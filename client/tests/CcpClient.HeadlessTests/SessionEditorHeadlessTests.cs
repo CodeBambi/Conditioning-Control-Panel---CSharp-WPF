@@ -1,8 +1,10 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Media;
 using Avalonia.VisualTree;
 using CcpClient.Desktop;
 using CcpClient.Desktop.Lifecycle;
@@ -241,12 +243,29 @@ public class SessionEditorHeadlessTests : HeadlessTest
 
         // The two cells that tell the copy from its original on screen.
         var badges = Descendant<StackPanel>(window, "ScriptedSessionRackPanel")
-            .GetVisualDescendants().OfType<TextBlock>()
-            .Where(t => t.Name?.StartsWith("SessionBadge", StringComparison.Ordinal) == true)
-            .Select(t => t.Text)
+            .GetVisualDescendants().OfType<Border>()
+            .Where(b => b.Name?.StartsWith("SessionBadge", StringComparison.Ordinal) == true)
+            .Select(b => (b.Child as TextBlock)?.Text)
             .ToList();
         Assert.Equal(4, badges.Count(b => b == "BUILT-IN"));
         Assert.Equal(1, badges.Count(b => b == "YOURS"));
+
+        // The badge is a FILLED pill, and the two states are two fills — the shape a headed
+        // region-colour check can aim at. Read off the control the page really built, so a badge
+        // that stopped carrying its provenance colour reddens here rather than at a capture.
+        //
+        // COMPARED AS COLOURS AND NOT AS STRINGS, which this fact learned the hard way: Avalonia's
+        // Color.ToString() returns a KNOWN COLOUR NAME when one matches, so the custom badge's
+        // #FFFF69B4 comes back as "HotPink" and a string comparison against the hex fails on a
+        // perfectly correct control. The sibling rack facts compare stripe colours as strings and
+        // get away with it only because none of those four hexes happens to be a named colour.
+        var fills = Descendant<StackPanel>(window, "ScriptedSessionRackPanel")
+            .GetVisualDescendants().OfType<Border>()
+            .Where(b => b.Name?.StartsWith("SessionBadge", StringComparison.Ordinal) == true)
+            .Select(b => ((ISolidColorBrush)b.Background!).Color)
+            .ToList();
+        Assert.Equal(4, fills.Count(f => f == Color.Parse("#FF5CC8FF")));
+        Assert.Equal(1, fills.Count(f => f == Color.Parse("#FFFF69B4")));
 
         // The shipped file is untouched: still there, still 30 minutes, still built-in.
         var shipped = ScriptedSession.ReadBuiltIns().Single(s => s.Id == "morning_drift");
@@ -280,6 +299,19 @@ public class SessionEditorHeadlessTests : HeadlessTest
         window.UpdateLayout();
 
         var savedPath = boot.Store.Read()[0].SourceFilePath;
+
+        // THE SAVED ROW COMES BACK SELECTED, and this line exists because the mutation check caught
+        // the fact below being unable to tell. RepaintScriptedSessionRack arms its row by
+        // ReferenceEquals, so a selection left pointing at the DETACHED object the editor built
+        // leaves the rack with nothing checked at all — the user's own pick silently lost by their
+        // own save — and every other assertion in this fact still passed, because a stale instance
+        // carries the same id and the same path. Re-pointing is what this asserts; the id and the
+        // path are what the rest asserts.
+        Assert.Equal(
+            ["Mine"],
+            Rows(window)
+                .Where(r => r.IsChecked == true)
+                .Select(r => r.GetValue(AutomationProperties.NameProperty)));
 
         // NO row is clicked here: the Edit button acts on the selection the save left behind, which
         // must now be the fresh instance read back off disk rather than the detached one.

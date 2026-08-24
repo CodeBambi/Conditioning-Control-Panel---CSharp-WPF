@@ -1203,6 +1203,12 @@ public partial class StudioPage : UserControl
     /// cell's right edge and the stripe.</summary>
     public const double RowGutter = 10;
 
+    /// <summary>The provenance badge's horizontal padding in DIP — the flat fill either side of its
+    /// caption, and the only part of that cell a headed capture can aim at without a glyph in the
+    /// frame. A constant rather than a literal for the same reason
+    /// <see cref="StripeWidth"/> is one.</summary>
+    public const double BadgePadding = 6;
+
     /// <summary>Which question the confirmation strip is asking. Explicit rather than derived from
     /// <see cref="ScriptedSessionRun.Running"/> at click time, because a session can END between
     /// the strip going up and the button being pressed, and a strip that silently changed its mind
@@ -1528,17 +1534,41 @@ public partial class StudioPage : UserControl
         // all four would carry no information; that premise died with the editor, because saving an
         // edited built-in puts a session of the SAME NAME on the row below it and this badge is the
         // only cell that tells them apart. See SessionRackNotices.RowProvenance.
-        var badge = new TextBlock
+        //
+        // A SOLID FILL WHERE UPSTREAM USES A 13% WASH (Resources/Theme/Colors.xaml:201, :203 —
+        // #225CC8FF and #22FF69B4 behind a solid-coloured caption), and the reason is the same kind
+        // of harness requirement the difficulty stripe's explicit height records. Composited over
+        // this rack's row background those two washes land about 22/12/10 apart per channel, and a
+        // headed region-colour check on this port's manifest runs at a tolerance of 4 against a set
+        // of colours that must all separate mechanically (ScriptedSessionPresentationTests). A
+        // 10-unit gap between the two states of the SAME cell is not a separation anybody should
+        // rest a capture on. Filled, the two states are 163/95/75 apart and the caption reads as
+        // dark-on-colour instead of colour-on-dark.
+        var badgeText = new TextBlock
         {
-            Name = "SessionBadge" + PascalId(session.Id),
             Text = SessionRackNotices.RowProvenance(session.Origin),
             FontSize = 9,
             FontWeight = FontWeight.Bold,
-            Foreground = new SolidColorBrush(
+            Foreground = new SolidColorBrush(Color.Parse("#FF141018")),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        var badge = new Border
+        {
+            Name = "SessionBadge" + PascalId(session.Id),
+            Child = badgeText,
+            Background = new SolidColorBrush(
                 Color.Parse(SessionRackNotices.RowProvenanceColour(session.Origin))),
+            CornerRadius = new Avalonia.CornerRadius(3),
+            // The horizontal padding is what a headed capture aims at: BadgePadding DIP of flat
+            // fill either side of the caption, inside a cell whose own edges are derivable from the
+            // badge's rect. A crop of the leading pad plus one row gutter therefore holds the
+            // badge's colour AND the row behind it, so no uniform image can satisfy it.
+            Padding = new Avalonia.Thickness(BadgePadding, 2),
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
             [Avalonia.Automation.AutomationProperties.AutomationIdProperty] =
                 "SessionBadge" + PascalId(session.Id),
+            [Avalonia.Automation.AutomationProperties.NameProperty] =
+                SessionRackNotices.RowProvenance(session.Origin),
         };
 
         // THE DIFFICULTY STRIPE, in upstream's own colours (Resources/Theme/Colors.xaml:191-197)
