@@ -212,13 +212,17 @@ const DECODER_CEILING = 2;
 const PREWARM = 6;
 /** Cards the WARM RAIL pulls bytes for, standing BEHIND the three-deep stack.
  *  Not a supply figure either: PREWARM buys rows (urls), this buys the bytes
- *  behind them. Four is the fast-swipe window - a player on the shortest ring
- *  clears the stack in about two seconds, and four cards is the slack that
- *  buys a phone on a slow link. */
-const WARM_AHEAD = 4;
+ *  behind them. Four was the first guess and a fast swiper beat it (owner
+ *  report, 2026-08-24: a sub-second rhythm against multi-megabyte gifs on a
+ *  phone link outran the window before the trickle refilled it). Eight is the
+ *  same idea sized to the actual burn rate: ~0.5s a card is ~4s of slack,
+ *  which is one big gif's worth of download on a bad day. */
+const WARM_AHEAD = 8;
 /** Warms in flight at once. This is a background TRICKLE and it is competing
- *  with the top card's own download, which always wins - two is plenty. */
-const WARM_INFLIGHT = 2;
+ *  with the top card's own download, which always wins - but two lanes stalled
+ *  behind one slow gif while the swiper burned the window down, so a third
+ *  lets small stills slip past a big download instead of queueing behind it. */
+const WARM_INFLIGHT = 3;
 /** The claim, when the door never resolved one for us (QUICK SORT floor).
  *  Moved 48/32 -> 72/48 with the deck (see claimOpts): a 120-card tier-4 deck
  *  fed by an 80-row claim would be repeats before the bell. */
@@ -926,9 +930,20 @@ export default {
             held.set(job.url, img);
             try {
               img.decoding = 'async';
-              img.onload = done;
-              img.onerror = () => { held.delete(job.url); done(); };
               img.src = job.url;
+              /* BYTES ARE HALF THE BILL. A cached gif still pays its DECODE on
+               * first paint, and on a phone that is the visible half of the
+               * stutter the owner reported - so a warm is not done until
+               * decode() says the first frame exists. The decoded frames live
+               * in the browser's image cache keyed by url, which is exactly
+               * where the card's own <img> will look. Fallback for engines
+               * without decode(): the old load/error pair, bytes-only. */
+              if (typeof img.decode === 'function') {
+                img.decode().then(done, () => { held.delete(job.url); done(); });
+              } else {
+                img.onload = done;
+                img.onerror = () => { held.delete(job.url); done(); };
+              }
             } catch (e) { held.delete(job.url); done(); }
           }
         }
