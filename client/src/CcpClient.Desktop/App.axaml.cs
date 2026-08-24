@@ -1,7 +1,12 @@
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Rendering.Composition;
+using Avalonia.VisualTree;
 using CcpClient.Desktop.Features.AvatarTube;
 using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Views;
@@ -107,6 +112,22 @@ public partial class App : Application
                     ? new Features.Intake.IntakeHarnessOptions(_intakeDrive, _intakeKillRenderers)
                     : null);
             desktop.MainWindow = dashboard;
+
+            // THE LINUX RENDER DISCRIMINATOR (CCP_RENDER_PROBE=<path.png>). Every Linux capture
+            // this port has taken is a single colour — 836,000 pixels of RGB(0,0,0) on a whole
+            // window, in WSLg RAIL, in XWayland, in a real Xvfb :99, and with
+            // LIBGL_ALWAYS_SOFTWARE=1. Two explanations survive that: the app draws nothing, or
+            // it draws and no screen-capture route on the machine can see it. This probe asks
+            // the app to read back its OWN surface IN PROCESS, which bypasses the screen-capture
+            // transport entirely, and it is deliberately an ENV VAR rather than a --flag:
+            // HarnessEntryPoints is the ONE registry for --flag literals and lives in a file this
+            // lane does not own, so a new flag here would red HarnessEntryPointGuardTests with no
+            // in-scope fix. CCP_MCP (Program.cs) is the standing env-var opt-in precedent.
+            var renderProbePath = Environment.GetEnvironmentVariable(RenderProbeVariable);
+            if (!string.IsNullOrWhiteSpace(renderProbePath))
+            {
+                dashboard.Opened += (_, _) => _ = RunRenderProbeAsync(dashboard, renderProbePath, desktop);
+            }
 
             // AvatarTube DEMONSTRATOR (--avatartube-demo): opens the tube at
             // startup (WSLg has no input automation — a named limit).
@@ -350,5 +371,146 @@ public partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>The render-probe opt-in. See the call site for why this is an env var, not a flag.</summary>
+    public const string RenderProbeVariable = "CCP_RENDER_PROBE";
+
+    /// <summary>How long a compositor batch may stay unsettled before the probe calls it pending.
+    /// The bound IS the measurement: a render loop that never renders leaves these tasks forever.</summary>
+    private static readonly TimeSpan RenderProbeTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Reads the running window's own rendering back IN PROCESS and reports what it found, then
+    /// ends the lifetime with a verdict exit code (0 non-vacuous, 3 vacuous — CcpVerify's
+    /// convention, so a script can branch without a file ever leaving the process).
+    ///
+    /// <para>WHAT EACH HALF PROVES, because they are NOT the same path and conflating them
+    /// would answer the wrong question. (1) The compositor half — <c>RequestCompositionBatchCommitAsync</c>
+    /// and its <c>Processed</c>/<c>Rendered</c> tasks — rides the REAL on-screen path
+    /// (<c>CompositingRenderer</c> over the window's render target) and proves the render thread
+    /// ran, but hands back no pixels. (2) The pixel half — <c>RenderTargetBitmap.Render(visual)</c>
+    /// — walks the visual tree through <c>ImmediateRenderer</c> (Avalonia 12.1.1 ships that
+    /// statement in its own XML docs: "This class is used to render the visual tree into a
+    /// DrawingContext by doing a simple tree traversal. It's currently used mostly for
+    /// RenderTargetBitmap.Render and VisualBrush"), so it proves the tree produces drawing
+    /// commands and Skia rasterises them on this machine — it does NOT prove the compositor
+    /// presents them. Avalonia 12.1.1 exposes no compositor-surface screenshot API at all
+    /// (there is no Capture/snapshot member anywhere under Avalonia.Rendering.Composition), so
+    /// these two together are the strongest in-process answer the framework can give.</para>
+    ///
+    /// <para>THE POSITIVE CONTROL IS NOT OPTIONAL. An all-black read-back is ambiguous on its
+    /// own: it means "the window drew nothing" only if the read-back mechanism itself works. So
+    /// the probe first draws a known two-colour pattern into a second render target and censuses
+    /// that. Control vacuous =&gt; the instrument is broken and the probe answers nothing, which
+    /// it says out loud instead of blaming the app.</para>
+    /// </summary>
+    private async Task RunRenderProbeAsync(Window window, string path, IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        var exitCode = 0;
+        try
+        {
+            _host.LogDiagnostic(
+                $"render-probe: visible={window.IsVisible} client={window.ClientSize} frame={window.FrameSize} "
+                + $"scaling={window.RenderScaling} rootChildren={window.GetVisualChildren().Count()}");
+
+            var compositor = ElementComposition.GetElementVisual(window)?.Compositor;
+            if (compositor is null)
+            {
+                _host.LogDiagnostic("render-probe: ON-SCREEN PATH — the window has no composition visual; the compositor never saw it");
+            }
+            else
+            {
+                var batch = compositor.RequestCompositionBatchCommitAsync();
+                _host.LogDiagnostic($"render-probe: ON-SCREEN PATH — batch deserialized on the render thread: {await SettledAsync(batch.Processed)}");
+                _host.LogDiagnostic($"render-probe: ON-SCREEN PATH — batch rendered on the render thread: {await SettledAsync(batch.Rendered)}");
+            }
+
+            using (var control = new RenderTargetBitmap(new PixelSize(8, 8), new Vector(96, 96)))
+            {
+                using (var context = control.CreateDrawingContext())
+                {
+                    context.FillRectangle(Brushes.White, new Rect(0, 0, 4, 8));
+                }
+
+                var controlCensus = Census(control, out var controlDistinct);
+                _host.LogDiagnostic($"render-probe: POSITIVE CONTROL (known two-colour target) census: {controlCensus}");
+                if (controlDistinct < 2)
+                {
+                    _host.LogDiagnostic("render-probe: INCONCLUSIVE — the read-back instrument itself is vacuous; nothing below can be trusted");
+                    desktop.Shutdown(1);
+                    return;
+                }
+            }
+
+            var scaling = window.RenderScaling;
+            var size = new PixelSize(
+                Math.Max(1, (int)Math.Round(window.ClientSize.Width * scaling)),
+                Math.Max(1, (int)Math.Round(window.ClientSize.Height * scaling)));
+            using var surface = new RenderTargetBitmap(size, new Vector(96 * scaling, 96 * scaling));
+            surface.Render(window);
+            var census = Census(surface, out var distinct);
+            _host.LogDiagnostic($"render-probe: IN-PROCESS READ-BACK ({size.Width}x{size.Height}) census: {census}");
+            surface.Save(path, PngBitmapEncoderOptions.Default);
+            _host.LogDiagnostic($"render-probe: wrote {path}");
+            exitCode = distinct < 2 ? 3 : 0;
+            _host.LogDiagnostic(distinct < 2
+                ? "render-probe: VERDICT (A) NOTHING WAS DRAWN — the window's own visual tree, read back in process, is one colour"
+                : "render-probe: VERDICT (B) SOMETHING WAS DRAWN — the window's own visual tree, read back in process, carries content");
+        }
+        catch (Exception ex)
+        {
+            _host.LogDiagnostic($"render-probe: FAILED — {ex}");
+            exitCode = 1;
+        }
+
+        desktop.Shutdown(exitCode);
+    }
+
+    /// <summary>Bounded settle report for a composition batch task. Never throws to the caller —
+    /// "still pending" is a measurement, not an error.</summary>
+    private static async Task<string> SettledAsync(Task task)
+    {
+        try
+        {
+            await task.WaitAsync(RenderProbeTimeout).ConfigureAwait(true);
+            return "YES";
+        }
+        catch (TimeoutException)
+        {
+            return $"NO — still pending after {RenderProbeTimeout.TotalSeconds:0}s";
+        }
+    }
+
+    /// <summary>The distinct-colour census, by the SAME rule the capture gate uses
+    /// (client/tools/verify/CcpVerify/CaptureCensus.cs: RGB only, alpha is never part of a
+    /// colour's identity, and the message always carries the count).</summary>
+    private static string Census(RenderTargetBitmap bitmap, out int distinct)
+    {
+        var size = bitmap.PixelSize;
+        var stride = size.Width * 4;
+        var length = stride * size.Height;
+        var buffer = Marshal.AllocHGlobal(length);
+        try
+        {
+            bitmap.CopyPixels(new PixelRect(0, 0, size.Width, size.Height), buffer, length, stride);
+            var bytes = new byte[length];
+            Marshal.Copy(buffer, bytes, 0, length);
+            var seen = new HashSet<int>();
+            for (var i = 0; i < length; i += 4)
+            {
+                seen.Add((bytes[i + 2] << 16) | (bytes[i + 1] << 8) | bytes[i]);
+            }
+
+            distinct = seen.Count;
+            return distinct < 2
+                ? $"{distinct} distinct colour — all {length / 4} pixels are "
+                  + $"RGB({bytes[2]},{bytes[1]},{bytes[0]}) #{bytes[2]:X2}{bytes[1]:X2}{bytes[0]:X2}"
+                : $"{distinct} distinct colours across {length / 4} pixels";
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
     }
 }
