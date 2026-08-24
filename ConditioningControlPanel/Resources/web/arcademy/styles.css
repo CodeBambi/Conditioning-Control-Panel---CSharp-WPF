@@ -150,8 +150,10 @@
    sibling learned the same lesson: dtrh/styles.css has `.sf-drop[hidden],
    .sf-nope[hidden] { display:none }`.
    Global rather than per-class on purpose: `engine/style.js` never styles
-   `[hidden]` (checked), no game does either, and a global reset also covers the
-   next element someone toggles this way. */
+   `[hidden]` (checked), and a global reset also covers the next element someone
+   toggles this way. ONE game rule is grandfathered: sort/setup-style.js pays for
+   the lamp rail's own display with `.g-sort-rail[hidden]{display:none}` (trap 27's
+   "pays for it" clause) - same value as this reset, redundant, never conflicting. */
 [hidden] { display:none !important; }
 
 html, body { height:100%; }

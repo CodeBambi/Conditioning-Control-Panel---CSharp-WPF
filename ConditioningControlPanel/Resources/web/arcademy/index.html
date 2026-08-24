@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>The Arcademy</title>
+    <!-- No favicon ships (the page is a webview); the empty data: href stops the
+         browser's automatic /favicon.ico probe from logging ERR_FILE_NOT_FOUND. -->
+    <link rel="icon" href="data:,">
     <!-- The in-app "Arcademy" page (T2 mini-game hub). Served by the WebView2
          ArcademyHostService from https://ccp.game/arcademy/. One document, ES
          modules, NO build step, NO frameworks, NO remote fonts (the webview is
