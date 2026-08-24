@@ -59,7 +59,9 @@ public sealed class MantraSessionTests : IDisposable
             _now = _now.AddTicks((long)Math.Round(seconds * TimeSpan.TicksPerSecond));
     }
 
-    private (PersistenceStore<ProgressionDocument> Store, ProgressionLedger Ledger) NewLedger()
+    /// <summary>A real ledger over a real temp file. Awaited rather than bridged: the facts that
+    /// need one are <c>async</c> so this file contains no blocking wait at all.</summary>
+    private async Task<(PersistenceStore<ProgressionDocument> Store, ProgressionLedger Ledger)> NewLedgerAsync()
     {
         var dir = Path.Combine(_root, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
@@ -68,7 +70,7 @@ public sealed class MantraSessionTests : IDisposable
             new SinkAdapter(_log),
             Path.Combine(dir, ProgressionDocument.FileName),
             ProgressionDocument.CurrentSchemaVersion);
-        store.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult(); // wallclock-allow: PersistenceStore.StartAsync loads on the calling thread and hands back an already-complete task (pinned by PersistenceStoreTests) — this bridge waits on nothing
+        await store.StartAsync(TestContext.Current.CancellationToken);
         return (store, new ProgressionLedger(store, _log.Add));
     }
 
@@ -111,10 +113,10 @@ public sealed class MantraSessionTests : IDisposable
     /// the order of <c>Streak++</c> against the payout.</para>
     /// </summary>
     [Fact]
-    public void ThePayoutLadder_IsThirtyPlusFivePerStreak_CappedAtFifty()
+    public async Task ThePayoutLadder_IsThirtyPlusFivePerStreak_CappedAtFifty()
     {
         var clock = new Clock();
-        var (store, ledger) = NewLedger();
+        var (store, ledger) = await NewLedgerAsync();
         _ = store;
 
         // A one-entry pool so the mantra is the same every repetition and the ladder is the only
@@ -373,10 +375,10 @@ public sealed class MantraSessionTests : IDisposable
     /// recomputed from the live streak rather than remembered.</para>
     /// </summary>
     [Fact]
-    public void ABrokenStreak_KeepsTheBestStreakTheRepetitionsAndTheXp()
+    public async Task ABrokenStreak_KeepsTheBestStreakTheRepetitionsAndTheXp()
     {
         var clock = new Clock();
-        var (store, ledger) = NewLedger();
+        var (store, ledger) = await NewLedgerAsync();
         _ = store;
         var session = new MantraSession(10, ["ok"], ledger, clock.Now);
 
@@ -586,7 +588,7 @@ public sealed class MantraSessionTests : IDisposable
     public async Task AnUnreadableLedger_RefusesTheGrant_AndTheRunCarriesOn()
     {
         var clock = new Clock();
-        var (store, ledger) = NewLedger();
+        var (store, ledger) = await NewLedgerAsync();
         await store.StopAsync();
 
         var session = new MantraSession(3, ["ok"], ledger, clock.Now);
@@ -619,10 +621,10 @@ public sealed class MantraSessionTests : IDisposable
     /// what stops this passing by doing nothing at all.</para>
     /// </summary>
     [Fact]
-    public void TheMantrasNeverReachTheLog()
+    public async Task TheMantrasNeverReachTheLog()
     {
         var clock = new Clock();
-        var (store, ledger) = NewLedger();
+        var (store, ledger) = await NewLedgerAsync();
         _ = store;
         var session = new MantraSession(3, [Secret], ledger, clock.Now);
 
