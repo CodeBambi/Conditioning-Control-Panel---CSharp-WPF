@@ -445,6 +445,133 @@ export function bellLabel(totalSec) {
   return p(Math.floor(s / 3600)) + ':' + p(Math.floor((s % 3600) / 60)) + ':' + p(s % 60);
 }
 
+/* ============================================================================
+ * THE WALK GRAPH - one corridor grammar, and it is THIS one.
+ *
+ * These four functions used to live inside createCampus() because the nightly
+ * route was their only caller. shell/ghosts.js (Campus Presence) walks the same
+ * geography with replayed attendees, and a SECOND pathing system is the one
+ * thing that could put a student through a wall - so they were lifted out
+ * VERBATIM instead of being copied. They are pure (they read the frozen ROOMS
+ * table and nothing else), which is also what lets the suite assert leg legality
+ * without building a DOM.
+ *
+ * THE WHOLE MAP, in three runs of floor:
+ *   MAIN HALL     x 200..1240, y 430..510   (the corridor every room opens onto)
+ *   WEST SPUR     x  62..200,  y 450..490   (the hall carrying on west)
+ *   GATE ALLEY    x 700..740,  y 510..730   + the front path down to y 920
+ * Every leg any of these functions returns stays inside that union.
+ * ==========================================================================*/
+
+/** The Main Gate, where every night's route (and every ghost) walks in. */
+export const CAMPUS_GATE = Object.freeze([720, 908]);
+/** The Main Hall's centre line - the lane the route and the ghosts walk. */
+export const CAMPUS_HALL_Y = 470;
+/** How long the entry reveal runs. Nothing may animate over it (PRESENCE §4). */
+export const CAMPUS_ENTER_MS = 4500;
+
+/**
+ * Where tonight's numbered badge stands, and where a ghost dwells: in the
+ * corridor just inside the door for a room bolted to the hall, in the wing alley
+ * for a wing room (which pins its own `stop`, because the Main Hall is nowhere
+ * near its door). Pure.
+ */
+export function stopAnchor(key) {
+  const spec = ROOMS[key] || {};
+  if (spec.stop) return spec.stop;
+  return spec.side === 'n' ? [spec.door, 447] : [spec.door, 488];
+}
+
+/**
+ * The point on the room's own wall the door symbol is drawn at - NOT a walkable
+ * spot (it is the threshold itself). Presence uses it as a keep-out radius so an
+ * encounter never stages on top of a swinging leaf. Pure; null for an unknown key.
+ */
+export function doorPoint(key) {
+  const spec = ROOMS[key];
+  if (!spec || spec.door == null) return null;
+  if (spec.side === 'n') return [spec.door, spec.wallY != null ? spec.wallY : 430];
+  if (spec.side === 'w' || spec.side === 'e') {
+    const r = spec.rect || [0, 0, 0, 0];
+    return [spec.side === 'w' ? r[0] : r[0] + r[2], spec.door];
+  }
+  return [spec.door, spec.wallY != null ? spec.wallY : 510];
+}
+
+/**
+ * The legs the route walks for one stop. A corridor room is one point on the
+ * hall's centre line - byte-identical to what this drew before. A wing room
+ * turns off at its junction, touches its door and comes back out, so the next
+ * leg still starts on the centre line instead of cutting through a wall. Pure.
+ */
+export function routeLegs(key) {
+  const spec = ROOMS[key];
+  if (!spec) return [];
+  if (spec.via) return [spec.via, stopAnchor(key), spec.via];
+  return [[spec.door, CAMPUS_HALL_Y]];
+}
+
+/** The nightly route's `d`, gate first. Pure. */
+export function routeFor(stops) {
+  if (!stops || !stops.length) return '';
+  let d = 'M' + CAMPUS_GATE[0] + ',' + CAMPUS_GATE[1]
+    + ' L' + CAMPUS_GATE[0] + ',' + CAMPUS_HALL_Y;
+  for (const s of stops) {
+    for (const leg of routeLegs(s.gameKey)) d += ' L' + leg[0] + ',' + leg[1];
+  }
+  return d;
+}
+
+/**
+ * THE GHOST'S LEG LIST: the waypoints a walker crosses getting from `from` to
+ * one room's dwell anchor, in the same corridor grammar as routeFor(). Three
+ * moves at most and every one of them axis-aligned:
+ *   1. step back onto the hall's centre line (a walker leaving a door plaque);
+ *   2. walk the centre line to the room's door coordinate;
+ *   3. step off it to the dwell anchor.
+ * A leg that would be zero-length is dropped, so a walk that is already on the
+ * line returns two points, not four. `from` may be any point on the graph -
+ * CAMPUS_GATE included, which is why step 1 walks the gate alley vertically.
+ * Pure; an unknown room key answers an empty list (the caller skips that leg).
+ */
+export function walkLegs(from, key) {
+  const spec = ROOMS[key];
+  if (!spec || !from) return [];
+  const anchor = stopAnchor(key);
+  // Already standing on the plaque (two classes running back to back in the
+  // same room): no legs at all, rather than a pointless round trip to the lane.
+  if (Math.abs(from[0] - anchor[0]) < 0.01 && Math.abs(from[1] - anchor[1]) < 0.01) return [];
+  const out = [];
+  const push = (p) => {
+    const last = out.length ? out[out.length - 1] : from;
+    if (Math.abs(last[0] - p[0]) < 0.01 && Math.abs(last[1] - p[1]) < 0.01) return;
+    out.push([p[0], p[1]]);
+  };
+  // 1. onto the lane. From the gate that is the vertical run up the gate alley;
+  //    from a door plaque it is the two dozen units back into the hall.
+  if (Math.abs(from[1] - CAMPUS_HALL_Y) > 0.01) push([from[0], CAMPUS_HALL_Y]);
+  // 2. along the lane to the room's own coordinate.
+  push([anchor[0], CAMPUS_HALL_Y]);
+  // 3. off the lane to the plaque.
+  push([anchor[0], anchor[1]]);
+  return out;
+}
+
+/** The way back out: the lane, then the gate alley, then the front path. Pure. */
+export function gateLegs(from) {
+  if (!from) return [];
+  const out = [];
+  const push = (p) => {
+    const last = out.length ? out[out.length - 1] : from;
+    if (Math.abs(last[0] - p[0]) < 0.01 && Math.abs(last[1] - p[1]) < 0.01) return;
+    out.push([p[0], p[1]]);
+  };
+  if (Math.abs(from[1] - CAMPUS_HALL_Y) > 0.01) push([from[0], CAMPUS_HALL_Y]);
+  push([CAMPUS_GATE[0], CAMPUS_HALL_Y]);
+  push([CAMPUS_GATE[0], CAMPUS_GATE[1]]);
+  return out;
+}
+
 /* ----------------------------------------------------------------------------
  * TINY BUILDERS - namespace-aware so the DOM double can host the campus.
  * -------------------------------------------------------------------------- */
@@ -520,11 +647,22 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
    * the board deals. After it has played, silent repaints must not re-run it
    * (the same law as splitflap's animate:false). */
   let enterTimer = 0;
+  let revealed = false;
+  function finishReveal() {
+    if (revealed || destroyed) return;
+    revealed = true;
+    try { root.classList.remove('enter'); } catch (e) { /* noop */ }
+    /* THE ONE HOOK THE STUDENT BODY NEEDS. PRESENCE.md §4: ghosts start AFTER
+     * the reveal, never during it - the rooms are still staggering in and a
+     * walker crossing that cascade reads as a glitch, not as a classmate. */
+    try { if (typeof handlers.revealDone === 'function') handlers.revealDone(); }
+    catch (e) { say('revealDone hook threw: ' + ((e && e.message) || e)); }
+  }
   if (typeof setTimeout === 'function') {
-    enterTimer = setTimeout(() => {
-      enterTimer = 0;
-      try { root.classList.remove('enter'); } catch (e) { /* noop */ }
-    }, 4500);
+    // Reduced motion has no cascade to wait out (the sheet refuses it), so the
+    // hook fires on the next turn rather than four and a half seconds late.
+    enterTimer = setTimeout(() => { enterTimer = 0; finishReveal(); },
+      reducedMotion ? 0 : CAMPUS_ENTER_MS);
   }
 
   /** Entry-stagger delay, per element (consumed by .campus-stage.enter rules). */
@@ -761,6 +899,17 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   /* route (under rooms so door arcs stay crisp) + stop badges (over, added last) */
   routePath = svg('path', { d: '' }, 'campus-route');
   plan.appendChild(routePath);
+
+  /* THE STUDENT BODY'S LAYER - a SIBLING of the route, mounted here and nowhere
+   * else (PRESENCE.md §4): above the floor and the carpet, UNDER the rooms and
+   * their door arcs, so a ghost walks the corridor and never over a door leaf.
+   * The campus owns the node and nothing else about the feature - shell/ghosts.js
+   * fills it, and a campus built with no presence data simply carries an empty
+   * group. It is `pointer-events:none` in the sheet (trap 59's law: a layer over
+   * the plan that took clicks would eat every room). */
+  const ghostLayer = svg('g', null, 'campus-students');
+  ghostLayer.setAttribute('aria-hidden', 'true');
+  plan.appendChild(ghostLayer);
 
   /* ------------------------------ rooms ---------------------------------- */
   /* A door is the architect's symbol: a gap in the wall plus the leaf pivoting
@@ -1536,34 +1685,9 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     return '';
   }
 
-  /* Where tonight's numbered badge stands: in the corridor just inside the door
-   * for a room bolted to the hall, in the wing alley for a wing room (which
-   * pins its own `stop`, because the Main Hall is nowhere near its door). */
-  function stopAnchor(key) {
-    const spec = ROOMS[key] || {};
-    if (spec.stop) return spec.stop;
-    return spec.side === 'n' ? [spec.door, 447] : [spec.door, 488];
-  }
-
-  /* The legs the route walks for one stop. A corridor room is one point on the
-   * hall's centre line - byte-identical to what this drew before. A wing room
-   * turns off at its junction, touches its door and comes back out, so the next
-   * leg still starts on the centre line instead of cutting through a wall. */
-  function routeLegs(key) {
-    const spec = ROOMS[key];
-    if (!spec) return [];
-    if (spec.via) return [spec.via, stopAnchor(key), spec.via];
-    return [[spec.door, 470]];
-  }
-
-  function routeFor(stops) {
-    if (!stops.length) return '';
-    let d = 'M720,908 L720,470';
-    for (const s of stops) {
-      for (const leg of routeLegs(s.gameKey)) d += ' L' + leg[0] + ',' + leg[1];
-    }
-    return d;
-  }
+  /* stopAnchor / routeLegs / routeFor are MODULE-LEVEL now (see THE WALK GRAPH,
+   * above): shell/ghosts.js walks the same corridor grammar and a second copy of
+   * it is exactly how a student ends up inside a wall. */
 
   function update(nextState, nextStats) {
     if (destroyed) return;
@@ -1858,6 +1982,10 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     root,
     boardMount,
     footMount,
+    /** THE STUDENT BODY'S SEAM: the one group shell/ghosts.js draws into. */
+    ghostMount: ghostLayer,
+    /** True once the entry reveal has finished (ghosts may not start before). */
+    revealDone() { return revealed; },
     update,
     noteDescriptors,
     closeCard,

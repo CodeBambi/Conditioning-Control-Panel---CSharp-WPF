@@ -196,6 +196,14 @@ internal static class ArcademyHostService
             // exactly the same, on the cards this machine already holds.
             ArcademySyncService.Attach(_meta, OnMirrorCardsChanged);
 
+            // CAMPUS PRESENCE (PRESENCE.md §3). Two independent halves behind one Attach: the
+            // EMITTER announces `campus_enter` (only if the player has opted in - the rung is read
+            // inside), and the SNAPSHOT PUSHER starts polling the public feed and handing it to
+            // the page. The pusher is deliberately NOT gated on the share setting: watching is not
+            // consenting, so a campus is populated for everyone who is online. Nothing here is
+            // awaited and no part of the launch depends on it.
+            ArcademyPresenceService.Attach(OnPresenceSnapshot);
+
             var webRoot = Path.Combine(AppContext.BaseDirectory, "Resources", "web");
             var mappings = new List<(string, string, CoreWebView2HostResourceAccessKind)>
             {
@@ -519,6 +527,9 @@ internal static class ArcademyHostService
                 _classActive = true;
                 App.Logger?.Information("ArcademyHost: class started ({Game}, tier {Tier})",
                     (string?)o["gameKey"], (int?)o["gradeTier"] ?? 0);
+                // CAMPUS PRESENCE: a door opened. Best-effort and gated on the share rung inside;
+                // at `off`, or with no identity, this line does nothing at all.
+                try { ArcademyPresenceService.NoteRoomEnter((string?)o["gameKey"]); } catch { }
                 break;
             case "class-ended":
                 OnClassEnded(o);
@@ -641,6 +652,12 @@ internal static class ArcademyHostService
             settings = BuildSettingsBag(s),
             keybinds = ParseJsonObject(s?.ArcademyKeybindsJson),
             hideTutorial = s?.ArcademyHideTutorial ?? false,
+            // CAMPUS PRESENCE, the consent rung, projected TOP-LEVEL beside the other global-tier
+            // scalars so the settings page can draw the row it owns (PRESENCE.md §3). `off` is the
+            // default and the fallback for anything unreadable - a consent flag never degrades to
+            // the nearest neighbour. It is the rung this account ASKED for: the server clamps it
+            // down silently when the account cannot back it (no linked Discord, no display name).
+            presenceShare = PresenceShare(s),
             // The app-wide panic key, projected for ONE reason (SYNTHESIS-NOTES #7):
             // shell/keybinds.js refuses to let a game bind over it. The page never
             // handles the panic key itself - that stays app-side.
@@ -1162,6 +1179,30 @@ internal static class ArcademyHostService
         ["campus_main_hall"] = "Main Hall",
         ["campus_the_quad"] = "The Quad",
         ["campus_front_path"] = "Front Path",
+
+        // CAMPUS PRESENCE - "The Student Body" (planning/arcademy/PRESENCE.md,
+        // shell/ghosts.js). Six rows and not one more: four BLIPS a ghost may
+        // say to another ghost, the busyness chip's label, and the layer's own
+        // name. The bubbles are 1-4 characters BY LAW - a mod re-voices the
+        // greeting without ever being able to put a sentence over a stranger's
+        // head, and every one is far under the 96-char MergeModTable cap.
+        ["presence_student_body"] = "Student Body",
+        ["presence_bubble_hi"] = "hihi",
+        ["presence_bubble_dots"] = "...",
+        ["presence_bubble_wave_a"] = "o/",
+        ["presence_bubble_wave_b"] = "\\o",
+        ["presence_here_tonight"] = "here tonight",
+        // ...and the CONSENT ROW (P3, the settings page's global tier). Every option says what
+        // it shows PUBLICLY, because the player is agreeing to a specific thing and a rung named
+        // only "Anonymous" is not one. All well under the 96-char MergeModTable cap (trap 26), so
+        // a mod may re-word the consent copy in its own voice - which is why it lives here at all.
+        ["presence_share_label"] = "Show yourself on campus",
+        ["presence_share_hint"] = "Your last 24 hours replay as a ghost. Room head counts include you at every rung.",
+        ["presence_share_off"] = "Off - room head counts only",
+        ["presence_share_anon"] = "Anonymous - a ghost with no name or picture",
+        ["presence_share_username"] = "Username - your display name over the ghost",
+        ["presence_share_discord"] = "Discord - your display name and profile picture",
+        ["presence_share_discord_note"] = "Discord needs a linked account. Without one the school shows your name instead.",
         ["campus_east_wing"] = "East Wing",
         ["campus_west_wing"] = "West Wing",
         ["campus_desc_east"] = "You can hear hammering behind the tape.",
@@ -2176,6 +2217,14 @@ internal static class ArcademyHostService
             // Shared with the descent on purpose: ONE photosensitivity guard app-wide.
             case "effectIntensity": s.ChaosEffectIntensity = Num(0.85); return s.ChaosEffectIntensity;
 
+            // CAMPUS PRESENCE, the one CONSENT flag the page may write (PRESENCE.md §3). The
+            // clamp is an allowlist, not a tolerance: anything that is not one of the four rungs
+            // is stored as `off`, so a malformed frame can only ever REDUCE what the account
+            // shows. Echoed post-clamp like every other key - trap 1, only the echo moves it.
+            case "presenceShare":
+                s.ArcademyPresenceShare = (value?.Type == JTokenType.String ? (string?)value : null) ?? "off";
+                return s.ArcademyPresenceShare;
+
             case "audioMute": s.ArcademyAudioMute = Flag(false); return s.ArcademyAudioMute;
             case "hideTutorial": s.ArcademyHideTutorial = Flag(false); return s.ArcademyHideTutorial;
 
@@ -2396,6 +2445,13 @@ internal static class ArcademyHostService
             }
             catch (Exception ex) { App.Logger?.Warning("ArcademyHost punch card: {E}", ex.Message); }
 
+            // CAMPUS PRESENCE: the class ended, and the letter that rides the wire is the HOST's
+            // clamped `grade` - the same value the XP table and the S double already read - so a
+            // junk field from the page cannot mint a grade for a stranger's map. A zen `pass` is
+            // not one of S/A/B/C and rides as null, which the renderer draws as a finish with no
+            // letter. Own try/catch: nothing about company may cost the payout frame below.
+            try { ArcademyPresenceService.NoteClassEnd(gameKey, grade); } catch { }
+
             if (_meta != null) _host?.Post(_meta.SnapshotMessage());
 
             _host?.Post(new
@@ -2486,6 +2542,39 @@ internal static class ArcademyHostService
             });
         }
         catch (Exception ex) { App.Logger?.Debug("ArcademyHost.OnMirrorCardsChanged: {E}", ex.Message); }
+    }
+
+    /// <summary>
+    /// CAMPUS PRESENCE: one snapshot, straight to the page. THE FRAME IS LOCKED and
+    /// <c>shell/ghosts.js</c> consumes exactly it:
+    /// <c>{type:'presence', self:&lt;opaque id|null&gt;, snapshot:&lt;the server payload&gt;}</c>.
+    ///
+    /// <para>THE SNAPSHOT IS PASSED THROUGH UNMODIFIED, and that is a rule rather than laziness.
+    /// Its <c>now</c> is the SERVER's clock, which is what lets the page compute the server's ages
+    /// for every ghost - reshaping it, or "helpfully" rewriting a timestamp into local time, is the
+    /// one edit that would let a skewed machine clock invent a live student.</para>
+    ///
+    /// <para><c>self</c> is always included, because omitting it leaves the page's previous value
+    /// standing; <c>snapshot</c> is null on the frame that only carries a newly-learned id, and the
+    /// page leaves the crowd it is drawing exactly where it is.</para>
+    /// </summary>
+    private static void OnPresenceSnapshot(string? self, JObject? snapshot)
+    {
+        try
+        {
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+            disp.BeginInvoke(() =>
+            {
+                try
+                {
+                    if (_host == null) return;
+                    _host.Post(new { type = "presence", self, snapshot });
+                }
+                catch (Exception ex) { App.Logger?.Debug("ArcademyHost.OnPresenceSnapshot post: {E}", ex.Message); }
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.OnPresenceSnapshot: {E}", ex.Message); }
     }
 
     /// <summary>
@@ -3513,6 +3602,7 @@ internal static class ArcademyHostService
         nameof(Models.AppSettings.OfflineMode),
         nameof(Models.AppSettings.MotionLevel),
         nameof(Models.AppSettings.ProtectBrowserVideoPlayback),
+        nameof(Models.AppSettings.ArcademyPresenceShare),
     };
 
     private static void OnSettingChangedInApp(object? sender, PropertyChangedEventArgs e)
@@ -3578,8 +3668,20 @@ internal static class ArcademyHostService
         nameof(Models.AppSettings.OfflineMode) => ("offlineMode", s.OfflineMode),
         nameof(Models.AppSettings.MotionLevel) => ("motionLevel", ResolvedMotionLevel()),
         nameof(Models.AppSettings.ProtectBrowserVideoPlayback) => ("protectBrowserVideo", s.ProtectBrowserVideoPlayback),
+        // CAMPUS PRESENCE. Clamped on the way out as well as on the way in: the property already
+        // refuses an unknown rung, and reading it through the same allowlist here means a
+        // hand-edited settings file can never project a rung the page has no control for.
+        nameof(Models.AppSettings.ArcademyPresenceShare) => ("presenceShare", PresenceShare(s)),
         _ => (null, null),
     };
+
+    /// <summary>The presence rung, clamped to the four we know. Anything else is <c>off</c> - a
+    /// consent flag degrades to "no consent", never to the nearest neighbour.</summary>
+    private static string PresenceShare(Models.AppSettings? s)
+    {
+        var v = (s?.ArcademyPresenceShare ?? "").Trim().ToLowerInvariant();
+        return Array.IndexOf(Models.AppSettings.ArcademyPresenceShares, v) >= 0 ? v : "off";
+    }
 
     // ============================ watchdogs / recovery ============================
 
@@ -3715,6 +3817,9 @@ internal static class ArcademyHostService
             // sent now (payload taken first, so the request outlives this window without touching
             // anything being disposed) and every reply still in the air is dropped by generation.
             try { ArcademySyncService.Detach(); } catch { }
+            // Stop the presence poll BEFORE the host goes: the timer must never outlive the window
+            // that armed it, and Detach also sends this session's one best-effort `campus_leave`.
+            try { ArcademyPresenceService.Detach(); } catch { }
             try { _meta?.FlushSave(); } catch { }
             _meta = null;
             _classActive = false;

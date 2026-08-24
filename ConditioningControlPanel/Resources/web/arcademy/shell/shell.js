@@ -36,6 +36,7 @@ import {
 } from '../games/registry.js';
 import { createBoard } from './splitflap.js';
 import { createCampus, campusState } from './campus.js';
+import { createGhosts, presenceOptions } from './ghosts.js';
 import { createReportCard } from './reportcard.js';
 import { createSettingsPage, boardSizeKey, SETTING_KEYS, isGlobalSettingKey } from './settings.js';
 import { createCeremonies } from './ceremonies.js';
@@ -435,6 +436,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   let splashSpent = false;
   let board = null;
   let campus = null;               // the night-campus hub (OPTIONAL - see showBoard)
+  // THE STUDENT BODY (PRESENCE.md). Optional in exactly the way the campus is:
+  // it hangs off the campus's own ghost layer, so it lives and dies with it and
+  // no other screen has ever heard of it.
+  let ghosts = null;
   let extrasBox = null;            // replay/report bar + yesterday strip container
   let settingsPage = null;
   let reportCard = null;
@@ -637,6 +642,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // beside dismissEndCard() at every real screen change instead, and
     // showReport() re-seats it after a repaint (same treatment, same reason).
     // The campus owns a 1s bell interval; a screen wipe must not orphan it.
+    if (ghosts) { try { ghosts.destroy(); } catch (e) { /* noop */ } ghosts = null; }
     if (campus) { try { campus.destroy(); } catch (e) { /* noop */ } campus = null; }
     extrasBox = null;
     // Every screen switch funnels through here, so no throw path can strand
@@ -896,6 +902,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         // content; regression #978's rule).
         boardPulse: store.get('boardOpenedDate') !== localDate,
         on: {
+          /* THE STUDENT BODY STARTS HERE AND NOWHERE ELSE (PRESENCE §4): after
+           * the entry reveal, never during it. The campus fires this once; a
+           * layer that failed to build simply never answers. */
+          revealDone: () => { try { if (ghosts) ghosts.start(); } catch (e) { say('presence start threw: ' + ((e && e.message) || e)); } },
           boardToggle: (expanded) => {
             if (!expanded) return;
             // Opening IS the flip: roll the flaps through, and remember the
@@ -936,6 +946,27 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       campus.boardMount.appendChild(board.root);
       renderBoardExtras(campus.footMount);
       dom.screen.appendChild(campus.root);
+      /* CAMPUS PRESENCE. Built AFTER the stage is in the document and started
+       * only by the campus's revealDone hook. It is its own try/catch for the
+       * campus's reason: a ghost layer that throws costs the player some company,
+       * never the school. With no host push and no `?presence=fixture` it draws
+       * nothing at all and logs nothing - the feature is silently absent, which
+       * is the whole reason it can merge before the server half exists. */
+      try {
+        const pOpts = presenceOptions();
+        ghosts = createGhosts({
+          mount: campus.ghostMount,
+          bridge,
+          mode: pOpts.mode,
+          fast: pOpts.fast,
+          reducedMotion,
+          log: say,
+        });
+        if (campus.revealDone && campus.revealDone()) ghosts.start();
+      } catch (e) {
+        say('presence layer unavailable (' + ((e && e.message) || e) + ')');
+        ghosts = null;
+      }
       // The window IS the campus: the topbar's content is diegetic in-scene
       // (crest, student ID, Front Office/gear), so the bar itself steps aside.
       // Every other screen re-shows it through renderTopbar().
@@ -2367,6 +2398,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   function applySuspend(on, reason) {
     suspendedGlobally = !!on;
     fireMoment(on ? 'suspend' : 'resume', { reason });   // EMI SEAM
+    // NO GHOSTS UNDER A MANDATORY VIDEO. The layer rides the same one funnel the
+    // pause card does, and it is a LEVEL (trap 28), so both edges are written.
+    if (ghosts) { try { ghosts.setPaused(!!on); } catch (e) { /* noop */ } }
     if (active) {
       try { active.engine.suspend(!!on); } catch (e) { say('engine.suspend threw: ' + ((e && e.message) || e)); }
       try { active.peek.forceHide(); } catch (e) { /* noop */ }
@@ -2646,6 +2680,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       disarmPunch();
       teardownClass();
       setStage(null);
+      if (ghosts) { try { ghosts.destroy(); } catch (e) { /* noop */ } ghosts = null; }
       if (campus) { try { campus.destroy(); } catch (e) { /* noop */ } campus = null; }
       if (vn) { try { vn.destroy(); } catch (e) { /* noop */ } vn = null; }
       try { ceremonies.destroy(); } catch (e) { /* noop */ }
