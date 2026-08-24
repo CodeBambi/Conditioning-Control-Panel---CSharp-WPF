@@ -40,7 +40,12 @@ Official sources (all fetched 2026-07-19, verified current):
   Windows-150% remains a named manual gate for the verification-harness row (row 7): set a
   monitor to 150% in Windows Settings, re-run `headed-smoke.ps1`, expect identical DIP bounds and
   1.5× pixel bounds.
-- **WSLg graceful close:** no `xdotool`/`wmctrl` in the WSL distro (no passwordless sudo to
+- **WSLg graceful close:** ~~no `xdotool`/`wmctrl` in the WSL distro~~ — the packages really are
+  absent, but that stopped meaning what this line assumed on 2026-08-24: XTEST 2.2 and
+  `libXtst.so.6` ship in the base X client libraries, so synthetic input needs no new package.
+  A graceful close is now driven directly by `WM_DELETE_WINDOW` ClientMessage and measured:
+  a deliberately malformed message is ignored (negative control), the real one runs the full
+  teardown and the process exits 0. Original note follows. (no passwordless sudo to
   install) — the WSLg instance was terminated by signal; graceful window-close on WSLg is a named
   manual gate. The teardown CONTRACT is proven by unit tests green on WSL2 (85/85 incl. the typed
   Cancelled teardown assertions) and the headed Windows exit-0 close.
