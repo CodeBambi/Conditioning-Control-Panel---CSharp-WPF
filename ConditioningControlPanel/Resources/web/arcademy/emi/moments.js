@@ -92,8 +92,30 @@ export const MOMENTS = Object.freeze({
   /* --- arriving ------------------------------------------------------- */
   /** The board / a room came up. She notices you. */
   greet: { chain: 'wink' },
-  /** A class started. GLANCE = "noticing the player" (locked). */
-  classStart: { chain: 'glance' },
+  /** A class started. GLANCE = "noticing the player" (locked) - and, since the
+   *  EMI COLOR wave, the arrival face knows what KIND of room it walked into
+   *  (payload.family, from the manifest): scanning in a search room, side-eye
+   *  in a tracking room, half-lidded calm at the pool. Unknown family = the
+   *  locked glance, exactly as before. */
+  classStart: {
+    pick(p) {
+      const FAMILY_FACE = {
+        search: '(◔_◔)', memory: '._.', reflex: 'o_o', comfort: '=_=',
+        tracking: '¬_¬', recall: '0_0', puzzle: '(◠‿◠)',
+      };
+      const f = p && FAMILY_FACE[String(p.family || '')];
+      return f ? { face: f, hold: 1400 } : { chain: 'glance' };
+    },
+  },
+
+  /* --- mid-class (EMI COLOR: the tension mirror) ------------------------
+   * FACE ONLY, by design: no bark pool exists on either name and none may be
+   * added - a mascot that talks during a clutch moment is a distraction with
+   * a fanbase. The games ration these through ctx.mood in shell.js. */
+  /** The room got serious. She leans in and stays leaned. */
+  tense: { face: 'o_o', hold: 1600 },
+  /** The one big moment. Wide eyes, a little shiver, nothing said. */
+  clutch: { face: '(⊙_⊙)', hold: 1800, body: 'shiver' },
 
   /* --- winning -------------------------------------------------------- */
   /** A punch card stamp landed, or a class was won.

@@ -575,6 +575,13 @@ export default {
       hintIndex = -1; hintLetter = '';
       if (ladder) ladder.miss();
       if (casino && ladder) casino.setHeat(ladder.heat);   // the marquee climbs with the storm
+      /* EMI COLOR: row five is the lean-in, the last row the wide eyes; the
+       * third wrong row is one small >_<. All face-side, shell-rationed. */
+      try {
+        if (ctx.mood && rowIndex === ROWS - 1) ctx.mood.clutch();
+        else if (ctx.mood && rowIndex === ROWS - 2) ctx.mood.tense();
+        else if (ctx.mood && rowIndex === 3) ctx.mood.stumble();
+      } catch (e) { /* noop */ }
       beat(tier >= 3);
       paintHud();
 

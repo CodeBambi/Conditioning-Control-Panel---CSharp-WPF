@@ -382,7 +382,7 @@ export const POOLS = Object.freeze({
   lfClassStart: {
     on: 'classStart', when: ['gameIs:lost_and_found'], odds: 0.25, ceremony: false, priority: 20,
     lines: [
-      { t: "find all five. squint like a champion.", face: '\\o/' },
+      { t: "squint like a champion. the wall respects that.", face: '\\o/' },
       { t: "i looked already. i'm not allowed to point.", face: '0_0' },
       { t: "somebody lost a whole gif in there. imagine the panic.", face: '@_@' }
     ]
@@ -537,7 +537,7 @@ export const POOLS = Object.freeze({
       /* EMI COLOR: room-flavoured S lines, closed by gameIs. */
       { t: "an s in the pool. lifeguard material.", face: '(⌐■_■)', when: ['gameIs:the_deep_end'] },
       { t: "an s in homeroom. the word never stood a chance.", face: '(⌐■_■)', when: ['gameIs:daily_trigger'] },
-      { t: "five for five. the bin fears you.", face: '\\o/', when: ['gameIs:lost_and_found'] }
+      { t: "a clean sweep. the bin fears you.", face: '\\o/', when: ['gameIs:lost_and_found'] }
     ]
   },
 

@@ -2339,6 +2339,44 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
     let ended = false;
 
+    /* ---- ctx.mood (EMI COLOR, 2026-08-24): THE TENSION MIRROR ------------
+     * A game may TELL the mascot how the room feels; it may not make her talk.
+     * `tense`/`clutch` reach only the wordless MOMENTS table (no pool exists on
+     * either name, by design - mid-class speech stays barred), `stumble` fires
+     * the small 'miss' face whose pool always said "one wrong answer, one
+     * dropped tile" and finally means it (its own maxPerClass:1 still rations
+     * the words), and `runLost` is the mid-class K.O. All throttled HERE so no
+     * game can flood her: tense latches until calm, everything shares a 15s
+     * spacing, stumbles cap at 3 a class, the K.O. spends once. Opt-in per
+     * game; a class that never calls it plays exactly as before. */
+    const mood = (() => {
+      let tenseLatch = false, stumbles = 0, lastAt = 0, koSpent = false;
+      const MOOD_SPACING_MS = 15000;
+      const fire = (name, extra) => {
+        try { fireMoment(name, Object.assign({ gameKey: cls.gameKey, midClass: true }, extra || {})); }
+        catch (e) { /* a mascot may never break a class */ }
+      };
+      return Object.freeze({
+        tense() {
+          if (tenseLatch) return; const now = Date.now();
+          if (now - lastAt < MOOD_SPACING_MS) return;
+          tenseLatch = true; lastAt = now; fire('tense');
+        },
+        calm() { tenseLatch = false; },
+        clutch() {
+          const now = Date.now();
+          if (now - lastAt < MOOD_SPACING_MS) return;
+          lastAt = now; fire('clutch');
+        },
+        stumble() {
+          if (stumbles >= 3) return; const now = Date.now();
+          if (now - lastAt < MOOD_SPACING_MS) return;
+          stumbles += 1; lastAt = now; fire('miss');
+        },
+        runLost() { if (koSpent) return; koSpent = true; fire('runLost'); },
+      });
+    })();
+
     const ctx = {
       root: chrome.root,
       engine: engineHandleFor(engine, manifest, cls.gameKey),
@@ -2351,6 +2389,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       peek,
       ceremonies: classCeremonies,
       store,
+      mood,
 
       /* ---- additive read-only projection (all from init) ----------------
        * A class that needs to know the shape of the machine it is running on
