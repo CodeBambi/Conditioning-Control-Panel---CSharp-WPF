@@ -37,10 +37,10 @@ public enum ToastKind
 /// notification-settings census entry, which is DEFERRED; a dismissal that outlives the process
 /// with no settings surface to review it would be a preference the user can set once and never
 /// find again. Upstream's optional ACTION BUTTON (<c>:175-198</c>) has exactly one consumer,
-/// <c>Services/TierGate.cs:133</c>'s "See tiers", which needs the tier-refusal route and an App
-/// Info &amp; Data page — neither of which this port has yet
-/// (<c>Views/Pages/PlayPage.axaml:93-96</c> records that divergence). Both are absent rather than
-/// stubbed.</para>
+/// <c>Services/TierGate.cs:133</c>'s "See tiers", which opens an App Info &amp; Data page this port
+/// does not have; the refusal itself now arrives here, but that button would have nowhere to go, so
+/// it is absent rather than stubbed and the route is named in words instead
+/// (<c>Views/Pages/PlayPage.axaml</c> records the divergence).</para>
 ///
 /// <para><b>The auto-dismiss timing is injected.</b> <see cref="Schedule"/> defaults to
 /// <c>DispatcherTimer.RunOnce</c>, which fires on the UI thread — so nothing here marshals, and a
@@ -83,7 +83,20 @@ public partial class ToastHost : UserControl
     /// </summary>
     public void Show(string message, ToastKind kind = ToastKind.Info, TimeSpan? duration = null)
     {
-        var toast = Add(message, kind);
+        ArgumentNullException.ThrowIfNull(message);
+
+        // THE SAME SENTENCE TWICE IS ONE TOAST WITH A FRESH CLOCK, NOT TWO TOASTS. Upstream states
+        // the rule for its keyed toasts - already showing is a no-op (NotificationService.cs:110) -
+        // and this port needs it for the unkeyed ones as well, because ITS host floats over the
+        // page's own controls rather than over empty chrome. Four presses on a refused button would
+        // otherwise build a stack tall enough to reach the button being pressed, which is exactly
+        // the defect the bottom dock exists to prevent (Views/MainWindow.axaml, ToastLayer). The
+        // timer is REPLACED rather than left alone so the newest press still gets its full
+        // duration: a refusal that expired a second after the user asked again would announce less
+        // than upstream does.
+        var toast = Existing(message) ?? Add(message, kind);
+        (toast.Tag as IDisposable)?.Dispose();
+
         // Upstream stashes the timer on the toast itself so the dismiss handler can stop it rather
         // than leak it for the rest of the window (NotificationService.cs:100-104, :215).
         toast.Tag = Schedule(duration ?? DefaultDuration, () => Remove(toast));
@@ -100,7 +113,18 @@ public partial class ToastHost : UserControl
     /// key and persists nothing, so it is NOT upstream's <c>ShowSticky</c>
     /// (<c>NotificationService.cs:61</c>).</para>
     /// </summary>
-    public void ShowUntilDismissed(string message, ToastKind kind) => Add(message, kind);
+    public void ShowUntilDismissed(string message, ToastKind kind)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        // Already on screen and waiting to be acknowledged: there is no timer to refresh and a
+        // second copy of the same sentence says nothing new. Upstream's own rule for a toast that
+        // outlives its own call (<c>NotificationService.cs:110</c>).
+        if (Existing(message) is null)
+        {
+            Add(message, kind);
+        }
+    }
 
     /// <summary>Takes every toast away. The shell has no consumer; a test uses it to reset.</summary>
     public void DismissAll()
@@ -111,10 +135,14 @@ public partial class ToastHost : UserControl
         }
     }
 
+    /// <summary>The toast already saying this, if one is up. Matched on the sentence rather than on
+    /// a key because the port's callers have no keys — see <see cref="Show"/>.</summary>
+    private Border? Existing(string message) =>
+        ToastStack.Children.OfType<Border>().FirstOrDefault(
+            toast => string.Equals(MessageOf(toast), message, StringComparison.Ordinal));
+
     private Border Add(string message, ToastKind kind)
     {
-        ArgumentNullException.ThrowIfNull(message);
-
         var text = new TextBlock { Text = message };
         text.Classes.Add("toast-message");
         text.SetValue(AutomationProperties.AutomationIdProperty, MessageAutomationId);

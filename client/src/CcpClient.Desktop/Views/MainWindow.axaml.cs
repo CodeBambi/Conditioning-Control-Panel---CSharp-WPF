@@ -155,7 +155,7 @@ public partial class MainWindow : Window
 
         _pages[ShellRoutes.Studio] = new StudioPage(Loom, Session, Scheduler, Haptics, Recap, Audio);
         _pages[ShellRoutes.Companion] = new CompanionPage(ShowCompanion);
-        _pages[ShellRoutes.Play] = new PlayPage(Dtrh, Goon, Arcademy, Mantra);
+        _pages[ShellRoutes.Play] = new PlayPage(Dtrh, Goon, Arcademy, Mantra, ToastLayer);
         _pages[ShellRoutes.Intake] = new IntakePage(Intake);
         _pages[ShellRoutes.System] = new SystemPage(host, Session, ToastLayer);
 
