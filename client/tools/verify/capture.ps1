@@ -221,11 +221,20 @@ $statesFor = @{
     # because nothing widened), `titles` is the same window after one app has been named. A check
     # that passed on both would be saying the third stop means nothing.
     'companion-privacy' = @('broad', 'titles')
-    # THE TYPED MANTRA GAME. Both states are the SAME window playing the SAME repetition of the
-    # SAME mantra, and the only thing between them is that somebody typed. `fresh` is the line as
-    # the game hands it over - every character dim - and `typed` is the same line after all but its
-    # last two characters have arrived on a real keyboard, so the same pixels are lit. A check that
-    # passed on both would be saying the per-character feedback, which is the whole game, is paint.
+    # THE TYPED MANTRA GAME. Both states are the same window on the same repetition, and the only
+    # thing a USER did differently is type: `fresh` is the line as the game hands it over - every
+    # character dim - and `typed` is a line after all but its last two characters have arrived on a
+    # real keyboard. A check that passed on both would be saying the per-character feedback, which
+    # is the whole game, is paint.
+    #
+    # THE TWO RUNS MAY OR MAY NOT SHOW THE SAME SENTENCE, and both cases have been measured. The
+    # mantra is DRAWN AT RANDOM from a pool of five, so each run gets its own line at its own
+    # Viewbox scale: one pair drew 'I am deeply relaxed' (2450x473) against 'My mind is open and
+    # receptive' (2450x307) and inverted 0.281/0.003 and 0.273/0.000; the next pair drew the same
+    # sentence twice, the same band to the pixel, and inverted 0.289/0.003 and 0.273/0.000. That
+    # the checks are indifferent to WHICH sentence is drawn is what says they read the
+    # per-character STATE and not the layout - and it is why the band is cut from the line's own
+    # rect rather than fixed.
     'mantra-window' = @('fresh', 'typed')
     # THE TRANSCRIPT: `closed` is the companion window with no transcript in the UIA tree at all,
     # `open` is the same window with the read-only viewer over it. One press between them.

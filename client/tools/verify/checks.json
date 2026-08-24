@@ -675,9 +675,12 @@
     // PER-CHARACTER FEEDBACK that is the whole game: a character the user has typed correctly is
     // painted #9988DD and one she has not is painted #353550 (MantraIntensity.ColdHighlight and
     // .Dim, upstream's Windows/MantraWindow.xaml.cs:28-29, chosen by MantraSession.StateOf from
-    // upstream's :133-144). Both captures are the same window, the same repetition and the same
-    // mantra; the only thing between them is that all but the last two characters have been typed
-    // on a real keyboard. A check that passed on both would be saying the feedback is decoration.
+    // upstream's :133-144). Both captures are the same window on the same repetition, and the only
+    // thing a USER did differently is type: in `typed`, all but the last two characters arrived on
+    // a real keyboard. A check that passed on both would be saying the feedback is decoration.
+    // The mantra is DRAWN AT RANDOM, so a pair may or may not show the same sentence - both cases
+    // are measured, and the checks invert identically either way, which is what says they read the
+    // character STATE and not the layout.
     //
     // THE REGION IS DERIVED, NEVER FIXED. The mantra is DRAWN AT RANDOM from a pool of five, so
     // its width and its inked fraction move with the draw - the pop quiz card's lesson, and the

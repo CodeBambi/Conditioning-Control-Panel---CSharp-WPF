@@ -1,4 +1,4 @@
-using CcpClient.Desktop.Features.Mantra;
+﻿using CcpClient.Desktop.Features.Mantra;
 using CcpVerify;
 using Xunit;
 
@@ -10,10 +10,13 @@ namespace CcpClient.Tests;
 /// <para><b>What this file is NOT.</b> It is not the evidence. The evidence is two real captures of
 /// the running game on a real Windows desktop at scale 1.75, taken through a door a user can press,
 /// and checked by <c>CcpVerify</c> against <c>client/tools/verify/checks.json</c>:
-/// <c>mantra-window-fresh-dim</c> scored 97338/346920 (0.281) on its own capture and 586/226380
-/// (0.003) on the other state's; <c>mantra-window-typed-lit</c> scored 61910/226380 (0.273) on its
-/// own and 0/346920 (0.000 EXACT) on the other's. A headless assembly cannot photograph anything and
-/// no fact here claims to.</para>
+/// <c>mantra-window-fresh-dim</c> scored 0.281 on its own capture, 0.003 on the other state's and
+/// 21/2560250 (0.000) on a capture of the whole dashboard; <c>mantra-window-typed-lit</c> scored
+/// 0.273 on its own and 0.000 EXACT on both of the others. TWO PAIRS were taken, and the mantra is
+/// drawn at random: the first drew different sentences in the two states ('I am deeply relaxed'
+/// over 2450x473 and 'My mind is open and receptive' over 2450x307), the second drew the same
+/// sentence twice over the same band to the pixel, and the checks inverted identically both times.
+/// A headless assembly cannot photograph anything and no fact here claims to.</para>
 ///
 /// <para><b>What it IS.</b> The things that rot silently between headed runs. This surface's claim
 /// is the per-character feedback that IS the game — a matched character is painted
