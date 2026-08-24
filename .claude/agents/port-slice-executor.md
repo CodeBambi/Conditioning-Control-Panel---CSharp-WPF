@@ -32,6 +32,15 @@ Paths are repository-relative; this repo lives at a different absolute path on e
    **Your floor run will therefore report a total that does NOT match the pin.** That is expected and is not a failure: confirm the observed total equals `pin + your reported delta`, and state both numbers in your report. Never widen the pin, disable a test, or special-case anything to make a step pass. Never add a name to `allowedSkips` unless its precondition is a property of the machine or OS.
 10. **Never export `CCP_DATA_ROOT` process-wide.** It makes the data-root isolation pin skip and the floor goes blind. Set it per headed-evidence run only.
 11. **Do not commit the board.** `client/docs/task-board.md` is a shared chokepoint reconciled by the orchestrator at land time.
+12. **If you edit anything under `client/docs/`, run `node client/tools/citations/intra.mjs` before you report.**
+   Learned 2026-08-24, the expensive way: a lane grepped `client/tests` for the document's FILENAME, found
+   nothing, and concluded no guard watched it. `intra.mjs` sweeps the WHOLE of `client/docs`
+   filename-agnostically and red with four wrong-line rows against the lane's new section, so no grep for
+   that filename could ever have found it. **Grepping for a document's name does not find the guards that
+   parse a whole directory.** Two traps that tool sets, both real: a citation ending a markdown table cell
+   binds the NEXT cell's leading backticked token (terminate the cell with a period), and a bare
+   `README.md:12-20` is rejected as an ambiguous basename when that name exists in more than one tree -
+   write the real path. Exit 0 is the bar.
 
 ## Loop
 
