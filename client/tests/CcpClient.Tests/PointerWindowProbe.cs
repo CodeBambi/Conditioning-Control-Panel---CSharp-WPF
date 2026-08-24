@@ -47,6 +47,7 @@ internal static class PointerWindowProbe
     private const uint WmMousewheel = 0x020A;
     private const uint WmKeydown = 0x0100;
     private const uint WmActivate = 0x0006;
+    private const uint WmQuit = 0x0012;
     private const uint PmRemove = 0x0001;
 
     /// <summary>The left button's bit in a mouse message's <c>wParam</c>. A move carrying it is a
@@ -343,6 +344,12 @@ internal static class PointerWindowProbe
 
         return ours;
     }
+
+    /// <summary>The OS thread that owns a window, or 0. The foreground is scoped to a thread's
+    /// input queue, so "these two windows are on different queues" is a question only this can
+    /// answer.</summary>
+    internal static uint OwningThreadOf(nint window) =>
+        WindowsHost && window != 0 ? GetWindowThreadProcessId(window, out _) : 0;
 
     internal static string DescribeWindow(nint window)
     {
@@ -880,6 +887,113 @@ internal static class PointerWindowProbe
         }
     }
 
+    /// <summary>
+    /// A <see cref="ScratchTarget"/> created, focused and pumped on a <b>SECOND THREAD</b>.
+    ///
+    /// <para><b>Why the thread, and why no fact about foreground activation is honest without
+    /// it.</b> Windows scopes the foreground to a THREAD'S INPUT QUEUE, and
+    /// <c>WS_EX_NOACTIVATE</c> governs the CROSS-QUEUE activation a click would otherwise cause.
+    /// Two windows on one thread share one queue, so "the foreground moved from one to the other"
+    /// there is a statement about that thread's active window and NOT about the style — measured
+    /// directly while writing this: with the foreground keeper on the run's own thread, a click on
+    /// the <c>WS_EX_NOACTIVATE</c> overlay moved <c>GetForegroundWindow</c> to the overlay, and
+    /// with the identical keeper on its own thread it did not. A fact that skipped this rig would
+    /// have reported the port stealing focus when what it had measured was the harness.</para>
+    ///
+    /// <para>Its thread owns the window for the window's whole life: a native window may be
+    /// created, focused and destroyed only by its own thread, so creation, <c>SetFocus</c>, the
+    /// message loop and the disposal all happen inside the thread body. The loop is a BLOCKING
+    /// QUEUE WAIT rather than a wall-clock wait — it returns when a message arrives and ends when
+    /// <see cref="Dispose"/> posts <c>WM_QUIT</c> — which is the same shape, for the same reason, as
+    /// <c>InputWindowProbe.ParkedWindow</c>.</para>
+    /// </summary>
+    internal sealed class ParkedScratchTarget : IDisposable
+    {
+        private readonly ManualResetEventSlim _ready = new(false);
+        private Thread? _thread;
+        private ScratchTarget? _target;
+        private uint _threadId;
+        private bool _disposed;
+
+        private ParkedScratchTarget()
+        {
+        }
+
+        internal nint Window => _target?.Window ?? 0;
+
+        internal int Downs => _target?.Downs ?? 0;
+
+        internal int KeyDowns => _target?.KeyDowns ?? 0;
+
+        internal int Activations => _target?.Activations ?? 0;
+
+        /// <summary>The OS thread that owns this window. A fact comparing it with the thread that
+        /// owns the surface under test is what proves the two queues really are different.</summary>
+        internal uint OwningThreadId => _threadId;
+
+        internal static ParkedScratchTarget Start(int x, int y, int width, int height)
+        {
+            var parked = new ParkedScratchTarget();
+            if (!WindowsHost)
+            {
+                return parked;
+            }
+
+            parked._thread = new Thread(() =>
+            {
+                parked._threadId = GetCurrentThreadId();
+                parked._target = ScratchTarget.Create(x, y, width, height, activatable: true);
+
+                // From the owning thread, which is the only thread SetFocus will accept it from.
+                if (parked._target is { Window: not 0 })
+                {
+                    SetFocus(parked._target.Window);
+                }
+
+                parked._ready.Set();
+
+                while (GetMessageW(out var message, 0, 0, 0))
+                {
+                    TranslateMessage(ref message);
+                    DispatchMessageW(ref message);
+                }
+
+                // DestroyWindow is refused from any thread but this one.
+                parked._target?.Dispose();
+            })
+            {
+                IsBackground = true,
+                Name = "ccp-pointer-probe-parked",
+            };
+
+            parked._thread.Start();
+
+            // BOUNDED, not pinned: the wedge is not the subject here, it is bring-up. A bare wait
+            // would take the whole run down with no failing test name if the thread died before
+            // Set().
+            TestWait.UntilSync(
+                () => parked._ready.IsSet, "the parked pointer target thread to create and focus its window");
+            return parked;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            if (WindowsHost && _threadId != 0)
+            {
+                PostThreadMessageW(_threadId, WmQuit, 0, 0);
+            }
+
+            _thread?.Join();
+            _ready.Dispose();
+        }
+    }
+
     // ---- interop ---------------------------------------------------------------------------
 
     private delegate nint WndProc(nint window, uint message, nint wParam, nint lParam);
@@ -1007,6 +1121,12 @@ internal static class PointerWindowProbe
     private static extern bool PostMessageW(nint window, uint message, nint wParam, nint lParam);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern bool PeekMessageW(out Msg msg, nint window, uint filterMin, uint filterMax, uint remove);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool GetMessageW(out Msg msg, nint window, uint filterMin, uint filterMax);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool PostThreadMessageW(uint thread, uint message, nint wParam, nint lParam);
+    [DllImport("user32.dll", SetLastError = true)] private static extern nint SetFocus(nint window);
+    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
     [DllImport("user32.dll")] private static extern bool TranslateMessage(ref Msg msg);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern nint DispatchMessageW(ref Msg msg);
     [DllImport("user32.dll", SetLastError = true)]

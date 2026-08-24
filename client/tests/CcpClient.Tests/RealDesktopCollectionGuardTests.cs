@@ -135,6 +135,16 @@ public class RealDesktopCollectionGuardTests
         // peer run's windows would be counted, or would win those points, exactly as they would for
         // every helper above.
         "SurfaceExitObservations",
+
+        // The overlay input-invariant run contends for everything the pointer lines contend for and
+        // then adds the two most exclusive resources on the machine: it SYNTHESISES KEYSTROKES into
+        // the system input stream, and it takes the FOREGROUND twice — once for the window it types
+        // into and once for the keeper that must still hold it after a handled click. A peer run's
+        // card taking the foreground mid-pass would read here as a click leaking through an overlay,
+        // which is a true report of a contended desktop and a useless one for the fact. Its
+        // task-switcher half additionally walks the whole z-order filtered to this process, so a
+        // peer's windows would be counted as ours.
+        "OverlayDesktopInputObservations",
     ];
 
     /// <summary>
@@ -175,6 +185,8 @@ public class RealDesktopCollectionGuardTests
         "GlyphCapabilityTests.cs",
         "GlyphAlphaDifferentialTests.cs",
         "GlyphCoexistenceTests.cs",
+        "OverlayDesktopInputTests.cs",
+        "OverlayTaskSwitcherTests.cs",
     ];
 
     [Fact]
