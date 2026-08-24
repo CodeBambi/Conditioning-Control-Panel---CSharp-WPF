@@ -76,6 +76,87 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// A premium feature left ON when its entitlement lapses (the ? box's free day rotating
+        /// out at midnight, a subscription expiring) used to stay armed underneath the re-drawn
+        /// padlock veil - and the veil covers the very toggle that turns it off, so users were
+        /// stuck with the feature running and no reachable OFF switch. This flips such features
+        /// off on the same funnel that repaints the veils, restoring the invariant that a veiled
+        /// page never has its feature enabled behind it.
+        ///
+        /// Safe against the async-validation startup window on purpose: HasPremiumAccess includes
+        /// the 14-day offline grace stamp (AppSettings.HasCachedPremiumAccess), so an entitled
+        /// subscriber reads true here even before validation lands - only genuinely lapsed users
+        /// are flipped, and settings are only ever written false here, never true.
+        /// </summary>
+        private void EnforceEntitlementLapse()
+        {
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings == null) return;
+                var premium = App.Patreon?.HasPremiumAccess == true;
+                var changed = false;
+
+                // Awareness (keyword triggers + screen OCR) - keeps its own keyboard hook and OCR
+                // scanner alive. Mirrors ChkAwarenessMaster_Changed's OFF branch.
+                if (settings.KeywordTriggersEnabled && !premium
+                    && App.DailyFree?.IsFreeToday("awareness") != true)
+                {
+                    settings.KeywordTriggersEnabled = false;
+                    App.KeywordTriggers?.Stop();
+                    App.ScreenOcr?.Stop();
+                    if (settings.PanicKeyEnabled != true) _keyboardHook?.Stop();
+                    changed = true;
+                    App.Logger?.Information("Entitlement lapsed: Awareness switched off");
+                }
+
+                // Bambi Takeover (autonomy).
+                if (settings.AutonomyModeEnabled && !premium
+                    && App.DailyFree?.IsFreeToday("takeover") != true)
+                {
+                    settings.AutonomyModeEnabled = false;
+                    App.Autonomy?.Stop();
+                    changed = true;
+                    App.Logger?.Information("Entitlement lapsed: Bambi Takeover switched off");
+                }
+
+                // She's Listening (spoken mantras). No background engine of its own to stop -
+                // the flag is what the speech pipeline consults.
+                if (settings.SpokenMantrasEnabled && !premium
+                    && App.DailyFree?.IsFreeToday("voice") != true)
+                {
+                    settings.SpokenMantrasEnabled = false;
+                    changed = true;
+                    App.Logger?.Information("Entitlement lapsed: She's Listening switched off");
+                }
+
+                // Haptics. The mixer already self-mutes live (HapticMixer.IsGateOpen), so this is
+                // about the master toggle not sitting ON underneath the veil.
+                if (settings.Haptics?.Enabled == true && !premium
+                    && App.DailyFree?.IsFreeToday("haptics") != true)
+                {
+                    settings.Haptics.Enabled = false;
+                    changed = true;
+                    App.Logger?.Information("Entitlement lapsed: Haptics switched off");
+                }
+
+                if (changed)
+                {
+                    App.Settings?.Save();
+                    // If the affected page is on screen right now, repaint its toggles too; every
+                    // page also re-syncs itself on open, so a miss here degrades to stale-until-
+                    // reopened, never to wrong.
+                    try { SyncAwarenessTabUI(); } catch { /* tab not built yet */ }
+                    try { SyncKeywordRescuePanelUi(); } catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "EnforceEntitlementLapse failed");
+            }
+        }
+
+        /// <summary>
         /// Repaints every entitlement veil that the ? box can lift, in one place, so the day-roll /
         /// server-override path and the tier-change path cannot disagree about which doors are shut.
         /// Each pool feature passes its <see cref="Models.ExclusiveFeature.DailyFreeKey"/>; Lockdown
@@ -83,6 +164,9 @@ namespace ConditioningControlPanel
         /// </summary>
         internal void RefreshEntitlementVeils()
         {
+            // Before repainting the padlocks: a feature left ON without entitlement is switched
+            // off, so a veil can never trap a running feature behind an unreachable toggle.
+            EnforceEntitlementLapse();
             // Haptics content grid - the dim-and-disable half of that page's gate. It has to ask
             // the same question HapticsGate does, or the free day lifts the veil and leaves an
             // inert page underneath.
