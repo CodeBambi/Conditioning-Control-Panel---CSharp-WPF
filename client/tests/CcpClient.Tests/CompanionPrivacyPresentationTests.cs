@@ -206,6 +206,14 @@ public class CompanionPrivacyPresentationTests
         // picture. Cropped to the padding alone both captures were a single flat colour, which the
         // capture step's non-vacuity gate refuses — so "not too far up" is no longer the only way
         // this band can be wrong, and "not far enough up" is now a refusal in its own right.
+        //
+        // THE TRANSCRIPT PAIR NOW HAS THE SAME SHAPE, plus one refusal no other surface here needs.
+        // Its band is the only one that deliberately extends OUTSIDE the window whose state it is
+        // reading: the transcript is a large flat window with no boundary anywhere near the sampled
+        // rows, so the boundary the `open` capture carries is the transcript's OWN LEFT EDGE, which
+        // the band straddles. That makes "the band is inside the transcript" the wrong assertion —
+        // the correct one is that the transcript's real edge lands where the companion's layout says
+        // it will, and inside the band rather than beside it.
         string[] geometry =
         [
             "it is sampling the segment's own glyphs",
@@ -213,7 +221,11 @@ public class CompanionPrivacyPresentationTests
             "off the dial strip entirely",
             "it is sampling the heading's glyphs",
             "'the dial seat band' 'the companion window'",
-            "'the transcript sample band' 'the transcript window'",
+            "'the transcript sample band' 'the companion window'",
+            "it would carry no boundary in `closed` and be a flat fill again",
+            "the band would not straddle it and `open` would be a flat fill again",
+            "'the band right of the transcript edge' 'the transcript window'",
+            "the whole band is covered and the capture carries no boundary",
         ];
         Assert.NotEmpty(geometry);
         foreach (var refusal in geometry)

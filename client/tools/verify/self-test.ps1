@@ -12,6 +12,38 @@
 # checks must trip on it. That is what separates a check that catches a REAL regression in product
 # markup from one that only distinguishes two captures of a working build.
 # Re-runnable: pwsh client/tools/verify/self-test.ps1
+#
+# =================================================================================================
+# THE SWEEP, and the policy decision behind it being OPT-IN.
+#
+# `pwsh client/tools/verify/self-test.ps1 -Sweep` drives EVERY surface and state capture.ps1 can
+# bind, runs each one's named checks, and reports a table.
+#
+# WHY IT EXISTS. This script drives two surfaces of nineteen, and that is how a broken surface
+# rotted unseen for a day: `companion-transcript` stopped capturing in BOTH states and nothing
+# noticed, because ONLY A HEADED RUN CATCHES A SURFACE THAT HAS STOPPED CAPTURING. No unit test, no
+# headless frame and no build can: the failure is a real window on a real desktop refusing to
+# photograph.
+#
+# WHY IT IS NOT THE DEFAULT, which is the decision this row asked for. The default legs cost four
+# builds and four captures; the sweep costs one build and THIRTY-SIX CAPTURES, several of which
+# are real scripted sessions that must be left running (session-history/kept exists precisely to
+# cross upstream's 30-second retention line), and it holds the machine-wide real-desktop lease for
+# the whole time - so every other lane's floor run and every other capture queues behind it. A
+# sweep that takes the better part of an hour and locks the desktop is a sweep nobody runs before a
+# push, and a check nobody runs is worth less than a fast one that always does. So: the fast legs
+# stay the thing you run every time, the sweep is the thing you run when you touched the harness,
+# a shared brush, a window's geometry, or before a wave lands.
+#
+# WHAT IT DOES NOT DO, deliberately: it does not seed a regression. The default legs prove the
+# named checks BITE; the sweep proves every surface still PHOTOGRAPHS and still passes its own
+# checks. Those are different questions and conflating them would multiply an hour by two.
+#
+# It discovers the pairs from capture.ps1's OWN $statesFor table, through the PowerShell parser
+# rather than a copy of the list - a duplicated list is the same rot vector this leg exists to
+# close, and a surface added to capture.ps1 joins the sweep with no edit here.
+# =================================================================================================
+param([switch]$Sweep)
 $ErrorActionPreference = 'Stop'
 
 $verifyDir = $PSScriptRoot
@@ -21,6 +53,115 @@ $verify = Join-Path $clientDir 'tools\verify\CcpVerify\bin\Debug\net10.0\CcpVeri
 $manifest = Join-Path $verifyDir 'checks.json'
 $capture = Join-Path $verifyDir 'artifacts\windows-rail-door-selected.png'
 $rackCapture = Join-Path $verifyDir 'artifacts\windows-rack-row-selected.png'
+
+# -------------------------------------------------------------------------------------------------
+# THE SWEEP LEG. Handled here, before any of the seeded-regression machinery below reads or writes
+# the product's markup: this leg mutates nothing, and a run that cannot damage the tree should not
+# even open the file it would have had to restore.
+# -------------------------------------------------------------------------------------------------
+if ($Sweep) {
+    # THE PAIRS, out of capture.ps1's own table through the PowerShell parser. Never a copy: a
+    # duplicated list would go stale exactly the way the two-surface coverage this leg replaces did.
+    $captureScript = Join-Path $verifyDir 'capture.ps1'
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($captureScript, [ref]$null, [ref]$null)
+    $assignment = $ast.Find({
+            param($node)
+            $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+            $node.Left.Extent.Text -eq '$statesFor'
+        }, $true)
+    if ($null -eq $assignment) {
+        Write-Output "SWEEP FAIL: capture.ps1 no longer assigns a `$statesFor table - the sweep cannot discover what to drive"
+        exit 1
+    }
+    $hashtable = $assignment.Right.Find({
+            param($node) $node -is [System.Management.Automation.Language.HashtableAst]
+        }, $true)
+    $statesFor = $hashtable.SafeGetValue()
+    if ($statesFor.Count -eq 0) {
+        Write-Output 'SWEEP FAIL: capture.ps1 declares an EMPTY surface table - a sweep of nothing is not a sweep'
+        exit 1
+    }
+
+    # HOW MANY NAMED CHECKS EACH PAIR HAS. Counted here rather than inferred from CcpVerify's exit
+    # code, because a pair with no declared check is not the same fact as a pair whose checks passed
+    # and this table must not print them the same way.
+    $manifestJson = ((Get-Content $manifest -Raw) -replace '(?m)^\s*//.*$', '') | ConvertFrom-Json
+    $checkCount = @{}
+    foreach ($check in $manifestJson.checks) {
+        $key = "$($check.surface)/$($check.state)"
+        $checkCount[$key] = 1 + ($(if ($checkCount.ContainsKey($key)) { $checkCount[$key] } else { 0 }))
+    }
+
+    $pairs = @()
+    foreach ($surface in ($statesFor.Keys | Sort-Object)) {
+        foreach ($state in $statesFor[$surface]) { $pairs += , @($surface, $state) }
+    }
+    Write-Output "--- sweep: $($statesFor.Count) surfaces, $($pairs.Count) surface/state pairs ---"
+
+    # ONE build for the whole sweep. capture.ps1 launches the BUILT exe, so a stale tree would have
+    # every row of this table describing yesterday's product.
+    dotnet build (Join-Path $clientDir 'CcpClient.sln') -c Debug --nologo | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Output 'SWEEP FAIL: the solution did not build; every capture below would be of the previous build'
+        exit 1
+    }
+
+    $rows = @()
+    $failed = 0
+    $sweepClock = [Diagnostics.Stopwatch]::StartNew()
+    foreach ($pair in $pairs) {
+        $surface, $state = $pair
+        $key = "$surface/$state"
+        $declared = if ($checkCount.ContainsKey($key)) { $checkCount[$key] } else { 0 }
+        $clock = [Diagnostics.Stopwatch]::StartNew()
+
+        $captureOut = & (Join-Path $verifyDir 'capture.ps1') -Surface $surface -State $state 2>&1 | Out-String
+        $captureExit = $LASTEXITCODE
+        if ($captureExit -ne 0) {
+            # THE TAIL IS THE FINDING. capture.ps1's refusals are one line and they name themselves,
+            # so the row carries the reason rather than an exit code the reader has to go looking up.
+            $reason = ($captureOut.Trim() -split "`n" | Where-Object { $_ -match '^(FAIL|VACUOUS)' } |
+                Select-Object -Last 1)
+            if ([string]::IsNullOrWhiteSpace($reason)) {
+                $reason = ($captureOut.Trim() -split "`n" | Select-Object -Last 1)
+            }
+            $rows += "  FAIL     $key ($([int]$clock.Elapsed.TotalSeconds)s) - capture exit ${captureExit}: $($reason.Trim())"
+            $failed++
+            continue
+        }
+
+        if ($declared -eq 0) {
+            # Not a pass and not a failure: the capture is real and non-vacuous, and no named check
+            # exists to say anything more about it. Printed as its own outcome so the total below
+            # cannot be read as "every pair verified" - and CcpVerify is not even asked, because
+            # EvaluateCapture REFUSES an empty selection by design (CheckEvaluator.cs:73-76), so
+            # calling it here would manufacture a red for a pair the port chose not to check.
+            $rows += "  UNCHECKED $key ($([int]$clock.Elapsed.TotalSeconds)s) - captured, no named check is declared for this pair"
+            continue
+        }
+
+        $png = Join-Path $verifyDir "artifacts\windows-$surface-$state.png"
+        $verifyOut = & $verify --capture $png --surface $surface --state $state --manifest $manifest 2>&1 | Out-String
+        $verifyExit = $LASTEXITCODE
+        if ($verifyExit -ne 0 -or $verifyOut -notmatch 'ALL CHECKS PASSED') {
+            $first = ($verifyOut -split "`n" | Where-Object { $_ -match 'FIRST FAILED CHECK|FAIL ' } | Select-Object -First 1)
+            $rows += "  FAIL     $key ($([int]$clock.Elapsed.TotalSeconds)s) - CcpVerify exit ${verifyExit}: $($first.Trim())"
+            $failed++
+            continue
+        }
+        $rows += "  PASS     $key ($([int]$clock.Elapsed.TotalSeconds)s) - $declared named check(s)"
+    }
+
+    Write-Output '--- sweep results ---'
+    foreach ($row in $rows) { Write-Output $row }
+    $minutes = [math]::Round($sweepClock.Elapsed.TotalMinutes, 1)
+    if ($failed -gt 0) {
+        Write-Output "SWEEP FAIL: $failed of $($pairs.Count) surface/state pairs did not produce a verified capture ($minutes min)"
+        exit 1
+    }
+    Write-Output "SWEEP PASS: $($pairs.Count) surface/state pairs, every capture non-vacuous and every declared check green ($minutes min)"
+    exit 0
+}
 
 # RESTORE FROM MEMORY, NEVER FROM GIT (near-miss, 2026-08-18).
 # This used `git checkout -- MainWindow.axaml` in both the failure path and the finally

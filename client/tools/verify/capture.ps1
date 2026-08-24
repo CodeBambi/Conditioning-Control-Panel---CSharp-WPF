@@ -3396,28 +3396,94 @@ elseif ($Surface -eq 'companion-transcript') {
         Write-Output "transcript rect $($transcriptRect.X),$($transcriptRect.Y) $($transcriptRect.W)x$($transcriptRect.H)"
     }
 
-    # THE BAND, at the SAME screen coordinates in both states, derived from a control that exists
-    # in both: the privacy card's heading, whose settings panel sits under the transcript when the
-    # transcript is up. 4 DIP above it is the settings Border's own top padding (14,8), which the
-    # Border does not paint - so in `closed` those pixels are the window's ground #FF141018, and in
-    # `open` they are the transcript's ground #FF1E1822.
+    # =============================================================================================
+    # THE BAND, and this surface is the reason the vacuity gate had to be argued with rather than
+    # opted out of.
+    #
+    # WHAT IT USED TO BE: 300x3 DIP of the settings Border's own top padding, at the same screen
+    # coordinates in both states. In `closed` those pixels are the companion window's ground
+    # #FF141018; in `open` the transcript is over them and they are its ground #FF1E1822. Both
+    # captures were therefore ONE FLAT COLOUR, and the capture step's non-vacuity gate refused both
+    # - correctly. A picture of a flat fill cannot be told from a picture of nothing.
+    #
+    # WHY THE OTHER FOUR SURFACES' FIX DOES NOT WORK HERE. Each of those moved its crop onto a
+    # boundary that exists in BOTH states. This surface has no such boundary: in `open` the
+    # transcript is a large flat window and EVERY pixel within 24 px of the old band belongs to it
+    # (measured: band at 921,1001, transcript rect 897,339 770x1225, so the nearest edge is its own
+    # left one, 24 px away). Anything the companion window paints is, by construction, covered.
+    #
+    # SO THE HONEST BOUNDARY IS THE TRANSCRIPT'S OWN EDGE, and the band now crosses it. It also
+    # reaches up to the settings panel's own 1 DIP top rule (#FF3A2F3E, CompanionWindow.axaml:146,
+    # BorderThickness 0,1,0,0), which is what the LEFT of the band still shows in `open` because the
+    # transcript does not reach it. That gives:
+    #   closed - rule + ground, two colours, the whole width;
+    #   open   - rule + ground left of the transcript's edge, transcript ground right of it, three.
+    # Both captures carry a boundary, and the picture now says something the flat fill never could:
+    # the transcript's edge is 16 DIP inside the band and the companion's own rule runs UP TO it and
+    # stops. A window that opened somewhere else, at the wrong size, or as a full-screen flood puts
+    # the wrong colour on one side of that line.
+    #
+    # THE HORIZONTAL ANCHOR IS DERIVED, because `closed` has no transcript to read a rect from and
+    # both captures must be at the SAME coordinates. The transcript is 440 DIP wide and CenterOwner
+    # on a 480 DIP companion window
+    # (client/src/CcpClient.Desktop/Features/Companion/CompanionTranscriptWindow.cs:57-58 and
+    # CompanionWindow.axaml:7),
+    # so its left edge sits 20 DIP in from the client edge; the settings Border insets its content by
+    # Padding 14 (:146), so the heading's own rect is 14 DIP in. The edge is therefore 6 DIP right of
+    # the heading. MEASURED AGAINST THAT: predicted 896, read back 897. The prediction is asserted
+    # below against the real rect, so a re-size on either window refuses by name instead of
+    # photographing the wrong side of a line that moved.
+    # =============================================================================================
     $headRect = Get-Rect (Get-Element $companion 'PrivacyDialHead')
-    $capX = $headRect.X + [int][math]::Round(20 * $scale)
-    $capY = $headRect.Y - [int][math]::Round(4 * $scale)
-    $capW = [int][math]::Round(300 * $scale)
-    $capH = [int][math]::Round(3 * $scale)
+    # The settings Border's top rule: BorderThickness 0,1,0,0 then Padding 14,8, so the heading's
+    # rect starts 9 DIP below the rule's top.
+    $panelRuleTop = $headRect.Y - [int][math]::Round(9 * $scale)
+    $transcriptEdge = $headRect.X + [int][math]::Round(6 * $scale)
+    $capX = $transcriptEdge - [int][math]::Round(16 * $scale)
+    $capY = $headRect.Y - [int][math]::Round(13 * $scale)
+    $capW = [int][math]::Round(76 * $scale)
+    $capH = [int][math]::Round(9 * $scale)
     if (($capY + $capH) -gt $headRect.Y) {
         Fail "the band ends at $($capY + $capH) and the card heading starts at $($headRect.Y); it is sampling the heading's glyphs"
     }
-    Write-Output "band $capX,$capY ${capW}x${capH} @ scale $scale - in the settings panel's top padding, above the card heading at $($headRect.Y)"
+    if ($capY -ge $panelRuleTop) {
+        Fail ("the band starts at $capY, at or below the settings panel's own rule at $panelRuleTop; " +
+    'it would carry no boundary in `closed` and be a flat fill again')
+    }
+    if ($capY -lt ($panelRuleTop - [int][math]::Round(6 * $scale))) {
+        Fail ("the band starts at $capY, more than 6 DIP above the settings panel's rule at $panelRuleTop - " +
+    "past the chat list's own 10 DIP bottom padding and into the conversation")
+    }
+    if ($transcriptEdge -le ($capX + [int][math]::Round(4 * $scale)) -or
+        $transcriptEdge -ge ($capX + $capW - [int][math]::Round(4 * $scale))) {
+        Fail ("the transcript's predicted left edge $transcriptEdge is not at least 4 DIP inside the band " +
+    "$capX..$($capX + $capW); the band would not straddle it and `open` would be a flat fill again")
+    }
+    Write-Output ("band $capX,$capY ${capW}x${capH} @ scale $scale - the settings panel's rule at $panelRuleTop " +
+    "and the ground below it, straddling the transcript's predicted left edge at $transcriptEdge, above the " +
+    "card heading at $($headRect.Y)")
 
     Assert-Inside @{ X = $capX; Y = $capY; W = $capW; H = $capH } $companionRect 'the transcript sample band' 'the companion window'
     if ($State -eq 'open') {
-        # The `open` capture is only evidence if the transcript really covers those pixels. It is
-        # centred on its owner, so this holds by construction - and it is ASSERTED rather than
-        # assumed, because a resize on either window would otherwise photograph the companion's own
-        # ground and the check would pass for the wrong reason.
-        Assert-Inside @{ X = $capX; Y = $capY; W = $capW; H = $capH } $transcriptRect 'the transcript sample band' 'the transcript window'
+        # The `open` capture is only evidence if the transcript really covers the RIGHT of the band
+        # and really does not cover the LEFT. It is centred on its owner, so this holds by
+        # construction - and it is ASSERTED rather than assumed, because a resize on either window
+        # would otherwise photograph the companion's own ground on both sides and the check would
+        # pass for the wrong reason.
+        $edgeError = [math]::Abs($transcriptRect.X - $transcriptEdge)
+        if ($edgeError -gt 3) {
+            Fail ("the transcript's left edge is at $($transcriptRect.X) and this band was aimed at $transcriptEdge " +
+    "($edgeError px out). The 440-of-480 DIP centring this band is derived from has changed, so the capture " +
+    'would be sampling the wrong side of the edge')
+        }
+        Assert-Inside @{ X = $transcriptRect.X; Y = $capY; W = $capX + $capW - $transcriptRect.X; H = $capH } `
+            $transcriptRect 'the band right of the transcript edge' 'the transcript window'
+        if ($transcriptRect.X -le $capX) {
+            Fail ("the transcript starts at $($transcriptRect.X), at or left of the band's own left edge $capX; " +
+    'the whole band is covered and the capture carries no boundary')
+        }
+        Write-Output ("straddle confirmed: transcript left edge $($transcriptRect.X) vs predicted $transcriptEdge " +
+    "($edgeError px), band $capX..$($capX + $capW)")
     }
     $windowRect = $companionRect
 }

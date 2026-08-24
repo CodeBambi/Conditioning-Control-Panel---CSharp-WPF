@@ -517,17 +517,32 @@
       "minPixelFraction": 0.95
     },
 
-    // THE TRANSCRIPT (audit row D11). Both checks read the SAME screen band - 3 DIP of the settings
-    // panel's own top padding, above the privacy card's heading - in the two states one press
-    // apart. In `closed` those pixels are the companion window's ground (#FF141018); in `open` the
-    // read-only transcript is over them and they are its ground (#FF1E1822).
+    // THE TRANSCRIPT (audit row D11). Both checks read the SAME screen band in the two states one
+    // press apart, and both read the same sub-rect of it: the part right of where the transcript's
+    // left edge falls, below the settings panel's own top rule. In `closed` those pixels are the
+    // companion window's ground (#FF141018); in `open` the read-only transcript is over them and
+    // they are its ground (#FF1E1822).
+    //
+    // THE BAND USED TO BE THE WHOLE CAPTURE and that is what broke it: cropped to 3 DIP of flat
+    // padding, BOTH captures were a single colour and the capture step's non-vacuity gate refused
+    // them - correctly, because a picture of a flat fill cannot be told from a picture of nothing.
+    // NO PER-SURFACE OPT-OUT WAS ADDED. The crop was widened until it carries a boundary in each
+    // state, which is strictly more than either flat fill ever proved:
+    //   closed - the settings Border's 1 DIP top rule (#FF3A2F3E, CompanionWindow.axaml:146) runs
+    //            the full width above the sampled rows; measured 2 distinct colours.
+    //   open   - the transcript's own left edge crosses the band 16 DIP in, with the companion's
+    //            ground and rule (in the transcript's drop shadow) to its left; measured 41.
+    // So a #FF1E1822 flood over the whole screen - which is what the old `open` capture could not
+    // be told from - is now refused as a one-colour image before any check runs, and a `closed`
+    // capture whose rule has gone is refused the same way.
     //
     // A UIA READ CANNOT DISCHARGE THIS ONE. The transcript is an OWNED window, and an owned window
     // is in its owner's UIA tree whether or not the compositor ever put it in front of anything -
     // "the window exists" and "the window is on top of the surface it was opened from" are
-    // different claims, and only the second is what a user experiences. capture.ps1 asserts the
-    // band is inside the transcript's REAL rect before reading, so a transcript that opened
-    // somewhere else fails by name rather than passing on the companion's own ground.
+    // different claims, and only the second is what a user experiences. capture.ps1 predicts the
+    // transcript's left edge from the companion's own layout, asserts the real rect agrees within
+    // 3 px (measured 1), and asserts the band straddles it - so a transcript that opened somewhere
+    // else, or at another size, fails by name rather than passing on the companion's own ground.
     //
     // The two grounds are 10/8/10 apart - the companion permissions pair's separation exactly, and
     // pinned at the same tolerance 4 for the same reason: at 8 either check would accept the
@@ -538,7 +553,7 @@
       "state": "closed",
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
-      "region": { "rect": { "x": 0.02, "y": 0.0, "w": 0.96, "h": 1.0 } },
+      "region": { "rect": { "x": 0.30, "y": 0.65, "w": 0.65, "h": 0.30 } },
       "expectedColor": "#141018",
       "tolerance": 4,
       "minPixelFraction": 0.98
@@ -549,7 +564,7 @@
       "state": "open",
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
-      "region": { "rect": { "x": 0.02, "y": 0.0, "w": 0.96, "h": 1.0 } },
+      "region": { "rect": { "x": 0.30, "y": 0.65, "w": 0.65, "h": 0.30 } },
       "expectedColor": "#1E1822",
       "tolerance": 4,
       "minPixelFraction": 0.98
