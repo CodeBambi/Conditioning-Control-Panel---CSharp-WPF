@@ -55,6 +55,19 @@ export const DIALS = Object.freeze({
   BLINK_EVERY_MS: 5200,    // resting blink cadence
   BLINK_HOLD_MS: 110,      // ...and how long the eyes stay shut
 
+  /* --- perception (the wave of 2026-08-24) ------------------------------ */
+  GAZE_MAX_PX: 3,          // the face may lean at most this many px toward the cursor
+  GAZE_DIV: 60,            // px of cursor distance per px of lean (bigger = subtler)
+  GAZE_EASE: 0.15,         // per-frame easing toward the target (0..1)
+  APPROACH_PX: 120,        // cursor within this many px of her EDGE = she notices
+  APPROACH_COOLDOWN_MS: 30000, // one noticing per this window, so she is not a doorbell
+  GLANCE_SPEED: 1.2,       // px/ms; entering the radius faster than this earns the glance chain
+  LINGER_MS: 2000,         // hover this long without clicking = expectant
+  LINGER_AWAY_MS: 4000,    // ...and this much longer with no pet = the look-away
+  DANGLE_MAX_DEG: 6,       // carried tilt is clamped here (physics reads as care, not slapstick)
+  DANGLE_K: 4,             // deg of tilt per px/ms of horizontal drag speed
+  DANGLE_SETTLE_MS: 260,   // the spring back to upright on release
+
   /* --- the idle sway (five body frames; antenna + hand tips only) ------- */
   SWAY_STEP_MS: 200,       // one step of the ping-pong walk
   SWAY_CENTER_MIN_MS: 600, // ...and the pause when it passes back through centre
@@ -192,6 +205,10 @@ function blankStats() {
   return {
     pets: 0, petStreaks3: 0, drags: 0, flings: 0, hides: 0, dockRestores: 0,
     bubblesSeen: 0, firstSeenAt: null, lastSeenAt: null, msVisible: 0,
+    /* WHERE SHE GETS PUT DOWN: drop counts per ninth of the viewport (z0..z8,
+     * row-major). The favourite-spot beats read the count off the dropAt
+     * payload; nothing else looks in here. */
+    zones: {},
   };
 }
 
@@ -200,7 +217,16 @@ function readStats(raw) {
   if (!raw || typeof raw !== 'object') return s;
   for (const k of Object.keys(s)) {
     const v = raw[k];
-    if (k === 'firstSeenAt' || k === 'lastSeenAt') {
+    if (k === 'zones') {
+      if (v && typeof v === 'object') {
+        for (const zk of Object.keys(v)) {
+          const n = v[zk];
+          if (/^z[0-8]$/.test(zk) && typeof n === 'number' && isFinite(n) && n >= 0) {
+            s.zones[zk] = Math.round(n);
+          }
+        }
+      }
+    } else if (k === 'firstSeenAt' || k === 'lastSeenAt') {
       if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) s[k] = v;
     } else if (typeof v === 'number' && isFinite(v) && v >= 0) {
       s[k] = Math.round(v);
@@ -271,7 +297,9 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   }
 
   function blob() {
-    const out = Object.assign({}, stats, { msVisible: visibleMs() });
+    // `zones` is the one nested object: cloned so the store never holds a live
+    // reference into the counters.
+    const out = Object.assign({}, stats, { msVisible: visibleMs(), zones: Object.assign({}, stats.zones) });
     const b = { x: fx0, y: fy0, hidden, stats: out };
     // `w` is written ONLY when it was chosen, never when it was derived from the
     // window - see `userSized`. An auto width in the blob would out-vote the
@@ -688,6 +716,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     stopBlink();
     stopSway();
     clearBody();
+    restGaze();      // a performance owns the whole glass; the lean eases home
     /* THE POSE. A chain that declares `bodyFrame` (chains.js owns that table)
      * HOLDS it for the whole run - a pose that flickered per 90ms glitch frame
      * would read as a broken sprite, not as a mood. A chain that declares none
@@ -721,6 +750,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     killTimers();
     stopBlink();
     stopSway();
+    restGaze();
     if (o.clearBubble !== false) setBubble(null);
     setBodyFrame(frameKey(o.bodyFrame) || frameForFace(text));
     drawFace(text, o.frameOpts || {});
@@ -801,6 +831,37 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   let armTimer = null;
   let petTimes = [];
   let petCooldownUntil = 0;
+  /* THE DANGLE. Carried, she tilts a few degrees against the direction of
+   * travel and springs upright on release - an inline `rotate` on the root,
+   * which is safe exactly while dragging: no body-move keyframe runs then, and
+   * the ones that run at release (bounce/thud) out-rank an inline transform for
+   * as long as they play. Smoothed so a jittery hand does not read as a shiver. */
+  let dangleV = 0;            // smoothed horizontal speed, px/ms
+  let dangleDeg = 0;          // the tilt currently applied
+
+  function clearDangle(immediate) {
+    dangleV = 0;
+    dangleDeg = 0;
+    if (!el.style) return;
+    if (immediate || reducedMotion()) {
+      el.style.transition = '';
+      el.style.transform = '';
+      return;
+    }
+    el.style.transition = 'transform ' + DIALS.DANGLE_SETTLE_MS + 'ms cubic-bezier(.2,1.5,.4,1)';
+    el.style.transform = '';
+    // Untracked on purpose: killTimers() must not be able to strand the
+    // transition on the root (it would slow every later dangle, nothing more).
+    setTimeout(() => { try { el.style.transition = ''; } catch (e) { /* noop */ } },
+      DIALS.DANGLE_SETTLE_MS + 50);
+  }
+
+  /** Which ninth of the viewport a point is in: z0..z8 row-major, plus the row band. */
+  function zoneOf(x, y, vp) {
+    const col = clamp(Math.floor(x * 3 / Math.max(1, vp.w)), 0, 2);
+    const row = clamp(Math.floor(y * 3 / Math.max(1, vp.h)), 0, 2);
+    return { z: row * 3 + col, row: row === 0 ? 'top' : (row === 1 ? 'mid' : 'bottom') };
+  }
 
   function disarmHold() {
     if (armTimer !== null) { clearTimeout(armTimer); armTimer = null; }
@@ -837,6 +898,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     dragMax = 0;
     dragTold = false;
     disarmHold();
+    clearDangle(true);
     el.classList.remove('dragging', 'armed');
   }
 
@@ -923,6 +985,17 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
         fastSince = 0;
         if (!saying()) setDragFace(DRAG_FACE);
       }
+
+      // THE DANGLE: lean against the travel, clamped and smoothed. Style is
+      // only written when the tilt moved a visible amount.
+      if (!reducedMotion()) {
+        dangleV = dangleV * 0.8 + (dx / dt) * 0.2;
+        const deg = clamp(-dangleV * DIALS.DANGLE_K, -DIALS.DANGLE_MAX_DEG, DIALS.DANGLE_MAX_DEG);
+        if (Math.abs(deg - dangleDeg) > 0.3) {
+          dangleDeg = deg;
+          try { el.style.transform = 'rotate(' + deg.toFixed(1) + 'deg)'; } catch (e) { /* noop */ }
+        }
+      }
     }
     if (moved > 0) { lastX = ev.clientX; lastY = ev.clientY; lastT = t; }
   }
@@ -939,6 +1012,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       dragging = false;
       dragFace = null;
       el.classList.remove('dragging');
+      clearDangle(false);
       const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { left: 0, top: 0 };
       commit(r.left, r.top);
       if (wasFling) stats.flings += 1;
@@ -954,15 +1028,25 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       const flung = wasFling;
       const travelled = realDrag();
       wasFling = false;
-      // ONE write per interaction, on the END of it (never per pointermove).
-      save();
       if (travelled) {
-        if (flung) emitGesture('fling');
         // WHERE SHE LANDED, in viewport coordinates: her CENTRE, which is the
         // point a hit-test should ask about. voice.js does the asking. A press
         // that never travelled is NOT a drop - she is exactly where she was.
         const sz = sizePx();
-        emitGesture('dropAt', { x: Math.round(r.left + sz.w / 2), y: Math.round(r.top + sz.h / 2) });
+        const px = Math.round(r.left + sz.w / 2);
+        const py = Math.round(r.top + sz.h / 2);
+        // ...and the SPOT MEMORY: which ninth of the window she was put down
+        // in, counted for life. The favourite-spot beats read the count off
+        // this payload, so the voice never has to open the widget's blob.
+        const zi = zoneOf(px, py, viewport());
+        const zk = 'z' + zi.z;
+        stats.zones[zk] = (stats.zones[zk] || 0) + 1;
+        // ONE write per interaction, on the END of it (never per pointermove).
+        save();
+        if (flung) emitGesture('fling');
+        emitGesture('dropAt', { x: px, y: py, zone: zi.z, zoneRow: zi.row, zoneCount: stats.zones[zk] });
+      } else {
+        save();
       }
       return;
     }
@@ -1038,6 +1122,9 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     // next pointerup commit a position read off a display:none element.
     endPress();
     cancelChain(); killTimers(); stopBlink(); stopSway(); clearBody(); setBubble(null);
+    clearApproachTimers();
+    restGaze();
+    try { canvas.style.transform = ''; } catch (e) { /* noop */ }
     el.hidden = true;
     dock.hidden = false;
     /* THE ONE-SHOT HINT. The dock is 28px and .35 opacity in a corner, so the
@@ -1080,12 +1167,144 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   el.addEventListener('pointercancel', onCancel);
   el.addEventListener('pointerleave', () => { if (!pressing) el.classList.remove('armed'); });
 
+  /* ---------------------- perception ------------------------------------
+   * She notices you BEFORE you touch her. Three pieces, all read off one
+   * document-level pointermove (rAF-shaped, ~16 samples/s):
+   *
+   *   GAZE      the face leans a few px toward the cursor. NOT a canvas
+   *             repaint - the glyph is expensive to draw (widget header), so
+   *             the lean is a CSS transform on the canvas element, which is
+   *             free. Idle-only: a chain, a say or a drag eases it home.
+   *   APPROACH  cursor near her edge = a perk (o_o); arriving FAST = the
+   *             glance chain. One per APPROACH_COOLDOWN_MS.
+   *   LINGER    hovering without committing = expectant, then one look-away
+   *             if the pet never comes. The episode resets when you leave.
+   *
+   * All of it is a spectator: it plays through raw()/play() like every other
+   * reaction, so law 3 (a SAY is never cut) holds without a special case, and
+   * the voice hears `approach`/`hoverLinger` through the same gesture tap as
+   * every pointer verb (no pools yet - wave 2b's writing slot). */
+  let gazeTX = 0, gazeTY = 0, gazeX = 0, gazeY = 0, gazeRaf = null;
+  let apInside = false, apCoolUntil = 0, apPets0 = 0;
+  let apLingerTimer = null, apAwayTimer = null;
+  let apLastX = 0, apLastY = 0, apLastT = 0;
+
+  function gazeActive() {
+    return !!painter && !hidden && enabled && !dragging && !busy() && !reducedMotion();
+  }
+  function gazeStep() {
+    gazeRaf = null;
+    const ax = gazeActive() ? gazeTX : 0;
+    const ay = gazeActive() ? gazeTY : 0;
+    gazeX += (ax - gazeX) * DIALS.GAZE_EASE;
+    gazeY += (ay - gazeY) * DIALS.GAZE_EASE;
+    // SETTLED = STOP. The loop only runs while the lean is travelling; a
+    // pointermove (or restGaze) nudges it back to life. A resting rAF that
+    // rewrote the same transform every frame would be the repaint-per-move
+    // mistake in a nicer hat.
+    if (Math.abs(gazeX - ax) + Math.abs(gazeY - ay) < 0.05) {
+      gazeX = ax; gazeY = ay;
+      try { canvas.style.transform = ax === 0 && ay === 0 ? '' : 'translate(' + ax.toFixed(2) + 'px,' + ay.toFixed(2) + 'px)'; } catch (e) { /* noop */ }
+      return;
+    }
+    try { canvas.style.transform = 'translate(' + gazeX.toFixed(2) + 'px,' + gazeY.toFixed(2) + 'px)'; } catch (e) { /* noop */ }
+    if (typeof requestAnimationFrame === 'function') gazeRaf = requestAnimationFrame(gazeStep);
+  }
+  function nudgeGaze() {
+    if (gazeRaf == null && typeof requestAnimationFrame === 'function') {
+      gazeRaf = requestAnimationFrame(gazeStep);
+    }
+  }
+  /** Ease the lean home NOW (a hide, a disable, a drag taking over). */
+  function restGaze() {
+    gazeTX = 0; gazeTY = 0;
+    nudgeGaze();
+  }
+
+  function clearApproachTimers() {
+    if (apLingerTimer !== null) { clearTimeout(apLingerTimer); apLingerTimer = null; }
+    if (apAwayTimer !== null) { clearTimeout(apAwayTimer); apAwayTimer = null; }
+  }
+  /** May a perception face go up right now? Never over a chain, a say, a press. */
+  function canPerk() {
+    return !!painter && !hidden && enabled && !pressing && !dragging && !busy() && !saying();
+  }
+
+  function onDocMove(ev) {
+    if (!enabled || hidden || !ev) return;
+    const t = nowMs();
+    if (t - apLastT < 60) return;                       // ~16 samples/s is plenty
+    const px = apLastX, py = apLastY, pt = apLastT;
+    apLastX = ev.clientX; apLastY = ev.clientY; apLastT = t;
+
+    let r = null;
+    try { r = el.getBoundingClientRect ? el.getBoundingClientRect() : null; } catch (e) { /* noop */ }
+    if (!r || !r.width) return;
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    const dx = ev.clientX - cx;
+    const dy = ev.clientY - cy;
+    const d = Math.hypot(dx, dy);
+
+    // GAZE: the lean is proportional and capped, and the loop eases it home
+    // on its own the moment gazeActive() goes false.
+    gazeTX = clamp(dx / DIALS.GAZE_DIV, -DIALS.GAZE_MAX_PX, DIALS.GAZE_MAX_PX);
+    gazeTY = clamp(dy / DIALS.GAZE_DIV, -DIALS.GAZE_MAX_PX, DIALS.GAZE_MAX_PX);
+    nudgeGaze();
+
+    // APPROACH: measured from her EDGE, so a bigger EMI is not a bigger doorbell.
+    const inside = d < r.width / 2 + DIALS.APPROACH_PX;
+    if (inside === apInside) return;
+    apInside = inside;
+    if (!inside) { clearApproachTimers(); return; }
+
+    if (t < apCoolUntil) return;
+    apCoolUntil = t + DIALS.APPROACH_COOLDOWN_MS;
+    apPets0 = stats.pets;
+    // Arriving fast earns the GLANCE (she tracks the fly-by); walking up earns
+    // the quiet perk. Both are idle-frame on purpose - noticing is not a beat.
+    const speed = pt > 0 ? Math.hypot(ev.clientX - px, ev.clientY - py) / Math.max(1, t - pt) : 0;
+    if (canPerk()) {
+      if (speed > DIALS.GLANCE_SPEED && CHAINS && CHAINS.glance) play(CHAINS.glance, { bodyFrame: 'idle' });
+      else raw('o_o', { hold: 900, bodyFrame: 'idle' });
+    }
+    emitGesture('approach', { fast: speed > DIALS.GLANCE_SPEED });
+
+    clearApproachTimers();
+    apLingerTimer = setTimeout(() => {
+      apLingerTimer = null;
+      if (!apInside || !canPerk()) return;
+      raw('^_^', { hold: 1100, bodyFrame: 'idle' });
+      emitGesture('hoverLinger');
+      apAwayTimer = setTimeout(() => {
+        apAwayTimer = null;
+        // Still hovering, still no pet: one small look-away. She is not hurt,
+        // she is making a point.
+        if (!apInside || !canPerk() || stats.pets > apPets0) return;
+        raw('¬_¬', { hold: 1000, bodyFrame: 'idle' });
+      }, DIALS.LINGER_AWAY_MS);
+    }, DIALS.LINGER_MS);
+  }
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('pointermove', onDocMove, { passive: true });
+  }
+
   /* ---------------------- viewport ------------------------------------- */
   /* A resize re-derives the default width AND re-clamps the anchor, in that
    * order - clamping against the old size would park her by a stale edge. */
+  // Seeded from the boot-time window: a page that OPENS narrow never "squished".
+  let wasNarrowVp = viewport().w < DIALS.W_NARROW_VW;
   function onResize() {
     refitWidth();
     if (!hidden && enabled) place();
+    // THE SQUISH: crossing into the narrow-window regime, once per crossing.
+    // The voice's one-shot beat makes "once ever" out of it; later crossings
+    // reach a beat already seen and land as silence.
+    const narrow = viewport().w < DIALS.W_NARROW_VW;
+    if (narrow !== wasNarrowVp) {
+      wasNarrowVp = narrow;
+      if (narrow && !hidden && enabled) emitGesture('windowSquish');
+    }
   }
   if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('resize', onResize);
@@ -1159,7 +1378,9 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     },
     get enabled() { return enabled; },
     /** Read-only lifetime telemetry (a copy - nothing outside may mutate it). */
-    stats() { return Object.assign({}, stats, { msVisible: visibleMs() }); },
+    stats() {
+      return Object.assign({}, stats, { msVisible: visibleMs(), zones: Object.assign({}, stats.zones) });
+    },
     /** Test/host seam: force the debounced write out now. */
     flush,
     destroy() {
@@ -1168,9 +1389,16 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       // clearBody() is the easy one to miss: `bodyTimer` outlives everything else
       // and its callback re-adds `.breath` to a node that is no longer in the page.
       cancelChain(); killTimers(); stopBlink(); stopSway(); disarmHold(); clearBody();
+      clearApproachTimers();
+      if (gazeRaf != null && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(gazeRaf); gazeRaf = null;
+      }
       // Her voice is a setTimeout ladder of its own and nothing above clears it.
       if (vox) { try { vox.stop(); } catch (e) { /* noop */ } }
       if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null; }
+      if (typeof document !== 'undefined' && document.removeEventListener) {
+        document.removeEventListener('pointermove', onDocMove);
+      }
       if (typeof window !== 'undefined' && window.removeEventListener) {
         window.removeEventListener('resize', onResize);
         window.removeEventListener('pagehide', onPageHide);

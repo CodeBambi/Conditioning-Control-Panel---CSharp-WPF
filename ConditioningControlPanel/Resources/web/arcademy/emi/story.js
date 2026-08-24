@@ -588,6 +588,93 @@ export const BEATS = deepFreeze([
     lead: ['glance', 'wink'],
     say: 'you came back.',
     face: '(｡♥‿♥｡)'
+  },
+
+  /* ==========================================================================
+   * THE PERCEPTION ONE-SHOTS (wave of 2026-08-24, `p` prefix - outside the
+   * timeline numbering on purpose: these are ambient, not story).
+   *
+   * SOURCE: the EMI ALIVE proposal the owner approved 2026-08-24. The first
+   * three `say` strings below are verbatim from that page; p03/p04/p06 are new
+   * at wiring time and are FLAGGED FOR OWNER VET in the PR - if one reads
+   * wrong the fix lands here and nowhere else, there is no upstream doc yet.
+   * All of them gate on b02: nothing ambient speaks before the introduction.
+   * ========================================================================*/
+
+  {
+    // The window crossed into the narrow regime and she got smaller with it.
+    // Once ever; every later squish is a face she has already made.
+    id: 'p01_window_cozy',
+    phase: 'AMB',
+    on: 'gesture:windowSquish',
+    requires: ['b02_hello'],
+    priority: 40,
+    say: 'cozy.',
+    face: 'x_x'
+  },
+
+  {
+    // SPOT MEMORY. The tenth time she is put down in the same ninth of the
+    // window, she admits she has a favourite. One per row band, once each -
+    // the three lines are variants, not a set she works through.
+    id: 'p02_spot_high',
+    phase: 'AMB',
+    on: 'gesture:dropAt',
+    when: ['zoneCountAtLeast:10', 'zoneRowIs:top'],
+    requires: ['b02_hello'],
+    priority: 30,
+    say: 'i like it up here.',
+    face: '^_^'
+  },
+
+  {
+    id: 'p03_spot_low',
+    phase: 'AMB',
+    on: 'gesture:dropAt',
+    when: ['zoneCountAtLeast:10', 'zoneRowIs:bottom'],
+    requires: ['b02_hello'],
+    priority: 30,
+    say: 'i like it down here.',
+    face: '^_^'
+  },
+
+  {
+    id: 'p04_spot_mid',
+    phase: 'AMB',
+    on: 'gesture:dropAt',
+    when: ['zoneCountAtLeast:10', 'zoneRowIs:mid'],
+    requires: ['b02_hello'],
+    priority: 30,
+    say: 'this is my spot now.',
+    face: '^_^'
+  },
+
+  {
+    // For the player who always docks her. Ten dismissals, and the next time
+    // they bring her back she makes the corner sound like a choice.
+    id: 'p05_corner_keeper',
+    phase: 'AMB',
+    on: 'gesture:restore',
+    when: ['hidesAtLeast:10'],
+    requires: ['b02_hello'],
+    priority: 30,
+    say: 'the corner is fine. i made it nice.',
+    face: '^_^'
+  },
+
+  {
+    // A CALENDAR year since her first day - `calendarDaysAtLeast`, not `days`,
+    // which only counts days played. Small on purpose: a party would make the
+    // number feel watched, and the number is the one thing she never explains.
+    id: 'p06_anniversary',
+    phase: 'AMB',
+    on: 'greet',
+    when: ['calendarDaysAtLeast:365'],
+    priority: 96,
+    lead: 'wink',
+    fx: 'sparks',
+    say: 'one whole year. gold star for us.',
+    face: '★★★'
   }
 
 ]);
