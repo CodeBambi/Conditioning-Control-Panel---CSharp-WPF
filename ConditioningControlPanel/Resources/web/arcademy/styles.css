@@ -2200,14 +2200,9 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
   --pc-crest-src:url(art/punchcard/crest-the_deep_end.png);  /* the sinking tile on the wave */
   --pc-face-src:url(art/punchcard/face-the_deep_end.png);
 }
-/* SORT ships PLACEHOLDER ART (2026-08-23): face-sort.png and crest-sort.png are
-   byte-copies of Discipline Hall's pair so the card has a floor to stand on
-   while the real pass is drawn. They are listed here and in faces.json for the
-   same reason - a class in faces.json is a class whose face SHIPPED, and both
-   files exist. Replace the two pngs and nothing else changes. */
 .arc-pc[data-game="sort"] {
-  --pc-crest-src:url(art/punchcard/crest-sort.png);  /* PLACEHOLDER - the fan + the two piles */
-  --pc-face-src:url(art/punchcard/face-sort.png);    /* PLACEHOLDER */
+  --pc-crest-src:url(art/punchcard/crest-sort.png);  /* the fan + the two piles */
+  --pc-face-src:url(art/punchcard/face-sort.png);
 }
 /* MISDIRECTION HAS NO ART ON PURPOSE - the class was scrapped (2026-08-23), so
    it is absent from faces.json too and its card keeps the drawn floor. */

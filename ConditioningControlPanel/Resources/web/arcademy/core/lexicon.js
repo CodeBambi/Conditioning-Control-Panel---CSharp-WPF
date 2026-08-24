@@ -102,10 +102,11 @@ export const DEFAULT_LEXICON = Object.freeze({
   campus_desc_the_deep_end: 'Sink tile into tile. The deeper you go, the harder the board is to read.',
   /* Semesters II / III (2026-08-23) */
   campus_room_misdirection: 'The Parlour',
-  /* SORT holds room 203 now - the lot-2 rework gave Misdirection's old parlour
+  /* SORT wears plate 201 - the lot-2 rework gave Misdirection's old parlour
      to the front office, so sort built new on the Entrance Hall's west span
-     (shell/campus.js). Misdirection's two rows stay: the host table is
-     append-only and the class is retired, not deleted. */
+     (shell/campus.js), and the 2026-08-24 renumber handed it Misdirection's
+     old room number as its substitute. Misdirection's two rows stay: the host
+     table is append-only and the class is retired, not deleted. */
   campus_room_sort: 'The Sorting Room',
   campus_room_echo: 'Music Room',
   campus_room_instant_recall: 'Lecture Hall',

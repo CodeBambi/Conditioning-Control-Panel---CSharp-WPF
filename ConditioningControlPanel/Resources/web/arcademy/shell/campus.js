@@ -46,8 +46,8 @@ const SVGNS = 'http://www.w3.org/2000/svg';
  * its biggest fronts held a filing cabinet and a settings desk while two classes
  * shared a 112x66 broom cupboard with no room for their own art. The Arcademy is
  * still dark (DoorAvailable = false), so that could be fixed once, and was:
- *   - ECHO took the north-east front (RM 201) and INSTANT RECALL the south-east
- *     one (RM 202) - the two rooms Records and the Registrar used to hold. Their
+ *   - ECHO took the north-east front and INSTANT RECALL the south-east one -
+ *     the two rooms Records and the Registrar used to hold. Their
  *     lexicon identity travelled with them: the Music Room is still the Music
  *     Room, and both are ordinary corridor rooms now (side/door/stop defaults).
  *   - RECORDS + THE REGISTRAR moved into the EAST WING, which stopped being a
@@ -106,9 +106,13 @@ export const ROOMS = Object.freeze({
    * (M720,908 straight up to the Main Hall), so the alley costs the plan
    * nothing: the walk between the hall and the Sorting Room IS the front walk.
    * An ordinary south-corridor room otherwise: side/door only, badge in the
-   * Main Hall, plate on the corridor wall like Lost & Found across the way. */
+   * Main Hall, plate on the corridor wall like Lost & Found across the way.
+   * THE PLATE SAYS 201 (owner ruling 2026-08-24): sort is Misdirection's
+   * substitute, so it wears Misdirection's old number - echo and instant
+   * recall slid back to 202/203, the numbers they carried before lot 2. The
+   * plates rotated; no room moved. */
   sort: {
-    rect: [740, 510, 200, 220], side: 's', door: 840, rm: '203',
+    rect: [740, 510, 200, 220], side: 's', door: 840, rm: '201',
     gameEn: 'Sort',
     nameKey: 'campus_room_sort', nameEn: 'The Sorting Room',
     descKey: 'campus_desc_sort',
@@ -122,14 +126,14 @@ export const ROOMS = Object.freeze({
    * (Both fronts stop at x 1220, leaving the 20-unit run of hall that opens onto
    * the front office's alley at x 1240.) */
   echo: {
-    rect: [940, 210, 280, 220], side: 'n', door: 1080, rm: '201',
+    rect: [940, 210, 280, 220], side: 'n', door: 1080, rm: '202',
     gameEn: 'Echo',
     nameKey: 'campus_room_echo', nameEn: 'Music Room',
     descKey: 'campus_desc_echo',
     descEn: 'It plays a line, you play it back. Then it adds one more, every time.',
   },
   instant_recall: {
-    rect: [960, 510, 260, 220], side: 's', door: 1040, rm: '202',
+    rect: [960, 510, 260, 220], side: 's', door: 1040, rm: '203',
     gameEn: 'Instant Recall',
     nameKey: 'campus_room_instant_recall', nameEn: 'Lecture Hall',
     descKey: 'campus_desc_instant_recall',
@@ -179,8 +183,9 @@ export const ROOMS = Object.freeze({
    * front office's now. A room here would be a room nothing can ever open:
    * `isOpenSemester` filters it out of the plan, the timetable never deals it,
    * and its lexicon rows stay in core/lexicon.js for the day a replacement
-   * class moves in - which will mint its OWN room, in whatever space the school
-   * has then. The Parlour is not sitting empty; it is gone. */
+   * class moves in. The Parlour is not sitting empty; it is gone - but its
+   * NUMBER is not: SORT, the substitute, wears the 201 plate by the Main
+   * Gate (owner ruling 2026-08-24). */
 });
 
 /* ----------------------------------------------------------------------------
@@ -917,7 +922,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     const nameY = spec.nameY != null ? spec.nameY : (spec.side === 'n' ? y + 156 : y + 46);
     g.appendChild(svgText(x + w / 2, nameY, 'campus-rname', t(spec.nameKey, spec.nameEn).toUpperCase()));
     /* THE NUMBER ROW IS SIZED BY THE ROOM, not by which wing it is in. A wide
-     * front carries "RM 201 · ECHO"; a deeper, narrower room carries the number
+     * front carries "RM 202 · ECHO"; a deeper, narrower room carries the number
      * alone, because a mod may re-voice a class into something long and 22
      * characters of tracked mono is 145 units - wider than the west wing's own
      * rooms. The neon sign, the hover card, the door card and the hanging board
