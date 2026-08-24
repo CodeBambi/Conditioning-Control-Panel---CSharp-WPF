@@ -32,11 +32,14 @@
  *                    clown lines are not filler; they are the camouflage that
  *                    makes a double land.
  *
- * Ratio, this file: 33 doubles / 115 lines = 28.7%. Excluding TELEMETRY (all
- * double by brief, milestone-rare in play): 28/110 = 25.5%, on the 1-in-4 lock.
- * Six pools are deliberately ALL clown - drag, runLost, sGrade, streak7, bigWin,
- * emiDropOnDoor - because the loudest and most frequent beats must stay pure
- * camouflage. Keep that shape when you add lines.
+ * Ratio, this file (recounted for the EMI COLOR wave, 2026-08-24): 45 doubles
+ * / 187 lines = 24.1%. Excluding TELEMETRY (all double by brief, milestone-rare
+ * in play): 36/178 = 20.2%, under the 1-in-4 lock - the wave added mostly clown
+ * on purpose, because it also added mostly FREQUENT pools (arrivals, drops,
+ * hovers) and frequent beats must stay camouflage.
+ * Six of the original pools are deliberately ALL clown - drag, runLost, sGrade,
+ * streak7, bigWin, emiDropOnDoor - because the loudest and most frequent beats
+ * must stay pure camouflage. Keep that shape when you add lines.
  *
  * ---------------------------------------------------------------------------
  * THE FENCE (audited across all 118 proposal lines; re-audit anything you add)
@@ -648,6 +651,31 @@ export const POOLS = Object.freeze({
     ]
   },
 
+  /* --- the calendar (EMI COLOR, 2026-08-24) -----------------------------
+   * FOUR NIGHTS A YEAR the greet knows the date. Local clock (dateIs is the
+   * player's evening), one line a session at most, priority 35: over the
+   * late-night hello, under a long-absence return - a three-day silence is
+   * bigger than a costume. No invented numbers, no gifts that don't exist:
+   * everything she claims is on her screen or in the room. */
+  smallHolidays: {
+    on: 'greet', odds: 1, ceremony: false, priority: 35,
+    maxPerSession: 1,
+    lines: [
+      { t: "it's spooky night. i practiced a scary face. ready?", face: '(✖╭╮✖)',
+        when: ['dateIs:10-31'] },
+      { t: "halloween. i'm going as a haunted television. easy.", face: '0_0',
+        when: ['dateIs:10-31'], double: true },
+      { t: "last night of the year. we made it. mostly you. us.", face: '^_^',
+        when: ['dateIs:12-31'] },
+      { t: "new year. same me. i checked twice. reassuring.", face: '^___^',
+        when: ['dateIs:01-01'] },
+      { t: "it's heart day. i drew you one. it's on my screen.", face: '(｡♥‿♥｡)',
+        when: ['dateIs:02-14'] },
+      { t: "it's prank day. i disabled all my pranks. or did i.", face: '(¬‿¬)',
+        when: ['dateIs:04-01'] }
+    ]
+  },
+
   /* --- the refusal ------------------------------------------------------ */
 
   /** A26 - a disabled button, a locked tile. Innocent face, villain quote.
@@ -697,7 +725,21 @@ export const RARE_DORK = Object.freeze({
     { t: "the call is coming from inside the arcade. it's me. hi.", face: '\\o/',
       on: 'idlePlayer', when: ['lateNight'] },
     { t: "initiating red eye mode. they're pink. it's fine.", face: '0_0',
-      on: 'idlePlayer' }
+      on: 'idlePlayer' },
+    /* --- DORK CANON II (EMI COLOR, 2026-08-24). Same bit, deeper shelf:
+     * over-performed, badly, proud of itself, face always miscast. */
+    { t: "my precious. i mean the cursor. my precious cursor.", face: '(✿◡‿◡)',
+      on: 'gesture:approach' },
+    { t: "all your base are belong to us. classic literature.", face: '(⌐■_■)',
+      on: 'classStart' },
+    { t: "game over man. game over. of the class. you won though.", face: '\\o/',
+      on: 'win' },
+    { t: "i see dead pixels. one. it's mine. we're friends.", face: '0_0',
+      on: 'idlePlayer' },
+    { t: "why so serious. it's me. i'm not serious either.", face: '(◠‿◠)',
+      on: 'resume' },
+    { t: "in space nobody can hear you win. here they can. win.", face: 'o_o',
+      on: 'classStart', when: ['lateNight'] }
   ])
 });
 

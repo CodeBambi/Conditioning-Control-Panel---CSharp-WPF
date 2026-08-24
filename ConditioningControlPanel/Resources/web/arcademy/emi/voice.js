@@ -637,6 +637,14 @@ export function createVoice(o) {
     /** Which class fired the moment - the per-game colour gate. Closed only
      *  by the payload: no gameKey, no match, never a guess. */
     gameIs: (a, c) => !!c.gameKey && c.gameKey === String(a),
+    /** The LOCAL calendar date, MM-DD. Local on purpose: a holiday is the
+     *  player's evening, not a UTC accountant's. */
+    dateIs: (a) => {
+      const d = new Date(now());
+      const mm = String(d.getMonth() + 1);
+      const dd = String(d.getDate());
+      return ((mm.length < 2 ? '0' + mm : mm) + '-' + (dd.length < 2 ? '0' + dd : dd)) === String(a);
+    },
   };
 
   function holds(when, c) {
