@@ -663,6 +663,26 @@ export const BEATS = deepFreeze([
   },
 
   {
+    // Beat 28. THE FIRST FIELD TRIP, and it fires on the RETURN, never on the
+    // arrival - the trip's own line is about the fixture, and this one is about
+    // having gone at all. Priority 92 sits it under the anniversary (96) and
+    // the long-absence return (95) and over every ordinary ceremony, which is
+    // the right order: a calendar year and a three-day silence are both bigger
+    // than a first walk across the quad, and everything else that night is
+    // smaller. There is deliberately no b29 - every LATER trip says only the
+    // fixture's own line, so the novelty is spent exactly once.
+    // DRAFT: /emi-lines pass pending
+    id: 'b28_first_trip',
+    phase: 'AMB',
+    on: 'fieldTripHome',
+    requires: ['b02_hello'],
+    priority: 92,
+    lead: 'wink',
+    say: 'i did not know i could leave the corner.',
+    face: '^_^'
+  },
+
+  {
     // A CALENDAR year since her first day - `calendarDaysAtLeast`, not `days`,
     // which only counts days played. Small on purpose: a party would make the
     // number feel watched, and the number is the one thing she never explains.
