@@ -7082,6 +7082,38 @@ namespace ConditioningControlPanel.Models
             }
         }
 
+        /// <summary>The four rungs of the Campus Presence consent ladder, weakest first. The
+        /// absent rung — <c>off</c> — is this client's own word for "no consent row at all"; it is
+        /// never a wire value (see <see cref="ArcademyPresenceShare"/>).</summary>
+        internal static readonly string[] ArcademyPresenceShares = { "off", "anon", "username", "discord" };
+
+        private string _arcademyPresenceShare = "off";
+        /// <summary>
+        /// CAMPUS PRESENCE, "the Student Body" (PRESENCE.md §3): what this account shows the rest
+        /// of the school. <c>off</c> (the default) · <c>anon</c> (an opaque id and an event list)
+        /// · <c>username</c> (+ the account's display name) · <c>discord</c> (+ a picture).
+        ///
+        /// <para>OPT-IN AND DEFAULT OFF, the same posture <c>HasRemoteMediaConsent</c> takes: this
+        /// is a consent flag, so an unreadable or unknown stored value reads as <c>off</c> rather
+        /// than as the nearest rung. Watching the campus is not consenting — the ghost snapshot is
+        /// pulled whatever this says, and this gates only what leaves this machine.</para>
+        ///
+        /// <para>The server clamps DOWN silently (a <c>discord</c> rung with no linked Discord is
+        /// written as <c>username</c>), so this value is what we ASKED for, never a promise of what
+        /// the account can actually stand on.</para>
+        /// </summary>
+        [JsonProperty("arcademyPresenceShare")]
+        public string ArcademyPresenceShare
+        {
+            get => _arcademyPresenceShare;
+            set
+            {
+                var v = (value ?? "").Trim().ToLowerInvariant();
+                _arcademyPresenceShare = Array.IndexOf(ArcademyPresenceShares, v) >= 0 ? v : "off";
+                OnPropertyChanged();
+            }
+        }
+
         #endregion
 
         #region Validation

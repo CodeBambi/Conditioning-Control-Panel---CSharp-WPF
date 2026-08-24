@@ -66,6 +66,10 @@ export const SETTING_KEYS = Object.freeze({
   }),
   audioMute: 'audioMute',
   hideTutorial: 'hideTutorial',
+  /** CAMPUS PRESENCE (PRESENCE.md §3): the ONE consent flag this page may write.
+   *  `off` | `anon` | `username` | `discord`, and the host re-clamps every one of
+   *  them - an unknown value lands on `off`, never on the nearest rung. */
+  presenceShare: 'presenceShare',
   /** The whole keybind map, as an OBJECT (the host stores it as JSON itself). */
   keybinds: 'keybinds',
 });
@@ -74,6 +78,7 @@ export const SETTING_KEYS = Object.freeze({
 const GLOBAL_KEYS = new Set([
   SETTING_KEYS.masterIntensity, SETTING_KEYS.effectIntensity,
   SETTING_KEYS.audioMute, SETTING_KEYS.hideTutorial, SETTING_KEYS.keybinds,
+  SETTING_KEYS.presenceShare,
   'masterVolume', 'remoteMediaRatio',
   // WHOLE-OBJECT echoes are globals too (W0, 2026-08-24): the host answers the
   // mixer as one `{key:'audioLevels', value:{...}}` frame, and the undotted key
@@ -110,10 +115,23 @@ export const AUDIO_GROUPS = Object.freeze([
   { g: 'music', label: 'Music' },
 ]);
 
+/** CAMPUS PRESENCE's consent ladder, weakest first and `off` at the bottom. The
+ *  ORDER is the ladder's, so the select reads as a ramp rather than as a menu. */
+export const PRESENCE_RUNGS = Object.freeze(['off', 'anon', 'username', 'discord']);
+
+/** English floors for the four rungs, used only when the lexicon has no row. */
+const PRESENCE_FALLBACK = Object.freeze({
+  off: 'Off - room head counts only',
+  anon: 'Anonymous - a ghost with no name or picture',
+  username: 'Username - your display name over the ghost',
+  discord: 'Discord - your display name and profile picture',
+});
+
 /** A per-game manifest may not name any of these (they are global). */
 const GLOBAL_RESERVED = new Set(
   ['masterIntensity', 'effectIntensity', 'audioMute', 'hideTutorial', 'mediaSource',
-    'remoteMediaRatio', 'offlineMode', 'masterVolume', 'motionLevel', 'reducedMotion']
+    'remoteMediaRatio', 'offlineMode', 'masterVolume', 'motionLevel', 'reducedMotion',
+    'presenceShare']
     .concat(CAP_CHANNELS.map((c) => c.ch))
     .concat(AUDIO_GROUPS.map((a) => a.g))
 );
@@ -413,8 +431,36 @@ export function createSettingsPage({ init, bridge, games, keybinds, onClose, log
       value: !!src.hideTutorial,
     }));
 
+    /* CAMPUS PRESENCE - the consent row (PRESENCE.md §3). It sits in the GLOBAL
+     * tier and not in the read-only ceilings above, because it is the one thing
+     * on this page the player grants rather than inherits: the app has no
+     * surface for it, so this IS the surface.
+     *
+     * FOUR RUNGS AND EVERY LABEL SAYS WHAT IT SHOWS. A row called only
+     * "Anonymous" is not consent copy; "a ghost with no name or picture" is.
+     * Everything here goes through t(), the shell's whole string law, so a mod
+     * can re-voice the copy - the C# NeutralLexicon mirrors all seven rows.
+     *
+     * The value is a STRING and selectRow sends it verbatim (its Number() path
+     * only takes over for a value that round-trips as a number), which is what
+     * the host's `presenceShare` clamp expects. Only the echo moves the model,
+     * trap 1, exactly like every other row on this page. */
+    const gp = group(t('presence_student_body', 'Student Body'));
+    gp.appendChild(selectRow({
+      key: SETTING_KEYS.presenceShare,
+      label: t('presence_share_label', 'Show yourself on campus'),
+      hint: t('presence_share_hint',
+        'Your last 24 hours replay as a ghost. Room head counts include you at every rung.'),
+      value: PRESENCE_RUNGS.indexOf(String(src.presenceShare)) >= 0 ? String(src.presenceShare) : 'off',
+      options: PRESENCE_RUNGS,
+      format: (o) => t('presence_share_' + o, PRESENCE_FALLBACK[o] || String(o)),
+    }));
+    gp.appendChild(el('p', 'arc-note', t('presence_share_discord_note',
+      'Discord needs a linked account. Without one the school shows your name instead.')));
+
     const frag = document.createDocumentFragment();
     frag.appendChild(g); frag.appendChild(gc); frag.appendChild(ga); frag.appendChild(gt);
+    frag.appendChild(gp);
     return frag;
   }
 
