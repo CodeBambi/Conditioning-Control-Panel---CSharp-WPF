@@ -179,8 +179,119 @@ $awardsFile = Join-Path $env:APPDATA 'CcpClient\graded_run_awards.json'
 # leak the session_preset.json note above records for the rack.
 $sessionLogsDir = Join-Path $env:APPDATA 'CcpClient\session_logs'
 $companionMemoryFile = Join-Path $env:APPDATA 'CcpClient\ai_memory.json'
-$goonProfileDir = Join-Path $env:APPDATA 'CcpClient\dtrh\wv2-profile-goon'
+$dtrhRoot = Join-Path $env:APPDATA 'CcpClient\dtrh'
 $outFile = Join-Path $shots "windows-$Surface-$State.png"
+
+# =================================================================================================
+# THE HARNESS'S OWN FOOTPRINT, and it filled a 952 GB volume to ZERO.
+#
+# The app builds a WebView2 UserDataFolder under %APPDATA%\CcpClient\dtrh for every embedded-browser
+# surface it opens (DtrhProfileLock.WebView2ProfileDir, one named profile per surface). This script
+# used to clear exactly ONE of them - wv2-profile-goon - only at START, and only on the goon-page
+# capture. Everything else accumulated, and a 14-capture survey starved the volume.
+#
+# THE DANGEROUS PART IS THAT A FULL DISK BLAMES THE PRODUCT. With the volume full, `toast -State
+# saved` refused with "the place you chose could not be written / wrote 0 bytes through the real
+# picker" - which reads exactly like a real storage defect in the app, and is not one. Every
+# failure this harness produces past that point is a lie about the product, so BOTH answers below
+# are required: refuse up front when the volume is too thin to trust, and never be the reason it
+# got that way.
+#
+# MEASURED ON THIS MACHINE rather than taken from the report, and the report is wrong in one place.
+# It says every capture leaks ~150 MB; it does not. `companion-transcript -State open` and
+# `trainer-card -State no-runs-yet` each left the tree ABSENT (0 KB) - neither opens an embedded
+# browser. `goon-page -State first-run` left 18,382 KB in wv2-profile-goon. So the leak is
+# per-SURFACE, not per-capture, and the accumulation the report saw is across the profiles this
+# script never named: the base wv2-profile, wv2-profile-intake and wv2-profile-loom were cleared by
+# nothing, ever. Clearing the ROOT rather than one child is the whole correction.
+#
+# It is also strictly MORE deterministic than the goon-only clear it replaces: every surface that
+# opens a browser now starts on an empty profile, so no capture can inherit page-side state from
+# the run before it. Best-effort at both ends for the reason the goon clear already recorded -
+# WebView2 children can hold files for seconds after the process they belonged to has gone - and a
+# residue left at EXIT is taken by the next run's clear at START, so the steady state is bounded at
+# one run's profiles instead of every run's.
+# =================================================================================================
+function Clear-DtrhProfiles([string]$when) {
+    if (-not (Test-Path $dtrhRoot)) { return }
+    $kb = 0
+    try {
+        $sum = (Get-ChildItem $dtrhRoot -Recurse -File -Force -ErrorAction SilentlyContinue |
+            Measure-Object -Property Length -Sum).Sum
+        if ($null -ne $sum) { $kb = [int]($sum / 1KB) }
+    }
+    catch { }
+    # POLLED TO A DEADLINE, never one attempt. Measured: a single removal straight after the app
+    # exits reaches everything EXCEPT EBWebView\lockfile - "used by another process" - because a
+    # msedgewebview2 child outlives its host by a moment (the same lingering-child class the product
+    # names at DtrhProfileLock.cs:8-16). One attempt took 18,382 KB down to 9 KB and then reported a
+    # failure; retrying to a deadline finishes the job and says how long it took.
+    $deadline = [Diagnostics.Stopwatch]::StartNew()
+    $lastError = $null
+    while ($deadline.Elapsed.TotalSeconds -lt 15) {
+        try {
+            Remove-Item $dtrhRoot -Recurse -Force -ErrorAction Stop
+            Write-Output ("${when}: WebView2 profile tree removed ($dtrhRoot, $kb KB, after " +
+    "$([math]::Round($deadline.Elapsed.TotalSeconds, 1))s)")
+            return
+        }
+        catch {
+            $lastError = $_
+            if (-not (Test-Path $dtrhRoot)) { break }
+            Start-Sleep -Milliseconds 250
+        }
+    }
+    if (-not (Test-Path $dtrhRoot)) {
+        Write-Output "${when}: WebView2 profile tree removed ($dtrhRoot, $kb KB)"
+        return
+    }
+    # REPORTED, never silent, and never fatal: a profile that could not be removed costs disk, not
+    # correctness, and the next run's start clear takes it.
+    Write-Output ("NOTE: the WebView2 profile tree could not be removed at $when after " +
+    "$([int]$deadline.Elapsed.TotalSeconds)s ($($lastError.Exception.GetType().Name): " +
+    "$($lastError.Exception.Message)). Up to $kb KB is still at $dtrhRoot; the next capture's " +
+    'start clear will take it.')
+}
+
+# THE FREE-SPACE FLOOR. 5 GB, and the number is measured rather than picked: the volume that
+# produced the false storage failure above had 2.1 GB free, and the same event truncated an MSBuild
+# output to zero bytes (414 x MSB3021). A floor at or below the level where this harness starts
+# producing lies is not a floor, so it sits above it with room for one profile tree, one capture and
+# a build's intermediates.
+$script:freeSpaceFloorBytes = 5GB
+
+function Assert-FreeSpace {
+    # Both volumes this run writes to: the profile/data root and the artifacts folder. Usually the
+    # same drive, deduplicated so it is not reported twice.
+    $roots = [ordered]@{}
+    foreach ($probe in @($env:APPDATA, $shots)) {
+        if ([string]::IsNullOrWhiteSpace($probe)) { continue }
+        try { $root = [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($probe)) } catch { continue }
+        if (-not [string]::IsNullOrWhiteSpace($root)) { $roots[$root] = $true }
+    }
+    if ($roots.Count -eq 0) {
+        Write-Output 'FAIL: neither %APPDATA% nor the artifacts folder resolved to a volume; free space cannot be read'
+        exit 1
+    }
+    foreach ($root in $roots.Keys) {
+        try { $free = ([IO.DriveInfo]::new($root)).AvailableFreeSpace }
+        catch {
+            Write-Output ("FAIL: free space on $root could not be read ($($_.Exception.GetType().Name): " +
+    "$($_.Exception.Message)). This harness does not capture over a volume it cannot measure.")
+            exit 1
+        }
+        $freeGb = [math]::Round($free / 1GB, 2)
+        $floorGb = [math]::Round($script:freeSpaceFloorBytes / 1GB, 2)
+        if ($free -lt $script:freeSpaceFloorBytes) {
+            Write-Output ("FAIL: only $freeGb GB free on $root, below this harness's $floorGb GB floor. " +
+    'REFUSING BEFORE ANYTHING RUNS, because past this point every failure this script produces is a ' +
+    'lie about the product: a full volume already made a real picker report "wrote 0 bytes" and a ' +
+    'real MSBuild leave a zero-byte deps.json. Free space and re-run.')
+            exit 1
+        }
+        Write-Output "free space on ${root}: $freeGb GB (floor $floorGb GB)"
+    }
+}
 
 # ValidateSet cannot express a PAIR, and an unpaired combination is not a typo the caller should
 # have to debug from a pixel check: 'rack-row-dot -State selected' has no drive and would silently
@@ -460,6 +571,10 @@ function Take-Lease {
 function Fail([string]$msg) {
     Write-Output "FAIL: $msg"
     if ($script:proc -and -not $script:proc.HasExited) { $script:proc.Kill() }
+    # The FAILURE path leaks exactly as much disk as the success path, and it is the path a lane
+    # hits repeatedly while chasing a refusal - so it clears too. After the kill, so the children
+    # holding the profile have at least been asked to go.
+    Clear-DtrhProfiles 'exit (failed)'
     Release-Lease
     exit 1
 }
@@ -983,6 +1098,10 @@ function Assert-Route($window, [string]$route) {
     if ($texts -notmatch "route: $route") { Fail "the shell did not navigate to '$route' (state drive failed)" }
 }
 
+# BEFORE THE LEASE, because a run that cannot honestly produce evidence must not make every other
+# lane queue behind it for five minutes to find that out.
+Assert-FreeSpace
+
 # Take the desktop BEFORE the app is launched: the window itself is the thing that must not
 # contend with another run's windows, so the lease has to cover the launch and not just the read.
 Take-Lease
@@ -1061,21 +1180,13 @@ if ($Surface -eq 'companion-transcript' -and (Test-Path $companionMemoryFile)) {
     Move-Item $companionMemoryFile $aside -Force
     Write-Output "deterministic start: the companion's persisted record moved aside to $aside (rename it back to restore)"
 }
-if ($Surface -eq 'goon-page' -and (Test-Path $goonProfileDir)) {
-    # Only for this surface: blowing away a WebView2 profile is not free (the next launch rebuilds
-    # it), and no other capture here depends on page-side state.
-    try {
-        Remove-Item $goonProfileDir -Recurse -Force -ErrorAction Stop
-        Write-Output "deterministic start: goon WebView2 profile cleared ($goonProfileDir)"
-    }
-    catch {
-        # REPORTED, never silent -- but not fatal, because it is not what this capture depends on.
-        Write-Output ("NOTE: the goon WebView2 profile could not be cleared " +
-    "($($_.Exception.GetType().Name): $($_.Exception.Message)). Continuing: the page's store is " +
-    'scoped to an ephemeral origin that changes every launch, and the modal=open gate below is ' +
-    'what would catch surviving page state')
-    }
-}
+# EVERY WebView2 PROFILE, EVERY SURFACE, not just the goon page's. This used to be scoped to
+# goon-page on the argument that "no other capture depends on page-side state" - which was true
+# about determinism and irrelevant to the disk. The clear runs unconditionally now for the reason
+# the block at the top of this file records, and it is best-effort for the reason the goon-only
+# clear already was: the page's store is scoped to an ephemeral origin that changes every launch,
+# and the modal=open gate below is what would catch surviving page state.
+Clear-DtrhProfiles 'deterministic start'
 
 $script:proc = [System.Diagnostics.Process]::Start($exe)
 Write-Output "launched pid=$($script:proc.Id)"
@@ -3465,6 +3576,10 @@ if ($script:proc.ExitCode -ne 0) { Fail "non-zero exit on close: $($script:proc.
 
 # The window is gone; the desktop belongs to whoever wants it next.
 Release-Lease
+
+# AND THE DISK BELONGS TO WHOEVER WANTS IT NEXT. The process has exited (WaitForExit above), so
+# this is the earliest honest moment to take the profile tree back.
+Clear-DtrhProfiles 'exit'
 
 # NON-VACUITY IS PART OF "CAPTURED", not a downstream opinion. A correctly-sized image of ONE
 # colour is exactly what this step produces when nothing was drawn, and it printed CAPTURE PASS
