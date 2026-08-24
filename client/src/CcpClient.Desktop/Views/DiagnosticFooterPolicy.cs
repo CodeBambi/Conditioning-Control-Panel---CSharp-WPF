@@ -12,8 +12,11 @@ namespace CcpClient.Desktop.Views;
 ///
 /// <para><b>The channel itself is deliberate and is NOT being deleted, which is the whole point of
 /// gating it here rather than removing the footer.</b> The probe is content-free, it is
-/// UIA-readable on Windows, and <see cref="MainWindow"/> logs it once on first layout so it is
-/// stderr-readable on Linux. That log line is how this port read its five rail doors' geometry on
+/// UIA-readable on Windows, and <see cref="MainWindow"/> logs it to stderr whenever the geometry it
+/// describes CHANGES, so it is readable on Linux. (It used to latch on the first layout, and on X11
+/// that ran before the scale factor and the window placement landed, so the one logged line
+/// described a window that no longer existed.) That log line is how this port read its five rail
+/// doors' geometry on
 /// a platform where every screen capture comes back black. Delete the channel and the Linux leg
 /// loses its only evidence; render it to a user and the product ships its own scaffolding.</para>
 ///
