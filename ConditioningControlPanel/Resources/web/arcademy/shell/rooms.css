@@ -1,0 +1,193 @@
+/* ============================================================================
+ * THE ROOM SCENE. Skin for shell/room.js: the VN antechamber between the
+ * campus door and a class. Loaded lazily by room.js AFTER styles.css, so the
+ * campus tokens (--pink and friends) are already on :root. The annex is the
+ * cold place; a classroom is warm - the glow here is the campus's own pink.
+ *
+ * The stage is a fixed 1376x768 plane scaled by transform to fit the screen
+ * (lab.css's fitStage, promoted). Hotspot rects are authored in stage pixels
+ * and ride the same scale for free. The only animation is the hotspot's
+ * breath, and .arc-reduced / .arm-lite hold it still (decoration law).
+ * ==========================================================================*/
+
+/* FIXED, LIKE .arc-records: the shell marks <html> arc-report-on for this
+ * screen (body overflow hidden) and .arc-screen is a 1080px COLUMN - an
+ * in-flow room would be a postcard in a gutter. Fixed + inset 0 is the shape
+ * every fullscreen screen here uses. */
+.arm-root {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: #0B0B18;
+  overflow: hidden;
+}
+
+.arm-stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1376px;
+  height: 768px;
+  transform-origin: 50% 50%;
+  /* room.js sets transform: translate(-50%,-50%) scale(s); origin must stay
+     center or the scale walks the stage off-axis (lab.css's lesson) */
+}
+
+.arm-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  image-rendering: pixelated;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ------------------------------ hotspots -------------------------------- */
+
+.arm-hot {
+  position: absolute;
+  z-index: 3;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+/* THE BREATH. The one lit thing in the room: a soft pink rim that swells and
+ * settles, loud enough to find in a second, quiet enough to live behind. */
+.arm-hot:not(.arm-exit) {
+  box-shadow: 0 0 0 2px rgba(255, 105, 180, 0.30),
+              0 0 26px 6px rgba(255, 105, 180, 0.16),
+              inset 0 0 30px rgba(255, 105, 180, 0.07);
+  animation: arm-breathe 2.6s ease-in-out infinite;
+}
+@keyframes arm-breathe {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(255, 105, 180, 0.24),
+                0 0 22px 4px rgba(255, 105, 180, 0.12),
+                inset 0 0 26px rgba(255, 105, 180, 0.05);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(255, 105, 180, 0.50),
+                0 0 40px 12px rgba(255, 105, 180, 0.26),
+                inset 0 0 40px rgba(255, 105, 180, 0.12);
+  }
+}
+.arc-reduced .arm-hot:not(.arm-exit),
+.arm-lite .arm-hot:not(.arm-exit) {
+  animation: none;
+  /* the static frame keeps the mid-breath weight so the room still reads */
+  box-shadow: 0 0 0 2px rgba(255, 105, 180, 0.40),
+              0 0 26px 6px rgba(255, 105, 180, 0.18),
+              inset 0 0 30px rgba(255, 105, 180, 0.08);
+}
+
+.arm-hot:hover, .arm-hot:focus-visible {
+  outline: none;
+  background: rgba(255, 105, 180, 0.08);
+  box-shadow: 0 0 0 2px rgba(255, 145, 200, 0.75),
+              0 0 44px 14px rgba(255, 105, 180, 0.30),
+              inset 0 0 44px rgba(255, 105, 180, 0.14);
+  animation: none;
+}
+
+/* The painted exit door: dark until you find it, honest once you do. */
+.arm-hot.arm-exit:hover, .arm-hot.arm-exit:focus-visible {
+  background: rgba(180, 150, 255, 0.08);
+  box-shadow: inset 0 0 0 2px rgba(190, 160, 255, 0.45);
+}
+
+.arm-hot .arm-hot-tag {
+  position: absolute;
+  left: 50%;
+  bottom: -26px;
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  background: rgba(16, 10, 20, 0.88);
+  color: var(--pink, #FF69B4);
+  border: 1px solid rgba(255, 105, 180, 0.35);
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 140ms linear;
+  pointer-events: none;
+}
+.arm-hot:hover .arm-hot-tag, .arm-hot:focus-visible .arm-hot-tag { opacity: 1; }
+.arm-hot.arm-exit .arm-hot-tag { color: #CBB8F2; border-color: rgba(190, 160, 255, 0.35); }
+
+/* ------------------------------ the plate ------------------------------- */
+
+.arm-plate {
+  position: absolute;
+  z-index: 4;
+  left: 18px;
+  top: 16px;
+  max-width: min(360px, 70vw);
+  padding: 12px 16px 12px;
+  background: rgba(16, 10, 22, 0.82);
+  border: 1px solid rgba(255, 105, 180, 0.28);
+  border-radius: 10px;
+  backdrop-filter: blur(3px);
+}
+.arm-plate-room {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: #B9A8C9;
+  margin-bottom: 2px;
+}
+.arm-plate-name {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.2;
+  color: #F5EAF2;
+}
+.arm-plate-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  color: var(--pink, #FF69B4);
+}
+.arm-plate-stamp {
+  padding: 1px 8px;
+  border: 2px solid var(--pink, #FF69B4);
+  border-radius: 4px;
+  font-weight: 800;
+  transform: rotate(-3deg);
+}
+.arm-plate-xp {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #C9BBD6;
+}
+
+/* ------------------------------ back pill ------------------------------- */
+
+.arm-back {
+  position: absolute;
+  z-index: 4;
+  left: 16px;
+  bottom: 14px;
+  padding: 6px 14px;
+  background: rgba(16, 10, 22, 0.82);
+  color: #D9C9E4;
+  border: 1px solid rgba(255, 105, 180, 0.30);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.arm-back:hover, .arm-back:focus-visible {
+  outline: none;
+  border-color: var(--pink, #FF69B4);
+  color: #FFF;
+}

@@ -1798,6 +1798,21 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   function openClassCard(key) {
     const spec = ROOMS[key];
     const r = st.rooms[key] || {};
+    /* THE ROOM SCENE TAKEOVER (shell/room.js). An ENTERABLE door is offered to
+     * the shell before the card pops; a shell that has the painted room takes
+     * it (walks, then shows the set) and returns true. Everything the card
+     * still owns stays the card's: a dark room (the lockedClick EMI seam), a
+     * suspended school, and every key the shell declines. The plate line rides
+     * along because ROOMS lives here and the scene should not re-derive it. */
+    if (!st.suspended && (r.scheduled || r.unlocked || st.devPass) && handlers.roomScene) {
+      let took = false;
+      try {
+        took = !!handlers.roomScene(key, {
+          plate: (t(spec.nameKey, spec.nameEn) + ' · ' + t('campus_rm', 'RM') + ' ' + spec.rm).toUpperCase(),
+        });
+      } catch (e) { took = false; }
+      if (took) return;
+    }
     ccRoom.textContent = (t(spec.nameKey, spec.nameEn) + ' · ' + t('campus_rm', 'RM') + ' ' + spec.rm).toUpperCase();
     ccCourse.textContent = name(key);
     ccStatus.textContent = statusLine(key).toUpperCase();

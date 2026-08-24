@@ -61,6 +61,11 @@ import { createAnnexReveal } from './annexreveal.js';
  * shell keeps the store, the gate, EMI's bracket and the bridge, records.js
  * style. */
 import { createAnnexLab } from '../annex/lab.js';
+/* THE ROOM SCENE (the VN antechamber). A painted room between the campus door
+ * and a class, replacing the door card for the rooms that have art - room.js
+ * owns the SCENES table and the stage; the shell keeps the walk, the launch
+ * path and the Esc rung (narrow caps, records.js style). */
+import { createRoomScene, hasRoomScene } from './room.js';
 /* THE PHANTOM POST: the mail engine and its three paper overlays. The engines
  * hold NO storage of their own (their STATE-NEEDS law) - the shell hands each
  * an injected blob below and banks it through the store like any page key. */
@@ -106,7 +111,7 @@ function sfx(name, level, extra) {
 
 /** Screen depth, so a swap knows which way it went. An ORDER, not a router -
  *  the router is `screen` and it stays exactly where it was. */
-const SCREEN_DEPTH = Object.freeze({ board: 0, records: 1, annex: 2, report: 2, settings: 3, class: 4 });
+const SCREEN_DEPTH = Object.freeze({ board: 0, room: 1, records: 1, annex: 2, report: 2, settings: 3, class: 4 });
 
 /* ----------------------------------------------------------------------------
  * DECK V - THE RAKE (house-rules.txt). Built ONCE here so all ten classes wear
@@ -619,6 +624,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    *  before the bracket so a settings-disabled EMI never comes back by accident. */
   let annexPage = null;
   let annexEmiPrev = false;
+  /** THE ROOM SCENE (shell/room.js). Built fresh per visit, destroyed on every
+   *  path out via clearScreen - the annex's lifecycle without the bracket. */
+  let roomPage = null;
   /** The one in-flight annex stats request ({promise, resolve, timer}|null). */
   let annexStatsWait = null;
   /* THE PUNCH-CARD CEREMONY. `punchStage` is the live overlay; `punchArm` is
@@ -927,6 +935,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         annexEmiPrev = false;
         try { const emi = getEmi(); if (emi && emi.setEnabled) emi.setEnabled(true); } catch (e) { /* noop */ }
       }
+    }
+    /* The room scene dies with its screen too - no bracket to restore (a
+     * classroom keeps its mascot), just the resize listener its destroy drops. */
+    if (roomPage) {
+      const rp = roomPage;
+      roomPage = null;
+      try { rp.destroy(); } catch (e) { /* noop */ }
     }
     extrasBox = null;
     /* THE ROTATE GATE BELONGS TO A SCREEN, NOT TO THE PAGE. Every screen change
@@ -1354,27 +1369,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
             } catch (e) { say('boardOpenedDate write failed: ' + ((e && e.message) || e)); }
             if (board) board.replay();
           },
-          begin: (gameKey) => walkThen(gameKey, () => {
-            const cls = timetable.classes.find((c) => c.gameKey === gameKey);
-            if (cls) { startClass(cls); return; }
-            // THE DEV DOOR: a room off tonight's board still opens when the host
-            // came in through `--arcademy`. Graded + timed like a dealt class,
-            // built from the registry descriptor (freeSwimClass's parachute).
-            // THE EARNED DOOR, then the dev one. A completed punch card opens
-            // its room every night - through the SAME path the dev pass uses, so
-            // an unlocked run is an ordinary graded class end to end (grades in
-            // `days`, XP once per UTC day, attendance idempotent). Nothing
-            // host-side gates which room may start; this is the whole feature.
-            if (isUnlocked(gameKey)) {
-              say('punch card unlock: ' + gameKey + ' is off the board - graded run anyway');
-              startClass(freeSwimClass(gameKey));
-              return;
-            }
-            if (devPass) {
-              say('dev pass: ' + gameKey + ' is off the board - graded run anyway');
-              startClass(freeSwimClass(gameKey));
-            }
-          }),
+          begin: (gameKey) => walkThen(gameKey, () => launchGraded(gameKey)),
+          /* THE ROOM SCENE TAKEOVER. campus.js offers every enterable door
+           * here before it pops the card; the shell takes the ones with art
+           * (room.js's SCENES table) and declines the rest with `false`, which
+           * pops the card exactly as it always did. The walk is unchanged -
+           * door first, THEN the room, because that is what a door is for. */
+          roomScene: (gameKey, info) => {
+            if (!hasRoomScene(gameKey)) return false;
+            walkThen(gameKey, () => showRoomScene(gameKey, info));
+            return true;
+          },
           freeSwim: (gameKey) => walkThen(gameKey, () => startFreeSwim(gameKey)),
           records: () => walkThen('records', () => showRecords()),
           annex: () => walkThen('annex', () => showAnnex()),
@@ -1613,6 +1618,95 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     });
     if (dom && dom.screen) dom.screen.appendChild(recordsPage.root);
     setStage('arc-report-on');
+  }
+
+  /* ---------------------- the graded launch ----------------------------
+   * ONE launch path for a door, wherever the press came from (the campus
+   * card's Begin, the room scene's lit furniture). Board first, then:
+   * THE EARNED DOOR, then the dev one. A completed punch card opens its room
+   * every night - through the SAME path the dev pass uses, so an unlocked run
+   * is an ordinary graded class end to end (grades in `days`, XP once per UTC
+   * day, attendance idempotent). Nothing host-side gates which room may
+   * start; this is the whole feature. THE DEV DOOR: a room off tonight's
+   * board still opens when the host came in through `--arcademy` - graded +
+   * timed like a dealt class, built from the registry descriptor
+   * (freeSwimClass's parachute).
+   * -------------------------------------------------------------------- */
+  function launchGraded(gameKey) {
+    const cls = timetable.classes.find((c) => c.gameKey === gameKey);
+    if (cls) { startClass(cls); return; }
+    if (isUnlocked(gameKey)) {
+      say('punch card unlock: ' + gameKey + ' is off the board - graded run anyway');
+      startClass(freeSwimClass(gameKey));
+      return;
+    }
+    if (devPass) {
+      say('dev pass: ' + gameKey + ' is off the board - graded run anyway');
+      startClass(freeSwimClass(gameKey));
+    }
+  }
+
+  /* ========================== SCREEN: ROOM ==============================
+   * THE ROOM SCENE. The VN antechamber: the walk brought the student to the
+   * door, this is the other side of it - the painted set with the class's
+   * own furniture lit. A screen like records (same funnel, same ladder
+   * shape); room.js holds the stage and the shell keeps everything that
+   * touches state. It shows only for enterable doors (campus.js gates the
+   * offer on scheduled/unlocked/devPass and never while suspended), so the
+   * dark-room card, its EMI seam and the suspend card are all untouched.
+   * The facts on the plate are the door card's, computed FRESH here so a
+   * retake entered seconds after a grade wears tonight's letter.
+   * ==================================================================== */
+  function showRoomScene(gameKey, info) {
+    if (!hasRoomScene(gameKey)) { showBoard(); return; }
+    screen = 'room';
+    dismissEndCard();
+    dismissPunchStage();
+    dismissAnnexStage();
+    clearScreen();
+    renderTopbar();
+    /* the door-open thump the card used to own - one verb, one sound */
+    sfx('door', 0.35);
+    const rec = todaysRecord(gameKey);
+    const done = !!rec;
+    const scheduled = timetable.classes.some((c) => c.gameKey === gameKey);
+    let statusLine, actionLabel, xpLine;
+    if (done) {
+      statusLine = t('retake', 'Retake');
+      actionLabel = t('retake', 'Retake');
+      xpLine = t('campus_xp_retake', 'Retakes pay no XP - pride only.');
+    } else if (scheduled) {
+      statusLine = t('campus_in_session', 'In Session');
+      actionLabel = t('begin_class', 'Begin');
+      xpLine = t('campus_xp_first', 'First pass of the day pays XP.');
+    } else if (isUnlocked(gameKey)) {
+      statusLine = t('campus_unlocked_sign', 'Open');
+      actionLabel = t('begin_class', 'Begin');
+      xpLine = t('campus_unlocked_hint',
+        'Card complete. This room opens every night, board or no board.');
+    } else {
+      /* the dev pass - campus.js's gate means this branch IS enterable */
+      statusLine = t('campus_dev_pass', 'Dev pass · Begin');
+      actionLabel = t('begin_class', 'Begin');
+      xpLine = t('campus_dev_pass_hint', "Dev pass: off tonight's board, graded anyway.");
+    }
+    roomPage = createRoomScene({
+      gameKey,
+      t,
+      lite: !!src.performanceMode,
+      log: say,
+      name: gameName(gameKey),
+      plate: (info && info.plate) || '',
+      statusLine,
+      actionLabel,
+      stamp: done && rec && rec.grade ? String(rec.grade) : '',
+      xpLine,
+      onEnter: () => launchGraded(gameKey),
+      onBack: () => showBoard(),
+    });
+    if (dom && dom.screen) dom.screen.appendChild(roomPage.root);
+    setStage('arc-report-on');
+    if (typeof roomPage.fit === 'function') roomPage.fit();
   }
 
   /* ============================ THE ANNEX ===============================
@@ -3570,6 +3664,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       }
       // The Records Office is a screen like settings: Esc walks back to campus.
       if (screen === 'records') { showBoard(); return true; }
+      // A ROOM SCENE is a screen like records: Esc walks back to campus. Its
+      // hotspots are buttons, not modals - the room owns no inner rungs.
+      if (screen === 'room') { showBoard(); return true; }
       // THE ANNEX folds inward-out (trap 48's shape, one ladder both sides of
       // the seam): the lab's own rungs first - paper down, OS window shut,
       // laptop closed, close-up stepped back - then the stairs walk home to

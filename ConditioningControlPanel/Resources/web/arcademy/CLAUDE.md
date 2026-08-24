@@ -83,6 +83,29 @@ shell/enrollment.js the once-ever intro (ENROLL_LEX: 3 flavour cards per class)
                    AND the stamp ceremony (day one = three punches, an S day =
                    two, an ordinary day = one,
                    the tenth = the unlock beat)
+shell/room.js      THE ROOM SCENE (VN antechamber): the painted set between the
+                   campus door and a class, REPLACING the door card for rooms
+                   listed in its SCENES table (pilot: daily_trigger / Homeroom,
+                   art/vn/vn-04). campus.js OFFERS every enterable door via
+                   handlers.roomScene(key, {plate}) before popping the card;
+                   shell.js takes keys the table has (walkThen first - door,
+                   THEN room), declines the rest with false = the card pops
+                   unchanged. Dark rooms / suspended school never offered, so
+                   the lockedClick EMI seam stays the card's. A screen like
+                   records: SCREEN_DEPTH room:1, one Esc rung (showBoard), torn
+                   down in clearScreen. Fixed 1376x768 stage, hotspot rects in
+                   stage px (lab.js promoted; transform-origin 50% 50%). Enter
+                   = begin (hotspot button holds focus). Free Swim rooms need a
+                   second furniture hotspot before joining SCENES (the card
+                   carried the button; DT has none, so the pilot ducks it).
+                   TRAP: the first fit() races the lazy rooms.css link - an
+                   unstyled root measures as the 1080px .arc-screen column and
+                   the room ships as a postcard; room.js refits on link load +
+                   art load + one rAF, and .arm-root is position:fixed like
+                   .arc-records for the same arc-report-on reason.
+shell/rooms.css    room.js's skin, lazy-linked on first visit (corkboard
+                   pattern). Pink breath on the one lit hotspot; .arc-reduced /
+                   .arm-lite hold it still (decoration law).
 shell/records.js   THE RECORDS OFFICE screen: the wall of ten cards, the per-card
                    stamp docket, and a link to the report card (never a second
                    share pipeline - trap 13). + THE SPOTLIGHT (owner playtest
