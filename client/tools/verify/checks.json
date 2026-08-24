@@ -466,7 +466,7 @@
       "state": "admitted",
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
-      "region": { "rect": { "x": 0.02, "y": 0.0, "w": 0.96, "h": 1.0 } },
+      "region": { "rect": { "x": 0.02, "y": 0.60, "w": 0.96, "h": 0.38 } },
       "expectedColor": "#1E1822",
       "tolerance": 4,
       "minPixelFraction": 0.98
@@ -477,7 +477,7 @@
       "state": "closed",
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
-      "region": { "rect": { "x": 0.02, "y": 0.0, "w": 0.96, "h": 1.0 } },
+      "region": { "rect": { "x": 0.02, "y": 0.60, "w": 0.96, "h": 0.38 } },
       "expectedColor": "#141018",
       "tolerance": 4,
       "minPixelFraction": 0.90
@@ -500,7 +500,7 @@
       "state": "broad",
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
-      "region": { "rect": { "x": 0.05, "y": 0.0, "w": 0.90, "h": 1.0 } },
+      "region": { "rect": { "x": 0.05, "y": 0.50, "w": 0.90, "h": 0.48 } },
       "expectedColor": "#1E1822",
       "tolerance": 4,
       "minPixelFraction": 0.95
@@ -511,7 +511,7 @@
       "state": "titles",
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
-      "region": { "rect": { "x": 0.05, "y": 0.0, "w": 0.90, "h": 1.0 } },
+      "region": { "rect": { "x": 0.05, "y": 0.50, "w": 0.90, "h": 0.48 } },
       "expectedColor": "#4A2C55",
       "tolerance": 4,
       "minPixelFraction": 0.95

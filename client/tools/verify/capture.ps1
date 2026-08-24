@@ -3102,11 +3102,19 @@ elseif ($Surface -eq 'companion-permissions') {
     # above it is a CheckBox with a real peer, and the panel opens 6 DIP below it (the settings
     # StackPanel's Spacing) behind a 1 DIP border and 6 DIP of padding. So 8..12 DIP below the
     # switch is inside that padding in `admitted`, and is the window's own ground in `closed`.
+    #
+    # AND THE CAPTURE STARTS 3 DIP BELOW THE SWITCH RATHER THAN 8, so it carries the panel's own
+    # EDGE above the sampled band: window ground, then EffectPermissionsPanel's 1 DIP #FFFFC107
+    # border, then its padding. Cropped to the padding alone the `admitted` capture was 665x7
+    # pixels of one colour and the capture step's non-vacuity gate refused it - correctly, because a
+    # picture of a flat fill cannot be told from a picture of nothing. The amber edge is the
+    # brightest boundary on this window and it exists only when the panel does, so the picture now
+    # says the panel OPENED as well as what colour it is.
     $masterRect = Get-Rect (Get-Element $companion 'EffectsMasterToggle')
     $capX = $companionRect.X + [int][math]::Round(20 * $scale)
-    $capY = $masterRect.Y + $masterRect.H + [int][math]::Round(8 * $scale)
+    $capY = $masterRect.Y + $masterRect.H + [int][math]::Round(3 * $scale)
     $capW = [int][math]::Round(380 * $scale)
-    $capH = [int][math]::Round(4 * $scale)
+    $capH = [int][math]::Round(9 * $scale)
 
     if ($State -eq 'admitted') {
         # THE CROSS-CHECK: the band must be above the FIRST switch's line, or it is sampling a row
@@ -3195,23 +3203,35 @@ elseif ($Surface -eq 'companion-privacy') {
     }
 
     # THE BAND, derived from the third segment's OWN rect. Each segment sits in a Border seat with
-    # 6,5 padding (CompanionWindow.axaml, Border.dial-seat), and Avalonia gives Border no automation
-    # peer (harness surprise #1) - but the RadioButton inside it has one, and the 5 DIP above its
-    # rect is the seat's own fill. That fill is the only thing the two states differ by here:
-    # #FF1E1822 unselected, #FF4A2C55 selected.
+    # 6,5 padding and a 1 DIP border (CompanionWindow.axaml, Border.dial-seat), and Avalonia gives
+    # Border no automation peer (harness surprise #1) - but the RadioButton inside it has one, and
+    # the 5 DIP above its rect is the seat's own fill. That fill is the only thing the two states
+    # differ by here: #FF1E1822 unselected, #FF4A2C55 selected.
+    #
+    # THE CAPTURE STARTS 8 DIP ABOVE THE SEGMENT RATHER THAN 4, so it carries the seat's own top
+    # EDGE above the sampled band: the strip's #FF1E1822 padding, the seat's 1 DIP border, then the
+    # fill. Cropped to the fill alone both states were one flat colour and the capture step's
+    # non-vacuity gate refused them - correctly, because a picture of a flat fill cannot be told
+    # from a picture of nothing. The border is a boundary in BOTH states and it moves with them
+    # (#FF3A2F3E unselected, #FFE066FF selected), so the picture now says the seat is a seat.
     $titlesRect = Get-Rect (Get-Element $companion 'DialTitles')
     $capX = $titlesRect.X
-    $capY = $titlesRect.Y - [int][math]::Round(4 * $scale)
+    $capY = $titlesRect.Y - [int][math]::Round(8 * $scale)
     $capW = $titlesRect.W
-    $capH = [int][math]::Round(3 * $scale)
+    $capH = [int][math]::Round(7 * $scale)
     if (($capY + $capH) -gt $titlesRect.Y) {
         Fail "the seat band ends at $($capY + $capH) and the segment starts at $($titlesRect.Y); it is sampling the segment's own glyphs"
     }
-    if ($capY -lt ($titlesRect.Y - [int][math]::Round(5 * $scale))) {
-        Fail "the seat band starts at $capY, above the seat's 5 DIP of top padding; it is outside the seat"
+    if ($capY -ge ($titlesRect.Y - [int][math]::Round(6 * $scale))) {
+        Fail ("the capture starts at $capY, at or below the seat's own border 6 DIP above the segment at " +
+    "$($titlesRect.Y); it would carry no boundary and be a flat fill again")
     }
-    Write-Output ("band $capX,$capY ${capW}x${capH} @ scale $scale - inside the '+ Page titles' seat's top padding, " +
-    "above the segment at $($titlesRect.Y)")
+    if ($capY -lt ($titlesRect.Y - [int][math]::Round(11 * $scale))) {
+        Fail ("the capture starts at $capY, further than 11 DIP above the segment at $($titlesRect.Y) - past the " +
+    "strip's own 6 DIP padding and off the dial strip entirely")
+    }
+    Write-Output ("band $capX,$capY ${capW}x${capH} @ scale $scale - the '+ Page titles' seat's top border and " +
+    "padding, above the segment at $($titlesRect.Y)")
 
     Assert-Inside @{ X = $capX; Y = $capY; W = $capW; H = $capH } $companionRect 'the dial seat band' 'the companion window'
     $windowRect = $companionRect

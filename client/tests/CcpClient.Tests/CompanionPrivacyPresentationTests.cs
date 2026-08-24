@@ -200,10 +200,17 @@ public class CompanionPrivacyPresentationTests
 
         // And the geometry refusals: a band that has drifted onto glyphs, out of its seat, or out
         // of the window it is supposed to be sampling is a failure rather than a capture.
+        //
+        // THE SEAT PAIR HAS THREE OF THEM NOW, and the middle one is why: the capture deliberately
+        // starts ABOVE the seat's 5 DIP of padding so that the seat's own 1 DIP border is in the
+        // picture. Cropped to the padding alone both captures were a single flat colour, which the
+        // capture step's non-vacuity gate refuses — so "not too far up" is no longer the only way
+        // this band can be wrong, and "not far enough up" is now a refusal in its own right.
         string[] geometry =
         [
             "it is sampling the segment's own glyphs",
-            "above the seat's 5 DIP of top padding; it is outside the seat",
+            "it would carry no boundary and be a flat fill again",
+            "off the dial strip entirely",
             "it is sampling the heading's glyphs",
             "'the dial seat band' 'the companion window'",
             "'the transcript sample band' 'the transcript window'",
