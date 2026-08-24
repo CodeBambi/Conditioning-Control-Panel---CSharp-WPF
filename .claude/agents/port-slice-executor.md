@@ -32,7 +32,10 @@ Paths are repository-relative; this repo lives at a different absolute path on e
    **Your floor run will therefore report a total that does NOT match the pin.** That is expected and is not a failure: confirm the observed total equals `pin + your reported delta`, and state both numbers in your report. Never widen the pin, disable a test, or special-case anything to make a step pass. Never add a name to `allowedSkips` unless its precondition is a property of the machine or OS.
 10. **Never export `CCP_DATA_ROOT` process-wide.** It makes the data-root isolation pin skip and the floor goes blind. Set it per headed-evidence run only.
 11. **Do not commit the board.** `client/docs/task-board.md` is a shared chokepoint reconciled by the orchestrator at land time.
-12. **If you edit anything under `client/docs/`, run `node client/tools/citations/intra.mjs` before you report.**
+12. **If you add or move a `File.ext:NNN` citation ANYWHERE under `client/`, run `node client/tools/citations/intra.mjs` before you report.**
+   Corrected 2026-08-24: this rule used to say "under `client/docs/`" and that was WRONG. `intra.mjs`
+   reads references from all five client roots - `client/{src,tests,docs,tools,spikes}` - so a lane that
+   edited only test files reddened it and found out the hard way.
    Learned 2026-08-24, the expensive way: a lane grepped `client/tests` for the document's FILENAME, found
    nothing, and concluded no guard watched it. `intra.mjs` sweeps the WHOLE of `client/docs`
    filename-agnostically and red with four wrong-line rows against the lane's new section, so no grep for
