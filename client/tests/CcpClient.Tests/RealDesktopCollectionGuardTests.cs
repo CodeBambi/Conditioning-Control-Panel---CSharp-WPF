@@ -111,6 +111,14 @@ public class RealDesktopCollectionGuardTests
         "GlyphWindowProbe",
         "GlyphSurfaceObservations",
         "Win32GlyphSurface",
+
+        // The teardown run brings FIVE of those surfaces up at once — an overlay, a glyph surface, a
+        // video surface carrying a picture, a pointer target that is deliberately not click-through,
+        // and a card that takes the foreground and the keyboard — and then destroys them and asks
+        // the window manager what is left. It contends for everything every line above contends for,
+        // and it adds one of its own: its central reading is a walk of the WHOLE z-order filtered to
+        // this process, so a second run's windows would be counted as this run's survivors.
+        "SurfaceTeardownObservations",
     ];
 
     /// <summary>
