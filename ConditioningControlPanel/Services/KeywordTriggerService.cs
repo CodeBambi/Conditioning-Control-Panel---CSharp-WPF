@@ -265,6 +265,13 @@ namespace ConditioningControlPanel.Services
             var settings = App.Settings?.Current;
             if (settings == null || !settings.KeywordTriggersEnabled) return;
 
+            // Entitlement can lapse while the hook is live (the ? box's free day rotating out at
+            // midnight, a subscription expiring mid-session). Start() checks HasAccess() once and
+            // never again, so without this per-press re-check the feature kept firing from behind
+            // the re-drawn padlock veil - which also covers the OFF toggle (the "can't turn it
+            // off after it rotated" reports). Cheap: a dictionary lookup + cached tier flags.
+            if (!HasAccess()) return;
+
             // App scope, checked before the buffer rather than before the match. Dropping the
             // keystrokes is the point: if it only refused to FIRE, a keyword typed into a blocked
             // app would still be sitting in the rolling buffer, ready to go off the moment focus
@@ -868,6 +875,10 @@ namespace ConditioningControlPanel.Services
             NeedsOcrConfirmation = false;
 
             if (!_isActive || _disposed) return;
+            // Live entitlement re-check (see OnKeyPressed). Placed ahead of the token diagnostic
+            // below on purpose: once access has lapsed, the user's screen contents are none of our
+            // business - not even at log level.
+            if (!HasAccess()) return;
             if (allWords == null || allWords.Count == 0)
             {
                 _ocrSeenCounts.Clear();
@@ -1103,6 +1114,8 @@ namespace ConditioningControlPanel.Services
         {
             if (!_isActive || _disposed) return;
             if (string.IsNullOrEmpty(text)) return;
+            // Live entitlement re-check (see OnKeyPressed).
+            if (!HasAccess()) return;
 
             var settings = App.Settings?.Current;
             if (settings == null || !settings.KeywordTriggersEnabled) return;
