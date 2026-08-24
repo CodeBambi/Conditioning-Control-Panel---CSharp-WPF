@@ -7,7 +7,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// The guards on the zero-execution census (<c>client/docs/task-board.md:33</c>).
+/// The guards on the zero-execution census (the zero-execution census row on <c>client/docs/task-board.md</c>).
 ///
 /// <para>WHAT THIS DOES NOT DO. It sets NO threshold, NO target and NO gate on the census count.
 /// The board row asks which shipped types have ZERO executed lines, not a percentage, and a
@@ -404,7 +404,7 @@ public sealed class ExecutionCensusTests
     ///
     /// <para>It also pins that a quiet exit ENUMERATES WHAT IT DID NOT CHECK. The coverage-derived
     /// rows and the embedded suite run table are stale by construction the moment a test moves
-    /// (<c>client/docs/task-board.md:34</c>), so a future orchestrator reading silence as "the
+    /// (the zero-execution census row on <c>client/docs/task-board.md</c>), so a future orchestrator reading silence as "the
     /// census is current" would be misled in the reassuring direction.</para>
     /// </summary>
     [Fact]

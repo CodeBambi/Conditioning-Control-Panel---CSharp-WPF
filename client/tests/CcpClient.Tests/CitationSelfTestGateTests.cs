@@ -13,7 +13,7 @@ namespace CcpClient.Tests;
 /// gone / ambiguous / out-of-range, and the coverage arithmetic), and <b>no standing gate ran any
 /// of them</b>: <c>check-floor.mjs</c> discovers csproj entries under <c>client/tests/</c>, so a
 /// node file under <c>client/tools/</c> is invisible to it and the classifier's green held only as
-/// of the last time a human ran the script by hand (<c>task-board.md:49</c> and <c>:330</c>). This
+/// of the last time a human ran the script by hand (the board rows for the citation inventory and the classifier gate; cited by subject rather than by line, because every land inserts rows and shifts the numbering). This
 /// class is the bridge. What <see cref="CitationNeedleTests"/> already pins is the tool's
 /// CONTRACT (both modes exit 0, both print the coverage block) and its DATA (needle schema,
 /// one-line resolution at a frozen SHA); neither touches the mechanism, and this does.</para>
