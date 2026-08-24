@@ -2826,6 +2826,189 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
   .arc-records-wall { grid-template-columns:1fr; }
 }
 
+/* ============================ THE MOBILE PASS ============================
+   Every rule below is gated on `html.arc-mobile`, which `core/device.js` writes
+   and only ever writes for a coarse-pointer device with no fine pointer and a
+   short side of 820px or less. A desktop WebView2 window never carries the class,
+   so this whole section is dead weight there and the app build renders exactly
+   what it rendered before the section existed. `?forcemobile=1` forces the class
+   on for debugging in a desktop browser, which is the only way to look at any of
+   this without a phone in your hand.
+
+   THE ONE VARIABLE. `--arc-mobile-chrome-h` is how tall the in-class top strip is
+   on a phone, safe area included. It lives on <html> rather than on the strip so
+   the strip's SIBLINGS can read it: a variable set on a node is invisible to
+   everything that is not inside that node, and the whole point is that the game
+   root can shift down out of the strip's way. A game that wants to reserve its
+   own room for the strip reads the same variable and gets the same number. */
+:root { --arc-mobile-chrome-h: 0px; }
+
+/* ---- in-class chrome (owner bug C: no visible way home on a phone) -------
+   The proctor strip already carried the campus pill; on a phone it also has to
+   be SOLID, safe-area aware, and short enough that a 390x844 screen still has a
+   board on it. The chips that ride between the pill and the clock are desk
+   dressing and they are the first thing to go: the one chip after the spacer
+   (the seconds, or the Free Swim badge) is the only one a phone keeps. */
+html.arc-mobile.arc-class-on {
+  --arc-mobile-chrome-h: calc(48px + env(safe-area-inset-top, 0px));
+}
+html.arc-mobile.arc-class-on .arc-proctor {
+  height:var(--arc-mobile-chrome-h);
+  min-height:var(--arc-mobile-chrome-h);
+  flex-wrap:nowrap; gap:8px;
+  padding:env(safe-area-inset-top, 0px) calc(10px + env(safe-area-inset-right, 0px))
+          0 calc(10px + env(safe-area-inset-left, 0px));
+  /* Opaque, not translucent: a strip you can see the board through is a strip a
+     player loses. The blur goes with it, because WebKit charges several ms a
+     frame for a backdrop-filter (CLAUDE.md trap 42) and this one would be on
+     screen for the whole class. */
+  background:var(--ground);
+  border-bottom:1px solid color-mix(in srgb, var(--lav), transparent 60%);
+  backdrop-filter:none; -webkit-backdrop-filter:none;
+}
+html.arc-mobile.arc-class-on .arc-proctor > .chip { display:none; }
+html.arc-mobile.arc-class-on .arc-proctor > .arc-spacer ~ .chip { display:inline-flex; }
+html.arc-mobile.arc-class-on .arc-proctor .arc-title {
+  font-size:11.5px; letter-spacing:.09em;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;
+}
+/* THE GAME MOVES DOWN, IT DOES NOT SLIDE UNDER. `.arc-classroot` is the
+   positioning parent every game builds inside, so shifting its TOP edge (rather
+   than padding it) moves the absolutely-positioned boards too. A padding would
+   have been ignored by every `inset:0` stage in games/. */
+html.arc-mobile.arc-class-on .arc-classroot { top:var(--arc-mobile-chrome-h); }
+/* The time bar rides down with it and becomes the strip's underline. */
+html.arc-mobile.arc-class-on .arc-timebar {
+  top:calc(var(--arc-mobile-chrome-h) - 4px);
+}
+/* Belt to the shell's braces: setStage() already hides the topbar while a class
+   is up, and on a phone it must stay hidden even if a repaint races. */
+html.arc-mobile.arc-class-on .arc-topbar { display:none; }
+
+/* ---- the pill, at thumb size --------------------------------------------
+   44px is the floor for anything a thumb has to find while a board is moving. */
+html.arc-mobile .arc-campuspill {
+  min-height:44px; min-width:44px;
+  padding:6px 14px 6px 11px;
+  /* A calm chip is right on a desktop, where it sits in a quiet corner of a big
+     window. On a phone it is the ONLY way home and it has one row of a 48px strip
+     to be found in, so it gets its edge back. */
+  border-color:color-mix(in srgb, var(--lav), transparent 35%);
+  color:var(--ink);
+}
+html.arc-mobile .arc-campuspill-chev { font-size:22px; }
+/* CREST ONLY once the words stop fitting. The button keeps its title and its
+   aria-label, so the affordance is intact for a screen reader and for a long
+   press; what goes is the two lines of tracking-heavy display type that were
+   pushing the clock off the end of the strip. */
+@media (max-width:430px) {
+  html.arc-mobile .arc-campuspill {
+    width:44px; padding:0; justify-content:center; gap:0; border-radius:50%;
+  }
+  html.arc-mobile .arc-campuspill-wrap { display:none; }
+  html.arc-mobile .arc-campuspill-chev { font-size:24px; }
+}
+/* The bottom exit bar keeps its behaviour exactly; it only wants a wider thumb
+   lane, and it already reads the home-indicator inset. */
+html.arc-mobile .arc-exitbar { gap:9px; padding-top:11px; }
+html.arc-mobile .arc-exitbar .btn { min-height:44px; }
+
+/* ---- the campus, whole (owner bugs A and B) ------------------------------
+   The plan is `xMidYMid slice` on a desktop and that is right there: the window
+   is near enough 16:9 that slicing only ever eats dead sky, and a filled frame
+   beats a letterboxed one. A phone is not near 16:9 in either direction. Held
+   upright it is about 9:19.5 and slice throws away two thirds of the WIDTH;
+   turned sideways it is about 19.5:9 and slice throws away the top and the
+   bottom, which is where The Pool is, and the owner's screenshot had it sheared
+   off at the bottom edge. So on a phone the plan MEETS instead: the whole
+   architecture is on the glass and the bands left over show the dusk sky the
+   stage was already painting. campus.js writes the attribute, and re-writes it
+   when a phone rotates; this rule is the belt for an SVG minted before the class
+   landed. */
+html.arc-mobile .campus-plan { object-fit:contain; }
+/* Campus controls at thumb size. The rooms themselves are 220 viewBox units on a
+   1440-unit plan, which lands at ~106px on a 844x390 phone, so they clear 44px by
+   a mile; these two are the small ones. */
+html.arc-mobile .campus-gearbtn { width:44px; height:44px; font-size:19px; }
+html.arc-mobile .campus-boardtab { padding:12px 18px; }
+/* The room tooltip follows a cursor that does not exist on a phone. */
+html.arc-mobile .campus-tip { display:none; }
+
+/* ---- the turn-your-phone card (shell/orientgate.js) ----------------------
+   Campus signage, not a browser error: the school's own sky, the school's own
+   faces, and no scolding. It covers EVERYTHING (z 90 clears the fx layer at 40,
+   the ceremony at 45 and EMI), because a card you can play around is a card that
+   does not work. It carries no dismiss button on purpose, since the way out is to
+   turn the phone and it lifts itself the instant you do. */
+.arc-orientgate {
+  position:fixed; inset:0; z-index:90;
+  display:flex; align-items:center; justify-content:center;
+  padding:calc(20px + env(safe-area-inset-top, 0px)) calc(20px + env(safe-area-inset-right, 0px))
+          calc(20px + env(safe-area-inset-bottom, 0px)) calc(20px + env(safe-area-inset-left, 0px));
+  background:radial-gradient(120% 90% at 50% 20%,
+    color-mix(in srgb, var(--campus-sky), var(--lav) 8%) 0%, var(--campus-sky) 72%);
+  overscroll-behavior:contain;
+}
+.arc-orientgate-card {
+  max-width:min(92vw, 420px);
+  text-align:center;
+  background:color-mix(in srgb, var(--navy), transparent 8%);
+  border:var(--hairline); border-radius:14px;
+  padding:22px 20px 24px;
+  box-shadow:0 22px 60px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.arc-orientgate-title { margin:6px 0 10px; }
+.arc-orientgate-body { margin:0; line-height:1.55; }
+/* The glyph. Two nested boxes and a quarter-turn keyframe, no SVG, so it takes
+   the sheet's colours for free and costs the compositor one transform. */
+.arc-orientgate-art {
+  position:relative; width:96px; height:96px; margin:0 auto 4px;
+  display:flex; align-items:center; justify-content:center;
+}
+.arc-orientgate-phone {
+  position:relative; display:block; width:44px; height:74px; border-radius:9px;
+  border:2px solid color-mix(in srgb, var(--lav), transparent 20%);
+  background:color-mix(in srgb, var(--ground), transparent 25%);
+  animation:arc-orient-turn 3.2s ease-in-out infinite;
+}
+.arc-orientgate-portrait .arc-orientgate-phone { animation-name:arc-orient-turn-back; }
+.arc-orientgate-screen {
+  display:block; position:absolute; inset:8px 6px;
+  border-radius:4px;
+  background:linear-gradient(135deg,
+    color-mix(in srgb, var(--lav), transparent 62%),
+    color-mix(in srgb, var(--pink), transparent 72%));
+}
+.arc-orientgate-arc {
+  position:absolute; inset:6px;
+  border-radius:50%;
+  border:2px dashed color-mix(in srgb, var(--lav), transparent 76%);
+  border-left-color:transparent; border-bottom-color:transparent;
+  opacity:.75;
+}
+@keyframes arc-orient-turn {
+  0%, 22% { transform:rotate(0deg); }
+  46%, 78% { transform:rotate(-90deg); }
+  100% { transform:rotate(0deg); }
+}
+@keyframes arc-orient-turn-back {
+  0%, 22% { transform:rotate(-90deg); }
+  46%, 78% { transform:rotate(0deg); }
+  100% { transform:rotate(-90deg); }
+}
+/* Reduced motion: the phone holds at the angle it is asking for, which is the
+   whole message. The freeze at the bottom of this file would otherwise run the
+   turn at .001s, which is a flicker rather than a still. */
+html.arc-reduced .arc-orientgate-phone { animation:none; transform:rotate(-90deg); }
+html.arc-reduced .arc-orientgate-portrait .arc-orientgate-phone { animation:none; transform:rotate(0deg); }
+@media (prefers-reduced-motion: reduce) {
+  .arc-orientgate-phone { animation:none; transform:rotate(-90deg); }
+  .arc-orientgate-portrait .arc-orientgate-phone { transform:rotate(0deg); }
+}
+/* Nothing moves behind the card, and EMI does not float on top of it. */
+html.arc-orient-blocked body { overflow:hidden; }
+html.arc-orient-blocked .arc-emi { display:none; }
+
 /* ============================ A11Y / MOTION ============================== */
 .arc-sr {
   position:absolute; width:1px; height:1px; padding:0; margin:-1px;
