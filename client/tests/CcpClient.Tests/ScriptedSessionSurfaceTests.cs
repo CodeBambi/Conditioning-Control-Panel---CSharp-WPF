@@ -19,7 +19,16 @@ namespace CcpClient.Tests;
 /// directory</b>, for the reason every session fact in this suite gives: a double diverges from the
 /// product exactly where the defect lives. The one substitution is the clock, which is a declared
 /// seam on the composition root.</para>
+///
+/// <para><b>And a real participant really starting a session really opens the machine's render
+/// endpoint</b>, which is why this class carries <see cref="RealRenderDeviceCollection"/>. Measured:
+/// a sampler over a whole run of the assembly minus <c>AudioCapabilityTests</c> found the process
+/// holding an ACTIVE render session in exactly two windows, both inside the two facts here that call
+/// <c>Scripted.Start</c>; run alone, this class reproduces exactly those two. Nothing about these
+/// facts changes — the attribute only stops them running BESIDE the class whose negative controls
+/// ask whether this process holds a render session at all.</para>
 /// </summary>
+[Collection(nameof(RealRenderDeviceCollection))]
 public class ScriptedSessionSurfaceTests
 {
     // =====================================================================================
