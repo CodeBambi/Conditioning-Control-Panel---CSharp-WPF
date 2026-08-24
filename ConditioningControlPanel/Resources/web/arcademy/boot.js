@@ -170,6 +170,10 @@ const INTRO_BED_WINDOW_MS = 600;
 /** After the knock (below) the splash lingers this long, so the bed's opening
  *  bar lands on the CRT and rides the exit into the campus reveal. */
 const KNOCK_EXIT_MS = 700;
+/** The bed is a 4.0s piece and MUST SAY SO: the clip governor's silent default
+ *  is 1.2s, which cut the jingle mid-phrase right as the splash exited (owner
+ *  report, 2026-08-24). Length + air; the element's own `ended` stops it. */
+const INTRO_BED_MAX_MS = 4600;
 const introTimers = new Set();
 
 /* THE KNOCK (web hosts only). `autoplayOk` is the WebView2 host's promise and
@@ -202,7 +206,7 @@ function onKnock() {
   try { if (knockHint) knockHint.classList.add('is-heard'); } catch (e) { /* noop */ }
   if (!splashIsUp()) return;         // failBoot got there first: nothing to score
   cancelIntroCues();                 // the stitched beats yield to the real bed
-  sfx('intro_bed', 0.6);
+  sfx('intro_bed', 0.6, { maxMs: INTRO_BED_MAX_MS });
   if (knockDismissQueued) setTimeout(dismissLoader, KNOCK_EXIT_MS);
 }
 
@@ -261,7 +265,7 @@ function scheduleIntroCues() {
     // hasSample is feature-detected: an older consumer simply stitches.
     const hasBed = !!(audio && typeof audio.hasSample === 'function' && audio.hasSample('intro_bed'));
     if (hasBed && src.autoplayOk === true && elapsed < INTRO_BED_WINDOW_MS) {
-      sfx('intro_bed', 0.6);
+      sfx('intro_bed', 0.6, { maxMs: INTRO_BED_MAX_MS });
       return;
     }
     for (const beat of INTRO_BEATS) {
