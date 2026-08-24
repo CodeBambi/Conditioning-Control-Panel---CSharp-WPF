@@ -12,22 +12,25 @@ namespace ConditioningControlPanel.Services
     /// scales linearly with XP turns a session claim into confetti. Keeping the arithmetic here
     /// makes the spec a test rather than a comment.</para>
     ///
-    /// <para><b>Why the cap is 7.</b> The House Book's line is "the FEELING scales, not the particle
-    /// count": past seven the eye stops counting tokens and starts seeing a spray, so a bigger award
-    /// buys a longer, fuller flight and never a crowd.</para>
+    /// <para><b>Why the cap is 10.</b> The House Book's line is "the FEELING scales, not the
+    /// particle count": past a handful the eye stops counting tokens and starts seeing a spray, so a
+    /// bigger award buys a longer, fuller flight and never a crowd. The band was 3-7 while a flight
+    /// fired every few seconds; once the gate cut it to completions only (see
+    /// <c>BankAccumulator.IsBankable</c>) the moment had to carry more weight, and the cheapest
+    /// weight in a spill is more of it. Ten is where "a payout" still stops short of confetti.</para>
     ///
     /// <para>Deterministic from its seed - same seed, same flight - so a plan can be asserted
     /// headlessly, and so nothing about the look of a moment depends on a clock.</para>
     /// </summary>
     public static class BankFlightPlan
     {
-        // ---- DIALS (House Book: 3-7 tokens, 500-650ms ease-in arc, 60-80ms stagger) ----
+        // ---- DIALS (House Book: 4-10 tokens, 500-650ms ease-in arc, 60-80ms stagger) ----
 
-        /// <summary>Floor on the token count: fewer than three does not read as "value", it reads as a glitch.</summary>
-        public const int MinTokens = 3;
+        /// <summary>Floor on the token count: fewer than four does not read as "value", it reads as a glitch.</summary>
+        public const int MinTokens = 4;
 
         /// <summary>Ceiling on the token count. See the class remarks - this is a feel decision, not a budget one.</summary>
-        public const int MaxTokens = 7;
+        public const int MaxTokens = 10;
 
         public const double StaggerMinMs = 60;
         public const double StaggerMaxMs = 80;
@@ -49,10 +52,10 @@ namespace ConditioningControlPanel.Services
         public static int TokenCount(double xpSum)
         {
             if (double.IsNaN(xpSum)) return MinTokens;
-            if (xpSum < 15) return 3;
-            if (xpSum < 50) return 4;
-            if (xpSum < 120) return 5;
-            if (xpSum < 300) return 6;
+            if (xpSum < 15) return 4;
+            if (xpSum < 50) return 6;
+            if (xpSum < 120) return 7;
+            if (xpSum < 300) return 8;
             return MaxTokens;
         }
 

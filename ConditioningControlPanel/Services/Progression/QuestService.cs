@@ -1160,8 +1160,10 @@ public class QuestService : IDisposable
         _isDirty = true;
         Save();
 
-        // Award XP (use a different source to avoid recursion with TrackXPEarned)
-        App.Progression?.AddXP(scaledXP, XPSource.Other);
+        // Award XP. XPSource.Quest, not Other: nothing branches on the source inside AddXP (the
+        // old comment's recursion worry was never about which value was passed), but THE BANK's
+        // flight only fires for completion-shaped awards and a quest payout is the archetype.
+        App.Progression?.AddXP(scaledXP, XPSource.Quest);
 
         // Check for Perfect Bimbo Week bonus (7, 14, 30 day daily quest streaks).
         // CheckPerfectWeekBonus grants the XP itself (before it writes its paid-once latch, so a

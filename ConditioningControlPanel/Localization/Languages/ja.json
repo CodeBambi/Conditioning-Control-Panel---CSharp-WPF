@@ -200,6 +200,7 @@
   "quest_complete": "完了！+{0} XP",
   "quest_daily": "デイリークエスト",
   "quest_weekly": "ウィークリークエスト",
+  "tooltip_quest_stamps": "あなたのクエスト。クリックでクエストタブを開きます。",
   "msg_level_up": "レベル {0}！",
   "msg_no_phrases": "フレーズが選択されていません。",
   "msg_enter_url": "URLを入力してください。",

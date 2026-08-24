@@ -100,12 +100,23 @@ namespace ConditioningControlPanel.Controls
         /// <summary>Hard ceiling on tokens in flight, and the size the sim array is pre-baked to.</summary>
         private const int MaxBankTokens = BankFlightPlan.MaxTokens;
 
-        /// <summary>Core diameter band in ELEMENT pixels. The book calls for a coin, not a spark.</summary>
-        private const double BankTokenCoreMinPx = 5;
-        private const double BankTokenCoreMaxPx = 7;
+        /// <summary>
+        /// Core diameter band in ELEMENT pixels. The book calls for a coin, not a spark - and since
+        /// THE BANK stopped firing for ambient XP (BankAccumulator.IsBankable) the coin is allowed
+        /// to be a fatter one. MainWindow.BankFx.cs's BankBoxPadPx is sized off the largest halo
+        /// this band can produce; the two move together.
+        /// </summary>
+        private const double BankTokenCoreMinPx = 6;
+        private const double BankTokenCoreMaxPx = 9;
 
         /// <summary>Halo diameter as a multiple of the core. Enough to read as "lit", not as a puff.</summary>
-        private const float BankTokenGlowScale = 3.4f;
+        private const float BankTokenGlowScale = 4.0f;
+
+        /// <summary>
+        /// Peak alpha of the halo. Raised with the rest of the flight: a rare payout is allowed to
+        /// be the brightest thing in the header for the third of a second it is crossing it.
+        /// </summary>
+        private const float BankTokenGlowAlpha = 0.42f;
 
         /// <summary>Fade-in after a token's stagger delay expires, so it arrives instead of popping.</summary>
         private const float BankTokenFadeInMs = 90f;
@@ -363,7 +374,7 @@ namespace ConditioningControlPanel.Controls
                 }
 
                 if (_particleBudget <= 0) ReadEnvironment();
-                // Budget-clamped exactly like Burst, even though seven tokens can never trouble a
+                // Budget-clamped exactly like Burst, even though ten tokens can never trouble a
                 // tier that allows particles at all: the rule is that no emitter gets to opt out.
                 count = Math.Clamp(count, 1, Math.Min(MaxBankTokens, Math.Max(1, _particleBudget)));
 
@@ -1009,7 +1020,7 @@ namespace ConditioningControlPanel.Controls
                 float core = t.Size * min * 2f;
                 float x = t.X * w, y = t.Y * h;
 
-                _paint.Color = SKColors.White.WithAlpha(Alpha(0.30f * a));
+                _paint.Color = SKColors.White.WithAlpha(Alpha(BankTokenGlowAlpha * a));
                 DrawSprite(canvas, Dot, x, y, core * BankTokenGlowScale, core * BankTokenGlowScale);
 
                 // The core brightens as it closes, so the last thing the eye tracks is the arrival.

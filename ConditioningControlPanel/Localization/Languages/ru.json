@@ -200,6 +200,7 @@
   "quest_complete": "ВЫПОЛНЕНО! +{0} XP",
   "quest_daily": "Ежедневный квест",
   "quest_weekly": "Еженедельный квест",
+  "tooltip_quest_stamps": "Твои квесты. Нажми, чтобы открыть вкладку «Квесты».",
   "msg_level_up": "Уровень {0}!",
   "msg_no_phrases": "Фразы не выбраны.",
   "msg_enter_url": "Пожалуйста, введи URL.",
