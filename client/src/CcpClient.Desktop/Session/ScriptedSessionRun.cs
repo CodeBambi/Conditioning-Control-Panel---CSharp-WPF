@@ -16,9 +16,9 @@ namespace CcpClient.Desktop.Session;
 /// <c>:663</c>) and the ±3 minute jitter on them (<c>RandomizeStartTimes</c>, <c>:777</c>), plus
 /// PAUSE and its penalty (<see cref="Pause"/>, <see cref="Resume"/>).
 /// <b>Not</b> here, each recorded rather than half-built: the session editor, custom and imported
-/// sessions, the rack's filter, sort and search, the XP AWARD itself (the penalty above is computed
-/// and charged against nothing — <see cref="XpPenaltyPerPause"/>), the Gamer-Girl corner-GIF window
-/// and scheduled bubble bursts.</para>
+/// sessions, the XP AWARD itself (the penalty above is computed and charged against nothing —
+/// <see cref="XpPenaltyPerPause"/>), the Gamer-Girl corner-GIF window and scheduled bubble bursts.
+/// The rack's own filter, order and search ARE here (<see cref="ScriptedSessionRack"/>).</para>
 ///
 /// <para><b>It owns the ordinary engine from outside</b>, the way
 /// <see cref="Scheduling.SessionScheduler"/> does, and for upstream's reason: starting a scripted

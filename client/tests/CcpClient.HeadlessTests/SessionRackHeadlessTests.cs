@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
@@ -725,6 +725,323 @@ public class SessionRackHeadlessTests : HeadlessTest
         Assert.Equal(1, boot.Run.PauseCount);
 
         await boot.Host.ShutdownAsync();
+    }
+
+    // =====================================================================================
+    //  the toolbar — filter, order, search
+    // =====================================================================================
+
+    /// <summary>
+    /// THE DOOR to the whole toolbar. Every control below is found by walking the REAL page mounted
+    /// in a REAL window from a cold composition-root boot — so a toolbar deleted from the markup, or
+    /// a page that never fills it, fails here rather than shipping a feature nobody can reach.
+    ///
+    /// <para>The captions are read off the controls, not off the constants that made them: the
+    /// bands' words and the orders' labels are the only evidence a user has for what a control
+    /// does.</para>
+    /// </summary>
+    [AvaloniaFact]
+    public async Task TheRackCarriesAToolbar_FourBandsAnOrderAndASearch_AllOpenOnEverything()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+
+        // THE DOOR, from the wrong side first: on the Studio page with another module open, none of
+        // these controls is on screen. A toolbar that lived outside the Scripted Sessions panel
+        // would be found by the walk below either way, so this is the half that proves WHERE it is.
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Assert.False(Descendant<TextBox>(window, "ScriptedSessionSearchBox").IsEffectivelyVisible);
+        Assert.False(Descendant<ComboBox>(window, "ScriptedSessionSortBox").IsEffectivelyVisible);
+
+        Click(window, Descendant<RadioButton>(window, "RowScriptedSession"));
+
+        var bands = Bands(window);
+        Assert.Equal(
+            ["SessionFilterEasy", "SessionFilterMedium", "SessionFilterHard", "SessionFilterExtreme"],
+            bands.Select(band => band.Name));
+        Assert.Equal(["Easy", "Medium", "Hard", "Extreme"], bands.Select(band => band.Content as string));
+
+        // All four on, which is upstream's default and the only state in which the rack shows
+        // everything it has (MainWindow/MainWindow.SessionIO.cs:189-195, :672).
+        Assert.All(bands, band => Assert.True(band.IsChecked));
+
+        var sort = Descendant<ComboBox>(window, "ScriptedSessionSortBox");
+        Assert.Equal(
+            ["As installed", "Name A-Z", "Easiest first", "Hardest first", "Shortest first"],
+            sort.Items.OfType<ComboBoxItem>().Select(item => item.Content as string));
+        Assert.Equal(0, sort.SelectedIndex);
+
+        var search = Descendant<TextBox>(window, "ScriptedSessionSearchBox");
+        Assert.True(string.IsNullOrEmpty(search.Text));
+        Assert.Equal("Search…", search.PlaceholderText);
+
+        // ON SCREEN, not merely in the tree: an invisible control is still a visual descendant, so
+        // every assertion above would hold over a toolbar the user cannot see. These are the ones
+        // that would not.
+        Assert.All<Control>(
+            [search, sort, .. bands, Descendant<TextBlock>(window, "ScriptedSessionRackCount")],
+            control =>
+            {
+                Assert.True(control.IsEffectivelyVisible);
+                Assert.True(control.Bounds.Width > 0);
+                Assert.True(control.Bounds.Height > 0);
+            });
+
+        // Nothing is filtered, so the count is the whole rack rather than "4 of 4".
+        Assert.Equal("4 sessions", TextOf(window, "ScriptedSessionRackCount"));
+        Assert.Equal(4, Rows(window).Count);
+
+        // AND THE SURFACE HAS STOPPED CLAIMING THIS IS MISSING. The absence notice is what tells a
+        // user which of upstream's rack they are looking at; leaving it naming a filter that is now
+        // two inches above it would be the rot this port amends at the land.
+        var absences = TextOf(window, "ScriptedSessionAbsenceState");
+        Assert.DoesNotContain("filter", absences, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("search", absences, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("the XP award", absences, StringComparison.Ordinal);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    /// <summary>
+    /// A user types, and the rack answers — real keystrokes into the real box, one character at a
+    /// time, through the control's own text input (upstream's <c>TxtRackSearch_TextChanged</c> ->
+    /// <c>RepaintSessionRack</c>, <c>MainWindow/MainWindow.SessionIO.cs:804-818</c>).
+    ///
+    /// <para>"gamer" appears in exactly one shipped file, so the surviving row is named rather than
+    /// counted; "gamerz" appears in none, which is the state upstream's empty line exists for
+    /// (<c>en.json:76</c>). Every backspace is a keystroke too, so the rack coming back is driven by
+    /// the same road it left by.</para>
+    /// </summary>
+    [AvaloniaFact]
+    public async Task TypingInTheSearchBoxRedrawsTheRack_AndAMissSaysSoWhereTheRowsWere()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        OpenTheSessionsRow(window);
+
+        var search = Descendant<TextBox>(window, "ScriptedSessionSearchBox");
+        TypeIntoSearch(window, search, "gamer");
+
+        Assert.Equal("gamer", search.Text);
+        Assert.Equal(["SessionRowGamerGirl"], Rows(window).Select(row => row.Name));
+        Assert.Equal("1 of 4", TextOf(window, "ScriptedSessionRackCount"));
+        Assert.DoesNotContain(
+            window.GetVisualDescendants().OfType<TextBlock>(),
+            text => text.Name == "ScriptedSessionRackNoMatch");
+
+        // One more letter and nothing matches. The rack does not go blank: it says why, where the
+        // rows were.
+        Type(window, "z");
+        Assert.Empty(Rows(window));
+        Assert.Equal("0 of 4", TextOf(window, "ScriptedSessionRackCount"));
+        Assert.Equal("No sessions match — clear a filter.", TextOf(window, "ScriptedSessionRackNoMatch"));
+
+        // And the whole rack comes back when the box is emptied.
+        Backspace(window, 6);
+        Assert.True(string.IsNullOrEmpty(search.Text));
+        Assert.Equal(4, Rows(window).Count);
+        Assert.Equal("4 sessions", TextOf(window, "ScriptedSessionRackCount"));
+        Assert.DoesNotContain(
+            window.GetVisualDescendants().OfType<TextBlock>(),
+            text => text.Name == "ScriptedSessionRackNoMatch");
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    /// <summary>
+    /// The band filters, clicked — upstream's difficulty dots
+    /// (<c>MainWindow/MainWindow.SessionIO.cs:778-787</c>), four independent switches over the four
+    /// files the app ships: two Easy, one Medium, one Hard and no Extreme.
+    ///
+    /// <para>The last step turns them ALL off, which is one click past a state a user reaches by
+    /// accident, and it lands on the same line a failed search does.</para>
+    /// </summary>
+    [AvaloniaFact]
+    public async Task SwitchingOffABandTakesItsRowsOut_AndSwitchingItBackOnBringsThemBack()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        OpenTheSessionsRow(window);
+
+        var easy = Bands(window)[0];
+        Click(window, easy);
+
+        // The Distant Doll and Morning Drift are the two Easy files; the Medium and Hard ones stay.
+        Assert.Equal(
+            ["SessionRowGamerGirl", "SessionRowGoodGirlsDontCum"],
+            Rows(window).Select(row => row.Name));
+        Assert.Equal("2 of 4", TextOf(window, "ScriptedSessionRackCount"));
+
+        Click(window, easy);
+        Assert.Equal(4, Rows(window).Count);
+        Assert.Equal("4 sessions", TextOf(window, "ScriptedSessionRackCount"));
+
+        foreach (var band in Bands(window))
+        {
+            Click(window, band);
+        }
+
+        Assert.Empty(Rows(window));
+        Assert.Equal("0 of 4", TextOf(window, "ScriptedSessionRackCount"));
+        Assert.Equal("No sessions match — clear a filter.", TextOf(window, "ScriptedSessionRackNoMatch"));
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    /// <summary>
+    /// The order, chosen on the real combo. Four of the five entries are asserted as four DIFFERENT
+    /// permutations of the same four rows, so an order that quietly did nothing would fail three of
+    /// them.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task ChoosingAnOrderRedrawsTheRackInIt_AndTheDefaultIsTheOrderTheFilesWereRead()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        OpenTheSessionsRow(window);
+
+        var sort = Descendant<ComboBox>(window, "ScriptedSessionSortBox");
+        Assert.Equal(
+            ["SessionRowDistantDoll", "SessionRowGamerGirl", "SessionRowGoodGirlsDontCum", "SessionRowMorningDrift"],
+            Rows(window).Select(row => row.Name));
+
+        sort.SelectedIndex = 1;   // Name A-Z
+        Assert.Equal(
+            ["SessionRowGamerGirl", "SessionRowGoodGirlsDontCum", "SessionRowMorningDrift", "SessionRowDistantDoll"],
+            Rows(window).Select(row => row.Name));
+
+        sort.SelectedIndex = 3;   // Hardest first
+        Assert.Equal(
+            ["SessionRowGoodGirlsDontCum", "SessionRowGamerGirl", "SessionRowDistantDoll", "SessionRowMorningDrift"],
+            Rows(window).Select(row => row.Name));
+
+        sort.SelectedIndex = 2;   // Easiest first
+        Assert.Equal(
+            ["SessionRowMorningDrift", "SessionRowDistantDoll", "SessionRowGamerGirl", "SessionRowGoodGirlsDontCum"],
+            Rows(window).Select(row => row.Name));
+
+        // An order is a VIEW: the count never moves, because nothing was filtered.
+        Assert.Equal("4 sessions", TextOf(window, "ScriptedSessionRackCount"));
+
+        sort.SelectedIndex = 0;
+        Assert.Equal(
+            ["SessionRowDistantDoll", "SessionRowGamerGirl", "SessionRowGoodGirlsDontCum", "SessionRowMorningDrift"],
+            Rows(window).Select(row => row.Name));
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    /// <summary>
+    /// THE ONE THAT MATTERS MOST, because it is where a repaint can quietly take something away
+    /// from a user: the rows are rebuilt on every keystroke, and the row a user has already picked
+    /// is a control that gets thrown away and made again.
+    ///
+    /// <para><b>A pick survives a repaint that hides it.</b> Upstream keeps its selected id across
+    /// every repaint too; here the readout under the button goes on naming the armed session while
+    /// its row is filtered out, so nothing can be started from a row nobody can see without the
+    /// panel saying which one it is. And when the filter is lifted, the row comes back ALREADY
+    /// CHECKED — a rebuild that dropped the check would leave the panel and the rack disagreeing
+    /// about what is armed.</para>
+    /// </summary>
+    [AvaloniaFact]
+    public async Task AFilterMayHideThePickedRow_ButItNeverDisarmsIt_AndTheRowComesBackChecked()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        OpenTheSessionsRow(window);
+
+        Click(window, Descendant<RadioButton>(window, "SessionRowMorningDrift"));
+        Assert.Contains(
+            "Morning Drift is selected",
+            TextOf(window, "ScriptedSessionPhaseState"),
+            StringComparison.Ordinal);
+
+        var search = Descendant<TextBox>(window, "ScriptedSessionSearchBox");
+        TypeIntoSearch(window, search, "gamer");
+
+        // The row is gone and the pick is not.
+        Assert.Equal(["SessionRowGamerGirl"], Rows(window).Select(row => row.Name));
+        Assert.False(Rows(window)[0].IsChecked);
+        Assert.Contains(
+            "Morning Drift is selected",
+            TextOf(window, "ScriptedSessionPhaseState"),
+            StringComparison.Ordinal);
+
+        Backspace(window, 5);
+
+        var morningDrift = Rows(window).Single(row => row.Name == "SessionRowMorningDrift");
+        Assert.True(morningDrift.IsChecked);
+        Assert.All(
+            Rows(window).Where(row => row.Name != "SessionRowMorningDrift"),
+            row => Assert.False(row.IsChecked));
+
+        // And the pick still starts THAT session, through the same four gestures as ever.
+        Click(window, Descendant<Button>(window, "ScriptedSessionStartButton"));
+        Assert.Equal("Start Morning Drift?", TextOf(window, "ScriptedSessionConfirmTitle"));
+        Click(window, Descendant<Button>(window, "ScriptedSessionConfirmButton"));
+        Assert.True(boot.Run.Running);
+        Assert.Equal("Morning Drift", boot.Run.Current?.Name);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    /// <summary>The rack's rows, in the order they are drawn. The empty lines are TextBlocks, so
+    /// this cannot count one as a row.</summary>
+    private static IReadOnlyList<RadioButton> Rows(MainWindow window) =>
+        [.. Descendant<StackPanel>(window, "ScriptedSessionRackPanel").Children.OfType<RadioButton>()];
+
+    /// <summary>The four band filters, in the order the toolbar built them.</summary>
+    private static IReadOnlyList<CheckBox> Bands(MainWindow window) =>
+        [.. Descendant<StackPanel>(window, "ScriptedSessionFilterPanel").Children.OfType<CheckBox>()];
+
+    /// <summary>
+    /// Put the caret in the search box, then type into it.
+    ///
+    /// <para><b>The focus is moved by the control's own <c>Focus()</c> and not by the click above
+    /// it, and that is a measured property of the headless platform rather than a shortcut:</b> a
+    /// real <c>MouseDown</c>/<c>MouseUp</c> on this box leaves <c>IsFocused</c> false, so every
+    /// keystroke after it would go to the window and the box would stay empty. The same suite's
+    /// scheduler facts drive their boxes the same way
+    /// (<c>CcpClient.HeadlessTests/SchedulerRowHeadlessTests.cs:232-236</c>). What arrives after the
+    /// caret is there is REAL input — key down, the platform's text, key up — through the TextBox's
+    /// own editing, never an assignment to <c>Text</c>.</para>
+    /// </summary>
+    private static void TypeIntoSearch(Window window, TextBox search, string text)
+    {
+        search.Focus();
+        window.UpdateLayout();
+        Assert.True(search.IsFocused);
+        Type(window, text);
+    }
+
+    /// <summary>Real typing into whatever holds focus: the key event, then the text the platform's
+    /// own translation produced, then the release — the pattern
+    /// <c>MantraWindowHeadlessTests.TypeChar</c> measured, because a <c>KeyPress</c> alone carries no
+    /// text into the input pipeline.</summary>
+    private static void Type(Window window, string text)
+    {
+        foreach (var c in text)
+        {
+            var key = Enum.Parse<Key>(char.ToUpperInvariant(c).ToString());
+            var physical = Enum.Parse<PhysicalKey>(char.ToUpperInvariant(c).ToString());
+            window.KeyPress(key, RawInputModifiers.None, physical, c.ToString());
+            window.KeyTextInput(c.ToString());
+            window.KeyRelease(key, RawInputModifiers.None, physical, c.ToString());
+            window.UpdateLayout();
+        }
+    }
+
+    /// <summary>Backspace is a keystroke like any other, and the box's own key handling is what
+    /// erases the character — so the rack coming back is driven by real input rather than by a test
+    /// assigning <c>Text</c>.</summary>
+    private static void Backspace(Window window, int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            window.KeyPress(Key.Back, RawInputModifiers.None, PhysicalKey.Backspace, string.Empty);
+            window.KeyRelease(Key.Back, RawInputModifiers.None, PhysicalKey.Backspace, string.Empty);
+            window.UpdateLayout();
+        }
     }
 
     /// <summary>The four gestures a start really takes, so no fact here reaches past the surface to
