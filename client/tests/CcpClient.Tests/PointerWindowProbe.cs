@@ -433,6 +433,31 @@ internal static class PointerWindowProbe
     /// COUNTER to move is not. That is what a real application does throughout a real drag, and it
     /// is what makes this reading deterministic.</para>
     ///
+    /// <para><b>That paragraph is true and it is not the whole story, which cost a day.</b>
+    /// <c>dragMoves=0 moves=2</c> has TWO causes that are indistinguishable from those two numbers:
+    /// the coalescing above, and the path contention below. Waiting on the counter fixes only the
+    /// first, so the reading came back on a machine where nothing about the injection had changed —
+    /// and a reader who recognised the signature went looking for a broken <c>SendInput</c> three
+    /// times. The counts alone can never separate them; the <see cref="DragReading"/> this now
+    /// returns can, and says which.</para>
+    ///
+    /// <para><b>Why every step HOLDS its own point, and the measurement that forced it.</b> The
+    /// press point is the only point the caller ever asked the window manager about, and the drag
+    /// then injects eight more at points nobody claimed. Reproduced outside the suite with a second
+    /// process holding a topmost window over the drag path and NOT over the press point: the click
+    /// lands, the button-down lands, and every single move goes to the interloper's input queue —
+    /// <c>downs=2 dragMoves=0 moves=2 wheel=1 keys=1 accepted=True</c>, byte for byte the reading
+    /// four <c>OverlayDesktopInputTests</c> facts reported for a day while three diagnoses looked
+    /// for a broken injection. The asymmetry is the whole clue and it is structural, not timing: a
+    /// BUTTON message is posted to the queue of the window under the cursor when the event is
+    /// injected, while a <c>WM_MOUSEMOVE</c> is SYNTHESISED at peek time for whatever owns the
+    /// cursor's point then — so a foreign window over part of the rectangle steals the moves and
+    /// leaves the clicks alone. <paramref name="hold"/> is therefore called per step and is the
+    /// same re-assertion <see cref="HitTestAfterRaising"/> already performs for the click; measured
+    /// against the same interloper re-asserting <c>HWND_TOPMOST</c> every 5ms, it recovers 8/8
+    /// steps. It never grants the answer: the counters are still the OS's, and a step whose move
+    /// does not arrive is reported with the handle that took it.</para>
+    ///
     /// <para>Every wait is <see cref="PumpUntil"/> — bounded iteration with a yield, never a
     /// wall-clock wait — so a step whose message never arrives falls out at the ceiling and the
     /// caller reads the unchanged count. The whole path must stay inside the window's rectangle: a
@@ -444,37 +469,92 @@ internal static class PointerWindowProbe
     /// <param name="deltaX">Total horizontal travel, split evenly across <paramref name="steps"/>.</param>
     /// <param name="deltaY">Total vertical travel.</param>
     /// <param name="steps">How many move events the drag is made of. Must be positive.</param>
-    /// <returns>True when the OS accepted every event of the drag.</returns>
-    internal static bool InjectDragAt(
-        ScratchTarget target, int x, int y, int deltaX, int deltaY, int steps)
+    /// <param name="hold">Re-assert the caller's own window stack over a point of the path and
+    /// answer who the window manager says owns it. The caller supplies it because only the caller
+    /// knows the ordering its leg requires — an overlay that must stay ABOVE the target is
+    /// re-asserted here too, so holding the point can never quietly move the target above the very
+    /// surface the leg is measuring through.</param>
+    /// <returns>What the OS accepted, how much of the path arrived, and who took the rest.</returns>
+    internal static DragReading InjectDragAt(
+        ScratchTarget target, int x, int y, int deltaX, int deltaY, int steps, Func<int, int, nint> hold)
     {
         ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(hold);
 
         if (!WindowsHost || steps <= 0)
         {
-            return false;
+            return new DragReading(false, Math.Max(0, steps), 0, 0, 0, 0);
         }
 
-        var moves = target.Moves;
+        // No counter wait on the press-point move: the caller has usually just clicked this exact
+        // point, the OS emits no WM_MOUSEMOVE for a cursor that does not move, and waiting for one
+        // burned the whole PumpUntil ceiling on EVERY drag — hundreds of milliseconds in which a
+        // foreign topmost window can arrive over the path. Nothing measures this move; the
+        // synchronisation the drag actually needs is the button-down below, which is waited for,
+        // and one drain keeps the queue's key state current before it.
         var accepted = SendMouse(x, y, MouseeventfMove);
-        PumpUntil(() => target.Moves > moves);
+        Pump(64);
 
         var downs = target.Downs;
         accepted &= SendMouse(x, y, MouseeventfLeftdown | MouseeventfMove);
         PumpUntil(() => target.Downs > downs);
 
+        var delivered = 0;
+        var contender = (nint)0;
+        var contendedX = 0;
+        var contendedY = 0;
+
         for (var step = 1; step <= steps; step++)
         {
-            moves = target.Moves;
-            accepted &= SendMouse(
-                x + (deltaX * step / steps), y + (deltaY * step / steps), MouseeventfMove);
-            PumpUntil(() => target.Moves > moves);
+            var stepX = x + (deltaX * step / steps);
+            var stepY = y + (deltaY * step / steps);
+
+            // Held, then DRAINED, then the counter is read: a z-order change can itself make the
+            // system re-synthesise a move, and counting that as this step's delivery would be the
+            // instrument answering its own question.
+            var owner = hold(stepX, stepY);
+            Pump(64);
+
+            var moves = target.Moves;
+            accepted &= SendMouse(stepX, stepY, MouseeventfMove);
+            if (PumpUntil(() => target.Moves > moves))
+            {
+                delivered++;
+            }
+            else if (contender == 0)
+            {
+                contender = owner;
+                contendedX = stepX;
+                contendedY = stepY;
+            }
         }
 
         var ups = target.Ups;
         accepted &= SendMouse(x + deltaX, y + deltaY, MouseeventfLeftup | MouseeventfMove);
         PumpUntil(() => target.Ups > ups);
-        return accepted;
+        return new DragReading(accepted, steps, delivered, contender, contendedX, contendedY);
+    }
+
+    /// <summary>
+    /// What one <see cref="InjectDragAt"/> did, in enough detail that a drag which did not arrive
+    /// names the window that took it instead of leaving a reader with two bare numbers.
+    /// </summary>
+    /// <param name="Accepted">The OS accepted every event of the drag.</param>
+    /// <param name="Steps">How many move events the drag was made of.</param>
+    /// <param name="Delivered">How many of them reached <c>target</c>'s window procedure.</param>
+    /// <param name="Contender">Who the window manager said owned the first step that did not
+    /// arrive, read while the caller's own stack was held over that point. 0 when every step
+    /// landed.</param>
+    /// <param name="ContendedX">And where that step was aimed.</param>
+    /// <param name="ContendedY">Ditto.</param>
+    internal readonly record struct DragReading(
+        bool Accepted, int Steps, int Delivered, nint Contender, int ContendedX, int ContendedY)
+    {
+        internal string Describe => Delivered >= Steps
+            ? $"drag path {Delivered}/{Steps} steps delivered"
+            : $"drag path {Delivered}/{Steps} steps delivered — the first that did not arrive was aimed at "
+                + $"({ContendedX},{ContendedY}), which the window manager gives to {DescribeWindow(Contender)} "
+                + "even with this run's own stack re-asserted over it";
     }
 
     /// <summary>One absolute mouse event at a point on the virtual desktop.</summary>
