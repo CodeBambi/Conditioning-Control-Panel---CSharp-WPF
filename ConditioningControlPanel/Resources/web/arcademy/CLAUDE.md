@@ -1104,6 +1104,28 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     ONE place in the school - the Lost & Found board (`tell` .12, 150ms throttle,
     hunt-phase only) - and that is an owner ruling, not an oversight to fix elsewhere.
 
+70. *(reserved: being minted on `feat/emi-blipese`, in flight at the same time as the
+    perception wave - whichever branch merges second keeps its number and renumbers.)*
+
+71. **THE `.emi` ROOT'S INLINE TRANSFORM BELONGS TO THE DANGLE.** While EMI is carried,
+    widget.js writes `rotate(...)` straight onto the root's style (the carry tilt); the
+    body-move keyframes (`bounce`/`thud`/`shiver`...) still win whenever they run because
+    CSS animations out-rank inline styles - which is the whole reason the dangle is legal.
+    Do NOT position EMI with a transform, and do NOT convert a body move to a transition:
+    a transition on `transform` would composite WITH the inline rotate instead of
+    replacing it, and the release spring (`clearDangle`) already owns the only transition
+    the root ever wears. The face's gaze lean is the same trick one level down: a CSS
+    translate on `.emi-screen` (the canvas ELEMENT), never a canvas repaint - a glyph
+    repaint per pointermove is the exact cost the drag-face dedupe exists to avoid.
+
+72. **A SCRIPTED SAY BEHIND A `lead` LANDS ON A TIMER, NOT ON THE CALL.** voice.js
+    schedules the bubble `chainMs(lead)` after the moment (~1200ms per unknown chain, and
+    a `lead: [a,b,c]` array is the SUM), so a synchronous suite that fires a beat and
+    reads `emi.say`'s log immediately sees NOTHING and reports a phantom regression. The
+    moment call still returns `true` the instant the beat is consumed - assert on that,
+    then await the lead before asserting the line. The perception suite
+    (`test-perception.mjs`, session scratchpad) does exactly this for p06/b25.
+
 ## 5. The game module contract (short version)
 
 ```js
