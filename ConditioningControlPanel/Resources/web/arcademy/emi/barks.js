@@ -562,24 +562,22 @@ export const TELEMETRY = Object.freeze({
  * goes past every night. Same fence as every line above: no acronym, no lab, no
  * records room, no door.
  *
- * EVERY LINE BELOW IS A DRAFT. They were written at wiring time because the
- * feature needed something in the bubble to test with, and they have not been
- * through /emi-lines or the owner's read. Nothing here is locked the way the
- * rows above this comment are locked.
+ * /emi-lines QA PASS 2026-08-24 (the EMI COLOR wave). Four rows passed as
+ * written; homeroom and sortroom were rewritten (the old homeroom line's
+ * before-read was faintly surveillance - "i have watched all of them" - which
+ * is a rule-1 kill, and the old sortroom line gestured where it should denote).
+ * Owner reads the whole table at the PR; until that word these are QA-passed,
+ * not locked.
  * ==========================================================================*/
 export const FIELD_TRIPS = Object.freeze({
-  /* DRAFT: /emi-lines pass pending */
   timetable: { t: "tomorrow is already up there. i had a look.", face: '(¬‿¬)' },
-  /* DRAFT: /emi-lines pass pending */
   belltower: { t: "the bell runs four minutes fast and nobody fixes it.", face: '0_0' },
-  /* DRAFT: /emi-lines pass pending */
   noticeboard: { t: "nobody has moved those four pins since i got here.", face: '._.' },
-  /* DRAFT: /emi-lines pass pending */
   idcard: { t: "that photo is you on your first night here.", face: '^_^' },
-  /* DRAFT: /emi-lines pass pending */
-  homeroom: { t: "everyone starts in this room. i have watched all of them.", face: '(◠‿◠)' },
-  /* DRAFT: /emi-lines pass pending */
-  sortroom: { t: "they keep two piles in there and i would only use one.", face: '(◔_◔)' },
+  /* Warm ritual on the surface; she was there for every single intake. */
+  homeroom: { t: "everyone starts in this room. i wave every time.", face: '(◠‿◠)' },
+  /* DOUBLE: clown hoarder on the surface / EMI discards nothing, ever. */
+  sortroom: { t: "i tried sorting once. everything went in the keep pile.", face: '(◔_◔)' },
 });
 
 export default { POOLS, RARE_DORK, TELEMETRY, FIELD_TRIPS };

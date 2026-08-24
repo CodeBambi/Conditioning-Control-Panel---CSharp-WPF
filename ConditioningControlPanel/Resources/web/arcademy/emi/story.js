@@ -692,14 +692,15 @@ export const BEATS = deepFreeze([
     // than a first walk across the quad, and everything else that night is
     // smaller. There is deliberately no b29 - every LATER trip says only the
     // fixture's own line, so the novelty is spent exactly once.
-    // DRAFT: /emi-lines pass pending
+    // /emi-lines QA 2026-08-24: contraction fix only ("did not" read stiff
+    // against the prose law); owner reads it at the PR.
     id: 'b28_first_trip',
     phase: 'AMB',
     on: 'fieldTripHome',
     requires: ['b02_hello'],
     priority: 92,
     lead: 'wink',
-    say: 'i did not know i could leave the corner.',
+    say: "i didn't know i could leave the corner.",
     face: '^_^'
   },
 
