@@ -63,7 +63,11 @@
  *     first (a fast sequence must not pile six whispers on top of each other);
  *     with no key the url is the slot.
  *   - `detail.maxMs` truncates playback (default CLIP_MAX_MS) with a short
- *     fade, so a 6-second phrase does not outlive the round.
+ *     fade, so a 6-second phrase does not outlive the round. An EXPLICIT
+ *     maxMs may buy more than the default - up to CLIP_REQ_MAX_MS - because
+ *     the intro bed is a 4s piece and the 1.2s governor was guillotining it
+ *     mid-phrase right as the splash exited (owner report, 2026-08-24). The
+ *     silent default is unchanged: a caller who says nothing still gets 1.2s.
  *   - a clip is never louder than a recipe at the same level: CLIP_GAIN is the
  *     same headroom the SOUNDS table's `gain` gives an oscillator.
  * A url the browser will not decode is silently dropped, exactly like a name
@@ -202,6 +206,10 @@ const clamp01 = (v) => (Number.isFinite(+v) ? Math.max(0, Math.min(1, +v)) : 0);
 /** Clip playback ceilings. MAX_MS truncates, FADE_MS is the way out, VOICES is
  *  the hard cap on simultaneous slots (Echo needs six, one per pad). */
 const CLIP_MAX_MS = 1200;
+/** What an explicit `detail.maxMs` may buy. The default above is the SILENT
+ *  ceiling; this is the spoken one - long enough for the 4s intro bed with
+ *  air to spare, short enough that no cue can annex the night. */
+const CLIP_REQ_MAX_MS = 8000;
 const CLIP_FADE_MS = 180;
 const CLIP_VOICES = 6;
 /** The headroom a recipe gets from its own `gain`, given to clips too, so a
@@ -451,7 +459,11 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
       el.src = url;
     } catch { return false; }
 
-    const maxMs = Math.max(80, Math.min(CLIP_MAX_MS, Number(d.maxMs) || CLIP_MAX_MS));
+    // Asked-for time is honoured up to CLIP_REQ_MAX_MS; silence means the
+    // 1.2s default. (The old Math.min(CLIP_MAX_MS, asked) clamped every
+    // request DOWN to the default, which cut the 4s intro bed at 1.2s.)
+    const askedMs = Number(d.maxMs) || 0;
+    const maxMs = Math.max(80, askedMs > 0 ? Math.min(askedMs, CLIP_REQ_MAX_MS) : CLIP_MAX_MS);
     const fadeMs = Math.max(0, Math.min(maxMs / 2, Number(d.fadeMs) || CLIP_FADE_MS));
     const rec = { el, gain: null, node: null, timer: 0 };
 

@@ -1339,8 +1339,19 @@ export default {
         pitch: 1 - PLAYTEST.SLIDE_PITCH_DROP * depthLineFor(boardDeepest(board)),
       });
 
-      /* 2. merges: score, chain, light, the descending chime */
-      chain = result.merges.length;
+      /* 2. merges: score, chain, light, the descending chime.
+       * THE CHAIN IS A STREAK, NOT A SNAPSHOT (owner report, 2026-08-24: "I
+       * keep merging stuff but the streak disappears"). It used to be
+       * RE-ASSIGNED to this one move's merge count, so a swipe that merged a
+       * single pair set it to 1 - under STREAK_VISIBLE - and the chip hid
+       * itself mid-run; only a double merge ever showed, which read as
+       * random. Now every merging move FEEDS it (a double feeds it twice)
+       * and only a real slide that merges NOTHING empties it. A wall bump
+       * never reaches this line, so bumping a wall is not a broken streak;
+       * the only other reset is the resurface deal, where a fresh board
+       * honestly starts a fresh chain. */
+      const burst = result.merges.length;
+      chain = burst > 0 ? chain + burst : 0;
       let deepestMergeEl = null;
       let deepestMergeTier = 0;
       /* Law I is untouched: `score` still moves in ONE place (below, by
@@ -1368,7 +1379,10 @@ export default {
         if (m.tier > deepestMergeTier) { deepestMergeTier = m.tier; deepestMergeEl = node; }
       }
       score += result.score;
-      if (chain >= 2) chainLinks += chain - 1;
+      /* chainLinks stays a CASCADE ledger (extra pairs beyond the first in a
+       * single swipe) - the report card's "links" must not inflate just
+       * because the chip above now remembers across moves. */
+      if (burst >= 2) chainLinks += burst - 1;
       maxChain = Math.max(maxChain, chain);
       paintChain();
 
