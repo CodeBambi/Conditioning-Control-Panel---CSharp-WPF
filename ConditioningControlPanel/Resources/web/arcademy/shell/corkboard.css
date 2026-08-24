@@ -355,3 +355,16 @@ html.arc-reduced .arc-boardprop-new { transition:none; }
   .arc-corkstage, .arc-corkboard, .arc-cork-slot { animation:none; }
   .arc-boardprop, .arc-boardprop-new { transition:none; }
 }
+
+/* ---- season looks (notice.look pass-through) ------------------------------
+   PENCIL is the groundskeeper's: graphite ink, pressed hard, no letterhead
+   softness. ASKEW hangs a sheet off its one remaining pin (the borrowed-pin
+   notice) - the extra lean rides ON TOP of the slot's dealt rotation. */
+.arc-corknote.look-pencil .arc-cork-notebody,
+.arc-corknote.look-pencil .arc-cork-notetitle {
+  font-family: var(--mono);
+  color: color-mix(in srgb, var(--ink), transparent 16%);
+  letter-spacing: .01em;
+}
+.arc-corknote.look-pencil { background-image: none; }
+.arc-corknote.look-askew { transform: rotate(6.5deg) translateY(3px); }

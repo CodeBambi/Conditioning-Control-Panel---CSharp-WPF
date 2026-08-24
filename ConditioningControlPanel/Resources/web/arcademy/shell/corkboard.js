@@ -202,17 +202,39 @@ export function localDay(when) {
  * @param {number=} slots
  * @returns {Array} the subset of NOTICES that is up
  */
-export function pickNotices(daySeed, slots) {
+export function pickNotices(daySeed, slots, list) {
   const seed = String(daySeed == null ? '' : daySeed);
-  const want = Math.max(1, Math.min(NOTICES.length,
+  const table = Array.isArray(list) ? list : NOTICES;
+  const want = Math.max(1, Math.min(table.length,
     Math.round(Number(slots) || BOARD_SLOTS)));
-  const pinned = NOTICES.filter((n) => n.pinned);
-  const loose = NOTICES.filter((n) => !n.pinned);
-  const room = Math.max(0, want - pinned.length);
-  const drawn = shuffled(loose, makeRng(seed + '|board-rota')).slice(0, room);
+  /* Three tiers. PINNED is furniture and always up. A WINDOWED notice (it
+   * carries a `when` gate and it is in the list at all, so the gate said yes)
+   * is a story beat and its moment is NOW - rotation may not sit on it. Only
+   * the evergreens rotate. */
+  const alwaysUp = table.filter((n) => n.pinned || n.when);
+  const loose = table.filter((n) => !n.pinned && !n.when);
+  const room = Math.max(0, want - alwaysUp.length);
+  /* Evergreens rotate as GROUPS: a notice with a `pair` key travels with its
+   * partners (the herb bed war is two notices or none - half an argument on
+   * the wall reads as a bug, not a feud). */
+  const groups = [];
+  const byPair = Object.create(null);
+  for (let i = 0; i < loose.length; i += 1) {
+    const n = loose[i];
+    const key = n.pair ? String(n.pair) : null;
+    if (!key) { groups.push([n]); continue; }
+    if (!byPair[key]) { byPair[key] = []; groups.push(byPair[key]); }
+    byPair[key].push(n);
+  }
+  const drawnGroups = shuffled(groups, makeRng(seed + '|board-rota'));
   const keep = Object.create(null);
-  for (let i = 0; i < drawn.length; i += 1) keep[drawn[i].id] = true;
-  return NOTICES.filter((n) => n.pinned || keep[n.id]);
+  let used = 0;
+  for (let i = 0; i < drawnGroups.length && used < room; i += 1) {
+    const g = drawnGroups[i];
+    if (used + g.length > room && used > 0) continue;   // a pair never splits
+    for (let j = 0; j < g.length; j += 1) { keep[g[j].id] = true; used += 1; }
+  }
+  return table.filter((n) => n.pinned || n.when || keep[n.id]);
 }
 
 /**
@@ -293,11 +315,15 @@ const deps = {
   daySeed: null,
   mount: null,
   log: null,
+  when: null,
 };
 
 /**
  * Hand the module its injected persistence and defaults. Every field optional.
- * @param {{state?:Object, save?:Function, daySeed?:string, mount?:Object, log?:Function}} opts
+ * `when` is the season gate evaluator: `(trigger) => boolean`, the shell's one
+ * bridge between this wall and the rest of the story (mail.js's triggerHolds
+ * over the shared context).
+ * @param {{state?:Object, save?:Function, daySeed?:string, mount?:Object, log?:Function, when?:Function}} opts
  */
 export function initCorkboard(opts) {
   const o = opts || {};
@@ -306,7 +332,23 @@ export function initCorkboard(opts) {
   if (o.daySeed != null) deps.daySeed = String(o.daySeed);
   if (o.mount) deps.mount = o.mount;
   if (typeof o.log === 'function') deps.log = o.log;
+  if (typeof o.when === 'function') deps.when = o.when;
   return deps.state;
+}
+
+/**
+ * The notices whose moment this is. A notice without a `when` gate is always
+ * eligible; one WITH a gate needs the injected evaluator to say yes, and with
+ * no evaluator installed it stays down (fail closed - a notice held is a
+ * notice that can still go up tomorrow).
+ * @returns {Array}
+ */
+function eligibleNotices() {
+  return NOTICES.filter((n) => {
+    if (!n.when) return true;
+    if (typeof deps.when !== 'function') return false;
+    try { return !!deps.when(n.when); } catch (e) { return false; }
+  });
 }
 
 /** The injected object, or a throwaway. Test seam, and the empty-state answer. */
@@ -327,7 +369,7 @@ function persist(s, save) {
 /** Is anything on tonight's wall unread? Drives the prop's quiet marker. */
 export function hasUnread(daySeed, override) {
   const s = stateOf(override);
-  const up = pickNotices(daySeed || deps.daySeed || utcDaySeed());
+  const up = pickNotices(daySeed || deps.daySeed || utcDaySeed(), undefined, eligibleNotices());
   for (let i = 0; i < up.length; i += 1) {
     const row = s.notices[up[i].id];
     if (!row || !row.seenAt) return true;
@@ -370,7 +412,7 @@ export function openCorkboard(opts) {
 
   const seed = String(o.daySeed != null ? o.daySeed : (deps.daySeed || utcDaySeed()));
   const s = stateOf(o.state);
-  const up = pickNotices(seed, o.slots);
+  const up = pickNotices(seed, o.slots, eligibleNotices());
   const today = localDay();
 
   const root = el('div', 'arc-corkstage');
@@ -418,6 +460,7 @@ export function openCorkboard(opts) {
     styleVar(slot, '--pin-x', geom.pinX.toFixed(1) + '%');
 
     const sheet = el('article', 'arc-corknote kind-' + notice.kind
+      + (notice.look ? ' look-' + String(notice.look) : '')
       + (geom.torn ? ' is-torn' : '')
       + (seenBefore ? ' is-read' : ' is-fresh'));
 
@@ -425,7 +468,12 @@ export function openCorkboard(opts) {
     sheet.appendChild(tag);
 
     sheet.appendChild(el('h2', 'arc-cork-notetitle', String(notice.title || '')));
-    sheet.appendChild(el('p', 'arc-cork-notebody', String(notice.body || '')));
+    /* A body is one paragraph or a list of them - the season's longer notices
+     * (a menu, a set of minutes) breathe in paragraphs like a letter does. */
+    const paras = Array.isArray(notice.body) ? notice.body : [notice.body];
+    for (let p = 0; p < paras.length; p += 1) {
+      sheet.appendChild(el('p', 'arc-cork-notebody', String(paras[p] || '')));
+    }
 
     // A flyer is a flyer because somebody can take a tab off the bottom of it.
     if (notice.kind === 'flyer') {

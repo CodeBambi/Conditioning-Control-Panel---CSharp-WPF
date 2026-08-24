@@ -249,6 +249,28 @@ function has(list, id) {
   return false;
 }
 
+/** LOCAL midnight of the day holding `v` - epoch ms, a 'yyyy-mm-dd' string, or
+ *  anything else (0). The spacing clauses count whole local days, never hours,
+ *  so a letter read at 23:59 unlocks its reply the moment the date turns. */
+function localDayStart(v) {
+  if (typeof v === 'string') {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+    if (!m) return 0;
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
+  }
+  const n = num(v);
+  if (!n) return 0;
+  const d = new Date(n);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+/** Whole LOCAL days from `from` (ms or day string) to `nowMs`; -1 if unknown. */
+function daysBetween(from, nowMs) {
+  const a = localDayStart(from);
+  if (!a) return -1;
+  return Math.round((localDayStart(nowMs) - a) / 86400000);
+}
+
 /* ----------------------------------------------------------------------------
  * THE CLAUSES
  *
@@ -290,6 +312,42 @@ export const CLAUSES = Object.freeze({
   afterDelivered: (a, c) => has(c.delivered, String(a)),
   /** Another letter has been opened. Letters that answer letters use this. */
   afterRead: (a, c) => has(c.read, String(a)),
+
+  /* -------- the season clauses (Wave 4b): spacing, cross-surface, calendar.
+   * A story chain is `daysAfterRead` links; a letter that answers the paper is
+   * `issueRead`/`daysAfterIssueRead`; a notice window closes with
+   * `beforeDelivered`/`beforeIssueRead`. All TOTAL, all fail-closed. -------- */
+
+  /** `['m03', 1]`: m03 read, and at least that many whole LOCAL days ago. */
+  daysAfterRead: (a, c) => {
+    const pair = Array.isArray(a) ? a : [a, 0];
+    const id = String(pair[0] || '');
+    if (!has(c.read, id)) return false;
+    const gap = daysBetween(c.readAt[id], c.nowMs);
+    return gap >= 0 && gap >= num(pair[1]);
+  },
+  /** The named letter has NOT landed yet (a window that closes on delivery). */
+  beforeDelivered: (a, c) => !has(c.delivered, String(a)),
+  /** A Bugle issue has been opened (ctx.issuesReadAt: id -> local day / ms). */
+  issueRead: (a, c) => c.issuesReadAt[String(a)] != null,
+  /** `['g1', 1]`: the issue read, and at least that many whole days ago. */
+  daysAfterIssueRead: (a, c) => {
+    const pair = Array.isArray(a) ? a : [a, 0];
+    const at = c.issuesReadAt[String(pair[0] || '')];
+    if (at == null) return false;
+    const gap = daysBetween(at, c.nowMs);
+    return gap >= 0 && gap >= num(pair[1]);
+  },
+  /** The named issue has NOT been opened yet. */
+  beforeIssueRead: (a, c) => c.issuesReadAt[String(a)] == null,
+  /** `[9, 10, 11]`: the LOCAL month is one of these (1-12). */
+  monthIn: (a, c) => {
+    const want = Array.isArray(a) ? a : [a];
+    const mm = Number(String(c.dateIs || '').slice(0, 2));
+    if (!mm) return false;
+    for (let i = 0; i < want.length; i += 1) if (num(want[i]) === mm) return true;
+    return false;
+  },
 });
 
 const warned = Object.create(null);
@@ -316,6 +374,11 @@ export function triggerHolds(trigger, ctx, log) {
     seenFlags: (ctx && isObj(ctx.seenFlags)) ? ctx.seenFlags : {},
     delivered: (ctx && Array.isArray(ctx.delivered)) ? ctx.delivered : [],
     read: (ctx && Array.isArray(ctx.read)) ? ctx.read : [],
+    /* the season fields; a caller that predates them reads empty and every
+     * clause asking about them fails closed, holding the letter. */
+    readAt: (ctx && isObj(ctx.readAt)) ? ctx.readAt : {},
+    issuesReadAt: (ctx && isObj(ctx.issuesReadAt)) ? ctx.issuesReadAt : {},
+    nowMs: num(ctx && ctx.nowMs) || Date.now(),
   };
 
   const names = Object.keys(t);
@@ -380,11 +443,15 @@ export function initMail({ ctx, state, save, catalog, now, log } = {}) {
     const c = isObj(base) ? base : {};
     const delivered = [];
     const read = [];
+    const readAt = {};
     for (let i = 0; i < letters.length; i += 1) {
       const r = rec(letters[i].id);
       if (!r || !num(r.deliveredAt)) continue;
       delivered.push(letters[i].id);
-      if (num(r.readAt)) read.push(letters[i].id);
+      if (num(r.readAt)) {
+        read.push(letters[i].id);
+        readAt[letters[i].id] = num(r.readAt);
+      }
     }
     return {
       day: num(c.day),
@@ -396,6 +463,11 @@ export function initMail({ ctx, state, save, catalog, now, log } = {}) {
       seenFlags: isObj(c.seenFlags) ? c.seenFlags : {},
       delivered,
       read,
+      readAt,
+      // Cross-surface facts ride in from the shell (Bugle reads); the box's
+      // own facts are minted here so no caller can forge a read it never made.
+      issuesReadAt: isObj(c.issuesReadAt) ? c.issuesReadAt : {},
+      nowMs: clock(),
     };
   }
 
@@ -512,6 +584,18 @@ export function initMail({ ctx, state, save, catalog, now, log } = {}) {
       }
       out.sort((a, b) => (b.v.deliveredAt - a.v.deliveredAt) || (a.i - b.i));
       return out.map((x) => x.v);
+    },
+
+    /**
+     * The fully-populated clause context (the shell's facts plus this box's
+     * delivered/read ledger). The noticeboard and the Bugle evaluate their own
+     * `when` gates against THIS through `triggerHolds`, so all three surfaces
+     * tell one story off one set of facts.
+     * @param {Object=} override
+     * @returns {Object}
+     */
+    context(override) {
+      return readCtx(override);
     },
   };
 }

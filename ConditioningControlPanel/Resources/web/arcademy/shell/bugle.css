@@ -366,3 +366,19 @@ html.arc-reduced .arc-bugleprop-new { transition:none; }
   .arc-buglestage, .arc-bugle, .arc-bugle-sheet.is-turning { animation:none; }
   .arc-bugle-tab, .arc-bugleprop, .arc-bugleprop-new { transition:none; }
 }
+
+/* ---- season render forms --------------------------------------------------
+   THE HALF STAR: the near-blank page's only print. A single star clipped to
+   its left half, small, slightly off centre, dim as worn stone type. */
+.arc-bugle-cols.is-sparse { min-height: 220px; position: relative; }
+.arc-bugle-halfstar {
+  display: block; margin: 64px 0 72px 44%;
+  width: 22px; height: 22px; overflow: hidden;
+}
+.arc-bugle-halfstar-glyph {
+  display: inline-block; width: 11px; overflow: hidden;
+  font-size: 20px; line-height: 22px;
+  color: color-mix(in srgb, var(--ink), transparent 55%);
+}
+/* THE SINGLE PANEL: the season's comics form - one wide frame, caption below. */
+.arc-bugle-panel.is-wide { flex: 1 1 100%; min-height: 96px; }

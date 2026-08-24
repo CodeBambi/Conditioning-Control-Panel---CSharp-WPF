@@ -173,13 +173,29 @@ export const ISSUES = Object.freeze([
 
 /** Newest issue first is the reading order; the table is authored oldest first. */
 export function latestIssue() {
-  return ISSUES.length ? ISSUES[ISSUES.length - 1] : null;
+  const out = availableIssues();
+  return out.length ? out[out.length - 1] : null;
 }
 
-/** Look one up by id. Falls back to the latest, then to null. */
+/**
+ * The issues whose moment has come, in catalog order. No `when` gate = always
+ * out; a gated issue with no evaluator installed stays on the stone (fail
+ * closed - an issue held is an issue that can still run tomorrow).
+ * @returns {Array}
+ */
+export function availableIssues() {
+  return ISSUES.filter((iss) => {
+    if (!iss.when) return true;
+    if (typeof deps.when !== 'function') return false;
+    try { return !!deps.when(iss.when); } catch (e) { return false; }
+  });
+}
+
+/** Look one up by id AMONG THE AVAILABLE. Falls back to the latest, then null. */
 export function findIssue(issueId) {
   const id = issueId == null ? '' : String(issueId);
-  for (let i = 0; i < ISSUES.length; i += 1) if (ISSUES[i].id === id) return ISSUES[i];
+  const out = availableIssues();
+  for (let i = 0; i < out.length; i += 1) if (out[i].id === id) return out[i];
   return latestIssue();
 }
 
@@ -243,11 +259,15 @@ const deps = {
   save: null,
   mount: null,
   log: null,
+  when: null,
 };
 
 /**
  * Hand the module its injected persistence and defaults. Every field optional.
- * @param {{state?:Object, save?:Function, mount?:Object, log?:Function}} opts
+ * `when` is the season gate evaluator: `(trigger) => boolean` (the shell wires
+ * mail.js's triggerHolds over the shared context), so an issue whose moment
+ * has not come does not exist yet as far as any reader can tell.
+ * @param {{state?:Object, save?:Function, mount?:Object, log?:Function, when?:Function}} opts
  */
 export function initBugle(opts) {
   const o = opts || {};
@@ -255,6 +275,7 @@ export function initBugle(opts) {
   if (typeof o.save === 'function') deps.save = o.save;
   if (o.mount) deps.mount = o.mount;
   if (typeof o.log === 'function') deps.log = o.log;
+  if (typeof o.when === 'function') deps.when = o.when;
   return deps.state;
 }
 
@@ -383,33 +404,47 @@ export function openBugle(issueId, opts) {
     lede.appendChild(el('div', 'arc-bugle-rule'));
     sheet.appendChild(lede);
 
-    const cols = el('div', 'arc-bugle-cols');
+    const cols = el('div', 'arc-bugle-cols' + (p.halfStar ? ' is-sparse' : ''));
     const paras = paragraphsOf(p.body);
     for (let i = 0; i < paras.length; i += 1) {
       cols.appendChild(el('p', 'arc-bugle-para' + (i === 0 ? ' is-open' : ''), paras[i]));
     }
-    if (!paras.length) {
+    if (!paras.length && !p.halfStar) {
       cols.appendChild(el('p', 'arc-bugle-para', t('bugle_empty', 'Nothing set for this page.')));
+    }
+    /* THE HALF STAR. One page in the season prints nearly nothing on purpose,
+     * and what it does print is this: a single small star, clipped to its left
+     * half, slightly off centre, exactly as it came off the stone. The flag
+     * renders the ornament between the paragraphs so the emptiness reads as
+     * the page's content rather than a loading failure. */
+    if (p.halfStar) {
+      const orn = el('div', 'arc-bugle-halfstar');
+      attr(orn, 'aria-hidden', 'true');
+      orn.appendChild(el('span', 'arc-bugle-halfstar-glyph', '★'));
+      cols.insertBefore(orn, cols.children[1] || null);
     }
     sheet.appendChild(cols);
 
-    /* THE COMICS BOX. A slot, not a picture: three empty frames and a caption
-     * rule, waiting on the art pass. It is drawn rather than left blank so the
-     * page composes correctly at every width before anything ships into it. */
+    /* THE COMICS BOX. `comics: true` draws the three-frame slot (the shape
+     * awaiting an art pass). `comics: '<caption>'` is the season's form: ONE
+     * framed panel, empty but for its printed caption beneath - the panel is
+     * described, never drawn, which is the correct amount of newspaper. */
     if (p.comics) {
       const box = el('figure', 'arc-bugle-comics');
       box.appendChild(el('figcaption', 'arc-bugle-comics-cap',
         t('bugle_comics', 'Comics').toUpperCase()));
       const strip = el('div', 'arc-bugle-strip');
       attr(strip, 'aria-hidden', 'true');
-      for (let i = 0; i < 3; i += 1) {
-        const panel = el('div', 'arc-bugle-panel');
-        panel.appendChild(el('span', 'arc-bugle-panelnum', String(i + 1)));
+      const single = typeof p.comics === 'string';
+      const frames = single ? 1 : 3;
+      for (let i = 0; i < frames; i += 1) {
+        const panel = el('div', 'arc-bugle-panel' + (single ? ' is-wide' : ''));
+        if (!single) panel.appendChild(el('span', 'arc-bugle-panelnum', String(i + 1)));
         strip.appendChild(panel);
       }
       box.appendChild(strip);
       box.appendChild(el('p', 'arc-note arc-bugle-comics-note',
-        'PLACEHOLDER: the strip goes in here.'));
+        single ? String(p.comics) : 'PLACEHOLDER: the strip goes in here.'));
       sheet.appendChild(box);
     }
 

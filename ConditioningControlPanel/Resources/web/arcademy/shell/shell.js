@@ -59,7 +59,7 @@ import { createAnnexReveal } from './annexreveal.js';
 /* THE PHANTOM POST: the mail engine and its three paper overlays. The engines
  * hold NO storage of their own (their STATE-NEEDS law) - the shell hands each
  * an injected blob below and banks it through the store like any page key. */
-import { initMail } from './mail.js';
+import { initMail, triggerHolds } from './mail.js';
 import { openMailbox, closeMailbox, isMailboxOpen } from './mailbox.js';
 import { initCorkboard, openCorkboard, currentCorkboard } from './corkboard.js';
 import { initBugle, openBugle, currentBugle } from './bugle.js';
@@ -481,12 +481,22 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     const d = new Date();
     const mm = String(d.getMonth() + 1);
     const dd = String(d.getDate());
+    /* The Bugle's read ledger rides into the clause context so a letter can
+     * answer the paper (issueRead / daysAfterIssueRead) - the one direction
+     * the season chains across surfaces. Values are the local day strings the
+     * Bugle banks; the clauses read both those and epoch ms. */
+    const issuesReadAt = {};
+    const issues = (postState.bugle && postState.bugle.issues) || {};
+    for (const id of Object.keys(issues)) {
+      if (issues[id] && issues[id].readAt) issuesReadAt[id] = issues[id].readAt;
+    }
     return {
       day: Object.keys(store.get('days') || {}).length,
       punches,
       streak: Number(store.get('streak')) || 0,
       dateIs: (mm.length < 2 ? '0' + mm : mm) + '-' + (dd.length < 2 ? '0' + dd : dd),
       seenFlags: { annex: !!store.get('annexRevealSeen') },
+      issuesReadAt,
     };
   }
   const mail = initMail({
@@ -495,8 +505,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     save: (s) => store.set('mail', s),
     log: say,
   });
-  initCorkboard({ state: postState.board, save: (s) => store.set('board', s), daySeed: utcDateSeed, log: say });
-  initBugle({ state: postState.bugle, save: (s) => store.set('bugle', s), log: say });
+  /* The one evaluator all three surfaces share: a `when` gate on a notice or
+   * an issue is judged against the SAME facts the postman uses (the shell's
+   * context plus the mailbox's own delivered/read ledger), so the season
+   * cannot contradict itself between surfaces. */
+  const postWhen = (trigger) => triggerHolds(trigger, mail.context(), say);
+  initCorkboard({ state: postState.board, save: (s) => store.set('board', s), daySeed: utcDateSeed, log: say, when: postWhen });
+  initBugle({ state: postState.bugle, save: (s) => store.set('bugle', s), log: say, when: postWhen });
   /** Repaint the campus post furniture after an overlay closes (fresh dots,
    *  unread pip) - a no-op anywhere but the board. */
   function refreshCampusPost() {
