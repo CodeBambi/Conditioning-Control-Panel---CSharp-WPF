@@ -138,6 +138,29 @@ export const DEFAULT_LEXICON = Object.freeze({
   campus_main_hall: 'Main Hall',
   campus_the_quad: 'The Quad',
   campus_front_path: 'Front Path',
+
+  /* CAMPUS PRESENCE - "The Student Body" (PRESENCE.md). Six rows and not one
+     more: four BLIPS, a chip label and the layer's own name. The bubbles are
+     1-4 characters BY LAW (diegetic-prose rule: these are blips, never
+     sentences), so a mod re-voices the greeting without ever being able to put
+     a paragraph over a stranger's head. */
+  presence_student_body: 'Student Body',
+  presence_bubble_hi: 'hihi',
+  presence_bubble_dots: '...',
+  presence_bubble_wave_a: 'o/',
+  presence_bubble_wave_b: '\\o',
+  presence_here_tonight: 'here tonight',
+  /* ...and the CONSENT ROW (P3). Every option names what it shows PUBLICLY:
+     the player is agreeing to a specific thing, and a rung called only
+     'Anonymous' is not one. Mirrored key-for-key in ArcademyHostService's
+     NeutralLexicon, or a mod skin renders raw keys here. */
+  presence_share_label: 'Show yourself on campus',
+  presence_share_hint: 'Your last 24 hours replay as a ghost. Room head counts include you at every rung.',
+  presence_share_off: 'Off - room head counts only',
+  presence_share_anon: 'Anonymous - a ghost with no name or picture',
+  presence_share_username: 'Username - your display name over the ghost',
+  presence_share_discord: 'Discord - your display name and profile picture',
+  presence_share_discord_note: 'Discord needs a linked account. Without one the school shows your name instead.',
   campus_east_wing: 'East Wing',
   campus_west_wing: 'West Wing',
   campus_desc_east: 'You can hear hammering behind the tape.',

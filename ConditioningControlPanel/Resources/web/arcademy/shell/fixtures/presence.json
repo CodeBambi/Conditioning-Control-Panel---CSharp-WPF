@@ -1,0 +1,224 @@
+{
+  "v": 1,
+  "note": "HAND-AUTHORED PLAYTEST DAY (?presence=fixture). Every `t` is a RELATIVE offset in seconds from now (<= 0); shell/ghosts.js normalises them to now+t at load, which is what keeps this file honest a week from now. The server's real snapshot sends absolute epoch seconds and a `now` - both shapes go through the same normaliser. Deliberate edge cases live in here: a retired room key (misdirection) that must be skipped without a throw, a hyphenated room key that must canonicalise, a discord avatar that is a data: URI, a discord avatar that CANNOT load (the pixel-sprite fallback), two students inside the live window, and enough opposite-end traffic that the corridor produces crossings.",
+  "now": 0,
+  "counts": {
+    "daily_trigger": 9,
+    "deja_vu": 7,
+    "the_deep_end": 6,
+    "echo": 5,
+    "instant_recall": 4,
+    "impulse_control": 3,
+    "sort": 3,
+    "lost_and_found": 2,
+    "composure": 2,
+    "anomaly": 1
+  },
+  "students": [
+    { "id": "a1b2c3d4", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -420 },
+      { "e": "room_enter", "t": -400, "room": "deja_vu" },
+      { "e": "class_end", "t": -220, "room": "deja_vu", "grade": "A" },
+      { "e": "room_enter", "t": -200, "room": "daily_trigger" },
+      { "e": "class_end", "t": -70, "room": "daily_trigger", "grade": "S" }
+    ] },
+    { "id": "7f0e9d21", "share": "username", "name": "PinkFuse", "avatar": null, "events": [
+      { "e": "campus_enter", "t": -390 },
+      { "e": "room_enter", "t": -360, "room": "echo" },
+      { "e": "class_end", "t": -150, "room": "echo", "grade": "B" },
+      { "e": "room_enter", "t": -120, "room": "instant_recall" }
+    ] },
+    { "id": "c4d5e6f7", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -1320 },
+      { "e": "room_enter", "t": -1290, "room": "anomaly" },
+      { "e": "class_end", "t": -1110, "room": "anomaly", "grade": "A" },
+      { "e": "room_enter", "t": -1080, "room": "composure" },
+      { "e": "class_end", "t": -840, "room": "composure", "grade": "S" },
+      { "e": "campus_leave", "t": -810 }
+    ] },
+    { "id": "11aa22bb", "share": "discord", "name": "velvetnoise", "avatar": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22%23e46bb5%22%2F%3E%3Ccircle%20cx%3D%228%22%20cy%3D%226%22%20r%3D%223%22%20fill%3D%22%23fff2fb%22%2F%3E%3Crect%20x%3D%223%22%20y%3D%2210%22%20width%3D%2210%22%20height%3D%226%22%20rx%3D%223%22%20fill%3D%22%23fff2fb%22%2F%3E%3C%2Fsvg%3E", "events": [
+      { "e": "campus_enter", "t": -1500 },
+      { "e": "room_enter", "t": -1470, "room": "echo" },
+      { "e": "class_end", "t": -1260, "room": "echo", "grade": "S" },
+      { "e": "campus_leave", "t": -1220 }
+    ] },
+    { "id": "9c8b7a65", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -2160 },
+      { "e": "room_enter", "t": -2130, "room": "instant_recall" },
+      { "e": "class_end", "t": -1890, "room": "instant_recall", "grade": "B" },
+      { "e": "campus_leave", "t": -1860 }
+    ] },
+    { "id": "4d3c2b1a", "share": "username", "name": "Lumen", "avatar": null, "events": [
+      { "e": "campus_enter", "t": -2760 },
+      { "e": "room_enter", "t": -2730, "room": "lost_and_found" },
+      { "e": "class_end", "t": -2430, "room": "lost_and_found", "grade": "C" },
+      { "e": "room_enter", "t": -2400, "room": "the_deep_end" },
+      { "e": "class_end", "t": -2100, "room": "the_deep_end", "grade": "A" },
+      { "e": "campus_leave", "t": -2070 }
+    ] },
+    { "id": "e5f60718", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -3360 },
+      { "e": "room_enter", "t": -3330, "room": "sort" },
+      { "e": "class_end", "t": -3180, "room": "sort", "grade": "A" },
+      { "e": "campus_leave", "t": -3150 }
+    ] },
+    { "id": "0a1b2c3d", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -3540 },
+      { "e": "room_enter", "t": -3500, "room": "daily_trigger" },
+      { "e": "class_end", "t": -3390, "room": "daily_trigger", "grade": "B" },
+      { "e": "room_enter", "t": -3360, "room": "impulse_control" },
+      { "e": "class_end", "t": -3180, "room": "impulse_control", "grade": "S" },
+      { "e": "campus_leave", "t": -3140 }
+    ] },
+    { "id": "55667788", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -5400 },
+      { "e": "room_enter", "t": -5370, "room": "deja_vu" },
+      { "e": "class_end", "t": -5190, "room": "deja_vu", "grade": "A" },
+      { "e": "campus_leave", "t": -5160 }
+    ] },
+    { "id": "aabbccdd", "share": "username", "name": "Static", "avatar": null, "events": [
+      { "e": "campus_enter", "t": -7200 },
+      { "e": "room_enter", "t": -7150, "room": "composure" },
+      { "e": "class_end", "t": -6850, "room": "composure", "grade": "B" },
+      { "e": "room_enter", "t": -6820, "room": "echo" },
+      { "e": "class_end", "t": -6610, "room": "echo", "grade": "A" },
+      { "e": "campus_leave", "t": -6580 }
+    ] },
+    { "id": "13579bdf", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -9000 },
+      { "e": "room_enter", "t": -8970, "room": "the_deep_end" },
+      { "e": "class_end", "t": -8670, "room": "the_deep_end", "grade": "S" },
+      { "e": "campus_leave", "t": -8640 }
+    ] },
+    { "id": "2468ace0", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -10800 },
+      { "e": "room_enter", "t": -10770, "room": "instant-recall" },
+      { "e": "class_end", "t": -10530, "room": "instant-recall", "grade": "B" },
+      { "e": "campus_leave", "t": -10500 }
+    ] },
+    { "id": "f1e2d3c4", "share": "discord", "name": "hollowkey", "avatar": "https://cdn.example.invalid/avatars/hollowkey.png", "events": [
+      { "e": "campus_enter", "t": -12600 },
+      { "e": "room_enter", "t": -12560, "room": "daily_trigger" },
+      { "e": "class_end", "t": -12440, "room": "daily_trigger", "grade": "S" },
+      { "e": "room_enter", "t": -12400, "room": "sort" },
+      { "e": "class_end", "t": -12250, "room": "sort", "grade": "A" },
+      { "e": "campus_leave", "t": -12210 }
+    ] },
+    { "id": "8899aabb", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -14400 },
+      { "e": "room_enter", "t": -14370, "room": "anomaly" },
+      { "e": "class_end", "t": -14190, "room": "anomaly", "grade": "C" },
+      { "e": "campus_leave", "t": -14160 }
+    ] },
+    { "id": "3c3c3c3c", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -16200 },
+      { "e": "room_enter", "t": -16170, "room": "echo" },
+      { "e": "class_end", "t": -15960, "room": "echo", "grade": "B" },
+      { "e": "room_enter", "t": -15930, "room": "lost_and_found" },
+      { "e": "class_end", "t": -15630, "room": "lost_and_found", "grade": "B" },
+      { "e": "campus_leave", "t": -15600 }
+    ] },
+    { "id": "6b6b6b6b", "share": "username", "name": "Nine", "avatar": null, "events": [
+      { "e": "campus_enter", "t": -18000 },
+      { "e": "room_enter", "t": -17960, "room": "misdirection" },
+      { "e": "class_end", "t": -17840, "room": "misdirection", "grade": "A" },
+      { "e": "room_enter", "t": -17800, "room": "deja_vu" },
+      { "e": "class_end", "t": -17620, "room": "deja_vu", "grade": "S" },
+      { "e": "campus_leave", "t": -17590 }
+    ] },
+    { "id": "d0d0d0d0", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -19800 },
+      { "e": "room_enter", "t": -19770, "room": "impulse_control" },
+      { "e": "class_end", "t": -19590, "room": "impulse_control", "grade": "A" },
+      { "e": "campus_leave", "t": -19560 }
+    ] },
+    { "id": "5a5a5a5a", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -21000 },
+      { "e": "room_enter", "t": -20970, "room": "the_deep_end" },
+      { "e": "class_end", "t": -20670, "room": "the_deep_end", "grade": "B" },
+      { "e": "campus_leave", "t": -20640 }
+    ] },
+    { "id": "90ab12cd", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -25200 },
+      { "e": "room_enter", "t": -25170, "room": "sort" },
+      { "e": "class_end", "t": -25020, "room": "sort", "grade": "C" },
+      { "e": "room_enter", "t": -24990, "room": "daily_trigger" },
+      { "e": "class_end", "t": -24870, "room": "daily_trigger", "grade": "A" },
+      { "e": "campus_leave", "t": -24840 }
+    ] },
+    { "id": "bb11ee44", "share": "username", "name": "Corvid", "avatar": null, "events": [
+      { "e": "campus_enter", "t": -28800 },
+      { "e": "room_enter", "t": -28760, "room": "composure" },
+      { "e": "class_end", "t": -28460, "room": "composure", "grade": "S" },
+      { "e": "campus_leave", "t": -28430 }
+    ] },
+    { "id": "7c7c1a1a", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -32400 },
+      { "e": "room_enter", "t": -32370, "room": "instant_recall" },
+      { "e": "class_end", "t": -32130, "room": "instant_recall", "grade": "A" },
+      { "e": "room_enter", "t": -32100, "room": "echo" },
+      { "e": "class_end", "t": -31890, "room": "echo", "grade": "B" },
+      { "e": "campus_leave", "t": -31860 }
+    ] },
+    { "id": "44556677", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -39600 },
+      { "e": "room_enter", "t": -39570, "room": "lost_and_found" },
+      { "e": "class_end", "t": -39270, "room": "lost_and_found", "grade": "B" },
+      { "e": "campus_leave", "t": -39240 }
+    ] },
+    { "id": "eeff0011", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -43200 },
+      { "e": "room_enter", "t": -43170, "room": "deja_vu" },
+      { "e": "class_end", "t": -42990, "room": "deja_vu", "grade": "C" },
+      { "e": "campus_leave", "t": -42960 }
+    ] },
+    { "id": "22334455", "share": "discord", "name": "sugarwire", "avatar": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22%237c6ce0%22%2F%3E%3Ccircle%20cx%3D%228%22%20cy%3D%226%22%20r%3D%223%22%20fill%3D%22%23ffe9a8%22%2F%3E%3Crect%20x%3D%223%22%20y%3D%2210%22%20width%3D%2210%22%20height%3D%226%22%20rx%3D%223%22%20fill%3D%22%23ffe9a8%22%2F%3E%3C%2Fsvg%3E", "events": [
+      { "e": "campus_enter", "t": -46800 },
+      { "e": "room_enter", "t": -46760, "room": "daily_trigger" },
+      { "e": "class_end", "t": -46640, "room": "daily_trigger", "grade": "S" },
+      { "e": "room_enter", "t": -46600, "room": "the_deep_end" },
+      { "e": "class_end", "t": -46300, "room": "the_deep_end", "grade": "A" },
+      { "e": "campus_leave", "t": -46270 }
+    ] },
+    { "id": "998877aa", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -54000 },
+      { "e": "room_enter", "t": -53970, "room": "anomaly" },
+      { "e": "class_end", "t": -53790, "room": "anomaly", "grade": "B" },
+      { "e": "campus_leave", "t": -53760 }
+    ] },
+    { "id": "1a2b3c4e", "share": "username", "name": "Moth", "avatar": null, "events": [
+      { "e": "campus_enter", "t": -61200 },
+      { "e": "room_enter", "t": -61170, "room": "impulse_control" },
+      { "e": "class_end", "t": -60990, "room": "impulse_control", "grade": "A" },
+      { "e": "room_enter", "t": -60960, "room": "sort" },
+      { "e": "class_end", "t": -60810, "room": "sort", "grade": "B" },
+      { "e": "campus_leave", "t": -60780 }
+    ] },
+    { "id": "cafebabe", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -68400 },
+      { "e": "room_enter", "t": -68370, "room": "echo" },
+      { "e": "class_end", "t": -68160, "room": "echo", "grade": "C" },
+      { "e": "campus_leave", "t": -68130 }
+    ] },
+    { "id": "0f0f0f0f", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -72000 },
+      { "e": "room_enter", "t": -71970, "room": "the_deep_end" },
+      { "e": "class_end", "t": -71670, "room": "the_deep_end", "grade": "S" },
+      { "e": "campus_leave", "t": -71640 }
+    ] },
+    { "id": "beadfeed", "share": "anon", "name": null, "avatar": null, "events": [
+      { "e": "campus_enter", "t": -75600 },
+      { "e": "room_enter", "t": -75570, "room": "composure" },
+      { "e": "class_end", "t": -75270, "room": "composure", "grade": "B" },
+      { "e": "room_enter", "t": -75240, "room": "lost_and_found" },
+      { "e": "class_end", "t": -74940, "room": "lost_and_found", "grade": "A" },
+      { "e": "campus_leave", "t": -74910 }
+    ] },
+    { "id": "5eed1234", "share": "username", "name": "Quiet", "avatar": null, "events": [
+      { "e": "campus_enter", "t": -82800 },
+      { "e": "room_enter", "t": -82770, "room": "daily_trigger" },
+      { "e": "class_end", "t": -82650, "room": "daily_trigger", "grade": "B" },
+      { "e": "campus_leave", "t": -82620 }
+    ] }
+  ]
+}
