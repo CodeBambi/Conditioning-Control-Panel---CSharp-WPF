@@ -57,6 +57,17 @@ export const ORIENT_TARGET = 'registrar';
 
 /** The miniature fades in at the gate before it moves (§3.3 step 1). */
 export const ARRIVE_MS = 600;
+/** How long the POINTER abort stays deaf after start(). On a first night the
+ *  beat begins the instant FIRST BELL's layer starts its 600ms unmount fade,
+ *  and the player is still clicking through what looks like a lingering scene
+ *  - caught live in the browser: the click-through's tail landed one frame
+ *  after the abort armed and spent the once-ever beat before anything visible
+ *  had happened. So the first beat-and-a-half is deaf to pointers: nothing is
+ *  missable in it (the fade-in and the first steps of the walk), a door click
+ *  still does its ordinary campus thing over the running beat, and Esc is NOT
+ *  graced - escapeStep calls skip() directly, and a deliberate key is a
+ *  deliberate key. */
+export const ABORT_GRACE_MS = 900;
 /** THE watchable walk - the one walk in the school that ignores WALK_MS_CAP. */
 export const ORIENT_WALK_MS = 2200;
 /** Arrival -> the card leaves the counter. EMI gets her line to herself. */
@@ -496,9 +507,12 @@ export function createOrientation(o) {
   function onAbortInput() { skip(); }
 
   /** Armed on a TIMER, never inline: the click that opened this campus is still
-   *  bubbling, and a beat that aborted on its own cause would never play. */
+   *  bubbling, and a beat that aborted on its own cause would never play. The
+   *  timer is ABORT_GRACE_MS, not 0 - the VN's dismissal tail (see the
+   *  constant) taught us that "one turn later" is still inside the player's
+   *  click-through. */
   function armAbort() {
-    at(0, () => {
+    at(ABORT_GRACE_MS, () => {
       if (state !== 'running' || bound) return;
       try {
         if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') return;

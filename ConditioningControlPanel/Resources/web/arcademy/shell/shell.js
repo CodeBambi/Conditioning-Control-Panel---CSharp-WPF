@@ -436,6 +436,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * free rather than a second cold open. */
   let vn = null;
   let splashSpent = false;
+  /* Has the first-night stage cleared? False until `onSplashDone` has run AND
+   * FIRST BELL has finished (or was never armed). Orientation Day may not start
+   * before both: the boot campus runs its 4.5s entry reveal UNDER the ~3s
+   * splash, so `revealDone` lands ~1.5s after the splash falls - which on a
+   * genuine first night is the middle of the cold open's first scene (measured
+   * live; the beat played under the VN plates and was spent unseen). */
+  let stageClear = false;
   let board = null;
   let campus = null;               // the night-campus hub (OPTIONAL - see showBoard)
   // THE STUDENT BODY (PRESENCE.md). Optional in exactly the way the campus is:
@@ -462,6 +469,20 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * change and are re-rendered on the next campus mount. FIFO-capped inside
    * walk.js (RESIDUE_MAX). Cleared at end-run with the rest of the shell. */
   let residueTrail = [];
+  /* THE ONE DOOR ORIENTATION DAY STARTS THROUGH. Every seam that could be "the
+   * moment the player can finally see the campus" funnels here - the campus's
+   * revealDone hook, the build-time already-revealed check, `onSplashDone`'s
+   * post-FIRST-BELL callback and the suspend lift - and the conditions are
+   * checked in ONE place so no seam can rediscover the mid-VN bug on its own:
+   * the stage must be clear (splash down, cold open done or never armed), the
+   * campus must exist, be revealed and be the live screen, and nothing may be
+   * suspended. `start()` is state-guarded, so N callers cost nothing. */
+  const maybeStartOrientation = () => {
+    if (!orientation || !stageClear || suspendedGlobally) return;
+    if (screen !== 'board') return;
+    if (!campus || typeof campus.revealDone !== 'function' || !campus.revealDone()) return;
+    try { orientation.start(); } catch (e) { say('orientation start threw: ' + ((e && e.message) || e)); }
+  };
   let extrasBox = null;            // replay/report bar + yesterday strip container
   let settingsPage = null;
   let reportCard = null;
@@ -1018,10 +1039,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           /* THE STUDENT BODY STARTS HERE AND NOWHERE ELSE (PRESENCE §4): after
            * the entry reveal, never during it. The campus fires this once; a
            * layer that failed to build simply never answers.
-           * ORIENTATION DAY rides the SAME slot, after the ghosts: the beat
-           * plays over a campus that is already alive and already populated. */
+           * ORIENTATION DAY rides the SAME slot, after the ghosts - through
+           * `maybeStartOrientation`, because this hook alone is NOT enough: the
+           * boot campus runs this reveal UNDER the splash, and on a first night
+           * FIRST BELL owns the screen after that. The funnel waits for all of
+           * them; the post-VN start is paid by `onSplashDone`. */
           revealDone: () => { try { if (ghosts) ghosts.start(); } catch (e) { say('presence start threw: ' + ((e && e.message) || e)); }
-            try { if (orientation) orientation.start(); } catch (e) { say('orientation start threw: ' + ((e && e.message) || e)); } },
+            maybeStartOrientation(); },
           boardToggle: (expanded) => {
             if (!expanded) return;
             // Opening IS the flip: roll the flaps through, and remember the
@@ -1129,7 +1153,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
             forced: orientForced,
             log: say,
           });
-          if (campus.revealDone && campus.revealDone()) orientation.start();
+          /* A reveal that already ran only counts once the STAGE is clear: the
+           * boot mount reaches here revealed-but-curtained (splash, then on a
+           * first night FIRST BELL), and its start is onSplashDone's to pay. A
+           * LATER mount - a `?orientation=force` replay after a class - is past
+           * all of that and starts right here like everything else. */
+          maybeStartOrientation();
         } catch (e) {
           say('orientation unavailable (' + ((e && e.message) || e) + ') - the card is simply given');
           orientation = null;
@@ -2596,11 +2625,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // NO GHOSTS UNDER A MANDATORY VIDEO. The layer rides the same one funnel the
     // pause card does, and it is a LEVEL (trap 28), so both edges are written.
     if (ghosts) { try { ghosts.setPaused(!!on); } catch (e) { /* noop */ } }
-    /* AND NO BEAT UNDER ONE EITHER. A suspend ENDS Orientation Day rather than
-     * pausing it: the card lands, `seenAt` is banked, and it never replays after
-     * the video (trap 28's spirit - a beat that came back afterwards would be a
-     * beat the player watched twice). The lift edge has nothing to restart. */
+    /* AND NO BEAT UNDER ONE EITHER. A RUNNING beat is ENDED rather than paused:
+     * the card lands, `seenAt` is banked, and it never replays after the video
+     * (trap 28's spirit - a beat that came back afterwards would be a beat the
+     * player watched twice). skip() refuses an IDLE beat on purpose - one still
+     * waiting behind the splash or FIRST BELL has shown nothing yet, so it
+     * simply stands down (onSplashDone's `beat` checks this flag) and the LIFT
+     * edge below hands it its stage back. start() is state-guarded, so a beat
+     * that already ran, skipped or never existed makes the lift a no-op. */
     if (on && orientation) { try { orientation.skip(); } catch (e) { /* noop */ } }
+    if (!on) maybeStartOrientation();
     if (active) {
       try { active.engine.suspend(!!on); } catch (e) { say('engine.suspend threw: ' + ((e && e.message) || e)); }
       try { active.peek.forceHide(); } catch (e) { /* noop */ }
@@ -2782,8 +2816,18 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     onSplashDone() {
       if (splashSpent) return;
       splashSpent = true;
-      try { if (vn) vn.splashDone(() => {}); }
+      /* ORIENTATION DAY waits its turn HERE. The first night's order is:
+       * splash down -> FIRST BELL's cold open (when armed) -> the beat. The
+       * stage is only CLEAR once the VN's `after` callback has run - and
+       * vn/index.js pays that EXACTLY once on every path: not armed, not a
+       * first night, a missing plate, played, or skipped. A VN that is absent
+       * or throws clears the stage on the spot. `maybeStartOrientation` then
+       * re-checks everything else (campus revealed, live screen, no suspend),
+       * so a beat can no longer start under a curtain from ANY seam. */
+      const stage = () => { stageClear = true; maybeStartOrientation(); };
+      try { if (vn) { vn.splashDone(stage); return; } }
       catch (e) { say('first bell cold open skipped (' + ((e && e.message) || e) + ')'); }
+      stage();
     },
 
     /** {type:'suspend'} */
