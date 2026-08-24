@@ -129,6 +129,9 @@ internal static class OverlayDesktopInputObservations
     /// <param name="Downs"><c>WM_LBUTTONDOWN</c> delivered to the window underneath, cumulative.</param>
     /// <param name="DragMoves"><c>WM_MOUSEMOVE</c> carrying <c>MK_LBUTTON</c>, cumulative — the DRAG
     /// channel. A move without the button is not counted.</param>
+    /// <param name="Moves">EVERY <c>WM_MOUSEMOVE</c>, cumulative. Never asserted; it is in the
+    /// failure text so a drag that read as absent can be diagnosed as "no move arrived" rather than
+    /// "moves arrived without the button", which are different problems.</param>
     /// <param name="Wheel">Wheel notches delivered, cumulative — the SCROLL channel.</param>
     /// <param name="KeyDowns"><c>WM_KEYDOWN</c> delivered, cumulative — the TYPE channel.</param>
     /// <param name="KeeperKeyDowns">The same count on the KEEPER window, so "the keystroke went
@@ -145,6 +148,7 @@ internal static class OverlayDesktopInputObservations
         nint Routed,
         int Downs,
         int DragMoves,
+        int Moves,
         int Wheel,
         int KeyDowns,
         int KeeperKeyDowns,
@@ -154,7 +158,7 @@ internal static class OverlayDesktopInputObservations
         internal bool EveryInjectionAccepted => ClickAccepted && DragAccepted && WheelAccepted && KeyAccepted;
 
         internal string Counts =>
-            $"{Label}: downs={Downs} dragMoves={DragMoves} wheel={Wheel} keys={KeyDowns} "
+            $"{Label}: downs={Downs} dragMoves={DragMoves} moves={Moves} wheel={Wheel} keys={KeyDowns} "
             + $"keeperKeys={KeeperKeyDowns} activations={Activations} "
             + $"routedTo={PointerWindowProbe.DescribeWindow(Routed)} "
             + $"foreground={PointerWindowProbe.DescribeWindow(Foreground)} "
@@ -477,8 +481,9 @@ internal static class OverlayDesktopInputObservations
         var click = pointIsOurs && PointerWindowProbe.InjectClickAt(centreX, centreY);
         PointerWindowProbe.PumpUntil(() => (underneath?.Downs ?? 0) > downsBefore);
 
-        var drag = pointIsOurs
-            && PointerWindowProbe.InjectDragAt(centreX, centreY, DragDeltaX, DragDeltaY, DragSteps);
+        var drag = pointIsOurs && underneath is not null
+            && PointerWindowProbe.InjectDragAt(
+                underneath, centreX, centreY, DragDeltaX, DragDeltaY, DragSteps);
         PointerWindowProbe.PumpUntil(() => (underneath?.DragMoves ?? 0) > dragBefore);
 
         var wheel = pointIsOurs && PointerWindowProbe.InjectWheelAt(centreX, centreY, WheelNotches);
@@ -496,6 +501,7 @@ internal static class OverlayDesktopInputObservations
             Routed: routed,
             Downs: underneath?.Downs ?? 0,
             DragMoves: underneath?.DragMoves ?? 0,
+            Moves: underneath?.Moves ?? 0,
             Wheel: underneath?.WheelNotches ?? 0,
             KeyDowns: underneath?.KeyDowns ?? 0,
             KeeperKeyDowns: keeper.KeyDowns,

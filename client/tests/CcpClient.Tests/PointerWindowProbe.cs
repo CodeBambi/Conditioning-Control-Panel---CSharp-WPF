@@ -412,73 +412,85 @@ internal static class PointerWindowProbe
     }
 
     /// <summary>
-    /// Synthesise a DRAG at a point: an absolute move to the start, a button down, a run of
-    /// absolute moves with the button still held, and a button up — one <c>SendInput</c> batch, so
-    /// nothing can move the pointer or release the button between them.
+    /// Synthesise a DRAG onto a named window: a press, a run of moves with the button still held,
+    /// and a release, <b>each one drained from this thread's queue before the next is injected</b>.
     ///
-    /// <para><b>Why the intermediate moves are separate events and not one jump.</b> The claim
-    /// being measured is that a passive region lets a drag reach the desktop underneath, and a drag
-    /// is <c>WM_MOUSEMOVE</c> carrying <c>MK_LBUTTON</c> — a single down/up pair with no motion
-    /// between them is a click, and would prove nothing about the move messages. The window
-    /// underneath counts only the moves that carry the button.</para>
+    /// <para><b>Why the moves are separate events.</b> The claim being measured is that a passive
+    /// region lets a drag reach the desktop underneath, and a drag is <c>WM_MOUSEMOVE</c> carrying
+    /// <c>MK_LBUTTON</c> — a single down/up pair with no motion between them is a click and would
+    /// prove nothing about the move messages. <paramref name="target"/> counts only the moves that
+    /// carry the button.</para>
     ///
-    /// <para>The whole path must stay inside the rectangle under test: a drag that leaves it is a
-    /// drag over somebody else's window, and the count would be a reading of the desktop rather
-    /// than of the surface.</para>
+    /// <para><b>Why each step waits for its own delivery, MEASURED rather than reasoned.</b> This
+    /// was first written as one <c>SendInput</c> batch, then as separate events with a single
+    /// <see cref="Pump(int)"/> between them. Both delivered the drag on some runs and not on others
+    /// from an identical rig — three runs reading <c>dragMoves=8 moves=10</c> and three reading
+    /// <c>dragMoves=0 moves=2</c>. The cause is that <c>WM_MOUSEMOVE</c> is not an ordinary queued
+    /// message: the system records the move and SYNTHESISES the message when the thread next peeks,
+    /// so an unpeeked move is simply replaced by the next one, and a batch whose button-up had
+    /// already landed produced a survivor with no <c>MK_LBUTTON</c> in it. <c>SendInput</c> returns
+    /// before the raw input thread has posted anything, so one pump is a race; waiting for the
+    /// COUNTER to move is not. That is what a real application does throughout a real drag, and it
+    /// is what makes this reading deterministic.</para>
+    ///
+    /// <para>Every wait is <see cref="PumpUntil"/> — bounded iteration with a yield, never a
+    /// wall-clock wait — so a step whose message never arrives falls out at the ceiling and the
+    /// caller reads the unchanged count. The whole path must stay inside the window's rectangle: a
+    /// drag that leaves it is a drag over somebody else's window.</para>
     /// </summary>
+    /// <param name="target">The window the drag is aimed at, and the counter each step waits on.</param>
     /// <param name="x">Where the press happens.</param>
     /// <param name="y">Ditto.</param>
     /// <param name="deltaX">Total horizontal travel, split evenly across <paramref name="steps"/>.</param>
     /// <param name="deltaY">Total vertical travel.</param>
     /// <param name="steps">How many move events the drag is made of. Must be positive.</param>
-    /// <returns>True when the OS accepted every event of the batch.</returns>
-    internal static bool InjectDragAt(int x, int y, int deltaX, int deltaY, int steps)
+    /// <returns>True when the OS accepted every event of the drag.</returns>
+    internal static bool InjectDragAt(
+        ScratchTarget target, int x, int y, int deltaX, int deltaY, int steps)
     {
+        ArgumentNullException.ThrowIfNull(target);
+
         if (!WindowsHost || steps <= 0)
         {
             return false;
         }
 
-        var inputs = new Input[2 + steps + 1];
-        var (startX, startY) = ToAbsolute(x, y);
+        var moves = target.Moves;
+        var accepted = SendMouse(x, y, MouseeventfMove);
+        PumpUntil(() => target.Moves > moves);
 
-        inputs[0].type = InputMouse;
-        inputs[0].U.mi = new MouseInput
-        {
-            dx = startX,
-            dy = startY,
-            dwFlags = MouseeventfMove | MouseeventfAbsolute | MouseeventfVirtualdesk,
-        };
-        inputs[1].type = InputMouse;
-        inputs[1].U.mi = new MouseInput
-        {
-            dx = startX,
-            dy = startY,
-            dwFlags = MouseeventfLeftdown | MouseeventfAbsolute | MouseeventfVirtualdesk | MouseeventfMove,
-        };
+        var downs = target.Downs;
+        accepted &= SendMouse(x, y, MouseeventfLeftdown | MouseeventfMove);
+        PumpUntil(() => target.Downs > downs);
 
         for (var step = 1; step <= steps; step++)
         {
-            var (stepX, stepY) = ToAbsolute(x + (deltaX * step / steps), y + (deltaY * step / steps));
-            inputs[1 + step].type = InputMouse;
-            inputs[1 + step].U.mi = new MouseInput
-            {
-                dx = stepX,
-                dy = stepY,
-                dwFlags = MouseeventfMove | MouseeventfAbsolute | MouseeventfVirtualdesk,
-            };
+            moves = target.Moves;
+            accepted &= SendMouse(
+                x + (deltaX * step / steps), y + (deltaY * step / steps), MouseeventfMove);
+            PumpUntil(() => target.Moves > moves);
         }
 
-        var (endX, endY) = ToAbsolute(x + deltaX, y + deltaY);
-        inputs[^1].type = InputMouse;
-        inputs[^1].U.mi = new MouseInput
+        var ups = target.Ups;
+        accepted &= SendMouse(x + deltaX, y + deltaY, MouseeventfLeftup | MouseeventfMove);
+        PumpUntil(() => target.Ups > ups);
+        return accepted;
+    }
+
+    /// <summary>One absolute mouse event at a point on the virtual desktop.</summary>
+    private static bool SendMouse(int x, int y, uint flags)
+    {
+        var (nx, ny) = ToAbsolute(x, y);
+        var inputs = new Input[1];
+        inputs[0].type = InputMouse;
+        inputs[0].U.mi = new MouseInput
         {
-            dx = endX,
-            dy = endY,
-            dwFlags = MouseeventfLeftup | MouseeventfAbsolute | MouseeventfVirtualdesk | MouseeventfMove,
+            dx = nx,
+            dy = ny,
+            dwFlags = flags | MouseeventfAbsolute | MouseeventfVirtualdesk,
         };
 
-        return SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<Input>()) == (uint)inputs.Length;
+        return SendInput(1, inputs, Marshal.SizeOf<Input>()) == 1;
     }
 
     /// <summary>
@@ -667,6 +679,7 @@ internal static class PointerWindowProbe
         private int _ups;
         private int _activationsRefused;
         private int _dragMoves;
+        private int _moves;
         private int _wheelNotches;
         private int _keyDowns;
         private int _activations;
@@ -692,6 +705,13 @@ internal static class PointerWindowProbe
         /// DRAG channel. A move without the button is not counted, because a pointer merely
         /// travelling over a window proves nothing about dragging through it.</summary>
         internal int DragMoves => Volatile.Read(ref _dragMoves);
+
+        /// <summary>EVERY <c>WM_MOUSEMOVE</c> delivered, with or without the button. It exists to
+        /// tell two very different failures apart: no move reached this window at all (a routing or
+        /// delivery problem), versus moves reached it without <c>MK_LBUTTON</c> (the coalescing
+        /// problem <see cref="InjectDragAt"/>'s remarks describe). A drag fact that could not say
+        /// which one it hit would send its reader after the wrong cause.</summary>
+        internal int Moves => Volatile.Read(ref _moves);
 
         /// <summary>Wheel notches delivered, summed by magnitude rather than counted by message, so
         /// a machine that coalesces two notches into one <c>WM_MOUSEWHEEL</c> still reports the
@@ -789,9 +809,13 @@ internal static class PointerWindowProbe
                         return 0;
 
                     case WmMousemove:
-                        if (built is not null && (wParam & MkLbutton) != 0)
+                        if (built is not null)
                         {
-                            Interlocked.Increment(ref built._dragMoves);
+                            Interlocked.Increment(ref built._moves);
+                            if ((wParam & MkLbutton) != 0)
+                            {
+                                Interlocked.Increment(ref built._dragMoves);
+                            }
                         }
 
                         return 0;
