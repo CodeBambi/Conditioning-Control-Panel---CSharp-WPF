@@ -500,10 +500,20 @@ public sealed class ScriptedSessionRun
             session = _session;
             snapshot = _snapshot;
             _running = false;
+
+            // THE COUNT AND THE BANKED TIME ARE NOT CLEARED HERE, and that is upstream's placement
+            // rather than an oversight: it resets all three at START (:164-166) and its
+            // StopSession never touches them — it cannot, because it READS _pauseCount at :401 to
+            // build the completed event. So PauseCount after a stop is still the ended run's, which
+            // is what a caller asking "how did that one go" wants, and the next START is what
+            // clears them.
+            //
+            // The FLAG is the one exception, and it is a recorded divergence. Upstream leaves
+            // _isPaused true after stopping a held session (nothing sets it false but :164 and
+            // :474), which is invisible there because every reader goes through _isRunning first.
+            // Here `Paused` is public and its own doc says a paused session is still running, so
+            // leaving it true on a stopped run would make that sentence false.
             _paused = false;
-            _pauseCount = 0;
-            _wallBanked = TimeSpan.Zero;
-            _monotonicBanked = TimeSpan.Zero;
             _session = null;
             _snapshot = null;
             _phaseIndex = 0;

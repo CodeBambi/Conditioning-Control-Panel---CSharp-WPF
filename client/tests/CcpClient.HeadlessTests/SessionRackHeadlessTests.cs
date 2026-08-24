@@ -570,6 +570,163 @@ public class SessionRackHeadlessTests : HeadlessTest
         await boot.Host.ShutdownAsync();
     }
 
+    // =====================================================================================
+    //  the hold — upstream's BtnPauseSession (MainWindow/MainWindow.Presets.cs:1908-1940)
+    // =====================================================================================
+
+    [AvaloniaFact]
+    public async Task ThePauseButtonExistsONLYWhileASessionIsRunning()
+    {
+        // Upstream's own rule: the button is declared Collapsed (MainWindow.xaml:2606-2607), shown
+        // when a session starts (:1809) and collapsed again when it ends (:1855). Absent rather
+        // than greyed, which is §9 D7 and upstream's own choice here.
+        var boot = await BootAsync();
+        var window = boot.Window;
+        OpenTheSessionsRow(window);
+
+        var pause = Descendant<Button>(window, "ScriptedSessionPauseButton");
+        Assert.False(pause.IsVisible);
+
+        StartMorningDrift(window);
+        Assert.True(pause.IsVisible);
+        Assert.Equal("Pause", pause.Content);
+
+        // It runs itself out (30 minutes) and the button goes with it — no gesture involved, so
+        // this is the surface following the RUN rather than following a click.
+        boot.Clock.Advance(TimeSpan.FromMinutes(30));
+        Assert.False(boot.Run.Running);
+        Assert.False(pause.IsVisible);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task PausingASKSFirst_NamesWhatItWouldCost_AndHoldsNOTHINGUntilItIsAnswered()
+    {
+        // Upstream puts a dialog up before a pause and names the running penalty in it
+        // (:1928-1932, en.json:3387-3389). The whole point of the ceremony is that the first click
+        // changes nothing — the same thing the START confirmation's own fact asserts.
+        var boot = await BootAsync();
+        var window = boot.Window;
+        OpenTheSessionsRow(window);
+        StartMorningDrift(window);
+        boot.Clock.Advance(TimeSpan.FromMinutes(4));
+
+        Click(window, Descendant<Button>(window, "ScriptedSessionPauseButton"));
+
+        // THE QUESTION IS UP AND NOTHING IS HELD.
+        Assert.False(boot.Run.Paused);
+        Assert.Equal(0, boot.Run.PauseCount);
+        Assert.True(Descendant<Border>(window, "ScriptedSessionConfirmPanel").IsVisible);
+        Assert.Equal("Pause Session?", TextOf(window, "ScriptedSessionConfirmTitle"));
+        Assert.Equal(
+            "Pausing costs 100 XP from this session's reward.",
+            TextOf(window, "ScriptedSessionConfirmDetail"));
+        Assert.Equal(
+            "Current penalty: -0 XP. After this pause: -100 XP — recorded, not charged: nothing in "
+                + "this build awards session XP yet.",
+            TextOf(window, "ScriptedSessionConfirmPromise"));
+        Assert.Equal("Are you sure?", TextOf(window, "ScriptedSessionConfirmQuestion"));
+        Assert.Equal("Yes, pause", Descendant<Button>(window, "ScriptedSessionConfirmButton").Content);
+        Assert.Equal("Keep going", Descendant<Button>(window, "ScriptedSessionCancelButton").Content);
+
+        // The session is still running underneath the question, and its clock is still running too.
+        boot.Clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.Equal("16% — 05:00 elapsed, 25:00 remaining", TextOf(window, "ScriptedSessionProgressState"));
+
+        // "Keep going" — upstream's own refusal button, and it holds nothing either.
+        Click(window, Descendant<Button>(window, "ScriptedSessionCancelButton"));
+        Assert.False(boot.Run.Paused);
+        Assert.Equal(0, boot.Run.PauseCount);
+        Assert.False(Descendant<Border>(window, "ScriptedSessionConfirmPanel").IsVisible);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task ConfirmingTheHoldREALLYHoldsTheRUN_TheReadoutSaysSo_AndTheClockStopsMoving()
+    {
+        // THE REACHABILITY FACT FOR THIS SLICE. Every step is a real gesture on the real shell —
+        // the Studio door, the Sessions row, a rack row, START, its confirmation, then the PAUSE
+        // button and its own confirmation — and what it asserts at the end is the state of the ONE
+        // ScriptedSessionRun the composition root built (Lifecycle/CompositionRoot.cs:275 →
+        // Session/SessionParticipant.cs:620). Nothing here calls Pause(): if the button stops
+        // reaching the run, this fails.
+        var boot = await BootAsync();
+        var window = boot.Window;
+        OpenTheSessionsRow(window);
+        StartMorningDrift(window);
+        boot.Clock.Advance(TimeSpan.FromMinutes(6));
+        Assert.Equal("20% — 06:00 elapsed, 24:00 remaining", TextOf(window, "ScriptedSessionProgressState"));
+
+        Click(window, Descendant<Button>(window, "ScriptedSessionPauseButton"));
+        Click(window, Descendant<Button>(window, "ScriptedSessionConfirmButton"));
+
+        // The RUN is held, and it is still running: a hold is not a stop.
+        Assert.True(boot.Run.Paused);
+        Assert.True(boot.Run.Running);
+        Assert.Equal(1, boot.Run.PauseCount);
+        Assert.Equal(100, boot.Run.XpPenalty);
+
+        // The surface says so, in upstream's own word (en.json:3180, :1759), and the button has
+        // become the other half of itself.
+        Assert.Equal(
+            "20% — 06:00 elapsed, 24:00 remaining [PAUSED]",
+            TextOf(window, "ScriptedSessionProgressState"));
+        Assert.Equal("Resume", Descendant<Button>(window, "ScriptedSessionPauseButton").Content);
+        Assert.False(Descendant<Border>(window, "ScriptedSessionConfirmPanel").IsVisible);
+
+        // AND THE CLOCK REALLY STOPPED. Ten minutes of wall clock, and not one of them is the
+        // session's — including the minute-10 phase change and the pink filter's delayed start,
+        // both of which would have repainted this line had the hold leaked.
+        boot.Clock.Advance(TimeSpan.FromMinutes(10));
+        Assert.Equal(
+            "20% — 06:00 elapsed, 24:00 remaining [PAUSED]",
+            TextOf(window, "ScriptedSessionProgressState"));
+        Assert.Contains(
+            "Phase 1 of 5 — Settling In",
+            TextOf(window, "ScriptedSessionPhaseState"),
+            StringComparison.Ordinal);
+        Assert.Equal("STOP SESSION (24:00)", Descendant<Button>(window, "ScriptedSessionStartButton").Content);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task ResumingAsksNOTHING_AndTheCountdownMovesAgainFromWhereItStopped()
+    {
+        // Upstream's asymmetry, verbatim: the paused branch calls ResumeSession() immediately
+        // (:1919-1924) while the running branch asks first (:1928-1939). A resume spends nothing,
+        // so there is nothing to ask about.
+        var boot = await BootAsync();
+        var window = boot.Window;
+        OpenTheSessionsRow(window);
+        StartMorningDrift(window);
+        boot.Clock.Advance(TimeSpan.FromMinutes(6));
+
+        var pause = Descendant<Button>(window, "ScriptedSessionPauseButton");
+        Click(window, pause);
+        Click(window, Descendant<Button>(window, "ScriptedSessionConfirmButton"));
+        boot.Clock.Advance(TimeSpan.FromMinutes(10));
+
+        // ONE click, no question, and it is running again.
+        Click(window, pause);
+        Assert.False(boot.Run.Paused);
+        Assert.True(boot.Run.Running);
+        Assert.False(Descendant<Border>(window, "ScriptedSessionConfirmPanel").IsVisible);
+        Assert.Equal("Pause", pause.Content);
+        Assert.Equal("20% — 06:00 elapsed, 24:00 remaining", TextOf(window, "ScriptedSessionProgressState"));
+
+        // From SIX, not sixteen: the ten held minutes were never the session's.
+        boot.Clock.Advance(TimeSpan.FromMinutes(2));
+        Assert.Equal("26% — 08:00 elapsed, 22:00 remaining", TextOf(window, "ScriptedSessionProgressState"));
+
+        // The count survives the resume — one gesture, one pause, one penalty (:440, :2014).
+        Assert.Equal(1, boot.Run.PauseCount);
+
+        await boot.Host.ShutdownAsync();
+    }
+
     /// <summary>The four gestures a start really takes, so no fact here reaches past the surface to
     /// call Start().</summary>
     private static void StartMorningDrift(MainWindow window)

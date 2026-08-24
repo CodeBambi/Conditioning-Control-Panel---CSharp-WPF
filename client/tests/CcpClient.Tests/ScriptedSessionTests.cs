@@ -974,6 +974,246 @@ public class ScriptedSessionTests
         Assert.Equal(15.0 * 2 / 17, rig.Run.Ramp.PinkOpacityPercent!.Value, 6);
     }
 
+    // =====================================================================================
+    //  PAUSE — upstream's PauseSession/ResumeSession (Services/Session/SessionEngine.cs:432-502)
+    // =====================================================================================
+
+    [Fact]
+    public async Task PausingFreezesTheClock_AndResumingCountsOnFromWhereItStopped()
+    {
+        // THE fact of this slice: held time does not count. Upstream banks the elapsed and halts
+        // its monotonic clock (:437, :441), then restarts BOTH from now (:475-476) so the held span
+        // is never in either total. (The type upstream halts is named in the product source, not
+        // here: the timing guard's token list is a substring match over whole lines, comments
+        // included, and it is right to be — a test file has no business naming that type at all.)
+        await using var rig = await Rig.StartAsync();
+        rig.Run.Start(Built("morning_drift")); // 30 minutes
+
+        rig.Clock.Advance(TimeSpan.FromMinutes(5));
+        Assert.Equal(TimeSpan.FromMinutes(5), rig.Run.Elapsed);
+
+        Assert.True(rig.Run.Pause());
+        Assert.True(rig.Run.Paused);
+        Assert.True(rig.Run.Running); // a hold is not a stop (:434 refuses when NOT running)
+
+        // Ten minutes of wall clock pass while it is held, and none of them are the session's.
+        rig.Clock.Advance(TimeSpan.FromMinutes(10));
+        Assert.Equal(TimeSpan.FromMinutes(5), rig.Run.Elapsed);
+        Assert.Equal(TimeSpan.FromMinutes(25), rig.Run.Remaining);
+
+        Assert.True(rig.Run.Resume());
+        Assert.False(rig.Run.Paused);
+
+        rig.Clock.Advance(TimeSpan.FromMinutes(2));
+
+        // Seven, not seventeen.
+        Assert.Equal(TimeSpan.FromMinutes(7), rig.Run.Elapsed);
+        Assert.Equal(TimeSpan.FromMinutes(23), rig.Run.Remaining);
+
+        // AND BOTH CLOCKS AGREE ACROSS THE HOLD, which is the half a naive port gets wrong: freeze
+        // only the wall side and the monotonic one runs on through the pause, so the two diverge by
+        // the whole held span and the 30-second guard fires on a session nothing was wrong with.
+        var reading = rig.Run.ReadElapsed();
+        Assert.Equal(TimeSpan.FromMinutes(7), reading.Wall);
+        Assert.Equal(TimeSpan.FromMinutes(7), reading.Monotonic);
+        Assert.False(reading.UsedMonotonic);
+        Assert.Equal(TimeSpan.Zero, reading.Divergence);
+    }
+
+    [Fact]
+    public async Task AHeldSessionDecidesNothing_NoPhaseMoves_NothingIsPublished_AndItCannotFinish()
+    {
+        // Upstream's tick returns on its very first line when paused (:506). Everything downstream
+        // of that line is therefore held too — the completion check, the readout, the phase, the
+        // ramp and the delayed starts.
+        await using var rig = await Rig.StartAsync();
+        rig.Run.Start(Built("morning_drift")); // phases at 0, 10, 15, 25, 30
+
+        rig.Clock.Advance(TimeSpan.FromMinutes(4));
+        Assert.Equal(0, rig.Run.CurrentPhaseIndex);
+        var publishedBeforeTheHold = rig.Progress.Count;
+
+        Assert.True(rig.Run.Pause());
+
+        // Forty minutes: past the second phase, past the third, past the fourth, and ten minutes
+        // past the session's own duration. A hold that leaked would have ENDED this session.
+        rig.Clock.Advance(TimeSpan.FromMinutes(40));
+
+        Assert.True(rig.Run.Running);
+        Assert.Empty(rig.Outcomes);
+        Assert.Equal(0, rig.Run.CurrentPhaseIndex);
+        Assert.Equal(TimeSpan.FromMinutes(4), rig.Run.Elapsed);
+        Assert.Equal(publishedBeforeTheHold, rig.Progress.Count);
+
+        // And a tick delivered by hand while held decides nothing either — the public entry point
+        // carries upstream's guard, not just the cancelled timer.
+        rig.Run.Tick();
+        Assert.True(rig.Run.Running);
+        Assert.Equal(publishedBeforeTheHold, rig.Progress.Count);
+    }
+
+    [Fact]
+    public async Task EveryHoldIsCounted_AndTheOutcomeCarriesWhatTheyWouldCost()
+    {
+        // Upstream counts the pause (:440) and prices the lot at 100 each (:90, :2014). This build
+        // computes the deduction and charges nothing, because it awards no session XP — the honest
+        // half, recorded on the outcome rather than skipped.
+        await using var rig = await Rig.StartAsync();
+        rig.Run.Start(Built("morning_drift"));
+
+        Assert.Equal(0, rig.Run.PauseCount);
+        Assert.Equal(0, rig.Run.XpPenalty);
+
+        rig.Clock.Advance(TimeSpan.FromMinutes(2));
+        rig.Run.Pause();
+        Assert.Equal(1, rig.Run.PauseCount);
+        Assert.Equal(100, rig.Run.XpPenalty);
+
+        rig.Run.Resume();
+        rig.Clock.Advance(TimeSpan.FromMinutes(1));
+        rig.Run.Pause();
+        rig.Run.Resume();
+
+        Assert.Equal(2, rig.Run.PauseCount);
+        Assert.Equal(200, rig.Run.XpPenalty);
+
+        rig.Run.Stop();
+        Assert.Equal(2, rig.Outcome!.PauseCount);
+        Assert.Equal(200, rig.Outcome.XpPenalty);
+
+        // The count SURVIVES the stop, which is upstream's placement and not an accident: it clears
+        // all three at START (:164-166) and its StopSession cannot clear them because it reads
+        // _pauseCount at :401 to build its own completed event.
+        Assert.Equal(2, rig.Run.PauseCount);
+        Assert.False(rig.Run.Paused);
+
+        // THE NEXT SESSION IS THE ONE THAT STARTS CLEAN, and both halves of that matter. The count
+        // goes back to zero (:165) — a second run must not inherit the first one's penalty — and so
+        // does the BANKED TIME (:166): three held minutes carried into a fresh session would make
+        // it start already three minutes old, on a clock the user never spent.
+        rig.Run.Start(Built("morning_drift"));
+        Assert.Equal(0, rig.Run.PauseCount);
+        Assert.Equal(0, rig.Run.XpPenalty);
+        Assert.Equal(TimeSpan.Zero, rig.Run.Elapsed);
+        Assert.Equal(TimeSpan.FromMinutes(30), rig.Run.Remaining);
+    }
+
+    [Fact]
+    public async Task ASecondHoldIsRefused_SoIsAResumeThatIsNotHeld_AndNeitherIsCharged()
+    {
+        // Upstream's two guards, which return in silence (:434, :472). They matter to the PRICE:
+        // a second pause that fell through would count a second 100 for one gesture.
+        await using var rig = await Rig.StartAsync();
+
+        Assert.False(rig.Run.Pause());   // nothing is running
+        Assert.False(rig.Run.Resume());
+        Assert.Equal(0, rig.Run.PauseCount);
+
+        rig.Run.Start(Built("morning_drift"));
+
+        Assert.False(rig.Run.Resume());  // running, but not held
+        Assert.Equal(0, rig.Run.PauseCount);
+
+        Assert.True(rig.Run.Pause());
+        Assert.False(rig.Run.Pause());
+        Assert.False(rig.Run.Pause());
+        Assert.Equal(1, rig.Run.PauseCount);
+        Assert.Equal(100, rig.Run.XpPenalty);
+
+        Assert.True(rig.Run.Resume());
+        Assert.False(rig.Run.Resume());
+        Assert.Equal(1, rig.Run.PauseCount);
+    }
+
+    [Fact]
+    public async Task AHoldTakesTheModulesDown_AndTheResumeBringsThemBackOnTheSESSIONsDials()
+    {
+        // Upstream stops thirteen services by name (:449-465) and starts the enabled ones again
+        // (:483-501). This port has one engine that owns them, so the pair is Stop/Start on it —
+        // and the RE-ARM is what makes the resume correct here, because this port's modules read
+        // their dials when they arm.
+        await using var rig = await Rig.StartAsync();
+        rig.WriteTheUsersDials();        // the user's own flash rate: 7 an hour
+        await rig.SaveEverything();
+
+        rig.Run.Start(Built("morning_drift")); // the session's: 12 an hour
+        Assert.Equal(12, rig.Effect.ArmedWith[^1]);
+        var disarmsBeforeTheHold = rig.Effect.Disarms;
+
+        rig.Clock.Advance(TimeSpan.FromMinutes(3));
+        rig.Run.Pause();
+
+        // Nothing is drawing, flashing or spawning while it is held.
+        Assert.False(rig.Engine.Running);
+        Assert.True(rig.Effect.Disarms > disarmsBeforeTheHold);
+
+        rig.Run.Resume();
+        Assert.True(rig.Engine.Running);
+
+        // Back up on the SESSION's twelve, not the user's seven: the dials were never restored,
+        // because a hold is not a stop.
+        Assert.Equal(12, rig.Effect.ArmedWith[^1]);
+        Assert.Equal(12, rig.Flash.Current.FlashesPerHour);
+
+        // And the user's own rate is still waiting for them at the end.
+        rig.Run.Stop();
+        Assert.Equal(7, rig.Flash.Current.FlashesPerHour);
+    }
+
+    [Fact]
+    public async Task ADelayedFeatureStaysOffAcrossAHold_AndStillArrivesAtItsOwnMinute()
+    {
+        // Upstream has to ASK which features are still pending before it restarts them
+        // (IsFeaturePending, :487-500), or a resume would bring a filter up ten minutes early.
+        // This port never needs the question: ScriptedSessionDials.Apply wrote the delayed
+        // feature's dial OFF at t=0, so the engine's re-arm finds a disabled module. Same outcome,
+        // and it is the ELAPSED time — not the wall clock — that decides when it really arrives.
+        await using var rig = await Rig.StartAsync();
+        rig.Run.Start(Built("morning_drift")); // pink filter from minute 10 of 30
+        Assert.Equal(10d, rig.Run.PinkStartMinute, 6);
+
+        rig.Clock.Advance(TimeSpan.FromMinutes(5));
+        Assert.False(rig.PinkModule.Enabled);
+
+        rig.Run.Pause();
+
+        // Twenty minutes of wall clock — well past minute 10 — pass while it is held.
+        rig.Clock.Advance(TimeSpan.FromMinutes(20));
+        rig.Run.Resume();
+        Assert.False(rig.PinkModule.Enabled); // the re-arm did not bring it up early
+
+        // It arrives on the session's own fifth remaining minute, not on the wall clock's.
+        rig.Clock.Advance(TimeSpan.FromMinutes(4));
+        Assert.False(rig.PinkModule.Enabled);
+        rig.Clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.True(rig.PinkModule.Enabled);
+    }
+
+    [Fact]
+    public async Task StoppingWhileHeldEndsOnTheTimeTheUserWasLastSHOWN_AndTheLogStillSpansTheWall()
+    {
+        // Upstream reads `finalElapsedTime = ElapsedTime` (:293), which short-circuits to the
+        // banked value while paused (:97) — so a session abandoned mid-hold is recorded as having
+        // run for as long as it really ran. The two wall instants beside it are NOT that number:
+        // they are the ends of the run, which the log wants
+        // (Services/Session/SessionLogService.cs:57, :86), and the gap between them is longer by
+        // exactly what the hold took.
+        await using var rig = await Rig.StartAsync();
+        rig.Run.Start(Built("morning_drift"));
+
+        rig.Clock.Advance(TimeSpan.FromMinutes(6));
+        rig.Run.Pause();
+        rig.Clock.Advance(TimeSpan.FromMinutes(20));
+
+        Assert.True(rig.Run.Stop());
+
+        var outcome = rig.Outcome!;
+        Assert.Equal(TimeSpan.FromMinutes(6), outcome.Elapsed);
+        Assert.False(outcome.Completed);
+        Assert.Equal(1, outcome.PauseCount);
+        Assert.Equal(TimeSpan.FromMinutes(26), outcome.EndedAt - outcome.StartedAt);
+    }
+
     private static ScriptedSession Built(string id) =>
         ScriptedSession.ReadBuiltIns().Single(s => s.Id == id);
 
