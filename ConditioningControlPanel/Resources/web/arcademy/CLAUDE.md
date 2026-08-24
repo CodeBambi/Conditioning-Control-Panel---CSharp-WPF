@@ -125,7 +125,7 @@ games/<key>/index.js  one folder per game; games NEVER import each other
                    TRACKABILITY INVARIANT: occlusion hides at most ONE link of a swap chain and every
                    occlusion carries a tell) / grade / lex MD_LEX; keybinds pick1..pick5; md_stake_mode
                    ask|bank|ride (greed scored UPWARD only, ride cap 5), md_shell_skin themed|minimal|contrast
-  sort/            the two-pile swipe (tracking, 120s)   - room 203, The Sorting Room, built
+  sort/            the two-pile swipe (tracking, 120s)   - room 201, The Sorting Room, built
                    on the Entrance Hall's west span after Misdirection's retirement (lot 2
                    gave the old parlour to the front office). Right = TARGET, left = NOISE, and
                    the piles are the PLAYER'S OWN NICHES, picked at a setup DOOR that runs
@@ -979,8 +979,9 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     dark, retire it rather than leaving the row to stub.
 58. **A ROOM CAN CHANGE HANDS, AND THE LEXICON ROWS DO NOT GO WITH IT.** When Misdirection
     was retired SORT first took its parlour whole; the lot-2 geography rework then razed the
-    parlour for the front office and sort built new (room 203, the Entrance Hall's donated
-    west span). `ROOMS` has a `sort` entry and no `misdirection` one - un-retiring that class
+    parlour for the front office and sort built new (room 201 since the 2026-08-24 renumber -
+    Misdirection's old plate followed its substitute; echo/IR slid back to 202/203 - on the
+    Entrance Hall's donated west span). `ROOMS` has a `sort` entry and no `misdirection` one - un-retiring that class
     now means giving it a room. Its `campus_room_misdirection` / `campus_desc_misdirection` / `game_misdirection`
     rows deliberately STAY: the host's `NeutralLexicon` is append-only and a retired class is
     not a deleted one. (The scratch campus suite asserted "misdirection has a room now" as of
