@@ -39,6 +39,25 @@ export const REPORT_LINES = Object.freeze({
   none: ['same time tomorrow?', 'class dismissed.'],
 });
 
+/**
+ * ORIENTATION DAY, her three lines (ORIENTATION.md §3.3, drafted through the
+ * /emi-lines gauntlet - EMI-ORIENTATION-LINES.md). One row per step of the beat,
+ * fired in order and once ever: the beat gates on the page-owned
+ * `orientation.seenAt`, so this moment cannot refire.
+ *
+ * THE LINES HERE ARE THE FALLBACK; the FACES are this table's own. The
+ * mod-skinnable rows (`emi_orientation_hi` / `_card` / `_go`) are resolved by
+ * shell/orientation.js - which has `t` - and arrive as `payload.line`. This file
+ * has never imported the lexicon (REPORT_LINES above are literals for the same
+ * reason) and adding an import for three strings would be the first crack in
+ * that. Keep the two copies verbatim: the suite fails if they drift.
+ */
+export const ORIENTATION_LINES = Object.freeze({
+  hi: Object.freeze({ line: 'a new student! i did a little spin. you missed it.', face: '(◕‿◕)' }),
+  card: Object.freeze({ line: "official! now you have to come back. it's the rules.", face: '(≧◡≦)' }),
+  go: Object.freeze({ line: "go! your first class doesn't know how lucky it is.", face: '^_~' }),
+});
+
 /** Grades that read as "a good day" for the streak/perfect branches. */
 const TOP_GRADES = { s: true, a: true };
 
@@ -138,6 +157,19 @@ export const MOMENTS = Object.freeze({
       const list = REPORT_LINES[g] || REPORT_LINES.none;
       const line = pick(list, (p && p.seed) != null ? p.seed : Date.now() / 60000);
       return { line, face: TOP_GRADES[g] ? '^_^' : '0_0' };
+    },
+  },
+
+  /* --- orientation day ------------------------------------------------ */
+  /** The school's once-ever hello (shell/orientation.js). `payload.step` picks
+   *  the row: hi (a new student walked up) -> card (the ID lands) -> go (the
+   *  send-off). An unknown step reads as the greeting rather than as silence,
+   *  which is the right failure for a beat that only ever plays once. */
+  orientation: {
+    say(p) {
+      const row = ORIENTATION_LINES[String((p && p.step) || 'hi')] || ORIENTATION_LINES.hi;
+      const line = (p && typeof p.line === 'string' && p.line) ? p.line : row.line;
+      return { line, face: row.face };
     },
   },
 

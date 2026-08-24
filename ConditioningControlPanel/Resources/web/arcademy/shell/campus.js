@@ -2073,6 +2073,19 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     /** The ONE student-ID node. Orientation Day animates this, never a copy. */
     idCardEl() { return id; },
     /**
+     * The two counters' groups, by walk-graph key. Orientation Day pulses the
+     * Front Office's own neon sign on arrival (§3.3 step 3) and a beat may not
+     * guess at a selector to find it - `roomRefs` holds GAME rooms only, so
+     * this is the facility half of the same idea. Unknown keys answer null.
+     * @param {string} key  'records' | 'registrar'
+     * @returns {?Element}
+     */
+    facilityNode(key) {
+      if (key === 'records') return recordsG;
+      if (key === 'registrar') return regG;
+      return null;
+    },
+    /**
      * A viewBox point -> page coordinates, for a FLIP that has to start at a
      * place on the plan (ORIENTATION.md §3.4's handover). Fully guarded: the
      * DOM double has no `getScreenCTM` and a detached SVG answers nothing
