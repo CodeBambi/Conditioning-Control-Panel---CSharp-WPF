@@ -319,7 +319,7 @@ export default {
       const now = Date.now();
       if (now - lastHoverAt < HOVER_THROTTLE_MS) return;
       lastHoverAt = now;
-      cue('tell', 0.12);
+      cue('tell', 0.05); /* owner 2026-08-24: hover cues -60%, this is the busiest one */
     }
 
     /* --------------------------------------------------------------- assets */

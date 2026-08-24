@@ -20,6 +20,30 @@ const ARM_MS = 110;
 /** Safety ceiling on a single hold, in case a pointerup is lost (alt-tab). */
 const MAX_HOLD_MS = 4000;
 
+/* ----------------------------------------------------------------------------
+ * THE SHUTTER. One cue, on the reveal - never on the release.
+ * shell/audio.js holds the only audio node on the page (trap 18), so this is a
+ * REQUEST on `document` and never a sound - the exact defensive shape
+ * shell/ceremonies.js sfx() set. A dropped cue is not an error.
+ * -------------------------------------------------------------------------- */
+/* The three games that wire peek all draw their reveal in `onReveal` and none
+ * of them makes a sound doing it, so this is the verb speaking for itself
+ * rather than a second voice over theirs.
+ */
+function sfx(name, level, extra) {
+  try {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    document.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: Object.assign(
+        { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+        extra || {}
+      ),
+    }));
+  } catch (e) { /* a cue must never be the thing that throws */ }
+}
+
 /**
  * @param {Object} o
  * @param {Function=} o.onReveal    () => void   start showing
@@ -60,6 +84,9 @@ export function createPeek({ onReveal, onHide, onFirstUse, maxHoldMs, log } = {}
         say('peek used - class capped at A');
         try { if (firstUse) firstUse(); } catch (e) { /* never fatal */ }
       }
+      // The shutter opens. Quiet on purpose: peek costs the player a grade cap
+      // already - it does not also need to announce itself to the room.
+      sfx('shutter', 0.25);
       try { if (reveal) reveal(); } catch (e) { say('peek onReveal threw: ' + ((e && e.message) || e)); }
       capTimer = setTimeout(end, maxHoldMs || MAX_HOLD_MS);
     }, ARM_MS);

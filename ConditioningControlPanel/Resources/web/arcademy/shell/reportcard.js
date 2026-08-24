@@ -18,7 +18,7 @@
  * ==========================================================================*/
 
 import { t, gradeLabel, tierLabel } from '../core/lexicon.js';
-import { exitBar, sign as signExit } from './exits.js';
+import { exitBar, sign as signExit, campusPillRow } from './exits.js';
 
 /** Mod-anonymous, name-only, no URL. Do not "improve" this. */
 export const SHARE_HEADER = 'The Arcademy';
@@ -28,6 +28,31 @@ export const SHARE_ALLOWED = Object.freeze(['daily_trigger']);
 const SHARE_NAMES = Object.freeze({ daily_trigger: 'Daily Trigger' });
 
 let ignoredShareLogged = false;
+
+/* ----------------------------------------------------------------------------
+ * THE PAPER LANDS ON THE DESK.
+ * shell/audio.js holds the only audio node on the page (trap 18), so this is a
+ * REQUEST on `document` and never a sound - the exact defensive shape
+ * shell/ceremonies.js sfx() set. A dropped cue is not an error.
+ * -------------------------------------------------------------------------- */
+/* ONE cue only. The card's other beats already ring through shell/ceremonies.js
+ * - the streak meter requests its own chime ladder and the perfect-attendance
+ * seal is `ceremonies.stamp()`, which dispatches 'stamp' itself (trap 67) - so
+ * there is deliberately no 'commit' at the seal. It is already sealed, audibly.
+ */
+function sfx(name, level, extra) {
+  try {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    document.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: Object.assign(
+        { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+        extra || {}
+      ),
+    }));
+  } catch (e) { /* a cue must never be the thing that throws */ }
+}
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -134,17 +159,30 @@ export function createReportCard({ ceremonies, toast, log } = {}) {
    * @param {boolean} state.perfect    all classes done today
    * @param {string} state.title       heading (today / yesterday)
    * @param {Function=} state.onDone
+   * @param {boolean=} state.arrived  this render is an ARRIVAL at the report,
+   *   not a repaint. `onPayout` re-renders this very screen the instant the
+   *   host pays out (trap 50's neighbour), and a paper that lands twice is a
+   *   paper nobody believes. The shell passes its own `wasScreen` answer.
    */
   function render(state) {
     const s = state || {};
     const results = s.results || {};
     const classes = (s.timetable && s.timetable.classes) || [];
     root.textContent = '';
+    if (s.arrived) sfx('paper', 0.3);
 
     /* the paper under the lamp - every block below lands on it */
     const paper = el('div', 'arc-report-paper');
     root.appendChild(paper);
     const put = (n) => paper.appendChild(n);
+
+    /* THE CREST, PINNED TO THE TOP OF THE PAPER. Done is still the lit sign at
+     * the bottom of the stage; this is the same journey with the school's name
+     * on it, and it sticks so a day with four classes, a share block and a
+     * stamp can never scroll the way home off the top. Same verb as Done. */
+    put(campusPillRow({
+      onActivate: () => { try { if (s.onDone) s.onDone(); } catch (e) { /* noop */ } },
+    }));
 
     put(el('p', 'arc-kicker', s.title || t('report_card', 'Report Card')));
     put(el('h2', 'arc-h2', s.dateLabel || (s.timetable && s.timetable.dateSeed) || ''));

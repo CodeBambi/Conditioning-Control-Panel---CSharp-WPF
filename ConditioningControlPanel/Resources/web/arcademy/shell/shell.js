@@ -72,6 +72,31 @@ const QUICK_MAX_SEC = 180;
 const CLOCK_TICK_MS = 250;
 
 /* ----------------------------------------------------------------------------
+ * THE SHELL'S OWN VOICE (AV Club, 2026-08-24). Two beats and nothing more: the
+ * swap between screens, and the first bell of the night. shell/audio.js owns the
+ * only audio node on the page (trap 18) - this is a REQUEST on `document`, the
+ * same shape shell/ceremonies.js sfx() and shell/punchcard.js thud() use, and a
+ * dropped cue is not an error.
+ * -------------------------------------------------------------------------- */
+function sfx(name, level, extra) {
+  try {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    document.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: Object.assign(
+        { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+        extra || {}
+      ),
+    }));
+  } catch (e) { /* a cue must never be the thing that throws */ }
+}
+
+/** Screen depth, so a swap knows which way it went. An ORDER, not a router -
+ *  the router is `screen` and it stays exactly where it was. */
+const SCREEN_DEPTH = Object.freeze({ board: 0, records: 1, report: 2, settings: 3, class: 4 });
+
+/* ----------------------------------------------------------------------------
  * DECK V - THE RAKE (house-rules.txt). Built ONCE here so all ten classes wear
  * it, and bounded by Law VI end to end: nothing below blocks, delays or moves an
  * exit, and the Esc ladder is untouched (escapeStep still walks exactly the
@@ -511,6 +536,23 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   let annexStage = null;
   let annexProbe = 0;
   let punchArm = null;             // {gameKey, mode:'daily'|'enrollment', timer}
+  /* THE SWAP CUE'S MEMORY. `screen` has already moved by the time clearScreen()
+   * runs (every call site sets it first), so this is the other end of the swap -
+   * and it starts on 'board' for the same reason `greeted` exists: the opening
+   * deal is not a swap, it is the page arriving. */
+  let lastScreenCued = 'board';
+  /* FIRST BELL OF THE NIGHT. One 'bell' per boot, and it wants three things to
+   * be true at once: the splash has landed, the campus's entry reveal has
+   * finished, and the opening (vn/) has closed. The two latches below are set by
+   * the campus's own revealDone hook and by `onSplashDone`'s continuation -
+   * `splashDone` runs its callback EXACTLY once however the opening ended
+   * (trap 76), which is why this never has to guess whether a scene is up. */
+  let bellRung = false;
+  let bellSplashCleared = false;
+  let bellBoardRevealed = false;
+  /* ...and the same two latches are what EMI has been waiting on. She is told
+   * once, on the edge; see maybeFirstBell. */
+  let introToldEmi = false;
   let active = null;               // the running class (see startClass)
   let suspendedGlobally = false;
   let destroyed = false;
@@ -692,7 +734,60 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     } catch (e) { return false; }
   }
 
+  /** Is the intro splash still up? The loader owns the opening beat (trap 66)
+   *  and its whole contract is `hidden`, so nothing in the chrome speaks under
+   *  it. A page with no loader at all (the DOM double) answers false. */
+  function splashUp() {
+    try {
+      if (typeof document === 'undefined' || !document.getElementById) return false;
+      const l = document.getElementById('arc-loader');
+      return !!(l && !l.hidden);
+    } catch (e) { return false; }
+  }
+
+  /**
+   * THE SCREEN-SWAP CUE. clearScreen() is the ONE funnel every screen change
+   * goes through, and `screen` is already the destination when it runs, so this
+   * is the only place on the page that knows both ends of a swap. Deeper is a
+   * 'lift', shallower is a 'slide', and the same screen twice is a REPAINT
+   * (showBoard({silent}), onPayout re-rendering the report) which says nothing -
+   * the same suppression the EMI seams make one line above.
+   */
+  function screenCue() {
+    const from = lastScreenCued;
+    const to = screen;
+    lastScreenCued = to;
+    if (from === to || splashUp()) return;
+    const a = SCREEN_DEPTH[from];
+    const b = SCREEN_DEPTH[to];
+    if (a == null || b == null) return;
+    sfx(b > a ? 'lift' : 'slide', 0.3);
+  }
+
+  /** Ring it, once, when all three gates are open and the campus is the screen. */
+  function maybeFirstBell() {
+    if (bellRung || destroyed) return;
+    if (!bellSplashCleared || !bellBoardRevealed) return;
+    /* THE INTRO IS OVER, AND EMI IS THE ONE WHO NEEDS TELLING (owner playtest,
+     * 2026-08-24: "the mascot is speaking underneath the intro"). Both latches
+     * are set here and nowhere else, so this is the page's one honest edge for
+     * it: the splash has landed AND the opening has closed. Her gate has been
+     * holding the day-1 introduction all this time; this is the call it lands
+     * on. Deliberately ABOVE the screen test - her introduction is owed to her
+     * whatever screen the player wandered to while a scene played, and the bell
+     * is not. Once only, and a mascot may never hold up the bell. */
+    if (!introToldEmi) {
+      introToldEmi = true;
+      try { const mascot = getEmi(); if (mascot && mascot.introDone) mascot.introDone(); }
+      catch (e) { say('EMI intro flush threw (ignored): ' + ((e && e.message) || e)); }
+    }
+    if (screen !== 'board' || active) return;
+    bellRung = true;
+    sfx('bell', 0.5);
+  }
+
   function clearScreen() {
+    screenCue();
     // The card ceremony is deliberately NOT dropped here. It rides ON the report
     // card, and `onPayout` re-renders that report on the same screen - a wipe
     // that took the ceremony with it would delete the card the instant the host
@@ -756,6 +851,23 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     if (dom && dom.topbar) dom.topbar.hidden = !!mode;
   }
 
+  /* ---------------------- the way home ----------------------------------
+   * ONE VERB, and it routes rather than tearing anything down. A live class
+   * walks its own leave-confirm (askLeaveClass, which ends in the ordinary
+   * showBoard()); everything else is already one showBoard() from the gates.
+   * Nothing here is a second teardown path, and nothing here touches the Esc
+   * ladder - trap 29's corollary still owns every rung of that walk.
+   * -------------------------------------------------------------------- */
+  function backToCampus() {
+    if (!active) { showBoard(); return; }
+    /* The confirm mounts on the CLASS's own root, so the class has to be the
+     * thing on screen before it can be asked about. The settings page is the
+     * one way to be standing here with a live class parked off-screen, and
+     * showClassScreen is the same re-seat its own Back button uses. */
+    if (screen !== 'class') showClassScreen();
+    askLeaveClass();
+  }
+
   /* ---------------------- top bar --------------------------------------- */
   function renderTopbar() {
     if (!dom || !dom.topbar) return;
@@ -767,7 +879,18 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // the hanging timetable plaque under it (owner screenshot, 0824).
     bar.hidden = !!campus;
     bar.textContent = '';
-    bar.appendChild(el('span', 'arc-title', t('arcademy', 'The Arcademy')));
+    /* THE WORDMARK IS THE DOOR (owner ruling 2026-08-24). On the campus the
+     * name is just the name - a back button pointing at the room you are
+     * standing in is noise, and the hub wears its own crest in the scene. On
+     * every other screen this bar is up for (the settings page, and the plain
+     * board fallback's siblings) the same slot carries the campus pill, so the
+     * school's name is the thing you press to get back to the school. It is
+     * shell/exits.js's node, not a lookalike: one mint, one behaviour. */
+    if (screen === 'board') {
+      bar.appendChild(el('span', 'arc-title', t('arcademy', 'The Arcademy')));
+    } else {
+      bar.appendChild(campusPill({ onActivate: () => backToCampus() }));
+    }
     bar.appendChild(el('span', 'chip year', tierLabel(maxTier())));
 
     const streak = store.streak();
@@ -1077,8 +1200,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
            * boot campus runs this reveal UNDER the splash, and on a first night
            * FIRST BELL owns the screen after that. The funnel waits for all of
            * them; the post-VN start is paid by `onSplashDone`. */
-          revealDone: () => { try { if (ghosts) ghosts.start(); } catch (e) { say('presence start threw: ' + ((e && e.message) || e)); }
-            maybeStartOrientation(); },
+          revealDone: () => {
+            try { if (ghosts) ghosts.start(); } catch (e) { say('presence start threw: ' + ((e && e.message) || e)); }
+            // FIRST BELL's second gate: the school has finished standing up.
+            bellBoardRevealed = true;
+            maybeFirstBell();
+            maybeStartOrientation();
+          },
           boardToggle: (expanded) => {
             if (!expanded) return;
             // Opening IS the flip: roll the flaps through, and remember the
@@ -1231,6 +1359,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       panel.appendChild(board.root);
       renderBoardExtras(panel);
       dom.screen.appendChild(panel);
+      // No campus means no revealDone hook, and a night with no scenery is
+      // still a night that opens: the plain board IS the school standing up.
+      bellBoardRevealed = true;
+      maybeFirstBell();
     }
   }
 
@@ -1278,6 +1410,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       timetable,
       results,
       shares,
+      // A REPAINT IS NOT AN ARRIVAL - the same guard the EMI seam below makes,
+      // handed to the card so its paper only lands when the screen changed.
+      arrived: wasScreen !== 'report',
       streak: store.streak(),
       perfect: allDone(),
       tier: maxTier(),
@@ -2813,9 +2948,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           ? 'An audio-only session started. Your attendance is safe.'
           : reason === 'panic' ? 'Stopped. Press the panic key again to leave.' : 'Paused for a video.',
           { resumable: reason === 'panic' });
-      } else if (active.suspendEl) {
-        active.suspendEl.remove();
-        active.suspendEl = null;
+      } else {
+        if (active.suspendEl) {
+          active.suspendEl.remove();
+          active.suspendEl = null;
+        }
+        /* THE PILL IS A LEVEL, SO BOTH EDGES ARE WRITTEN (trap 28). The
+         * re-enable used to hang off the overlay still being up, so a suspend
+         * that had already lost its card (a screen change, a teardown race, a
+         * second suspend:false frame) left the way home greyed out for the rest
+         * of the class with nothing on screen to explain why. */
         if (active.pill) active.pill.disabled = false;
       }
     }
@@ -2974,18 +3116,20 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     onSplashDone() {
       if (splashSpent) return;
       splashSpent = true;
-      /* ORIENTATION DAY waits its turn HERE. The first night's order is:
-       * splash down -> FIRST BELL's cold open (when armed) -> the beat. The
-       * stage is only CLEAR once the VN's `after` callback has run - and
-       * vn/index.js pays that EXACTLY once on every path: not armed, not a
-       * first night, a missing plate, played, or skipped. A VN that is absent
-       * or throws clears the stage on the spot. `maybeStartOrientation` then
-       * re-checks everything else (campus revealed, live screen, no suspend),
-       * so a beat can no longer start under a curtain from ANY seam. */
-      const stage = () => { stageClear = true; maybeStartOrientation(); };
-      try { if (vn) { vn.splashDone(stage); return; } }
+      /* THE BELL AND ORIENTATION DAY BOTH RIDE THIS ONE FUNNEL, deliberately
+       * not two: `splashDone` calls back exactly once whether the opening
+       * played, stood down or threw (trap 76). The continuation pays BOTH
+       * debts - the bell's latch (maybeFirstBell is latched, a double call is
+       * free) and the stage-clear that lets `maybeStartOrientation` re-check
+       * everything else (campus revealed, live screen, no suspend), so a beat
+       * can never start under a curtain from ANY seam. */
+      const cleared = () => {
+        bellSplashCleared = true; maybeFirstBell();
+        stageClear = true; maybeStartOrientation();
+      };
+      try { if (vn) { vn.splashDone(cleared); return; } }
       catch (e) { say('first bell cold open skipped (' + ((e && e.message) || e) + ')'); }
-      stage();
+      cleared();
     },
 
     /** {type:'suspend'} */

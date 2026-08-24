@@ -148,6 +148,29 @@ export const AUDIO_GROUPS = Object.freeze([
   { g: 'music', label: 'Music' },
 ]);
 
+/* ----------------------------------------------------------------------------
+ * THE AUDIBLE MIXER (AV CLUB, 2026-08-24). Five sliders that moved in complete
+ * silence - a player set "Drops" to 40% by reading a number and found out what
+ * 40% meant three screens later, in the middle of a class. So each bus gets ONE
+ * representative cue, fired when its new level lands.
+ *
+ * WHEN, and this is the whole trick: NOT on the drag. The model on this page
+ * only ever moves on the host's echo (see the header), and `shell/audio.js`
+ * subscribes to that same echo for the mixer's own gains - so a cue fired while
+ * the thumb is still moving would play at the OLD level and tell the player a
+ * lie about the slider they are looking at. The preview therefore hangs off
+ * `applyEcho`, behind a short debounce, and the debounce does a second job:
+ * boot.js subscribes the shell to `setting` BEFORE audio.js exists, so on any
+ * one frame this page hears the echo FIRST. A timer puts the cue after
+ * audio.js's own handler in that same dispatch, whichever order they sit in.
+ * -------------------------------------------------------------------------- */
+const PREVIEW_CUE = Object.freeze({
+  fx: 'chime', voice: 'emi_blip', tutorial: 'blip', drops: 'pop', music: 'wash',
+});
+/** Loud enough to judge, quiet enough to tune a whole mixer with. */
+const PREVIEW_LEVEL = 0.7;
+const PREVIEW_DEBOUNCE_MS = 150;
+
 /** CAMPUS PRESENCE's consent ladder, weakest first and `off` at the bottom. The
  *  ORDER is the ladder's, so the select reads as a ramp rather than as a menu. */
 export const PRESENCE_RUNGS = Object.freeze(['off', 'anon', 'username', 'discord']);
@@ -232,6 +255,32 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
   function write(key, value, row) {
     if (row) row.classList.add('pending');
     send(key, value);
+  }
+
+  /* THE PREVIEW. One pending cue at a time: sweeping a slider lands several
+   * echoes and the player wants to hear the LAST one, not a burst. The request
+   * is `arcademy-sfx` on `document` like every other cue in the school -
+   * settings owns no audio node either (trap 18), and the copy of the defensive
+   * dispatch is ceremonies.js's, deliberately, so there is one shape to fix. */
+  let previewTimer = 0;
+  let previewBus = null;
+  function previewBusLevel(bus) {
+    if (!PREVIEW_CUE[bus]) return;
+    previewBus = bus;
+    if (previewTimer) { try { clearTimeout(previewTimer); } catch (e) { /* noop */ } }
+    previewTimer = setTimeout(() => {
+      previewTimer = 0;
+      const b = previewBus;
+      previewBus = null;
+      try {
+        if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+        const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+        if (!Ctor) return;
+        document.dispatchEvent(new Ctor('arcademy-sfx', {
+          detail: { name: PREVIEW_CUE[b], level: PREVIEW_LEVEL, bus: b },
+        }));
+      } catch (e) { /* a cue must never be the thing that throws */ }
+    }, PREVIEW_DEBOUNCE_MS);
   }
 
   /* ---------------------- row builders --------------------------------- */
@@ -1106,8 +1155,17 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
       if (key === SETTING_KEYS.keybinds) { if (keybinds) keybinds.applyEcho(value); return; }
       const row = rows.get(key);
       if (!row) return;
+      /* Was this echo the answer to OUR write? `pending` is the only marker of
+       * that, and `row.apply` clears it - so the question has to be asked here,
+       * one line early. Without it a host-initiated push (the app's own volume
+       * mixer moving, a mod applying a profile) would make this page beep at a
+       * player who never touched a slider. */
+      const mine = !!(row.node && row.node.classList && row.node.classList.contains('pending'));
       try { row.apply(value); }
       catch (e) { say('settings echo ' + key + ' failed: ' + ((e && e.message) || e)); }
+      if (mine && typeof key === 'string' && key.indexOf('audioLevels.') === 0) {
+        previewBusLevel(key.slice('audioLevels.'.length));
+      }
     },
     /** Current per-game values as a game sees them (see shell.js ctx.settings). */
     gameSettingsFor(gameKey, manifest) {
@@ -1130,6 +1188,9 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
     },
     destroy() {
       for (const off of offs.splice(0)) { try { off(); } catch (e) { /* noop */ } }
+      // A preview owed to a page that is already gone is a beep from nowhere.
+      if (previewTimer) { try { clearTimeout(previewTimer); } catch (e) { /* noop */ } }
+      previewTimer = 0; previewBus = null;
       rows.clear();
       root.remove();
     },

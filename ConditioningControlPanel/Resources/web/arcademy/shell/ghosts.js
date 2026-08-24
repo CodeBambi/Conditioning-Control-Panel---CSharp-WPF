@@ -608,6 +608,38 @@ export function spriteTraitsFor(id) {
  * THE LAYER
  * ==========================================================================*/
 
+/* ----------------------------------------------------------------------------
+ * A CLASSMATE PASSING. THE ONE AMBIENT CUE IN THE BUNDLE.
+ * shell/audio.js holds the only audio node on the page (trap 18), so this is a
+ * REQUEST on `document` and never a sound - the exact defensive shape
+ * shell/ceremonies.js sfx() set. A dropped cue is not an error.
+ * -------------------------------------------------------------------------- */
+/* Every other cue in this wave rides a user action or a once-ever ceremony.
+ * This one does not, and it is allowed to exist for exactly one reason: the
+ * campus is meant to feel INHABITED, and a student body you can only see is a
+ * student body you stop noticing. So it is barely audible, it rides the
+ * ENCOUNTER (two ghosts actually meeting, which is already a staged, rare
+ * thing) and it is throttled to one every eight seconds no matter how busy the
+ * night is. Reduced motion has no walking, so it has nothing to overhear.
+ */
+function sfx(name, level, extra) {
+  try {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    document.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: Object.assign(
+        { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+        extra || {}
+      ),
+    }));
+  } catch (e) { /* a cue must never be the thing that throws */ }
+}
+
+/** THE FLOOR ON THE PASS-BY CUE. Wall-clock, so `?presence=fixture`'s 6x time
+ *  scale cannot turn a quiet campus into a switchboard. */
+const NEAR_GAP_MS = 8000;
+
 function svgNode(tag, attrs, cls) {
   const n = (typeof document !== 'undefined' && document.createElementNS)
     ? document.createElementNS(SVGNS, tag)
@@ -792,6 +824,7 @@ export function createGhosts(o) {
   const nodes = new Map();     // id -> {g, sprite, chip, name, bubble, lastSeg, lagMs, facing}
   let live = null;             // the encounter currently on stage
   let sparkTimers = [];
+  let lastNearCue = -1e9;      // wall ms of the last pass-by cue (see NEAR_GAP_MS)
 
   /* ---------------------------------------------------------------- data -- */
 
@@ -994,6 +1027,20 @@ export function createGhosts(o) {
     if (enc.scene === 'nod') {
       ra.g.setAttribute('data-scene', 'nod');
       rb.g.setAttribute('data-scene', 'nod');
+    }
+    /* SOMEBODY WENT PAST. Fired only once the scene has actually committed
+     * (every refusal above returns before this), and only when there is walking
+     * to hear it over.
+     * 0.05, not 0.12: this is a PROXIMITY cue, i.e. hover-adjacent ambient -
+     * nobody asked for it, it just happens while you stand on the plan. Owner
+     * verdict 2026-08-24 took hover cues down 60% for triggering often, and
+     * this one rides along with them. NEAR_GAP_MS is untouched. */
+    if (!still && !paused) {
+      const nowWall = clock.now();
+      if (nowWall - lastNearCue >= NEAR_GAP_MS) {
+        lastNearCue = nowWall;
+        sfx('near', 0.05);
+      }
     }
     return true;
   }

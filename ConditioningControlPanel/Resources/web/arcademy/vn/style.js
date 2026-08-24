@@ -52,18 +52,48 @@ export const STYLE_TEXT = `
   .arc-vn-frame { width:min(100vw, 177.78dvh); height:min(56.25vw, 100dvh); }
 }
 
+/* THE CARRIAGE THE PLATE RIDES ON (owner playtest order, 2026-08-24: slow the
+   intro beats down, about half a second of black between them, and a sliding
+   fading transition on the change). The plate itself cannot do the sliding -
+   data-motion fills a keyframe with fill-mode both, and a filling animation
+   out-ranks an inline transform (trap 71's law, trap 74's corollary) - so the
+   slow camera stays on .arc-vn-bg and the box AROUND it does the travelling.
+   NO BACKTICKS IN HERE (trap 37): one in a comment ends the literal, and trap
+   84 is why node --check does not see it.
+
+   THE DEFAULT STATE IS "PARKED OFF THE ENTRY SIDE, INVISIBLE", which is what
+   lets index.js drop both classes mid-hold: the carriage walks back across to
+   the entry side while nothing is on screen, so the new plate never flashes at
+   the wrong offset and no state needs a transition:none dance.
+
+   The neon wash lives in here too. It is the arch light on ONE set, so it
+   belongs to the plate, and a wash pinned to the frame would still be glowing
+   through a hold that is supposed to be black.
+
+   Durations are written inline by index.js from BEAT_OUT_MS / BEAT_IN_MS - the
+   numbers live in exactly one file and this sheet does not keep a second copy.
+   The box is oversized by 4% a side so a 2.6% slide can never expose the frame
+   under it. */
+.arc-vn-bgwrap {
+  position:absolute; left:-4%; top:-4%; width:108%; height:108%;
+  opacity:0; transform:translate3d(2.6%, 0, 0);
+  transition:opacity 300ms ease, transform 300ms cubic-bezier(.22,.61,.36,1);
+}
+.arc-vn-bgwrap.is-in  { opacity:1; transform:translate3d(0, 0, 0); }
+.arc-vn-bgwrap.is-out { opacity:0; transform:translate3d(-2.6%, 0, 0); }
+
 /* THE PLATE, and the slow camera on it. The transform is the ONLY thing that
    moves (trap 36's law: patterns and stills drift by transform, never by
    background-position), and the plate is oversized so a 2% push or a 4% pan
-   can never expose an edge. */
+   can never expose an edge. It is opaque and it stays opaque: every fade the
+   opening has belongs to the carriage above, so a plate swap is never two
+   fades racing each other. */
 .arc-vn-bg {
   position:absolute; left:-3%; top:-3%; width:106%; height:106%;
   background-position:center; background-size:cover; background-repeat:no-repeat;
   transform:scale(1); transform-origin:52% 62%;
-  transition:opacity 600ms ease;
-  opacity:0;
+  opacity:1;
 }
-.arc-vn-bg.is-lit { opacity:1; }
 .arc-vn-bg[data-motion="push"] { animation:arc-vn-push 26s ease-out both; }
 .arc-vn-bg[data-motion="pan"]  { animation:arc-vn-pan 18s linear both; }
 @keyframes arc-vn-push { from { transform:scale(1); } to { transform:scale(1.045); } }
@@ -205,9 +235,14 @@ export const STYLE_TEXT = `
 
 /* ---- REDUCED MOTION: fades become cuts, the pan becomes a still ---------- */
 /* Two seams, same treatment: the media query for the OS preference and
-   html.arc-reduced for init.reducedMotion / motionLevel 0 (shell.js sets it). */
+   html.arc-reduced for init.reducedMotion / motionLevel 0 (shell.js sets it).
+   The carriage is in both lists, so a beat change here is a CUT to black, the
+   half-second hold the owner ordered, and a cut to the new plate - the pacing
+   survives, only the sliding goes. index.js writes 0ms durations for the same
+   case; the !important below is what covers an OS preference JS cannot read. */
 html.arc-reduced .arc-vn,
 html.arc-reduced .arc-vn-bg,
+html.arc-reduced .arc-vn-bgwrap,
 html.arc-reduced .arc-vn-cap,
 html.arc-reduced .arc-vn-paper,
 html.arc-reduced .arc-vn-boardzone,
@@ -220,7 +255,7 @@ html.arc-reduced .arc-vn-cap.is-up { transform:translateX(-50%); }
 html.arc-reduced .arc-vn-paper.is-up { transform:translate(-50%, -50%); }
 html.arc-reduced .arc-vn-skip.is-holding .arc-vn-skip-fill { transition:none; }
 @media (prefers-reduced-motion: reduce) {
-  .arc-vn, .arc-vn-bg, .arc-vn-cap, .arc-vn-paper,
+  .arc-vn, .arc-vn-bg, .arc-vn-bgwrap, .arc-vn-cap, .arc-vn-paper,
   .arc-vn-boardzone, .arc-vn-boardglow { transition:none !important; }
   .arc-vn-bg, .arc-vn-neon, .arc-vn-tap { animation:none !important; }
   .arc-vn-neon.is-on { opacity:.55; }
