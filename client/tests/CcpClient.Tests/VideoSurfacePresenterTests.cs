@@ -332,6 +332,44 @@ public class VideoSurfacePresenterTests
         Assert.Equal(0, rig.Presence.Presents);
     }
 
+    /// <summary>
+    /// <b>ONE decoder, ONE capability and ONE placement carry a whole clip</b> — the unified
+    /// presentation contract's resource clause ("Monitor count must not multiply decoders, audio
+    /// sessions, network downloads, or frame storage", <c>client/docs/architecture.md</c> A-003),
+    /// which this port satisfies the only way a primary-display-only surface can: there is nothing
+    /// to multiply BY. Upstream is the counter-example that makes the clause worth pinning — it
+    /// builds one window and one <c>WriteableBitmap</c> per screen
+    /// (<c>Services/Video/DualMonitorVideoService.cs:373-387</c>) and gates three-or-more monitors
+    /// behind an opt-in because of "N independent decoders on high monitor counts"
+    /// (<c>Services/Video/VideoService.cs:2035-2045</c>).
+    ///
+    /// <para><b>And the same count names a contract clause the port does NOT meet.</b> The display
+    /// seam is read ONCE, before the decoder opens, and never again while the clip runs — so
+    /// "Recompute targets when displays are added, removed, rotated, rearranged, or have scaling
+    /// changed" (<c>client/docs/capability-inventory.md</c>, "Per-monitor geometry") is unimplemented:
+    /// nothing in this port listens for a display change, and a clip that started before one keeps
+    /// the rectangle it was given. That is asserted here rather than left as prose, so the lane that
+    /// implements the recompute has to come through this fact and say so.</para>
+    /// </summary>
+    [Fact]
+    public void ONEDecoderONECapabilityAndONEPlacementCarryTheWholeClip_AndTheDisplayIsNeverReReAD()
+    {
+        using var rig = new Rig();
+        rig.Clips.FrameCount = 6;
+
+        rig.Presenter.Begin("clip.mp4", TimeSpan.Zero, () => { });
+        rig.Clock.AdvanceToNextDue();
+        rig.Clock.AdvanceToNextDue();
+        rig.Clock.AdvanceToNextDue();
+
+        Assert.Equal(1, rig.Clips.Opens);
+        Assert.Equal(1, rig.PresencesBuilt);
+        Assert.Equal(4, rig.Presence.Shows);
+        Assert.Equal(1, rig.Presence.Presents);
+
+        Assert.Equal(1, rig.DisplayReads);
+    }
+
     [Fact]
     public void DisposeReleasesTheCadence_TheClip_AndTheCapability()
     {
@@ -361,8 +399,26 @@ public class VideoSurfacePresenterTests
             Clips = new StubClipSource();
             var bounds = display ?? (useDefaultDisplay ? new VideoBounds(0, 0, 400, 240) : null);
             Presenter = new VideoSurfacePresenter(
-                Clock, action => action(), () => Presence, Clips, () => bounds);
+                Clock,
+                action => action(),
+                () =>
+                {
+                    PresencesBuilt++;
+                    return Presence;
+                },
+                Clips,
+                () =>
+                {
+                    DisplayReads++;
+                    return bounds;
+                });
         }
+
+        /// <summary>How many times the presenter asked its display seam where the surface may go.</summary>
+        public int DisplayReads { get; private set; }
+
+        /// <summary>How many video capabilities the presenter built.</summary>
+        public int PresencesBuilt { get; private set; }
 
         public ManualClock Clock { get; }
 
