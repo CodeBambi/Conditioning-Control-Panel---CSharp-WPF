@@ -326,7 +326,7 @@ public class SessionEditorHeadlessTests : HeadlessTest
         Assert.Same(editor, boot.Studio.CurrentEditor);
         Assert.Null(editor.ResultSession);
         Assert.Equal(SessionEditorRules.NameRequired, editor.Refusal);
-        Assert.False(Directory.Exists(boot.Store.Folder));
+        Assert.Empty(boot.Store.Read());
         Assert.Equal(4, Rows(boot.Window).Count);
 
         editor.Close();
@@ -351,7 +351,7 @@ public class SessionEditorHeadlessTests : HeadlessTest
 
         Assert.Null(boot.Studio.CurrentEditor);
         Assert.Null(editor.ResultSession);
-        Assert.False(Directory.Exists(boot.Store.Folder));
+        Assert.Empty(boot.Store.Read());
         Assert.Equal(4, Rows(window).Count);
 
         // The rack's own instance is untouched — the edit was made on a copy.

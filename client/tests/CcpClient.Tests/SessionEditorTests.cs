@@ -227,16 +227,20 @@ public class SessionEditorTests
     public void ACustomSessionLandsUnderTheDataRoot_AndTheFolderAppearsOnlyWhenOneIsSaved()
     {
         var root = TempRoot();
+        Directory.CreateDirectory(root);
         var store = new CustomSessionStore(root, new Sink());
 
         Assert.Equal(Path.GetFullPath(Path.Combine(root, "custom_sessions")), store.Folder);
-        Assert.False(Directory.Exists(store.Folder));
+
+        // Nothing under the data root yet — enumerated rather than asked about, so an absent folder
+        // fails this line instead of quietly satisfying a predicate.
+        Assert.Empty(Directory.GetDirectories(root));
         Assert.Empty(store.Read());
 
         var path = store.Save(SessionEditorRules.Apply(BuiltIn(), "Mine", "", 45, () => "abc"));
 
         Assert.NotNull(path);
-        Assert.True(Directory.Exists(store.Folder));
+        Assert.Equal([store.Folder], Directory.GetDirectories(root).Select(Path.GetFullPath));
         Assert.Equal(store.Folder, Path.GetDirectoryName(path));
         Assert.Equal("abc.session.json", Path.GetFileName(path));
 
@@ -351,8 +355,10 @@ public class SessionEditorTests
         session.Origin = ScriptedSessionOrigin.Custom;
         session.SourceFilePath = victim;
 
+        // The refused delete left the file where it was — read back rather than asked about, so a
+        // file that HAS gone fails here with a missing-file throw instead of a silent predicate.
         Assert.False(store.Delete(session));
-        Assert.True(File.Exists(victim));
+        Assert.Equal("{}", File.ReadAllText(victim));
 
         var path = store.Save(session);
         Assert.Equal(store.Folder, Path.GetDirectoryName(path));
