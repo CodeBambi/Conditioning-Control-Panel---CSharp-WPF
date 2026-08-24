@@ -56,6 +56,10 @@
 //     `--no-incremental` forces compilation, not restore. The gate REPORTS whether restore
 //     no-opped so the reader knows which reading they hold, and `--cold` (opt-in) forces the
 //     re-resolve when the diff touches a *.csproj, *.props, *.targets or a lock file.
+//   - The zero-byte-output sweep weighs the four shapes that are never legitimately empty (.dll,
+//     .exe, .deps.json, .runtimeconfig.json) under the output directories MSBuild NAMED in this
+//     build. A truncated file of any other shape, or one in a project that produced no output line,
+//     is outside it — and a file that is corrupt but non-empty is outside it by construction.
 //   - It observes a build. It proves nothing about behaviour, rendering, timing or interaction.
 //
 // USAGE
@@ -63,8 +67,9 @@
 //   node client/tests/floor/check-warnings.mjs --self-test  parser corpus only, no build
 //   node client/tests/floor/check-warnings.mjs --cold       also force a full NuGet re-resolve
 //   node client/tests/floor/check-warnings.mjs --log-dir D  put the full build log in D
-// Exit 0 = zero warnings and zero errors, positively observed. Exit 1 = anything else, including
-// every "I could not tell" case: this gate never reports a count it did not read.
+// Exit 0 = zero warnings, zero errors and no zero-byte generated output, all positively observed.
+// Exit 1 = anything else, including every "I could not tell" case: this gate never reports a count
+// it did not read.
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -125,7 +130,7 @@ const ERROR_WITH_CODE = /^\s*(?:(?<origin>.*?)\s*:\s*)?error\s+(?<code>[A-Za-z][
 
 const SUMMARY_WARNINGS = /^\s*(\d+)\s+Warning\(s\)\s*$/;
 const SUMMARY_ERRORS = /^\s*(\d+)\s+Error\(s\)\s*$/;
-const PROJECT_OUTPUT = /^\s*(?<name>[^\s>]+)\s+->\s+\S+/;
+const PROJECT_OUTPUT = /^\s*(?<name>[^\s>]+)\s+->\s+(?<output>\S.*?)\s*$/;
 const RESTORE_NOOP = /All projects are up-to-date for restore\./;
 
 /**
@@ -216,23 +221,108 @@ export function discoverSolutionProjects(slnText) {
   return projects;
 }
 
-/** Project names that reported an output (`Name -> path`) — i.e. that actually built. */
-export function parseBuiltProjects(output) {
-  const built = new Set();
+/** Project name -> the assembly path it reported (`Name -> path`), i.e. the projects that built. */
+export function parseProjectOutputs(output) {
+  const outputs = new Map();
   for (const raw of output.split(/\r?\n/)) {
     const m = PROJECT_OUTPUT.exec(raw.trimEnd());
     if (m) {
-      built.add(m.groups.name);
+      outputs.set(m.groups.name, m.groups.output);
     }
   }
-  return built;
+  return outputs;
+}
+
+/** Project names that reported an output (`Name -> path`) — i.e. that actually built. */
+export function parseBuiltProjects(output) {
+  return new Set(parseProjectOutputs(output).keys());
+}
+
+// ---------------------------------------------------------------------------
+// THE TREE THIS BUILD LEFT BEHIND, and the day a cold build signed off a broken one.
+//
+// 2026-08-25: a disk-full MSBuild run (414 x MSB3021) truncated
+// client/tests/CcpClient.HeadlessTests/bin/Debug/net10.0/CcpClient.HeadlessTests.deps.json to ZERO
+// BYTES. The runner then died with "Error initializing the dependency resolver". The dangerous half
+// is what happened next: THIS GATE, forced non-incremental, reported 0 warnings and 0 errors over
+// that same tree - because a build that leaves a generated file alone says nothing about it, and
+// nothing in the build stream ever mentioned it.
+//
+// THE REPORTED MECHANISM DOES NOT REPRODUCE HERE, AND THAT IS RECORDED RATHER THAN REPEATED. The
+// row explains the survival as "a cold build does not re-derive a generated file whose timestamp is
+// newer than its inputs". Measured on SDK 10.0.x in this worktree: truncating that exact file to
+// zero and running this gate REPAIRED it (63,971 bytes back, 0 zero-byte outputs) - `--no-incremental`
+// maps to the Rebuild target, whose Clean deletes the file first. So the incident needed something
+// more than a newer timestamp to survive, most likely a Clean that could not read its own
+// FileListAbsolute.txt on the same full volume. What is NOT in doubt is the shape: a zero-byte
+// output in a built tree, invisible to a 0/0 build, fatal to whatever loads it. Reproduced here
+// end to end - the zeroed deps.json gives the runner's exact
+// "Error initializing the dependency resolver", and this sweep names the file out of 1,154 weighed.
+//
+// WHY HERE AND NOT IN THE FLOOR GATE, which was the other candidate (it already stats the assembly
+// under test in assertBuildIsFresh and could compare sizes for a line). MEASURED, not assumed: the
+// floor over that same broken tree fails at "the test assembly exited 2147516555" and its output
+// tail does carry the resolver message and the file's path - so it is not blind, and this is not
+// about rescuing it. It is about COVERAGE and EARLINESS. The floor only ever looks at the two TEST
+// projects, so a truncated CcpClient.Desktop.deps.json or a zero-byte Avalonia native is invisible
+// to it; and it only speaks after a suite has run. This gate has just built EVERY project in the
+// solution and is handed each one's output path by MSBuild itself, so it is the only place the
+// check covers the whole tree - and it is the gate that told the lie.
+//
+// SCOPE: files that exist and are zero bytes, of the four shapes that are NEVER legitimately empty
+// - a managed assembly, an apphost, and the two generated host files. An absent file is not this
+// check's business (a project that produced no output at all is already a named failure above).
+// ---------------------------------------------------------------------------
+
+const NEVER_EMPTY_OUTPUT = /\.(dll|exe|deps\.json|runtimeconfig\.json)$/i;
+
+/**
+ * Every zero-byte generated output under the directories these build outputs live in, recursively
+ * (a truncated native under runtimes/ is the same defect one layer down). Returns the offenders AND
+ * how many files were weighed, because this file's standing rule is that a gate never reports a
+ * count it did not read — a sweep that silently examined nothing would otherwise read as clean.
+ * `io` is injected so the self-test can drive both directions without a build.
+ */
+export function findTruncatedOutputs(outputPaths, io = {
+  list: (dir) => fs.readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((e) => e.isFile())
+    .map((e) => path.join(e.parentPath ?? e.path, e.name)),
+  size: (file) => fs.statSync(file).size,
+}) {
+  const dirs = [...new Set(outputPaths.map((p) => path.dirname(p)))].sort();
+  const seen = new Set();
+  const truncated = [];
+  for (const dir of dirs) {
+    let files;
+    try {
+      files = io.list(dir);
+    } catch {
+      continue; // an output directory that cannot be listed is not evidence of truncation
+    }
+    for (const file of files) {
+      if (!NEVER_EMPTY_OUTPUT.test(file) || seen.has(file)) {
+        continue;
+      }
+      let size;
+      try {
+        size = io.size(file);
+      } catch {
+        continue;
+      }
+      seen.add(file);
+      if (size === 0) {
+        truncated.push(file);
+      }
+    }
+  }
+  return { truncated: truncated.sort(), scanned: seen.size };
 }
 
 /**
  * The whole verdict, as a pure function of the build's exit code and its complete output.
  * Split out from the spawn so the self-test can drive it with literal output.
  */
-export function evaluate({ exitCode, output, slnText }) {
+export function evaluate({ exitCode, output, slnText, outputSweep = null }) {
   const problems = [];
   const warnings = parseWarnings(output);
   const errors = parseErrors(output);
@@ -264,6 +354,27 @@ export function evaluate({ exitCode, output, slnText }) {
       "A project that quietly left the build is unobserved, and its warnings would read as zero " +
       "(same defect class as the test floor's 'a suite outside the floor')."
     );
+  }
+
+  // The zero-byte-output sweep. `null` means the caller did not run it (the pure self-test
+  // corpora); a sweep that ran and weighed NOTHING is a failure, not a pass, for the same reason
+  // an unreadable summary is.
+  if (outputSweep !== null) {
+    if (outputSweep.scanned === 0) {
+      problems.push(
+        "the zero-byte-output sweep weighed 0 files — it examined nothing and cannot be read as " +
+        "clean (the build's own `Name -> path` lines named no readable output directory)."
+      );
+    }
+    if (outputSweep.truncated.length > 0) {
+      problems.push(
+        `${outputSweep.truncated.length} ZERO-BYTE BUILD OUTPUT(S) — this tree is CORRUPT and the ` +
+        "build did not notice, because a forced non-incremental build rebuilds its own outputs and " +
+        "does NOT re-derive a generated file whose timestamp is already newer than its inputs. " +
+        "Delete each one and rebuild:\n" +
+        outputSweep.truncated.map((f) => `      ${f}`).join("\n")
+      );
+    }
   }
 
   if (warnings.length > 0) {
@@ -301,6 +412,7 @@ export function evaluate({ exitCode, output, slnText }) {
     builtProjects: [...built].sort(),
     solutionProjects: [...projects.keys()].sort(),
     restoreNoOp: RESTORE_NOOP.test(output),
+    outputSweep,
   };
 }
 
@@ -440,6 +552,83 @@ export function runSelfTest(log = console.log) {
     failures.push("evaluate() reported OK when the summary and the diagnostic-line parse disagreed");
   }
 
+  // THE ZERO-BYTE-OUTPUT SWEEP, both directions, over an INJECTED filesystem so no build is
+  // needed. The corpus is the real incident's tree shape: a healthy output folder, and the same
+  // folder with CcpClient.HeadlessTests.deps.json at zero bytes.
+  const OUT = "C:\\repo\\client\\tests\\CcpClient.HeadlessTests\\bin\\Debug\\net10.0";
+  const treeFiles = [
+    `${OUT}\\CcpClient.HeadlessTests.dll`,
+    `${OUT}\\CcpClient.HeadlessTests.exe`,
+    `${OUT}\\CcpClient.HeadlessTests.deps.json`,
+    `${OUT}\\CcpClient.HeadlessTests.runtimeconfig.json`,
+    `${OUT}\\CcpClient.HeadlessTests.pdb`,
+    `${OUT}\\runtimes\\win-x64\\native\\libSkiaSharp.dll`,
+    `${OUT}\\xunit.runner.json`,
+  ];
+  const io = (zeroByte) => ({
+    list: () => treeFiles,
+    size: (f) => (zeroByte.includes(f) ? 0 : 4096),
+  });
+  const healthy = findTruncatedOutputs([`${OUT}\\CcpClient.HeadlessTests.dll`], io([]));
+  if (healthy.truncated.length !== 0) {
+    failures.push(`the sweep named an offender in a healthy tree: ${healthy.truncated.join(", ")}`);
+  }
+  // Five of the seven are of a never-empty shape; the .pdb and the .json config are not this
+  // check's business, and a sweep that weighed all seven would be claiming a rule it does not have.
+  if (healthy.scanned !== 5) {
+    failures.push(`the sweep weighed ${healthy.scanned} file(s) of the corpus, expected the 5 never-empty shapes`);
+  }
+  const broken = findTruncatedOutputs(
+    [`${OUT}\\CcpClient.HeadlessTests.dll`],
+    io([`${OUT}\\CcpClient.HeadlessTests.deps.json`]));
+  if (broken.truncated.length !== 1 || !broken.truncated[0].endsWith("CcpClient.HeadlessTests.deps.json")) {
+    failures.push(`the sweep did not name the zero-byte deps.json: ${JSON.stringify(broken.truncated)}`);
+  }
+  // A zero-byte NATIVE one directory down is the same defect, and the sweep is recursive.
+  const brokenNative = findTruncatedOutputs(
+    [`${OUT}\\CcpClient.HeadlessTests.dll`],
+    io([`${OUT}\\runtimes\\win-x64\\native\\libSkiaSharp.dll`]));
+  if (brokenNative.truncated.length !== 1) {
+    failures.push(`the sweep missed a zero-byte native under runtimes/: ${JSON.stringify(brokenNative.truncated)}`);
+  }
+  // evaluate(): a clean build over a CORRUPT tree is a failure — the whole point of the incident.
+  const corruptTree = evaluate({
+    exitCode: 0,
+    output: "  A -> C:\\out\\A.dll\n\nBuild succeeded.\n    0 Warning(s)\n    0 Error(s)\n",
+    slnText: sln,
+    outputSweep: { truncated: [`${OUT}\\CcpClient.HeadlessTests.deps.json`], scanned: 5 },
+  });
+  if (corruptTree.ok) {
+    failures.push("evaluate() reported OK for a 0/0 build over a tree with a zero-byte deps.json in it");
+  }
+  // ...and a sweep that weighed nothing is not a clean sweep.
+  const blindSweep = evaluate({
+    exitCode: 0,
+    output: "  A -> C:\\out\\A.dll\n\nBuild succeeded.\n    0 Warning(s)\n    0 Error(s)\n",
+    slnText: sln,
+    outputSweep: { truncated: [], scanned: 0 },
+  });
+  if (blindSweep.ok) {
+    failures.push("evaluate() reported OK for an output sweep that examined zero files");
+  }
+  // ...and the healthy sweep does NOT redden a clean build, or the gate would only ever fire.
+  const cleanTree = evaluate({
+    exitCode: 0,
+    output: "  A -> C:\\out\\A.dll\n\nBuild succeeded.\n    0 Warning(s)\n    0 Error(s)\n",
+    slnText: sln,
+    outputSweep: { truncated: [], scanned: 5 },
+  });
+  if (!cleanTree.ok) {
+    failures.push(`evaluate() reddened a clean build over a healthy tree: ${cleanTree.problems.join(" | ")}`);
+  }
+  // The output path the sweep depends on really is parsed off MSBuild's own line.
+  const parsedOutputs = parseProjectOutputs(
+    "  CcpClient.Tests -> C:\\repo\\client\\tests\\CcpClient.Tests\\bin\\Debug\\net10.0\\CcpClient.Tests.dll\n");
+  if (parsedOutputs.get("CcpClient.Tests") !==
+      "C:\\repo\\client\\tests\\CcpClient.Tests\\bin\\Debug\\net10.0\\CcpClient.Tests.dll") {
+    failures.push(`the project output path was not parsed off the build line: ${JSON.stringify([...parsedOutputs])}`);
+  }
+
   if (failures.length > 0) {
     log("WARNING GATE SELF-TEST FAILED:");
     for (const f of failures) log(`  ${f}`);
@@ -447,7 +636,7 @@ export function runSelfTest(log = console.log) {
   }
   log(`WARNING GATE SELF-TEST OK: ${SELF_TEST_POSITIVES.length} positive, ` +
     `${SELF_TEST_NEGATIVES.length} negative corpus lines, plus dedup, summary, ` +
-    "fail-closed and retired-filter exhibits.");
+    "fail-closed, retired-filter and zero-byte-output exhibits.");
   return 0;
 }
 
@@ -499,7 +688,10 @@ export async function main(argv = []) {
   // The COMPLETE, unfiltered stream, on disk, before anything is read out of it.
   fs.writeFileSync(logPath, output, "utf8");
 
-  const verdict = evaluate({ exitCode, output, slnText });
+  // Read the TREE the build left, from the output paths MSBuild itself printed.
+  const outputSweep = findTruncatedOutputs([...parseProjectOutputs(output).values()]);
+
+  const verdict = evaluate({ exitCode, output, slnText, outputSweep });
 
   if (!verdict.ok) {
     console.error("WARNING GATE FAILED:");
@@ -512,7 +704,8 @@ export async function main(argv = []) {
 
   console.log(
     `WARNING GATE OK: 0 warnings, 0 errors across ${verdict.builtProjects.length} project(s) ` +
-    `[${verdict.builtProjects.join(", ")}] in ${CONFIGURATION}, forced non-incremental.`
+    `[${verdict.builtProjects.join(", ")}] in ${CONFIGURATION}, forced non-incremental; ` +
+    `${outputSweep.scanned} generated output(s) weighed, 0 of them zero-byte.`
   );
   if (verdict.restoreNoOp) {
     console.log("  note: NuGet restore was a no-op this run, so restore-time (NU*) warnings were not re-evaluated." +
