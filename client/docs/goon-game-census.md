@@ -50,9 +50,14 @@ git ls-files ConditioningControlPanel/Resources/web/goon | Measure-Object -Line
 ```
 
 Both trees agree with `git ls-files`, so there are no untracked bytes in either. **R2 additionally
-matches a second independent record** — `client/docs/upstream-payload-inventory.json:26`
-(`"fileCountAtBaseline": 184`) — and the board itself classes that field as record data rather than
-an assertion, so the agreement is corroboration, not discharge.
+matches a second independent record** — `client/docs/upstream-payload-inventory.json:43`
+(`"fileCountAtBaseline": 184`) — and as of 2026-08-24 that field IS AN ASSERTION, so the agreement
+is now discharge rather than mere corroboration. This paragraph used to say the opposite, citing
+a stale line and calling the field "record data rather than an assertion". Both halves went stale on the
+same day: the payload-drift guard began asserting the count AND a file-list digest for every tree,
+and inserting the new fields moved goon's count line from :26 to :43. The old citation was already
+wrong before that move — the cited line held a different tree's disposition — so this corrects two
+errors, not one.
 
 **I did not need the merge-delta interpretation.** The trainer-card census found its row's numbers were files added
 at one merge rather than directory totals; here both readings would have to be tested only if the
