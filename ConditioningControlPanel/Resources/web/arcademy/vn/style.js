@@ -41,6 +41,16 @@ export const STYLE_TEXT = `
   position:relative; width:min(100vw, 177.78vh); height:min(56.25vw, 100vh);
   overflow:hidden;
 }
+/* THE MOBILE PASS. A vh unit is the viewport with a phone's browser bars
+   retracted, so the letterbox solved itself taller than the box it is drawn in
+   and the bottom of the plate sat under the URL bar. The vh pair above stays put
+   as the fallback for an engine with no dvh; this pair overwrites it everywhere
+   else, and the arithmetic is identical.
+   NO BACKTICKS IN HERE (trap 37): this sheet is a template literal, and one
+   backtick in a comment ends it and takes the whole VN skin with it. */
+@supports (height: 100dvh) {
+  .arc-vn-frame { width:min(100vw, 177.78dvh); height:min(56.25vw, 100dvh); }
+}
 
 /* THE PLATE, and the slow camera on it. The transform is the ONLY thing that
    moves (trap 36's law: patterns and stills drift by transform, never by

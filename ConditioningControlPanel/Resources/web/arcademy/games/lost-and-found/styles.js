@@ -86,7 +86,13 @@ export const CSS = [
      landscape tile ratio. Same tile COUNT as ever - only the size breathes. */
   '.g-lf-view { position:absolute; left:0; right:0; bottom:0; top:var(--g-lf-top);',
   '  overflow:hidden; background:transparent;',
+  /* THE MOBILE PASS: `dvh`, with the `vh` line kept above it as the fallback an
+     engine without dvh reads and a newer one overwrites. On a phone `100vh` is
+     the viewport WITH the browser bars retracted, so the mosaic was solving its
+     row height against a frame taller than the one it is drawn in and the bottom
+     row rode under the URL bar. Every other board in games/ already uses dvh. */
   '  --g-lf-th:calc((100vh - var(--g-lf-top) - (var(--g-lf-rows,4) + 1) * var(--g-lf-gap)) / var(--g-lf-rows,4));',
+  '  --g-lf-th:calc((100dvh - var(--g-lf-top) - (var(--g-lf-rows,4) + 1) * var(--g-lf-gap)) / var(--g-lf-rows,4));',
   '  --g-lf-tw:calc(var(--g-lf-th) * 1.15); }',
   '.g-lf-view.g-lf-lite { --g-lf-tw:calc(var(--g-lf-th) * 1.3); }',
   '.g-lf-mosaic { position:absolute; inset:0; display:flex; flex-direction:column;',
