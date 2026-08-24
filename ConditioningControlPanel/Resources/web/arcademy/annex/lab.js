@@ -247,9 +247,11 @@ export function createAnnexLab(caps) {
 
     /* place tiles by bbox, cam8 by the proven override */
     const screens = Array.isArray(quads.screens) ? quads.screens : [];
+    /* every tile places, the laptop included: its locked-terminal card is the
+     * diegetic pre-OS screen (raw chroma green through the mask otherwise) */
     screens.forEach((s2) => {
       const tile = wall.tiles && wall.tiles[s2.name];
-      if (!tile || s2.name === 'laptop') return;
+      if (!tile) return;
       const bb = s2.name === 'cam8' ? CAM8_BBOX : s2.bbox;
       if (!bb) return;
       tile.style.left = bb[0] + 'px';

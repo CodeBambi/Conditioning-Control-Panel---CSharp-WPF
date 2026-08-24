@@ -24,8 +24,9 @@
   top: 50%;
   width: 1376px;
   height: 768px;
-  transform-origin: 0 0;
-  /* lab.js sets transform: translate(-50%,-50%) scale(s) in px, not here */
+  transform-origin: 50% 50%;
+  /* lab.js sets transform: translate(-50%,-50%) scale(s); origin must stay
+     center or the scale walks the stage off-axis (found by the rig's 04 shot) */
 }
 
 .al-art {
