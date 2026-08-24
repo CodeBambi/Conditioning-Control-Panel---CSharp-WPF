@@ -34,7 +34,13 @@ namespace CcpClient.Tests;
 /// output device is a real machine and the port must be honest there too: both sides of every
 /// equality below go false together, so the fact still bites rather than being skipped. That is
 /// <see cref="TrayCapabilityTests"/>' discipline and the reason no predicate appears in a fact body.</para>
+///
+/// <para><b>Why this class is in <see cref="RealRenderDeviceCollection"/>.</b> Links 1-3 are asked
+/// of the PROCESS, and Windows folds every default-GUID stream a process opens into one session, so
+/// a second real device anywhere in this process answers them. That collection's remarks carry the
+/// measurements, the census of who else opens one, and the 9-of-20-to-0-of-20 before and after.</para>
 /// </summary>
+[Collection(nameof(RealRenderDeviceCollection))]
 public class AudioCapabilityTests
 {
     // =================================================================================
@@ -62,7 +68,7 @@ public class AudioCapabilityTests
         Assert.False(
             before.Active,
             $"the OS already reports an ACTIVE render session for pid {Environment.ProcessId} with no "
-            + $"device open in this suite: {before}");
+            + $"device open in this suite: {before}. {SomethingElseInThisProcessHasTheEndpoint}");
     }
 
     [Fact]
@@ -166,7 +172,17 @@ public class AudioCapabilityTests
         // Link 3's other half. Measured 1 -> 0 on this machine: the session drops to
         // AudioSessionStateInactive when the device is disposed. Both columns again — the product
         // must stop claiming at the same moment the OS stops confirming.
-        Assert.False(run.OsSessionStillActiveAfterDispose, run.Evidence);
+        //
+        // The teardown itself is SYNCHRONOUS and was measured to be: 30 open/cue/dispose cycles with
+        // every core saturated by spinning threads reported the session Inactive on the very first
+        // read after Dispose, 30 out of 30. So a True here is not a slow teardown and waiting for it
+        // would be a lie — it is another live stream, named below.
+        Assert.False(
+            run.OsSessionStillActiveAfterDispose,
+            run.Evidence
+            + ". A DISPOSE THAT NO LONGER CLOSES THE DEVICE is the product regression this fact "
+            + "exists to catch, and it is the first thing to check. If the presence really did tear "
+            + "down, then: " + SomethingElseInThisProcessHasTheEndpoint);
         Assert.False(run.ClaimedRenderingAfterDispose, run.Evidence);
 
         await Task.CompletedTask;
@@ -605,6 +621,23 @@ public class AudioCapabilityTests
     }
 
     // =================================================================================
+
+    /// <summary>The diagnosis both negative controls carry, because a bare False here cost two lanes
+    /// a day each: the question is per-PROCESS and cannot be narrowed further, so the only thing that
+    /// can make it true is another live render stream in this same process.</summary>
+    private const string SomethingElseInThisProcessHasTheEndpoint =
+        "WHAT THIS MEANS, AND WHAT IT DOES NOT. It is NOT another process: WasapiRenderProbe skips "
+        + "every session whose IAudioSessionControl2::GetProcessId is not this pid, and a peer test "
+        + "process holding a real ACTIVE session for 90 seconds left this class green 8 runs out of 8. "
+        + "It is NOT a slow teardown either (30 of 30 cycles reported Inactive on the first read after "
+        + "Dispose with every core saturated). It is ANOTHER LIVE RENDER STREAM IN THIS PROCESS: "
+        + "Windows folds every default-GUID stream a process opens into ONE session with ONE instance "
+        + "identifier, which stays Active until the last of them is disposed, so this question cannot "
+        + "be asked per-stream and no assertion here can be narrowed to fix it. The classes that open "
+        + "a real render device are co-located in RealRenderDeviceCollection so they cannot run "
+        + "beside this one; if a new class opens one and did not join, THAT is what this failure is "
+        + "reporting, and its name belongs in that collection — see RealRenderDeviceCollection.cs for "
+        + "the census method that finds it";
 
     private static Task WaitUntil(Func<bool> condition, string what) =>
         TestWait.Until(condition, what, window: TimeSpan.FromSeconds(15));

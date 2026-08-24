@@ -708,8 +708,23 @@ public sealed class GoonPracticeTests
         return path;
     }
 
+    /// <summary>The verification harness's own capture directory, which is GITIGNORED in whole
+    /// (<c>client/tools/verify/artifacts/.gitignore</c> is <c>*</c> plus itself) and holds the BMPs,
+    /// PNGs and logs a headed run writes WHILE this suite may be running.</summary>
+    private const string CaptureArtefacts = "client/tools/verify/artifacts/";
+
     /// <summary>Every file the CLIENT tree owns — build outputs excluded, because that is
-    /// exactly where the linked glob is supposed to put copies.</summary>
+    /// exactly where the linked glob is supposed to put copies, and the harness's gitignored
+    /// capture directory excluded because it is not part of the tree this guard is about.
+    ///
+    /// <para><b>Why the artefacts directory is not a hole in the guard.</b> This sweep exists to
+    /// prove no goon payload BYTE is forked into <c>client/</c>. Nothing under
+    /// <see cref="CaptureArtefacts"/> is tracked — a capture there cannot become a fork of anything,
+    /// it is ephemeral evidence that the next run overwrites. What it CAN do is be open for writing
+    /// when this guard hashes it, which fails the whole suite with an <c>IOException</c> that names
+    /// neither this guard nor the harness that holds the file. That happened
+    /// (<c>client/docs/task-board.md</c>, the P2 row this exclusion closes), and the identity of one
+    /// earlier crashed run was never recoverable.</para></summary>
     private static List<string> ClientOwnedFiles(string repoRoot)
     {
         var files = new List<string>();
@@ -726,7 +741,8 @@ public sealed class GoonPracticeTests
                 {
                     var rel = Path.GetRelativePath(repoRoot, f).Replace('\\', '/');
                     return !rel.Contains("/bin/", StringComparison.Ordinal)
-                        && !rel.Contains("/obj/", StringComparison.Ordinal);
+                        && !rel.Contains("/obj/", StringComparison.Ordinal)
+                        && !rel.StartsWith(CaptureArtefacts, StringComparison.Ordinal);
                 }));
         }
 
@@ -739,10 +755,32 @@ public sealed class GoonPracticeTests
             .OrderBy(r => r, StringComparer.Ordinal)
             .ToList();
 
+    /// <summary>One file's digest — and a failure that NAMES THE GUARD when the file cannot be
+    /// read. A bare <c>IOException</c> out of a hash call says nothing about which fact was running,
+    /// what it was proving, or that the cause is another process rather than a defect; that is an
+    /// hour of somebody's life. The catch is here rather than in the three facts that hash, because
+    /// all three route through this one call.</summary>
     private static string Sha256(string path)
     {
-        using var stream = File.OpenRead(path);
-        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
+        try
+        {
+            using var stream = File.OpenRead(path);
+            return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new Xunit.Sdk.XunitException(
+                $"GoonPracticeTests could not READ {path} to hash it, so this fact reached no verdict "
+                + "at all — it did not find a forked payload byte and it did not clear the tree of one. "
+                + $"The open failed with {ex.GetType().Name}: {ex.Message}. These facts hash the goon "
+                + "payload against the client tree (the glob copies the bytes unmodified, and no payload "
+                + "byte is forked into client/), so every file under client/src, client/tests, client/docs "
+                + "and client/tools is opened for reading. ANOTHER PROCESS HOLDING THE FILE OPEN IS THE "
+                + "USUAL CAUSE and it is not a defect in the product: the verification harness writes its "
+                + $"captures under {CaptureArtefacts}, which this sweep already excludes, so a file outside "
+                + "that directory being written during a test run is worth chasing on its own.",
+                ex);
+        }
     }
 
     /// <summary>
