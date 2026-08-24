@@ -913,6 +913,18 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("AutonomyService: CanTakeAction=false - not enabled");
                 return false;
             }
+
+            // Entitlement is re-checked live, not just in CanStart(): the ? box's free day can
+            // rotate out (or a subscription lapse) while the timers are armed, and CanStart()
+            // never runs again after Start(). Without this the takeover kept acting from behind
+            // the re-drawn padlock veil. Same OR as CanStart, or the two gates disagree.
+            var hasEntitlement = App.Patreon?.HasPremiumAccess == true
+                                 || App.DailyFree?.IsFreeToday("takeover") == true;
+            if (!hasEntitlement)
+            {
+                App.Logger?.Debug("AutonomyService: CanTakeAction=false - premium access lapsed");
+                return false;
+            }
             if (_isOnCooldown)
             {
                 App.Logger?.Debug("AutonomyService: CanTakeAction=false - on cooldown");

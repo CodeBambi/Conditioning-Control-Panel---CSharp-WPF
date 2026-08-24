@@ -80,6 +80,13 @@ export const DIALS = Object.freeze({
   SAY_HOLD_BASE_MS: 1400,  // ...and a long one grows: BASE + PER_CHAR x length
   SAY_HOLD_PER_CHAR_MS: 45,
 
+  /* --- the field trip (wave W2a) --------------------------------------- */
+  CRT_MS: 200,             // ONE power-off: squish to a line (~140) + flash dot (~60).
+                           // MIRRORS widget.css `emi-crt-off`/`emi-crt-on`, the way
+                           // BODY_MS mirrors emi.css. Change both or she moves in the light.
+  TRIP_GAP_PX: 14,         // px she stands off the fixture she came to look at
+  TRIP_BEAT_MS: 320,       // the pause after the line, before the tube goes dark again
+
   /* --- persistence ----------------------------------------------------- */
   SAVE_DEBOUNCE_MS: 600,   // one write per interaction, never per pointermove
 });
@@ -915,6 +922,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     dragTold = false;
     disarmHold();
     clearDangle(true);
+    poiForget();                     // W2a: the drag's fixture snapshot dies with the drag
     el.classList.remove('dragging', 'armed');
   }
 
@@ -927,6 +935,10 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
 
   function onDown(ev) {
     if (!enabled || hidden) return;
+    /* TOUCH ALWAYS WINS (W2a, trap 75). A finger on her at ANY point of a field
+     * trip ends it on the spot - she stays where the trip had put her, upright,
+     * and the press below carries on into a perfectly ordinary drag. */
+    cancelTrip({ stay: true });
     // The x is a real button: let it have its own click, and never start a drag
     // from it (a dismiss that could turn into a fling is a trap, not a feature).
     if (inX(ev)) return;
@@ -961,7 +973,8 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     el.classList.add('dragging');
     // The reaction is a raw face, not a chain: a chain would fight the next
     // frame of movement. A live SAY keeps the glass (law 3).
-    if (!saying()) { cancelChain(); killTimers(); stopBlink(); stopSway(); clearBody(); setDragFace(DRAG_FACE); }
+    poiSnapshot();                   // W2a: measure the fixtures ONCE, not per move
+    if (!saying()) { cancelChain(); killTimers(); stopBlink(); stopSway(); clearBody(); setDragFace(carryFace()); }
   }
 
   function onMove(ev) {
@@ -999,7 +1012,19 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
         else if (t - fastSince > DIALS.FLING_MS && !saying()) { wasFling = true; setDragFace(FLING_FACE); }
       } else if (fastSince) {
         fastSince = 0;
-        if (!saying()) setDragFace(DRAG_FACE);
+        if (!saying()) setDragFace(carryFace());
+      }
+
+      /* FIELD-TRIP ANTICIPATION (W2a). Carried over a fixture she has a line
+       * about, she lights up. ENTER/LEAVE ONLY: the rects were measured once at
+       * beginDrag and the repaint rides setDragFace's dedupe, so a pointermove
+       * over open ground costs a handful of number compares and nothing else. */
+      if (poiCache) {
+        const onPoi = overPoi(left, top);
+        if (onPoi !== poiOver) {
+          poiOver = onPoi;
+          if (!saying() && dragFace !== FLING_FACE) setDragFace(carryFace());
+        }
       }
 
       // THE DANGLE: lean against the travel, clamped and smoothed. Style is
@@ -1140,6 +1165,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     // A live press has to be let go BEFORE she goes: a latched drag would let the
     // next pointerup commit a position read off a display:none element.
     endPress();
+    cancelTrip();                    // W2a: dismissed mid-trip = home first, then the dock
     cancelChain(); killTimers(); stopBlink(); stopSway(); clearBody(); setBubble(null);
     clearApproachTimers();
     restGaze();
@@ -1419,6 +1445,10 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   // Seeded from the boot-time window: a page that OPENS narrow never "squished".
   let wasNarrowVp = viewport().w < DIALS.W_NARROW_VW;
   function onResize() {
+    /* A RESIZE MOVED THE FIXTURE (W2a, trap 73). The anchor she is standing at
+     * was solved against the old viewport, so the trip is over: she goes home
+     * and the scheduler may offer another one later. */
+    cancelTrip();
     refitWidth();
     if (!hidden && enabled) place();
     // THE SQUISH: crossing into the narrow-window regime, once per crossing.
@@ -1441,6 +1471,335 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('pagehide', onPageHide);
   }
+
+
+  /* ========================================================================
+   * THE FIELD TRIP (wave W2a, 2026-08-24) - EMI'S ONE AUTONOMOUS VERB
+   *
+   * Everything this wave adds to the widget lives between these two rules,
+   * deliberately: `feat/emi-off-channels` is editing this file at the same
+   * time. The only code outside the block is eight one-line hooks, each marked
+   * `W2a` - endPress, onDown, beginDrag, onMove, hide, onResize, setEnabled,
+   * destroy - plus three members on the handle.
+   *
+   * WHAT A TRIP IS. She powers her tube off where she stands, reappears beside
+   * a campus fixture, says one line about it, powers off again and comes back
+   * to the player's saved spot. It is a scripted rare delight and NOT wandering:
+   * WHEN it may happen is `emi/fieldtrips.js`'s problem, and it is the only
+   * caller. This file owns HOW, and the how is four laws:
+   *
+   *   1. THE RECT IS RESOLVED AT FIRE TIME, NEVER AT SCHEDULE TIME. Screens
+   *      resize, the campus repaints, the plan is `xMidYMid slice` - a rect
+   *      captured when the trip was queued is a rect that has moved by the
+   *      time she gets there. `apparate` therefore takes a GETTER and calls it
+   *      inside the dark, one frame before she lands. See trap 73.
+   *   2. TOUCH ALWAYS WINS. A pointerdown on her at any point of the ladder
+   *      ends the trip on the spot: she stays where she is, upright, with no
+   *      stranded animation class, and the press carries on into an ordinary
+   *      drag. Trap 75.
+   *   3. SHE NEVER STARTS ONE OVER HERSELF. Mid-say, mid-chain, mid-press,
+   *      dismissed, disabled or already travelling, `apparate` refuses and
+   *      answers null. The caller does not need a guard.
+   *   4. THE SAVED SPOT IS NEVER WRITTEN. The trip moves `el.style.left/top`
+   *      and never `fx0`/`fy0`, so "come home" is just `place()` and a crash,
+   *      a reload or a cancel can never lose where the player put her. The one
+   *      exception is the touch cancel, which commits the spot she was ACTUALLY
+   *      standing on - from the trip's own bookkeeping, never from
+   *      `getBoundingClientRect`, which mid-squish reports a 1px line.
+   * ======================================================================*/
+
+  /** The carried face over a registered fixture: pure delight. `*_*` is already
+   *  paired to the `pet` pose in FACE_BODY_FRAME, so the body follows for free. */
+  const POI_FACE = '*_*';
+
+  /** Normalise anything rect-shaped (a DOMRect, a plain object, a getter's
+   *  answer) into our own numbers, or null. Never throws on junk. */
+  function rectNow(src) {
+    let r = null;
+    try { r = typeof src === 'function' ? src() : src; } catch (e) { return null; }
+    if (!r || typeof r !== 'object') return null;
+    const left = num(r.left);
+    const top = num(r.top);
+    if (left === null || top === null) return null;
+    let w = num(r.width);
+    let h = num(r.height);
+    if (w === null) { const rt = num(r.right); w = rt === null ? null : rt - left; }
+    if (h === null) { const bt = num(r.bottom); h = bt === null ? null : bt - top; }
+    if (w === null || h === null || !(w > 0) || !(h > 0)) return null;
+    return { left, top, width: w, height: h, right: left + w, bottom: top + h };
+  }
+
+  /** How much of her box would sit on top of the fixture, in square px. */
+  function overlapArea(left, top, s, rect) {
+    const ox = Math.min(left + s.w, rect.right) - Math.max(left, rect.left);
+    const oy = Math.min(top + s.h, rect.bottom) - Math.max(top, rect.top);
+    return (ox > 0 && oy > 0) ? ox * oy : 0;
+  }
+
+  /**
+   * WHERE SHE STANDS TO LOOK AT SOMETHING. Four candidates - right, left, under,
+   * over - each clamped into the viewport and then scored. The clamp runs BEFORE
+   * the overlap test on purpose: against a fixture in the corner the clamp is
+   * what drags a candidate back over the very thing she came to see, and a test
+   * on the raw candidate would never notice.
+   */
+  function anchorFor(rect) {
+    const vp = viewport();
+    const s = sizePx();
+    const g = DIALS.TRIP_GAP_PX;
+    const lo = DIALS.MARGIN;
+    const maxX = Math.max(lo, vp.w - s.w - lo);
+    const maxY = Math.max(lo, vp.h - s.h - lo);
+    const midY = rect.top + rect.height / 2 - s.h / 2;
+    const midX = rect.left + rect.width / 2 - s.w / 2;
+    const cands = [
+      { left: rect.right + g, top: midY },
+      { left: rect.left - g - s.w, top: midY },
+      { left: midX, top: rect.bottom + g },
+      { left: midX, top: rect.top - g - s.h },
+    ];
+    let best = null;
+    for (const c of cands) {
+      const left = Math.round(clamp(c.left, lo, maxX));
+      const top = Math.round(clamp(c.top, lo, maxY));
+      const over = overlapArea(left, top, s, rect);
+      const pushed = Math.abs(left - c.left) + Math.abs(top - c.top);
+      // Clean beats compromised; among compromises, least overlap then least
+      // clamping. There is ALWAYS an answer - a mascot with nowhere to stand
+      // would be a trip that hangs half way through.
+      if (!best || over < best.over || (over === best.over && pushed < best.pushed)) {
+        best = { left, top, over, pushed };
+      }
+      if (over === 0 && pushed < 1) break;
+    }
+    return { left: best.left, top: best.top };
+  }
+
+  /* ---- the drag's fixture snapshot ------------------------------------ */
+  /* MEASURED ONCE PER DRAG, NEVER PER MOVE. A getBoundingClientRect for every
+   * registered fixture on every pointermove is the same mistake the drag-face
+   * dedupe exists to prevent, multiplied by the size of the registry - and a
+   * drag cannot resize the window, so one snapshot is also the correct answer. */
+  let poiRectsFn = null;
+  let poiCache = null;
+  let poiOver = false;
+
+  function poiForget() { poiCache = null; poiOver = false; }
+
+  function poiSnapshot() {
+    poiForget();
+    if (!poiRectsFn) return;
+    let list = null;
+    try { list = poiRectsFn(); } catch (e) { return; }
+    if (!Array.isArray(list) || !list.length) return;
+    const out = [];
+    for (const r of list) { const n = rectNow(r); if (n) out.push(n); }
+    if (out.length) poiCache = out;
+  }
+
+  /** Is her CENTRE inside one of the snapshotted fixtures? */
+  function overPoi(left, top) {
+    if (!poiCache) return false;
+    const s = sizePx();
+    const cx = left + s.w / 2;
+    const cy = top + s.h / 2;
+    for (const r of poiCache) {
+      if (cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom) return true;
+    }
+    return false;
+  }
+
+  /** The face a CARRY currently wears, fixture or not. The fling face outranks
+   *  both while it lasts; this is only what she falls back to. */
+  function carryFace() { return poiOver ? POI_FACE : DRAG_FACE; }
+
+  /* ---- the tube ------------------------------------------------------- */
+  /* THE POWER-OFF IS A KEYFRAME AND THAT IS THE WHOLE ARGUMENT (trap 71). The
+   * `.emi` root's INLINE transform belongs to the dangle; a CSS animation
+   * out-ranks an inline style for as long as it runs, which is exactly why the
+   * squish is allowed to own the root and the carry tilt is not disturbed.
+   * The reflow is trap 4's lesson: re-adding the same class without one is a
+   * keyframe the browser coalesces away. */
+  function crtClear() {
+    try {
+      el.classList.remove('crt-off');
+      el.classList.remove('crt-on');
+      el.classList.remove('crt-blank');
+    } catch (e) { /* noop */ }
+  }
+  function crt(cls) {
+    crtClear();
+    if (!cls) return;
+    try { void el.offsetWidth; el.classList.add(cls); } catch (e) { /* noop */ }
+  }
+  /** 0 under reduced motion: the CSS drops the squish, so waiting for it would
+   *  only be a pause in an empty room. */
+  function crtMs() { return reducedMotion() ? 0 : DIALS.CRT_MS; }
+
+  /* ---- the trip ------------------------------------------------------- */
+  /* {timer, left, top, onDone} - `left`/`top` are the trip's OWN bookkeeping of
+   * where it last put her, because a rect read mid-squish is a 1px line. */
+  let trip = null;
+
+  function tripping() { return !!trip; }
+
+  /** One step at a time, on a timer this trip owns. NOT `later()`: the say in
+   *  the middle goes through `play()`, and `play()` calls `killTimers()`. */
+  function tripStep(ms, fn) {
+    if (!trip) return;
+    if (trip.timer !== null) clearTimeout(trip.timer);
+    const mine = trip;
+    trip.timer = setTimeout(() => {
+      if (trip !== mine) return;
+      trip.timer = null;
+      try { fn(); }
+      catch (e) { say('emi: trip step threw - ' + ((e && e.message) || e)); cancelTrip(); }
+    }, Math.max(0, ms));
+  }
+
+  /** Move her for the TRIP only: style plus the bubble flip, never the fractions. */
+  function tripPlaceAt(left, top) {
+    const vp = viewport();
+    const s = sizePx();
+    if (trip) { trip.left = left; trip.top = top; }
+    try {
+      el.style.left = Math.round(left) + 'px';
+      el.style.top = Math.round(top) + 'px';
+    } catch (e) { /* noop */ }
+    faceBubble(left, top, s.w, vp.w);
+  }
+
+  /**
+   * END A TRIP. Two shapes and they are genuinely different:
+   *   cancelTrip()            -> she comes HOME (a dismiss, a resize, a disable,
+   *                              a destroy, the caller's own cancel)
+   *   cancelTrip({stay:true}) -> she stops WHERE SHE IS and that spot becomes
+   *                              hers (a finger landed on her: trap 75)
+   * Both clear every animation class and every protected say, so whatever
+   * happens next starts from a mascot in a known state.
+   */
+  function cancelTrip(opts) {
+    if (!trip) return false;
+    const t = trip;
+    trip = null;
+    if (t.timer !== null) { clearTimeout(t.timer); t.timer = null; }
+    /* THE FILL IS FORWARDS, SO TAKING THE CLASS OFF IS NOT OPTIONAL (trap 74).
+     * A welded `scaleY(1)` would out-rank the dangle's inline rotate for ever. */
+    crtClear();
+    cancelChain();
+    killTimers();
+    setBubble(null);
+    const stay = !!(opts && opts.stay);
+    if (stay) { commit(t.left, t.top); save(); }
+    else place();
+    if (typeof t.onDone === 'function') {
+      try { t.onDone({ cancelled: true, stay }); } catch (e) { /* noop */ }
+    }
+    idle();
+    return true;
+  }
+
+  /**
+   * APPARATE: the whole trip, as one call.
+   *
+   * @param {Function|Object} getRect  a RECT-GETTER, e.g.
+   *        `() => node.getBoundingClientRect()`. A bare rect is accepted and is
+   *        a bug waiting to happen - see law 1 and trap 73.
+   * @param {{line?:string, face?:string, onDone?:Function}=} opts
+   * @returns {Function|null} a cancel function, or null when she refused.
+   */
+  function apparate(getRect, opts) {
+    const o = opts || {};
+    if (!getRect) return null;
+    // LAW 3: she never starts one over herself.
+    if (!enabled || hidden || trip || pressing || dragging || busy() || saying()) return null;
+    if (!el || !el.classList) return null;
+    // Nothing to travel TO is not a failure, it is a fixture that is not on
+    // screen. Answer null and let the scheduler try again another night.
+    if (!rectNow(getRect)) return null;
+
+    const line = typeof o.line === 'string' && o.line.trim() ? o.line : null;
+    const face = typeof o.face === 'string' && o.face ? o.face : '^_^';
+    trip = { timer: null, left: 0, top: 0, onDone: typeof o.onDone === 'function' ? o.onDone : null };
+
+    // Where she is standing right now, in pixels, so a cancel during the very
+    // first squish still knows the spot it is being asked to keep.
+    const start = place();
+    trip.left = start.left;
+    trip.top = start.top;
+
+    stopBlink();
+    stopSway();
+    clearBody();
+    restGaze();
+
+    /* 1. THE TUBE GOES OFF. */
+    crt('crt-off');
+    tripStep(crtMs(), () => {
+      /* 2. THE DARK. The rect is resolved HERE - law 1 - and a fixture that has
+       *    gone since the trip was scheduled sends her straight home. */
+      crt('crt-blank');
+      const rect = rectNow(getRect);
+      if (!rect) { cancelTrip(); return; }
+      const spot = anchorFor(rect);
+      tripPlaceAt(spot.left, spot.top);
+      crt('crt-on');
+      tripStep(crtMs(), () => {
+        /* 3. THE LINE. Through the ordinary say path, so the bubble, the pose,
+         *    the hold and the Blipese babble are all the ones she already has
+         *    (trap 70: the voice hangs off setBubble and nowhere else). */
+        crtClear();
+        let wait = DIALS.TRIP_BEAT_MS;
+        if (line) {
+          wait = SAY_LEAD_MS + sayHoldMs(line) + DIALS.TRIP_BEAT_MS;
+          let spoke = false;
+          if (makeSay && painter) {
+            try { spoke = play(makeSay(line, face, sayHoldMs(line)), { protect: true, force: true }); }
+            catch (e) { spoke = false; }
+          }
+          // FACELESS STILL TALKS. The body png and the bubble are the half of
+          // EMI that never needed a 2d context, and the trip is worth more than
+          // the reaction frame on top of it.
+          if (!spoke) { setBubble(line); wait = sayHoldMs(line) + DIALS.TRIP_BEAT_MS; }
+        }
+        tripStep(wait, () => {
+          /* 4. HOME. The same two beats, backwards. */
+          cancelChain();
+          killTimers();
+          setBubble(null);
+          crt('crt-off');
+          tripStep(crtMs(), () => {
+            crt('crt-blank');
+            // `place()` reads the fractions the trip never touched, which IS the
+            // player's saved spot (law 4). No arithmetic, so no drift.
+            const home = place();
+            if (trip) { trip.left = home.left; trip.top = home.top; }
+            crt('crt-on');
+            tripStep(crtMs(), () => {
+              const t = trip;
+              trip = null;
+              crtClear();
+              idle();
+              if (t && typeof t.onDone === 'function') {
+                try { t.onDone({ cancelled: false, stay: false }); } catch (e) { /* noop */ }
+              }
+            });
+          });
+        });
+      });
+    });
+
+    return () => cancelTrip();
+  }
+
+  /** THE REGISTRY SEAM. `emi/fieldtrips.js` hands over a function answering the
+   *  live rects of every fixture EMI has a line about; the widget uses them for
+   *  exactly ONE thing, the carried `*_*`. Null clears it. */
+  function setPoiRects(fn) {
+    poiRectsFn = typeof fn === 'function' ? fn : null;
+    if (!poiRectsFn) poiForget();
+  }
+  /* ===================== end of the field trip ========================== */
 
   /* ---------------------- first paint ----------------------------------- */
   built = true;
@@ -1466,6 +1825,9 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     hasFace() { return !!painter; },
     saying, busy,
     setBubble,
+    /* W2a - the field trip. `apparate` takes a RECT-GETTER (trap 73), refuses
+     * over any live verb, and answers a cancel function or null. */
+    apparate, setPoiRects, tripping,
     hide, show,
     get hidden() { return hidden; },
     /** True once the first-dismiss hint has been spent (persisted). */
@@ -1492,6 +1854,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       if (!enabled) {
         accrueVisible();
         endPress();
+        cancelTrip();                // W2a: switched off mid-trip = home first
         cancelChain(); killTimers(); stopBlink(); stopSway(); clearBody();
         root.hidden = true;
         save(true);
@@ -1533,6 +1896,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     },
     destroy() {
       accrueVisible();
+      cancelTrip();                  // W2a: never leave a trip timer behind
       save(true);
       // clearBody() is the easy one to miss: `bodyTimer` outlives everything else
       // and its callback re-adds `.breath` to a node that is no longer in the page.

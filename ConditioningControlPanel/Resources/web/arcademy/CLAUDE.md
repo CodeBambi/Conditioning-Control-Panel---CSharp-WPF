@@ -307,7 +307,48 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
                call site in shell.js is one unguarded line.
   widget.css   the layer (.arc-emi, fixed, z 50), the grab/grabbing cursors, the
                x affordance, the edge dock, and the bubble's `.bubble-left` /
-               `.bubble-low` flips (right margin / top edge).
+               `.bubble-low` flips (right margin / top edge). Plus THE CRT
+               POWER-OFF (`emi-crt-off` / `emi-crt-on`, 200ms each, and the
+               `.crt-blank` frame between them) - the field trip's transition.
+  fieldtrips.js THE ONE AUTONOMOUS VERB (W2a, 2026-08-24): the POI registry and
+               the scheduler that decides she may use it. `widget.apparate()` is
+               HOW a trip happens; this is WHEN, and it is FIVE gates - never
+               before session 3, at most one a sitting, one visit per fixture
+               for ever (voice.js's own `seen` ledger via `hasSeen`/`markSeen`),
+               the right screen with the fixture actually measurable, and truly
+               idle. It owns NO timer and NO observer: it is a passive
+               `offer(name, payload)` that `index.js` calls when the voice has
+               declined a moment, and the only moment it answers to is
+               `idlePlayer` - which campus.js already fires on its attract
+               loop's own idle edge ("a mascot does not get a second idle
+               timer"). At rest the file measures nothing and costs nothing.
+               Six POIs, all campus scenery that `campus.update()` never
+               rebuilds; the Records door and every other `.facility` is OUT,
+               the same geofence voice.js keeps. The LINES are barks.js's
+               `FIELD_TRIPS` table, keyed by `lineKey`; a key with no row is a
+               POI that never travels.
+vn/          FIRST BELL: the once-ever opening, and the ONLY thing in this bundle
+             that is allowed to sit between the splash and the campus. Four
+             scenes, all first-run: s01 the gates (2 captions), s02 the
+             admissions desk (paper #1) ending in THE BOARD HANDOFF, s03 the
+             walk to Homeroom, m01 the second slip after the first-ever stamp.
+             Spec: `<Screenshots>/arcademy-vn-proposals/FIRST-BELL.md`. See
+             trap 76 - the safety laws are the feature.
+  index.js     createFirstBell({store, rows, firstNight, canInterrupt, onMoment,
+               reducedMotion, base, log}) -> {armed, splashDone, gateClass,
+               afterCeremony, seenState, bankAll, destroy}. Mints its OWN fixed
+               layer (z 58: over EMI, under the toast) - index.html grows no id.
+  scenes.js    PURE data: the step lists, the plate names and BOARD_ZONE
+               (x 25-60%, y 18-48% of the 16:9 frame, the panel SET-NOTES
+               reserved). A step is caption / paper / hold / fx / swap / board.
+  lex.js       VN_LEX + PAPERS. The two papers are stored as CLAUSE rows joined
+               with one space, so every row clears the 96-char mod-skin cap
+               (trap 26) while the joined paragraph stays verbatim.
+  style.js     the skin, injected as <style id="arc-vn-style"> the way a game
+               injects its own (styles.css is shell chrome only).
+  demo.html    standalone scene tester, no shell and no bridge; `?beat=<id>`
+               (gates|desk|board|walk|mail|coldopen|reduced, plus `&hold=1`)
+               jumps straight to one beat so it can be shot headlessly.
 ```
 
 Each game owns its own lexicon rows; **`ArcademyHostService.NeutralLexicon` mirrors every
@@ -486,6 +527,27 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
   a hide/show/destroy flushes immediately, and `pagehide` banks the last stretch of
   `msVisible`). A drag that wrote per frame would post sixty meta-commands a second across
   the bridge.
+- **`widget.apparate(getRect, {line, face, onDone})` IS THE WHOLE FIELD TRIP, and it
+  takes a GETTER** (W2a, 2026-08-24). Power-off where she stands -> reappear beside the
+  fixture -> land the line through the ordinary say path -> power off -> home. It returns
+  a cancel function, or **null** when she refused, and she refuses over every live verb
+  she has: mid-say, mid-chain, mid-press, mid-drag, dismissed, disabled, or already
+  travelling. So a caller needs no guard of its own - `emi/fieldtrips.js` deliberately
+  tests none of them twice.
+  - **The saved spot is never written.** A trip moves `el.style.left/top` and never
+    `fx0`/`fy0`, so "come home" is just `place()`. The ONE exception is the touch cancel
+    (`{stay:true}`), which commits the spot she was actually standing on - from the trip's
+    own bookkeeping, never from `getBoundingClientRect` (trap 74).
+  - **`widget.setPoiRects(fn)`** is the other half: a function answering the live rects of
+    every registered fixture. The widget calls it ONCE per drag - never per pointermove -
+    and uses it for exactly one thing, the carried `*_*`.
+  - **The return is a MOMENT, not a callback into the script.** A completed trip fires
+    `fieldTripHome {id, lineKey}` through the ordinary `voiceMoment` path, which is what
+    lets story.js own beat `b28_first_trip` and its once-ever flag. A CANCELLED trip fires
+    nothing - she did not get home, so there is nothing to be pleased about.
+  - **`voice.hasSeen(id)` / `voice.markSeen(id)` / `voice.sessions`** are the three members
+    the scheduler borrows, and they exist so there is ONE ledger. A POI id is in the same
+    namespace as a beat id; the `trip_` prefix is what keeps them apart.
 - **The shell's EMI seams are six one-liners and every one of them is `fireMoment(...)`.**
   `shell.js` mounts once (before the first `showBoard()`, so the opening `greet` has a face to
   wear) and fires at: the board being ARRIVED at (not repainted), `startClass`, the graded
@@ -514,7 +576,7 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
   - **Consent off is the player's OWN library**, `init.settings.localAssets`
     (trap 16's `{gifs, stills}`), titled with the filename. Neither available and
     `watching.plan()` returns null: the channel is ABSENT from the wheel, never a
-    stub and never a black glass (trap 78).
+    stub and never a black glass (trap 79).
   - `canvasSafe` is deliberately **false** on that claim. The two-pool law exists
     so a consumer that READS pixels never meets a tainted origin; the glass is
     drawn to and never sampled, and the reveal card is a plain `<img>`. A
@@ -1152,7 +1214,7 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     entry; it renders tiers 1+2 plus that game's group only (an unknown key falls back
     to the FULL page - too many knobs is the lesser bug than hidden ones). ctx.settings
     is a startClass snapshot, so the scoped page prints `applies_next_class` instead of
-    pretending to live-apply. The campus gear / Registrar stay argless = full sheet.
+    pretending to live-apply. The campus gear / Front Office stay argless = full sheet.
 
 69. **Deck gates split two ways since W2 (2026-08-24): `armed()` = visuals and keeps
     capsOk; `sounds()` = cues and NEVER tests capsOk.** bgIntensity 0 is the player's
@@ -1210,9 +1272,74 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     then await the lead before asserting the line. The perception suite
     (`test-perception.mjs`, session scratchpad) does exactly this for p06/b25.
 
-*(73-75 belong to `feat/emi-fieldtrip`, landing in parallel. This wave starts at 76.)*
+73. **A FIXTURE RECT CAPTURED AT SCHEDULE TIME IS A RECT THAT HAS MOVED, SO
+    `apparate` TAKES A GETTER AND NOT A RECT.** A field trip is offered on an idle
+    edge and lands two power-offs later, and in between the window can resize, the
+    campus can repaint, and the SVG plan re-solves everything on it (`campus.plan`
+    is `preserveAspectRatio="xMidYMid slice"`, so viewBox units do not map linearly
+    to the viewport and a 40px window change moves every fixture). `apparate`
+    therefore resolves the rect INSIDE the dark, one frame before she lands, and the
+    registry's `anchor` is a function returning a function for exactly that reason.
+    Two things fall out and both are deliberate: a fixture that has GONE by fire time
+    sends her straight home instead of parking her at (0,0), and a resize mid-trip
+    cancels it outright (the anchor she is standing at was solved against a viewport
+    that no longer exists). Passing a bare rect still works and is the bug this trap
+    is named for.
+74. **THE CRT KEYFRAME FILLS `forwards`, SO TAKING THE CLASS OFF IS NOT OPTIONAL -
+    AND A RECT READ MID-SQUISH IS A 1PX LINE.** `emi-crt-off`/`emi-crt-on` animate
+    `transform` on the `.emi` root, which is legal precisely because a CSS animation
+    out-ranks the dangle's inline `rotate` while it runs (trap 71). But `forwards`
+    means a class nobody removes WELDS `scaleY(1)` onto the root and the dangle
+    silently stops working for ever after - the same lesson `droop` taught `BODY_MS`.
+    Every exit from a trip goes through `crtClear()` for that reason. The twin half:
+    `getBoundingClientRect` reports the TRANSFORMED box, so a position read while the
+    squish is running is a 1px-tall line at the wrong top. The trip therefore keeps
+    its own `{left, top}` and commits THAT, and nothing in the ladder ever measures
+    her.
+75. **TOUCH ALWAYS WINS, AND "WINS" MEANS SHE STAYS WHERE SHE IS.** A pointerdown on
+    EMI at any point of a trip ends it on the spot - `onDown` cancels before it does
+    anything else, so the press carries straight on into an ordinary drag with no
+    stranded animation class, no protected say still holding the glass, and no
+    teleport. The cancel COMMITS the spot she was standing on, which is the half that
+    is easy to miss: leaving the trip's pixel position on the element without writing
+    the fractions means the next resize (or the next launch) snaps her back to where
+    the trip started, several seconds after the player put her somewhere else. The
+    other cancels - a dismiss, a disable, a destroy, a resize, the caller's own -
+    bring her HOME instead, because none of them is the player choosing a spot.
 
-76. **THE OFF CHANNELS ARE A SECOND CANVAS OVER THE FACE, AND THAT IS THE WHOLE
+76. **THE OPENING IS FURNITURE, NOT A GATE, AND THAT IS AN INVARIANT WITH FIVE
+    CONSEQUENCES (FIRST BELL, 2026-08-24).** `vn/` is the first thing this bundle has
+    ever put between the splash and a live campus, so every one of its four seams is
+    built to be a NO-OP by default rather than a step that has to succeed.
+    - **Every entry point takes a continuation and runs it exactly once.**
+      `settler()` in `vn/index.js` is the ONE funnel - success, a throw, a missing plate,
+      a spent flag and a watchdog all land there and all close the layer and call back.
+      If you add a fifth seam, hand it to `settler()` too; do not grow a second exit.
+    - **The plates are checked BEFORE anything mounts.** A missing png must never cost
+      the player a black rectangle with a caption on it, so `ensurePlate()` gates the
+      mount and the four plates are warmed at construction while the campus paints. A
+      scene that stands down leaves its ledger entry ARMED for the next eligible night.
+    - **`base` is DOCUMENT-relative, not module-relative.** An `Image` src and an inline
+      `background-image` both resolve against `index.html`, so the default is `./` and
+      only `vn/demo.html` passes `../`. A module-relative `../` asks the host for
+      `https://ccp.game/art/...` and silently gets nothing - which looks exactly like a
+      missing plate.
+    - **s03 spends its flag BEFORE it calls back**, because the callback re-enters
+      `startClass` and a flag written afterwards would gate the same class twice. Same
+      shape as m01: `afterCeremony()` spends `m01` and then decides whether to draw, so a
+      ceremony that cleared onto a live class still burns the beat instead of queueing it.
+    - **Escape is never touched.** boot.js owns the key at the window and the shipped
+      hold-Esc exit has to work on every VN frame, so `vn/index.js` reads only Enter and
+      calls `preventDefault` nowhere. The board dealt into the wall is decoration too -
+      no `onSelect`, `aria-hidden`, `tabIndex -1` - because the row the player actually
+      clicks is the campus's, one layer down.
+    Persistence is `vnSeen`, a plain page-owned key beside EMI's `emiVoice` (no C# change
+    needed; `ArcademyMetaStore.Set` takes any new top-level key). First-run only is
+    enforced at construction: `shell.js isFirstNight()` reads "no card enrolled and no
+    graded day", and a false answer BANKS all four flags so an upgrading player never
+    meets a frame of it.
+
+77. **THE OFF CHANNELS ARE A SECOND CANVAS OVER THE FACE, AND THAT IS THE WHOLE
     SAFETY ARGUMENT (W3, 2026-08-24).** `face.js` is owner-locked, so a wave that
     turned EMI's glass into a pong board could not touch it - and does not.
     `.emi-glass` is a SECOND canvas carrying the byte-for-byte rect `.emi-screen`
@@ -1226,7 +1353,7 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     the `loadOptional` discipline again. If you ever move `.emi-screen`'s rect,
     move `.emi-glass` in the same commit or the channels drift off her bezel; and
     never, ever paint a channel by calling into the face renderer.
-77. **A SAY OUTRANKS THE GLASS, AND THE HOOK IS `cancelChain()` - ONE PLACE.**
+78. **A SAY OUTRANKS THE GLASS, AND THE HOOK IS `cancelChain()` - ONE PLACE.**
     Trap 70's lesson, one wave later: `widget.js`'s `cancelChain()` is already the
     funnel EVERY path that takes her face goes through (a chain, a say, a drag, a
     hide, a `setEnabled(false)`, `destroy()`), so the off-channel preempt is ONE
@@ -1240,7 +1367,7 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     repeating wheel timer, five passive document listeners, and NO rAF, no fetch
     and no media element while nothing is up (proved in Chromium: zero
     `requestAnimationFrame` calls in 1.2s of rest).
-78. **`plan()` REFUSES, IT NEVER STUBS - AND `prepare()` IS THE ONLY I/O IN THE
+79. **`plan()` REFUSES, IT NEVER STUBS - AND `prepare()` IS THE ONLY I/O IN THE
     WAVE.** A channel that cannot fully play tonight is ABSENT from the wheel: no
     tape on record and RERUNS does not exist, no library and no consent and NOW
     WATCHING does not exist, reduced motion and PONG / code rain / THE WRONG
@@ -1252,7 +1379,7 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     `FETCH_BUDGET_MS` (2000): a slow answer **skips the takeover entirely** rather
     than opening on a black glass. The wheel's weights are meaningless without
     this: `rollChannel` weights only what actually planned.
-79. **THE OFF CHANNELS BIND EMI'S FIRST KEY LISTENER, AND IT IS A PASSIVE READ.**
+80. **THE OFF CHANNELS BIND EMI'S FIRST KEY LISTENER, AND IT IS A PASSIVE READ.**
     Trap 59 says EMI binds no key listener at all, and that rule was about the ESC
     LADDER: she may add no rung to it. "Any input cancels" cannot mean "any input
     except the keyboard", so `takeover.js` listens for `keydown` on `document`

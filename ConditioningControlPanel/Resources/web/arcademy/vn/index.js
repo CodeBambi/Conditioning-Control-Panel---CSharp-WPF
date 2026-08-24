@@ -1,0 +1,758 @@
+/* ============================================================================
+ * vn/index.js - FIRST BELL: the opening's whole chassis, in one controller.
+ *
+ * WHAT THIS IS
+ * A small visual-novel layer that speaks FOUR times on a player's first night
+ * and never again: two captions at the gates, one piece of paper on the
+ * admissions desk (which hands the wall over to the live split-flap board), one
+ * caption on the walk to Homeroom, and one slip after the first stamp. The beat
+ * sheet is `<Screenshots>/arcademy-vn-proposals/FIRST-BELL.md` (owner-vetted
+ * 2026-08-24, rulings 1-5); every word on screen is verbatim from it, stored in
+ * vn/lex.js and mirrored in ArcademyHostService.NeutralLexicon.
+ *
+ * THE FOUR SAFETY LAWS, and they outrank every beat below
+ *
+ *   1. THE VN NEVER GATES SHIPPED FLOW. Every entry point takes a continuation
+ *      and guarantees it runs exactly once: on success, on a throw, on a missing
+ *      plate, on an already-spent flag, and on a watchdog. `settler()` is the one
+ *      funnel and it is idempotent, so there is exactly one thing to get right.
+ *   2. NO SHIPPED BEAT IS RENAMED OR REORDERED. The VN adds frames BEFORE a
+ *      seam and never inside one. b02 is untouched, the enrollment intro still
+ *      runs first, the class clock is still armed in beginPlay, and the stamp
+ *      ceremony is exactly the ceremony it was.
+ *   3. FIRST RUN ONLY. A school that has already been attended stands the whole
+ *      module down and BANKS every scene as seen, so an existing player upgrading
+ *      into this build never meets a single frame of it.
+ *   4. ESC IS NOT OURS. boot.js owns the key at the window, and nothing here
+ *      binds, reads, swallows or preventDefaults it - the shipped hold-Esc exit
+ *      works at every VN frame (the beat sheet's "furniture, not a gate").
+ *
+ * PERSISTENCE. `vnSeen` in the C# meta store, a SIBLING of emi/voice.js's
+ * `emiVoice` key and written the identical way: `store.set(key, blob)` ->
+ * meta-command -> ArcademyMetaStore -> back in `init.meta` next launch. Once-ever
+ * therefore means across app restarts, which is the whole point. There is no
+ * localStorage in this bundle and this file adds none.
+ *
+ * INPUT. A tap, a click or Enter advances. The hold-to-skip pill is on screen
+ * from frame one (ruling 4) and reuses boot.js's 1200ms reach-for-the-door
+ * grammar; holding it ends the CURRENT scene and fast-lands its handoff edge -
+ * the board for the cold open, the class for the walk, EMI's line for the mail.
+ * It can never skip a shipped ceremony, only VN tissue.
+ * ==========================================================================*/
+
+import { t } from '../core/lexicon.js';
+import { VN_LEX, PAPERS } from './lex.js';
+import { injectStyle } from './style.js';
+import { COLD_OPEN, WALK, MAIL, ART, BOARD_ZONE, SCENE_IDS } from './scenes.js';
+
+/** The store key. Sibling of emi/voice.js's VOICE_STORE_KEY, same discipline. */
+export const VN_STORE_KEY = 'vnSeen';
+
+/** Bump only for a shape change; an unreadable blob starts clean, never throws. */
+const BLOB_VERSION = 1;
+
+/** The tunables. One table, at the top, the way every other module here does it. */
+export const VN_DIALS = Object.freeze({
+  HOLD_MS: 1200,          // boot.js's HOLD_EXIT_MS - the same reach for the door
+  FADE_MS: 600,           // the layer's own fade up / down
+  ART_TIMEOUT_MS: 2500,   // a plate that has not decoded by here is a missing plate
+  BOARD_WARM_MS: 700,     // the wall warming up before the first flap rolls
+  BOARD_DEAL_MS: 2600,    // the cascade (rows * .4s + .95s + the meta fade)
+  BOARD_DEAL_REDUCED_MS: 700,
+  PAPER_OUT_MS: 300,      // the slip tucking back into the tray
+  MAIL_DELAY_MS: 700,     // let the screen under the ceremony settle first
+  /* WATCHDOGS. If any of these fire the VN has a bug, and a bug may not cost
+   * the player their night: the continuation runs and the layer comes down. */
+  COLD_OPEN_CAP_MS: 150000,
+  WALK_CAP_MS: 30000,
+  MAIL_CAP_MS: 40000,
+});
+
+const doc = (typeof document !== 'undefined') ? document : null;
+const win = (typeof window !== 'undefined') ? window : null;
+
+function isObj(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
+
+/** Lexicon read with this module's own English as the fallback (trap 15). */
+function tx(key) { return t(key, VN_LEX[key] || ''); }
+
+function attr(node, name, value) {
+  try { if (node && typeof node.setAttribute === 'function') node.setAttribute(name, value); }
+  catch (e) { /* the DOM double may not carry attributes - never fatal */ }
+}
+
+function cls(node, name, on) {
+  try { if (node && node.classList) node.classList[on ? 'add' : 'remove'](name); }
+  catch (e) { /* noop */ }
+}
+
+/** Compose one paper paragraph from its clause rows (vn/lex.js PAPERS). */
+export function paragraph(rows) {
+  const out = [];
+  for (const key of (Array.isArray(rows) ? rows : [])) {
+    const s = tx(key);
+    if (s) out.push(s);
+  }
+  return out.join(' ');
+}
+
+/* ============================================================================
+ * createFirstBell
+ * ==========================================================================*/
+/**
+ * @param {Object} o
+ * @param {Object=} o.store          core/store.js handle (get/set). No store =
+ *                                   no ledger = the module stands down, because
+ *                                   a once-ever beat that cannot remember it ran
+ *                                   is a beat that runs every night.
+ * @param {Function=} o.rows         () => board rows for the handoff, exactly the
+ *                                   shape shell.js's buildRows(true) returns
+ * @param {Function=} o.firstNight   () => boolean. FALSE banks every scene and
+ *                                   the module never speaks (law 3).
+ * @param {Function=} o.canInterrupt () => boolean. False at mount time spends the
+ *                                   mail rather than laying it over a live class.
+ * @param {Function=} o.onMoment     (name, payload) => void. shell.js's
+ *                                   fireMoment, INJECTED - this file imports
+ *                                   nothing from emi/ (trap 60's discipline).
+ * @param {boolean=} o.reducedMotion
+ * @param {string=} o.base           prefix for the plate urls. It is resolved
+ *                                   against the DOCUMENT, not against this
+ *                                   module, because both an <img> src and an
+ *                                   inline background-image do - so the default
+ *                                   is './' (index.html sits in the web root)
+ *                                   and vn/demo.html passes '../'. A module
+ *                                   -relative '../' here would ask the host for
+ *                                   https://ccp.game/art/... and get nothing.
+ * @param {Function=} o.log
+ * @returns {?Object} the controller, or null when there is nothing to play into
+ */
+export function createFirstBell(o) {
+  const s = o || {};
+  const say = typeof s.log === 'function' ? s.log : () => {};
+  if (!doc || !doc.body || typeof doc.createElement !== 'function') return null;
+
+  const store = (s.store && typeof s.store.get === 'function' && typeof s.store.set === 'function')
+    ? s.store : null;
+  const rowsOf = typeof s.rows === 'function' ? s.rows : () => [];
+  const canInterrupt = typeof s.canInterrupt === 'function' ? s.canInterrupt : () => true;
+  const fire = typeof s.onMoment === 'function' ? s.onMoment : () => {};
+  const base = typeof s.base === 'string' ? s.base : './';
+  const reduced = !!s.reducedMotion;
+
+  function el(tag, klass, text) {
+    const n = doc.createElement(tag);
+    if (klass) n.className = klass;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  /* ---------------------- the ledger ------------------------------------ */
+  const blob = readBlob();
+
+  function readBlob() {
+    let raw = null;
+    try { raw = store ? store.get(VN_STORE_KEY) : null; }
+    catch (e) { say('vn: store read failed - ' + ((e && e.message) || e)); }
+    const b = (isObj(raw) && raw.v === BLOB_VERSION) ? raw : {};
+    return { v: BLOB_VERSION, seen: Object.assign({}, isObj(b.seen) ? b.seen : {}) };
+  }
+
+  function save() {
+    if (!store) return;
+    try { store.set(VN_STORE_KEY, JSON.parse(JSON.stringify(blob))); }
+    catch (e) { say('vn: store write failed - ' + ((e && e.message) || e)); }
+  }
+
+  function seen(id) { return !!blob.seen[String(id)]; }
+
+  /** Spend a scene. Written through IMMEDIATELY: a scene the player watched and
+   *  then closed the app on must never replay. */
+  function spend(id) {
+    if (blob.seen[id]) return;
+    blob.seen[id] = true;
+    save();
+    say('vn: ' + id + ' spent');
+  }
+
+  /** Bank the whole opening without playing a frame of it (law 3, and the way
+   *  out of every degraded path that must not leave a scene half-armed). */
+  function bankAll(why) {
+    let moved = false;
+    for (const id of SCENE_IDS) if (!blob.seen[id]) { blob.seen[id] = true; moved = true; }
+    if (moved) save();
+    say('vn: stood down (' + why + ')');
+  }
+
+  /* ---------------------- module-wide state ----------------------------- */
+  let destroyed = false;
+  let layer = null;             // the fixed full-viewport element, or null
+  let frame = null;
+  let bg = null;
+  let neon = null;
+  let capNode = null;
+  let tapNode = null;
+  let paperNode = null;
+  let zoneNode = null;
+  let glowNode = null;
+  let skipBtn = null;
+  let boardApi = null;
+  let advance = null;           // the live "next step" verb, or null
+  let skipTo = null;            // the live "end this scene now" verb, or null
+  const timers = new Set();
+
+  injectStyle(doc);
+
+  /* ---------------------- timers, all cancellable ----------------------- */
+  function later(fn, ms) {
+    const id = setTimeout(() => {
+      timers.delete(id);
+      if (destroyed) return;
+      try { fn(); } catch (e) { say('vn beat threw: ' + ((e && e.message) || e)); }
+    }, Math.max(0, ms || 0));
+    timers.add(id);
+    return id;
+  }
+  function killTimers() {
+    for (const id of Array.from(timers)) { try { clearTimeout(id); } catch (e) { /* noop */ } }
+    timers.clear();
+  }
+
+  /* ---------------------- the plates ------------------------------------
+   * WARMED AT CONSTRUCTION, so no entry point ever pays a decode. A plate that
+   * cannot decode is remembered as false and its scene stands down instead of
+   * laying a caption over a black rectangle. */
+  const plateOk = Object.create(null);
+
+  function preload(url) {
+    return new Promise((resolve) => {
+      if (!win || typeof win.Image !== 'function' || !url) { resolve(false); return; }
+      let settled = false;
+      const done = (ok) => { if (settled) return; settled = true; plateOk[url] = ok; resolve(ok); };
+      try {
+        const img = new win.Image();
+        img.onload = () => done(true);
+        img.onerror = () => done(false);
+        img.src = base + url;
+        // A decode still running at the cap is a decode we will not wait on.
+        setTimeout(() => done(false), VN_DIALS.ART_TIMEOUT_MS);
+      } catch (e) { done(false); }
+    });
+  }
+
+  function ensurePlate(url) {
+    if (!url) return Promise.resolve(true);
+    if (plateOk[url] !== undefined) return Promise.resolve(!!plateOk[url]);
+    return preload(url);
+  }
+
+  /* ---------------------- the layer ------------------------------------- */
+  function mountLayer(opts) {
+    unmountLayer();
+    const bare = !!(opts && opts.bare);
+    layer = el('div', 'arc-vn' + (bare ? ' is-bare' : ''));
+    layer.id = 'arc-vn';
+    attr(layer, 'role', 'group');
+
+    frame = el('div', 'arc-vn-frame');
+    bg = el('div', 'arc-vn-bg');
+    attr(bg, 'aria-hidden', 'true');
+    neon = el('div', 'arc-vn-neon');
+    attr(neon, 'aria-hidden', 'true');
+    frame.appendChild(bg);
+    frame.appendChild(neon);
+
+    /* THE CAPTION IS THE ONLY THING A SCREEN READER SHOULD MEET HERE: the plate
+     * is decoration and the board copy is duplicated live on the campus under
+     * this layer, so both are aria-hidden and the card is a polite status. */
+    capNode = el('div', 'arc-vn-cap');
+    attr(capNode, 'role', 'status');
+    attr(capNode, 'aria-live', 'polite');
+    frame.appendChild(capNode);
+
+    tapNode = el('p', 'arc-vn-tap', tx('vn_tap'));
+    attr(tapNode, 'aria-hidden', 'true');
+    frame.appendChild(tapNode);
+
+    frame.appendChild(buildSkip());
+    layer.appendChild(frame);
+
+    // TAP TO ADVANCE. The pill is inside the layer and stops its own clicks, so
+    // reaching for the skip is never read as a tap on the scene.
+    layer.addEventListener('click', onTap);
+    if (win && win.addEventListener) win.addEventListener('keydown', onKey);
+
+    doc.body.appendChild(layer);
+    // One frame of nothing so the opacity transition has a from-state.
+    later(() => cls(layer, 'is-up', true), 20);
+    return layer;
+  }
+
+  function unmountLayer() {
+    if (win && win.removeEventListener) { try { win.removeEventListener('keydown', onKey); } catch (e) { /* noop */ } }
+    if (boardApi) { try { boardApi.destroy(); } catch (e) { /* noop */ } boardApi = null; }
+    if (layer) { try { layer.remove(); } catch (e) { /* noop */ } }
+    layer = null; frame = null; bg = null; neon = null;
+    capNode = null; tapNode = null; paperNode = null;
+    zoneNode = null; glowNode = null; skipBtn = null;
+  }
+
+  /** Fade the layer out, then drop it. Reduced motion cuts straight to the drop. */
+  function closeLayer(after) {
+    const done = () => {
+      unmountLayer();
+      if (typeof after === 'function') { try { after(); } catch (e) { say('vn continuation threw: ' + ((e && e.message) || e)); } }
+    };
+    if (!layer) { done(); return; }
+    cls(layer, 'is-up', false);
+    const id = setTimeout(done, reduced ? 0 : VN_DIALS.FADE_MS);
+    timers.add(id);
+  }
+
+  /* ---------------------- the hold-to-skip pill ------------------------- */
+  function buildSkip() {
+    skipBtn = el('button', 'arc-vn-skip');
+    skipBtn.type = 'button';
+    attr(skipBtn, 'aria-label', tx('vn_skip'));
+    const fill = el('i', 'arc-vn-skip-fill');
+    attr(fill, 'aria-hidden', 'true');
+    skipBtn.appendChild(fill);
+    skipBtn.appendChild(el('span', 'arc-vn-skip-label', tx('vn_skip')));
+
+    let holdTimer = 0;
+    const release = () => {
+      if (holdTimer) { clearTimeout(holdTimer); holdTimer = 0; }
+      cls(skipBtn, 'is-holding', false);
+    };
+    const start = (e) => {
+      if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+      if (holdTimer) return;
+      cls(skipBtn, 'is-holding', true);
+      holdTimer = setTimeout(() => {
+        holdTimer = 0;
+        cls(skipBtn, 'is-holding', false);
+        // The hold landed: end the current scene at its own handoff edge.
+        try { if (skipTo) skipTo(); } catch (err) { say('vn skip threw: ' + ((err && err.message) || err)); }
+      }, VN_DIALS.HOLD_MS);
+    };
+    skipBtn.addEventListener('pointerdown', start);
+    skipBtn.addEventListener('pointerup', release);
+    skipBtn.addEventListener('pointercancel', release);
+    skipBtn.addEventListener('pointerleave', release);
+    skipBtn.addEventListener('click', (e) => {
+      if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+    });
+    return skipBtn;
+  }
+
+  /* ---------------------- input ----------------------------------------- */
+  function onTap() {
+    try { if (advance) advance(); } catch (e) { say('vn advance threw: ' + ((e && e.message) || e)); }
+  }
+
+  /**
+   * ENTER ONLY. Escape is boot.js's (law 4) and is not read, not swallowed and
+   * not preventDefaulted here; Space is left alone too, because it is the
+   * browser's own activation key for the focused skip pill.
+   */
+  function onKey(e) {
+    if (!e || e.repeat) return;
+    if (e.key !== 'Enter') return;
+    onTap();
+  }
+
+  /* ---------------------- the scene surface ----------------------------- */
+  function setCaption(text) {
+    if (!capNode) return;
+    if (!text) {
+      cls(capNode, 'is-up', false);
+      capNode.textContent = '';
+      cls(tapNode, 'is-up', false);
+      return;
+    }
+    capNode.textContent = String(text);
+    cls(capNode, 'is-up', true);
+    cls(tapNode, 'is-up', true);
+  }
+
+  /** Paint an ALREADY-DECODED plate. Never awaits: ensurePlate is the gate. */
+  function applyPlate(url, motion) {
+    if (!bg || !url) return;
+    cls(bg, 'is-lit', false);
+    bg.style.backgroundImage = 'url("' + base + url + '")';
+    attr(bg, 'data-motion', reduced ? 'still' : (motion || 'still'));
+    // Reflow so a re-armed animation actually re-runs (trap 4's law).
+    try { void bg.offsetWidth; } catch (e) { /* the DOM double has no layout */ }
+    cls(bg, 'is-lit', true);
+  }
+
+  /** Drop a live paper immediately (a skip, a teardown). */
+  function clearPaper() {
+    if (!paperNode) return;
+    const node = paperNode;
+    paperNode = null;
+    try { node.remove(); } catch (e) { /* noop */ }
+  }
+
+  function showPaper(which, onDismiss) {
+    const spec = PAPERS[which];
+    if (!spec || !frame) { onDismiss(); return; }
+    clearPaper();
+    paperNode = el('div', 'arc-vn-paper');
+    attr(paperNode, 'role', 'status');
+    paperNode.appendChild(el('h2', 'arc-vn-paper-title', tx(spec.title)));
+    const rule = el('div', 'arc-vn-paper-rule');
+    attr(rule, 'aria-hidden', 'true');
+    paperNode.appendChild(rule);
+    for (const rows of spec.paras) {
+      const text = paragraph(rows);
+      if (text) paperNode.appendChild(el('p', null, text));
+    }
+    paperNode.appendChild(el('p', 'arc-vn-paper-sign', tx(spec.sign)));
+    frame.appendChild(paperNode);
+    const mine = paperNode;
+    later(() => cls(mine, 'is-up', true), 20);
+    cls(tapNode, 'is-up', true);
+
+    advance = () => {
+      advance = null;
+      paperNode = null;
+      cls(mine, 'is-up', false);
+      cls(tapNode, 'is-up', false);
+      later(() => { try { mine.remove(); } catch (e) { /* noop */ } }, reduced ? 0 : VN_DIALS.PAPER_OUT_MS);
+      later(onDismiss, reduced ? 0 : VN_DIALS.PAPER_OUT_MS);
+    };
+  }
+
+  /* ---------------------- B4: THE BOARD WAKES --------------------------- */
+  /**
+   * THE HANDOFF. The plate paints a BARE panel over the admissions desk and the
+   * SHIPPED split-flap board (shell/splitflap.js, the same module the campus
+   * hangs behind its plaque) mounts into the reserved zone and deals tonight's
+   * slots. The board is never baked into art (owner order, SET-NOTES) and this
+   * is the frame where the painting becomes the app.
+   *
+   * The module is reached for with a DYNAMIC import inside a try/catch - the
+   * loadOptional discipline shell.js uses for the engine and the provider - so a
+   * board that cannot be built costs the flourish and nothing else.
+   */
+  async function dealBoard(done) {
+    if (!frame) { done(); return; }
+    let box = null;
+    try {
+      const r = frame.getBoundingClientRect ? frame.getBoundingClientRect() : null;
+      if (r && r.width > 0 && r.height > 0) box = r;
+    } catch (e) { box = null; }
+
+    const pct = (n) => (n * 100).toFixed(3) + '%';
+    zoneNode = el('div', 'arc-vn-boardzone');
+    attr(zoneNode, 'aria-hidden', 'true');
+    zoneNode.style.left = pct(BOARD_ZONE.x);
+    zoneNode.style.top = pct(BOARD_ZONE.y);
+    zoneNode.style.width = pct(BOARD_ZONE.w);
+    zoneNode.style.height = pct(BOARD_ZONE.h);
+
+    // The glow spills a little past the panel; the board sits exactly in it.
+    glowNode = el('div', 'arc-vn-boardglow');
+    attr(glowNode, 'aria-hidden', 'true');
+    glowNode.style.left = pct(Math.max(0, BOARD_ZONE.x - 0.03));
+    glowNode.style.top = pct(Math.max(0, BOARD_ZONE.y - 0.05));
+    glowNode.style.width = pct(BOARD_ZONE.w + 0.06);
+    glowNode.style.height = pct(BOARD_ZONE.h + 0.10);
+
+    frame.appendChild(glowNode);
+    frame.appendChild(zoneNode);
+    const glow = glowNode;
+    later(() => cls(glow, 'is-up', true), 20);
+
+    let rows = [];
+    try { rows = rowsOf() || []; } catch (e) { say('vn: rows() threw - ' + ((e && e.message) || e)); }
+
+    let createBoard = null;
+    try {
+      const mod = await import('../shell/splitflap.js');
+      createBoard = mod && (mod.createBoard || mod.default);
+    } catch (e) { say('vn: splitflap unavailable (' + ((e && e.message) || e) + ') - the wall stays bare'); }
+    if (destroyed || !zoneNode) { done(); return; }
+
+    if (typeof createBoard === 'function' && rows.length) {
+      try {
+        // NO onSelect: the rows the player actually clicks are the campus's,
+        // under this layer. These are set dressing on a painted wall.
+        boardApi = createBoard({ rows, reducedMotion: reduced, animate: false });
+        zoneNode.appendChild(boardApi.root);
+        try {
+          const kids = boardApi.root.children || [];
+          for (let i = 0; i < kids.length; i++) { try { kids[i].tabIndex = -1; } catch (e2) { /* noop */ } }
+        } catch (e2) { /* noop */ }
+        // Scale the REAL board down into the painted panel rather than
+        // re-implementing it at another size.
+        if (box) {
+          try {
+            const br = boardApi.root.getBoundingClientRect();
+            const zw = box.width * BOARD_ZONE.w;
+            const zh = box.height * BOARD_ZONE.h;
+            if (br.width > 0 && br.height > 0) {
+              const k = Math.min(zw / br.width, zh / br.height, 1);
+              if (k > 0 && k < 1) boardApi.root.style.transform = 'scale(' + k.toFixed(4) + ')';
+            }
+          } catch (e2) { /* no layout, no scale - the board still reads */ }
+        }
+      } catch (e) {
+        say('vn: board mount threw (' + ((e && e.message) || e) + ')');
+        boardApi = null;
+      }
+    }
+
+    const zone = zoneNode;
+    later(() => {
+      cls(zone, 'is-up', true);
+      // The flaps roll HERE, not at build: the deal is the beat.
+      if (boardApi) { try { boardApi.replay(); } catch (e) { /* noop */ } }
+    }, reduced ? 0 : VN_DIALS.BOARD_WARM_MS);
+
+    later(done, (reduced ? 0 : VN_DIALS.BOARD_WARM_MS)
+      + (reduced ? VN_DIALS.BOARD_DEAL_REDUCED_MS : VN_DIALS.BOARD_DEAL_MS));
+  }
+
+  /* ---------------------- the step runner ------------------------------- */
+  /**
+   * Walk one scene's steps.
+   * @param {Object} scene   from vn/scenes.js
+   * @param {Function} end   the normal handoff. Runs at most once.
+   * @param {Function=} onSkip  what a hold-to-skip lands on instead of `end`.
+   *   Defaults to `end`; the cold open passes "jump to the board" (ruling 4).
+   */
+  function runScene(scene, end, onSkip) {
+    let i = 0;
+    let over = false;
+    const close = (fn) => {
+      if (over) return;
+      over = true;
+      advance = null;
+      setCaption('');
+      clearPaper();
+      fn();
+    };
+    skipTo = () => close(typeof onSkip === 'function' ? onSkip : end);
+
+    const step = () => {
+      if (destroyed || over) return;
+      if (i >= scene.steps.length) { close(end); return; }
+      const st = scene.steps[i++];
+      advance = null;
+
+      if (st.hold != null) { later(step, reduced ? Math.min(200, st.hold) : st.hold); return; }
+      if (st.fx === 'neon') { cls(neon, 'is-on', true); step(); return; }
+      if (st.swap) {
+        ensurePlate(st.swap).then((ok) => {
+          if (destroyed || over) return;
+          if (ok) applyPlate(st.swap, st.motion || 'still');
+          step();
+        });
+        return;
+      }
+      if (st.board) {
+        // THE DEAL IS PAST THE POINT OF SKIPPING. Holding through it would
+        // re-enter dealBoard and mount a second board on the same wall.
+        skipTo = null;
+        dealBoard(() => close(end));
+        return;
+      }
+      if (st.paper) { showPaper(st.paper, step); return; }
+      if (st.caption) {
+        setCaption(tx(st.caption));
+        const mine = () => { if (advance !== mine) return; advance = null; setCaption(''); step(); };
+        advance = mine;
+        // A caption with an autoMs advances itself if the player just watches.
+        if (st.autoMs) later(mine, reduced ? Math.min(1200, st.autoMs) : st.autoMs);
+        return;
+      }
+      step();   // an unknown step is a no-op, never a stall
+    };
+
+    step();
+  }
+
+  /* ---------------------- the one funnel -------------------------------- */
+  /**
+   * SETTLE. Law 1 in a dozen lines: whatever happened, the continuation runs
+   * exactly once and the layer is gone. Every entry point below hands its
+   * continuation to this and to nothing else.
+   */
+  function settler(after, watchdogMs, label) {
+    let spent = false;
+    const settle = (why) => {
+      if (spent) return;
+      spent = true;
+      killTimers();
+      advance = null;
+      skipTo = null;
+      say('vn: ' + label + ' -> ' + why);
+      closeLayer(after);
+    };
+    if (watchdogMs) timers.add(setTimeout(() => settle('watchdog'), watchdogMs));
+    return settle;
+  }
+
+  /* ============================ ENTRY POINTS =========================== */
+
+  /**
+   * B1 -> B4. The splash has been hidden and the campus is painted underneath
+   * but has not been touched: play the cold open, hand the wall to the live
+   * board, and get out of the way.
+   *
+   * @param {Function} after  called EXACTLY once, always
+   */
+  function splashDone(after) {
+    const go = typeof after === 'function' ? after : () => {};
+    if (destroyed || !store) { go(); return; }
+    if (seen('s01') && seen('s02')) { go(); return; }
+
+    let firstNight = true;
+    try { firstNight = typeof s.firstNight === 'function' ? !!s.firstNight() : true; }
+    catch (e) { firstNight = false; }
+    if (!firstNight) { bankAll('not a first night'); go(); return; }
+
+    const gates = COLD_OPEN[0];
+    const desk = COLD_OPEN[1];
+
+    /* THE PLATES ARE THE GATE, AND THEY ARE CHECKED BEFORE ANYTHING MOUNTS.
+     * A missing file must never cost the player a black rectangle, so nothing
+     * is drawn until the pixels are known to exist. The ledger is left ARMED -
+     * a plate that comes back tomorrow gets its scene (B-sheet: a missed edge
+     * leaves the scene armed for the next eligible night). */
+    Promise.all([ensurePlate(gates.image), ensurePlate(desk.image)]).then(([a, b]) => {
+      if (destroyed) { go(); return; }
+      if (!a || !b) { say('vn: a plate is missing - the cold open stands down'); go(); return; }
+
+      const settle = settler(go, VN_DIALS.COLD_OPEN_CAP_MS, 'cold open');
+      try {
+        mountLayer({});
+        /* THE SKIP'S HANDOFF EDGE IS B4, never a shipped seam: both scenes are
+         * spent, the desk plate goes up and the board deals. */
+        const toBoard = () => {
+          skipTo = null;          // one deal per night, whatever the player holds
+          spend('s01'); spend('s02');
+          clearPaper();
+          applyPlate(desk.image, desk.motion);
+          dealBoard(() => settle('skipped to the board'));
+        };
+        const runDesk = () => {
+          if (seen('s02')) { settle('desk already spent'); return; }
+          applyPlate(desk.image, desk.motion);
+          runScene(desk, () => { spend('s02'); settle('done'); }, toBoard);
+        };
+
+        applyPlate(gates.image, gates.motion);
+        if (seen('s01')) { runDesk(); return; }
+        runScene(gates, () => { spend('s01'); runDesk(); }, toBoard);
+      } catch (e) {
+        say('vn cold open threw: ' + ((e && e.message) || e));
+        settle('threw');
+      }
+    });
+  }
+
+  /**
+   * B7 -> B8. One caption on the midway and a threshold hold on the empty
+   * Homeroom, then the SHIPPED class takeover, untouched and next.
+   *
+   * @param {Object} spec      {gameKey, homeroom} - the timetable row being opened
+   * @param {Function} resume  starts the class. Called EXACTLY once, always.
+   * @returns {boolean} true = the VN took this frame and now owns `resume`
+   */
+  function gateClass(spec, resume) {
+    const go = typeof resume === 'function' ? resume : () => {};
+    if (destroyed || !store || seen('s03')) return false;
+    if (!seen('s02')) return false;            // the opening never ran; do not start here
+    if (layer) return false;                   // a scene is already up: never two
+    // THE WALK IS TO HOMEROOM. Any other door leaves the scene armed for the
+    // night the player actually walks to room 101.
+    if (!spec || !spec.homeroom) return false;
+    if (!plateOk[WALK.image] || !plateOk[ART.homeroom]) return false;
+
+    /* SPEND IT FIRST. `resume` re-enters startClass, and a flag written after
+     * that would gate the same class a second time. This ordering is the whole
+     * reason the seam is safe to re-enter. */
+    spend('s03');
+    const settle = settler(go, VN_DIALS.WALK_CAP_MS, 'walk');
+    try {
+      mountLayer({});
+      applyPlate(WALK.image, WALK.motion);
+      runScene(WALK, () => settle('done'));
+    } catch (e) {
+      say('vn walk threw: ' + ((e && e.message) || e));
+      settle('threw');
+    }
+    return true;
+  }
+
+  /**
+   * B11. The first-ever punch ceremony has just cleared: the slip slides out
+   * from under the live board, and once it is dismissed EMI gets her one new
+   * line through the ordinary moment seam (`firstMail` -> emi/story.js b28).
+   *
+   * @returns {boolean} true = the paper is scheduled
+   */
+  function afterCeremony() {
+    if (destroyed || !store || seen('m01')) return false;
+    if (!seen('s02')) return false;            // the opening never ran for this player
+    if (layer) return false;
+    spend('m01');
+
+    const settle = settler(() => {
+      /* THE PAPER FIRST, EMI SECOND. She reacts to mail as an outsider and never
+       * reads it aloud (the beat sheet's rule), so her line only lands once the
+       * slip is off the screen. A missing or dismissed EMI is a silent no-op. */
+      try { fire('firstMail', { paper: 'p2' }); } catch (e) { /* a mascot may never break a beat */ }
+    }, VN_DIALS.MAIL_CAP_MS, 'mail');
+
+    later(() => {
+      if (destroyed) return;
+      let ok = true;
+      try { ok = !!canInterrupt(); } catch (e) { ok = false; }
+      // A class is up: the slip is not worth laying over live play. It is spent
+      // either way - this beat belongs to the FIRST stamp and to no other.
+      if (!ok) { settle('screen busy'); return; }
+      try {
+        mountLayer({ bare: true });
+        runScene(MAIL, () => settle('done'));
+      } catch (e) {
+        say('vn mail threw: ' + ((e && e.message) || e));
+        settle('threw');
+      }
+    }, VN_DIALS.MAIL_DELAY_MS);
+    return true;
+  }
+
+  /* ---------------------- the controller -------------------------------- */
+  const api = {
+    /** Anything left to play at all? shell.js logs this once; nothing branches. */
+    get armed() { return !destroyed && !!store && SCENE_IDS.some((id) => !seen(id)); },
+    splashDone,
+    gateClass,
+    afterCeremony,
+    /** Test seam: the ledger, as a copy. */
+    seenState() { return Object.assign({}, blob.seen); },
+    /** Test/demo seam: bank the whole opening the way a returning player has it. */
+    bankAll,
+    /** Test/demo seam: has this plate decoded? */
+    plateState() { return Object.assign({}, plateOk); },
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      killTimers();
+      advance = null;
+      skipTo = null;
+      unmountLayer();
+    },
+  };
+
+  // WARM THE PLATES while the campus paints. Fire and forget: nothing waits on
+  // it, and a failure is simply a scene that stands down when its turn comes.
+  if (api.armed) { for (const key of Object.keys(ART)) { try { ensurePlate(ART[key]); } catch (e) { /* noop */ } } }
+
+  return api;
+}
+
+export default createFirstBell;

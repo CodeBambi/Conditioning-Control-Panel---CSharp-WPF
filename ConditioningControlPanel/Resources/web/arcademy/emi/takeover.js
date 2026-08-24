@@ -718,7 +718,7 @@ export function createDeck(o = {}) {
     }
   }
 
-  /* EMI'S FIRST KEY LISTENER, AND IT IS A PASSIVE READ (see CLAUDE.md trap 78).
+  /* EMI'S FIRST KEY LISTENER, AND IT IS A PASSIVE READ (see CLAUDE.md trap 80).
    * It never calls preventDefault or stopPropagation and it adds NO rung to the
    * Esc ladder - it exists because "any input cancels" has to mean any input. */
   function onKey() {

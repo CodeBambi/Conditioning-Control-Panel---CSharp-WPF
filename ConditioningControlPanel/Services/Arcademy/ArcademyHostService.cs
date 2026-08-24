@@ -1150,7 +1150,7 @@ internal static class ArcademyHostService
         ["campus_desc_the_deep_end"] = "Sink tile into tile. The deeper you go, the harder the board is to read.",
         ["campus_records"] = "Records",
         ["campus_desc_records"] = "Report card, attendance ledger, grades. Your whole term, in ink.",
-        ["campus_registrar"] = "Registrar",
+        ["campus_registrar"] = "Front Office",
         ["campus_desc_registrar"] = "Every setting is a form. Every consent, a waiver with a stamp.",
         ["campus_entrance_hall"] = "Entrance Hall",
         ["campus_desc_entrance"] = "The notice board carries announcements. The trophy case waits for your diplomas.",
@@ -1236,7 +1236,7 @@ internal static class ArcademyHostService
         // Mirrors shell/enrollment.js's ENROLL_LEX verbatim - copy the values, do not
         // re-word them (the IC_LEX rule). Three cards per class, in the campus voice:
         // what the room is for, what it makes you do, what it is doing to you.
-        ["enroll_daily_trigger_1"] = "Homeroom takes attendance first, and the register is one word long.",
+        ["enroll_daily_trigger_1"] = "Homeroom goes first, and the whole lesson is one word long.",
         ["enroll_daily_trigger_2"] = "Everyone in the school sits the same word tonight. Six chances, no help.",
         ["enroll_daily_trigger_3"] = "Say it enough mornings and you stop deciding what it means.",
         ["enroll_lost_and_found_1"] = "Things go missing here constantly. Nobody files a report.",
@@ -1266,6 +1266,37 @@ internal static class ArcademyHostService
         ["enroll_composure_1"] = "The Studio grades one thing: can you finish a picture while interfered with.",
         ["enroll_composure_2"] = "Slide the tiles back into order while the room blurs what order was.",
         ["enroll_composure_3"] = "Nothing in here is fast. Composure is the subject and it cannot be rushed.",
+        // ---- FIRST BELL, the once-ever opening (Resources/web/arcademy/vn/lex.js) -------
+        // Mirrors VN_LEX row for row. The two PAPERS are stored as CLAUSE rows and joined
+        // with a single space by vn/index.js paragraph(): every row therefore stays under
+        // the 96-character mod-skin cap, which a whole paragraph could never do (a value
+        // over 96 is dropped by MergeModTable and can never be re-voiced - see trap 26).
+        // Splitting is a storage decision; the joined text is the owner-vetted paragraph
+        // byte for byte and no word of it may be edited here.
+        ["vn_skip"] = "Hold to skip",
+        ["vn_tap"] = "Tap to continue",
+        ["vn_s01_cap1"] = "The gates open at dusk and classes run every night, holidays included.",
+        ["vn_s01_cap2"] = "Your enrollment went through last week. First bell rings in the main hall.",
+        ["vn_p1_title"] = "WELCOME TO THE ARCADEMY",
+        ["vn_p1_a"] = "Hi! You're all set.",
+        ["vn_p1_b"] = "Tonight's four classes go up on the big board over this desk at first bell,",
+        ["vn_p1_c"] = "homeroom first and then whatever order you feel like.",
+        ["vn_p1_d"] = "You don't need to bring anything, every room already has its own machine",
+        ["vn_p1_e"] = "and the machine has everything.",
+        ["vn_p1_f"] = "Nobody's at the desk after dark, so if a cabinet acts up,",
+        ["vn_p1_g"] = "give it one gentle kick and leave us a note in the tray.",
+        ["vn_p1_h"] = "Have a great first night!",
+        ["vn_s03_cap"] = "Homeroom is room 101, first door on your left, just follow the footprint decals.",
+        ["vn_p2_title"] = "NICE ONE!",
+        ["vn_p2_a"] = "That's your first stamp of the year.",
+        ["vn_p2_b"] = "Three classes are still lit on the board if you're up for another,",
+        ["vn_p2_c"] = "and if you're done for tonight that's fine too,",
+        ["vn_p2_d"] = "the board deals fresh at dusk either way.",
+        ["vn_p2_e"] = "Replay anything as much as you like,",
+        ["vn_p2_f"] = "the card just takes one stamp per class a night.",
+        ["vn_p2_g"] = "Spare tokens can go in the fountain, it's supposed to be good luck,",
+        ["vn_p2_h"] = "or at least that's what everybody writes in the yearbook.",
+        ["vn_sign"] = "- the front desk",
         // ---- per-game rows (Semester 1) -------------------------------------------------
         // Keys that are not prefixed by a game: the shell and more than one class render
         // them (Daily Trigger mints them today).

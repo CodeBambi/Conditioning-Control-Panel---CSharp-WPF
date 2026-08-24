@@ -172,7 +172,6 @@
 :root.arc-reduced .arc-emi .emi-dock:hover,
 :root.arc-reduced .arc-emi .emi-dock:focus-visible { transform: none; }
 
-/* ============================================================================
  * THE REVEAL CARD (THE OFF CHANNELS, W3)
  *
  * The payoff of NOW WATCHING: she was caught watching something, she offered,
@@ -216,3 +215,69 @@
   max-width: 100%;
   overflow-wrap: anywhere;
 }
+=======
+/* ---- THE FIELD TRIP: the CRT power-off ---------------------------------
+ * W2a (2026-08-24). EMI's one autonomous verb is a TRIP: she powers her tube
+ * off, reappears beside a campus fixture, says one line about it, powers off
+ * again and comes home. This is the transition, and it is a CRT losing its
+ * deflection: the picture squishes to a bright horizontal LINE (~140 ms), the
+ * line collapses to a DOT and flashes out (~60 ms). Power-on is the same
+ * timeline read backwards.
+ *
+ * IT IS A KEYFRAME, DELIBERATELY (trap 71 + the new trap 73). The `.emi` root's
+ * INLINE transform belongs to the dangle, so a transition or an inline
+ * transform here would fight the carry tilt for the root every time a trip and
+ * a drag overlapped. CSS animations out-rank inline styles for as long as they
+ * run, which is exactly why the squish is allowed to own the root and the
+ * dangle is not disturbed by it.
+ *
+ * THE DURATIONS BELOW ARE THE CONTRACT. `widget.js DIALS.CRT_MS` mirrors the
+ * 200 ms, the same way `BODY_MS` mirrors emi.css's body-move keyframes: this
+ * file owns the animation, that file owns how long it waits for it. Change one
+ * and change the other, or she moves before the tube has gone dark.
+ *
+ * The origin moves to the CENTRE for the collapse. `.emi` rests at 50% 100%
+ * (the body moves pivot on her feet) and a tube that collapsed to its feet
+ * would read as a trapdoor, not as a power cut. */
+@keyframes emi-crt-off {
+  0%   { transform: scaleY(1)    scaleX(1);    filter: none; opacity: 1; }
+  70%  { transform: scaleY(.008) scaleX(1.03); filter: brightness(3.2) saturate(.2); opacity: 1; }
+  85%  { transform: scaleY(.008) scaleX(.08);  filter: brightness(4.5) saturate(0);  opacity: 1; }
+  100% { transform: scaleY(.008) scaleX(0);    filter: brightness(4.5) saturate(0);  opacity: 0; }
+}
+@keyframes emi-crt-on {
+  0%   { transform: scaleY(.008) scaleX(0);    filter: brightness(4.5) saturate(0);  opacity: 0; }
+  15%  { transform: scaleY(.008) scaleX(.08);  filter: brightness(4.5) saturate(0);  opacity: 1; }
+  30%  { transform: scaleY(.008) scaleX(1.03); filter: brightness(3.2) saturate(.2); opacity: 1; }
+  100% { transform: scaleY(1)    scaleX(1);    filter: none; opacity: 1; }
+}
+.arc-emi .emi.crt-off,
+.arc-emi .emi.crt-on {
+  transform-origin: 50% 50%;
+  pointer-events: none;          /* mid-collapse she is a 1px line: nothing to grab */
+}
+.arc-emi .emi.crt-off { animation: emi-crt-off 200ms linear forwards; }
+.arc-emi .emi.crt-on  { animation: emi-crt-on  200ms linear forwards; }
+
+/* BETWEEN THE TWO she is nowhere, and `visibility` is how she gets there.
+ * NOT `display` and NOT the hidden attribute: `hidden` is the DOCK's state and
+ * widget.js reads `el.hidden` as "dismissed by the player" in five places, so
+ * borrowing it for a 40 ms teleport would make a trip look like a dismissal. */
+.arc-emi .emi.crt-blank {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* REDUCED MOTION: no squish, no flash. She is simply not there and then she is,
+ * which is the same beat with the animation taken out - the widget skips the
+ * waits to match (widget.js `reducedMotion()` in the trip ladder). */
+@media (prefers-reduced-motion: reduce) {
+  .arc-emi .emi.crt-off,
+  .arc-emi .emi.crt-on { animation: none; }
+  .arc-emi .emi.crt-off { visibility: hidden; }
+}
+:root.arc-reduced .arc-emi .emi.crt-off,
+:root.arc-reduced .arc-emi .emi.crt-on { animation: none; }
+:root.arc-reduced .arc-emi .emi.crt-off { visibility: hidden; }
+
+/* =====================================================================

@@ -43,6 +43,12 @@ import { createPeek } from './peek.js';
 import { createKeybinds } from './keybinds.js';
 import { campusPill, createConfirm, exitBar, sign as signExit } from './exits.js';
 import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
+/* FIRST BELL - the once-ever opening (vn/). It mints its own layer, owns its own
+ * ledger (`vnSeen`, a sibling of EMI's `emiVoice`) and NEVER gates a shipped
+ * seam: every entry point takes a continuation and runs it exactly once - on
+ * success, on a throw, on a missing plate and on a watchdog. A returning
+ * player's whole experience of this import is one controller that stands down. */
+import { createFirstBell } from '../vn/index.js';
 import { createRecords } from './records.js';
 import { loadFaceGeometry, ENROLL_PUNCHES } from './punchcard.js';
 /* EMI, the mascot. Two of B's own modules: `mountEmi` builds the floating widget
@@ -420,6 +426,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * boots, an empty seen ledger and no introduction). This flag says "the board
    * has been arrived at once"; everything after it is the guard as it was. */
   let greeted = false;
+  /* FIRST BELL. The opening's controller (vn/index.js) or null - null is the
+   * whole story on a platform with no document, and a returning player's
+   * controller is live but permanently stood down. `splashSpent` makes
+   * onSplashDone idempotent: boot.js calls it once, but a second call must be
+   * free rather than a second cold open. */
+  let vn = null;
+  let splashSpent = false;
   let board = null;
   let campus = null;               // the night-campus hub (OPTIONAL - see showBoard)
   let extrasBox = null;            // replay/report bar + yesterday strip container
@@ -595,6 +608,25 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    */
   function needsEnrollment(gameKey) {
     try { return !store.punchCard(gameKey).enrolled; } catch (e) { return false; }
+  }
+
+  /**
+   * HAS THIS SCHOOL EVER BEEN ATTENDED? The FIRST BELL opening is first-run only
+   * (its law 3), and this is the whole test: not one card enrolled and not one
+   * graded day on the books. Both are already-derived reads - `enrolledAt` is
+   * the host's own enrollment flag and `days` is the page's graded view - so
+   * nothing new is stored to answer it, and a player restored from the server
+   * mirror reads as a returning player for free.
+   * A throw answers FALSE, which stands the opening down: the safe answer to
+   * "I cannot tell" is the one that shows nobody anything.
+   */
+  function isFirstNight() {
+    try {
+      for (const entry of games.list) if (store.punchCard(entry.key).enrolled) return false;
+      const days = store.get('days');
+      if (days && typeof days === 'object' && Object.keys(days).length) return false;
+      return true;
+    } catch (e) { return false; }
   }
 
   function clearScreen() {
@@ -905,7 +937,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       renderBoardExtras(campus.footMount);
       dom.screen.appendChild(campus.root);
       // The window IS the campus: the topbar's content is diegetic in-scene
-      // (crest, student ID, Registrar/gear), so the bar itself steps aside.
+      // (crest, student ID, Front Office/gear), so the bar itself steps aside.
       // Every other screen re-shows it through renderTopbar().
       if (dom.topbar) dom.topbar.hidden = true;
     } catch (e) {
@@ -936,7 +968,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * THE SPLIT (owner ruling 2026-08-24). `gameKey` scopes the page to one
    * class: the pause card passes the running class's key so a player mid-class
    * sees the globals plus THEIR room's knobs, never the other eight. The
-   * campus gear and the Registrar keep calling with no argument and get the
+   * campus gear and the Front Office keep calling with no argument and get the
    * full sheet - the between-classes page is the right home for "everything".
    */
   function showSettings(gameKey) {
@@ -1122,7 +1154,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       justUnlocked: !!spec.justUnlocked,
       reducedMotion,
       onPunched: spec.onPunched,
-      onDone: () => { punchStage = null; },
+      onDone: () => {
+        punchStage = null;
+        /* FIRST BELL SEAM (m01, the second slip). The FIRST-EVER card ceremony
+         * has cleared: the front desk's note slides out from under the live
+         * board, and EMI's one new line lands after it. Once-ever, guarded, and
+         * the VN itself refuses to mount over a live class (canInterrupt) - so
+         * the ordinary "Done" path and a screen change both read the same. */
+        try { if (vn) vn.afterCeremony(); }
+        catch (e) { say('first bell mail skipped (' + ((e && e.message) || e) + ')'); }
+      },
       log: say,
     });
     return punchStage;
@@ -1660,6 +1701,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    */
   function startClass(cls, opts) {
     if (suspendedGlobally) { shout(t('class_suspended', 'Class Suspended')); return; }
+    /* FIRST BELL SEAM (s03, the walk to Homeroom). ADDITIVE AND ONCE-EVER: the
+     * VN plays one caption on the midway and a beat on the Homeroom threshold,
+     * then re-enters this function with the flag already spent, so the shipped
+     * class takeover is byte-for-byte the next thing that happens. A false, a
+     * throw, a spent flag, a missing plate and a class that is not Homeroom all
+     * fall straight through to the class - the VN may never be a gate. */
+    try {
+      if (vn && vn.gateClass({ gameKey: cls.gameKey, homeroom: !!cls.homeroom },
+        () => startClass(cls, opts))) return;
+    } catch (e) { say('first bell walk skipped (' + ((e && e.message) || e) + ')'); }
     dismissEndCard();
     dismissPunchStage();
     if (active) teardownClass();
@@ -2486,6 +2537,21 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       } catch (e) { say('punch ceremony failed: ' + ((e && e.message) || e)); }
     },
 
+    /**
+     * THE SPLASH IS DOWN (boot.js, trap 66's happy path only). The campus is
+     * already painted underneath with `animate:false` and has not been touched
+     * yet, which is exactly the frame FIRST BELL's cold open wants. Idempotent,
+     * guarded, and a no-op for everyone except a genuine first night - and the
+     * failBoot path never calls it at all, so an error card is never held up by
+     * a scene (the same law that keeps the splash itself off that path).
+     */
+    onSplashDone() {
+      if (splashSpent) return;
+      splashSpent = true;
+      try { if (vn) vn.splashDone(() => {}); }
+      catch (e) { say('first bell cold open skipped (' + ((e && e.message) || e) + ')'); }
+    },
+
     /** {type:'suspend'} */
     onSuspend(m) { applySuspend(!!(m && m.on), m && m.reason); },
 
@@ -2581,6 +2647,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       teardownClass();
       setStage(null);
       if (campus) { try { campus.destroy(); } catch (e) { /* noop */ } campus = null; }
+      if (vn) { try { vn.destroy(); } catch (e) { /* noop */ } vn = null; }
       try { ceremonies.destroy(); } catch (e) { /* noop */ }
       if (settingsPage) { try { settingsPage.destroy(); } catch (e) { /* noop */ } }
     },
@@ -2604,6 +2671,29 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * are optional to her - absent means the channel is absent. */
     if (emiLayer) mountEmi({ layer: emiLayer, store, toast: shout, log: say, assets, settings: src.settings });
   } catch (e) { say('EMI failed to mount (the shell is unaffected): ' + ((e && e.message) || e)); }
+
+  /* FIRST BELL. Built here, BEFORE the first showBoard(), for the same reason
+   * EMI is: the controller warms its plates while the campus paints, so nothing
+   * waits on a decode when boot.js hands the splash edge over. Nothing plays at
+   * construction - `onSplashDone` above is the only thing that starts a scene,
+   * and on any night but the first the controller banks its whole ledger and
+   * never speaks. A throw here costs the opening and nothing else. */
+  try {
+    vn = createFirstBell({
+      store,
+      // The SAME rows the campus board deals, so the wall over the admissions
+      // desk and the board behind the plaque can never disagree.
+      rows: () => buildRows(true),
+      firstNight: isFirstNight,
+      // A slip may not land over live play; the mail defers (and is spent).
+      canInterrupt: () => !active && screen !== 'class',
+      // EMI's ONE verb, injected. vn/ imports nothing from emi/ (trap 60).
+      onMoment: (name, payload) => fireMoment(name, payload),
+      reducedMotion,
+      log: say,
+    });
+    if (vn) say('first bell: ' + (vn.armed ? 'armed' : 'nothing left to play'));
+  } catch (e) { say('first bell unavailable (the shell is unaffected): ' + ((e && e.message) || e)); }
 
   showBoard();
   return api;

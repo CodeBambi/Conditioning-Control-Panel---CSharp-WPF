@@ -26,6 +26,8 @@ export { DIALS, HINT_LINE, STORE_KEY, sayHoldMs, SAY_LEAD_MS };
 
 let singleton = null;
 let voice = null;
+/** emi/fieldtrips.js, once the voice it reads has landed. Null is normal. */
+let trips = null;
 let voicePending = null;
 /** () => bool: can EMI actually PERFORM right now (is her face attached). */
 let voiceGate = null;
@@ -52,6 +54,9 @@ export function getEmi() { return singleton; }
 /** The voice (emi/voice.js), once it has loaded. Null is the normal answer. */
 export function getVoice() { return voice; }
 
+/** The field-trip scheduler (emi/fieldtrips.js), once it has loaded. */
+export function getTrips() { return trips; }
+
 /**
  * ASK THE VOICE, SAFELY. `moments.js` routes every moment through here before
  * it reaches the wordless table.
@@ -65,7 +70,19 @@ export function getVoice() { return voice; }
  */
 export function voiceMoment(name, payload) {
   try {
-    if (voice && voice.ready && (!voiceGate || voiceGate())) return !!voice.onMoment(name, payload);
+    if (voice && voice.ready && (!voiceGate || voiceGate())) {
+      if (voice.onMoment(name, payload)) return true;
+      /* ...AND THEN THE FIELD TRIP (wave W2a). Asked LAST and only about the
+       * moments it declares, so a night with a line in it is never also a night
+       * she walks off in the middle of one. A launched trip answers true the
+       * same way a spoken line does: the wordless table stands down, because
+       * EMI is not there to make a face - she is on her way across the quad.
+       * The trips module is asked through the same wrapper the voice is, so a
+       * scheduler that throws can no more reach a screen transition than a
+       * decision engine that does. */
+      if (trips) return !!trips.offer(name, payload);
+      return false;
+    }
     if (singleton) voicePending = { name, payload, when: Date.now() };
   } catch (e) { /* a mascot may never break a screen transition */ }
   return false;
@@ -231,6 +248,8 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
 
     /** The decision engine, once it has loaded. A test/debug handle only. */
     get voice() { return voice; },
+    /** The field-trip scheduler (W2a), once it has loaded. Test/debug only. */
+    get trips() { return trips; },
     /** Debug: the one moment waiting on the voice + the face, by name. */
     get pendingMoment() { return voicePending ? voicePending.name : null; },
 
@@ -239,10 +258,12 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
 
     destroy() {
       try { widget.destroy(); } catch (e) { /* noop */ }
+      try { if (trips) trips.destroy(); } catch (e) { /* noop */ }
       try { if (voice) voice.destroy(); } catch (e) { /* noop */ }
       try { if (vox) vox.destroy(); } catch (e) { /* noop */ }
       vox = null;
       voice = null;
+      trips = null;
       voicePending = null;
       voiceGate = null;
       if (singleton === api) singleton = null;
@@ -271,6 +292,22 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
       log: say,
     });
     flushVoice();
+    /* THE FIELD TRIPS, ONE MORE STEP OUT (wave W2a). Loaded after the voice
+     * because it reads the voice's session counter and writes the voice's seen
+     * ledger, and optionally for the same reason everything else in this file
+     * is optional: a broken scheduler costs EMI one rare delight, never her
+     * face, her verbs or the shell's boot. */
+    import('./fieldtrips.js').then((f) => {
+      if (singleton !== api || !f || typeof f.createFieldTrips !== 'function') return;
+      trips = f.createFieldTrips({
+        widget,
+        voice,
+        // The return beat rides the ordinary moment path, so story.js owns
+        // whether b28 is spent and this module never writes a story flag.
+        fire: (n, p) => voiceMoment(n, p),
+        log: say,
+      });
+    }).catch((e) => { say('emi: fieldtrips.js unavailable (' + ((e && e.message) || e) + ')'); });
   }).catch((e) => { say('emi: voice.js unavailable (' + ((e && e.message) || e) + ')'); });
 
   return api;

@@ -544,4 +544,42 @@ export const TELEMETRY = Object.freeze({
   ])
 });
 
-export default { POOLS, RARE_DORK, TELEMETRY };
+/* ============================================================================
+ * D) FIELD TRIPS - one line per campus fixture, for the wave W2a trip.
+ *
+ * NOT A POOL, and the difference matters. A pool is dice: voice.js rolls odds,
+ * checks a floor and picks a line. A field trip has already been rationed by
+ * the time a line is wanted - one trip a session at most, never before the
+ * third, and every fixture is a once-ever - so the "pick" is just a lookup.
+ * `emi/fieldtrips.js` reads this table by `lineKey` and hands the string to
+ * `widget.apparate`, which lands it through the ordinary say path.
+ *
+ * A key with no row here is a POI that never travels. That is the correct
+ * failure: an unwritten line is silence, never an invented one.
+ *
+ * THE REGISTER IS SOMEBODY WHO LIVES HERE. She is not explaining the school to
+ * you; she is telling you the one thing she happens to know about something she
+ * goes past every night. Same fence as every line above: no acronym, no lab, no
+ * records room, no door.
+ *
+ * EVERY LINE BELOW IS A DRAFT. They were written at wiring time because the
+ * feature needed something in the bubble to test with, and they have not been
+ * through /emi-lines or the owner's read. Nothing here is locked the way the
+ * rows above this comment are locked.
+ * ==========================================================================*/
+export const FIELD_TRIPS = Object.freeze({
+  /* DRAFT: /emi-lines pass pending */
+  timetable: { t: "tomorrow is already up there. i had a look.", face: '(¬‿¬)' },
+  /* DRAFT: /emi-lines pass pending */
+  belltower: { t: "the bell runs four minutes fast and nobody fixes it.", face: '0_0' },
+  /* DRAFT: /emi-lines pass pending */
+  noticeboard: { t: "nobody has moved those four pins since i got here.", face: '._.' },
+  /* DRAFT: /emi-lines pass pending */
+  idcard: { t: "that photo is you on your first night here.", face: '^_^' },
+  /* DRAFT: /emi-lines pass pending */
+  homeroom: { t: "everyone starts in this room. i have watched all of them.", face: '(◠‿◠)' },
+  /* DRAFT: /emi-lines pass pending */
+  sortroom: { t: "they keep two piles in there and i would only use one.", face: '(◔_◔)' },
+});
+
+export default { POOLS, RARE_DORK, TELEMETRY, FIELD_TRIPS };

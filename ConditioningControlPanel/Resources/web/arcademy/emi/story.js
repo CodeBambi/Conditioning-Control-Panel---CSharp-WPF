@@ -88,8 +88,9 @@ function deepFreeze(o) {
 }
 
 /**
- * BEATS - 33 rows: the 32 scripted one-shots from the timeline's audit, plus
- * b27, which spends no new line (it forces text that already exists).
+ * BEATS - 34 rows: the 32 scripted one-shots from the timeline's audit, plus
+ * b27, which spends no new line (it forces text that already exists), plus b28,
+ * the FIRST BELL opening's one new line (owner ruling 2, 2026-08-24).
  * Ordered as the player meets them.
  */
 export const BEATS = deepFreeze([
@@ -224,6 +225,26 @@ export const BEATS = deepFreeze([
     held: '4/10',
     fx: 'hearts',
     say: 'a real hole punch. i heard it. beautiful sound.',
+    face: '^_^'
+  },
+
+  {
+    // Beat 28. THE OPENING'S ONLY NEW EMI LINE (FIRST BELL B11, owner ruling 2,
+    // 2026-08-24). It rides `firstMail`, a moment the FIRST BELL layer fires
+    // once the front desk's second slip has cleared the screen - so it is a
+    // reaction to the paper and never a reading of it. She is not on the
+    // distribution list because she is not a student; the line is a needy
+    // friend on the first read and equipment on the second, and the joke is
+    // never written down anywhere. Cuttable without a hole: delete this row and
+    // the paper simply plays silent while EMI stays idle.
+    // `requires` b02 for the reason every other day-1 beat does - the
+    // introduction comes first or none of them fire.
+    id: 'b28_first_mail',
+    phase: 'P0',
+    on: 'firstMail',
+    requires: ['b02_hello'],
+    priority: 80,
+    say: 'mail already? i never get any. tell me if it\'s good.',
     face: '^_^'
   },
 
@@ -490,7 +511,7 @@ export const BEATS = deepFreeze([
     when: ['sessionAtLeast:10', 'lateNight'],
     priority: 58,
     double: true,
-    say: 'i don\'t dream. why would you ask. anyway—',
+    say: 'i don\'t dream. why would you ask. anyway...',
     face: '(◔_◔)'
   },
 
@@ -659,6 +680,26 @@ export const BEATS = deepFreeze([
     requires: ['b02_hello'],
     priority: 30,
     say: 'the corner is fine. i made it nice.',
+    face: '^_^'
+  },
+
+  {
+    // Beat 28. THE FIRST FIELD TRIP, and it fires on the RETURN, never on the
+    // arrival - the trip's own line is about the fixture, and this one is about
+    // having gone at all. Priority 92 sits it under the anniversary (96) and
+    // the long-absence return (95) and over every ordinary ceremony, which is
+    // the right order: a calendar year and a three-day silence are both bigger
+    // than a first walk across the quad, and everything else that night is
+    // smaller. There is deliberately no b29 - every LATER trip says only the
+    // fixture's own line, so the novelty is spent exactly once.
+    // DRAFT: /emi-lines pass pending
+    id: 'b28_first_trip',
+    phase: 'AMB',
+    on: 'fieldTripHome',
+    requires: ['b02_hello'],
+    priority: 92,
+    lead: 'wink',
+    say: 'i did not know i could leave the corner.',
     face: '^_^'
   },
 

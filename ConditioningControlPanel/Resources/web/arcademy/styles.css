@@ -1102,6 +1102,10 @@ svg.campus-plan { position:absolute; inset:0; width:100%; height:100%; display:b
   fill:var(--campus-text); text-anchor:middle;
 }
 .campus-rname.dim { opacity:.85; }
+/* A COMPACT FACILITY WITH A LONG NAME. campus.js hangs this on a name over ten
+   characters in a 108-unit room ("FRONT OFFICE"); at the full 13.5px its last
+   glyph runs past the plan's right safe-band edge. */
+.campus-rname.tight { font-size:11.5px; letter-spacing:.1em; }
 .campus-rsub {
   font-family:var(--mono); font-size:10px; font-weight:500; letter-spacing:.2em;
   fill:var(--campus-text-dim); text-anchor:middle;
@@ -1366,7 +1370,7 @@ g.campus-room.open .campus-ping { animation:campus-pingring 2.6s cubic-bezier(.2
    old wing cupboards and hooked on `data-wing`, which was never what it meant -
    the rule is about a room 84 units tall, not about which end of the school it
    stands in. The wings' classes are full storefronts today and wear the full
-   bloom; Records and the Registrar are the compact rooms, so campus.js hangs
+   bloom; Records and the Front Office are the compact rooms, so campus.js hangs
    `data-compact` on exactly them. */
 g.campus-room[data-compact] .campus-neon { filter:drop-shadow(0 0 2.5px var(--pink)); }
 g.campus-room[data-compact] .campus-neon.v { filter:drop-shadow(0 0 2.5px var(--lav)); }
