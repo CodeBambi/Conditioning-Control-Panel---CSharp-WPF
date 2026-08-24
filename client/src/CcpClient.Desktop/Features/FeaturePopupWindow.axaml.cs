@@ -5,6 +5,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 
 namespace CcpClient.Desktop.Features;
@@ -218,7 +219,31 @@ public partial class FeaturePopupWindow : Window, FeaturePopupManager.IPopup
 
         var ownerRect = new PixelRect(_owner.Position, PixelSize.FromSize(_owner.ClientSize, _owner.RenderScaling));
         var popupSize = PixelSize.FromSize(ClientSize, RenderScaling);
-        Position = PopupPlacement.CenteredClampedPosition(ownerRect, popupSize, screen.WorkingArea);
+        var wanted = PopupPlacement.CenteredClampedPosition(ownerRect, popupSize, screen.WorkingArea);
+        Position = wanted;
+
+        // AND ONCE MORE ONE DISPATCHER TURN LATER, BECAUSE ON X11 THE FIRST WRITE IS DROPPED.
+        // Measured on WSLg 2026-08-24, at scale 1 and 1.75, with the arithmetic instrumented:
+        // this method computed 290,60 (scale 1) and 469,46 (scale 1.75) from sane inputs — owner
+        // 1100x760 DIP, working area 0,0 2880x1800 — assigned them, and the window landed at
+        // 10,10 and 0,0 respectively, i.e. wherever the window manager had put it. The X SERVER
+        // IS NOT THE ONE REFUSING: an external XMoveWindow from a second process moved the same
+        // window from 10,10 to exactly 600,300. Re-asserting the identical value one turn later
+        // lands it: measured 290,60 and 469,46 in root coordinates, centred on the owner.
+        //
+        // Unconditional rather than conditional on a read-back, because the X11 Position GETTER
+        // is not trustworthy either — it still reported 0,0 in the runs where the window was
+        // provably at 290,60. On Windows this is a second assignment of a value already in
+        // effect, which is a no-op move and never a visible jump.
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                if (IsVisible)
+                {
+                    Position = wanted;
+                }
+            },
+            DispatcherPriority.Loaded);
     }
 
     private void OnOwnerPositionChanged(object? sender, PixelPointEventArgs e)
