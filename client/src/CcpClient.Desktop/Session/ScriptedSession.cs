@@ -119,6 +119,58 @@ public sealed class ScriptedSession
     public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 
     /// <summary>
+    /// Where this session came from. <b>Not in the file and never written to one</b> — upstream
+    /// marks both its provenance members <c>[JsonIgnore]</c> under the comment "Source Tracking (not
+    /// serialized to file)" (<c>Models/SessionDefinition.cs:62-68</c>), and the reason is the whole
+    /// import story: a file that carried its own provenance would go on claiming to be built-in
+    /// wherever it was copied. Provenance is a property of WHERE the file was read, so
+    /// <see cref="ReadFolder"/> stamps it and nothing else does.
+    /// </summary>
+    [JsonIgnore]
+    public ScriptedSessionOrigin Origin { get; set; }
+
+    /// <summary>The file this session was read from, or empty for one that has never been written
+    /// (upstream's <c>SourceFilePath</c>, <c>Models/SessionDefinition.cs:67-68</c>, and
+    /// <c>[JsonIgnore]</c> for the reason <see cref="Origin"/> gives). It is what lets a second edit
+    /// of the same custom session overwrite its own file instead of laying a new one beside it
+    /// (<c>Services/Session/SessionFileService.cs:232-241</c>).</summary>
+    [JsonIgnore]
+    public string SourceFilePath { get; set; } = "";
+
+    /// <summary>
+    /// This session AS A FILE — the bytes <see cref="CustomSessionStore.Save"/> writes and
+    /// <see cref="Parse"/> reads back (upstream's <c>ExportSession</c>,
+    /// <c>Services/Session/SessionFileService.cs:62-66</c>).
+    ///
+    /// <para>It goes through the SAME <see cref="JsonOptions"/> the read uses, which is what turns
+    /// <see cref="ExtensionData"/> into a preservation mechanism rather than a decoration: a key
+    /// this port has never heard of survives a read, an edit and a write unchanged, and that is the
+    /// only reason an editor here can touch a file authored by a newer build without truncating
+    /// it.</para>
+    /// </summary>
+    public string ToJson() => JsonSerializer.Serialize(this, JsonOptions);
+
+    /// <summary>
+    /// A detached copy, made THROUGH THE FILE FORMAT rather than member by member — so anything
+    /// the port does not model comes with it, and a member added to this class cannot be forgotten
+    /// here. <see cref="Origin"/> and <see cref="SourceFilePath"/> are carried across by hand
+    /// precisely because the format does not carry them.
+    ///
+    /// <para>The editor works on one of these and never on the rack's own instance: a cancelled
+    /// edit must leave the rack exactly as it found it, and the surest way to guarantee that is for
+    /// the edit to have had nothing of the rack's to write on.</para>
+    /// </summary>
+    public ScriptedSession Copy()
+    {
+        var copy = Parse(ToJson())
+            ?? throw new InvalidOperationException(
+                "a session failed to round-trip through its own serializer options");
+        copy.Origin = Origin;
+        copy.SourceFilePath = SourceFilePath;
+        return copy;
+    }
+
+    /// <summary>
     /// Parse one file's text. Returns null on malformed JSON, which is upstream's own answer —
     /// <c>catch (JsonException) { return null; }</c> (<c>SessionFileService.cs:105-108</c>) — so a
     /// hand-edited or truncated file is a row that does not appear, never a crash.
@@ -136,12 +188,25 @@ public sealed class ScriptedSession
     }
 
     /// <summary>Read one <c>.session.json</c>. Null when the file is absent or unreadable
-    /// (<c>SessionFileService.cs:82-108</c>).</summary>
+    /// (<c>Services/Session/SessionFileService.cs:82-108</c>). The session remembers the path it
+    /// came from (<see cref="SourceFilePath"/>); its <see cref="Origin"/> is the caller's to stamp,
+    /// because only the caller knows which folder it asked for.</summary>
     public static ScriptedSession? ReadFile(string path)
     {
         try
         {
-            return File.Exists(path) ? Parse(File.ReadAllText(path)) : null;
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            var session = Parse(File.ReadAllText(path));
+            if (session is not null)
+            {
+                session.SourceFilePath = path;
+            }
+
+            return session;
         }
         catch (IOException)
         {
@@ -161,24 +226,58 @@ public sealed class ScriptedSession
     /// shipped files are content beside the binary, and a published tree missing them is a degraded
     /// install rather than a crash.
     /// </summary>
-    public static IReadOnlyList<ScriptedSession> ReadFolder(string folder)
+    /// <param name="folder">The folder to read.</param>
+    /// <param name="origin">What the sessions in it ARE. The default is what every caller before the
+    /// editor wanted; <see cref="CustomSessionStore"/> passes
+    /// <see cref="ScriptedSessionOrigin.Custom"/>. Stamped here rather than read out of the file,
+    /// for the reason <see cref="Origin"/> gives.</param>
+    public static IReadOnlyList<ScriptedSession> ReadFolder(
+        string folder, ScriptedSessionOrigin origin = ScriptedSessionOrigin.BuiltIn)
     {
         if (!Directory.Exists(folder))
         {
             return [];
         }
 
-        return
-        [
-            .. Directory.GetFiles(folder, "*" + FileExtension)
-                .OrderBy(Path.GetFileName, StringComparer.Ordinal)
-                .Select(ReadFile)
-                .OfType<ScriptedSession>(),
-        ];
+        var sessions = Directory.GetFiles(folder, "*" + FileExtension)
+            .OrderBy(Path.GetFileName, StringComparer.Ordinal)
+            .Select(ReadFile)
+            .OfType<ScriptedSession>()
+            .ToList();
+
+        foreach (var session in sessions)
+        {
+            session.Origin = origin;
+        }
+
+        return sessions;
     }
 
     /// <summary>The four shipped sessions (<see cref="BuiltInFolder"/>).</summary>
     public static IReadOnlyList<ScriptedSession> ReadBuiltIns() => ReadFolder(BuiltInFolder);
+}
+
+/// <summary>
+/// Where a session came from — upstream's <c>SessionSource</c>
+/// (<c>Models/SessionDefinition.cs:7-15</c>) minus its third member.
+///
+/// <para><b>Upstream's <c>Imported</c> is not here</b>, and leaving it out is the same call the rack
+/// made about upstream's source chips: this build has no gesture that imports a session file from
+/// anywhere, so a member no path can produce would be a provenance the badge promised and nothing
+/// could deliver. It costs nothing to add the day an import lands, because
+/// <see cref="ScriptedSession.Origin"/> is stamped by the reader rather than parsed out of a
+/// file.</para>
+/// </summary>
+public enum ScriptedSessionOrigin
+{
+    /// <summary>Shipped beside the binary (<see cref="ScriptedSession.BuiltInFolder"/>). Upstream
+    /// <c>BuiltIn</c>, and it means there what it means here: never overwritten, never deleted
+    /// (<c>Services/Session/SessionManager.cs:204-206</c>).</summary>
+    BuiltIn,
+
+    /// <summary>The user's own, under <see cref="CustomSessionStore.FolderName"/> in the data root.
+    /// Upstream <c>Custom</c>.</summary>
+    Custom,
 }
 
 /// <summary>Upstream's four difficulty bands (<c>Models/Session.cs:8-14</c>), camelCase in the
