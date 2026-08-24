@@ -4,6 +4,9 @@ using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -559,6 +562,11 @@ internal static class ArcademyHostService
             case "library-remove":
                 OnLibraryRemove(o);
                 break;
+            case "annex-stats":
+                // The registry link downstairs. Fire-and-forget: exactly one reply comes back,
+                // and a failure is a reply with body = null, never a missing one.
+                OnAnnexStats();
+                break;
             case "exit":       // page-initiated (Esc held): it winds itself down, then exit-done
                 _exiting = true;
                 App.Logger?.Information("ArcademyHost: page exit ({Reason})", (string?)o["reason"]);
@@ -679,6 +687,9 @@ internal static class ArcademyHostService
             // The dev switch (`--arcademy`) is projected so the campus can offer Begin on rooms
             // the seed did not deal tonight (shell: devPass). Always false on a player launch.
             devDoor = _devDoor,
+            // THE SUBJECT FILE (ANNEX-OS.md): the numbers the annex terminal prints about
+            // this player, resolved here so the page downstairs counts nothing itself.
+            subject = BuildSubject(s),
         };
     }
 
@@ -693,6 +704,94 @@ internal static class ArcademyHostService
         binauralDepth = s?.ArcademyCapBinauralDepth ?? 1.0,
         bgIntensity = s?.ArcademyCapBgIntensity ?? 1.0,
     };
+
+    /// <summary>
+    /// THE SUBJECT'S OWN FILE (ANNEX-OS.md §5). Everything the annex terminal prints about the
+    /// player, projected once at init so the OS downstairs never counts anything itself - the page
+    /// only ever RENDERS a number this method already resolved.
+    ///
+    /// <para>THE WHOLE BODY IS WRAPPED. A throw inside <see cref="BuildInit"/> kills the entire init
+    /// message, and a page that never gets init never boots - so a missing counter costs a row here,
+    /// never the Arcademy. Every read is null-safe with a literal fallback for the same reason.</para>
+    /// </summary>
+    private static object BuildSubject(Models.AppSettings? s)
+    {
+        try
+        {
+            var (code, password) = SubjectCredentials(s);
+            return new
+            {
+                // Deterministic theatre, not security: the code and the password are a stable
+                // derivation of this install's identity so the paper in the binder and the
+                // terminal agree. Nothing is protected by them - the note with the password is
+                // pinned next to the screen on purpose.
+                code,
+                password,
+                // "yyyy-MM-dd" or null on installs that predate the field; null passes through and
+                // the OS drops the row rather than inventing a date.
+                date = s?.InstallDate,
+                level = s?.PlayerLevel ?? 0,
+                // The MONOTONIC lifetime ledger. GetTotalXP() is season/curve dependent and would
+                // make "experience, lifetime" fall when a season rolls.
+                xp = App.Achievements?.Progress?.TotalXPEarned ?? 0,
+                minutes = s?.TotalConditioningMinutes ?? 0,
+                videoMinutes = App.Achievements?.Progress?.TotalVideoMinutes ?? 0,
+                spiralMinutes = App.Achievements?.Progress?.TotalSpiralMinutes ?? 0,
+                // The NO-ARGUMENT overload only. The free (false) and patron (true) overloads are
+                // deliberately separate counts and must never be summed into one number
+                // (AchievementService.cs:1074) - this one is already the whole shelf.
+                achievements = App.Achievements?.GetUnlockedCount() ?? 0,
+                appStreak = s?.CurrentStreak ?? 0,
+                appStreakBest = s?.HighestStreak ?? 0,
+                // AppSettings.TotalSessions is a SECOND, independent counter of the same idea.
+                // The progress ledger is the one chosen here; do not project both, a file that
+                // prints two different session counts reads as a bug in the file.
+                sessionsStarted = App.Achievements?.Progress?.TotalSessionsStarted ?? 0,
+                flashes = App.Achievements?.Progress?.TotalFlashImages ?? 0,
+                bubbles = App.Achievements?.Progress?.TotalBubblesPopped ?? 0,
+                lockCards = App.Achievements?.Progress?.TotalLockCardsCompleted ?? 0,
+                keywordTriggers = App.Achievements?.Progress?.KeywordTriggersFired ?? 0,
+            };
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ArcademyHost.BuildSubject: {E}", ex.Message);
+            return new { };
+        }
+    }
+
+    /// <summary>The salt behind the subject code and the terminal password. DETERMINISTIC THEATRE,
+    /// NOT SECURITY: it exists so one install always sees one code, and so two installs do not see
+    /// the same one. Nothing is guarded by either string.</summary>
+    private const string SubjectSalt = "ccp-annex-subject-2026";
+
+    /// <summary>Sixteen dry desk nouns, indexed by two hash bytes. Sixteen exactly - the index is a
+    /// nibble (<c>&amp; 0x0F</c>), so a seventeenth word would simply never be drawn.</summary>
+    private static readonly string[] SubjectWords =
+    {
+        "paper", "drawer", "folder", "carbon", "staple", "filing", "copier", "binder",
+        "archive", "cabinet", "printer", "lamp", "stamp", "memo", "index", "teal",
+    };
+
+    /// <summary>
+    /// Derive this install's <c>XXXX-XXXX-XXXX</c> subject code and its <c>word-word-NN</c>
+    /// terminal password from one HMAC. The identity is the account's unified id, or - offline, or
+    /// never signed in - a stable string built from the install date and the offline name, so the
+    /// code does not change under a player who never logged in.
+    /// </summary>
+    private static (string Code, string Password) SubjectCredentials(Models.AppSettings? s)
+    {
+        var identity = s?.UnifiedId;
+        if (string.IsNullOrWhiteSpace(identity))
+            identity = "offline:" + (s?.InstallDate ?? "") + ":" + (s?.OfflineUsername ?? "");
+        using var mac = new HMACSHA256(Encoding.UTF8.GetBytes(SubjectSalt));
+        var h = mac.ComputeHash(Encoding.UTF8.GetBytes(identity));
+        var hex = Convert.ToHexString(h, 0, 6);   // 12 uppercase hex chars
+        var code = hex.Substring(0, 4) + "-" + hex.Substring(4, 4) + "-" + hex.Substring(8, 4);
+        var password = SubjectWords[h[6] & 0x0F] + "-" + SubjectWords[h[7] & 0x0F] + "-"
+            + (h[8] % 100).ToString("00", CultureInfo.InvariantCulture);
+        return (code, password);
+    }
 
     private static object BuildAudioLevels(Models.AppSettings? s)
     {
@@ -2186,6 +2285,90 @@ internal static class ArcademyHostService
         ["bugle_comics"] = "Comics",
         ["bugle_empty"] = "Nothing set for this page.",
         ["bugle_prop_label"] = "The paper",
+        // ---- the annex (ANNEX-OS.md) - fence words legal on these rows only ----
+        ["annex_cam"] = "CAM",
+        ["annex_rec"] = "REC",
+        ["annex_cam_gate"] = "MAIN GATE",
+        ["annex_lap_title"] = "RECORDS ANNEX",
+        ["annex_lap_locked"] = "TERMINAL LOCKED",
+        ["annex_lap_prompt"] = "AWAITING KEY",
+        ["annex_door"] = "A wall panel, ajar",
+        ["annex_room_label"] = "The Records Annex",
+        ["annex_back"] = "step back",
+        ["annex_hot_monitors"] = "the monitors",
+        ["annex_hot_shelf"] = "the shelf",
+        ["annex_hot_desk"] = "the desk",
+        ["annex_hot_door"] = "the stairs",
+        ["annex_hot_folder"] = "the folder",
+        ["annex_hot_binder"] = "FIELD DATA",
+        ["annex_hot_laptop"] = "the laptop",
+        ["annex_paper_close"] = "put it down",
+        ["annex_stamp_ongoing"] = "ONGOING",
+        ["annex_page_prev"] = "previous page",
+        ["annex_page_next"] = "next page",
+        ["annex_os_label"] = "Annex terminal",
+        ["annex_os_boot_1"] = "RECORDS ANNEX / UNIT TERMINAL",
+        ["annex_os_boot_2"] = "memory check: fine, thanks for asking",
+        ["annex_os_boot_3"] = "feed wall link: up",
+        ["annex_os_boot_4"] = "archive index: 26 files, 5 drawers",
+        ["annex_os_login_sub"] = "authorised staff. there is no other kind of staff.",
+        ["annex_os_pass"] = "password",
+        ["annex_os_enter"] = "log in",
+        ["annex_os_wrong"] = "no. the note is right there.",
+        ["annex_os_note"] = "PW: CYBER-PUNK",
+        ["annex_os_files"] = "FILES",
+        ["annex_os_registry"] = "REGISTRY",
+        ["annex_os_search"] = "SUBJECT SEARCH",
+        ["annex_os_term"] = "TERMINAL",
+        ["annex_os_close"] = "close",
+        ["annex_os_live"] = "LIVE",
+        ["annex_os_archive"] = "ARCHIVE",
+        ["annex_os_linkdown"] = "LINK DOWN",
+        ["annex_os_linkwait"] = "link…",
+        ["annex_os_retry"] = "retry",
+        ["annex_os_room"] = "room",
+        ["annex_os_enrolled"] = "enrolled",
+        ["annex_os_completed"] = "completed",
+        ["annex_os_all"] = "all subjects",
+        ["annex_os_redacted"] = "withheld",
+        ["annex_os_code"] = "subject code",
+        ["annex_os_open_file"] = "open file",
+        ["annex_os_notfound"] = "that code is not on file. check the paper in the binder.",
+        ["annex_os_file_title"] = "SUBJECT FILE",
+        ["annex_os_ongoing"] = "ONGOING",
+        ["annex_f_general"] = "GENERAL",
+        ["annex_f_since"] = "on record since",
+        ["annex_f_level"] = "level",
+        ["annex_f_xp"] = "experience, lifetime",
+        ["annex_f_minutes"] = "supervised minutes",
+        ["annex_f_video"] = "screening minutes",
+        ["annex_f_spiral"] = "focus minutes",
+        ["annex_f_ach"] = "citations on file",
+        ["annex_f_attend"] = "ATTENDANCE",
+        ["annex_f_streak"] = "attendance streak",
+        ["annex_f_perfect"] = "perfect nights",
+        ["annex_f_cards"] = "cards mastered",
+        ["annex_f_appstreak"] = "reporting streak",
+        ["annex_f_appbest"] = "reporting streak, best",
+        ["annex_f_sessions"] = "sessions opened",
+        ["annex_f_devices"] = "DEVICES",
+        ["annex_f_flashes"] = "exposures delivered",
+        ["annex_f_bubbles"] = "targets cleared",
+        ["annex_f_lockcards"] = "sentences typed",
+        ["annex_f_triggers"] = "cue firings",
+        ["annex_f_unit"] = "UNIT OBSERVATION",
+        ["annex_f_pets"] = "pets received",
+        ["annex_f_drags"] = "relocations",
+        ["annex_f_flings"] = "ejections",
+        ["annex_f_hides"] = "dismissals",
+        ["annex_f_restores"] = "recalls from dock",
+        ["annex_f_lines"] = "lines delivered",
+        ["annex_f_emisessions"] = "sessions observed",
+        ["annex_f_emidays"] = "days observed",
+        ["annex_f_hours"] = "hours observed",
+        ["campus_annex"] = "Records Annex",
+        ["campus_annex_status"] = "Stairs down",
+        ["campus_desc_annex"] = "Under the office. The lights are off down there. The screens are not.",
     };
 
     /// <summary>The mockup's owner-approved tokens (BUILD-CONTRACT §10). A mod overrides them via
@@ -3491,6 +3674,95 @@ internal static class ArcademyHostService
         foreach (var r in rows)
             outRows.Add(new { name = r.Name, ok = r.Ok, videoCount = r.VideoCount, stillOnly = r.StillOnly, selected = r.Selected });
         return outRows.ToArray();
+    }
+
+    // ============================ the annex registry link ============================
+
+    /// <summary>The proxy, spelled the way every other service here spells it (there is no shared
+    /// constant in this codebase - ArcademyPresenceService, ArcademySyncService, V2AuthService and
+    /// ProfileSyncService each carry their own copy).</summary>
+    private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
+
+    /// <summary>The public aggregate the annex terminal's REGISTRY pane draws. Unauthenticated by
+    /// design (head counts, nothing personal) - NO token is ever attached to this request.</summary>
+    private const string AnnexStatsPath = "/v2/arcademy/annex/stats";
+
+    /// <summary>Short of the page's own 8s deadline, so a slow link resolves as LINK DOWN here
+    /// rather than being abandoned there.</summary>
+    private static readonly TimeSpan AnnexStatsTimeout = TimeSpan.FromSeconds(6);
+
+    /// <summary>A public aggregate is a few KB. A body this size is not the feed we asked for.</summary>
+    private const int MaxAnnexStatsChars = 400_000;
+
+    private static readonly HttpClient AnnexHttp = new() { Timeout = AnnexStatsTimeout };
+
+    /// <summary>
+    /// <c>annex-stats</c>: the page cannot reach the server itself (CORS is a wall, and the wall is
+    /// right), so the host fetches the public aggregate and posts it straight back. EXACTLY ONE
+    /// reply per ask, and <c>body</c> is either the parsed object or null - the OS renders LINK DOWN
+    /// on null and never fabricates a number. A missing reply is the same thing eight seconds later,
+    /// so nothing here may throw out of the handler.
+    ///
+    /// <para>OFFLINE MODE NEVER LEAVES THE MACHINE: the same flag <see cref="BuildInit"/> projects
+    /// as <c>offlineMode</c> short-circuits to a null reply with no request at all.</para>
+    /// </summary>
+    private static async void OnAnnexStats()
+    {
+        // The window this ask belongs to: a relaunch mid-flight must not answer the NEW page.
+        int epoch = Volatile.Read(ref _generation);
+        if (App.Settings?.Current?.OfflineMode == true)
+        {
+            App.Logger?.Debug("ArcademyHost: annex-stats declined - offline mode");
+            PostAnnexStats(null, epoch);
+            return;
+        }
+
+        JObject? body = null;
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, ProxyBaseUrl + AnnexStatsPath);
+            using var response = await AnnexHttp.SendAsync(request).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                App.Logger?.Debug("ArcademyHost: annex-stats {Status}", (int)response.StatusCode);
+            }
+            else
+            {
+                var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                if (text.Length > MaxAnnexStatsChars)
+                    App.Logger?.Information("[ArcademyHost] annex-stats is {N} chars - ignored", text.Length);
+                else
+                    body = JObject.Parse(text);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Non-200, unparseable, timed out, no network: one line, and the pane says LINK DOWN.
+            App.Logger?.Debug("ArcademyHost: annex-stats failed: {E}", ex.Message);
+            body = null;
+        }
+        PostAnnexStats(body, epoch);
+    }
+
+    /// <summary>Post the one reply on the UI thread, dropping it if the window it was asked for is
+    /// gone or has been relaunched underneath us. Never throws.</summary>
+    private static void PostAnnexStats(JObject? body, int epoch)
+    {
+        try
+        {
+            var win = _host?.Window;
+            if (win == null || Volatile.Read(ref _generation) != epoch) return;
+            win.Dispatcher.BeginInvoke(() =>
+            {
+                try
+                {
+                    if (_host == null || Volatile.Read(ref _generation) != epoch) return;
+                    _host.Post(new { type = "annex-stats", body });
+                }
+                catch (Exception ex) { App.Logger?.Debug("ArcademyHost.annex-stats post: {E}", ex.Message); }
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.PostAnnexStats: {E}", ex.Message); }
     }
 
     /// <summary>True when remote media may appear anywhere in the app. Copied verbatim from
