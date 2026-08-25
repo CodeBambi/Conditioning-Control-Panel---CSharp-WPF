@@ -201,6 +201,11 @@ public sealed class OverlaySurfaceSet : IDisposable
     /// <summary>Rebuilds this set has asked its consumer for since it was constructed.</summary>
     public int RebuildsRequested { get; private set; }
 
+    /// <summary>Placements refused because every surface in the pool was already showing something
+    /// — the count of things a caller asked for and this set could not put anywhere. Diagnostics
+    /// and facts; never a claim about a screen.</summary>
+    public int PlacementsRefusedWhileFull { get; private set; }
+
     /// <summary>Times the rule came due and did NOT rebuild because
     /// <see cref="MaxRebuildAttempts"/> rebuilds had already failed to win the band back — the
     /// backed-off state, where a refusal is being lived with rather than fought (upstream's own
@@ -367,6 +372,41 @@ public sealed class OverlaySurfaceSet : IDisposable
                 OverlayReasonCodes.OverlayNoDisplay,
                 "the operating system enumerated no display, so there is no rectangle an overlay could legally "
                 + "be placed on and nothing was attempted"));
+        return LastPresent;
+    }
+
+    /// <summary>
+    /// Record that every surface in the pool is busy, and return what was recorded.
+    ///
+    /// <para><b>Why this exists at all.</b> The cap is a product decision — WPF's own
+    /// <c>MAX_CONCURRENT_FLASH</c> (<c>Services/Flash/FlashService.cs:50</c>), which exists there
+    /// for "memory explosion / compositor backup from too many concurrent flash windows"
+    /// (<c>:1174-1176</c>) — and saturating it is not a fault. But the caller's dials reach it: the
+    /// images-per-flash dial goes to twenty against a pool of ten, and a surface outlives the
+    /// interval between flashes at the top of the frequency dial, so at the maximum-settings
+    /// configuration <c>client/port.txt</c> names as the performance contract the pool saturates
+    /// and later images have nowhere to go. Those images used to disappear on a bare
+    /// <c>return</c> — no count, no state, no reason — which is the one thing this codebase's
+    /// capability contract refuses (<c>client/docs/runtime-capability-contract.md</c> §1).</para>
+    ///
+    /// <para><b>Why Degraded and not Unavailable.</b> Because the surfaces that took the slots are
+    /// on screen doing their job, and this property is what a module panel shows the user. An
+    /// <c>Unavailable</c> here would put "Nothing was drawn on screen" in front of a user watching
+    /// ten flashes (<c>Views/Pages/StudioPage.axaml.cs:3386-3400</c>). Degraded names what survives
+    /// and what did not, which is exactly the state (contract §1: degradation that cannot name its
+    /// surviving semantics is not degradation).</para>
+    /// </summary>
+    public CapabilityState RecordPoolFull()
+    {
+        PlacementsRefusedWhileFull++;
+        LastPresent = new CapabilityState.Degraded(
+            $"the {_maxSurfaces} surfaces already on screen are still holding what was placed on them",
+            new CapabilityReason(
+                OverlayReasonCodes.OverlaySurfacePoolFull,
+                $"all {_maxSurfaces} pooled overlay surfaces are still showing something, so this one was not "
+                + "placed. That ceiling on concurrent surfaces is the product's own and nothing failed here: a "
+                + "surface comes free when its lifetime ends. "
+                + $"{PlacementsRefusedWhileFull} placement(s) have been refused this way so far"));
         return LastPresent;
     }
 

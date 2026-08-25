@@ -109,6 +109,13 @@ public interface IOverlayPresence : IDisposable
     /// Takes the surface off the screen, keeping the window for the next
     /// <see cref="Present"/>. <see cref="CapabilityState.Available"/> means the OS confirmed the
     /// window is no longer visible and the hit test no longer routes to it.
+    ///
+    /// <para><b>The window is kept; the CONTENT is not.</b> Whatever a backend allocated to hold
+    /// the last frame is given back here, not at <see cref="IDisposable.Dispose"/>. Callers pool
+    /// presences and reuse them for the life of a session
+    /// (<c>Effects/OverlaySurfaceSet.cs:238-258</c>), so "freed at Dispose" means "held until the
+    /// session ends" — and a frame is as large as the surface, which at the image-scale dial's
+    /// ceiling is the whole monitor. A caller that needs the same pixels again paints them again.</para>
     /// </summary>
     CapabilityState Withdraw();
 
