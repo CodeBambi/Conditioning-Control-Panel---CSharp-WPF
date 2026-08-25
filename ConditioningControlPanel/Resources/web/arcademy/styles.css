@@ -54,6 +54,9 @@
   /* cinema black for the Annex reveal (shell/annexreveal.js) - a breath of
      navy so the cut reads as night, not as a dead renderer */
   --annex-void:#070710;
+  /* the student ID's chip LED on its unlinked rung - the ONE place a brand
+     colour appears in this school, and it is a 6px dot (shell/idcard.js) */
+  --discord:#5865F2;
 
   /* --- semantic --- */
   --gS:var(--gold); --gA:var(--pink); --gB:var(--lav); --gC:var(--slate);
@@ -1759,7 +1762,20 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
   box-shadow:0 16px 44px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.08);
   padding:12px 14px; overflow:hidden; transition:transform .3s;
 }
-.campus-idcard:hover { transform:rotate(-1deg) translateY(-4px); }
+/* THE CARD IS A DOOR NOW: it lifts under the pointer AND under the keyboard,
+   and the press dips it. Same one transition, three states. */
+.campus-idcard { cursor:pointer; text-align:left; }
+.campus-idcard:hover,
+.campus-idcard:focus-visible {
+  transform:rotate(-1deg) translateY(-4px); outline:none;
+  box-shadow:0 22px 54px rgba(0,0,0,.75),
+    0 0 22px color-mix(in srgb, var(--pink), transparent 62%),
+    inset 0 1px 0 rgba(255,255,255,.1);
+}
+.campus-idcard:active { transform:rotate(-1deg) translateY(-2px) scale(.985); }
+/* ATTENDANCE HEAT: the hairline warms from lavender to gold as the streak
+   climbs past a week. A colour, not a bulb ring - and it survives motion 0. */
+.campus-idcard.is-warm { border-color:color-mix(in srgb, var(--gold), transparent 55%); }
 .campus-idcard::after {
   content:""; position:absolute; top:0; left:-70%; width:45%; height:100%;
   transform:skewX(-18deg);
@@ -1767,23 +1783,118 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
   animation:campus-sheen 5.5s ease-in-out infinite;
 }
 @keyframes campus-sheen { 0%, 60% { left:-70%; } 90%, 100% { left:130%; } }
-.campus-idcard .id-top { display:flex; gap:12px; align-items:center; }
+/* the lanyard clip, the crest band and the foil edge: the three bits of
+   printing that make a laminated card read as one */
+.campus-idcard .id-clip {
+  position:absolute; top:-2px; left:50%; transform:translateX(-50%);
+  width:34px; height:9px; border-radius:0 0 6px 6px;
+  background:linear-gradient(180deg, #10101f, var(--panel2));
+  border:1px solid color-mix(in srgb, var(--lav), transparent 75%); border-top:0;
+}
+.campus-idcard .id-band {
+  display:flex; align-items:center; justify-content:space-between;
+  margin:2px 0 9px; padding-bottom:7px; border-bottom:var(--hairline);
+}
+.campus-idcard .id-crest {
+  display:flex; align-items:center; gap:6px;
+  font-family:var(--pix); font-size:7px; color:var(--pink); letter-spacing:.04em;
+}
+.campus-idcard .id-crestmark { width:13px; height:13px; flex:none; }
+.campus-idcard .id-kind {
+  font-family:var(--mono); font-size:8px; letter-spacing:.22em; color:var(--ink-faint);
+}
+.campus-idcard .id-foil {
+  position:absolute; left:0; right:0; bottom:0; height:4px; opacity:.8;
+  background:linear-gradient(90deg, var(--pink), var(--gold), var(--lav), var(--pink));
+}
+.campus-idcard .id-top { display:flex; gap:10px; align-items:flex-start; }
+.campus-idcard .id-well { width:58px; flex:none; }
+.campus-idcard > .id-chip { margin-top:9px; }
+.campus-idcard .id-meta { flex:1; min-width:0; }
+/* THE PHOTO WELL. One <img> - the host's baked avatar or the drawn stand-in
+   (shell/idcard.js's data URIs). ONE BREATH lives on the rim, pink once the
+   photo is real, lavender while it is a placeholder. */
 .campus-idcard .id-photo {
-  width:48px; height:56px; border-radius:7px; border:var(--hairline);
-  flex:none; position:relative;
-  background:radial-gradient(circle at 50% 34%, var(--panel2) 26%, var(--campus-furn) 70%);
+  width:58px; height:66px; border-radius:7px; border:var(--hairline);
+  position:relative; overflow:hidden; background:var(--flap-well);
+  animation:id-rim 3.6s ease-in-out infinite;
 }
-.campus-idcard .id-photo::before {
-  content:""; position:absolute; left:50%; top:12px; width:17px; height:17px;
-  border-radius:50%; transform:translateX(-50%);
-  background:color-mix(in srgb, var(--lav), transparent 60%);
+.campus-idcard .id-photo.is-real {
+  border-color:color-mix(in srgb, var(--pink), transparent 40%);
+  animation-name:id-rim-pink;
 }
-.campus-idcard .id-photo::after {
-  content:""; position:absolute; left:50%; bottom:5px; width:28px; height:17px;
-  border-radius:9px 9px 0 0; transform:translateX(-50%);
-  background:color-mix(in srgb, var(--lav), transparent 60%);
+@keyframes id-rim {
+  0%, 100% { box-shadow:0 0 0 0 color-mix(in srgb, var(--lav), transparent 60%); }
+  50% { box-shadow:0 0 12px 1px color-mix(in srgb, var(--lav), transparent 58%); }
 }
-.campus-idcard .id-name { font-family:var(--disp); font-size:14px; color:var(--ink); }
+@keyframes id-rim-pink {
+  0%, 100% { box-shadow:0 0 0 0 color-mix(in srgb, var(--pink), transparent 60%); }
+  50% { box-shadow:0 0 14px 1px color-mix(in srgb, var(--pink), transparent 52%); }
+}
+.id-photo-img {
+  position:absolute; inset:0; width:100%; height:100%; display:block;
+  object-fit:cover;
+}
+/* PHOTO DAY: the flash is the WELL's, never the screen's, and the photo
+   develops in from grey. Both classes come off the moment the beat is over. */
+.id-flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; }
+.is-flashing > .id-flash,
+.is-flashing > .arc-id-flash { animation:id-flash .16s ease-out both; }
+@keyframes id-flash { 0% { opacity:.9; } 100% { opacity:0; } }
+.is-developing > .id-photo-img,
+.is-developing > .arc-id-photo-img { animation:id-develop .7s ease-out both; }
+@keyframes id-develop {
+  from { filter:grayscale(1) blur(4px) brightness(1.5); }
+  to { filter:none; }
+}
+/* THE CHIP. The photo consent, in one row: an LED, the Discord glyph on the
+   unlinked rung, and the words. It is a real <button> inside the card's own
+   role=button, so its click stops there (campus.js) and never opens the card. */
+.id-chip {
+  margin-top:6px; width:100%;
+  display:flex; align-items:center; gap:5px; white-space:nowrap;
+  background:var(--flap-well); border:var(--hairline); border-radius:6px;
+  padding:4px 5px;
+  font-family:var(--mono); font-size:7px; letter-spacing:.03em; line-height:1.2;
+  color:var(--ink-dim); text-align:left; cursor:pointer;
+  transition:transform .08s ease-out, border-color .18s, box-shadow .18s, opacity .18s;
+}
+.id-chip:hover {
+  border-color:color-mix(in srgb, var(--pink), transparent 50%);
+  box-shadow:0 0 12px color-mix(in srgb, var(--pink), transparent 70%);
+}
+.id-chip:focus-visible { outline:2px solid var(--lav); outline-offset:2px; }
+.id-chip:active { transform:scale(.96); }
+.id-chip[disabled] { cursor:default; opacity:.72; }
+.id-chip .id-chip-label { overflow:hidden; text-overflow:ellipsis; }
+.id-chip-led {
+  width:6px; height:6px; border-radius:50%; flex:none;
+  background:var(--slate); box-shadow:0 0 0 1px rgba(0,0,0,.4);
+}
+.id-chip.is-on .id-chip-led { background:var(--pink); box-shadow:0 0 6px var(--pink); }
+.id-chip.is-use .id-chip-led { background:var(--lav); box-shadow:0 0 5px var(--lav); }
+.id-chip.is-link .id-chip-led { background:var(--discord); box-shadow:0 0 6px var(--discord); }
+.id-chip.is-pending .id-chip-led { background:var(--gold); box-shadow:0 0 5px var(--gold); }
+.id-chip-glyph { width:9px; height:9px; flex:none; opacity:.85; color:var(--discord); }
+/* WAITING is the ONE optimistic paint, and it looks like waiting rather than
+   like a result (trap 1). Static equivalent: the LED simply sits amber. */
+.id-chip.is-wait .id-chip-led { background:var(--gold); animation:id-blink .7s steps(2) infinite; }
+@keyframes id-blink { to { opacity:.15; } }
+.id-chip.is-shiver { animation:id-shiver .25s ease-in-out; }
+@keyframes id-shiver {
+  0%, 100% { transform:translateX(0); }
+  20% { transform:translateX(-4px); }
+  40% { transform:translateX(4px); }
+  60% { transform:translateX(-3px); }
+  80% { transform:translateX(3px); }
+}
+.campus-idcard .id-name {
+  /* --body, not --disp: the display face small-caps a nickname (see the big
+     card's own note). A name is printed as it is typed. */
+  font-family:var(--body); font-weight:700; font-size:14px; color:var(--ink);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.campus-idcard .id-num { font-family:var(--mono); font-size:8px; letter-spacing:.14em; color:var(--ink-dim); margin-top:3px; }
 .campus-idcard .id-no { font-family:var(--mono); font-size:9px; letter-spacing:.2em; color:var(--ink-faint); margin-top:3px; }
 .campus-idcard .id-tier {
   display:inline-block; margin-top:5px; font-family:var(--mono); font-size:8.5px;
@@ -1791,6 +1902,14 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
   border:1px solid color-mix(in srgb, var(--gold), transparent 60%);
   border-radius:4px; padding:2px 5px;
   background:color-mix(in srgb, var(--gold), transparent 93%);
+  transform:rotate(-3deg);
+}
+/* RE-INKED: the YEAR stamp lands again when the tier moves (campus.js update). */
+.campus-idcard .id-tier.is-thud { animation:id-thud .34s cubic-bezier(.2, 1.5, .4, 1) both; }
+@keyframes id-thud {
+  0% { transform:rotate(-3deg) scale(2.1); filter:brightness(2.2); }
+  55% { transform:rotate(-3deg) scale(.86); }
+  100% { transform:rotate(-3deg) scale(1); filter:none; }
 }
 .campus-idcard .id-stats { display:flex; gap:7px; margin-top:10px; }
 .campus-idcard .id-stat {
@@ -3576,6 +3695,366 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
 html.ae-lite .arc-rs-glint,
 html.ae-lite .arc-rs .arc-pc-text { animation:none; }
 html.ae-lite .arc-rs-name .arc-rs-l { animation-play-state:running, paused; }
+
+/* ---- THE ID SPOTLIGHT (shell/idcard.js createIdSpotlight) ---------------
+   The Records spotlight's twin, one door down: pick up the student ID leaning
+   in the corner of the campus and the school holds it to the desk lamp. Same
+   z 46 (under the annex reveal 48, under EMI 50, under the toasts 60), same
+   veil + key light + placard + one focusable close, same "records.js only
+   mounts nodes, every frame of motion lives here".
+   Choreography (delays from mount):
+     0ms   veil + lamp + the card sweeps in         400ms  the YEAR stamp lands
+     700ms the marquee glint crosses the name       750ms  six tiles, 90ms apart
+   LAWS KEPT: the foil DRIFTS and the laminate answers the mouse by TRANSFORM,
+   never background-position (trap 36); the name's glint is a translating strip
+   inside a clipping box for the same reason; every base state is VISIBLE, so
+   animation:none is a finished still, not a blank card.
+   Reduced motion (.arc-id-reduced, minted by idcard.js off html.arc-reduced OR
+   the media query) is ONE fade on the ROOT and animation:none on every single
+   thing inside it - the tiles arrive already carrying their numbers. */
+.arc-id {
+  position:fixed; inset:0; z-index:46;
+  display:flex; align-items:center; justify-content:center;
+}
+.arc-id-veil {
+  position:absolute; inset:0;
+  /* DEEPER THAN THE RECORDS ONE, on purpose: that spotlight covers a dark
+     panel, this one covers the LIT campus plan, and the same three stops read
+     as a filter over the school rather than as the school going dark. */
+  background:radial-gradient(ellipse at 50% 40%,
+    color-mix(in srgb, var(--navy), transparent 22%) 0%,
+    rgba(5, 6, 14, .93) 62%,
+    rgba(3, 4, 10, .97) 100%);
+  animation:arc-id-fade .28s ease-out both;
+}
+@keyframes arc-id-fade { from { opacity:0; } to { opacity:1; } }
+.arc-id.is-closing { pointer-events:none; }
+.arc-id.is-closing .arc-id-veil,
+.arc-id.is-closing .arc-id-stage,
+.arc-id.is-closing .arc-id-close { animation:arc-id-out .18s ease-in both; }
+@keyframes arc-id-out { to { opacity:0; } }
+
+.arc-id-stage {
+  position:relative;
+  display:flex; flex-direction:column; align-items:center; gap:16px;
+  max-width:96vw; padding:10px;
+}
+.arc-id-lamp {
+  position:absolute; left:50%; top:40%;
+  width:150%; aspect-ratio:1.35;
+  transform:translate(-50%, -52%);
+  pointer-events:none;
+  background:radial-gradient(ellipse at 50% 46%,
+    color-mix(in srgb, var(--gold), transparent 82%) 0%,
+    color-mix(in srgb, var(--lav), transparent 90%) 44%,
+    transparent 70%);
+  animation:arc-id-fade .6s ease-out both,
+            arc-id-lamp-breathe 7s 1.5s ease-in-out infinite alternate;
+}
+@keyframes arc-id-lamp-breathe { from { opacity:1; } to { opacity:.72; } }
+.arc-id-row {
+  display:flex; gap:24px; align-items:stretch; flex-wrap:wrap; justify-content:center;
+}
+
+/* THE CARD, big. The wrapper owns the perspective and the entrance; the card
+   itself owns only the tilt and the flip, so the two never fight over one
+   transform (the arc-rs-card lesson). */
+.arc-id-cardwrap {
+  perspective:1100px;
+  animation:arc-id-cardin .55s cubic-bezier(.18, 1.2, .3, 1) both;
+}
+@keyframes arc-id-cardin {
+  from { opacity:0; transform:translateY(9vh) scale(.55) rotate(-4deg); }
+  70%  { opacity:1; transform:translateY(-.6vh) scale(1.015) rotate(.5deg); }
+  to   { opacity:1; transform:none; }
+}
+.arc-id-big {
+  --rx:0deg; --ry:0deg; --mx:50%; --my:50%;
+  position:relative; width:min(560px, 92vw); aspect-ratio:1.62;
+  border-radius:16px; cursor:pointer;
+  transform-style:preserve-3d;
+  transform:rotateX(var(--rx)) rotateY(var(--ry));
+  transition:transform .12s ease-out;
+}
+.arc-id-big.is-flipping { transition:transform .6s cubic-bezier(.2, 1.2, .35, 1); }
+.arc-id-big.is-back { transform:rotateY(180deg); }
+.arc-id-face {
+  position:absolute; inset:0; border-radius:16px; overflow:hidden;
+  backface-visibility:hidden;
+  background:linear-gradient(160deg, #2b2b52 0%, var(--panel) 40%, #171730 100%);
+  border:1px solid color-mix(in srgb, var(--lav), transparent 72%);
+  box-shadow:0 34px 84px rgba(0,0,0,.72),
+    0 0 46px color-mix(in srgb, var(--lav), transparent 78%),
+    inset 0 1px 0 rgba(255,255,255,.08);
+}
+.arc-id-face.is-back { transform:rotateY(180deg); }
+/* THE LAMINATE. A specular that follows the pointer by TRANSFORM off the two
+   custom properties the tilt handler writes - plain alpha, no blend surface
+   (trap 36's first third: a blend must read back what is under it). */
+.arc-id-lam {
+  position:absolute; inset:-60%; pointer-events:none; opacity:.5;
+  background:radial-gradient(circle at 50% 50%,
+    rgba(255,255,255,.22) 0%, rgba(255,255,255,.05) 22%, transparent 45%);
+  transform:translate(calc((var(--mx, 50%) - 50%) * .8), calc((var(--my, 50%) - 50%) * .8));
+}
+/* THE HOLO FOIL. The rainbow DRIFTS on the `translate` property and SHIFTS with
+   the tilt on `transform` - two independent transforms, one layer, and not a
+   pixel of background-position anywhere. */
+.arc-id-foil {
+  position:absolute; left:0; right:0; bottom:0; height:13%;
+  overflow:hidden; border-top:1px solid rgba(255,255,255,.12);
+}
+.arc-id-rainbow {
+  position:absolute; top:0; bottom:0; left:-50%; width:200%; display:block;
+  opacity:.85;
+  background:linear-gradient(100deg, var(--pink) 0%, var(--gold) 18%, #7ee0d6 36%,
+    var(--lav) 52%, var(--pink) 70%, var(--gold) 88%, var(--lav) 100%);
+  transform:translateX(calc((var(--mx, 50%) - 50%) * -.12));
+  animation:arc-id-foildrift 14s ease-in-out infinite alternate;
+}
+@keyframes arc-id-foildrift { from { translate:-4% 0; } to { translate:4% 0; } }
+.arc-id-grid {
+  position:absolute; inset:0; display:block; opacity:.5;
+  background:repeating-linear-gradient(90deg, transparent 0 6px, rgba(0,0,0,.35) 6px 7px),
+             repeating-linear-gradient(0deg, transparent 0 3px, rgba(0,0,0,.25) 3px 4px);
+}
+.arc-id-foilmark {
+  position:absolute; left:18px; top:50%; transform:translateY(-50%);
+  font-family:var(--pix); font-size:7.5px; letter-spacing:.08em; color:rgba(20,20,40,.9);
+}
+.arc-id-foilno {
+  position:absolute; right:18px; top:50%; transform:translateY(-50%);
+  font-family:var(--mono); font-size:9px; letter-spacing:.2em; color:rgba(20,20,40,.85);
+}
+.arc-id-band {
+  position:absolute; left:0; right:0; top:0; height:15%;
+  display:flex; align-items:center; justify-content:space-between; padding:0 22px;
+  background:linear-gradient(90deg, var(--pink-deep), var(--pink) 60%, var(--pink-deep));
+  color:#1a1030;
+}
+.arc-id-crest { display:flex; align-items:center; gap:9px; font-family:var(--pix); font-size:10px; letter-spacing:.05em; }
+.arc-id-crestmark { width:19px; height:19px; flex:none; }
+.arc-id-kind { font-family:var(--mono); font-size:10px; letter-spacing:.28em; font-weight:600; }
+
+.arc-id-body { position:absolute; left:22px; right:22px; top:19%; bottom:16%; display:flex; gap:22px; }
+.arc-id-body.is-back { flex-direction:column; gap:10px; top:17%; }
+.arc-id-well { width:31%; flex:none; display:flex; flex-direction:column; }
+/* ONE BREATH, and it is the photo rim - pink once the photo is real. */
+.arc-id-photo {
+  width:100%; aspect-ratio:56/66; border-radius:10px; position:relative; overflow:hidden;
+  border:2px solid color-mix(in srgb, var(--lav), transparent 65%);
+  background:var(--flap-well);
+  animation:arc-id-rim 3.6s ease-in-out infinite;
+}
+.arc-id-photo.is-real {
+  border-color:color-mix(in srgb, var(--pink), transparent 30%);
+  animation-name:arc-id-rim-pink;
+}
+@keyframes arc-id-rim {
+  0%, 100% { box-shadow:0 0 0 0 color-mix(in srgb, var(--lav), transparent 60%); }
+  50% { box-shadow:0 0 18px 2px color-mix(in srgb, var(--lav), transparent 55%); }
+}
+@keyframes arc-id-rim-pink {
+  0%, 100% { box-shadow:0 0 0 0 color-mix(in srgb, var(--pink), transparent 60%); }
+  50% { box-shadow:0 0 22px 2px color-mix(in srgb, var(--pink), transparent 50%); }
+}
+.arc-id-photo-img { position:absolute; inset:0; width:100%; height:100%; display:block; object-fit:cover; }
+.arc-id-flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; }
+/* the chip, at reading size (the shared rungs live with .id-chip above) */
+.arc-id-chip { margin-top:9px; font-size:9.5px; gap:7px; padding:7px 8px; border-radius:7px; white-space:normal; }
+.arc-id-chip .id-chip-led { width:8px; height:8px; }
+.arc-id-chip .id-chip-glyph { width:12px; height:12px; }
+.arc-id-hint {
+  margin-top:6px; font-family:var(--mono); font-size:8.5px; line-height:1.45;
+  letter-spacing:.02em; color:var(--ink-faint);
+}
+.arc-id-meta { flex:1; min-width:0; position:relative; }
+/* THE MARQUEE. A glint strip travelling across the name inside its own
+   clipping box - a transform, never an animated background-position. */
+.arc-id-name {
+  position:relative; display:inline-block; overflow:hidden;
+  margin:2px 0 0; max-width:100%;
+  /* --body, NOT --disp: the display face falls through to Copperplate Gothic
+     on most Windows boxes and small-caps everything it is handed. A nickname's
+     casing is the nickname, so the one place the player's own name is printed
+     large gets the plain stack. */
+  font-family:var(--body); font-weight:800;
+  font-size:clamp(19px, 3.3vw, 30px); line-height:1.08; letter-spacing:.02em;
+  color:var(--ink);
+}
+.arc-id-glint {
+  position:absolute; top:-40%; bottom:-40%; left:0; width:38%; display:block;
+  pointer-events:none;
+  background:linear-gradient(100deg, transparent 0%, rgba(255,255,255,.5) 46%,
+    rgba(255,255,255,.08) 60%, transparent 100%);
+  transform:translateX(-190%) rotate(8deg);
+  animation:arc-id-glint 6s .7s ease-in-out infinite;
+}
+@keyframes arc-id-glint {
+  0%   { transform:translateX(-190%) rotate(8deg); }
+  16%  { transform:translateX(400%) rotate(8deg); }
+  100% { transform:translateX(400%) rotate(8deg); }
+}
+.arc-id-num { font-family:var(--mono); font-size:11px; letter-spacing:.2em; color:var(--ink-faint); margin-top:6px; }
+.arc-id-num .arc-id-numval { font-style:normal; color:var(--ink-dim); margin-left:6px; }
+.arc-id-num .arc-id-numtemp {
+  font-style:normal; font-size:8px; letter-spacing:.18em; margin-left:6px;
+  color:var(--gold); border:1px solid color-mix(in srgb, var(--gold), transparent 60%);
+  border-radius:3px; padding:0 4px;
+}
+.arc-id-rows {
+  margin:12px 0 0; display:grid; grid-template-columns:auto 1fr; gap:5px 14px;
+  font-family:var(--mono); font-size:10px; letter-spacing:.12em;
+}
+.arc-id-rows dt { color:var(--ink-faint); margin:0; }
+.arc-id-rows dd { color:var(--ink-dim); margin:0; }
+/* THE YEAR STAMP. It lands 400ms in with the punch card's own thud. */
+.arc-id-yearstamp {
+  position:absolute; right:-4px; bottom:2px;
+  font-family:var(--mono); font-size:13px; letter-spacing:.18em; color:var(--gold);
+  border:2px solid color-mix(in srgb, var(--gold), transparent 45%); border-radius:6px;
+  padding:6px 12px; transform:rotate(-7deg);
+  background:color-mix(in srgb, var(--gold), transparent 92%);
+  animation:arc-id-bigthud .34s .4s cubic-bezier(.2, 1.5, .4, 1) both;
+}
+.arc-id-yearstamp.is-thud { animation:arc-id-bigthud .34s cubic-bezier(.2, 1.5, .4, 1) both; }
+.arc-id-yearstamp small {
+  display:block; font-size:7.5px; letter-spacing:.28em; margin-top:2px;
+  color:color-mix(in srgb, var(--gold), transparent 30%);
+}
+@keyframes arc-id-bigthud {
+  0%   { opacity:0; transform:rotate(-7deg) scale(2.1); filter:brightness(2.2); }
+  30%  { opacity:1; }
+  55%  { opacity:1; transform:rotate(-7deg) scale(.86); }
+  100% { opacity:1; transform:rotate(-7deg) scale(1); filter:none; }
+}
+/* THE BACK: the barcode, the small print, the punch line and the signature. */
+.arc-id-barcode {
+  height:40px; width:70%; display:flex; align-items:stretch;
+  background:var(--ink); padding:4px 8px; border-radius:4px;
+}
+.arc-id-barcode i { display:block; background:#12122a; }
+.arc-id-barcodeno { font-family:var(--mono); font-size:9px; letter-spacing:.4em; color:var(--ink-dim); margin-top:4px; }
+.arc-id-small { margin:0; font-family:var(--mono); font-size:9.5px; line-height:1.55; color:var(--ink-dim); max-width:88%; }
+.arc-id-small b { color:var(--ink); font-weight:600; }
+.arc-id-punchline { font-family:var(--mono); font-size:9.5px; letter-spacing:.06em; color:var(--ink-faint); }
+.arc-id-recordslink {
+  align-self:flex-start; background:transparent; cursor:pointer;
+  border:1px solid color-mix(in srgb, var(--lav), transparent 60%); border-radius:6px;
+  padding:5px 9px;
+  font-family:var(--mono); font-size:9px; letter-spacing:.16em; color:var(--lav);
+  transition:transform .08s, box-shadow .18s;
+}
+.arc-id-recordslink:hover { box-shadow:0 0 14px color-mix(in srgb, var(--lav), transparent 60%); }
+.arc-id-recordslink:focus-visible { outline:2px solid var(--lav); outline-offset:2px; }
+.arc-id-recordslink:active { transform:scale(.96); }
+.arc-id-sig { margin-top:auto; display:flex; align-items:flex-end; gap:14px; }
+.arc-id-sigline { flex:1; border-bottom:1px solid var(--ink-faint); position:relative; height:28px; }
+.arc-id-sigline span {
+  position:absolute; left:8px; bottom:2px; transform:rotate(-2deg);
+  font-family:var(--body); font-style:italic; font-size:18px; color:var(--lav);
+}
+
+/* THE STAT SHEET. Six tiles, landing 90ms apart on a chime ladder. Base state
+   is the FINISHED tile, so animation:none is a full sheet. */
+.arc-id-sheet {
+  display:grid; grid-template-columns:repeat(2, 150px); gap:10px; align-content:start;
+  animation:arc-id-sheetin .4s .45s ease-out both;
+}
+@keyframes arc-id-sheetin {
+  from { opacity:0; transform:translateY(10px); }
+  to { opacity:1; transform:none; }
+}
+.arc-id-tile {
+  position:relative; padding:12px 12px 10px; border-radius:10px;
+  background:linear-gradient(160deg, var(--panel), var(--navy));
+  border:var(--hairline);
+  animation:arc-id-tilein .34s cubic-bezier(.2, 1.5, .4, 1) both;
+  animation-delay:calc(.75s + var(--i, 0) * 90ms);
+}
+@keyframes arc-id-tilein {
+  from { opacity:0; transform:translateY(8px) scale(.94); }
+  to { opacity:1; transform:none; }
+}
+.arc-id-tile > b {
+  display:block; font-family:var(--mono); font-size:24px; font-weight:600;
+  line-height:1; color:var(--pink); font-variant-numeric:tabular-nums;
+}
+.arc-id-tile.is-gold > b { color:var(--gold); }
+.arc-id-tile.is-lav > b { color:var(--lav); }
+.arc-id-tile.is-text > b { font-size:15px; color:var(--ink); letter-spacing:.06em; white-space:nowrap; }
+.arc-id-tile.is-text > b i { font-style:normal; font-size:10px; color:var(--ink-faint); letter-spacing:.14em; margin-left:6px; }
+.arc-id-tile > span {
+  display:block; margin-top:6px;
+  font-family:var(--mono); font-size:8px; letter-spacing:.18em; color:var(--ink-faint);
+}
+/* ALMOST: the honest distance to the next milestone, ghosted. Text, so motion
+   level 0 loses nothing at all. */
+.arc-id-almost {
+  position:absolute; right:10px; top:10px; text-align:right; line-height:1.3;
+  font-family:var(--mono); font-size:8px; letter-spacing:.12em;
+  color:color-mix(in srgb, var(--gold), transparent 30%);
+}
+.arc-id-almost b { display:block; font-size:8px; color:inherit; opacity:.6; }
+
+.arc-id-placard { text-align:center; animation:arc-id-sheetin .4s .55s ease-out both; }
+.arc-id-placard h2 {
+  margin:0; font-family:var(--disp); font-weight:800;
+  font-size:clamp(16px, 2.6vw, 22px); letter-spacing:.2em; text-transform:uppercase;
+  color:var(--ink); text-shadow:0 2px 10px rgba(0,0,0,.6);
+}
+.arc-id-placard p {
+  margin:5px 0 0; font-family:var(--mono); font-size:10px; letter-spacing:.16em;
+  color:var(--ink-faint);
+}
+.arc-id-close {
+  position:absolute; top:clamp(10px, 3vh, 26px); right:clamp(12px, 3vw, 30px);
+  width:44px; height:44px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:17px; line-height:1; color:var(--ink-dim); cursor:pointer;
+  background:color-mix(in srgb, var(--navy), transparent 28%);
+  border:var(--hairline); border-radius:999px;
+  transition:color .15s, border-color .15s, transform .15s;
+  animation:arc-id-fade .3s .25s ease-out both;
+}
+.arc-id-close:hover { color:var(--ink); border-color:var(--lav); transform:scale(1.06); }
+.arc-id-close:focus-visible { outline:2px solid var(--lav); outline-offset:2px; }
+
+/* REDUCED MOTION. The ONE fade lives on the ROOT (`.arc-id` itself), and every
+   single thing INSIDE it is animation:none - which is the assertion the rig
+   makes and the reason the fade is not on the veil. The card still flips, the
+   chip still works, and the tiles carry their numbers from the first frame
+   (idcard.js fills them at mount). */
+.arc-id.arc-id-reduced { opacity:1; animation:arc-id-fade .12s ease-out both; }
+.arc-id-reduced *, .arc-id-reduced *::before, .arc-id-reduced *::after { animation:none !important; }
+.arc-id-reduced .arc-id-big { transition:none; }
+.arc-id-reduced .arc-id-lam { display:none; }
+.arc-id-reduced .arc-id-photo { box-shadow:0 0 14px 1px color-mix(in srgb, var(--lav), transparent 60%); }
+.arc-id-reduced .arc-id-photo.is-real { box-shadow:0 0 14px 1px color-mix(in srgb, var(--pink), transparent 55%); }
+.arc-id-reduced .arc-id-glint { display:none; }
+.arc-id-reduced.is-closing { animation:arc-id-out .12s ease-in both; }
+/* A LIT-DOWN ROOM keeps the entrance and sheds the loops: the lamp's breath,
+   the foil drift, the photo rim and the roaming glint are the per-frame cost
+   and none of them is the beat. Both seams say the same thing - the engine's
+   own html.ae-lite and idcard.js's `lite` (init.performanceMode). */
+html.ae-lite .arc-id-lamp,
+.arc-id.is-lite .arc-id-lamp { animation:arc-id-fade .6s ease-out both; }
+html.ae-lite .arc-id-rainbow,
+html.ae-lite .arc-id-photo,
+html.ae-lite .arc-id-glint,
+.arc-id.is-lite .arc-id-rainbow,
+.arc-id.is-lite .arc-id-photo,
+.arc-id.is-lite .arc-id-glint { animation:none; }
+/* A PHONE STACKS. The card over the sheet, the sheet two columns of whatever
+   is left, and the chip at a thumb's size (owner bug C's rule). */
+html.arc-mobile .arc-id-row { flex-direction:column; gap:14px; align-items:center; }
+html.arc-mobile .arc-id-sheet { grid-template-columns:repeat(2, 1fr); width:min(560px, 92vw); }
+html.arc-mobile .arc-id-chip { min-height:44px; font-size:11px; }
+html.arc-mobile .arc-id-stage { gap:12px; }
+@media (max-width:820px) {
+  .arc-id-row { flex-direction:column; align-items:center; }
+  .arc-id-sheet { grid-template-columns:repeat(2, 1fr); width:min(560px, 92vw); }
+}
 
 /* ---- THE WALL WHISPER --------------------------------------------------
    A breath of each class's spotlight identity on the pinned cards - but the

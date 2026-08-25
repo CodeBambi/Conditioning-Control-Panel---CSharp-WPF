@@ -364,7 +364,19 @@ namespace ConditioningControlPanel.Services
         {
             if (_isRunning || _isDisposed) return;
 
-            // Check if feature is enabled and consent given
+            // Check if the account is entitled, the feature is enabled and consent was given.
+            //
+            // The entitlement term is #1047's other half: this legacy poll reads the foreground window
+            // TITLE every 1.5s and is armed by the same dial as the v2 observer, so gating only the
+            // observer would have left the older, blunter watcher running for a lapsed account.
+            // Awareness is a tier-1 feature (ExclusiveFeature "awareness", Tier = 1) and this asks the
+            // same question its page's veil does.
+            if (!Services.Awareness.AwarenessObserver.HasEntitlement)
+            {
+                App.Logger?.Debug("WindowAwareness: Not starting - no premium entitlement for awareness");
+                return;
+            }
+
             if (App.Settings?.Current?.AwarenessModeEnabled != true ||
                 App.Settings?.Current?.AwarenessConsentGiven != true)
             {
@@ -549,6 +561,12 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                // Entitlement, re-asked live rather than trusted from Start(). A subscription that
+                // expires (or a free day that rotates out at midnight) while this timer is armed must
+                // stop the watching, not merely re-draw the padlock over it — the #267 rule. Ahead of
+                // GetActiveWindowTitle so a lapsed account's titles are never read.
+                if (!Services.Awareness.AwarenessObserver.HasEntitlement) return;
+
                 // "Not right now." Tested BEFORE the window title is read, so a pause observes
                 // nothing rather than observing and discarding.
                 //

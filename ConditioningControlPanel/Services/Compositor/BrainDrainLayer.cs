@@ -46,14 +46,27 @@ public sealed class BrainDrainLayer : BaseLayer
     private double _sourceRadius;               // WPF-BlurEffect-equivalent radius ON THE DOWNSCALED SOURCE
     // Alpha-mix axis (compositor path only). At low intensity the gaussian is a fraction of a
     // source pixel wide - i.e. nothing - so the *strength* has to come from how much of the blurred
-    // copy we paint over the real screen. Intensity 1..100 ramps the draw alpha linearly 0.30 -> 0.85:
-    // the real screen ALWAYS ghosts through (owner call, 2026-07-31: the effect must stay subtle -
-    // full-opacity blur read as "basically illegible"). Sigma rises alongside, so perceived strength
-    // is continuous across 1 -> 100 while the ceiling stays a dreamy haze, not a wall.
-    // Pulse still paints at full alpha - a pulse is a deliberate 1-second slam.
+    // copy we paint over the real screen. The real screen ALWAYS ghosts through (owner call,
+    // 2026-07-31: the effect must stay subtle - full-opacity blur read as "basically illegible").
+    // Sigma rises alongside, so perceived strength is continuous across 1 -> 100 while the ceiling
+    // stays a dreamy haze, not a wall. Pulse still paints at full alpha - a deliberate 1-second slam.
+    //
+    // FLOOR LOWERED 2026-08-25 (support: "too strong even at low values"). The old curve was linear
+    // 0.30 -> 0.85, which meant intensity 1 still painted 30% of a copy the capture pump had already
+    // downscaled 4x and stretched back. That resample IS a blur on its own, so the bottom of the dial
+    // was never actually light: sigma was ~0 but the veil was not. The floor is now 0.10 and the ramp
+    // is shaped by AlphaCurveExponent so the SAME dial values keep the SAME feel from the middle up:
+    //   intensity   1 -> 0.10 (was 0.30)      the genuinely light setting people were reaching for
+    //   intensity  25 -> 0.39 (was 0.43)      slightly lighter
+    //   intensity  50 -> 0.57 (was 0.57)      unchanged
+    //   intensity  75 -> 0.72 (was 0.71)      unchanged to the eye
+    //   intensity 100 -> 0.85 (was 0.85)      unchanged
+    // The exponent is what buys that: 0.66 is the power that pins the 50 point in place while the
+    // floor drops. Nobody at a mid or high setting feels this change; only the bottom third moves.
     private const int AlphaFullIntensity = 100;
-    private const double AlphaFloor = 0.30;
+    private const double AlphaFloor = 0.10;
     private const double AlphaCeiling = 0.85;
+    private const double AlphaCurveExponent = 0.66;
     private byte _drawAlpha = 255;
     // Melt variant ("braindrain_melt"): shares this layer and ALL of OverlayService's hold/ramp
     // state - a melt band and a plain blur band never co-exist by design.
@@ -266,9 +279,10 @@ public sealed class BrainDrainLayer : BaseLayer
         _pump?.SetBlur(Sigma, _meltAmplitude);
     }
 
-    /// <summary>Draw alpha for an intensity: <see cref="AlphaFloor"/> at 1, linear to
-    /// <see cref="AlphaCeiling"/> at <see cref="AlphaFullIntensity"/> and above - never fully
-    /// opaque. See the field comment for why.</summary>
+    /// <summary>Draw alpha for an intensity: <see cref="AlphaFloor"/> at 1, rising by
+    /// <see cref="AlphaCurveExponent"/> to <see cref="AlphaCeiling"/> at
+    /// <see cref="AlphaFullIntensity"/> and above - never fully opaque. See the field comment for
+    /// the curve and for why the floor moved.</summary>
     /// <summary>
     /// The draw-alpha curve, shared with the legacy per-screen window path in OverlayService the
     /// same way <see cref="RadiusScale"/> already is. Both paths have to mean the same thing at the
@@ -280,7 +294,8 @@ public sealed class BrainDrainLayer : BaseLayer
     internal static byte AlphaFor(int intensity)
     {
         int i = Math.Clamp(intensity, 1, AlphaFullIntensity);
-        double a = AlphaFloor + (AlphaCeiling - AlphaFloor) * (i - 1) / (AlphaFullIntensity - 1.0);
+        double t = (i - 1) / (AlphaFullIntensity - 1.0);
+        double a = AlphaFloor + (AlphaCeiling - AlphaFloor) * Math.Pow(t, AlphaCurveExponent);
         return (byte)Math.Clamp(Math.Round(a * 255.0), 0, 255);
     }
 

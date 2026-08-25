@@ -1803,7 +1803,9 @@ namespace ConditioningControlPanel.Services
         private void EnsureLayerHook()
         {
             if (_layerHook != null) return;
-            _layerHook = new GlobalMouseHook { LeftDown = OnLayerFlashLeftDown };
+            // Right-click dismisses too: layer flashes own no right-button verb, so the right
+            // message routes into the same hit-test (a miss still passes the click through).
+            _layerHook = new GlobalMouseHook { LeftDown = OnLayerFlashLeftDown, RightDown = OnLayerFlashLeftDown };
             _layerHook.Start();
         }
 
@@ -3029,6 +3031,13 @@ namespace ConditioningControlPanel.Services
         /// <param name="haveLocal">True when a disk or pack image is available as an alternative.</param>
         private bool ShouldDrawRemote(bool haveLocal)
         {
+            // Bug #1037. This used to read the ratio without ever re-reading the source setting,
+            // so a user who switched to "my library only" mid-run kept drawing remote stills at
+            // RemoteMediaRatio% until the warm pool drained - which is why restarting the app
+            // "fixed" it. The source setting is the gate, and it is a live one: turning remote
+            // media off has to mean the very next flash is local.
+            if (!RemoteFlashesEnabled()) return false;
+
             // Nothing local to fall back to: the remote pool is the whole library. This is the
             // onboarding case the feature exists for - a user with an empty assets folder.
             if (!haveLocal) return true;
@@ -3629,11 +3638,16 @@ namespace ConditioningControlPanel.Services
 
             // One-time click handler — gated on the per-spawn IsClickable flag so a
             // recycled window behaves per its current spawn, with no handler stacking.
-            w.MouseLeftButtonDown += (s, e) =>
+            // Right-click dismisses too (suggestion): MOBA reflex — same handler on both buttons,
+            // with only the right path marked handled so it can't surface a context menu.
+            System.Windows.Input.MouseButtonEventHandler flashClick = (s, e) =>
             {
+                if (e.ChangedButton == System.Windows.Input.MouseButton.Right) e.Handled = true;
                 if (s is FlashWindow fw && fw.IsClickable && !fw.IsFadingOut)
                     OnFlashClicked(fw, App.Settings.Current);
             };
+            w.MouseLeftButtonDown += flashClick;
+            w.MouseRightButtonDown += flashClick;
 
             // Safety net: if the window is closed externally (e.g., OS shutdown, Alt+F4)
             // without going through SafeCloseFlashWindow, dispose the CTS to prevent leaks~ 🧹

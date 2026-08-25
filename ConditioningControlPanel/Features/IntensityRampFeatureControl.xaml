@@ -126,7 +126,7 @@
             </Grid>
         </Border>
 
-        <!-- Ramp links: its own card, five peer switches on one wrapped row. -->
+        <!-- Ramp links: its own card, six peer switches on one wrapped row. -->
         <Border Style="{StaticResource SettingCardStyle}">
             <Grid>
                 <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
@@ -161,10 +161,18 @@
                             <TextBlock Text="{loc:Str setting_master}" Foreground="{StaticResource TextLightBrush}"
                                        FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,14,6">
                             <CheckBox x:Name="ChkLinkSub" Style="{StaticResource ToggleStyle}"
                                       Checked="Link_Changed" Unchecked="Link_Changed"/>
                             <TextBlock Text="{loc:Str label_sub}" Foreground="{StaticResource TextLightBrush}"
+                                       FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <!-- Brain Drain rides the ramp like the spiral does. The BLUR strength, not
+                             the audio trigger rate - see RampLinkBrainDrain. -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <CheckBox x:Name="ChkLinkBrainDrain" Style="{StaticResource ToggleStyle}"
+                                      Checked="Link_Changed" Unchecked="Link_Changed"/>
+                            <TextBlock Text="{loc:Str label_braindrain}" Foreground="{StaticResource TextLightBrush}"
                                        FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </WrapPanel>

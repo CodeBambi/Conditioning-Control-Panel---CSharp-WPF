@@ -212,8 +212,12 @@ namespace ConditioningControlPanel.Services.Awareness
         public bool MediaSignalAvailable => _media?.IsAvailable == true;
 
         /// <summary>
-        /// Whether v2 may run at all: the kill switch, the feature toggle, the legacy consent AND the
-        /// v2 consent, all four.
+        /// Whether v2 may run at all: the ENTITLEMENT, the kill switch, the feature toggle, the legacy
+        /// consent AND the v2 consent, all five.
+        ///
+        /// <para><b>Entitlement is first on purpose</b> (see <see cref="HasEntitlement"/>). Awareness
+        /// is a tier-1 feature and this predicate used to be the one place in the chain that did not
+        /// know it, which left a lapsed account observed with no reachable off switch (#1047).</para>
         ///
         /// <para><b>Why <c>AwarenessConsentShownV2</c> is in here.</b> v1 persisted nothing; v2 keeps a
         /// 30-day on-disk record of per-app visit counts, minute totals, day streaks and a machine-wide
@@ -234,7 +238,7 @@ namespace ConditioningControlPanel.Services.Awareness
                 {
                     var s = App.Settings?.Current;
                     if (s == null) return false;
-                    return s.UseAwarenessV2 && s.AwarenessModeEnabled &&
+                    return HasEntitlement && s.UseAwarenessV2 && s.AwarenessModeEnabled &&
                            s.AwarenessConsentGiven && s.AwarenessConsentShownV2;
                 }
                 catch { return false; }
@@ -242,8 +246,47 @@ namespace ConditioningControlPanel.Services.Awareness
         }
 
         /// <summary>
-        /// Starts the ledger (which loads and prunes) and arms the poll. A no-op when awareness is off,
-        /// unconsented or the v2 kill switch is down — in which case the legacy
+        /// The entitlement half of <see cref="IsEnabled"/>, split out so the legacy
+        /// <c>WindowAwarenessService</c> poll and <c>MainWindow.EnforceEntitlementLapse</c> ask the
+        /// same question this does instead of each writing their own.
+        ///
+        /// <para><b>Why it exists at all (#1047).</b> Awareness is sold at tier 1
+        /// (<c>ExclusiveFeature</c> key <c>"awareness"</c>, <c>Tier = 1</c>) and its page carries the
+        /// premium veil, but the predicate above read four SETTINGS flags and no entitlement — so an
+        /// account whose access lapsed kept a one-second foreground poll and a 30-day on-disk ledger
+        /// running behind a padlock it could not reach through, tray-minimised included. That is the
+        /// exact shape PR #267 deleted everywhere else, and this is the same expression
+        /// <c>MainWindow.RefreshPremiumGate(AwarenessTab.AwarenessGate, "awareness")</c> paints the
+        /// veil with, so the veil and the engine can no longer disagree.</para>
+        ///
+        /// <para>"Premium" here means TIER 1, per the house rule. <c>HasPremiumAccess</c> already folds
+        /// in the whitelist, SubscribeStar and the 14-day offline grace, so a paying subscriber never
+        /// reads false during the startup window before async validation lands; only a genuinely
+        /// lapsed account does. The free-day rotation is OR'd in because the ? box can put awareness
+        /// in the window for a day.</para>
+        ///
+        /// <para>Fails CLOSED when <c>App.Patreon</c> is null (early startup, or a service that failed
+        /// to construct): a missing gate must never read as an open door. Safe here because every
+        /// start path runs after the Patreon service is constructed — the avatar tube's Loaded handler
+        /// and the companion room's dial — and <c>RefreshEntitlementVeils</c> re-arms the service if
+        /// entitlement resolves later.</para>
+        /// </summary>
+        public static bool HasEntitlement
+        {
+            get
+            {
+                try
+                {
+                    return App.Patreon?.HasPremiumAccess == true
+                           || App.DailyFree?.IsFreeToday("awareness") == true;
+                }
+                catch { return false; }
+            }
+        }
+
+        /// <summary>
+        /// Starts the ledger (which loads and prunes) and arms the poll. A no-op when the account is not
+        /// entitled, or awareness is off, unconsented or the v2 kill switch is down — in which case the legacy
         /// <c>WindowAwarenessService</c> pipeline keeps running exactly as it does today.
         /// </summary>
         public void Start()
@@ -252,7 +295,7 @@ namespace ConditioningControlPanel.Services.Awareness
 
             if (!IsEnabled)
             {
-                App.Logger?.Debug("AwarenessObserver: not starting (v2 off, awareness off, or no consent)");
+                App.Logger?.Debug("AwarenessObserver: not starting (not entitled, v2 off, awareness off, or no consent)");
                 return;
             }
 
@@ -431,6 +474,13 @@ namespace ConditioningControlPanel.Services.Awareness
             if (_disposed || !_running) return;
             if (Application.Current?.Dispatcher == null) return;
             if (Application.Current.Dispatcher.HasShutdownStarted) return;
+
+            // Re-asked EVERY tick, not only at Start(): entitlement can lapse mid-run (a free day
+            // rotating out at midnight, a subscription expiring, a logout) and a timer armed while the
+            // account was entitled would otherwise keep reading the foreground forever. #267 put the
+            // same live re-check in the keyword engine's fire paths for the same reason. It sits ahead
+            // of Observe(), so a lapsed account's window titles are never read, let alone recorded.
+            if (!IsEnabled) return;
 
             _ = TickAsync(_clock());
         }

@@ -233,6 +233,53 @@ internal static class AnimatedWebp
     /// </summary>
     public static void AttachAnimation(Image img, string path, int maxDim, int maxFrames = 48)
     {
+        Uri? stillUri = null;
+        try { stillUri = new Uri(path, UriKind.Absolute); } catch { }
+
+        AttachInternal(img, maxDim, maxFrames, path, stillUri,
+            (key, dim, frames) => DecodeCached(key, dim, frames,
+                () => DecodeFrames(path, dim, frames, maxMemoryMb: 24.0)));
+    }
+
+    /// <summary>
+    /// <see cref="AttachAnimation(Image,string,int,int)"/> for sources addressed by URI rather
+    /// than by file path - specifically the corner overlays' built-in <c>pack://</c> spiral, which
+    /// has no path to open. A file:// URI takes the path overload unchanged (SKCodec memory-maps
+    /// the file); a pack:// resource is pulled into memory on the CALLER's thread, because
+    /// Application.GetResourceStream is not documented as thread-safe, and only the decode runs
+    /// off it.
+    /// </summary>
+    public static void AttachAnimation(Image img, Uri uri, int maxDim, int maxFrames = 48)
+    {
+        if (uri.IsFile)
+        {
+            AttachAnimation(img, uri.LocalPath, maxDim, maxFrames);
+            return;
+        }
+
+        byte[]? bytes = null;
+        try
+        {
+            var info = Application.GetResourceStream(uri);
+            if (info?.Stream != null)
+            {
+                using var src = info.Stream;
+                using var ms = new MemoryStream();
+                src.CopyTo(ms);
+                bytes = ms.ToArray();
+            }
+        }
+        catch (Exception ex) { App.Logger?.Debug("AnimatedWebp: resource read {Uri}: {E}", uri, ex.Message); }
+        if (bytes == null) return;
+
+        AttachInternal(img, maxDim, maxFrames, uri.ToString(), uri,
+            (key, dim, frames) => DecodeCached(key, dim, frames,
+                () => DecodeFrames(new MemoryStream(bytes), dim, frames, maxMemoryMb: 24.0)));
+    }
+
+    private static void AttachInternal(Image img, int maxDim, int maxFrames, string cacheKey, Uri? stillUri,
+        Func<string, int, int, (List<BitmapSource> Frames, TimeSpan Delay)?> decode)
+    {
         var token = new object();
         _live.Remove(img);
         _live.Add(img, token);
@@ -242,9 +289,9 @@ internal static class AnimatedWebp
         {
             (List<BitmapSource> Frames, TimeSpan Delay)? decoded = null;
             BitmapSource? still = null;
-            try { decoded = DecodeCached(path, dim, maxFrames); }
-            catch (Exception ex) { App.Logger?.Debug("AnimatedWebp decode {Path}: {E}", path, ex.Message); }
-            if (decoded == null)
+            try { decoded = decode(cacheKey, dim, maxFrames); }
+            catch (Exception ex) { App.Logger?.Debug("AnimatedWebp decode {Path}: {E}", cacheKey, ex.Message); }
+            if (decoded == null && stillUri != null)
             {
                 try
                 {
@@ -252,7 +299,7 @@ internal static class AnimatedWebp
                     bmp.BeginInit();
                     bmp.CacheOption = BitmapCacheOption.OnLoad;
                     bmp.DecodePixelWidth = dim;
-                    bmp.UriSource = new Uri(path, UriKind.Absolute);
+                    bmp.UriSource = stillUri;
                     bmp.EndInit();
                     if (bmp.CanFreeze) bmp.Freeze();
                     still = bmp;
@@ -304,7 +351,8 @@ internal static class AnimatedWebp
         catch { }
     }
 
-    private static (List<BitmapSource> Frames, TimeSpan Delay)? DecodeCached(string path, int maxDim, int maxFrames)
+    private static (List<BitmapSource> Frames, TimeSpan Delay)? DecodeCached(
+        string path, int maxDim, int maxFrames, Func<(List<BitmapSource> Frames, TimeSpan FrameDelay)?> decodeSource)
     {
         string key = path + "|" + maxDim;
         lock (_cacheLock)
@@ -318,7 +366,7 @@ internal static class AnimatedWebp
 
         // Attach sites are budget-capped upstream (MAX_ANIMATED / TEASE_MAX_ANIMATED), so a
         // per-clip 24MB frame budget keeps worst-case cache residency under ~100MB.
-        var decoded = DecodeFrames(path, maxDim, maxFrames, maxMemoryMb: 24.0);
+        var decoded = decodeSource();
         if (decoded is not { } d) return null;
 
         lock (_cacheLock)

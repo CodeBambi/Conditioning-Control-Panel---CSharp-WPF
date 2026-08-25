@@ -62,6 +62,10 @@
  *               off the dropAt payload (zone, zoneRow, zoneCount)
  * emi color     droppedOn:room|sealed|wing|none   what a dropAt landed on
  *               gameIs:KEY         which class fired the moment (per-game colour)
+ * emi asks      askAnswered:ID     she asked, and you told her something
+ *               askIs:ID:ANSWER    ...and this is what you said
+ *               sessionsSinceAsk:ID:N   at least N sittings since that answer
+ *               hasName            a14 landed and `emi.name` is set
  *
  * FREQUENCY FIELDS honoured on a pool or a line: odds, ceremony, priority,
  * noRepeat, cooldownMs, maxPerSession, maxPerClass, oncePerStreak, onceEver,
@@ -170,6 +174,35 @@ function gradeKey(g) {
 
 /** A line's identity for the heard counter, the no-repeat guard and onceEver. */
 function lineKey(l) { return (l && (l.id || l.t)) ? String(l.id || l.t) : ''; }
+
+/* ============================================================================
+ * THE NAME TOKEN (wave EMI ASKS, 2026-08-25)
+ *
+ * `{name}` is the ONE substitution this file performs, and the whole design is
+ * in what happens when there is no name: the token and the punctuation it
+ * brought with it are removed, and the line collapses to the variant that
+ * shipped. `'{name}. you came back.'` is `'you came back.'` on a install that
+ * never answered a14 - byte for byte the line it always was - so a name-drop
+ * can be written into an existing beat without forking it.
+ *
+ * It is never a fallback name. There is no "hey you", no "student": a token
+ * with nothing behind it is silence, which is the same rule the whole voice
+ * runs on.
+ * ==========================================================================*/
+const NAME_TOKEN = /\{name\}(\s*[.,!?:;-]\s*)?\s?/g;
+
+/** Resolve `{name}`. `name` empty/absent = the un-named variant. */
+export function resolveName(line, name) {
+  if (typeof line !== 'string' || line.indexOf('{name}') < 0) return line;
+  const n = typeof name === 'string' ? name.trim() : '';
+  if (!n) return line.replace(NAME_TOKEN, '').replace(/^\s+/, '');
+  return line.split('{name}').join(n);
+}
+
+/** Does this line ASK for the name? (A drop is rationed; a plain line is not.) */
+export function wantsName(line) {
+  return typeof line === 'string' && line.indexOf('{name}') >= 0;
+}
 
 /* ============================================================================
  * createVoice
@@ -293,6 +326,10 @@ export function createVoice(o) {
      * read as. Session-only on purpose - entering the lab and the app exit that
      * follows it are the same sitting. */
     flinchSuppress: false,
+    /* EMI ASKS: at most ONE name-drop a sitting (spec). A second line that
+     * wanted the name gets the un-named variant instead of being dropped - the
+     * beat still lands, it just does not say your name twice in a night. */
+    nameDropped: false,
   };
   S.openedBad = blob.lastSessionEnd === 'bad';
 
@@ -482,6 +519,41 @@ export function createVoice(o) {
     touch();
   }
 
+  /* ---------------------- the ask ledger (EMI ASKS) ---------------------
+   * READ-ONLY, ALWAYS. `emi/asks.js` collects the answers and widget.js is the
+   * one writer of the `emi` key; this file only ever looks. */
+  function askBlob() {
+    try {
+      const b = store && typeof store.get === 'function' ? store.get('emi') : null;
+      return isObj(b) ? b : null;
+    } catch (e) { return null; }
+  }
+  /**
+   * ONE ROW OF THE LEDGER. `{game}` in an id is substituted with the class
+   * that fired the moment, which is how the PER-ROOM ask (a04, banked as
+   * `a04_room|<gameKey>`) is asked about without minting a per-game predicate
+   * for every gate that wants one: `askIs:a04_room|{game}:yes`. No gameKey on
+   * the payload means no row, never a guess.
+   */
+  function askRow(id, c) {
+    const raw = String(id == null ? '' : id);
+    if (raw.indexOf('{game}') >= 0) {
+      const g = c && typeof c.gameKey === 'string' ? c.gameKey : '';
+      if (!g) return null;
+      return askRow(raw.split('{game}').join(g), c);
+    }
+    const b = askBlob();
+    const rows = b && isObj(b.ask) ? b.ask : null;
+    const r = rows && Object.prototype.hasOwnProperty.call(rows, raw) ? rows[raw] : null;
+    return isObj(r) ? r : null;
+  }
+  /** Her name for you, or ''. Never null: a caller may concatenate it. */
+  function playerName() {
+    const b = askBlob();
+    const n = b && typeof b.name === 'string' ? b.name.trim() : '';
+    return n;
+  }
+
   /** The punch cards, straight off the store's cache. Read-only, always. */
   function cardsBlob() {
     try {
@@ -637,6 +709,33 @@ export function createVoice(o) {
     /** Which class fired the moment - the per-game colour gate. Closed only
      *  by the payload: no gameKey, no match, never a guess. */
     gameIs: (a, c) => !!c.gameKey && c.gameKey === String(a),
+    /* --- the EMI ASKS wave (2026-08-25) --------------------------------- */
+    /** She asked and you answered - an IGNORED ask is deliberately NOT an
+     *  answer, so a callback can never reference a conversation you declined. */
+    askAnswered: (a, c) => { const r = askRow(a, c); return !!r && r.a !== 'ignored'; },
+    /** ...and this is what you said. `askIs:a03_flavor:spiral`. */
+    askIs: (a, c) => {
+      const raw = String(a == null ? '' : a);
+      const i = raw.lastIndexOf(':');
+      if (i < 0) return false;
+      const r = askRow(raw.slice(0, i), c);
+      return !!r && String(r.a) === raw.slice(i + 1);
+    },
+    /** At least N sittings since that answer - the callbacks wait, so a recall
+     *  reads as memory rather than as an echo. `sessionsSinceAsk:a03_flavor:2`. */
+    sessionsSinceAsk: (a, c) => {
+      const raw = String(a == null ? '' : a);
+      const i = raw.lastIndexOf(':');
+      if (i < 0) return false;
+      const r = askRow(raw.slice(0, i), c);
+      if (!r || r.a === 'ignored') return false;
+      const need = Number(raw.slice(i + 1)) || 0;
+      const at = Number(r.s);
+      if (!Number.isFinite(at) || at <= 0) return false;
+      return (blob.sessions - Math.round(at)) >= need;
+    },
+    /** a14 landed. The gate every name-drop line carries. */
+    hasName: () => !!playerName(),
     /** The LOCAL calendar date, MM-DD. Local on purpose: a holiday is the
      *  player's evening, not a UTC accountant's. */
     dateIs: (a) => {
@@ -700,10 +799,22 @@ export function createVoice(o) {
     return false;
   }
 
+  /**
+   * THE ONE PLACE `{name}` IS RESOLVED. The ration is spent HERE and only on a
+   * line that actually landed, so a bubble EMI could not draw never costs the
+   * night's one name-drop.
+   */
   function sayIt(line, face, nod) {
     if (typeof line !== 'string' || !line) return false;
-    try { return !!emi.say(line, { face: face || undefined, nod: nod === true }); }
+    const wants = wantsName(line);
+    const name = (wants && !S.nameDropped) ? playerName() : '';
+    const text = wants ? resolveName(line, name) : line;
+    if (!text) return false;
+    let done = false;
+    try { done = !!emi.say(text, { face: face || undefined, nod: nod === true }); }
     catch (e) { return false; }
+    if (done && wants && name) S.nameDropped = true;
+    return done;
   }
 
   /**
@@ -735,8 +846,15 @@ export function createVoice(o) {
       t += D.HELD_MS;
     }
     if (line) {
+      /* THE HOLD MEASURES THE LINE THE PLAYER WILL SEE. A `{name}` line is
+       * longer (or shorter) than the token, and a tail scheduled against the
+       * unresolved text would land on a bubble that is still up (trap 72's
+       * cousin). Resolved with the SAME ration `sayIt` will spend. */
+      const shown = wantsName(line)
+        ? resolveName(line, S.nameDropped ? '' : playerName())
+        : line;
       steps.push({ at: t, run: () => sayIt(line, entry.face, entry.nod) });
-      t += SAY_LEAD_MS + sayHoldMs(line);
+      t += SAY_LEAD_MS + sayHoldMs(shown);
     }
     if (entry.tail) steps.push({ at: t, run: () => emoteIt({ chain: entry.tail }) });
     if (!steps.length) return emoteIt(entry.emote);
@@ -1080,6 +1198,18 @@ export function createVoice(o) {
     },
     /** How many times EMI has been mounted, ever. The `sessionAtLeast` spine. */
     get sessions() { return blob.sessions; },
+
+    /* ---- THE EMI ASKS SEAM (2026-08-25) -------------------------------
+     * An ask's reaction can be a humanity drop (a02's "good. me neither.
+     * wait."), and the rarity of those is rationed ACROSS EVERY POOL by
+     * DOUBLES_PER_SESSION. A second ledger for the ask engine would let a
+     * night carry two of them, which is exactly the ratio the lock exists to
+     * hold. So the ask engine spends THIS one. */
+    spendQuirk() { const was = S.doubleSpent; S.doubleSpent = true; return !was; },
+    /** Has the quirk slot gone this sitting? Read-only. */
+    get quirkSpent() { return S.doubleSpent; },
+    /** Her name for you, or ''. Read-only - `emi/asks.js` owns the writing. */
+    get playerName() { return playerName(); },
     /** Test seams. A suite that rolls dice must not flake. */
     setRng(fn) { if (typeof fn === 'function') rng = fn; },
     setClock(fn) { if (typeof fn === 'function') clock = fn; },

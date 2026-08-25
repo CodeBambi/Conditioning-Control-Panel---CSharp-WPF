@@ -306,18 +306,34 @@ public class QuestDefinitionService : IDisposable
 
             try
             {
-                var fileName = $"{quest.Id}_{GetFileNameFromUrl(quest.ImageUrl)}";
-                var localPath = Path.Combine(_imageCacheDir, fileName);
+                // The extension is NOT known until the bytes are here: a CDN image URL is
+                // routinely a bare hash. So the cache name is matched on its stem and the
+                // extension is derived from the response (see MediaTypeSniffer).
+                var stem = $"{quest.Id}_{GetFileStemFromUrl(quest.ImageUrl)}";
 
-                // Skip if already cached
-                if (File.Exists(localPath))
+                // Skip if already cached, whatever extension that cached copy ended up with.
+                var existing = Directory.Exists(_imageCacheDir)
+                    ? Directory.GetFiles(_imageCacheDir, stem + ".*")
+                    : Array.Empty<string>();
+                if (existing.Length > 0)
                 {
-                    quest.CachedImagePath = localPath;
+                    quest.CachedImagePath = existing[0];
                     continue;
                 }
 
                 // Download the image
-                var imageBytes = await _httpClient.GetByteArrayAsync(quest.ImageUrl);
+                using var response = await _httpClient.GetAsync(quest.ImageUrl);
+                response.EnsureSuccessStatusCode();
+                var imageBytes = await response.Content.ReadAsByteArrayAsync();
+
+                var ext = Helpers.MediaTypeSniffer.ResolveExtension(
+                    response.Content.Headers.ContentType?.ToString(),
+                    imageBytes,
+                    quest.ImageUrl,
+                    Helpers.MediaTypeSniffer.DefaultImageExtension,
+                    "QuestDefinitionService");
+
+                var localPath = Path.Combine(_imageCacheDir, stem + ext);
                 await File.WriteAllBytesAsync(localPath, imageBytes);
                 quest.CachedImagePath = localPath;
 
@@ -331,18 +347,26 @@ public class QuestDefinitionService : IDisposable
     }
 
     /// <summary>
-    /// Extract filename from URL
+    /// The URL's last path segment WITHOUT its extension — the cache filename's stem. The
+    /// extension is never taken from here: a CDN image URL is often a bare hash, and a name
+    /// built from one would be extensionless (which no image loader in the app will touch).
+    /// See <see cref="Helpers.MediaTypeSniffer"/>.
     /// </summary>
-    private string GetFileNameFromUrl(string url)
+    private string GetFileStemFromUrl(string url)
     {
         try
         {
             var uri = new Uri(url);
-            return Path.GetFileName(uri.LocalPath);
+            var stem = Path.GetFileNameWithoutExtension(uri.LocalPath);
+            // Whatever survives must be a legal, non-empty filename fragment.
+            foreach (var c in Path.GetInvalidFileNameChars()) stem = stem.Replace(c, '_');
+            stem = stem.Trim();
+            if (stem.Length > 64) stem = stem[..64];
+            return stem.Length > 0 ? stem : "image";
         }
         catch
         {
-            return "image.png";
+            return "image";
         }
     }
 
@@ -407,11 +431,14 @@ public class QuestDefinitionService : IDisposable
             if (string.IsNullOrEmpty(quest.ImageUrl))
                 continue;
 
-            var fileName = $"{quest.Id}_{GetFileNameFromUrl(quest.ImageUrl)}";
-            var localPath = Path.Combine(_imageCacheDir, fileName);
+            // Matched on the stem: the cached copy's extension was decided by the response
+            // when it was downloaded, not by the URL, so it is not knowable from here.
+            var stem = $"{quest.Id}_{GetFileStemFromUrl(quest.ImageUrl)}";
+            if (!Directory.Exists(_imageCacheDir)) continue;
 
-            if (File.Exists(localPath))
-                quest.CachedImagePath = localPath;
+            var matches = Directory.GetFiles(_imageCacheDir, stem + ".*");
+            if (matches.Length > 0)
+                quest.CachedImagePath = matches[0];
         }
     }
 

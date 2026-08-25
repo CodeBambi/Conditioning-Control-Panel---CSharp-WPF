@@ -397,6 +397,9 @@ internal static class ArcademyHostService
         }
 
         _panicSuspended = true;
+        // An open Discord link-up is part of what the emergency stop stops: the browser is sitting
+        // on a page this window asked for, and the chip must not be left saying "Waiting...".
+        CancelPendingLink("panic", tellPage: true);
         App.Logger?.Information("ArcademyHost: panic press 1 - suspending{Mid} (press again to leave)",
             _classActive ? " mid-class" : "");
         Suspend(true, "panic");
@@ -462,6 +465,10 @@ internal static class ArcademyHostService
             _host?.Post(BuildInit());
             if (_host != null) _host.Post(new { type = "fullscreen", on = _host.IsFullscreen });
             SeedNativeState();
+            // THE STUDENT ID PHOTO. `init` carried whatever was already on disk; this asks the CDN
+            // whether that is still the player's avatar. Fire-and-forget, never awaited, and it
+            // pushes its own `profile` frame only if the bytes actually changed.
+            KickAvatarRefresh();
             App.Logger?.Information("ArcademyHostService: sent init (protocol {P})", Protocol);
         }
         catch (Exception ex) { App.Logger?.Warning("ArcademyHostService.OnPageReady: {E}", ex.Message); }
@@ -561,6 +568,12 @@ internal static class ArcademyHostService
                 break;
             case "library-remove":
                 OnLibraryRemove(o);
+                break;
+            case "link-discord":
+                // THE STUDENT ID's photo chip, in its "Link Discord" state. Posted ONLY when
+                // discordLinked is false - a linked account moves the rung with an ordinary
+                // set-setting instead (contract trap 1).
+                OnLinkDiscord();
                 break;
             case "annex-stats":
                 // The registry link downstairs. Fire-and-forget: exactly one reply comes back,
@@ -690,7 +703,56 @@ internal static class ArcademyHostService
             // THE SUBJECT FILE (ANNEX-OS.md): the numbers the annex terminal prints about
             // this player, resolved here so the page downstairs counts nothing itself.
             subject = BuildSubject(s),
+            // THE STUDENT ID (STUDENT ID contract, "Wire contract"). Who the card is made out to,
+            // whether there is a photo on it, and the one consent rung that governs both.
+            profile = BuildProfile(s),
         };
+    }
+
+    /// <summary>
+    /// THE STUDENT ID's identity block. Four fields, and the whole body is wrapped for the same
+    /// reason <see cref="BuildSubject"/> is: a throw here would kill <c>init</c>, and a page that
+    /// never gets <c>init</c> never boots. A failure costs the card its name and its photo, never
+    /// the Arcademy.
+    ///
+    /// <para>THE NAME IS THE CCP NICKNAME, never the Discord handle (owner ruling 5).
+    /// <see cref="App.UserDisplayName"/> already resolves the offline username, the unified display
+    /// name and the provider names in the app's own order; blank reads as null and the page draws
+    /// its own "Student".</para>
+    ///
+    /// <para>THE PHOTO IS THE <c>discord</c> RUNG (owner ruling 1). One switch: the picture on the
+    /// card is the picture the campus ghost wears, so <c>avatarUrl</c> is non-null only at that rung
+    /// AND with Discord actually linked AND with bytes already cached. Anything less is null and the
+    /// page draws its PHOTO PENDING plate. The cache is read here synchronously and never fetches -
+    /// the fetch is <see cref="KickAvatarRefresh"/>, and when it lands it pushes a <c>profile</c>
+    /// frame of its own.</para>
+    /// </summary>
+    private static object BuildProfile(Models.AppSettings? s)
+    {
+        try
+        {
+            var linked = App.Discord?.IsAuthenticated == true;
+            var share = PresenceShare(s);
+            var name = App.UserDisplayName;
+            return new
+            {
+                name = string.IsNullOrWhiteSpace(name) ? null : name!.Trim(),
+                avatarUrl = (linked && share == "discord") ? ArcademyAvatarCache.ReadDataUri() : null,
+                discordLinked = linked,
+                presenceShare = share,
+            };
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ArcademyHost.BuildProfile: {E}", ex.Message);
+            return new
+            {
+                name = (string?)null,
+                avatarUrl = (string?)null,
+                discordLinked = false,
+                presenceShare = "off",
+            };
+        }
     }
 
     private static object BuildCaps(Models.AppSettings? s) => new
@@ -2400,6 +2462,45 @@ internal static class ArcademyHostService
         ["campus_annex"] = "Records Annex",
         ["campus_annex_status"] = "Stairs down",
         ["campus_desc_annex"] = "Under the office. The lights are off down there. The screens are not.",
+        // ---- THE STUDENT ID (2026-08-25): the furniture card, its photo chip and the spotlight.
+        // The chip rows are the SHORT face (under the photo); the id_photo_* rows are the long
+        // ones the spotlight prints beside it. One switch behind both - the `discord` rung.
+        ["student_id_title"] = "Student ID",
+        ["id_photo_pending"] = "Photo pending",
+        ["id_photo_on"] = "Discord photo on",
+        ["id_photo_use"] = "Use my Discord photo",
+        ["id_photo_link"] = "Link Discord for my photo",
+        ["id_photo_waiting"] = "Waiting on Discord...",
+        ["id_chip_on"] = "Photo on",
+        ["id_chip_use"] = "Use Discord photo",
+        ["id_chip_link"] = "Link Discord",
+        ["id_chip_wait"] = "Waiting...",
+        ["id_photo_hint_app"] = "Opens the Discord link-up in the app, then your photo goes on the card and on campus.",
+        ["id_photo_hint_web"] = "Sends you to Connections to link Discord, then straight back here with the photo on.",
+        ["id_photo_hint_off"] = "Your ghost on campus wears this photo too. Tap to take it down (your name stays).",
+        ["id_photo_failed"] = "Discord did not pick up. Try again in a minute.",
+        ["id_photo_day"] = "Photo day",
+        ["id_no"] = "Student no.",
+        ["id_no_temp"] = "temp",
+        ["id_enrolled"] = "Enrolled",
+        ["id_homeroom"] = "Homeroom",
+        ["id_issued_at"] = "Issued at",
+        ["id_front_desk"] = "Front desk",
+        ["id_stat_semester"] = "Term",
+        ["id_stat_streak"] = "Attendance streak",
+        ["id_stat_perfect"] = "Perfect days",
+        ["id_stat_stamps"] = "Stamps of 100",
+        ["id_stat_best"] = "S days",
+        ["id_year"] = "Year",
+        ["id_grade_tier"] = "Grade tier",
+        ["id_to_go"] = "{n} to go",
+        ["id_reinked"] = "Re-inked",
+        ["id_flip"] = "Tap the card to turn it over. Esc to put it back.",
+        ["id_back_lost"] = "Lost it? Ask at the front desk. The second one costs you a stamp.",
+        ["id_back_valid"] = "Good for as long as the lights are on.",
+        ["id_records_line"] = "Records: {n} of {m} cards mastered",
+        ["id_open_records"] = "Open Records",
+        ["id_spot_close"] = "Close",
     };
 
     /// <summary>The mockup's owner-approved tokens (BUILD-CONTRACT §10). A mod overrides them via
@@ -2670,6 +2771,16 @@ internal static class ArcademyHostService
     /// re-inventing the table (SYNTHESIS-NOTES #4).</summary>
     private const double FlavorXpCap = 15;
 
+    /// <summary>EMI's dare bonus (EMI ASKS, owner call 2026-08-25): "bet you can't S this one",
+    /// won. A small FIXED award, host-side like every other number on this page - the frame says
+    /// only WHICH dare was won, never what it is worth.</summary>
+    private const double DareBonusXp = 15;
+
+    /// <summary>The only three dare kinds a page may name. Anything else is dropped in silence:
+    /// the field is free text off a postMessage and it must never be able to widen the table.</summary>
+    private static readonly HashSet<string> DareKinds =
+        new(StringComparer.Ordinal) { "S", "streak", "fast" };
+
     /// <summary>
     /// <c>class-ended</c> -> the ONE XP table, the attendance/streak write, and the
     /// <c>payout-result</c> reply. Every input is re-clamped: the page reports what happened, the
@@ -2720,6 +2831,22 @@ internal static class ArcademyHostService
                 try { App.Progression?.AddXP(xp, XPSource.Other); }
                 catch (Exception ex) { App.Logger?.Debug("ArcademyHost payout AddXP: {E}", ex.Message); }
             }
+            /* EMI'S DARE (EMI ASKS, 2026-08-25). The page flags the run when the player takes the
+               bet and reports the WIN on this same frame; the host owns the number and the farm
+               guard. Gated on `firstToday` for exactly the reason the payout above is: a retake is
+               a free replay of the same script, and a dare that paid on every replay would be the
+               one way to grind XP out of a class that is deliberately free. It is its own AddXP
+               call, tagged XPSource.Quest, so THE BANK flies (BankAccumulator.IsBankable) the way
+               a quest payout does - the class XP itself stays XPSource.Other and is unchanged. */
+            var dareWon = (ReadString(o, "dareWon") ?? "").Trim();
+            if (dareWon.Length > 16) dareWon = dareWon[..16];
+            bool darePaid = firstToday && DareKinds.Contains(dareWon);
+            if (darePaid)
+            {
+                try { App.Progression?.AddXP(DareBonusXp, XPSource.Quest); }
+                catch (Exception ex) { App.Logger?.Debug("ArcademyHost dare AddXP: {E}", ex.Message); }
+            }
+
             int levelAfter = App.Settings?.Current?.PlayerLevel ?? levelBefore;
 
             // LOCAL date rolls attendance; the page's dayUtc only ever seeded the content (#978),
@@ -2776,11 +2903,16 @@ internal static class ArcademyHostService
                 classesToday,
                 // Additive: the report card reads it to explain a 0 XP line. Older pages ignore it.
                 retake = !firstToday,
+                // Additive (EMI ASKS): what the dare bonus actually paid, so the page never has
+                // to guess. 0 on every class that carried no dare, and on a retake.
+                dareXp = darePaid ? DareBonusXp : 0,
             });
             PostPunchCard(gameKey, "daily", punch);
             App.Logger?.Information(
-                "ArcademyHost: class complete ({Game}, tier {Tier}, grade {Grade}) = {Xp:0} XP{Retake}, streak {Streak}, {Today}/4 today",
-                gameKey, tier, grade, xp, firstToday ? "" : " (retake - already paid for " + dayUtc + ")",
+                "ArcademyHost: class complete ({Game}, tier {Tier}, grade {Grade}) = {Xp:0} XP{Dare}{Retake}, streak {Streak}, {Today}/4 today",
+                gameKey, tier, grade, xp,
+                darePaid ? " +" + DareBonusXp.ToString("0", CultureInfo.InvariantCulture) + " dare (" + dareWon + ")" : "",
+                firstToday ? "" : " (retake - already paid for " + dayUtc + ")",
                 streak, classesToday);
         }
         catch (Exception ex) { App.Logger?.Warning("ArcademyHost.OnClassEnded: {E}", ex.Message); }
@@ -2886,6 +3018,193 @@ internal static class ArcademyHostService
             });
         }
         catch (Exception ex) { App.Logger?.Debug("ArcademyHost.OnPresenceSnapshot: {E}", ex.Message); }
+    }
+
+    // ============================ the student id ============================
+
+    /// <summary>One link at a time. A second <c>link-discord</c> while a browser flow is open is
+    /// IGNORED, not queued: two OAuth listeners want the same local port, and the player is already
+    /// looking at the page the first one opened.</summary>
+    private static int _linkInFlight;   // 0/1 via Interlocked
+
+    /// <summary>Set when THIS host tore the link-up down (panic, teardown, our own deadline).
+    /// Cancelling the flow makes it throw, and without this the throw would push a second, wrong
+    /// <c>failed</c> frame straight after the <c>cancelled</c> we already sent.</summary>
+    private static bool _linkCancelled;
+
+    /// <summary>Our own ceiling on a link. <see cref="Services.Account.DiscordService"/> gives up
+    /// after five minutes, which is five minutes of the chip saying "Waiting on Discord..." to
+    /// somebody who closed the tab. Two minutes and we call it cancelled, cancel the flow underneath
+    /// and let them press it again.</summary>
+    private static readonly TimeSpan LinkDeadline = TimeSpan.FromSeconds(120);
+
+    /// <summary>
+    /// Push the identity block. <paramref name="result"/> is the outcome of a link attempt
+    /// (<c>linked</c> / <c>cancelled</c> / <c>failed</c>) and is absent on the ordinary pushes -
+    /// a rung that moved, or a photo that finished downloading. The page repaints the card and the
+    /// chip from this frame only.
+    /// </summary>
+    private static void PushProfile(string? result = null)
+    {
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null || disp.HasShutdownStarted) return;
+        disp.BeginInvoke(() =>
+        {
+            try
+            {
+                if (_host == null) return;
+                _host.Post(new { type = "profile", profile = BuildProfile(App.Settings?.Current), result });
+            }
+            catch (Exception ex) { App.Logger?.Debug("ArcademyHost.PushProfile: {E}", ex.Message); }
+        });
+    }
+
+    /// <summary>
+    /// Bring the cached student photo up to date off the UI thread, and push a <c>profile</c> frame
+    /// if - and only if - the bytes changed. Called at window open (after <c>init</c> has already
+    /// shipped whatever was on disk) and again after a link completes.
+    ///
+    /// <para>Generation-guarded like every other continuation here: a fetch that comes back after
+    /// the window closed and relaunched must not paint the NEW page's card.</para>
+    /// </summary>
+    private static void KickAvatarRefresh()
+    {
+        int epoch = Volatile.Read(ref _generation);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                if (!await ArcademyAvatarCache.EnsureCachedAsync().ConfigureAwait(false)) return;
+                if (Volatile.Read(ref _generation) != epoch) return;
+                PushProfile();
+            }
+            catch (Exception ex) { App.Logger?.Debug("ArcademyHost.KickAvatarRefresh: {E}", ex.Message); }
+        });
+    }
+
+    /// <summary>
+    /// ONE CLICK IS ENOUGH (owner ruling 2). The chip asked for a Discord link; when the OAuth
+    /// succeeds the HOST applies <c>presenceShare = discord</c> itself and pushes the finished
+    /// profile, so the player never has to come back and flip a second switch.
+    ///
+    /// <para>An account that is ALREADY linked takes the short path - apply the rung, refresh the
+    /// photo, answer <c>linked</c>. The page is not supposed to send this frame in that state
+    /// (contract trap 1), but a stale page must not be able to strand its own chip.</para>
+    ///
+    /// <para>The rung is written THROUGH AppSettings, never into the projection: that is what fires
+    /// <see cref="ArcademyPresenceService"/>'s consent hook and the ordinary <c>setting</c> echo.
+    /// Writing it any other way would move the card without moving the ghost, which is exactly the
+    /// one switch the owner ruled these are.</para>
+    /// </summary>
+    private static async void OnLinkDiscord()
+    {
+        if (Interlocked.CompareExchange(ref _linkInFlight, 1, 0) != 0)
+        {
+            App.Logger?.Debug("ArcademyHost: link-discord ignored - a link is already open");
+            return;
+        }
+        _linkCancelled = false;
+        var d = App.Discord;
+        try
+        {
+            if (d == null)
+            {
+                PushProfile("failed");
+                return;
+            }
+
+            if (d.IsAuthenticated)
+            {
+                ApplyDiscordRung();
+                await ArcademyAvatarCache.EnsureCachedAsync().ConfigureAwait(true);
+                PushProfile("linked");
+                return;
+            }
+
+            App.Logger?.Information("ArcademyHost: student ID chip is opening the Discord link-up");
+            // StartOAuthFlowAsync IS the completion signal: it returns when the flow has finished
+            // end to end (tokens exchanged, user validated) and throws on cancel/timeout/failure.
+            // No polling, and no listening to AuthenticationChanged - that event also fires for a
+            // link the player started somewhere else in the app.
+            var flow = Application.Current?.Dispatcher?.InvokeAsync(() => d.StartOAuthFlowAsync())
+                .Task.Unwrap() ?? d.StartOAuthFlowAsync();
+            // Observe any future fault whichever way this race lands, so a flow that throws after
+            // our deadline cannot reach the finalizer as an UnobservedTaskException.
+            _ = flow.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
+
+            var done = await Task.WhenAny(flow, Task.Delay(LinkDeadline)).ConfigureAwait(true);
+            if (done != flow)
+            {
+                App.Logger?.Information("ArcademyHost: Discord link timed out after {S}s - cancelled",
+                    LinkDeadline.TotalSeconds);
+                _linkCancelled = true;
+                try { d.CancelOAuthFlow(); } catch { }
+                PushProfile("cancelled");
+                return;
+            }
+            await flow.ConfigureAwait(true);   // rethrows whatever the flow threw
+
+            if (_linkCancelled) return;        // panic/teardown already answered the page
+            if (!d.IsAuthenticated)
+            {
+                // The flow returned without linking: the service refuses a second concurrent run
+                // (IsVerifying) and returns immediately, which reads as "nothing happened".
+                PushProfile("cancelled");
+                return;
+            }
+
+            ApplyDiscordRung();
+            await ArcademyAvatarCache.EnsureCachedAsync().ConfigureAwait(true);
+            App.Logger?.Information("ArcademyHost: Discord linked from the student ID - photo rung applied");
+            PushProfile("linked");
+        }
+        catch (OperationCanceledException)
+        {
+            App.Logger?.Information("ArcademyHost: Discord link cancelled");
+            if (!_linkCancelled) PushProfile("cancelled");
+        }
+        catch (Exception ex)
+        {
+            // A flow WE cancelled surfaces as a throw too (a dead listener, or the service's own
+            // TimeoutException off the cancelled delay). That is not a failure to report twice.
+            if (_linkCancelled) App.Logger?.Debug("ArcademyHost: link-up threw after we cancelled it: {E}", ex.Message);
+            else
+            {
+                App.Logger?.Warning("ArcademyHost: Discord link failed: {E}", ex.Message);
+                PushProfile("failed");
+            }
+        }
+        finally { Interlocked.Exchange(ref _linkInFlight, 0); }
+    }
+
+    /// <summary>Raise the consent rung to <c>discord</c> the ordinary way - through AppSettings, so
+    /// the presence service's hook and the page's <c>setting</c> echo both fire - and persist it.
+    /// The property clamps unknown values itself, so this can only ever write the rung it names.</summary>
+    private static void ApplyDiscordRung()
+    {
+        try
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            if (!string.Equals(PresenceShare(s), "discord", StringComparison.Ordinal))
+            {
+                s.ArcademyPresenceShare = "discord";
+                App.Settings?.Save();
+            }
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.ApplyDiscordRung: {E}", ex.Message); }
+    }
+
+    /// <summary>The panic key (and the teardown) close an open link-up: a browser tab left waiting
+    /// on a listener nobody is going to read is worse than a chip the player can press again.
+    /// Pushes <c>cancelled</c> only when there is still a page to hear it.</summary>
+    private static void CancelPendingLink(string why, bool tellPage)
+    {
+        if (Volatile.Read(ref _linkInFlight) == 0) return;
+        App.Logger?.Information("ArcademyHost: cancelling the open Discord link-up ({Why})", why);
+        _linkCancelled = true;
+        try { App.Discord?.CancelOAuthFlow(); } catch { }
+        if (tellPage) PushProfile("cancelled");
     }
 
     /// <summary>
@@ -4038,6 +4357,19 @@ internal static class ArcademyHostService
                 return;
             }
 
+            // THE STUDENT ID follows the rung from EVERY surface - this page's chip, the app's own
+            // Settings tab, the host applying it after an OAuth. The photo is the `discord` rung
+            // (owner ruling 1), so the card's picture can only appear or vanish on this frame; the
+            // `setting` echo below carries the rung but never the bytes. Pushed even when the page
+            // wrote it itself, which is the case where the avatar has to arrive.
+            if (e.PropertyName == nameof(Models.AppSettings.ArcademyPresenceShare))
+            {
+                PushProfile();
+                // Climbing to `discord` on a machine that has never cached the picture: ask for it
+                // now rather than at the next window open. A no-op when the cache is already current.
+                if (PresenceShare(s) == "discord") KickAvatarRefresh();
+            }
+
             if (_suppressSettingEcho) return;   // the page's own write already gets a reply
             var (key, value) = ProjectedSetting(s, e.PropertyName);
             if (key == null) return;
@@ -4220,6 +4552,9 @@ internal static class ArcademyHostService
             // Stop the presence poll BEFORE the host goes: the timer must never outlive the window
             // that armed it, and Detach also sends this session's one best-effort `campus_leave`.
             try { ArcademyPresenceService.Detach(); } catch { }
+            // A link-up the player started from the student ID belongs to THIS window. No frame:
+            // there is nothing left to paint it.
+            try { CancelPendingLink("teardown", tellPage: false); } catch { }
             try { _meta?.FlushSave(); } catch { }
             _meta = null;
             _classActive = false;

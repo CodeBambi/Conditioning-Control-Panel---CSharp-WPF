@@ -346,6 +346,22 @@ namespace ConditioningControlPanel
             if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
             if (string.IsNullOrWhiteSpace(dlg.SelectedPath)) return;
 
+            // #1053: every top-level image in this folder becomes a wallpaper the app puts on
+            // screen. FolderBrowserDialog opens on the Desktop by default, so "OK" without
+            // navigating is one click away from handing over a folder of personal photos.
+            if (Services.SecurityHelper.IsPersonalFolderRoot(dlg.SelectedPath))
+            {
+                MessageBox.Show(
+                    "That folder is one of Windows' own - your Desktop, Documents, Pictures, Downloads, " +
+                    "your user folder or a whole drive." + Environment.NewLine + Environment.NewLine +
+                    "Every image sitting in it would become a " +
+                    "wallpaper she can put on your screen, so pick a folder you filled with wallpapers " +
+                    "on purpose instead.",
+                    "Pick a folder of your own",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             s.WallpaperSourceFolder = dlg.SelectedPath;
             App.Settings?.Save();
             RefreshWallpaperFolderLabel();

@@ -209,6 +209,21 @@ shell/deskbook.js  THE BOOK ON THE DESK: a two-page spread mounted over the two
                    does NOT go through the lexicon (trap 26 caps a row at 96
                    chars and a paragraph is not a label) - only the chapter tabs
                    and the two arrows are keyed
+shell/idcard.js    THE STUDENT ID: the laminated card in the corner of the
+                   campus, and the spotlight it opens (records.js's shape, z 46,
+                   veil + key light + placard + Tab trap + one Esc rung above
+                   the Records one). Two halves in one file: PURE PARTS that
+                   campus.js imports (the drawn PHOTO PENDING / anon portraits
+                   as `data:` URIs, `chipRung`, `paintChip`, `studentNumber`,
+                   `runPhotoDay`) so the furniture card and the big card can
+                   never disagree, and `createIdSpotlight()` itself. The card
+                   shows name / number / term / enrolled / homeroom, a YEAR
+                   stamp that lands on punchcard.js's own thud, a six-tile stat
+                   sheet on a chime ladder, and a FLIP side (barcode, small
+                   print, the Records line, the signature). The chip under the
+                   photo IS the `presenceShare` discord rung (owner ruling, see
+                   §3) and paints only from the echo. NOT SHAREABLE by ruling -
+                   reportcard.js stays the one share pipeline (trap 13)
 shell/annexreveal.js THE NIGHT THE WALL MOVED: the once-ever reveal cinematic
                      (cut to black -> a thud from below -> EMI startled -> one
                      second of the records office at night with a wall panel
@@ -423,6 +438,12 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
                is a fixed 8px/104px pixel grid, never a cqw clamp - see trap 55.
   demo.html    standalone renderer tester (no shell), loads the real modules.
   widget.js    THE FLOATING ELEMENT: mount, drag, pet, hide/dock, persistence.
+               Since EMI ASKS it also owns the CHIP STRIP (`mountAsk` /
+               `unmountAsk` / `askReady` / `asking`), the four seams an ask's
+               YES needs (`parkMirrored`, `setGazeBias`, `creditPet` and
+               `apparate`'s `stay`) and the ask LEDGER, which rides the same
+               `emi` blob and the same debounced writer (`askState` /
+               `askSave`) - see trap 96.
                Owns the pointer verbs and the ONE chain runner (so there is
                exactly one thing to cancel and one place that knows a SAY is
                mid-line). It NEVER imports the renderer - face/chains/fx are
@@ -447,6 +468,28 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
                `.bubble-low` flips (right margin / top edge). Plus THE CRT
                POWER-OFF (`emi-crt-off` / `emi-crt-on`, 200ms each, and the
                `.crt-blank` frame between them) - the field trip's transition.
+  asks.js      THE ASK ENGINE (EMI ASKS, 2026-08-25): the one thing she does
+               that is not a reaction - a question, and then she WAITS. An ask
+               is a bubble line plus a two-chip strip that persists until a
+               chip is clicked, the ask is dismissed, or she gives up (40s; 12s
+               for the ones that ride `classStart`). The IGNORED path is
+               universal and WORDLESS: chips out, `-_-` 1400, bubble `...`,
+               idle. No line, ever. Five gates - session 3, not mid-class, not
+               over a live verb (`widget.askReady()`), the cadence (3 sittings,
+               or 2 on a 1-in-3 roll; the NAME ask is exempt) and one ask a
+               sitting. TWO entry points and the order is the feature:
+               `note(name, payload)` runs on EVERY moment (the latches - is a
+               class up, did a dare resolve, is the gaze bias spent) and
+               `offer(name, payload)` only on the ones the voice AND the trips
+               declined. `greetIntercept()` is the third, and the only thing in
+               EMI that runs BEFORE the voice: three skipped "bed?"s replace
+               one greet with a groggy one. Effects a YES buys are all widget
+               seams (`parkMirrored` / `setGazeBias` / `creditPet`) bar two -
+               a01's `soft` night, which shell.js reads off `asks.flags`, and
+               the DARES, which flag the next class and resolve on its own
+               win/fail into `dareWon` on the payout frame. The lines are the
+               ASKS table in the file, VERBATIM from
+               `planning/arcademy/EMI-ASKS.md`.
   fieldtrips.js THE ONE AUTONOMOUS VERB (W2a, 2026-08-24): the POI registry and
                the scheduler that decides she may use it. `widget.apparate()` is
                HOW a trip happens; this is WHEN, and it is FIVE gates - never
@@ -899,6 +942,33 @@ DOWN, and the page never invents a number).
   `startSwapTo` "for consistency", the blueprint becomes quiz material and a stop can ask about
   a frame the player was never meant to be tested on. `freeze(true)`, `reshuffle()` and
   `destroy()` all take it down.
+
+- **THE STUDENT ID's `profile` IS ADDITIVE, AND THE PHOTO CHIP IS THE
+  `presenceShare` DISCORD RUNG.** `init.profile` = `{name, avatarUrl,
+  discordLinked, presenceShare}`; the host pushes `{type:'profile', profile,
+  result?:'linked'|'cancelled'|'failed'}` after an OAuth completes, fails or is
+  cancelled AND after any `presenceShare` change it applies itself. The page
+  posts exactly two things: `{type:'link-discord', thenShare:'discord'}` (ONLY
+  while `discordLinked` is false) and the ordinary
+  `set-setting {key:'presenceShare'}` once it is true. A host that predates the
+  frame is a supported host: the card draws "Student", the drawn stand-in
+  portrait and the unlinked chip, nothing throws, and the page asks the network
+  for nothing (the rig asserts zero off-origin requests).
+  - **ONE SWITCH** (owner ruling): the photo toggle IS the public `discord`
+    rung, so photo on means the campus ghost wears it too, and turning it off
+    drops to `username` (the name stays). There is no second private flag.
+  - **THE SNOWFLAKE RULE HOLDS** (PRESENCE.md §10): the Discord CDN url and the
+    Discord user id NEVER reach the page. Desktop caches a 128px PNG and ships
+    it as a `data:` URI inside init; the web build sends the first-party proxy
+    url. Anything else is a leak, and `<img>` onerror falls back to the drawn
+    portrait rather than retrying.
+  - **ONE CLICK IS THE CONSENT** (owner ruling): when a link-up started from the
+    chip succeeds, the HOST applies `presenceShare:'discord'` itself and pushes
+    `profile {result:'linked'}`. The page never asks twice, and the chip's
+    label is what promised it.
+  - **THE STUDENT NUMBER IS DERIVED ON THE PAGE**, `core`-free: the presence
+    `self` opaque id hashed to `XXXX-XXXX`, or a seed off the enrolment date and
+    the name with a tiny `temp` mark until the real one lands.
 
 ## 4. Traps (each one cost real time)
 
@@ -1812,6 +1882,127 @@ DOWN, and the page never invents a number).
     changes. Idle events also budget legibility - the name is dark/displaced <=20% of
     any cycle - and the wall whisper (`arc-rw-*`) is hover/focus-gated per card so the
     grid never runs ten ambient loops at once.
+92. **A REDUCED-MOTION "ONE FADE" CANNOT BE A TRANSITION, AND IT CANNOT LIVE INSIDE THE
+    OVERLAY EITHER (the ID spotlight, 2026-08-25).** The global freeze at the bottom of
+    `styles.css` is `html.arc-reduced *, ::before, ::after { animation-duration:.001s
+    !important; animation-iteration-count:1 !important; animation-delay:0s !important;
+    transition:none !important; }` - so the obvious way to write "reduced motion is one
+    120ms fade" (a `transition:opacity` plus a class flipped on the next rAF) is dead on
+    arrival: the transition is forbidden and the overlay simply pops. It has to be an
+    ANIMATION. But the decoration law's own test is "no `animation-name` other than none
+    INSIDE the reduced overlay", which an animated veil would fail. Both hold at once only
+    because the fade sits on the OVERLAY ROOT (`.arc-id.arc-id-reduced`) while
+    `.arc-id-reduced *` is `animation:none !important` - a root is not "inside" itself.
+    Watch the specificity too: `html.arc-reduced *` is (0,1,1) and outranks
+    `.arc-id-reduced *` at (0,1,0) on `animation-duration`, but they are different
+    longhands, so `animation-name:none` still lands and the freeze still owns the duration.
+    Read `.arc-rs-reduced` the same way, and do not "simplify" either one into a transition.
+93. **THE STUDENT ID IS ONE NODE WITH THREE OWNERS, AND `data-inflight` IS THE FENCE.**
+    `campus.idCardEl()` is built once and never replaced - orientation.js animates that exact
+    element (ORIENTATION.md §3.2), `emi/fieldtrips.js` measures it by the `.campus-idcard`
+    selector, and the card is a `role=button` that opens the spotlight. Three things follow.
+    Adding children is fine; REPLACING the node is not, so `setProfile()` repaints in place
+    and never re-renders the card. Withheld is still the `hidden` PROPERTY only (trap 27), and
+    the click is refused while it is set. And the handover is refused too: orientation.js
+    stamps `data-inflight="1"` where the flight starts and `landCard()` clears it - which is
+    the ONE place every path out of the beat already funnels through, so there is exactly one
+    place it comes off. A press mid-flight would open a spotlight over a card that is still
+    travelling and hand focus back to a node the beat is about to restyle.
+
+92. **THE CHIP STRIP IS THE THIRD AND LAST NODE ON THE LAYER THAT TAKES A CLICK
+    (EMI ASKS, 2026-08-25).** Trap 59's law is that `#arc-emi` is
+    `pointer-events:none` and exactly two nodes turn it back on (`.emi` and
+    `.emi-dock`). An ask adds `.emi-chip` and NOTHING else: the `.emi-ask` strip
+    that holds the chips stays inert, so the gap between two chips is still a
+    click that reaches the board underneath. Four `pointer-events:auto` rules on
+    the whole layer now, and `test-asks.mjs` counts them. The rest of trap 59
+    survives untouched and is asserted the same way: `widget.js` still makes
+    exactly ONE `preventDefault()` call (the `pointerdown` on `.emi`), the ask
+    engine's two document listeners are `{passive:true}` in the bubble phase and
+    call neither `preventDefault` nor `stopPropagation` (trap 80's shape), and
+    EMI still adds no rung to the Esc ladder - Esc dismisses an ask on its way
+    past and the ladder never notices it happened.
+93. **AN ASK MAY NEVER LAND ON TOP OF A LINE, AND THAT IS TWO SEPARATE RULES.**
+    (a) THE ORDER: `emi/index.js voiceMoment` asks the voice, then the field
+    trips, then the asks - so a night with a scripted beat in it is never also a
+    night she stops you to ask a question. (b) THE STATE: `widget.askReady()` is
+    the one honest answer to "may she ask right now" and it refuses over a say,
+    a chain, a press, a drag, a live field trip, a live off-channel, a dismissed
+    or disabled EMI, and a strip that is already up. Neither rule can carry the
+    other: the order alone would still let an ask land while a trip's power-off
+    was running, and the state alone would let a bark and a question fight over
+    the same moment. **And the latches are a third thing entirely.** `note()` is
+    called on EVERY moment, `offer()` only on the declined ones - a dare that
+    resolved only when the voice happened to stay quiet would resolve about half
+    the time. If you add a moment to the ask table, add it to `ASK_TRIGGERS` and
+    ask yourself which of the two entry points it belongs to.
+94. **`{name}` RESOLVES TO THE LINE THAT SHIPPED, NOT TO A FALLBACK NAME.** The
+    token is the ONE substitution `voice.js` performs, and the whole design is in
+    what it does when there is no name: the token AND the punctuation it brought
+    with it are removed, so `'{name}. you came back.'` is `'you came back.'` byte
+    for byte on an install that never answered a14. That is what lets a name-drop
+    be written into an existing beat (p06's anniversary line is a PREFIX, not a
+    fork) instead of doubling the pool. There is no "hey you" and no "student":
+    a token with nothing behind it is silence, which is the rule the whole voice
+    runs on. Two consequences: the ladder measures the RESOLVED line for its hold
+    (a name is longer than its token, and a `tail` scheduled against the raw text
+    would land on a live bubble - trap 72's cousin), and the ration is spent in
+    `sayIt` only when the line actually landed, at most once a sitting. New
+    name-drop lines in `barks.js` also carry `when: ['hasName']`, so an unnamed
+    player sees the pools they always had; only a line that was ALREADY there may
+    take a bare prefix.
+95. **THE BED ASK RIDES `exitAim`, NOT `exitIntent`, AND IT MAY NEVER TOUCH THE
+    DOOR.** `boot.js` fires `exitIntent` 450ms into a 1200ms Esc hold - the wrong
+    end of the gesture for a question, because the window is already closing
+    behind it (and that moment belongs to the flinch anyway). So `shell.js` mints
+    a second, earlier and much softer signal: a `{passive:true}` `pointermove` in
+    the bubble phase that fires `exitAim` ONCE a sitting when the cursor reaches
+    the top-right corner the host window's close button lives in. The fence is
+    the feature and it is asserted by source shape: no `preventDefault`, no
+    `stopPropagation`, no `beforeunload`, no refusal, no await, nothing that
+    could delay a frame - and the listener comes off in the shell's own teardown.
+    A skipped "bed?" costs HER sleep (three running buys a groggy greet), never
+    you a second click.
+96. **THERE IS EXACTLY ONE WRITER OF THE `emi` KEY, AND THE ASK LEDGER RIDES
+    IT.** `widget.js save()` does `store.set('emi', blob())` - a full replace, not
+    a merge - so an ask engine that wrote `store.merge('emi', {name})` of its own
+    would have its name eaten by the next drag. The ledger (`ask{}`, `name`,
+    `lastAskSession`, `bedSkips`) is therefore spliced into `blob()` and mutated
+    through `widget.askState()` / `widget.askSave()`, and every field is
+    re-derived defensively on the way IN (a stored name is re-sanitised, a row
+    with no `a` is dropped). Nothing is written at all for a player who has never
+    answered an ask, so an untouched install keeps the blob it always had.
+    `voice.js` reads the same ledger through `store.get('emi')` for
+    `askIs` / `askAnswered` / `sessionsSinceAsk` / `hasName` and writes none of
+    it. An IGNORED ask is deliberately NOT an answer to any of those predicates:
+    she can never reference a conversation you declined to have.
+97. **`classStart` IS EVALUATED WHILE THE MID-CLASS LATCH IS STILL OPEN, AND A
+    DARE'S CLOCK IS THE SHORT ONE.** The dares (a09/a10/a11) have to be offered
+    on `classStart`, which is also the moment that closes the "not mid-class"
+    gate - so `offer()` runs first and `note()` sets the latch, which is the
+    whole reason the module has two entry points instead of one. That places the
+    strip correctly (shell.js fires `classStart` right after `clearScreen()`, one
+    beat before the class chrome is built and long before a board takes input),
+    but it does not keep it there: a strip nobody answers would still be up when
+    the board goes live. Hence `DARE_GIVE_UP_MS` (12s, against the ordinary 40s)
+    on every `classStart` ask, plus the universal any-press cancel. If a future
+    ask wants to ride a moment that fires ON a live board, it does not - move the
+    offer to the class-rules sheet (trap 85) instead.
+
+98. **THE STRIP LIVES INSIDE `.emi`, SO EVERY CHIP PRESS HAS TO BE HANDED BACK -
+    AND ONLY A BROWSER CAN SEE THAT IT WAS NOT.** `.emi`'s `pointerdown` is the
+    drag/pet handler, and it does two things a button cannot survive:
+    `setPointerCapture` on the root (which retargets the release, so the chip's
+    own `click` never fires) and `preventDefault()` (which suppresses the
+    compatibility mouse events the click is minted from). A chip that fell
+    through to it was therefore dead on arrival AND quietly banked a head-pat.
+    `onDown` now returns early on `inAsk(ev)`, exactly as it has always done for
+    `inX(ev)` - the x button has needed the same guard since day one, and for
+    the same reason. **The node suite passed the whole time.** The DOM double has
+    no pointer capture, no compatibility events and no real click dispatch, so it
+    cannot express this failure at all; `proof-asks.mjs` (port 8753) caught it on
+    the first run. Any future affordance placed inside `.emi` needs the same
+    early return, and a browser assertion to prove it.
 
 ## 5. The game module contract (short version)
 
@@ -1944,12 +2135,45 @@ saver exemption on the WALL clock, the reveal card's layout and its
 `pointer-events:none`, and **zero rAF calls in 1.2s at rest**. Both drive a deck
 of their own on compressed dials - the shipped widget grows no test seam.
 
+`scratchpad/askproof/proof-asks.mjs` is the ask strip's browser half (**27 assertions**,
+port 8753): the real widget over the real sheets in Chromium, reading the geometry back.
+It proves what the DOM double structurally cannot - that `widget.css` parses and all 22
+strip rules survive the cascade, that the layer is still `pointer-events:none` with only
+the CHIPS live, that the line sits clear above (or below) the strip on all three
+orientations, that a strip parked in the right margin stays inside the window, that a
+trusted click on a chip is a chip press and NOT a pet or a drag (trap 98 - it caught that
+one), that a board row 60px away is still clickable under her (trap 59), and that a14's
+field is a real 8-character input that takes focus and submits on Enter.
+
 **Browser pass, not just node.** The suites drive a DOM double, which cannot see a CSS rule
 that does not parse, a module that throws on evaluation, or trap 49. The recipe: serve the
 web root over plain http, install `window.chrome.webview` through Playwright's
 `addInitScript` (bridge.js captures the transport at module scope, so it must exist before
 the first import), post a realistic `init`, then screenshot and read `document.styleSheets`
 back. It caught trap 49 and two duplicated-copy layout bugs the node run could not.
+
+`scratchpad/asksuite/test-asks.mjs` (2026-08-25, EMI ASKS) is the ask engine's own:
+**228 assertions** over the real `emi/asks.js` against a fake widget, the real
+`emi/widget.js` strip under the DOM double, and the real `emi/voice.js`. It covers the
+five gates (session 3, mid-class, the widget's own refusal, the cadence's two doors, one
+ask a sitting), the WORDLESS ignored path and the three ways to reach it (give-up, a
+document press, a pet), the store shape and the one-writer law, the name sanitiser and the
+`{name}` fallback with its one-a-sitting ration, all four new predicates including the
+`{game}` substitution, every dare from the flag to the payout string, a15's fence, and
+every question and reaction VERBATIM against a hand-transcribed copy of `EMI-ASKS.md`. It
+also greps the seams that are not JavaScript, `test-hostfixes.mjs`-style: shell.js's
+additive `dareWon`, the passive exit-aim listener, the C# `DareBonusXp` / `XPSource.Quest`
+pair and `BankAccumulator`'s bankable row, impulse-control's additive `newBest`, and the
+count of `pointer-events:auto` rules on the EMI layer. It brings its OWN augmented
+`document` (one that takes listeners) rather than touching `domshim.mjs`, because every
+other suite depends on `audio.js` no-opping there.
+
+**`test-voice.mjs` used to crash before it finished.** `boot.js` binds a document listener
+and the shared `domshim.mjs` document is a plain object, so the file threw at its boot
+import and reported ZERO assertions while still printing three failures. It now installs
+those two methods on its own copy and runs to completion: **115 assertions, 4 failures**,
+and the same four fail identically on unmodified `main` (three stale trigger-coverage
+fixtures plus the greet-seam one).
 
 `test-hostfixes.mjs` covers the two seams that are not JavaScript. It **parses the real
 `styles.css`** and evaluates the `[hidden]` cascade for every element the shell toggles

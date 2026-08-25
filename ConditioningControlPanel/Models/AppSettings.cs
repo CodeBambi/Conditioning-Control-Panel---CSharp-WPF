@@ -2704,6 +2704,20 @@ namespace ConditioningControlPanel.Models
             set { _rampLinkSubliminalAudio = value; OnPropertyChanged(); }
         }
 
+        private bool _rampLinkBrainDrain = false;
+        /// <summary>
+        /// Let the intensity ramp drive the Brain Drain SCREEN BLUR the way it already drives the
+        /// spiral (<see cref="BrainDrainBlurStrength"/>, the visual dial - NOT
+        /// <see cref="BrainDrainIntensity"/>, which is the audio half's trigger rate). Off by
+        /// default like every other ramp link. OverlayService repaints the live overlay off
+        /// PropertyChanged, so the haze deepens as the ramp climbs with no extra plumbing.
+        /// </summary>
+        public bool RampLinkBrainDrain
+        {
+            get => _rampLinkBrainDrain;
+            set { _rampLinkBrainDrain = value; OnPropertyChanged(); }
+        }
+
         private bool _endSessionOnRampComplete = false;
         public bool EndSessionOnRampComplete
         {

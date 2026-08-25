@@ -225,17 +225,33 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    var fileName = GetPackPreviewFileName(url);
-                    var localPath = Path.Combine(cacheDir, fileName);
+                    // Stem now, extension after the bytes arrive: a preview URL is often a
+                    // bare hash, and naming the cache file from it wrote an extensionless
+                    // file that nothing else in the app could ever identify.
+                    var stem = GetPackPreviewFileStem(url);
+                    var cached = Directory.GetFiles(cacheDir, stem + ".*");
                     byte[] bytes;
+                    string localPath;
 
-                    if (File.Exists(localPath))
+                    if (cached.Length > 0)
                     {
+                        localPath = cached[0];
                         bytes = await File.ReadAllBytesAsync(localPath);
                     }
                     else
                     {
-                        bytes = await httpClient.GetByteArrayAsync(url);
+                        using var response = await httpClient.GetAsync(url);
+                        response.EnsureSuccessStatusCode();
+                        bytes = await response.Content.ReadAsByteArrayAsync();
+
+                        var ext = MediaTypeSniffer.ResolveExtension(
+                            response.Content.Headers.ContentType?.ToString(),
+                            bytes,
+                            url,
+                            MediaTypeSniffer.DefaultImageExtension,
+                            "PackPreviewCache");
+
+                        localPath = Path.Combine(cacheDir, stem + ext);
                         await File.WriteAllBytesAsync(localPath, bytes);
                     }
 
@@ -259,10 +275,22 @@ namespace ConditioningControlPanel
             return images;
         }
 
-        private static string GetPackPreviewFileName(string url)
+        /// <summary>
+        /// The cache filename's STEM — the URL's last path segment with any extension removed
+        /// and illegal characters folded out. The extension is decided from the response, not
+        /// from the URL (see <see cref="MediaTypeSniffer"/>).
+        /// </summary>
+        private static string GetPackPreviewFileStem(string url)
         {
-            try { return Path.GetFileName(new Uri(url).LocalPath); }
-            catch { return "image.png"; }
+            try
+            {
+                var stem = Path.GetFileNameWithoutExtension(new Uri(url).LocalPath);
+                foreach (var c in Path.GetInvalidFileNameChars()) stem = stem.Replace(c, '_');
+                stem = stem.Trim();
+                if (stem.Length > 64) stem = stem[..64];
+                return stem.Length > 0 ? stem : "preview";
+            }
+            catch { return "preview"; }
         }
 
         private void OnPackDownloadProgress(object? sender, (ContentPack Pack, int Progress) e)
@@ -419,6 +447,34 @@ namespace ConditioningControlPanel
 
         private void RefreshAssetTree()
         {
+            // One-time heal for libraries that already hold extensionless media (a download
+            // written without an extension is invisible to every scanner in the app). Hooked
+            // HERE because this is the single funnel every assets scan goes through — tab
+            // show, post-import, folder change — so no new startup work and no new call site.
+            // Gated on a marker file, runs on the thread pool, and never throws.
+            Services.Content.AssetExtensionRepair.RunOnceInBackground(renamed =>
+            {
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        // The tree that was built a moment ago predates the renames.
+                        if (!IsLoaded || Dispatcher.HasShutdownStarted) return;
+                        RefreshAssetTree();
+                        App.Flash?.LoadAssets();
+                        App.Video?.ReloadAssets();
+                        App.BubbleCount?.ReloadAssets();
+                        App.Logger?.Information("AssetExtensionRepair: reloaded assets after {Count} rename(s)", renamed);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning("AssetExtensionRepair: post-repair refresh failed: {Error}", ex.Message);
+                    }
+                }));
+            });
+
             _assetTree.Clear();
             var assetsPath = App.EffectiveAssetsPath;
 

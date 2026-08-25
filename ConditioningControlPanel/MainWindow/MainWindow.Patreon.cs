@@ -110,6 +110,27 @@ namespace ConditioningControlPanel
                     App.Logger?.Information("Entitlement lapsed: Awareness switched off");
                 }
 
+                // Awareness MODE - the companion's eyes: the v2 observer's one-second foreground poll
+                // and its 30-day on-disk ledger, plus the legacy 1.5s window-title watcher. A separate
+                // flag from KeywordTriggersEnabled above and NOT covered by #267, which is how #1047
+                // happened: the tab wore the padlock while the engine kept observing, and because the
+                // engine's own predicate read four settings and no entitlement there was nothing to
+                // stop it. Stop() on the legacy service chains the observer's Stop(), which flushes
+                // and closes the ledger.
+                //
+                // AwarenessConsentGiven is deliberately left ALONE. It records an answer the user gave,
+                // not a switch; clearing it would make a returning subscriber re-consent to something
+                // they already agreed to. Every readout treats "enabled AND consented" as on, so
+                // clearing the enable is enough for the state to be honest.
+                if (settings.AwarenessModeEnabled && !premium
+                    && App.DailyFree?.IsFreeToday("awareness") != true)
+                {
+                    settings.AwarenessModeEnabled = false;
+                    App.WindowAwareness?.Stop();
+                    changed = true;
+                    App.Logger?.Information("Entitlement lapsed: Awareness Mode switched off");
+                }
+
                 // Bambi Takeover (autonomy).
                 if (settings.AutonomyModeEnabled && !premium
                     && App.DailyFree?.IsFreeToday("takeover") != true)
@@ -130,6 +151,36 @@ namespace ConditioningControlPanel
                     App.Logger?.Information("Entitlement lapsed: She's Listening switched off");
                 }
 
+                // She's Listening - the MICROPHONE half. SpokenMantrasEnabled above is the speaking
+                // half; these two are the listening half, they persist, and AutonomyService
+                // .RefreshVoiceInputModes re-arms them from settings on every launch. #267 cleared the
+                // mouth and left the ear, so a lapsed account restarted straight back into an open
+                // wake-word loop under a veil covering its own disarm controls. Clearing the flags is
+                // what makes the Settings > Devices chips honest; the Refresh call is what actually
+                // closes the mic in this session.
+                if ((settings.SpeechWakeWordEnabled || settings.SpeechPushToTalkEnabled) && !premium
+                    && App.DailyFree?.IsFreeToday("voice") != true)
+                {
+                    settings.SpeechWakeWordEnabled = false;
+                    settings.SpeechPushToTalkEnabled = false;
+                    App.Autonomy?.RefreshVoiceInputModes();
+                    changed = true;
+                    App.Logger?.Information("Entitlement lapsed: She's Listening mic modes disarmed");
+                }
+
+                // Mantra Chant - her voice on a loop, armed from the Takeover tab underneath the same
+                // veil. #685 already stops it surviving a RELAUNCH (App.OnStartup clears the flag), so
+                // what is left is the mid-session lapse: the loop keeps chanting behind a padlock that
+                // covers the toggle. Stop() releases the output device as well as ending the loop.
+                if (settings.MantraChantEnabled && !premium
+                    && App.DailyFree?.IsFreeToday("takeover") != true)
+                {
+                    settings.MantraChantEnabled = false;
+                    App.MantraChant?.Stop();
+                    changed = true;
+                    App.Logger?.Information("Entitlement lapsed: Mantra Chant switched off");
+                }
+
                 // Haptics. The mixer already self-mutes live (HapticMixer.IsGateOpen), so this is
                 // about the master toggle not sitting ON underneath the veil.
                 if (settings.Haptics?.Enabled == true && !premium
@@ -148,6 +199,27 @@ namespace ConditioningControlPanel
                     // reopened, never to wrong.
                     try { SyncAwarenessTabUI(); } catch { /* tab not built yet */ }
                     try { SyncKeywordRescuePanelUi(); } catch { }
+                    // The awareness dial lives in the Companion room, which is NOT veiled - it is the
+                    // off switch a lapsed user can still reach - so it has to be told the eyes just
+                    // closed or it would keep showing them open.
+                    try { CompanionRoom?.AwarenessVm.Sync(); } catch { }
+                    try { CompanionRoom?.SyncHero(); } catch { }
+                    // The mic chips live on the She's Listening tab and mirror the two speech flags
+                    // just cleared; without this they keep claiming the wake word is armed.
+                    try { RefreshSheListeningDeviceChips(); } catch { }
+                }
+
+                // The mirror case. Awareness's runtime predicate now fails CLOSED while App.Patreon is
+                // still null, so a login completing, a tier upgrade landing or the free day rotating IN
+                // has to re-arm what the settings already say should be running - otherwise entitlement
+                // resolving late leaves an entitled user's dial on and her eyes shut until relaunch.
+                // Start() no-ops when already running and re-checks the settings itself, so this can
+                // only ever restore what the user asked for; it writes no settings.
+                if (settings.AwarenessModeEnabled && settings.AwarenessConsentGiven
+                    && Services.Awareness.AwarenessObserver.HasEntitlement
+                    && App.WindowAwareness?.IsRunning != true)
+                {
+                    App.WindowAwareness?.Start();
                 }
             }
             catch (Exception ex)
@@ -948,10 +1020,16 @@ namespace ConditioningControlPanel
             CompanionTab.SliderBubbleDurationCompanion.Value = settings.BubbleDurationSeconds;
             CompanionTab.TxtBubbleDurationCompanion.Text = $"{(int)settings.BubbleDurationSeconds}s";
 
-            // Awareness Mode settings (free for all users). The on/off checkbox became Z5's dial
-            // (design §6: "toggle superseded by Z5 dial"), which reads the same two settings; the
-            // cooldowns below are the "kept" half and still live in the Workshop.
-            var awarenessAvailable = true;
+            // Awareness Mode settings. The on/off checkbox became Z5's dial (design §6: "toggle
+            // superseded by Z5 dial"), which reads the same two settings; the cooldowns below are the
+            // "kept" half and still live in the Workshop.
+            //
+            // This used to be a hardcoded `true` under a "free for all users" comment, which was never
+            // true of the shipped product: awareness is ExclusiveFeature "awareness", Tier = 1, its own
+            // page wears the premium veil, and after #1047 the engines ask the same question. The dial
+            // itself deliberately stays reachable for everyone (it is the OFF switch), so this only
+            // governs the legacy cooldown panel below.
+            var awarenessAvailable = Services.Awareness.AwarenessObserver.HasEntitlement;
             CompanionTab.SliderAwarenessCooldown.Value = settings.AwarenessReactionCooldownSeconds;
             CompanionTab.TxtAwarenessCooldown.Text = $"{settings.AwarenessReactionCooldownSeconds}s";
             CompanionTab.SliderAwarenessCooldownMax.Value = settings.AwarenessCooldownMaxSeconds;

@@ -199,6 +199,20 @@ namespace ConditioningControlPanel
             if (_isLoading) return App.Settings?.Current?.AwarenessModeEnabled == true;
             if (App.Settings?.Current == null) return false;
 
+            // The entitlement bar, on the ON edge only (#1047). The engines now refuse to run without
+            // it, so without this the dial would happily read "open" over an observer that had already
+            // declined - the mirror image of the bug being fixed. Asked BEFORE the consent dialog: it
+            // is rude to walk someone through a privacy explanation for a door that will not open.
+            //
+            // Turning it OFF is deliberately never gated, and this card never wears a veil. That is
+            // what keeps the promise the padlocked Awareness tab could not: whatever her account is
+            // doing, the switch that closes her eyes is on screen and it works.
+            if (enabled && !Services.TierGate.DemandPremium(Loc.Get("tab_awareness"), "awareness"))
+            {
+                CompanionRoom?.AwarenessVm.Sync();
+                return false;
+            }
+
             if (enabled && !AwarenessConsentDialog.EnsureConsent(this, App.Settings.Current))
             {
                 // Declined (or the dialog could not open). Nothing is written, nothing starts, and the

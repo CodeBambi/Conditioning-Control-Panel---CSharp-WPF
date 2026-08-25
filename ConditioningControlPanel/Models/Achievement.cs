@@ -663,7 +663,7 @@ public class Achievement
         {
             Id = "top_of_the_class",
             Name = "Top of the Class",
-            Requirement = "Score 90% or better on a quiz",
+            Requirement = "Score 90% or better on an intake",
             FlavorText = "Top marks. Empty head, top marks. Funny how that works.",
             ImageName = "top_of_the_class.png",
             Category = AchievementCategory.Minigames,
@@ -673,8 +673,8 @@ public class Achievement
         {
             Id = "teachers_pet",
             Name = "Teacher's Pet",
-            Requirement = "Pass 25 quizzes",
-            FlavorText = "Twenty five quizzes passed. Such a good student.",
+            Requirement = "Pass 10 intakes",
+            FlavorText = "Ten intakes, start to finish. Such a good student.",
             ImageName = "teachers_pet.png",
             Category = AchievementCategory.Minigames,
             IsExclusive = true
@@ -683,8 +683,8 @@ public class Achievement
         {
             Id = "honor_roll",
             Name = "Honor Roll",
-            Requirement = "Score 90% or better in 3 different categories",
-            FlavorText = "Cleared category after category. Nothing left to learn here.",
+            Requirement = "Score 90% or better on 3 different intake themes",
+            FlavorText = "Theme after theme, cleared. Nothing left to learn here.",
             ImageName = "honor_roll.png",
             Category = AchievementCategory.Minigames,
             IsExclusive = true
@@ -693,8 +693,8 @@ public class Achievement
         {
             Id = "held_back",
             Name = "Held Back",
-            Requirement = "Fail three quizzes in a row",
-            FlavorText = "Three failures in a row. Maybe the material's too hard. Maybe that's the point.",
+            Requirement = "Quit three intakes early",
+            FlavorText = "Walked out three times running. Maybe it is too much. Maybe that is the point.",
             ImageName = "held_back.png",
             Category = AchievementCategory.Minigames,
             IsExclusive = true

@@ -130,6 +130,124 @@
   transform: translate(6px, -6px) skewX(30deg);
 }
 
+
+/* ---- ASKS: the chip strip (wave EMI ASKS, 2026-08-25) -------------------
+ * She asks a question and two chips hang under the line. The strip is a
+ * SIBLING of the bubble inside `.emi`, which is what makes the `.bubble-left`
+ * / `.bubble-low` flips apply to both halves off the same two root classes
+ * (trap 61) - there is no third orientation to keep in step.
+ *
+ * INPUT TRUST (trap 59). `.arc-emi` is `pointer-events:none` and exactly two
+ * nodes turned it back on. The CHIPS are the third and last; the strip that
+ * holds them stays inert, so the gap between two chips is still a click that
+ * reaches the board underneath.
+ *
+ * THE PIXEL GRID IS THE BUBBLE'S (trap 62): Press Start 2P at a WHOLE 8px, an
+ * absolute max-width, no clamp and no cqw. A chip is the same face as the line
+ * it sits under because it is the same voice.
+ *
+ * ONE NUMBER, TWO OWNERS. `--emi-ask-h` is the strip's measured height and it
+ * is what lifts the BUBBLE out of the way; `--emi-ask-dx` is widget.js's
+ * viewport clamp. The clamp is a custom property and not an inline transform
+ * because the slide keyframes below animate `transform`, and an inline one
+ * would be out-ranked for as long as they ran. */
+.arc-emi .emi .emi-ask {
+  position: absolute;
+  left: calc(58% + var(--emi-bubble-dx, 15px));
+  bottom: 96%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: max-content;
+  max-width: 148px;
+  z-index: 4;
+  pointer-events: none;
+  transform-origin: 0 100%;
+  transform: translateX(var(--emi-ask-dx, 0px));
+  animation: emi-ask-in 180ms ease-out both;
+}
+.arc-emi .emi .emi-ask[hidden] { display: none !important; }
+.arc-emi .emi .emi-ask.out { animation: emi-ask-out 200ms ease-in both; }
+
+/* The line moves up (or down) by exactly the strip's height plus a hair. */
+.arc-emi .emi.ask-up .emi-bubble { bottom: calc(96% + var(--emi-ask-h, 0px)); }
+.arc-emi .emi.bubble-left .emi-ask {
+  left: auto;
+  right: calc(58% + var(--emi-bubble-dx, 15px));
+  justify-content: flex-end;
+  transform-origin: 100% 100%;
+}
+.arc-emi .emi.bubble-low .emi-ask {
+  bottom: auto;
+  top: 96%;
+  transform-origin: 0 0;
+}
+.arc-emi .emi.bubble-low.bubble-left .emi-ask { transform-origin: 100% 0; }
+.arc-emi .emi.bubble-low.ask-up .emi-bubble {
+  bottom: auto;
+  top: calc(96% + var(--emi-ask-h, 0px));
+}
+
+/* ---- the chips ---------------------------------------------------------
+ * HER PALETTE: the YES chip wears the pink she is drawn in, the second wears
+ * the lavender alt, so the pair reads as a choice and not as a form. */
+.arc-emi .emi .emi-chip {
+  pointer-events: auto;
+  display: inline-block;
+  margin: 0;
+  padding: 5px 7px;
+  font-family: 'Press Start 2P', 'Noto Sans Mono', var(--mono, 'Cascadia Mono', 'Consolas', monospace);
+  font-weight: 400;
+  font-size: 8px;
+  line-height: 1.4;
+  letter-spacing: 0;
+  text-align: center;
+  color: #1A1A2E;
+  background: #F5F0E1;
+  border: 2px solid #FF69B4;
+  border-radius: 0;
+  box-shadow: 3px 3px 0 #0E0E1C;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.arc-emi .emi .emi-chip + .emi-chip { border-color: #B9A7F5; }
+.arc-emi .emi .emi-chip:hover { background: #FF69B4; color: #F5F0E1; }
+.arc-emi .emi .emi-chip + .emi-chip:hover { background: #B9A7F5; }
+.arc-emi .emi .emi-chip:active { transform: translate(1px, 1px); box-shadow: 2px 2px 0 #0E0E1C; }
+.arc-emi .emi .emi-chip:focus-visible { outline: 2px solid #FFD700; outline-offset: 2px; }
+/* a14's field: the one chip you type into. Never a chip you can press. */
+.arc-emi .emi .emi-chip-field {
+  width: 72px;
+  cursor: text;
+  text-align: left;
+  border-color: #FF69B4;
+}
+.arc-emi .emi .emi-chip-field:hover { background: #F5F0E1; color: #1A1A2E; }
+
+@keyframes emi-ask-in {
+  from { opacity: 0; transform: translate(var(--emi-ask-dx, 0px), 6px); }
+  to { opacity: 1; transform: translateX(var(--emi-ask-dx, 0px)); }
+}
+@keyframes emi-ask-out {
+  from { opacity: 1; transform: translateX(var(--emi-ask-dx, 0px)); }
+  to { opacity: 0; transform: translate(calc(var(--emi-ask-dx, 0px) + 10px), 0); }
+}
+
+/* REDUCED MOTION: no slide, in or out. widget.js drops the leave DELAY on the
+ * same reading, so the strip is simply gone rather than gone-after-220ms. */
+@media (prefers-reduced-motion: reduce) {
+  .arc-emi .emi .emi-ask,
+  .arc-emi .emi .emi-ask.out { animation: none; }
+  .arc-emi .emi .emi-chip:active { transform: none; }
+}
+:root.arc-reduced .arc-emi .emi .emi-ask,
+:root.arc-reduced .arc-emi .emi .emi-ask.out { animation: none; }
+:root.arc-reduced .arc-emi .emi .emi-chip:active { transform: none; }
+
+/* The phone gets the same rope the bubble does (see THE PHONE CLAMP below). */
+:root.arc-mobile .arc-emi .emi .emi-ask { max-width: min(72vw, 200px); }
+
 /* ---- the dock -----------------------------------------------------------
  * Where a dismissed EMI lives. Semi-transparent so it never competes with the
  * board, full strength the moment it is aimed at. */

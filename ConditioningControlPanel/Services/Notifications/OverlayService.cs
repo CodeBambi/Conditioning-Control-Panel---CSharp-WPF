@@ -360,10 +360,27 @@ public class OverlayService : IDisposable
             {
                 try
                 {
+                    var library = Path.Combine(App.UserDataPath, "Spirals");
+
                     // Pool directory: folder of the configured spiral, else the user Spirals library.
                     var poolDir = !string.IsNullOrEmpty(configured)
                         ? Path.GetDirectoryName(configured)
-                        : Path.Combine(App.UserDataPath, "Spirals");
+                        : library;
+
+                    // Bug #1053. "Select spiral GIF" browses the whole disk, so `configured` can
+                    // be a file the user happened to have on their Desktop - and this branch then
+                    // widens ONE file into EVERY image in its folder, drawn fullscreen. That is
+                    // how the app showed someone a family photo it was never given. Picking a file
+                    // out of Desktop/Downloads/Pictures says nothing about the rest of that folder,
+                    // so those roots are refused and we fall back to the Spirals library, which is
+                    // the only pool the setting's tooltip ever promised.
+                    if (SecurityHelper.IsPersonalFolderRoot(poolDir))
+                    {
+                        App.Logger?.Warning(
+                            "[Overlay] Spiral randomize: refusing {Pool} as a spiral pool (personal/system folder) " +
+                            "- falling back to the Spirals library", poolDir);
+                        poolDir = library;
+                    }
 
                     if (string.IsNullOrEmpty(poolDir) || !Directory.Exists(poolDir))
                         return null;
@@ -2803,6 +2820,24 @@ public class OverlayService : IDisposable
                 if (hwnd == IntPtr.Zero) continue;
                 ReassertOne(hwnd, videoHwnd, aboveVideo, force, ref anyRecovered);
             }
+        }
+
+        // Corner GIFs are topmost layered windows too, and neither kind was ever in this sweep: a
+        // mandatory video (or any other topmost raise) buried them for the rest of the session with
+        // no way back, since neither window re-raises itself. Both kinds go through ReassertOne, so
+        // they also inherit the #497 below-video pin instead of covering the clip.
+        try
+        {
+            foreach (var hwnd in App.CornerGif?.GetOverlayHandles() ?? new List<IntPtr>())
+                ReassertOne(hwnd, videoHwnd, aboveVideo, force, ref anyRecovered);
+
+            var sessionCornerGif = SessionEngine.Active?.GetCornerGifHandle() ?? IntPtr.Zero;
+            if (sessionCornerGif != IntPtr.Zero)
+                ReassertOne(sessionCornerGif, videoHwnd, aboveVideo, force, ref anyRecovered);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ReassertZOrder (corner GIFs) failed: {Error}", ex.Message);
         }
 
         // Compositor hosts carry the SAME fullscreen effects when the unified renderer is on,

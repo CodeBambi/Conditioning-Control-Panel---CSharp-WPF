@@ -231,11 +231,15 @@ public sealed class ToastEffect : PossessionEffectBase
                     if (layer == null || _toast == null) return;
                     var p = e.GetPosition(layer);
                     if (!_rect.Contains(p)) return;      // not on the toast: the click carries on
+                    // Right-click dismisses too (suggestion): handled only on that path, so a right
+                    // press on the toast can't also open a context menu behind it.
+                    if (e.ChangedButton == MouseButton.Right) e.Handled = true;
                     _ = UndoAsync(TimeSpan.FromMilliseconds(160));
                 }
                 catch { }
             };
             _window.PreviewMouseLeftButtonDown += _click;
+            _window.PreviewMouseRightButtonDown += _click;
         }
         catch { _click = null; }
     }
@@ -243,6 +247,8 @@ public sealed class ToastEffect : PossessionEffectBase
     private void UnhookDismiss()
     {
         try { if (_window != null && _click != null) _window.PreviewMouseLeftButtonDown -= _click; }
+        catch { }
+        try { if (_window != null && _click != null) _window.PreviewMouseRightButtonDown -= _click; }
         catch { }
         _click = null;
     }
