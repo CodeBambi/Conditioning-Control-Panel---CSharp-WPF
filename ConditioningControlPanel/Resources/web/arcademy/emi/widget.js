@@ -1051,6 +1051,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     });
     current = { handle, protect: !!o.protect, ask: !!o.ask };
     if (o.ask) askHold = true;
+    stampActivity(o.protect ? 'say' : 'play');
     return true;
   }
 
@@ -1076,6 +1077,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     if (o.fx) burst(o.fx);
     const hold = typeof o.hold === 'number' ? o.hold : DIALS.RAW_HOLD_MS;
     if (hold > 0) later(() => idle(), hold);
+    stampActivity('raw');
     return true;
   }
 
@@ -1115,9 +1117,37 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     return () => gestureSubs.delete(cb);
   }
   function emitGesture(kind, detail) {
+    /* THE HEARTBEAT'S EAR (2026-08-25). A player verb IS activity, so it resets
+     * the metronome exactly as one of her own acts does - the heartbeat only
+     * ever fills silence, it never competes with a hand on the mouse. The ONE
+     * exclusion is `blinkIdle`, which IS the unattended idle blink: counting it
+     * would re-stamp the clock every 5.2s and the beat could never come due. */
+    if (kind !== 'blinkIdle') stampActivity('gesture:' + kind);
     if (!gestureSubs.size) return;
     for (const cb of gestureSubs) {
       try { cb(kind, detail || {}); } catch (e) { /* noop */ }
+    }
+  }
+
+  /* ---------------------- the activity tap (HEARTBEAT, 2026-08-25) ------
+   * ONE stamp for "something visible just happened", so `emi/heartbeat.js` can
+   * measure silence without twenty call sites learning about it. It is fired
+   * from the FOUR choke points every visible verb funnels through - `play`
+   * (every chain, every say, every emote), `raw` (a held face), the deck's
+   * `screenTakeover` (trap 77: the second canvas is its own path and does NOT
+   * run through play) and `apparate` (a field trip) - plus every player gesture
+   * above. A subscriber that throws is swallowed here: a listener may never
+   * reach into a pointer handler or a chain runner. */
+  const activitySubs = new Set();
+  function onActivity(cb) {
+    if (typeof cb !== 'function') return () => {};
+    activitySubs.add(cb);
+    return () => activitySubs.delete(cb);
+  }
+  function stampActivity(kind) {
+    if (!activitySubs.size) return;
+    for (const cb of activitySubs) {
+      try { cb(String(kind || '')); } catch (e) { /* noop */ }
     }
   }
 
@@ -1607,18 +1637,54 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     try { canvas.style.transform = 'translate(' + gazeX.toFixed(2) + 'px,' + gazeY.toFixed(2) + 'px)'; } catch (e) { /* noop */ }
     if (typeof requestAnimationFrame === 'function') gazeRaf = requestAnimationFrame(gazeStep);
   }
-  function nudgeGaze() {
+  /** Wake the easing loop. (Was `nudgeGaze` until the heartbeat wave took that
+   *  name for the PUBLIC verb below - this one only kicks the rAF.) */
+  function kickGaze() {
     if (gazeRaf == null && typeof requestAnimationFrame === 'function') {
       gazeRaf = requestAnimationFrame(gazeStep);
     }
+  }
+  /* THE GAZE NUDGE (HEARTBEAT, 2026-08-25). "A nudge in a direction" is a
+   * whole act on the wheel, and it is the CHEAPEST one she has: no chain, no
+   * bubble, no repaint - the same CSS translate on the canvas ELEMENT the
+   * cursor lean already rides (trap 71). `dx`/`dy` are a DIRECTION in -1..1,
+   * scaled by GAZE_MAX_PX, held `ms` and then eased home.
+   *
+   * Reduced motion REFUSES it outright rather than snapping: W1's gaze is off
+   * under `prefers-reduced-motion` and a heartbeat may not smuggle it back in.
+   * It also refuses over any live verb, because a lean that survives a say is
+   * a face stuck off-centre. */
+  let gazeNudgeTimer = null;
+  function clearGazeNudge() {
+    if (gazeNudgeTimer !== null) { clearTimeout(gazeNudgeTimer); gazeNudgeTimer = null; }
+  }
+  function nudgeGaze(dx, dy, ms) {
+    if (!painter || hidden || !enabled || dragging || pressing) return false;
+    if (busy() || saying() || reducedMotion()) return false;
+    const x = Number(dx), y = Number(dy);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+    if (x === 0 && y === 0) return false;
+    clearGazeNudge();
+    gazeTX = clamp(x, -1, 1) * DIALS.GAZE_MAX_PX;
+    gazeTY = clamp(y, -1, 1) * DIALS.GAZE_MAX_PX;
+    kickGaze();
+    const hold = Number.isFinite(Number(ms)) && Number(ms) > 0 ? Math.round(Number(ms)) : 1500;
+    gazeNudgeTimer = setTimeout(() => { gazeNudgeTimer = null; restGaze(); }, hold);
+    return true;
   }
   /** Ease the lean home NOW (a hide, a disable, a drag taking over). The
    *  ASKS bias is deliberately NOT cleared here: it belongs to the class, and
    *  `gazeActive()` already parks the whole lean at 0 while anything else owns
    *  the glass, so it simply comes back when she is idle again. */
   function restGaze() {
+    /* A HEARTBEAT NUDGE IS EASED HOME BY WHATEVER TAKES THE GLASS NEXT. Every
+     * path that owns her face (play / raw / idle / hide / disable / a drag)
+     * already calls this, so the release timer is cleared HERE and nowhere
+     * else - a nudge that outlived the reaction after it would be a lean
+     * nobody asked for. */
+    clearGazeNudge();
     gazeTX = 0; gazeTY = 0;
-    nudgeGaze();
+    kickGaze();
   }
 
   function clearApproachTimers() {
@@ -1648,9 +1714,10 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
 
     // GAZE: the lean is proportional and capped, and the loop eases it home
     // on its own the moment gazeActive() goes false.
+    clearGazeNudge();          // the cursor outranks a heartbeat's idle look
     gazeTX = clamp(dx / DIALS.GAZE_DIV, -DIALS.GAZE_MAX_PX, DIALS.GAZE_MAX_PX);
     gazeTY = clamp(dy / DIALS.GAZE_DIV, -DIALS.GAZE_MAX_PX, DIALS.GAZE_MAX_PX);
-    nudgeGaze();
+    kickGaze();
 
     // APPROACH: measured from her EDGE, so a bigger EMI is not a bigger doorbell.
     const inside = d < r.width / 2 + DIALS.APPROACH_PX;
@@ -1784,6 +1851,12 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
           },
           seed: String((stats.firstSeenAt || '') + '|' + (isoDay() || '')),
           onStat(key) {
+            /* TRAP 77's OTHER HALF, AND THE ONE PLACE THAT SEES EVERY CHANNEL.
+             * The glass never runs through play(), and a wheel-rolled takeover
+             * that waited on `prepare` starts a tick AFTER the caller returned -
+             * so the heartbeat's clock is stamped off the deck's own counter
+             * rather than off any one call site. */
+            if (key === 'takeovers') stampActivity('takeover');
             if (!Object.prototype.hasOwnProperty.call(stats, key)) return;
             stats[key] += 1;
             save();
@@ -2086,6 +2159,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     const line = typeof o.line === 'string' && o.line.trim() ? o.line : null;
     const face = typeof o.face === 'string' && o.face ? o.face : '^_^';
     trip = { timer: null, left: 0, top: 0, onDone: typeof o.onDone === 'function' ? o.onDone : null };
+    stampActivity('apparate');
 
     // Where she is standing right now, in pixels, so a cancel during the very
     // first squish still knows the spot it is being asked to keep.
@@ -2479,7 +2553,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   function setGazeBias(dir) {
     const d = Number(dir);
     askGaze = Number.isFinite(d) ? clamp(d, -1, 1) : 0;
-    nudgeGaze();
+    kickGaze();
     return askGaze;
   }
 
@@ -2519,6 +2593,10 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     attach,
     /** Subscribe to the pointer verbs (emi/voice.js). Returns an unsubscribe. */
     onGesture,
+    /* HEARTBEAT (2026-08-25): subscribe to "she just did something visible",
+     * and the idle gaze nudge. `emi/heartbeat.js` is the only caller of either;
+     * both are inert until something subscribes. */
+    onActivity, nudgeGaze,
     play, raw, idle,
     /** Swap the body png by frame key (BODY_FRAME_SRC). Test/host seam. */
     setBodyFrame,
@@ -2601,7 +2679,20 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       if (!deck) return false;
       const p = typeof which === 'string' ? (CHANNEL_TABLE && CHANNEL_TABLE[which]) : which;
       if (!p) return false;
+      // The heartbeat's clock is stamped off the deck's own `onStat` counter,
+      // not from here - see the loadChannels block.
       try { return !!deck.screenTakeover(p, opts || {}); } catch (e) { return false; }
+    },
+    /**
+     * THE HEARTBEAT'S DOOR ONTO THE WHEEL (2026-08-25). One wheel tick with the
+     * player-silence floor (THEATRE_IDLE_MS) lifted and every OTHER deck
+     * refusal - the per-channel cooldowns, the global cooldown, PER_SESSION_CAP,
+     * a class owning the screen, a live say, a hidden document - still standing.
+     * The owner wants screen animations frequent; they are still the deck's.
+     */
+    pulseChannel() {
+      if (!deck || typeof deck.pulse !== 'function') return false;
+      try { return !!deck.pulse(); } catch (e) { return false; }
     },
     /** The deck itself: the suites drive the wheel and the clock through it. */
     get channels() { return deck; },
@@ -2625,6 +2716,8 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       // and its callback re-adds `.breath` to a node that is no longer in the page.
       cancelChain(); killTimers(); stopBlink(); stopSway(); disarmHold(); clearBody();
       clearApproachTimers();
+      clearGazeNudge();               // HEARTBEAT: the one timer restGaze owns
+      activitySubs.clear();
       if (gazeRaf != null && typeof cancelAnimationFrame === 'function') {
         cancelAnimationFrame(gazeRaf); gazeRaf = null;
       }

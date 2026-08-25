@@ -205,6 +205,17 @@ export default {
     };
     const say = (m) => { try { ctx.log('[an] ' + m); } catch (e) { /* noop */ } };
 
+    /* EMI COMMENTARY SEAMS (the heartbeat wave). note() names a moment the
+     * mascot may react to - the shell prefixes 'game:' and its own voice engine
+     * decides whether the moment is worth a face, a line or nothing at all.
+     * Additive, one-way and fully guarded: an older shell has none of it, and a
+     * mascot may never break a class. Anomaly takes no hold() window - the find
+     * advance is contract-protected dead-air-free space, not a fenced one. */
+    const note = (id, extra) => {
+      try { if (ctx.mood && typeof ctx.mood.note === 'function') ctx.mood.note(id, extra); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+
     /* ---- lifecycle flags ------------------------------------------------ */
     let dead = false;
     let paused = false;
@@ -254,6 +265,8 @@ export default {
     let stallMs = 0;                       // ms since the player's last tap
     let stallSinceReport = 0;              // accumulator for the ~500ms report
     let lifetimeBefore = 0;
+    let emiBigGridSeen = false;            // an.bigGrid is a once-per-class seam
+    let emiRefusedTaps = 0;                // refusals that survived the bump throttle
     const findTimes = [];
     const recoveryTimes = [];
     const kindsSeen = new Map();           // kind -> {offered, cleared}
@@ -397,6 +410,8 @@ export default {
       if (now - lastBumpAt < REFUSE_GAP_MS) return;
       lastBumpAt = now;
       cue('bump', 0.15);   /* owner 2026-08-24: error cues -50% */
+      emiRefusedTaps += 1;
+      note('an.refusedTap', { kind: 'tease', n: emiRefusedTaps });
     }
 
     /* ---- the decks, null-safe ------------------------------------------- */
@@ -645,6 +660,7 @@ export default {
         r = asBreather(r, plan);
         whiffStreak = 0;
         breathers += 1;
+        note('an.breather', { kind: 'curiosity', n: breathers });
       }
 
       const url = dealUrl();
@@ -712,6 +728,7 @@ export default {
 
       deck('casino', 'roundStart', roundsOffered, kind);
       deck('pressure', 'beat', 'round');
+      note('an.roundStart', { kind: 'curiosity', n: roundsOffered, word: kind, left: n * n });
       if (r.breather) msg('an_breather', AN_LEX.an_breather);
       else if (roundsOffered === 1) msg('an_play_hint', AN_LEX.an_play_hint);
       say('round ' + roundsOffered + ': ' + kind + ' d=' + delta + (r.breather ? ' BREATHER' : '')
@@ -782,6 +799,7 @@ export default {
       if (cur.relocated > 0) {
         relocatedCleared += 1;
         if (cur.lastRelocAt >= 0) recoveryTimes.push(Math.max(1, Math.round(latency - cur.lastRelocAt)));
+        note('an.relocatedCleared', { kind: 'celebrate', n: relocatedCleared, streak, tile: i });
       }
       const kseen = kindsSeen.get(cur.kind) || { offered: 1, cleared: 0 };
       kseen.cleared += 1;
@@ -857,13 +875,20 @@ export default {
          * belongs above the error floor, not down with the wrong taps. */
         cue('near', 0.34);
         msg('an_moved', AN_LEX.an_moved);
+        /* the ghost branch owns this tap - an.whiff is the timeout and
+         * an.refusedTap is a dead press, so the three can never double-fire */
+        note('an.ghostTap', { kind: 'commiserate', n: ghostFinds, tile: i, word: cur.kind });
       } else {
         cur.remainingMs -= PLAYTEST.WRONG_BURN_MS;
         cue('thud', 0.13, { pitch: 0.8 });
         msg('an_wrong', AN_LEX.an_wrong);
       }
 
-      if (streak !== 0) { streak = 0; deck('pressure', 'setStreak', 0); heat(); litCheck(); }
+      if (streak !== 0) {
+        const lostStreak = streak;
+        streak = 0; deck('pressure', 'setStreak', 0); heat(); litCheck();
+        note('an.streakBroken', { kind: 'commiserate', streak: lostStreak });
+      }
       deck('casino', 'tap', {
         correct: false, i, latencyMs: latency, streak,
         first: false, jackpot: false, kind: cur.kind, moved,
@@ -906,6 +931,7 @@ export default {
        * round armed. A dead moment that has to be shortened is not a dead
        * moment. */
       deadBeatSafe('round_gap');
+      note('an.whiff', { kind: 'commiserate', n: whiffStreak, tile: cur.oddIndex, word: cur.kind });
       after(reduced ? PLAYTEST.WHIFF_HOLD_MS_REDUCED : PLAYTEST.WHIFF_HOLD_MS, endRound);
     }
 
@@ -929,6 +955,7 @@ export default {
          * The false -> true edge only - `litOn` above is the latch. */
         cue('chime', 0.5, { pitch: pitchFor(streak) });
         cue('pad', 0.22);
+        note('an.streakLit', { kind: 'celebrate', streak, n: roundsCleared });
       }
     }
 
@@ -1070,6 +1097,7 @@ export default {
         if (cur.relocations.length) relocatedRounds = Math.max(0, relocatedRounds - 1);
         const kseen = kindsSeen.get(cur.kind);
         if (kseen) kseen.offered = Math.max(0, kseen.offered - 1);
+        note('an.bellMidRound', { kind: 'commiserate', n: roundsOffered, word: cur.kind, streak: bestStreak });
       }
       setPhase('verdict');
       deck('casino', 'bell', true);
@@ -1114,6 +1142,9 @@ export default {
       });
       const gates = hardGates({ roundsOffered, firstTapFinds });
       const fx = flavorXp(subSecondFinds, relocatedCleared);
+      /* the sGate IS the perfect class - every offered round on the first tap.
+       * finish() runs once (guarded by `ended`), so this cannot repeat. */
+      if (gates.sGate) note('an.perfectClass', { kind: 'celebrate', n: firstTapFinds, streak: bestStreak });
 
       try {
         const prior = (ctx.store && typeof ctx.store.gameMeta === 'function')
@@ -1324,6 +1355,12 @@ export default {
           seed, gradeTier: tier, timeBudgetSec: budgetMs / 1000, kindsMode, reduced, coarse,
         });
         n = plan.n;
+        /* twenty-five identical tiles is the whole "oh no" of tier 3+. Once per
+         * class only - the grid size never changes once the plan is dealt. */
+        if (!emiBigGridSeen && n >= 5) {
+          emiBigGridSeen = true;
+          note('an.bigGrid', { kind: 'tension', n, left: n * n });
+        }
 
         rollLocal = (() => {
           const roll = makeTaggedRoll(seed + '|an-vr');

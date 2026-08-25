@@ -30,6 +30,8 @@ let voice = null;
 let trips = null;
 /** emi/asks.js (wave EMI ASKS), on the same terms. Null is normal. */
 let asks = null;
+/** emi/heartbeat.js (THE METRONOME, 2026-08-25), on the same terms. */
+let heart = null;
 let voicePending = null;
 /** () => bool: can EMI actually PERFORM right now (is her face attached). */
 let voiceGate = null;
@@ -102,6 +104,9 @@ export function getTrips() { return trips; }
 
 /** The ask engine (emi/asks.js), once it has loaded. Null is normal. */
 export function getAsks() { return asks; }
+
+/** The metronome (emi/heartbeat.js), once it has loaded. Null is normal. */
+export function getHeartbeat() { return heart; }
 
 /**
  * ASK THE VOICE, SAFELY. `moments.js` routes every moment through here before
@@ -348,6 +353,9 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
      *  `flags` (a01's comfort faces) and its `classResult` (the dare payout);
      *  everything else on it is a test/debug handle. */
     get asks() { return asks; },
+    /** The metronome (emi/heartbeat.js), once it has loaded. Test/debug only:
+     *  nothing on the page drives it, which is the point of a heartbeat. */
+    get heartbeat() { return heart; },
     /** Debug: the one moment waiting on the voice + the face, by name. */
     get pendingMoment() { return voicePending ? voicePending.name : null; },
 
@@ -377,6 +385,10 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
     get bodyFrame() { try { return widget.bodyFrame; } catch (e) { return 'idle'; } },
 
     destroy() {
+      /* THE HEARTBEAT GOES FIRST: it is the one thing here that owns a running
+       * interval, and a tick that landed between the widget's teardown and its
+       * own would be a beat spent on a mascot that is no longer in the page. */
+      try { if (heart) heart.destroy(); } catch (e) { /* noop */ }
       try { widget.destroy(); } catch (e) { /* noop */ }
       try { if (asks) asks.destroy(); } catch (e) { /* noop */ }
       try { if (trips) trips.destroy(); } catch (e) { /* noop */ }
@@ -386,6 +398,7 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
       voice = null;
       trips = null;
       asks = null;
+      heart = null;
       voicePending = null;
       voiceGate = null;
       if (singleton === api) singleton = null;
@@ -444,6 +457,27 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
       if (singleton !== api || !a || typeof a.createAsks !== 'function') return;
       asks = a.createAsks({ widget, emi: api, voice, store, log: say });
     }).catch((e) => { say('emi: asks.js unavailable (' + ((e && e.message) || e) + ')'); });
+    /* THE HEARTBEAT, LAST (2026-08-25). It is a CONSUMER of all three - it
+     * spends the voice's lines, the deck's channels and the ask engine's
+     * questions and owns none of them - so it is mounted after the voice and
+     * takes `asks`/`trips` as GETTERS: those two are one more import away and
+     * a heartbeat that captured them here would capture null for ever.
+     * Optional on the same terms as everything else in this file: a missing
+     * or broken metronome costs EMI her idle life, never her face, her verbs
+     * or the shell's boot. */
+    import('./heartbeat.js').then((hb) => {
+      if (singleton !== api || !hb || typeof hb.createHeartbeat !== 'function') return;
+      heart = hb.createHeartbeat({
+        widget,
+        emi: api,
+        voice,
+        asks: () => asks,
+        trips: () => trips,
+        store,
+        log: say,
+      });
+      try { if (heart) heart.start(); } catch (e) { /* noop */ }
+    }).catch((e) => { say('emi: heartbeat.js unavailable (' + ((e && e.message) || e) + ')'); });
   }).catch((e) => { say('emi: voice.js unavailable (' + ((e && e.message) || e) + ')'); });
 
   return api;

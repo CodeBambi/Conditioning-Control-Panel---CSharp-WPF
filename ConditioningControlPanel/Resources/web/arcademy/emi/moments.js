@@ -113,9 +113,15 @@ export const MOMENTS = Object.freeze({
   },
 
   /* --- mid-class (EMI COLOR: the tension mirror) ------------------------
-   * FACE ONLY, by design: no bark pool exists on either name and none may be
-   * added - a mascot that talks during a clutch moment is a distraction with
-   * a fanbase. The games ration these through ctx.mood in shell.js. */
+   * FACE FIRST, and these two are still very nearly face-only. The rule that
+   * "no bark pool may ever sit on tense or clutch" was REVERSED by the owner on
+   * 2026-08-25 ("it needs to comment ALSO WHILE IN A SESSION"): a small,
+   * clown-only pool on either name is legal now, and the class ration in
+   * voice.js (CLASS_BARK_FLOOR_MS + CLASS_BARKS_MAX, plus the `mood.hold`
+   * danger gate) is what keeps a clutch moment from becoming a conversation.
+   * The ordinary road for class commentary is `ctx.mood.note()` and the
+   * `game:*` names it mints - see GAME_NOTE_FACES below. The games still ration
+   * these two through ctx.mood in shell.js. */
   /** The room got serious. She leans in and stays leaned. */
   tense: { face: 'o_o', hold: 1600 },
   /** The one big moment. Wide eyes, a little shiver, nothing said. */
@@ -207,6 +213,41 @@ export const MOMENTS = Object.freeze({
   glitch: { chain: 'glitch' },
 });
 
+/* ============================================================================
+ * CLASS COMMENTARY: the generic `game:*` row (HEARTBEAT wave, 2026-08-25)
+ *
+ * `ctx.mood.note('lf.tile.repeat', {kind:'tease', n:3})` fires the moment
+ * `game:lf.tile.repeat`. There will be dozens of those names and this table
+ * will never have a row for most of them, which is the design: a note declares
+ * what KIND of feeling it is and the mascot answers with a face from this
+ * closed set. So EVERY note gets at least a face, and the voice ladder decides
+ * separately whether it also earns a line (pool `game:<id>`).
+ *
+ * Six kinds, one fallback. An unknown kind - and a note that declared none -
+ * reads as `ambient`, which is the GLANCE: "I noticed", the cheapest true
+ * thing she can say about a moment she has no opinion on. A named row here
+ * would out-rank all of this; nothing stops a specific `game:` name being
+ * added to MOMENTS above when one earns it.
+ * ==========================================================================*/
+export const GAME_NOTE_PREFIX = 'game:';
+export const GAME_NOTE_FACES = Object.freeze({
+  celebrate: Object.freeze({ face: '^_^', hold: 1000, fx: 'hearts', body: 'bounce' }),
+  commiserate: Object.freeze({ face: '>_<', hold: 900 }),
+  tease: Object.freeze({ face: '(¬‿¬)', hold: 1200 }),
+  tension: Object.freeze({ face: 'o_o', hold: 1400 }),
+  curiosity: Object.freeze({ face: '0_0', hold: 1100 }),
+  ambient: Object.freeze({ chain: 'glance' }),
+});
+
+/** The wordless answer to a `game:*` note, or null when it is not one. */
+function gameNoteSpec(name, p) {
+  if (typeof name !== 'string' || name.indexOf(GAME_NOTE_PREFIX) !== 0) return null;
+  const kind = String((p && p.kind) || '');
+  return (Object.prototype.hasOwnProperty.call(GAME_NOTE_FACES, kind)
+    ? GAME_NOTE_FACES[kind]
+    : GAME_NOTE_FACES.ambient);
+}
+
 /* The escalation counter for tabAway/suspend. Session-only by design: coming
  * back tomorrow should not inherit yesterday's side-eye. */
 const seen = Object.create(null);
@@ -252,7 +293,12 @@ function react(emi, ok) {
 export function fireMoment(name, payload) {
   const emi = getEmi();
   if (!emi || typeof name !== 'string') return false;
-  const spec = Object.prototype.hasOwnProperty.call(MOMENTS, name) ? MOMENTS[name] : null;
+  /* A NAMED ROW WINS; a `game:*` note with no row of its own falls back to the
+   * face for its declared kind. Resolved before the voice is asked, because the
+   * fallback is the thing that makes "every note gets a face" true. */
+  const spec = Object.prototype.hasOwnProperty.call(MOMENTS, name)
+    ? MOMENTS[name]
+    : gameNoteSpec(name, payload);
 
   const p = Object.assign({}, payload || {});
   if (name === 'tabAway' || name === 'suspend') {

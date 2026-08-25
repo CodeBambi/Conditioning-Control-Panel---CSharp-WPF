@@ -249,6 +249,9 @@ export function createIcCasino(o) {
   const C = IC_CASINO;
   const say = typeof opts.log === 'function' ? opts.log : () => {};
   const t = typeof opts.t === 'function' ? opts.t : ((k, f) => f);
+  /* EMI COMMENTARY SEAM: the game hands its guarded note() down in the base
+     kit. A deck built by anything older simply has none. */
+  const note = typeof opts.note === 'function' ? opts.note : () => {};
   const reduced = !!opts.reduced;
   const motion = Math.max(0, Math.min(2, Math.round(opts.motionLevel == null ? 2 : Number(opts.motionLevel) || 0)));
   const still = reduced || motion <= 0;
@@ -607,6 +610,9 @@ export function createIcCasino(o) {
       if (tempted || (hoverOn && lastReveal && nowMs() - hoverSince >= C.ALMOST_HOVER_MS)) {
         showWord('ic_almost', 'ALMOST', 'lav');
         nearMiss('almost', C.NEAR_MISS_I.almost);
+        /* the hand sat ON the X and still held - the only near-crime in the
+           room, and the deck is the only thing that saw it */
+        note('ic.almostTouchedIt', { kind: 'tease', streak: Math.max(0, Number(e.streak) || 0) });
       }
       tempted = false;
       void e;

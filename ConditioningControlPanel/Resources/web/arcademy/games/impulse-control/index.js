@@ -75,7 +75,7 @@ import {
 } from './scoring.js';
 import { createRender } from './render.js';
 import { IC_LEX } from './lex.js';
-import { createIcCasino } from './casino.js';
+import { createIcCasino, IC_CASINO, isJust, isRecordPing } from './casino.js';
 import { createIcPressure } from './pressure.js';
 import { createIcTrickster } from './trickster.js';
 
@@ -233,6 +233,20 @@ export default {
     const t = (k, f) => {
       try { return ctx.lexicon(k, f == null ? IC_LEX[k] : f); }
       catch (e) { return f == null ? (IC_LEX[k] || k) : f; }
+    };
+    /* EMI COMMENTARY SEAMS (the heartbeat wave). note() names a moment the
+     * mascot may react to - the shell prefixes 'game:' and its own voice engine
+     * decides whether the moment is worth a face, a line or nothing at all.
+     * hold() fences a timing-critical window where she may pull faces but never
+     * words. Both are additive, one-way and fully guarded: an older shell has
+     * neither, and a mascot may never break a class. */
+    const note = (id, extra) => {
+      try { if (ctx.mood && typeof ctx.mood.note === 'function') ctx.mood.note(id, extra); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+    const holdWords = (on) => {
+      try { if (ctx.mood && typeof ctx.mood.hold === 'function') ctx.mood.hold(!!on); }
+      catch (e) { /* a mascot may never break a class */ }
     };
     const timers = createTimers();
     const reduced = probe('(prefers-reduced-motion: reduce)')
@@ -537,6 +551,10 @@ export default {
            holds a node and can never raise this tier's audio ceiling. */
         cue: (name, level, extra) => deckEngine.audio(name, level, extra),
         log: say,
+        /* EMI COMMENTARY SEAMS: two moments live only inside a deck (the
+           casino's ALMOST, the pressure ladder stepping back down), so the
+           guarded note() rides down with the rest of the base kit. */
+        note,
       };
       try {
         casino = createIcCasino(Object.assign({}, base, {
@@ -789,6 +807,12 @@ export default {
       /* RT INTEGRITY: the deck event is routed only AFTER the stamp is taken,
          so no deck can ever sit between the paint and the clock. */
       S.windowTimer = timers.after(b.windowMs, () => windowEnd(b));
+      /* THE GO / NO-GO WINDOW IS LIVE. Faces yes, words never: the score here
+         is literally (window - rt), and on the X the correct play is to touch
+         nothing for two seconds. Placed after the clock stamp and the window
+         timer so it can never sit between the paint and the reading. Every
+         resolution path below closes it. */
+      holdWords(true);
       decks('reveal', {
         idx: S.idx,
         kind: b.kind,
@@ -803,6 +827,7 @@ export default {
       if (!S || S.stagePhase !== 'reveal') return;
       S.stagePhase = 'gap';
       stopDescend();                          // W3 P0-8: nothing is in flight
+      holdWords(false);                 // the window resolved on its own clock
       const streakBefore = S.streak;
       if (b.kind === 'denied') {
         /* the X survived - restraint pays, and the backdrop turns over */
@@ -811,12 +836,14 @@ export default {
         S.render.deniedPassed();
         S.render.stamp('calm', t('ic_denied_pass', 'Withheld'));
         swapBackdrop();
+        note('ic.heldTheX', { kind: 'celebrate', n: S.tally.deniedHeld, streak: S.streak });
       } else {
         /* drifted away - 0 points, NOT an error */
         S.tally.drifted++;
         S.streak = 0;
         S.render.fadeBubble();
         S.render.stamp('', t('ic_missed', 'It drifted away'));
+        note('ic.driftedAway', { kind: 'commiserate', n: S.tally.drifted, streak: streakBefore });
       }
       S.tally.score = S.score;
       hud();
@@ -836,6 +863,7 @@ export default {
       const b = S.bubble;
       timers.cancel(S.windowTimer);
       S.stagePhase = 'gap';
+      holdWords(false);                 // the window resolved on a real press
 
       if (b.kind === 'denied') {
         /* THE X. The one error in the game. */
@@ -856,6 +884,8 @@ export default {
           if (ctx.mood && streakBefore >= 6) { ctx.mood.runLost(); ctx.mood.calm(); }
           else if (ctx.mood) { ctx.mood.stumble(); ctx.mood.calm(); }
         } catch (e) { /* noop */ }
+        /* the one K.O. in the room: a long chain eaten by the X */
+        if (streakBefore >= 6) note('ic.xEatenBigChain', { kind: 'commiserate', n: Math.round(rt), streak: streakBefore });
         say('X clicked (' + source + ') at +' + Math.round(rt) + 'ms: -' + X_PENALTY);
       } else {
         const rt = Math.max(0, at - S.revealAt);
@@ -904,6 +934,14 @@ export default {
           flavor: b.flavor,
           score: S.score,
         });
+        /* EMI COMMENTARY SEAMS, all four once per tap and all off the numbers
+           the ledger already settled above - nothing here is recomputed for a
+           payload and nothing here may write back. */
+        if (newRecord) note('ic.newPersonalBest', { kind: 'celebrate', n: Math.round(rt), streak: S.streak });
+        if (kind === 'perfect') note('ic.perfectPop', { kind: 'celebrate', n: Math.round(rt), streak: S.streak });
+        if (isJust(rt, b.windowMs)) note('ic.justMadeIt', { kind: 'tease', n: Math.round(rt), streak: S.streak });
+        else if (!newRecord && isRecordPing(rt, record)) note('ic.recordPing', { kind: 'commiserate', n: Math.round(rt), streak: S.streak });
+        if (IC_CASINO.MILESTONES.indexOf(S.streak) >= 0) note('ic.streakMilestone', { kind: 'celebrate', streak: S.streak, n: S.bestStreak });
       }
       S.phaseTimer = timers.after(b.gapMs, nextBubble);
     }
@@ -947,6 +985,7 @@ export default {
       S.debriefed = true;
       S.running = false;
       S.stagePhase = 'debrief';
+      holdWords(false);                 // class over: nothing is scored again
       S.render.setTravel(null);
       /* the ENGINE cools here, as it always has. The decks keep the heat they
          earned until their own end()/destroy() sighs it out - zeroing them
@@ -994,6 +1033,7 @@ export default {
       deck('pressure', 'end', endInfo);
       deck('trickster', 'end', endInfo);
       const royal = !!(casinoEnd && casinoEnd.royal);
+      if (royal) note('ic.royal', { kind: 'celebrate', n: led.score, streak: S.bestStreak });
 
       /* W2 CHROME - THE TICKET. style.js prints the whole receipt in one
          pass (no per-row stagger anywhere in .g-ic-paper-grid), so the ladder
@@ -1057,6 +1097,10 @@ export default {
         + ', swaps ' + S.swaps + (perfect ? ', PERFECT' : '') + (royal ? ', ROYAL' : ''));
 
       S.autoTimer = timers.after(AUTO_SUBMIT_MS, submit);
+      /* THE TICKET IS UP. The class's biggest hole: a static screen, two
+         buttons and up to AUTO_SUBMIT_MS of dead air. Announced ONCE, right
+         here - no timer of its own, the seam simply says how long she has. */
+      note('ic.debriefIdle', { kind: 'ambient', n: Math.round(AUTO_SUBMIT_MS / 1000) });
     }
 
     function writeMeta() {
@@ -1095,6 +1139,7 @@ export default {
     function submit() {
       if (!S || ended) return;
       ended = true;
+      holdWords(false);                 // class end, whichever door it came out
       timers.cancel(S.autoTimer);
       const { led } = S.result || {};
       writeMeta();
@@ -1125,6 +1170,9 @@ export default {
     function freeze() {
       timers.cancel(S.phaseTimer); timers.cancel(S.windowTimer); timers.cancel(S.travelTimer);
       stopDescend();                          // W3 P0-8: the travel loop is dead, so is its riser
+      /* pause / tab-away / mandatory video: any live window is void, so the
+         word fence comes down here too - it must never outlive the bubble. */
+      holdWords(false);
       /* a bubble in flight is void - hide it, it re-deals from the mouth */
       if (S.stagePhase === 'reveal' || S.stagePhase === 'slide' || S.stagePhase === 'load') {
         /* a voided REVEAL was already counted as shown; un-count it, or the
@@ -1206,6 +1254,7 @@ export default {
 
       destroy() {
         destroyed = true;
+        holdWords(false);               // teardown never leaves the fence up
         decks('destroy');
         casino = null; pressure = null; trickster = null;
         timers.killAll();

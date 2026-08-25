@@ -287,6 +287,18 @@ export default {
     };
     const say = (m) => { try { ctx.log('[ir] ' + m); } catch (e) { /* noop */ } };
 
+    /* EMI COMMENTARY SEAMS (the heartbeat wave). emiNote() names a moment the
+     * mascot may react to - the shell prefixes 'game:' and its own voice engine
+     * decides whether the moment is worth a face, a line or nothing at all.
+     * Named emiNote because this module already owns a note() - the LEDGER
+     * write - and the two must never be confused. Additive, one-way and fully
+     * guarded: an older shell has neither, and a mascot may never break a
+     * class. */
+    const emiNote = (id, extra) => {
+      try { if (ctx.mood && typeof ctx.mood.note === 'function') ctx.mood.note(id, extra); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+
     /* ---- lifecycle ------------------------------------------------------ */
     let dead = false;
     let paused = false;
@@ -820,6 +832,8 @@ export default {
       if (montage) montage.reshuffle();
       deck('casino', 'layoutChange', 'reshuffle');
       deck('pressure', 'beat', 'layout');
+      /* board-level: once per reshuffle, never per tile. */
+      emiNote('ir.wallReshuffled', { kind: 'ambient', n: stopsResolved, streak });
     }
 
     /* ==================================================================== *
@@ -1168,6 +1182,23 @@ export default {
       else deck('casino', 'stop', stop.n, stop.announced);
       deck('pressure', 'beat', 'stop');
       deck('trickster', 'afterStop');
+      /* THE FREEZE. A stop that arrived with no warning bell is its own moment
+       * - branch, never both. */
+      if (stop.announced) {
+        emiNote('ir.freezeLanded', {
+          kind: 'tension',
+          n: Number(stop.n) | 0,
+          left: Math.max(0, plan.stops.length - stopIdx),
+          streak,
+        });
+      } else {
+        emiNote('ir.unannouncedFreeze', {
+          kind: 'tension',
+          n: Number(stop.n) | 0,
+          left: Math.max(0, plan.stops.length - stopIdx),
+          streak,
+        });
+      }
       if (!stop.announced && tier === 2) {
         /* SYNTHESIS #2: the taste of the twist is DEBRIEFED, once. */
         after(1200, () => { if (live) msg('ir_nobell_debrief', IR_LEX.ir_nobell_debrief); });
@@ -1813,6 +1844,24 @@ export default {
       deck('pressure', 'beat', correct ? 'hit' : 'miss');
       if (live.plantMatch >= 0 && !decoyHit) deck('casino', 'plantResisted');
 
+      /* THE RESOLUTION. One seam per outcome, never two: a fast correct answer
+       * is answerFast ONLY, a merely correct one is answerCorrect. `n` is the
+       * commit time in ms. */
+      if (correct) {
+        if (latencyMs <= q.windowMs * 0.3) {
+          emiNote('ir.answerFast', { kind: 'celebrate', n: latencyMs | 0, streak });
+        } else {
+          emiNote('ir.answerCorrect', { kind: 'celebrate', n: latencyMs | 0, streak });
+        }
+      } else if (timedOut) {
+        emiNote('ir.answerTimeout', { kind: 'commiserate', n: timeouts | 0, streak });
+      }
+      /* the two halves of the decoy: the plant landed, or it did not. */
+      if (live.plantMatch >= 0) {
+        if (decoyHit) emiNote('ir.decoyTaken', { kind: 'commiserate', n: plantExposures | 0, streak });
+        else emiNote('ir.decoyResisted', { kind: 'celebrate', n: plantsResisted | 0, streak });
+      }
+
       /* THE VERDICT IS THE PROOF, so the wall comes back for it and the tiles
        * that really wore the answer are ringed. */
       try { if (stage) stage.setAttribute('data-shroud', '0'); } catch (e) { /* noop */ }
@@ -1886,6 +1935,8 @@ export default {
       } else if (!how.correct && !how.timedOut && !how.voided && isNearMiss(q, index)) {
         const nk = kind === 'spiral' ? 'ir_near_spiral' : kind === 'phrase' ? 'ir_near_heard' : 'ir_near';
         line = t(nk, IR_LEX[nk]);
+        /* it DID happen - just earlier. The recency error, not a blank. */
+        emiNote('ir.nearMissRecency', { kind: 'commiserate', word: String(kind), streak });
       } else if (how.voided) line = t('ir_voided', IR_LEX.ir_voided);
       truthEl.appendChild(el('p', 'g-ir-truth-line', line));
       if (msgEl) msgEl.textContent = line;
@@ -1952,6 +2003,7 @@ export default {
            * nothing else. It lands 250ms behind the stop's own win so it reads
            * as a second, separate piece of good news. */
           after(250, () => { tick('lift', 0.28, { pitch: 1.2 }); });
+          emiNote('ir.comebackCorrected', { kind: 'celebrate', n: Number(stop.n) | 0, streak });
         }
         correctionPending = 0;
       } else if (!fullyCorrect && !correctionUsed && asked > 0) {
@@ -1971,6 +2023,8 @@ export default {
            * The floor is fired HERE, before rewardBeat(), so a roll that pays
            * stacks ON TOP of it instead of replacing it. Pitch is the run. */
           tick('streak', 0.3, { pitch: 1 + 0.06 * Math.min(PLAYTEST.PITCH_CAP, streak) });
+          /* a clean stop, and how long the run is now. */
+          emiNote('ir.cleanStopStreak', { kind: 'celebrate', n: bestRun, streak, left: Math.max(0, plan.stopCount - stopsResolved - 1) });
           rewardBeat();
         } else {
           streak = 0;
@@ -2172,6 +2226,9 @@ export default {
       if (elapsedMs - guardSince > PLAYTEST.ESCAPE_MS) { guardHits = 0; guardSince = elapsedMs; }
       guardHits += 1;
       if (guardHits >= PLAYTEST.ESCAPE_TAPS) {
+        /* the frustration detector: they mashed the card and the school took
+         * the stop away. Read the count BEFORE it is reset. */
+        emiNote('ir.escapeGuardVoid', { kind: 'commiserate', n: guardHits | 0, streak });
         guardHits = 0;
         say('escape guard: stop ' + live.stop.n + ' voided');
         /* W3 P2-5: a VOID is not a wrong answer, it is the class letting you

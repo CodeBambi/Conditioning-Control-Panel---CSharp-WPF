@@ -343,6 +343,18 @@ export default {
     };
     const say = (m) => { try { ctx.log('[de] ' + m); } catch (e) { /* noop */ } };
 
+    /* EMI COMMENTARY SEAMS (the heartbeat wave). note() names a moment the
+     * mascot may react to - the shell prefixes 'game:' and its own voice engine
+     * decides whether the moment is worth a face, a line or nothing at all.
+     * There is no hold() here: a 2048-shaped board has no sub-5s graded input
+     * window, so nothing in this room is timing-critical enough to fence.
+     * note() is additive, one-way and fully guarded: an older shell has it not
+     * at all, and a mascot may never break a class. */
+    const note = (id, extra) => {
+      try { if (ctx.mood && typeof ctx.mood.note === 'function') ctx.mood.note(id, extra); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+
     /* ---- lifecycle flags ------------------------------------------------ */
     let dead = false;
     let paused = false;
@@ -433,6 +445,7 @@ export default {
     let stuckHints = 0;
     let slides = 0;
     let bumps = 0;
+    let emiBumpRun = 0;                    // bumps SINCE the last real slide (seam payload only)
     let slideTimer = 0;
     let wakeTimer = 0;
     let bumpTimer = 0;
@@ -1550,12 +1563,17 @@ export default {
         // board shakes into the blocked edge, the casino flashes it, and a
         // muted thud plays. Never silence.
         bumps += 1;
+        emiBumpRun += 1;
         shakeBoard(dir);
         deck('casino', 'bump', dir);
         tick('bump', PLAYTEST.BUMP_LEVEL);
         deck('trickster', 'afterMove', { moved: false, merges: [], spawn: null, locked: false });
+        // one seam per REFUSED press (this branch runs once per input, never per
+        // frame), carrying the run so the joke can build on the second and third
+        note('de.wallBump', { kind: 'tease', n: emiBumpRun, word: dir });
         return false;
       }
+      emiBumpRun = 0;                       // a real slide ends the run
       swipes += 1;
       slides += 1;
       stallMs = 0;
@@ -1663,6 +1681,7 @@ export default {
        * single swipe) - the report card's "links" must not inflate just
        * because the chip above now remembers across moves. */
       if (burst >= 2) chainLinks += burst - 1;
+      if (burst >= 2) note('de.chainBurst', { kind: 'celebrate', n: burst, streak: chain, tile: tierName(deepestMergeTier) });
       maxChain = Math.max(maxChain, chain);
 
       /* 3. a new deepest tier: the STATE moves now; the show is the beats'. */
@@ -1782,6 +1801,7 @@ export default {
       /* W3 P1-16: the room offering a hand. stuckShown latches it to one pulse
        * per stall, so this is the whole of the cue's rate limit. */
       tick('lift', 0.2);
+      note('de.stuck', { kind: 'ambient', n: stuckHints, left: dirs.length });
     }
     function clearHint() {
       if (hintTimer) { clearTimer(hintTimer); hintTimer = 0; }
@@ -1917,6 +1937,12 @@ export default {
         else if (ctx.mood && d >= 6) ctx.mood.tense();
       } catch (e) { /* noop */ }
       if (d >= TIER_MAX || ended) return;
+      if (d >= 3) {
+        // the depth THIS dive just reached for the first time
+        note('de.newDeepest', { kind: 'celebrate', n: d, tile: tierName(d) });
+        // and, separately, the all-time rung: deeper than the player has EVER been
+        if (rec.lifetimeNew) note('de.lifetimeDepth', { kind: 'celebrate', n: d, tile: tierName(d) });
+      }
       rewardShowNow(rec.rewardShow);
     }
 
@@ -2014,6 +2040,7 @@ export default {
         try { ctx.ceremonies.reward('jackpot', { target: boardEl, text: t('de_jackpot', DE_LEX.de_jackpot) }); } catch (e) { /* noop */ }
         fireSafe('flash_burst', { count: 2, alpha: 0.45 });     // decoration (fireSafe welds it)
         tick('jackpot', 0.7);
+        note('de.jackpot', { kind: 'celebrate', n: jackpots, streak: chain });
         current();
         return;
       }
@@ -2071,6 +2098,8 @@ export default {
       deck('casino', 'almost', a, b);
       tick('near_miss', 0.3);
       msg('de_strain', DE_LEX.de_strain);
+      // past the key + cooldown gates above, so this is once per real strain
+      note('de.strain', { kind: 'tension', n: pair[0].tier, tile: tierName(pair[0].tier), streak: chain });
     }
 
     /* ==================================================================== *
@@ -2090,6 +2119,8 @@ export default {
        * on the way out, so the relief has a shape and a player can hear it
        * running out. */
       tick('wash', 0.25, { pitch: 1.2 });
+      // `exhaleUsed` latches above: once per dive, never per move
+      note('de.exhale', { kind: 'commiserate', n: occupancy(board), tile: tierName(diveDeepest) });
       heat();
       after(plan.exhaleMs, () => {
         exhaleOn = false;
@@ -2113,6 +2144,9 @@ export default {
       deck('pressure', 'resurface');
       /* EMI COLOR: the dive ended - K.O. once a class, then the slate is calm. */
       try { if (ctx.mood) { ctx.mood.runLost(); ctx.mood.calm(); } } catch (e) { /* noop */ }
+      // NOT a loss: the depth is banked. The seep already owns the drain beat
+      // below, so this only names the moment and never claims the silence.
+      note('de.resurface', { kind: 'commiserate', n: resurfaces, tile: tierName(diveDeepest), left: secLeft() });
       try { ctx.ceremonies.stamp({ text: t('de_stamp_resurface', DE_LEX.de_stamp_resurface), tone: 'pink', target: bench }); } catch (e) { /* noop */ }
       msg('de_resurface_line', DE_LEX.de_resurface_line);
       tick('stamp_bad', 0.15);                      // the loss: a muted thud, never silence
@@ -2192,6 +2226,8 @@ export default {
       try { ctx.ceremonies.stamp({ text: t('de_stamp_ceiling', DE_LEX.de_stamp_ceiling), target: bench }); } catch (e) { /* noop */ }
       msg('de_ceiling_line', DE_LEX.de_ceiling_line);
       tick('jackpot', 0.9);
+      // the ladder ENDS here - once per timed class, once per dive in free swim
+      note('de.ceiling', { kind: 'celebrate', n: bestDeepest, tile: tierName(bestDeepest), left: secLeft() });
       fireSafe('flash_burst', { count: 3, alpha: 0.5 });
       current();
       const ceremonyMs = reduced ? PLAYTEST.CEREMONY_MS_REDUCED : PLAYTEST.CEREMONY_MS;
@@ -2220,6 +2256,9 @@ export default {
       try { if (surfaceBtn) surfaceBtn.disabled = true; } catch (e) { /* noop */ }
       stopClock();
       say('free swim: surfacing at ' + clockText());
+      /* FREE SWIM only (the guard above returns on a timed class): the player
+       * decided when the soak was over, which almost never happens here. */
+      note('de.freeSwimSurface', { kind: 'commiserate', n: secElapsed(), tile: tierName(Math.max(bestDeepest, diveDeepest)) });
       bell();
     }
 
@@ -2245,6 +2284,10 @@ export default {
       after(420, () => {
         try { ctx.ceremonies.stamp({ text: t('de_stamp_bell', DE_LEX.de_stamp_bell), tone: 'pink', target: bench }); } catch (e) { /* noop */ }
       });
+      /* The end-of-class bell. A free swim reaches this same dim-out path from
+       * the Surface button, which has already spoken for itself, so the bell
+       * seam is a TIMED class only. Locked at the bell is a softer beat. */
+      if (!endless) note('de.bell', { kind: survived ? 'celebrate' : 'commiserate', n: bestDeepest, tile: tierName(bestDeepest) });
       after(reduced ? PLAYTEST.CEREMONY_MS_REDUCED : PLAYTEST.CEREMONY_MS, () => finish(false));
     }
 

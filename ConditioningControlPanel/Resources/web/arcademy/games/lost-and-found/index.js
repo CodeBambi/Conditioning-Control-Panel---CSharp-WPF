@@ -167,6 +167,18 @@ export default {
     const rng = typeof ctx.rng === 'function' ? ctx.rng : Math.random;
     const timers = createTimers();
 
+    /* EMI COMMENTARY SEAMS (the heartbeat wave). note() names a moment the
+     * mascot may react to - the shell prefixes 'game:' and its own voice engine
+     * decides whether the moment is worth a face, a line or nothing at all.
+     * It is additive, one-way and fully guarded: an older shell has no note()
+     * at all, and a mascot may never break a class.
+     * NO hold() HERE: this hunt is click-precision but LONG, and the ruling is
+     * that a long phase is not fenced - the voice engine rations itself. */
+    const note = (id, extra) => {
+      try { if (ctx.mood && typeof ctx.mood.note === 'function') ctx.mood.note(id, extra); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+
     /* ------------------------------------------------------------- state */
     let phase = 'idle';           // idle | briefing | hunt | ceremony | done
     let tier = 1;
@@ -204,6 +216,12 @@ export default {
     let jackpots = 0;
     let relocations = 0;
     const findTimes = [];
+    /* EMI SEAM STATE. Read by the commentary seams and by nothing else - no
+       game rule, grade input or timing hangs off any of these four. */
+    let emiFindSum = 0;            // running sum of finds so far (fast / slow)
+    let emiWarmNotedFind = -1;     // one warm note per hunt round, not per click
+    let emiRelocAtHuntStart = 0;   // relocations banked when this hunt began
+    let emiPeekNoted = false;      // the first peek is remarked on once ever
 
     let modifierOn = false;
     let bellRung = false;
@@ -1087,6 +1105,7 @@ export default {
       cleanThisFind = true;
       findStartedAt = Date.now();
       findPausedBase = pausedMs;
+      emiRelocAtHuntStart = relocations;
       if (hud) {
         hud.setProgress(finds, findsTarget);
         hud.dim(false);
@@ -1098,6 +1117,7 @@ export default {
         bellRung = true;
         if (casino) casino.bell(true);       // the frame goes gold for the last hunt
         announce(t('lf_final_bell', 'Final bell'), 2000);
+        note('lf.finalBell', { kind: 'tension', n: findsTarget, left: 1, streak: bestCleanStreak });
         // "guaranteed clutch cinematics": if the clock never gets tight enough,
         // the board relents anyway on the last find.
         timers.after(PLAYTEST.CLUTCH_BELL_DELAY_MS, () => {
@@ -1139,6 +1159,7 @@ export default {
       cue('whoosh', 0.3, { pitch: 0.7, duck: 'voice', duckMs: 500 });
       /* EMI COLOR: the board's own clutch beat is the mascot's too. */
       try { if (ctx.mood) ctx.mood.clutch(); } catch (e) { /* noop */ }
+      note('lf.clutch', { kind: 'tension', n: finds, left: Math.max(0, findsTarget - finds) });
       say('clutch ease engaged');
     }
 
@@ -1207,6 +1228,25 @@ export default {
         cleanStreak = 0;
       }
 
+      /* EMI SEAMS: the two branches of ONE find resolution, judged against this
+       * class's own running mean rather than a par recompute on the beat (a
+       * 200-tile wall at tier 1 and a 40-tile wall at tier 4 are not the same
+       * fast), plus the tier-4 case where the seat moved mid-hunt and the
+       * player tracked it anyway. */
+      const emiPrior = findTimes.length - 1;
+      const emiMean = emiPrior > 0 ? emiFindSum / emiPrior : 0;
+      const emiLeft = Math.max(0, findsTarget - finds);
+      const emiMoved = Math.max(0, relocations - emiRelocAtHuntStart);
+      emiFindSum += took;
+      if (emiPrior >= 2 && took <= emiMean * 0.55) {
+        note('lf.fastFind', { kind: 'celebrate', n: Math.round(took), streak: cleanStreak, left: emiLeft });
+      } else if (emiPrior >= 2 && took >= emiMean * 1.8) {
+        note('lf.slowFind', { kind: 'commiserate', n: Math.round(took), streak: cleanStreak, left: emiLeft });
+      }
+      if (emiMoved > 0) {
+        note('lf.trackedRelocation', { kind: 'celebrate', n: emiMoved, streak: cleanStreak, left: emiLeft });
+      }
+
       if (pityTimer) { timers.cancel(pityTimer); pityTimer = 0; }
       if (churnTimer) { timers.cancel(churnTimer); churnTimer = 0; }
 
@@ -1240,6 +1280,8 @@ export default {
       // the streak that is actually buying the player something.
       const goldStreak = sGateStreakFor(findsTarget);
       try { ctx.ceremonies.streakMeter({ target: hud && hud.streakMount, filled: cleanStreak, gold: cleanStreak >= goldStreak }); } catch (e) { /* optional */ }
+      // the CROSSING, not the state - a streak that stays gold is gold once
+      if (cleanStreak === goldStreak) note('lf.cleanStreakGold', { kind: 'celebrate', streak: cleanStreak, n: finds, left: emiLeft });
       if (!reduced) {
         try { ctx.engine.sustain('ambient_field', { kind: cleanStreak >= goldStreak ? 'goldleaf' : 'confetti' }); } catch (e) { /* optional */ }
         timers.after(900, () => { try { ctx.engine.stop('ambient_field'); } catch (e) { /* ignore */ } });
@@ -1260,9 +1302,11 @@ export default {
         try { ctx.ceremonies.reward('jackpot', { intensity: 1, target: hud && hud.stampAnchor, text: t('lf_royal', 'ROYAL PAYOUT') }); } catch (e) { /* optional */ }
         // INPUT TRUST: clickSafe over a click-precision board, always.
         try { ctx.engine.fire('gif_burst', { clickSafe: true, count: 5, assetKind: 'loop' }); } catch (e) { /* optional */ }
+        note('lf.royalPayout', { kind: 'celebrate', n: finds, streak: bestCleanStreak });
       } else if (roll && roll.jackpot) {
         try { ctx.ceremonies.reward('jackpot', { intensity: roll.intensity, target: hud && hud.stampAnchor, text: t('lf_jackpot', 'Jackpot') }); } catch (e) { /* optional */ }
         try { ctx.engine.fire('gif_burst', { clickSafe: true, count: 4, assetKind: 'loop' }); } catch (e) { /* optional */ }
+        note('lf.jackpot', { kind: 'celebrate', n: jackpots, streak: cleanStreak });
       } else if (roll && roll.nearMiss) {
         try { ctx.ceremonies.reward('near_miss', { intensity: roll.intensity, target: hud && hud.stampAnchor }); } catch (e) { /* optional */ }
       }
@@ -1272,6 +1316,7 @@ export default {
         modifierOn = true;
         announce(t('lf_modifier', 'The board wakes up'), 2000);
         startWakeHum();          // W3 P1-14: the escalation stops being a banner
+        note('lf.boardWakesUp', { kind: 'tension', n: finds, left: emiLeft });
         say('modifier engaged after find ' + finds);
       }
 
@@ -1292,6 +1337,11 @@ export default {
            both. */
         rotateTarget(finds);
         if (hud) hud.showBriefing(targetLook(), t('lf_rebrief', 'New target. Memorize her.'));
+        /* SAMPLED. Up to 25 re-briefs a class, so the seam offers the FIRST one
+         * and then every fourth - the board is dimmed and frozen here, which
+         * makes it the one guaranteed-safe speech window, but a reaction to
+         * every single new face would narrate the whole class. */
+        if (finds === 1 || finds % 4 === 0) note('lf.rebrief', { kind: 'curiosity', n: finds, left: Math.max(0, findsTarget - finds) });
         const holdMs = reduced ? 700 : Math.min(Math.round(dials.previewSec * 1000), 1400);
         timers.after(holdMs, () => {
           if (phase === 'done') return;
@@ -1381,6 +1431,12 @@ export default {
         board.mark(target, 'g-lf-warm', true);
         timers.after(PLAYTEST.NEAR_TWIN_SHIMMER_MS + 60, () => board.mark(target, 'g-lf-warm', false));
       }
+      /* ONCE PER HUNT ROUND, never per press: a flailing player can hit two
+       * twins in a row and she only gets to be fooled once a target. */
+      if (emiWarmNotedFind !== finds) {
+        emiWarmNotedFind = finds;
+        note('lf.warmClick', { kind: 'tease', tile: Number(tile && tile.i) | 0, n: misclicks, left: Math.max(0, findsTarget - finds) });
+      }
     }
 
     /* --------------------------------------------------------------- finish */
@@ -1466,6 +1522,10 @@ export default {
           // The cap itself is the shell's; we only tell the player, once.
           announce(t('peek_hint', 'Hold to peek. Using it caps this class at A.'), 1800);
           if (hud) hud.setChips(misclicks, peeksNow());
+          if (!emiPeekNoted) {
+            emiPeekNoted = true;
+            note('lf.peekFirstUse', { kind: 'tease', n: peeksNow(), left: Math.max(0, findsTarget - finds) });
+          }
         },
       });
       const btn = hud && hud.peekButton;

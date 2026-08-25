@@ -239,6 +239,9 @@ export function createIcPressure(o) {
   const opts = o || {};
   const P = IC_PRESSURE;
   const say = typeof opts.log === 'function' ? opts.log : () => {};
+  /* EMI COMMENTARY SEAM: the game hands its guarded note() down in the base
+     kit. A deck built by anything older simply has none. */
+  const note = typeof opts.note === 'function' ? opts.note : () => {};
   const reduced = !!opts.reduced;
   const motion = Math.max(0, Math.min(2, Math.round(opts.motionLevel == null ? 2 : Number(opts.motionLevel) || 0)));
   const still = reduced || motion <= 0;
@@ -467,6 +470,9 @@ export function createIcPressure(o) {
       cue(P.RUNG_CUE[r], r);
     } else {
       for (let k = rung; k > r; k--) for (const add of P.RUNG_ADDS[k]) applyAdd(add, false);
+      /* the room going quiet is the AFTERMATH of the mistake, a hysteresis
+         later - the lights going out one at a time, nothing pending */
+      note('ic.rungFell', { kind: 'commiserate', n: r, streak: streak });
     }
     rung = r;
     retune();

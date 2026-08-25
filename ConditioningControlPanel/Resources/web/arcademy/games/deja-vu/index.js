@@ -212,6 +212,28 @@ export default {
     };
     const say = (m) => { try { ctx.log(m); } catch (e) { /* noop */ } };
 
+    /* EMI COMMENTARY SEAMS (the heartbeat wave). emiNote() names a moment the
+     * mascot may react to - the shell prefixes 'game:' and its own voice engine
+     * decides whether the moment is worth a face, a line or nothing at all.
+     * emiHold() fences a timing-critical window where she may pull faces but
+     * never words. Both are additive, one-way and fully guarded: an older shell
+     * has neither, and a mascot may never break a class.
+     * Named emiNote/emiHold and not note/hold because runSwap already owns a
+     * local `note` (the swap tell's DOM label) and a seam fires inside it. */
+    const emiNote = (id, extra) => {
+      try { if (ctx.mood && typeof ctx.mood.note === 'function') ctx.mood.note(id, extra); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+    const emiHold = (on) => {
+      try { if (ctx.mood && typeof ctx.mood.hold === 'function') ctx.mood.hold(!!on); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+    /* THE ONE HELD WINDOW: the memorize preview. Held from preview() to
+     * previewDown(), and released by every exit path (bell, clear, finish,
+     * pause/suspend, destroy) so the fence can never outlive the beat. */
+    let emiPreviewHeld = false;
+    let emiPopNoted = false;       // one bubble note a board, never one a pop
+
     /* ---- lifecycle flags ------------------------------------------------- */
     let dead = false;
     let paused = false;
@@ -724,6 +746,7 @@ export default {
       swapAttempt.clear();
       drumrolled = false;
       watchLie = -1;
+      emiPopNoted = false;
       clearLie();
       busy = true;                       // input is closed until this preview is over
       facesLocked = false;
@@ -761,6 +784,8 @@ export default {
        * stream so no two land on the same note. The re-deal path (runRedeal)
        * is a re-showing, not a deal, and stays out of this. */
       const lastDealt = layout.dealOrder.length - 1;
+      // one note for the whole cascade, never one a card
+      emiNote('dv.dealCascade', { kind: 'ambient', n: layout.dealOrder.length, left: dials.pairs });
       layout.dealOrder.forEach((cellIndex, n) => {
         const audible = n < 6 || n === lastDealt;
         after(n * TIMING.dealStaggerMs, () => {
@@ -780,6 +805,10 @@ export default {
        * a notch per cleared board toward tier 4's own floor. It spends bell
        * time; that is priced into the grade's board cost (script.js). */
       facesLocked = true;      // nothing may re-face a board the player is reading
+      /* THE FENCE GOES UP. The memorize window is the class's whole mechanic
+       * and it is already being attacked on purpose by the poison sub_flash;
+       * EMI may pull a face here, never a word. */
+      emiPreviewHeld = true; emiHold(true);
       setHint('dv_preview_hint', 'Memorize the board.');
       if (grid) grid.classList.add('scanning');       // the machine shows you
       for (const c of cells) {
@@ -822,6 +851,8 @@ export default {
       /* W3 P0-13: the board goes face down and the clock starts. The thud is
        * the inverse of the whoosh that opened it. */
       tick('thud', 0.3, { pitch: 1.2 });
+      // the faces are going down: the reading is over, so the fence comes down
+      emiPreviewHeld = false; emiHold(false);
       if (touch) playWindowStop();                    // the preview's window dies with it
       if (grid) grid.classList.remove('scanning');    // the machine is done showing
       for (const c of cells) {
@@ -871,7 +902,12 @@ export default {
       /* FAKE SHUFFLE (House Rules): the pantomime rides the tail of the
        * preview - cards feint trades and land home. Nothing moves, no tell
        * fires, and input stays closed until the theatre leaves the stage. */
-      if (trickster) trickster.shuffle(cells, open); else open();
+      if (trickster) {
+        // the return says the pantomime actually played: one note a board, and
+        // none at all on the boards where the deck holds the card back
+        const feinted = trickster.shuffle(cells, open);
+        if (feinted) emiNote('dv.fakeShuffle', { kind: 'tease', n: cells.length });
+      } else open();
     }
 
     /* ==================================================================== *
@@ -904,6 +940,7 @@ export default {
           watchLie = -1;
           if (called) {
             calledLies += 1;
+            emiNote('dv.calledTheLie', { kind: 'celebrate', n: calledLies, tile: i, streak: combo });
             setHint('dv_called_it', 'You called the lie.', true);
             tick('streak', 0.7, { pitch: 1.3 });
             rewardBeat(true);
@@ -938,6 +975,8 @@ export default {
       mismatchStreak = 0;
       /* EMI COLOR: one pair left on the bench = the lean-in. */
       try { if (ctx.mood && unmatchedPairs() === 1) ctx.mood.tense(); } catch (e) { /* noop */ }
+      // the same beat, named: the board is down to its guaranteed last pair
+      if (unmatchedPairs() === 1) emiNote('dv.lastPair', { kind: 'tension', left: 1, n: matched, streak: combo });
       const pairId = cells[a].pairId;
 
       /* "tracked through the static": matched within 2 attempts of the pair
@@ -951,6 +990,7 @@ export default {
         /* W3 P1-10: the rarest skill this class measures - you followed a card
          * through the static. It lands over the match cue, not under it. */
         after(120, () => tick('chime', 0.45, { pitch: 1.5 }));
+        emiNote('dv.trackedThroughStatic', { kind: 'celebrate', n: tracked, tile: pairId, streak: combo });
         setHint('dv_tracked', 'Tracked through the static.', true);
       }
 
@@ -1014,6 +1054,8 @@ export default {
           catch (e) { /* noop */ }
           // the almost: the face you NEEDED haunts the card you picked
           if (casino) casino.almost(cells[b], cells[a]);
+          // she watched them see it - fires with the ceremony, once an attempt
+          emiNote('dv.nearMissPartner', { kind: 'commiserate', tile: partner, streak: mismatchStreak });
         }
         tick('stamp_bad', 0.2);
         after(reduced ? TIMING.flipReducedMs : TIMING.flipMs, () => {
@@ -1143,6 +1185,9 @@ export default {
           else tick('chime', 0.3, { pitch: 1.2 });
           if (lied) setHint('dv_redeal_hint', 'One of those was a lie.', true);
           else setHint('dv_redeal_gift', 'The machine blinked.', true);
+          /* the tensest three seconds in the class, or the one honest gift */
+          if (lied) emiNote('dv.redealLied', { kind: 'tension', tile: watchLie, n: settledWindow });
+          else emiNote('dv.redealGift', { kind: 'celebrate', n: showing.length, left: Math.floor(showing.length / 2) });
           busy = false;
           endgameCheck();
         });
@@ -1209,6 +1254,9 @@ export default {
       /* W3 P1-10: the TELL. */
       tick('glitch', 0.5);
       setHint('dv_swap_hint', 'The board is moving.', true);
+      /* the law says the tell always precedes - she is part of the announcement */
+      emiNote('dv.swapTell', { kind: 'tension', tile: a, n: swapsFired + 1,
+        left: Math.max(0, dials.swapBudget - swapsFired - 1) });
 
       after(TIMING.tellMs, () => {
         let swapped = false;
@@ -1375,6 +1423,7 @@ export default {
     function win() {
       if (dead || ended || belled) return;
       busy = true;                          // the board is over; nothing may land
+      emiPreviewHeld = false; emiHold(false);   // no fence survives a board
       boardsCleared += 1;
       const clearSec = Math.max(0, (elapsedMs - boardPlayMs) / 1000);
       boardLog.push({
@@ -1388,6 +1437,9 @@ export default {
       try { ctx.ceremonies.stamp({ text: t('dv_stamp_clear', 'CLEAR'), target: grid }); } catch (e) { /* noop */ }
       tick('stamp', 0.8);
       paintHud();
+      /* the running score of the class, counted out loud */
+      emiNote('dv.boardClear', { kind: 'celebrate', n: boardsCleared, streak: combo,
+        left: Math.max(0, Math.ceil((budgetMs - elapsedMs) / 1000)) });
       say('board ' + boardNo + ' clear in ' + clearSec.toFixed(1) + 's ('
         + attempts + ' attempts) - ' + boardsCleared + ' cleared, '
         + Math.max(0, Math.ceil((budgetMs - elapsedMs) / 1000)) + 's left');
@@ -1421,6 +1473,7 @@ export default {
       if (ended || belled) return;
       belled = true;
       busy = true;                           // 1. input is shut BEFORE anything else
+      emiPreviewHeld = false; emiHold(false);  // the bell may fall mid-preview
       stopClock();
       clearTimers();                         // 2. truncate: no step from the live board runs
       if (touch) playWindowStop();
@@ -1434,6 +1487,10 @@ export default {
       stopAmbience();
       if (casino) casino.dimOut();           // the bell is never silence
       setHint('dv_bell', 'The bell. Class over.', true);
+      /* cut off mid-sentence by a school bell - `left` is what the live board
+       * still owed, so one pair short of clear reads as one pair short */
+      emiNote('dv.bellMidBoard', { kind: 'commiserate', n: boardsCleared,
+        left: Math.max(0, playablePairs() - matched) });
       try { ctx.ceremonies.stamp({ text: t('dv_stamp_bell', 'BELL'), tone: 'pink', target: grid }); } catch (e) { /* noop */ }
       /* W3 P0-3: the bell is this class's NORMAL ending (trap 82) and it was
        * playing the loudest error sound in the school. The school's own bell,
@@ -1448,6 +1505,7 @@ export default {
     function finish(timeout) {
       if (ended) return;
       ended = true;
+      emiPreviewHeld = false; emiHold(false);   // the class end always releases
       stopClock();
       stopAmbience();
       if (trickster) trickster.stop();
@@ -1555,6 +1613,12 @@ export default {
           restart,
           onPop: () => {
             bubblesPopped += 1;
+            /* ONE note a board, not one a pop: a storm of decoys is still a
+             * single act of procrastination as far as she is concerned. */
+            if (!emiPopNoted) {
+              emiPopNoted = true;
+              emiNote('dv.bubblePop', { kind: 'tease', n: bubblesPopped });
+            }
             tick('bubble_pop', 0.4);
             if (grid) {
               grid.classList.add('jiggle');
@@ -1977,6 +2041,8 @@ export default {
       pause() {
         if (paused) return;
         paused = true;
+        // a frozen class may sit here forever - the fence must not sit with it
+        emiHold(false);
         // the lab holds its breath: every CSS animation (sweep, beam, shudder)
         // freezes in place via animation-play-state
         if (stage) stage.classList.add('suspended');
@@ -1986,6 +2052,8 @@ export default {
       resume() {
         if (!paused) return;
         paused = false;
+        // the preview the pause interrupted is still the preview: re-fence it
+        if (emiPreviewHeld && !dead && !ended && !belled) emiHold(true);
         if (stage) stage.classList.remove('suspended');
         lastTick = Date.now();
         for (const c of cells) if (c.state === 'up' || (c.state === 'locked' && loopPolicy.play)) playFace(c, true);
@@ -2000,6 +2068,7 @@ export default {
 
       destroy() {
         dead = true;
+        emiPreviewHeld = false; emiHold(false);   // teardown always releases
         hideHowto();
         if (touch) playWindowStop();
         stopClock();
