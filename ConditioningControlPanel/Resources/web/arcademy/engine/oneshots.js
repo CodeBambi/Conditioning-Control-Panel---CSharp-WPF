@@ -38,6 +38,23 @@
  * `--ae-dur` is `spec.durMs` and the release is `spec.durMs + 320`, exactly as
  * before. A caller that lengthens a word must also widen its own cadence, or two
  * words overlap (Instant Recall raised `CADENCE.subliminal.min` to 1400 for this).
+ *
+ * ADDITIVE (2026-08-25, the voiced word): `voice: true` on sub_flash SAYS the
+ * word as it paints it. OPT-IN per call and inert unless three things line up -
+ * the caller asked, the shell handed this engine a `wordAudio` entry for the
+ * word it drew, and the latch below is open. The engine holds no audio element
+ * here either: it routes through this file's own `audio_trigger` (the clip door
+ * on `shell/audio.js`), so the clip rides the bus graph, the duck hierarchy, the
+ * mute and the master volume like every other sound the school makes.
+ *   - `voiceKey` (default 'ae-sub') is the mixer's voice SLOT: a re-fire on the
+ *     same key cuts the clip already in it, which is what keeps a class from
+ *     stacking its own whispers. A class that wants its own slot passes
+ *     '<game>-whisper'.
+ *   - The synthesised whisper (`sfx`) is the FALLBACK, not a layer: a call that
+ *     passes both plays the clip and skips the oscillator for that tick.
+ *   - `wordAudio` is EMPTY on a day the app-wide whisper mute is on, so no game
+ *     has to gate its own flag on `ctx.audioAudible` - the flag simply does
+ *     nothing. Neither side alone opens the tap, exactly as the host describes.
  * ==========================================================================*/
 
 import { clamp01 } from '../core/caps.js';
@@ -53,8 +70,17 @@ import { createEscapeGuard } from './escape.js';
  *  read it off the wall, not off a billboard. */
 export const SUB_HOLD_MAX_MS = 1400;
 
+/** The one-at-a-time latch on a VOICED sub_flash. The stream can tick at
+ *  SUB_MS.fast (360ms) and six clips a second would empty CLIP_VOICES in one
+ *  breath, so a voiced word waits this long behind the last one and the tick
+ *  that arrives early simply lands silent - the WORD still paints. 1400 is
+ *  SUB_HOLD_MAX_MS: no clip may start while the last word could still be up. */
+const VOICE_MIN_GAP_MS = SUB_HOLD_MAX_MS;
+
 export function createOneshots(ctx) {
   const live = { flash: 0, gifBurst: 0, sub: 0 };
+  /** When the last voiced word's clip was sent. Per engine, not per class. */
+  let lastVoiceAt = 0;
 
   /* The lite twins ride the exact seam flashBurstLite always has: ctx.lite()
    * (coarse pointer OR motionLevel <= 1), evaluated at spend time. A desktop
@@ -161,9 +187,34 @@ export function createOneshots(ctx) {
     ctx.fx('sub_flash', variant.name);
     ctx.timers.after(durMs + 320, () => { ctx.timers.release(node); live.sub = Math.max(0, live.sub - 1); });
     ctx.timers.own(node);
-    if (opts.sfx) ctx.sfx(typeof opts.sfx === 'string' ? opts.sfx : 'whisper', 0.25 + 0.35 * strength, { duck: 'voice' });
+
+    /* THE VOICED WORD (opt-in, see the header). Only a caller that asked, only a
+     * word the shell handed a clip for, and only when the latch is open. */
+    let voiced = false;
+    if (opts.voice === true && word) {
+      const clip = (typeof ctx.wordAudio === 'function') ? ctx.wordAudio(String(word)) : null;
+      const now = Date.now();
+      if (clip && (now - lastVoiceAt) >= VOICE_MIN_GAP_MS) {
+        lastVoiceAt = now;
+        voiced = true;
+        audioTrigger({
+          name: 'whisper',                      // the recipe a host without the file falls to
+          url: clip,
+          key: opts.voiceKey ? String(opts.voiceKey) : 'ae-sub',
+          maxMs: durMs + 400,
+          level: 0.28 + 0.2 * strength,
+          duck: 'voice',
+        });
+      }
+    }
+    /* The SYNTHESISED whisper is the fallback, never a layer on top: a caller
+     * that passes both `sfx` and `voice` (deja-vu's preview flash does) would
+     * otherwise play an oscillator impression of a whisper over the real one. */
+    if (opts.sfx && !voiced) ctx.sfx(typeof opts.sfx === 'string' ? opts.sfx : 'whisper', 0.25 + 0.35 * strength, { duck: 'voice' });
+
     const handle = { kind: 'sub_flash', variant: variant.name, text: word || null, durMs };
     if (held) handle.holdMs = durMs;
+    if (voiced) handle.voiced = true;
     return handle;
   }
 
@@ -331,7 +382,7 @@ export function createOneshots(ctx) {
     gif_burst: gifBurst,
     audio_trigger: audioTrigger,
     live,
-    reset() { live.flash = 0; live.gifBurst = 0; live.sub = 0; },
+    reset() { live.flash = 0; live.gifBurst = 0; live.sub = 0; lastVoiceAt = 0; },
   };
 }
 

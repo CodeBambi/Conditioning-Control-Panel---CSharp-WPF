@@ -264,6 +264,23 @@ export function createEngine(options = {}) {
   const coarse = probeCoarsePointer();
   const allow = Array.isArray(opts.effectsConsumed) && opts.effectsConsumed.length ? opts.effectsConsumed.slice() : null;
   const wordsIn = Array.isArray(opts.words) ? opts.words.filter((w) => typeof w === 'string' && w.trim()) : [];
+  /* THE VOICED WORD MAP (2026-08-25), a sibling of `words`: word -> whisper clip
+   * url. The SHELL resolves it - built from the day's trigger rows and passed
+   * ONLY when the app-wide whisper mute is off, so the engine never learns what
+   * SubAudioAudible is and an inaudible day simply arrives as no map at all.
+   * Null prototype: a word spelled '__proto__' or 'constructor' must MISS here,
+   * not inherit a function off Object and hand it to the mixer as a url. */
+  const wordAudioIn = (() => {
+    const bag = opts.wordAudio;
+    if (!bag || typeof bag !== 'object') return null;
+    const map = Object.create(null);
+    let n = 0;
+    for (const k of Object.keys(bag)) {
+      const u = bag[k];
+      if (k && typeof u === 'string' && u) { map[k] = u; n += 1; }
+    }
+    return n ? map : null;
+  })();
 
   let heat = 0;
   let channels = clampToCaps(heatToChannels(0), capsVec);
@@ -497,6 +514,14 @@ export function createEngine(options = {}) {
     reduced: () => reducedMotion || motionLevel === 0,
     lite: () => coarse || motionLevel <= 1,
     words: () => wordsIn,
+    /** One word's whisper clip url, or null. Null for every word on a day the
+     *  app-wide whisper mute is on, which is how `voice` stays inert without a
+     *  single game having to ask about audio. */
+    wordAudio(w) {
+      if (!wordAudioIn || typeof w !== 'string' || !w) return null;
+      const u = wordAudioIn[w];
+      return (typeof u === 'string' && u) ? u : null;
+    },
     assetUrlSync,
     spiralUrl,
     sfx, sfxRaw, fx, log,

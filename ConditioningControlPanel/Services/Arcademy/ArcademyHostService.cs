@@ -677,6 +677,13 @@ internal static class ArcademyHostService
             // binds one per pad and plays it under the pad's note; `words` stays exactly as it
             // was for every other class. Empty audio everywhere when SubAudioAudible is off.
             triggers = BuildTriggers(phrases),
+            // THE HOUSE VOCABULARY'S clips: one row per word of the school's own 24-word list
+            // that has an mp3 beside the page. `words` above may legally be EMPTY - nothing
+            // enabled, or a creator mod that ships no pool - and on that day the page deals the
+            // house list instead (core/vocab.js) and reads its triggers from HERE. Listed always,
+            // audible only under SubAudioAudible, exactly like `triggers`; the page filters these
+            // to the words it actually dealt so ctx.triggers never describes a pool nobody sees.
+            houseTriggers = BuildHouseTriggers(),
             // UTC date seeds the content so the day's classes are globally identical (#978)...
             utcDateSeed = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             // ...and the LOCAL date is what rolls the attendance streak.
@@ -907,6 +914,97 @@ internal static class ArcademyHostService
         {
             App.Logger?.Debug("ArcademyHost.BuildSfxSamples: {E}", ex.Message);
             return _sfxSamples = Array.Empty<string>();
+        }
+    }
+
+    /// <summary>
+    /// THE SCHOOL'S OWN VOCABULARY, mirrored from <c>Resources/web/arcademy/core/vocab.js</c>
+    /// (<c>HOUSE_WORDS</c>). The page owns the list and only ever falls back to it when the
+    /// player's <c>SubliminalPool</c> is empty; this copy exists so the host can answer WHICH of
+    /// those words has a clip on disk without the page probing for files. The spelling is LOCKED
+    /// on both sides: the filename is the word lowercased with spaces turned into underscores
+    /// ("LET GO" -> <c>let_go.mp3</c>), so renaming a word here or there orphans a clip.
+    /// </summary>
+    private static readonly string[] HouseWords =
+    {
+        "FOCUS", "RELAX", "BREATHE", "LET GO", "SINK", "DEEPER", "DRIFT", "BLANK",
+        "EMPTY", "LISTEN", "OBEY", "GOOD", "AGAIN", "STAY", "SMILE", "SOFTER",
+        "MELT", "CALM", "DROP", "TRUST", "QUIET", "OPEN", "GIVE IN", "FLOAT",
+    };
+
+    /// <summary>The file stem a house word's clip ships under: lowercase, spaces to underscores.</summary>
+    private static string HouseSlug(string word)
+        => (word ?? string.Empty).Trim().ToLowerInvariant().Replace(' ', '_');
+
+    /// <summary>
+    /// Which house-word clips are on disk. Cached for the process for the same reason
+    /// <see cref="BuildSfxSamples"/> is: the folder ships with the build and cannot change under
+    /// a running app. <c>null</c> = not scanned yet, never "none found".
+    /// </summary>
+    private static string[]? _sublimStems;
+
+    private static string[] SublimStems()
+    {
+        if (_sublimStems != null) return _sublimStems;
+        try
+        {
+            var dir = Path.Combine(AppContext.BaseDirectory, "Resources", "web", "arcademy", "assets", "sublim");
+            if (!Directory.Exists(dir)) return _sublimStems = Array.Empty<string>();
+            _sublimStems = Directory.EnumerateFiles(dir, "*.mp3", SearchOption.TopDirectoryOnly)
+                .Select(f => Path.GetFileNameWithoutExtension(f) ?? string.Empty)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .OrderBy(n => n, StringComparer.Ordinal)
+                .ToArray();
+            return _sublimStems;
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ArcademyHost.SublimStems: {E}", ex.Message);
+            return _sublimStems = Array.Empty<string>();
+        }
+    }
+
+    /// <summary>
+    /// The house vocabulary WITH its whisper clips: <c>[{text, audio}]</c>, one row per house word
+    /// that actually has an mp3 beside the page. The page uses these only on a day it fell back to
+    /// the house list (an empty <c>SubliminalPool</c>), and it filters them down to the words it
+    /// dealt, so <c>ctx.triggers</c> always describes <c>ctx.words</c>.
+    /// <para>
+    /// The url is RELATIVE to the page (<c>./assets/sublim/&lt;slug&gt;.mp3</c>), exactly like the
+    /// sample door's cues: the whole arcademy folder is served off one origin, so the element that
+    /// plays it stays same-origin and can feed the mixer's bus graph instead of slipping it.
+    /// </para>
+    /// <para>
+    /// GATED ON <see cref="Models.AppSettings.SubAudioAudible"/> the same way
+    /// <see cref="BuildTriggers"/> is: with the app-wide whisper mute on, every row is text-only
+    /// and the page has nothing it could play. The rows are still listed - the host says what
+    /// EXISTS (trap 86); the flag says whether it may be heard. An empty or missing folder is an
+    /// empty list and the school simply flashes its words in silence.
+    /// </para>
+    /// </summary>
+    private static object[] BuildHouseTriggers()
+    {
+        try
+        {
+            var stems = SublimStems();
+            if (stems.Length == 0) return Array.Empty<object>();
+            var have = new HashSet<string>(stems, StringComparer.OrdinalIgnoreCase);
+            var audible = App.Settings?.Current?.SubAudioAudible == true;
+            var rows = new List<object>(HouseWords.Length);
+            foreach (var word in HouseWords)
+            {
+                var slug = HouseSlug(word);
+                if (slug.Length == 0 || !have.Contains(slug)) continue;
+                rows.Add(audible
+                    ? (object)new { text = word, audio = "./assets/sublim/" + slug + ".mp3" }
+                    : new { text = word, audio = (string?)null });
+            }
+            return rows.ToArray();
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ArcademyHost.BuildHouseTriggers: {E}", ex.Message);
+            return Array.Empty<object>();
         }
     }
 

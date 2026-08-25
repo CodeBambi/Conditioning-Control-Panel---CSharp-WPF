@@ -517,6 +517,9 @@ export function create(o) {
       image: false,
       variant: 'centre',
       anchor: n && n.playfield ? n.playfield : undefined,
+      /* VOICE: one dealt trickster card, not a cadence - it speaks its word. */
+      voice: true,
+      voiceKey: 'sort-whisper',
     });
     return true;
   }

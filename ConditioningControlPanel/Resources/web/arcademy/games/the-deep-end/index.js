@@ -1930,7 +1930,14 @@ export default {
       const ms = cadenceMs(plan.subFlashMs, currentHeat, plan.subJitter[subIdx % plan.subJitter.length]);
       subTimer = after(ms, () => {
         subTimer = 0;
-        const r = fireSafe('sub_flash', { anchor: well, variant: plan.subVariants[subIdx % plan.subVariants.length] });
+        /* VOICE: cadence floor is 5200 * CADENCE_MIN_MULT * (1 - CADENCE_JITTER)
+           = ~1521ms, clear of the 1400ms voiced-gap floor. */
+        const r = fireSafe('sub_flash', {
+          anchor: well,
+          variant: plan.subVariants[subIdx % plan.subVariants.length],
+          voice: true,
+          voiceKey: 'the-deep-end-whisper',
+        });
         if (r) subFlashes += 1;
         subIdx += 1;
         armSubFlash();
