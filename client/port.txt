@@ -28,6 +28,15 @@ evidence or owner decision.
 - Treat the port as a contract of visible behavior, not a code migration: the authoritative question
   is how the user interacts with the feature and what is visible on screen, not how the WPF app
   happened to be structured internally.
+- THE USER INTERFACE MUST LOOK AND FEEL LIKE THE WPF PRODUCT'S, not merely offer the same
+  functions. Owner requirement: the two products' UI should be the same or very close. Layout,
+  spacing, typography, colour, chrome, iconography, control shapes, states and transitions are part
+  of the ported contract, and a screen that does the right thing while looking unlike the shipping
+  product is an incomplete port, not a styling preference.
+- A UI parity claim needs a MATCHED VISUAL COMPARISON: the same surface captured from both products
+  under the same display scale, compared as pixels or as measured geometry and colour, not as a
+  reading of markup. Where the port deliberately diverges, record the divergence and its reason
+  rather than letting it stand as an accident.
 - Research current official Avalonia documentation before selecting a v12 API, dependency, native
   integration, platform behavior, or rendering approach.
 - A Windows build, stub, no-op fallback, or markup alone does not prove Windows and Linux support.
