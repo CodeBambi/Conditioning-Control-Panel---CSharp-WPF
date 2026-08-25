@@ -730,6 +730,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   // Host opened the building through the dev switch (`--arcademy`). Unlocks
   // Begin on every campus door regardless of the seed; never true for players.
   const devPass = src.devDoor === true;
+  /* THE ANNEX PEEK (web only, owner only). The web lobby stamps it for an
+   * account on the server's ARCADEMY_ANNEX_PEEK_EMAILS allow-list arriving at
+   * /arcademy?annex=1; the C# host has never sent the field and absent is
+   * false, so the desktop cannot see this branch at all.
+   *
+   * IT IS A PEEK, NOT A REVEAL. It makes the lab REACHABLE - the campus hatch
+   * and the office's ajar door - and touches nothing else. It never writes
+   * `annexRevealSeen`, so maybeAnnexReveal below is untouched and the real
+   * beat still waits for the tenth card and lands once, for real, later. It
+   * deliberately does NOT reach `seenFlags.annex` either: that flag gates the
+   * postman, and a delivered letter is persisted state a peek must not mint. */
+  const annexPeek = src.devAnnex === true;
+  if (annexPeek) say('ANNEX PEEK (owner dev): lab reachable, nothing stamped');
 
   /* ---------------------- registry + timetable -------------------------- */
   const games = await loadGames(say);
@@ -1510,7 +1523,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
          * hatch joins the plan only after the reveal AND a first visit through
          * the office panel - revisits skip the walk, discovery never does.
          * Same bag contract as `post`: campus draws, the shell keeps state. */
-        annex: (store.get('annexRevealSeen') && (store.get('annex') || {}).visited)
+        annex: (annexPeek || (store.get('annexRevealSeen') && (store.get('annex') || {}).visited))
           ? { open: () => walkThen('annex', () => showAnnex()) }
           : null,
         on: {
@@ -2115,8 +2128,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       daySeed: utcDateSeed,
       onCorkRead: () => { /* the read rows are the module's own; nothing owed here */ },
       // THE STOREROOM. The shell keeps the gate: the door exists only once the
-      // reveal has fired (ANNEX-OS.md §1), and the room just draws it.
-      ajar: !!store.get('annexRevealSeen'),
+      // reveal has fired (ANNEX-OS.md §1), and the room just draws it. The
+      // owner's peek is the second key to the same door and stamps nothing.
+      ajar: !!store.get('annexRevealSeen') || annexPeek,
       onBack: () => showBoard(),
       onReport: () => showReport(),
       onAnnex: () => showAnnex(),
