@@ -14,7 +14,15 @@ namespace CcpClient.Tests;
 /// which is the narrower half of the boundary rule <c>Entitlement/ShippingAppDataLocation.cs</c>
 /// already states for that directory. That the System door really shows the line is
 /// <c>SystemPageHeadlessTests</c>.</para>
+///
+/// <para><b>Why the collection attribute is here.</b> The last fact's SUBJECT is the default
+/// settings path, so it reads <c>CCP_DATA_ROOT</c> through
+/// <see cref="CompositionRoot.DefaultSettingsPath"/> and cannot be given a factory instead —
+/// which is the second of the two fixes <c>ProcessEnvCollectionGuardTests</c> names, and it costs
+/// this class its parallelism against <c>DataRootOverrideEnvTests</c>. The variable is READ here
+/// and never written.</para>
 /// </summary>
+[Collection(nameof(ProcessEnvCollection))]
 public class SettingsHandoverNoticesTests
 {
     [Fact]
@@ -39,12 +47,15 @@ public class SettingsHandoverNoticesTests
         // §9 D7's rule applied to a sentence: a screen that says "not yet" is a placeholder with a
         // user reading it. If a later packet really does build an import, this fact is the one it
         // has to change deliberately.
+        // Written out rather than looped: an assertion that lives only inside a foreach passes
+        // silently over an empty collection, which is the shape VacuousShapeGuardTests refuses.
         var line = SettingsHandoverNotices.Describe(@"Q:\a", @"Q:\b");
 
-        foreach (var promise in new[] { "not yet", "will be", "coming soon", "in a future", "for now" })
-        {
-            Assert.DoesNotContain(promise, line, StringComparison.OrdinalIgnoreCase);
-        }
+        Assert.DoesNotContain("not yet", line, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("will be", line, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("coming soon", line, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("in a future", line, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("for now", line, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
