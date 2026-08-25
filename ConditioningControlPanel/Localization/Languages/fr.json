@@ -4248,6 +4248,7 @@
   "tooltip_nav_door_webapp": "Ouvre l'app web CC Labs dans ton navigateur",
   "nav_search_label": "Recherche",
   "nav_search_keys": "Ctrl+K",
+  "nav_tag_premium_tip": "Fonctionnalité premium. N'importe quel palier de mécène la débloque.",
   "tooltip_nav_search": "Cherche des paramètres et des écrans (Ctrl+K)",
   "label_banner_web_xp": "Ton XP suit désormais ton compte -",
   "label_banner_web_link": "vois-le dans l'app web",

@@ -276,6 +276,11 @@ namespace ConditioningControlPanel
                 // the subscription block in MainWindow.xaml.cs.
                 ApplyDoorArt();
 
+                // LAYER A: the gold stars on the sold rows, and the four subscriptions that take
+                // them away again. Authored Collapsed, so a rail that never got here shows none
+                // rather than all - see the style in MainWindow.xaml.
+                RefreshNavPremiumTags();
+
                 NavSidebar.MouseEnter += (_, __) => SetNavRailExpanded(true);
 
                 // No timer, by owner call (NavRailCollapseAnimMs): leaving the rail IS the
@@ -826,6 +831,12 @@ namespace ConditioningControlPanel
                     expand ? ms : ms / 2));
                 foreach (var label in _navRailLabels)
                     label.BeginAnimation(UIElement.OpacityProperty, fade);
+                // LAYER A: the premium pills ride the same clock. They are PLATES, not text, so
+                // the label sweep above does not reach them - and the nearest one starts only
+                // ~63px in (after ja "認識", the shortest premium label shipped), which the 56px
+                // strip's ClipToBounds covers by 7px and one shorter translation would not.
+                foreach (var tag in NavPremiumTagElements)
+                    tag.BeginAnimation(UIElement.OpacityProperty, fade);
             }
             else
             {
@@ -835,6 +846,11 @@ namespace ConditioningControlPanel
                 {
                     label.BeginAnimation(UIElement.OpacityProperty, null);
                     label.Opacity = expand ? 1 : 0;
+                }
+                foreach (var tag in NavPremiumTagElements)
+                {
+                    tag.BeginAnimation(UIElement.OpacityProperty, null);
+                    tag.Opacity = expand ? 1 : 0;
                 }
             }
 
