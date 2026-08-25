@@ -24,12 +24,26 @@
  * so every existing caller is byte-identical and simply ignores a new field.
  * It exists because a class may only record what the engine DID (Law I), and
  * "which spiral did you just see" is unanswerable off the request alone.
+ *
+ * ADDITIVE (2026-08-25, the Loom directive): the spiral source may now be a
+ * PARAMS WRAPPER instead of a url string - {loom:true, id:'loom:xxxxxxxx',
+ * params:<loomField v2>, href:<bundled gif fallback url>} - from `opts.url` or
+ * from the shell's spiralUrl() provider. That routes through loomWash.js: ONE
+ * <canvas> child inside the SAME wash element (the one-element-per-kind law is
+ * untouched; the parent's opacity stays the intensity channel), drawn live by
+ * the vendored Loom shader. The handle's `url` then answers the wrapper's
+ * STABLE id ('loom:'+hash of the normalized params) - and on the WebGL floor
+ * (no context, or a context lost) the bundled `href` gif is painted through the
+ * plain path and the handle answers THAT url, because the ledger records what
+ * is actually on screen (Law I). A plain string source is byte-identical to
+ * before.
  * ==========================================================================*/
 
 import { clamp01 } from '../core/caps.js';
 import { NODE_CAPS, washSpec, gifRainSpec, ambientSpec, driftSpec, bubbleSpec } from './curves.js';
 import { rand, hasDom, mediaEl, budgetedKind } from './util.js';
 import { createEscapeGuard } from './escape.js';
+import { createLoomWash } from './loomWash.js';
 
 /** ambient_field kinds ported from DTRH fieldFx AMBIENT_KINDS (DOM subset). */
 const AMBIENT = {
@@ -67,6 +81,54 @@ export function createSustained(ctx) {
     return h;
   }
 
+  /* ---- the live Loom inside a wash hold (see the 2026-08-25 header note) --- */
+  /** Is this spiral source the Loom params wrapper rather than a url string? */
+  function isLoomWrap(v) {
+    return !!(v && typeof v === 'object' && v.loom === true && v.params);
+  }
+  /** Mount/retune the loom canvas on this hold. Returns the LEDGER answer:
+   *  the wrapper's id while the canvas is live, the fallback gif url when the
+   *  WebGL floor caught it, or null (the CSS conic kept the element). */
+  function loomMount(h, wrap) {
+    try {
+      if (!h.loom) h.loom = createLoomWash({ log: ctx.log });
+      if (h.loom.supported()) {
+        const ok = h.loom.mount(h.el, wrap.params, {
+          still: ctx.reduced(),
+          /* context lost MID-HOLD: the canvas is gone, so the gif takes the
+           * element at once - the screen never goes bare. (The one answer
+           * already handed out for this hold can go stale for its remainder;
+           * every NEXT trigger answers the gif url, honestly.) */
+          onLost: () => {
+            try {
+              if (wrap.href) h.el.style.backgroundImage = 'url("' + wrap.href + '")';
+            } catch (e) { /* ignore */ }
+          },
+        });
+        if (ok) {
+          h.el.style.backgroundImage = 'none';
+          return String(wrap.id || 'loom:0');
+        }
+      }
+    } catch (e) { ctx.log('loom wash refused (' + ((e && e.message) || e) + ') - gif fallback'); }
+    // THE FLOOR: no WebGL -> the bundled gif IS what is shown, so it IS the answer.
+    loomDrop(h);
+    if (wrap.href && typeof wrap.href === 'string') {
+      h.el.style.backgroundImage = 'url("' + wrap.href + '")';
+      return String(wrap.href);
+    }
+    return null;
+  }
+  /** Tear the loom canvas off a hold entirely (a url string took the element,
+   *  or the hold is being released). Safe on a hold that never had one. */
+  function loomDrop(h) {
+    if (h && h.loom) { try { h.loom.dispose(); } catch (e) { /* ignore */ } h.loom = null; }
+  }
+  /** The hold's opacity was driven to 0 (or back up): idle the loom's rAF. */
+  function loomActive(h, on) {
+    if (h && h.loom) { try { h.loom.setActive(!!on); } catch (e) { /* ignore */ } }
+  }
+
   /**
    * wash: snap ON at alpha, then fade after holdMs. A fresh trigger REFRESHES the
    * deadline on the same element (never a second element for the same kind).
@@ -92,7 +154,13 @@ export function createSustained(ctx) {
     let wroteUrl = null;
     if (opts.url || (washKind === 'spiral' && ctx.spiralUrl)) {
       const url = opts.url || ctx.spiralUrl();
-      if (url) { h.el.style.backgroundImage = 'url("' + url + '")'; wroteUrl = String(url); }
+      if (isLoomWrap(url)) {
+        // THE LOOM PATH (2026-08-25): a params wrapper - live canvas, stable id.
+        wroteUrl = loomMount(h, url);
+      } else if (url) {
+        loomDrop(h);   // a url string takes the element back; no-op when no canvas
+        h.el.style.backgroundImage = 'url("' + url + '")'; wroteUrl = String(url);
+      }
     }
     if (h.hideTimer) { ctx.timers.cancel(h.hideTimer); h.hideTimer = 0; }
     h.el.style.opacity = String(alpha);
@@ -110,14 +178,14 @@ export function createSustained(ctx) {
       h.hideTimer = ctx.timers.after(holdMs, () => { h.el.style.opacity = String(back); h.hideTimer = 0; });
     } else {
       h.forever = false; h.heldAlpha = 0;
-      h.hideTimer = ctx.timers.after(holdMs, () => { h.el.style.opacity = '0'; h.hideTimer = 0; });
+      h.hideTimer = ctx.timers.after(holdMs, () => { h.el.style.opacity = '0'; h.hideTimer = 0; loomActive(h, false); });
     }
     ctx.fx('wash', washKind);
     if (opts.sfx) ctx.sfx(typeof opts.sfx === 'string' ? opts.sfx : 'wash', 0.2 + 0.3 * strength, { duck: 'voice' });
     return {
       kind: 'wash', variant: washKind, alpha, holdMs, url: wroteUrl,
       retune() { /* alpha follows the next trigger; nothing to animate */ },
-      stop() { if (h.hideTimer) { ctx.timers.cancel(h.hideTimer); h.hideTimer = 0; } h.forever = false; h.heldAlpha = 0; h.el.style.opacity = '0'; },
+      stop() { if (h.hideTimer) { ctx.timers.cancel(h.hideTimer); h.hideTimer = 0; } h.forever = false; h.heldAlpha = 0; h.el.style.opacity = '0'; loomActive(h, false); },
     };
   }
 
@@ -402,7 +470,8 @@ export function createSustained(ctx) {
         if (h.hideTimer) { ctx.timers.cancel(h.hideTimer); h.hideTimer = 0; }
         h.forever = false; h.heldAlpha = 0;
         h.el.style.opacity = '0';
-        if (immediate) ctx.timers.release(h.el);
+        loomActive(h, false);
+        if (immediate) { loomDrop(h); ctx.timers.release(h.el); }
       }
       if (immediate) washHolds.clear();
       return true;

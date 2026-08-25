@@ -180,17 +180,6 @@ export const DE_PRESSURE = Object.freeze({
   CUE_LEVEL_STEP: 0.05,
   AUDIO_CEIL: Object.freeze({ 1: 0.45, 2: 0.6, 3: 0.75, 4: 0.9 }),
 
-  /* ---- the one spiral image per class ---------------------------------- */
-  SPIRAL_DIR: '../../../dtrh/assets/bubbles/effects/spirals/',
-  /** sp6 (123K) / sp7 (721K) carry most of the weight; sp5 (5.3M) is never drawn. */
-  SPIRALS: Object.freeze([
-    Object.freeze({ file: 'sp6.gif', w: 4 }),
-    Object.freeze({ file: 'sp7.gif', w: 4 }),
-    Object.freeze({ file: 'sp1.gif', w: 1 }),
-    Object.freeze({ file: 'sp2.webp', w: 1 }),
-    Object.freeze({ file: 'sp3.gif', w: 1 }),
-    Object.freeze({ file: 'sp4.webp', w: 1 }),
-  ]),
   /** game-local nodes, total: pin + ring + glitch. */
   NODE_BUDGET: 3,
 });
@@ -230,19 +219,6 @@ export function punchFor(o) {
   const ms = Math.min(P.PUNCH_MS_CAP, Math.round(P.PUNCH_MS_BASE + P.PUNCH_MS_SPAN * q + 8 * (link - 1)));
   const scale = Math.min(P.PUNCH_SCALE_CAP, 1 + P.PUNCH_SCALE_BASE + P.PUNCH_SCALE_SPAN * q + 0.01 * (link - 1));
   return { scale: +scale.toFixed(3), px: +px.toFixed(2), ms };
-}
-
-/** The class's spiral image, chosen once from the bundled dtrh pool (weighted). */
-function pickSpiral(roll) {
-  const list = DE_PRESSURE.SPIRALS;
-  let total = 0;
-  for (const s of list) total += s.w;
-  let r = roll * total;
-  let file = list[0].file;
-  for (const s of list) { r -= s.w; if (r <= 0) { file = s.file; break; } }
-  let href = DE_PRESSURE.SPIRAL_DIR + file;
-  try { href = new URL(DE_PRESSURE.SPIRAL_DIR + file, import.meta.url).href; } catch (e) { /* relative is fine */ }
-  return { file, href };
 }
 
 function el(tag, cls) {
@@ -384,7 +360,21 @@ export function createDePressure(o) {
   let royalOn = false;
   let outOn = false;
   const present = new Set();          // feature keys ON right now
-  const spiral = pickSpiral(roll('spiral'));
+  /* THE CLASS SPIRAL comes from the SHELL now (the Loom directive,
+   * 2026-08-25): opts.classSpiral is either the loom params wrapper
+   * {loom:true, id, params, href} or a plain url string (a user-saved loom
+   * gif / the bundled floor). The wheel wash goes URL-LESS - the engine's
+   * spiralUrl() provider answers with this same class spiral, live canvas
+   * and all - and the static PIN paints the paintable half (`href` on the
+   * wrapper, the string itself otherwise). The old private bundled pool and
+   * its `|spiral` roll are gone; the deck rolls are per-tag streams, so
+   * removing a tag shifts nothing else. */
+  const classSpiral = opts.classSpiral || null;
+  const spiral = (classSpiral && typeof classSpiral === 'object' && classSpiral.loom === true)
+    ? { file: String(classSpiral.id || 'loom'), href: typeof classSpiral.href === 'string' ? classSpiral.href : null }
+    : (typeof classSpiral === 'string' && classSpiral
+      ? { file: classSpiral.split('/').pop() || classSpiral, href: classSpiral }
+      : { file: 'provider', href: null });
   let preload = null;
   let assetUrl = null;                // the glitch wash's pool image (one per kind)
 
@@ -452,7 +442,8 @@ export function createDePressure(o) {
     pin = el('div', 'g-de-p-pin');
     if (pin) {
       if (pin.style) {
-        try { pin.style.backgroundImage = 'url("' + spiral.href + '")'; } catch (e) { /* ignore */ }
+        // a wrapper with no paintable href leaves the pin's own CSS ground
+        if (spiral.href) { try { pin.style.backgroundImage = 'url("' + spiral.href + '")'; } catch (e) { /* ignore */ } }
         setVar(pin, '--de-p-spindir', roll('pin-dir') < 0.5 ? '-1' : '1');
       }
       opts.bench.appendChild(pin);
@@ -463,9 +454,10 @@ export function createDePressure(o) {
       glitch = el('div', 'g-de-p-glitch');
       if (glitch) opts.stage.appendChild(glitch);
     }
-    // preload the ONE spiral this class will ever show (the pin and the wash share it)
+    // preload the pin/fallback gif when there is one (a generated loom class
+    // draws its wash live - there are no bytes to warm)
     try {
-      if (typeof Image === 'function') { preload = new Image(); preload.src = spiral.href; }
+      if (spiral.href && typeof Image === 'function') { preload = new Image(); preload.src = spiral.href; }
     } catch (e) { preload = null; }
   }
 
@@ -643,7 +635,9 @@ export function createDePressure(o) {
     breathTimer = after(Math.round(ms), () => { breathTimer = 0; if (has('breath') && !stopped) { breathe(); armBreath(); } });
   }
   function wheelWash() {
-    sustain('wash', { variant: 'spiral', url: spiral.href, alpha: lerp(P.WHEEL_ALPHA, heat), sustainForever: true });
+    /* URL-LESS (Loom directive): the engine's spiralUrl() provider answers -
+     * the live loom canvas on a generated class, the user/bundled gif else. */
+    sustain('wash', { variant: 'spiral', alpha: lerp(P.WHEEL_ALPHA, heat), sustainForever: true });
   }
   function fadeWash(variant, extra) {
     // NEVER stop('wash'): it blacks out the drain index.js holds. A tiny alpha
@@ -704,7 +698,7 @@ export function createDePressure(o) {
       off() { glitchOff(); },
     },
     rain: { on() { rain('light', lerp(P.RAIN_MS, heat)); }, off() { stopKind('gif_rain'); } },
-    wheel: { on() { wheelWash(); }, off() { fadeWash('spiral', { url: spiral.href }); } },
+    wheel: { on() { wheelWash(); }, off() { fadeWash('spiral'); } },   // url-less both ways: same provider answer
     drain: { on() { drainDeep(true); }, off() { drainDeep(false); } },
     slideglitch: { on() { fire('flash_burst', { count: 2, holdMs: 700, clickSafe: true, clickable: false }); }, off() {} },
     subs: { on() { sustain('sub_flash', { variant: P.SUB_VARIANT }); }, off() { stopKind('sub_flash'); } },

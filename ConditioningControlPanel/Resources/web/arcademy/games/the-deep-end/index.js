@@ -2301,6 +2301,10 @@ export default {
             assets: deckAssets,
             timers: deckTimers,
             capsOk: capsArmed,
+            /* the shell's class spiral (Loom directive 2026-08-25): the loom
+             * params wrapper or a plain gif url - the deck's pin paints its
+             * paintable half and the wheel wash rides the engine provider. */
+            classSpiral: (ctx && ctx.classSpiral) || null,
             log: say,
           });
         } catch (e) { pressure = null; say('pressure refused: ' + ((e && e.message) || e)); }
