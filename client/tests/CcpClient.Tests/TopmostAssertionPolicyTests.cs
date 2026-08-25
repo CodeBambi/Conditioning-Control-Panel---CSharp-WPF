@@ -21,12 +21,16 @@ namespace CcpClient.Tests;
 /// routing the topmost claim through the ladder trades one refusal for another and pays for it with
 /// a real focus theft, at a 32-iteration re-assert cadence.</para>
 ///
-/// <para><b>Why this guard is derived from source rather than given a list of four files.</b> A
-/// hard-coded list stops covering the tree the moment a sixth surface appears — which is the same
-/// blind spot the §8 census exists to close. The set here is re-derived on every run from every
-/// file under <c>client/src</c> that USES <c>HwndTopmost</c> (its own P/Invoke constant declaration
-/// does not count), and exactly one member is exempt: the lock card, whose capability IS the
-/// foreground (§8.3 S-04). Everything else in that set must take no foreground.</para>
+/// <para><b>Why this guard is derived from source rather than given a list of four files, and why
+/// it names no exemption.</b> A hard-coded list stops covering the tree the moment a sixth surface
+/// appears — which is the same blind spot the §8 census exists to close. The set here is re-derived
+/// on every run: every file under <c>client/src</c> that USES <c>HwndTopmost</c> (its own P/Invoke
+/// constant declaration does not count) AND declares <c>WS_EX_NOACTIVATE</c>. That second half is
+/// the discriminator and it is a property of the code rather than a file name: the lock card is the
+/// one topmost surface that deliberately carries neither <c>WS_EX_NOACTIVATE</c> nor
+/// <c>WS_EX_TRANSPARENT</c>, because "their absence is what makes this window the opposite kind of
+/// window" (<c>Input/Win32InputPresence.cs:1097-1099</c>), so it falls out of the set on its own
+/// and no exemption list has to be maintained or trusted.</para>
 ///
 /// <para><b>What this does NOT claim.</b> Nothing here is a Linux statement — all five members are
 /// <c>Win32*</c> types that do not exist off Windows. And a text scan is a scan: it pins that the
@@ -42,9 +46,10 @@ public sealed class TopmostAssertionPolicyTests
     /// <summary>The topmost claim itself. A file that never names this is not in the set.</summary>
     private const string TopmostNeedle = "HwndTopmost";
 
-    /// <summary>The one member allowed to take the foreground, and the only one — §8.3 S-04:
-    /// "the lock card is the one surface here whose capability IS the foreground".</summary>
-    private const string ForegroundOwner = "Input/Win32InputPresence.cs";
+    /// <summary>The non-activation declaration that separates the four surfaces this decision binds
+    /// from the one topmost surface whose capability IS the foreground. Derived, never listed.
+    /// </summary>
+    private const string NonActivatingNeedle = "WsExNoactivate";
 
     /// <summary>The foreground-TAKING calls. <c>GetForegroundWindow</c> is deliberately absent:
     /// three of the four surfaces READ the foreground to refuse on it, which is the opposite act.
@@ -66,10 +71,11 @@ public sealed class TopmostAssertionPolicyTests
         new(@"/\*.*?\*/|//[^\r\n]*", RegexOptions.Compiled | RegexOptions.Singleline);
 
     [Fact]
-    public void EveryFileThatAssertsHwndTopmost_TakesNoForeground_ExceptTheLockCardWhoseCapabilityItIs()
+    public void EveryNonActivatingSurfaceThatAssertsHwndTopmost_TakesNoForeground()
     {
         var sourceRoot = Path.Combine([FindRepoRoot(), .. SourceRootParts]);
-        var asserters = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        var nonActivating = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        var activating = new SortedSet<string>(StringComparer.Ordinal);
 
         foreach (var file in Directory.EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories))
         {
@@ -79,29 +85,35 @@ public sealed class TopmostAssertionPolicyTests
                 continue;
             }
 
-            asserters.Add(Path.GetRelativePath(sourceRoot, file).Replace('\\', '/'), code);
+            var path = Path.GetRelativePath(sourceRoot, file).Replace('\\', '/');
+            if (code.Contains(NonActivatingNeedle, StringComparison.Ordinal))
+            {
+                nonActivating.Add(path, code);
+            }
+            else
+            {
+                activating.Add(path);
+            }
         }
 
-        // Broken-detector. A walk that finds nothing — a moved source root, a renamed constant —
-        // would otherwise pass for the worst possible reason, and a set without the one member the
-        // exemption names is a set that is not looking at this tree.
+        // Two broken-detectors, because both halves of the partition can rot. A walk that finds no
+        // non-activating surfaces has stopped seeing the tree; a walk in which the discriminator
+        // separates nothing is not discriminating, and the argument below no longer follows from it.
         Assert.True(
-            asserters.Count >= 2,
-            $"only {asserters.Count} file(s) under {string.Join('/', SourceRootParts)} use "
-            + $"{TopmostNeedle}; this guard has stopped seeing the tree it is supposed to bind");
+            nonActivating.Count >= 2,
+            $"only {nonActivating.Count} file(s) under {string.Join('/', SourceRootParts)} both use "
+            + $"{TopmostNeedle} and declare {NonActivatingNeedle}; this guard has stopped seeing the tree "
+            + "it is supposed to bind");
         Assert.True(
-            asserters.Keys.Any(k => k.EndsWith(ForegroundOwner, StringComparison.Ordinal)),
-            $"{ForegroundOwner} is not in the derived topmost-asserting set {string.Join(", ", asserters.Keys)} "
-            + "— the exemption below would then be exempting nothing and the scan is not measuring what it claims");
+            activating.Count >= 1,
+            $"every file that uses {TopmostNeedle} also declares {NonActivatingNeedle}, so the "
+            + "discriminator separates nothing. Either the one topmost surface whose capability IS the "
+            + "foreground has changed shape — in which case §8.3 S-04 and §8.7 both need re-reading — or "
+            + "this scan is no longer measuring what it claims");
 
         var offenders = new List<string>();
-        foreach (var (path, code) in asserters)
+        foreach (var (path, code) in nonActivating)
         {
-            if (path.EndsWith(ForegroundOwner, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
             var found = TakeForegroundNeedles.Where(n => code.Contains(n + "(", StringComparison.Ordinal)).ToArray();
             if (found.Length > 0)
             {

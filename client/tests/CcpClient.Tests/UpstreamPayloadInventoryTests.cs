@@ -126,14 +126,7 @@ public sealed partial class UpstreamPayloadInventoryTests
     public void RealRepo_EveryServedTreeIsCopiedAtItsPinnedShape_AndNoNotPortedTreeIsCopiedAtAll()
     {
         var inventory = ParseInventory(File.ReadAllText(Path.Combine([FindRepoRoot(), .. InventoryParts])));
-        var payloadRoot = Path.Combine(AppContext.BaseDirectory, "payload");
-
-        Assert.True(
-            Directory.Exists(payloadRoot),
-            $"no payload root at {payloadRoot}. The client's web payloads are copied there by the "
-            + "linked globs in CcpClient.Desktop.csproj; without it this guard is looking at nothing "
-            + "and fails rather than passing vacuously");
-
+        var payloadRoot = FindCopiedPayloadRoot(); // throws (fails) if absent — never a skip
         var copied = EnumerateTrees(payloadRoot);
         var served = inventory.Trees.Where(t => t.Disposition == "served").ToArray();
         Assert.NotEmpty(served); // broken-detector: a gutted inventory must not pass here either
@@ -256,6 +249,24 @@ public sealed partial class UpstreamPayloadInventoryTests
         throw new InvalidOperationException(
             $"repo root not found walking up from {AppContext.BaseDirectory} " +
             $"(anchor: {string.Join('/', RepoAnchorParts)}) — the upstream-tree guard refuses to skip");
+    }
+
+    /// <summary>The build output's copied payload root. Kept OUT of the <c>[Fact]</c> body with the
+    /// rest of the tree-existence plumbing so no <c>fs-predicate</c> shape lands in a fact — the same
+    /// placement <c>NativeWindowCensusTests</c> and <c>ArcademyServingTests</c> use for the same
+    /// reason — and it throws rather than returning a sentinel, because a guard that cannot find the
+    /// bytes it compares must fail and not pass over an empty set.</summary>
+    private static string FindCopiedPayloadRoot()
+    {
+        var payloadRoot = Path.Combine(AppContext.BaseDirectory, "payload");
+        if (!Directory.Exists(payloadRoot))
+        {
+            throw new InvalidOperationException(
+                $"no payload root at {payloadRoot}. The client's web payloads are copied there by the "
+                + "linked globs in CcpClient.Desktop.csproj; without it this guard is looking at nothing");
+        }
+
+        return payloadRoot;
     }
 
     /// <summary>The guard body, parameterized on the repo root so fixture tests can
