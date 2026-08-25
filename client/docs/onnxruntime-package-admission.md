@@ -128,10 +128,14 @@ user.
 **Why the probe is generated instead of being the product.** Building this test project in Release
 costs **1.2 GB** of duplicated output per worktree — measured, not estimated: 569 MB of per-RID
 natives, 521 MB of linked web payload, 101 MB of libvlc — for a claim about process exit that a
-200 KB console program makes just as well. Redirecting that build with `-o` instead makes all three
-projects in the graph write one directory and race each other's file copies (observed: four `MSB3026`
-retries on SkiaSharp natives). The generated probe costs about 1 MB in the OS temp directory and
-about two seconds per run.
+200 KB console program makes just as well.
+
+Redirecting that build with `-o` instead is worse rather than cheaper: the flag becomes a GLOBAL
+property, so all three projects in the graph write the same directory and copy the same files into
+it. One such run here emitted `MSB3026` file-copy retries on SkiaSharp natives (*"being used by
+another process"*) and a repeat emitted none — which makes it a race, and an intermittent build
+failure inside a gate is worse than a loud one. The generated probe costs about 1 MB in the OS temp
+directory and about two seconds per run.
 
 ## 5. What landing the reference would still take
 
@@ -145,7 +149,7 @@ None of this is done here, and each item is a real step rather than a formality:
    the restored dependency graph rather than from the csproj's direct references, so adding
    `Microsoft.ML.OnnxRuntime` reds that guard until MIT/Microsoft and the two natives are named. That
    is the guard working, not an obstacle.
-3. **A decision about the 181 MB of natives for eight RIDs this product will never load.** The
+3. **A decision about the 181 MB of natives, of which this product loads one RID per platform.** The
    libvlc precedent is already in `CcpClient.Desktop.csproj`, which trims three architecture trees to
    one and states why; an inference runtime shipping android and ios binaries in a desktop artifact
    deserves the same treatment and the same written reason.

@@ -36,10 +36,12 @@ namespace CcpClient.Tests;
 /// <c>CcpClient.Desktop</c> or this test project in Release costs <b>1.2 GB</b> of duplicated output
 /// per worktree — measured, not estimated: 569 MB of per-RID natives, 521 MB of linked web payload
 /// and 101 MB of libvlc — for a claim about process exit that a 200 KB console app makes just as
-/// well. Redirecting that build's output with <c>-o</c> instead makes all three projects in the
-/// graph write the same directory and race each other's file copies (observed: four
-/// <c>MSB3026</c> retries on SkiaSharp natives). The generated probe is the cheap honest option, and
-/// what it costs is stated above rather than implied.</para>
+/// well. Redirecting that build's output with <c>-o</c> instead is worse rather than cheaper: the
+/// flag becomes a GLOBAL property, so all three projects in the graph write and copy into the same
+/// directory. One run of it here emitted <c>MSB3026</c> file-copy retries on SkiaSharp natives and a
+/// repeat emitted none, which makes it a race — and an intermittent build failure inside a gate is
+/// worse than a loud one. The generated probe is the cheap honest option, and what it costs is
+/// stated above rather than implied.</para>
 /// </summary>
 public sealed class NativeTeardownExitTests
 {
