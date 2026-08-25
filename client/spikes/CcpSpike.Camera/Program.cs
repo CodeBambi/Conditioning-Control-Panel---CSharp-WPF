@@ -121,15 +121,70 @@ internal static class Program
                 return 2;
             }
 
-            // ── 4. Frames ──────────────────────────────────────────────────────────────────────
+            // ── 4. Frames, AND A CONSUMER ──────────────────────────────────────────────────────
+            // The sink is where this harness stopped being about "does a camera open" and became
+            // about "can anything USE what it delivers". Everything it records is a COUNT or a
+            // GEOMETRY: per-frame numbers are never printed (Services/Webcam/WebcamTrackingService
+            // .cs:28-29), and it could not keep a frame even if it wanted to — the span it is handed
+            // is a ref struct the compiler will not let it store, and the buffer underneath belongs
+            // to the driver and is unlocked before the next line runs.
             Console.WriteLine();
-            Console.WriteLine($"[4] PUMP {frames} frame(s)");
+            Console.WriteLine($"[4] PUMP {frames} frame(s) THROUGH A CONSUMER");
+            var seen = 0;
+            var withPicture = 0;
+            var geometries = new SortedSet<string>(StringComparer.Ordinal);
+            var spanBytes = new SortedSet<int>();
+
+            void Consume(ReadOnlySpan<byte> pixels, CameraFrameInfo frame)
+            {
+                seen++;
+                spanBytes.Add(pixels.Length);
+                geometries.Add($"{frame.Width}x{frame.Height} stride={frame.Stride} "
+                    + $"bottom-up={frame.BottomUp} bytes={frame.Bytes}");
+
+                // The SPATIAL half of the port's own acceptance rule, over the span this consumer
+                // was handed. The TEMPORAL half is unavailable here on purpose and the reason is the
+                // point of the whole slice: it needs the PREVIOUS frame, and nothing on this side of
+                // the seam is able to keep one.
+                if (CameraFrameProbe.MaxChannelStdDev(pixels) >= CameraFrameProbe.MinStdDev)
+                {
+                    withPicture++;
+                }
+            }
+
             var pumped = Stopwatch.StartNew();
-            var delivered = await participant.PumpAsync(frames, CancellationToken.None);
+            var delivered = await participant.PumpAsync(frames, Consume, CancellationToken.None);
             pumped.Stop();
             Console.WriteLine($"    delivered={delivered} in {pumped.ElapsedMilliseconds}ms "
                 + $"({(pumped.ElapsedMilliseconds > 0 ? delivered * 1000.0 / pumped.ElapsedMilliseconds : 0):F1} fps), "
                 + $"FramesRead={participant.FramesRead}");
+            Console.WriteLine($"    consumer saw {seen} frame(s); {withPicture} of them carried picture "
+                + $"(spatial bar {CameraFrameProbe.MinStdDev})");
+            Console.WriteLine($"    geometry: {string.Join(" | ", geometries)}");
+            Console.WriteLine($"    span length(s) handed over: {string.Join(", ", spanBytes)}");
+            if (seen != delivered)
+            {
+                Console.WriteLine($"    FAIL: {delivered} frame(s) arrived but the consumer saw {seen}");
+                return 4;
+            }
+
+            if (seen == 0)
+            {
+                // Distinguished from the flat case because they have opposite causes and the first
+                // run of this harness hit exactly this: a poisoned geometry refused every frame, and
+                // a message about flat pixels would have sent somebody to look at the camera.
+                Console.WriteLine("    FAIL: no frame reached the consumer at all — the geometry the OS "
+                    + "declared did not describe the buffers that arrived, or nothing arrived");
+                return 5;
+            }
+
+            if (withPicture == 0)
+            {
+                Console.WriteLine("    FAIL: every frame the consumer saw was flat — pixels arrived but "
+                    + "carried no picture");
+                return 6;
+            }
+
             Prompt(pause, "    THE INDICATOR SHOULD BE LIT. Press Enter to close the camera.");
 
             // ── 5. Release ─────────────────────────────────────────────────────────────────────
@@ -147,7 +202,9 @@ internal static class Program
             var reopen = await participant.StartCaptureAsync(preferred, CancellationToken.None);
             Report(reopen);
             Console.WriteLine($"    running={participant.CaptureRunning} opens={participant.CameraOpenAttempts}");
-            var reDelivered = await participant.PumpAsync(10, CancellationToken.None);
+            // NULL sink on purpose: the drop-it path is what every product build takes today, and it
+            // must still work on real hardware after a re-open.
+            var reDelivered = await participant.PumpAsync(10, sink: null, CancellationToken.None);
             Console.WriteLine($"    delivered={reDelivered} on the second open");
             await participant.StopCaptureAsync();
             Console.WriteLine($"    running={participant.CaptureRunning}");

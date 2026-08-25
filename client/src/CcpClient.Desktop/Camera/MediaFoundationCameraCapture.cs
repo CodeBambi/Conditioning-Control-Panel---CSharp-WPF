@@ -914,7 +914,7 @@ public sealed class MediaFoundationCameraCapture : ICameraCaptureSource
     /// only "1280x720" would build every gaze vector out of an upside-down face and look merely
     /// inaccurate. When the attribute is absent the tightly-packed top-down layout is used, which is
     /// what an RGB32 output type means when nothing says otherwise — the same fallback
-    /// <c>Video/MediaFoundationClipSource.cs:207-215</c> already makes.</para></summary>
+    /// <c>Video/MediaFoundationClipSource.cs:208-217</c> already makes.</para></summary>
     private void ReadFrameSize(IMFSourceReader reader)
     {
         if (reader.GetCurrentMediaType(_stream, out var current) != 0 || current is null)
