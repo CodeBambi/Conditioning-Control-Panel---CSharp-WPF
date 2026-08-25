@@ -31,8 +31,14 @@
  *  - iOS is mp4-only; formats are filtered per platform.
  *  - Remote goes through the BRIDGE ('assets-request'/'assets'), never a fetch
  *    from the page, and never at all under OfflineMode or a closed consent gate.
- *  - claim() PREWARMS (link rel=preload, else new Image()) so the first draw is
- *    already decoded.
+ *  - claim() runs an ON-DECK WARM RAIL (0825, mobile web): the pool FORECASTS
+ *    its next few draws with the very selection code next() runs, then warms
+ *    those bytes the SORT way - a detached Image()+decode() for stills/gifs,
+ *    fetch(url,{mode:'no-cors'}) for video urls (NEVER a detached <video> -
+ *    it spins a demuxer, trap 36). Remote urls only; local is the host serving
+ *    the player's own disk and warming it is waste (and what keeps the desktop
+ *    WebView2 build inert). The draw itself is still decided AT DRAW TIME by
+ *    the same seeded logic, so the served sequence never moves.
  *
  * LOCAL INVENTORY. A virtual host cannot be enumerated from JS, so SOMETHING has
  * to hand the page the list. Accepted (first non-empty wins, all merged):
@@ -61,6 +67,16 @@ function placeholderUrls() {
 }
 
 const REMOTE_CAP = 80;        // mirrors intake's REMOTE_CAP: a page never hoards media
+
+/* THE ON-DECK RAIL's dials (0825). SORT's warm rail proved the shape and the
+ * numbers' logic (games/sort/index.js WARM_AHEAD/WARM_INFLIGHT header): the
+ * deck is a LOOK-AHEAD, not a supply figure, and the warm is a background
+ * TRICKLE that must lose to whatever is already on screen. */
+export const DECK_AHEAD = 6;      // draws forecast (and byte-warmed) ahead, per kind
+export const WARM_INFLIGHT = 3;   // warms in flight at once - a third lane lets small
+                                  // stills slip past one slow multi-megabyte download
+const WARM_HELD_MAX = 24;         // decoded detached Images held against GC
+const VIDEO_URL_RE = /\.(mp4|webm|m4v)(\?|#|$)/i;
 
 /** Keys the shell/host might carry the local inventory under. A page cannot
  *  enumerate a virtual host, so SOMETHING has to hand us the list; we accept
@@ -122,6 +138,27 @@ export function createAssets(options = {}) {
   let prewarmed = new Set();
   let disposed = false;
 
+  /* ------------------------------------------------------------------------
+   * THE RAND BUFFER - the seam that lets a pool decide its draws EARLY without
+   * moving them. next() used to call rng() inline; now every draw takes its
+   * values through takeRand() (a FIFO over the same stream) and a FORECAST
+   * peeks the values a future draw WILL take via peekRand() without consuming
+   * them. Emissions are handed to real draws strictly in emission order, so
+   * for a given seed the served sequence is byte-identical to the pre-deck
+   * provider - peeking pulls values into the buffer early, never past a draw.
+   * The buffer is provider-level because the rng is (shell.js hands us
+   * makeRng(utcDateSeed + '|assets') and nothing else consumes it).
+   * --------------------------------------------------------------------- */
+  const randBuf = [];
+  const takeRand = () => (randBuf.length ? randBuf.shift() : rng());
+  const peekRand = (i) => { while (randBuf.length <= i) randBuf.push(rng()); return randBuf[i]; };
+
+  /** Data Saver is the player's word that we do not spend bytes on a guess. */
+  const saveData = (() => {
+    try { return !!(typeof navigator !== 'undefined' && navigator.connection && navigator.connection.saveData === true); }
+    catch { return false; }
+  })();
+
   function absorbRemote(entries) {
     let added = 0;
     for (const e of (entries || [])) {
@@ -140,39 +177,115 @@ export function createAssets(options = {}) {
     return added;
   }
 
-  /**
-   * Prewarm: decode-ahead without blocking anything. Silent on failure.
+  /* ------------------------------------------------------------------------
+   * THE WARM RAIL - bytes AND decode ahead of the deal, and nothing else.
    *
-   * BOUNDED, and that is load-bearing (0821, Lost & Found's dense-board pass).
-   * A `link rel=preload as=image` is a HIGH-priority fetch: firing one per
-   * manifest entry (a claim can ask for 130+ loops) puts the whole library in
-   * front of the media the player is actually looking at, and for gifs it also
-   * starts decoders the board has no budget for. A short warm queue is the
-   * point of a prewarm; a long one is a stampede that races the visible loads.
+   * The old mechanism was a `link rel=preload` at fetchPriority low: a hint
+   * that bought no decode, and it was pointed at urls the cursor+jump draw
+   * almost never actually served. Deleted in favour of the two warms SORT's
+   * rail proved on a phone (games/sort/index.js, owner report 2026-08-24):
+   *
+   *  - a still or gif warms in a DETACHED new Image() + decode(). Nothing
+   *    composites; the strong ref in warmHeld only keeps GC off the request,
+   *    and the decoded frames land in the browser's image cache keyed by url -
+   *    exactly where the game's own <img> will look.
+   *  - a video url warms with fetch(url, {mode:'no-cors'}) and the opaque
+   *    reply is thrown away unread. Deliberately NEVER a detached <video>: a
+   *    warm <video> starts a demuxer the instant it has bytes - an off-screen
+   *    decoder no ceiling ever counted (trap 36's law).
+   *
+   * BOUNDED, and that is load-bearing (0821, Lost & Found's dense-board pass):
+   * a stampede of warms races the media the player is looking at. This is a
+   * TRICKLE - WARM_INFLIGHT lanes, every url at most once per provider, only
+   * the deck HEAD may ask for 'high' priority - and under Data Saver no byte
+   * moves at all. REMOTE urls only: local (ccp.* / relative / data: / blob: /
+   * same-origin) is the host serving the player's own disk, already instant,
+   * which is what keeps the desktop WebView2 build's behaviour inert.
+   * --------------------------------------------------------------------- */
+  const warmQueue = [];
+  const warmHeld = new Map();       // url -> the detached Image holding it open
+  let warmFlight = 0;
+
+  /** Only bytes that actually travel: remote http(s), not our own origin. */
+  function warmable(url) {
+    const s = String(url || '');
+    if (!s || prewarmed.has(s)) return false;
+    if (isLocalUrl(s)) return false;             // ccp.* / relative / data: / blob:
+    if (!/^https?:\/\//i.test(s)) return false;
+    try {
+      if (typeof location !== 'undefined' && location.origin && new URL(s).origin === location.origin) return false;
+    } catch { return false; }
+    return true;
+  }
+
+  function warmDone() { warmFlight = Math.max(0, warmFlight - 1); if (!disposed) warmPump(); }
+  function warmPump() {
+    while (!disposed && warmFlight < WARM_INFLIGHT && warmQueue.length) {
+      const job = warmQueue.shift();
+      warmFlight += 1;
+      if (job.video) {
+        /* fire and forget, and swallow everything: a rejected warm is a url
+         * that will simply load the ordinary way at reveal. */
+        try {
+          if (typeof fetch !== 'function') { warmDone(); continue; }
+          const init = { mode: 'no-cors', credentials: 'omit' };
+          if (job.high) init.priority = 'high';       // Fetch Priority API; unknown keys are ignored
+          const pr = fetch(job.url, init);
+          if (pr && pr.then) pr.then(warmDone, warmDone); else warmDone();
+        } catch { warmDone(); }
+      } else {
+        let img = null;
+        try { img = new Image(); } catch { img = null; }
+        if (!img) { warmDone(); continue; }
+        warmHeld.set(job.url, img);
+        while (warmHeld.size > WARM_HELD_MAX) {
+          const oldest = warmHeld.keys().next().value;
+          if (oldest == null) break;
+          warmHeld.delete(oldest);
+        }
+        try {
+          img.decoding = 'async';
+          try { img.fetchPriority = job.high ? 'high' : 'low'; } catch { /* older engines */ }
+          img.src = job.url;
+          /* BYTES ARE HALF THE BILL: a cached gif still pays its decode on
+           * first paint, so a warm is not done until decode() says the first
+           * frame exists. Fallback for engines without decode(): load/error,
+           * bytes-only. */
+          if (typeof img.decode === 'function') {
+            img.decode().then(warmDone, () => { warmHeld.delete(job.url); warmDone(); });
+          } else {
+            img.onload = warmDone;
+            img.onerror = () => { warmHeld.delete(job.url); warmDone(); };
+          }
+        } catch { warmHeld.delete(job.url); warmDone(); }
+      }
+    }
+  }
+
+  /** Queue one url for warming. Returns true if it was actually queued. */
+  function warmUrl(url, high) {
+    if (disposed || saveData) return false;
+    if (typeof document === 'undefined') return false;   // node harness: inert
+    if (!warmable(url)) return false;
+    const s = String(url);
+    prewarmed.add(s);
+    warmQueue.push({ url: s, video: VIDEO_URL_RE.test(s), high: !!high });
+    warmPump();
+    return true;
+  }
+
+  /**
+   * prewarm(urls): the bounded warm verb (tagged.js injects it; its pool.prewarm
+   * already peeks the rows its cursor WILL serve, so its urls are honest). The
+   * first url that actually queues is the caller's own deck head - 'high'.
    */
   const PREWARM_MAX = 12;
   function prewarm(urls) {
-    if (typeof document === 'undefined') return;
     let n = 0;
-    for (const url of urls) {
+    for (const url of (urls || [])) {
       if (n >= PREWARM_MAX) break;
       if (!url || prewarmed.has(url)) continue;
-      prewarmed.add(url);
-      n += 1;
-      try {
-        const head = document.head || document.documentElement;
-        if (head) {
-          const link = document.createElement('link');
-          link.rel = 'preload';
-          link.as = /\.(mp4|webm|m4v)(\?|#|$)/i.test(url) ? 'video' : 'image';
-          // a warm-up must never outrank what is already on screen
-          try { link.fetchPriority = 'low'; } catch { /* older engines */ }
-          link.href = url;
-          head.appendChild(link);
-          continue;
-        }
-      } catch { /* fall through to Image() */ }
-      try { const img = new Image(); img.src = url; } catch { /* ignore */ }
+      if (warmUrl(url, n === 0)) n += 1;
     }
   }
 
@@ -337,11 +450,10 @@ export function createAssets(options = {}) {
     // target is never the tile the decoys are drawing from in the same frame
     const localTargets = localStills.slice().reverse();
 
-    // A HANDFUL of each kind, not the whole manifest: see prewarm()'s header.
-    // The first draws are what this is for; everything after them is dressed
-    // progressively by the game anyway.
-    prewarm(localLoops.slice(0, Math.min(6, Math.max(4, want.loop)))
-      .concat(localStills.slice(0, Math.min(6, Math.max(4, want.still + want.target)))));
+    // (The claim-time warm moved BELOW the deck machinery: it now warms the
+    //  actual first deck entries - the urls next() WILL serve - instead of a
+    //  slice of the local lists, which on the web build were placeholder SVGs
+    //  and on desktop are the host's own disk. See refreshDeck().)
 
     // --- the remote side, if the gate is open ------------------------------
     // The host's contract is "whatever is buffered NOW, and ask again after
@@ -365,7 +477,10 @@ export function createAssets(options = {}) {
         onBatch: (entries) => {
           if (released || disposed) return;
           if (absorbRemote(entries)) {
-            prewarm((remotePools[kind] || []).slice(-4));
+            /* The pool just grew, so every forecast is stale: re-deal the deck
+             * and warm ITS urls. (The old `slice(-4)` warmed the newest
+             * arrivals, which the cursor+jump draw almost never served next.) */
+            refreshDeck();
             notifyUpdate();
           }
           if ((remotePools[kind] || []).length < count && attempt < MAX_ASKS) {
@@ -385,16 +500,90 @@ export function createAssets(options = {}) {
       log('canvasSafe claim: local-only pool (CORS two-pool law)');
     }
 
-    function drawLocal(kind) {
+    /* =======================================================================
+     * THE DRAW, parameterized (THE ON-DECK RAIL, 0825).
+     *
+     * computeDraw/computeLocal are next()'s old inline selection logic MOVED,
+     * not changed: same branches, same cursor walk, same seeded jump, and the
+     * rand supplier `take` is called at exactly the code positions rng() sat.
+     * next() runs them against the LIVE cursors with takeRand() (consuming the
+     * stream in emission order - byte-identical serving); refreshDeck() runs
+     * them against CLONED cursors with peekRand() (consuming nothing) to learn
+     * which urls the next DECK_AHEAD draws of a kind WILL serve, and hands the
+     * remote ones to the warm rail - the head at 'high' priority. A forecast
+     * is exact until the pool grows; every draw and every absorbed batch
+     * re-deals it, so the deck head is always the truth.
+     * ==================================================================== */
+    function computeLocal(kind, st, take) {
       const list = kind === 'loop' ? localLoops : (kind === 'target' ? localTargets : localStills);
-      if (!list.length) return placeholders[Math.floor(rng() * placeholders.length)] || null;
-      const i = cursors[kind] % list.length;
-      cursors[kind] += 1;
+      if (!list.length) return placeholders[Math.floor(take() * placeholders.length)] || null;
+      const i = st.cursors[kind] % list.length;
+      st.cursors[kind] += 1;
       // a deterministic walk with a seeded jump keeps repeats far apart without
       // ever risking "the same tile twice in a row" on a tiny local pool
-      const jump = list.length > 2 ? Math.floor(rng() * (list.length - 1)) : 0;
+      const jump = list.length > 2 ? Math.floor(take() * (list.length - 1)) : 0;
       return list[(i + jump) % list.length];
     }
+
+    function computeDraw(k, st, take) {
+      const remoteKind = k === 'target' ? 'still' : k;
+      // The ratio is a MIX dial, not a veto: on the placeholder floor (no real
+      // local media of this kind) there is nothing to mix WITH, so the remote
+      // pool serves every draw it can cover.
+      const bareLocal = !(remoteKind === 'loop' ? localPools.loop.length : localPools.still.length);
+      if (wantRemote(bareLocal ? 1 : remoteRatio, take(), (remotePools[remoteKind] || []).length > 0, canvasSafe)) {
+        const list = remotePools[remoteKind];
+        const i = st.remoteCursors[remoteKind] % list.length;
+        st.remoteCursors[remoteKind] += 1;
+        const jump = list.length > 2 ? Math.floor(take() * (list.length - 1)) : 0;
+        const url = list[(i + jump) % list.length];
+        if (url && (!canvasSafe || isLocalUrl(url))) return { url, remote: true };
+      }
+      return { url: computeLocal(k, st, take), remote: false };
+    }
+
+    const liveState = { cursors, remoteCursors };
+
+    /** The next `depth` draws of one kind, decided EARLY over cloned cursors
+     *  and peeked rand values. Mutates nothing that serving reads. */
+    function forecast(k, depth) {
+      const st = { cursors: Object.assign({}, cursors), remoteCursors: Object.assign({}, remoteCursors) };
+      let pi = 0;
+      const take = () => peekRand(pi++);
+      const out = [];
+      for (let i = 0; i < depth; i++) out.push(computeDraw(k, st, take));
+      return out;
+    }
+
+    /* Forecast only the kinds this claim actually asked for; a spec-less claim
+     * still decks the default kind. Each kind's forecast starts at peek index
+     * 0 - "the next draws are all this kind" - so whichever kind the game asks
+     * for next, that kind's deck HEAD is the url it gets. */
+    const deckKinds = [];
+    if (want.loop) deckKinds.push('loop');
+    if (want.still) deckKinds.push('still');
+    if (want.target) deckKinds.push('target');
+    if (!deckKinds.length) deckKinds.push('still');
+
+    /** Re-deal the deck and warm its remote urls. Returns how many queued. */
+    function refreshDeck(depth) {
+      if (released || disposed || saveData) return 0;
+      if (typeof document === 'undefined') return 0;
+      const d = Math.max(1, Math.min(DECK_AHEAD, (depth | 0) || DECK_AHEAD));
+      let queued = 0;
+      for (const k of deckKinds) {
+        const entries = forecast(k, d);
+        for (let i = 0; i < entries.length; i++) {
+          const e = entries[i];
+          if (e && e.url && e.remote && warmUrl(e.url, i === 0)) queued += 1;
+        }
+      }
+      return queued;
+    }
+
+    /* The claim-time warm: the actual first deck entries. On desktop (local
+     * media, remote pool empty or unused) this queues nothing - inert. */
+    refreshDeck();
 
     const pool = {
       spec: { loops: want.loop, stills: want.still, targets: want.target, canvasSafe, niches: niches || null },
@@ -406,20 +595,20 @@ export function createAssets(options = {}) {
       next(kind) {
         const k = (kind === 'loop' || kind === 'gif') ? 'loop' : (kind === 'target' ? 'target' : 'still');
         if (released) return { url: placeholders[0] || null, remote: false };
-        const remoteKind = k === 'target' ? 'still' : k;
-        // The ratio is a MIX dial, not a veto: on the placeholder floor (no real
-        // local media of this kind) there is nothing to mix WITH, so the remote
-        // pool serves every draw it can cover.
-        const bareLocal = !(remoteKind === 'loop' ? localPools.loop.length : localPools.still.length);
-        if (wantRemote(bareLocal ? 1 : remoteRatio, rng(), (remotePools[remoteKind] || []).length > 0, canvasSafe)) {
-          const list = remotePools[remoteKind];
-          const i = remoteCursors[remoteKind] % list.length;
-          remoteCursors[remoteKind] += 1;
-          const jump = list.length > 2 ? Math.floor(rng() * (list.length - 1)) : 0;
-          const url = list[(i + jump) % list.length];
-          if (url && (!canvasSafe || isLocalUrl(url))) return { url, remote: true };
-        }
-        return { url: drawLocal(k), remote: false };
+        /* Decided NOW, with the live cursors and the next rand emissions - the
+         * deck never serves, it only warmed what this call is about to pick. */
+        const res = computeDraw(k, liveState, takeRand);
+        refreshDeck();               // the window moved: warm the new tail
+        return res;
+      },
+      /**
+       * Warm the next n deck entries' bytes now (bounded by DECK_AHEAD).
+       * SORT's quick path has always called this behind a typeof guard - it
+       * was a claimTagged-only verb before 0825. Returns how many queued.
+       */
+      prewarm(n) {
+        const d = Math.round(Number(n) || 0);
+        return d > 0 ? refreshDeck(d) : 0;
       },
       /** How many candidates the pool can actually serve right now. */
       stats() {
@@ -588,6 +777,12 @@ export function createAssets(options = {}) {
       probes.clear();
       libraryCbs.clear();
       channel.dispose();
+      warmQueue.length = 0;
+      for (const img of warmHeld.values()) {
+        try { img.onload = null; img.onerror = null; } catch { /* noop */ }
+      }
+      warmHeld.clear();
+      warmFlight = 0;
       prewarmed = new Set();
     },
   };
