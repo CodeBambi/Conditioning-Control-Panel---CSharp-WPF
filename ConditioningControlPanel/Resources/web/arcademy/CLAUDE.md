@@ -2428,6 +2428,22 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     Same PR: the phone bell chip is two lines (grid, icon spanning both rows) stepped left
     of the bell tower's painted clock by clamp(32px, 5vw, 48px); every rule html.arc-mobile.
 
+107. **EMI'S CADENCE IS THREE DIALS AND ONE LATCH, RETUNED 2026-08-25 (owner: "very
+    few comments and animations").** `voice.js` `BARK_FLOOR_MS` 90s -> 40s;
+    `CAMPUS_ODDS_MULT` x1.5 scales a pool's odds on every moment that is NOT in
+    `MID_CLASS_MOMENTS` (miss/fail/runLost/tense/clutch/thinking) AND not while the
+    session latch `S.inClass` is up (classStart/suspend set it, win/fail/runLost/
+    reportCard/dayDone/greet/resume clear it - `miss` does NOT, a miss is mid-class).
+    `channels.js` `SL_DIALS` 90s/20s/180s/6 -> 30s/10s/60s/14 and every per-channel
+    cooldown halved. NEW: **the fidget** - a weighted wordless chain (`FIDGET_CHAINS`,
+    glance/wink/thinking/sus/nod/smug/dizzy/wake) that rides `blinkIdle` AFTER the
+    glitch passes, `FIDGET_ODDS` per blink, campus-only, and never inside
+    `FIDGET_AFTER_SAY_MS` of a line (`S.lastSayAt` is stamped in `sayIt`, the one
+    funnel every bark/beat/ask lands through). It owns no timer: it can only fire
+    when the blink can, so the blink's own guards (busy/hidden/dragging/disabled)
+    are its guards. A pool with `maxPerSession` (idlePlayer = 2) still caps itself
+    - the multiplier moves the dice, never the ration or the doubles slot.
+
 ## 5. The game module contract (short version)
 
 ```js

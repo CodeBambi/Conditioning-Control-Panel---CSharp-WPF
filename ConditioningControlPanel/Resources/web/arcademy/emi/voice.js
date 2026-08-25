@@ -83,7 +83,25 @@ import { sayHoldMs, SAY_LEAD_MS } from './widget.js';
 export const VOICE_DIALS = Object.freeze({
   /* --- the seldom channel ---------------------------------------------- */
   BARK_ODDS: 0.25,           // default chance a pool speaks instead of staying wordless
-  BARK_FLOOR_MS: 90000,      // no two barks closer than this (ceremony pools exempt)
+  BARK_FLOOR_MS: 40000,      // no two barks closer than this (ceremony pools exempt)
+                             // (90s until 2026-08-25; owner: "slightly more frequent")
+  /* OUT-OF-CLASS BOOST (owner, 2026-08-25). In class the player is looking at
+   * the game, not at her, so a line spent there is half-wasted. Every moment
+   * that is NOT mid-class (see MID_CLASS_MOMENTS) has its pool odds scaled by
+   * this before the dice roll; capped at 1, ceremony pools already sit at 1. */
+  CAMPUS_ODDS_MULT: 1.5,
+  /* THE FIDGET (owner, 2026-08-25): a wordless chain between barks, so the
+   * space between two lines is not just breath and blink. Rides the idle blink
+   * (BLINK_EVERY_MS, ~5.2s) like the glitch does - NO timer of its own, and it
+   * cannot fire on a page nobody is touching any more than the blink can.
+   * Odds are PER BLINK: 0.14 x 5.2s = one fidget every ~37s of campus idle. */
+  FIDGET_ODDS: 0.14,
+  FIDGET_AFTER_SAY_MS: 7000,  // never right on the heels of a bark or a beat
+  FIDGET_CHAINS: Object.freeze([
+    // weight, chain. The quiet ones lead; the loud ones are the spice.
+    [5, 'glance'], [4, 'wink'], [3, 'thinking'], [3, 'sus'], [2, 'nod'],
+    [2, 'smug'], [1, 'dizzy'], [1, 'wake'],
+  ]),
   FRESH_WEIGHT: 3,           // an unheard line is this many times likelier than a heard one
   DOUBLES_PER_SESSION: 1,    // the suspiciously-human register, capped across ALL pools
 
@@ -131,6 +149,14 @@ const BLOB_VERSION = 1;
  * to the lab door that is coming. Not a quiet one - none. It is enforced HERE,
  * in the engine, so no future data file can open it by accident. */
 const SILENT_TARGETS = Object.freeze({ records: true, lab: true });
+
+/* Moments that land while the player is INSIDE a class and looking at the
+ * game. These keep their written odds; everything else gets CAMPUS_ODDS_MULT.
+ * classStart / win / stamp / reportCard are on the room card, where she is in
+ * view, so they count as campus. */
+const MID_CLASS_MOMENTS = Object.freeze({
+  miss: true, fail: true, runLost: true, tense: true, clutch: true, thinking: true,
+});
 
 /** The seen-flag for the forced post-lab greet (owner rec 4). */
 const POST_LAB_GREET_FLAG = 'postLabGreet';
@@ -330,6 +356,11 @@ export function createVoice(o) {
      * wanted the name gets the un-named variant instead of being dropped - the
      * beat still lands, it just does not say your name twice in a night. */
     nameDropped: false,
+    /* THE FIDGET's two reads: are we in a class right now (classStart ->
+     * win/fail/runLost/reportCard/dayDone/greet/resume), and when did she last
+     * have a line up (any bark, beat or ask lands through sayIt). */
+    inClass: false,
+    lastSayAt: 0,
   };
   S.openedBad = blob.lastSessionEnd === 'bad';
 
@@ -813,6 +844,7 @@ export function createVoice(o) {
     let done = false;
     try { done = !!emi.say(text, { face: face || undefined, nod: nod === true }); }
     catch (e) { return false; }
+    if (done) S.lastSayAt = now();
     if (done && wants && name) S.nameDropped = true;
     return done;
   }
@@ -950,7 +982,8 @@ export function createVoice(o) {
     /* THE FLOOR. Ninety seconds between any two barks; a ceremony is rare by
      * nature and is exempt by DECLARATION, never by accident. */
     if (!pool.ceremony && S.lastBarkAt && (c.now - S.lastBarkAt) < D.BARK_FLOOR_MS) return false;
-    const odds = typeof pool.odds === 'number' ? pool.odds : D.BARK_ODDS;
+    let odds = typeof pool.odds === 'number' ? pool.odds : D.BARK_ODDS;
+    if (!MID_CLASS_MOMENTS[name] && !S.inClass) odds = Math.min(1, odds * D.CAMPUS_ODDS_MULT);
     if (odds < 1 && rng() >= odds) return false;
     const line = pickLine(pool, c);
     if (!line) return false;
@@ -1007,6 +1040,25 @@ export function createVoice(o) {
    * One frame, once a session at most, only after the lab, and never in the
    * first minute of the first three sessions after it - the gag must not
    * cluster near the memory of the room it leaks from. */
+  /* ---------------------- the fidget --------------------------------------
+   * Wordless, weighted, campus-only. Rides `blinkIdle`, after the glitch has
+   * passed on it. Refuses in class, while she is busy, and inside
+   * FIDGET_AFTER_SAY_MS of any line - the line is the point, the fidget is
+   * the space between two lines. */
+  function fidget() {
+    if (S.inClass) return false;
+    if (S.lastSayAt && now() - S.lastSayAt < D.FIDGET_AFTER_SAY_MS) return false;
+    if (S.lastBarkAt && now() - S.lastBarkAt < D.FIDGET_AFTER_SAY_MS) return false;
+    if (rng() >= D.FIDGET_ODDS) return false;
+    const table = D.FIDGET_CHAINS;
+    let total = 0;
+    for (const e of table) total += Number(e[0]) || 0;
+    let r = rng() * total;
+    let chain = table[table.length - 1][1];
+    for (const e of table) { r -= Number(e[0]) || 0; if (r < 0) { chain = e[1]; break; } }
+    return emoteIt({ chain });
+  }
+
   function glitch() {
     if (!blob.labSeen) return false;
     if (S.glitchCount >= D.GLITCH_PER_SESSION) return false;
@@ -1096,6 +1148,12 @@ export function createVoice(o) {
       /* THE GEOFENCE, FIRST AND UNCONDITIONAL. Not a quiet reaction: none. */
       if (name === 'lockedClick' && p && SILENT_TARGETS[String(p.what)]) return false;
 
+      /* THE CLASS LATCH, read even before the script lands. Same rungs as
+       * widget.js noteMoment minus `miss` (a miss is mid-class, not the end). */
+      if (name === 'classStart' || name === 'suspend') S.inClass = true;
+      else if (name === 'win' || name === 'fail' || name === 'runLost' || name === 'reportCard'
+        || name === 'dayDone' || name === 'greet' || name === 'resume') S.inClass = false;
+
       if (!ready || !canPerform()) {
         /* NOT YET. Either the script has not landed or the face has not, and
          * both mean the same thing: consuming a one-shot beat here would burn
@@ -1135,7 +1193,7 @@ export function createVoice(o) {
       /* THE IDLE BLINK IS THE ONE UNATTENDED "GESTURE", so it reaches the
        * GLITCH and nothing else: no beat and no bark may ever be spent by a
        * page nobody is touching (field bug, 2026-08-24). */
-      if (kind === 'blinkIdle') return glitch();
+      if (kind === 'blinkIdle') return glitch() || fidget();
       let payload = p || {};
       if (kind === 'dropAt') {
         const hit = hitTest(Number(payload.x) || 0, Number(payload.y) || 0);
