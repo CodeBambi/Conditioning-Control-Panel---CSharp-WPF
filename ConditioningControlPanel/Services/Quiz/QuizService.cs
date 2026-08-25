@@ -155,6 +155,22 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex) { App.Logger?.Debug("QuizCompleted subscriber error: {Error}", ex.Message); }
         }
 
+        /// <summary>
+        /// Raised when a graded run is WALKED OUT OF rather than finished - today only the web
+        /// intake can do that (its "are you sure? -> Yes" abort and its own exit affordance,
+        /// both before a quiz-result has arrived). The classic quiz has no equivalent: it grades
+        /// whatever you gave it. Same static shape and the same reason as <see cref="QuizCompleted"/>.
+        /// </summary>
+        public static event EventHandler? QuizAbandoned;
+
+        /// <summary>Fire the QuizAbandoned signal. Called by IntakeHostService when a run is quit
+        /// before it reports a result.</summary>
+        public static void RaiseQuizAbandoned()
+        {
+            try { QuizAbandoned?.Invoke(null, EventArgs.Empty); }
+            catch (Exception ex) { App.Logger?.Debug("QuizAbandoned subscriber error: {Error}", ex.Message); }
+        }
+
         private readonly HttpClient _httpClient;
         private List<ProxyChatMessage> _conversationHistory = new();
         private QuizCategory _currentCategory;

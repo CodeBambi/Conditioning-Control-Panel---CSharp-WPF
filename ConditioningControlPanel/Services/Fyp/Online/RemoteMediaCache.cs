@@ -144,7 +144,12 @@ internal static class RemoteMediaCache
         string? path = null;
         try
         {
-            var ext = ExtensionOf(url) ?? ".bin";
+            // URL first (it is what the consumers' own format checks were made against), then
+            // the bytes' own signature. ".bin" is gone on purpose: a file with an extension no
+            // player recognises is the same bug as a file with none — see MediaTypeSniffer.
+            var ext = ExtensionOf(url)
+                      ?? Helpers.MediaTypeSniffer.FromMagicBytes(bytes, Helpers.MediaTypeSniffer.MagicProbeBytes)
+                      ?? Helpers.MediaTypeSniffer.DefaultImageExtension;
             path = Path.Combine(App.GetMediaTempPath(), $"{TempPrefix}{Guid.NewGuid():N}{ext}");
             await File.WriteAllBytesAsync(path, bytes, ct).ConfigureAwait(false);
         }

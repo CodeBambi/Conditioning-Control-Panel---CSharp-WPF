@@ -1803,7 +1803,9 @@ namespace ConditioningControlPanel.Services
         private void EnsureLayerHook()
         {
             if (_layerHook != null) return;
-            _layerHook = new GlobalMouseHook { LeftDown = OnLayerFlashLeftDown };
+            // Right-click dismisses too: layer flashes own no right-button verb, so the right
+            // message routes into the same hit-test (a miss still passes the click through).
+            _layerHook = new GlobalMouseHook { LeftDown = OnLayerFlashLeftDown, RightDown = OnLayerFlashLeftDown };
             _layerHook.Start();
         }
 
@@ -3629,11 +3631,16 @@ namespace ConditioningControlPanel.Services
 
             // One-time click handler — gated on the per-spawn IsClickable flag so a
             // recycled window behaves per its current spawn, with no handler stacking.
-            w.MouseLeftButtonDown += (s, e) =>
+            // Right-click dismisses too (suggestion): MOBA reflex — same handler on both buttons,
+            // with only the right path marked handled so it can't surface a context menu.
+            System.Windows.Input.MouseButtonEventHandler flashClick = (s, e) =>
             {
+                if (e.ChangedButton == System.Windows.Input.MouseButton.Right) e.Handled = true;
                 if (s is FlashWindow fw && fw.IsClickable && !fw.IsFadingOut)
                     OnFlashClicked(fw, App.Settings.Current);
             };
+            w.MouseLeftButtonDown += flashClick;
+            w.MouseRightButtonDown += flashClick;
 
             // Safety net: if the window is closed externally (e.g., OS shutdown, Alt+F4)
             // without going through SafeCloseFlashWindow, dispose the CTS to prevent leaks~ 🧹

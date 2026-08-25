@@ -65,6 +65,11 @@ namespace ConditioningControlPanel.Services.Quiz
         private static DispatcherTimer? _exitWatchdog;
         private static DateTime _lastHeartbeatUtc;
         private static bool _exiting;
+        /// <summary>Has THIS run reported a <c>quiz-result</c> yet? The page keeps its window open
+        /// after the result (Recovery band, summary, outro spiral recap), so the exit message that
+        /// eventually arrives is a normal wind-down, not a walk-out. Only a page-initiated quit with
+        /// this still false counts as quitting an intake early (achievement "held_back").</summary>
+        private static bool _resultReceived;
         private static bool _relaunchedOnce;
         private static bool _testMode;
         private static bool _disposing;   // reentrancy guard (Dispose closes the window -> Closed -> DisposeAll)
@@ -94,6 +99,7 @@ namespace ConditioningControlPanel.Services.Quiz
                 catch (Exception ex) { App.Logger?.Debug("IntakeHost: audio-web request failed: {E}", ex.Message); }
 
                 _exiting = false;
+                _resultReceived = false;
                 _testMode = testMode;
                 _duckPreference = duckMainWindow;
 
@@ -327,10 +333,12 @@ namespace ConditioningControlPanel.Services.Quiz
                     ApplyHostFullscreen((bool?)o["on"] ?? false);
                     break;
                 case "exit":       // page-initiated wind-down (its own exit affordance)
+                    ReportWalkOutIfUnfinished();
                     _exiting = true;
                     ArmExitWatchdog();
                     break;
                 case "intake-close":   // "are you sure? -> Yes" jumpscare ABORT
+                    ReportWalkOutIfUnfinished();
                     OnIntakeClose();
                     break;
                 case "loom-save":      // outro spiral recap: "Keep it" -> the Spirals library
@@ -396,6 +404,7 @@ namespace ConditioningControlPanel.Services.Quiz
             try { run = o["result"]?.ToObject<QuizRunResult>(); }
             catch (Exception ex) { App.Logger?.Warning("IntakeHostService: bad quiz-result: {E}", ex.Message); }
             if (run == null) return;
+            _resultReceived = true;   // from here on, leaving the window is a wind-down, not a walk-out
 
             App.Logger?.Information(
                 "IntakeHostService: quiz-result (niche={N}, peakDepth={D:0.00}, band={B}, mantras={M})",
@@ -593,6 +602,23 @@ namespace ConditioningControlPanel.Services.Quiz
         /// <see cref="DisposeAll"/> path the natural close and the title-bar X use, so no
         /// <see cref="QuizRunResult"/> is generated. <c>_exiting</c> is set first so the heartbeat
         /// watchdog can't relaunch the window the user is being kicked out of.</summary>
+        /// <summary>Tell the gamification bridge the run was walked out of, if it was. Fired from the
+        /// two PAGE-INITIATED quits only (the jumpscare abort and the page's own exit affordance) and
+        /// only while <see cref="_resultReceived"/> is false, so a normal post-result close, a boot
+        /// failure, a recovery relaunch and an app shutdown all stay out of it. The bridge counts a
+        /// streak of these for "held_back" - see GamificationBridge.OnQuizAbandoned.</summary>
+        private static void ReportWalkOutIfUnfinished()
+        {
+            if (_resultReceived || _exiting) return;
+            _resultReceived = true;   // latch: exit + intake-close can both arrive for one quit
+            try
+            {
+                App.Logger?.Information("IntakeHostService: intake quit before it reported a result");
+                QuizService.RaiseQuizAbandoned();
+            }
+            catch (Exception ex) { App.Logger?.Debug("IntakeHostService: walk-out report failed: {E}", ex.Message); }
+        }
+
         private static void OnIntakeClose()
         {
             _exiting = true;

@@ -76,6 +76,33 @@ namespace ConditioningControlPanel
                 // nav button when the completion landed off-tab. See MainWindow.EventFx.cs.
                 CelebrateQuestComplete(e.QuestType);
 
+                // Auto-advance the daily card (suggestion thread: Wobberjockey/Rosalyn/Nardda).
+                // QuestService generates the NEXT daily *after* it raises QuestCompleted, so the
+                // RefreshQuestUI above necessarily paints the quest that just finished - the card
+                // then sat on "COMPLETED" until the tab was left and re-entered. A short beat lets
+                // the completed overlay be seen, then we repaint onto the freshly rolled quest.
+                // CheckAndGenerateQuests is the same idempotent pass the refresh timer already runs;
+                // it respects MaxDailyQuestsPerDay (so the 3/3 "all done" card still wins) and touches
+                // no reroll counter, so a completion never spends one of the 1+2 rerolls.
+                if (e.QuestType == Models.QuestType.Daily)
+                {
+                    Task.Delay(1800).ContinueWith(_ =>
+                    {
+                        DispatcherHelper.RunOnUISync(() =>
+                        {
+                            try
+                            {
+                                App.Quests?.CheckAndGenerateQuests();
+                                RefreshQuestUI();
+                            }
+                            catch (Exception ex)
+                            {
+                                App.Logger?.Warning(ex, "Quest auto-advance repaint failed");
+                            }
+                        });
+                    });
+                }
+
                 // Hide inline banner after 5 seconds
                 Task.Delay(5000).ContinueWith(_ =>
                 {
