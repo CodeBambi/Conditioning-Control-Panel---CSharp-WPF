@@ -1034,6 +1034,12 @@ export function createSeep(o) {
 
     const double = tier() >= 3 && roll('slip_double') < SLIP_DOUBLE_P && !reducedMotion;
     setAttr(g, 'data-seep', 'slip');
+    /* W3 P2-10: the room drops to the monitors downstairs, and the feed picks
+     * it up. Barely-there BY DOCTRINE - a fiftieth of a game pop, under the
+     * threshold at which a player would say they heard something rather than
+     * that something happened. On the SLIP itself, once; the second flick of a
+     * double is the same room still slipped, not a new tell. */
+    cue('glitch', 0.05);
     later(() => {
       dropAttr(g, 'data-seep');
       if (restoreKey) { restoreKey(); restoreKey = null; }

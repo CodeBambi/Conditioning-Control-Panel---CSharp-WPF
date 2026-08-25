@@ -448,6 +448,10 @@ export default {
         stagePhase: 'intro',     // intro|load|slide|reveal|gap|debrief
         slideStart: 0, slideMs: 0,
         revealAt: 0,
+        /* W3 P0-8: the slide riser's own bookkeeping. `descendOn` is the arm
+           flag every stop path clears; `descendAt` is when the next strike is
+           due (the mixer has no sustain, so a riser is RE-STRUCK - trap 108). */
+        descendOn: false, descendAt: 0,
         travelTimer: 0, phaseTimer: 0, windowTimer: 0, autoTimer: 0,
         lastPressAt: -1e9,
         paused: false, suspended: false, running: false,
@@ -726,6 +730,9 @@ export default {
       S.bubble = b;
       S.stagePhase = 'load';
       hud();
+      /* W3 P1-12: the round starts. A short high thud at the mouth of the tube,
+       * so the anticipation has a downbeat to hang off. */
+      deckEngine.audio('thud', 0.2, { pitch: 1.3 });
       S.render.showLoad();
       heat();
       /* the decks learn the KIND at the mouth - the trickster's tell needs it
@@ -741,6 +748,28 @@ export default {
       S.phaseTimer = timers.after(LOAD_MS, () => beginSlide(b));
     }
 
+    /* W3 P0-8: THE SLIDE RISER. The whole trip down the tube used to be dead
+     * air, which is why the pop arrived from nowhere. `descend` is a 1200ms
+     * finite riser, so the travel loop re-strikes it while the bubble is in
+     * flight, climbing .06 -> .18 with the distance covered. Two rules:
+     *   - it is DRIVEN BY THE TRAVEL LOOP, never by a ticker of its own, so a
+     *     freeze or a suspend that stops the slide stops the sound with it;
+     *   - the last strike is timed to resolve INTO the reveal (peak under
+     *     bubble_pop), and no new strike is ever armed after one, because a
+     *     recipe has no stop (trap 108) - what we cancel is the re-strike. */
+    const DESCEND_STEP_MS = 520;
+    const DESCEND_LEAD_MS = 260;   // no strike this close to the mouth
+    function stopDescend() {
+      if (!S) return;
+      S.descendOn = false;
+      S.descendAt = 0;
+    }
+    function descendStrike(p) {
+      if (!S || !S.descendOn) return;
+      const k = Math.max(0, Math.min(1, p));
+      deckEngine.audio('descend', 0.06 + 0.12 * k, { pitch: 1 + 0.1 * k });
+      S.descendAt = now() + DESCEND_STEP_MS;
+    }
     function beginSlide(b) {
       if (!S || S.paused || S.suspended) return;
       S.stagePhase = 'slide';
@@ -748,11 +777,16 @@ export default {
       S.slideMs = b.slideMs;
       S.render.setTravel(0);
       decks('slide', { idx: S.idx, slideMs: b.slideMs });
+      S.descendOn = true;
+      S.descendAt = 0;
       const tick = () => {
         if (!S || S.stagePhase !== 'slide' || S.paused || S.suspended) return;
         const p = (now() - S.slideStart) / S.slideMs;
         if (p >= 1) { reveal(b); return; }
         S.render.setTravel(p);
+        /* W3 P0-8: one strike per DESCEND_STEP_MS, never one per travel tick. */
+        if (S.descendOn && now() >= S.descendAt
+          && (S.slideMs - (now() - S.slideStart)) > DESCEND_LEAD_MS) descendStrike(p);
         S.travelTimer = timers.after(TRAVEL_TICK_MS, tick);
       };
       S.travelTimer = timers.after(TRAVEL_TICK_MS, tick);
@@ -761,7 +795,13 @@ export default {
     function reveal(b) {
       if (!S || S.paused || S.suspended) return;
       S.stagePhase = 'reveal';
+      stopDescend();                          // W3 P0-8: the slide is over
       if (b.kind === 'denied') S.tally.deniedShown++; else S.tally.goodShown++;
+      /* W3 P0-7: the face turns and the window opens, and until now that was
+       * the loudest silence in the class. KIND-BLIND, and that is the whole
+       * discipline of it: one level, one pitch, whatever the bubble is. A cue
+       * that knew the kind would be a free tell (casino.js's no-tell law). */
+      deckEngine.audio('shutter', 0.35);
       S.render.revealBubble(b);
       S.revealAt = now();                       // the clock starts ON the paint call
       /* RT INTEGRITY: the deck event is routed only AFTER the stamp is taken,
@@ -786,6 +826,7 @@ export default {
     function windowEnd(b) {
       if (!S || S.stagePhase !== 'reveal') return;
       S.stagePhase = 'gap';
+      stopDescend();                          // W3 P0-8: nothing is in flight
       holdWords(false);                 // the window resolved on its own clock
       const streakBefore = S.streak;
       if (b.kind === 'denied') {
@@ -931,6 +972,9 @@ export default {
         });
         subBeatIdx += 1;
       } else if (flavor === 'spiral') {
+        /* W3 P1-12: one of the three pop flavours was mute. The flourish gets a
+         * thin high wash so all three beats land as three beats. */
+        deckEngine.audio('wash', 0.22, { pitch: 1.3 });
         S.render.flourish();
       }
     }
@@ -1034,6 +1078,17 @@ export default {
         }
       } catch (e) { /* a ceremony must never be the thing that fails */ }
 
+      /* W3 P1-12: four outcomes used to share one `slide`. The ticket keeps its
+         slide; the STAMP now says which of the four this was, and a lifetime
+         best tops it 400ms later. Outside the ceremony's try/catch on purpose -
+         the sound of the verdict does not depend on whether the shell had a
+         stamp slot to draw in. A ROYAL is left alone: the casino's royal ladder
+         owns that beat and doubling it would flatten the rarest thing here.
+         debrief() runs once a class, so neither line needs a latch; the IN-PLAY
+         record cue is the casino's and is latched there (P0-4). */
+      if (!royal && perfect) deckEngine.audio('stamp', 0.4, { pitch: 1.2 });
+      if (!royal && newBest) timers.after(400, () => deckEngine.audio('record', 0.45));
+
       say('debrief: score ' + led.score
         + ', median ' + (led.medianRt == null ? 'n/a' : Math.round(led.medianRt) + 'ms')
         + ', popped ' + S.tally.popped + '/' + S.tally.goodShown
@@ -1071,6 +1126,9 @@ export default {
       const fold = foldBaseline(S.meta, sessionMedian, true);
       if (fold) {
         S.recalibrated = true;
+        /* W3 P1-12: the one destructive button on the ticket answered with
+         * nothing at all. `commit` is the school's "that is done now". */
+        deckEngine.audio('commit', 0.4);
         S.result.fold = fold;
         try { ctx.store.mergeGameMeta(GAME_KEY, { baselineMs: fold.baselineMs, baselineUpdatedAt: Date.now(), bestRtMs: 0 }); }
         catch (e) { /* noop */ }
@@ -1111,6 +1169,7 @@ export default {
     /* ============================================================ FREEZE */
     function freeze() {
       timers.cancel(S.phaseTimer); timers.cancel(S.windowTimer); timers.cancel(S.travelTimer);
+      stopDescend();                          // W3 P0-8: the travel loop is dead, so is its riser
       /* pause / tab-away / mandatory video: any live window is void, so the
          word fence comes down here too - it must never outlive the bubble. */
       holdWords(false);
@@ -1132,6 +1191,9 @@ export default {
       if (!S.running || S.debriefed) return;
       S.phaseTimer = timers.after(RESUME_DELAY_MS, () => {
         if (!S || S.paused || S.suspended) return;
+        /* W3 P1-12: the thaw. The class picks itself up and says so, so the
+         * first bubble after a freeze is not a surprise. */
+        deckEngine.audio('lift', 0.25);
         /* Only a bubble the freeze actually VOIDED is dealt again. A freeze
            that landed in the settle gap has nothing in flight - re-dealing the
            cursor there would replay a bubble that already resolved (double

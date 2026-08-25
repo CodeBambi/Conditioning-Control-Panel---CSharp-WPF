@@ -65,6 +65,16 @@ export function createSustained(ctx) {
   const active = new Map();
   const washHolds = new Map();   // washKind -> { el, hideTimer } — the one-element law
   const live = { rain: 0, bubbles: 0 };
+  /* W3 (trap 111): a sustain is cued PER WAVE, never per node, so the three
+   * things a re-entrant starter has to remember live up here.
+   *   lastWashKind  the wash that last took the air, so a refresh of the SAME
+   *                 wash is silent and a change of kind is not (P0-25);
+   *   lastHumAt     the Loom hum's own floor - the spiral is re-triggered by
+   *                 the pressure decks far faster than the 1.4s recipe, and a
+   *                 stack of hums is a drone nobody asked for (P0-26). */
+  let lastWashKind = null;
+  let lastHumAt = 0;
+  const SPIRAL_HUM_GAP_MS = 1400;
 
   /* ---- wash -------------------------------------------------------------- */
   function ensureWash(washKind) {
@@ -175,16 +185,22 @@ export function createSustained(ctx) {
      * (Law I: the ledger records what the engine did). `null` when nothing was
      * written - a pink/drain wash with no url keeps its CSS gradient. */
     let wroteUrl = null;
+    let loomTook = false;
     if (opts.url || (washKind === 'spiral' && ctx.spiralUrl)) {
       const url = opts.url || ctx.spiralUrl();
       if (isLoomWrap(url)) {
         // THE LOOM PATH (2026-08-25): a params wrapper - live canvas, stable id.
         wroteUrl = loomMount(h, url);
+        loomTook = typeof wroteUrl === 'string' && wroteUrl.indexOf('loom:') === 0;
       } else if (url) {
         loomDrop(h);   // a url string takes the element back; no-op when no canvas
         h.el.style.backgroundImage = 'url("' + url + '")'; wroteUrl = String(url);
       }
     }
+    /* Was this wash already on screen? Read BEFORE the opacity is written: it
+     * is the difference between a wash arriving and a wash being refreshed,
+     * which is the whole of P0-25's per CHANGE, not per re-trigger. */
+    const wasUp = parseFloat(h.el.style.opacity || '0') > 0.001;
     if (h.hideTimer) { ctx.timers.cancel(h.hideTimer); h.hideTimer = 0; }
     h.el.style.opacity = String(alpha);
     /* THE HELD WASH. sustainForever HOLDS the element at alpha until a later
@@ -204,7 +220,27 @@ export function createSustained(ctx) {
       h.hideTimer = ctx.timers.after(holdMs, () => { h.el.style.opacity = '0'; h.hideTimer = 0; loomActive(h, false); });
     }
     ctx.fx('wash', washKind);
-    if (opts.sfx) ctx.sfx(typeof opts.sfx === 'string' ? opts.sfx : 'wash', 0.2 + 0.3 * strength, { duck: 'voice' });
+    /* W3 P0-25: THE AIR. `if (opts.sfx)` was never true - no caller in the
+     * school ever set it - so the heaviest thing the engine draws arrived in
+     * silence. A wash now takes the air by default and `sfx:false` is the way
+     * out; a string still names the cue. It fires on a CHANGE only: the wash
+     * arriving, or a different kind taking the element. startWash is re-entrant
+     * by design (a deck refreshes the deadline several times a second at the
+     * top of the ladder) and one cue per refresh would be a hiss. */
+    const washChanged = !wasUp || washKind !== lastWashKind;
+    if (opts.sfx !== false && washChanged) {
+      ctx.sfx(typeof opts.sfx === 'string' ? opts.sfx : 'wash', 0.2 + 0.3 * strength, { duck: 'voice' });
+    }
+    lastWashKind = washKind;
+    /* W3 P0-26: the Loom is the biggest thing on the screen and had no sound at
+     * all. The hum is struck on the mount and on each re-trigger that takes the
+     * canvas - never per frame (loomWash draws at 30-60fps and owns no cue) -
+     * and never on warmSpiral, which mounts at opacity 0 and does not come
+     * through here. The recipe's own 1.4s length is the floor between strikes. */
+    if (loomTook) {
+      const now = Date.now();
+      if (now - lastHumAt >= SPIRAL_HUM_GAP_MS) { lastHumAt = now; ctx.sfx('spiral_hum', 0.22); }
+    }
     return {
       kind: 'wash', variant: washKind, alpha, holdMs, url: wroteUrl,
       retune() { /* alpha follows the next trigger; nothing to animate */ },
@@ -283,10 +319,17 @@ export function createSustained(ctx) {
     if (clickable) {
       guard = createEscapeGuard({
         timers: ctx.timers,
+        sfx: ctx.sfx,                      // W3 P0-24: the trip is a release
         onComplete: (why) => { ctx.log('bubble_field escape (' + why + ')'); if (typeof opts.onForceComplete === 'function') { try { opts.onForceComplete(why); } catch { /* ignore */ } } },
       });
       guard.arm();
     }
+    /* W3 P1-17: the field's own air, ONE cue for the wave (trap 111). The
+     * clickSafe field - decoration, nobody pops it - was silent from entrance
+     * to exit, which is the whole reason the row exists. The exit is the
+     * teardown's coalesced wash, not a second cue here. */
+    ctx.sfx('bubble_bed', 0.24);
+    let popN = 0;
 
     function spawn() {
       if (live.bubbles >= max) return;
@@ -308,7 +351,9 @@ export function createSustained(ctx) {
           try { ev.stopPropagation(); } catch { /* ignore */ }
           if (guard) guard.note();
           node.classList.add('ae-bubble-pop');
-          ctx.sfx('bubble_pop', 0.3 + 0.3 * clamp01(spec.alpha));
+          // W3 P1-17: the pop ladder climbs a semitone a bubble, capped at 8.
+          popN = Math.min(8, popN + 1);
+          ctx.sfx('bubble_pop', 0.3 + 0.3 * clamp01(spec.alpha), { pitch: 1 + 0.06 * popN });
           try { opts.onPop(node); } catch { /* game's problem */ }
           ctx.timers.after(280, () => kill(node));
         }, { once: true });
@@ -340,6 +385,7 @@ export function createSustained(ctx) {
       stop() {
         if (timer) ctx.timers.cancel(timer);
         timer = 0;
+        popN = 0;
         if (guard) guard.cancel();
         // fade, never snap: existing bubbles finish their rise
       },
@@ -453,6 +499,9 @@ export function createSustained(ctx) {
     ctx.timers.own(node);
     // one frame later so the opacity transition actually runs
     ctx.timers.after(16, () => { node.style.opacity = String(clamp01(0.10 + level * 0.45)); });
+    /* W3 P1-17: a CRT coming up is a room getting a machine in it. The seep's
+     * own hum, quieter than the tell that owns it, once for the wave. */
+    ctx.sfx('seep_hum', 0.12);
     ctx.fx('crt', variant.name);
     return {
       kind: 'crt', variant: variant.name,
@@ -506,11 +555,23 @@ export function createSustained(ctx) {
     return true;
   }
 
-  function stopAll(immediate) {
+  /**
+   * stopAll(immediate, quiet)
+   * W3 P1-17: the teardown tears six things down on one frame, so it gets ONE
+   * cue and not six (trap 111) - the wash recipe pitched down, quiet, the exit
+   * half of every entrance above. Two guards on it. It only speaks when
+   * something was actually up (a stopAll over an empty stage is not a beat),
+   * and `quiet` silences it for the SUSPEND path: a panic, a mandatory video
+   * or an audio-only flip is the one teardown that must make no sound at all.
+   */
+  function stopAll(immediate, quiet) {
+    const hadAnything = !quiet && (active.size > 0 || washHolds.size > 0);
     for (const kind of [...active.keys()]) stop(kind, immediate);
     stop('wash', immediate);
+    lastWashKind = null;
     live.rain = 0;
     live.bubbles = 0;
+    if (hadAnything) ctx.sfx('wash', 0.12, { pitch: 0.8 });
   }
 
   function retuneAll() {

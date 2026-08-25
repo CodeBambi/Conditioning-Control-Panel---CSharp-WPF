@@ -271,6 +271,18 @@ export function createCeremonies({ engine, layer, reducedMotion, log } = {}) {
     /** How many segments the meter has - games must not hardcode 8 or 12. */
     get segments() { return SEGMENTS; },
 
+    /**
+     * THE CEREMONY'S OWN CLOCK, LENT OUT (W3 P0-28). Sequencing a beat needs a
+     * timer, and a timer needs an owner: this one is already swept by
+     * `destroy()` below, so a caller that borrows it cannot leave a stamp
+     * falling on a screen that has gone. The end card uses it to put air
+     * between its whoosh, its stamp and its payoff.
+     * @returns {number} the handle, for a caller that wants to cancel early
+     */
+    later(fn, ms) {
+      return later(typeof fn === 'function' ? fn : () => {}, Math.max(0, Number(ms) || 0));
+    },
+
     destroy() {
       for (const t of Array.from(timers)) clearTimeout(t);
       timers.clear();

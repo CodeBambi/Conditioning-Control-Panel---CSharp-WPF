@@ -2919,27 +2919,44 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     /* --- the grade, as a thing --- */
     const gradeHost = el('div', 'arc-endcard-grade');
     card.appendChild(gradeHost);
-    try {
-      ceremonies.gradeObject({
-        grade: graded && graded.grade,
-        zen: !!(graded && graded.zen),
-        target: gradeHost,
-        hold: 600000,               // it is the card's subject, not a flash
-      });
-    } catch (e) { say('end card grade object failed: ' + ((e && e.message) || e)); }
+    /* W3 P0-28: THE CARD IS A SEQUENCE, NOT A FRAME. The stamp and the payoff
+     * used to land on the same tick as the card itself, so the biggest beat in
+     * the night arrived from nowhere and three sounds fought over one moment.
+     * Now: the card arrives on a whoosh, 350ms of nothing (that silence IS the
+     * anticipation), the stamp comes down, 500ms more, and the payoff pays.
+     * The timers are ceremonies' own, so a screen change sweeps them; each one
+     * still checks the card is the card it was built for, because `endCard` is
+     * assigned below and a dismiss can beat either beat to the frame.
+     * The payoff keeps its own jackpot duck - that lives in ceremonies. */
+    const mine = () => !!(endCard && endCard.root === root);
+    sfx('whoosh', 0.2);
+    ceremonies.later(() => {
+      if (!mine()) return;
+      try {
+        ceremonies.gradeObject({
+          grade: graded && graded.grade,
+          zen: !!(graded && graded.zen),
+          target: gradeHost,
+          hold: 600000,             // it is the card's subject, not a flash
+        });
+      } catch (e) { say('end card grade object failed: ' + ((e && e.message) || e)); }
+    }, 350);
 
     card.appendChild(el('h2', 'arc-h2', gameName(gameKey)));
 
     /* --- LOSSES DISGUISED: a C, or a dropped hard gate, still gets a beat --- */
-    try {
-      const kind = ceremonies.payoff({
-        grade: graded && graded.grade,
-        zen: !!(graded && graded.zen),
-        capped,
-        target: gradeHost,
-      });
-      say('end card payoff (' + gameKey + '): ' + kind);
-    } catch (e) { say('end card payoff failed: ' + ((e && e.message) || e)); }
+    ceremonies.later(() => {
+      if (!mine()) return;
+      try {
+        const kind = ceremonies.payoff({
+          grade: graded && graded.grade,
+          zen: !!(graded && graded.zen),
+          capped,
+          target: gradeHost,
+        });
+        say('end card payoff (' + gameKey + '): ' + kind);
+      } catch (e) { say('end card payoff failed: ' + ((e && e.message) || e)); }
+    }, 850);
 
     /* --- THE SUNK-COST METER --- */
     const prog = progressFor(gameKey);
@@ -2957,6 +2974,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     meter.setAttribute('aria-label', meterText);
     card.appendChild(meter);
     card.appendChild(el('p', 'arc-rake-meterlabel', meterText));
+    /* W3 P1-18: THE METER SAYS HOW CLOSE. It is the only cross-class progress
+     * the player ever sees and it painted in silence. One `streak` note, pitched
+     * by the fill, 400ms after the payoff so it is the last thing on the card
+     * rather than a fourth voice in the pile-up. Drops bus (it is progress
+     * toward a payout), and it never runs ahead of a dismiss. */
+    ceremonies.later(() => {
+      if (!mine()) return;
+      sfx('streak', 0.3, { bus: 'drops', pitch: 1 + 0.5 * (Number(prog.eased) || 0) });
+    }, 1250);
 
     /* --- THE DROP. Never on a retake (the day already paid), never endless. --- */
     const drop = isRetake ? null : rollRakeDrop(gameKey);
@@ -3363,6 +3389,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     };
   }
 
+  /** Which rooms have already rung tonight (W3 P1-18). A first sitting rings;
+   *  a retake of the same room does not ring twice. */
+  const classBellRung = new Set();
+
   /**
    * @param {Object} cls   a timetable class (or the synthetic one freeSwimClass
    *   builds for a room that is not on tonight's board)
@@ -3384,6 +3414,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (vn && vn.gateClass({ gameKey: cls.gameKey, homeroom: !!cls.homeroom },
         () => startClass(cls, opts))) return;
     } catch (e) { say('first bell walk skipped (' + ((e && e.message) || e) + ')'); }
+    /* W3 P1-18: CLASS BEGINS. A school rings a bell when a lesson starts and
+     * this one never did. BELOW the VN gate on purpose - while the first-bell
+     * walk owns the beat the school stays quiet and lets it - and once per
+     * room per night, so a retake does not re-ring what already rang. Lighter
+     * and higher than the night's own first bell at maybeFirstBell. */
+    if (cls && cls.gameKey && !classBellRung.has(cls.gameKey)) {
+      classBellRung.add(cls.gameKey);
+      sfx('bell', 0.3, { pitch: 1.15 });
+    }
     dismissEndCard();
     dismissPunchStage();
     dismissAnnexStage();
@@ -4193,6 +4232,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       catch (e) { say('game pause/resume threw: ' + ((e && e.message) || e)); }
       try { active.peek.forceHide(); } catch (e) { /* noop */ }
       if (!active.pauseEl) {
+        /* W3 P0-27: THE FREEZE HAS A SOUND NOW. Every road into a pause - the
+         * card, the settings screen, applySuspend(true) - lands here, and until
+         * now the loudest thing in the school went silent with no cue at all.
+         * A low thud and a short duck: the room stops. Inside the card-build
+         * guard, so a second pause on an already-paused class is silent, which
+         * is what keeps this the strict inverse of the lift below. */
+        sfx('thud', 0.3, { pitch: 0.85, duck: { target: 'spotlight', mult: 0.2, ms: 400 } });
         const overlay = el('div', 'arc-suspended');
         overlay.appendChild(el('h2', 'arc-h2', 'Paused'));
         const bar = el('div', 'arc-classbar');
@@ -4237,6 +4283,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
        * graded time, and a tell may never cost a timing window. */
       if (active.pauseEl) {
         active.pauseEl.remove();
+        // W3 P0-27: the inverse, on the removal line itself - the card goes and
+        // the room comes back up. No duck: this one is the un-ducking.
+        sfx('lift', 0.28);
         active.pauseEl = null;
       }
       const cls0 = active;

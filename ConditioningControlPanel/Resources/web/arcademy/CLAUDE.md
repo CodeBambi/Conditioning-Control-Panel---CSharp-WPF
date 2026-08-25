@@ -374,6 +374,9 @@ shell/annexreveal.js THE NIGHT THE WALL MOVED: the once-ever reveal cinematic
 shell/peek.js      the shared hold-to-reveal verb (caps the class at A)
 shell/keybinds.js  manifest-declared verb slots, one blob, PanicKey conflict check
 shell/audio.js     THE consumer of engine 'arcademy-sfx' (WebAudio, procedural)
+                   + SAMPLES door (assets/sfx, host-listed), ALIASES (verdict names
+                   and sample floors), HOLD/STOP for room-tone beds (trap 109),
+                   unknown-name blip logged once (trap 110)
 games/registry.js  guarded allSettled registry + tier math + class_suspended stub
                    + GAME_SEMESTER / OPEN_SEMESTERS (the release gate: a CLOSED semester's
                    games are ABSENT from the pool, never stubs; isOpenSemester())
@@ -2635,6 +2638,49 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     bubble. Zero IS a value; `null`, `''`, `NaN` and a boolean are not. A pool of
     nothing but token lines is simply silent on a payload that carried none, so
     always write plain siblings beside a token line.
+
+109. **A HOLD HAS AN OWNER, AND ONLY A FILE CAN HOLD** (W3 sfx, 2026-08-25,
+    `shell/audio.js`). The mixer's one sustain: `detail.hold:true` on a SAMPLED name
+    (or a `detail.url`) loops the element in slot `detail.key || name`, fades in over
+    `CLIP_FADE_MS`, ignores `maxMs`; `detail.stop:true` fades that slot out, and is
+    honoured even when muted so a room can always be left; `stop_clips` and the mute
+    echo cut holds too. A recipe CANNOT hold: a hold asked of a name with no file
+    behind it is `'dropped'` (a looping oscillator impression of a room is a different
+    room), so the five beds (`records_bed` `campus_idle` `vn_bed_ext` `vn_bed_int`
+    `cam_bed`) are SAMPLE_ONLY and a bed call site needs no fallback and no
+    `hasSample()`. The rule that costs time: WHOEVER STARTS A BED STOPS IT in its own
+    teardown / unmount / scene-change path (records room teardown, campus idle, VN
+    `applyPlate` int/ext swap, annex cams). The mixer will never guess that a room has
+    been left, and a bed that outlives its room plays under the next class.
+
+110. **AN UNKNOWN CUE NAME IS A BLIP, NOT AN ERROR - SO ADD THE NAME IN THE SAME PR
+    AS ITS FIRST CALL SITE** (W3). Misdirection fired `hit` `miss` `ride` `bank`
+    `reveal` for a whole semester and every one of them degraded to the 660Hz tick;
+    nobody noticed because nothing was thrown. The mixer now logs
+    `[audio] unknown cue "x" - playing blip` ONCE per name (`unknownNames`), and those
+    five are `ALIASES` onto real recipes (sting / thud / pop / commit / tell). The
+    merge gate for any sfx wave is mechanical: every name in
+    `grep -rhoE "(tick|cue|tone|audio|sfx)\('([a-z_]+)'" games engine shell emi vn annex`
+    must be a key of SOUNDS, SAMPLES or ALIASES. Aliases resolve ONE level deep and
+    may carry a `pitch` multiplier (`tape_stop` = glitch at .7 when its file is
+    absent); the sample lookup always uses the name AS FIRED.
+
+111. **COUNTDOWNS TICK ON THE SECOND BOUNDARY, NEVER ON THE TICKER** (W3). Every
+    visible timer drained in silence before this wave, and the wrong fix is one
+    `clock_tick` per rAF / per 60ms poll (a Geiger counter). The convention every
+    game now follows: fire only when `Math.ceil(remaining/1000)` CHANGES, only in the
+    last third (or last 3s, whichever the game's window makes sensible), pitch
+    `1 + .06 * n` climbing toward zero, level .10 -> .18, and KILL it in the window's
+    disarm so a resolved round never ticks once more over its stamp. Rate limits are
+    the caller's job: the mixer will happily play sixty a second.
+
+112. **ENGINE SUSTAINS CUE PER WAVE, NOT PER NODE** (W3, `engine/sustained.js`,
+    `engine/loomWash.js`). Bubble beds, bursts, gif rain and the Loom's spiral are
+    streams of DOM nodes; a cue per node is the fastest way to turn the fx bus into
+    noise and the clip table into a queue. Bursts cap at 3-4 cues per burst, `gif_rain`
+    is never per drop, `spiral_hum` strikes on mount and on each re-trigger only, wash
+    air fires per wash CHANGE (not per re-entrant `startWash`), and teardown coalesces
+    into ONE wash. `sub_flash`'s synth whisper stays suppressed on a voiced tick (108).
 
 ## 5. The game module contract (short version)
 

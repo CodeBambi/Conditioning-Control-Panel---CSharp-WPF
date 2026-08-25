@@ -237,7 +237,10 @@ export function createLadder({ engine, tier, log, reduced, targets, pollution, r
   function whisper() {
     // A decoy whisper of ANOTHER bank word, through the ducking hierarchy. The
     // text ride is sub_flash's; this is the audio half of the same lie.
-    fire('audio_trigger', { name: 'whisper', level: 0.45, bus: 'voice', duck: 'voice' });
+    /* W3 P1-9: through the GAME's clamped helper like every other cue here -
+     * a raw fire walked past the grade tier's audio ceiling. */
+    try { cueFn('whisper', 0.45, { bus: 'voice', duck: 'voice' }); }
+    catch (e) { /* a refused cue is not an error */ }
     live.add('audio_trigger');
     pollute();
   }
@@ -298,7 +301,17 @@ export function createLadder({ engine, tier, log, reduced, targets, pollution, r
       // Already at the ceiling? The pressure still lands: refresh the wash and
       // (from rung 3) fire one extra pollution flash, so row 6 is not quieter
       // than row 4 just because the ladder ran out of rungs.
-      if (now === before && now >= 3) { washPulse(); pollute(); }
+      if (now === before && now >= 3) {
+        washPulse();
+        pollute();
+        /* W3 P1-9: at the ceiling nothing climbs, so rows five and six were
+         * the two quietest of the class. One bell a step ABOVE the top rung:
+         * the pressure landed even though the ladder had nowhere to go. */
+        try {
+          cueFn(RUNG_CUE.NAME, RUNG_CUE.LEVEL_BASE + RUNG_CUE.LEVEL_STEP * now,
+            { pitch: 1 + RUNG_CUE.PITCH_STEP * (now + 1) });
+        } catch (e) { /* a cue never kills a rung */ }
+      }
       return now;
     },
 

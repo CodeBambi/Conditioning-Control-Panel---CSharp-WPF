@@ -827,6 +827,15 @@ export function createDePressure(o) {
     for (let k = from; k > r; k--) leaveRung(k, r);
     rung = r;
     retune();
+    /* W3 P1-7: the ladder only ever cued on the way UP, so the room getting
+     * lighter - the relief the whole surge is built to buy - happened in
+     * silence. ONE slide for the descend however many rungs it sheds, pitched
+     * down and at half the climb's level: a release is quieter than a threat. */
+    if (armedBase && !destroyed && !stopped && typeof eng.fire === 'function') {
+      count('audio_trigger');
+      const level = Math.min(audioCeil, (P.CUE_LEVEL_BASE + P.CUE_LEVEL_STEP * r) * 0.5);
+      try { eng.fire('audio_trigger', { name: 'slide', level, pitch: 0.8 }); } catch (e) { /* a cue never throws upward */ }
+    }
     say('pressure: rung ' + from + ' -> ' + r + ' (fade)');
   }
   function cancelHyst() { if (hystTimer) { cancel(hystTimer); hystTimer = 0; } hystTarget = -1; }

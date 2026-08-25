@@ -792,7 +792,10 @@ export function createCpCasino(o) {
       if (!started || !sounds()) return;
       counts.thrashes += 1;
       streak = 0;
-      cue('bump', C.THRASH_LEVEL, { pitch: 0.7 });     // a muted thud, never silence
+      /* W3 P1-2: a thrash is not a refused press, so it stopped borrowing the
+       * refusal's sound. A body knock a fourth under it - quiet, by the error
+       * rule, and unmistakably its own. */
+      cue('thud', C.THRASH_LEVEL, { pitch: 0.65 });
       if (armed && !reduced && frame && frame.style && !zen) leanFrame((roll('thrash') < 0.5 ? -1 : 1) * 0.4, 0, 160);
     },
 

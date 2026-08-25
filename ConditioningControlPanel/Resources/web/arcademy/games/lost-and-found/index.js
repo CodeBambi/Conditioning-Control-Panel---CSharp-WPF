@@ -862,6 +862,13 @@ export default {
       relocations += 1;
       if (telegraph) {
         tasteShown = true;
+        /* W3 P1-14: THE TASTE OF THE TWIST. The one relocate the class shows you
+         * gets a long, low glitch - two strikes so the smear lasts as long as
+         * the 1.4s crossfade does. Every OTHER relocate stays exactly as silent
+         * as the churn it hides inside, and that is the twist, not an omission:
+         * a lie that announces itself is not a lie. */
+        cue('glitch', 0.3, { pitch: 0.8 });
+        timers.after(90, () => cue('glitch', 0.22, { pitch: 0.75 }));
         announce(t('lf_relocate', 'It moved - the same glitch hides the churn'), 2400);
       }
       return moved;
@@ -964,10 +971,20 @@ export default {
       // The mosaic assembles tile by tile - diegetic loading that doubles as
       // preloader cover for whatever the provider is still fetching.
       const els = board.tiles.map((tile) => board.primaryEl(tile)).filter(Boolean);
+      /* W3 P1-14. THE ASSEMBLE. The mosaic builds itself tile by tile and did it
+       * in silence, so the opening of the class had no sound at all. A very
+       * faint tell per tile turns the load into a ladder - CAPPED AT 24 ticks,
+       * because a 200-tile board would be a hailstorm, and the level is .06:
+       * this is texture under a picture, not an event. */
+      let assembleTicks = 0;
       els.forEach((node, i) => {
         if (node && node.style) node.style.opacity = '0';
+        const cueThis = assembleTicks < 24;
+        if (cueThis) assembleTicks += 1;
+        const n = assembleTicks - 1;
         timers.after(Math.min(1400, i * ASSEMBLE_STAGGER_MS), () => {
           if (node && node.style) node.style.opacity = '';
+          if (cueThis) cue('tell', 0.06, { pitch: 1 + 0.02 * n });
         });
       });
       // The count is a NUMBER in the sentence now, so the row carries a {n} slot
@@ -1026,7 +1043,31 @@ export default {
       }
     }
 
+    /* W3 P1-14. THE BOARD WAKES UP, and until now that was a banner and a set of
+     * numbers nobody could hear change. The woken board carries a presence: a
+     * `seep_hum` re-struck on its own timer (the mixer has no sustain - trap
+     * 108), just under the threshold of "a sound". It is stopped in
+     * stopEffects(), which is every road out of this class. */
+    const WAKE_HUM_MS = 640;
+    let wakeHumTimer = 0;
+    function stopWakeHum() {
+      if (wakeHumTimer) { timers.cancel(wakeHumTimer); wakeHumTimer = 0; }
+    }
+    function startWakeHum() {
+      if (wakeHumTimer || ended) return;
+      const strike = () => {
+        wakeHumTimer = 0;
+        if (ended || phase === 'done' || !modifierOn) return;
+        /* a paused / suspended class is not breathing: the loop stays alive so
+           the room comes back with the player, but it says nothing meanwhile. */
+        if (!halted) cue('seep_hum', 0.08, { pitch: 0.95 });
+        wakeHumTimer = timers.after(WAKE_HUM_MS, strike);
+      };
+      strike();
+    }
+
     function stopEffects() {
+      stopWakeHum();                 // W3 P1-14: every hold has an owner (trap 108)
       for (const kind of ['row_drift', 'bubble_field', 'crt', 'wash', 'sub_flash', 'ambient_field']) {
         try { ctx.engine.stop(kind); } catch (e) { /* optional */ }
       }
@@ -1088,10 +1129,16 @@ export default {
     function armPity() {
       if (pityTimer) { timers.cancel(pityTimer); pityTimer = 0; }
       if (!board) return;
+      /* W3 P1-14: the pity shimmer is the room quietly helping, and it was
+       * purely visual - on a wall of moving pictures, easy to miss entirely. A
+       * high, tiny tell says "over here". CAPPED AT THREE: a fourth would stop
+       * being help and start being a metronome. */
+      let pityCues = 0;
       pityTimer = timers.after(PLAYTEST.PITY_STUCK_MS, function pulse() {
         if (halted || phase !== 'hunt') return;
         if (Date.now() - findStartedAt < PLAYTEST.PITY_MIN_ELAPSED_MS) return;
         const target = board.targetTile();
+        if (pityCues < 3) { pityCues += 1; cue('tell', 0.1, { pitch: 1.6 }); }
         board.mark(target, 'g-lf-pity', true);
         timers.after(PLAYTEST.PITY_SHIMMER_MS + 60, () => board.mark(target, 'g-lf-pity', false));
         pityTimer = timers.after(PLAYTEST.PITY_REPEAT_MS, pulse);
@@ -1105,19 +1152,39 @@ export default {
       if (board) board.setDriftMult(PLAYTEST.CLUTCH_DRIFT_EASE);
       setHeat();
       announce(t('lf_clutch', 'The board relents'), 1800);
+      /* W3 P0-17. THE CLUTCH. The churn stops, the drift eases and the board
+       * lets go, and all of it was a banner. One low whoosh with a duck under
+       * it, so the room audibly makes space. ONCE - the clutchOn latch above
+       * has already returned for every repeat call. */
+      cue('whoosh', 0.3, { pitch: 0.7, duck: 'voice', duckMs: 500 });
       /* EMI COLOR: the board's own clutch beat is the mascot's too. */
       try { if (ctx.mood) ctx.mood.clutch(); } catch (e) { /* noop */ }
       note('lf.clutch', { kind: 'tension', n: finds, left: Math.max(0, findsTarget - finds) });
       say('clutch ease engaged');
     }
 
+    /* W3 P0-2. THE COUNTDOWN. `tick` runs on TICK_MS, so the cue rides the
+     * WHOLE SECONDS figure changing and never the ticker. ZEN NEVER TICKS -
+     * a mode whose whole promise is no clock does not get a clock in the ear -
+     * and the run is short by design: the pitch ladder is 1 + .06n over five
+     * rungs, which is what makes the last one read as the last one. */
+    const CLOCK_TICK_FROM_SEC = 5;
+    let clockTickSec = -1;
     function tick() {
       if (halted || phase === 'done') return;
       if (!hud) return;
       if (zen) { hud.setClock(null); return; }
       const left = secLeft();
       hud.setClock(left);
-      if (left <= 0) { finish(false); return; }
+      if (left > 0 && left <= CLOCK_TICK_FROM_SEC) {
+        const secs = Math.ceil(left);
+        if (secs !== clockTickSec) {
+          clockTickSec = secs;
+          const n = Math.min(4, CLOCK_TICK_FROM_SEC - secs);
+          cue('clock_tick', 0.1 + 0.02 * n, { pitch: 1 + 0.06 * n });
+        }
+      } else if (left > CLOCK_TICK_FROM_SEC) clockTickSec = -1;
+      if (left <= 0) { clockTickSec = -1; finish(false); return; }
       if (finds === findsTarget - 1 && left <= PLAYTEST.CLUTCH_SEC_LEFT) clutch();
     }
 
@@ -1248,6 +1315,7 @@ export default {
       if (finds >= modifierFind && !modifierOn) {
         modifierOn = true;
         announce(t('lf_modifier', 'The board wakes up'), 2000);
+        startWakeHum();          // W3 P1-14: the escalation stops being a banner
         note('lf.boardWakesUp', { kind: 'tension', n: finds, left: emiLeft });
         say('modifier engaged after find ' + finds);
       }
@@ -1278,6 +1346,11 @@ export default {
         timers.after(holdMs, () => {
           if (phase === 'done') return;
           if (hud) hud.collapseBriefing();
+          /* W3 P2-6: the MID-CLASS re-brief card shrinks into the board a frame
+           * before the relocate it covers. A short high whoosh sells the card
+           * going in. The OPENING briefing keeps its own silence - that one is
+           * off the clock and the room has not started yet. */
+          cue('whoosh', 0.22, { pitch: 1.2 });
           relocate();
           timers.after(reduced ? 60 : 420, () => {
             if (phase === 'done') return;
@@ -1328,6 +1401,10 @@ export default {
         announce(t('lf_misclick_streak', 'Focus'), 1500);
         if (tier >= PLAYTEST.MISCLICK_WASH_FROM_TIER) {
           try { ctx.engine.sustain('wash', { variant: 'pink', holdMs: 600 }); } catch (err) { /* optional */ }
+          /* W3 P2-6: the third miss in a row escalates and the escalation was
+           * silent. The QUIETEST of this class's three washes on purpose - it
+           * is a loss cue, and the House Book halves those. */
+          cue('wash', 0.15, { pitch: 0.7 });
         }
       }
     }
@@ -1371,6 +1448,12 @@ export default {
       stopGovernor();
       stopEffects();
       if (trickster) trickster.stop();
+      /* W3 P0-16. THE COMPLETION. Finishing the hunt used to end on exactly the
+       * same descending sigh as running out of time - the marquee's dimOut -
+       * so the class scored a failure better than a success. The win gets its
+       * own bright note FIRST, and the sigh then plays under it as the lights
+       * going down rather than as the verdict. */
+      if (complete) cue('chime', 0.35, { pitch: 1.3 });
       if (casino) { casino.stop(); casino.dimOut(); }
       // hideBriefing: the bell can land mid-RE-BRIEF (per-round rotation) and
       // killAll() has just eaten the timer that would have dismissed the card
@@ -1420,9 +1503,17 @@ export default {
 
     /* ------------------------------------------------------------ the peek */
     function wirePeek() {
+      /* W3 P1-14. THE PEEK COSTS THE CLASS AN A AND SOUNDED LIKE NOTHING, in
+       * either direction. Both cues hang off the shell's own handlers rather
+       * than the button, so the KEY path is covered too: a lift on the way in
+       * (the card comes up), a low slide on the way out (it is taken away). */
       ctx.peek.setHandlers({
-        onReveal: () => { if (hud) hud.showPeek(targetLook()); },
+        onReveal: () => {
+          if (hud) hud.showPeek(targetLook());
+          cue('lift', 0.25, { pitch: 1.15 });
+        },
         onHide: () => {
+          cue('slide', 0.2, { pitch: 0.85 });
           if (!hud) return;
           hud.hidePeek();
           hud.setChips(misclicks, peeksNow());     // the count moves on EVERY peek

@@ -407,6 +407,12 @@ export function createEcCasino(o) {
   const poolTimers = new Array(6).fill(0);
   let flashTimer = 0; let dipTimer = 0; let wordTimer = 0; let pulseTimer = 0; let punchTimer = 0;
   let royalTimer = 0; let glintTimer = 0; let humTimer = 0; let humPool = -1;
+  /* W3 P1-11: THE BELL STRETCH HUM. The last stretch is the loudest thing this
+   * rig does visually and the thinnest thing it does audibly, so the gold gets a
+   * presence under it. The mixer has no sustain (trap 108), so it is RE-STRUCK
+   * on a timer of our own and stopped in dimOut() and stop() - the two ways this
+   * deck can ever end. */
+  let stretchTimer = 0;
   const sweepTimers = new Set();
   const remixTimers = new Set();
   let remixing = false;
@@ -572,6 +578,19 @@ export function createEcCasino(o) {
     if (humTimer) { cancel(humTimer); humTimer = 0; }
     if (humPool >= 0 && pools[humPool]) setCls(pools[humPool], 'hum', false);
     humPool = -1;
+  }
+  /* W3 P1-11: the stretch hum's own loop. `seep_hum` is a 700ms envelope, so a
+   * re-strike every 620ms reads as one continuous presence with no gap and no
+   * node held anywhere (trap 18). Self-limiting by construction: if the timer
+   * registry is torn down the hum simply stops. */
+  const STRETCH_HUM_MS = 620;
+  function stopStretchHum() {
+    if (stretchTimer) { cancel(stretchTimer); stretchTimer = 0; }
+  }
+  function strikeStretchHum() {
+    if (!sounds() || !bellOn) { stopStretchHum(); return; }
+    cue('seep_hum', 0.08, { pitch: 1 });
+    stretchTimer = after(STRETCH_HUM_MS, strikeStretchHum);
   }
   function hum(i) {
     clearHum();
@@ -822,9 +841,13 @@ export function createEcCasino(o) {
 
     /** The bell (the last stretch): gold and fast. */
     bell(on) {
+      const was = bellOn;
       bellOn = !!on;
       setCls(halo, 'gold', bellOn || royalOn);
       if (bellOn) setCls(halo, 'amber', false);
+      /* W3 P1-11: the gold gets a floor under it, struck once on the EDGE. */
+      if (bellOn && !was) strikeStretchHum();
+      else if (!bellOn) stopStretchHum();
       paintHeat(true);
     },
 
@@ -836,6 +859,7 @@ export function createEcCasino(o) {
       encoreOn = false;
       killRemix();
       clearHum();
+      stopStretchHum();   // W3 P1-11: the stretch is over, the floor goes with it
       for (const id of Array.from(sweepTimers)) cancel(id);
       sweepTimers.clear();
       setCls(halo, 'flash', false);
@@ -860,6 +884,8 @@ export function createEcCasino(o) {
     stop() {
       cancelAll();
       flashTimer = dipTimer = wordTimer = pulseTimer = punchTimer = royalTimer = glintTimer = humTimer = 0;
+      stretchTimer = 0;   // W3 P1-11: cancelAll() already killed it; the handle goes too
+      bellOn = false;
       sweepTimers.clear();
       killRemix();
       clearHum();

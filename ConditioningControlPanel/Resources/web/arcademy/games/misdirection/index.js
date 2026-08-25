@@ -295,6 +295,7 @@ export default {
     let stallTimer = 0;
     let subTimer = 0;
     let pickTicker = 0;
+    let stakeTicker = 0;      // W3 P0-2: the stake window's own countdown
     let keyOff = [];
 
     /* ==================================================================== *
@@ -397,6 +398,49 @@ export default {
       const ceil = PLAYTEST.AUDIO_CEIL[tier] || 0.45;
       const lv = Math.min(ceil, level == null ? 0.4 : level);
       fireSafe('audio_trigger', Object.assign({ name, level: lv }, extra || {}));
+    }
+
+    /**
+     * W3 P0-2 - THE COUNTDOWN CONVENTION, one helper for the whole class.
+     * The pick ring drains on a 60ms ticker and the stake prompt on a 250ms
+     * one; the EAR wants a second. So the cue is gated on the ceil'd seconds
+     * value changing (never on the ticker), it only speaks inside the last
+     * third of the window or its last three seconds, whichever is shorter, and
+     * the pitch climbs a step a tick so a run of them reads as a run rather
+     * than as a repeated beep. Every window that arms one disarms it when it
+     * resolves - a countdown that outlives its window is trap 110.
+     */
+    let cdSec = -1;
+    let cdN = 0;
+    function armCountdown() { cdSec = -1; cdN = 0; }
+    function countdown(msLeft, totalMs) {
+      const s = Math.ceil(Math.max(0, msLeft) / 1000);
+      if (s === cdSec) return;
+      cdSec = s;
+      if (s <= 0) return;
+      /* THE LAST THIRD OR THE LAST THREE SECONDS, WHICHEVER IS SHORTER. A
+       * 6s window ticks twice; a 2.4s ring ticks once, at the end; a class
+       * clock would tick three times and no more. Taking the LONGER of the
+       * two would have made Sort's 750ms ring tick from the frame it armed,
+       * which is a metronome, not a countdown. */
+      if (msLeft > Math.min(3000, (Number(totalMs) || 0) / 3)) return;
+      tick('clock_tick', Math.min(0.18, 0.1 + cdN * 0.02), { pitch: 1 + 0.06 * cdN });
+      cdN += 1;
+    }
+
+    /**
+     * W3 P0-18 - THE REFUSED PRESS, ported from the-deep-end/index.js. A tap
+     * on a shell while the table is busy, mid-shuffle or waiting on the stake
+     * answer was swallowed in silence, so a player who pressed early could not
+     * tell a dead press from a missed one. One muted bump, throttled, because
+     * a mashed key must not machine-gun the room.
+     */
+    let lastRefuseAt = 0;
+    function refused() {
+      const at = Date.now();
+      if (at - lastRefuseAt < 250) return;
+      lastRefuseAt = at;
+      tick('bump', 0.15);   /* owner 2026-08-24: error cues -50% */
     }
 
     /* ---- the decks, null-safe ------------------------------------------- */
@@ -933,6 +977,11 @@ export default {
       busy = false;
       pickOpenAt = Date.now();
       stallMs = 0;
+      /* W3 P0-18: the table stops moving and the round hands itself to you.
+       * The one moment in the class the player is asked to act, and it had no
+       * sound at all - the tell recipe, which is what this class says with. */
+      tick('tell', 0.35);
+      armCountdown();
       const d = plan.dials;
 
       /* The last glance, contaminated - and welded clickSafe over a table the
@@ -950,15 +999,22 @@ export default {
       if (pickTicker) clearTimer(pickTicker);
       pickTicker = every(60, () => {
         if (token !== roundToken || !stage) return;
-        const p = clamp01((Date.now() - pickOpenAt) / Math.max(1, scaled(d.pickMs)));
+        const span = Math.max(1, scaled(d.pickMs));
+        const spent = Date.now() - pickOpenAt;
+        const p = clamp01(spent / span);
         stage.style.setProperty('--md-pick', p.toFixed(3));
+        countdown(span - spent, span);   // W3 P0-2, on the second, not the frame
       });
       after(d.pickMs, step(token, () => resolvePick(token, -1, true)));
     }
 
     function tryPick(slot) {
-      if (dead || ended || busy || !roundLive || awaitingStake) return;
-      if (!plan || !(slot >= 0 && slot < plan.shells)) return;
+      if (dead || ended) return;
+      /* W3 P0-18: a press the table cannot take is ANSWERED now, not swallowed
+       * (the end card is the one silence - the class is over, nothing is
+       * refusing anything). */
+      if (busy || !roundLive || awaitingStake) { refused(); return; }
+      if (!plan || !(slot >= 0 && slot < plan.shells)) { refused(); return; }
       resolvePick(roundToken, slot, false);
     }
 
@@ -1010,7 +1066,12 @@ export default {
         consecutiveMisses = 0;
         setBeat('hit');
         msg('md_hit_line', MD_LEX.md_hit_line);
-        tick('hit', 0.5, { pitch: Math.min(1.7, 1 + Math.min(7, streak) * 0.06) });
+        /* W3 P0-1: the verdict cue used to fire HERE as well as in the casino's
+         * chime ladder (casino.js pick(), one line above through deck('casino',
+         * 'pick')), two stings on one frame at two pitches. The deck's is the
+         * one with the streak ladder on it, so the deck keeps the beat and this
+         * one is gone. `hit` itself is now a real recipe (sting) rather than a
+         * blip, which is what made the doubling audible in the first place. */
         try { ctx.ceremonies.streakMeter({ target: null, filled: Math.min(10, streak) }); } catch (e) { /* noop */ }
         const bankedBefore = pot.banked;
         pot = potAfter(pot, 'win');
@@ -1099,7 +1160,11 @@ export default {
       if (rideBtn) rideBtn.disabled = pot.rideDepth >= PLAYTEST.RIDE_CAP;
       msg('md_stake_line', MD_LEX.md_stake_line);
       deck('casino', 'stake', { ride: false, pot: pot.live });
+      /* W3 P0-18: the panel that asks for the greediest decision in the class
+       * came up silently. A lift, pitched down - it is a question, not a win. */
+      tick('lift', 0.3, { pitch: 0.8 });
 
+      const stakeMs = stakeMode === 'ask' ? PLAYTEST.STAKE_MS : PLAYTEST.AUTO_STAKE_MS;
       if (stakeMode === 'bank') {
         after(PLAYTEST.AUTO_STAKE_MS, step(token, () => resolveStake('bank', true)));
       } else if (stakeMode === 'ride') {
@@ -1109,12 +1174,23 @@ export default {
          * an inattentive player must never be walked into a stake. */
         after(PLAYTEST.STAKE_MS, step(token, () => resolveStake('bank', true)));
       }
+      /* W3 P0-2: the auto-resolve is a countdown the player cannot see, so it
+       * is the one that most needs an ear. Same convention, same helper, and
+       * it is cleared in resolveStake and in finish(). */
+      armCountdown();
+      const openedAt = Date.now();
+      if (stakeTicker) clearTimer(stakeTicker);
+      stakeTicker = every(250, () => {
+        if (token !== roundToken || !awaitingStake) return;
+        countdown(stakeMs - (Date.now() - openedAt), stakeMs);
+      });
     }
 
     function resolveStake(action, auto) {
       if (dead || ended || !awaitingStake) return;
       awaitingStake = false;
       const token = roundToken;
+      if (stakeTicker) { clearTimer(stakeTicker); stakeTicker = 0; }   // W3 P0-2 disarm
       if (stakeEl) stakeEl.hidden = true;
 
       if (action === 'ride' && pot.rideDepth < PLAYTEST.RIDE_CAP) {
@@ -1196,7 +1272,10 @@ export default {
           deck('casino', 'bell', true);
           deck('pressure', 'beat', 'bell');
           msg('md_bell_warn', MD_LEX.md_bell_warn);
-          tick('sting', 0.4);
+          /* W3 P0-3: the warning was a sting, which is this class's HIT sound.
+           * A school warns with a bell, quietly, and the same bell rings the
+           * class out below at full weight. One vocabulary, two levels. */
+          tick('bell', 0.3);
         }
         if (elapsedMs >= budgetMs) { stopClock(); run(bell); }
       });
@@ -1213,9 +1292,16 @@ export default {
       setPhase('ended');
       deck('casino', 'dimOut');
       deck('pressure', 'dimOut');
-      try { ctx.ceremonies.stamp({ text: t('md_stamp_bell', MD_LEX.md_stamp_bell), tone: 'pink', target: table }); } catch (e) { /* noop */ }
       msg('md_bell_line', MD_LEX.md_bell_line);
-      tick('stamp', 0.6);
+      /* W3 P0-3: the end of a class is a BELL, and then the paperwork. The
+       * stamp used to fire twice on this frame - once here as a bare cue and
+       * once inside ceremonies.stamp - so the two thunks smeared into one fat
+       * one. The bare cue is gone, the ceremony is the stamp, and it lands
+       * 420ms behind the bell: the silence between them is the beat. */
+      tick('bell', 0.5);
+      after(420, () => {
+        try { ctx.ceremonies.stamp({ text: t('md_stamp_bell', MD_LEX.md_stamp_bell), tone: 'pink', target: table }); } catch (e) { /* noop */ }
+      });
       after(reduced ? 700 : 1100, () => finish());
     }
 
@@ -1228,6 +1314,7 @@ export default {
       busy = true;
       stopClock();
       if (pickTicker) { clearTimer(pickTicker); pickTicker = 0; }
+      if (stakeTicker) { clearTimer(stakeTicker); stakeTicker = 0; }   // W3 P0-2 disarm
       if (stallTimer) { clearTimer(stallTimer); stallTimer = 0; }
       if (subTimer) { clearTimer(subTimer); subTimer = 0; }
       if (driftOn) { stopSafe('row_drift'); driftOn = false; }
@@ -1287,6 +1374,10 @@ export default {
       if (!endEl) return;
       endEl.textContent = '';
       endEl.hidden = false;
+      /* W3 P2-7: the end card arrived without a sound. ONE slide for the whole
+       * card (trap 69) - the rows do not stagger, so a ladder would be a lie
+       * about how the paper lands. */
+      tick('slide', 0.3);
       endEl.appendChild(el('h3', 'g-md-end-title', t('md_end_title', MD_LEX.md_end_title)));
       const row = (cls, k, v) => {
         const r = el('div', 'g-md-end-row' + (cls ? ' ' + cls : ''));
@@ -1347,6 +1438,11 @@ export default {
           onGo: () => {
             if (done || dead) return;
             done = true;
+            /* W3 P0-18: the GO of a one-page sheet is the START press of the
+             * class (trap 69's chrome vocabulary), and it is the only cue the
+             * sheet gets - a turn cue as well would be two sounds for one
+             * gesture. */
+            tick('lift', 0.5);
             try {
               const list = howtoSeenTiers();
               if (list.indexOf(tier) < 0) {

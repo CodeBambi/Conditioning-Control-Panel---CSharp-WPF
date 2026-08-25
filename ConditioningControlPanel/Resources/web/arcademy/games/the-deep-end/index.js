@@ -1416,7 +1416,11 @@ export default {
       grab.blocked = blocked;
       boardEl.classList.remove(...GRAB_CLASSES);
       if (dir) boardEl.classList.add('g-de-grab-' + dir);
-      if (blocked) boardEl.classList.add('g-de-grab-blocked');
+      /* W3 P2-8: the hand meets a solid wall MID-GESTURE and the board goes
+       * stiff under it. On the class going ON only, once per transition, and
+       * well under the release bump the wall itself plays - this is friction,
+       * not a verdict. */
+      if (blocked) { boardEl.classList.add('g-de-grab-blocked'); tick('bump', 0.08); }
       else boardEl.classList.remove('g-de-grab-blocked');
     }
     /** Drop the whole gesture: capture, classes, vars. Never fires a move. */
@@ -1794,7 +1798,9 @@ export default {
       if (hintTimer) clearTimer(hintTimer);
       hintTimer = after(PLAYTEST.HINT_MS, () => { hintTimer = 0; clearHint(); });
       msg('de_stuck_hint', DE_LEX.de_stuck_hint);
-      // the stall tick latches `stuckShown`, so this is once per stall, not per tick
+      /* W3 P1-16: the room offering a hand. stuckShown latches it to one pulse
+       * per stall, so this is the whole of the cue's rate limit. */
+      tick('lift', 0.2);
       note('de.stuck', { kind: 'ambient', n: stuckHints, left: dirs.length });
     }
     function clearHint() {
@@ -1845,6 +1851,10 @@ export default {
       if (rec.spawnTile && board && !ended) {
         const tile = board.tiles.find((x) => x.id === rec.spawnTile.id);
         if (tile) tileEl(tile, true);
+        /* W3 P1-16: the one thing on this board the player did not do. It is
+         * signed, barely - a tenth of a blip under the slide that carried it,
+         * so the board changing under the hand is felt rather than heard. */
+        if (tile) tick('blip', 0.1);
       }
       if (rec.siltMsg) msg('de_silt_line', DE_LEX.de_silt_line);
       paintHud();
@@ -2103,7 +2113,12 @@ export default {
       deck('casino', 'exhale', true);
       deck('pressure', 'exhale', true);
       msg('de_exhale_line', DE_LEX.de_exhale_line);
-      tick('whisper', 0.3);
+      /* W3 P1-16: the mercy window is TEN SECONDS of the room letting up, and
+       * a 240ms whisper marked the start of it while the end went by unmarked.
+       * The room breathes instead: a wash up on the way in, the same wash down
+       * on the way out, so the relief has a shape and a player can hear it
+       * running out. */
+      tick('wash', 0.25, { pitch: 1.2 });
       // `exhaleUsed` latches above: once per dive, never per move
       note('de.exhale', { kind: 'commiserate', n: occupancy(board), tile: tierName(diveDeepest) });
       heat();
@@ -2112,6 +2127,7 @@ export default {
         deck('casino', 'exhale', false);
         deck('pressure', 'exhale', false);
         if (!ended) setPhase(basePhase());
+        if (!ended) tick('wash', 0.25, { pitch: 0.8 });
         heat();
       });
     }
@@ -2134,7 +2150,12 @@ export default {
       try { ctx.ceremonies.stamp({ text: t('de_stamp_resurface', DE_LEX.de_stamp_resurface), tone: 'pink', target: bench }); } catch (e) { /* noop */ }
       msg('de_resurface_line', DE_LEX.de_resurface_line);
       tick('stamp_bad', 0.15);                      // the loss: a muted thud, never silence
-      tick('wash', 0.4);
+      /* W3 P0-21: the drain. A whole board of tiles goes and the water leaves
+       * a tiled pool over DRAIN_MS, and all of it used to happen under a plain
+       * wash - the deadest moment in the collection. `water_drain` is the
+       * sample, `drain_bed` its recipe floor, ONE per resurface, ducking the
+       * voice so a line landing on top of it does not fight the water. */
+      tick('water_drain', 0.35, { duck: 'voice' });
       stopDrift();
       for (const node of liveTiles()) node.classList.add('is-gone');
       sustainSafe('bubble_field', { clickSafe: true, variant: 'rise', max: 10 });
@@ -2253,9 +2274,16 @@ export default {
       bestDeepest = Math.max(bestDeepest, diveDeepest);
       deck('casino', 'dimOut');
       deck('pressure', 'dimOut');
-      try { ctx.ceremonies.stamp({ text: t('de_stamp_bell', DE_LEX.de_stamp_bell), tone: 'pink', target: bench }); } catch (e) { /* noop */ }
       msg('de_bell_line', DE_LEX.de_bell_line);
-      tick('stamp', 0.6);
+      /* W3 P0-3: the bell, and then the paperwork. The stamp used to fire
+       * twice on this one frame - once here as a bare cue, once inside
+       * ceremonies.stamp - so two thunks smeared into one fat one. The bare
+       * cue is gone, the ceremony IS the stamp, and it lands 420ms behind the
+       * bell: the gap between them is the beat. */
+      tick('bell', 0.5);
+      after(420, () => {
+        try { ctx.ceremonies.stamp({ text: t('de_stamp_bell', DE_LEX.de_stamp_bell), tone: 'pink', target: bench }); } catch (e) { /* noop */ }
+      });
       /* The end-of-class bell. A free swim reaches this same dim-out path from
        * the Surface button, which has already spoken for itself, so the bell
        * seam is a TIMED class only. Locked at the bell is a softer beat. */
@@ -2463,7 +2491,10 @@ export default {
           deck('casino', 'bell', true);
           deck('pressure', 'bell', true);
           msg('de_bell_warn', DE_LEX.de_bell_warn);
-          tick('sting', 0.4);
+          /* W3 P0-3: a school warns with a bell, quietly; the same bell rings
+           * the class out below at full weight. The sting this used to play is
+           * a verdict sound and belongs to the board, not to the clock. */
+          tick('bell', 0.3);
         }
         if (elapsedMs >= budgetMs) { stopClock(); run(bell); }
       });

@@ -636,11 +636,20 @@ export function createCpTrickster(o) {
         });
       } catch (e) { /* a refused fire is not an error */ }
     }
-    if (solved) { fired.solved += 1; solvedPlayed = true; } else fired.preview += 1;
+    if (solved) {
+      fired.solved += 1;
+      solvedPlayed = true;
+      /* W3 P1-3: the fake solved board is the biggest lie the class tells, so
+       * it gets the resolve it is imitating - a hair flat, over a wash, sweet
+       * to the ear and wrong to the gut. Once per class (solvedPlayed). */
+      cue('false_solve', 0.5, { pitch: 0.983 });
+    } else fired.preview += 1;
     if (previewTimer) cancel(previewTimer);
     previewTimer = after(ms, () => {
       previewTimer = 0;
       if (pv.classList) pv.classList.remove('is-on');
+      /* W3 P1-3: the lie dissolving - the picture was only ever paper. */
+      if (solved) cue('paper', 0.18);
       if (previewClear) cancel(previewClear);
       previewClear = after(T.PREVIEW_FADE_MS, () => { previewClear = 0; clearGhosts(); });
     });
@@ -725,6 +734,10 @@ export function createCpTrickster(o) {
     } catch (e) { clockObs = null; }
     if (!hooked) clockPoll = every(T.CLOCK_POLL_MS, bendFace);
     bendFace();
+    /* W3 P1-6: the room starts lying about time, and it says so ONCE - a tick
+     * a hair flat of the honest countdown's. armClock returns early once
+     * armed, so it cannot repeat inside a class. */
+    cue('clock_tick', 0.2, { pitch: 0.94 });
     say('trickster: the clock goes crooked (' + (hooked ? 'observer' : 'poll') + ')');
   }
   function disarmClock(restore) {
@@ -790,6 +803,9 @@ export function createCpTrickster(o) {
     ghost = node;
     lastWorst = worst;
     fired.ghost += 1;
+    /* W3 P1-4: the hand that points at the WORST slide. Under the breath and
+     * off-tone, because advice this bad should never sound like a chime. */
+    cue('whisper', 0.16, { pitch: 0.8 });
     say('trickster: ghost cursor (tile ' + worst.id + ', score ' + worst.score + ')');
   }
   function unghost() {

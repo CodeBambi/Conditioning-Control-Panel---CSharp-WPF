@@ -77,10 +77,18 @@ export const SUB_HOLD_MAX_MS = 1400;
  *  SUB_HOLD_MAX_MS: no clip may start while the last word could still be up. */
 const VOICE_MIN_GAP_MS = SUB_HOLD_MAX_MS;
 
+/** W3 P1-17: the floor between two SYNTHESISED sub_flash whispers. The stream
+ *  ticks at 360ms at the top of its range and a whisper on every tick is a
+ *  hiss, not a subliminal; two seconds is slow enough that the ear hears each
+ *  one arrive. The VOICED path has its own, longer latch (VOICE_MIN_GAP_MS). */
+const SUB_CUE_GAP_MS = 2000;
+
 export function createOneshots(ctx) {
   const live = { flash: 0, gifBurst: 0, sub: 0 };
   /** When the last voiced word's clip was sent. Per engine, not per class. */
   let lastVoiceAt = 0;
+  /** ...and when the last synthesised whisper went out (W3 P1-17). */
+  let lastSubCueAt = 0;
 
   /* The lite twins ride the exact seam flashBurstLite always has: ctx.lite()
    * (coarse pointer OR motionLevel <= 1), evaluated at spend time. A desktop
@@ -209,8 +217,24 @@ export function createOneshots(ctx) {
     }
     /* The SYNTHESISED whisper is the fallback, never a layer on top: a caller
      * that passes both `sfx` and `voice` (deja-vu's preview flash does) would
-     * otherwise play an oscillator impression of a whisper over the real one. */
-    if (opts.sfx && !voiced) ctx.sfx(typeof opts.sfx === 'string' ? opts.sfx : 'whisper', 0.25 + 0.35 * strength, { duck: 'voice' });
+     * otherwise play an oscillator impression of a whisper over the real one.
+     *
+     * W3 P1-17: `opts.sfx` was never set by anything in the school, so the word
+     * that lands in the middle of the screen landed in silence. The CENTRE
+     * variant now whispers by default, quietly and throttled; scatter stays
+     * mute (it is peripheral dressing, and a cue would drag the eye to it).
+     * `sfx:false` is still the way out and a string still names the cue, and a
+     * caller that asked keeps the louder level it always had. */
+    const autoSfx = opts.sfx == null && variant.name === 'centre';
+    const wantSfx = opts.sfx == null ? autoSfx : opts.sfx;
+    if (wantSfx && !voiced) {
+      const nowMs = Date.now();
+      if (!autoSfx || (nowMs - lastSubCueAt) >= SUB_CUE_GAP_MS) {
+        if (autoSfx) lastSubCueAt = nowMs;
+        ctx.sfx(typeof wantSfx === 'string' ? wantSfx : 'whisper',
+          autoSfx ? 0.18 : 0.25 + 0.35 * strength, { duck: 'voice' });
+      }
+    }
 
     const handle = { kind: 'sub_flash', variant: variant.name, text: word || null, durMs };
     if (held) handle.holdMs = durMs;
@@ -294,7 +318,14 @@ export function createOneshots(ctx) {
           killNode(node);
           // the hydra: popping one spawns two more, up to hydraGen generations
           const gens = Number.isFinite(opts.hydraGen) ? opts.hydraGen : (ctx.lite() ? 0 : 1);
-          if (genLeft > 0 && gens > 0 && !cleared) { makeNode(genLeft - 1); makeNode(genLeft - 1); }
+          if (genLeft > 0 && gens > 0 && !cleared) {
+            makeNode(genLeft - 1); makeNode(genLeft - 1);
+            /* W3 P1-17: the hydra's children arrived in the same silence as the
+             * pop that made them, so the one moment the effect FIGHTS BACK read
+             * as an ordinary clear. One bright pop behind the plain one, on the
+             * children not on each child. */
+            ctx.timers.after(80, () => ctx.sfx('pop', 0.25, { pitch: 1.4 }));
+          }
         }, { once: true });
       }
       ctx.layers.front.appendChild(node);
@@ -305,20 +336,36 @@ export function createOneshots(ctx) {
       return node;
     }
 
+    /* W3 P1-17: ONE cue used to fire for the whole burst, before any node was
+     * on screen, so a four-node stagger sounded exactly like a single flash.
+     * The cue now rides the nodes: one each, capped at three (trap 111 - bursts
+     * are the per-instance exception, and the cap is what keeps them from being
+     * a machine gun), each quieter than the last so the burst reads as one
+     * gesture arriving rather than as three separate events. */
+    let cued = 0;
+    const CUE_FALL = [1, 0.7, 0.5];
+    const burstName = opts.sfxName || (kind === 'gif_burst' ? 'burst' : 'flash');
+    const burstLevel = 0.3 + 0.45 * strobe;
+    function burstCue() {
+      if (opts.sfx === false || cued >= CUE_FALL.length) return;
+      ctx.sfx(burstName, burstLevel * CUE_FALL[cued]);
+      cued += 1;
+    }
+
     const stagger = ctx.reduced() ? 0 : Math.round((opts.holdMs || spec.holdMs) * 0.32 / Math.max(1, count));
     for (let i = 0; i < count; i++) {
       const gens = Number.isFinite(opts.hydraGen) ? opts.hydraGen : (ctx.lite() ? 0 : 1);
-      if (i === 0 || stagger === 0) makeNode(gens, opts.x, opts.y);
-      else ctx.timers.after(stagger * i, () => makeNode(gens));
+      if (i === 0 || stagger === 0) { makeNode(gens, opts.x, opts.y); burstCue(); }
+      else ctx.timers.after(stagger * i, () => { makeNode(gens); burstCue(); });
     }
 
     if (clickable) {
-      guard = createEscapeGuard({ timers: ctx.timers, onComplete: (why) => { clearAll('escape:' + why); if (typeof opts.onForceComplete === 'function') { try { opts.onForceComplete(why); } catch { /* ignore */ } } } });
+      // W3 P0-24: sfx threaded so the guard can sound its own release.
+      guard = createEscapeGuard({ timers: ctx.timers, sfx: ctx.sfx, onComplete: (why) => { clearAll('escape:' + why); if (typeof opts.onForceComplete === 'function') { try { opts.onForceComplete(why); } catch { /* ignore */ } } } });
       guard.arm();
     }
 
     ctx.fx(kind, variant.name);
-    if (opts.sfx !== false) ctx.sfx(opts.sfxName || (kind === 'gif_burst' ? 'burst' : 'flash'), 0.3 + 0.45 * strobe);
     return {
       kind, variant: variant.name, count, clickSafe, clickable, fullBleed,
       get live() { return nodes.length; },

@@ -847,6 +847,14 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     try { if (typeof handlers.revealDone === 'function') handlers.revealDone(); }
     catch (e) { say('revealDone hook threw: ' + ((e && e.message) || e)); }
   }
+  /* W3 P0-31: THE CAMPUS WAKING UP. Four and a half seconds of establishing
+   * shot used to play in total silence, right after the intro bed had just
+   * finished proving the page can make a sound. `campus_wake` is a 4.2s swell
+   * on the MUSIC bus that rises under the cascade and is gone before the board
+   * deals, once per mount and never twice. Reduced motion has no cascade to
+   * score, so it gets no swell either (trap 66: no cues where there is no
+   * animation). */
+  if (!reducedMotion) sfx('campus_wake', 0.3, { bus: 'music' });
   if (typeof setTimeout === 'function') {
     // Reduced motion has no cascade to wait out (the sheet refuses it), so the
     // hook fires on the next turn rather than four and a half seconds late.
@@ -2059,6 +2067,11 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   function closeCard() {
     if (!cardOpen) return false;
     cardOpen = false;
+    /* W3 P1-18. popCard has thumped since the door card existed and nothing
+     * ever answered it: the card simply vanished. Same door, lighter and a
+     * touch higher, because shutting one is not the same gesture as opening
+     * it. Guarded by `cardOpen` above, so a stray close is silent. */
+    sfx('door', 0.18, { pitch: 1.1 });
     scrim.classList.remove('on');
     chalkClear();          // a card that shut mid-ghost still settles its title
     return true;
@@ -2463,6 +2476,11 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
         return;
       }
       try { ref.neonText.textContent = flapText(truth, k); } catch (e) { /* noop */ }
+      /* W3 P1-18: the sign flutters, so the sign ticks. The vane cue lives HERE
+       * and not in splitflap's cueCascade (trap 87): that board's stagger is
+       * hard-coupled to the stylesheet and this one runs on its own dial.
+       * Quiet - it is a sign across a dark campus, not the departure board. */
+      sfx('flap', 0.12);
     });
     if (!id) done();
   }
@@ -2513,6 +2531,14 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     const order = attractOrder();
     if (!order.length) { armIdle(); return; }
     attractOn = true;
+    /* W3 P1-22: THE ROOM TONE UNDER THE ATTRACT. The player has gone quiet, the
+     * cursor is about to tour an empty campus, and the empty campus has never
+     * had any air in it. `campus_idle` is a HOLD - the mixer's only sustain - so
+     * it is a bed, not a cue, and it must be let go of by the same code that
+     * started it: cancelAttract stops it, and destroy() reaches cancelAttract.
+     * The bed is SAMPLE-ONLY: with no file shipped this is honest silence, no
+     * fallback and nothing to check. Music bus, under everything. */
+    sfx('campus_idle', 0.25, { bus: 'music', hold: true });
     arng = makeRng('arcademy|campus|attract|' + attractSeed);   // same show, every loop
     if (reducedMotion) { order.forEach((k) => glow(k, true)); return; }
     ensureCursor();
@@ -2530,6 +2556,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   function cancelAttract(rearm) {
     if (attractOn) {
       attractOn = false;
+      sfx('campus_idle', 0.25, { bus: 'music', stop: true });   // W3 P1-22: the bed's owner
       attractClearAll();
       unglowAll();
       resettleSigns();
@@ -2609,15 +2636,24 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     bellHeld = start;
     paintBell(start);
     try { bellText.classList.add('arc-seep-held'); } catch (e) { /* noop */ }
+    /* W3 P2-10 (THE SEEP, tell 07). The catch-up is the tell: three quick
+     * repaints where a clock should have ticked once. One tick per PAINT, and
+     * the cue lives here rather than in seep.js because here is where the
+     * paints are - a caller counting them out on its own timer would drift the
+     * moment these two numbers move. Under the doctrine's floor: a clock you
+     * half-heard resync, not a clock announcing itself. The hold itself is
+     * silent, which is what makes the three ticks read as catching up. */
     bellCatch.push(setTimeout(() => {
       try { bellText.classList.remove('arc-seep-held'); } catch (e) { /* noop */ }
       try { bellText.classList.add('arc-seep-catch'); } catch (e) { /* noop */ }
       paintBell(start - 1);
-      bellCatch.push(setTimeout(() => paintBell(start - 2), 110));
+      sfx('clock_tick', 0.09);
+      bellCatch.push(setTimeout(() => { paintBell(start - 2); sfx('clock_tick', 0.09); }, 110));
       bellCatch.push(setTimeout(() => {
         bellHeld = null;
         try { bellText.classList.remove('arc-seep-catch'); } catch (e) { /* noop */ }
         paintBell(null);
+        sfx('clock_tick', 0.09);
       }, 220));
     }, hold));
     return true;

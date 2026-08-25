@@ -411,6 +411,20 @@ export function create(o) {
   const offs = [];
 
   const halted = () => destroyed || stopped || paused || !armedBase;
+  /**
+   * W3 - the deck's one cue, through the game's own clamped helper (never the
+   * engine directly, never a node of its own).
+   *
+   * THREE OF THE SEVEN CARDS STAY SILENT AND THAT IS THE POINT: the crooked
+   * ring and the lying label are lies ABOUT THE ROOM'S OWN INSTRUMENTS, and a
+   * lie that announces itself is not a lie. The three that do sound are the
+   * ones the eye already catches - a video stopping, a card mirroring, a chip
+   * stuttering - so the cue is the physical event, not a tell.
+   */
+  function cue(name, level, extra) {
+    if (halted() || !engine || typeof engine.audio !== 'function') return;
+    try { engine.audio(name, level, extra); } catch (e) { /* a cue never throws upward */ }
+  }
   function after(ms, fn) {
     if (!armedBase || destroyed) return 0;
     try { return timers.after(ms, () => { if (!destroyed) fn(); }); }
@@ -485,6 +499,10 @@ export function create(o) {
     const frost = el('div', 'g-sort-tk-frost');
     setAttr(node, 'data-tk-freeze', '1');
     if (frost) { try { node.appendChild(frost); } catch (e) { /* noop */ } }
+    /* W3 P1-15: the honest half of this card is a real video really stopping,
+     * so it gets the sound of a tape motor giving up (`tape_stop`, whose recipe
+     * floor is a slowed glitch). It is the EVENT, not a tell about the lie. */
+    cue('tape_stop', 0.2);
     /* a REAL video is really paused; that is the honest half of this card */
     let wasVideo = false;
     try {
@@ -528,6 +546,7 @@ export function create(o) {
   function playDoppel(node) {
     if (!node) return false;
     setAttr(node, 'data-tk-mirror', '1');
+    cue('glitch', 0.15);   // W3 P2-12: the card turns over on itself
     return true;
   }
 
@@ -591,6 +610,7 @@ export function create(o) {
     flickPrev = truth;
     flickLie = lie;
     try { box.textContent = lie; } catch (e) { return false; }
+    cue('glitch', 0.15);   // W3 P2-12: the chip stutters
     addCls(chip.el, 'is-flick');
     cancel(flickTimer);
     flickTimer = after(TRICKSTER.FLICK_MS, () => {

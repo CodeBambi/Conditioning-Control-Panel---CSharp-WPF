@@ -581,6 +581,28 @@ export default {
       return fireSafe('audio_trigger', o);
     }
 
+    /* W3 P2-5: THE GOLDLEAF'S OWN NOTE. A run of two lights the wall with gold
+     * grain and said nothing, so the run was visible and inaudible. The mixer
+     * has no sustain (trap 108), so this is a RE-STRUCK `pad` - one soft high
+     * note every GOLD_HUM_MS while the run is alive, self-limiting because it
+     * re-arms only from inside itself. It is stopped at the streak break, at
+     * the bell and in destroy: a hum with no owner outlives its class. */
+    const GOLD_HUM_MS = 2200;
+    let goldHumTimer = 0;
+    function stopGoldHum() {
+      if (goldHumTimer) { clearTimer(goldHumTimer); goldHumTimer = 0; }
+    }
+    function startGoldHum() {
+      if (goldHumTimer || dead || ended) return;
+      const strike = () => {
+        goldHumTimer = 0;
+        if (dead || ended || streak < 2) return;
+        tick('pad', 0.1, { pitch: 1.4 });
+        goldHumTimer = after(GOLD_HUM_MS, strike);
+      };
+      strike();
+    }
+
     /** Every deck call: null-safe, try/catch'd, never able to break the class. */
     function deck(which, method, ...args) {
       const d = which === 'casino' ? casino : which === 'pressure' ? pressure : trickster;
@@ -950,6 +972,14 @@ export default {
             holdMs: PLAYTEST.SUB_HOLD_MS[tier],
           });
           if (r) note('subliminal', r.text ? { word: String(r.text) } : { assetId: 'card' }, r.variant || variant);
+          /* W3 P1-13, THE PILOT. Eight of the ten pool channels are silent and
+           * this is the ONE that gets a mark, because a held word is what the
+           * questions ask about most and the easiest thing to miss with the eye
+           * on the wall. Deliberately faint (.12) and READ-ONLY: it writes NO
+           * ledger entry (the sub_flash above already wrote the truth), it is
+           * not an emission, and nothing may ever resolve against it. If it
+           * reads as a tell in play-test, this one call is the whole feature. */
+          if (r) tick('whisper', 0.12, { pitch: 1.1 });
           break;
         }
         case 'whisper': {
@@ -1574,6 +1604,10 @@ export default {
       question.weight = (6000 / question.windowMs) * optionWeight(question.options.length);
       live.question = question;
       live.askedCount += 1;
+      /* W3 P1-13: the FIRST card of a stop arrives on the freeze's own beat and
+       * needs no cue of its own; every card after it used to appear in silence.
+       * One sheet of paper says "another one". */
+      if (qi > 0) tick('paper', 0.22, { pitch: 1 });
       renderQuestion(question);
       startWindow(question);
       if (qi === 0) armPlant(stop, question);
@@ -1671,20 +1705,35 @@ export default {
         timerEl.style.setProperty('--ir-left', '1');
         timerEl.textContent = Math.ceil(question.windowMs / 1000) + '';
       }
+      /* W3 P0-2: the countdown's own state. The window ticker runs at 100ms; the
+       * cue rides the whole-seconds figure the chip already prints. */
+      live.tickSec = -1;
+      live.ticks = 0;
       const step = 100;
       live.windowTimer = every(step, () => {
         if (!live || !live.question) return;
         live.elapsedInWindow += step;
         live.windowLeft = Math.max(0, question.windowMs - live.elapsedInWindow);
+        const secs = Math.ceil(live.windowLeft / 1000);
         if (timerEl) {
           timerEl.style.setProperty('--ir-left', (live.windowLeft / question.windowMs).toFixed(3));
-          timerEl.textContent = Math.ceil(live.windowLeft / 1000) + '';
+          timerEl.textContent = secs + '';
+        }
+        /* W3 P0-2: the last 3 seconds enter the ear, one tick per boundary,
+         * pitch and level climbing. stopWindow() kills it - which is every road
+         * out of a question, a commit and a timeout alike. */
+        if (live.windowLeft > 0 && secs <= 3 && secs !== live.tickSec) {
+          live.tickSec = secs;
+          const n = Math.min(4, live.ticks);
+          tick('clock_tick', 0.1 + 0.02 * n, { pitch: 1 + 0.06 * n });
+          live.ticks += 1;
         }
         if (live.windowLeft <= 0) commit(-1, 'timeout');
       });
     }
     function stopWindow() {
       if (live && live.windowTimer) { clearTimer(live.windowTimer); live.windowTimer = 0; }
+      if (live) { live.tickSec = -1; live.ticks = 0; }   // W3 P0-2: the countdown is disarmed with the window
     }
 
     /* ---- the decoy plant (tier 3+, SetPiece-gated) ---------------------- */
@@ -1820,6 +1869,11 @@ export default {
         highlightSafe(q.meta.truthTiles, true);
       }
       renderVerdict(q, index, { correct, timedOut, voided, decoyHit });
+      /* W3 P1-13: taking the PLANT is not the same mistake as a plain miss, and
+       * it used to make the same sound. The false memory answers in its own
+       * voice, 200ms behind the verdict stamp so the two do not smear. Quiet:
+       * it is still a loss. */
+      if (decoyHit) after(200, () => { tick('whisper', 0.22, { pitch: 0.6 }); });
 
       const hold = reduced ? PLAYTEST.VERDICT_MS_REDUCED : PLAYTEST.VERDICT_MS;
       live.plantMatch = -1;
@@ -1945,7 +1999,10 @@ export default {
         if (fullyCorrect) {
           correctedWeight += correctionPending;
           msg('ir_corrected', IR_LEX.ir_corrected);
-          /* the comeback: once a class, at most. */
+          /* W3 P1-13: THE COMEBACK. Once a class, and it was a banner and
+           * nothing else. It lands 250ms behind the stop's own win so it reads
+           * as a second, separate piece of good news. */
+          after(250, () => { tick('lift', 0.28, { pitch: 1.2 }); });
           emiNote('ir.comebackCorrected', { kind: 'celebrate', n: Number(stop.n) | 0, streak });
         }
         correctionPending = 0;
@@ -1960,11 +2017,18 @@ export default {
         if (fullyCorrect) {
           streak += 1;
           bestRun = Math.max(bestRun, streak);
+          /* W3 P0-5: THE GUARANTEED WIN. Clearing a whole stop only ever
+           * sounded when the variable-ratio roll happened to pay, so the ear
+           * heard the misses (a `sting` at .6) far more reliably than the wins.
+           * The floor is fired HERE, before rewardBeat(), so a roll that pays
+           * stacks ON TOP of it instead of replacing it. Pitch is the run. */
+          tick('streak', 0.3, { pitch: 1 + 0.06 * Math.min(PLAYTEST.PITCH_CAP, streak) });
           /* a clean stop, and how long the run is now. */
           emiNote('ir.cleanStopStreak', { kind: 'celebrate', n: bestRun, streak, left: Math.max(0, plan.stopCount - stopsResolved - 1) });
           rewardBeat();
         } else {
           streak = 0;
+          stopGoldHum();          // W3 P2-5: the run is over, its dressing goes
         }
       }
       deck('pressure', 'setStreak', streak);
@@ -2019,6 +2083,12 @@ export default {
       try { if (stage) stage.removeAttribute('data-shroud'); } catch (e) { /* noop */ }
       highlightSafe(null, false);
       try { if (well && well.style) well.style.setProperty('opacity', '1'); } catch (e) { /* noop */ }
+      /* W3 P1-13: the freeze had an entrance and no exit. `shutter_close` is
+       * the shutter opening in reverse, so the wall going live again is the
+       * counterpart of the wall stopping. Pitch stays 1 HERE: with no mp3 the
+       * name falls to `shutter` and the alias already carries the .8, and a
+       * second .8 on top would drop it to .64. */
+      tick('shutter_close', 0.3, { pitch: 1 });
       if (montage) montage.freeze(false);
       reshuffleWall();
       recomputeBand();
@@ -2029,7 +2099,8 @@ export default {
        * golden grain. It is DRESSING, not an effect: `ambient_field` is not a
        * pool key, it writes NO ledger entry and it can never be an option -
        * the owner's ruling is that a quiz only ever names what CCP names. */
-      if (streak >= 2) sustainSafe('ambient_field', { kind: 'goldleaf', density: 0.3 + 0.3 * band });
+      if (streak >= 2) { sustainSafe('ambient_field', { kind: 'goldleaf', density: 0.3 + 0.3 * band }); startGoldHum(); }
+      else stopGoldHum();
       halted = false;
       seedDealer();
       armDealer();
@@ -2160,6 +2231,10 @@ export default {
         emiNote('ir.escapeGuardVoid', { kind: 'commiserate', n: guardHits | 0, streak });
         guardHits = 0;
         say('escape guard: stop ' + live.stop.n + ' voided');
+        /* W3 P2-5: a VOID is not a wrong answer, it is the class letting you
+         * out, and it sounded identical to a miss. A low slide says the card
+         * was taken away rather than failed. */
+        tick('slide', 0.18, { pitch: 0.7 });
         commit(-1, 'void');
       }
     }
@@ -2230,6 +2305,9 @@ export default {
         if (!bellOn && left <= PLAYTEST.BELL_WARN_SEC) {
           bellOn = true;
           deck('casino', 'bell', true);
+          /* W3 P0-3: the bell vocabulary. This class's last-stretch warning had
+           * no sound at all. One school, one bell: warn .3, the end .5. */
+          tick('bell', 0.3, { pitch: 1 });
           if (!live) msg('ir_bell_warn', IR_LEX.ir_bell_warn);
         }
         const stop = nextStop();
@@ -2262,7 +2340,11 @@ export default {
       stopClock();
       clearChannels();
       stopWindow();
+      stopGoldHum();                    // W3 P2-5: the run's dressing never outlives the class
       stopAmbience();
+      /* W3 P0-3: the class ends on the bell, and the debrief's own `slide`
+       * follows it 420ms later (renderEnd) instead of sharing the frame. */
+      tick('bell', 0.5, { pitch: 1 });
       /* the bell's freeze is HOUSEKEEPING, not a stop: no shutter (the debrief
        * slide is the beat here, and two cues on one frame is a smear). */
       if (montage) { montage.stopGovernor(); montage.stop(); montage.freeze(true, { silent: true }); }
@@ -2334,7 +2416,8 @@ export default {
        * card fades in as one object (.g-ir-end / g-ir-endin), so there is no
        * visual stagger for a blip ladder to ride: the House Book's answer to an
        * unstaggered debrief is ONE `slide`, on the same beat as the fade. */
-      tick('slide', 0.35, { pitch: 1 });
+      /* W3 P0-3: +420ms, so the bell finish() struck has the frame to itself. */
+      after(420, () => { tick('slide', 0.35, { pitch: 1 }); });
       endEl.appendChild(el('h3', 'g-ir-end-title', t('ir_end_title', IR_LEX.ir_end_title)));
       const row = (k, v, cls) => {
         const r = el('div', 'g-ir-end-row' + (cls ? ' ' + cls : ''));
@@ -2635,6 +2718,7 @@ export default {
         dead = true;
         stopClock();
         clearChannels();
+        stopGoldHum();                  // W3 P2-5: every hold has an owner (trap 108)
         clearTimers();
         stopAmbience();
         unbindInput();

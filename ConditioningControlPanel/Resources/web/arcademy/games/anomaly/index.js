@@ -95,6 +95,8 @@ const isVideoUrl = (url) => VIDEO_URL_RE.test(String(url || ''));
 const MEDIA_TRIES = 5;
 /** A round shorter than this cannot be offered before the bell. */
 const MIN_ROUND_MS = 2600;
+/** W3 P0-2: the widest a round countdown may be heard, in ms. */
+const COUNTDOWN_MS = 3000;
 /** The shared ticker. */
 const TICK_MS = 110;
 
@@ -694,6 +696,8 @@ export default {
         remainingMs: r.durationMs,
         done: false,
         ghost: -1,
+        /* W3 P0-2: the last whole second this round's countdown ticked on. */
+        lastTickSec: 0,
       };
 
       /* every tile back to a clean, identical slate, then the one delta */
@@ -713,7 +717,9 @@ export default {
       /* THE ROUND FLIP IS AUDIBLE (W2). setPhase writes a CSS attribute and
        * nothing else, so a fresh sheet used to be dealt in silence - an eye
        * that looked away missed the deal entirely. One soft carriage tell. */
-      cue('tell', 0.3);
+      /* W3 P1-5: a breather round IS the comeback, so its deal is pitched a
+       * gear down - the same carriage tell, audibly a softer one. */
+      cue('tell', 0.3, r.breather ? { pitch: 0.84 } : null);
       paintHud();
       busy = false;
       stallMs = 0;
@@ -865,7 +871,9 @@ export default {
             ctx.ceremonies.reward('near_miss', { text: t('an_moved', AN_LEX.an_moved), target: tile || gridEl });
           }
         } catch (e) { /* noop */ }
-        cue('near', 0.15);
+        /* W3 P1-5: the ghost refund HANDS TIME BACK, so it is a reward and
+         * belongs above the error floor, not down with the wrong taps. */
+        cue('near', 0.34);
         msg('an_moved', AN_LEX.an_moved);
         /* the ghost branch owns this tap - an.whiff is the timeout and
          * an.refusedTap is a dead press, so the three can never double-fire */
@@ -911,6 +919,9 @@ export default {
       if (cur.wrong > 0) msg('an_reveal', AN_LEX.an_reveal);
       else msg('an_timeout', AN_LEX.an_timeout);
       cue('thud', 0.12, { pitch: 0.7 });
+      /* W3 P1-5: the answer being pointed at is its own beat, so a whiff no
+       * longer sounds exactly like an ordinary wrong tap. */
+      after(260, () => cue('near', 0.12, { pitch: 0.8 }));
       paintHud();
       /* THE BREATH AFTER A WHIFF. `busy` is set and `cur.done` with it, so every
        * tap lands in the refusal branch; the reveal is up and the next round is
@@ -938,8 +949,14 @@ export default {
       litOn = want;
       if (want) gridEl.classList.add('is-lit');
       else gridEl.classList.remove('is-lit');
-      if (want) msg('an_streak_lit', AN_LEX.an_streak_lit);
-      if (want) note('an.streakLit', { kind: 'celebrate', streak, n: roundsCleared });
+      if (want) {
+        msg('an_streak_lit', AN_LEX.an_streak_lit);
+        /* W3 P1-5: the grid igniting is the loudest thing a streak does here.
+         * The false -> true edge only - `litOn` above is the latch. */
+        cue('chime', 0.5, { pitch: pitchFor(streak) });
+        cue('pad', 0.22);
+        note('an.streakLit', { kind: 'celebrate', streak, n: roundsCleared });
+      }
     }
 
     /** The variable-ratio canon, engine first, seeded local fallback second. */
@@ -1022,6 +1039,7 @@ export default {
           for (const rec of cur.relocations) {
             if (!rec.applied && cur.spentMs >= rec.at) { armRelocation(rec); break; }
           }
+          countdown();
         }
         /* THE STALL is the player's own: ms since the last TAP, reported to the
          * trickster on a ~500ms cadence (0 resets it). It runs during a live
@@ -1038,12 +1056,34 @@ export default {
         paintHud();
         if (!bellOn && elapsedMs >= budgetMs) { bell(); return; }
         if (!bellOn && budgetMs - elapsedMs <= PLAYTEST.BELL_WARN_SEC * 1000) {
-          if (stage && stage.getAttribute('data-warn') !== '1') stage.setAttribute('data-warn', '1');
+          if (stage && stage.getAttribute('data-warn') !== '1') {
+            stage.setAttribute('data-warn', '1');
+            /* W3 P0-3: the warn is the end bell struck softer. The attribute
+             * edge is the latch, so it can only land once. */
+            cue('bell', 0.3);
+          }
         }
         if (cur && !cur.done && cur.remainingMs <= 0) whiff();
       });
     }
     function stopClock() { if (tickId) { clearTimer(tickId); tickId = 0; } }
+
+    /* THE COUNTDOWN (W3 P0-2). The round deadline enters the ear for its last
+     * third, capped at three seconds: one tick per whole-second boundary with
+     * the pitch climbing, never one per ticker frame. A breather round is the
+     * comeback and is left in peace. It dies with the round for free, because
+     * the clock only calls it while `cur` is live and undone. */
+    function countdown() {
+      const r = cur.round;
+      if (bellOn || busy || !r || r.breather) return;
+      const gate = Math.min(COUNTDOWN_MS, Math.round(r.durationMs / 3));
+      if (cur.remainingMs > gate || cur.remainingMs <= 0) return;
+      const sec = Math.ceil(cur.remainingMs / 1000);
+      if (sec === cur.lastTickSec) return;
+      cur.lastTickSec = sec;
+      const step = Math.max(0, Math.ceil(gate / 1000) - sec);
+      cue('clock_tick', Math.min(0.18, 0.1 + 0.04 * step), { pitch: 1 + 0.06 * step });
+    }
 
     function bell() {
       if (ended || bellOn) return;
@@ -1068,7 +1108,10 @@ export default {
         }
       } catch (e) { /* noop */ }
       msg('an_bell', AN_LEX.an_bell);
-      cue('stamp', 0.55);
+      /* W3 P0-3: the bell IS the end of the class, and the stamp lands after
+       * it - the school speaks first and the paperwork follows. */
+      cue('bell', 0.5);
+      after(420, () => cue('stamp', 0.55));
       after(reduced ? PLAYTEST.CEREMONY_MS_REDUCED : PLAYTEST.CEREMONY_MS, finish);
     }
 
@@ -1270,6 +1313,9 @@ export default {
       }
       if (!node) node = fallbackHowto(onGo);
       if (!node) { onDone(); return; }
+      /* W3 P1-5: the sheet ARRIVES - a page landing on the desk, not silence
+       * until GO is pressed. */
+      cue('paper', 0.3);
       howtoEl = node;
     }
 

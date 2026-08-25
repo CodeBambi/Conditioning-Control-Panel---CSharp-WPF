@@ -14,13 +14,13 @@ export const ESCAPE_EFFORT = 6;      // interactions
 export const ESCAPE_MS = 5000;       // ms of sustained effort
 
 /**
- * createEscapeGuard({ onComplete, effort, ms, timers })
+ * createEscapeGuard({ onComplete, effort, ms, timers, sfx })
  *   guard.note()      count one interaction (click/tap/keypress against it)
  *   guard.arm()       start the clock (call when the blocking effect appears)
  *   guard.cancel()    the effect completed normally
  *   guard.tripped     whether forceComplete already fired
  */
-export function createEscapeGuard({ onComplete, effort = ESCAPE_EFFORT, ms = ESCAPE_MS, timers } = {}) {
+export function createEscapeGuard({ onComplete, effort = ESCAPE_EFFORT, ms = ESCAPE_MS, timers, sfx } = {}) {
   let count = 0;
   let timer = 0;
   let tripped = false;
@@ -31,6 +31,10 @@ export function createEscapeGuard({ onComplete, effort = ESCAPE_EFFORT, ms = ESC
     tripped = true;
     if (timer && timers) timers.cancel(timer);
     timer = 0;
+    /* W3 P0-24: the sound of being let go. ONE cue per trip - the guard trips
+     * at most once by construction, and note() is deliberately silent, because
+     * a cue per interaction would score the struggle rather than the release. */
+    if (typeof sfx === 'function') { try { sfx('whoosh', 0.3, { pitch: 0.8 }); } catch { /* never throw out of a guard */ } }
     try { if (onComplete) onComplete(why); } catch { /* never throw out of a guard */ }
   }
   function arm() {

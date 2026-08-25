@@ -82,6 +82,12 @@ export function createPeek({ onReveal, onHide, onFirstUse, maxHoldMs, log } = {}
       if (!used) {
         used = true;
         say('peek used - class capped at A');
+        /* W3 P1-18: THE COST, SAID OUT LOUD, ONCE. This is the frame the class
+         * is capped at an A in, and it used to pass without a sound - the
+         * player paid the whole grade and heard the shutter, which is the part
+         * they got for free. A bad stamp, quiet: it is a loss cue, and loss
+         * cues are the quietest things in the building (owner's rule). */
+        sfx('stamp_bad', 0.12);
         try { if (firstUse) firstUse(); } catch (e) { /* never fatal */ }
       }
       // The shutter opens. Quiet on purpose: peek costs the player a grade cap
@@ -97,6 +103,9 @@ export function createPeek({ onReveal, onHide, onFirstUse, maxHoldMs, log } = {}
     if (!holding) return;
     holding = false;
     totalMs += Math.max(0, Date.now() - holdStartedAt);
+    // W3 P1-18: the shutter has opened since the verb existed and never once
+    // closed. Lower and quieter than the open - a thing shutting, not opening.
+    sfx('shutter', 0.18, { pitch: 0.9 });
     try { if (hide) hide(); } catch (e) { say('peek onHide threw: ' + ((e && e.message) || e)); }
   }
 

@@ -268,14 +268,17 @@ export function createAnPressure(o) {
     count('stop:' + kind);
     try { if (typeof eng.stop === 'function') eng.stop(kind); } catch (e) { /* noop */ }
   }
-  function cue(name, rung) {
+  function cueAt(name, level, pitch) {
     if (!sounds() || !name) return;
-    const level = Math.min(audioCeil, P.CUE_LEVEL_BASE + rung * P.CUE_LEVEL_STEP);
+    const lv = Math.min(audioCeil, level);
     count('cue');
     try {
-      if (typeof eng.audio === 'function') eng.audio(name, level, { pitch: +(0.9 + rung * 0.04).toFixed(3) });
-      else if (typeof eng.fire === 'function') eng.fire('audio_trigger', { name, level, pitch: +(0.9 + rung * 0.04).toFixed(3) });
+      if (typeof eng.audio === 'function') eng.audio(name, lv, { pitch });
+      else if (typeof eng.fire === 'function') eng.fire('audio_trigger', { name, level: lv, pitch });
     } catch (e) { /* noop */ }
+  }
+  function cue(name, rung) {
+    cueAt(name, P.CUE_LEVEL_BASE + rung * P.CUE_LEVEL_STEP, +(0.9 + rung * 0.04).toFixed(3));
   }
 
   /* ---- state -------------------------------------------------------------- */
@@ -445,6 +448,10 @@ export function createAnPressure(o) {
       cue(P.RUNG_CUE[r], r);
     } else {
       for (let k = rung; k > r; k--) for (const add of P.RUNG_ADDS[k]) applyAdd(add, false);
+      /* W3 P1-7: the room letting go is relief, and relief has a sound. ONE
+       * cue per descend call however many rungs were shed, at half the climb's
+       * level and pitched under it. */
+      cueAt('slide', (P.CUE_LEVEL_BASE + r * P.CUE_LEVEL_STEP) / 2, 0.8);
     }
     rung = r;
     retune();
