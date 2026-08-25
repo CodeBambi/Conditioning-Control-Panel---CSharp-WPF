@@ -113,6 +113,43 @@ public partial class App : Application
                     : null);
             desktop.MainWindow = dashboard;
 
+            // THE EMERGENCY STOP, and the reason it is claimed HERE rather than in the shell's own
+            // constructor. Every affordance that ends a session lives inside that window, and every
+            // effect surface goes up HWND_TOPMOST over it — so before this the app had a reachable
+            // state with no way out of it, and a real user reached it on 2026-08-23: nineteen
+            // visible surfaces, three of them the full size of his monitor, and the process had to
+            // be killed for him from outside.
+            //
+            // A system-wide chord is a PROCESS-wide claim: exactly one window on the machine may
+            // hold Ctrl+Alt+Esc, and this is the one place in the product that builds exactly one
+            // shell. Arming inside MainWindow's constructor would instead mean every extra shell a
+            // test builds asks the OS for a chord the first one already holds and is refused — the
+            // second and later ones would each raise the "no emergency stop" warning below, which
+            // is a false alarm about a process that HAS one. The wiring is proved by the headed run
+            // recorded with this change rather than by a headless fact, for the same reason.
+            var panicKey = new Input.Win32PanicKey();
+            panicKey.Pressed += dashboard.PanicPress;
+            dashboard.Closed += (_, _) => panicKey.Dispose();
+            var panicState = panicKey.Arm();
+            _host.LogDiagnostic($"panic: {Input.Win32PanicKey.Gesture} -> {panicState}");
+            if (panicState is Capabilities.CapabilityState.Available)
+            {
+                // The user has to be told the escape exists, and the running session's own status
+                // line is where they are looking when they need it.
+                dashboard.PanicGesture = Input.Win32PanicKey.Gesture;
+            }
+            else
+            {
+                // A dead emergency stop somebody believes in is worse than none, so the refusal is
+                // said on the surface and not only in the log — WPF raises the same alarm from its
+                // own settings validator when its panic key is switched off
+                // (ConditioningControlPanel/Models/AppSettings.cs:6786-6788).
+                dashboard.Opened += (_, _) => dashboard.Toasts.ShowUntilDismissed(
+                    $"No emergency stop: {Input.Win32PanicKey.Gesture} could not be claimed. "
+                    + "STOP on this window is the only way to end a session.",
+                    Views.ToastKind.Warning);
+            }
+
             // THE LINUX RENDER DISCRIMINATOR (CCP_RENDER_PROBE=<path.png>). Every Linux capture
             // this port has taken is a single colour — 836,000 pixels of RGB(0,0,0) on a whole
             // window, in WSLg RAIL, in XWayland, in a real Xvfb :99, and with

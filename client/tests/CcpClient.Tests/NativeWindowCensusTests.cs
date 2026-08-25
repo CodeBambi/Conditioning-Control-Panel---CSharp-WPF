@@ -7,7 +7,7 @@ namespace CcpClient.Tests;
 /// <summary>
 /// The ONE tree-wide census under <c>client/docs/window-behavior-manifest.md</c> §8.3.
 ///
-/// <para><b>Why one guard and not seven.</b> Five of the seven sites already read the operating
+/// <para><b>Why one guard and not one per site.</b> Five of the eight sites already read the operating
 /// system or the window manager back and refuse in type — <c>Overlay/Win32OverlayPresence.cs:610-623</c>,
 /// <c>Glyph/Win32GlyphSurface.cs:638-652</c>, <c>Pointer/Win32PointerSurface.cs:445-468</c>,
 /// <c>Input/Win32InputPresence.cs:362-368</c>, <c>Video/Win32VideoPresence.cs:175-182</c>. A per-surface
@@ -36,11 +36,11 @@ public sealed class NativeWindowCensusTests
     /// <summary>Creates a Win32 top-level window.</summary>
     private const string CreateNeedle = "CreateWindowExW";
 
-    /// <summary>Mutates the extended style of a window Avalonia created — the seventh shape, which
+    /// <summary>Mutates the extended style of a window Avalonia created — the OTHER shape, which
     /// creates nothing and is invisible to a <see cref="CreateNeedle"/> sweep.</summary>
     private const string MutateNeedle = "AddWindowStylesCallback";
 
-    private const string SectionHeading = "### 8.3 The seven sites";
+    private const string SectionHeading = "### 8.3 The eight sites";
 
     private static readonly string[] RepoAnchorParts = ["client", "CcpClient.sln"];
     private static readonly string[] ManifestParts = ["client", "docs", "window-behavior-manifest.md"];
