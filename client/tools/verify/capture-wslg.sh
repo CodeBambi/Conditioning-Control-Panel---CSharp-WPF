@@ -513,10 +513,10 @@ if [ "$ROUTE" = atspi ] && { [ "$SURFACE" = studio-dial ] || [ "$SURFACE" = audi
   # atspi.py refuses it rather than photographing the caption.
   if [ "$SURFACE" = studio-dial ]; then
     ROW='Lock Card rack row'; DIAL='Lock Card repeats'; DIAL_ROLE='@slider'
-    MATE='Lock Card strict mode'; MATE_ROLE='@check box'
+    MATE='Lock Card strict mode'; MATE_ROLE='@check-box'
   else
     ROW='Audio rack row';     DIAL='Master volume';     DIAL_ROLE='@slider'
-    MATE='Test audio';        MATE_ROLE='@push button'
+    MATE='Test audio';        MATE_ROLE='@push-button'
   fi
 
   scroll_into_view "$ROW"

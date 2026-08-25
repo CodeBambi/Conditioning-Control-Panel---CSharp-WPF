@@ -117,6 +117,13 @@ class Tree:
         except dbus.DBusException:
             return "?"
 
+    @staticmethod
+    def same_role(actual, wanted):
+        """AT-SPI role names carry spaces ('push button', 'radio button', 'check box'), and a role
+        with a space inside a shell argument is a quoting trap that costs an hour the first time it
+        silently splits into two arguments. Hyphens are accepted for the same role."""
+        return actual.replace(" ", "-") == wanted.replace(" ", "-")
+
     def children(self, ref):
         try:
             return [(str(k[0]), str(k[1])) for k in self.iface(ref, ACCESSIBLE).GetChildren()]
@@ -217,7 +224,7 @@ def one(tree, frame, selector, role=None, what="element"):
         # collision this exists for is real and is a shape rather than an accident: a dial's
         # caption TextBlock carries the same words as the dial's own AutomationProperties.Name, so
         # 'Master volume' names both a label and a slider (StudioPage.axaml:1849-1855).
-        hits = [h for h in hits if tree.role_of(h[0]) == role]
+        hits = [h for h in hits if Tree.same_role(tree.role_of(h[0]), role)]
     if not hits:
         sys.exit("FAIL: no %s named %r in this window. AT-SPI carries the accessible NAME, never "
                  "the AutomationId, so a control with only an AutomationId is not addressable "
@@ -298,10 +305,12 @@ def main():
             sys.exit("FAIL: `in` needs a parent selector and a child selector")
         child = sys.argv[4]
         ref, name, _ = one(tree, frame, selector)
+        # `in` spends argv[4] on the CHILD selector, so a parent whose own name collides is named
+        # with a role-qualified `rect` first and reached through its unique child from there.
         if child.startswith("@"):
             role = child[1:]
             hits = [(r, tree.name_of(r)) for r, _, _ in tree.walk(ref)
-                    if tree.role_of(r) == role]
+                    if Tree.same_role(tree.role_of(r), role)]
         else:
             matches = matcher(child)
             hits = [(r, tree.name_of(r)) for r, _, _ in tree.walk(ref)
@@ -318,9 +327,9 @@ def main():
         # found structurally instead: the nearest scroll-pane ANCESTOR of the element. That is a
         # stronger statement than naming it, not a weaker one — it cannot name the wrong
         # ScrollViewer, because it is the one this element actually scrolls inside.
-        _, name, parents = one(tree, frame, selector)
+        _, name, parents = one(tree, frame, selector, role)
         for ancestor in parents:
-            if tree.role_of(ancestor) == "scroll pane":
+            if Tree.same_role(tree.role_of(ancestor), "scroll pane"):
                 emit(tree, ancestor, tree.name_of(ancestor))
                 return 0
         sys.exit("FAIL: %r has no scroll-pane ancestor, so it is not inside a viewport at all"
