@@ -39,6 +39,11 @@
  *    the player's own disk and warming it is waste (and what keeps the desktop
  *    WebView2 build inert). The draw itself is still decided AT DRAW TIME by
  *    the same seeded logic, so the served sequence never moves.
+ *  - THE MANIFEST SEAM (0825): a game that knows its WHOLE ordered media list
+ *    up front (SORT's deck) hands it to pool.warmManifest(entries) and walks
+ *    pool.warmCursor(i); pool.ready(url) answers when a url's warm landed, and
+ *    pool.markBroken(url)/isBroken(url) drive the shared url blacklist that
+ *    every draw skips. All five verbs live on BOTH pool shapes.
  *
  * LOCAL INVENTORY. A virtual host cannot be enumerated from JS, so SOMETHING has
  * to hand the page the list. Accepted (first non-empty wins, all merged):
@@ -77,6 +82,43 @@ export const WARM_INFLIGHT = 3;   // warms in flight at once - a third lane lets
                                   // stills slip past one slow multi-megabyte download
 const WARM_HELD_MAX = 24;         // decoded detached Images held against GC
 const VIDEO_URL_RE = /\.(mp4|webm|m4v)(\?|#|$)/i;
+
+/* THE MANIFEST WARMER's windows (0825, SORT). A game that knows its complete
+ * ordered media need list up front (SORT builds the whole deck before the first
+ * card shows) hands the list to pool.warmManifest() and advances
+ * pool.warmCursor() as its own play position moves; the warm window rides the
+ * cursor. IDLE is the door/ghost-round/rules-sheet time - the cursor has never
+ * advanced, the player is reading and the network is otherwise quiet, so the
+ * window is deep. Once the cursor moves the window narrows to a look-ahead a
+ * fast swiper cannot outrun but that still loses to whatever is on screen.
+ * Manifest warms ride the SAME rail as the forecast deck above - one
+ * WARM_INFLIGHT budget, one warm per url per provider, WARM_HELD_MAX held,
+ * nothing at all under Data Saver. */
+export const MANIFEST_AHEAD_IDLE = 24;
+export const MANIFEST_AHEAD_PLAY = 10;
+
+/* THE URL BLACKLIST (0825), module-level so a dead CDN url stays dead across
+ * every pool and every class this page runs (it empties with the page, so a
+ * transient outage is forgiven on the next load). Fed by warm failures - an
+ * Image error, or a no-cors video fetch REJECTING, which is the one video
+ * verdict no-cors can see (an HTTP 404 behind an opaque response never lands
+ * here) - and by games reporting a face that errored via pool.markBroken().
+ * Draws skip it and serve the next eligible row instead; the placeholder floor
+ * stays the final answer. Bounded: the oldest entry is forgotten first. */
+const BROKEN_URL_CAP = 400;
+const brokenUrls = new Set();
+export function markBrokenUrl(url) {
+  const s = String(url || '');
+  if (!s || brokenUrls.has(s)) return false;
+  brokenUrls.add(s);
+  while (brokenUrls.size > BROKEN_URL_CAP) {
+    const oldest = brokenUrls.values().next().value;
+    if (oldest == null) break;
+    brokenUrls.delete(oldest);
+  }
+  return true;
+}
+export function isBrokenUrl(url) { return brokenUrls.has(String(url || '')); }
 
 /** Keys the shell/host might carry the local inventory under. A page cannot
  *  enumerate a virtual host, so SOMETHING has to hand us the list; we accept
@@ -210,6 +252,7 @@ export function createAssets(options = {}) {
   function warmable(url) {
     const s = String(url || '');
     if (!s || prewarmed.has(s)) return false;
+    if (isBrokenUrl(s)) return false;            // a dead url is never re-asked for
     if (isLocalUrl(s)) return false;             // ccp.* / relative / data: / blob:
     if (!/^https?:\/\//i.test(s)) return false;
     try {
@@ -218,20 +261,57 @@ export function createAssets(options = {}) {
     return true;
   }
 
+  /** A url whose warm cannot help: local disk, our own origin, data:/blob:.
+   *  These are ready the instant an element asks - ready() answers true NOW. */
+  function instantUrl(url) {
+    const s = String(url || '');
+    if (!s) return false;
+    if (isLocalUrl(s)) return true;
+    if (!/^https?:\/\//i.test(s)) return true;
+    try {
+      if (typeof location !== 'undefined' && location.origin && new URL(s).origin === location.origin) return true;
+    } catch { /* an unparsable url is not instant */ }
+    return false;
+  }
+
+  /* Warm OUTCOMES, for ready(): which urls finished (bytes + decode for a
+   * still/gif, bytes for a video) and who is waiting to hear. */
+  const warmDoneUrls = new Set();
+  const readyWaiters = new Map();   // url -> Set of resolve callbacks
+
+  function flushReady(url, ok) {
+    const set = readyWaiters.get(url);
+    if (!set) return;
+    readyWaiters.delete(url);
+    for (const fn of [...set]) { try { fn(!!ok); } catch { /* a bad waiter never kills the rail */ } }
+  }
+  /** The instance's blacklist verb: the module Set, plus this instance's
+   *  waiters answered "no" so a gate consulting ready() moves on at once. */
+  function markBroken(url) {
+    const s = String(url || '');
+    if (!s) return;
+    markBrokenUrl(s);
+    flushReady(s, false);
+  }
+
   function warmDone() { warmFlight = Math.max(0, warmFlight - 1); if (!disposed) warmPump(); }
+  function warmOk(url) { warmDoneUrls.add(url); flushReady(url, true); warmDone(); }
   function warmPump() {
     while (!disposed && warmFlight < WARM_INFLIGHT && warmQueue.length) {
       const job = warmQueue.shift();
       warmFlight += 1;
       if (job.video) {
-        /* fire and forget, and swallow everything: a rejected warm is a url
-         * that will simply load the ordinary way at reveal. */
+        /* fire and forget: the opaque reply is thrown away unread. A REJECTED
+         * warm is a NETWORK-level failure (DNS, refused connection) - the only
+         * video verdict no-cors can see - and it feeds the blacklist; an HTTP
+         * error rides an opaque 'ok' we cannot read and resolves as done. */
         try {
           if (typeof fetch !== 'function') { warmDone(); continue; }
           const init = { mode: 'no-cors', credentials: 'omit' };
           if (job.high) init.priority = 'high';       // Fetch Priority API; unknown keys are ignored
           const pr = fetch(job.url, init);
-          if (pr && pr.then) pr.then(warmDone, warmDone); else warmDone();
+          if (pr && pr.then) pr.then(() => warmOk(job.url), () => { markBroken(job.url); warmDone(); });
+          else warmDone();
         } catch { warmDone(); }
       } else {
         let img = null;
@@ -252,24 +332,32 @@ export function createAssets(options = {}) {
            * frame exists. Fallback for engines without decode(): load/error,
            * bytes-only. */
           if (typeof img.decode === 'function') {
-            img.decode().then(warmDone, () => { warmHeld.delete(job.url); warmDone(); });
+            img.decode().then(() => warmOk(job.url), () => {
+              warmHeld.delete(job.url);
+              /* decode() also rejects when a HEALTHY url's decode is aborted
+               * mid-flight; only a url with no pixels at all is actually dead. */
+              if (img.complete && !(Number(img.naturalWidth) > 0)) markBroken(job.url);
+              else flushReady(job.url, false);
+              warmDone();
+            });
           } else {
-            img.onload = warmDone;
-            img.onerror = () => { warmHeld.delete(job.url); warmDone(); };
+            img.onload = () => warmOk(job.url);
+            img.onerror = () => { warmHeld.delete(job.url); markBroken(job.url); warmDone(); };
           }
         } catch { warmHeld.delete(job.url); warmDone(); }
       }
     }
   }
 
-  /** Queue one url for warming. Returns true if it was actually queued. */
-  function warmUrl(url, high) {
+  /** Queue one url for warming. Returns true if it was actually queued.
+   *  `videoHint` overrides the extension sniff when the caller knows the mime. */
+  function warmUrl(url, high, videoHint) {
     if (disposed || saveData) return false;
     if (typeof document === 'undefined') return false;   // node harness: inert
     if (!warmable(url)) return false;
     const s = String(url);
     prewarmed.add(s);
-    warmQueue.push({ url: s, video: VIDEO_URL_RE.test(s), high: !!high });
+    warmQueue.push({ url: s, video: videoHint == null ? VIDEO_URL_RE.test(s) : !!videoHint, high: !!high });
     warmPump();
     return true;
   }
@@ -288,6 +376,106 @@ export function createAssets(options = {}) {
       if (warmUrl(url, n === 0)) n += 1;
     }
   }
+
+  /* ------------------------------------------------------------------------
+   * THE MANIFEST WARMER (0825). warmManifest(entries) declares the ORDERED
+   * media need list a game already knows in full; warmCursor(i) is the game's
+   * play position in it. The warm window is [cursor, cursor + ahead): deep
+   * (MANIFEST_AHEAD_IDLE) while the cursor has never advanced - the door /
+   * intro / rules-sheet time - and a tight look-ahead (MANIFEST_AHEAD_PLAY)
+   * once play starts. One manifest per provider: a game claims one pool at a
+   * time, and a new warmManifest() simply replaces the old list. Everything
+   * funnels through warmUrl(), so remote-only, once per url, WARM_INFLIGHT
+   * shared with the forecast rail, WARM_HELD_MAX held, saveData-inert - all
+   * of it holds here by construction. The 6-deep forecast rail above stays
+   * exactly as it was for games that never call this.
+   * --------------------------------------------------------------------- */
+  let manifest = null;    // { entries: [{url, video}], cursor, moved }
+
+  function normalizeManifestEntries(entries) {
+    const out = [];
+    for (const e of (Array.isArray(entries) ? entries : [])) {
+      const url = typeof e === 'string' ? e : (e && e.url);
+      if (!url || typeof url !== 'string') continue;
+      const mime = (e && typeof e === 'object') ? String(e.mime || '') : '';
+      out.push({ url: String(url), video: /^video\//i.test(mime) || VIDEO_URL_RE.test(url) });
+    }
+    return out;
+  }
+
+  /** Warm the window the cursor currently commands. Returns how many queued. */
+  function pumpManifest() {
+    if (!manifest || disposed) return 0;
+    const ahead = manifest.moved ? MANIFEST_AHEAD_PLAY : MANIFEST_AHEAD_IDLE;
+    const at = Math.max(0, Math.min(manifest.cursor, manifest.entries.length));
+    const end = Math.min(manifest.entries.length, at + ahead);
+    let queued = 0;
+    for (let k = at; k < end; k++) {
+      const e = manifest.entries[k];
+      /* the HEAD of the window is the card the player is (about to be) looking
+       * at - the one warm allowed to ask for priority */
+      if (e && warmUrl(e.url, k === at, e.video)) queued += 1;
+    }
+    return queued;
+  }
+
+  function warmManifest(entries) {
+    manifest = { entries: normalizeManifestEntries(entries), cursor: 0, moved: false };
+    return pumpManifest();
+  }
+
+  function warmCursor(i) {
+    if (!manifest) return;
+    const n = Math.max(0, Math.round(Number(i) || 0));
+    if (n > 0) manifest.moved = true;
+    if (n === manifest.cursor) return;
+    manifest.cursor = n;
+    pumpManifest();
+  }
+
+  /**
+   * ready(url, {timeoutMs}) -> Promise<boolean>. True the moment the url's
+   * warm has completed (immediately if it already has, and immediately for a
+   * local / same-origin url - the host serving the player's own disk cannot be
+   * probed and does not need to be); false on a KNOWN failure (the blacklist)
+   * or when timeoutMs passes first. Never rejects: a media gate that could
+   * throw would be a class that could not start. timeoutMs 0 answers from
+   * what is known right now.
+   */
+  const READY_DEFAULT_MS = 1000;
+  function readyFor(url, opts) {
+    const s = String(url || '');
+    if (!s) return Promise.resolve(false);
+    if (isBrokenUrl(s)) return Promise.resolve(false);
+    if (instantUrl(s)) return Promise.resolve(true);
+    if (warmDoneUrls.has(s)) return Promise.resolve(true);
+    const t = (opts && opts.timeoutMs != null) ? Math.max(0, Number(opts.timeoutMs) || 0) : READY_DEFAULT_MS;
+    /* nothing pending can ever land: disposed, Data Saver (no warm runs), or
+     * a zero timeout - answer with what is known */
+    if (t === 0 || disposed || saveData) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      let set = readyWaiters.get(s);
+      if (!set) { set = new Set(); readyWaiters.set(s, set); }
+      let timer = 0;
+      const fn = (ok) => { try { clearTimeout(timer); } catch { /* noop */ } resolve(!!ok); };
+      set.add(fn);
+      timer = setTimeout(() => {
+        const cur = readyWaiters.get(s);
+        if (cur) { cur.delete(fn); if (!cur.size) readyWaiters.delete(s); }
+        resolve(false);
+      }, t);
+    });
+  }
+
+  /** The media seam every pool shape exposes (claim() below, claimTagged's
+   *  wrapper, and deck-side adapters forward these five verbs verbatim). */
+  const mediaSeam = {
+    warmManifest: (entries, opts) => { void opts; return warmManifest(entries); },
+    warmCursor: (i) => warmCursor(i),
+    ready: (url, opts) => readyFor(url, opts),
+    markBroken: (url) => markBroken(url),
+    isBroken: (url) => isBrokenUrl(url),
+  };
 
   /* ==========================================================================
    * THE DOOR'S SEAM (SORT). Four reads and two writes, all additive.
@@ -522,7 +710,14 @@ export function createAssets(options = {}) {
       // a deterministic walk with a seeded jump keeps repeats far apart without
       // ever risking "the same tile twice in a row" on a tiny local pool
       const jump = list.length > 2 ? Math.floor(take() * (list.length - 1)) : 0;
-      return list[(i + jump) % list.length];
+      /* THE BLACKLIST SKIP consumes no rand: the walk just steps forward to the
+       * next eligible row, so with a clean blacklist (the ordinary day) the
+       * served sequence is byte-identical to the pre-blacklist provider. */
+      for (let step = 0; step < list.length; step++) {
+        const cand = list[(i + jump + step) % list.length];
+        if (cand && !isBrokenUrl(cand)) return cand;
+      }
+      return placeholders[(i + jump) % placeholders.length] || null;   // every row dead: the floor
     }
 
     function computeDraw(k, st, take) {
@@ -536,7 +731,13 @@ export function createAssets(options = {}) {
         const i = st.remoteCursors[remoteKind] % list.length;
         st.remoteCursors[remoteKind] += 1;
         const jump = list.length > 2 ? Math.floor(take() * (list.length - 1)) : 0;
-        const url = list[(i + jump) % list.length];
+        /* the blacklist skip: step to the next eligible row, no rand consumed;
+         * a fully dead remote list falls through to the local side */
+        let url = null;
+        for (let step = 0; step < list.length; step++) {
+          const cand = list[(i + jump + step) % list.length];
+          if (cand && !isBrokenUrl(cand)) { url = cand; break; }
+        }
         if (url && (!canvasSafe || isLocalUrl(url))) return { url, remote: true };
       }
       return { url: computeLocal(k, st, take), remote: false };
@@ -610,6 +811,19 @@ export function createAssets(options = {}) {
         const d = Math.round(Number(n) || 0);
         return d > 0 ? refreshDeck(d) : 0;
       },
+      /**
+       * THE MANIFEST SEAM (0825), same five verbs on every pool shape:
+       *   warmManifest(entries[, opts])  ordered [{url, kind?, mime?}] (or bare
+       *                                  url strings) - the game's full need
+       *   warmCursor(i)                  the game's play position in it
+       *   ready(url, {timeoutMs})       -> Promise<boolean> (see readyFor)
+       *   markBroken(url) / isBroken(url) the shared url blacklist
+       */
+      warmManifest: mediaSeam.warmManifest,
+      warmCursor: mediaSeam.warmCursor,
+      ready: mediaSeam.ready,
+      markBroken: mediaSeam.markBroken,
+      isBroken: mediaSeam.isBroken,
       /** How many candidates the pool can actually serve right now. */
       stats() {
         return {
@@ -656,6 +870,9 @@ export function createAssets(options = {}) {
       platform,
       prewarm,
       log,
+      /* the shared url blacklist: a tagged serve skips a dead row and the
+       * seeded re-serve is its substitute source (see tagged.js nextRow) */
+      broken: isBrokenUrl,
       /* The remote gate is the app's, not the door's: with remote media off (or
        * OfflineMode on) a remote source row simply never asks, the tag lands
        * empty, and the door refuses to start on pool.empty(). A LOCAL row is
@@ -666,6 +883,12 @@ export function createAssets(options = {}) {
         taggedPools.add(pool);
         const dispose = pool.dispose;
         pool.dispose = () => { taggedPools.delete(pool); dispose(); };
+        /* the manifest seam rides BOTH pool shapes (see claim().warmManifest) */
+        pool.warmManifest = mediaSeam.warmManifest;
+        pool.warmCursor = mediaSeam.warmCursor;
+        pool.ready = mediaSeam.ready;
+        pool.markBroken = mediaSeam.markBroken;
+        pool.isBroken = mediaSeam.isBroken;
       }
       return pool;
     });
@@ -777,6 +1000,9 @@ export function createAssets(options = {}) {
       probes.clear();
       libraryCbs.clear();
       channel.dispose();
+      manifest = null;
+      for (const url of [...readyWaiters.keys()]) flushReady(url, false);
+      warmDoneUrls.clear();
       warmQueue.length = 0;
       for (const img of warmHeld.values()) {
         try { img.onload = null; img.onerror = null; } catch { /* noop */ }
