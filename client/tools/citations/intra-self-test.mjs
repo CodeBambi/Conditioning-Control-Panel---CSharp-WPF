@@ -864,6 +864,7 @@ test("I24: a quotation before a PARENTHESISED citation binds to it; the list for
     fx.base();
     fx.write("client/src/CcpClient.Desktop/Alpha.cs", "// alpha carries its own sentence\n");
     fx.write("client/src/CcpClient.Desktop/Beta.cs", "// beta carries a different sentence\n");
+    fx.write("client/src/CcpClient.Desktop/Deep/Nested/Gamma.cs", "// nested carries a third sentence\n");
     fx.write(
       "client/docs/notes.md",
       [
@@ -876,6 +877,11 @@ test("I24: a quotation before a PARENTHESISED citation binds to it; the list for
         'and again: Alpha.cs:1 "alpha carries its own sentence", Beta.cs:1 and nothing quoted here.',
         // The parenthesised form, and it is checked.
         '"alpha carries its own sentence" (Alpha.cs:1).',
+        // The same form PATH-QUALIFIED, which is how the corpus actually writes it. The search has
+        // to start before the author's own prefix, not before the basename: reading back from the
+        // basename leaves "`Deep/Nested/" between the parenthesis and the quotation, and the
+        // leading form then silently never fires on a qualified citation — which is most of them.
+        '"nested carries a third sentence" (`Deep/Nested/Gamma.cs:1`).',
         "",
       ].join("\n"),
     );
@@ -883,8 +889,8 @@ test("I24: a quotation before a PARENTHESISED citation binds to it; the list for
     assert.deepEqual(outcome.rows, [], "every binding here is correct, so there is nothing to report");
     assert.equal(
       outcome.summary.counts.quotesChecked,
-      4,
-      "three trailing quotations and one parenthesised leading one — the unquoted Beta.cs:1 is checked for range only",
+      5,
+      "three trailing quotations and two parenthesised leading ones — the unquoted Beta.cs:1 is checked for range only",
     );
   });
 });

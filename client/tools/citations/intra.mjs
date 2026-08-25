@@ -429,7 +429,13 @@ export function quotePresent(span, needle) {
 const QUOTE_CLAIMED_BY_NEXT =
   /^\s*\((?:`|<c>)?[A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:csproj|axaml|props|json|html|mjs|sln|ps1|cs|md|js|sh|py):\d/;
 
-/** The quoted run this citation claims, or null. `start`/`end` bound the citation token itself. */
+/** The quoted run this citation claims, or null.
+ *
+ *  `start` MUST be the start of the citation INCLUDING any path prefix the author wrote, not the
+ *  start of the basename REFERENCE matched. The window manifest is why: it writes
+ *  `"…" (\`Input/Win32InputPresence.cs:1097-1099\`)`, and reading backwards from the basename leaves
+ *  `` `Input/ `` between the parenthesis and the search — so the leading form silently never fired
+ *  on any path-qualified citation, which is most of them. `end` bounds the token itself. */
 export function quotedNeighbour(text, start, end) {
   const tail = text.slice(end, end + 400);
   const after = QUOTED_AFTER.exec(tail);
@@ -851,7 +857,7 @@ export function runIntraDetector({ repoRoot } = {}) {
       // side (a symbol is backtick- or <c>-quoted, a quotation is double-quoted), so a citation
       // reaching both needles carried its quotation on the LEADING side, and both are checked.
       let checkedANeedle = false;
-      const quoted = quotedNeighbour(text, m.index, m.index + m[0].length);
+      const quoted = quotedNeighbour(text, m.index - prefix.length, m.index + m[0].length);
       if (quoted !== null) {
         if (ledgerDocuments.has(rel)) {
           counts.quotesInLedger += 1;
