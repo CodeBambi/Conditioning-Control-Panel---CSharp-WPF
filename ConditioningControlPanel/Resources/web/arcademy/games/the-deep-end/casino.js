@@ -32,9 +32,11 @@
  *                   index.js's (audio is the engine's, never this file's).
  *   THE ALMOST      near-miss staging: two equal deepest tiles, adjacent and
  *                   blocked, LEAN toward each other (a 6% translate composed
- *                   into style.js's transform through --de-lean-x/y) while the
- *                   square hums with pink light. The tiles never change
- *                   position; the lean is cleared on a deadline.
+ *                   into style.js's transform through --de-lean-x/y - the
+ *                   TILE-level pair; the bench's own lean rides the separate
+ *                   --de-bench-lean-x/y so it can never bleed into a tile)
+ *                   while the square hums with pink light. The tiles never
+ *                   change position; the lean is cleared on a deadline.
  *   THE CURRENT     (pass 3) every legal slide sends a flock of 10-16 drawn
  *                   chevrons through the room the way the board went: 4-5
  *                   seeded streamlines laid across the direction of travel,
@@ -105,9 +107,11 @@ export const DE_CASINO = Object.freeze({
   STOP_HYST: 0.05,
   FAMILIES: Object.freeze(['bands', 'rays', 'lens', 'vortex', 'motes']),
   /** Pass 2 - THE SLIDE: the bench leans toward the move (style.js composes
-   *  --de-lean-x/y on the bench into a 2deg tilt + a 6px shove) and springs
-   *  back when the lean clears. Magnitude = base + per tile moved + per cell
-   *  of distance, capped at 1. */
+   *  --de-bench-lean-x/y on the bench into a 2deg tilt + a 6px shove) and
+   *  springs back when the lean clears. Magnitude = base + per tile moved +
+   *  per cell of distance, capped at 1. The pair is DISTINCT from the tiles'
+   *  --de-lean-x/y (the almost) so a bench lean can never inherit into every
+   *  tile's positional transform. */
   LEAN_MS: 260,
   LEAN_MAG_BASE: 0.45,
   LEAN_MAG_STEP: 0.14,
@@ -194,6 +198,9 @@ export function createDeCasino(o) {
   const opts = o || {};
   const say = typeof opts.log === 'function' ? opts.log : () => {};
   const reduced = !!opts.reduced;
+  /* pass 6 - THE TOUCH RUNG: the game's own touch flag. On a phone the flock
+     is skipped whole (10-16 filtered nodes + two forced layouts per slide). */
+  const touchDev = !!opts.touch;
   const armed = !!opts.capsOk && !!opts.stage && !!opts.bench && !!opts.backdrop
     && !!opts.timers && typeof opts.timers.after === 'function' && typeof document !== 'undefined';
   /* W2 - THE CUE ROAD, AND THE DECOUPLE. `armed` folds capsOk in, and
@@ -259,6 +266,63 @@ export function createDeCasino(o) {
   let flow = null;               // the arrow layer in the overlay
   const flocks = [];             // [{nodes, timers}] - at most FLOW_MAX
   let flows = 0;
+  /* perf (owner's phone, 2026-08-25): the bench/board rects used to be read
+     with getBoundingClientRect INSIDE the merge/slide path - right after the
+     move handler dirtied every tile's style, so each read was a forced layout
+     flush at the worst possible moment. The geometry is now measured ONCE
+     (lazily, then cached) and only invalidated by resize/orientation. */
+  let geom = null;               // {bw,bh,gx,gy,gw,gh,n,tile,step} | null
+  let resizeBound = false;
+  const invalidateGeom = () => { geom = null; };
+  function measureGeom() {
+    const bench = rectOf(opts.bench);
+    if (!bench || !bench.width || !bench.height) { geom = null; return null; }
+    const board = rectOf(opts.board);
+    const g = {
+      bw: bench.width, bh: bench.height,
+      gx: board ? board.left - bench.left : 0,
+      gy: board ? board.top - bench.top : 0,
+      gw: board && board.width ? board.width : 0,
+      gh: board && board.height ? board.height : 0,
+      n: 0, tile: 0, step: 0,
+    };
+    // the grid step, derived once: n from the cell count, the gap from the
+    // board's computed style - so anchorOf never has to measure a tile again
+    try {
+      const cells = opts.board && typeof opts.board.querySelectorAll === 'function'
+        ? opts.board.querySelectorAll('.g-de-cell').length : 0;
+      if (cells > 0) g.n = Math.round(Math.sqrt(cells));
+    } catch (e) { /* stays 0 */ }
+    if (g.n > 0 && g.gw > 0) {
+      let gap = 0;
+      try {
+        if (typeof getComputedStyle === 'function') {
+          gap = parseFloat(getComputedStyle(opts.board).columnGap) || 0;
+        }
+      } catch (e) { gap = 0; }
+      g.tile = (g.gw - (g.n - 1) * gap) / g.n;
+      g.step = g.tile + gap;
+    }
+    geom = g;
+    return g;
+  }
+  function geomNow() { return geom || measureGeom(); }
+  function bindResize() {
+    if (resizeBound || typeof window === 'undefined' || !window.addEventListener) return;
+    try {
+      window.addEventListener('resize', invalidateGeom);
+      window.addEventListener('orientationchange', invalidateGeom);
+      resizeBound = true;
+    } catch (e) { /* stays unbound; geomNow simply keeps the first measure */ }
+  }
+  function unbindResize() {
+    if (!resizeBound) return;
+    resizeBound = false;
+    try {
+      window.removeEventListener('resize', invalidateGeom);
+      window.removeEventListener('orientationchange', invalidateGeom);
+    } catch (e) { /* ignore */ }
+  }
 
   /* ---------------------------------------------------- the pool's identity */
   function setProp(k, v) {
@@ -402,12 +466,17 @@ export function createDeCasino(o) {
 
   /* ------------------------------------------------------ the bench lean */
   /** The bench leans (x, y in -1..1) and springs back after ms. One lean at a
-   *  time: a new one replaces the old deadline, never stacks. */
+   *  time: a new one replaces the old deadline, never stacks.
+   *  BUG FIX (2026-08-25): this used to write --de-lean-x/y - the SAME names
+   *  every tile's positional transform reads for the almost's tile lean. The
+   *  custom props inherited from the bench into all 16-25 tiles, so every
+   *  slide gave every tile an extra transform transition (and again on the
+   *  spring-back). The bench pair is now its own name. */
   function leanBench(x, y, ms) {
     if (!opts.bench || !opts.bench.style) return;
     try {
-      opts.bench.style.setProperty('--de-lean-x', x.toFixed(2));
-      opts.bench.style.setProperty('--de-lean-y', y.toFixed(2));
+      opts.bench.style.setProperty('--de-bench-lean-x', x.toFixed(2));
+      opts.bench.style.setProperty('--de-bench-lean-y', y.toFixed(2));
       benchLeaning = true;
     } catch (e) { return; }
     if (leanTimer) cancel(leanTimer);
@@ -416,7 +485,7 @@ export function createDeCasino(o) {
   function clearBenchLean() {
     benchLeaning = false;
     if (!opts.bench || !opts.bench.style) return;
-    try { opts.bench.style.removeProperty('--de-lean-x'); opts.bench.style.removeProperty('--de-lean-y'); } catch (e) { /* ignore */ }
+    try { opts.bench.style.removeProperty('--de-bench-lean-x'); opts.bench.style.removeProperty('--de-bench-lean-y'); } catch (e) { /* ignore */ }
   }
   function clearWall() {
     if (!wall || !wall.classList) return;
@@ -492,13 +561,25 @@ export function createDeCasino(o) {
     return made;
   }
 
-  /** Bench-relative centre of a tile (or of the board when the tile is gone). */
+  /** Bench-relative centre of a tile (or of the board when the tile is gone).
+   *  BUG FIX (2026-08-25): this used to getBoundingClientRect a MID-TRANSITION
+   *  tile - a forced layout in the merge path AND an interpolated position, so
+   *  the bubbles rose from wherever the slide happened to be. The anchor is
+   *  now derived from the tile's honest --r/--c against the cached grid step:
+   *  no layout flush, and the bubbles anchor to the TRUE cell. */
   function anchorOf(tileEl) {
-    const bench = rectOf(opts.bench);
-    if (!bench) return null;
-    const t = rectOf(tileEl) || rectOf(opts.board);
-    if (!t || !t.width) return { x: bench.width / 2, y: bench.height / 2, w: 0, h: 0 };
-    return { x: t.left - bench.left + t.width / 2, y: t.top - bench.top + t.height / 2, w: t.width, h: t.height };
+    const g = geomNow();
+    if (!g) return null;
+    const cell = gridOf(tileEl);
+    if (cell && g.step > 0) {
+      return {
+        x: g.gx + cell.c * g.step + g.tile / 2,
+        y: g.gy + cell.r * g.step + g.tile / 2,
+        w: g.tile, h: g.tile,
+      };
+    }
+    if (g.gw) return { x: g.gx + g.gw / 2, y: g.gy + g.gh / 2, w: g.gw, h: g.gh };
+    return { x: g.bw / 2, y: g.bh / 2, w: 0, h: 0 };
   }
 
   /* ------------------------------------------------------------- the lean */
@@ -534,15 +615,14 @@ export function createDeCasino(o) {
     if (!flow || !flow.appendChild) return 0;
     while (flocks.length >= DE_CASINO.FLOW_MAX) killFlock(flocks[0]);
     const horiz = v.x !== 0;
-    const bench = rectOf(opts.bench);
-    let bw = bench && bench.width ? bench.width : 0;
-    let bh = bench && bench.height ? bench.height : 0;
+    const g = geomNow();               // cached: no forced layout in the slide path
+    let bw = g && g.bw ? g.bw : 0;
+    let bh = g && g.bh ? g.bh : 0;
     if (!bw || !bh) { bw = 620; bh = 620; }
-    const board = rectOf(opts.board);
-    let gw = board && board.width ? board.width : 0;
-    let gh = board && board.height ? board.height : 0;
-    let gx = board && bench ? board.left - bench.left : 0;
-    let gy = board && bench ? board.top - bench.top : 0;
+    let gw = g && g.gw ? g.gw : 0;
+    let gh = g && g.gh ? g.gh : 0;
+    let gx = g ? g.gx : 0;
+    let gy = g ? g.gy : 0;
     if (!gw || !gh || (gw >= bw - 10 && gh >= bh - 10)) {
       /* nothing measurable to sit beside: assume the square owns the middle
          76% of the bench, which is what the layout gives it */
@@ -617,6 +697,8 @@ export function createDeCasino(o) {
       mountOverlay();
       dressPool();
       paintMarquee();
+      bindResize();
+      measureGeom();     // one forced layout HERE, not per merge (resize re-measures)
       say('casino: marquee lit, ' + Object.keys(layers).length + ' layers');
     },
 
@@ -695,7 +777,10 @@ export function createDeCasino(o) {
       slides += 1;
       const v = DIRV[String(dir)];
       if (!v) return;
-      spawnFlock(String(dir), v);
+      /* pass 6: no flock on a touch device - 10-16 drop-shadowed nodes per
+         slide (cap 32 live) was the single heaviest per-slide cost on a phone.
+         The bench lean below survives (style.js flattens it under ae-touch). */
+      if (!touchDev) spawnFlock(String(dir), v);
       if (reduced) return;
       const n = Math.max(1, Math.min(4, Number(count) || 1));
       const d = Math.max(1, Math.min(4, Number(distance) || 1));
@@ -740,12 +825,11 @@ export function createDeCasino(o) {
         if (typeof cs.offsetWidth === 'number') void cs.offsetWidth;
         cs.classList.add('g-de-draining');
       }
-      const bench = rectOf(opts.bench);
-      const board = rectOf(opts.board);
-      if (bench && board && board.width) {
-        const cx = board.left - bench.left + board.width / 2;
-        const cy = board.top - bench.top + board.height * 0.85;
-        bubblesAt(cx, cy, DE_CASINO.BUB_RESURFACE, 6, board.width * 0.9);
+      const g = geomNow();
+      if (g && g.gw) {
+        const cx = g.gx + g.gw / 2;
+        const cy = g.gy + g.gh * 0.85;
+        bubblesAt(cx, cy, DE_CASINO.BUB_RESURFACE, 6, g.gw * 0.9);
       }
       // the frame dips with the water, then heat repaints it
       if (mq && mq.style) mq.style.setProperty('--g-de-mqa', '0.12');
@@ -775,11 +859,9 @@ export function createDeCasino(o) {
       paintMarquee();
       flashMarquee(2.2);
       pulseWater(1, true);
-      const bench = rectOf(opts.bench);
-      const board = rectOf(opts.board);
-      if (bench && board && board.width) {
-        bubblesAt(board.left - bench.left + board.width / 2, board.top - bench.top + board.height * 0.9,
-          DE_CASINO.BUB_ROYAL, 11, board.width);
+      const g = geomNow();
+      if (g && g.gw) {
+        bubblesAt(g.gx + g.gw / 2, g.gy + g.gh * 0.9, DE_CASINO.BUB_ROYAL, 11, g.gw);
       }
     },
 
@@ -821,6 +903,7 @@ export function createDeCasino(o) {
 
     destroy() {
       destroyed = true;
+      unbindResize();
       for (const id of Array.from(live)) cancel(id);
       live.clear();
       clearLean();

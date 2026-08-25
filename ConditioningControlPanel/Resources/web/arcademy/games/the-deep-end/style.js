@@ -27,8 +27,11 @@
  * Two pairs of decoration vars are composed INTO the transform for the decks:
  *   --de-lie-dx / --de-lie-dy   unitless step offsets (trickster cameo)
  *   --de-lean-x / --de-lean-y   -1..1 lean toward a partner (casino strain)
- * They default to 0 and are removed by the deck that set them. The SAME lean
- * pair on .g-de-bench (inherits:false, so it never reaches a tile) tilts the
+ * They default to 0 and are removed by the deck that set them. The bench's
+ * own lean is the SEPARATE --de-bench-lean-x/y pair (it used to share the
+ * tile names, and on any host without @property registration the bench value
+ * inherited into every tile's positional transform - an extra transform
+ * transition per tile per slide, and again on the spring-back): it tilts the
  * whole bench toward a move and springs it back (casino.slide / bump).
  *
  * PASS 2 - THE SLIDE, THE WALL, THE FACES. index.js marks moving tiles
@@ -144,6 +147,8 @@ export const STYLE_TEXT = `
 @property --de-n-scale{syntax:'<number>';inherits:true;initial-value:1}
 @property --de-lean-x{syntax:'<number>';inherits:false;initial-value:0}
 @property --de-lean-y{syntax:'<number>';inherits:false;initial-value:0}
+@property --de-bench-lean-x{syntax:'<number>';inherits:false;initial-value:0}
+@property --de-bench-lean-y{syntax:'<number>';inherits:false;initial-value:0}
 @property --de-lie-dx{syntax:'<number>';inherits:false;initial-value:0}
 @property --de-lie-dy{syntax:'<number>';inherits:false;initial-value:0}
 /* pass 3 - THE HAND: the grab vector lives on the BOARD (index.js writes it on
@@ -343,10 +348,11 @@ export const STYLE_TEXT = `
 /* ---- the bench: the board fills the frame -------------------------------- */
 .g-de-bench{position:relative;z-index:1;flex:1;min-height:0;width:100%;
   display:flex;justify-content:center;align-items:center;
-  /* pass 2: the lean (casino.slide / bump set --de-lean-x/y here; a spring
-     curve carries it there and back) */
-  transform:perspective(1200px) rotateY(calc(var(--de-lean-x,0) * 2.2deg)) rotateX(calc(var(--de-lean-y,0) * -2.2deg))
-    translate3d(calc(var(--de-lean-x,0) * 6px), calc(var(--de-lean-y,0) * 6px), 0);
+  /* pass 2: the lean (casino.slide / bump set --de-bench-lean-x/y here; a
+     spring curve carries it there and back). BUG FIX 2026-08-25: this pair
+     used to be --de-lean-x/y, the same names the tiles read - see the header. */
+  transform:perspective(1200px) rotateY(calc(var(--de-bench-lean-x,0) * 2.2deg)) rotateX(calc(var(--de-bench-lean-y,0) * -2.2deg))
+    translate3d(calc(var(--de-bench-lean-x,0) * 6px), calc(var(--de-bench-lean-y,0) * 6px), 0);
   transition:transform .36s cubic-bezier(.2,1.6,.35,1)}
 /* ---- 15 SOMETHING BELOW (the seep's Deep End special) --------------------
    A soft-edged shape drifting once through the shallows, BEHIND the tiles.
@@ -954,6 +960,55 @@ html.ae-touch .g-de-p-glitch.is-on{backdrop-filter:none;-webkit-backdrop-filter:
    stops asking for a brightness pass on the frame the new name lands. */
 html.ae-touch .g-de-tile.is-merged .g-de-glyph{animation:g-de-glyphpop-t .42s ease-out 1}
 @keyframes g-de-glyphpop-t{0%{transform:scale(1.25);opacity:.72}100%{transform:none;opacity:1}}
+
+/* ---- pass 6b: THE TOUCH GPU DIET (html.ae-touch, 2026-08-25) -------------
+   The owner's iPhone 13 Pro Max dropped frames on EVERY tile slide, even with
+   two tiles on the board. The per-slide bill, retired here (the JS half -
+   flock skip, still merge punch, still faces, grab coalescing - is gated on
+   the game's own touch flag):
+     - .g-de-arrow wore a drop-shadow FILTER: 10-16 filtered nodes per slide,
+       up to 32 live. The flock is not even spawned on touch (casino.js); the
+       filter goes too for any host that arms ae-touch without the game flag.
+     - the bench lean was a perspective/rotateY/rotateX 3D transform - a 360ms
+       re-composite of the WHOLE board subtree per slide. Flat 2D shove now.
+     - the seven .g-de-bd layers each ran infinite animations (ken-burns +
+       pattern drifts). Frozen exactly like .g-de-lite freezes them - the
+       static gradients stay, so the pool still LOOKS dressed. (ae-touch is a
+       hardware ceiling: a phone on FULL is owed these cuts too, and the auto
+       probe samples an idle board so a phone never demoted on its own.)
+     - g-de-deepbreath is a FILTER (brightness) animation: always-on on the
+       deepest tile, and re-listed on every sliding tile's body. Dropped; the
+       stretch/squash (transform-only) is kept on the slide.
+     - the marquee flash animated brightness + drop-shadow over a board-sized
+       frame on every merge: opacity-only twin.
+     - the ken-burns pan on still faces: a composited transform per face, 16s,
+       forever. Off.
+   Everything here is also either killed or matched by the reduced-motion
+   blocks BELOW this one (their animation:none !important kills and later
+   equal-specificity bench rules still win), so reduced motion is unchanged. */
+html.ae-touch .g-de-arrow{filter:none}
+html.ae-touch .g-de-bench{transform:translate3d(calc(var(--de-bench-lean-x,0) * 6px), calc(var(--de-bench-lean-y,0) * 6px), 0)}
+html.ae-touch .g-de-bd,
+html.ae-touch .g-de-bd-veil::before,
+html.ae-touch .g-de-bd-bands::before,html.ae-touch .g-de-bd-bands::after,
+html.ae-touch .g-de-bd-lens::before,html.ae-touch .g-de-bd-lens::after,
+html.ae-touch .g-de-bd-motes::before,html.ae-touch .g-de-bd-motes::after,
+html.ae-touch .g-de-bd-rays::before,html.ae-touch .g-de-bd-vortex::before{animation:none}
+html.ae-touch .g-de-tile.is-deepest::before{animation:none}
+html.ae-touch .g-de-tile.is-sliding-x:not(.is-merged):not(.is-silt)::before{
+  animation:g-de-stretchx .32s cubic-bezier(.3,.7,.3,1) 1}
+html.ae-touch .g-de-tile.is-sliding-y:not(.is-merged):not(.is-silt)::before{
+  animation:g-de-stretchy .32s cubic-bezier(.3,.7,.3,1) 1}
+html.ae-touch .g-de-mq.g-de-mq-flash,
+html.ae-touch .g-de-mq.g-de-mq-bell.g-de-mq-flash{animation:g-de-mqflash-t .6s ease-out 1}
+@keyframes g-de-mqflash-t{0%{opacity:1}100%{opacity:var(--g-de-mqa,.26)}}
+html.ae-touch img.g-de-media{animation:none}
+/* the OS-level reduced-motion query pins the bench flat at LOWER specificity
+   than the touch rule above, so the touch sheet restates it (the class-based
+   html.arc-reduced rule below already outranks by order). */
+@media (prefers-reduced-motion: reduce){
+  html.ae-touch .g-de-bench{transform:none;transition:none}
+}
 
 /* ---- reduced motion: the mechanic survives, the motion does not ---------- */
 html.arc-reduced .g-de-stage *{animation:none !important}

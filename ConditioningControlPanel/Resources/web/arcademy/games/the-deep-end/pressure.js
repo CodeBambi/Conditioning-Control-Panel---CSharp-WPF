@@ -284,6 +284,11 @@ export function createDePressure(o) {
   const reduced = !!opts.reduced;
   const motion = Math.max(0, Math.min(2, Math.round(opts.motionLevel == null ? 2 : Number(opts.motionLevel) || 0)));
   const still = reduced || motion <= 0;           // no tremor, no chip transforms, no spin, no shudder
+  /* pass 6 - THE TOUCH RUNG: on a phone the merge punch takes the reduced-
+     motion body (the ring bloom) instead of the rAF board-translate loop -
+     `board.style.translate` per frame restyles the whole board subtree, and it
+     fires on the very first 2-tile merge. */
+  const touchDev = !!opts.touch;
   const gradeTier = Math.max(1, Math.min(4, Number(opts.gradeTier) || 1));
   const audioCeil = P.AUDIO_CEIL[gradeTier] || P.AUDIO_CEIL[1];
   const hud = opts.hud || {};
@@ -568,7 +573,7 @@ export function createDePressure(o) {
   /** Extend-not-stack: the louder amplitude wins, the deadline moves out. */
   function punchBoard(px, ms) {
     if (!armed() || stopped) return;
-    if (still) { bloomRing(false); return; }
+    if (still || touchDev) { bloomRing(false); return; }   // touch: bloom, never the translate loop
     const a = Math.min(P.PUNCH_PX_CAP, Math.max(0, Number(px) || 0)) * P.MOTION_MUL[motion];
     if (a < 0.1) return;
     const t = nowMs();
