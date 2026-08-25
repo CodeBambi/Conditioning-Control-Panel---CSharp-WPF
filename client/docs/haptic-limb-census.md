@@ -122,10 +122,10 @@ cited line; the pin checks both sides.
 <!-- census:sites -->
 | # | upstream | needle | verdict | port trigger | port needle | T3 | notes |
 |---|---|---|---|---|---|---|---|
-| 1 | `Services/Flash/FlashService.cs:1453` | `App.Haptics?.FlashDecayVibeAsync()` | collapsed | `Effects/FlashSurfacePresenter.cs:364` | `_surfaces.Place(slot, request, frame, draw.Lifetime)` | fail: intensity + ladder | A flash image appears. Upstream's LAYER arm; one of three mutually exclusive spawn arms in `SpawnFlashWindow` (`:1445`, `:1455`, `:1482`) that all call the same thing. |
-| 2 | `Services/Flash/FlashService.cs:1480` | `App.Haptics?.FlashDecayVibeAsync()` | collapsed | `Effects/FlashSurfacePresenter.cs:364` | `_surfaces.Place(slot, request, frame, draw.Lifetime)` | fail: intensity + ladder | Same moment, upstream's shared-HOST arm. |
-| 3 | `Services/Flash/FlashService.cs:1516` | `App.Haptics?.FlashDecayVibeAsync()` | collapsed | `Effects/FlashSurfacePresenter.cs:364` | `_surfaces.Place(slot, request, frame, draw.Lifetime)` | fail: intensity + ladder | Same moment, upstream's per-WINDOW arm. Nothing is lost by the collapse: all three arms call one method and the arm is a rendering choice, not a haptic one. |
-| 4 | `Services/Flash/FlashService.cs:1627` | `haptics.SetLayer(Services.Haptics.Core.HapticLayer.Luminance,` | present | `Effects/FlashSurfacePresenter.cs:364` | `_surfaces.Place(slot, request, frame, draw.Lifetime)` | fail: latch + intensity | A flash image is on screen, for as long as it is. Shares the port statement with 1-3 but is a different command: a continuous layer at the image's average brightness, auto-zeroed after the flash's own lifetime. The port already holds the decoded BGRA bytes at this point (`Effects/FlashFrameSource.cs:205`, `:258`), so no second decode is needed. |
+| 1 | `Services/Flash/FlashService.cs:1453` | `App.Haptics?.FlashDecayVibeAsync()` | collapsed | `Effects/FlashSurfacePresenter.cs:374` | `_surfaces.Place(slot, request, frame, draw.Lifetime)` | fail: intensity + ladder | A flash image appears. Upstream's LAYER arm; one of three mutually exclusive spawn arms in `SpawnFlashWindow` (`:1445`, `:1455`, `:1482`) that all call the same thing. |
+| 2 | `Services/Flash/FlashService.cs:1480` | `App.Haptics?.FlashDecayVibeAsync()` | collapsed | `Effects/FlashSurfacePresenter.cs:374` | `_surfaces.Place(slot, request, frame, draw.Lifetime)` | fail: intensity + ladder | Same moment, upstream's shared-HOST arm. |
+| 3 | `Services/Flash/FlashService.cs:1516` | `App.Haptics?.FlashDecayVibeAsync()` | collapsed | `Effects/FlashSurfacePresenter.cs:374` | `_surfaces.Place(slot, request, frame, draw.Lifetime)` | fail: intensity + ladder | Same moment, upstream's per-WINDOW arm. Nothing is lost by the collapse: all three arms call one method and the arm is a rendering choice, not a haptic one. |
+| 4 | `Services/Flash/FlashService.cs:1627` | `haptics.SetLayer(Services.Haptics.Core.HapticLayer.Luminance,` | present | `Effects/FlashSurfacePresenter.cs:374` | `_surfaces.Place(slot, request, frame, draw.Lifetime)` | fail: latch + intensity | A flash image is on screen, for as long as it is. Shares the port statement with 1-3 but is a different command: a continuous layer at the image's average brightness, auto-zeroed after the flash's own lifetime. The port already holds the decoded BGRA bytes at this point (`Effects/FlashFrameSource.cs:205`, `:258`), so no second decode is needed. |
 | 5 | `Services/Flash/FlashService.cs:1915` | `App.Haptics?.FlashClickVibeAsync()` | absent-by-decision | — | — | — | A flash is popped. Reached by THREE upstream routes, not one: the mouse click (`:1846`), the gaze pop (`:294`) and the layered-visual click (`:3632`). The port has no route of any kind. |
 | 6 | `Services/Video/VideoService.cs:2580` | `App.Haptics?.StartVideoBackgroundVibeAsync()` | collapsed | `Effects/MandatoryVideoEffect.cs:287` | `_surface.Begin(firing.Path, firing.MaxLength, OnClipEnded)` | fail: latch + intensity | A clip starts playing. Upstream's LibVLC engine, the fallback one. |
 | 7 | `Services/Video/VideoService.Browser.cs:452` | `App.Haptics?.StartVideoBackgroundVibeAsync()` | collapsed | `Effects/MandatoryVideoEffect.cs:287` | `_surface.Begin(firing.Path, firing.MaxLength, OnClipEnded)` | fail: latch + intensity | Same moment on upstream's DEFAULT engine, which `VideoService.cs:2407` routes to first. The port has one video path and no browser engine, so both engines' starts are one statement here. This is the site both prior counts missed. |
@@ -146,7 +146,7 @@ cited line; the pin checks both sides.
 
 | port statement | serves sites | what a limb would do there |
 |---|---|---|
-| `Effects/FlashSurfacePresenter.cs:364` | 1, 2, 3, 4 | one decay ladder AND one luminance layer per placed image |
+| `Effects/FlashSurfacePresenter.cs:374` | 1, 2, 3, 4 | one decay ladder AND one luminance layer per placed image |
 | `Effects/MandatoryVideoEffect.cs:287` | 6, 7 | raise the continuous video layer |
 | `Effects/MandatoryVideoEffect.cs:416` (+ `:337`) | 12 | zero it, on every path that takes the clip off the screen |
 | `Effects/SubliminalsEffect.cs:209` | 14, 15 | one short pulse per card |
@@ -163,7 +163,7 @@ would be `absent-unexplained`, and there are none.
 <!-- census:decisions -->
 | site | decision | quote |
 |---|---|---|
-| 5 | `Effects/FlashSurfacePresenter.cs:360` | `serve pop / hydra / XP mechanics this port does not have` |
+| 5 | `Effects/FlashSurfacePresenter.cs:370` | `serve pop / hydra / XP mechanics this port does not have` |
 | 8 | `Haptics/IHapticSink.cs:301` | `a script player this port has not ported at all` |
 | 9 | `Haptics/IHapticSink.cs:301` | `a script player this port has not ported at all` |
 | 10 | `Effects/MandatoryVideoEffect.cs:405` | `not ported and not shown as dead controls: attention` |
@@ -175,7 +175,7 @@ would be `absent-unexplained`, and there are none.
 <!-- /census:decisions -->
 
 **Site 5 — the flash pop.** The quoted sentence is the reason the port's flash surfaces are created
-`ClickThrough: true` unconditionally (`Effects/FlashSurfacePresenter.cs:363`): a surface that caught
+`ClickThrough: true` unconditionally (`Effects/FlashSurfacePresenter.cs:373`): a surface that caught
 clicks it does nothing with would swallow the user's input. **The moment this site fires on is a
 flash being popped**, and with every flash surface click-through there is no pop. **The quote covers all three
 upstream routes, because it names the MECHANIC rather than the input**: `pop / hydra / XP mechanics

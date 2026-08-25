@@ -129,7 +129,11 @@ public sealed class SpiralSurfacePresenter : ISpiralSurface, IDisposable
         _surfaces = new OverlaySurfaceSet(
             clock, dispatch, presenceFactory, MaxConcurrentSurfaces, TopmostCadence,
             rebuild: Rebuild,
-            topmostHeld: topmostHeld);
+            topmostHeld: topmostHeld,
+            // The spiral is the SECOND of upstream's three below-video lists
+            // (OverlayService.cs:2793, _spiralWindows), for the same reason as the tint and with the
+            // same 5 s kick. See Overlay/VideoTopmostAnchor.cs.
+            yieldToVideo: true);
     }
 
     /// <summary>The product composition: the real overlay backend for this platform, the GDI+

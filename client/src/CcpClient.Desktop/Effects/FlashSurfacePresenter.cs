@@ -169,6 +169,16 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
         _random = random ?? new Random();
         _haptics = haptics;
         _animations = animations;
+        // NO yieldToVideo, and that is a decision rather than an omission. Upstream's below-video
+        // pin reaches the pink filter, the spiral and the brain-drain blur
+        // (Services/Notifications/OverlayService.cs:2793-2801) and pointedly not flash: RaiseAllToFront
+        // calls flashes "the top attention layer by design" and force-raises every legacy flash window
+        // with no video test at all (Services/Flash/FlashService.cs:203-224, ForceTopmost at :3865-3877).
+        // Only its compositor-HOST branch stands down while a video plays, and :230-235 says why —
+        // the host is what OverlayService pins below the video, so raising it there would just fight
+        // that reconciler. This port's video surface is opaque (Video/Win32VideoPresence.cs:130) and
+        // typically fills the display, and nothing in Session/SessionParticipant.cs suppresses flash
+        // during a clip, so a flash pinned under it would be invisible for the whole clip.
         _surfaces = new OverlaySurfaceSet(clock, dispatch, presenceFactory, MaxConcurrentSurfaces, TopmostCadence);
     }
 

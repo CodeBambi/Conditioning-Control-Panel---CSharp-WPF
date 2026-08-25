@@ -118,6 +118,51 @@ internal static class OverlayWindowProbe
         return before;
     }
 
+    /// <summary>The scratch styles that make a window a plain top-level surface with no taskbar
+    /// entry and no activation — what a stand-in for another module's window is built from.</summary>
+    internal static uint ToolwindowNoactivate => WsExToolwindow | WsExNoactivate;
+
+    /// <summary>
+    /// Is <paramref name="upper"/> ahead of <paramref name="lower"/> in the OS's own z-order walk
+    /// over visible top-level windows?
+    ///
+    /// <para>The ORDERING is the fact. <c>WS_EX_TOPMOST</c> says which BAND a window is in and
+    /// never where in it, so a below-video pin — which keeps the bit and changes only the slot —
+    /// is invisible to an extended-style read and visible only here. False when either window is
+    /// not in the walk, so a destroyed or hidden window can never read as "above".</para>
+    /// </summary>
+    internal static bool IsAbove(nint upper, nint lower)
+    {
+        if (!WindowsHost || upper == 0 || lower == 0 || upper == lower)
+        {
+            return false;
+        }
+
+        var upperIndex = -1;
+        var lowerIndex = -1;
+        var visible = 0;
+        for (var candidate = GetTopWindow(0); candidate != 0; candidate = GetWindow(candidate, GwHwndnext))
+        {
+            if (!IsWindowVisible(candidate))
+            {
+                continue;
+            }
+
+            if (candidate == upper)
+            {
+                upperIndex = visible;
+            }
+            else if (candidate == lower)
+            {
+                lowerIndex = visible;
+            }
+
+            visible++;
+        }
+
+        return upperIndex >= 0 && lowerIndex >= 0 && upperIndex < lowerIndex;
+    }
+
     /// <summary>WS_EX_TOPMOST, for tests that need to strip exactly the re-assertable bit.</summary>
     internal static uint TopmostBit => WsExTopmost;
 
