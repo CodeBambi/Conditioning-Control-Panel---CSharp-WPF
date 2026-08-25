@@ -1089,9 +1089,11 @@
 
             <!-- Row 3: the ? box + the immersion pair -->
             <!-- The ? BOX: today's premium feature, free for the day (DailyFreeService).
-                 Title and the FREE TODAY badge are painted by MainWindow.RefreshMysteryTile()
-                 on every rail repaint; the literals below are design-time fallbacks. Click
-                 navigates to today's feature - the tile never launches anything itself.
+                 The title is painted by MainWindow.RefreshMysteryTile() on every rail repaint
+                 and is ALWAYS the offer ("FREE TODAY"), never the day's feature - naming it on
+                 this face would spend the reveal below before the plate ever turned. The literal
+                 is a design-time fallback. Click navigates to today's feature - the tile never
+                 launches anything itself.
 
                  The tile is a TWO-SIDED PLATE (owner spec 2026-08-11 #2, revised): HOVER turns
                  it - same ScaleX fake-spin as the intake pass card on the logo tile, one quick
@@ -1111,7 +1113,7 @@
                 </Grid.RenderTransform>
 
                 <features:FeatureCard x:Name="CardMystery" x:FieldModifier="internal"
-                                      Title="Daily Gift"
+                                      Title="FREE TODAY"
                                       Icon="pack://application:,,,/Resources/features/mysterybox.png"
                                       Click="CardMystery_Click"/>
 
@@ -1153,8 +1155,9 @@
                         <!-- The gift's price, re-stamped. On the REVEAL face only: this is the
                              side that names today's feature, so it is the side that can say what
                              the feature normally costs and that today it does not. The ? box face
-                             keeps its own gold ring and its FREE TODAY text pill - putting a tier
-                             sign on the unopened box would price a gift nobody has looked at yet.
+                             carries no sign of any kind, only its gold ring and its FREE TODAY
+                             title - putting a tier sign on the unopened box would price a gift
+                             nobody has looked at yet.
                              Painted by RefreshMysteryTile; collapsed for premium accounts, who own
                              the whole pool and are not being given anything. -->
                         <fx:TierBadge x:Name="MysteryRevealBadge" x:FieldModifier="internal"
