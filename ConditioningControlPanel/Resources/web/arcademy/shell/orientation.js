@@ -449,11 +449,26 @@ export function createOrientation(o) {
     return true;
   }
 
+  /** THE CARD IS IN THE AIR. campus.js refuses the ID's own click and its chip
+   *  while this attribute is set: a card that is mid-handover is a beat, not a
+   *  thing you can pick up. ONE attribute, set where the flight starts and
+   *  cleared in landCard() - which every path out of the beat already goes
+   *  through, so there is exactly one place it comes off. */
+  function markInflight(on) {
+    const card = cardEl();
+    if (!card || !card.dataset) return;
+    try {
+      if (on) card.dataset.inflight = '1';
+      else delete card.dataset.inflight;
+    } catch (e) { /* noop */ }
+  }
+
   /** LAW 3. The card is in its home slot, right now, with nothing pending. */
   function landCard() {
     const card = cardEl();
     if (!card) return false;
     try { card.hidden = false; } catch (e) { /* noop */ }
+    markInflight(false);
     dropSheen();
     setStyle(card, 'transition', '');
     setStyle(card, 'transform', '');
@@ -475,6 +490,7 @@ export function createOrientation(o) {
     at(REDUCED_FADE_MS + 60, () => {
       setStyle(card, 'transition', '');
       setStyle(card, 'opacity', '');
+      markInflight(false);
     });
     return true;
   }
@@ -546,6 +562,7 @@ export function createOrientation(o) {
     if (state !== 'running') return;
     const card = cardEl();
     try { if (card) card.hidden = false; } catch (e) { /* noop */ }
+    markInflight(true);
     const flew = flip(card);
     at(flew ? FLIP_MS : 0, () => {
       if (state !== 'running') return;
@@ -613,6 +630,7 @@ export function createOrientation(o) {
       at(REDUCED_HI_MS, () => { if (state === 'running') { moment('hi'); } });
       at(REDUCED_CARD_MS, () => {
         if (state !== 'running') return;
+        markInflight(true);
         fadeInCard();
         stampCue();
         moment('card');

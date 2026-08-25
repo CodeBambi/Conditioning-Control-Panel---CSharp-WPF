@@ -39,6 +39,12 @@ import { isMobile, onDeviceChange } from '../core/device.js';
  * everything arrives through the `post` option bag, and a campus built without
  * one simply has no post - the mockup, the suite and old callers all still
  * stand). */
+/* THE STUDENT ID'S PARTS. Pure helpers, shared with the spotlight so the
+ * furniture card and the big card can never disagree about what your card says
+ * (shell/idcard.js's header). Nothing here mounts anything. */
+import { genericPortrait, portraitSrc, portraitLabel, chipRung, paintChip, runPhotoDay,
+  studentNumber } from './idcard.js';
+import { thud as punchThud } from './punchcard.js';
 import { mountMailChip } from './mailbox.js';
 import { mountBoardProp } from './corkboard.js';
 import { mountBugleProp } from './bugle.js';
@@ -671,6 +677,27 @@ function el(tag, cls, text) {
   return n;
 }
 
+/** The student ID's crest: an arcade token with a star, DRAWN. The campus has
+ *  no logo file and this one is 20x20 of markup (the nine-broken-logos law). */
+function idCrestGlyph() {
+  const ns = 'http://www.w3.org/2000/svg';
+  try {
+    const s = document.createElementNS(ns, 'svg');
+    s.setAttribute('viewBox', '0 0 20 20');
+    s.setAttribute('class', 'id-crestmark');
+    s.setAttribute('aria-hidden', 'true');
+    const ring = document.createElementNS(ns, 'circle');
+    ring.setAttribute('cx', '10'); ring.setAttribute('cy', '10'); ring.setAttribute('r', '9');
+    ring.setAttribute('fill', 'none'); ring.setAttribute('stroke', 'currentColor');
+    ring.setAttribute('stroke-width', '2');
+    const star = document.createElementNS(ns, 'path');
+    star.setAttribute('fill', 'currentColor');
+    star.setAttribute('d', 'M10 5.5l1.3 2.8 3 .3-2.3 2 .7 3-2.7-1.6-2.7 1.6.7-3-2.3-2 3-.3z');
+    s.appendChild(ring); s.appendChild(star);
+    return s;
+  } catch (e) { return null; }
+}
+
 /* ============================================================================
  * THE CAMPUS
  * ==========================================================================*/
@@ -682,7 +709,12 @@ function el(tag, cls, text) {
  * @param {Object} o.stats        {streak, perfectDays, tier}
  * @param {boolean=} o.reducedMotion
  * @param {Object} o.on           {begin(gameKey), freeSwim(gameKey), records(),
- *   registrar(), boardToggle(expanded)} - freeSwim is only ever called for a
+ *   registrar(), boardToggle(expanded), idCard(), idChip()} - `idCard` is
+ *   OFFERED by the student ID's own click and Enter (the shell owns the
+ *   spotlight, shell/idcard.js, exactly as it owns the Records one) and
+ *   `idChip` is the photo consent leaving for the host; both are optional, and
+ *   a caller that hands neither gets the furniture card it has always got.
+ *   freeSwim is only ever called for a
  *   room whose state carries an `endless` declaration (the shell reads the
  *   manifest, never the campus). boardToggle fires AFTER the hanging board has
  *   been shown/hidden - the shell rolls the flaps (and stamps the store) on
@@ -775,6 +807,16 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   let idStreak = null;
   let idPerfect = null;
   let idTier = null;
+  /* THE STUDENT ID's live parts. `idProfile` is the LAST profile the shell
+   * handed down (init.profile, then every `profile` frame) - the card paints
+   * from it and derives nothing of its own. */
+  let idPhotoImg = null;
+  let idPhotoEl = null;
+  let idChip = null;
+  let idNum = null;
+  let idProfile = null;
+  let idChipState = 'link';
+  let idLastTier = 0;
   let bellText = null;
 
   /* ------------------------------ SVG plan ------------------------------- */
@@ -1604,15 +1646,69 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
    * and the sheet's `[hidden]{display:none!important}` reset - never a bare
    * `display:` on this node (trap 27). */
   if (idCardMode === 'withheld') id.hidden = true;
+  /* THE LANYARD CLIP. Pure furniture, drawn, no asset. */
+  const idClip = el('i', 'id-clip');
+  idClip.setAttribute('aria-hidden', 'true');
+  id.appendChild(idClip);
+  /* THE CREST BAND. The card says what it is, in its own words. */
+  const idBand = el('div', 'id-band');
+  const idCrest = el('span', 'id-crest');
+  const idCrestMark = idCrestGlyph();
+  if (idCrestMark) idCrest.appendChild(idCrestMark);
+  idCrest.appendChild(el('span', null, t('arcademy', 'The Arcademy').toUpperCase()));
+  idBand.appendChild(idCrest);
+  idBand.appendChild(el('span', 'id-kind', t('student_id_title', 'Student ID').toUpperCase()));
+  id.appendChild(idBand);
   const idTop = el('div', 'id-top');
-  idTop.appendChild(el('div', 'id-photo'));
-  const idMeta = el('div');
+  /* THE PHOTO WELL. ONE `<img>` carries either the host's baked avatar or the
+   * drawn stand-in; a decode failure swaps the src back to the stand-in and
+   * never reaches for the network again (ghosts.js's rule). No Discord url and
+   * no Discord id is ever on this page - the host resolves both (PRESENCE §10). */
+  const idWell = el('div', 'id-well');
+  const idPhoto = el('div', 'id-photo');
+  idPhotoImg = el('img', 'id-photo-img');
+  idPhotoImg.setAttribute('alt', '');
+  idPhotoImg.setAttribute('decoding', 'async');
+  idPhotoImg.addEventListener('error', () => {
+    try {
+      const fb = genericPortrait(idProfile && idProfile.presenceShare);
+      if (idPhotoImg.src !== fb) { idPhotoImg.src = fb; idPhoto.classList.remove('is-real'); }
+    } catch (e) { /* noop */ }
+  });
+  idPhotoImg.src = genericPortrait(null);
+  idPhoto.appendChild(idPhotoImg);
+  const idFlash = el('i', 'id-flash');
+  idFlash.setAttribute('aria-hidden', 'true');
+  idPhoto.appendChild(idFlash);
+  idWell.appendChild(idPhoto);
+  idPhotoEl = idPhoto;
+  /* THE CHIP: the photo consent, in the card's own words. It paints the rung it
+   * is HANDED and never the one its own click asked for (trap 1) - the click
+   * leaves through `handlers.idChip` and the shell waits for the echo. */
+  idChip = el('button', 'id-chip');
+  idChip.type = 'button';
+  idChip.addEventListener('click', (ev) => {
+    /* The chip is INSIDE the card's own button, so its click must not also
+     * open the spotlight - one press, one verb. */
+    try { ev.stopPropagation(); } catch (e) { /* noop */ }
+    if (id.hidden || (id.dataset && id.dataset.inflight === '1')) return;
+    if (handlers.idChip) { try { handlers.idChip(); } catch (e) { say('idChip threw: ' + ((e && e.message) || e)); } }
+  });
+  idTop.appendChild(idWell);
+  const idMeta = el('div', 'id-meta');
   idMeta.appendChild(el('div', 'id-name', t('student', 'Student')));
+  idNum = el('div', 'id-num', '');
+  idMeta.appendChild(idNum);
   idMeta.appendChild(el('div', 'id-no', (t('semester', 'Semester') + ' ' + termRoman).toUpperCase()));
   idTier = el('span', 'id-tier', '');
   idMeta.appendChild(idTier);
   idTop.appendChild(idMeta);
   id.appendChild(idTop);
+  /* THE CHIP SPANS THE CARD, not the 58px well. "Link Discord" at chip type
+   * does not fit under the photo and an ellipsis is not a consent sentence -
+   * the row still reads as the photo's own switch because it sits directly
+   * under it, and it is a 208px hit target instead of a 48px one. */
+  id.appendChild(idChip);
   const idStats = el('div', 'id-stats');
   const stat = (cls, label) => {
     const s = el('div', 'id-stat' + (cls ? ' ' + cls : ''));
@@ -1625,7 +1721,73 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   idStreak = stat('', t('attendance', 'Attendance'));
   idPerfect = stat('gp', t('perfect_attendance', 'Perfect Attendance'));
   id.appendChild(idStats);
+  const idFoil = el('i', 'id-foil');
+  idFoil.setAttribute('aria-hidden', 'true');
+  id.appendChild(idFoil);
+  paintIdChip('link');
+  /* THE CARD IS A DOOR NOW. It opens the ID spotlight (shell/idcard.js) through
+   * the shell, which owns the overlay exactly as it owns the Records one. The
+   * press is REFUSED while the card is withheld and while Orientation Day has
+   * it in the air (`data-inflight`, set and cleared by orientation.js) - a beat
+   * that is mid-flight is not a thing you can pick up. */
+  id.setAttribute('role', 'button');
+  id.tabIndex = 0;
+  id.setAttribute('aria-label', t('student_id_title', 'Student ID'));
+  const openIdCard = () => {
+    if (id.hidden || (id.dataset && id.dataset.inflight === '1')) return;
+    if (!handlers.idCard) return;
+    try { handlers.idCard(); } catch (e) { say('idCard threw: ' + ((e && e.message) || e)); }
+  };
+  id.addEventListener('click', openIdCard);
+  id.addEventListener('keydown', (ev) => {
+    if (!ev || (ev.key !== 'Enter' && ev.key !== ' ')) return;
+    try { ev.preventDefault(); } catch (e) { /* noop */ }
+    openIdCard();
+  });
   root.appendChild(id);
+
+  /** Paint the chip's rung. `pending` keeps the last label - the echo has not
+   *  landed, so there is nothing new to say (trap 1). */
+  function paintIdChip(state) {
+    idChipState = String(state || 'link');
+    paintChip(idChip, t, idChipState, true);
+  }
+
+  /**
+   * THE PROFILE LANDED. Everything the card says about YOU repaints from this
+   * one object and from nothing else: the photo, the name, the number and the
+   * chip's resting rung. A host that has never heard of `profile` simply never
+   * calls this, and the card keeps the stand-in portrait it was built with.
+   * @param {Object} p  {name, avatarUrl, discordLinked, presenceShare, selfId}
+   */
+  function setIdProfile(p) {
+    idProfile = p && typeof p === 'object' ? p : null;
+    const prof = idProfile || {};
+    try { if (idPhotoImg) idPhotoImg.src = portraitSrc(prof); } catch (e) { /* noop */ }
+    try {
+      if (idPhotoEl && idPhotoEl.classList) {
+        idPhotoEl.classList.toggle('is-real',
+          !!prof.discordLinked && String(prof.presenceShare) === 'discord' && !!prof.avatarUrl);
+      }
+    } catch (e) { /* noop */ }
+    try { if (idPhotoEl) idPhotoEl.setAttribute('aria-label', portraitLabel(t, prof)); }
+    catch (e) { /* noop */ }
+    const nameEl = id.querySelector ? id.querySelector('.id-name') : null;
+    if (nameEl) nameEl.textContent = prof.name ? String(prof.name) : t('student', 'Student');
+    if (idNum) {
+      const num = studentNumber(prof.selfId, prof.enrolled, prof.name);
+      idNum.textContent = t('id_no', 'Student no.').toUpperCase() + ' ' + num.no;
+    }
+    paintIdChip(chipRung(prof));
+  }
+
+  /** PHOTO DAY on the furniture card: the shutter, the well-only flash and the
+   *  photo developing in. Reduced motion is a plain swap (runPhotoDay's rule). */
+  function idPhotoDay() {
+    return runPhotoDay(idPhotoEl, sfx, !!reducedMotion, (ms, fn) => {
+      try { setTimeout(fn, ms); } catch (e) { fn(); }
+    });
+  }
 
   /* THE POST ROW: the noticeboard thumbnail and the folded Bugle, leaning
    * against the wall beside the student ID. Furniture only - the overlays,
@@ -2044,7 +2206,25 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     /* ID card */
     idStreak.textContent = '🔥 ' + String((stats2.streak | 0));
     idPerfect.textContent = String((stats2.perfectDays | 0));
-    idTier.textContent = tierLabel(stats2.tier || 1).toUpperCase();
+    const tierNow = stats2.tier || 1;
+    idTier.textContent = tierLabel(tierNow).toUpperCase();
+    /* RE-INKED. A card whose YEAR changed is a card the front desk stamped
+     * again, so the stamp lands with the punch card's own thud - once, on the
+     * paint that CHANGED it, and never on the first one (as far as tonight
+     * knows, the card was always this year). Reduced motion keeps the words
+     * and drops the beat, like everything else on this card. */
+    if (idLastTier && tierNow !== idLastTier && !reducedMotion) {
+      try {
+        idTier.classList.remove('is-thud');
+        void idTier.offsetWidth;
+        idTier.classList.add('is-thud');
+        idTier.setAttribute('title', t('id_reinked', 'Re-inked'));
+      } catch (e) { /* noop */ }
+      try { punchThud(1); } catch (e) { /* noop */ }
+    }
+    idLastTier = tierNow;
+    /* The card's edge warms as the streak climbs: a colour, never a bulb ring. */
+    try { id.classList.toggle('is-warm', (stats2.streak | 0) >= 7); } catch (e) { /* noop */ }
   }
 
   /* enrich class-card state with descriptor detail the shell passes on stops */
@@ -2364,6 +2544,19 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     walkMount: walkLayer,
     /** The ONE student-ID node. Orientation Day animates this, never a copy. */
     idCardEl() { return id; },
+    /**
+     * THE PROFILE SEAM (shell/idcard.js's contract). The shell hands the card
+     * `init.profile` at build and every `profile` frame after it; the card
+     * paints and derives nothing. Called with nothing at all, the card keeps
+     * the stand-in portrait and the unlinked chip it was built with.
+     */
+    setProfile: setIdProfile,
+    /** The chip's in-flight looks, which only the shell knows about:
+     *  'wait' (a link is in the air) and 'pending' (a set-setting is waiting on
+     *  its echo). Every resting rung comes from `setProfile`. */
+    setChipState: paintIdChip,
+    /** PHOTO DAY on the furniture card (the spotlight has its own). */
+    photoDay: idPhotoDay,
     /**
      * The two counters' groups, by walk-graph key. Orientation Day pulses the
      * Front Office's own neon sign on arrival (§3.3 step 3) and a beat may not
