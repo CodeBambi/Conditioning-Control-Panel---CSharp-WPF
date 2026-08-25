@@ -520,6 +520,38 @@
    keeps the centred stage. */
 html.arc-mobile[data-arc-orient="landscape"] .arm-stage { top: 0; transform-origin: 50% 0; }
 
+/* A HOVER-ONLY AFFORDANCE IS NOT AN AFFORDANCE ON A PHONE (owner report
+   2026-08-25, "I cannot get to the lab from the Records office"). `.arm-exit`
+   is the painted way through - dark until you find it, honest once you do -
+   and the only thing that ever lit it was `:hover` / `:focus-visible`. A thumb
+   has neither, so on a phone the storeroom door was a 75x231 rect of painted
+   wall with nothing at all to say it could be pressed.
+
+   It gets a RESTING rim on touch, and only on touch: the same quiet purple the
+   hover state uses, at the hover's own weight rather than a new colour. It
+   still never breathes and it still never out-shouts `.arm-main` - the verb
+   that pays keeps the pink and keeps the pulse. The desktop rule is untouched,
+   so a mouse still finds the door the way it was signed off.
+
+   EVERY NUMBER HERE IS A STAGE PIXEL. A hotspot lives inside the 1376x768
+   plane, and a phone fits that plane at about a half - so the desktop's 2px
+   rim would land at one physical pixel and the 13px tag at six. They are
+   doubled, and that is not a taste call, it is the same arithmetic the
+   step-back pill lost (scene.css's own note). */
+html.arc-mobile .arm-hot.arm-exit {
+  box-shadow: inset 0 0 0 5px rgba(190, 160, 255, 0.50),
+              0 0 34px 8px rgba(150, 120, 230, 0.22);
+}
+/* ...and its name, which is the other half a phone cannot hover for. The tag
+   is decoration (it takes no pointer events), so the rect under it stays one
+   unbroken press. */
+html.arc-mobile .arm-hot.arm-exit .arm-hot-tag {
+  opacity: 1;
+  bottom: -40px;
+  padding: 6px 16px;
+  font-size: 22px;
+}
+
 html.arc-mobile .arm-bar {
   gap: 10px;
   padding: 7px calc(clamp(10px, 2.6vw, 22px) + env(safe-area-inset-right, 0px))

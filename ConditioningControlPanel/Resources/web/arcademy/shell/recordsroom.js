@@ -63,7 +63,7 @@ import { t as lexT } from '../core/lexicon.js';
 import { createScene } from './scene.js';
 import { createRecords } from './records.js';
 import { createDeskBook } from './deskbook.js';
-import { mountNotices } from './corkboard.js';
+import { mountNotices, closeNoticeReader, readerUp } from './corkboard.js';
 
 /* ----------------------------------------------------------------------------
  * THE TABLE
@@ -287,6 +287,8 @@ export function createRecordsRoom(caps) {
   let closeCards = null;       // the live panel's own close, or null
   let book = null;             // shell/deskbook.js, built on the first book view
   let paper = null;            // the corkboard's mount handle, or null
+  let mini = null;             // the WIDE shot's miniature wall, or null
+  let miniOff = null;          // its unmount
   let freshEl = null;          // the pink tab, or null
   let freshOff = null;         // its unmount
   let ajar = !!c.ajar;
@@ -344,6 +346,7 @@ export function createRecordsRoom(caps) {
 
   try { scene.root.classList.add('rr-room'); } catch (e) { /* noop */ }
   scene.setFlag('ajar', ajar);
+  mountMiniCork();
 
   /* THE ROOM TONE IS NOT WIRED, AND THAT IS A DELIBERATE ABSENCE.
    *
@@ -485,6 +488,48 @@ export function createRecordsRoom(caps) {
     });
   }
 
+  /* ------------------------------------------------------- THE MINIATURE */
+
+  /**
+   * THE BOARD HAS PAPER ON IT FROM ACROSS THE ROOM (owner ruling 2026-08-25).
+   * The plate paints bare cork, so until you walked up to it the office's
+   * noticeboard was an empty board in a room that is supposed to be lived in.
+   * This hangs the SAME night's set - one table, one state, one wall - into the
+   * cork rect on the wide shot, stood back from.
+   *
+   * IT IS A PREVIEW, AND THAT WORD IS LOAD-BEARING: `mountNotices({preview})`
+   * marks nothing read and banks no visit, so looking at the board is not
+   * reading the board and the fresh dot survives the glance.
+   *
+   * THE SCALE IS DERIVED, NEVER TYPED. The inner wall is laid out at the
+   * CLOSE-UP's own width, so a sheet in the miniature is the same shape as the
+   * sheet you walk up to, and the whole thing is then scaled by the ratio the
+   * two rects give us. Its height is the rect divided back out by that scale,
+   * which is what lets the grid deal two rows into the board's own proportions
+   * rather than into a letterboxed strip.
+   */
+  function mountMiniCork() {
+    if (dead || mini) return;
+    const rect = RECTS.corkboard;
+    const scale = rect[2] / CORK_INNER[2];
+    if (!(scale > 0)) return;
+    const wrap = el('div', 'rr-corkmini');
+    attr(wrap, 'aria-hidden', 'true');
+    /* `rr-cork` so it is laid out and inked exactly like the wall it is a
+     * picture of; `rr-cork-mini` so nothing - a sheet, a suite - can mistake
+     * the picture for the wall. */
+    const inner = el('div', 'rr-cork rr-cork-mini arc-cork-wall');
+    try {
+      inner.style.width = CORK_INNER[2] + 'px';
+      inner.style.height = Math.round(rect[3] / scale) + 'px';
+      inner.style.transform = 'scale(' + scale.toFixed(4) + ')';
+    } catch (e) { /* the node double has no style box - the wall still mounts */ }
+    wrap.appendChild(inner);
+    miniOff = scene.mountInView('wide', wrap, rect);
+    mini = mountNotices(inner, { daySeed: c.daySeed, preview: true, log: log });
+    if (!mini) log('records room: the miniature wall could not be pinned');
+  }
+
   /* ------------------------------------------------------------ THE BOARD */
 
   /** Pin the night's sheets over the bare cork, once per visit to the room. */
@@ -497,6 +542,12 @@ export function createRecordsRoom(caps) {
     paper = mountNotices(host, {
       daySeed: c.daySeed,
       onRead: typeof c.onCorkRead === 'function' ? c.onCorkRead : undefined,
+      /* EVERY SHEET COMES OFF THE WALL. The close-up is a painting scaled to
+       * the window, so on a phone its body copy lands near seven pixels and
+       * the bottom row hangs out of the frame; one press lifts the paper to
+       * full size over the window (corkboard.js's READER). The wall is still
+       * read at a glance - this is what a glance you cannot resolve does next. */
+      readable: true,
       log: log,
     });
     if (!paper) log('records room: the wall could not be pinned');
@@ -531,8 +582,16 @@ export function createRecordsRoom(caps) {
    */
   function escapeStep() {
     if (dead) return false;
+    /* A SHEET IN THE HAND IS THE THING ONE PRESS AGO, so it folds before the
+     * spotlight and before the chassis - inward-out, all the way down. */
+    if (dismissReader()) return true;
     if (dismissSpotlight()) return true;
     try { return !!scene.escapeStep(); } catch (e) { return false; }
+  }
+
+  /** The reader's own rung, kept separate so the shell can name it. */
+  function dismissReader() {
+    try { return !!closeNoticeReader(); } catch (e) { return false; }
   }
 
   /** The spotlight's own rung, kept separate so the shell can name it. */
@@ -557,6 +616,12 @@ export function createRecordsRoom(caps) {
     timers.length = 0;
     if (book) { try { book.destroy(); } catch (e) { /* noop */ } book = null; }
     if (paper) { try { paper.destroy(); } catch (e) { /* noop */ } paper = null; }
+    /* The miniature is scenery and goes with the room; its unmount is the
+     * chassis's, its sheets are corkboard.js's, and a reader left in the
+     * player's hand is a <body>-level node that would outlive both. */
+    if (mini) { try { mini.destroy(); } catch (e) { /* noop */ } mini = null; }
+    if (miniOff) { try { miniOff(); } catch (e) { /* noop */ } miniOff = null; }
+    try { closeNoticeReader(); } catch (e) { /* noop */ }
     if (recordsPage) { try { recordsPage.destroy(); } catch (e) { /* noop */ } recordsPage = null; }
     closeCards = null;
     freshEl = null;
@@ -584,6 +649,11 @@ export function createRecordsRoom(caps) {
     book: function () { return book; },
     /** The night's pinned sheets, once the cork has been visited. */
     notices: function () { return paper ? paper.notices : null; },
+    /** The wide shot's miniature wall, or null. */
+    miniNotices: function () { return mini ? mini.notices : null; },
+    /** Is a sheet in the player's hand right now? */
+    readerUp: function () { try { return !!readerUp(); } catch (e) { return false; } },
+    dismissReader: dismissReader,
     /** Was this the room's first-ever visit? */
     firstVisit: function () { return firstEver; },
     /** Is the tray wearing the first-visit solo ring right now? */

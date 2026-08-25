@@ -143,7 +143,16 @@
 /* THE PILL, lifted from lab.css's .al-back. The apron's slab LEAVES THE ROOM;
    a player two clicks into a close-up needs the other verb and Esc is not a
    mouse. Warm here rather than the annex's cold green - a facility room is
-   still the school. Home never draws one. */
+   still the school. Home never draws one.
+
+   IT IS A CHILD OF `.asc-root`, NOT OF A SLIDE, and that is the whole of why
+   it is legible: a slide lives inside the SCALED stage, so a pill in there is
+   authored in stage pixels and comes out multiplied by the fit (~0.5 on a
+   phone - a 44px thumb target measured 22px and 12px type measured 6px). Root
+   is `position:fixed; inset:0`, so absolute here is screen pixels on every
+   host. z4 clears the stage (which is z:auto) and stays under the overlay
+   (z20), which is the right order: a panel opened over a close-up is the
+   thing the pill's own press closes first. */
 .asc-back {
   position: absolute;
   z-index: 4;
@@ -418,7 +427,9 @@
 html.arc-mobile[data-arc-orient="landscape"] .asc-stage { top: 0; transform-origin: 50% 0; }
 
 /* The step-back pill is a thumb target on a phone, and it shares the room's
-   ceiling with the plate. */
+   ceiling with the plate. Every number here is a SCREEN pixel now (see the
+   pill's own block above); before the pill moved out of the stage they were
+   stage pixels and this whole rule was worth about half of what it says. */
 html.arc-mobile .asc-back {
   left: calc(10px + env(safe-area-inset-left, 0px));
   top: calc(8px + env(safe-area-inset-top, 0px));

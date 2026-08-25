@@ -418,6 +418,43 @@ export function createScene(opts) {
     } catch (e) { /* noop */ }
   }
 
+  /* ---------------------------------------------------- the step-back pill */
+
+  /* THE WAY OUT OF A CLOSE-UP, and there is exactly ONE of it. lab.css's
+   * `.al-back`, promoted: the apron's slab leaves the room on the way into a
+   * close-up (A ZOOM IS A ZOOM), Esc is not a thumb, so a close-up draws a
+   * pill of its own.
+   *
+   * IT HANGS OFF THE ROOT, NEVER OFF THE SLIDE. A slide lives inside
+   * `.asc-stage`, which is the 1376x768 plane scaled to fit - so a pill in
+   * there is authored in STAGE pixels and every phone rule written for it is
+   * multiplied by the fit (~0.5 on a 844x390 window: a 44px thumb target came
+   * out 22px tall with 6px type, which is the owner's "there is no way back
+   * from the book", 2026-08-25). The apron band has been a screen-pixel
+   * sibling since it was written; the pill is the same kind of thing.
+   *
+   * It comes and goes by REMOVAL (trap 27), never by `hidden`, and it is a
+   * LEVEL keyed on the view exactly the way the apron is - every showView
+   * writes it, so an interrupted walk can never strand it over the wide shot.
+   */
+  const backPill = el('button', 'asc-back', '‹ ' + t('back', 'Back'));
+  backPill.type = 'button';
+  backPill.setAttribute('aria-label', t('back', 'Back'));
+  /* The pill runs the SAME fold Esc runs: a panel opened over a close-up is
+   * the thing one press ago, so it closes first. At the wide shot escapeStep
+   * answers false and does nothing - and the pill is not up there anyway. */
+  backPill.addEventListener('click', function () { escapeStep(); });
+  let backUp = false;
+  function backVisible(show) {
+    const want = !!show;
+    if (want === backUp) return;
+    backUp = want;
+    try {
+      if (want) root.appendChild(backPill);
+      else backPill.remove();
+    } catch (e) { /* a way out must never be the thing that throws */ }
+  }
+
   /* ------------------------------------------------------------ hotspots */
 
   function placeRect(node, rect) {
@@ -938,15 +975,12 @@ export function createScene(opts) {
       if (whenOn(opt.when)) node.appendChild(b);
     }
 
-    /* THE STEP-BACK PILL, lab.js's, on every close-up. The apron's slab LEAVES
-     * THE ROOM; a player two clicks deep needs the other verb, and Esc is not
-     * a mouse. Home has none - the apron is the way out from there. */
-    if (name !== 'wide') {
-      const pill = el('button', 'asc-back', '‹ ' + t('back', 'Back'));
-      pill.type = 'button';
-      pill.addEventListener('click', function () { showView('wide'); });
-      node.appendChild(pill);
-    }
+    /* THE STEP-BACK PILL IS NOT IN HERE ANY MORE - see backVisible(). It used
+     * to be a child of the slide, which put it inside the SCALED stage: on a
+     * phone the fit is ~0.5, so every screen pixel the phone rules asked for
+     * came out halved (a 44px thumb target measured 22px, 12px type measured
+     * 6px) and the one way out of a close-up read as a smudge. It is chrome,
+     * not paint - it hangs off the root now, in screen pixels. */
     return node;
   }
 
@@ -1040,6 +1074,9 @@ export function createScene(opts) {
      * every close-up. Written on EVERY move, not just the ones that change it,
      * so the level always matches the view that is actually up. */
     apronVisible(name === 'wide');
+    /* ...and the pill is the other half of the same law: the band and the pill
+     * are never both up, and never both away. */
+    backVisible(name !== 'wide');
     if (prevName) sfx(back ? 'door' : 'blip', back ? 0.3 : 0.16, back ? null : { pitch: 1.05 });
     /* Keyboard keeps its place: the room's own verb takes focus once the node
      * is in the document (a fresh node ignores focus() in some engines). */
@@ -1189,7 +1226,26 @@ export function createScene(opts) {
       bar.style.setProperty('--arm-band-h', bandH + 'px');
     }
     root.style.setProperty('--arm-band-h', bandH + 'px');
+    /* ...AND ON <html>, because a viewport-level modal cannot inherit it.
+     * `position:fixed` inside this room is contained by the room (root is
+     * fixed, and an overlay panel carries a transform), so anything that has
+     * to be measured against the WINDOW - the Records spotlight, a notice
+     * reader - is mounted on <body> and has no ancestor of ours to read the
+     * band off. One page-level custom property is the seam; destroy() clears
+     * it, so a screen after this one never inherits a carpet that left. */
+    setBandVar(bandH);
     return s;
+  }
+
+  /** The band height as a page fact. Defensive: the node double has no
+   *  documentElement and a page with no scene must read 0. */
+  function setBandVar(px) {
+    try {
+      const de = doc.documentElement;
+      if (de && de.style && typeof de.style.setProperty === 'function') {
+        de.style.setProperty('--arm-band-h', (Number(px) || 0) + 'px');
+      }
+    } catch (e) { /* noop */ }
   }
   function onResize() { fit(); }
 
@@ -1230,6 +1286,8 @@ export function createScene(opts) {
     if (sheetRooms && sheetRooms.removeEventListener) { try { sheetRooms.removeEventListener('load', onResize); } catch (e) { /* noop */ } }
     if (overlay) { try { overlay.layer.remove(); } catch (e) { /* noop */ } overlay = null; }
     if (bar) { try { bar.remove(); } catch (e) { /* noop */ } }
+    /* The carpet goes with the room: the next screen has no band. */
+    setBandVar(0);
     try { root.remove(); } catch (e) { /* noop */ }
     live.length = 0;
     /* The props go with the room, but they are NOT ours to destroy - the

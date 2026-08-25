@@ -2357,6 +2357,8 @@ internal static class ArcademyHostService
         ["board_kind_notice"] = "Notice",
         ["board_kind_flyer"] = "Flyer",
         ["board_kind_minutes"] = "Minutes",
+        ["board_note_open"] = "Take this one down and read it",
+        ["board_note_close"] = "Put it back on the wall",
         ["bugle_issue"] = "Issue",
         ["bugle_page"] = "Page",
         ["bugle_pages"] = "Pages",

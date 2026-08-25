@@ -206,6 +206,13 @@ shell/scene.js     THE SCENE CHASSIS: a generalised point-and-click ROOM (the
                    player walked out of. Test seams: `fxStats`, `fxCount`,
                    `fxHands`, `fxHold`. An unknown kind is LOGGED, never
                    thrown - a table is data
+                   THE STEP-BACK PILL IS THE ROOT'S, NOT THE SLIDE'S (0825): one
+                   `.asc-back` hangs off `.asc-root`, added and removed by view
+                   the way the apron's class is written, so it is SCREEN pixels
+                   on every host - a pill inside the stage rides the fit scale
+                   and lands at half size on a phone (trap 101). It runs
+                   `escapeStep()`, not `showView('wide')`, so a panel opened
+                   over a close-up folds first.
                    A ZOOM IS A ZOOM (owner ruling 0825): the apron band belongs
                    to the WIDE shot and FADES OUT on showView(non-wide) (~200ms,
                    `.asc-bar-away`; .arc-reduced cuts; visibility rides the same
@@ -221,7 +228,17 @@ shell/recordsroom.js THE RECORDS OFFICE AS A ROOM (0825), the chassis's first
                    verb - it opens records.js in a scene panel, and wears the
                    two nudges), the CORKBOARD (a close-up of the cork with
                    corkboard.js's own mountNotices pinned over `corkInner`,
-                   FULL measured rect - the band is away in a close-up),
+                   FULL measured rect - the band is away in a close-up -
+                   `readable:true`, so every sheet carries an `.arc-cork-open`
+                   door and one press lifts corkboard.js's READER: a full-size,
+                   scrollable copy of that sheet on <body> at z56, above the
+                   apron band and below the toasts, and the FIRST rung of this
+                   room's Esc fold. It is the answer to a wall that is painted
+                   at stage scale: on a phone the close-up's body copy lands
+                   near 7px and a busy term's fifth row hangs out of the
+                   window, so on `html.arc-mobile` the office cork also clips
+                   each sheet to a row's share (with a fade and a drawn lens
+                   glyph) and scrolls. Desktop keeps the ruled overhang),
                    the BOOK (a close-up with deskbook.js over `ledgerPages`)
                    and the STOREROOM (`when:'ajar'`, so no flag = no rect, no
                    patch, nothing at all). THE TWO NUDGES: `.rr-fresh`, a pink
@@ -256,6 +273,15 @@ shell/recordsroom.js THE RECORDS OFFICE AS A ROOM (0825), the chassis's first
                    bridge and EMI. AND IT MUST BE TORN DOWN IN clearScreen -
                    the apron is on <body>, so a room left standing leaves a
                    slab across the next screen. + recordsroom.css
+                   THE MINIATURE (0825): the wide shot hangs a scaled copy of
+                   the SAME night's wall in the cork rect
+                   (`mountNotices({preview:true})` inside `.rr-corkmini`), so
+                   the painted board has paper on it before you walk up to it.
+                   A preview marks nothing read and banks no visit - looking at
+                   a board is not reading it - and it takes no pointer, so the
+                   board hotspot owns every press over it. The scale is DERIVED
+                   (rect width / CORK_INNER width), never typed, so a sheet in
+                   the picture is the shape of the sheet on the wall.
 shell/deskbook.js  THE BOOK ON THE DESK: a two-page spread mounted over the two
                    painted page rects. `left`/`right` are SIDE HOSTS (.rdb-side,
                    no clip) with the paper (.rdb-page, overflow:hidden) inside:
@@ -2188,6 +2214,44 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     both `infinite`). Shorten those to one-shots and the splash freezes on its last frame for
     over a second while the jingle finishes. Measured after: hidden at ~4.6s from t0 on the
     autoplay host, and knock + ~4.4s on the browser (headless, real mp3 decode).
+
+101. **A CONTROL INSIDE A SCALED OR TRANSFORMED ROOM IS NOT MEASURED IN SCREEN PIXELS,
+    AND ON A PHONE THAT IS THE DIFFERENCE BETWEEN A CONTROL AND A SMUDGE (owner bugs
+    2026-08-25, Records Office in landscape).** A scene room is a fixed 1376x768 plane
+    scaled to fit; a phone in landscape fits it at about **0.5**. Four separate bug
+    reports came out of one arithmetic mistake, and the rule that closes all four is:
+    **paint is authored in stage pixels, chrome is authored in screen pixels, and the
+    two may not live in the same box.**
+    - **`.asc-back` was a child of the slide.** Every phone rule written for it - a 44px
+      minimum thumb target, 12px type, a safe-area inset - was multiplied by the fit and
+      landed as a 39x22 pill with 6px type. It hangs off `.asc-root` now (fixed to the
+      window, like the apron band always has been). The same arithmetic hit
+      `.arm-hot.arm-exit`'s 2px rim (one physical pixel) and its 13px tag (six).
+    - **`position:fixed` LOSES TO ANY TRANSFORMED ANCESTOR.** `.arc-rs` (the card
+      spotlight) is `fixed; inset:0` and was appended into `.arc-records` - which, inside
+      the Records room, sits in `.asc-panel`, and that panel carries a `transform` for its
+      slide-up. A transformed ancestor becomes the containing block, so the whole
+      presentation was laid out inside an 810x302 scroller parked at the bottom of the
+      phone: veil stopped at the panel edge, card centred on the panel, top of the card
+      cut off. **A modal over the window is mounted on `<body>`** - records.js's spotlight
+      and corkboard.js's notice reader both are - and anything it must clear (the apron
+      band) reaches it as a custom property `scene.js` publishes on `<html>`
+      (`--arm-band-h`, cleared in destroy()). A `padding-bottom` written against an
+      ancestor it does not actually have is not a fix; it is the same bug twice.
+    - **A HOVER-ONLY AFFORDANCE IS NOT AN AFFORDANCE ON A PHONE.** `.arm-exit` was dark
+      until `:hover`/`:focus-visible`. A thumb has neither, so the Records storeroom door
+      (the only way to the annex from the office) was 75x231 of painted wall that said
+      nothing. It carries a resting rim + its tag under `html.arc-mobile` only; the
+      desktop stays "found, not advertised".
+    - **AND THE HUB HEADER CAN COME BACK OVER A ROOM.** `.arc-topbar` is sticky at z30 and
+      a room is fixed at z10. `setStage()` hides the bar, but `renderTopbar()` guarded on
+      `campus` alone - so any unconditional repaint (`onMeta` from a host `meta` push,
+      `onPayout`) hoisted it back over the Records room, the report card and the annex,
+      swallowing the top band and the step-back pill with it. The guard is
+      `!!campus || !!stageMode` now: **a full-bleed stage owns the window.**
+
+    Sitting behind all of it: **a phone viewport is a merge gate** (section 6). Every one
+    of these was invisible at 1600x900 and obvious in the first 844x390 shot.
 
 ## 5. The game module contract (short version)
 

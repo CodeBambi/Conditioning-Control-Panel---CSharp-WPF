@@ -3302,11 +3302,18 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
 .arc-rs.is-closing .arc-rs-close { animation:arc-rs-out .18s ease-in both; }
 @keyframes arc-rs-out { to { opacity:0; } }
 
+/* THE STAGE IS CENTRED IN WHAT THE PLAYER CAN SEE, not in the window. A scene
+   room parks an opaque apron band along the bottom and publishes its height on
+   <html> as `--arm-band-h` (scene.js fit(); zero, and therefore harmless, on
+   every screen that is not a room). Padding it out of the stage is what keeps
+   the card off the carpet instead of half behind it. */
 .arc-rs-stage {
   position:relative;
   display:flex; flex-direction:column; align-items:center; gap:14px;
   max-width:96vw;
+  max-height:100%;
   padding:10px;
+  padding-bottom:calc(10px + var(--arm-band-h, 0px));
 }
 /* The key light: a warm cone behind the card, breathing very slowly. */
 .arc-rs-lamp {
@@ -4515,6 +4522,26 @@ html.arc-mobile .campus-gearbtn { width:44px; height:44px; font-size:19px; }
 html.arc-mobile .campus-boardtab { padding:12px 18px; }
 /* The room tooltip follows a cursor that does not exist on a phone. */
 html.arc-mobile .campus-tip { display:none; }
+
+/* ---- THE CARD SPOTLIGHT, IN A HAND (owner bug 2026-08-25) ----------------
+   Two things are wrong with the desktop dial on a phone in landscape. The card
+   width is capped at `(100vh - 250px) * 1.5`, and 250px of a 390px window is
+   most of it - the exhibit came out 210px wide on an 844px screen, a thumbnail
+   under a key light. And the placard's 3.6vw name is display type sized for a
+   1600px window. So the ceiling is re-derived from what is actually free: the
+   window, less the room's apron band, less the placard's own two lines. The
+   `62vw` term is the other axis (a card wider than that stops being a card
+   held up and starts being a wall), and the 720px cap is still the art's. */
+html.arc-mobile .arc-rs .arc-pc {
+  --pc-w:min(720px, 62vw, calc((100vh - var(--arm-band-h, 0px) - 128px) * 1.5));
+}
+html.arc-mobile .arc-rs-stage { gap:8px; padding:6px; padding-bottom:calc(6px + var(--arm-band-h, 0px)); }
+html.arc-mobile .arc-rs-name { font-size:clamp(15px, 2.6vw, 24px); letter-spacing:.12em; }
+html.arc-mobile .arc-rs-sub { font-size:10px; letter-spacing:.12em; }
+html.arc-mobile .arc-rs-placard { gap:3px; }
+/* The close button keeps its 44px, and it stops sharing a corner with the
+   card: on a short window the stage reaches the top of the glass. */
+html.arc-mobile .arc-rs-close { top:8px; right:10px; }
 
 /* ---- the turn-your-phone card (shell/orientgate.js) ----------------------
    Campus signage, not a browser error: the school's own sky, the school's own
