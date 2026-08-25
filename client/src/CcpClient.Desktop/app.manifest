@@ -5,6 +5,38 @@
      WebView2 surface needs this manifest. -->
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
   <assemblyIdentity version="1.0.0.0" name="CcpClient.Desktop" />
+  <!--
+    DPI AWARENESS IS DECLARED HERE RATHER THAN INHERITED FROM A DEPENDENCY, and the values are the
+    shipping product's own (ConditioningControlPanel/app.manifest:6-7: dpiAware true/pm +
+    dpiAwareness PerMonitorV2). The port already RAN per-monitor-aware, but only because
+    Avalonia.Win32 calls SetProcessDpiAwarenessContext when its platform initialises
+    (Win32PlatformOptions.DpiAwareness, default PerMonitorDpiAware) - a default of a package, at
+    phase 4, after this app's phases 1-3 and every pre-phase diagnostic have already run.
+
+    WHAT THAT WINDOW COSTS, MEASURED ON THIS MACHINE (one display, 175%): an unmanifested net10
+    apphost reads the primary monitor as 1646x1029 and a PER_MONITOR_AWARE_V2 one reads 2880x1800,
+    which is the physical mode EnumDisplaySettings reports in both. Overlay/OverlayDisplays.cs and
+    Effects/PrimaryDisplayPlacement.cs both document their rectangles as PHYSICAL pixels, and that
+    is only true of a process that has said so. Nothing in phases 1-3 reads display geometry today;
+    declaring it here means nothing added there ever has to know that.
+
+    THIS DOES NOT FIGHT AVALONIA AND WAS CHECKED, NOT ASSUMED. With the manifest in force
+    SetProcessDpiAwarenessContext returns FALSE with ERROR_ACCESS_DENIED (5) and the awareness stays
+    PER_MONITOR_AWARE_V2 - the same value Avalonia was asking for, so its call becomes a no-op and
+    nothing observable changes at runtime. The two declarations agree by construction; a
+    disagreement would be a silent divergence in every coordinate this product computes.
+
+    AND IT IS NOT A REPLACEMENT FOR AVALONIA'S CALL. A manifest only reaches the process when the
+    apphost launches it: measured, `dotnet CcpClient.Desktop.dll` through the muxer runs UNAWARE
+    (dotnet/runtime#13272) and is rescued by Avalonia at phase 4. Both mechanisms are load-bearing
+    and neither is redundant.
+  -->
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+    </windowsSettings>
+  </application>
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
     <application>
       <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" /> <!-- Windows 10/11 -->
