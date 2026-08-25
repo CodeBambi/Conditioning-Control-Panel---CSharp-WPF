@@ -598,7 +598,21 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
                idlePlayer tabAway suspend resume rareDrop firstUnlock reportCard
                glitch) + fireMoment(name, payload). An unknown name, an unmounted
                EMI and a dismissed EMI are all silent no-ops, which is why every
-               call site in shell.js is one unguarded line.
+               call site in shell.js is one unguarded line. Plus the ONE generic
+               row: any `game:*` name (a class-commentary note from
+               `ctx.mood.note()`) answers out of GAME_NOTE_FACES by
+               `payload.kind`, so a name this table has never heard of still
+               gets a face. Traps 111-112.
+  heartbeat.js THE METRONOME (2026-08-25): createHeartbeat({widget, emi, voice,
+               asks, trips}) -> {start, stop, tick, state, destroy}. ONE
+               setInterval at HB_DIALS.TICK_MS that measures how long since
+               anything visible happened (`widget.onActivity`) and, when the
+               period is up and every gate holds, draws ONE act off a weighted
+               wheel under the sequence law: face / fidget / nudge / screen /
+               bark / ask. It owns no data, no rations and no verbs - it decides
+               WHEN, and the engines that own each act decide whether. The one
+               sanctioned unattended spender in EMI; mounted last from index.js
+               and destroyed first. Traps 108-110.
   widget.css   the layer (.arc-emi, fixed, z 50), the grab/grabbing cursors, the
                x affordance, the edge dock, and the bubble's `.bubble-left` /
                `.bubble-low` flips (right margin / top edge). Plus THE CRT
@@ -2005,13 +2019,19 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
 
 
 90. **`ctx.mood` IS THE TENSION MIRROR, AND IT IS FACE-ONLY BY LAW (EMI COLOR,
-    2026-08-24).** A game may tell the mascot how the room feels - `ctx.mood.tense()`
+    2026-08-24).** **LAW (1) WAS REVERSED BY THE OWNER ON 2026-08-25 - READ TRAP
+    111 WITH THIS ONE.** A game may tell the mascot how the room feels -
+    `ctx.mood.tense()`
     latches until `.calm()`, `.clutch()` is the one big moment, `.stumble()` is a small
     >_<, `.runLost()` the once-per-class K.O. - and every one of them is throttled in
     shell.js (15s shared spacing, 3 stumbles a class, tense latch), so a game cannot
-    flood her and must never build its own rate limit on top. Three laws: (1) NO BARK
-    POOL may ever sit on `tense` or `clutch` - mid-class speech is barred and the only
-    words a stumble can buy are the `miss` pool's own (maxPerClass:1); (2) call sites
+    flood her and must never build its own rate limit on top. Three laws: (1) ~~NO BARK
+    POOL may ever sit on `tense` or `clutch` - mid-class speech is barred~~ **a small,
+    clown-only pool on either name is legal since the heartbeat wave; mid-class WORDS
+    are now rationed by voice.js (a 20s floor, 8 a class, and the `mood.hold` danger
+    gate) rather than barred, and the ordinary road for commentary is
+    `ctx.mood.note()`** - and the only
+    words a stumble can buy are still the `miss` pool's own (maxPerClass:1); (2) call sites
     are opt-in and null-safe (`if (ctx.mood) ...` inside try/catch) because rigs stub
     ctx without it; (3) ride the game's EXISTING beat (L&F calls it inside its own
     `clutch()` ease) rather than inventing a parallel one. The `classStart` payload
@@ -2444,6 +2464,133 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     are its guards. A pool with `maxPerSession` (idlePlayer = 2) still caps itself
     - the multiplier moves the dice, never the ration or the doubles slot.
 
+108. **THE HEARTBEAT IS THE ONE SANCTIONED UNATTENDED SPENDER, AND IT EXISTS SO
+    NOTHING ELSE HAS TO BE (owner, 2026-08-25: "It's awfully quiet, tho we got a
+    lot of lines. Never be completely idle: something new every 10 seconds ...
+    Always do something. It has to feel alive").** This REVERSES the 2026-08-24
+    field bug's rule. That rule stands where it was made - `voice.js onGesture`
+    still spends no beat and no bark from an idle blink - but "nobody may spend a
+    beat unattended" is now "exactly ONE thing may, and it is not the blink".
+    `emi/heartbeat.js` carries the four gates a blink structurally cannot:
+    - **`document.visibilityState`, and it takes the TIMER down, not the tick.**
+      `visibilitychange` -> hidden CLEARS the interval; visible re-arms it AND
+      re-stamps the clock, or the whole absence reads as silence and she
+      performs on the first frame of a screen you have only just come back to.
+    - **THE GEOFENCE, unchanged and absolute.** The Records Office, the annex
+      and the lab are `emi.setEnabled(false)` screens, so `emi.enabled` IS the
+      gate here. No dial and no data file can open it.
+    - **`widget.askReady()` is the whole "is she free" question** - no say, no
+      chain, no press, no drag, no trip, no live channel, no strip, not
+      dismissed, not disabled. It never pre-empts and it never QUEUES: a refused
+      tick is skipped and the next one is 2.5s away.
+    - **It decides WHEN, never WHETHER.** Every act goes through the engine that
+      already owns it (`emi.emote`, the deck, `voice.onMoment`, `asks.offer`)
+      and every ration those keep - the bark floor, the doubles slot, the deck's
+      cooldowns and PER_SESSION_CAP, all five ask gates - is untouched.
+    ONE `setInterval` at `TICK_MS`, one short gaze-release timer in widget.js,
+    and `destroy()` (called BEFORE the widget's, from `emi/index.js`) takes the
+    interval, the visibility listener and the activity subscription with it.
+
+109. **THE CLOCK IS MEASURED, NOT SLEPT, AND IT MEASURES `widget.onActivity`.**
+    The tick asks one question - how long since anything visible happened - so
+    the period stays honest even though the interval is coarse. `onActivity` is
+    fired from FOUR choke points, and the exclusion is the trap: `play()` (every
+    chain, say and emote), `raw()` (a held face), `apparate()` (a field trip),
+    the deck's **`onStat('takeovers')`** - because trap 77's second canvas never
+    runs through `play()` AND a wheel-rolled channel that waited on `prepare`
+    starts a tick after its caller returned - plus every `emitGesture` **except
+    `blinkIdle`**. Counting the idle blink would re-stamp the clock every 5.2s
+    and the beat could never come due at all. A player verb counting as activity
+    is the feature, not a bug: the heartbeat fills silence and never competes
+    with a hand on the mouse.
+    The gaze half of a `nudge` is `widget.nudgeGaze(dx, dy, ms)` - the same CSS
+    translate on the canvas ELEMENT the cursor lean rides (trap 71), never a
+    repaint. It is REFUSED outright under reduced motion (W1's gaze is off
+    there and a heartbeat may not smuggle it back in) and over any live verb,
+    and its release timer is cleared inside `restGaze()`, which is the one
+    funnel every take-the-glass path already runs through. The widget's old
+    internal `nudgeGaze()` (kick the rAF) is now `kickGaze()`.
+
+110. **THE SEQUENCE LAW IS THE OWNER'S RHYTHM, AND IT IS WHY THE WHEEL IS NOT
+    JUST WEIGHTS.** Never the same KIND twice in a row (a second face counts as
+    a repeat even when the glyph differs); a SPOKEN kind (bark, ask) is always
+    followed by at least one WORDLESS one; a screen never follows a screen; and
+    after a bark the next act comes at `x AFTER_BARK_MULT` so the animation
+    ANSWERS the line. STARVATION is the other half - past `SPEAK_STARVE_MS`
+    (75s campus) / `CLASS_STARVE_MS` (90s in class) the next act is forced to a
+    bark, **but only when the voice's own floor would let one through**, or the
+    beat is spent on a refusal. The starvation clock reads `voice.lastSayAt`,
+    not just the heartbeat's own acts: a bark spent by a shell MOMENT is words
+    too. A refused kind is RE-DRAWN (bounded, three tries a tick) rather than
+    queued, which is what stops a cooling deck or a spent ask from eating the
+    whole beat. In class the wheel is four kinds - `screen` and `ask` are
+    weighted 0, because the deck refuses a channel there anyway and an ask is
+    campus-only by owner rule. A heartbeat-sourced deck pulse lifts EXACTLY one
+    leg of `eligible()`, `THEATRE_IDLE_MS`; the per-channel cooldowns,
+    `GLOBAL_COOLDOWN_MS`, `PER_SESSION_CAP` and every other leg still refuse,
+    and the deep-idle screensaver pair is deliberately out of a pulse's reach
+    (a screensaver that can be summoned is not a screensaver).
+    `HB_DIALS` is the one frozen table. The period floor inside `rollPeriod` is
+    deliberately 1000ms and NOT `TICK_MS`, so a suite that lengthens the tick to
+    keep the interval out of its way does not silently lengthen the period
+    underneath itself - that cost twenty red assertions the first time.
+
+111. **MID-CLASS SPEECH IS LEGAL NOW, AND IT IS PAID FOR WITH A CEILING AND A
+    DANGER GATE (owner, 2026-08-25: "it needs to comment ALSO WHILE IN A
+    SESSION and react to what's happening").** This reverses trap 90's first law
+    - "NO BARK POOL may ever sit on `tense` or `clutch`" - and the wider "no
+    speech mid-class" rationale in `voice.js` and `moments.js`. What replaced it,
+    all in `voice.js`:
+    - `CLASS_BARK_FLOOR_MS` **20000** for a mid-class pool; the 40s
+      `BARK_FLOOR_MS` is the CAMPUS floor from here on. Mid-class means `game:*`
+      (always - only a game can fire one) and `heartbeat` with `payload.inClass`.
+    - `CLASS_BARKS_MAX` **8** per class, reset by `classStart`. Ceremony pools
+      are exempt from both, exactly as they always were.
+    - **`ctx.mood.hold(true/false)` is the DANGER GATE.** A game holds the window
+      where a sentence would actually cost the player the round (Impulse
+      Control's go/no-go, Echo's playback, Misdirection's shuffle) and while it
+      is held voice.js refuses WORDS on `game:*` and `heartbeat` - asked before
+      the pool is even looked up, so no floor, ration or no-repeat is spent by a
+      line that was never going to land. **FACES still fall through**, which is
+      the tension mirror still working. It arrives as an ordinary `moodHold`
+      moment (the games keep ONE seam) but is answered ABOVE the readiness
+      check, so it can never be buffered as `pending` and replayed as a reaction
+      three seconds into the window it was meant to protect; and it
+      AUTO-RELEASES on `classStart` and on every class-ending moment, so a game
+      that throws mid-window cannot mute her for the rest of the sitting.
+    Predicates `campus` / `inClass` are how ONE trigger name serves both sides
+    of the door, and `payload.inClass` OUTRANKS the session latch - the
+    heartbeat knows which screen it is standing on, the latch is only as fresh
+    as the last moment the shell fired. The campus cadence did not move:
+    `BARK_FLOOR_MS` 40s and `CAMPUS_ODDS_MULT` x1.5 are as trap 107 left them.
+
+112. **A `game:*` NOTE ALWAYS GETS A FACE, AND A PAYLOAD TOKEN WITH NOTHING
+    BEHIND IT KILLS THE LINE.** `ctx.mood.note(id, extra)` mints the moment
+    `game:<id>` - and `<id>` IS the bark pool's key, so renaming one orphans the
+    other. There will be dozens of those names and `MOMENTS` deliberately has a
+    row for none of them: `moments.js` answers every `game:*` from
+    `GAME_NOTE_FACES`, keyed off `extra.kind` (celebrate / commiserate / tease /
+    tension / curiosity / ambient - unknown AND absent both read as the ambient
+    GLANCE). That is the promise the wave makes to a game author: every note
+    gets at least a face, and the voice decides separately whether it also earns
+    a line. The throttles are shell.js's and they are a FLOOD GUARD, not a
+    ration - 2500ms between any two notes, 6000ms between two of the same id, 40
+    a class - because the VOICE does the rationing and a game must never build
+    its own on top (trap 90's third law, unchanged). They keep their own
+    counters: sharing `lastAt` with `tense`/`clutch` would let one note eat the
+    room's whole 15s weather budget. `hold()` is edge-triggered for the same
+    reason - a game may call it every frame.
+    **THE TOKENS:** `{n} {tile} {word} {left} {streak} {grade}`, resolved off the
+    moment's payload the way `{name}` is (trap 94) with ONE difference that is
+    the whole design - `{name}` collapses to the un-named variant because it was
+    WRITTEN to, but a `{n}` the payload did not carry is a sentence about
+    nothing, so the LINE IS SKIPPED. The filter runs in `pickLine`, so the pool
+    answers with a plain sibling instead of falling silent, and `sayIt` carries
+    the same check as the fence behind the fence. A raw `{n}` may never reach the
+    bubble. Zero IS a value; `null`, `''`, `NaN` and a boolean are not. A pool of
+    nothing but token lines is simply silent on a payload that carried none, so
+    always write plain siblings beside a token line.
+
 ## 5. The game module contract (short version)
 
 ```js
@@ -2638,6 +2785,31 @@ pair and `BankAccumulator`'s bankable row, impulse-control's additive `newBest`,
 count of `pointer-events:auto` rules on the EMI layer. It brings its OWN augmented
 `document` (one that takes listeners) rather than touching `domshim.mjs`, because every
 other suite depends on `audio.js` no-opping there.
+
+`scratchpad/emi-heart/tests/` (2026-08-25, THE HEARTBEAT) is the metronome's three,
+**249 assertions**, dropped into a copy of the ask suite's harness (`run.sh` re-copies the
+web root into `arc/` - re-run it after every edit or you test last hour's file, which cost
+twenty phantom red lines here):
+- `test-heartbeat.mjs` (**122**) drives the real `emi/heartbeat.js` with a fake widget, a
+  fake emi and `tick()` called by hand over a virtual clock - the dials verbatim and frozen,
+  every IDLE_FACE resolved against `chains.js` FACES and every NUDGE_BODY against the real
+  `emi.css`, the period and its jitter, the x0.7 after a bark, all four legs of the gate,
+  the sequence law over 200 beats (zero repeats, zero doubled speech, zero screen-on-screen),
+  both starvation floors, the class wheel's two zero weights, a refused kind being re-drawn,
+  `destroy()` taking the interval AND the listener AND the subscription, and an act that
+  throws never escaping the tick. Two sections drive the REAL widget: the activity tap
+  (raw / play / say / a player verb all stamp it) and `nudgeGaze` under reduced motion.
+- `test-classvoice.mjs` (**73**) drives the real `emi/voice.js` with INJECTED pools, which
+  is how both new shapes (`on:'heartbeat'` + `when:['campus']`, and `on:'game:<id>'`) are
+  proven to resolve before a single line exists: the two floors, the class ceiling and the
+  ceremony exemption, the danger gate spending nothing, the payload tokens (substituted,
+  skipped, and never printed raw), and the campus cadence proven UNMOVED.
+- `test-moodnote.mjs` (**54**) mounts the WHOLE EMI stack under the DOM double with a
+  2d-context stub and reads back the face that reached the canvas for every note kind -
+  the "every note gets a face" promise, asserted rather than assumed - plus the shell.js
+  `ctx.mood.note` / `hold` contract by source shape.
+The rest of the suites are unchanged by the wave: 885 passing / 51 failing before it and
+the identical 885 / 51 after (those 51 are drift from an older worktree, red on both sides).
 
 **`test-voice.mjs` used to crash before it finished.** `boot.js` binds a document listener
 and the shared `domshim.mjs` document is a plain object, so the file threw at its boot

@@ -62,6 +62,8 @@
  *               off the dropAt payload (zone, zoneRow, zoneCount)
  * emi color     droppedOn:room|sealed|wing|none   what a dropAt landed on
  *               gameIs:KEY         which class fired the moment (per-game colour)
+ * heartbeat     inClass / campus   which side of the door this moment is on,
+ *               read off payload.inClass first and the session latch second
  * emi asks      askAnswered:ID     she asked, and you told her something
  *               askIs:ID:ANSWER    ...and this is what you said
  *               sessionsSinceAsk:ID:N   at least N sittings since that answer
@@ -85,6 +87,15 @@ export const VOICE_DIALS = Object.freeze({
   BARK_ODDS: 0.25,           // default chance a pool speaks instead of staying wordless
   BARK_FLOOR_MS: 40000,      // no two barks closer than this (ceremony pools exempt)
                              // (90s until 2026-08-25; owner: "slightly more frequent")
+  /* MID-CLASS SPEECH (HEARTBEAT wave, 2026-08-25, owner: "it needs to comment
+   * ALSO WHILE IN A SESSION and react to what's happening"). The 40s floor
+   * above is the CAMPUS floor from here on; a mid-class pool (`game:*`, and
+   * `heartbeat` while in class) runs on the shorter one and is rationed by a
+   * per-class CEILING instead, because a class is a bounded number of minutes
+   * and eight lines in one is already a chatty mascot. Ceremony pools are
+   * exempt from both, exactly as they always were. */
+  CLASS_BARK_FLOOR_MS: 20000,
+  CLASS_BARKS_MAX: 8,
   /* OUT-OF-CLASS BOOST (owner, 2026-08-25). In class the player is looking at
    * the game, not at her, so a line spent there is half-wasted. Every moment
    * that is NOT mid-class (see MID_CLASS_MOMENTS) has its pool odds scaled by
@@ -158,6 +169,18 @@ const MID_CLASS_MOMENTS = Object.freeze({
   miss: true, fail: true, runLost: true, tense: true, clutch: true, thinking: true,
 });
 
+/* THE HEARTBEAT WAVE'S TWO NEW SHAPES (2026-08-25).
+ *  - `game:<id>` is a class COMMENTARY note, minted by `ctx.mood.note()`. It is
+ *    mid-class by definition: the game is the only thing that can fire one.
+ *  - `heartbeat` is the metronome, and it fires on BOTH sides of the door, so
+ *    it is mid-class only when its payload says so.
+ * Both answers feed one question - does this line get the campus odds boost,
+ * the campus floor, or the shorter class floor and the class ceiling. */
+const GAME_NOTE_PREFIX = 'game:';
+function isGameNote(name) {
+  return typeof name === 'string' && name.indexOf(GAME_NOTE_PREFIX) === 0;
+}
+
 /** The seen-flag for the forced post-lab greet (owner rec 4). */
 const POST_LAB_GREET_FLAG = 'postLabGreet';
 
@@ -228,6 +251,68 @@ export function resolveName(line, name) {
 /** Does this line ASK for the name? (A drop is rationed; a plain line is not.) */
 export function wantsName(line) {
   return typeof line === 'string' && line.indexOf('{name}') >= 0;
+}
+
+/* ============================================================================
+ * THE PAYLOAD TOKENS (HEARTBEAT wave, 2026-08-25)
+ *
+ * Class commentary wants to say the thing that just happened - "{n} in a row",
+ * "that {tile} again" - and a moment already carries those numbers. Six tokens,
+ * closed set, resolved off the PAYLOAD and nothing else:
+ *
+ *   {n} {tile} {word} {left} {streak} {grade}
+ *
+ * THE RULE IS THE SAME ONE `{name}` RUNS ON, one step harder: a token with
+ * nothing behind it is not a fallback and not a blank - the LINE IS SKIPPED.
+ * `{name}` may collapse to the un-named variant because it was written to; a
+ * "{n} in a row!" with no `n` is a sentence about nothing, so the pool picks
+ * another line instead. The filter runs in `pickLine`, so a pool whose lines
+ * all want a token the moment did not carry is simply silent this time.
+ *
+ * A raw token NEVER reaches the bubble. That is the whole point of the pair.
+ * ==========================================================================*/
+export const PAYLOAD_TOKENS = Object.freeze(['n', 'tile', 'word', 'left', 'streak', 'grade']);
+const PAYLOAD_TOKEN_RE = /\{(n|tile|word|left|streak|grade)\}/g;
+
+/** The tokens this line asks for, in order, deduped. Empty for a plain line. */
+export function tokensIn(line) {
+  if (typeof line !== 'string' || line.indexOf('{') < 0) return [];
+  const out = [];
+  let m;
+  PAYLOAD_TOKEN_RE.lastIndex = 0;
+  while ((m = PAYLOAD_TOKEN_RE.exec(line)) !== null) {
+    if (out.indexOf(m[1]) < 0) out.push(m[1]);
+  }
+  return out;
+}
+
+/** One token's value off a payload, or null when the moment did not carry it. */
+function tokenValue(payload, key) {
+  const p = plain(payload);
+  if (!Object.prototype.hasOwnProperty.call(p, key)) return null;
+  const v = p[key];
+  if (v == null) return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : null;
+  if (typeof v === 'boolean') return null;      // a flag is not a word
+  const s = String(v).trim();
+  return s ? s : null;
+}
+
+/**
+ * Substitute the payload tokens.
+ * @returns {?string} the resolved line, or NULL when a token had no value -
+ *          which is the caller's cue to skip the line entirely.
+ */
+export function resolveTokens(line, payload) {
+  const want = tokensIn(line);
+  if (!want.length) return typeof line === 'string' ? line : null;
+  let out = line;
+  for (const key of want) {
+    const v = tokenValue(payload, key);
+    if (v === null) return null;
+    out = out.split('{' + key + '}').join(v);
+  }
+  return out;
 }
 
 /* ============================================================================
@@ -361,6 +446,18 @@ export function createVoice(o) {
      * have a line up (any bark, beat or ask lands through sayIt). */
     inClass: false,
     lastSayAt: 0,
+    /* --- THE HEARTBEAT WAVE (2026-08-25) -------------------------------
+     * `classBarks` is the mid-class ceiling's counter (CLASS_BARKS_MAX), reset
+     * by `classStart` beside the maxPerClass map. `holdWords` is the DANGER
+     * GATE: a game holds it over a timing-critical window (a go/no-go, a
+     * playback, a shuffle) and while it is up she may not spend WORDS on a
+     * `game:*` note or on the heartbeat. Faces still land - they are one
+     * second, on her own glass, and the whole point of the tension mirror. */
+    classBarks: 0,
+    holdWords: false,
+    /** The class that is up, for a moment that carries no gameKey of its own
+     *  (the heartbeat). Set by `classStart`, cleared with the latch. */
+    gameKey: null,
   };
   S.openedBad = blob.lastSessionEnd === 'bad';
 
@@ -645,6 +742,11 @@ export function createVoice(o) {
       if (blob.lastSessionEnd !== 'ok') { blob.lastSessionEnd = 'ok'; touch(); }
     } else if (name === 'classStart') {
       S.classCount = {};                       // maxPerClass is per class, not per session
+      /* WHICH CLASS IS UP (HEARTBEAT wave). The moments that carry a gameKey
+       * carry it themselves; the heartbeat fires on its own clock and has to
+       * ask someone. It is cleared with the latch, so a campus beat can never
+       * inherit the last class's colour. */
+      S.gameKey = typeof (p && p.gameKey) === 'string' && p.gameKey ? p.gameKey : null;
     }
 
     /* TODAY'S HOLES, for the double-punch beat. Counted off the stamp moments
@@ -669,6 +771,28 @@ export function createVoice(o) {
       }
       if ((GRADE_RANK[g] || 0) > (GRADE_RANK[blob.dayBest] || 0)) { blob.dayBest = g; touch(); }
     }
+  }
+
+  /* ---------------------- in class, or on the campus --------------------
+   * THE HEARTBEAT WAVE's one question, asked in three places (the odds boost,
+   * the floor, the ceiling) and answered once. The PAYLOAD outranks the latch:
+   * the heartbeat knows which side of the door it is standing on, and it says
+   * so on every beat, while `S.inClass` is only ever as fresh as the last
+   * moment the shell fired. */
+  function inClassNow(c) {
+    const p = (c && c.p) || {};
+    if (p.inClass === true || p.midClass === true) return true;
+    if (p.inClass === false) return false;
+    if (isGameNote(c && c.name)) return true;
+    return S.inClass === true;
+  }
+  /** Does this moment carry the mid-class rules (the short floor, the
+   *  ceiling, no campus odds boost)? */
+  function midClassMoment(name, c) {
+    if (MID_CLASS_MOMENTS[name]) return true;
+    if (isGameNote(name)) return true;
+    if (name === 'heartbeat') return inClassNow(c);
+    return false;
   }
 
   /* ---------------------- predicates ------------------------------------ */
@@ -767,6 +891,12 @@ export function createVoice(o) {
     },
     /** a14 landed. The gate every name-drop line carries. */
     hasName: () => !!playerName(),
+    /* --- the HEARTBEAT wave (2026-08-25) -------------------------------- */
+    /** WHICH SIDE OF THE DOOR. The heartbeat fires the same trigger name on
+     *  both, so a campus pool and a class pool are told apart by these two and
+     *  nothing else. `payload.inClass` wins over the session latch. */
+    inClass: (a, c) => inClassNow(c),
+    campus: (a, c) => !inClassNow(c),
     /** The LOCAL calendar date, MM-DD. Local on purpose: a holiday is the
      *  player's evening, not a UTC accountant's. */
     dateIs: (a) => {
@@ -835,11 +965,17 @@ export function createVoice(o) {
    * line that actually landed, so a bubble EMI could not draw never costs the
    * night's one name-drop.
    */
-  function sayIt(line, face, nod) {
+  function sayIt(line, face, nod, c) {
     if (typeof line !== 'string' || !line) return false;
     const wants = wantsName(line);
     const name = (wants && !S.nameDropped) ? playerName() : '';
-    const text = wants ? resolveName(line, name) : line;
+    /* TWO SUBSTITUTIONS, IN THIS ORDER, AND ONLY ONE OF THEM MAY FAIL. The
+     * name collapses to the un-named variant; a payload token with nothing
+     * behind it kills the line outright rather than printing `{n}` at a
+     * player (pickLine has usually filtered it already - this is the fence
+     * behind the fence, for a beat or an injected line that never met it). */
+    const named = wants ? resolveName(line, name) : line;
+    const text = resolveTokens(named, c && c.p);
     if (!text) return false;
     let done = false;
     try { done = !!emi.say(text, { face: face || undefined, nod: nod === true }); }
@@ -855,7 +991,7 @@ export function createVoice(o) {
    * moment that fired this has already moved on.
    * @returns {boolean} true when the FIRST step actually landed
    */
-  function perform(entry) {
+  function perform(entry, c) {
     const leads = [];
     const lead = entry.lead;
     if (typeof lead === 'string') leads.push({ chain: lead });
@@ -882,10 +1018,14 @@ export function createVoice(o) {
        * longer (or shorter) than the token, and a tail scheduled against the
        * unresolved text would land on a bubble that is still up (trap 72's
        * cousin). Resolved with the SAME ration `sayIt` will spend. */
-      const shown = wantsName(line)
+      const named = wantsName(line)
         ? resolveName(line, S.nameDropped ? '' : playerName())
         : line;
-      steps.push({ at: t, run: () => sayIt(line, entry.face, entry.nod) });
+      // ...and the payload tokens for the same reason: `{n}` is 3 characters
+      // and "seventeen" is nine. An unresolvable line measures as itself and
+      // then never lands, which costs a tail nothing.
+      const shown = resolveTokens(named, c && c.p) || named;
+      steps.push({ at: t, run: () => sayIt(line, entry.face, entry.nod, c) });
       t += SAY_LEAD_MS + sayHoldMs(shown);
     }
     if (entry.tail) steps.push({ at: t, run: () => emoteIt({ chain: entry.tail }) });
@@ -908,7 +1048,7 @@ export function createVoice(o) {
       if (b.requires.length && !b.requires.every((r) => !!blob.seen[r])) continue;
       if (!holds(b.when, c)) continue;
       if (b.whenAny.length && !holdsAny(b.whenAny, c)) continue;
-      const done = (b.emote && !b.say && !b.lead && !b.held) ? emoteIt(b.emote) : perform(b);
+      const done = (b.emote && !b.say && !b.lead && !b.held) ? emoteIt(b.emote) : perform(b, c);
       if (!done) continue;
       // SEEN ONLY WHEN IT WAS ACTUALLY SEEN: a dismissed EMI eats no beat.
       S.seenThisSession[b.id] = true;
@@ -953,6 +1093,11 @@ export function createVoice(o) {
       if (l.onceEver && (Number(heard[lineKey(l)]) || 0) > 0) return false;
       if (l.maxPerSession && (S.lineCount[pool.id + '|' + lineKey(l)] || 0) >= l.maxPerSession) return false;
       if (l.when.length && !holds(l.when, c)) return false;
+      /* THE TOKEN FILTER (2026-08-25). A line that asks for `{n}` on a moment
+       * that carried no `n` is not a line - it is dropped HERE, so the pool
+       * still answers with one of its plain ones instead of falling silent.
+       * A raw token may never reach the bubble. */
+      if (l.t && resolveTokens(l.t, c.p) === null) return false;
       return true;
     });
     if (!usable.length) return null;
@@ -977,18 +1122,33 @@ export function createVoice(o) {
   }
 
   function fireBark(name, c) {
+    const mid = midClassMoment(name, c);
+    /* THE DANGER GATE (HEARTBEAT wave, 2026-08-25). A game holds the window it
+     * cannot afford to lose the player's eyes on - Impulse Control's go/no-go,
+     * Echo's playback, Misdirection's shuffle - and while it is held she may
+     * not spend WORDS on class commentary. It is asked before the pool is even
+     * looked up, so no ration, no floor and no no-repeat is spent by a line
+     * that was never going to land. FACES are untouched (moments.js runs
+     * afterwards): a one-second face on her own glass is the tension mirror,
+     * a sentence is a distraction with a fanbase. */
+    if (S.holdWords && (isGameNote(name) || name === 'heartbeat')) return false;
     const pool = eligiblePool(name, c);
     if (!pool) return false;
-    /* THE FLOOR. Ninety seconds between any two barks; a ceremony is rare by
-     * nature and is exempt by DECLARATION, never by accident. */
-    if (!pool.ceremony && S.lastBarkAt && (c.now - S.lastBarkAt) < D.BARK_FLOOR_MS) return false;
+    /* THE FLOOR, and since the heartbeat wave there are two of them: 40s on the
+     * campus, 20s mid-class. A ceremony is rare by nature and is exempt from
+     * both by DECLARATION, never by accident. */
+    const floor = mid ? D.CLASS_BARK_FLOOR_MS : D.BARK_FLOOR_MS;
+    if (!pool.ceremony && S.lastBarkAt && (c.now - S.lastBarkAt) < floor) return false;
+    /* ...AND THE CEILING, which is what the short floor is paid for with. */
+    if (mid && !pool.ceremony && S.classBarks >= D.CLASS_BARKS_MAX) return false;
     let odds = typeof pool.odds === 'number' ? pool.odds : D.BARK_ODDS;
-    if (!MID_CLASS_MOMENTS[name] && !S.inClass) odds = Math.min(1, odds * D.CAMPUS_ODDS_MULT);
+    if (!mid && !S.inClass) odds = Math.min(1, odds * D.CAMPUS_ODDS_MULT);
     if (odds < 1 && rng() >= odds) return false;
     const line = pickLine(pool, c);
     if (!line) return false;
-    if (!perform(line)) return false;
+    if (!perform(line, c)) return false;
 
+    if (mid) S.classBarks += 1;
     S.lastBarkAt = c.now;
     S.poolLast[pool.id] = c.now;
     S.poolCount[pool.id] = (S.poolCount[pool.id] || 0) + 1;
@@ -1079,7 +1239,7 @@ export function createVoice(o) {
     const beat = BEATS.find((b) => b.id === POST_LAB_GREET_FLAG)
       || BEATS.find((b) => b.on === 'greet' && /postlab|post_lab/i.test(String(b.id)));
     if (!beat) return false;
-    if (!perform(beat)) return false;
+    if (!perform(beat, c)) return false;
     blob.seen[POST_LAB_GREET_FLAG] = true;
     blob.seen[beat.id] = true;
     S.seenThisSession[beat.id] = true;
@@ -1148,11 +1308,29 @@ export function createVoice(o) {
       /* THE GEOFENCE, FIRST AND UNCONDITIONAL. Not a quiet reaction: none. */
       if (name === 'lockedClick' && p && SILENT_TARGETS[String(p.what)]) return false;
 
+      /* THE DANGER GATE'S SWITCH (HEARTBEAT wave). `ctx.mood.hold(true/false)`
+       * arrives as an ordinary moment so the games keep ONE seam, but it is a
+       * FLAG and not a beat: it is answered here, above the readiness check, so
+       * a hold can never be buffered as `pending` and replayed as a reaction
+       * three seconds into the window it was meant to protect. */
+      if (name === 'moodHold') { S.holdWords = !!(p && p.on); return false; }
+
       /* THE CLASS LATCH, read even before the script lands. Same rungs as
-       * widget.js noteMoment minus `miss` (a miss is mid-class, not the end). */
-      if (name === 'classStart' || name === 'suspend') S.inClass = true;
-      else if (name === 'win' || name === 'fail' || name === 'runLost' || name === 'reportCard'
-        || name === 'dayDone' || name === 'greet' || name === 'resume') S.inClass = false;
+       * widget.js noteMoment minus `miss` (a miss is mid-class, not the end).
+       * A `game:*` note and a `heartbeat` deliberately move NEITHER latch: they
+       * are commentary ON the state, never a change of it. */
+      if (name === 'classStart' || name === 'suspend') {
+        S.inClass = true;
+        if (name === 'classStart') { S.classBarks = 0; S.holdWords = false; }
+      } else if (name === 'win' || name === 'fail' || name === 'runLost' || name === 'reportCard'
+        || name === 'dayDone' || name === 'greet' || name === 'resume') {
+        S.inClass = false;
+        /* THE HOLD AUTO-RELEASES ON THE WAY OUT. A game that threw mid-window
+         * (or simply forgot its `hold(false)`) must not be able to mute her for
+         * the rest of the sitting - the class ending is the release. */
+        S.holdWords = false;
+        S.gameKey = null;
+      }
 
       if (!ready || !canPerform()) {
         /* NOT YET. Either the script has not landed or the face has not, and
@@ -1191,8 +1369,15 @@ export function createVoice(o) {
     if (typeof kind !== 'string' || !kind) return false;
     try {
       /* THE IDLE BLINK IS THE ONE UNATTENDED "GESTURE", so it reaches the
-       * GLITCH and nothing else: no beat and no bark may ever be spent by a
-       * page nobody is touching (field bug, 2026-08-24). */
+       * GLITCH and the FIDGET and nothing else: no beat and no bark is ever
+       * spent from here (field bug, 2026-08-24).
+       *
+       * SINCE 2026-08-25 THAT IS NO LONGER "NOBODY MAY SPEND A BEAT
+       * UNATTENDED" - it is "only ONE thing may, and it is not this one".
+       * `emi/heartbeat.js` is the sanctioned unattended spender: it carries
+       * gates this seam cannot (document visibility, a silent screen, its own
+       * period) and it goes through `onMoment('heartbeat')` like any other
+       * moment. The blink stays glitch || fidget, deliberately. */
       if (kind === 'blinkIdle') return glitch() || fidget();
       let payload = p || {};
       if (kind === 'dropAt') {
@@ -1268,6 +1453,26 @@ export function createVoice(o) {
     get quirkSpent() { return S.doubleSpent; },
     /** Her name for you, or ''. Read-only - `emi/asks.js` owns the writing. */
     get playerName() { return playerName(); },
+    /* ---- THE HEARTBEAT SEAM (2026-08-25) ------------------------------
+     * `emi/heartbeat.js` needs three reads and one write, and none of them is
+     * a decision: which side of the door she is on, when she last had a line
+     * up (the STARVATION clock - it must count every line, not just the
+     * heartbeat's own), and the danger gate. `state()` answers a deep JSON copy
+     * of the whole blob, which is a silly price for one boolean on a 2.5s
+     * timer. */
+    /** Is a class up, by the session latch (the shell's own moments set it). */
+    get inClass() { return S.inClass; },
+    /** ...and which one. Null on the campus, always. */
+    get gameKey() { return S.gameKey; },
+    /** When ANY line of hers last landed - bark, beat, ask or trip. */
+    get lastSayAt() { return S.lastSayAt; },
+    /** When she last spent a BARK (the floor's own clock). */
+    get lastBarkAt() { return S.lastBarkAt; },
+    /** The danger gate. `ctx.mood.hold()` is the real caller, through the
+     *  `moodHold` moment; this is the direct seam for a test and for a caller
+     *  that already holds the voice. */
+    holdWords(on) { S.holdWords = on !== false; return S.holdWords; },
+    get wordsHeld() { return S.holdWords; },
     /** Test seams. A suite that rolls dice must not flake. */
     setRng(fn) { if (typeof fn === 'function') rng = fn; },
     setClock(fn) { if (typeof fn === 'function') clock = fn; },

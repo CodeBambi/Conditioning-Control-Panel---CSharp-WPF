@@ -291,6 +291,37 @@ export default {
       try { return ctx.lexicon(k, f == null ? SORT_LEX[k] : f); }
       catch (e) { return f == null ? (SORT_LEX[k] || k) : f; }
     };
+
+    /* EMI COMMENTARY SEAMS (the heartbeat wave). emiNote() names a moment the
+     * mascot may react to - the shell prefixes 'game:' and its own voice engine
+     * decides whether the moment is worth a face, a line or nothing at all.
+     * emiHold() fences a timing-critical window where she may pull faces but
+     * never words. Both are additive, one-way and fully guarded: an older shell
+     * has neither, and a mascot may never break a class. They are emiNote /
+     * emiHold and not note / hold because this room already owns a note() -
+     * the lexicon strip under the stack. */
+    const emiNote = (id, extra) => {
+      try { if (ctx.mood && typeof ctx.mood.note === 'function') ctx.mood.note(id, extra); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+    const emiHold = (on) => {
+      try { if (ctx.mood && typeof ctx.mood.hold === 'function') ctx.mood.hold(!!on); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+    /** The rung the halo starts CHASING at - see data-chase in armTop(). */
+    const EMI_CHASE_RUNG = 6;
+    let emiRingHeld = false;
+    let emiCapped = false;
+    let emiWallWoke = false;
+    /** The hold is a WINDOW, not a pulse: idempotent, so a second arm or a
+     *  second release can never leave her fenced with no ring to fence. */
+    const emiHoldRing = (on) => {
+      const want = !!on;
+      if (want === emiRingHeld) return;
+      emiRingHeld = want;
+      emiHold(want);
+    };
+
     const timers = createTimers();
     const reduced = probe('(prefers-reduced-motion: reduce)')
       || !!(ctx.motion && ctx.motion.reducedMotion);
@@ -343,6 +374,69 @@ export default {
         }
       },
     };
+
+    /* EMI RIDES THE BUS rather than twenty-odd call sites. Every moment this
+     * room already announces to its decks is a moment the mascot may react to,
+     * so the heartbeat subscribes ONCE, here, and the play loop never learns
+     * she exists. A mapper returns [seam id, payload] or null to let the beat
+     * pass unremarked - `grab` and `drag` are deliberately not mapped at all
+     * (the player's finger is on the card and she does nothing). */
+    const EMI_SEAMS = {
+      commit: (p) => {
+        /* JUST is the near-miss you won, ALMOST the one you lost; they are
+         * mutually exclusive, and an ordinary correct swipe is wallpaper. */
+        if (p.just) return ['sort.just', { kind: 'celebrate', n: S ? S.just : 0, streak: Number(p.chain) | 0 }];
+        if (p.almost) return ['sort.almost', { kind: 'commiserate', n: Number(p.rung) | 0, streak: Number(p.chain) | 0 }];
+        return null;
+      },
+      wrong: (p) => ['sort.wrong', {
+        kind: 'commiserate',
+        n: S ? S.wrong : 0,
+        streak: S ? S.chain : 0,
+        tile: (p.card && p.card.tag) ? String(p.card.tag) : '',
+      }],
+      pass: (p) => ['sort.pass', { kind: 'tease', n: S ? S.passed : 0, streak: Number(p.chain) | 0 }],
+      rung: (p) => {
+        if (p.down) return null;
+        const to = Number(p.to) | 0;
+        /* THE CEILING, ONCE. A tier hands out 5/6/7/8 rungs and no more, so
+         * arriving at the cap is a different piece of news from climbing, and
+         * the same instant is never both: the cap beat outranks the rung-up. */
+        if (S && !emiCapped && to >= S.rungCap) {
+          emiCapped = true;
+          return ['sort.rungCapped', { kind: 'celebrate', n: to, streak: S.chain }];
+        }
+        return ['sort.rungUp', { kind: 'celebrate', n: to, streak: S ? S.chain : 0 }];
+      },
+      jackpot: (p) => {
+        const why = String(p.why || '');
+        if (why === 'royal') {
+          return ['sort.royal', { kind: 'celebrate', n: Number(p.rung) | 0, streak: Number(p.chain) | 0 }];
+        }
+        /* a MINOR pays several times a class and is not news */
+        if (why.indexOf('major@') !== 0) return null;
+        return ['sort.majorJackpot', {
+          kind: 'celebrate',
+          n: Number(p.rung) | 0,
+          streak: Number(p.chain) | 0,
+          left: S ? Math.max(0, CHAIN.MAJOR_RUNGS.length - S.majorsPaid.length) : 0,
+        }];
+      },
+      end: (p) => {
+        const tk = p.ticket || {};
+        return ['sort.ticket', {
+          kind: (p.royal || Number(p.composite) >= 0.7) ? 'celebrate' : 'commiserate',
+          n: Number(tk.sorted) | 0,
+          streak: Number(tk.longestChain) | 0,
+        }];
+      },
+    };
+    for (const evt of Object.keys(EMI_SEAMS)) {
+      bus.on(evt, (p) => {
+        const r = EMI_SEAMS[evt](p || {});
+        if (r) emiNote(r[0], r[1]);
+      });
+    }
 
     /* ==================================================================== *
      * THE ENGINE, AS A DECK SEES IT. Null-safe everywhere, frozen while the
@@ -1048,6 +1142,7 @@ export default {
         } else {
           S.cards = shuffled(S.cards, S.rngDeal);
           S.recycles += 1;
+          emiNote('sort.deckRecycle', { kind: 'curiosity', n: S.recycles, left: S.cards.length });
         }
         S.cursor = 0;
       }
@@ -1201,6 +1296,11 @@ export default {
       if (S.swipe) S.swipe.enabled(true);
       timers.cancel(S.ringTimer);
       S.ringTimer = timers.every(reduced ? RING_TICK_MS_REDUCED : RING_TICK_MS, ringTick);
+      /* AN ARMED RING AT A CHASE RUNG is the one window in this room where a
+       * spoken line would cost the player something real: rung 6 is a 1050ms
+       * ring and rung 8 a 750ms one, read and committed. Faces yes, words no,
+       * for that ring only - disarm(), a freeze and the teardown all let go. */
+      emiHoldRing(S.rung >= EMI_CHASE_RUNG);
       /* THE NODE RIDES THE DEAL (LOT D). A deck that dresses the top card -
        * the freeze's poster hold, the mirrored doppelganger, the ghost drift,
        * the lying label - needs the element, and this is the ONE moment the
@@ -1222,6 +1322,9 @@ export default {
       timers.cancel(S.ringTimer);
       S.ringTimer = 0;
       if (S.swipe) S.swipe.enabled(false);
+      /* the ring is down, so the fence comes down with it - commit, pass and
+       * the bell all come through here */
+      emiHoldRing(false);
     }
 
     /* ==================================================================== *
@@ -1345,7 +1448,16 @@ export default {
     function onRungUp(from, to) {
       bus.emit('rung', { from, to, down: false });
       cue('streak', 0.42, { pitch: chimePitch(Math.min(CHAIN.CHIME_CAP, to)) });
-      if (S.wall) S.wall.show(to, false);
+      if (S.wall) {
+        /* THE WALL WAKES. show() is idempotent and reports what the wall is
+         * doing now, so the first true here is the first time the collage of
+         * the player's own sorted cards stands up behind the stack. */
+        const wallOn = S.wall.show(to, false);
+        if (wallOn && !emiWallWoke) {
+          emiWallWoke = true;
+          emiNote('sort.wallWakes', { kind: 'curiosity', n: S.correct + S.wrong, streak: S.chain });
+        }
+      }
       /* THE MAJOR JACKPOTS: rungs 3, 5 and 7, once each per class. */
       if (isMajorRung(to) && S.majorsPaid.indexOf(to) < 0) {
         S.majorsPaid.push(to);
@@ -1799,6 +1911,10 @@ export default {
       /* THE WALL TAKES THE STAGE for three seconds before anything is said
        * about it. What you sorted is the last thing the room shows you. */
       try { if (S.wall) { S.wall.show(S.rung, true); S.wall.bleed(true); } } catch (e) { /* noop */ }
+      /* THREE SECONDS OF THE PLAYER'S OWN TASTE, with the hand down and
+       * nothing playable. The safest window in the room, and the best one. */
+      emiHoldRing(false);
+      emiNote('sort.bellWall', { kind: 'celebrate', n: S.correct + S.wrong, streak: S.longestChain });
       for (const live of S.live.slice()) { addCls(live.node, 'is-sink'); }
       timers.after(reduced ? 400 : WALL.BLEED_MS, () => {
         if (!S || destroyed) return;
@@ -1933,6 +2049,9 @@ export default {
         if (S.swipe) S.swipe.enabled(false);
       }
       S.frozenAt = now();
+      /* a frozen ring is not a timing-critical one - she is free again until
+       * the thaw re-arms it */
+      emiHoldRing(false);
     }
     function thaw() {
       if (!S || S.over) return;
@@ -1956,6 +2075,8 @@ export default {
         if (S.swipe) S.swipe.enabled(true);
         timers.cancel(S.ringTimer);
         S.ringTimer = timers.every(reduced ? RING_TICK_MS_REDUCED : RING_TICK_MS, ringTick);
+        /* the ring the freeze interrupted is live again, fence and all */
+        emiHoldRing(S.rung >= EMI_CHASE_RUNG);
       }
       decksCall('resume');
     }
@@ -1997,6 +2118,8 @@ export default {
 
       destroy() {
         destroyed = true;
+        /* a class that is gone can never be the thing still fencing her */
+        emiHoldRing(false);
         decksCall('destroy');
         decks.casino = null; decks.pressure = null; decks.trickster = null;
         listeners.clear();

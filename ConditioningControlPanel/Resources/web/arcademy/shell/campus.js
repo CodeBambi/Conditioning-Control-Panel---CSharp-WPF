@@ -689,6 +689,17 @@ function sfx(name, level, extra) {
 const HOVER_GAP_MS = 150;
 let lastHoverCue = 0;
 
+/** EMI's hover seam is the DWELL, never the enter (heartbeat wave, 2026-08-25).
+ *  A pointer crossing the plan fires mouseenter dozens of times a minute, and
+ *  the throttle above only bounds the RATE - the same reason the owner took the
+ *  hover cue down 60%. So the moment is "the pointer SETTLED on one room", and
+ *  it is cancelled the instant the pointer leaves. The rest of the ration is the
+ *  pool's own: odds 0.15, a three-minute cooldown and maxPerSession 2. */
+const HOVER_DWELL_MS = 1200;
+
+/** How close to the last bell EMI is allowed to notice, once a night. */
+const BELL_NEAR_SEC = 300;
+
 function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -790,6 +801,16 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   let st = state || campusState({ classes: [], records: {} });
   let cardOpen = false;
   let destroyed = false;
+  /* EMI's two campus latches (heartbeat wave). `hoverDwell` is the settle timer
+   * behind `campus.roomHover`; `bellNagged` makes `campus.bellNear` a once-per-
+   * campus EDGE rather than a thing the 1s bell tick could say sixty times. */
+  let hoverDwell = 0;
+  let bellNagged = false;
+  function clearHoverDwell() {
+    if (!hoverDwell) return;
+    try { clearTimeout(hoverDwell); } catch (e) { /* noop */ }
+    hoverDwell = 0;
+  }
   /* PHANTOM POST furniture handles - null when no `post` bag arrived. */
   let mailChip = null;
   let boardProp = null;
@@ -1315,7 +1336,10 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     g.appendChild(neon);
     roomRefs[key] = { g, neon, neonText, ping, spec, sub };
     g.addEventListener('click', () => openClassCard(key));
-    attachTip(g, () => classTip(key));
+    // EMI SEAM: the pointer SETTLED on this room (HOVER_DWELL_MS), not crossed it.
+    attachTip(g, () => classTip(key), () => {
+      try { fireMoment('campus.roomHover', { gameKey: key, inClass: false }); } catch (e) { /* noop */ }
+    });
     plan.appendChild(g);
     return g;
   }
@@ -1870,7 +1894,8 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   tip.appendChild(tipName); tip.appendChild(tipStatus); tip.appendChild(tipDesc);
   root.appendChild(tip);
 
-  function attachTip(g, dataFn) {
+  /** `onDwell` is EMI's, and only the class rooms pass one - see HOVER_DWELL_MS. */
+  function attachTip(g, dataFn, onDwell) {
     g.addEventListener('mouseenter', () => {
       let d;
       try { d = dataFn(); } catch (e) { d = null; }
@@ -1890,6 +1915,13 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       tipStatus.textContent = d.status || '';
       tipDesc.textContent = d.desc || '';
       tip.classList.add('on');
+      if (onDwell && typeof setTimeout === 'function') {
+        clearHoverDwell();
+        hoverDwell = setTimeout(() => {
+          hoverDwell = 0;
+          try { onDwell(); } catch (e) { /* noop */ }
+        }, HOVER_DWELL_MS);
+      }
     });
     g.addEventListener('mousemove', (e) => {
       const r = (root.getBoundingClientRect ? root.getBoundingClientRect() : null);
@@ -1898,7 +1930,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       tip.style.setProperty('left', Math.min(e.clientX + 18, w - 270) - r.left + 'px');
       tip.style.setProperty('top', (e.clientY + 18 - r.top) + 'px');
     });
-    g.addEventListener('mouseleave', () => tip.classList.remove('on'));
+    g.addEventListener('mouseleave', () => { tip.classList.remove('on'); clearHoverDwell(); });
   }
 
   function classTip(key) {
@@ -1966,8 +1998,16 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
 
   let cardAction = null;
   let cardAltAction = null;
-  scrim.addEventListener('click', (e) => { if (e.target === scrim) closeCard(); });
-  ccX.addEventListener('click', () => closeCard());
+  /* COLD FEET, and only cold feet (EMI SEAM, heartbeat wave). `closeCard()`
+   * itself is the wrong seam: Begin and Free Swim shut the card on their way IN
+   * and would read as a back-out. These two listeners are the only paths that
+   * dismiss the card and go nowhere. */
+  function backOut() {
+    if (!closeCard()) return;
+    try { fireMoment('campus.doorBackedOut', { inClass: false }); } catch (e) { /* noop */ }
+  }
+  scrim.addEventListener('click', (e) => { if (e.target === scrim) backOut(); });
+  ccX.addEventListener('click', () => backOut());
   ccGo.addEventListener('click', () => {
     const act = cardAction;
     closeCard();
@@ -2537,7 +2577,18 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     try { bellText.textContent = bellLabel(sec == null ? bellSecondsLeft() : sec); }
     catch (e) { /* noop */ }
   }
-  function tickBell() { if (bellHeld == null) paintBell(null); }
+  function tickBell() {
+    if (bellHeld != null) return;
+    paintBell(null);
+    /* EMI SEAM: the ONE tick that crosses five minutes, and only with the night
+     * unfinished. A once-per-campus edge, never a countdown she reads aloud. */
+    if (bellNagged || st.allDone) return;
+    let left = 0;
+    try { left = bellSecondsLeft(); } catch (e) { return; }
+    if (!(left > 0 && left <= BELL_NEAR_SEC)) return;
+    bellNagged = true;
+    try { fireMoment('campus.bellNear', { secondsLeft: left, inClass: false }); } catch (e) { /* noop */ }
+  }
   function clearBellCatch() {
     for (const id of bellCatch) { try { clearTimeout(id); } catch (e) { /* noop */ } }
     bellCatch = [];
@@ -2689,6 +2740,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       if (boardProp) { try { boardProp.destroy(); } catch (e) { /* noop */ } boardProp = null; }
       if (bugleProp) { try { bugleProp.destroy(); } catch (e) { /* noop */ } bugleProp = null; }
       cancelAttract(false);
+      clearHoverDwell();     // a settle timer must never outlive the plan it sat on
       if (idleTimer) { try { clearTimeout(idleTimer); } catch (e) { /* noop */ } idleTimer = 0; }
       try { INPUT_EVENTS.forEach((n) => root.removeEventListener(n, onInput, true)); } catch (e) { /* noop */ }
       if (docBound) { try { document.removeEventListener('keydown', onInput, true); } catch (e) { /* noop */ } }
