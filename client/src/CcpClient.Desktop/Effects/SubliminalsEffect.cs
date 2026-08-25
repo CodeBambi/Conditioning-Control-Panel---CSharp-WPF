@@ -190,9 +190,17 @@ public sealed class SubliminalsEffect : PacedSessionEffect<SubliminalFiring>
 
         var preset = _preset.Current;
         var hold = HoldMilliseconds(preset.DurationFrames);
+
+        // The colours are resolved HERE, once per card, because that is where upstream resolves
+        // them: ShowSubliminalVisuals parses all three out of App.Settings.Current on every show
+        // (SubliminalService.cs:622-624), so a colour changed between two subliminals lands on the
+        // next one rather than at the next session.
+        var palette = SubliminalPalette.From(
+            preset.BackgroundColour, preset.TextColour, preset.OutlineColour);
+
         return new SubliminalFiring(
             new SubliminalEvent(0, hold, default),
-            new SubliminalCard(phrase, preset.OpacityPercent, CardLifetime(preset.DurationFrames)));
+            new SubliminalCard(phrase, preset.OpacityPercent, CardLifetime(preset.DurationFrames), palette));
     }
 
     /// <inheritdoc/>
@@ -229,15 +237,45 @@ public sealed class SubliminalsEffect : PacedSessionEffect<SubliminalFiring>
     /// asked for and the reason <see cref="ISessionEffect.Arm"/> stopped returning void: the
     /// schedule really is armed — <c>Degraded</c>, never <c>Unavailable</c> — and the surviving
     /// semantics say exactly which half holds.
+    ///
+    /// <para>The second case is the same shape for a DIAL rather than a pool
+    /// (<see cref="EffectReasonCodes.SubliminalOpaqueBackgroundOnly"/>): the transparent-background
+    /// setting is persisted and cannot be obeyed by this surface, so it is refused by name instead
+    /// of being read and thrown away.</para>
     /// </summary>
-    protected override CapabilityState Ready(CapabilityState scheduled) =>
-        scheduled is CapabilityState.Available && _pool.ActiveCount == 0
-            ? new CapabilityState.Degraded(
+    protected override CapabilityState Ready(CapabilityState scheduled)
+    {
+        if (scheduled is not CapabilityState.Available)
+        {
+            return scheduled;
+        }
+
+        // Order is the strength of the claim, not preference: an empty pool means NOTHING appears
+        // at all, which makes the card's background colour moot. Only a module that will really
+        // show a card can be degraded by how that card is painted.
+        if (_pool.ActiveCount == 0)
+        {
+            return new CapabilityState.Degraded(
                 "the schedule is armed and paced, and every firing will be a no-op",
                 new CapabilityReason(
                     EffectReasonCodes.SubliminalNoActivePhrase,
-                    "no phrase in the subliminal pool is active, so nothing will be shown and nothing counted"))
-            : scheduled;
+                    "no phrase in the subliminal pool is active, so nothing will be shown and nothing counted"));
+        }
+
+        if (_preset.Current.BackgroundTransparent)
+        {
+            return new CapabilityState.Degraded(
+                "the schedule, the phrase pool and all three card colours are honoured; only the "
+                + "transparent-background dial is not",
+                new CapabilityReason(
+                    EffectReasonCodes.SubliminalOpaqueBackgroundOnly,
+                    "SubBackgroundTransparent is on and this build's card is one layered window at a "
+                    + "single uniform alpha over a frame with no per-pixel alpha, so the background "
+                    + "will be drawn opaque in the colour you chose"));
+        }
+
+        return scheduled;
+    }
 
     /// <summary>Take the card off the screen. WPF blanks and hides its keep-alive windows on stop
     /// (<c>SubliminalService.cs:116-127</c>) — the half of stop the user can see.</summary>

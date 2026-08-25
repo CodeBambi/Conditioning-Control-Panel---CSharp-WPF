@@ -8,9 +8,12 @@ namespace CcpClient.Desktop.Effects;
 /// stays. Composed by the effect from its dials, so the presenter reads no settings of its own.</summary>
 /// <param name="Text">The phrase. It reaches the rasteriser and nothing else — never a log, never an
 /// event, never the UI (the media-logging rule the port holds everywhere).</param>
-/// <param name="OpacityPercent">WPF's <c>SubliminalOpacity</c> (<c>AppSettings.cs:1256</c>).</param>
+/// <param name="OpacityPercent">WPF's <c>SubliminalOpacity</c> (<c>AppSettings.cs:1282</c>).</param>
 /// <param name="Lifetime">How long the card is on screen, envelope included.</param>
-public sealed record SubliminalCard(string Text, int OpacityPercent, TimeSpan Lifetime);
+/// <param name="Palette">The three colours this card is drawn in, resolved from the module's dials
+/// at compose time — upstream re-reads them per show (<c>SubliminalService.cs:622-624</c>).</param>
+public sealed record SubliminalCard(
+    string Text, int OpacityPercent, TimeSpan Lifetime, SubliminalPalette Palette);
 
 /// <summary>Where a subliminal goes when it has somewhere to go.</summary>
 public interface ISubliminalSurface
@@ -132,7 +135,7 @@ public sealed class SubliminalSurfacePresenter : ISubliminalSurface, IDisposable
         }
 
         var monitor = display.Value;
-        var frame = _frames.Render(card.Text, monitor.Width, monitor.Height);
+        var frame = _frames.Render(card.Text, monitor.Width, monitor.Height, card.Palette);
         if (frame is null)
         {
             UnrasterisedPhrases++;

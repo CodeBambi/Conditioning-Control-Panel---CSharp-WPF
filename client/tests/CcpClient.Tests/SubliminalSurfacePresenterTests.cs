@@ -22,7 +22,7 @@ public class SubliminalSurfacePresenterTests
     private static readonly OverlayBounds Display = new(0, 0, 1920, 1080);
 
     private static readonly SubliminalCard Card =
-        new("GOOD GIRL", 80, SubliminalsEffect.CardLifetime(2));
+        new("GOOD GIRL", 80, SubliminalsEffect.CardLifetime(2), SubliminalPalette.Default);
 
     // ---------------------------------------------------------------------------------
     //  one full-screen card, at the module's own opacity, click-through
@@ -109,7 +109,7 @@ public class SubliminalSurfacePresenterTests
     public void ALongerDurationDialReallyHoldsTheCardLonger()
     {
         var rig = new Rig();
-        var longCard = new SubliminalCard("JUST OBEY", 80, SubliminalsEffect.CardLifetime(10));
+        var longCard = new SubliminalCard("JUST OBEY", 80, SubliminalsEffect.CardLifetime(10), SubliminalPalette.Default);
 
         rig.Presenter.Show(longCard);
         rig.Clock.Advance(Card.Lifetime);
@@ -437,14 +437,14 @@ public class SubliminalSurfacePresenterTests
     /// <summary>A rasteriser with no GDI+: it answers the size the caller asks for.</summary>
     private sealed class StubFrameSource : ISubliminalFrameSource
     {
-        public OverlayFrame? Render(string text, int width, int height) =>
+        public OverlayFrame? Render(string text, int width, int height, SubliminalPalette palette) =>
             OverlayFrame.Solid(width, height, 0xFF, 0x00, 0xFF);
     }
 
     /// <summary>A rasteriser that can produce nothing — a build with no text stack.</summary>
     private sealed class RefusingFrameSource : ISubliminalFrameSource
     {
-        public OverlayFrame? Render(string text, int width, int height) => null;
+        public OverlayFrame? Render(string text, int width, int height, SubliminalPalette palette) => null;
     }
 
     /// <summary>The manual clock, the session spine's shape. Zero wall-clock.</summary>

@@ -60,6 +60,15 @@ public sealed class SubliminalPresetDocument
     /// <summary>WPF clamp <c>Math.Clamp(value, 10, 100)</c> (<c>AppSettings.cs:1260</c>).</summary>
     public const int MaxOpacityPercent = 100;
 
+    /// <summary>WPF's <c>SubBackgroundColor</c> default (<c>AppSettings.cs:1352</c>).</summary>
+    public const string DefaultBackgroundColour = "#000000";
+
+    /// <summary>WPF's <c>SubTextColor</c> default (<c>AppSettings.cs:1366</c>).</summary>
+    public const string DefaultTextColour = "#FF00FF";
+
+    /// <summary>WPF's <c>SubBorderColor</c> default (<c>AppSettings.cs:1380</c>).</summary>
+    public const string DefaultOutlineColour = "#FFFFFF";
+
     /// <summary>
     /// WPF's shipped phrase pool, verbatim and in its own order
     /// (<c>AppSettings.cs:1263-1285</c>) — twenty-one phrases, every one of them active by default.
@@ -94,6 +103,9 @@ public sealed class SubliminalPresetDocument
     private int _perMinute = DefaultPerMinute;
     private int _durationFrames = DefaultDurationFrames;
     private int _opacityPercent = DefaultOpacityPercent;
+    private string _backgroundColour = DefaultBackgroundColour;
+    private string _textColour = DefaultTextColour;
+    private string _outlineColour = DefaultOutlineColour;
     private Dictionary<string, bool> _phrases = BuildDefaultPool();
 
     /// <summary>
@@ -142,6 +154,65 @@ public sealed class SubliminalPresetDocument
         get => _opacityPercent;
         set => _opacityPercent = Math.Clamp(value, MinOpacityPercent, MaxOpacityPercent);
     }
+
+    /// <summary>
+    /// The card's background colour, as the hex string upstream persists — WPF's
+    /// <c>SubBackgroundColor</c> (<c>AppSettings.cs:1352-1357</c>), read on every show at
+    /// <c>Services/Subliminal/SubliminalService.cs:622</c>. Held as the raw string because that is
+    /// what upstream persists and because an unparseable one has a defined answer rather than an
+    /// exception (<see cref="Effects.SubliminalPalette.From"/>). Never null, WPF's own
+    /// <c>value ?? "#000000"</c> (<c>:1356</c>).
+    /// </summary>
+    public string BackgroundColour
+    {
+        get => _backgroundColour;
+        set => _backgroundColour = value ?? DefaultBackgroundColour;
+    }
+
+    /// <summary>
+    /// The phrase's own colour — WPF's <c>SubTextColor</c> (<c>AppSettings.cs:1366-1371</c>), read
+    /// at <c>SubliminalService.cs:623</c>. Never null, WPF's own <c>value ?? "#FF00FF"</c>.
+    /// </summary>
+    public string TextColour
+    {
+        get => _textColour;
+        set => _textColour = value ?? DefaultTextColour;
+    }
+
+    /// <summary>
+    /// The outline's colour — WPF's <c>SubBorderColor</c> (<c>AppSettings.cs:1380-1385</c>), read at
+    /// <c>SubliminalService.cs:624</c>. Never null, WPF's own <c>value ?? "#FFFFFF"</c>.
+    /// </summary>
+    public string OutlineColour
+    {
+        get => _outlineColour;
+        set => _outlineColour = value ?? DefaultOutlineColour;
+    }
+
+    /// <summary>
+    /// WPF's <c>SubBackgroundTransparent</c> (<c>AppSettings.cs:1359-1364</c>), default <b>false</b>:
+    /// when on, upstream simply omits the background rectangle from the card
+    /// (<c>SubliminalService.cs:969-980</c>) and the desktop shows through the gaps between glyphs.
+    ///
+    /// <para><b>This port cannot honour it, and says so rather than ignoring it.</b> The card is
+    /// composited as one layered window at a single uniform <c>LWA_ALPHA</c>
+    /// (<c>Overlay/Win32OverlayPresence.cs</c> calls <c>SetLayeredWindowAttributes</c> with
+    /// <c>LWA_ALPHA</c> and nothing else), and the frame it paints is B,G,R,<b>X</b> — the fourth
+    /// byte is padding, not per-pixel alpha (<see cref="Overlay.OverlayFrame"/>). There is no value
+    /// this rasteriser can write into the background that the OS will treat as "not there". So the
+    /// setting is PERSISTED, and the module reports
+    /// <see cref="EffectReasonCodes.SubliminalOpaqueBackgroundOnly"/> when it is on: the user's
+    /// choice is kept, and the fact that the screen will not obey it is stated in type instead of
+    /// being silently dropped.</para>
+    ///
+    /// <para><b>What it would take.</b> Two mechanisms could express it and neither is this
+    /// module's to take: <c>UpdateLayeredWindow</c> (real per-pixel alpha, but mutually exclusive
+    /// with <c>SetLayeredWindowAttributes</c>, which would delete the alpha read-back the overlay's
+    /// <c>OverlayNotComposited</c> refusal stands on), or <c>LWA_COLORKEY</c> alongside the alpha
+    /// (one exact colour punched out, which would also punch out every glyph pixel that happened to
+    /// match it). Both change a surface four modules share.</para>
+    /// </summary>
+    public bool BackgroundTransparent { get; set; }
 
     /// <summary>
     /// The phrase pool: every phrase the user has, mapped to whether it is active — WPF's
