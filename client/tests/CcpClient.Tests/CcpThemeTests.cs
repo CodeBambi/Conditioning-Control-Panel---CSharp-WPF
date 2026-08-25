@@ -103,8 +103,15 @@ public class CcpThemeTests
     /// instead moves <c>PanelAccent</c> by a unit on two channels.</para>
     ///
     /// <para>So this reads the three-line body out of <c>MainWindow.xaml.cs</c> and compares it to
-    /// the port's own, with only <c>Color.FromRgb</c> and whitespace normalised. Upstream editing
-    /// the arithmetic reds here rather than in a capture six weeks later.</para>
+    /// the expression the port copied, with only <c>Color.FromRgb</c> and whitespace normalised.
+    /// UPSTREAM editing the arithmetic reds here rather than in a capture six weeks later.</para>
+    ///
+    /// <para><b>It does NOT guard the port's copy, and that direction has its own fact.</b> This
+    /// one reads only the shipping product's source, so an edit to <see cref="CcpTheme.Lighten"/>
+    /// leaves it green — measured, by making Lighten round: this stayed green and
+    /// <see cref="TheShadeFunctionsTruncateRatherThanRound"/> redded with
+    /// <c>Expected #ff34343c / Actual #ff35343c</c>. The two together cover both directions;
+    /// either alone covers one.</para>
     /// </summary>
     [Theory]
     [InlineData("LightenColor", "(byte)Math.Min(255, c.R + (255 - c.R) * amount), (byte)Math.Min(255, c.G + (255 - c.G) * amount), (byte)Math.Min(255, c.B + (255 - c.B) * amount)")]
@@ -200,10 +207,6 @@ public class CcpThemeTests
 
         var tokens = CcpTheme.CcpDefault.Tokens();
 
-        // Five grounds, three accents, and Fluent's family of seven. Pinned so a key added or
-        // dropped is a decision somebody has to make on purpose.
-        Assert.Equal(15, tokens.Count);
-
         foreach (var key in tokens.Keys)
         {
             Assert.True(declared.Contains(key),
@@ -222,6 +225,13 @@ public class CcpThemeTests
                 $"the theme rewrites '{untouched}', which no ModTheme supplies (WPF Models/ModManifest.cs). "
                 + "Upstream leaves it on the seed and the port must, or the two products stop matching");
         }
+
+        // Five grounds, three accents, and Fluent's family of seven. LAST, deliberately: a
+        // cardinality pin ahead of the two loops would answer FIRST for the mutation those loops
+        // exist to catch, and the red would name a number instead of naming the key. (Measured -
+        // adding ElevatedSurface to the map redded this fact on "Values differ" until the pin
+        // moved down here.)
+        Assert.Equal(15, tokens.Count);
     }
 
     /// <summary>
