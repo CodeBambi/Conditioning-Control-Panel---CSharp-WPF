@@ -4951,3 +4951,99 @@ html.arc-mobile .campus-bellchip {
 html.arc-mobile .campus-bellchip .ic { grid-row:1 / 3; font-size:13px; }
 html.arc-mobile .campus-bellchip .cap { display:block; font-size:7.5px; letter-spacing:.18em; line-height:1; }
 html.arc-mobile .campus-bellchip .tm { font-size:10px; line-height:1; }
+
+/* ======================= GPU DIET (html.ae-touch) ========================
+   PHONE STANDING COSTS (perf/arcademy-mobile-web). `html.ae-touch` is the
+   DEVICE seam (trap 42): boot arms it once on coarse pointers / touch
+   digitisers, the desktop WebView2 host never wears it, so every rule in
+   this block is invisible to the desktop build - byte-identical evaluation.
+   Two families of cut, both about what WebKit charges per frame:
+
+     - INFINITE KEYFRAMES ON NON-COMPOSITED PROPERTIES (stroke-dashoffset,
+       box-shadow, background-position, filter, left) freeze to their RESTING
+       frame - the lit state, never a dead one (the reduced-motion block's
+       own law: a dead sign reads as a closed room);
+     - BIG blur() FILTERS (fog 60px, room glow 22px) become soft gradients /
+       a small blur - the look survives, the surface-per-frame does not.
+
+   Transform/opacity-only loops (fog drift, room pulse, ping ring, timebar
+   head breath, glint) are composited and CHEAP - they stay, so the campus
+   still breathes. The split-flap keyframes (arc-flap) are deliberately NOT
+   here: the board reveal is beat-critical and keeps full fidelity. ------- */
+
+/* tonight's route: the marching ants rest, one halo instead of two. The
+   .done arm restates its filter because this guard outranks its bare (0,2,0);
+   the entry reveal keeps its one-shot fade and sheds only the infinite march. */
+html.ae-touch .campus-route {
+  animation:none;
+  filter:drop-shadow(0 0 4px var(--pink));
+}
+html.ae-touch .campus-route.done { filter:none; }
+html.ae-touch .campus-stage.enter .campus-route {
+  animation:campus-routein .9s 1.05s both;
+}
+
+/* neon signs: no flicker, ONE tight halo per sign (~10 filtered groups sit on
+   the plan at once). The .v and .off arms are restated because the base guard
+   outranks their bare selectors; [data-compact]'s tighter 2.5px halo already
+   outranks this and is untouched. */
+html.ae-touch .campus-neon {
+  animation:none;
+  filter:drop-shadow(0 0 5px var(--pink));
+}
+html.ae-touch .campus-neon.v { filter:drop-shadow(0 0 5px var(--lav)); }
+html.ae-touch .campus-neon.off { filter:none; }
+
+/* the bulb chase: parked lit, exactly the reduced-motion treatment. */
+html.ae-touch g.campus-room.open rect.campus-marquee { animation:none; opacity:.85; }
+
+/* the fog: blur(60px) on two 70%x44% sheets was a re-raster the campus paid
+   the whole time it was up. The same hues become one soft-edged ellipse per
+   sheet; the drift stays (transform-only, composited). */
+html.ae-touch .campus-fog { filter:none; }
+html.ae-touch .campus-fog.a {
+  background:radial-gradient(closest-side,
+    color-mix(in srgb, var(--panel2), var(--lav) 18%) 0%,
+    color-mix(in srgb, color-mix(in srgb, var(--panel2), var(--lav) 18%), transparent 45%) 40%,
+    color-mix(in srgb, color-mix(in srgb, var(--panel2), var(--lav) 18%), transparent 80%) 68%,
+    transparent 92%);
+}
+html.ae-touch .campus-fog.b {
+  background:radial-gradient(closest-side,
+    color-mix(in srgb, var(--panel2), var(--pink) 14%) 0%,
+    color-mix(in srgb, color-mix(in srgb, var(--panel2), var(--pink) 14%), transparent 45%) 40%,
+    color-mix(in srgb, color-mix(in srgb, var(--panel2), var(--pink) 14%), transparent 80%) 68%,
+    transparent 92%);
+}
+
+/* room glows: a readable bloom at a fraction of the surface. The opacity
+   pulse riding these is composited and keeps running. */
+html.ae-touch g.campus-room.open .campus-lit,
+html.ae-touch g.campus-room.retake .campus-lit,
+html.ae-touch g.campus-room.facility .campus-lit { filter:blur(8px); }
+
+/* the class time bar's travelling sheen (background-position, the whole
+   class long): parked. The head breath (::before, opacity) still moves, so
+   Law III's "never still" survives on the cheap channel. */
+html.ae-touch .arc-timebar-fill::after { animation:none; }
+
+/* the end card's retake pulse (box-shadow): the arc-reduced resting glow. */
+html.ae-touch .arc-endcard-actions .arc-retake {
+  animation:none;
+  box-shadow:0 0 16px rgba(255,105,180,.4);
+}
+
+/* the ID card sheen (animates `left`): parked off-card at its own 0% frame. */
+html.ae-touch .campus-idcard::after { animation:none; }
+
+/* the photo-rim breaths (box-shadow), furniture card and big card both:
+   parked at their shared 0% frame (no shadow - the border still tells
+   placeholder from real). */
+html.ae-touch .campus-idcard .id-photo,
+html.ae-touch .arc-id-photo { animation:none; }
+
+/* the record spotlight's star wave + slot stir: ten simultaneous filter /
+   background-color loops while the spotlight is up. Parked at their resting
+   frames; the entrance choreography (one-shot) is untouched. */
+html.ae-touch .arc-rs .arc-pc-hole.is-punched,
+html.ae-touch .arc-rs .arc-pc-hole:not(.is-punched) { animation:none; }

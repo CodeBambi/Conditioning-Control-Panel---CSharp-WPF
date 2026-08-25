@@ -760,6 +760,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   let introToldEmi = false;
   let active = null;               // the running class (see startClass)
   let suspendedGlobally = false;
+  /* The reason the CURRENT suspend level was set with (null when lifted).
+   * Written only by applySuspend; read only by the web tab-visibility wiring
+   * below, so it can refuse to lift a suspend it did not apply itself. */
+  let suspendReason = null;
   let destroyed = false;
   // Host opened the building through the dev switch (`--arcademy`). Unlocks
   // Begin on every campus door regardless of the seed; never true for players.
@@ -4092,6 +4096,37 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     document.addEventListener('pointermove', onExitAim, { passive: true });
   }
 
+  /* WEB TAB SUSPEND (perf/arcademy-mobile-web). On the desktop host the bridge
+   * drives applySuspend (onSuspend below); in a browser nothing ever did, so a
+   * backgrounded tab kept every loop warm. Wired ONLY when the host is not the
+   * desktop (init.platform.host), and with its own reason string so it can
+   * never be confused with - or lift - a suspend the host initiated:
+   * - hidden: refuse while ANY suspend already holds the level (trap 28: it is
+   *   a LEVEL, and whoever set it owns it), and refuse while an Orientation
+   *   Day beat is on stage - applySuspend(true) SKIPS a running beat and banks
+   *   it as seen, which must not be spent on a mere tab switch (background
+   *   throttling stills the beat anyway; the same shape as orientFreeze's
+   *   both-direction guard).
+   * - visible: lift ONLY a 'tabhidden' suspend this listener applied itself.
+   *   A mid-class return lands on the pause card with its Resume button -
+   *   applySuspend(false) deliberately leaves the class paused. */
+  const platformHost = String((src.platform && src.platform.host) || 'desktop');
+  function onTabVisibility() {
+    try {
+      if (document.visibilityState === 'hidden') {
+        if (suspendedGlobally) return;
+        try { if (orientation && orientation.active()) return; } catch (e) { /* noop */ }
+        applySuspend(true, 'tabhidden');
+      } else if (suspendedGlobally && suspendReason === 'tabhidden') {
+        applySuspend(false, 'tabhidden');
+      }
+    } catch (e) { say('tab suspend threw: ' + ((e && e.message) || e)); }
+  }
+  if (platformHost !== 'desktop'
+      && typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('visibilitychange', onTabVisibility);
+  }
+
   /* ASKS: a01's YES buys a SOFT night - comfort faces on arrival and one extra
    * line on the report card. The flag lives in the ask engine (it is
    * session-only and it is hers); this is the shell's read of it, and a page
@@ -4111,6 +4146,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    */
   function applySuspend(on, reason) {
     suspendedGlobally = !!on;
+    suspendReason = on ? (reason || '') : null;
     fireMoment(on ? 'suspend' : 'resume', { reason });   // EMI SEAM
     // NO GHOSTS UNDER A MANDATORY VIDEO. The layer rides the same one funnel the
     // pause card does, and it is a LEVEL (trap 28), so both edges are written.
@@ -4146,7 +4182,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         pauseClass(true);
         showSuspendedOverlay(reason === 'audio-only'
           ? 'An audio-only session started. Your attendance is safe.'
-          : reason === 'panic' ? 'Stopped. Press the panic key again to leave.' : 'Paused for a video.',
+          : reason === 'panic' ? 'Stopped. Press the panic key again to leave.'
+            /* 'tabhidden' is the web wiring's own reason - the desktop host
+             * never sends it, so its three lines above are byte-identical. */
+            : reason === 'tabhidden' ? 'Paused while you were away.'
+              : 'Paused for a video.',
           { resumable: reason === 'panic' });
       } else {
         if (active.suspendEl) {
@@ -4597,9 +4637,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         annexStatsWait = null;
       }
       setStage(null);
-      /* ASKS: the exit-aim listener is the shell's, so the shell takes it. */
+      /* ASKS: the exit-aim listener is the shell's, so the shell takes it.
+       * The web tab-suspend listener is the shell's too (a no-op remove on the
+       * desktop host, where it was never added). */
       if (typeof document !== 'undefined' && document.removeEventListener) {
         try { document.removeEventListener('pointermove', onExitAim); } catch (e) { /* noop */ }
+        try { document.removeEventListener('visibilitychange', onTabVisibility); } catch (e) { /* noop */ }
       }
       if (orientation) { const ob = orientation; orientation = null; try { ob.destroy(); } catch (e) { /* noop */ } }
       if (ghosts) { try { ghosts.destroy(); } catch (e) { /* noop */ } ghosts = null; }
