@@ -24,9 +24,13 @@ public sealed class RewriteEffect : PossessionEffectBase
 
     private TextBlock? _tb;
     private string? _originalText;
+    /// <summary>The exact string we WROTE, so the restore can tell "still ours" from "the world moved
+    /// on" - see UndoCoreAsync.</summary>
+    private string? _writtenText;
 
     private ContentControl? _cc;
     private object? _originalContent;
+    private string? _writtenContent;
 
     public override string Id => "rewrite";
     public override PossessionRung MinRung => PossessionRung.Drift;
@@ -70,6 +74,7 @@ public sealed class RewriteEffect : PossessionEffectBase
                 _cc = cc;
                 _originalContent = cc.Content;   // the exact object, not a copy of the string
                 cc.Content = line;
+                _writtenContent = line;
                 return Task.CompletedTask;
             }
 
@@ -86,30 +91,44 @@ public sealed class RewriteEffect : PossessionEffectBase
 
             _originalText = text;
             _tb.Text = rewritten;
+            _writtenText = rewritten;
         }
         catch (Exception ex) { App.Logger?.Warning("Possession rewrite failed: {Error}", ex.Message); }
 
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// The exact original - but only while the control still carries what WE put there. Every label
+    /// this effect can take is a code-driven one ({loc:Str} is a Binding, which IsRewritable declines),
+    /// which makes them precisely the ones something else rewrites: a level-up writing TxtLevelLabel, a
+    /// counter ticking. Restoring a three-second-old string over that would quietly undo the newer
+    /// value. Same guard as XpDrainEffect.RestoreTheLevel.
+    /// </summary>
     protected override Task UndoCoreAsync(TimeSpan duration)
     {
         try
         {
-            if (_cc != null && _originalContent != null) _cc.Content = _originalContent;
+            if (_cc != null && _originalContent != null && _writtenContent != null
+                && _cc.Content is string now && string.Equals(now, _writtenContent, StringComparison.Ordinal))
+                _cc.Content = _originalContent;
         }
         catch (Exception ex) { App.Logger?.Warning("Possession rewrite content restore failed: {Error}", ex.Message); }
 
         try
         {
-            if (_tb != null && _originalText != null) _tb.Text = _originalText;
+            if (_tb != null && _originalText != null && _writtenText != null
+                && string.Equals(_tb.Text, _writtenText, StringComparison.Ordinal))
+                _tb.Text = _originalText;
         }
         catch (Exception ex) { App.Logger?.Warning("Possession rewrite text restore failed: {Error}", ex.Message); }
 
         _cc = null;
         _originalContent = null;
+        _writtenContent = null;
         _tb = null;
         _originalText = null;
+        _writtenText = null;
         return Task.CompletedTask;
     }
 

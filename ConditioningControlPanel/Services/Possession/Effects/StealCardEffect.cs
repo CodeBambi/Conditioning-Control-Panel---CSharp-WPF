@@ -48,6 +48,9 @@ public sealed class StealCardEffect : PossessionEffectBase
     private Point _flightTarget;     // layer space, where the tube was standing
     private bool _flew;
 
+    /// <summary>True while this effect holds the warden's tube lease (see <see cref="TakeTube"/>).</summary>
+    private bool _holdsTube;
+
     public override string Id => "stealcard";
     public override PossessionRung MinRung => PossessionRung.Collapse;
     public override PossessionIntensity MinIntensity => PossessionIntensity.Gentle;
@@ -118,30 +121,39 @@ public sealed class StealCardEffect : PossessionEffectBase
                                ghost.Origin.Y + ghost.SizeDip.Height / 2.0);
         _flightTarget = centre;
 
-        var tube = AvailableTube();
-        if (tube != null)
+        var tube = TakeTube();
+        try
         {
-            _flew = await GlideBesideAsync(tube, el, ct).ConfigureAwait(true);
-            if (_flew)
+            if (tube != null)
             {
-                if (!await PossAnim.DelayAsync(BeatMs, ct).ConfigureAwait(true)) return;
-                var mouth = TubeMouthInLayer(ctx);
-                if (mouth.HasValue) _flightTarget = mouth.Value;
+                _flew = await GlideBesideAsync(tube, el, ct).ConfigureAwait(true);
+                if (_flew)
+                {
+                    if (!await PossAnim.DelayAsync(BeatMs, ct).ConfigureAwait(true)) return;
+                    var mouth = TubeMouthInLayer(ctx);
+                    if (mouth.HasValue) _flightTarget = mouth.Value;
+                }
             }
+
+            double dx = _flightTarget.X - centre.X;
+            double dy = _flightTarget.Y - centre.Y;
+
+            PossAnim.To(_scale, ScaleTransform.ScaleXProperty, TinyScale, SuckMs, PossAnim.EaseIn);
+            PossAnim.To(_scale, ScaleTransform.ScaleYProperty, TinyScale, SuckMs, PossAnim.EaseIn);
+            PossAnim.To(_tr, TranslateTransform.XProperty, dx, SuckMs, PossAnim.EaseIn);
+            PossAnim.To(_tr, TranslateTransform.YProperty, dy, SuckMs, PossAnim.EaseIn);
+            PossAnim.To(visual, UIElement.OpacityProperty, 0, SuckMs, PossAnim.EaseIn);
+            await PossAnim.DelayAsync(SuckMs + 30, ct).ConfigureAwait(true);
+
+            // The tube got what it came for; send it home rather than leaving it parked for two minutes.
+            if (_flew) SendTubeHome();
         }
-
-        double dx = _flightTarget.X - centre.X;
-        double dy = _flightTarget.Y - centre.Y;
-
-        PossAnim.To(_scale, ScaleTransform.ScaleXProperty, TinyScale, SuckMs, PossAnim.EaseIn);
-        PossAnim.To(_scale, ScaleTransform.ScaleYProperty, TinyScale, SuckMs, PossAnim.EaseIn);
-        PossAnim.To(_tr, TranslateTransform.XProperty, dx, SuckMs, PossAnim.EaseIn);
-        PossAnim.To(_tr, TranslateTransform.YProperty, dy, SuckMs, PossAnim.EaseIn);
-        PossAnim.To(visual, UIElement.OpacityProperty, 0, SuckMs, PossAnim.EaseIn);
-        await PossAnim.DelayAsync(SuckMs + 30, ct).ConfigureAwait(true);
-
-        // The tube got what it came for; send it home rather than leaving it parked for two minutes.
-        if (_flew) SendTubeHome();
+        finally
+        {
+            // Every early return above (cancelled beat, cancelled suck) must give the tube back, or the
+            // warden's busy flag stays raised for the rest of the lockdown and it never knocks again.
+            ReleaseTube();
+        }
     }
 
     protected override async Task UndoCoreAsync(TimeSpan duration)
@@ -169,7 +181,10 @@ public sealed class StealCardEffect : PossessionEffectBase
         try { ghost?.Dispose(); }
         catch (Exception ex) { App.Logger?.Warning("Possession stealcard restore failed: {Error}", ex.Message); }
 
-        if (_flew) SendTubeHome();
+        // Belt and braces - the apply already sent it home. Only re-send when the tube is actually
+        // free: SendTubeHome CLEARS the tube's captured home, so doing it during a warden knock or
+        // leave strands the tube wherever that verb left it.
+        if (_flew && TakeTube() != null) SendTubeHome();
 
         _ghost = null;
         _tr = null;
@@ -261,19 +276,38 @@ public sealed class StealCardEffect : PossessionEffectBase
 
     // ---- the tube ------------------------------------------------------------------------------
 
-    /// <summary>The warden's gates, mirrored (Warden.IsAvailable is the same list). Null means the
-    /// theft happens without a thief on screen.</summary>
-    private static AvatarTubeWindow? AvailableTube()
+    /// <summary>The warden's gates, mirrored (Warden.IsAvailable is the same list) PLUS the warden's
+    /// own busy flag, taken as a lease. Null means the theft happens without a thief on screen.
+    ///
+    /// <para><b>The lease is the whole coordination mechanism.</b> A theft and a warden verb both move
+    /// the tube and both rely on <c>AvatarTubeWindow</c>'s single captured "home"; whichever one calls
+    /// ReturnHomeAsync first clears it and strands the other. Taking the same <c>_busy</c> flag the
+    /// verbs take means only one of them is ever moving the tube, so the capture bookkeeping has
+    /// exactly one owner. Also honours the warden's cooldown-free availability gates.</para></summary>
+    private AvatarTubeWindow? TakeTube()
     {
         try
         {
+            if (_holdsTube) return App.AvatarWindow;
             if (App.Settings?.Current?.LockdownWardenEnabled != true) return null;
             var tube = App.AvatarWindow;
             if (tube == null || !tube.CanPerformPossessionMove) return null;
             if (App.Video?.IsPlaying == true) return null;
+
+            var warden = App.Possession?.Warden as Warden;
+            if (warden != null && !warden.TryTakeTube()) return null;   // a knock / stare / leave owns it
+            _holdsTube = true;
             return tube;
         }
         catch { return null; }
+    }
+
+    /// <summary>Give the tube back to the warden. Safe when the lease was never taken.</summary>
+    private void ReleaseTube()
+    {
+        if (!_holdsTube) return;
+        _holdsTube = false;
+        try { (App.Possession?.Warden as Warden)?.ReleaseTube(); } catch { }
     }
 
     private static async Task<bool> GlideBesideAsync(AvatarTubeWindow tube, FrameworkElement el,
@@ -316,14 +350,23 @@ public sealed class StealCardEffect : PossessionEffectBase
         catch { return null; }
     }
 
-    private static void SendTubeHome()
+    /// <summary>Send the tube home, and give the warden its lease back only once it has ARRIVED.
+    /// ReturnHomeAsync clears the tube's captured home in its finally, so releasing any earlier would
+    /// let a warden verb capture a home that is about to be wiped out from under it.</summary>
+    private void SendTubeHome()
     {
+        if (!_holdsTube) return;
+        _holdsTube = false;   // the homeward leg owns the lease from here; ReleaseTube() now no-ops
+
+        static void Done() { try { (App.Possession?.Warden as Warden)?.ReleaseTube(); } catch { } }
+
         try
         {
-            var tube = App.AvatarWindow;
-            if (tube == null) return;
-            _ = tube.ReturnHomeAsync(CancellationToken.None);
+            var t = App.AvatarWindow?.ReturnHomeAsync(CancellationToken.None);
+            if (t == null) { Done(); return; }
+            _ = t.ContinueWith(_ => Done(), CancellationToken.None,
+                               TaskContinuationOptions.None, TaskScheduler.Default);
         }
-        catch { }
+        catch { Done(); }
     }
 }

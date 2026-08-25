@@ -68,11 +68,22 @@ public sealed class LockdownDoseKeeper : IDisposable
     /// <summary>Flags outside the wall that still mean "something is running" - the keeper must not
     /// talk over an audio-only bed, a corner GIF or a takeover just because the wall toggles are off.
     /// (Whisper audio is NOT here on purpose: SubliminalService plays it, so it is already covered by
-    /// the subliminal toggle and means nothing on its own.)</summary>
+    /// the subliminal toggle and means nothing on its own.)
+    ///
+    /// <para>Pop Quiz belongs here rather than in <see cref="Catalog"/>: <c>StartEngine</c> starts it
+    /// off <c>PopQuizEnabled</c> like any wall feature, so a lockdown with only Pop Quiz on is NOT an
+    /// empty room - but it is not a wall card, so <c>MainWindow.SetWallFeature</c> does not know its
+    /// key and it must never be conscriptable. Living outside the catalog makes that true by
+    /// construction: it counts, and it can never be picked.</para></summary>
     private static bool HasOffWallDose(AppSettings s) =>
         s.AudioOnlySession
+        || s.PopQuizEnabled
         || (s.CornerGifOverlays?.Any(o => o != null && o.Enabled) == true)
         || (s.AutonomyModeEnabled && s.AutonomyConsentGiven);
+
+    /// <summary>Test seam for the off-wall half of the census (Pop Quiz, the audio bed, corner GIFs,
+    /// takeover). Public so the suite can pin what counts without a live lockdown.</summary>
+    public static bool CountsAsOffWallDose(AppSettings s) => s != null && HasOffWallDose(s);
 
     /// <summary>True when NOTHING would run - no wall feature on and no off-wall dose either.</summary>
     public static bool DoseIsEmpty(AppSettings s)
@@ -252,16 +263,25 @@ public sealed class LockdownDoseKeeper : IDisposable
         if (!_lockdown.IsActive) { _armed = false; return; }
         if (!Enabled) return;   // turned off mid-lockdown: stand down, restore still runs at the end
         var s = App.Settings?.Current;
-        var mw = Application.Current?.MainWindow as MainWindow;
+        // App.MainWindowRef, not Application.Current.MainWindow: the latter is null while the window
+        // is hidden to tray, which is exactly where a lockdown run spends much of its time - and a
+        // null here silently no-ops the whole enforcement pass. (Same read as Warden.cs / App.xaml.cs.)
+        var mw = App.MainWindowRef ?? Application.Current?.MainWindow as MainWindow;
         if (s == null || mw == null) return;
 
         _busy = true;
         try
         {
             // A running session owns the dose (MainWindow.SessionFeatureLock rule 1). Stand down.
+            //
+            // _wasEmpty is deliberately NOT rewritten here. Rewriting it every tick consumed the empty
+            // EDGE: a session that ends with every feature off left _wasEmpty already true, so the
+            // `empty && !_wasEmpty` test below never fired and the room refilled silently, with no
+            // `starve` tripwire and no warden line. The edge is what the tripwire is made of, so it
+            // survives the stand-down and fires the moment the keeper is watching again.
             if (mw.IsSessionFeatureLockActive)
             {
-                _engineIdle = 0; _doseIdle = 0; _wasEmpty = DoseIsEmpty(s);
+                _engineIdle = 0; _doseIdle = 0;
                 return;
             }
 
@@ -351,7 +371,10 @@ public sealed class LockdownDoseKeeper : IDisposable
     {
         try
         {
-            mw.StartEngine();
+            // systemInitiated: the keeper is not the user pressing START. Without it, Stop-inside-a-
+            // lockdown farmed the Relapse achievement, TotalSessions grew once per engine-idle grace
+            // and the mandatory-video enhancement prompt could pop inside the lockdown.
+            mw.StartEngine(systemInitiated: true);
             _weStartedEngine = true;
             WriteRecoveryFile();
             App.Logger?.Information("Lockdown dose: engine started for the user");
@@ -364,6 +387,12 @@ public sealed class LockdownDoseKeeper : IDisposable
         try { App.Bark?.NotifyLockdownConscript(names ?? "", _round, engineStarted); } catch { }
     }
 
+    /// <summary>The extensions VideoService actually plays, mirrored from its refill scan
+    /// (Services/Video/VideoService.cs, <c>RefillVideoQueues</c>). Counting ANY file made round 2
+    /// conscript Mandatory Videos over a folder holding nothing but Thumbs.db, desktop.ini or the
+    /// .ccpenh.json enhancement sidecars - a feature switched on with nothing to play.</summary>
+    private static readonly string[] VideoExtensions = { ".mp4", ".mov", ".avi", ".wmv", ".mkv", ".webm" };
+
     /// <summary>Escalation features only join the pool when they would actually do something.</summary>
     private static bool AssetsExistFor(string key)
     {
@@ -372,11 +401,21 @@ public sealed class LockdownDoseKeeper : IDisposable
             if (key == "video")
             {
                 var dir = Path.Combine(App.EffectiveAssetsPath, "videos");
-                return Directory.Exists(dir) && Directory.EnumerateFiles(dir).Any();
+                if (!Directory.Exists(dir)) return false;
+                // AllDirectories to match VideoService: users organise videos into category subfolders.
+                return Directory.EnumerateFiles(dir, "*.*", SearchOption.AllDirectories)
+                                .Any(f => VideoExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()));
             }
         }
         catch { }
         return true;
+    }
+
+    /// <summary>Test seam: does this filename count as something the video feature could play?</summary>
+    public static bool IsPlayableVideoFile(string path)
+    {
+        try { return !string.IsNullOrWhiteSpace(path) && VideoExtensions.Contains(Path.GetExtension(path).ToLowerInvariant()); }
+        catch { return false; }
     }
 
     private void OnDeactivated()
@@ -384,31 +423,56 @@ public sealed class LockdownDoseKeeper : IDisposable
         try
         {
             _kickoff?.Stop();
-            if (!_armed) return;
+            if (!_armed) { DeleteRecoveryFile(); return; }   // nothing was ever borrowed this lockdown
             _armed = false;
+            // Restore OWNS the recovery file from here. It is the record of what is still switched on
+            // against the user's wishes, so it may only be deleted once the toggles are actually back -
+            // and Restore can be QUEUED to the UI thread, so deleting it here (the old `finally`) threw
+            // the record away before the restore had even run.
             Restore();
         }
         catch (Exception ex) { App.Logger?.Warning("Lockdown dose: restore failed: {Error}", ex.Message); }
-        finally { DeleteRecoveryFile(); }
     }
 
     /// <summary>Gives back what was borrowed: flipped toggles to their pre-lockdown value, and the
-    /// engine stopped if the keeper was the one who started it and it was not running before.</summary>
+    /// engine stopped if the keeper was the one who started it and it was not running before. Deletes
+    /// the recovery file only when everything was actually given back; anything left flipped stays on
+    /// disk so <see cref="RecoverIfNeeded"/> finishes the job at the next launch.</summary>
     private void Restore()
     {
-        var mw = Application.Current?.MainWindow as MainWindow;
-        if (mw == null) return;
+        // Marshal FIRST. MainWindow's Application.Current.MainWindow getter VerifyAccess-throws off the
+        // UI thread, so reading it before this check made the marshalling branch unreachable - the read
+        // threw and the whole restore was lost to OnDeactivated's catch.
         var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher != null && !dispatcher.CheckAccess()) { dispatcher.BeginInvoke(Restore); return; }
+        if (dispatcher != null && !dispatcher.CheckAccess())
+        {
+            if (dispatcher.HasShutdownStarted) return;   // recovery file kept; next launch cleans up
+            dispatcher.BeginInvoke(new Action(Restore));
+            return;
+        }
+
+        var mw = App.MainWindowRef ?? Application.Current?.MainWindow as MainWindow;
+        if (mw == null)
+        {
+            App.Logger?.Warning("Lockdown dose: no main window at restore - {Count} toggle(s) left on, "
+                + "recovery file kept for the next launch", _flipped.Count);
+            return;
+        }
 
         var gaveBack = new List<string>();
+        var stillFlipped = new List<string>();
         foreach (var key in _flipped.ToList())
         {
             if (_snapshotOn.Contains(key)) continue;   // they had it on themselves - leave it
             try { mw.SetWallFeature(key, false); gaveBack.Add(key); }
-            catch (Exception ex) { App.Logger?.Warning("Lockdown dose: could not give back {Key}: {Error}", key, ex.Message); }
+            catch (Exception ex)
+            {
+                stillFlipped.Add(key);
+                App.Logger?.Warning("Lockdown dose: could not give back {Key}: {Error}", key, ex.Message);
+            }
         }
         _flipped.Clear();
+        foreach (var key in stillFlipped) _flipped.Add(key);
 
         var stoppedEngine = false;
         if (_weStartedEngine && !_engineWasRunning && App.IsEngineRunning && !mw.IsSessionFeatureLockActive)
@@ -418,6 +482,10 @@ public sealed class LockdownDoseKeeper : IDisposable
         }
         App.Logger?.Information("Lockdown dose: released (gave back {Keys}; engine {Engine})",
             gaveBack.Count == 0 ? "nothing" : string.Join(",", gaveBack), stoppedEngine ? "stopped" : "left as is");
+
+        // Only now, and only if nothing is still flipped: the file is the recovery record.
+        if (stillFlipped.Count == 0) DeleteRecoveryFile();
+        else WriteRecoveryFile();
     }
 
     // ---------------------------------------------------------------------------------------------

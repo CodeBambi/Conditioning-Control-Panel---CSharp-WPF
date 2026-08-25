@@ -36,8 +36,21 @@ public sealed class FallEffect : PossessionEffectBase
     public override TimeSpan HoldFor => TimeSpan.FromSeconds(45);
     public override IReadOnlyList<PossessionRole> Roles => _roles;
 
+    /// <summary>
+    /// A card is dropped off the bottom of the window AND has its hit-testing turned off for 45 s, so
+    /// everything inside it goes with it. <c>Possession.Exclude</c> inherits DOWN only: the Lockdown
+    /// card is enrollable while BtnEmergencyExit and TxtLockdownExit sit inside it, and taking it
+    /// would take the exits. <see cref="PossessionOffLimits"/> is the shared rule (StealCardEffect
+    /// has carried the same one privately since wave 2).
+    /// </summary>
     protected override bool CanApplyCore(PossessionContext ctx, PossessionTarget? target)
-        => target?.Element != null && !PossessionVisual.IsWindowChrome(target.Element);
+    {
+        var el = target?.Element;
+        if (el == null) return false;
+        if (PossessionVisual.IsWindowChrome(el)) return false;
+        if (PossessionOffLimits.IsOffLimits(el)) return false;
+        return true;
+    }
 
     protected override async Task ApplyCoreAsync(PossessionContext ctx, PossessionTarget? target, CancellationToken ct)
     {

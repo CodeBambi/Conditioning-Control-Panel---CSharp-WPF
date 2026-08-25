@@ -58,6 +58,7 @@ public sealed class RoomWarpEffect : PossessionEffectBase
     private bool _metricsCaptured;
     private double _w0, _h0, _left0, _top0;
     private bool _wLocal, _hLocal, _leftLocal, _topLocal;
+    private SizeToContent _sizeToContent0 = SizeToContent.Manual;
 
     public override string Id => "roomwarp";
     public override PossessionRung MinRung => PossessionRung.Collapse;
@@ -310,6 +311,9 @@ public sealed class RoomWarpEffect : PossessionEffectBase
             _hLocal = w.ReadLocalValue(FrameworkElement.HeightProperty) != DependencyProperty.UnsetValue;
             _leftLocal = w.ReadLocalValue(Window.LeftProperty) != DependencyProperty.UnsetValue;
             _topLocal = w.ReadLocalValue(Window.TopProperty) != DependencyProperty.UnsetValue;
+            _sizeToContent0 = w.SizeToContent;
+            // The size the room actually HAD, whichever way it was established: a window whose Width
+            // is NaN is still some number of pixels wide, and that number is what the undo owes back.
             _w0 = double.IsNaN(w.Width) ? w.ActualWidth : w.Width;
             _h0 = double.IsNaN(w.Height) ? w.ActualHeight : w.Height;
             _left0 = w.Left;
@@ -327,8 +331,26 @@ public sealed class RoomWarpEffect : PossessionEffectBase
         {
             if (w.WindowState == WindowState.Normal)
             {
-                if (_wLocal) w.Width = _w0; else if (_shrunk > 0) w.ClearValue(FrameworkElement.WidthProperty);
-                if (_hLocal) w.Height = _h0; else if (_shrunk > 0) w.ClearValue(FrameworkElement.HeightProperty);
+                // The toll was paid in PIXELS (w.Width = ... on every escape attempt), so the refund
+                // has to be pixels too. ClearValue looks like the tidy way to hand a property that
+                // had no local value back to whoever owned it - and it is what NeutralTransform and
+                // FallEffect correctly do - but a Window is not a Border: WPF ignores a NaN width, so
+                // clearing it leaves the HWND at the shrunken size and the room simply never grows
+                // back. The one case where clearing IS the restore is a window that sizes itself to
+                // its content on that axis; then a local width is the thing that would be wrong.
+                bool contentSizesWidth = _sizeToContent0 is SizeToContent.Width or SizeToContent.WidthAndHeight;
+                bool contentSizesHeight = _sizeToContent0 is SizeToContent.Height or SizeToContent.WidthAndHeight;
+
+                if (_wLocal || _shrunk > 0)
+                {
+                    if (!_wLocal && contentSizesWidth) w.ClearValue(FrameworkElement.WidthProperty);
+                    else if (!double.IsNaN(_w0) && _w0 > 0) w.Width = _w0;
+                }
+                if (_hLocal || _shrunk > 0)
+                {
+                    if (!_hLocal && contentSizesHeight) w.ClearValue(FrameworkElement.HeightProperty);
+                    else if (!double.IsNaN(_h0) && _h0 > 0) w.Height = _h0;
+                }
                 if (!double.IsNaN(_left0) && (_leftLocal || _nudgedX > 0)) w.Left = _left0;
                 if (!double.IsNaN(_top0) && (_topLocal || _nudgedY > 0)) w.Top = _top0;
             }
@@ -336,6 +358,7 @@ public sealed class RoomWarpEffect : PossessionEffectBase
         catch (Exception ex) { App.Logger?.Warning("Possession roomwarp metric restore failed: {Error}", ex.Message); }
 
         _metricsCaptured = false;
+        _sizeToContent0 = SizeToContent.Manual;
         _shrunk = 0;
         _nudgedX = 0;
         _nudgedY = 0;

@@ -23,7 +23,12 @@ public sealed class RailSweepScene : PossessionSceneBase
     public override PossessionRung MinRung => PossessionRung.Melt;
     public override int Beats => 3;
 
-    private const int MaxDoors = 5;
+    /// <summary>Never more doors than this scene declares in <see cref="Beats"/>. The director books a
+    /// scene against the concurrency cap as its beat count (POSSESSION.md: "a scene counts as its beat
+    /// count"), so claiming five while declaring three would hold five controls inside a three-slot
+    /// budget - and declaring five instead would put the scene over <c>MaxLive</c> at every rung it is
+    /// allowed to run at (3 at Melt, 4 at Collapse), so it could never be elected at all.</summary>
+    internal const int MaxDoors = 3;
 
     protected override async Task RunCoreAsync(PossessionContext ctx, IPossessionHost host,
                                                Func<PossessionRole, PossessionTarget?> pick, CancellationToken ct)
