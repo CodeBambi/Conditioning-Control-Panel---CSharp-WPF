@@ -164,11 +164,11 @@ public sealed class Win32PanicKey : IDisposable
             return _armOutcome ?? Unavailable(HotkeyRefused, "this panic key's thread has already answered once and refused");
         }
 
-        _thread = new Thread(PumpUntilClosed)
-        {
-            IsBackground = true,
-            Name = "CCP panic key",
-        };
+        // IsBackground on the construction line, which is both a real requirement and the shape
+        // SurfaceExitTests' foreground-thread guard reads: a FOREGROUND thread would keep this
+        // process alive after Main returned with every native surface still on the user's desktop —
+        // the exact trap the panic key exists to open, sprung by the panic key itself.
+        _thread = new Thread(PumpUntilClosed) { IsBackground = true, Name = "CCP panic key" };
 
         // STA for the same reason every message pump takes it: this thread owns a top-level window
         // and dispatches messages to it, and STA is the apartment that contract is written for.

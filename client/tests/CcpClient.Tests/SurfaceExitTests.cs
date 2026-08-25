@@ -182,11 +182,14 @@ public class SurfaceExitTests : RealDesktopFacts
     /// process may exit — so one such thread anywhere in the product would hold the app alive after
     /// the shell closed, with the surfaces still up, and no bound inside teardown could reach it.
     ///
-    /// <para>The port creates exactly one managed thread outside the pool, and it is
-    /// <c>IsBackground</c> on purpose: <c>Audio/SoundArbitration.cs:1332-1341</c> — <i>"named +
-    /// IsBackground so a wedged native call never blocks process exit"</i>. That is the same
-    /// judgement this row reached from the other end, already made at the one native wedge this port
-    /// has measured.</para>
+    /// <para>The port creates two managed threads outside the pool and both are <c>IsBackground</c>
+    /// on purpose. The first is <c>Audio/SoundArbitration.cs:1332-1341</c> — <i>"named +
+    /// IsBackground so a wedged native call never blocks process exit"</i>, the same judgement this
+    /// row reached from the other end, already made at the one native wedge this port has measured.
+    /// The second is the emergency stop's own pump (<c>Input/Win32PanicKey.cs</c>), which owns the
+    /// hidden window <c>WM_HOTKEY</c> is posted to so the chord is dequeued whatever the UI thread
+    /// is doing — and which, as a foreground thread, would hold the process open with every surface
+    /// up: the panic key springing the trap it exists to open.</para>
     ///
     /// <para><b>Mutation that reds it:</b> drop <c>IsBackground = true</c> from that construction,
     /// or add any other <c>new Thread(...)</c> to <c>client/src</c> without it.</para>
