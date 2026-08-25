@@ -819,10 +819,19 @@ export default {
     }
     function setTouchClass(on) {
       /* <html> ONLY: the stage's own look hangs off `html.ae-touch .g-de-*` in
-         style.js, so there is no second class to keep in sync here. */
+         style.js, so there is no second class to keep in sync here.
+         GLOBALLY ARMED (core/device.js, 2026-08-25): when the shell armed
+         `.ae-touch` page-wide it stamps `data-ae-touch-global="1"` on <html>,
+         and the class is then not ours to toggle - the add is redundant and
+         the destroy-time remove would strip the whole page's GPU ceiling on
+         the way back to the lobby. probeTouch() stays the fallback for hosts
+         where device.js never armed it (a big tablet, a touch-screen laptop
+         browser), where this lifecycle add/remove behaves exactly as before. */
       try {
         const html = typeof document !== 'undefined' ? document.documentElement : null;
-        if (html && html.classList) html.classList[on ? 'add' : 'remove']('ae-touch');
+        if (!html || !html.classList) return;
+        if (typeof html.getAttribute === 'function' && html.getAttribute('data-ae-touch-global') === '1') return;
+        html.classList[on ? 'add' : 'remove']('ae-touch');
       } catch (e) { /* ignore */ }
     }
     /** The animated-tier cap and the still-shallows line: the resolved rung

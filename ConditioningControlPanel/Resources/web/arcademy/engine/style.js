@@ -220,9 +220,11 @@ export const STYLE_TEXT = `
        drain wash is up. Its gradient already carries the drain; only the blur
        goes, exactly as in lite.
      - a BLEND SURFACE has to read what is under it before it can write, and
-       these four are FULL-SCREEN (the spiral is 150vmax, over twice the
-       viewport). On the near-black ground screen and plain alpha read almost
-       identically, so the tint stays and the read-back goes.
+       these five are FULL-SCREEN (the spiral is 150vmax, over twice the
+       viewport; .ae-crt is inset:0 with overlay - it was the one fullscreen
+       blend this list originally missed). On the near-black ground screen,
+       overlay and plain alpha read almost identically, so the tint stays and
+       the read-back goes.
      - a FILTER over a live decode is a whole GPU pass per decoded frame
        (ae-burst-double lands on gif_burst nodes, which are <video> whenever
        the pool hands back a webm), and ae-mosh's blur re-runs that pass every
@@ -232,10 +234,13 @@ export const STYLE_TEXT = `
    (background-position, the one pattern the perf trace named), so it holds
    still on touch - the scanlines themselves stay. */
 .ae-touch .ae-wash-drain{backdrop-filter:none;-webkit-backdrop-filter:none}
-.ae-touch .ae-wash-pink,.ae-touch .ae-wash-spiral,.ae-touch .ae-wash-sublim,.ae-touch .ae-jackpot{mix-blend-mode:normal}
+.ae-touch .ae-wash-pink,.ae-touch .ae-wash-spiral,.ae-touch .ae-wash-sublim,.ae-touch .ae-jackpot,.ae-touch .ae-crt{mix-blend-mode:normal}
 .ae-touch .ae-crt-live{animation:none}
 .ae-touch .ae-burst-double{filter:none}
 .ae-touch .ae-glitch-datamosh{filter:none;animation:ae-shudder var(--ae-dur,600ms) steps(2,end) 1}
+/* .ae-mote stays animated on touch ON PURPOSE: ae-float is transform-only
+   (compositor-cheap, no re-raster), and the phone cost of the ambient field is
+   its NODE COUNT, which the lite ladder now caps (curves.js ambientLite). */
 
 /* ---- reduced motion: neutralise EVERY animation -------------------------- */
 @media (prefers-reduced-motion: reduce){

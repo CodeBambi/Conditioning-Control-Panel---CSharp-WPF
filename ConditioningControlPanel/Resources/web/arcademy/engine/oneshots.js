@@ -8,7 +8,7 @@
  *     strobe-class terms (glitch shudder, burst alpha, sub alpha) are additionally
  *     multiplied by effectIntensity (the photosensitivity guard);
  *   - node budgets: flash_burst 20 live (3 on a coarse/low-motion device),
- *     gif_burst 10, sub_flash 6;
+ *     gif_burst 10 (4 coarse/low-motion), sub_flash 6 (3 coarse/low-motion);
  *   - INPUT TRUST: over a click/tap-precision surface the game passes
  *     clickSafe:true and every burst node renders pointer-events:none;
  *   - a clickable burst is a blocking effect, so it carries an ESCAPE GUARD
@@ -56,7 +56,12 @@ export const SUB_HOLD_MAX_MS = 1400;
 export function createOneshots(ctx) {
   const live = { flash: 0, gifBurst: 0, sub: 0 };
 
+  /* The lite twins ride the exact seam flashBurstLite always has: ctx.lite()
+   * (coarse pointer OR motionLevel <= 1), evaluated at spend time. A desktop
+   * with a fine pointer on motionLevel 2 never sees the lite number. */
   const flashCap = () => (ctx.lite() ? NODE_CAPS.flashBurstLite : NODE_CAPS.flashBurst);
+  const gifBurstCap = () => (ctx.lite() ? NODE_CAPS.gifBurstLite : NODE_CAPS.gifBurst);
+  const subCap = () => (ctx.lite() ? NODE_CAPS.subFlashLite : NODE_CAPS.subFlash);
 
   /* ---- glitch_swap ------------------------------------------------------- */
   /**
@@ -104,7 +109,7 @@ export function createOneshots(ctx) {
   /* ---- sub_flash --------------------------------------------------------- */
   function subFlash(opts = {}) {
     if (!hasDom()) return null;
-    if (live.sub >= NODE_CAPS.subFlash) return null;
+    if (live.sub >= subCap()) return null;
     const strength = ctx.ceiling('subDensity', opts.strength);
     if (strength <= 0.001) return null;       // subDensity capped off -> silent
     const spec = subFlashSpec(ctx.strobe(strength));
@@ -173,7 +178,7 @@ export function createOneshots(ctx) {
     const variant = ctx.variant(kind, strobe, ctx.reduced() ? (kind === 'flash_burst' ? 'single' : 'pop') : opts.variant);
     const ceilAlpha = burstOpacityForHeat(heat) * (0.6 + 0.4 * strobe);
     const alpha = Math.min(ceilAlpha, clamp01(opts.alpha == null ? ceilAlpha : ctx.pct(opts.alpha)));
-    const cap = kind === 'flash_burst' ? flashCap() : NODE_CAPS.gifBurst;
+    const cap = kind === 'flash_burst' ? flashCap() : gifBurstCap();
     const counter = kind === 'flash_burst' ? 'flash' : 'gifBurst';
 
     /* FULL BLEED (additive, 2026-08-23). One node covering the whole layer -
