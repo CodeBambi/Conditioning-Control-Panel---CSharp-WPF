@@ -47,7 +47,10 @@ param(
     # low-noise instrument: with fifteen surfaces sharing one thread every module's cadence is a
     # function of every other module's, and a 12% run-to-run spread swallows anything smaller.
     # One surface alone answers "how long does ONE frame of this take" directly, in 1/Hz.
-    [ValidateSet('all', 'spiral')][string]$Modules = 'all'
+    # `bubbles` was added AFTER the before/after runs this script's first user took, for a
+    # DIAGNOSTIC measurement of a path that change did not touch. It gates seeding only, and the
+    # `all` and `spiral` documents it writes are byte-for-byte what they were.
+    [ValidateSet('all', 'spiral', 'bubbles')][string]$Modules = 'all'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -341,13 +344,15 @@ function Write-Doc([string]$name, [hashtable]$body) {
 
 $MAX = 99999
 $on = $Modules -eq 'all'
+$spiralOn = $Modules -in @('all', 'spiral')
+$bubbleOn = $Modules -in @('all', 'bubbles')
 Write-Doc 'session_preset.json'        @{ flashEnabled = $on; flashesPerHour = $MAX; imagesPerFlash = $MAX }
 Write-Doc 'session_visuals.json'       @{ imageScalePercent = $MAX; flashOpacityPercent = $MAX; flashDurationSeconds = $MAX }
-Write-Doc 'session_spiral.json'        @{ enabled = $true; opacityPercent = $MAX; path = '' }
+Write-Doc 'session_spiral.json'        @{ enabled = $spiralOn; opacityPercent = $MAX; path = '' }
 Write-Doc 'session_pinkfilter.json'    @{ enabled = $on; opacityPercent = $MAX }
 Write-Doc 'session_subliminal.json'    @{ enabled = $on; perMinute = $MAX; durationFrames = $MAX; opacityPercent = $MAX }
 Write-Doc 'session_video.json'         @{ enabled = $on; perHour = $MAX; maxSeconds = $MAX }
-Write-Doc 'session_bubblepop.json'     @{ enabled = $on; perMinute = $MAX; sizePercent = $MAX; speedBoostPercent = $MAX }
+Write-Doc 'session_bubblepop.json'     @{ enabled = $bubbleOn; perMinute = $MAX; sizePercent = $MAX; speedBoostPercent = $MAX }
 Write-Doc 'session_bubblecount.json'   @{ enabled = $on; perHour = $MAX }
 Write-Doc 'session_bouncing_text.json' @{ enabled = $on; speed = $MAX; sizePercent = $MAX; opacityPercent = $MAX }
 Write-Doc 'session_lockcard.json'      @{ enabled = $on; perHour = $MAX; repeats = $MAX; strict = $false }
