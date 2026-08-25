@@ -25,12 +25,25 @@ namespace CcpClient.Desktop.Camera;
 /// <list type="bullet">
 /// <item><b>The MSMF rungs are no longer a fallback — they are the whole route.</b> Upstream keeps
 /// Media Foundation <i>"as a fallback for the MF-only / 32-bit-only devices the WinRT enumerator
-/// catches"</i> (<c>Services/Webcam/WebcamTrackingService.cs:159-161</c>, issues #282/#279/#291). A
-/// build whose only capture path IS Media Foundation cannot miss an MF-only camera, so that entire
-/// class of failure is closed rather than ported. What is LOST is upstream's stated preference for
+/// catches"</i> (<c>Services/Webcam/WebcamTrackingService.cs:159-161</c>, issues #282/#279/#291).
+///
+/// <para><b>That sentence has TWO halves and only the second one is closed by the transport
+/// change, which this file's first version got wrong and said so out loud.</b> It claimed a build
+/// whose only capture path IS Media Foundation "cannot miss an MF-only camera, so that entire
+/// class of failure is closed" — true of the OPEN, false of the PRODUCT, because the open is only
+/// ever reached for a device the ROSTER already named and the roster came from DirectShow alone.
+/// Upstream needs both halves for a reason: MSMF capture rungs to OPEN such a camera, and a
+/// separate WinRT/MF ENUMERATOR to SEE it at all
+/// (<c>Services/Webcam/WebcamWinRtEnumerator.cs:13-17</c>). The enumeration half is now closed
+/// too, by <see cref="EnumerateDevices"/> — the same <c>MFEnumDeviceSources</c> walk
+/// <see cref="FindActivate"/> already ran to MATCH a device, used to LIST them — and it is
+/// reached the way upstream reaches its own fallback: only when the DirectShow list comes back
+/// empty (<c>Services/Webcam/WebcamTrackingService.cs:1120-1134</c>).</para>
+///
+/// <para>What is LOST is upstream's stated preference for
 /// DirectShow on Elgato and UVC webcams (<c>:157-159</c>): if such a camera behaves worse under MF
 /// than under DSHOW, this port has no second transport to fall back to. That is a real, named
-/// user-visible risk and it is not hidden behind a claim of parity.</item>
+/// user-visible risk and it is not hidden behind a claim of parity.</para></item>
 /// <item><b>The MJPG escalation IS ported, because its cause is the camera and not the API.</b>
 /// One camera hands back frames that are non-empty and contain no face under default format
 /// negotiation (<c>:163-166</c>, BUG-F2XJE2E7X9), and asking for MJPG instead fixes it. The default
@@ -835,6 +848,170 @@ public sealed class MediaFoundationCameraCapture : ICameraCaptureSource
         finally
         {
             Release(current);
+        }
+    }
+
+    // =========================================================================================
+    //  Device enumeration — the SECOND look, when the DirectShow roster comes back empty
+    // =========================================================================================
+
+    /// <summary>The route <see cref="EnumerateDevices"/> speaks for. Named, never an index.</summary>
+    public const string EnumerationRoute =
+        "Media Foundation MFEnumDeviceSources over MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID";
+
+    /// <summary>
+    /// <b>The video-capture devices Media Foundation can see, for the machines where DirectShow can
+    /// see none.</b>
+    ///
+    /// <para><b>Why this lives on the capture type.</b> Upstream needs TWO things to serve an
+    /// MF-only or 32-bit-only camera, and they are separate: MSMF capture rungs to OPEN it
+    /// (<c>Services/Webcam/WebcamTrackingService.cs:167-172</c>) and a WinRT enumerator to SEE it,
+    /// because <i>"a 64-bit process misses cameras that register only 32-bit DirectShow filters or
+    /// are Media-Foundation-only, so DirectShow returns an empty list even though Discord / Windows
+    /// Camera / OpenCV-MSMF open the device fine"</i>
+    /// (<c>Services/Webcam/WebcamWinRtEnumerator.cs:13-17</c>, issues #282/#279/#291). Slice 1 named
+    /// that gap and deferred it here in as many words — <i>"closing that needs a Media Foundation
+    /// IMFActivate enumeration through mfplat/mf.dll, which is the capture slice's business because
+    /// that is the API family the capture path would use anyway"</i>
+    /// (<c>Camera/DirectShowCameraDeviceSource.cs</c>) — and this is that enumeration. It is the walk
+    /// <see cref="FindActivate"/> already performs to MATCH one device, with the match predicate
+    /// removed, so the interop underneath it is code that has run against real hardware rather than
+    /// a second hand-laid copy of it.</para>
+    ///
+    /// <para><b>NOTHING HERE OPENS A CAMERA and no indicator lights.</b> <c>MFEnumDeviceSources</c>
+    /// hands back ACTIVATION objects, which are descriptions; a device is opened only by
+    /// <c>IMFActivate::ActivateObject</c>, which this method never calls and which lives in
+    /// <see cref="TryRung"/> behind the consent gate. That is what lets an enumeration route call it
+    /// at all — <see cref="ICameraDeviceSource"/> promises that enumerating touches no device.</para>
+    ///
+    /// <para><b>A device with no symbolic link is SKIPPED rather than offered under a friendly
+    /// name.</b> Every identity this port hands out has to survive being persisted
+    /// (<c>client/docs/capability-inventory.md</c>: <i>"Never use only a transient camera index"</i>),
+    /// and the symbolic link is the only durable one Media Foundation has. Upstream's WinRT fallback
+    /// keeps such a device under an <c>(int Index, string Name)</c> pair
+    /// (<c>Services/Webcam/WebcamWinRtEnumerator.cs:44-50</c>); that pair is exactly the identity
+    /// this port refuses to build a roster from.</para>
+    /// </summary>
+    public static CameraInventory EnumerateDevices()
+    {
+        if (!StartPlatformForEnumeration())
+        {
+            return CameraInventory.Refusing(EnumerationRoute, new CapabilityState.DependencyMissing(
+                "the Media Foundation platform (mfplat.dll)",
+                new CapabilityReason(
+                    CameraReasonCodes.CameraEnumerationUnsupported,
+                    "Media Foundation would not start on this Windows installation, so its video-capture device "
+                    + "list could not be read. That list is the SECOND look — the DirectShow enumeration is the "
+                    + "first — so a camera only Media Foundation can see would be missed here. This is usually an "
+                    + "N or KN edition of Windows without the Media Feature Pack installed. NO CAMERA WAS OPENED")));
+        }
+
+        IMFAttributes? attributes = null;
+        var list = IntPtr.Zero;
+        var count = 0;
+        try
+        {
+            if (MFCreateAttributes(out attributes, 1) != 0 || attributes is null
+                || attributes.SetGUID(ref DevSourceAttributeSourceType, ref DevSourceVideoCaptureGuid) != 0
+                || MFEnumDeviceSources(attributes, out list, out count) != 0)
+            {
+                return CameraInventory.Refusing(
+                    EnumerationRoute, EnumerationFaulted("the device list could not be built"));
+            }
+
+            var devices = new List<CameraDevice>(count);
+            for (var index = 0; index < count; index++)
+            {
+                var entry = Marshal.ReadIntPtr(list, index * IntPtr.Size);
+                if (entry == IntPtr.Zero)
+                {
+                    continue;
+                }
+
+                var activate = Marshal.GetObjectForIUnknown(entry) as IMFActivate;
+                Marshal.Release(entry);
+                if (activate is null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    if (activate.GetAllocatedString(ref DevSourceSymbolicLink, out var link, out _) != 0
+                        || string.IsNullOrWhiteSpace(link))
+                    {
+                        continue;
+                    }
+
+                    // Upstream's own placeholder for a device the OS named nothing
+                    // (Services/Webcam/WebcamWinRtEnumerator.cs:48). A blank row in a camera picker is
+                    // worse than an honest one.
+                    var named = activate.GetAllocatedString(ref DevSourceFriendlyName, out var name, out _) == 0
+                        && !string.IsNullOrWhiteSpace(name)
+                        ? name
+                        : "(unnamed device)";
+
+                    devices.Add(new CameraDevice(link, named, IdentityIsStable: true));
+                }
+                finally
+                {
+                    Release(activate);
+                }
+            }
+
+            return CameraInventory.Named(EnumerationRoute, devices);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Type name only, for the reason Camera/DirectShowCameraDeviceSource.cs gives: an HRESULT
+            // message on this path can carry a device symbolic link.
+            return CameraInventory.Refusing(
+                EnumerationRoute, EnumerationFaulted($"it failed with {ex.GetType().Name}"));
+        }
+        finally
+        {
+            Release(attributes);
+            if (list != IntPtr.Zero)
+            {
+                Marshal.FreeCoTaskMem(list);
+            }
+
+            StopPlatformForEnumeration();
+        }
+    }
+
+    private static CapabilityState EnumerationFaulted(string what) =>
+        new CapabilityState.Faulted(new CapabilityReason(
+            CameraReasonCodes.CameraEnumerationFailed,
+            $"the Media Foundation device enumeration ran and {what}, so no claim is made about whether a "
+            + "camera is attached. NO CAMERA WAS OPENED"));
+
+    /// <summary>Start the platform for ONE enumeration. Separate from <see cref="StartPlatform"/>
+    /// because that one owns an INSTANCE's lifetime and this method has no instance;
+    /// <c>MFStartup</c>/<c>MFShutdown</c> are reference-counted per process, so the two nest
+    /// safely.</summary>
+    private static bool StartPlatformForEnumeration()
+    {
+        try
+        {
+            return MFStartup(MfVersion, MfStartupLite) == 0;
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    private static void StopPlatformForEnumeration()
+    {
+        try
+        {
+            MFShutdown();
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+        {
+            // Unreachable once MFStartup has succeeded, and swallowed for the reason StopPlatform
+            // swallows it: a teardown that throws would mask the outcome being reported.
         }
     }
 

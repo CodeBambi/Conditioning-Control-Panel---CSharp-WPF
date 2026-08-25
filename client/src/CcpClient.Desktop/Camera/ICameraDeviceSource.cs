@@ -136,3 +136,64 @@ public sealed class UnsupportedCameraDeviceSource(string route, string detail) :
             "a camera-enumeration route for this platform",
             new CapabilityReason(CameraReasonCodes.CameraEnumerationUnsupported, detail)));
 }
+
+/// <summary>
+/// <b>The rule for asking a SECOND enumeration route, and — more importantly — the three cases
+/// where it must not be asked at all.</b>
+///
+/// <para>Upstream has the same shape and states its trigger exactly: <i>"64-bit DirectShow
+/// SystemDeviceEnum misses cameras that register only 32-bit DirectShow filters or are
+/// Media-Foundation-only — yet OpenCV-MSMF (our open path) and Discord/Windows Camera can still
+/// use them. Fall back to the WinRT/MF list so the selector isn't empty for those users
+/// (#282/#279/#291)"</i>, guarded by <c>if (devices.Count == 0)</c>
+/// (<c>Services/Webcam/WebcamTrackingService.cs:1120-1134</c>). A route that named even one
+/// camera is never second-guessed, because a second walk costs a platform start-up on every
+/// launch probe and can only add duplicates of what is already there.</para>
+///
+/// <para><b>A REFUSAL IS NOT AN EMPTY LIST, and this is the divergence from upstream.</b>
+/// Upstream cannot reach this case — its DirectShow walk returns an empty list for a failure
+/// (<c>Services/Webcam/WebcamDeviceEnumerator.cs:119-122</c>) and it has no privacy read at all,
+/// so a denied user and a user with no webcam look identical to it. Here they do not: a primary
+/// route that refused typed has NOT said "no camera", and running a second route over the top of
+/// a Windows privacy denial would turn "you have denied camera access" into a device roster,
+/// which is the one direction <c>runtime-capability-contract.md</c> §2 rule 4 forbids evidence to
+/// move. So a refusal short-circuits and the fallback is never asked.</para>
+///
+/// <para><b>And when the FALLBACK refuses, its refusal is what comes back</b> — not the primary's
+/// honest "nothing found". Upstream returns the empty list here; this port does not, for the
+/// reason <see cref="ICameraDeviceSource.Enumerate"/> already gives: <i>"the route threw" and
+/// "there is no camera" are the two facts this capability exists to keep apart</i>. Telling
+/// somebody whose Media Foundation is missing to go and plug a webcam in sends them to fix a
+/// thing that is not wrong (<see cref="CameraReasonCodes"/>).</para>
+/// </summary>
+public static class CameraEnumerationFallback
+{
+    /// <summary>
+    /// <paramref name="primary"/>, or the <paramref name="fallback"/>'s answer restamped with
+    /// <paramref name="route"/> when the primary really ran and named nothing.
+    ///
+    /// <para><b><paramref name="fallback"/> is a thunk so that "it was never asked" is a fact
+    /// somebody can fail</b> rather than a claim about a branch. It is invoked at most once and
+    /// only on the one path that needs it.</para>
+    ///
+    /// <para>Everything returned carries <paramref name="route"/>, so the source's own
+    /// <see cref="ICameraDeviceSource.Route"/> is what a user reads however the answer was
+    /// reached — that route names both walks, which is the honest thing to show for a roster that
+    /// may have come from either.</para>
+    /// </summary>
+    public static CameraInventory Apply(string route, CameraInventory primary, Func<CameraInventory> fallback)
+    {
+        ArgumentNullException.ThrowIfNull(primary);
+        ArgumentNullException.ThrowIfNull(fallback);
+
+        if (primary.Refusal is not null || primary.Devices.Count > 0)
+        {
+            return primary;
+        }
+
+        var second = fallback();
+        return second.Refusal is { } refusal
+            ? CameraInventory.Refusing(route, refusal)
+            : CameraInventory.Named(route, second.Devices);
+    }
+}
