@@ -503,15 +503,27 @@
          the window resizes. A toast body carries a background and captures its own clicks (exactly
          as upstream's do, MainWindow.xaml:3212-3216), so the refusal took away the one thing that
          card guarantees in every branch: a gated press must ARRIVE
-         (Views/Tabs/PlayTabView.xaml:503-506). At 800x560 it also covered the Companion page's
-         only button. The bottom of the page area is empty on all five pages at every size measured,
-         so the announcement is free there. ToastPlacementHeadlessTests holds this by PRESSING every
-         page's buttons through a live toast - not by hit-testing them, which answers wrongly before
-         the first pointer event.
+         (Views/Tabs/PlayTabView.xaml:503-506). At 800x560 it covered the Companion page's only
+         button as well.
+
+         At the bottom right, the page area is empty on ALL FIVE PAGES at the shell's own
+         1100x760 - scrolled to the top and scrolled to the end - so the announcement is free.
+         TierRefusalRouteHeadlessTests holds it by PRESSING the gated buttons through a live toast
+         at five sizes, not by hit-testing them: InputHitTest answers wrongly between a toast's
+         layout pass and the first pointer event, so a query would have called the covered button
+         reachable.
+
+         WHAT IS NOT CLAIMED, because it was measured and is not true: total clearance at EVERY
+         size. The shell declares no minimum, and at 800x560 the page area is 600x410 - a 360x153
+         overlay cannot miss everything in it. There the Studio rack's right edge, the Mantra reps
+         picker and Quick Drop's bottom 10 DIP fall under the toast; no button's CENTRE does, and
+         every press still arrives. The top-right dock was not clear there either and took FALL
+         IN's centre instead.
 
          No bottom margin: the toast body's own 10 DIP bottom margin (ToastHost.axaml, upstream's
          :135) is the gap above the action bar, and anything more pushes the toast back up into the
-         page at the sizes where the page has least room.
+         page at the sizes where the page has least room - at 800x560 a 16 DIP one would put its
+         top edge through Quick Drop's centre.
 
          The host has NO Background, which is why the empty area around a toast does not eat
          clicks on the page underneath (Services/Notifications/NotificationService.cs:16-18). -->
