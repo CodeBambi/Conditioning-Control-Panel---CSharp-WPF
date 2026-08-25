@@ -72,6 +72,7 @@ public sealed class OverlaySurfaceSet : IDisposable
     private readonly TimeSpan? _topmostCadence;
     private readonly Action? _rebuild;
     private readonly Func<IOverlayPresence, bool?> _topmostHeld;
+    private readonly bool _yieldToVideo;
     private readonly List<Slot> _slots = [];
 
     private IDisposable? _cadence;
@@ -104,6 +105,20 @@ public sealed class OverlaySurfaceSet : IDisposable
     /// <see cref="TopmostHeldByOs"/>. A seam, because it is the one input to the rebuild rule that no
     /// test could otherwise drive, and because a null answer must stay distinguishable from a loss —
     /// a build with no window to read never rebuilds anything.</param>
+    /// <param name="yieldToVideo">
+    /// Whether this module's surfaces belong UNDER a mandatory video while one is on screen —
+    /// upstream's <c>PinBelowVideo</c> (<c>Services/Notifications/OverlayService.cs:2851-2860</c>).
+    ///
+    /// <para><b>This is a per-MODULE decision and that is why it is a constructor parameter rather
+    /// than something the backend works out.</b> Upstream's reconciler reaches exactly three window
+    /// lists — pink filter, spiral, brain-drain blur (<c>:2793-2801</c>) — plus the compositor hosts
+    /// that carry the same fullscreen effects (<c>:2807-2818</c>). Flash is deliberately NOT among
+    /// them: <c>Services/Flash/FlashService.cs:203-224</c> calls flashes "the top attention layer by
+    /// design" and force-raises every one with no video test, and only its compositor-HOST branch
+    /// stands down while a video plays, for the reason spelled out at <c>:230-235</c>. Flash, the
+    /// tint and the spiral all drive THIS class, so the scope has to be expressed here or it cannot
+    /// be expressed at all. False is the safe default: the top of the band, exactly as before.</para>
+    /// </param>
     public OverlaySurfaceSet(
         ISessionClock clock,
         Action<Action> dispatch,
@@ -111,7 +126,8 @@ public sealed class OverlaySurfaceSet : IDisposable
         int maxSurfaces,
         TimeSpan? topmostCadence,
         Action? rebuild = null,
-        Func<IOverlayPresence, bool?>? topmostHeld = null)
+        Func<IOverlayPresence, bool?>? topmostHeld = null,
+        bool yieldToVideo = false)
     {
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(dispatch);
@@ -124,7 +140,12 @@ public sealed class OverlaySurfaceSet : IDisposable
         _topmostCadence = topmostCadence;
         _rebuild = rebuild;
         _topmostHeld = topmostHeld ?? TopmostHeldByOs;
+        _yieldToVideo = yieldToVideo;
     }
+
+    /// <summary>Whether this module stands down under a mandatory video. Diagnostics and facts;
+    /// never a claim about a screen.</summary>
+    public bool YieldsToVideo => _yieldToVideo;
 
     /// <summary>
     /// The product read-back: <c>GetWindowLongPtrW(GWL_EXSTYLE) &amp; WS_EX_TOPMOST</c> on the window
@@ -483,7 +504,7 @@ public sealed class OverlaySurfaceSet : IDisposable
             if (_slots[i].Live)
             {
                 anyLive = true;
-                _slots[i].Presence.Reassert();
+                ReassertOne(_slots[i].Presence);
             }
         }
 
@@ -542,6 +563,7 @@ public sealed class OverlaySurfaceSet : IDisposable
 
         var live = 0;
         var lost = false;
+        var videoUp = _yieldToVideo && VideoTopmostAnchor.IsClaimed;
         for (var i = 0; i < _slots.Count; i++)
         {
             if (!_slots[i].Live)
@@ -560,7 +582,17 @@ public sealed class OverlaySurfaceSet : IDisposable
                 // Upstream's non-forced pass re-pins exactly the windows whose read-back lost the
                 // bit (OverlayService.cs:2864-2880). The cheap self-heal comes first; escalation is
                 // only for a loss that survives it.
-                _slots[i].Presence.Reassert();
+                ReassertOne(_slots[i].Presence);
+            }
+            else if (videoUp)
+            {
+                // A CLIP THAT STARTED UNDER A SURFACE THAT IS ALREADY UP. Upstream's video rule is
+                // resolved BEFORE its needsPin test (OverlayService.cs:2851-2853 runs ahead of
+                // :2856), so its 500 ms pass re-pins a held band while a video plays and never
+                // counts it as a loss. Without this arm the tint would sit over a clip for up to a
+                // whole 5 s cadence period at every video start. Deliberately does not touch the
+                // loss streak or the rebuild budget: nothing was lost.
+                _slots[i].Presence.ReassertBelowVideo();
             }
         }
 
@@ -597,13 +629,35 @@ public sealed class OverlaySurfaceSet : IDisposable
                 {
                     if (_slots[i].Live)
                     {
-                        _slots[i].Presence.Reassert();
+                        ReassertOne(_slots[i].Presence);
                     }
                 }
             }
         }
 
         EnsureReconcile();
+    }
+
+    /// <summary>
+    /// Every re-assertion this class makes, routed through the module's scope.
+    ///
+    /// <para>A yielding module always goes through <see cref="IOverlayPresence.ReassertBelowVideo"/>,
+    /// including when no video is up — that call resolves to <c>HWND_TOPMOST</c> then, so the
+    /// no-video case is the old behaviour and not a second code path that could drift from it.
+    /// A non-yielding module (flash, subliminals) always takes the top of the band, which is
+    /// upstream's <c>RaiseAllToFront</c> with no video test
+    /// (<c>Services/Flash/FlashService.cs:203-224</c>).</para>
+    /// </summary>
+    private void ReassertOne(IOverlayPresence presence)
+    {
+        if (_yieldToVideo)
+        {
+            presence.ReassertBelowVideo();
+        }
+        else
+        {
+            presence.Reassert();
+        }
     }
 
     /// <summary>One pooled surface: its presence, whether it is up, where, and until when.</summary>

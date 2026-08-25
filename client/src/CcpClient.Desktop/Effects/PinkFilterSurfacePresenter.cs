@@ -104,7 +104,13 @@ public sealed class PinkFilterSurfacePresenter : IPinkFilterSurface, IDisposable
         _surfaces = new OverlaySurfaceSet(
             clock, dispatch, presenceFactory, MaxConcurrentSurfaces, TopmostCadence,
             rebuild: Rebuild,
-            topmostHeld: topmostHeld);
+            topmostHeld: topmostHeld,
+            // The pink filter is the FIRST of upstream's three below-video lists
+            // (OverlayService.cs:2793, _pinkFilterWindows). A full-display tint that takes the top
+            // of the band on its 5 s kick puts itself over a mandatory video that is placed topmost
+            // once and never re-raises, and the clip plays under it for its whole length (#497,
+            // named at OverlayService.cs:2776-2780). See Overlay/VideoTopmostAnchor.cs.
+            yieldToVideo: true);
     }
 
     /// <summary>The product composition: the real overlay backend for this platform and the OS's own

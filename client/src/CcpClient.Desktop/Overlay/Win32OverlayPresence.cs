@@ -339,6 +339,21 @@ public sealed class Win32OverlayPresence : IOverlayPresence
         Raise();
     }
 
+    /// <inheritdoc/>
+    public void ReassertBelowVideo()
+    {
+        if (_disposed || !_presenting || !OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        // The slot in the band, not the top of it. With no video up this is HWND_TOPMOST and the
+        // call is byte-for-byte Reassert; with one up it is an insert-after that keeps
+        // WS_EX_TOPMOST and parks this surface under the clip — upstream's PinBelowVideo
+        // (Services/Notifications/OverlayService.cs:2851-2860, issued at :2870-2874).
+        Raise(VideoTopmostAnchor.InsertAfter(_window));
+    }
+
     public CapabilityState Withdraw()
     {
         if (_disposed)
@@ -866,11 +881,22 @@ public sealed class Win32OverlayPresence : IOverlayPresence
     /// <summary>WPF's <c>ForceTopmost</c>, verbatim in effect (<c>FlashService.cs:3865-3868</c>).
     /// The OS's answer is RECORDED rather than discarded: "the bit is still missing" and "the call
     /// that would set it is being refused" are different diagnoses with different fixes, and a void
-    /// Raise cannot tell them apart.</summary>
-    private void Raise()
+    /// Raise cannot tell them apart.
+    ///
+    /// <para>Unconditionally the TOP of the topmost band. Its callers are <see cref="Present"/>'s
+    /// style loop and its hit test, which are ESTABLISHING the surface and have to be able to win
+    /// their own point to say anything about it at all, and <see cref="Reassert"/>, which is the
+    /// unscoped kick every module gets. The below-video slot belongs to
+    /// <see cref="ReassertBelowVideo"/> alone.</para></summary>
+    private void Raise() => Raise(Win32OverlayInterop.HwndTopmost);
+
+    /// <summary>One topmost assertion at a caller-chosen slot in the band. See
+    /// <see cref="VideoTopmostAnchor"/> for the only slot other than <c>HWND_TOPMOST</c> this port
+    /// produces, and for the scope it is allowed in.</summary>
+    private void Raise(nint insertAfter)
     {
         LastRaiseSucceeded = Win32OverlayInterop.SetWindowPos(
-            _window, Win32OverlayInterop.HwndTopmost, 0, 0, 0, 0,
+            _window, insertAfter, 0, 0, 0, 0,
             Win32OverlayInterop.SwpNomove | Win32OverlayInterop.SwpNosize | Win32OverlayInterop.SwpNoactivate);
         LastRaiseError = LastRaiseSucceeded ? 0 : Marshal.GetLastWin32Error();
     }

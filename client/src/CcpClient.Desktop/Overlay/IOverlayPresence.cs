@@ -106,6 +106,28 @@ public interface IOverlayPresence : IDisposable
     void Reassert();
 
     /// <summary>
+    /// <see cref="Reassert"/> for a module that must stay BELOW a mandatory video while one is on
+    /// screen — upstream's <c>PinBelowVideo</c> (<c>Services/Notifications/OverlayService.cs:2851-2860</c>,
+    /// issued at <c>:2870-2874</c>), which keeps the topmost band and the <c>WS_EX_TOPMOST</c> bit
+    /// and only changes the slot INSIDE the band.
+    ///
+    /// <para><b>Two methods rather than a parameter, because the scope is the whole point.</b>
+    /// Upstream applies this rule to exactly three window lists — pink filter, spiral,
+    /// brain-drain blur (<c>OverlayService.cs:2793-2801</c>) — and deliberately not to flash, "the
+    /// top attention layer by design" (<c>Services/Flash/FlashService.cs:203-224</c>, which
+    /// force-raises with no video test at all). Flash and the tint share
+    /// <c>Effects/OverlaySurfaceSet.cs</c> in this port, so the caller has to be able to say which
+    /// one it is; a backend cannot know.</para>
+    ///
+    /// <para><b>The default is <see cref="Reassert"/> and that is the honest default.</b> A backend
+    /// with no z-order to resolve — every non-Windows one — has nothing to yield and nothing to
+    /// yield to. Only <see cref="Win32OverlayPresence"/> overrides it, and only to ask
+    /// <see cref="VideoTopmostAnchor.InsertAfter"/> which slot in the band to take. Returns
+    /// nothing, for the same reason <see cref="Reassert"/> does.</para>
+    /// </summary>
+    void ReassertBelowVideo() => Reassert();
+
+    /// <summary>
     /// Takes the surface off the screen, keeping the window for the next
     /// <see cref="Present"/>. <see cref="CapabilityState.Available"/> means the OS confirmed the
     /// window is no longer visible and the hit test no longer routes to it.

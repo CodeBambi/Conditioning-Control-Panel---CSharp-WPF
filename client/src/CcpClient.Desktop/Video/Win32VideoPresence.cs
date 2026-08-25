@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using CcpClient.Desktop.Capabilities;
+using CcpClient.Desktop.Overlay;
 
 namespace CcpClient.Desktop.Video;
 
@@ -163,6 +164,26 @@ public sealed class Win32VideoPresence : IVideoPresence
         LastObservation = observation;
         IsPresenting = observation.WindowExists && observation.WindowVisible;
 
+        // PUBLISH THE ANCHOR. This window is placed topmost once and re-raises only inside the
+        // bounded read-back above; upstream's own design calls it "deliberately non-re-raising"
+        // (Services/Notifications/OverlayService.cs:2776-2780), and protects it by resolving every
+        // ambient overlay's pin to PinBelowVideo while it plays (:2851-2860). This port has no
+        // service that owns those overlays, so the claim is published here and the yielding modules
+        // read it — see Overlay/VideoTopmostAnchor.cs for which modules those are and which
+        // (flash, bouncing text) upstream deliberately excludes.
+        //
+        // Conditioned on IsPresenting, not on SetWindowPos succeeding: a placement that got the
+        // window on screen and then refused for occlusion or bounds is still a window covering the
+        // display, and one that never reached the screen must not demote anything.
+        if (IsPresenting)
+        {
+            VideoTopmostAnchor.Claim(window);
+        }
+        else
+        {
+            VideoTopmostAnchor.Release(window);
+        }
+
         if (!observation.WindowExists || !observation.WindowVisible
             || !observation.AboveEveryOrdinaryWindow || !HoldsRequestedBounds(observation, bounds))
         {
@@ -288,6 +309,12 @@ public sealed class Win32VideoPresence : IVideoPresence
                 "there is no video surface on screen to take down");
         }
 
+        // Released BEFORE the hide, so nothing can pin itself below a window on its way off the
+        // screen. The surfaces that were parked under it stay in the topmost band — an insert-after
+        // never cleared WS_EX_TOPMOST — and retake the top of it on their next cadence tick. A
+        // missed release strands nothing either: VideoTopmostAnchor.InsertAfter asks the OS whether
+        // the handle is still a visible window before handing it to anybody.
+        VideoTopmostAnchor.Release(_window);
         Win32VideoInterop.ShowWindow(_window, Win32VideoInterop.SwHide);
         var observation = Read();
         LastObservation = observation;
@@ -355,6 +382,7 @@ public sealed class Win32VideoPresence : IVideoPresence
 
         if (_window != 0)
         {
+            VideoTopmostAnchor.Release(_window);
             Win32VideoInterop.DestroyWindow(_window);
             _window = 0;
         }
