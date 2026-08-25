@@ -109,6 +109,35 @@ public class SurfaceTeardownTests : RealDesktopFacts
     }
 
     /// <summary>
+    /// <b>The refusal THE INVARIANT takes rather than running vacuously, and the one place in this
+    /// file where keying is not available.</b>
+    ///
+    /// <para>The three facts around it are KEYED to <c>MachineHasInteractiveDesktop</c> because
+    /// "these five Win32 surfaces never reached the desktop" is a true and useful statement about a
+    /// machine with no Win32 window manager. This one is different: <c>Os.RoutesAwayFromUs</c>
+    /// requires the point to resolve to a REAL window belonging to another process - an answer of 0
+    /// on a live desktop means the reading was taken off-screen, not that the desktop got its input
+    /// back - so off Windows it answers NO, and keying it would mean asserting the INVERSE of the
+    /// invariant as this platform's expected outcome. The other clauses ("nothing of ours survives",
+    /// "the handle is gone", "the foreground came back", "no teardown diagnostic") are each
+    /// trivially true of a run that created no window at all.</para>
+    ///
+    /// <para>So it refuses by name, and the name is pinned in <c>client/tests/floor/floor.json</c>'s
+    /// <c>allowedSkips</c> under its machine class. The X11 and Wayland halves of
+    /// <c>.claude/skills/overlay-clickthrough/SKILL.md:30-31</c> are unmeasured and no green run
+    /// here says anything about them.</para>
+    /// </summary>
+    private const string ReclamationRefusalReason =
+        "this fact asks the WINDOW MANAGER what it still holds after the application tore itself down: whether a "
+        + "visible top-level window of ours survives in the z-order, and whether each of five points where a surface "
+        + "used to be now routes to a real window belonging to another process. Neither question exists off Windows, "
+        + "and neither can be asked in a Windows session with no interactive desktop: the five Win32 surfaces refuse "
+        + "to present, every handle is 0, the hit test resolves to no window at all, and 'nothing of ours survived' "
+        + "would be true of a run that put nothing on the screen. Its siblings above are KEYED to the machine "
+        + "instead, because 'the surfaces never reached the desktop' IS a true statement there; this one has no such "
+        + "reading and refuses instead";
+
+    /// <summary>
     /// <b>THE INVARIANT.</b> With the leak repaired, the application is fully down and the operating
     /// system holds nothing of ours: no visible top-level window in the z-order, no live handle, and
     /// every point where a surface used to be routes to another process.
@@ -121,6 +150,8 @@ public class SurfaceTeardownTests : RealDesktopFacts
     [Fact]
     public void AfterTeardown_NoWindowOfOursSurvives_AndEverySurfacePointRoutesBackToTheDesktop()
     {
+        Assert.SkipUnless(OverlayWindowProbe.MachineHasInteractiveDesktop, ReclamationRefusalReason);
+
         var run = SurfaceTeardownObservations.Teardown;
 
         Assert.True(run.OurVisibleWindowsAfterRestore == 0,

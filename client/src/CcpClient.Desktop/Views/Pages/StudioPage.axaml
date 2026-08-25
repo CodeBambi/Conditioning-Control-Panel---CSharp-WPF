@@ -2300,11 +2300,16 @@
                          TextWrapping="Wrap"
                          Text="" />
               <StackPanel Orientation="Horizontal" Spacing="8">
+                <!-- The spoken name carries "(confirm)" and the caption does not: this button and
+                     the rack's own ScriptedSessionStartButton below both read "Start Session"
+                     (en.json:1331) and are visible together, and AT-SPI has no AutomationId to tell
+                     them apart. StudioPage.axaml.cs rewrites this name on every state change; the
+                     literal here is the pre-first-update value and must agree with it. -->
                 <Button x:Name="ScriptedSessionConfirmButton"
                         Classes="module-action"
                         HorizontalAlignment="Left"
                         AutomationProperties.AutomationId="ScriptedSessionConfirmButton"
-                        AutomationProperties.Name="Start Session"
+                        AutomationProperties.Name="Start Session (confirm)"
                         Content="Start Session" />
                 <Button x:Name="ScriptedSessionCancelButton"
                         Classes="module-action"

@@ -1,4 +1,5 @@
 ﻿using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
@@ -209,6 +210,57 @@ public class SessionRackHeadlessTests : HeadlessTest
         Assert.Equal("Ready to begin?", TextOf(window, "ScriptedSessionConfirmQuestion"));
         Assert.Equal("Start Session", Descendant<Button>(window, "ScriptedSessionConfirmButton").Content);
         Assert.Equal("Not yet", Descendant<Button>(window, "ScriptedSessionCancelButton").Content);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    /// <summary>
+    /// <b>Two buttons that start a session are on screen together, and until 2026-08-25 they
+    /// answered to the SAME accessible name.</b>
+    ///
+    /// <para>Both captions are upstream's own <c>en.json:1331</c> "Start Session" — the rack's
+    /// button (<c>SessionRackNotices.StartButtonIdle</c>) and the confirmation's
+    /// (<c>.ConfirmStart</c>) — and the caption is the ported outcome, so neither may change.
+    /// Windows tells them apart by <c>AutomationId</c>, which is how this port's own capture
+    /// harness finds them. <b>AT-SPI carries no AutomationId at all</b>, so a Linux screen-reader
+    /// user was offered two indistinguishable targets, one of which starts a session — measured on
+    /// WSL2/Ubuntu 26.04 through the AT-SPI route at <c>518,456 123x39</c> and
+    /// <c>505,518 220x45</c> with identical names.</para>
+    ///
+    /// <para>So the confirmation's SPOKEN name carries "(confirm)" and its caption does not. This
+    /// fact pins both halves: the captions still match upstream, and the names no longer do.</para>
+    /// </summary>
+    [AvaloniaFact]
+    public async Task TheTwoStartButtonsThatAreOnScreenTogether_DoNotAnswerToTheSameACCESSIBLENAME()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        OpenTheSessionsRow(window);
+
+        Click(window, Descendant<RadioButton>(window, "SessionRowMorningDrift"));
+        Click(window, Descendant<Button>(window, "ScriptedSessionStartButton"));
+
+        var confirm = Descendant<Button>(window, "ScriptedSessionConfirmButton");
+        var rack = Descendant<Button>(window, "ScriptedSessionStartButton");
+
+        // The collision only exists while BOTH are on screen, so that is established first rather
+        // than assumed: a hidden confirmation would make the names below a comparison of one
+        // reachable control against one that no assistive technology could reach.
+        Assert.True(Descendant<Border>(window, "ScriptedSessionConfirmPanel").IsVisible);
+        Assert.True(confirm.IsVisible);
+        Assert.True(rack.IsVisible);
+
+        // The captions are upstream's and stay identical — this fix is not allowed to change what
+        // the user SEES.
+        Assert.Equal("Start Session", confirm.Content);
+        Assert.Equal("Start Session", rack.Content);
+
+        var confirmName = AutomationProperties.GetName(confirm);
+        var rackName = AutomationProperties.GetName(rack);
+
+        Assert.Equal("Start Session", rackName);
+        Assert.Equal("Start Session (confirm)", confirmName);
+        Assert.NotEqual(rackName, confirmName);
 
         await boot.Host.ShutdownAsync();
     }

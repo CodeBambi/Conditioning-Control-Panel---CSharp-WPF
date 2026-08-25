@@ -69,6 +69,11 @@ public class PanicKeyTests : RealDesktopFacts
     /// </summary>
     private static bool IsARealWindow(nint window) => WindowsHost && window != 0 && IsWindow(window);
 
+    /// <summary>The window the OS puts under a screen point, or 0 where there is no window manager
+    /// to ask. Same short-circuit and same reason as <see cref="IsARealWindow"/>.</summary>
+    private static nint WindowUnder(int x, int y) =>
+        WindowsHost ? WindowFromPoint(new Point { X = x, Y = y }) : 0;
+
     [Fact]
     public void TheChordIsHeldSystemWide_AndTheOperatingSystemConfirmsTheWindowItIsPostedTo()
     {
@@ -135,7 +140,7 @@ public class PanicKeyTests : RealDesktopFacts
             + "about an unobstructed desktop and would prove nothing about the situation it names");
 
         var centre = bounds.Centre;
-        Assert.True(WindowFromPoint(new Point { X = centre.X, Y = centre.Y }) != 0,
+        Assert.True(WindowUnder(centre.X, centre.Y) != 0,
             "no window owns the centre of the display, so the hit-test instrument is not reading anything");
 
         // Pressed is raised on the panic key's OWN thread now, so the counter crosses a thread

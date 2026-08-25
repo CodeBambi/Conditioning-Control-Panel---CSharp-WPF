@@ -2096,9 +2096,21 @@ public partial class StudioPage : UserControl
             ScriptedSessionCancelButton.Content = SessionRackNotices.CancelPause;
         }
 
+        // THE ACCESSIBLE NAME IS NOT THE CAPTION HERE, AND THAT IS DELIBERATE. Upstream's confirm
+        // button and the rack's own button carry the SAME caption in the start state — both are
+        // en.json:1331 "Start Session" (SessionRackNotices.ConfirmStart, .StartButtonIdle) — and
+        // both are on screen at once while the confirmation is open. Windows tells them apart by
+        // AutomationId, which is how this port's own harness finds them; AT-SPI carries no
+        // AutomationId at all, so on Linux an assistive technology offered the user two
+        // indistinguishable targets, one of which starts a session (measured 2026-08-25:
+        // `518,456 123x39` and `505,518 220x45`, identical names). The visible caption is
+        // untouched — it is the ported outcome — and only the SPOKEN name says which button this
+        // is. The suffix is unconditional rather than applied only in the colliding state: a name
+        // that changes shape between states is worse for a screen-reader user than one that does
+        // not, and "Yes, stop session (confirm)" is accurate in every state this panel has.
         ScriptedSessionConfirmButton.SetValue(
             Avalonia.Automation.AutomationProperties.NameProperty,
-            ScriptedSessionConfirmButton.Content as string ?? string.Empty);
+            $"{ScriptedSessionConfirmButton.Content as string ?? string.Empty} (confirm)");
         ScriptedSessionCancelButton.SetValue(
             Avalonia.Automation.AutomationProperties.NameProperty,
             ScriptedSessionCancelButton.Content as string ?? string.Empty);
