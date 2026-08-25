@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using CcpClient.Desktop;
 using CcpClient.Desktop.Camera;
@@ -23,7 +24,7 @@ namespace CcpClient.Tests;
 /// layout of a running kernel's sysfs — nothing in this repository has executed
 /// <see cref="V4L2CameraDeviceSource"/> on Linux.</para>
 /// </summary>
-public sealed class CameraCapabilityTests
+public sealed class CameraCapabilityTests(ITestOutputHelper output)
 {
     // =====================================================================================
     //  The refusal this build actually produces, and the gap it names
@@ -496,14 +497,29 @@ public sealed class CameraCapabilityTests
     /// for a build that decoded nothing. A build that really opens a camera has to touch pixels
     /// somewhere, so a rule forbidding it everywhere would either be deleted or evaded — the usual
     /// evasion being a sub-namespace the scan does not reach. Rather than that, the rule now has
-    /// three parts, and TWO OF THEM ARE NEW OBLIGATIONS THAT DID NOT EXIST BEFORE:</para>
+    /// four parts, and THREE OF THEM ARE NEW OBLIGATIONS THAT DID NOT EXIST BEFORE:</para>
+    ///
+    /// <para><b>And this fact did not keep its own promise until 2026-08-25, which is worth stating
+    /// plainly because the repair is what made the sentence above true.</b> The scan matched the
+    /// namespace EXACTLY, so the sub-namespace evasion it names as its reason for existing was not
+    /// prevented at all; and the recogniser knew five fixed shapes, none of which is an imaging or
+    /// tensor type, so <c>private Mat _resizeBuffer;</c> — the field upstream's pipeline holds five
+    /// times over — passed it in silence. The scope is a PREFIX now and the recogniser walks
+    /// STRUCTURE (<see cref="CarriesPixels"/>) and ORIGIN (<see cref="ForeignOrigin"/>). No offending
+    /// member ever existed in this tree: the guard was blind, the product was not leaking, and
+    /// <see cref="TheRetentionRuleCatchesABufferTypeItHasNEVERHeardOf_AndTheSweepReachesEverySubNamespace"/>
+    /// is what keeps the sight.</para>
     ///
     /// <list type="number">
-    /// <item><b>RETENTION IS BANNED OUTRIGHT.</b> No type in the namespace — including the pixel
-    /// boundary, including the interop declarations — may declare a FIELD or a PROPERTY that can
-    /// carry pixels. Nothing in this product can hold the last frame a camera saw, so there is no
-    /// object for a serializer, a logger or a crash dumper to find one in. This is stricter than the
-    /// old rule, which only happened to be satisfied because nothing decoded.</item>
+    /// <item><b>RETENTION IS BANNED OUTRIGHT.</b> No type in the namespace OR ANY NAMESPACE BELOW IT
+    /// — including the pixel boundary, including the interop declarations — may declare a FIELD or a
+    /// PROPERTY that can carry pixels, and "can carry pixels" is decided TRANSITIVELY rather than
+    /// from a list of type names. Nothing in this product can hold the last frame a camera saw, so
+    /// there is no object for a serializer, a logger or a crash dumper to find one in.</item>
+    /// <item><b>STATE TYPED FROM A PACKAGE IS BANNED</b> wherever it is not a buffer by shape either
+    /// — <c>NamedOnnxValue</c> is a <c>string</c> and an <c>object</c>, and no structural rule can
+    /// ever see what such a thing holds. A field or property typed from an imaging library, an
+    /// inference runtime or a media framework has to be argued for by editing this fact.</item>
     /// <item><b>ESCAPE IS BANNED except at ONE NAMED TYPE.</b> Pixel-carrying parameters and returns
     /// are allowed only on <c>CameraFrameProbe</c> and only on PRIVATE members elsewhere. The
     /// boundary type is checked to be <c>static</c> and <c>abstract sealed</c> with NO fields at all,
@@ -516,17 +532,30 @@ public sealed class CameraCapabilityTests
     /// </list>
     ///
     /// <para>So: add a <c>byte[] Frame</c> field, a <c>float[] Landmarks</c> property, a
-    /// <c>Stream Preview</c>, a public method returning pixels, or an <c>IntPtr</c> on a hand-written
-    /// type anywhere under <c>Camera/</c>, and this fails. The seam still has to keep arguing for
-    /// itself; it now has to argue for one more thing than it used to.</para>
+    /// <c>Stream Preview</c>, a <c>Mat</c>, a <c>DenseTensor&lt;float&gt;</c>, an <c>OrtValue</c>, a
+    /// public method returning pixels, or an <c>IntPtr</c> on a hand-written type anywhere under
+    /// <c>Camera/</c> OR ANY FOLDER BELOW IT, and this fails. The seam still has to keep arguing for
+    /// itself; it now has to argue for two more things than it used to.</para>
     /// </summary>
     [Fact]
     public void NoFrameCanBeRETAINEDAnywhereInTheCameraSeam_AndNoneCanESCAPEItExceptAtTheOnePixelBoundary()
     {
-        var types = typeof(CameraCapability).Assembly.GetTypes()
-            .Where(type => type.Namespace == typeof(CameraCapability).Namespace)
+        var product = typeof(CameraCapability).Assembly;
+        var seam = typeof(CameraCapability).Namespace!;
+        var types = product.GetTypes()
+            .Where(type => InTheCameraSeam(type.Namespace, seam))
             .ToList();
         Assert.NotEmpty(types); // the scan below is not vacuous
+
+        // The stop rule inside CarriesPixels is only meaningful if "the runtime's own assemblies"
+        // and "everything else" are actually different places. Asserted, not assumed: a build that
+        // put them in one folder would silently stop walking OpenCvSharp and OnnxRuntime too.
+        Assert.NotEqual(string.Empty, RuntimeDirectory);
+        Assert.True(IsRuntimeOwned(typeof(object)), "the runtime must own its own object type");
+        Assert.False(
+            IsRuntimeOwned(typeof(CameraCapability)),
+            "the product loaded from the runtime's own directory, so the field walk would stop at "
+            + "every package type instead of walking it: " + RuntimeDirectory);
 
         // The ONE type allowed to take pixels, named here so that adding a second is an edit to this
         // fact rather than a quiet addition under Camera/.
@@ -574,6 +603,10 @@ public sealed class CameraCapabilityTests
                 {
                     offenders.Add($"RETAINS {type.Name}.{property.Name} : {property.PropertyType.Name}");
                 }
+                else if (ForeignOrigin(property.PropertyType, product) is { } foreign)
+                {
+                    offenders.Add($"FOREIGN {type.Name}.{property.Name} : {foreign}");
+                }
             }
 
             foreach (var field in type.GetFields(flags))
@@ -582,6 +615,10 @@ public sealed class CameraCapabilityTests
                 if (CarriesPixels(field.FieldType, comImport))
                 {
                     offenders.Add($"RETAINS {type.Name}.{field.Name} : {field.FieldType.Name}");
+                }
+                else if (ForeignOrigin(field.FieldType, product) is { } foreign)
+                {
+                    offenders.Add($"FOREIGN {type.Name}.{field.Name} : {foreign}");
                 }
             }
 
@@ -607,17 +644,125 @@ public sealed class CameraCapabilityTests
             }
         }
 
+        // WHAT WAS ACTUALLY SWEPT, written into the run's own output, because a guard that reports
+        // success over an empty set is the failure mode this port has hit twice. A reader of a green
+        // run can see the subject was there without re-deriving it.
+        output.WriteLine(
+            $"camera seam scan: {types.Count} type(s) under '{seam}' and below, {scanned} member(s) examined");
         Assert.True(scanned > 50, $"only {scanned} members scanned — the seam scan has lost its subject");
         Assert.True(
             offenders.Count == 0,
-            "the camera seam gained a member that can RETAIN image or per-frame biometric data, or that can let "
-            + "it ESCAPE, which client/docs/capability-inventory.md requires to be memory-only:\n  "
+            "the camera seam gained a member that can RETAIN image or per-frame biometric data, that holds a type "
+            + "from a FOREIGN package, or that can let it ESCAPE, which client/docs/capability-inventory.md "
+            + "requires to be memory-only:\n  "
             + string.Join("\n  ", offenders));
 
         // And there is no audio anywhere in it either: upstream's rule is that audio capture is never
         // opened (Services/Webcam/WebcamTrackingService.cs:30), and here there is no member to
         // open one with.
         Assert.DoesNotContain(types, type => type.Name.Contains("Audio", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// <b>THE RETENTION RULE RECOGNISES A BUFFER TYPE THIS PORT HAS NEVER HEARD OF, AND THE SCAN
+    /// REACHES EVERY SUB-NAMESPACE.</b> The fact above sweeps the real tree; this one proves the
+    /// sweep has teeth, over inputs constructed here, because a rule that catches nothing on a clean
+    /// tree and a rule that catches everything look identical from a green run.
+    ///
+    /// <para><b>Both halves were holes until 2026-08-25, and both are the same hole: an engine slice
+    /// that lands anyway.</b> The recogniser knew five shapes, none of which is <c>Mat</c>,
+    /// <c>DenseTensor&lt;float&gt;</c> or <c>OrtValue</c>; and the sweep matched the namespace
+    /// EXACTLY, so a type in <c>Camera.Inference</c> was never looked at — which the retention rule's
+    /// own docstring names as the evasion it exists to prevent. No offending field existed in the
+    /// tree at any point: this repaired the GUARD, not a leak.</para>
+    ///
+    /// <para>The decoys below are the shapes of the real thing rather than the real thing: a handle
+    /// on a base class is <c>OpenCvSharp.Mat</c> (<c>DisposableCvObject.ptr</c>), a
+    /// <c>Memory&lt;float&gt;</c> is <c>DenseTensor&lt;T&gt;</c>, a <see cref="SafeHandle"/> field is
+    /// <c>OrtValue</c>. Nothing here takes a dependency to test one, and every one of them is caught
+    /// by structure, so the fourth such type — the one nobody has named yet — is caught too.</para>
+    ///
+    /// <para>The second list is the load-bearing half of a strictness claim: the real shapes the seam
+    /// already holds must NOT be flagged. A <see cref="Dictionary{TKey, TValue}"/> keeps an
+    /// <c>int[]</c> of hash buckets and a <see cref="CancellationToken"/> reaches a kernel wait
+    /// handle, and a walk that called those "pixels" would be turned off within the week.</para>
+    /// </summary>
+    [Fact]
+    public void TheRetentionRuleCatchesABufferTypeItHasNEVERHeardOf_AndTheSweepReachesEverySubNamespace()
+    {
+        // ---- the sweep's SCOPE: a prefix, so no sub-namespace can hide under it ----
+        const string seam = "CcpClient.Desktop.Camera";
+        Assert.True(InTheCameraSeam(seam, seam));
+        Assert.True(InTheCameraSeam(seam + ".Inference", seam));
+        Assert.True(InTheCameraSeam(seam + ".Gaze.Onnx", seam));
+        Assert.False(InTheCameraSeam("CcpClient.Desktop", seam));
+        Assert.False(InTheCameraSeam("CcpClient.Desktop.CameraMocks", seam)); // a sibling, not the seam
+        Assert.False(InTheCameraSeam(null, seam));
+
+        // And the REAL seam types really are selected by it — the scope change is not theoretical.
+        Assert.Equal(seam, typeof(CameraCapability).Namespace);
+        Assert.True(InTheCameraSeam(typeof(CameraFrameProbe).Namespace, seam));
+
+        // ---- what CARRIES a buffer ----
+        Type[] carriers =
+        [
+            typeof(DecoyNativeImage),                    // IntPtr on a BASE class: the Mat shape
+            typeof(DecoyResizeBuffer),                   // ... reached through a derived type
+            typeof(DecoyTensor),                         // Memory<float>: the DenseTensor shape
+            typeof(DecoyHandle),                         // a SafeHandle itself
+            typeof(DecoySession),                        // a SafeHandle FIELD: the OrtValue shape
+            typeof(DecoyResizeBuffer[]),                 // an array of them
+            typeof(List<DecoyResizeBuffer>),             // ... and a collection of them
+            typeof(Dictionary<string, DecoyTensor>),     // ... behind a runtime type's generic argument
+            typeof(Task<DecoyNativeImage>),              // ... and behind an await
+            typeof(byte[]), typeof(float[]), typeof(IntPtr), typeof(UIntPtr), typeof(HandleRef),
+            typeof(GCHandle), typeof(System.Buffers.MemoryHandle),   // a PINNED frame is still a frame
+            typeof(MemoryStream), typeof(Memory<float>), typeof(ReadOnlyMemory<byte>), typeof(Span<byte>),
+        ];
+
+        foreach (var carrier in carriers)
+        {
+            Assert.True(
+                CarriesPixels(carrier, allowNativeHandles: false),
+                $"{carrier.Name} can hold a frame and the retention rule did not say so");
+        }
+
+        // ---- what does NOT, including every shape the seam really holds today ----
+        Type[] innocent =
+        [
+            typeof(string), typeof(int), typeof(bool), typeof(Guid), typeof(DateTimeOffset),
+            typeof(bool[]), typeof(char[]), typeof(string[]),
+            typeof(List<string>), typeof(IReadOnlyList<string>),
+            typeof(Dictionary<string, JsonElement>),     // CameraConsentDocument.ExtensionData
+            typeof(CancellationToken),                   // reaches a kernel handle; is not an image
+            typeof(CameraDevice), typeof(CameraInventory), typeof(CameraConsentDocument),
+            typeof(DecoyRing),                           // self-referencing: must TERMINATE, and be false
+        ];
+
+        foreach (var type in innocent)
+        {
+            Assert.False(
+                CarriesPixels(type, allowNativeHandles: false),
+                $"{type.Name} cannot hold a frame, and a rule that says it can will be deleted");
+        }
+
+        // The native-handle allowance is for the OPERATING SYSTEM's own signatures and covers handles
+        // ONLY — a COM declaration is still not allowed to carry an array of pixels or a stream.
+        Assert.False(CarriesPixels(typeof(IntPtr), allowNativeHandles: true));
+        Assert.False(CarriesPixels(typeof(DecoyNativeImage), allowNativeHandles: true));
+        Assert.True(CarriesPixels(typeof(byte[]), allowNativeHandles: true));
+        Assert.True(CarriesPixels(typeof(MemoryStream), allowNativeHandles: true));
+
+        // ---- and the blind spot, covered from the other side ----
+        // NamedOnnxValue is a string and an object: no structural rule can see what it holds, so the
+        // seam refuses state typed from a package instead, whatever its shape.
+        var product = typeof(CameraCapability).Assembly;
+        Assert.NotNull(ForeignOrigin(typeof(FactAttribute), product));
+        Assert.NotNull(ForeignOrigin(typeof(FactAttribute[]), product));
+        Assert.NotNull(ForeignOrigin(typeof(List<FactAttribute>), product));
+        Assert.Null(ForeignOrigin(typeof(CameraInventory), product));
+        Assert.Null(ForeignOrigin(typeof(Dictionary<string, JsonElement>), product));
+        Assert.Null(ForeignOrigin(typeof(int), product));
     }
 
     /// <summary>
@@ -788,7 +933,7 @@ public sealed class CameraCapabilityTests
     /// revoke — neither string appears in a single logged line, while the COUNT does. Log the device
     /// list the way upstream does (<c>Services/Webcam/WebcamTrackingService.cs:1136-1141</c>) and
     /// this fails. There is no frame to check for because the seam has no frame type at all, which
-    /// <see cref="NothingInTheCameraSeamCanCarryAFrame_ACropATensorALandmarkOrAGazeSample"/>
+    /// <see cref="NoFrameCanBeRETAINEDAnywhereInTheCameraSeam_AndNoneCanESCAPEItExceptAtTheOnePixelBoundary"/>
     /// proves separately.</para>
     /// </summary>
     [Fact]
@@ -902,9 +1047,80 @@ public sealed class CameraCapabilityTests
     //  Helpers
     // =====================================================================================
 
-    /// <summary>Types that can carry pixels, tensors, landmarks or any raw buffer. A numeric array
-    /// is included deliberately: <c>float[]</c> is what a landmark set and a tensor look like.</summary>
-    private static bool CarriesPixels(Type type, bool allowNativeHandles)
+    /// <summary>Whether a namespace IS the camera seam or is nested INSIDE it.
+    ///
+    /// <para>A prefix, never an equality. The seam scan asked <c>Namespace == "…Camera"</c> until
+    /// 2026-08-25, which meant a type in <c>…Camera.Inference</c> or <c>…Camera.Gaze</c> was not
+    /// scanned at all — the exact evasion the retention rule's own docstring says it exists to stop.
+    /// The boundary character matters as much as the prefix: a sibling namespace such as
+    /// <c>CcpClient.Desktop.CameraMocks</c> is NOT the seam and must not be swept into it.</para>
+    /// </summary>
+    private static bool InTheCameraSeam(string? candidate, string seam) =>
+        candidate is not null
+        && candidate.StartsWith(seam, StringComparison.Ordinal)
+        && (candidate.Length == seam.Length || candidate[seam.Length] == '.');
+
+    /// <summary>The directory the .NET runtime's OWN assemblies are loaded from, which is wherever
+    /// <see cref="object"/> lives. Everything else — this product, and every NuGet package it or a
+    /// later slice pulls in — is loaded from somewhere else, and that is the whole discriminator
+    /// <see cref="CarriesPixels"/> uses to decide whose private state it is entitled to walk. The
+    /// retention fact asserts this is a real distinction rather than assuming it.</summary>
+    private static readonly string RuntimeDirectory =
+        Path.GetDirectoryName(typeof(object).Assembly.Location) ?? string.Empty;
+
+    /// <summary>Whether a type belongs to the runtime itself.</summary>
+    private static bool IsRuntimeOwned(Type type)
+    {
+        var location = type.Assembly.Location;
+        return RuntimeDirectory.Length > 0
+            && location.Length > 0
+            && string.Equals(Path.GetDirectoryName(location), RuntimeDirectory, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Whether a type can carry pixels, tensors, landmarks or any other raw buffer — <b>decided by
+    /// SHAPE, TRANSITIVELY</b>, so a type this port has never heard of is caught the first time
+    /// somebody declares a field of it.
+    ///
+    /// <para><b>Why it is not a list of names.</b> Until 2026-08-25 this recognised exactly five
+    /// shapes — pointers, <see cref="IntPtr"/>, <see cref="Stream"/>, a span/memory generic and a
+    /// primitive array — and <c>OpenCvSharp.Mat</c>, <c>DenseTensor&lt;float&gt;</c> and
+    /// <c>OrtValue</c> are NONE of them, so <c>private Mat _resizeBuffer;</c> passed in silence.
+    /// That is precisely the field upstream's gaze pipeline holds
+    /// (<c>Services/Webcam/WebcamTrackingService.cs:3179,3183,3349,3356,3536</c>), so the guard was
+    /// blind to the only shape it was ever going to have to catch. Adding those three names would
+    /// have rotted the day a fourth appeared; the rule below asks what a type IS MADE OF instead.</para>
+    ///
+    /// <list type="bullet">
+    /// <item><b>Leaves</b> — the shapes that ARE a buffer or a handle to one: a pointer, an
+    /// <see cref="IntPtr"/>/<see cref="UIntPtr"/>, a <see cref="SafeHandle"/>, a
+    /// <see cref="CriticalHandle"/>, a <see cref="HandleRef"/>, a <see cref="GCHandle"/>, a
+    /// <see cref="System.Buffers.MemoryHandle"/>, a <see cref="Stream"/>, any span/memory generic,
+    /// and an array of a numeric primitive.</item>
+    /// <item><b>The walk</b> — by-ref element, array element, EVERY generic argument, and every
+    /// field on the whole base chain, public and private, instance and static.
+    /// Cycle-safe by a visited set and depth-bounded, so a self-referencing type terminates.</item>
+    /// <item><b>The one stop</b> — the runtime's own private plumbing is not opened up. A
+    /// <see cref="Dictionary{TKey, TValue}"/> holds an <c>int[]</c> of hash buckets and a
+    /// <see cref="CancellationTokenSource"/> holds a kernel wait handle; neither is an image, and a
+    /// walk that descended into them would flag every collection in the seam and be deleted within a
+    /// week. Their GENERIC ARGUMENTS are still walked, so <c>Dictionary&lt;string, byte[]&gt;</c>,
+    /// <c>Task&lt;Mat&gt;</c> and <c>Lazy&lt;DenseTensor&lt;float&gt;&gt;</c> are all caught.</item>
+    /// </list>
+    ///
+    /// <para><b>What it does NOT catch, stated rather than implied.</b> A buffer behind an
+    /// <see cref="object"/>-typed or non-generic-interface-typed field is invisible to it —
+    /// <c>NamedOnnxValue</c> is exactly that shape, a <c>string</c> and an <c>object</c> — because a
+    /// declared type is all reflection can see without an instance. That hole is covered from the
+    /// other side by <see cref="ForeignOrigin"/>, which asks where a type came FROM instead of what
+    /// it is made of. A buffer smuggled inside a runtime type's private state is not caught either,
+    /// and neither is one that only exists inside a method body — the latter deliberately, since a
+    /// local cannot outlive its call and the ESCAPE half already checks every signature.</para>
+    /// </summary>
+    private static bool CarriesPixels(Type type, bool allowNativeHandles) =>
+        CarriesPixels(type, allowNativeHandles, [], 0);
+
+    private static bool CarriesPixels(Type type, bool allowNativeHandles, HashSet<Type> visited, int depth)
     {
         if (type.IsPointer)
         {
@@ -913,15 +1129,25 @@ public sealed class CameraCapabilityTests
 
         if (type.IsByRef)
         {
-            type = type.GetElementType() ?? type;
+            return CarriesPixels(type.GetElementType()!, allowNativeHandles, visited, depth);
         }
 
-        if (!allowNativeHandles && (type == typeof(IntPtr) || type == typeof(UIntPtr)))
+        if (typeof(Stream).IsAssignableFrom(type))
         {
             return true;
         }
 
-        if (typeof(Stream).IsAssignableFrom(type))
+        // Native handles: banned everywhere except on the operating system's own signatures. The
+        // runtime's OWN handle wrappers are enumerated here for one reason — they live in the
+        // runtime, whose private state the walk below deliberately does not open, so SafeHandle's
+        // IntPtr and GCHandle's pinned buffer would otherwise be invisible. This is the one place a
+        // name list is unavoidable, and it is a list of the runtime's handle CATEGORY rather than of
+        // anybody's imaging types.
+        if (!allowNativeHandles
+            && (type == typeof(IntPtr) || type == typeof(UIntPtr) || type == typeof(HandleRef)
+                || type == typeof(GCHandle) || type == typeof(System.Buffers.MemoryHandle)
+                || typeof(SafeHandle).IsAssignableFrom(type)
+                || typeof(CriticalHandle).IsAssignableFrom(type)))
         {
             return true;
         }
@@ -938,10 +1164,90 @@ public sealed class CameraCapabilityTests
         if (type.IsArray)
         {
             var element = type.GetElementType()!;
-            return element.IsPrimitive && element != typeof(bool) && element != typeof(char);
+            return element.IsPrimitive
+                ? element != typeof(bool) && element != typeof(char)
+                : CarriesPixels(element, allowNativeHandles, visited, depth + 1);
+        }
+
+        // 12 is far past anything a real object graph in this seam reaches; the visited set is what
+        // actually terminates a cycle, and this is the belt for the braces.
+        if (depth >= 12 || type.IsPrimitive || type.IsEnum || type == typeof(string) || !visited.Add(type))
+        {
+            return false;
+        }
+
+        foreach (var argument in type.GetGenericArguments())
+        {
+            if (CarriesPixels(argument, allowNativeHandles, visited, depth + 1))
+            {
+                return true;
+            }
+        }
+
+        const BindingFlags storage = BindingFlags.Public | BindingFlags.NonPublic
+            | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
+
+        // The WHOLE base chain, because a private field on a base class is not returned for a
+        // derived type — and a base class is exactly where an imaging library keeps its handle
+        // (OpenCvSharp puts Mat's behind DisposableCvObject).
+        for (var current = type; current is not null && current != typeof(object); current = current.BaseType)
+        {
+            if (IsRuntimeOwned(current))
+            {
+                continue;
+            }
+
+            foreach (var field in current.GetFields(storage))
+            {
+                // `const` is a compile-time literal with no storage at run time.
+                if (!field.IsLiteral && CarriesPixels(field.FieldType, allowNativeHandles, visited, depth + 1))
+                {
+                    return true;
+                }
+            }
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// The name of the first type in a declared type's closure that came from NEITHER the runtime
+    /// NOR this product, or null when there is none.
+    ///
+    /// <para><b>This is the shape rule's blind spot, covered from the other side.</b>
+    /// <c>NamedOnnxValue</c> is a <c>string</c> and an <c>object</c>: nothing about its structure
+    /// says "inference", and no structural rule can ever see what its <c>object</c> holds. What CAN
+    /// be seen is that it arrived from an inference package. So the camera seam may hold state typed
+    /// from the runtime and from itself, and a field or property typed from any package — an imaging
+    /// library, an inference runtime, a media framework — has to be argued for by editing this fact.
+    /// It is the same discipline the ONE pixel boundary is already named under, and it is why an
+    /// engine slice cannot land a retained tensor by picking a type whose fields happen to be
+    /// opaque.</para>
+    ///
+    /// <para>Generic arguments and element types are followed; FIELDS are not, because a product
+    /// type's internals are the product's business and the structural rule already walks them.</para>
+    /// </summary>
+    private static string? ForeignOrigin(Type type, Assembly product)
+    {
+        if (type.IsByRef || type.IsPointer || type.IsArray)
+        {
+            return ForeignOrigin(type.GetElementType()!, product);
+        }
+
+        if (!type.IsGenericParameter && type.Assembly != product && !IsRuntimeOwned(type))
+        {
+            return type.FullName ?? type.Name;
+        }
+
+        foreach (var argument in type.GetGenericArguments())
+        {
+            if (ForeignOrigin(argument, product) is { } foreign)
+            {
+                return foreign;
+            }
+        }
+
+        return null;
     }
 
     private static string FixtureRoot()
@@ -1000,5 +1306,69 @@ public sealed class CameraCapabilityTests
                 lines.Add(message);
             }
         }
+    }
+
+    // =====================================================================================
+    //  Decoys: the SHAPES an engine slice would bring, without taking the dependency to say so
+    // =====================================================================================
+
+    /// <summary>The <c>OpenCvSharp.Mat</c> shape. The buffer is a native pointer, and the pointer is
+    /// a PRIVATE field on a BASE class, so a derived type's own field list never mentions it and
+    /// neither does its public surface.
+    ///
+    /// <para>Read off the real package rather than remembered: OpenCvSharp4 4.9.0.20240103 — the
+    /// version upstream references (<c>ConditioningControlPanel/ConditioningControlPanel.csproj:136</c>) —
+    /// declares <c>OpenCvSharp.Mat</c> with NO fields of its own, <c>DisposableCvObject</c> with
+    /// <c>IntPtr ptr</c>, and <c>DisposableObject</c> with a <see cref="GCHandle"/> and a second
+    /// <see cref="IntPtr"/>. A rule that only looked at the declaring type would see nothing at
+    /// all.</para></summary>
+    private class DecoyNativeImage : IDisposable
+    {
+        private IntPtr _pixels;
+
+        public bool IsAllocated => _pixels != IntPtr.Zero;
+
+        public void Dispose() => _pixels = IntPtr.Zero;
+    }
+
+    /// <summary>What <c>private Mat _resizeBuffer;</c> looks like to reflection — the field upstream's
+    /// pipeline really holds (<c>Services/Webcam/WebcamTrackingService.cs:3179,3183,3349,3356,3536</c>),
+    /// and the one this guard passed in silence until 2026-08-25.</summary>
+    private sealed class DecoyResizeBuffer : DecoyNativeImage
+    {
+    }
+
+    /// <summary>The <c>DenseTensor&lt;float&gt;</c> shape: managed storage behind a memory handle,
+    /// with no pointer and no array in sight.</summary>
+    private sealed class DecoyTensor
+    {
+        private Memory<float> _values = Memory<float>.Empty;
+
+        public int Length => _values.Length;
+    }
+
+    /// <summary>The shape ONNX Runtime's <c>OrtValue</c> keeps a native tensor behind. Its
+    /// <see cref="IntPtr"/> lives in the runtime's own private state, where the field walk
+    /// deliberately does not go — which is why a handle is a LEAF of the rule and not a walk.</summary>
+    private sealed class DecoyHandle() : SafeHandle(IntPtr.Zero, ownsHandle: true)
+    {
+        public override bool IsInvalid => true;
+
+        protected override bool ReleaseHandle() => true;
+    }
+
+    /// <summary>A type whose only state is a handle to somebody else's buffer.</summary>
+    private sealed class DecoySession
+    {
+        private readonly DecoyHandle _value = new();
+
+        public bool IsClosed => _value.IsClosed;
+    }
+
+    /// <summary>Holds no buffer and points at itself. The walk must TERMINATE on it and answer no —
+    /// a recursive rule without a visited set dies here rather than reporting anything.</summary>
+    private sealed class DecoyRing
+    {
+        public DecoyRing? Next { get; init; }
     }
 }
