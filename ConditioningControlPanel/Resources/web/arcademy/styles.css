@@ -1977,20 +1977,31 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
    on the same pixel and hung them BELOW the `bottom:22px` anchor by their own
    height. On a desktop window too, which is how it reached the owner.
 
-   THE BREAKPOINT IS THE CARD'S BREAKPOINT, VERBATIM. The step-aside exists to
+   THE BREAKPOINT IS THE CARD'S BREAKPOINT, VERBATIM. The phone rule exists to
    clear `.campus-idcard`, so it has to use exactly the query that FOLDS the
    card ("small stages", further down this file). A row that dodged at 740px
    while the card folded at 760px/600px landed the props back on the
-   architecture of every landscape phone. The card no longer leaves at that
-   size (2026-08-25: it folds into a ~185px tag, because `display:none` here
-   was the owner's "I cannot see my profile card on the web"), so the row
-   steps RIGHT of the tag instead of taking the corner. */
+   architecture of every landscape phone. */
 .campus-postrow {
   position:absolute; left:calc(clamp(12px, 2.5vw, 44px) + 256px); bottom:22px;
   z-index:24; display:flex; align-items:flex-end; gap:12px;
 }
+/* THE PHONE CORNERS (owner bug, 2026-08-25). Stepping the row RIGHT of the
+   folded ID tag kept it out of the tag but parked both props across the front
+   of The Pool (room 105) at the bottom of the plan, which is where the owner
+   found them. On a small stage the props take the TOP-LEFT corner instead:
+   `.campus-crest` is already `display:none` up there, so it is the one band a
+   phone leaves genuinely empty, and the row keeps the crest's own left inset
+   so it hangs off the same margin the title would have used.
+
+   IT HAS TO STOP ABOVE EMI. She is 86x87 on a phone and the owner parks her
+   at about y=100 on an 844x390 window; the row is 70px tall, so top:12px ends
+   it at y=82 and leaves 18px of sky. Her bubble RISES off her ear into that
+   band when she talks (emi/widget.js BUBBLE_RISE), and that is fine and not a
+   collision to dodge: the whole EMI layer is #arc-emi z50 and these props are
+   z24, so she is drawn OVER the furniture, never under it. */
 @media (max-width:760px), (max-height:600px) {
-  .campus-postrow { left:calc(clamp(12px, 2.5vw, 44px) + 212px); bottom:16px; }
+  .campus-postrow { left:clamp(12px, 2.5vw, 44px); top:12px; bottom:auto; }
 }
 
 /* ---- tooltip ---- */
@@ -2356,6 +2367,11 @@ html.arc-reduced .campus-trace.fading { transition:none; opacity:.22; }
   .campus-idcard .id-name { font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .campus-idcard .id-num { margin-top:2px; white-space:nowrap; }
   .campus-crest { display:none; }
+  /* THE HINT STEPS LEFT for the envelope. shell/mail.css pins `.arc-mailchip`
+     into this corner on exactly this query, and the hint is the only
+     instruction on the screen - it may share the baseline, never the pixels.
+     44px of chip plus 12px of gap. */
+  .campus-hint { right:calc(clamp(12px, 2.5vw, 40px) + 56px); }
 }
 
 /* ============================ EXITS ======================================
@@ -4132,13 +4148,70 @@ html.ae-lite .arc-id-glint,
 /* A PHONE STACKS. The card over the sheet, the sheet two columns of whatever
    is left, and the chip at a thumb's size (owner bug C's rule). */
 html.arc-mobile .arc-id-row { flex-direction:column; gap:14px; align-items:center; }
-html.arc-mobile .arc-id-sheet { grid-template-columns:repeat(2, 1fr); width:min(560px, 92vw); }
+html.arc-mobile .arc-id-sheet { grid-template-columns:repeat(2, 1fr); width:var(--id-w, min(560px, 92vw)); }
 html.arc-mobile .arc-id-chip { min-height:44px; font-size:11px; }
 html.arc-mobile .arc-id-stage { gap:12px; }
 @media (max-width:820px) {
   .arc-id-row { flex-direction:column; align-items:center; }
-  .arc-id-sheet { grid-template-columns:repeat(2, 1fr); width:min(560px, 92vw); }
+  .arc-id-sheet { grid-template-columns:repeat(2, 1fr); width:var(--id-w, min(560px, 92vw)); }
 }
+
+/* ---- A SHORT STAGE (phone landscape) ----------------------------------
+   OWNER BUG, 2026-08-25: "the card is not centred, the top is cut off and the
+   page will not scroll to it". A CENTRED COLUMN TALLER THAN ITS WINDOW CLIPS
+   AT THE START EDGE. `.arc-id` is a flex box with `align-items:center` and the
+   stage stacks card -> stats -> placard, which measures 656px on an 844x390
+   phone; centring 656 in 390 puts the top of the card at y=-133, and there is
+   no `overflow` anywhere above it, so nothing could ever scroll up to the
+   photo. Two halves, and they are deliberately different.
+
+   THE CARD FACE SCALES, AND IT SCALES - IT DOES NOT NARROW. The obvious fix is
+   a smaller `width` on `.arc-id-big`, and it is wrong: the face is laid out in
+   absolute percentages over fixed 22px insets and fixed 9-24px type, so at
+   ~330px the meta column overruns the body and the homeroom row falls off the
+   bottom edge. Nothing had ever caught that because a phone CANNOT reach this
+   card at 330px any other way - portrait is refused outright by the
+   orientation gate, so 560px is the only width the face has ever been drawn
+   at. `zoom` on the wrapper scales the LAYOUT BOX as well as the paint, so the
+   row and the scroller measure the card at its drawn size and the whole face
+   arrives in proportion; a `transform:scale()` would leave a 346px hole in the
+   flow and would fight `arc-id-cardin`, which animates that same transform.
+   The steps are a ladder rather than a calc because `zoom` takes a number and
+   there is no dividing a vh by a px to get one.
+
+   THE STATS SCROLL. The stage becomes the scroller. The veil, the key light
+   and the close button are NOT inside it, so they stay put - which is the
+   whole reason the close stays reachable at every scroll position.
+
+   THREE THINGS THAT LOOK OPTIONAL AND ARE NOT: `overflow-x` is pinned hidden
+   because `overflow-y:auto` alone computes the OTHER axis to auto as well and
+   the 150%-wide key light would grow a horizontal scrollbar; the lamp goes
+   with it, because a radial glow that wide is a hard-edged rectangle the
+   moment a scroller clips it, and the veil's own gradient already lights the
+   middle; and the top padding is the close button's own reach
+   (clamp(10px, 3vh, 26px) + 44px, which is 62px at the top of this query) plus
+   four pixels of daylight. */
+@media (max-height:600px) {
+  .arc-id-stage {
+    --id-zoom:.86;
+    --id-w:calc(560px * var(--id-zoom));
+    max-height:100vh;
+    max-height:100dvh;
+    overflow-y:auto; overflow-x:hidden;
+    -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
+    padding:66px 10px 18px;
+  }
+  .arc-id-cardwrap { zoom:var(--id-zoom); }
+  .arc-id-lamp { display:none; }
+  .arc-id-row { flex-direction:column; align-items:center; }
+  /* The sheet reads the same --id-w the mobile block reads, so a SHORT but
+     WIDE window (a resized desktop, where neither html.arc-mobile nor the
+     820px query lands) still gets a stat sheet the width of its card. */
+  .arc-id-sheet { grid-template-columns:repeat(2, 1fr); width:var(--id-w, min(560px, 92vw)); }
+}
+@media (max-height:520px) { .arc-id-stage { --id-zoom:.74; } }
+@media (max-height:450px) { .arc-id-stage { --id-zoom:.66; } }
+@media (max-height:400px) { .arc-id-stage { --id-zoom:.58; } }
 
 /* ---- THE WALL WHISPER --------------------------------------------------
    A breath of each class's spotlight identity on the pinned cards - but the
