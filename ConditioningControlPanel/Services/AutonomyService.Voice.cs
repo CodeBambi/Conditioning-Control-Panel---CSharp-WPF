@@ -66,7 +66,22 @@ namespace ConditioningControlPanel.Services
                 // arm from their own toggles + consent + an available engine, so "Hey Bambi" works
                 // even with Takeover off. Their home UI is the "She's Listening" Exclusive.
                 var s = App.Settings?.Current;
+
+                // Entitlement, in the base condition so BOTH mic modes inherit it. She's Listening is
+                // a premium feature whose tab wears the veil, but these two toggles persist and this
+                // method re-arms them from settings on EVERY launch — so before this a lapsed account
+                // came back from a restart with a wake-word loop holding the microphone open, behind a
+                // padlock covering the only controls that disarm it. Exactly the shape PR #267 was
+                // written to delete; it just never reached this file.
+                //
+                // Re-read here rather than cached: this method is the reconcile point, so a lapse that
+                // happens while the loop is up is corrected the next time anything calls it, and
+                // EnforceEntitlementLapse calls it on the day-roll / tier-change / logout funnel.
+                bool entitled = App.Patreon?.HasPremiumAccess == true
+                                || App.DailyFree?.IsFreeToday("voice") == true;
+
                 bool baseOk = !_disposed
+                              && entitled
                               && s?.MicConsentGiven == true
                               && App.Speech?.IsAvailable == true;
 
