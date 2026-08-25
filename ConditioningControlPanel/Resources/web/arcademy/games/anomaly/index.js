@@ -339,6 +339,17 @@ export default {
       try { return ctx.engine.sustain(kind, o) || null; } catch (e) { return null; }
     }
     function stopSafe(kind) { try { if (ctx.engine) ctx.engine.stop(kind); } catch (e) { /* noop */ } }
+    /* THE SEEP'S CLASS-SIDE DOOR (tell 13, the Overseen Frame). We name a DEAD
+     * MOMENT and the engine asks the director; it answers null the overwhelming
+     * majority of the time and that is the feature. The engine owns the pixels,
+     * on its own pointer-events:none fx layer, and the claim releases itself on
+     * the tell's last frame - there is nothing here to hold and nothing to undo.
+     * A `dead`/`paused` class never asks: a dead moment in a class nobody is
+     * playing is not a dead moment, it is an absence. */
+    function deadBeatSafe(name) {
+      if (dead || paused || !ctx.engine || typeof ctx.engine.deadBeat !== 'function') return null;
+      try { return ctx.engine.deadBeat(name) || null; } catch (e) { return null; }
+    }
     /** The engine as a deck sees it: three welded primitives + a READ of the
      *  clamped channels (THE CEILING RULE - a deck asks, it never raises). */
     const deckEngine = {
@@ -876,6 +887,14 @@ export default {
       else msg('an_timeout', AN_LEX.an_timeout);
       cue('thud', 0.12, { pitch: 0.7 });
       paintHud();
+      /* THE BREATH AFTER A WHIFF. `busy` is set and `cur.done` with it, so every
+       * tap lands in the refusal branch; the reveal is up and the next round is
+       * 1100ms away (600 reduced). THE TIMEOUT PATH ONLY: the FIND path advances
+       * in 380ms (220 reduced) BY CONTRACT - a correct first tap is promised an
+       * instant round - and a 240ms frame there would still be up when the next
+       * round armed. A dead moment that has to be shortened is not a dead
+       * moment. */
+      deadBeatSafe('round_gap');
       after(reduced ? PLAYTEST.WHIFF_HOLD_MS_REDUCED : PLAYTEST.WHIFF_HOLD_MS, endRound);
     }
 

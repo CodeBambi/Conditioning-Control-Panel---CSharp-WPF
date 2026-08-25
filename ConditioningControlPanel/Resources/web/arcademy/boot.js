@@ -247,6 +247,56 @@ function sfx(name, level, extra) {
   } catch (e) { /* never fatal */ }
 }
 
+/* ----------------------------------------------------------------------------
+ * THE FEED SLATE (THE SEEP, tell 10). One boot in forty, a single ~80ms frame
+ * inside the loader: a green slate saying a camera feed dropped, before the
+ * campus fades up like nothing happened. The very first tell most players will
+ * ever half-see, and the ONLY one that exists at tier zero.
+ *
+ * FOUR THINGS KEEP IT OUT OF THE BOOT'S WAY, and they are the whole design:
+ *   - the module is reached for with a DYNAMIC import that nothing awaits. boot
+ *     never blocks on it, a module that fails to load costs the frame and
+ *     nothing else, and `shell/shell.js` imports the same file a moment later
+ *     anyway, so the fetch is not even extra work.
+ *   - it reads the tier off the RAW `init.meta` blob (`sealedFromMeta`), because
+ *     there is no store, no registry and no shell this early.
+ *   - the loader's contract is untouched (trap 66): the slate is a child that is
+ *     appended and taken away again, and `hidden` / `.is-done` still mean
+ *     exactly what boot.js has always meant by them. A slate whose beat has
+ *     already passed is never struck late, and failBoot cancels it outright -
+ *     an error card is not delayed by a haunting any more than by a celebration.
+ *   - reduced motion never sees it (the photosensitivity note), and the roll is
+ *     SEEDED on the UTC day plus the hour, so a reload replays the same answer
+ *     rather than handing a player a re-roll.
+ * -------------------------------------------------------------------------- */
+/** ~40% through the ~3s splash: past the CRT power-on, before the rail deals. */
+const SLATE_AT_MS = 1150;
+let cancelSlate = null;
+
+function armFeedSlate() {
+  if (cancelSlate || !dom.loader) return;
+  const src = initMsg || {};
+  try {
+    import('./shell/seep.js').then((m) => {
+      try {
+        if (!m || cancelSlate || !splashIsUp()) return;
+        const opts = m.seepOptions();
+        if (opts.off) return;
+        const tier = opts.tier != null ? opts.tier : m.tierForSealed(m.sealedFromMeta(src.meta));
+        const want = m.slateWanted({
+          utcDay: src.utcDateSeed,
+          tier,
+          reducedMotion: !!src.reducedMotion || src.motionLevel === 0,
+          forced: opts.forced,
+        });
+        if (!want) return;
+        const elapsed = Date.now() - introT0;
+        cancelSlate = m.mountFeedSlate(dom.loader, { atMs: Math.max(0, SLATE_AT_MS - elapsed) });
+      } catch (e) { /* a haunting may never cost the boot */ }
+    }).catch(() => {});
+  } catch (e) { /* noop */ }
+}
+
 function cancelIntroCues() {
   for (const id of Array.from(introTimers)) { try { clearTimeout(id); } catch (e) { /* noop */ } }
   introTimers.clear();
@@ -312,6 +362,8 @@ function failBoot(msg) {
   disarmKnock();
   try { if (knockHint) knockHint.remove(); } catch (e) { /* noop */ }
   cancelIntroCues();      // a clearTimeout, so the error card waits for nothing
+  try { if (cancelSlate) cancelSlate(); } catch (e) { /* noop */ }
+  cancelSlate = null;
   if (dom.nopeMsg) dom.nopeMsg.textContent = String(msg).slice(0, 200);
   if (dom.nope) dom.nope.hidden = false;
 }
@@ -399,6 +451,7 @@ bridge.on('init', guard('init', (m) => {
   initMsg = m;
   bridge.markInitialized();       // flush anything the page queued pre-init
   armBootDeadline();              // progress milestone
+  armFeedSlate();                 // THE SEEP, tell 10 - fire and forget
   if (m.audioOnlySession) {
     // The host gate refuses the launch in this state (BUILD-CONTRACT §3); if we
     // somehow got here anyway, the shell renders the closed-school card.
@@ -449,6 +502,8 @@ bridge.on('end-run', guard('end-run', () => shutdown('host asked')));
  * -------------------------------------------------------------------------- */
 function shutdown(reason) {
   cancelIntroCues();
+  try { if (cancelSlate) cancelSlate(); } catch (e) { /* best effort */ }
+  cancelSlate = null;
   try { if (shell) shell.destroy(); } catch (e) { /* best effort */ }
   try { if (audio) audio.destroy(); } catch (e) { /* best effort */ }
   shell = null;

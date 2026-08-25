@@ -348,6 +348,25 @@ export const STYLE_TEXT = `
   transform:perspective(1200px) rotateY(calc(var(--de-lean-x,0) * 2.2deg)) rotateX(calc(var(--de-lean-y,0) * -2.2deg))
     translate3d(calc(var(--de-lean-x,0) * 6px), calc(var(--de-lean-y,0) * 6px), 0);
   transition:transform .36s cubic-bezier(.2,1.6,.35,1)}
+/* ---- 15 SOMETHING BELOW (the seep's Deep End special) --------------------
+   A soft-edged shape drifting once through the shallows, BEHIND the tiles.
+   Opacity and transform only, never past .12, and the soft edge is a radial
+   gradient rather than a blur - a live filter over a stage that already carries
+   decoded loops is a whole GPU pass per frame, and this class is the one that
+   measured that. Parented into .g-de-backdrop, which is z 0 under the board's
+   z 1 and pointer-events:none for itself and every child. No forwards fill:
+   the engine removes the node on the tell's last frame. */
+.g-de-seep{position:absolute;left:0;bottom:9%;width:46%;height:5.5%;min-height:16px;
+  border-radius:50%;pointer-events:none;z-index:0;opacity:0;
+  background:radial-gradient(closest-side,rgba(2,6,9,.95),rgba(2,6,9,0));
+  animation:g-de-below var(--de-seep-ms,1600ms) ease-in-out 1}
+@keyframes g-de-below{
+  0%{transform:translateX(-60%);opacity:0}
+  22%{opacity:.12}
+  74%{opacity:.12}
+  100%{transform:translateX(250%);opacity:0}}
+.g-de-stage[data-reduced="1"] .g-de-seep{animation:none;opacity:0}
+
 .g-de-board{position:relative;z-index:1;width:var(--de-board);height:var(--de-board);
   --de-tile:calc((var(--de-board) - (var(--de-n,4) - 1) * var(--de-gap)) / var(--de-n,4));
   --de-step:calc(var(--de-tile) + var(--de-gap));

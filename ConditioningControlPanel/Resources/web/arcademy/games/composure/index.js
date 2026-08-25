@@ -444,6 +444,17 @@ export default {
       try { return ctx.engine.sustain(kind, opts || {}) || null; } catch (e) { return null; }
     }
     function stopSafe(kind) { try { if (ctx.engine) ctx.engine.stop(kind); } catch (e) { /* noop */ } }
+    /* THE SEEP'S CLASS-SIDE DOOR (tell 13, the Overseen Frame). We name a DEAD
+     * MOMENT and the engine asks the director; it answers null the overwhelming
+     * majority of the time and that is the feature. The engine owns the pixels,
+     * on its own pointer-events:none fx layer, and the claim releases itself on
+     * the tell's last frame - there is nothing here to hold and nothing to undo.
+     * A `dead`/`paused` class never asks: a dead moment in a class nobody is
+     * playing is not a dead moment, it is an absence. */
+    function deadBeatSafe(name) {
+      if (dead || paused || !ctx.engine || typeof ctx.engine.deadBeat !== 'function') return null;
+      try { return ctx.engine.deadBeat(name) || null; } catch (e) { return null; }
+    }
     /** The engine, as a deck sees it: the three welded primitives plus a READ
      *  of the clamped channel vector (THE CEILING RULE - a deck asks, it never
      *  raises). Every member is null-safe and may answer null. */
@@ -1275,6 +1286,12 @@ export default {
       deck('trickster', 'deal');
       msg('cp_bank_line', CP_LEX.cp_bank_line, 2400);
       tick('lift', 0.42);
+      /* THE BREATH BETWEEN BOARDS, and the widest one in the collection. The
+       * bank beat is a SCENE, not a wall: while `banking` is set a press is not
+       * refused, it is INERT - no cue, no thud, no queue slot - and the deal
+       * holds it for another 700ms (300 reduced) on top of the 1800 the
+       * celebration already spent. Nothing can be costed here. */
+      deadBeatSafe('round_gap');
       say('dealing board ' + (boardIndex + 1) + ' (walk ' + scrambleWalkFor(tier, zen, boardIndex)
         + ', mh ' + mhStart + ', baseline ' + baseline + ', par ' + par + ')');
 

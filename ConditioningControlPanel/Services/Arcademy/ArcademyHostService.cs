@@ -2186,6 +2186,19 @@ internal static class ArcademyHostService
         ["bugle_comics"] = "Comics",
         ["bugle_empty"] = "Nothing set for this page.",
         ["bugle_prop_label"] = "The paper",
+        // ---- wet ink (THE SEEP, tell 09) -----------------------------------------------
+        // The one COPY tell: a warm maintenance note on the noticeboard that reads as a
+        // shrug the first time and as a confession after the reveal. Stored as CLAUSE ROWS
+        // joined with one space (the PAPERS pattern) so every row clears MergeModTable's
+        // 96-char cap and a mod can still re-voice the whole note. Do not merge the rows.
+        // Rows 3 and 4 carry the seed clause - CANON, the school's own cover story.
+        ["seep_wetink_title"] = "FROM THE FRONT DESK",
+        ["seep_wetink_1"] = "Couple of things this week: the water fountain by 103 is fixed, you're welcome,",
+        ["seep_wetink_2"] = "and whoever keeps winning the gate raffle please come collect your pencils.",
+        ["seep_wetink_3"] = "Also if you see light under the Records door after closing,",
+        ["seep_wetink_4"] = "that's just the old wiring acting up again, Marco says he'll swap the breaker",
+        ["seep_wetink_5"] = "when the part shows up. Be good.",
+        ["seep_wetink_sig"] = "The front desk.",
     };
 
     /// <summary>The mockup's owner-approved tokens (BUILD-CONTRACT §10). A mod overrides them via

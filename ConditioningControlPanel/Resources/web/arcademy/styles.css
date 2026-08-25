@@ -3938,3 +3938,198 @@ html.arc-reduced *, html.arc-reduced *::before, html.arc-reduced *::after {
 @media (prefers-reduced-motion: reduce) {
   .arc-annexstage, .arc-annex-still { transition:none !important; transform:none !important; }
 }
+
+/* ============================== THE SEEP =================================
+   shell/seep.js's pixels. Eleven campus tells, one director, zero toasts.
+   Everything here is a CLASS TOGGLE or a node that lives for under a quarter
+   of a second, and every one of them obeys the same five laws:
+
+     - compositor only: opacity and transform. NO blend modes, NO filters over
+       anything live, NO background-position animation (trap 36 - the scanline
+       sheets are oversized by exactly one tile period and TRANSLATED by that
+       period, which is annex/cams.css's recipe verbatim).
+     - pointer-events:none on every layer, always. A tell may never eat a tap
+       (the input-trust law, traps 27 and 59).
+     - no `forwards` fill on anything that shares an element with another
+       animation (trap 74: a welded transform is for ever).
+     - one flicker per tell, sub-200ms, no repeats (photosensitivity).
+     - reduced motion kills the animated ones outright, at the bottom of this
+       block, in one place.
+
+   THE COLD PALETTE is two literals in the same sanction the campus card hues
+   and annex/cams.css's --annex-cold hold: they MIRROR LOCKED ART - the
+   phosphor grade of the approved Annex slides. The seep is the feed showing
+   through, so it may not be reskinned by a mod: the whole point is that it does
+   not match the school. --------------------------------------------------- */
+:root {
+  --seep-cold:#8FE0CE;        /* lab phosphor - the same value cams.css holds */
+  --seep-deep:#0D2724;        /* dead-channel green-black under every feed    */
+  --seep-blue:#8ECBFF;        /* blueprint linework                           */
+}
+
+/* ---- the seep's own layer inside .campus-stage ---------------------------
+   z 12: above the plan, under the campus chrome (topright 20, idcard 25, tip
+   80, scrim 90) and - because .campus-stage is its own stacking context at
+   z 20 - under the page's fx (40), ceremony (45), annex reveal (48) and EMI
+   (50) whatever it does. */
+.campus-seep {
+  position:absolute; inset:0; z-index:12; pointer-events:none;
+}
+
+/* ---- 01 THE SLIP --------------------------------------------------------
+   One room drops its varsity paint and renders the way the monitors downstairs
+   render it. Everything warm goes to zero; the linework, the plates and the
+   furniture come back as blueprint. */
+g.campus-room[data-seep="slip"] .campus-cabinet,
+g.campus-room[data-seep="slip"] .campus-lit,
+g.campus-room[data-seep="slip"] .campus-logo,
+g.campus-room[data-seep="slip"] .campus-trim,
+g.campus-room[data-seep="slip"] .campus-scan,
+g.campus-room[data-seep="slip"] .campus-neon,
+g.campus-room[data-seep="slip"] .campus-ping { opacity:0; }
+g.campus-room[data-seep="slip"] .campus-gfloor {
+  fill:var(--seep-deep); stroke:var(--seep-blue); stroke-width:1.4;
+}
+g.campus-room[data-seep="slip"] .campus-furn,
+g.campus-room[data-seep="slip"] .campus-door {
+  stroke:var(--seep-blue); stroke-width:1.2; fill:none; opacity:.9;
+}
+g.campus-room[data-seep="slip"] .campus-furnf {
+  fill:none; stroke:var(--seep-blue); stroke-width:1.2; opacity:.9;
+}
+g.campus-room[data-seep="slip"] .campus-rname,
+g.campus-room[data-seep="slip"] .campus-rsub {
+  fill:var(--seep-cold); stroke:none; font-family:var(--pix); letter-spacing:.08em;
+}
+
+/* the camera furniture the slip hangs inside the room's own <g> */
+.campus-seepcam { pointer-events:none; }
+.campus-seepscan {
+  fill:url(#campusScan); opacity:.55;
+  animation:seep-scan .24s linear infinite;
+}
+@keyframes seep-scan { to { transform:translateY(6px); } }   /* one tile period */
+.campus-seeposd {
+  fill:var(--seep-cold); stroke:none;
+  font-family:var(--pix); font-size:9px; letter-spacing:.1em;
+}
+.campus-seeprec { opacity:.9; animation:seep-rec 1.4s steps(2, jump-none) infinite; }
+@keyframes seep-rec { 50% { opacity:.15; } }
+
+/* ---- 02 THE FILE NAME ---------------------------------------------------
+   The plate says what the CODE calls the room. Monospace phosphor green, and
+   the string itself is a hardcoded dev key - never a lexicon row. */
+.campus-rsub.arc-seep-key {
+  fill:var(--seep-cold); stroke:none; opacity:1;
+  font-family:var(--pix); font-size:9px; letter-spacing:.08em;
+}
+
+/* ---- 12 THE CHALK GHOST (the class-side kit's shell half) ---------------
+   The File Name, following you to class. The door card's title spends ~90ms
+   spelling the room's bare dev key before it settles - the plates' own recipe
+   on an HTML node instead of an SVG one, and the same hardcoded string: the
+   filing system talking, never a lexicon row.
+
+   NO reduced-motion rung here, on purpose. The plates and the camera furniture
+   get one because they are decoration a sheet can zero; this is the card's own
+   <h3>, and blanking a title for two frames is a worse frame than the tell.
+   shell/seep.js retires `chalk_ghost` outright under reduced motion (it is
+   `animated:true` in the ladder), which is the guard that actually holds.
+
+   The other three class-side tells do NOT live here: 13 and 14 are the engine's
+   (`.ae-seep-*` in engine/style.js, on its own pointer-events:none fx layer),
+   15 is The Deep End's backdrop and 16 is one Instant Recall montage tile.
+   Each sheet owns its own pixels; this file owns the cold palette they all
+   read. ------------------------------------------------------------------- */
+.campus-classcard .cc-body h3.arc-seep-chalk {
+  color:var(--seep-cold); font-family:var(--pix); letter-spacing:.08em;
+  text-shadow:0 0 10px color-mix(in srgb, var(--seep-cold), transparent 45%);
+}
+
+/* ---- 07 THE SLOW SECOND -------------------------------------------------
+   DISPLAY ONLY. campus.js freezes the picture and then triple-ticks the two
+   skipped seconds back in; this is only what the frozen picture looks like. */
+.campus-bellchip .tm.arc-seep-held { color:var(--seep-cold); }
+.campus-bellchip .tm.arc-seep-catch { opacity:.55; }
+
+/* ---- 11 THE COLD DRAFT --------------------------------------------------
+   The edges of the plan breathe faintly green, once, for 2.4 seconds. One
+   layer, opacity only, no filter and no blend - the cam-wall budget law. */
+.arc-seep-draft {
+  position:absolute; inset:0; pointer-events:none; opacity:0;
+  box-shadow:inset 0 0 clamp(40px, 7vw, 120px) clamp(6px, 1.2vw, 22px)
+    color-mix(in srgb, var(--seep-cold), transparent 46%);
+}
+.arc-seep-draft.is-on { animation:seep-draft 2.4s ease-in-out both; }
+@keyframes seep-draft { 0% { opacity:0; } 40% { opacity:.5; } 100% { opacity:0; } }
+
+/* ---- 06 EMI'S BAD FRAME -------------------------------------------------
+   ONE phosphor frame over her widget. A REAL pseudo-element on .emi, which
+   owns neither ::before nor ::after, so nothing of hers is displaced - and NO
+   transform and NO `forwards` fill anywhere near this root (trap 74: the crt
+   keyframes weld scaleY on and the dangle never works again). Strictly visual:
+   the voice lock is absolute pre-reveal and she gets no line, ever. */
+.emi.arc-seep-frame::after {
+  content:''; position:absolute; inset:0; pointer-events:none; z-index:2;
+  background:
+    repeating-linear-gradient(180deg,
+      color-mix(in srgb, var(--seep-cold), transparent 76%) 0 1px, transparent 1px 3px),
+    color-mix(in srgb, var(--seep-deep), transparent 22%);
+}
+
+/* ---- 10 THE FEED SLATE --------------------------------------------------
+   One ~80ms frame inside the boot loader. It lives in styles.css rather than a
+   lazily-injected module sheet on purpose: the slate paints while the splash is
+   up, which is before shell/seep.js has been imported at all, and a tell that
+   has to wait for a stylesheet is a tell that misses its own beat. */
+.arc-seep-slate {
+  position:absolute; inset:0; z-index:9; pointer-events:none;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+  background:var(--seep-deep);
+  background-image:repeating-linear-gradient(180deg,
+    color-mix(in srgb, var(--seep-cold), transparent 88%) 0 1px, transparent 1px 3px);
+  color:var(--seep-cold);
+  font-family:var(--pix); letter-spacing:.14em;
+}
+.arc-seep-slate-id { font-size:20px; }
+.arc-seep-slate-sub { font-size:11px; opacity:.65; }
+
+/* ---- 08 THE OTHER STAMP -------------------------------------------------
+   80ms of ghost ink under the real mark. It is laid in the SAME box the stamp
+   lands in and taken away before the stamp keyframe starts, so nothing on the
+   card ever moves. */
+.arc-seep-stampbox { position:relative; width:100%; height:0; pointer-events:none; }
+.arc-seep-stamp {
+  position:absolute; left:50%; top:0; transform:translate(-50%,-50%) rotate(-8deg);
+  pointer-events:none; white-space:nowrap;
+  font-family:var(--pix); font-size:13px; letter-spacing:.06em;
+  color:color-mix(in srgb, var(--seep-cold), black 22%);
+  border:2px solid color-mix(in srgb, var(--seep-cold), black 22%);
+  border-radius:5px; padding:2px 8px;
+}
+
+/* ---- 05 THE LOOKER, UPSTAIRS -------------------------------------------
+   Mid-crossing they stop and face out of the plan. The stop IS the tell, so
+   this is a pause and a pair of eyes, never a flash. A CSS transform on
+   .gh-inner out-ranks the facing attribute ghosts.js writes, which is how the
+   turn happens without the scheduler knowing anything about it. */
+.campus-student[data-seep-look="1"] .gh-inner { transform:scale(1,1); }
+.campus-student[data-seep-look="1"] .gh-eye { fill:var(--seep-cold); }
+
+/* ---- THE SAFETY RUNGS, IN ONE PLACE ------------------------------------
+   Reduced motion (the shell's flag OR the media query) retires every animated
+   tell; the Hum, which is audio, and Wet Ink, which is a sheet of paper, are
+   the survivors and neither of them is in this block. shell/seep.js refuses to
+   plan them as well - this is the belt to that pair of braces. */
+html.arc-reduced .campus-seepscan,
+html.arc-reduced .campus-seeprec { animation:none; }
+html.arc-reduced g.campus-room[data-seep="slip"] .campus-gfloor,
+html.arc-reduced .campus-seepcam,
+html.arc-reduced .campus-rsub.arc-seep-key,
+html.arc-reduced .arc-seep-draft,
+html.arc-reduced .arc-seep-slate { opacity:0; }
+html.arc-reduced .emi.arc-seep-frame::after { content:none; }
+@media (prefers-reduced-motion: reduce) {
+  .campus-seepscan, .campus-seeprec { animation:none; }
+  .arc-seep-draft.is-on { animation:none; opacity:0; }
+}

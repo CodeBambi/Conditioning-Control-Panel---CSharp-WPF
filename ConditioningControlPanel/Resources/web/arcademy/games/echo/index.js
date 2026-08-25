@@ -484,6 +484,17 @@ export default {
     }
     function stopSafe(kind) { try { if (ctx.engine) ctx.engine.stop(kind); } catch (e) { /* noop */ } }
     function beatSafe(opts) { try { if (ctx.engine && ctx.engine.beat) ctx.engine.beat(opts || {}); } catch (e) { /* noop */ } }
+    /* THE SEEP'S CLASS-SIDE DOOR (tell 13, the Overseen Frame). We name a DEAD
+     * MOMENT and the engine asks the director; it answers null the overwhelming
+     * majority of the time and that is the feature. The engine owns the pixels,
+     * on its own pointer-events:none fx layer, and the claim releases itself on
+     * the tell's last frame - there is nothing here to hold and nothing to undo.
+     * A `dead`/`paused` class never asks: a dead moment in a class nobody is
+     * playing is not a dead moment, it is an absence. */
+    function deadBeatSafe(name) {
+      if (dead || paused || !ctx.engine || typeof ctx.engine.deadBeat !== 'function') return null;
+      try { return ctx.engine.deadBeat(name) || null; } catch (e) { return null; }
+    }
     function ceremonySafe(kind, opts) {
       if (dead || !ctx.engine || typeof ctx.engine.ceremony !== 'function') return null;
       try { return ctx.engine.ceremony(kind, opts || {}) || null; } catch (e) { return null; }
@@ -1654,6 +1665,13 @@ export default {
         inEncore ? EC_LEX.ec_msg_encore_clear : EC_LEX.ec_msg_clear);
       rewardBeat();
       stopInputPressure();
+      /* THE BREATH BETWEEN ROUNDS. `inputOpen` is false, the input window timer
+       * is disarmed and the next deal is a whole hold away (950ms, 520 reduced):
+       * nothing is armed, nothing is timed and a press here already costs
+       * nothing. The CLEAR path only - the fail path spends its hold teaching
+       * the answer with a 700ms pad reveal, and a monitor frame over a lesson is
+       * a monitor frame in the way. */
+      deadBeatSafe('round_gap');
       const hold = reduced ? PLAYTEST.CLEAR_HOLD_MS_REDUCED : PLAYTEST.CLEAR_HOLD_MS;
       after(hold, () => { if (!ended) dealSequence(len + 1); });
     }

@@ -56,6 +56,11 @@ import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
 import { createFirstBell } from '../vn/index.js';
 import { createRecords } from './records.js';
 import { createAnnexReveal } from './annexreveal.js';
+/* THE SEEP - the foreshadowing layer. ONE director, and the shell's whole
+ * relationship with it is: build it, hand it read-only seams and three gate
+ * answers, tell it when a class ended, tear it down. It writes nothing, it
+ * posts nothing, it mints no meta key and it adds no rung to the Esc ladder. */
+import { createSeep } from './seep.js';
 /* THE PHANTOM POST: the mail engine and its three paper overlays. The engines
  * hold NO storage of their own (their STATE-NEEDS law) - the shell hands each
  * an injected blob below and banks it through the store like any page key. */
@@ -339,6 +344,10 @@ async function loadOptional(path, factoryName, fallback, say) {
 const NULL_ENGINE_FACTORY = () => ({
   setHeat() {}, fire() { return false; }, sustain() { return false; }, stop() {},
   setpiece() {}, beat() {}, ceremony() { return false; }, suspend() {}, dispose() {},
+  /* THE SEEP'S CLASS-SIDE DOOR. Null is the answer every caller already handles
+   * (it is the answer seven times in eight on a live engine too), so a class
+   * that runs undistracted simply never sees a tell. */
+  deadBeat() { return null; },
 });
 
 /* A provider that failed to load must still answer every verb a class can call,
@@ -493,6 +502,24 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     return {
       day: Object.keys(store.get('days') || {}).length,
       punches,
+      /* SEALED CARDS, not stamps: `punchesAtLeast` counts holes and this counts
+       * finished cards. It is the number THE SEEP's ladder runs on, and Wet Ink
+       * (corkboard n19) is the one notice gated on it - which is how a sheet of
+       * paper goes up at the same moment the school starts getting thin without
+       * the noticeboard ever hearing of the seep. Derived, never stored. */
+      sealed: (() => {
+        /* The whole read is guarded, and not only for a junk card: postCtx is
+         * declared well above `games`, so a caller that somehow asked before the
+         * registry resolved would meet a temporal-dead-zone throw. Nought sealed
+         * is the honest answer for a school that has not opened yet. */
+        try {
+          let n = 0;
+          for (const entry of games.list) {
+            try { if (store.punchCard(entry.key).complete) n += 1; } catch (e) { /* noop */ }
+          }
+          return n;
+        } catch (e) { return 0; }
+      })(),
       streak: Number(store.get('streak')) || 0,
       dateIs: (mm.length < 2 ? '0' + mm : mm) + '-' + (dd.length < 2 ? '0' + dd : dd),
       seenFlags: { annex: !!store.get('annexRevealSeen') },
@@ -705,7 +732,74 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     log: say,
   });
 
-  reportCard = createReportCard({ ceremonies, toast: shout, log: say });
+  /* ---------------------- THE SEEP ---------------------------------------
+   * Built here because everything it needs already exists (the store, the
+   * registry list, the day seed) and two things below it want it: the report
+   * card asks it for the Other Stamp, and the split-flap board asks it for the
+   * Misprint. It is OPTIONAL in exactly the way the campus and the ghosts are -
+   * a director that fails to build costs the haunting and nothing else.
+   *
+   * THE SEAMS ARE GETTERS, NOT HANDLES (trap 73): the campus, the ghost layer
+   * and the mascot are all torn down and rebuilt under it, and a handle captured
+   * at mount is a handle that has gone by the time a tell fires.
+   *
+   * THE GATE IS THE SHELL'S OWN ANSWER to three questions the director cannot
+   * see for itself. `busy` is the important one: it is every overlay, ceremony
+   * and modal that owns the screen, and it is what stops a slip landing under
+   * the annex reveal or over a punch-card beat. */
+  let seep = null;
+  try {
+    seep = createSeep({
+      store,
+      games,
+      utcDay: utcDateSeed,
+      reducedMotion,
+      log: say,
+      seams: {
+        campus: () => campus,
+        ghosts: () => ghosts,
+        emi: () => { try { return getEmi(); } catch (e) { return null; } },
+      },
+      gate: {
+        campusVisible: () => screen === 'board' && !!campus && !active,
+        classRunning: () => !!active,
+        busy: () => {
+          if (suspendedGlobally || destroyed) return true;
+          if (punchStage || annexStage || annexProbe || endCard) return true;
+          if (active && (active.suspendEl || active.paused)) return true;
+          /* FIRST BELL is deliberately NOT a rung here. `vn.armed` means "there
+           * are scenes this save has not seen", not "a scene is on screen", and
+           * every place one actually plays is already covered: the cold open and
+           * the walk sit inside the seep's two-minute quiet window, s03 runs out
+           * of startClass (so `classRunning`), and m01 rides the punch ceremony
+           * (so `punchStage`). A rung on `armed` would mute the whole first
+           * night instead. */
+          try { if (orientation && orientation.active()) return true; } catch (e) { /* noop */ }
+          try { if (isMailboxOpen()) return true; } catch (e) { /* noop */ }
+          try { const c = currentCorkboard(); if (c && !c.closed) return true; } catch (e) { /* noop */ }
+          try { const b = currentBugle(); if (b && !b.closed) return true; } catch (e) { /* noop */ }
+          /* A door card is a modal over the plan; a slip behind it is a slip
+           * nobody sees. `seepSeam().cardIsOpen()` is a READ - `closeCard()`
+           * would have closed it. */
+          try {
+            const cs = campus && campus.seepSeam && campus.seepSeam();
+            if (cs && cs.cardIsOpen && cs.cardIsOpen()) return true;
+          } catch (e) { /* noop */ }
+          return false;
+        },
+      },
+    });
+  } catch (e) {
+    say('the seep failed to build (' + ((e && e.message) || e) + ') - the school is simply quiet');
+    seep = null;
+  }
+  /** THE ONE SUPPLIER the split-flap board asks at deal time. Null-safe both
+   *  ways: no director, no misprint, and the board is what it always was. */
+  const seepMisprint = (rows) => {
+    try { return seep ? seep.misprintFor(rows) : null; } catch (e) { return null; }
+  };
+
+  reportCard = createReportCard({ ceremonies, seep, toast: shout, log: say });
 
   /* ---------------------- helpers --------------------------------------- */
   function gameName(key) {
@@ -889,7 +983,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       try { ob.destroy(); } catch (e) { /* noop */ }
     }
     if (ghosts) { try { ghosts.destroy(); } catch (e) { /* noop */ } ghosts = null; }
-    if (campus) { try { campus.destroy(); } catch (e) { /* noop */ } campus = null; }
+    if (campus) {
+      try { campus.destroy(); } catch (e) { /* noop */ }
+      campus = null;
+      /* A campus that has gone is a VISIT that has ended: the once-per-visit
+       * tells (the Slow Second) re-arm for the next one. */
+      try { if (seep) seep.note('campusUnmount'); } catch (e) { /* noop */ }
+    }
     /* THE WALKER GOES LAST AND ITS RESIDUE IS BANKED FIRST. `campus` is already
      * null by the time destroy() runs, which is what makes a pending onDone
      * safe: walk.js pays it (a launch is never silently swallowed), the funnel
@@ -1147,6 +1247,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     teardownClass();
     clearScreen();
     renderTopbar();
+    /* THE SEEP'S EAR, and this is the ONE hook the Cold Draft wants: walking
+     * back out onto the campus from a class or a report card. You just fed the
+     * thing downstairs; it exhales. The director owns the roll, the cooldown and
+     * the two-minute quiet window - this line only says what happened. */
+    if (wasScreen === 'class' || wasScreen === 'report') {
+      try { if (seep) seep.note('classEnd', { from: wasScreen }); } catch (e) { /* noop */ }
+    }
     // EMI SEAM: arriving at the campus, not repainting it - and the FIRST deal
     // of the night is an arrival (see `greeted`, above).
     if (!greeted || wasScreen !== 'board') {
@@ -1198,6 +1305,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       reducedMotion,
       animate: false,
       onSelect: onSelectRow,
+      misprintFor: seepMisprint,
     });
 
     /* ========================= THE ONE WALK FUNNEL =======================
@@ -1278,6 +1386,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         // ORIENTATION DAY §3.2: the card is WITHHELD on a first night so the
         // beat can hand over the very same node. One card object either way.
         idCardMode: wantsOrientation ? 'withheld' : 'shown',
+        /* THE CHALK GHOST'S DOOR (tell 12). A GETTER, never a handle (trap 73):
+         * the campus is torn down and rebuilt under the director, and a handle
+         * captured at mount is a handle that has gone. The campus never imports
+         * seep.js - it asks this and paints what it is told, exactly the way the
+         * split-flap board takes `misprintFor`. */
+        seep: () => seep,
         // ...and the idle attract may not deal a cursor over the handover (§4).
         // Asked at the ONE place attract decides to begin; a beat that is over
         // (or was never built) says false and attract arms exactly as before.
@@ -1456,6 +1570,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         reducedMotion,
         animate: !silent,
         onSelect: onSelectRow,
+        misprintFor: seepMisprint,
       });
       const panel = el('div', 'arc-panel');
       panel.appendChild(el('p', 'arc-kicker', t('timetable', 'Timetable')));
@@ -2294,6 +2409,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
        *   cadenceMs(kind) -> ms          heat-scaled cadence (Infinity = silent)
        *   channels() -> {…}              the CLAMPED channel vector (a copy)
        *   diagnostics() -> {…}           live node counts, setpieces, refusals
+       *   deadBeat(beat, opts)           THE SEEP'S CLASS-SIDE DOOR. The class
+       *                                  names a DEAD MOMENT it is standing in and
+       *                                  gets a handle or (almost always) null. NOT
+       *                                  kind-addressed and NOT an effect: it spends
+       *                                  no channel, clears no ceiling and has
+       *                                  nothing to do with the manifest allowlist,
+       *                                  because a seep frame is the school talking,
+       *                                  not the class. engine/index.js's header
+       *                                  carries the whole contract.
        * A null engine answers undefined for all of them, which is why every game
        * keeps its own fallback: presence is not a promise of an effect. */
       setPhase: safe('setPhase'),
@@ -2304,6 +2428,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       cadenceMs: safe('cadenceMs'),
       channels: safe('channels'),
       diagnostics: safe('diagnostics'),
+      deadBeat: safe('deadBeat'),
       // suspend()/dispose() are deliberately absent: the shell owns lifecycle.
     };
   }
@@ -2316,6 +2441,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    */
   function startClass(cls, opts) {
     if (suspendedGlobally) { shout(t('class_suspended', 'Class Suspended')); return; }
+    /* THE SEEP'S EAR. A new class resets the per-class scopes of the class-side
+     * kit; nothing else about a start interests it. */
+    try { if (seep) seep.note('classStart', { gameKey: cls && cls.gameKey }); } catch (e) { /* noop */ }
     /* FIRST BELL SEAM (s03, the walk to Homeroom). ADDITIVE AND ONCE-EVER: the
      * VN plays one caption on the midway and a beat on the Homeroom threshold,
      * then re-enters this function with the flag already spent, so the shipped
@@ -2384,6 +2512,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * when the first spiral wash actually mounts, and the CSS conic gradient
      * is still the fallback if it 404s. */
     const classSpiral = pickSpiralUrl(seed, src.settings);
+    /* THIS ROOM'S CAMERA, for the class-side kit's Resume Slate (`FEED 05 - SYNC`
+     * in The Deep End). The DIRECTOR owns the Annex map, so it resolves the tag
+     * and the shell keeps no second copy of a table it does not own. */
+    const seepFeedTag = seep ? seep.feedTag(cls.gameKey) : '';
     /* The whole pool, frozen, for a class that needs to OFFER spirals rather
      * than only wear one (Instant Recall's SPIRAL question). Same rows, same
      * order, same weights the pick walks - see spiralPoolRows. */
@@ -2409,6 +2541,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         // and boot.js listens there. Passing window as well would double every
         // arcademy-log line (engine/index.js emit() fires document AND bus).
         bus: null,
+        /* THE SEEP, CLASS-SIDE. An INJECTION, never an import: the engine must
+         * not know shell/seep.js exists. Two fields and no more - the door
+         * itself, and this room's camera tag, which the shell resolves because
+         * the shell is the half that knows the game key (FEED 05 is The Deep
+         * End's, per the Annex map, and a player who cross-checks it against the
+         * camera wall is meant to find it agrees). A director that failed to
+         * build hands the engine nothing and every dead beat answers null. */
+        seep: seep ? {
+          beat: (name, payload) => {
+            try { return seep ? seep.beat(name, payload) : null; } catch (e) { return null; }
+          },
+          feed: seepFeedTag,
+        } : null,
       }) || NULL_ENGINE_FACTORY();
     } catch (e) {
       say('createEngine threw (' + ((e && e.message) || e) + ') - class runs undistracted');
@@ -3009,10 +3154,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // screen and applySuspend(true) all land here, so the class clock only has
     // to be hooked once. (applySuspend(false) deliberately leaves the class
     // paused behind its Resume button, and that button comes back through here.)
-    timeBarSet(!on);
-    try { on ? active.instance.pause() : active.instance.resume(); }
-    catch (e) { say('game pause/resume threw: ' + ((e && e.message) || e)); }
     if (on) {
+      timeBarSet(false);
+      try { active.instance.pause(); }
+      catch (e) { say('game pause/resume threw: ' + ((e && e.message) || e)); }
       try { active.peek.forceHide(); } catch (e) { /* noop */ }
       if (!active.pauseEl) {
         const overlay = el('div', 'arc-suspended');
@@ -3047,10 +3192,55 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         active.root.appendChild(overlay);
         active.pauseEl = overlay;
       }
-    } else if (active.pauseEl) {
-      active.pauseEl.remove();
-      active.pauseEl = null;
+    } else {
+      /* THE LIFT, AND THE ONE PIECE OF SEQUENCING IN THE CLASS-SIDE KIT.
+       * The card comes down FIRST and unconditionally: the door the player just
+       * pressed must open at once, whatever paints behind it. Then the clock and
+       * the game go back together, through `resumeAfterSlate` - which runs them
+       * on the Resume Slate's LAST FRAME when the seep took the beat, and right
+       * here, in this same tick, when it did not (seven resumes in eight).
+       * THE CLOCK IS INSIDE THE THUNK on purpose: a slate that held the game
+       * while the class clock ran would cost the player a tenth of a second of
+       * graded time, and a tell may never cost a timing window. */
+      if (active.pauseEl) {
+        active.pauseEl.remove();
+        active.pauseEl = null;
+      }
+      const cls0 = active;
+      resumeAfterSlate(() => {
+        /* torn down, or re-paused while the slate was up: not ours any more */
+        if (active !== cls0 || cls0.paused) return;
+        timeBarSet(true);
+        try { cls0.instance.resume(); }
+        catch (e) { say('game pause/resume threw: ' + ((e && e.message) || e)); }
+      });
     }
+  }
+
+  /**
+   * TELL 14, THE RESUME SLATE. About one resume in eight the seep wants a tenth
+   * of a second of `FEED nn - SYNC` before the game comes back, and the law is
+   * that INPUT RE-ARMS ONLY AFTER THE SLATE CLEARS. `engine.deadBeat('resume')`
+   * is the whole mechanism: it paints on the engine's own fx layer (which is
+   * pointer-events:none by construction, so the slate cannot eat the press even
+   * if it were mistimed) and runs `onClear` on the tell's last frame, after the
+   * pixels are gone and the director's claim is released.
+   *
+   * A null answer - the common one - means the lift runs here, synchronously,
+   * and the resume is byte-for-byte what it always was.
+   */
+  function resumeAfterSlate(lift) {
+    if (!active) return;
+    let held = null;
+    try {
+      held = (active.engine && typeof active.engine.deadBeat === 'function')
+        ? active.engine.deadBeat('resume', {
+          payload: { gameKey: active.cls && active.cls.gameKey },
+          onClear: lift,
+        })
+        : null;
+    } catch (e) { held = null; }
+    if (!held) lift();
   }
 
   function showSuspendedOverlay(note, opts) {
@@ -3321,6 +3511,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * One rung of the Esc ladder. Returns true when the shell consumed it, so
      * boot.js only reaches for fullscreen/exit once the page has nothing to close.
      */
+    /** THE SEEP's director, for the play-test rig and the suites. Null when it
+     *  failed to build. Nothing in the shipped shell reads this. */
+    seepDirector() { return seep; },
     escapeStep() {
       // THE CONFIRM IS THE INNERMOST RUNG. It is a modal the player opened one
       // press ago, so Esc closing it first is the only answer that is not a
@@ -3455,6 +3648,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       residueTrail = [];
       lastRoomKey = null;
       if (vn) { try { vn.destroy(); } catch (e) { /* noop */ } vn = null; }
+      if (seep) { try { seep.destroy(); } catch (e) { /* noop */ } seep = null; }
       try { ceremonies.destroy(); } catch (e) { /* noop */ }
       if (settingsPage) { try { settingsPage.destroy(); } catch (e) { /* noop */ } }
     },

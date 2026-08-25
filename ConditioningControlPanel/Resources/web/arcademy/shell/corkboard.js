@@ -310,6 +310,45 @@ export const NOTICES = Object.freeze([
       'The fire drill will be held on the fourteenth of May, corrected in ink to the second of October, corrected again in a different ink to the ninth, and further amended in pencil, in a hand nobody claims, to read simply the spring. Assembly is on the far lawn, weather and groundskeeping matters permitting, and everyone is kindly asked to leave this notice where it hangs, as it is the only copy, has served since before any current tenure, and is expected, at the present rate of amendment, to serve for some years yet.',
     ]),
   }),
+  /* ------------------------------------------------------------------------
+   * WET INK (THE SEEP, tell 09) - and it is the one sheet on this wall that is
+   * LEXICON-KEYED rather than a literal.
+   *
+   * Everything else here is the season's own prose and stays a literal for the
+   * same reason EMI's lines are (diegetic, change-hostile, mod-neutral). This
+   * one is user-facing copy the C# NeutralLexicon has to mirror, so it comes
+   * through `titleKey` / `bodyKeys` - clause rows joined with one space, every
+   * row under trap 26's 96-character mod-skin cap (core/lexicon.js
+   * `seep_wetink_*`). The `body` below is the same text as a fallback, so a host
+   * that never grew the rows renders the note verbatim anyway (trap 15).
+   *
+   * IT IS NOT A FLICKER. It goes up and it stays up: `when` makes it a WINDOWED
+   * notice, which `pickNotices` treats as always-up once its gate passes, so
+   * rotation can never sit on it. The gate is ONE sealed punch card - the same
+   * count shell/seep.js's ladder runs on, which is what puts the note on the
+   * wall exactly at T1 without the corkboard knowing the seep exists.
+   * --------------------------------------------------------------------- */
+  Object.freeze({
+    id: 'n19',
+    kind: 'notice',
+    pinned: false,
+    title: 'FROM THE FRONT DESK',
+    titleKey: 'seep_wetink_title',
+    body: Object.freeze([
+      'Couple of things this week: the water fountain by 103 is fixed, you\'re welcome, '
+        + 'and whoever keeps winning the gate raffle please come collect your pencils. '
+        + 'Also if you see light under the Records door after closing, that\'s just the old '
+        + 'wiring acting up again, Marco says he\'ll swap the breaker when the part shows up. '
+        + 'Be good.',
+      'The front desk.',
+    ]),
+    bodyKeys: Object.freeze([
+      Object.freeze(['seep_wetink_1', 'seep_wetink_2', 'seep_wetink_3', 'seep_wetink_4', 'seep_wetink_5']),
+      Object.freeze(['seep_wetink_sig']),
+    ]),
+    when: Object.freeze({ sealedAtLeast: 1 }),
+    look: 'pencil',
+  }),
 ]);
 
 /** How many sheets the wall holds at once. Pinned rows always make the cut. */
@@ -510,6 +549,39 @@ function stateOf(override) {
   return s;
 }
 
+/* ----------------------------------------------------------------------------
+ * KEYED COPY, and it is OPT-IN PER ROW.
+ *
+ * The season's own notices are literals on purpose (diegetic prose, the same
+ * sanction EMI's lines hold). A row that DOES have to be mod-skinnable declares
+ * `titleKey` and/or `bodyKeys` - the latter one CLAUSE LIST PER PARAGRAPH, so a
+ * long paragraph can clear trap 26's 96-character cap and still read as one
+ * sentence. A missing row degrades to the literal beside it, which degrades to
+ * DEFAULT_LEXICON, which degrades to English (trap 15): three floors, and the
+ * paper never renders a raw key.
+ * -------------------------------------------------------------------------- */
+
+/** The sheet's headline - keyed if the row asked, otherwise its literal. */
+export function noticeTitle(notice) {
+  const lit = String((notice && notice.title) || '');
+  const key = notice && notice.titleKey;
+  return (typeof key === 'string' && key) ? t(key, lit) : lit;
+}
+
+/** Paragraph `i` of the sheet - the clause rows joined with ONE space. */
+export function noticeParagraph(notice, i, fallback) {
+  const lit = String(fallback == null ? '' : fallback);
+  const table = notice && notice.bodyKeys;
+  const clauses = Array.isArray(table) ? table[i] : null;
+  if (!Array.isArray(clauses) || !clauses.length) return lit;
+  const parts = [];
+  for (let k = 0; k < clauses.length; k += 1) {
+    const v = t(String(clauses[k]), '');
+    if (v) parts.push(v);
+  }
+  return parts.length ? parts.join(' ') : lit;
+}
+
 function persist(s, save) {
   const fn = (typeof save === 'function') ? save : deps.save;
   if (typeof fn !== 'function') return;
@@ -620,12 +692,12 @@ export function openCorkboard(opts) {
     const tag = el('span', 'arc-cork-kind', kindLabel(notice.kind).toUpperCase());
     sheet.appendChild(tag);
 
-    sheet.appendChild(el('h2', 'arc-cork-notetitle', String(notice.title || '')));
+    sheet.appendChild(el('h2', 'arc-cork-notetitle', noticeTitle(notice)));
     /* A body is one paragraph or a list of them - the season's longer notices
      * (a menu, a set of minutes) breathe in paragraphs like a letter does. */
     const paras = Array.isArray(notice.body) ? notice.body : [notice.body];
     for (let p = 0; p < paras.length; p += 1) {
-      sheet.appendChild(el('p', 'arc-cork-notebody', String(paras[p] || '')));
+      sheet.appendChild(el('p', 'arc-cork-notebody', noticeParagraph(notice, p, paras[p])));
     }
 
     // A flyer is a flyer because somebody can take a tab off the bottom of it.

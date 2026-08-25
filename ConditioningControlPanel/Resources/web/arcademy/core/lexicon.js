@@ -331,6 +331,26 @@ export const DEFAULT_LEXICON = Object.freeze({
   bugle_comics: 'Comics',
   bugle_empty: 'Nothing set for this page.',
   bugle_prop_label: 'The paper',
+
+  /* WET INK (THE SEEP, tell 09). The one COPY tell, played completely straight:
+   * a warm, chatty maintenance note on the noticeboard. First read is a shrug.
+   * After the reveal it is the oldest confession in the building.
+   *
+   * STORED AS CLAUSE ROWS, joined with one space (vn/lex.js PAPERS' pattern and
+   * trap 26's rule): a NeutralLexicon value over 96 characters can never be
+   * mod-skinned, so every row here clears the cap while the joined paragraph
+   * stays verbatim. Do not merge them back into one string.
+   *
+   * The seed clause (rows 3 and 4) is CANON and never changes across mods - the
+   * wiring story is the school's own cover story. Front-desk voice throughout;
+   * no cold register anywhere, because the whole trick is that it is innocent. */
+  seep_wetink_title: 'FROM THE FRONT DESK',
+  seep_wetink_1: 'Couple of things this week: the water fountain by 103 is fixed, you\'re welcome,',
+  seep_wetink_2: 'and whoever keeps winning the gate raffle please come collect your pencils.',
+  seep_wetink_3: 'Also if you see light under the Records door after closing,',
+  seep_wetink_4: 'that\'s just the old wiring acting up again, Marco says he\'ll swap the breaker',
+  seep_wetink_5: 'when the part shows up. Be good.',
+  seep_wetink_sig: 'The front desk.',
 });
 
 let table = Object.create(null);
