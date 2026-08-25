@@ -236,10 +236,14 @@ public class VisualsModuleTests
         var presence = Assert.Single(rig.Presences);
         var request = Assert.Single(presence.Requests);
 
-        // Opacity: 40 % reached the layered window's LWA_ALPHA byte, through the overlay's own
-        // rounding (Overlay/OverlaySurfaceRequest.cs:61-68).
-        Assert.Equal(0.4, request.Opacity);
-        Assert.Equal((byte)102, request.Alpha);
+        // Opacity: 40 % reaches the layered window's LWA_ALPHA byte, through the overlay's own
+        // rounding (Overlay/OverlaySurfaceRequest.cs:61-68) — but it ARRIVES over the fade rather
+        // than in the placement frame. The surface is PLACED at the onset and ramped to the dial
+        // (FlashService.cs:2108-2112), so the dial is read off the ramp's destination.
+        Assert.Equal(FlashFade.OnsetOpacity, request.Opacity);
+        rig.Ramp(TimeSpan.FromSeconds(1.0 / 2.4) + FlashFade.Cadence);
+        Assert.Equal(0.4, presence.Opacities[^1]);
+        Assert.Equal((byte)102, new OverlaySurfaceRequest(request.Bounds, 0.4, true).Alpha);
 
         // Size: the frame source was asked for 800x600 scaled through FlashGeometry at 200 %, which
         // is upstream's own CalculateGeometry (FlashService.cs:2290-2315) and not this test's
@@ -252,10 +256,13 @@ public class VisualsModuleTests
         var (defaultWidth, _) = FlashGeometry.Size(800, 600, Display.Width, Display.Height, 100);
         Assert.NotEqual(defaultWidth, request.Bounds.Width);
 
-        // Lifetime: the surface is still up one tick before the dialled lifetime and gone on it.
+        // Lifetime: the surface is still up one tick before the dialled lifetime, still up ON it —
+        // that is when it starts LEAVING — and gone one ramp later.
         rig.Clock.Advance(TimeSpan.FromSeconds(13) - TimeSpan.FromMilliseconds(1));
         Assert.Equal(0, presence.WithdrawCalls);
         rig.Clock.Advance(TimeSpan.FromMilliseconds(1));
+        Assert.Equal(0, presence.WithdrawCalls);
+        rig.Ramp(TimeSpan.FromSeconds(1.0 / 2.4) + FlashFade.Cadence);
         Assert.Equal(1, presence.WithdrawCalls);
     }
 
@@ -351,11 +358,16 @@ public class VisualsModuleTests
             800, 600, Display.Width, Display.Height, FlashSurfacePresenter.ImageScalePercent);
         Assert.Equal(width, request.Bounds.Width);
         Assert.Equal(height, request.Bounds.Height);
-        Assert.Equal(FlashSurfacePresenter.OpacityPercent / 100.0, request.Opacity);
+
+        // The default opacity is where the RAMP lands, not what the placement asks for: the fade is
+        // upstream's and it is not a dial (FlashService.cs:2018, :2108-2112).
+        rig.Ramp(TimeSpan.FromSeconds(1.0 / 2.4) + FlashFade.Cadence);
+        Assert.Equal(
+            FlashSurfacePresenter.OpacityPercent / 100.0, Assert.Single(rig.Presences).Opacities[^1]);
 
         rig.Clock.Advance(FlashSurfacePresenter.SurfaceLifetime - TimeSpan.FromMilliseconds(1));
         Assert.Equal(0, Assert.Single(rig.Presences).WithdrawCalls);
-        rig.Clock.Advance(TimeSpan.FromMilliseconds(1));
+        rig.Ramp(TimeSpan.FromSeconds(1.0 / 2.4) + FlashFade.Cadence);
         Assert.Equal(1, Assert.Single(rig.Presences).WithdrawCalls);
     }
 
@@ -381,8 +393,9 @@ public class VisualsModuleTests
         Assert.Equal(3, rig.Presences.Count);
         Assert.Equal(1, rig.DrawReads);
 
+        rig.Ramp(TimeSpan.FromSeconds(1.0 / 2.4) + FlashFade.Cadence);
         var sizes = rig.Presences.Select(p => p.Requests[0].Bounds.Width).Distinct().ToList();
-        var opacities = rig.Presences.Select(p => p.Requests[0].Opacity).Distinct().ToList();
+        var opacities = rig.Presences.Select(p => p.Opacities[^1]).Distinct().ToList();
         Assert.Single(sizes);
         Assert.Single(opacities);
         Assert.Equal(0.4, opacities[0]);
@@ -394,7 +407,8 @@ public class VisualsModuleTests
         rig.Presenter.Show(["d.png"]);
         Assert.Equal(2, rig.DrawReads);
         Assert.Equal(4, rig.AllRequests.Count);
-        Assert.Equal(1.0, rig.AllRequests[^1].Opacity);
+        rig.Ramp(TimeSpan.FromSeconds(1.0 / 2.4) + FlashFade.Cadence);
+        Assert.Equal(1.0, rig.Presences.Single(p => p.Requests.Count == 2).Opacities[^1]);
     }
 
     [Fact]
@@ -466,7 +480,8 @@ public class VisualsModuleTests
         var presenter = new PresenterRig { Draw = null, DrawSource = rig.Dials.Draw };
 
         presenter.Presenter.Show(["before.png"]);
-        Assert.Equal(1.0, presenter.AllRequests[0].Opacity);
+        presenter.Ramp(TimeSpan.FromSeconds(1.0 / 2.4) + FlashFade.Cadence);
+        Assert.Equal(1.0, presenter.Presences[0].Opacities[^1]);
 
         // The ramp drives the dial while that flash is still on screen.
         dial.Write(50);
@@ -474,15 +489,20 @@ public class VisualsModuleTests
 
         // The flash already up is unchanged — no second Present was issued for it at all, which is
         // precisely the click-through gap that is NOT being opened (D174). If Reapply ever grew a
-        // re-tint, this count would move.
+        // re-tint, this count would move. The FADE does not open it either: it writes alpha through
+        // SetOpacity and never re-presents, and a surface already at its dial is written no more.
         Assert.Single(presenter.AllRequests);
-        Assert.Equal(1.0, presenter.AllRequests[0].Opacity);
+        var settled = presenter.Presences[0].Opacities.Count;
+        presenter.Ramp(TimeSpan.FromSeconds(1.0 / 2.4));
+        Assert.Equal(settled, presenter.Presences[0].Opacities.Count);
+        Assert.Equal(1.0, presenter.Presences[0].Opacities[^1]);
 
         // The next one carries the ramped value.
         presenter.Presenter.HideAll();
         presenter.Presenter.Show(["after.png"]);
         Assert.Equal(2, presenter.AllRequests.Count);
-        Assert.Equal(0.5, presenter.AllRequests[^1].Opacity);
+        presenter.Ramp(TimeSpan.FromSeconds(1.0 / 2.4) + FlashFade.Cadence);
+        Assert.Equal(0.5, presenter.Presences.Single(p => p.Requests.Count == 2).Opacities[^1]);
     }
 
     // =====================================================================================
@@ -789,6 +809,16 @@ public class VisualsModuleTests
 
         public FlashSurfacePresenter Presenter => _presenter.Value;
 
+        /// <summary>Steps the FADE's ramp on the injected clock, one <see cref="FlashFade.Cadence"/>
+        /// at a time, for <paramref name="span"/> of clock time. Zero wall-clock.</summary>
+        public void Ramp(TimeSpan span)
+        {
+            for (var stepped = TimeSpan.Zero; stepped < span; stepped += FlashFade.Cadence)
+            {
+                Clock.Advance(FlashFade.Cadence);
+            }
+        }
+
         private Func<FlashDraw>? DrawSupplier()
         {
             if (DrawSource is not null)
@@ -836,6 +866,17 @@ public class VisualsModuleTests
 
         public void Reassert()
         {
+        }
+
+        /// <summary>Every opacity the FADE has ramped this surface to, in order. The dial no longer
+        /// arrives in the placement request — a flash is PLACED at FlashFade.OnsetOpacity and ramped
+        /// up to the dial (FlashService.cs:2108-2112) — so this list is where a fact reads it.</summary>
+        public List<double> Opacities { get; } = [];
+
+        public CapabilityState SetOpacity(double opacity)
+        {
+            Opacities.Add(opacity);
+            return new CapabilityState.Available("recording presence: composited");
         }
 
         public CapabilityState SetClickThrough(bool clickThrough) =>

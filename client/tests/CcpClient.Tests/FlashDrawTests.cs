@@ -335,6 +335,34 @@ public class FlashDrawTests : RealDesktopFacts
             + "image's colour — the picture outlived the effect that put it there");
     }
 
+    [Fact]
+    public void ARealFlashARRIVESOverItsFade_RatherThanAtFullBrightnessInThePlacementFrame()
+    {
+        // THE OWNER'S DEFECT, ON A REAL COMPOSITED DESKTOP. At the top of the size dial a flash is
+        // exactly the monitor, so a surface that reaches full alpha in the frame it appears IS "the
+        // screen turns white" — reproduced headed at 80.65 % of the desktop in near-white. Upstream
+        // never did that: the window is shown at opacity zero and the heartbeat ramps it up at
+        // FADE_PER_SEC (FlashService.cs:1505, :2018, :2108-2112).
+        //
+        // Four ticks into the ramp the surface composites at about a sixth of full alpha, so what
+        // the desktop carries is a BLEND of the image and whatever is underneath it — not the
+        // image's own colour, which is the colour being counted. Once the ramp lands, the colour is
+        // there. That difference is the fade, measured through the OS's own compositor rather than
+        // through anything this process remembers doing.
+        var run = FlashEndToEndObservations.Measured;
+
+        Assert.True(
+            run.DesktopCaptureIsLive
+                ? run.DesktopPixelsMidFade * 4 < run.DesktopPixelsDuring
+                : run.DesktopPixelsMidFade == 0 && run.DesktopPixelsDuring == 0,
+            $"a desktop capture can see a painted layered window on this machine = {run.DesktopCaptureIsLive}. "
+            + $"Four ramp ticks in, the composited desktop carried {run.DesktopPixelsMidFade} pixels of the "
+            + $"image's own colour, and once the ramp had landed it carried {run.DesktopPixelsDuring}. A flash "
+            + "that snapped straight to its dial would put the SAME count on the screen in both reads, which is "
+            + "the single-frame onset this fade exists to remove; a flash that never arrived at all would put "
+            + "none in either");
+    }
+
     // ---------------------------------------------------------------------------------
     //  the refusal is complete: a backend that cannot draw says so about DRAWING too
     // ---------------------------------------------------------------------------------
