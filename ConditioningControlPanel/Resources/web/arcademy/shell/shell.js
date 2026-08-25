@@ -413,9 +413,25 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   /* ---------------------- look & lexicon -------------------------------- */
   setLexicon(src.lexicon);
   applyPalette(src.palette, say);
-  const reducedMotion = !!src.reducedMotion || src.motionLevel === 0;
+  let reducedMotion = !!src.reducedMotion || src.motionLevel === 0;
   if (reducedMotion && document.documentElement) {
     document.documentElement.classList.add('arc-reduced');
+  }
+  /** THE WEB'S MOTION CONTROL. The settings page's 'This device' sheet posts
+   *  `motionLevel` (0 off / 1 reduced / 2 full) and the shim echoes it; this is
+   *  the echo landing. The desktop never echoes the key (its Motion row is
+   *  read-only, the app owns it), so on the app this is never reached. CSS
+   *  rides html.arc-reduced at once; the JS consumers read `reducedMotion` at
+   *  their next build (a class start, a screen change), which is the same
+   *  contract every other setting on that page already makes. */
+  function applyMotionLevel(level) {
+    const n = Number(level);
+    if (!Number.isFinite(n)) return;
+    src.motionLevel = n;
+    src.reducedMotion = n !== 2;
+    reducedMotion = n === 0 || !!src.reducedMotion;
+    const html = document.documentElement;
+    if (html && html.classList) html.classList.toggle('arc-reduced', reducedMotion);
   }
   /* THE MOBILE SEAM (core/device.js). One decision, painted on <html> as
    * `arc-mobile` and kept there across a rotate, so the stylesheet's phone rules
@@ -744,6 +760,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   // Host opened the building through the dev switch (`--arcademy`). Unlocks
   // Begin on every campus door regardless of the seed; never true for players.
   const devPass = src.devDoor === true;
+  /* THE ANNEX PEEK (web only, owner only). The web lobby stamps it for an
+   * account on the server's ARCADEMY_ANNEX_PEEK_EMAILS allow-list arriving at
+   * /arcademy?annex=1; the C# host has never sent the field and absent is
+   * false, so the desktop cannot see this branch at all.
+   *
+   * IT IS A PEEK, NOT A REVEAL. It makes the lab REACHABLE - the campus hatch
+   * and the office's ajar door - and touches nothing else. It never writes
+   * `annexRevealSeen`, so maybeAnnexReveal below is untouched and the real
+   * beat still waits for the tenth card and lands once, for real, later. It
+   * deliberately does NOT reach `seenFlags.annex` either: that flag gates the
+   * postman, and a delivered letter is persisted state a peek must not mint. */
+  const annexPeek = src.devAnnex === true;
+  if (annexPeek) say('ANNEX PEEK (owner dev): lab reachable, nothing stamped');
 
   /* ---------------------- registry + timetable -------------------------- */
   const games = await loadGames(say);
@@ -1138,7 +1167,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   function setStage(mode) {
     const html = document.documentElement;
     if (html && html.classList) {
-      html.classList.remove('arc-class-on', 'arc-report-on');
+      html.classList.remove('arc-class-on', 'arc-report-on', 'arc-settings-on');
       if (mode) html.classList.add(mode);
     }
     if (dom && dom.topbar) dom.topbar.hidden = !!mode;
@@ -1540,7 +1569,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
          * hatch joins the plan only after the reveal AND a first visit through
          * the office panel - revisits skip the walk, discovery never does.
          * Same bag contract as `post`: campus draws, the shell keeps state. */
-        annex: (store.get('annexRevealSeen') && (store.get('annex') || {}).visited)
+        annex: (annexPeek || (store.get('annexRevealSeen') && (store.get('annex') || {}).visited))
           ? { open: () => walkThen('annex', () => showAnnex()) }
           : null,
         on: {
@@ -1765,11 +1794,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     screen = 'settings';
     clearScreen();
     renderTopbar();
+    /* The marker styles.css keys the phone's settings rules off (the opaque
+     * bottom bar, the scroller's padding, EMI stepping off the title). Not a
+     * stage: the topbar stays up. clearScreen() -> setStage(null) unwinds it. */
+    if (document.documentElement && document.documentElement.classList) {
+      document.documentElement.classList.add('arc-settings-on');
+    }
     settingsPage = createSettingsPage({
       init: src,
       bridge,
       games: games.list,
       keybinds,
+      // The folds bank their open state here (`optionsOpen.<section>`).
+      store,
       /* THE DOOR'S TWO WRITE VERBS, lent to the web Media group so its add
        * and remove buttons ride SORT's `probe-sub` / `library-remove` frames
        * rather than a second copy of them. The group only renders behind
@@ -2154,8 +2191,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       daySeed: utcDateSeed,
       onCorkRead: () => { /* the read rows are the module's own; nothing owed here */ },
       // THE STOREROOM. The shell keeps the gate: the door exists only once the
-      // reveal has fired (ANNEX-OS.md §1), and the room just draws it.
-      ajar: !!store.get('annexRevealSeen'),
+      // reveal has fired (ANNEX-OS.md §1), and the room just draws it. The
+      // owner's peek is the second key to the same door and stamps nothing.
+      ajar: !!store.get('annexRevealSeen') || annexPeek,
       onBack: () => showBoard(),
       onReport: () => showReport(),
       onAnnex: () => showAnnex(),
@@ -4191,6 +4229,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (src.settings && typeof src.settings === 'object' && !isGlobalSettingKey(m.key)) {
         src.settings[m.key] = m.value;
       }
+      if (m.key === 'motionLevel') applyMotionLevel(m.value);
       if (settingsPage) { settingsPage.noteEcho(m.key, m.value); settingsPage.applyEcho(m.key, m.value); }
       if (m.key === SETTING_KEYS.keybinds) keybinds.applyEcho(m.value);
       /* THE PHOTO CHIP IS THE `presenceShare` DISCORD RUNG (owner ruling 1), so

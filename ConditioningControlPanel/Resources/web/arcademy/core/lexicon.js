@@ -198,6 +198,43 @@ export const DEFAULT_LEXICON = Object.freeze({
      it reads init.lexicon directly with the same English as its own fallback -
      keep the two strings identical when either moves. */
   intro_knock: 'Knock to enter',
+  /* --- THE FRONT OFFICE SHEET (shell/settings.js) -----------------------
+     Section titles, the two ceilings blurbs (one per host), the web's device
+     rows, and the one-line summaries the folded headers wear. `{v}`, `{n}`,
+     `{name}` and `{sep}` are filled by the page. */
+  settings_ceilings_head: 'App ceilings',
+  settings_ceilings_note_app: 'Set in the app and shown here so you know what the school has to work with.',
+  settings_device_head: 'This device',
+  settings_device_note: 'Sound and motion for this browser, on this phone or PC. Nothing here leaves the device.',
+  settings_master_volume: 'Master volume',
+  settings_master_volume_hint: 'One dial over every sound the school makes.',
+  settings_motion: 'Motion',
+  settings_motion_hint: 'Reduced keeps the room still. Off cuts every animation the school can cut.',
+  settings_motion_off: 'Off',
+  settings_motion_reduced: 'Reduced',
+  settings_motion_full: 'Full',
+  settings_distraction_head: 'Distraction',
+  settings_channels_head: 'Channel ceilings',
+  settings_channels_note: 'A class may use less than these. Never more.',
+  settings_sound_head: 'Sound',
+  settings_lessons_head: 'Lessons',
+  settings_game_nothing: 'Nothing to configure - this class runs on the globals.',
+  settings_sum_volume: 'Volume {v}',
+  settings_sum_motion: 'Motion {v}',
+  settings_sum_online_on: 'Online on',
+  settings_sum_online_off: 'Online off',
+  settings_sum_intensity: 'Intensity {v}',
+  settings_sum_guard: 'Guard {v}',
+  settings_sum_caps_all: 'All at 100%',
+  settings_sum_caps_low: 'Lowest: {name} {v}',
+  settings_sum_muted: 'Muted',
+  settings_sum_sound: 'On{sep}Music {v}',
+  settings_sum_tutorials_on: 'Tutorials on',
+  settings_sum_tutorials_off: 'Tutorials skipped',
+  settings_sum_board: 'Board {v}',
+  settings_sum_keys: '{n} keys',
+  settings_sum_key_one: '1 key',
+  settings_sum_nothing: 'Nothing to set',
   /* --- THE MEDIA COUNTER, web only (MEDIA-CONTRACT §8) -------------------
      Rendered by shell/settings.js ONLY where the browser host shim declares
      `init.settings.mediaControls === true`, so the WebView2 build never draws
