@@ -297,7 +297,7 @@ export function createRender(o = {}) {
   function revealBubble(b) {
     const bub = nodes.bubble;
     if (!bub) return;
-    bub.classList.remove('pop', 'fade', 'hit');
+    bub.classList.remove('pop', 'fade', 'hit', 'gone');
     if (nodes.bubbleImg) nodes.bubbleImg.src = url(b.kind === 'denied' ? BUBBLE_SRC : (FLAVOR_SRC[b.flavor] || BUBBLE_SRC));
     setCls(nodes.x, 'on', b.kind === 'denied');
     if (nodes.holdring) {
@@ -348,6 +348,12 @@ export function createRender(o = {}) {
   function flourish() {
     if (!nodes.flourish || !doc) return;
     try {
+      /* the flourish IS the spiral bubble's pop: it wears the same spiral.png
+         and spawns at the same basin point, so if the bubble's own .pop
+         scale-out is left running the player sees a second bubble popping.
+         Snap the bubble out and let the flourish carry the whole exit. */
+      const bub = nodes.bubble;
+      if (bub) { bub.classList.remove('on', 'pop'); bub.classList.add('gone'); }
       const img = doc.createElement('img');
       img.className = 'g-ic-flourish-img';
       img.src = url(FLAVOR_SRC.spiral);
