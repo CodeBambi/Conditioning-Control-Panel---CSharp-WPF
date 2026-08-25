@@ -2107,6 +2107,30 @@
       "expectDetected": true,
       "verdict": "not-vacuous",
       "reason": "File.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion, and every path is the same dir.Path()/MemoryFile expression the setup created the file with (proved present before the forget, in the same test), so a wrong path fails the setup rather than silencing the delete check"
+    },
+    {
+      "key": "CcpClient.Tests/ThirdPartyNoticesTests.cs::ThirdPartyNoticesTests.EveryVendoredWebLibrary_IsNamedInTheNotices",
+      "path": "CcpClient.Tests/ThirdPartyNoticesTests.cs",
+      "line": 110,
+      "method": "ThirdPartyNoticesTests.EveryVendoredWebLibrary_IsNamedInTheNotices",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "File.Exists/Directory.Exists appears only inside Assert.True at body depth 0 (the payload-root check sits inside a foreach whose emptiness is separately pinned by the globbedRoots.Count > 0 assertion above it) — the predicate IS the assertion; an absent read-only tree or a missing committed model file FAILS the fact rather than silencing it, which is the refuses-to-skip posture a notices guard needs"
+    },
+    {
+      "key": "CcpClient.Tests/ThirdPartyNoticesTests.cs::ThirdPartyNoticesTests.TheGazeModelDigests_MatchTheCommittedModelBytes",
+      "path": "CcpClient.Tests/ThirdPartyNoticesTests.cs",
+      "line": 193,
+      "method": "ThirdPartyNoticesTests.TheGazeModelDigests_MatchTheCommittedModelBytes",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "File.Exists/Directory.Exists appears only inside Assert.True at body depth 0 (the payload-root check sits inside a foreach whose emptiness is separately pinned by the globbedRoots.Count > 0 assertion above it) — the predicate IS the assertion; an absent read-only tree or a missing committed model file FAILS the fact rather than silencing it, which is the refuses-to-skip posture a notices guard needs"
     }
   ]
 }

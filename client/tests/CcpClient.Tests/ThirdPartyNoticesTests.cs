@@ -113,14 +113,12 @@ public sealed class ThirdPartyNoticesTests
         var notices = ReadNotices(root);
         var webRoot = Path.Combine([root, .. WpfWebParts]);
 
-        if (!Directory.Exists(webRoot))
-        {
-            Assert.Fail(
-                $"the read-only payload tree is not at {webRoot}, so this guard reached no verdict — "
-                + "it neither found an unattributed library nor cleared the tree of one. The client "
-                + "csproj globs those trees into payload/ beside the binary; a checkout without them "
-                + "is broken, not a machine this guard may skip on.");
-        }
+        Assert.True(
+            Directory.Exists(webRoot),
+            $"the read-only payload tree is not at {webRoot}, so this guard reached no verdict — "
+            + "it neither found an unattributed library nor cleared the tree of one. The client "
+            + "csproj globs those trees into payload/ beside the binary; a checkout without them "
+            + "is broken, not a machine this guard may skip on.");
 
         var globbedRoots = GlobbedPayloadRoots(root);
         Assert.True(
@@ -133,13 +131,11 @@ public sealed class ThirdPartyNoticesTests
         foreach (var payload in globbedRoots)
         {
             var payloadRoot = Path.Combine(webRoot, payload);
-            if (!Directory.Exists(payloadRoot))
-            {
-                Assert.Fail(
-                    $"the client csproj globs Resources/web/{payload}/**, but {payloadRoot} does not "
-                    + "exist — a half-present read-only tree is a corrupt checkout, and this guard "
-                    + "fails rather than quietly sweeping fewer trees than the product ships.");
-            }
+            Assert.True(
+                Directory.Exists(payloadRoot),
+                $"the client csproj globs Resources/web/{payload}/**, but {payloadRoot} does not "
+                + "exist — a half-present read-only tree is a corrupt checkout, and this guard "
+                + "fails rather than quietly sweeping fewer trees than the product ships.");
 
             // The root-level `vendor` tree IS a payload glob of its own, so the payload root can
             // itself be the vendor directory; the other five carry theirs somewhere inside.
@@ -200,25 +196,21 @@ public sealed class ThirdPartyNoticesTests
         var notices = ReadNotices(root);
         var modelsDir = Path.Combine([root, .. WpfModelParts]);
 
-        if (!Directory.Exists(modelsDir))
-        {
-            Assert.Fail(
-                $"the read-only model directory is not at {modelsDir}, so the digests in "
-                + $"{NoticesRelativePath} §5 were compared against nothing. Those files are committed "
-                + "to this repository; their absence is a broken checkout rather than a machine "
-                + "property, so this guard fails instead of skipping.");
-        }
+        Assert.True(
+            Directory.Exists(modelsDir),
+            $"the read-only model directory is not at {modelsDir}, so the digests in "
+            + $"{NoticesRelativePath} §5 were compared against nothing. Those files are committed "
+            + "to this repository; their absence is a broken checkout rather than a machine "
+            + "property, so this guard fails instead of skipping.");
 
         var wrong = new List<string>();
         foreach (var file in GazeModelFiles)
         {
             var path = Path.Combine(modelsDir, file);
-            if (!File.Exists(path))
-            {
-                Assert.Fail(
-                    $"{path} is missing, so the {file} digest in {NoticesRelativePath} §5 stands on "
-                    + "nothing. The three .onnx files are committed directly to the WPF tree.");
-            }
+            Assert.True(
+                File.Exists(path),
+                $"{path} is missing, so the {file} digest in {NoticesRelativePath} §5 stands on "
+                + "nothing. The three .onnx files are committed directly to the WPF tree.");
 
             var actual = Sha256Hex(path);
             if (!notices.Contains(actual, StringComparison.OrdinalIgnoreCase))

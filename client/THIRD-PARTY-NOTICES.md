@@ -165,11 +165,16 @@ distinct from the MIT-licensed managed bindings that carry them.
 
 ## 4. LibVLC and LibVLCSharp — the LGPL obligations, stated
 
-`CcpClient.Desktop.csproj:38` has carried the note *"LGPL-2.1-or-later — sidecar note,
-pending-owner"* since the video-handoff spike deferred it (`client/docs/video-handoff-spike.md:19`:
-*"LGPL sidecar/relink obligations = a packaging note, pending-owner"*). This section replaces that
-note with the actual obligations. Two of the three are already satisfied by how the client is built;
-the third is **not**, and is named rather than assumed.
+The shipping project file's `LibVLCSharp` comment has carried the note *"LGPL-2.1-or-later — sidecar
+note, pending-owner"* since the video-handoff spike deferred it (`client/docs/video-handoff-spike.md`
+§1: *"LGPL sidecar/relink obligations = a packaging note, pending-owner"*). This section replaces
+that note with the actual obligations. Two of the three are already satisfied by how the client is
+built; the third is **not**, and is named rather than assumed.
+
+*(Line-precise citations are deliberately absent from this file: it lives at the client root, which
+is outside the corpus `client/tools/citations/intra.mjs` sweeps, so a `:NNN` here would rot unwatched.
+Section references do not. The line-precise evidence is in `client/docs/gaze-model-provenance.md`,
+which the detector does read.)*
 
 **What ships.** `LibVLCSharp` 3.10.0 (managed, LGPL-2.1-or-later) and, on Windows,
 `VideoLAN.LibVLC.Windows` 3.0.23.1 — `libvlc.dll`, `libvlccore.dll`, an `hrtfs/` and `lua/` tree, and
@@ -188,7 +193,7 @@ unmodified, dynamically loaded, and lives in its own directory beside the binary
 `libvlc/win-x64/libvlc.dll` requires nothing from us.
 
 **Relinking — THE MANAGED HALF IS NOT SATISFIED, and this is the open item.** The named publish
-strategy is self-contained **single-file** (`client/docs/release-publish-gates.md:9`), which bundles
+strategy is self-contained **single-file** (`client/docs/release-publish-gates.md` §1), which bundles
 every managed assembly — including `LibVLCSharp.dll` — into the apphost. A user cannot substitute a
 modified LibVLCSharp in that artifact, which is exactly the substitution §6 exists to preserve. Two
 discharges, both real, neither taken here because both are packaging changes outside this work's
@@ -197,7 +202,7 @@ scope:
 - **Cheap:** keep `LibVLCSharp.dll` out of the bundle
   (`<ExcludeFromSingleFile>` on that assembly) so it ships as a replaceable sidecar. Costs one
   file beside the exe; the artifact is already a directory rather than a literal single file
-  (`release-publish-gates.md:13`), so nothing is lost.
+  (`client/docs/release-publish-gates.md` §1, native-library layout), so nothing is lost.
 - **Or:** ship the complete corresponding source of LibVLCSharp with the artifact, or a written
   offer valid for three years.
 
