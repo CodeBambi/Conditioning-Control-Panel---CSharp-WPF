@@ -360,10 +360,27 @@ public class OverlayService : IDisposable
             {
                 try
                 {
+                    var library = Path.Combine(App.UserDataPath, "Spirals");
+
                     // Pool directory: folder of the configured spiral, else the user Spirals library.
                     var poolDir = !string.IsNullOrEmpty(configured)
                         ? Path.GetDirectoryName(configured)
-                        : Path.Combine(App.UserDataPath, "Spirals");
+                        : library;
+
+                    // Bug #1053. "Select spiral GIF" browses the whole disk, so `configured` can
+                    // be a file the user happened to have on their Desktop - and this branch then
+                    // widens ONE file into EVERY image in its folder, drawn fullscreen. That is
+                    // how the app showed someone a family photo it was never given. Picking a file
+                    // out of Desktop/Downloads/Pictures says nothing about the rest of that folder,
+                    // so those roots are refused and we fall back to the Spirals library, which is
+                    // the only pool the setting's tooltip ever promised.
+                    if (SecurityHelper.IsPersonalFolderRoot(poolDir))
+                    {
+                        App.Logger?.Warning(
+                            "[Overlay] Spiral randomize: refusing {Pool} as a spiral pool (personal/system folder) " +
+                            "- falling back to the Spirals library", poolDir);
+                        poolDir = library;
+                    }
 
                     if (string.IsNullOrEmpty(poolDir) || !Directory.Exists(poolDir))
                         return null;

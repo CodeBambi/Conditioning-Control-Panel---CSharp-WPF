@@ -2130,6 +2130,22 @@ namespace ConditioningControlPanel
             if (dialog.ShowDialog(owner) == System.Windows.Forms.DialogResult.OK)
             {
                 var selectedPath = dialog.SelectedPath;
+
+                // #1053: this folder becomes the root of every media scan in the app, and the
+                // app also writes into it (images/, videos/, .packs/, .temp/). Neither belongs
+                // on the Desktop or a drive root.
+                if (Services.SecurityHelper.IsPersonalFolderRoot(selectedPath))
+                {
+                    MessageBox.Show(
+                        "That folder is one of Windows' own - your Desktop, Documents, Pictures, " +
+                        "Downloads, your user folder or a whole drive." + Environment.NewLine + Environment.NewLine +
+                        "The app both reads and " +
+                        "writes here, so pick or make a folder that holds nothing but your assets.",
+                        "Pick a folder of your own",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
                 var newPacksFolder = Path.Combine(selectedPath, ".packs");
                 var shouldMovePacks = false;
                 var packFoldersToMove = new List<(string SourceFolder, string PackName)>();
