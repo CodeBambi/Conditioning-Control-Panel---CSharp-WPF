@@ -268,6 +268,10 @@
          Image simply renders nothing and the XAML-drawn slab underneath carries the button. -->
     <Resource Include="Resources\lockdown\emergency_exit.png" />
     <Resource Include="Resources\spiral.gif" />
+    <!-- Corner-overlay spiral: the same loop pre-scaled to 360x240. The corner GIF draws at
+         70-300px and used to fall back to the 2400x1600 spiral above, which the render thread then
+         resampled every frame on a layered window - the program-day freeze. -->
+    <Resource Include="Resources\spiral_corner.gif" />
     <Resource Include="Resources\Patreon tier1.png" />
     <Resource Include="Resources\Patreon tier2.png" />
     <Resource Include="Resources\Patreon tier3.png" />

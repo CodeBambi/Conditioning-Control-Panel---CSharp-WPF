@@ -4,7 +4,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
-using XamlAnimatedGif;
 
 namespace ConditioningControlPanel.Services
 {
@@ -36,12 +35,10 @@ namespace ConditioningControlPanel.Services
         private const int SpawnDeferMaxAttempts = 8;
         private const int SpawnRetryMs = 250;
 
-        /// <summary>Source GIFs beyond this many pixels are logged as a hazard: XamlAnimatedGif builds a
-        /// WriteableBitmap at the source's NATIVE size and the render thread resamples it down to the
-        /// overlay's size on every frame. On a WS_EX_LAYERED window that per-frame cost is what starves
-        /// the UI thread's WriteableBitmap.Lock (the CWGXBitmapLockState::LockRead wedge named in
-        /// UiHangWatchdog's dump notes).</summary>
-        private const long OversizeSourcePixels = 4_000_000;   // ~2000x2000
+        // The oversize hazard threshold now lives in CornerGifMedia.OversizeSourcePixels, shared with
+        // the session-scoped overlay. It was 4 MP here and in SessionEngine - 4% ABOVE the built-in
+        // spiral's 3.84 MP, i.e. above the one asset both paths defaulted to - so the warning that
+        // was meant to name this freeze never once fired.
 
         // Keyed by slot index so a single slot can be rebuilt without touching the others.
         private readonly Dictionary<int, Window> _windows = new();
@@ -84,6 +81,26 @@ namespace ConditioningControlPanel.Services
                 try { return _windows.Count + "+" + _pending.Count + "pending"; }
                 catch { return "(unavailable)"; }
             }
+        }
+
+        /// <summary>
+        /// Live overlay hwnds, for OverlayService's z-order sweep. UI thread only (Window and
+        /// WindowInteropHelper are thread-affine); returns nothing off it rather than throwing.
+        /// </summary>
+        internal List<IntPtr> GetOverlayHandles()
+        {
+            var handles = new List<IntPtr>(_windows.Count);
+            try
+            {
+                if (Application.Current?.Dispatcher?.CheckAccess() != true) return handles;
+                foreach (var window in _windows.Values)
+                {
+                    var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+                    if (hwnd != IntPtr.Zero) handles.Add(hwnd);
+                }
+            }
+            catch { /* a diagnostic/reconciler accessor must never throw */ }
+            return handles;
         }
 
         /// <summary>
@@ -309,7 +326,7 @@ namespace ConditioningControlPanel.Services
             {
                 if (w.Content is Image img)
                 {
-                    try { AnimationBehavior.SetSourceUri(img, null); } catch { }
+                    try { CornerGifMedia.Detach(img); } catch { }
                     try { img.Source = null; } catch { }
                 }
                 w.Content = null;
@@ -421,11 +438,9 @@ namespace ConditioningControlPanel.Services
         private void ShowOne(int index, CornerGifOverlaySetting setting)
         {
             Uri? gifUri = null;
-            System.Drawing.Image? img = null;
-            System.IO.MemoryStream? imgBacking = null;   // must outlive img (see the resource branch)
 
             // Resolution order: this slot's explicit pick -> the Spiral Library's active
-            // selection (App.Settings.SpiralPath, the "pool") -> built-in spiral resource.
+            // selection (App.Settings.SpiralPath, the "pool") -> built-in corner spiral.
             // So an enabled-but-unpicked slot draws whatever spiral the app is already using,
             // matching OverlayService.GetSpiralPath (the pool) rather than a separate file.
             string filePath = "";
@@ -442,71 +457,43 @@ namespace ConditioningControlPanel.Services
 
             if (!string.IsNullOrEmpty(filePath))
             {
-                try
-                {
-                    gifUri = new Uri(filePath);
-                    img = System.Drawing.Image.FromFile(filePath);
-                }
+                try { gifUri = new Uri(filePath); }
                 catch (Exception ex)
                 {
                     App.Logger?.Warning("CornerGifService: failed to load GIF from file {Path}: {Error}", filePath, ex.Message);
                     gifUri = null;
-                    img = null;
                 }
             }
 
-            // Built-in spiral resource fallback (same resource the pool's "Default" card uses).
-            // Handles both pack:// (embedded) and file:// (active-mod override) URIs.
-            if (img == null)
+            // Built-in fallback. CornerGifMedia keeps an active mod's own spiral (branding) and
+            // otherwise hands back the pre-scaled corner asset rather than the 2400x1600 fullscreen
+            // spiral this used to reach for.
+            if (gifUri == null)
             {
-                try
-                {
-                    gifUri = new Uri(ModResourceResolver.ResolveSpiralUri(), UriKind.Absolute);
-                    if (gifUri.IsFile)
-                    {
-                        img = System.Drawing.Image.FromFile(gifUri.LocalPath);
-                    }
-                    else
-                    {
-                        var resourceInfo = Application.GetResourceStream(gifUri);
-                        if (resourceInfo?.Stream != null)
-                        {
-                            // GDI+ keeps reading the source stream for the Image's whole lifetime,
-                            // so the resource stream cannot be disposed here - copy it into a buffer
-                            // that outlives img and is released alongside it below.
-                            imgBacking = new System.IO.MemoryStream();
-                            using (var src = resourceInfo.Stream) src.CopyTo(imgBacking);
-                            imgBacking.Position = 0;
-                            img = System.Drawing.Image.FromStream(imgBacking);
-                        }
-                    }
-                }
+                try { gifUri = new Uri(CornerGifMedia.ResolveDefaultUriString(), UriKind.Absolute); }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning("CornerGifService: failed to load default spiral resource: {Error}", ex.Message);
+                    App.Logger?.Warning("CornerGifService: failed to resolve default spiral resource: {Error}", ex.Message);
                 }
             }
 
-            if (img == null || gifUri == null)
+            if (gifUri == null)
             {
                 App.Logger?.Warning("CornerGifService: could not load any corner GIF image - skipping");
-                img?.Dispose();
-                imgBacking?.Dispose();
                 return;
             }
 
-            double gifWidth = img.Width;
-            double gifHeight = img.Height;
-            img.Dispose();
-            imgBacking?.Dispose();
-
-            // Bug #625: a decoded-but-degenerate image (0x0) makes the scale below divide by
-            // zero, and assigning the resulting NaN/Infinity to Window.Width/Height throws
-            // deep inside WPF layout - which, on the startup restore path, took the whole app
-            // down. Bail out loudly instead of handing WPF non-finite geometry.
-            if (gifWidth <= 0 || gifHeight <= 0)
+            // Header-only dimension read - this was a full GDI+ decode whose only product was
+            // Width/Height, so every show decoded the file twice.
+            //
+            // Bug #625: a degenerate (0x0) image makes the scale below divide by zero, and
+            // assigning the resulting NaN/Infinity to Window.Width/Height throws deep inside WPF
+            // layout - which, on the startup restore path, took the whole app down. Bail out loudly
+            // instead of handing WPF non-finite geometry.
+            if (!CornerGifMedia.TryGetPixelSize(gifUri, out var gifWidth, out var gifHeight)
+                || gifWidth <= 0 || gifHeight <= 0)
             {
-                App.Logger?.Warning("CornerGifService: GIF has degenerate size {W}x{H} ({Path}) - skipping overlay",
+                App.Logger?.Warning("CornerGifService: GIF has unreadable or degenerate size {W}x{H} ({Path}) - skipping overlay",
                     gifWidth, gifHeight, gifUri);
                 return;
             }
@@ -590,35 +577,22 @@ namespace ConditioningControlPanel.Services
                 Stretch = System.Windows.Media.Stretch.Uniform
             };
 
-            // Per-frame downscale quality (#954/#958). XamlAnimatedGif hands the render thread a
-            // WriteableBitmap at the GIF's NATIVE size and WPF resamples it to the overlay's size on
-            // EVERY frame; the default for a downscale is the expensive Fant filter. On a layered
-            // window - whose composition is a full UpdateLayeredWindow blit rather than a GPU
-            // surface flip - that resample is what saturates the render thread, and a saturated
-            // render thread is what blocks the UI thread inside WriteableBitmap.Lock (the
-            // CWGXBitmapLockState::LockRead wedge in UiHangWatchdog's dump notes). Bilinear costs a
-            // fraction of it and is indistinguishable on a spiral at 300px.
+            // Per-frame downscale quality (#954/#958). Still set, but a belt to the braces now: the
+            // frames CornerGifMedia hands over are already the overlay's size, so there is no
+            // per-frame downscale left to filter.
             System.Windows.Media.RenderOptions.SetBitmapScalingMode(
                 imageElement, System.Windows.Media.BitmapScalingMode.LowQuality);
 
-            long sourcePixels = (long)gifWidth * (long)gifHeight;
-            if (sourcePixels > OversizeSourcePixels)
-            {
-                App.Logger?.Warning(
-                    "CornerGifService: source GIF is {W}x{H} ({MP:F1}MP) but the overlay draws it at {TW}x{TH} - every frame is resampled at full size, which is the shape of the #954/#958 freeze. Consider a smaller GIF.",
-                    (int)gifWidth, (int)gifHeight, sourcePixels / 1_000_000.0,
-                    (int)windowWidth, (int)windowHeight);
-            }
+            CornerGifMedia.WarnIfOversize("CornerGifService", gifUri, gifWidth, gifHeight, windowWidth, windowHeight);
 
-            // Error handler FIRST: SetSourceUri kicks off an async load, so a fault raised before
-            // the handler is attached has no subscriber.
-            AnimationBehavior.AddErrorHandler(imageElement, (s, e) =>
-            {
-                App.Logger?.Warning("CornerGifService: GIF animation error ({Kind}): {Error}",
-                    e.Kind, e.Exception?.Message);
-            });
-            AnimationBehavior.SetRepeatBehavior(imageElement, System.Windows.Media.Animation.RepeatBehavior.Forever);
-            AnimationBehavior.SetSourceUri(imageElement, gifUri);
+            // Decode ONCE, OFF the UI thread, downscaled to the pixels this overlay actually
+            // occupies (see CornerGifMedia). XamlAnimatedGif handed the render thread a
+            // WriteableBitmap at the GIF's NATIVE size and WPF resampled it to the overlay's size on
+            // EVERY frame, forever - on a layered window that saturates the render thread, and a
+            // saturated render thread blocks the UI thread inside WriteableBitmap.Lock (the
+            // CWGXBitmapLockState::LockRead wedge in UiHangWatchdog's dump notes). #221 only made
+            // the filter cheaper; the source stayed full size.
+            CornerGifMedia.Attach(imageElement, gifUri, windowWidth, windowHeight, dpiScale);
 
             window.Content = imageElement;
             window.SourceInitialized += (s, e) => MakeWindowClickThrough(window);
