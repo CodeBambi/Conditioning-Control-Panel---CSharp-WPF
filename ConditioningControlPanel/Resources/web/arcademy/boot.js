@@ -489,6 +489,7 @@ bridge.on('suspend', guard('suspend', (m) => {
     + (shell ? '' : ' [buffered until the shell exists]'));
 }));
 bridge.on('meta', guard('meta', (m) => { if (shell) shell.onMeta(m); }));
+bridge.on('annex-stats', guard('annex-stats', (m) => { if (shell && shell.onAnnexStats) shell.onAnnexStats(m); }));
 bridge.on('fullscreen', guard('fullscreen', (m) => { fullscreen = !!m.on; }));
 bridge.on('ping', guard('ping', (m) => bridge.send({ type: 'pong', t: m && m.t })));
 bridge.on('end-run', guard('end-run', () => shutdown('host asked')));

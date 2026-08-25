@@ -1,0 +1,470 @@
+/* ============================================================================
+ * THE ROOM SCENE. Skin for shell/room.js: the VN antechamber between the
+ * campus door and a class. Loaded lazily by room.js AFTER styles.css, so the
+ * campus tokens (--pink and friends) are already on :root. The annex is the
+ * cold place; a classroom is warm - the glow here is the campus's own pink.
+ *
+ * The stage is a fixed 1376x768 plane scaled by transform to fit the screen
+ * (lab.css's fitStage, promoted). Hotspot rects are authored in stage pixels
+ * and ride the same scale for free. The only animation is the hotspot's
+ * breath, and .arc-reduced / .arm-lite hold it still (decoration law).
+ * ==========================================================================*/
+
+/* FIXED, LIKE .arc-records: the shell marks <html> arc-report-on for this
+ * screen (body overflow hidden) and .arc-screen is a 1080px COLUMN - an
+ * in-flow room would be a postcard in a gutter. Fixed + inset 0 is the shape
+ * every fullscreen screen here uses. */
+.arm-root {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: #0B0B18;
+  overflow: hidden;
+}
+
+.arm-stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1376px;
+  height: 768px;
+  transform-origin: 50% 50%;
+  /* room.js sets transform: translate(-50%,-50%) scale(s); origin must stay
+     center or the scale walks the stage off-axis (lab.css's lesson) */
+}
+
+.arm-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  image-rendering: pixelated;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ------------------------------ hotspots -------------------------------- */
+
+.arm-hot {
+  position: absolute;
+  z-index: 3;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+/* THE BREATH. The one lit thing in the room: a soft pink rim that swells and
+ * settles, loud enough to find in a second, quiet enough to live behind. Only
+ * the MAIN hotspot breathes - the exit and the free-swim rect are quieter
+ * furniture and must never compete with the verb that pays. */
+.arm-hot.arm-main {
+  box-shadow: 0 0 0 2px rgba(255, 105, 180, 0.30),
+              0 0 26px 6px rgba(255, 105, 180, 0.16),
+              inset 0 0 30px rgba(255, 105, 180, 0.07);
+  animation: arm-breathe 2.6s ease-in-out infinite;
+}
+@keyframes arm-breathe {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(255, 105, 180, 0.24),
+                0 0 22px 4px rgba(255, 105, 180, 0.12),
+                inset 0 0 26px rgba(255, 105, 180, 0.05);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(255, 105, 180, 0.50),
+                0 0 40px 12px rgba(255, 105, 180, 0.26),
+                inset 0 0 40px rgba(255, 105, 180, 0.12);
+  }
+}
+.arc-reduced .arm-hot.arm-main,
+.arm-lite .arm-hot.arm-main {
+  animation: none;
+  /* the static frame keeps the mid-breath weight so the room still reads */
+  box-shadow: 0 0 0 2px rgba(255, 105, 180, 0.40),
+              0 0 26px 6px rgba(255, 105, 180, 0.18),
+              inset 0 0 30px rgba(255, 105, 180, 0.08);
+}
+
+.arm-hot:hover, .arm-hot:focus-visible {
+  outline: none;
+  background: rgba(255, 105, 180, 0.08);
+  box-shadow: 0 0 0 2px rgba(255, 145, 200, 0.75),
+              0 0 44px 14px rgba(255, 105, 180, 0.30),
+              inset 0 0 44px rgba(255, 105, 180, 0.14);
+  animation: none;
+}
+
+/* The painted exit door: dark until you find it, honest once you do. */
+.arm-hot.arm-exit:hover, .arm-hot.arm-exit:focus-visible {
+  background: rgba(180, 150, 255, 0.08);
+  box-shadow: inset 0 0 0 2px rgba(190, 160, 255, 0.45);
+}
+
+/* THE SIDE DOOR, PAINTED. The pool's ladder wearing the same pool light the
+   apron's subordinate slab wears: a still cyan rim, no breath. Always visible
+   (it is a way IN, not a secret like the exit) but never the brightest thing
+   in the frame - the graded lane keeps that. */
+.arm-hot.arm-swim {
+  box-shadow: 0 0 0 2px rgba(127, 216, 232, 0.30),
+              inset 0 0 22px rgba(127, 216, 232, 0.07);
+}
+.arm-hot.arm-swim:hover, .arm-hot.arm-swim:focus-visible {
+  background: rgba(127, 216, 232, 0.10);
+  box-shadow: 0 0 0 2px rgba(127, 216, 232, 0.75),
+              0 0 34px 10px rgba(127, 216, 232, 0.26),
+              inset 0 0 34px rgba(127, 216, 232, 0.12);
+}
+
+.arm-hot .arm-hot-tag {
+  position: absolute;
+  left: 50%;
+  bottom: -26px;
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  background: rgba(16, 10, 20, 0.88);
+  color: var(--pink, #FF69B4);
+  border: 1px solid rgba(255, 105, 180, 0.35);
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 140ms linear;
+  pointer-events: none;
+}
+.arm-hot:hover .arm-hot-tag, .arm-hot:focus-visible .arm-hot-tag { opacity: 1; }
+.arm-hot.arm-exit .arm-hot-tag { color: #CBB8F2; border-color: rgba(190, 160, 255, 0.35); }
+.arm-hot.arm-swim .arm-hot-tag { color: #9FE6F5; border-color: rgba(127, 216, 232, 0.40); }
+
+/* ------------------------------ the plate ------------------------------- */
+
+.arm-plate {
+  position: absolute;
+  z-index: 4;
+  left: 18px;
+  top: 16px;
+  max-width: min(360px, 70vw);
+  padding: 12px 16px 12px;
+  background: rgba(16, 10, 22, 0.82);
+  border: 1px solid rgba(255, 105, 180, 0.28);
+  border-radius: 10px;
+  backdrop-filter: blur(3px);
+}
+.arm-plate-room {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: #B9A8C9;
+  margin-bottom: 2px;
+}
+.arm-plate-name {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.2;
+  color: #F5EAF2;
+}
+.arm-plate-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  color: var(--pink, #FF69B4);
+}
+.arm-plate-stamp {
+  padding: 1px 8px;
+  border: 2px solid var(--pink, #FF69B4);
+  border-radius: 4px;
+  font-weight: 800;
+  transform: rotate(-3deg);
+}
+.arm-plate-xp {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #C9BBD6;
+}
+
+/* --------------------------- the midway apron ---------------------------- */
+
+/* THE MIDWAY APRON. The VN set reserves every painting's lower third as a
+ * calm dark floor, so the "void" under the furniture is in the art itself;
+ * the apron claims that floor plus any letterbox under it and dresses it as
+ * the strip of midway carpet at the front edge of the room. room.js fit()
+ * anchors the top edge to the painting's floor line and publishes the band
+ * height as --arm-band-h; everything in here sizes off that one number.
+ * Checkered route tape fences the carpet off from the painting; a bulb-ring
+ * marquee slab carries the verb dead centre. */
+.arm-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: calc(100% - 150px); /* fallback; room.js fit() owns this */
+  bottom: 0;
+  /* ABOVE EMI (#arc-emi is 50, toasts 60): the apron is the front edge of the
+   * stage, nearer the camera than anything in the room - EMI wanders BEHIND
+   * it, and the three buttons can never be squatted on. Toasts, the esc hint
+   * and the loader still win. */
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px clamp(16px, 3vw, 44px) 0;
+  background: linear-gradient(180deg,
+              rgba(11, 11, 24, 0) 0%,
+              rgba(14, 10, 26, 0.85) 16%,
+              rgba(17, 12, 31, 0.97) 46%,
+              #100C1E 100%);
+}
+
+/* The route tape: the campus path's checkered pink-and-gold border, run along
+   the seam between painting and carpet. */
+.arm-bar::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 10px;
+  background: repeating-linear-gradient(90deg,
+              rgba(255, 105, 180, 0.85) 0 16px,
+              rgba(255, 215, 0, 0.75) 16px 32px);
+  border-bottom: 2px solid rgba(4, 3, 12, 0.6);
+}
+
+/* The carpet: the midway's confetti pattern (pink triangles, gold squiggles,
+   cyan dots), fading in out of the seam so it never crops the painting. */
+.arm-bar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 12px;
+  bottom: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='84' height='84'%3E%3Cpath d='M10 12 l8 5 -9 4 z' fill='%23FF69B4'/%3E%3Cpath d='M56 34 l7 6 -10 2 z' fill='%23FF69B4'/%3E%3Cpath d='M30 66 l8 4 -8 5 z' fill='%23FF69B4'/%3E%3Cpath d='M40 18 q4 -6 8 0 t8 0' stroke='%23FFD700' stroke-width='2.2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M8 48 q4 -6 8 0 t8 0' stroke='%23FFD700' stroke-width='2.2' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='70' cy='60' r='2.6' fill='%237FD8E8'/%3E%3Ccircle cx='22' cy='32' r='2.2' fill='%237FD8E8'/%3E%3Ccircle cx='64' cy='10' r='2.2' fill='%237FD8E8'/%3E%3C/svg%3E");
+  background-size: 84px 84px;
+  opacity: 0.30;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 38%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 38%);
+}
+
+/* The 1fr sides are what keep the hero centred no matter how long the two
+   slab labels get in a language that spends more words on them. */
+.arm-bar-side {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.arm-bar-right { justify-content: flex-end; }
+
+/* ------------------------------ the hero -------------------------------- */
+
+.arm-hero-group {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* THE MARQUEE SLAB. A cabinet-marquee button: navy body, a ring of chasing
+   gold bulbs in the gutter, hot pink face wearing the verb. The chalkboard
+   says the verb quietly, in the fiction; this says it in lights. */
+.arm-hero {
+  position: relative;
+  flex: 0 0 auto;
+  height: clamp(84px, calc(var(--arm-band-h, 180px) * 0.58), 148px);
+  min-width: clamp(260px, 24vw, 460px);
+  padding: 12px;
+  background: #1A1A2E;
+  border: none;
+  border-radius: 18px;
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 6px 0 #060410,
+              0 12px 30px rgba(0, 0, 0, 0.55),
+              0 0 36px rgba(255, 105, 180, 0.30);
+}
+/* Two offset bulb grids in the 10px gutter, blinking in alternation - the
+   classic marquee chase. The face child paints over the middle, and the xor
+   mask keeps the dots to the border ring even before it does. */
+.arm-hero::before, .arm-hero::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 16px;
+  padding: 10px;
+  pointer-events: none;
+  background-image: radial-gradient(circle, #FFD700 2.4px, rgba(255, 215, 0, 0.28) 3.2px, transparent 4.4px);
+  background-size: 24px 24px;
+  background-position: 5px 3px;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+.arm-hero::after { background-position: 17px 15px; }
+@keyframes arm-bulbs-a { 0%, 49.9% { opacity: 1; } 50%, 100% { opacity: 0.25; } }
+@keyframes arm-bulbs-b { 0%, 49.9% { opacity: 0.25; } 50%, 100% { opacity: 1; } }
+.arm-hero::before { animation: arm-bulbs-a 1.15s linear infinite; }
+.arm-hero::after  { animation: arm-bulbs-b 1.15s linear infinite; }
+.arc-reduced .arm-hero::before, .arm-lite .arm-hero::before,
+.arc-reduced .arm-hero::after,  .arm-lite .arm-hero::after {
+  animation: none;
+  opacity: 0.85; /* every bulb lit and still */
+}
+
+.arm-hero .arm-hero-face {
+  position: absolute;
+  inset: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #FF8FC8 0%, var(--pink, #FF69B4) 55%, #E7529F 100%);
+  color: #26081B;
+  font-size: clamp(24px, calc(var(--arm-band-h, 180px) * 0.20), 42px);
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.40),
+              inset 0 -3px 0 rgba(0, 0, 0, 0.18);
+}
+.arm-hero:hover .arm-hero-face, .arm-hero:focus-visible .arm-hero-face {
+  background: linear-gradient(180deg, #FFA9D6 0%, #FF7FBE 55%, #F063AC 100%);
+}
+.arm-hero:hover, .arm-hero:focus-visible {
+  outline: none;
+  box-shadow: 0 6px 0 #060410,
+              0 12px 30px rgba(0, 0, 0, 0.55),
+              0 0 52px rgba(255, 105, 180, 0.55);
+}
+.arm-hero:active { transform: translateY(3px); box-shadow: 0 3px 0 #060410, 0 8px 22px rgba(0, 0, 0, 0.5); }
+.arc-reduced .arm-hero:active, .arm-lite .arm-hero:active { transform: none; }
+
+/* THE SIDE DOOR. The second verb when a room has one (Free Swim): the same
+   slab language a size down, cyan pool light instead of marquee pink, no
+   bulbs - subordinate on purpose. */
+.arm-hero-alt {
+  position: relative;
+  flex: 0 0 auto;
+  height: clamp(64px, calc(var(--arm-band-h, 180px) * 0.44), 108px);
+  min-width: clamp(150px, 12vw, 250px);
+  padding: 8px;
+  background: #101C30;
+  border: none;
+  border-radius: 14px;
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 5px 0 #050810,
+              0 8px 22px rgba(0, 0, 0, 0.5),
+              0 0 24px rgba(127, 216, 232, 0.22);
+}
+.arm-hero-alt .arm-hero-face {
+  position: absolute;
+  inset: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: linear-gradient(180deg, #1E3A5C 0%, #152A44 100%);
+  border: 2px solid rgba(127, 216, 232, 0.50);
+  color: #9FE6F5;
+  font-size: clamp(15px, calc(var(--arm-band-h, 180px) * 0.11), 22px);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.arm-hero-alt:hover, .arm-hero-alt:focus-visible {
+  outline: none;
+  box-shadow: 0 5px 0 #050810,
+              0 8px 22px rgba(0, 0, 0, 0.5),
+              0 0 38px rgba(127, 216, 232, 0.45);
+}
+.arm-hero-alt:hover .arm-hero-face, .arm-hero-alt:focus-visible .arm-hero-face {
+  border-color: #7FD8E8;
+  color: #CFF3FA;
+}
+.arm-hero-alt:active { transform: translateY(2px); }
+.arc-reduced .arm-hero-alt:active, .arm-lite .arm-hero-alt:active { transform: none; }
+
+/* ---------------------------- the side slabs ----------------------------- */
+
+/* The two errands either side of the verb, grown into furniture: a corridor
+   direction sign home on the left, a control plate on the right. Quiet,
+   solid, and never the thing the eye lands on first. */
+.arm-bar-ghost {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 100%;
+  height: clamp(56px, calc(var(--arm-band-h, 180px) * 0.40), 96px);
+  padding: 0 clamp(16px, 2vw, 30px);
+  background: linear-gradient(180deg, #232342 0%, #1A1A2E 100%);
+  border: 2px solid rgba(255, 215, 0, 0.35);
+  border-bottom-width: 4px;
+  border-radius: 14px;
+  color: #EADFF2;
+  font: inherit;
+  font-size: clamp(13px, calc(var(--arm-band-h, 180px) * 0.082), 18px);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 5px 0 rgba(4, 3, 12, 0.8), 0 8px 22px rgba(0, 0, 0, 0.5);
+}
+.arm-bar-ghost .arm-slab-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.arm-slab-opts { border-color: rgba(190, 160, 255, 0.40); }
+.arm-bar-ghost:hover, .arm-bar-ghost:focus-visible {
+  outline: none;
+  color: #FFF;
+  border-color: var(--gold, #FFD700);
+}
+.arm-slab-opts:hover, .arm-slab-opts:focus-visible { border-color: #BEA0FF; }
+.arm-bar-ghost:active { transform: translateY(2px); box-shadow: 0 3px 0 rgba(4, 3, 12, 0.8); }
+.arc-reduced .arm-bar-ghost:active, .arm-lite .arm-bar-ghost:active { transform: none; }
+
+/* The glyphs: drawn in CSS, no assets. A gold chevron home; three little
+   sliders for the knobs. */
+.arm-glyph { flex: 0 0 auto; position: relative; }
+.arm-glyph-arrow {
+  width: 14px;
+  height: 14px;
+  border-left: 4px solid var(--gold, #FFD700);
+  border-bottom: 4px solid var(--gold, #FFD700);
+  transform: rotate(45deg);
+  border-radius: 2px;
+}
+.arm-glyph-knobs {
+  width: 22px;
+  height: 16px;
+  background: repeating-linear-gradient(180deg,
+              rgba(190, 160, 255, 0.85) 0 2px, transparent 2px 7px);
+}
+.arm-glyph-knobs::before, .arm-glyph-knobs::after {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #BEA0FF;
+}
+.arm-glyph-knobs::before { left: 3px; top: -2px; }
+.arm-glyph-knobs::after { right: 4px; top: 12px; }

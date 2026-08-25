@@ -789,6 +789,7 @@
   "quest_complete": "完成！+{0} 经验值",
   "quest_daily": "每日任务",
   "quest_weekly": "每周任务",
+  "tooltip_quest_stamps": "你的任务。点击打开任务标签页。",
   "msg_level_up": "等级 {0}！",
   "msg_no_phrases": "未选择短语。",
   "msg_enter_url": "请输入URL。",

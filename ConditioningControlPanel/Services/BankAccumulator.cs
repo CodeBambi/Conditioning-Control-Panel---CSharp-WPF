@@ -14,10 +14,18 @@ namespace ConditioningControlPanel.Services
     /// collection window (<see cref="WindowMs"/>), everything landing inside joins the pot, and the
     /// pot flies ONCE.</para>
     ///
-    /// <para><b>The cooldown is the real dial.</b> A window alone would still fire every 1.5s under
-    /// sustained XP. <see cref="CooldownMs"/> is the floor between flight STARTS: while it is
-    /// running the open pot simply keeps collecting, so a busy session produces a fuller flight
-    /// every three seconds rather than a stutter of thin ones.</para>
+    /// <para><b>The gate came first.</b> Pooling alone still celebrated ambient weather, just in
+    /// tidier lumps - a flight every few seconds for XP nobody had DONE anything to earn. Only
+    /// completion-shaped awards reach a pot at all now (<see cref="IsBankable"/>); everything else
+    /// bypasses THE BANK and tweens the counter the way it did before this class existed. Rarity is
+    /// what buys the moment its weight, and it is why the flight itself could then be made louder.</para>
+    ///
+    /// <para><b>The cooldown is the second dial.</b> A window alone would still fire every 1.5s
+    /// under sustained XP. <see cref="CooldownMs"/> is the floor between flight STARTS: while it is
+    /// running the open pot simply keeps collecting, so two completions landing on top of each
+    /// other produce one fuller flight rather than a stutter of thin ones. With the gate in front of
+    /// it this rarely binds - it is kept as the backstop for a burst of completions, not as the
+    /// thing that makes THE BANK rare.</para>
     ///
     /// <para><b>A level-up poisons the pot.</b> House law, one burst per moment: if an award crossed
     /// a level, <c>CelebrateLevelUp</c> owns that instant and THE BANK yields entirely - the pot is
@@ -37,6 +45,29 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>Minimum gap between flight STARTS. Awards arriving inside it join the next pot.</summary>
         public const double CooldownMs = 3000;
+
+        /// <summary>
+        /// THE BANK is a celebration for FINISHING something, and this is the whole guest list.
+        ///
+        /// <para>The four here share one shape: a fixed award, paid once, at the end of a thing the
+        /// subject chose to see through. Every other <see cref="XPSource"/> is weather - a flash
+        /// tick, a mantra, a subliminal, a bubble, an attention check - and weather arriving with
+        /// tokens and a thud is how a reward moment turns into a notification sound. Those awards
+        /// never enter a pot; their XP tweens the counter exactly as it did before THE BANK
+        /// existed (see <c>MainWindow.BankFx.cs</c>, which releases the display hold for them on
+        /// the spot).</para>
+        ///
+        /// <para>ONE list, deliberately: adding a future completion (a program graduating, an
+        /// Arcademy diploma) is a one-line change here and nowhere else.</para>
+        /// </summary>
+        public static bool IsBankable(XPSource source) => source switch
+        {
+            XPSource.Quest => true,        // a daily/weekly quest paying out
+            XPSource.Session => true,      // a session run to the end
+            XPSource.LockCard => true,     // a lock card served
+            XPSource.BubbleCount => true,  // the counting game's result screen
+            _ => false,
+        };
 
         private readonly Func<double> _nowMs;
 
@@ -90,6 +121,10 @@ namespace ConditioningControlPanel.Services
         /// <para>Non-positive, NaN and infinite amounts are ignored outright rather than opening a
         /// pot: this sits on the live XP path, and a zero-XP award must not be able to arm a
         /// celebration for nothing.</para>
+        ///
+        /// <para>The caller is expected to have asked <see cref="IsBankable"/> first - the gate
+        /// lives at the call site because that is the only place that can also hand the display
+        /// back for a source THE BANK is declining.</para>
         /// </summary>
         public Flight? OnAward(double amount, XPSource source, bool leveledUp)
         {

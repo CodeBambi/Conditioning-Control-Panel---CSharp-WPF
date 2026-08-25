@@ -15,17 +15,19 @@ namespace ConditioningControlPanel.Tests;
 public class BankFlightPlanTests
 {
     [Theory]
-    // Each pair is (xpSum, tokens) on both sides of every step in the table.
-    [InlineData(0, 3)]
-    [InlineData(14.99, 3)]
-    [InlineData(15, 4)]
-    [InlineData(49.99, 4)]
-    [InlineData(50, 5)]
-    [InlineData(119.99, 5)]
-    [InlineData(120, 6)]
-    [InlineData(299.99, 6)]
-    [InlineData(300, 7)]
-    [InlineData(50_000, 7)]
+    // Each pair is (xpSum, tokens) on both sides of every step in the table. The band widened from
+    // 3-7 to 4-10 when THE BANK stopped firing for ambient XP: a flight that only happens on a
+    // completion is allowed to be a fuller spill.
+    [InlineData(0, 4)]
+    [InlineData(14.99, 4)]
+    [InlineData(15, 6)]
+    [InlineData(49.99, 6)]
+    [InlineData(50, 7)]
+    [InlineData(119.99, 7)]
+    [InlineData(120, 8)]
+    [InlineData(299.99, 8)]
+    [InlineData(300, 10)]
+    [InlineData(50_000, 10)]
     public void TokenCount_StepsExactlyOnTheTablesEdges(double xpSum, int expected)
         => Assert.Equal(expected, BankFlightPlan.TokenCount(xpSum));
 
@@ -47,11 +49,13 @@ public class BankFlightPlanTests
     }
 
     [Theory]
-    [InlineData(3)]
     [InlineData(4)]
     [InlineData(5)]
     [InlineData(6)]
     [InlineData(7)]
+    [InlineData(8)]
+    [InlineData(9)]
+    [InlineData(10)]
     public void EveryPlan_SitsInsideTheHouseBooksBands(int count)
     {
         // Swept over many seeds: a band violation that only shows up on one seed in fifty is

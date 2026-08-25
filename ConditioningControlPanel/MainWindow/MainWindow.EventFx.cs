@@ -20,13 +20,13 @@ namespace ConditioningControlPanel
     /// <para><b>The seventh moment.</b> THE BANK on XP (MainWindow.BankFx.cs) joined this list
     /// later and breaks its shape in one way worth naming here: the six above are one-offs a
     /// subject reaches a handful of times, while XP arrives constantly, so THE BANK is the only
-    /// event moment that has to be RATIONED. It does not burst - value flies as 3-7 tokens from
-    /// its source to the XP counter - and it does not fire per event: <see cref="BankAccumulator"/>
-    /// pools awards behind a collection window and a launch cooldown so a busy minute produces a
-    /// few deliberate flights instead of thirty. It keeps every rule below (the focus gate, the
-    /// particle gate, TransformToVisual anchoring, no idle clock) and owns a second, re-sizeable
-    /// canvas of its own, because a flight is a line between two anchors rather than a box round
-    /// one.</para>
+    /// event moment that has to be RATIONED. It does not burst - value flies as 4-10 tokens from
+    /// its source to the XP counter - and it does not fire per event: only completion-shaped awards
+    /// reach it at all (<see cref="BankAccumulator.IsBankable"/>), and those are then pooled behind
+    /// a collection window and a launch cooldown, so even a session and the quest it finishes ship
+    /// as one flight. It keeps every rule below (the focus gate, the particle gate,
+    /// TransformToVisual anchoring, no idle clock) and owns a second, re-sizeable canvas of its
+    /// own, because a flight is a line between two anchors rather than a box round one.</para>
     ///
     /// <para><b>The shared burst layer.</b> One <see cref="AmbientFxCanvas"/> lives in
     /// <c>EventFxHost</c>, a child of RootGrid <i>outside</i> the 1489x901 Viewbox. Inside the

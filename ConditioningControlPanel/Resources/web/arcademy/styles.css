@@ -1429,6 +1429,13 @@ g.campus-room.facility .campus-lit { fill:var(--lav); filter:blur(22px); opacity
 /* RECORDS is the trophy case: a warm gold wash behind its glass, brighter than
    the other two facilities because it is the room that holds what you earned. */
 g.campus-room.facility.records .campus-lit { fill:var(--gold); opacity:.17; }
+/* THE ANNEX HATCH is the one cold plate on a warm plan: the lab's phosphor
+   (cams.css's sampled green, restated here because this sheet cannot import
+   it) where every neighbour glows lavender or gold. The palette break IS the
+   signpost - no pulse, no ping, no marquee (pre-attentive doctrine). */
+g.campus-room.facility.annex .campus-lit { fill:#8FE0CE; opacity:.13; }
+g.campus-room.facility.annex .campus-rname,
+g.campus-room.facility.annex .campus-rsub { fill:color-mix(in srgb, #8FE0CE 55%, var(--campus-text) 45%); }
 @keyframes campus-roompulse { 0%, 100% { opacity:.16; } 50% { opacity:.38; } }
 
 .campus-ping {
@@ -2955,6 +2962,33 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
   grid-template-columns:repeat(auto-fill, minmax(248px, 1fr));
   padding:6px 0 4px;
 }
+/* THE WALL PANEL (ANNEX-OS.md §1). A low wainscot strip under the card wall,
+   ajar by two pixels of cold seam-light. Deliberately quiet: no pulse, no
+   badge, no pointer until hover - the green in a warm room does all the
+   telling. Colors are literal on purpose: the lab's phosphor pair exists
+   outside the campus token system (the room it leads to is not the campus). */
+.arc-records-annexdoor {
+  position:relative;
+  height:34px;
+  margin:2px 0 0;
+  padding:0;
+  background:color-mix(in srgb, var(--navy), black 26%);
+  border:var(--hairline); border-radius:3px;
+  cursor:pointer;
+}
+.arc-records-annexdoor::after {
+  content:''; position:absolute; inset:6px auto 6px 12%;
+  width:34%; border-top:1px solid color-mix(in srgb, var(--line), transparent 30%);
+  border-bottom:1px solid color-mix(in srgb, var(--line), transparent 30%);
+}
+.arc-records-annexseam {
+  position:absolute; top:3px; bottom:3px; right:22%;
+  width:3px; background:#8FE0CE; opacity:.55;
+  box-shadow:0 0 8px 1px rgba(143, 224, 206, .5);
+}
+.arc-records-annexdoor:hover .arc-records-annexseam,
+.arc-records-annexdoor:focus-visible .arc-records-annexseam { opacity:.9; }
+.arc-records-annexdoor:focus-visible { outline:2px solid #8FE0CE; outline-offset:2px; }
 .arc-records-slot {
   display:flex; flex-direction:column; align-items:center; gap:8px;
   padding:12px 10px 10px;

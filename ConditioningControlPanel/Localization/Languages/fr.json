@@ -200,6 +200,7 @@
   "quest_complete": "TERMINÉE ! +{0} XP",
   "quest_daily": "Quête Quotidienne",
   "quest_weekly": "Quête Hebdomadaire",
+  "tooltip_quest_stamps": "Tes quêtes. Clique pour ouvrir l'onglet Quêtes.",
   "msg_level_up": "Niveau {0} !",
   "msg_no_phrases": "Aucune phrase sélectionnée.",
   "msg_enter_url": "Veuillez entrer une URL.",

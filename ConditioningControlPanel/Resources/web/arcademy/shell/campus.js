@@ -500,6 +500,13 @@ export const FACILITIES = Object.freeze({
   registrar: Object.freeze({
     rect: [1260, 476, 108, 84], side: 'w', door: 518, stop: [1250, 518], rm: '002',
   }),
+  /* THE ANNEX HATCH (ANNEX-OS.md §1). Above the office because the room is
+   * below it: the plate marks the stairs, not the floor. Its stop is Records'
+   * proven stop - the walk IS the walk to the office door, and the descent
+   * starts there. Drawn only when the shell hands the bag (gated build). */
+  annex: Object.freeze({
+    rect: [1260, 300, 108, 72], side: 'w', door: 336, stop: [1250, 422], rm: '000',
+  }),
 });
 
 /** ROOMS first, the two counters second. Pure; undefined for anything else. */
@@ -705,7 +712,7 @@ function el(tag, cls, text) {
  * @returns {{root, boardMount, footMount, update, closeCard, destroy}}
  */
 export function createCampus({ state, gameName, banner, stats, reducedMotion, on, log,
-  dateSeed, attractIdleMs, boardPulse, idCardMode, holdAttract, post, seep } = {}) {
+  dateSeed, attractIdleMs, boardPulse, idCardMode, holdAttract, post, seep, annex } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const handlers = on || {};
   const name = typeof gameName === 'function' ? gameName : (k) => String(k);
@@ -1358,6 +1365,29 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   stag(recordsG, 700);
   stag(regG, 780);
 
+  /* THE ANNEX HATCH. The post-bag contract, again: campus mounts the node
+   * only when the shell hands the bag, and the shell keeps the gate (reveal
+   * seen + a first visit made), the store, and every byte of state. A player
+   * who has never been downstairs never sees this group exist. */
+  let annexG = null;
+  if (annex && typeof annex.open === 'function') {
+    annexG = facility({
+      rect: FACILITIES.annex.rect, door: FACILITIES.annex.door,
+      side: FACILITIES.annex.side, compact: true,
+      nameY: 340,
+      name: t('campus_annex', 'Records Annex'),
+      rm: FACILITIES.annex.rm,
+      onClick: () => annex.open(),
+      tip: () => ({
+        name: t('campus_annex', 'Records Annex'),
+        status: t('campus_annex_status', 'Stairs down'),
+        desc: t('campus_desc_annex', 'Under the office. The lights are off down there. The screens are not.'),
+      }),
+    });
+    annexG.setAttribute('class', 'campus-room facility annex');
+    stag(annexG, 820);
+  }
+
   /* Entrance hall dressing (notice board, trophy case, admissions desk, crest) */
   const hall = svg('g', null, 'campus-halldress');
   hall.appendChild(svg('circle', { cx: 582, cy: 622, r: 46, 'stroke-dasharray': '4 6' }, 'campus-crestring'));
@@ -1854,6 +1884,21 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   function openClassCard(key) {
     const spec = ROOMS[key];
     const r = st.rooms[key] || {};
+    /* THE ROOM SCENE TAKEOVER (shell/room.js). An ENTERABLE door is offered to
+     * the shell before the card pops; a shell that has the painted room takes
+     * it (walks, then shows the set) and returns true. Everything the card
+     * still owns stays the card's: a dark room (the lockedClick EMI seam), a
+     * suspended school, and every key the shell declines. The plate line rides
+     * along because ROOMS lives here and the scene should not re-derive it. */
+    if (!st.suspended && (r.scheduled || r.unlocked || st.devPass) && handlers.roomScene) {
+      let took = false;
+      try {
+        took = !!handlers.roomScene(key, {
+          plate: (t(spec.nameKey, spec.nameEn) + ' · ' + t('campus_rm', 'RM') + ' ' + spec.rm).toUpperCase(),
+        });
+      } catch (e) { took = false; }
+      if (took) return;
+    }
     ccRoom.textContent = (t(spec.nameKey, spec.nameEn) + ' · ' + t('campus_rm', 'RM') + ' ' + spec.rm).toUpperCase();
     ccCourse.textContent = name(key);
     ccStatus.textContent = statusLine(key).toUpperCase();
@@ -2330,6 +2375,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     facilityNode(key) {
       if (key === 'records') return recordsG;
       if (key === 'registrar') return regG;
+      if (key === 'annex') return annexG;
       return null;
     },
     /**

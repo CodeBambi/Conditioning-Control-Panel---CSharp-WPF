@@ -54,7 +54,7 @@
   <div id="comphost" hidden>
     <div class="an-stage">
       <div class="an-feeds" id="feeds"></div>
-      <img class="an-art" src="demo-assets/annex_shot_monitors2.png" alt="">
+      <img class="an-art" src="../art/annex/lab-monitors.png" alt="">
     </div>
   </div>
   <p class="note" id="note">feeds are seeded — a reload replays the same shift</p>
@@ -76,7 +76,7 @@
   let placed = false;
   async function placeTiles() {
     if (placed) return;
-    const q = await (await fetch('demo-assets/screen_quads.json')).json();
+    const q = await (await fetch('../art/annex/screen-quads.json')).json();
     const boxes = {};
     for (const s of q.annex_shot_monitors2.screens) boxes[s.name] = s.bbox.slice();
     boxes.cam8 = [581, 539, 215, 143];   // full glass; the laptop occlusion is the mask's job
@@ -108,7 +108,7 @@
     feeds.style.webkitMaskImage = u;
     feeds.style.maskImage = u;
   };
-  maskImg.src = 'demo-assets/annex_shot_monitors2_screenmask.png';
+  maskImg.src = '../art/annex/lab-monitors-mask.png';
 
   function fitStage() {
     const s = Math.min(1, comphost.clientWidth / 1376);

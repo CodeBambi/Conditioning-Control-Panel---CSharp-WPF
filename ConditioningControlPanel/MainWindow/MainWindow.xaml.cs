@@ -439,6 +439,11 @@ namespace ConditioningControlPanel
                 App.Quests.QuestsRefreshed += (s, e) => Dispatcher.Invoke(() => RefreshQuestUI());
             }
 
+            // The header's four tilted quest stamps (3 daily slots + the weekly), sitting in the
+            // XP row ahead of the LVL chip. MainWindow.QuestStamps.cs owns its own subscriptions
+            // and collapses itself when there is no QuestService, so the bar keeps full width.
+            InitializeQuestStamps();
+
             // Repaint the quests tab whenever the streak-fix balance moves. StreakFixCharges is
             // written imperatively (stats tile + button caption), not bound, and it changes from four
             // places — sync adoption, the manual spend, the automatic spend and the skill purchase —

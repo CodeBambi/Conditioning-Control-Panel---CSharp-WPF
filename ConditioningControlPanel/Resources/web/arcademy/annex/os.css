@@ -1,0 +1,373 @@
+/* ============================================================================
+ * THE ANNEX OS. Skin for os.js: a dated windowed desktop on the lab laptop.
+ * Loaded lazily by lab.js (corkboard ensureStyles pattern), AFTER styles.css.
+ *
+ * Palette law: the OS must read COLDER than anything else in the Arcademy.
+ * The two lab greens come from cams.css (--annex-cold / --annex-cold-deep,
+ * sampled off the locked slides); every use here carries a literal fallback
+ * because cams.css may not be linked on a screen that shows the OS alone.
+ * Chrome grey is steel, never the campus navy, and nothing in here uses
+ * --pink: the warm campus accent does not exist downstairs.
+ * ==========================================================================*/
+
+.aos-root {
+  position: absolute;
+  inset: 0;
+  background: #0A1416;
+  color: #C8D6D2;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow: hidden;
+  user-select: none;
+  cursor: default;
+}
+
+/* ------------------------------- boot ----------------------------------- */
+
+.aos-boot {
+  position: absolute;
+  inset: 0;
+  background: #050B0C;
+  color: var(--annex-cold, #8FE0CE);
+  padding: 24px 28px;
+  white-space: pre-wrap;
+  font-size: 12px;
+}
+.aos-boot-line { opacity: 0; animation: aos-bootline 120ms steps(1) forwards; }
+@keyframes aos-bootline { to { opacity: 1; } }
+.arc-reduced .aos-boot-line, .aos-lite .aos-boot-line { animation: none; opacity: 1; }
+
+/* ------------------------------- login ---------------------------------- */
+
+.aos-login {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(120% 90% at 50% 10%, #10201F 0%, #081011 70%);
+}
+.aos-login-box {
+  width: min(340px, 84%);
+  background: #26302F;
+  border: 2px solid;
+  border-color: #56645F #10201C #10201C #56645F; /* the bevel */
+  padding: 14px 16px 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+}
+.aos-login-title {
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  color: #E4EEEA;
+  margin-bottom: 2px;
+}
+.aos-login-sub { color: #8FA39D; font-size: 11px; margin-bottom: 12px; }
+.aos-field { margin-bottom: 10px; }
+.aos-field label { display: block; font-size: 11px; color: #8FA39D; margin-bottom: 3px; }
+.aos-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: #0C1514;
+  color: var(--annex-cold, #8FE0CE);
+  border: 2px solid;
+  border-color: #10201C #56645F #56645F #10201C; /* sunken */
+  padding: 5px 7px;
+  font: inherit;
+  outline: none;
+}
+.aos-input:focus { border-color: var(--annex-cold, #8FE0CE); }
+.aos-btn {
+  background: #35423F;
+  color: #E4EEEA;
+  border: 2px solid;
+  border-color: #56645F #10201C #10201C #56645F;
+  padding: 4px 14px;
+  font: inherit;
+  cursor: pointer;
+}
+.aos-btn:active { border-color: #10201C #56645F #56645F #10201C; }
+.aos-btn:focus-visible { outline: 1px dotted #E4EEEA; outline-offset: -4px; }
+.aos-login-err { color: #D9A66A; font-size: 11px; min-height: 15px; margin-top: 8px; }
+
+/* The sticky note. The whole puzzle is noticing it. */
+.aos-note {
+  position: absolute;
+  right: 6%;
+  bottom: 12%;
+  width: 108px;
+  padding: 10px 10px 14px;
+  background: #E8DFA8;
+  color: #4A4430;
+  font-family: 'Comic Sans MS', 'Segoe Print', cursive;
+  font-size: 12px;
+  line-height: 1.3;
+  transform: rotate(-4deg);
+  box-shadow: 2px 3px 8px rgba(0, 0, 0, 0.45);
+}
+.aos-note::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 38px;
+  width: 30px;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.35);
+  transform: rotate(2deg);
+}
+
+/* ------------------------------ desktop ---------------------------------- */
+
+.aos-desk {
+  position: absolute;
+  inset: 0 0 30px 0;
+  background:
+    radial-gradient(140% 100% at 50% 0%, #123130 0%, var(--annex-cold-deep, #0D2724) 60%, #081312 100%);
+  overflow: hidden;
+}
+.aos-icons {
+  position: absolute;
+  top: 14px;
+  left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.aos-icon {
+  width: 84px;
+  background: none;
+  border: 1px solid transparent;
+  color: #C8D6D2;
+  font: inherit;
+  font-size: 11px;
+  text-align: center;
+  cursor: pointer;
+  padding: 4px 2px;
+}
+.aos-icon:hover, .aos-icon:focus-visible { border-color: rgba(143, 224, 206, 0.4); outline: none; }
+.aos-icon-glyph {
+  display: block;
+  width: 34px;
+  height: 28px;
+  margin: 0 auto 4px;
+  border: 2px solid #6E7F7A;
+  background: #16211F;
+  position: relative;
+}
+.aos-icon-glyph::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  background:
+    repeating-linear-gradient(180deg, #3E4E4A 0 2px, transparent 2px 5px);
+}
+.aos-icon[data-app='term'] .aos-icon-glyph::after {
+  background: none;
+  border-left: 6px solid var(--annex-cold, #8FE0CE);
+  inset: 5px auto 5px 5px;
+  width: 0;
+}
+
+/* ------------------------------ windows ---------------------------------- */
+
+.aos-win {
+  position: absolute;
+  min-width: 240px;
+  background: #26302F;
+  border: 2px solid;
+  border-color: #56645F #10201C #10201C #56645F;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+}
+.aos-win.is-front { z-index: 5; }
+.aos-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px 3px 8px;
+  background: linear-gradient(90deg, #1E4A44 0%, #16302D 100%);
+  color: #DFF3EC;
+  font-weight: bold;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  cursor: grab;
+  touch-action: none;
+}
+.aos-win:not(.is-front) .aos-title { background: #23302E; color: #93A6A0; }
+.aos-title-x {
+  margin-left: auto;
+  width: 20px;
+  height: 18px;
+  background: #35423F;
+  color: #E4EEEA;
+  border: 2px solid;
+  border-color: #56645F #10201C #10201C #56645F;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.aos-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #0F1918;
+  border-top: 1px solid #10201C;
+  padding: 10px 12px;
+  user-select: text;
+  cursor: auto;
+}
+
+/* small containers: windows go full-desk */
+.aos-cramped .aos-win {
+  inset: 4px 4px 34px 4px !important;
+  width: auto !important;
+  min-width: 0;
+}
+
+/* ------------------------------ taskbar ---------------------------------- */
+
+.aos-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  background: #26302F;
+  border-top: 2px solid #56645F;
+  font-size: 11px;
+}
+.aos-bar-btn {
+  background: #35423F;
+  color: #C8D6D2;
+  border: 2px solid;
+  border-color: #56645F #10201C #10201C #56645F;
+  padding: 2px 10px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.aos-bar-btn.is-open { border-color: #10201C #56645F #56645F #10201C; background: #1C2624; }
+.aos-clock { margin-left: auto; color: #8FA39D; padding: 0 6px; font-variant-numeric: tabular-nums; }
+
+/* ------------------------------ FILES ------------------------------------ */
+
+.aos-files { display: flex; gap: 0; height: 100%; min-height: 0; }
+.aos-tree {
+  width: 148px;
+  flex: none;
+  border-right: 1px solid #24312E;
+  padding-right: 8px;
+  margin-right: 10px;
+  overflow: auto;
+}
+.aos-folder {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: #C8D6D2;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.aos-folder:hover, .aos-folder:focus-visible { background: #1A2624; outline: none; }
+.aos-folder.is-sel { background: #1E4A44; color: #DFF3EC; }
+.aos-doclist { flex: 1; min-width: 0; overflow: auto; }
+.aos-docrow {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--annex-cold, #8FE0CE);
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.aos-docrow:hover, .aos-docrow:focus-visible { background: #1A2624; outline: none; }
+.aos-docrow.is-read { color: #7E948E; }
+
+/* the missing number is a gap, not a row: nothing renders it, on purpose */
+
+/* ------------------------------ viewer ------------------------------------ */
+
+.aos-doc-head {
+  color: #93A6A0;
+  border-bottom: 1px solid #24312E;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+  white-space: pre-wrap;
+  letter-spacing: 0.03em;
+}
+.aos-doc-body { white-space: pre-wrap; color: #C8D6D2; max-width: 62ch; }
+
+/* ------------------------------ REGISTRY ---------------------------------- */
+
+.aos-reg-h { color: #93A6A0; font-weight: bold; letter-spacing: 0.06em; margin: 4px 0 8px; }
+.aos-reg-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.aos-reg-table th {
+  text-align: left;
+  color: #8FA39D;
+  font-size: 11px;
+  font-weight: normal;
+  border-bottom: 1px solid #24312E;
+  padding: 2px 8px 4px 0;
+}
+.aos-reg-table td { padding: 3px 8px 3px 0; color: #C8D6D2; }
+.aos-reg-table tr.aos-reg-total td { border-top: 1px solid #24312E; color: #DFF3EC; }
+.aos-redact {
+  display: inline-block;
+  min-width: 34px;
+  height: 11px;
+  background: #050A09;
+  vertical-align: middle;
+}
+.aos-reg-note { color: #93A6A0; max-width: 62ch; margin: 6px 0; }
+.aos-reg-down { color: #D9A66A; letter-spacing: 0.1em; padding: 14px 0; }
+.aos-reg-wait { color: #8FA39D; padding: 14px 0; }
+
+/* ------------------------------ SEARCH ------------------------------------ */
+
+.aos-search-form { max-width: 300px; }
+.aos-file-sec { margin-bottom: 14px; }
+.aos-file-sec h4 {
+  margin: 0 0 6px;
+  color: #93A6A0;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 0.08em;
+}
+.aos-file-row { display: flex; gap: 12px; padding: 1px 0; }
+.aos-file-row dt { flex: none; width: 190px; color: #8FA39D; }
+.aos-file-row dd { margin: 0; color: var(--annex-cold, #8FE0CE); font-variant-numeric: tabular-nums; }
+.aos-file-stamp {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 2px 10px;
+  border: 2px solid #D9A66A;
+  color: #D9A66A;
+  font-weight: bold;
+  letter-spacing: 0.2em;
+  transform: rotate(-2deg);
+}
+
+/* ------------------------------ TERMINAL ---------------------------------- */
+
+.aos-term { color: var(--annex-cold, #8FE0CE); white-space: pre-wrap; font-size: 12px; }
+.aos-term .aos-term-final { color: #DFF3EC; }

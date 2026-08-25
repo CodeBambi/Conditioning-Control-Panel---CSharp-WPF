@@ -61,6 +61,16 @@ import { createAnnexReveal } from './annexreveal.js';
  * answers, tell it when a class ended, tear it down. It writes nothing, it
  * posts nothing, it mints no meta key and it adds no rung to the Esc ladder. */
 import { createSeep } from './seep.js';
+/* THE LAB ITSELF (ANNEX-OS.md). A screen, not an overlay: the room, the paper
+ * props and the fake OS all live in annex/lab.js behind narrow caps - the
+ * shell keeps the store, the gate, EMI's bracket and the bridge, records.js
+ * style. */
+import { createAnnexLab } from '../annex/lab.js';
+/* THE ROOM SCENE (the VN antechamber). A painted room between the campus door
+ * and a class, replacing the door card for the rooms that have art - room.js
+ * owns the SCENES table and the stage; the shell keeps the walk, the launch
+ * path and the Esc rung (narrow caps, records.js style). */
+import { createRoomScene, hasRoomScene } from './room.js';
 /* THE PHANTOM POST: the mail engine and its three paper overlays. The engines
  * hold NO storage of their own (their STATE-NEEDS law) - the shell hands each
  * an injected blob below and banks it through the store like any page key. */
@@ -74,7 +84,7 @@ import { loadFaceGeometry, ENROLL_PUNCHES } from './punchcard.js';
  * EMI's expression and never the shell's boot) and `fireMoment` is the ONE verb
  * every seam below uses. Both are no-ops when there is no `#arc-emi` layer -
  * which is exactly the case in the node DOM double. */
-import { mountEmi, getEmi } from '../emi/index.js';
+import { mountEmi, getEmi, getVoice } from '../emi/index.js';
 import { fireMoment } from '../emi/moments.js';
 
 const FLAVOR_XP_CAP = 15;          // BUILD-CONTRACT §8 - the page clamps too
@@ -106,7 +116,7 @@ function sfx(name, level, extra) {
 
 /** Screen depth, so a swap knows which way it went. An ORDER, not a router -
  *  the router is `screen` and it stays exactly where it was. */
-const SCREEN_DEPTH = Object.freeze({ board: 0, records: 1, report: 2, settings: 3, class: 4 });
+const SCREEN_DEPTH = Object.freeze({ board: 0, room: 1, records: 1, annex: 2, report: 2, settings: 3, class: 4 });
 
 /* ----------------------------------------------------------------------------
  * DECK V - THE RAKE (house-rules.txt). Built ONCE here so all ten classes wear
@@ -629,12 +639,29 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   };
   let extrasBox = null;            // replay/report bar + yesterday strip container
   let settingsPage = null;
+  /** WHERE THE SETTINGS PAGE OWES ITS WAY BACK. Normally there is nothing to
+   *  remember: the page came from the campus or a class and goes home to the
+   *  one it came from. A caller with somewhere else in mind (the room scene's
+   *  rail, which reopens the room it left) parks that route here and both
+   *  exits - the page's own Back and the Esc rung - spend it exactly once. */
+  let settingsBack = null;
   let reportCard = null;
   /** The Deck V one-more card. It sits OVER the report card, never instead of
    *  it (see showEndCard) - `{root, destroy}` while live, null otherwise. */
   let endCard = null;
   /** The Records Office screen (PUNCHCARD §6) - built lazily, kept for reuse. */
   let recordsPage = null;
+  /** THE LAB (ANNEX-OS.md). Built fresh per visit and destroyed on every path
+   *  out - it runs a cam-wall rAF and holds EMI's bracket, neither of which
+   *  may survive the screen. `annexEmiPrev` remembers whether EMI was enabled
+   *  before the bracket so a settings-disabled EMI never comes back by accident. */
+  let annexPage = null;
+  let annexEmiPrev = false;
+  /** THE ROOM SCENE (shell/room.js). Built fresh per visit, destroyed on every
+   *  path out via clearScreen - the annex's lifecycle without the bracket. */
+  let roomPage = null;
+  /** The one in-flight annex stats request ({promise, resolve, timer}|null). */
+  let annexStatsWait = null;
   /* THE PUNCH-CARD CEREMONY. `punchStage` is the live overlay; `punchArm` is
    * what the shell is WAITING for while the host answers `class-ended`.
    * Both are null the rest of the time. */
@@ -1001,6 +1028,26 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       walker = null;
       try { residueTrail = w.residue(); } catch (e) { /* noop */ }
       try { w.destroy(); } catch (e) { /* noop */ }
+    }
+    /* THE LAB DIES WITH ITS SCREEN. Every path out funnels through here, which
+     * is what makes the EMI bracket safe: she comes back on the same wipe that
+     * removes the room, and only to the state she held before it (a player who
+     * keeps her off in settings never sees her flicker on). */
+    if (annexPage) {
+      const ap = annexPage;
+      annexPage = null;
+      try { ap.destroy(); } catch (e) { /* noop */ }
+      if (annexEmiPrev) {
+        annexEmiPrev = false;
+        try { const emi = getEmi(); if (emi && emi.setEnabled) emi.setEnabled(true); } catch (e) { /* noop */ }
+      }
+    }
+    /* The room scene dies with its screen too - no bracket to restore (a
+     * classroom keeps its mascot), just the resize listener its destroy drops. */
+    if (roomPage) {
+      const rp = roomPage;
+      roomPage = null;
+      try { rp.destroy(); } catch (e) { /* noop */ }
     }
     extrasBox = null;
     /* THE ROTATE GATE BELONGS TO A SCREEN, NOT TO THE PAGE. Every screen change
@@ -1410,6 +1457,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           bugleState: postState.bugle,
           daySeed: utcDateSeed,
         },
+        /* THE ANNEX SHORTCUT (ANNEX-OS.md §1, the owner's entry ruling): the
+         * hatch joins the plan only after the reveal AND a first visit through
+         * the office panel - revisits skip the walk, discovery never does.
+         * Same bag contract as `post`: campus draws, the shell keeps state. */
+        annex: (store.get('annexRevealSeen') && (store.get('annex') || {}).visited)
+          ? { open: () => walkThen('annex', () => showAnnex()) }
+          : null,
         on: {
           /* THE STUDENT BODY STARTS HERE AND NOWHERE ELSE (PRESENCE §4): after
            * the entry reveal, never during it. The campus fires this once; a
@@ -1435,29 +1489,20 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
             } catch (e) { say('boardOpenedDate write failed: ' + ((e && e.message) || e)); }
             if (board) board.replay();
           },
-          begin: (gameKey) => walkThen(gameKey, () => {
-            const cls = timetable.classes.find((c) => c.gameKey === gameKey);
-            if (cls) { startClass(cls); return; }
-            // THE DEV DOOR: a room off tonight's board still opens when the host
-            // came in through `--arcademy`. Graded + timed like a dealt class,
-            // built from the registry descriptor (freeSwimClass's parachute).
-            // THE EARNED DOOR, then the dev one. A completed punch card opens
-            // its room every night - through the SAME path the dev pass uses, so
-            // an unlocked run is an ordinary graded class end to end (grades in
-            // `days`, XP once per UTC day, attendance idempotent). Nothing
-            // host-side gates which room may start; this is the whole feature.
-            if (isUnlocked(gameKey)) {
-              say('punch card unlock: ' + gameKey + ' is off the board - graded run anyway');
-              startClass(freeSwimClass(gameKey));
-              return;
-            }
-            if (devPass) {
-              say('dev pass: ' + gameKey + ' is off the board - graded run anyway');
-              startClass(freeSwimClass(gameKey));
-            }
-          }),
+          begin: (gameKey) => walkThen(gameKey, () => launchGraded(gameKey)),
+          /* THE ROOM SCENE TAKEOVER. campus.js offers every enterable door
+           * here before it pops the card; the shell takes the ones with art
+           * (room.js's SCENES table) and declines the rest with `false`, which
+           * pops the card exactly as it always did. The walk is unchanged -
+           * door first, THEN the room, because that is what a door is for. */
+          roomScene: (gameKey, info) => {
+            if (!hasRoomScene(gameKey)) return false;
+            walkThen(gameKey, () => showRoomScene(gameKey, info));
+            return true;
+          },
           freeSwim: (gameKey) => walkThen(gameKey, () => startFreeSwim(gameKey)),
           records: () => walkThen('records', () => showRecords()),
+          annex: () => walkThen('annex', () => showAnnex()),
           /* THE DOOR walks; THE GEAR does not. campus.js calls `registrarRoom`
            * for the Front Office room and falls back to `registrar` for the
            * topbar gear, so these two lines are the whole split. */
@@ -1594,7 +1639,8 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * campus gear and the Front Office keep calling with no argument and get the
    * full sheet - the between-classes page is the right home for "everything".
    */
-  function showSettings(gameKey) {
+  function showSettings(gameKey, opts) {
+    settingsBack = (opts && opts.onClose) || null;
     if (active) pauseClass(true);
     dismissEndCard();
     dismissPunchStage();
@@ -1615,7 +1661,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       assets,
       log: say,
       gameKey: gameKey || null,
-      onClose: () => (active ? showClassScreen() : showBoard()),
+      onClose: () => {
+        const back = settingsBack;
+        settingsBack = null;
+        if (active) { showClassScreen(); }
+        else if (back) { back(); }
+        else { showBoard(); }
+      },
     });
     dom.screen.appendChild(settingsPage.root);
   }
@@ -1688,9 +1740,242 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       onBack: () => showBoard(),
       onReport: () => showReport(),
       reportLabel: t('report_card', 'Report Card'),
+      // THE WALL PANEL. The shell keeps the gate: the ajar seam exists only
+      // once the reveal has fired (ANNEX-OS.md §1); records just draws it.
+      onAnnex: store.get('annexRevealSeen') ? () => showAnnex() : null,
     });
     if (dom && dom.screen) dom.screen.appendChild(recordsPage.root);
     setStage('arc-report-on');
+  }
+
+  /* ---------------------- the graded launch ----------------------------
+   * ONE launch path for a door, wherever the press came from (the campus
+   * card's Begin, the room scene's lit furniture). Board first, then:
+   * THE EARNED DOOR, then the dev one. A completed punch card opens its room
+   * every night - through the SAME path the dev pass uses, so an unlocked run
+   * is an ordinary graded class end to end (grades in `days`, XP once per UTC
+   * day, attendance idempotent). Nothing host-side gates which room may
+   * start; this is the whole feature. THE DEV DOOR: a room off tonight's
+   * board still opens when the host came in through `--arcademy` - graded +
+   * timed like a dealt class, built from the registry descriptor
+   * (freeSwimClass's parachute).
+   * -------------------------------------------------------------------- */
+  function launchGraded(gameKey) {
+    const cls = timetable.classes.find((c) => c.gameKey === gameKey);
+    if (cls) { startClass(cls); return; }
+    if (isUnlocked(gameKey)) {
+      say('punch card unlock: ' + gameKey + ' is off the board - graded run anyway');
+      startClass(freeSwimClass(gameKey));
+      return;
+    }
+    if (devPass) {
+      say('dev pass: ' + gameKey + ' is off the board - graded run anyway');
+      startClass(freeSwimClass(gameKey));
+    }
+  }
+
+  /* ========================== SCREEN: ROOM ==============================
+   * THE ROOM SCENE. The VN antechamber: the walk brought the student to the
+   * door, this is the other side of it - the painted set with the class's
+   * own furniture lit. A screen like records (same funnel, same ladder
+   * shape); room.js holds the stage and the shell keeps everything that
+   * touches state. It shows only for enterable doors (campus.js gates the
+   * offer on scheduled/unlocked/devPass and never while suspended), so the
+   * dark-room card, its EMI seam and the suspend card are all untouched.
+   * The facts on the plate are the door card's, computed FRESH here so a
+   * retake entered seconds after a grade wears tonight's letter.
+   * ==================================================================== */
+  function showRoomScene(gameKey, info) {
+    if (!hasRoomScene(gameKey)) { showBoard(); return; }
+    screen = 'room';
+    dismissEndCard();
+    dismissPunchStage();
+    dismissAnnexStage();
+    clearScreen();
+    renderTopbar();
+    /* the door-open thump the card used to own - one verb, one sound */
+    sfx('door', 0.35);
+    const rec = todaysRecord(gameKey);
+    const done = !!rec;
+    const scheduled = timetable.classes.some((c) => c.gameKey === gameKey);
+    let statusLine, actionLabel, xpLine;
+    if (done) {
+      statusLine = t('retake', 'Retake');
+      actionLabel = t('retake', 'Retake');
+      xpLine = t('campus_xp_retake', 'Retakes pay no XP - pride only.');
+    } else if (scheduled) {
+      statusLine = t('campus_in_session', 'In Session');
+      actionLabel = t('begin_class', 'Begin');
+      xpLine = t('campus_xp_first', 'First pass of the day pays XP.');
+    } else if (isUnlocked(gameKey)) {
+      statusLine = t('campus_unlocked_sign', 'Open');
+      actionLabel = t('begin_class', 'Begin');
+      xpLine = t('campus_unlocked_hint',
+        'Card complete. This room opens every night, board or no board.');
+    } else {
+      /* the dev pass - campus.js's gate means this branch IS enterable */
+      statusLine = t('campus_dev_pass', 'Dev pass · Begin');
+      actionLabel = t('begin_class', 'Begin');
+      xpLine = t('campus_dev_pass_hint', "Dev pass: off tonight's board, graded anyway.");
+    }
+    const swim = suspendedGlobally ? null : endlessFor(gameKey);
+    roomPage = createRoomScene({
+      gameKey,
+      t,
+      lite: !!src.performanceMode,
+      log: say,
+      name: gameName(gameKey),
+      plate: (info && info.plate) || '',
+      statusLine,
+      actionLabel,
+      stamp: done && rec && rec.grade ? String(rec.grade) : '',
+      xpLine,
+      onEnter: () => launchGraded(gameKey),
+      onBack: () => showBoard(),
+      /* THE OFFER THE CARD USED TO CARRY. The room REPLACES the door card, and
+       * the card was where a game with `manifest.endless` showed its second,
+       * subordinate Free Swim button - so the room owes the same offer or the
+       * fan-out quietly takes it away. room.js paints it twice (the ladder in
+       * the art, the side slab on the apron) and spends one latch for both;
+       * startFreeSwim re-checks endlessFor itself, so this is a hint, not an
+       * authority. A game with nothing declared gets undefined = neither. */
+      onFreeSwim: swim ? () => startFreeSwim(gameKey) : undefined,
+      freeSwimLabel: swim ? t(swim.labelKey || 'free_swim', 'Free Swim') : '',
+      /* THE RAIL'S THIRD ERRAND. The knobs are asked for from the doorway more
+       * than anywhere else, so the room lends them its own way back: settings
+       * opened from here folds into the room it left, never past it. */
+      onOptions: () => showSettings(gameKey, { onClose: () => showRoomScene(gameKey, info) }),
+    });
+    if (dom && dom.screen) dom.screen.appendChild(roomPage.root);
+    setStage('arc-report-on');
+    if (typeof roomPage.fit === 'function') roomPage.fit();
+  }
+
+  /* ============================ THE ANNEX ===============================
+   * ANNEX-OS.md. The lab under the Records Office: a screen like records,
+   * not an overlay - same funnel, same ladder shape, same narrow-caps law.
+   * EMI is absent while the player is inside (the 0823 lock: dock gone, not
+   * a hint, not once); the bracket is setEnabled and clearScreen() restores
+   * it on EVERY path out. First entry flips the voice's labSeen - the one
+   * verb the lab wave owns - which arms b27, the glitch and the wrong
+   * channel without adding a word of dialogue.
+   * ==================================================================== */
+  function showAnnex() {
+    screen = 'annex';
+    dismissEndCard();
+    dismissPunchStage();
+    dismissAnnexStage();
+    clearScreen();
+    renderTopbar();
+    try { const v = getVoice(); if (v && v.setLabSeen) v.setLabSeen(true); } catch (e) { /* noop */ }
+    try {
+      const emi = getEmi();
+      if (emi && emi.setEnabled) { annexEmiPrev = !!emi.enabled; emi.setEnabled(false); }
+    } catch (e) { /* noop */ }
+    annexPage = createAnnexLab({
+      t,
+      lite: !!src.performanceMode,
+      log: say,
+      subject: src.subject || {},
+      gamesList: games.list.map((e) => e.key),
+      gameName,
+      // ONE page-owned blob, not N keys (the meta-store headroom law).
+      annexState: () => store.get('annex') || {},
+      saveAnnex: (patch) => { try { store.merge('annex', patch); } catch (e) { say('annex merge failed'); } },
+      liveFile: () => subjectFile(),
+      fetchStats: () => requestAnnexStats(),
+      onExit: () => showRecords(),
+    });
+    if (dom && dom.screen) dom.screen.appendChild(annexPage.root);
+    setStage('arc-report-on');
+    if (typeof annexPage.fit === 'function') annexPage.fit();
+  }
+
+  /* THE SUBJECT FILE (punch 3B). Built fresh at every open so the numbers are
+   * current - that is the gut punch, the paper upstairs was old. Sources:
+   * the host-resolved `subject` init key (app-lifetime counters, quote-only-
+   * what-is-counted law), the store (attendance, cards), and EMI's sanctioned
+   * stats() accessor. A missing source drops its rows, never fakes them. */
+  function subjectFile() {
+    const sub = src.subject || {};
+    const secs = [];
+    const gen = [];
+    const num = (v) => (typeof v === 'number' && isFinite(v));
+    if (sub.date) gen.push([t('annex_f_since', 'on record since'), sub.date]);
+    if (num(sub.level)) gen.push([t('annex_f_level', 'level'), sub.level]);
+    if (num(sub.xp)) gen.push([t('annex_f_xp', 'experience, lifetime'), Math.round(sub.xp)]);
+    if (num(sub.minutes)) gen.push([t('annex_f_minutes', 'supervised minutes'), Math.round(sub.minutes)]);
+    if (num(sub.videoMinutes)) gen.push([t('annex_f_video', 'screening minutes'), Math.round(sub.videoMinutes)]);
+    if (num(sub.spiralMinutes)) gen.push([t('annex_f_spiral', 'focus minutes'), Math.round(sub.spiralMinutes)]);
+    if (num(sub.achievements)) gen.push([t('annex_f_ach', 'citations on file'), sub.achievements]);
+    if (gen.length) secs.push({ title: t('annex_f_general', 'GENERAL'), rows: gen });
+
+    const att = [];
+    try {
+      const streak = store.get('streak');
+      if (num(streak)) att.push([t('annex_f_streak', 'attendance streak'), streak]);
+      const perfect = store.get('perfectAttendance');
+      if (num(perfect)) att.push([t('annex_f_perfect', 'perfect nights'), perfect]);
+      att.push([t('annex_f_cards', 'cards mastered'), masteredCount()]);
+    } catch (e) { /* rows drop, never fake */ }
+    if (num(sub.appStreak)) att.push([t('annex_f_appstreak', 'reporting streak'), sub.appStreak]);
+    if (num(sub.appStreakBest)) att.push([t('annex_f_appbest', 'reporting streak, best'), sub.appStreakBest]);
+    if (num(sub.sessionsStarted)) att.push([t('annex_f_sessions', 'sessions opened'), sub.sessionsStarted]);
+    if (att.length) secs.push({ title: t('annex_f_attend', 'ATTENDANCE'), rows: att });
+
+    const dev = [];
+    if (num(sub.flashes)) dev.push([t('annex_f_flashes', 'exposures delivered'), sub.flashes]);
+    if (num(sub.bubbles)) dev.push([t('annex_f_bubbles', 'targets cleared'), sub.bubbles]);
+    if (num(sub.lockCards)) dev.push([t('annex_f_lockcards', 'sentences typed'), sub.lockCards]);
+    if (num(sub.keywordTriggers)) dev.push([t('annex_f_triggers', 'cue firings'), sub.keywordTriggers]);
+    if (dev.length) secs.push({ title: t('annex_f_devices', 'DEVICES'), rows: dev });
+
+    const obs = [];
+    try {
+      const emi = getEmi();
+      const st2 = emi && typeof emi.stats === 'function' ? emi.stats() : null;
+      if (st2) {
+        const pick = [
+          ['pets', 'annex_f_pets', 'pets received'],
+          ['drags', 'annex_f_drags', 'relocations'],
+          ['flings', 'annex_f_flings', 'ejections'],
+          ['hides', 'annex_f_hides', 'dismissals'],
+          ['dockRestores', 'annex_f_restores', 'recalls from dock'],
+          ['bubblesSeen', 'annex_f_lines', 'lines delivered'],
+          ['sessions', 'annex_f_emisessions', 'sessions observed'],
+          ['days', 'annex_f_emidays', 'days observed'],
+        ];
+        pick.forEach(([k, lk, fb]) => { if (num(st2[k])) obs.push([t(lk, fb), st2[k]]); });
+        if (num(st2.msVisible)) {
+          obs.push([t('annex_f_hours', 'hours observed'), (st2.msVisible / 3600000).toFixed(1)]);
+        }
+      }
+    } catch (e) { /* rows drop, never fake */ }
+    if (obs.length) secs.push({ title: t('annex_f_unit', 'UNIT OBSERVATION'), rows: obs });
+    return secs;
+  }
+
+  /* THE REGISTRY LINK (punch 2). The page cannot reach the server (CORS is a
+   * wall, and the wall is right): the host fetches the public aggregate and
+   * posts it back as `annex-stats`. One request in flight, an 8s deadline,
+   * and every failure resolves null - the OS renders LINK DOWN, never a
+   * fabricated number (C6). Offline mode never sends at all. */
+  function requestAnnexStats() {
+    if (src.offlineMode) return Promise.resolve(null);
+    if (annexStatsWait) return annexStatsWait.promise;
+    const w = {};
+    w.promise = new Promise((resolve) => {
+      w.resolve = resolve;
+      w.timer = setTimeout(() => { annexStatsWait = null; resolve(null); }, 8000);
+    });
+    annexStatsWait = w;
+    try { bridge.send({ type: 'annex-stats' }); }
+    catch (e) {
+      clearTimeout(w.timer);
+      annexStatsWait = null;
+      return Promise.resolve(null);
+    }
+    return w.promise;
   }
 
   /* ============================ THE PUNCH CARD ==========================
@@ -3392,6 +3677,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
   /* ---------------------- host frames ----------------------------------- */
   const api = {
+    /** {type:'annex-stats'} - the host's answer to the registry link. Resolves
+     *  the one pending request; an unsolicited frame is dropped on the floor. */
+    onAnnexStats(m) {
+      const w = annexStatsWait;
+      if (!w) return;
+      annexStatsWait = null;
+      try { clearTimeout(w.timer); } catch (e) { /* noop */ }
+      w.resolve(m && m.body && typeof m.body === 'object' ? m.body : null);
+    },
+
     /** {type:'setting'} post-clamp echo. THE only path that moves a setting. */
     onSetting(m) {
       if (!m || typeof m.key !== 'string') return;
@@ -3577,7 +3872,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       }
       if (screen === 'settings') {
         if (settingsPage) { try { settingsPage.destroy(); } catch (e) { /* noop */ } settingsPage = null; }
-        if (active) showClassScreen(); else showBoard();
+        /* Esc is the page's other Back, so it owes the same route home - a
+         * settings page opened from a room folds back into the room, not past
+         * it to the campus. Same one-shot spend, same order of precedence. */
+        const back = settingsBack;
+        settingsBack = null;
+        if (active) showClassScreen();
+        else if (back) back();
+        else showBoard();
         return true;
       }
       // THE RECORDS SPOTLIGHT is a modal the player opened one press ago (a
@@ -3589,6 +3891,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       }
       // The Records Office is a screen like settings: Esc walks back to campus.
       if (screen === 'records') { showBoard(); return true; }
+      // A ROOM SCENE is a screen like records: Esc walks back to campus. Its
+      // hotspots are buttons, not modals - the room owns no inner rungs.
+      if (screen === 'room') { showBoard(); return true; }
+      // THE ANNEX folds inward-out (trap 48's shape, one ladder both sides of
+      // the seam): the lab's own rungs first - paper down, OS window shut,
+      // laptop closed, close-up stepped back - then the stairs walk home to
+      // the office, never straight to campus. You leave the way you came in.
+      if (screen === 'annex' && annexPage) {
+        try { if (annexPage.escapeStep()) return true; } catch (e) { /* noop */ }
+      }
+      if (screen === 'annex') { showRecords(); return true; }
       // A host suspend owns the screen. The panic ladder's second press (host
       // side) is the exit, and walking to the board here would destroy the
       // Resume card ~60ms after it appeared (both ladders fire on one Esc -
@@ -3639,6 +3952,20 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       dismissAnnexStage();
       disarmPunch();
       teardownClass();
+      /* the lab (and EMI's bracket) cannot outlive the shell */
+      if (annexPage) {
+        const ap = annexPage;
+        annexPage = null;
+        try { ap.destroy(); } catch (e) { /* noop */ }
+        if (annexEmiPrev) {
+          annexEmiPrev = false;
+          try { const emi = getEmi(); if (emi && emi.setEnabled) emi.setEnabled(true); } catch (e) { /* noop */ }
+        }
+      }
+      if (annexStatsWait) {
+        try { clearTimeout(annexStatsWait.timer); annexStatsWait.resolve(null); } catch (e) { /* noop */ }
+        annexStatsWait = null;
+      }
       setStage(null);
       if (orientation) { const ob = orientation; orientation = null; try { ob.destroy(); } catch (e) { /* noop */ } }
       if (ghosts) { try { ghosts.destroy(); } catch (e) { /* noop */ } ghosts = null; }
