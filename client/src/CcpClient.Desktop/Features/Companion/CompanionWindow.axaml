@@ -7,7 +7,7 @@
         Width="480" Height="860" MinWidth="380" MinHeight="420"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        Background="#FF141018">
+        Background="{DynamicResource DarkerBgBrush}">
 
   <!-- Hand-authored smallest AXAML (A-013 advisory runs on this file — advisory
        only). Evolved dashboard grammar: dark #FF141018 base, neon #FFE066FF accent,
@@ -26,13 +26,13 @@
       <Setter Property="Padding" Value="10,7" />
       <Setter Property="Margin" Value="0,3" />
       <Setter Property="MaxWidth" Value="330" />
-      <Setter Property="Background" Value="#FF1E1822" />
-      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="Background" Value="{DynamicResource SeatBgBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentHoverBrush}" />
       <Setter Property="BorderThickness" Value="1" />
     </Style>
     <Style Selector="Border.chat-bubble.user">
       <Setter Property="Background" Value="#FF241A2B" />
-      <Setter Property="BorderBrush" Value="#FF6B5B73" />
+      <Setter Property="BorderBrush" Value="{DynamicResource TextDimBrush}" />
       <Setter Property="HorizontalAlignment" Value="Right" />
     </Style>
     <Style Selector="Border.chat-bubble.thinking">
@@ -41,7 +41,7 @@
     <!-- The badge: neon accent ring — visible ONLY on Generated bubbles (the class is
          bound to the type-derived IsAiBadged, the single badge authority). -->
     <Style Selector="Border.chat-bubble.badged">
-      <Setter Property="BorderBrush" Value="#FFE066FF" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ShellAccentBrightBrush}" />
       <Setter Property="BoxShadow" Value="0 0 8 0 #66E066FF" />
     </Style>
     <!-- The refusal class (evolved POLICY-pill equivalent): amber treatment, never badged. -->
@@ -53,32 +53,32 @@
       <Setter Property="Opacity" Value="0.75" />
     </Style>
     <Style Selector="Border.badge-pill">
-      <Setter Property="Background" Value="#FFE066FF" />
+      <Setter Property="Background" Value="{DynamicResource ShellAccentBrightBrush}" />
       <Setter Property="Padding" Value="4,1" />
       <Setter Property="CornerRadius" Value="3" />
     </Style>
     <Style Selector="Border.badge-pill TextBlock">
-      <Setter Property="Foreground" Value="#FF141018" />
+      <Setter Property="Foreground" Value="{DynamicResource DarkerBgBrush}" />
       <Setter Property="FontSize" Value="9" />
       <Setter Property="FontWeight" Value="Bold" />
     </Style>
     <Style Selector="Button.companion">
       <Setter Property="Padding" Value="10,5" />
-      <Setter Property="Background" Value="#FF2A2130" />
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
-      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentHoverBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="4" />
     </Style>
     <Style Selector="Button.companion:pointerover">
-      <Setter Property="BorderBrush" Value="#FFE066FF" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ShellAccentBrightBrush}" />
     </Style>
     <Style Selector="Button.companion:disabled">
       <Setter Property="Opacity" Value="0.5" />
     </Style>
     <Style Selector="TextBlock.status">
       <Setter Property="FontSize" Value="11" />
-      <Setter Property="Foreground" Value="#FF9A8FA3" />
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
     </Style>
     <!-- THE DIAL SEAT. A Border around each segment, because a RadioButton's own Background does
          not fill a segment under the Fluent template - and because the seat's PADDING is what the
@@ -86,15 +86,15 @@
          seat fill, and the two fills are 44/20/51 apart so neither state's check can accept the
          other's capture. -->
     <Style Selector="Border.dial-seat">
-      <Setter Property="Background" Value="#FF1E1822" />
-      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="Background" Value="{DynamicResource SeatBgBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentHoverBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="3" />
       <Setter Property="Padding" Value="6,5" />
     </Style>
     <Style Selector="Border.dial-seat.selected">
       <Setter Property="Background" Value="#FF4A2C55" />
-      <Setter Property="BorderBrush" Value="#FFE066FF" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ShellAccentBrightBrush}" />
     </Style>
     <Style Selector="TextBlock.status.available">
       <Setter Property="Foreground" Value="#FFB8F0B8" />
@@ -104,9 +104,9 @@
   <Grid RowDefinitions="Auto,*,Auto,Auto">
 
     <!-- Header: title + status (status derives from the probed capability state ONLY). -->
-    <Border Grid.Row="0" Background="#FF241A2B" BorderBrush="#FF3A2F3E" BorderThickness="0,0,0,1" Padding="14,10">
+    <Border Grid.Row="0" Background="#FF241A2B" BorderBrush="{DynamicResource PanelAccentHoverBrush}" BorderThickness="0,0,0,1" Padding="14,10">
       <Grid ColumnDefinitions="Auto,*">
-        <TextBlock Text="Companion" FontSize="15" FontWeight="SemiBold" Foreground="#FFE066FF" VerticalAlignment="Center" />
+        <TextBlock Text="Companion" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource ShellAccentBrightBrush}" VerticalAlignment="Center" />
         <TextBlock Grid.Column="1" Classes="status"
                    Classes.available="{Binding StatusAvailable}"
                    Text="{Binding StatusText}"
@@ -133,7 +133,7 @@
                 <Border IsVisible="{Binding IsAiBadged}" Classes="badge-pill" HorizontalAlignment="Left" Margin="0,0,0,3">
                   <TextBlock Text="{Binding ProvenanceClass, StringFormat='AI · {0}'}" />
                 </Border>
-                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="#FFE8E0EE" />
+                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="{DynamicResource TextLightBrush}" />
               </StackPanel>
             </Border>
           </DataTemplate>
@@ -143,7 +143,7 @@
 
     <!-- Settings surface: awareness consent + memory consent + cooldown values + the
          memory-clear control. All states are session-scoped typed placeholders (owner-pending). -->
-    <Border Grid.Row="2" BorderBrush="#FF3A2F3E" BorderThickness="0,1,0,0" Padding="14,8">
+    <Border Grid.Row="2" BorderBrush="{DynamicResource PanelAccentHoverBrush}" BorderThickness="0,1,0,0" Padding="14,8">
       <StackPanel Spacing="6">
         <!-- WHAT LEAVES YOUR PC (audit row A3). Three stops over the two states the port has:
              the awareness consent, and the F4 per-app title allow-list. Never a stored level -
@@ -152,38 +152,38 @@
              and the filter cannot disagree. Copy is upstream's own
              (Localization/Languages/en.json:4432-4437, :4450). -->
         <TextBlock x:Name="PrivacyDialHead" Text="what leaves your PC"
-                   FontSize="12" Foreground="#FFE8E0EE"
+                   FontSize="12" Foreground="{DynamicResource TextLightBrush}"
                    AutomationProperties.AutomationId="PrivacyDialHead"
                    AutomationProperties.Name="what leaves your PC" />
         <Border x:Name="PrivacyDialStrip"
-                Background="#FF1E1822" BorderBrush="#FF3A2F3E" BorderThickness="1"
+                Background="{DynamicResource SeatBgBrush}" BorderBrush="{DynamicResource PanelAccentHoverBrush}" BorderThickness="1"
                 CornerRadius="4" Padding="6">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <Border Classes="dial-seat" Classes.selected="{Binding StopOffSelected}">
               <RadioButton x:Name="DialOff" GroupName="privacy-dial" Content="─ Off"
                            IsChecked="{Binding StopOffSelected}"
-                           Foreground="#FFE8E0EE" FontSize="12"
+                           Foreground="{DynamicResource TextLightBrush}" FontSize="12"
                            AutomationProperties.AutomationId="DialOff"
                            AutomationProperties.Name="privacy dial off" />
             </Border>
             <Border Classes="dial-seat" Classes.selected="{Binding StopAppNamesSelected}">
               <RadioButton x:Name="DialBroad" GroupName="privacy-dial" Content="◔ App names only"
                            IsChecked="{Binding StopAppNamesSelected}"
-                           Foreground="#FFE8E0EE" FontSize="12"
+                           Foreground="{DynamicResource TextLightBrush}" FontSize="12"
                            AutomationProperties.AutomationId="DialBroad"
                            AutomationProperties.Name="privacy dial app names only" />
             </Border>
             <Border x:Name="DialTitlesSeat" Classes="dial-seat" Classes.selected="{Binding StopPageTitlesSelected}">
               <RadioButton x:Name="DialTitles" GroupName="privacy-dial" Content="◉ + Page titles"
                            IsChecked="{Binding StopPageTitlesSelected}"
-                           Foreground="#FFE8E0EE" FontSize="12"
+                           Foreground="{DynamicResource TextLightBrush}" FontSize="12"
                            AutomationProperties.AutomationId="DialTitles"
                            AutomationProperties.Name="privacy dial plus page titles" />
             </Border>
           </StackPanel>
         </Border>
         <TextBlock x:Name="PrivacyDialHint" Text="{Binding PrivacyHint}"
-                   FontSize="11" Foreground="#FF9A8FA3" TextWrapping="Wrap"
+                   FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"
                    AutomationProperties.AutomationId="PrivacyDialHint" />
 
         <!-- THE PER-APP EDITOR (audit row A4). Opened by ASKING for the third stop; asking never
@@ -193,18 +193,18 @@
              every app's title through. -->
         <Border x:Name="TitleAllowEditor"
                 IsVisible="{Binding TitleEditorVisible}"
-                BorderBrush="#FF3A2F3E" BorderThickness="1" CornerRadius="4"
-                Background="#FF1E1822" Padding="8,6"
+                BorderBrush="{DynamicResource PanelAccentHoverBrush}" BorderThickness="1" CornerRadius="4"
+                Background="{DynamicResource SeatBgBrush}" Padding="8,6"
                 AutomationProperties.AutomationId="TitleAllowEditor">
           <StackPanel Spacing="4">
             <TextBlock Text="Apps whose page titles she may carry. Empty means none, for anyone."
-                       FontSize="11" Foreground="#FF9A8FA3" TextWrapping="Wrap" />
+                       FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" />
             <Grid ColumnDefinitions="*,Auto">
               <TextBox x:Name="TitleAllowInput"
                        Text="{Binding TitleAllowInput}"
                        PlaceholderText="app name"
-                       Background="#FF141018" Foreground="#FFE8E0EE"
-                       BorderBrush="#FF3A2F3E" CornerRadius="4" Padding="6,4"
+                       Background="{DynamicResource DarkerBgBrush}" Foreground="{DynamicResource TextLightBrush}"
+                       BorderBrush="{DynamicResource PanelAccentHoverBrush}" CornerRadius="4" Padding="6,4"
                        AutomationProperties.AutomationId="TitleAllowInput"
                        AutomationProperties.Name="app name to allow" />
               <Button Grid.Column="1" x:Name="TitleAllowAdd" Margin="6,0,0,0"
@@ -226,12 +226,12 @@
               </ItemsControl.ItemsPanel>
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="x:String">
-                  <Border Background="#FF2A2130" BorderBrush="#FF6B5B73" BorderThickness="1"
+                  <Border Background="{DynamicResource PanelAccentBrush}" BorderBrush="{DynamicResource TextDimBrush}" BorderThickness="1"
                           CornerRadius="3" Padding="6,2" Margin="0,2,4,0">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                      <TextBlock Text="{Binding}" FontSize="11" Foreground="#FFE8E0EE" VerticalAlignment="Center" />
+                      <TextBlock Text="{Binding}" FontSize="11" Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center" />
                       <Button Content="×" Padding="4,0" FontSize="11"
-                              Background="Transparent" BorderThickness="0" Foreground="#FF9A8FA3"
+                              Background="Transparent" BorderThickness="0" Foreground="{DynamicResource TextMutedBrush}"
                               Command="{Binding $parent[ItemsControl].((companion:CompanionViewModel)DataContext).RemoveNamedAppCommand}"
                               CommandParameter="{Binding}"
                               AutomationProperties.Name="stop carrying titles for this app" />
@@ -247,7 +247,7 @@
           <CheckBox x:Name="MemoryConsentToggle"
                     Content="Memory consent"
                     IsChecked="{Binding MemoryConsentGranted}"
-                    Foreground="#FFE8E0EE" FontSize="12" VerticalAlignment="Center"
+                    Foreground="{DynamicResource TextLightBrush}" FontSize="12" VerticalAlignment="Center"
                     AutomationProperties.AutomationId="MemoryConsentToggle"
                     AutomationProperties.Name="memory consent toggle" />
           <Button Grid.Column="1" x:Name="TranscriptButton" Margin="14,0,0,0"
@@ -293,7 +293,7 @@
                   ToolTip.Tip="The saved memory and every quarantined copy of it, so nothing can bring it back." />
         </WrapPanel>
         <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
-          <TextBlock Text="Cooldowns (s):" FontSize="11" Foreground="#FF9A8FA3" VerticalAlignment="Center" Margin="0,0,8,0" />
+          <TextBlock Text="Cooldowns (s):" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
           <NumericUpDown x:Name="ReactionCooldownBox" Grid.Column="1" Width="72"
                          Minimum="1" Maximum="600" Increment="1"
                          Value="{Binding ReactionSeconds}"
@@ -329,11 +329,11 @@
              user says so, which is the divergence AiExecutionGates.NoneAdmitted already
              recorded. -->
         <Grid ColumnDefinitions="Auto,Auto,*">
-          <TextBlock Text="Effect control" FontSize="12" Foreground="#FFE8E0EE" VerticalAlignment="Center" />
+          <TextBlock Text="Effect control" FontSize="12" Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center" />
           <CheckBox Grid.Column="1" x:Name="EffectsMasterToggle" Margin="10,0,0,0"
                     Content="Let her drive effects"
                     IsChecked="{Binding EffectsMasterEnabled}"
-                    Foreground="#FFE8E0EE" FontSize="12" VerticalAlignment="Center"
+                    Foreground="{DynamicResource TextLightBrush}" FontSize="12" VerticalAlignment="Center"
                     AutomationProperties.AutomationId="EffectsMasterToggle"
                     AutomationProperties.Name="effect control master toggle"
                     ToolTip.Tip="Master switch. While this is off she can drive nothing, whatever the switches below say." />
@@ -341,7 +341,7 @@
         <Border x:Name="EffectPermissionsPanel"
                 IsVisible="{Binding EffectsMasterEnabled}"
                 BorderBrush="#FFFFC107" BorderThickness="1" CornerRadius="4"
-                Background="#FF1E1822" Padding="8,6"
+                Background="{DynamicResource SeatBgBrush}" Padding="8,6"
                 AutomationProperties.AutomationId="EffectPermissionsPanel">
           <StackPanel Spacing="4">
             <TextBlock Text="Effect permissions" FontSize="11" FontWeight="SemiBold" Foreground="#FFFFC107" />
@@ -356,7 +356,7 @@
                   <StackPanel Orientation="Horizontal" Width="210" Margin="0,1">
                     <CheckBox Content="{Binding Label}"
                               IsChecked="{Binding Allowed}"
-                              Foreground="#FFE8E0EE" FontSize="12" VerticalAlignment="Center"
+                              Foreground="{DynamicResource TextLightBrush}" FontSize="12" VerticalAlignment="Center"
                               AutomationProperties.AutomationId="{Binding Id}"
                               AutomationProperties.Name="{Binding Label}" />
                     <!-- The named absence, in one word on screen and in full on hover. A ticked
@@ -365,7 +365,7 @@
                     <TextBlock Text="· not in this build"
                                IsVisible="{Binding BackendNoteVisible}"
                                VerticalAlignment="Center" Margin="4,0,0,0"
-                               FontSize="10" Foreground="#FF9A8FA3"
+                               FontSize="10" Foreground="{DynamicResource TextMutedBrush}"
                                ToolTip.Tip="{Binding BackendNote}" />
                   </StackPanel>
                 </DataTemplate>
@@ -377,26 +377,26 @@
              does — saved, clearable, consumed as context ONLY under the consent typed state.
              Never imply recall under the Denied placeholder default. -->
         <TextBlock Text="Memory is saved, can be cleared here, and is used as conversation context while memory consent is on. Consent, effect permissions and cooldowns are session-scoped placeholders pending owner decisions."
-                   FontSize="10" Opacity="0.6" Foreground="#FFE8E0EE" TextWrapping="Wrap" />
+                   FontSize="10" Opacity="0.6" Foreground="{DynamicResource TextLightBrush}" TextWrapping="Wrap" />
         <!-- The second honesty line, and it is the one that keeps this whole panel from
              over-claiming: her replies do not reach the command executor in this build at all
              (AiOperationPipeline.cs:340-346 refuses envelope-shaped replies). These switches
              decide what WOULD be admitted; nothing dispatches yet. -->
         <TextBlock x:Name="EffectDispatchNotice"
                    Text="Nothing dispatches yet: her replies are not read as commands in this build, so these switches decide what would be admitted, not what is happening."
-                   FontSize="10" Opacity="0.6" Foreground="#FFE8E0EE" TextWrapping="Wrap"
+                   FontSize="10" Opacity="0.6" Foreground="{DynamicResource TextLightBrush}" TextWrapping="Wrap"
                    AutomationProperties.AutomationId="EffectDispatchNotice" />
       </StackPanel>
     </Border>
 
     <!-- Input row: Enter or Send; Stop while in-flight. -->
-    <Border Grid.Row="3" BorderBrush="#FF3A2F3E" BorderThickness="0,1,0,0" Padding="14,10">
+    <Border Grid.Row="3" BorderBrush="{DynamicResource PanelAccentHoverBrush}" BorderThickness="0,1,0,0" Padding="14,10">
       <Grid ColumnDefinitions="*,Auto,Auto">
         <TextBox x:Name="ChatInput"
                  Text="{Binding InputText}"
                  PlaceholderText="Message the companion…"
-                 Background="#FF1E1822" Foreground="#FFE8E0EE"
-                 BorderBrush="#FF3A2F3E" CornerRadius="4" Padding="8,6"
+                 Background="{DynamicResource SeatBgBrush}" Foreground="{DynamicResource TextLightBrush}"
+                 BorderBrush="{DynamicResource PanelAccentHoverBrush}" CornerRadius="4" Padding="8,6"
                  AutomationProperties.Name="companion chat input">
           <TextBox.KeyBindings>
             <KeyBinding Gesture="Enter" Command="{Binding SendCommand}" />
@@ -421,14 +421,14 @@
             IsVisible="{Binding ConfirmVisible}"
             Background="#A0141018">
       <Border Width="340" Padding="18" CornerRadius="8"
-              Background="#FF1E1822" BorderBrush="#FFE066FF" BorderThickness="1"
+              Background="{DynamicResource SeatBgBrush}" BorderBrush="{DynamicResource ShellAccentBrightBrush}" BorderThickness="1"
               HorizontalAlignment="Center" VerticalAlignment="Center">
         <StackPanel Spacing="12">
           <TextBlock x:Name="ConfirmTitleText" Text="{Binding ConfirmTitle}"
-                     FontWeight="SemiBold" FontSize="14" Foreground="#FFE066FF"
+                     FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource ShellAccentBrightBrush}"
                      AutomationProperties.AutomationId="ConfirmTitleText" />
           <TextBlock x:Name="ConfirmBodyText" Text="{Binding ConfirmBody}"
-                     TextWrapping="Wrap" Foreground="#FFE8E0EE"
+                     TextWrapping="Wrap" Foreground="{DynamicResource TextLightBrush}"
                      AutomationProperties.AutomationId="ConfirmBodyText" />
           <Grid ColumnDefinitions="*,Auto,Auto">
             <Button Grid.Column="1" x:Name="ConfirmYesButton" Margin="0,0,8,0"

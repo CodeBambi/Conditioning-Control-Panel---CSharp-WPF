@@ -1,16 +1,29 @@
 # CCP greenfield verification harness - seeded-regression self-test.
 # Proves the targeted gate catches a REAL visual regression, throwaway-edit pattern
 # (AVLN2000 precedent; NO defect-injection flags in product code):
-#   1. edit the REAL MainWindow.axaml — break the SELECTED rail-door border brush
+#   1. edit the REAL Themes/Ccp.axaml — break the SELECTED rail-door border brush
 #   2. build, capture rail-door/selected, assert CcpVerify FAILS the SPECIFIC NAMED check
 #   3. restore (from the bytes captured in memory, never git), rebuild, re-capture, assert green
 #
+# THE ANCHOR MOVED, 2026-08-25, AND THE SEED GOT STRONGER FOR IT.
+# This used to seed Views/MainWindow.axaml, where #FFE066FF was pasted at three sites. The product
+# has a token layer now: that colour is declared ONCE, as `ShellAccentBright` in
+# src/CcpClient.Desktop/Themes/Ccp.axaml, and every surface that paints a selection binds the key
+# rather than the value. So the file this script edits moved with it.
+#
+# Seeding the token is strictly stronger than seeding one surface's markup was. Before, a seed
+# reached exactly the three sites that happened to carry the literal, and any FOURTH surface added
+# later - in another file, by another lane - was invisible to this test the day it was written.
+# Now the seed reaches every consumer of the key, present and future, because there is only one
+# place the colour exists. The two named checks below still have to trip, for the same reason as
+# before: that is what separates a check that catches a REAL regression in product markup from one
+# that only distinguishes two captures of a working build.
+#
 # The SAME seed covers the RACK, and it costs one extra capture per build to prove it.
-# #FFE066FF is not door-specific — it is also RadioButton.rack-row:checked's BorderBrush and
-# Ellipse.dot.live's Fill (MainWindow.axaml:68-71, :101-105, :390-393) — so one throwaway edit
-# breaks the rail door's selected border AND the rack row's selection marker, and both named
-# checks must trip on it. That is what separates a check that catches a REAL regression in product
-# markup from one that only distinguishes two captures of a working build.
+# `ShellAccentBright` is not door-specific — it is also RadioButton.rack-row:checked's BorderBrush
+# and Ellipse.dot.live's Fill (MainWindow.axaml:68-71, :101-105, :390-393 declare the three
+# styles) — so one throwaway edit breaks the rail door's selected border AND the rack row's
+# selection marker.
 # Re-runnable: pwsh client/tools/verify/self-test.ps1
 #
 # =================================================================================================
@@ -53,7 +66,7 @@ $ErrorActionPreference = 'Stop'
 
 $verifyDir = $PSScriptRoot
 $clientDir = Resolve-Path (Join-Path $verifyDir '..\..')
-$axaml = Join-Path $clientDir 'src\CcpClient.Desktop\Views\MainWindow.axaml'
+$axaml = Join-Path $clientDir 'src\CcpClient.Desktop\Themes\Ccp.axaml'
 $verify = Join-Path $clientDir 'tools\verify\CcpVerify\bin\Debug\net10.0\CcpVerify.exe'
 $manifest = Join-Path $verifyDir 'checks.json'
 $capture = Join-Path $verifyDir 'artifacts\windows-rail-door-selected.png'
@@ -205,9 +218,16 @@ function Fail([string]$msg) {
     exit 1
 }
 
-if ($original -notmatch '#FFE066FF') { Fail "AXAML does not contain the selected-door brush #FFE066FF - self-test anchor missing" }
+if ($original -notmatch '#FFE066FF') { Fail "$axaml does not declare the selected-door brush #FFE066FF - self-test anchor missing" }
 
-Write-Output '--- phase 1: seed the regression (selected-door border brush -> #FF336633) ---'
+# Exactly ONE occurrence, and the token file says so in its own comment. If a second ever appears -
+# a worked example, a duplicate key, a hex quoted in prose - the -replace below would rewrite it
+# too, and the restore proof further down would then be checking a file this script had edited in
+# two places for one reason. Cheaper to refuse than to explain.
+$anchorCount = ([regex]::Matches($original, '#FFE066FF')).Count
+if ($anchorCount -ne 1) { Fail "expected exactly ONE #FFE066FF in $axaml, found $anchorCount - the seed would touch more than the token" }
+
+Write-Output '--- phase 1: seed the regression (ShellAccentBright token -> #FF336633) ---'
 [IO.File]::WriteAllText($axaml, ($original -replace '#FFE066FF', '#FF336633'), [Text.UTF8Encoding]::new($false))
 
 try {

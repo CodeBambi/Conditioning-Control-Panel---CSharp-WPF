@@ -117,7 +117,7 @@
                          AutomationProperties.AutomationId="PhraseImportConfirmTitle"
                          TextWrapping="Wrap" />
               <TextBlock x:Name="PhraseImportConfirmDetail"
-                         Foreground="#FFE8E0EE"
+                         Foreground="{DynamicResource TextLightBrush}"
                          FontSize="12"
                          AutomationProperties.AutomationId="PhraseImportConfirmDetail"
                          TextWrapping="Wrap" />

@@ -10,7 +10,7 @@
         WindowDecorations="None"
         CanResize="False"
         ShowInTaskbar="False"
-        Background="#FF141018">
+        Background="{DynamicResource DarkerBgBrush}">
 
   <!-- ONE command path: Escape (tunnel key handling, WPF PreviewKeyDown parity) and the
        title-bar close button (Click) both terminate in ClosePopup() (W-04; xaml.cs:45-71). -->
@@ -18,38 +18,38 @@
   <Window.Styles>
     <Style Selector="Button.variant">
       <Setter Property="Padding" Value="10,4" />
-      <Setter Property="Background" Value="#FF2A2130" />
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
-      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentHoverBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="4" />
     </Style>
     <Style Selector="Button.variant:pointerover">
-      <Setter Property="BorderBrush" Value="#FFE066FF" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ShellAccentBrightBrush}" />
     </Style>
   </Window.Styles>
 
-  <Border BorderBrush="#FFE066FF" BorderThickness="1">
+  <Border BorderBrush="{DynamicResource ShellAccentBrightBrush}" BorderThickness="1">
     <Grid RowDefinitions="Auto,*,Auto">
 
       <!-- Popup-LOCAL title bar (A-005: no shared chrome framework). Drag via BeginMoveDrag. -->
       <Border x:Name="TitleBar" Grid.Row="0"
               Background="#FF241A2B"
-              BorderBrush="#FF3A2F3E" BorderThickness="0,0,0,1">
+              BorderBrush="{DynamicResource PanelAccentHoverBrush}" BorderThickness="0,0,0,1">
         <Grid ColumnDefinitions="Auto,*,Auto">
           <Border Width="28" Height="28" Margin="14,10,10,10"
                   CornerRadius="6" Background="#33E066FF">
-            <TextBlock Text="⚙" FontSize="16" Foreground="#FFE066FF"
+            <TextBlock Text="⚙" FontSize="16" Foreground="{DynamicResource ShellAccentBrightBrush}"
                        HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Border>
           <TextBlock Grid.Column="1" Text="Demo: Status Ticker — settings (demonstrator)"
-                     VerticalAlignment="Center" Foreground="#FFE066FF"
+                     VerticalAlignment="Center" Foreground="{DynamicResource ShellAccentBrightBrush}"
                      FontSize="15" FontWeight="SemiBold" />
           <Button Grid.Column="2" x:Name="CloseButton"
                   AutomationProperties.Name="popup close button"
                   Width="38" Height="38"
                   Background="Transparent" BorderThickness="0"
-                  Foreground="#FF9A8FA3" Content="✕"
+                  Foreground="{DynamicResource TextMutedBrush}" Content="✕"
                   ToolTip.Tip="Close (Esc)" />
         </Grid>
       </Border>
@@ -84,9 +84,9 @@
              the headed harness. UIA-readable; content-free diagnostics. -->
       <StackPanel x:Name="ProbeFooter" Grid.Row="2" Margin="16,4,16,8">
         <TextBlock x:Name="ScrollProbeText" FontSize="10" Opacity="0.6"
-                   Foreground="#FFE8E0EE" Text="scroll-probe: pending" />
+                   Foreground="{DynamicResource TextLightBrush}" Text="scroll-probe: pending" />
         <TextBlock x:Name="PopupProbeText" FontSize="10" Opacity="0.6"
-                   Foreground="#FFE8E0EE" Text="popup-probe: pending" />
+                   Foreground="{DynamicResource TextLightBrush}" Text="popup-probe: pending" />
       </StackPanel>
     </Grid>
   </Border>

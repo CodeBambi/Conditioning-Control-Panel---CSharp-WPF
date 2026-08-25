@@ -5,7 +5,7 @@
         Width="560" Height="560"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
-        Background="#FF141018">
+        Background="{DynamicResource DarkerBgBrush}">
   <!--
     SESSION EDITOR — upstream's Windows/SessionEditorWindow.xaml(.cs), opened from the rack row's
     edit action (MainWindow/MainWindow.SessionIO.cs:538 builds the button, :1819-1868 handles it).
@@ -35,31 +35,31 @@
   -->
   <Window.Styles>
     <Style Selector="Border.plate">
-      <Setter Property="Background" Value="#FF241E2A" />
-      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentHoverBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="6" />
       <Setter Property="Padding" Value="12" />
     </Style>
     <Style Selector="TextBlock.field-label">
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
       <Setter Property="Opacity" Value="0.7" />
       <Setter Property="FontSize" Value="11" />
       <Setter Property="Margin" Value="0,0,0,4" />
     </Style>
     <Style Selector="TextBox.field">
-      <Setter Property="Background" Value="#FF1B1620" />
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
-      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="Background" Value="{DynamicResource PanelBgBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentHoverBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="4" />
       <Setter Property="Padding" Value="8,6" />
       <Setter Property="FontSize" Value="12" />
     </Style>
     <Style Selector="Button.editor-action">
-      <Setter Property="Background" Value="#FF2A2130" />
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
-      <Setter Property="BorderBrush" Value="#FFD05CE8" />
+      <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ShellAccentBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="6" />
       <Setter Property="Padding" Value="16,8" />
@@ -73,7 +73,7 @@
     <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
       <TextBlock Grid.Column="0" x:Name="Header"
                  AutomationProperties.AutomationId="SessionEditorHeader"
-                 Foreground="#FFD05CE8" FontSize="20" FontWeight="Bold"
+                 Foreground="{DynamicResource ShellAccentBrush}" FontSize="20" FontWeight="Bold"
                  Text="Session Editor" />
       <!-- THE PROVENANCE LINE, and it is load-bearing rather than decorative: editing a built-in
            produces a second session with the SAME NAME unless the user changes it, so the one
@@ -84,7 +84,7 @@
            the decision is being made. -->
       <TextBlock Grid.Column="1" x:Name="ProvenanceLine"
                  AutomationProperties.AutomationId="SessionEditorProvenance"
-                 Foreground="#FFE8E0EE" Opacity="0.7" FontSize="12"
+                 Foreground="{DynamicResource TextLightBrush}" Opacity="0.7" FontSize="12"
                  VerticalAlignment="Center" TextAlignment="Right" Text="" />
     </Grid>
 
@@ -145,7 +145,7 @@
                     AutomationProperties.Name="Session duration in minutes" />
             <TextBlock Grid.Column="1" x:Name="DurationValue"
                        AutomationProperties.AutomationId="SessionEditorDurationValue"
-                       Foreground="#FFE8E0EE" FontSize="12" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextLightBrush}" FontSize="12" FontWeight="SemiBold"
                        VerticalAlignment="Center" Margin="10,0,0,0" MinWidth="60"
                        TextAlignment="Right" Text="" />
           </Grid>
@@ -190,7 +190,7 @@
                    AutomationProperties.AutomationId="SessionEditorDescriptionBox"
                    AutomationProperties.Name="Session description"
                    Text="" />
-          <TextBlock Foreground="#FFE8E0EE" Opacity="0.6" FontSize="11" Margin="0,4,0,0"
+          <TextBlock Foreground="{DynamicResource TextLightBrush}" Opacity="0.6" FontSize="11" Margin="0,4,0,0"
                      TextWrapping="Wrap"
                      Text="The rack row shows the first line; the whole thing is on its tooltip." />
         </StackPanel>
@@ -199,7 +199,7 @@
              §9 D7's rule: absent rather than greyed, and NAMED rather than silently missing. -->
         <TextBlock x:Name="AbsenceLine"
                    AutomationProperties.AutomationId="SessionEditorAbsence"
-                   Foreground="#FFE8E0EE" Opacity="0.6" FontSize="11"
+                   Foreground="{DynamicResource TextLightBrush}" Opacity="0.6" FontSize="11"
                    TextWrapping="Wrap" Text="" />
       </StackPanel>
     </Border>

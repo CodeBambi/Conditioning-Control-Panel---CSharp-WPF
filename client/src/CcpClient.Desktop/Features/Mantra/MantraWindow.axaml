@@ -70,7 +70,7 @@
         <StackPanel>
           <TextBlock Text="STREAK" Foreground="#606080" FontSize="11" FontWeight="Bold"
                      HorizontalAlignment="Center"/>
-          <TextBlock x:Name="StreakText" Text="0" Foreground="#FF69B4" FontSize="36"
+          <TextBlock x:Name="StreakText" Text="0" Foreground="{DynamicResource PinkBrush}" FontSize="36"
                      AutomationProperties.AutomationId="MantraStreakText"
                      FontWeight="Bold" HorizontalAlignment="Center"/>
         </StackPanel>
@@ -114,7 +114,7 @@
     <!-- The end of the run (WPF markup :179-192). -->
     <Border x:Name="CompletionOverlay" IsVisible="False" Background="#E0000000">
       <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-        <TextBlock Text="SESSION COMPLETE" Foreground="#FF69B4" FontSize="48" FontWeight="Bold"
+        <TextBlock Text="SESSION COMPLETE" Foreground="{DynamicResource PinkBrush}" FontSize="48" FontWeight="Bold"
                    HorizontalAlignment="Center"/>
         <TextBlock x:Name="CompletionStatsText" Foreground="#AAB8B8D0" FontSize="22"
                    HorizontalAlignment="Center" Margin="0,16,0,0"/>

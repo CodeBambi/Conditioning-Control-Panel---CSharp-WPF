@@ -3,7 +3,7 @@
         x:Class="CcpClient.Desktop.Features.AvatarTube.AvatarTubeDemonstratorWindow"
         Width="320" Height="380"
         Title="AvatarTube DEMONSTRATOR"
-        Background="#FF141018"
+        Background="{DynamicResource DarkerBgBrush}"
         CanResize="False"
         ShowInTaskbar="False"
         WindowStartupLocation="Manual">
@@ -11,12 +11,12 @@
     <!-- Explicit DEMONSTRATOR label (the demonstrator pattern): really-functioning, superseded
          by the first real AvatarTube feature, owner may async-veto. -->
     <TextBlock Text="AvatarTube DEMONSTRATOR — synthetic packs, not a product feature; the first real AvatarTube supersedes it."
-               FontSize="10" Opacity="0.7" TextWrapping="Wrap" Foreground="#FFE8E0EE" />
+               FontSize="10" Opacity="0.7" TextWrapping="Wrap" Foreground="{DynamicResource TextLightBrush}" />
 
     <!-- The tube: two crossfade layers at natural size (crisp strip; nearest-neighbor),
          float headroom 4 DIP all around so the strip never clips. Content bg = the
          evidence ContentBg constants. -->
-    <Border x:Name="AvatarStage" Width="104" Height="136" Background="#FF141018"
+    <Border x:Name="AvatarStage" Width="104" Height="136" Background="{DynamicResource DarkerBgBrush}"
             Margin="0,8,0,0" HorizontalAlignment="Left">
       <Canvas Width="104" Height="136">
         <Canvas x:Name="FloatCanvas" Width="96" Height="128" Canvas.Left="4" Canvas.Top="4">
@@ -28,12 +28,12 @@
       </Canvas>
     </Border>
 
-    <TextBlock x:Name="CapabilityText" FontSize="10" Foreground="#FFE8E0EE" Margin="0,6,0,0" TextWrapping="Wrap" />
+    <TextBlock x:Name="CapabilityText" FontSize="10" Foreground="{DynamicResource TextLightBrush}" Margin="0,6,0,0" TextWrapping="Wrap" />
     <TextBlock x:Name="ProbeText" FontSize="10" FontFamily="Consolas" Foreground="#FFB8F0B8" Margin="0,2,0,0"
                Text="avatar-probe: pending" />
 
     <!-- Demonstrator control strip (explicitly labeled; real user paths drive every behavior). -->
-    <TextBlock Text="demonstrator controls:" FontSize="9" Opacity="0.5" Foreground="#FFE8E0EE" Margin="0,8,0,2" />
+    <TextBlock Text="demonstrator controls:" FontSize="9" Opacity="0.5" Foreground="{DynamicResource TextLightBrush}" Margin="0,8,0,2" />
     <WrapPanel>
       <Button x:Name="ModeButton" Content="Animate" Margin="0,0,6,4" Padding="8,2" />
       <Button x:Name="TalkButton" Content="Talk" Margin="0,0,6,4" Padding="8,2" />

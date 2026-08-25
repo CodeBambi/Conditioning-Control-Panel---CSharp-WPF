@@ -4,7 +4,7 @@
         x:Class="CcpClient.Desktop.Views.MainWindow"
         Width="1100" Height="760"
         Title="CCP Client"
-        Background="#FF141018">
+        Background="{DynamicResource DarkerBgBrush}">
   <!--
     The navigation shell. Rail + page host + a diagnostic footer, modelled on the
     v6.8.1 Studio rack the owner pointed at (wpf-surface-reachability.md §8.3 @ 7527243e7) rather than on
@@ -34,10 +34,10 @@
          pseudo-class and keyboard activation is the control's own (WPF's rack row is a
          RadioButton too — Views/Tabs/StudioTabView.xaml.cs:645-651). -->
     <Style Selector="RadioButton.door">
-      <Setter Property="Background" Value="#FF1E1822" />
-      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="Background" Value="{DynamicResource SeatBgBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentHoverBrush}" />
       <Setter Property="BorderThickness" Value="2" />
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
       <Setter Property="Padding" Value="12,0,12,0" />
       <Setter Property="Height" Value="44" />
       <!-- Stretch, so every door is the same width: the headed harness captures a door's top
@@ -61,14 +61,14 @@
       </Setter>
     </Style>
     <Style Selector="RadioButton.door:pointerover">
-      <Setter Property="BorderBrush" Value="#FF6B5B73" />
+      <Setter Property="BorderBrush" Value="{DynamicResource TextDimBrush}" />
     </Style>
-    <!-- The selected door. #FFE066FF is the tier-2/tier-3 harness anchor
-         (client/tools/verify/self-test.ps1 seeds its regression by replacing it, and
-         checks.json's rail-door-selected-border reads this band back off real pixels). -->
+    <!-- The selected door. ShellAccentBright is the harness anchor and it is DECLARED IN
+         Themes/Ccp.axaml, not here: self-test.ps1 seeds its regression by replacing the token's
+         value there, and checks.json's rail-door-selected-border reads this band off real pixels. -->
     <Style Selector="RadioButton.door:checked">
-      <Setter Property="Background" Value="#FF2A2130" />
-      <Setter Property="BorderBrush" Value="#FFE066FF" />
+      <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ShellAccentBrightBrush}" />
     </Style>
 
     <!-- Rack row: the same mechanism at module granularity. -->
@@ -76,7 +76,7 @@
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderBrush" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0,0,0,0" />
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
       <Setter Property="Padding" Value="10,0,10,0" />
       <Setter Property="Height" Value="36" />
       <Setter Property="HorizontalAlignment" Value="Stretch" />
@@ -97,55 +97,55 @@
       </Setter>
     </Style>
     <Style Selector="RadioButton.rack-row:pointerover">
-      <Setter Property="Background" Value="#FF241E2A" />
+      <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}" />
     </Style>
     <Style Selector="RadioButton.rack-row:checked">
-      <Setter Property="Background" Value="#FF2A2130" />
-      <Setter Property="BorderBrush" Value="#FFE066FF" />
+      <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ShellAccentBrightBrush}" />
       <Setter Property="BorderThickness" Value="3,0,0,0" />
     </Style>
 
     <Style Selector="Border.rail">
-      <Setter Property="Background" Value="#FF19141F" />
-      <Setter Property="BorderBrush" Value="#FF2A2130" />
+      <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}" />
       <Setter Property="BorderThickness" Value="0,0,1,0" />
-      <Setter Property="Padding" Value="12" />
+      <Setter Property="Padding" Value="{DynamicResource PadNotice}" />
       <Setter Property="Width" Value="200" />
     </Style>
     <Style Selector="Border.rack">
-      <Setter Property="Background" Value="#FF19141F" />
-      <Setter Property="BorderBrush" Value="#FF2A2130" />
+      <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="8" />
-      <Setter Property="Padding" Value="8" />
+      <Setter Property="CornerRadius" Value="{DynamicResource RadiusPanel}" />
+      <Setter Property="Padding" Value="{DynamicResource PadRack}" />
     </Style>
     <Style Selector="Border.module">
-      <Setter Property="Background" Value="#FF1B1622" />
-      <Setter Property="BorderBrush" Value="#FF2A2130" />
+      <Setter Property="Background" Value="{DynamicResource PanelBgBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="8" />
-      <Setter Property="Padding" Value="16" />
+      <Setter Property="CornerRadius" Value="{DynamicResource RadiusPanel}" />
+      <Setter Property="Padding" Value="{DynamicResource PadPanel}" />
     </Style>
     <Style Selector="Border.notice">
-      <Setter Property="Background" Value="#FF241E2A" />
-      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentHoverBrush}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="6" />
-      <Setter Property="Padding" Value="12" />
+      <Setter Property="CornerRadius" Value="{DynamicResource RadiusControl}" />
+      <Setter Property="Padding" Value="{DynamicResource PadNotice}" />
     </Style>
     <Style Selector="Border.footer">
-      <Setter Property="Background" Value="#FF19141F" />
-      <Setter Property="BorderBrush" Value="#FF2A2130" />
+      <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}" />
       <Setter Property="BorderThickness" Value="0,1,0,0" />
       <Setter Property="Padding" Value="12,6" />
     </Style>
 
     <Style Selector="Button.module-action">
-      <Setter Property="Background" Value="#FF2A2130" />
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
-      <Setter Property="BorderBrush" Value="#FFD05CE8" />
+      <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ShellAccentBrush}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="CornerRadius" Value="{DynamicResource RadiusControl}" />
       <Setter Property="Padding" Value="14,10" />
       <Setter Property="HorizontalAlignment" Value="Stretch" />
       <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -155,17 +155,17 @@
          (Views/Tabs/PlayTabView.xaml:252 derives the band's 15 from "the card's 16 minus its
          1px border"), which is why the band below is 15. -->
     <Style Selector="Border.hero">
-      <Setter Property="Background" Value="#FF1B1622" />
-      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="Background" Value="{DynamicResource PanelBgBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentHoverBrush}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="16" />
-      <Setter Property="Padding" Value="24" />
+      <Setter Property="CornerRadius" Value="{DynamicResource RadiusCard}" />
+      <Setter Property="Padding" Value="{DynamicResource PadCard}" />
     </Style>
     <Style Selector="Border.tier-badge">
-      <Setter Property="Background" Value="#FF241E2A" />
-      <Setter Property="BorderBrush" Value="#FFB47BFF" />
+      <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource NeonPurpleBrush}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="CornerRadius" Value="{DynamicResource RadiusChip}" />
       <Setter Property="Padding" Value="7,2" />
     </Style>
     <Style Selector="TextBlock.tier-badge-text">
@@ -179,10 +179,10 @@
       <Setter Property="FontWeight" Value="Bold" />
     </Style>
     <Style Selector="Button.hero-primary">
-      <Setter Property="Background" Value="#FFD05CE8" />
+      <Setter Property="Background" Value="{DynamicResource ShellAccentBrush}" />
       <Setter Property="Foreground" Value="#FFFFFFFF" />
       <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="CornerRadius" Value="14" />
+      <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}" />
       <Setter Property="FontSize" Value="16" />
       <Setter Property="FontWeight" Value="Bold" />
       <Setter Property="Padding" Value="30,14" />
@@ -190,8 +190,8 @@
     </Style>
     <Style Selector="Button.hero-secondary">
       <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Foreground" Value="#FFD05CE8" />
-      <Setter Property="BorderBrush" Value="#FFD05CE8" />
+      <Setter Property="Foreground" Value="{DynamicResource ShellAccentBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ShellAccentBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="9" />
       <Setter Property="FontSize" Value="12" />
@@ -204,9 +204,9 @@
          ELEMENT rather than here — see the comment in PlayPage.axaml. -->
     <Style Selector="Border.lock-band">
       <Setter Property="Background" Value="#A8120A1E" />
-      <Setter Property="BorderBrush" Value="#FFB47BFF" />
+      <Setter Property="BorderBrush" Value="{DynamicResource NeonPurpleBrush}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="15" />
+      <Setter Property="CornerRadius" Value="{DynamicResource RadiusBand}" />
     </Style>
     <!-- The refusal message's own ground, and it must be OPAQUE (alpha FF). WPF's scrim carries
          a glyph plus one short line and sends the prose to a toast, which has its own surface
@@ -216,18 +216,18 @@
          so the card still reads around it. PlayPageHeadlessTests pins both alphas. -->
     <Style Selector="Border.lock-plate">
       <Setter Property="Background" Value="#FF1B1424" />
-      <Setter Property="BorderBrush" Value="#FFB47BFF" />
+      <Setter Property="BorderBrush" Value="{DynamicResource NeonPurpleBrush}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="CornerRadius" Value="{DynamicResource RadiusPlate}" />
       <Setter Property="Padding" Value="20,16" />
     </Style>
     <Style Selector="TextBlock.lock-title">
-      <Setter Property="Foreground" Value="#FFB47BFF" />
+      <Setter Property="Foreground" Value="{DynamicResource NeonPurpleBrush}" />
       <Setter Property="FontSize" Value="13" />
       <Setter Property="FontWeight" Value="Bold" />
     </Style>
     <Style Selector="TextBlock.lock-text">
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
       <Setter Property="FontSize" Value="12" />
       <!-- Three wrapped sentences need leading, or the descenders of one line sit on the
            ascenders of the next — the second half of what the headed capture caught. -->
@@ -241,9 +241,9 @@
          capture on the DTRH band, and it applies to any prose sitting on a translucent scrim. -->
     <Style Selector="Border.intake-gate">
       <Setter Property="Background" Value="#CC0A0A14" />
-      <Setter Property="BorderBrush" Value="#FFD05CE8" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ShellAccentBrush}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="CornerRadius" Value="{DynamicResource RadiusGate}" />
     </Style>
 
     <!-- The FAILURE livery, and it exists to be told apart from the two refusal liveries
@@ -263,22 +263,22 @@
          render one through the other. -->
     <Style Selector="Border.fault-band">
       <Setter Property="Background" Value="#C8140A02" />
-      <Setter Property="BorderBrush" Value="#FFF0A02E" />
+      <Setter Property="BorderBrush" Value="{DynamicResource WarningBrush}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="15" />
+      <Setter Property="CornerRadius" Value="{DynamicResource RadiusBand}" />
     </Style>
     <!-- Opaque, exactly as lock-plate is and for the §10 D23 reason: prose on a translucent scrim
          composites through the card and cannot be read. Its ground is warm rather than violet so
          the plate reads as a different KIND of surface, not a recoloured one. -->
     <Style Selector="Border.fault-plate">
       <Setter Property="Background" Value="#FF241505" />
-      <Setter Property="BorderBrush" Value="#FFF0A02E" />
+      <Setter Property="BorderBrush" Value="{DynamicResource WarningBrush}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="CornerRadius" Value="{DynamicResource RadiusPlate}" />
       <Setter Property="Padding" Value="20,16" />
     </Style>
     <Style Selector="TextBlock.fault-title">
-      <Setter Property="Foreground" Value="#FFF0A02E" />
+      <Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
       <Setter Property="FontSize" Value="13" />
       <Setter Property="FontWeight" Value="Bold" />
     </Style>
@@ -294,17 +294,17 @@
     </Style>
 
     <Style Selector="TextBlock.rail-brand">
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
       <Setter Property="FontWeight" Value="Bold" />
       <Setter Property="Margin" Value="4,0,0,10" />
     </Style>
     <Style Selector="TextBlock.page-title">
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
       <Setter Property="FontSize" Value="22" />
       <Setter Property="FontWeight" Value="Bold" />
     </Style>
     <Style Selector="TextBlock.page-blurb">
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
       <Setter Property="Opacity" Value="0.6" />
       <Setter Property="FontSize" Value="12" />
       <!-- The Studio blurb sits in a fixed-width rack column; unwrapped it overruns into the
@@ -312,18 +312,18 @@
       <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
     <Style Selector="TextBlock.rack-group">
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
       <Setter Property="Opacity" Value="0.5" />
       <Setter Property="FontSize" Value="10" />
       <Setter Property="Margin" Value="10,6,0,4" />
     </Style>
     <Style Selector="TextBlock.module-title">
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
       <Setter Property="FontSize" Value="16" />
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
     <Style Selector="TextBlock.diagnostic">
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
       <Setter Property="Opacity" Value="0.75" />
       <Setter Property="FontSize" Value="10" />
     </Style>
@@ -338,8 +338,8 @@
          port does not have, and rendering them would be the greyed control that swallows the
          gesture (§9 D7's rule). §9 D10 recorded the whole bar as absent; this narrows it. -->
     <Style Selector="Border.actionbar">
-      <Setter Property="Background" Value="#FF19141F" />
-      <Setter Property="BorderBrush" Value="#FF2A2130" />
+      <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}" />
       <Setter Property="BorderThickness" Value="0,1,0,0" />
       <Setter Property="Padding" Value="20,12" />
     </Style>
@@ -349,10 +349,10 @@
          btn_start/btn_stop keys (:761-762, :786-787) — the port keeps the literals and drops
          the glyphs, which is the §9 D8 emoji-stripping rule. -->
     <Style Selector="Button.session-start">
-      <Setter Property="Background" Value="#FFD05CE8" />
+      <Setter Property="Background" Value="{DynamicResource ShellAccentBrush}" />
       <Setter Property="Foreground" Value="#FFFFFFFF" />
       <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="CornerRadius" Value="14" />
+      <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}" />
       <Setter Property="FontSize" Value="18" />
       <Setter Property="FontWeight" Value="Bold" />
       <Setter Property="Padding" Value="42,12" />
@@ -362,10 +362,10 @@
          a disabled one — a stop the user cannot press is the failure mode a panic button
          exists to prevent. -->
     <Style Selector="Button.session-start.running">
-      <Setter Property="Background" Value="#FFFF6B6B" />
+      <Setter Property="Background" Value="{DynamicResource DangerBrush}" />
     </Style>
     <Style Selector="TextBlock.session-status">
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
       <Setter Property="Opacity" Value="0.7" />
       <Setter Property="FontSize" Value="12" />
       <Setter Property="VerticalAlignment" Value="Center" />
@@ -380,27 +380,27 @@
       <Setter Property="Width" Value="8" />
       <Setter Property="Height" Value="8" />
       <Setter Property="Fill" Value="Transparent" />
-      <Setter Property="Stroke" Value="#FF6B5B73" />
+      <Setter Property="Stroke" Value="{DynamicResource TextDimBrush}" />
       <Setter Property="StrokeThickness" Value="1" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="Ellipse.dot.armed">
-      <Setter Property="Fill" Value="#FF6B5B73" />
-      <Setter Property="Stroke" Value="#FF6B5B73" />
+      <Setter Property="Fill" Value="{DynamicResource TextDimBrush}" />
+      <Setter Property="Stroke" Value="{DynamicResource TextDimBrush}" />
     </Style>
     <Style Selector="Ellipse.dot.live">
-      <Setter Property="Fill" Value="#FFE066FF" />
+      <Setter Property="Fill" Value="{DynamicResource ShellAccentBrightBrush}" />
       <Setter Property="Stroke" Value="#FFF3C4FF" />
     </Style>
 
     <Style Selector="TextBlock.dial-label">
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
       <Setter Property="Opacity" Value="0.8" />
       <Setter Property="FontSize" Value="12" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="TextBlock.dial-value">
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
       <Setter Property="FontSize" Value="12" />
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="VerticalAlignment" Value="Center" />
@@ -408,7 +408,7 @@
       <Setter Property="TextAlignment" Value="Right" />
     </Style>
     <Style Selector="CheckBox.dial-enable">
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
       <Setter Property="FontSize" Value="12" />
     </Style>
   </Window.Styles>
