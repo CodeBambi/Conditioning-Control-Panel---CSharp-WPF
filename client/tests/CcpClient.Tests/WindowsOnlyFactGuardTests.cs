@@ -112,8 +112,8 @@ public partial class WindowsOnlyFactGuardTests
             + "eaten the comparison it was meant to qualify");
     }
 
-    /// <summary>Every P/Invoke name declared under <c>client/tests</c>, with the file that declares
-    /// it. Kept OUT of the fact body with the rest of the tree plumbing so no <c>fs-predicate</c>
+    /// <summary>Every P/Invoke name declared under <c>client/tests</c>, with every file that
+    /// declares it. Kept OUT of the fact body with the rest of the tree plumbing so no <c>fs-predicate</c>
     /// shape lands in a fact — the convention <c>SurfaceExitTests.ProductSourceRoot</c> follows. The
     /// name set is GLOBAL rather than per-file on purpose: an <c>internal</c> extern is callable
     /// from another file, and a guard that only looked in the declaring file would miss it. Line
@@ -126,7 +126,10 @@ public partial class WindowsOnlyFactGuardTests
         var testsRoot = Path.Combine([FindRepoRoot(), .. TestsParts]);
         Assert.True(Directory.Exists(testsRoot), $"client/tests not found at {testsRoot} — this guard refuses to skip");
 
-        var byName = new Dictionary<string, string>(StringComparer.Ordinal);
+        // Every declaring file, not the first one seen: several files declare their own
+        // private IsWindow, and a message naming one of them as THE declaration sends the
+        // reader to a file that has nothing to do with the violation.
+        var byName = new SortedDictionary<string, SortedSet<string>>(StringComparer.Ordinal);
         foreach (var file in Directory.EnumerateFiles(testsRoot, "*.cs", SearchOption.AllDirectories)
             .Where(f => !f.Replace('\\', '/').Contains("/obj/", StringComparison.Ordinal))
             .Where(f => !f.Replace('\\', '/').Contains("/bin/", StringComparison.Ordinal))
@@ -136,11 +139,17 @@ public partial class WindowsOnlyFactGuardTests
                 .Select(l => l.TrimStart().StartsWith("//", StringComparison.Ordinal) ? string.Empty : l));
             foreach (Match match in ExternDeclaration().Matches(text))
             {
-                byName.TryAdd(match.Groups[1].Value, Path.GetFileName(file));
+                if (!byName.TryGetValue(match.Groups[1].Value, out var declaringFiles))
+                {
+                    declaringFiles = new SortedSet<string>(StringComparer.Ordinal);
+                    byName[match.Groups[1].Value] = declaringFiles;
+                }
+
+                declaringFiles.Add(Path.GetFileName(file));
             }
         }
 
-        return [.. byName.Select(pair => (pair.Key, pair.Value))];
+        return [.. byName.Select(pair => (pair.Key, string.Join(", ", pair.Value)))];
     }
 
     private static string FindRepoRoot()
