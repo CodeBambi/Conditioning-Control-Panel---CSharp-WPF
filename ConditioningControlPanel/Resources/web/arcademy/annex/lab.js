@@ -135,6 +135,7 @@ const DRAWER = Object.freeze([
 const SILS = Object.freeze({
   owl: 'M50 8 L38 22 Q18 26 14 52 Q12 78 30 88 L70 88 Q88 78 86 52 Q82 26 62 22 L50 8 Z',
   tiger: 'M22 30 Q14 12 30 14 Q40 4 50 12 Q60 4 70 14 Q86 12 78 30 Q88 46 80 64 Q70 86 50 86 Q30 86 20 64 Q12 46 22 30 Z',
+  ghost: 'M50 8 Q20 8 20 44 L20 82 L30 72 L40 84 L50 72 L60 84 L70 72 L80 82 L80 44 Q80 8 50 8 Z',
   clip: 'M36 18 Q36 8 48 8 Q60 8 60 18 L60 66 Q60 78 48 78 Q36 78 36 66 L36 30 Q36 24 43 24 Q50 24 50 30 L50 62',
 });
 
@@ -579,8 +580,9 @@ export function createAnnexLab(caps) {
       path.setAttribute('class', 'al-sil-shape');
     }
     svg.appendChild(path);
-    if (name === 'owl') {
-      [[38, 46], [62, 46]].forEach(([ex, ey]) => {
+    if (name === 'owl' || name === 'ghost') {
+      const eyeY = name === 'ghost' ? 42 : 46;
+      [[38, eyeY], [62, eyeY]].forEach(([ex, ey]) => {
         const eye = doc.createElementNS(SVG_NS, 'circle');
         eye.setAttribute('cx', String(ex));
         eye.setAttribute('cy', String(ey));

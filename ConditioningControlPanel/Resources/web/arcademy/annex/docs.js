@@ -627,19 +627,19 @@ export const MASCOT_PAGES = Object.freeze([
       'app one more time, and nobody has.',
   }),
   Object.freeze({
-    id: 'tiger', sil: 'tiger', img: 'mascot-tiger.png',
-    red: Object.freeze({ a: 'T', z: 'Y', n: 2 }),
+    id: 'phantom', sil: 'ghost', img: 'mascot-phantom.png',
+    red: Object.freeze({ a: 'P', z: 'M', n: 5 }),
     stamp: 'REDACTED',
-    head: 'CASE PAGE. Breakfast product. Name withheld.',
+    head: 'CASE PAGE. Finance product. Name withheld.',
     body:
-'subject\'s mascot addresses children **in the second person** and **grades them great** before ' +
-'any performance occurs. **the praise arrives with the sugar.** **pairing does the rest**, see the ' +
-'evaluative conditioning file in protocols.\n\n' +
-'the mascot has **outlived four recipe changes**. **the bond survives what the product does not.** ' +
-'notes: none.',
-    tldr: Object.freeze(['in the second person', 'grades them great',
-      'the praise arrives with the sugar', 'pairing does the rest',
-      'outlived four recipe changes', 'the bond survives what the product does not']),
+'subject\'s product holds money. the face on it is **a ghost that smiles**. surveyed users rate ' +
+'the product **friendly** and rate their losses **their own fault**, a split the summary page ' +
+'files under **forgiving the face**.\n\n' +
+'the interface celebrates **the number going up** and is quiet otherwise. **the ghost never ' +
+'mentions the losses.** **the smile is load bearing.** notes: none.',
+    tldr: Object.freeze(['a ghost that smiles', 'friendly', 'their own fault',
+      'forgiving the face', 'the number going up',
+      'the ghost never mentions the losses', 'the smile is load bearing']),
   }),
   Object.freeze({
     id: 'clip', sil: 'clip', img: 'mascot-clip.png',
