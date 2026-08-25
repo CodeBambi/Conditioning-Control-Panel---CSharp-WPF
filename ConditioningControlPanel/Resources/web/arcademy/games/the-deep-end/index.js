@@ -168,7 +168,7 @@ import {
 } from './schedule.js';
 import { compositeFor, hardGates, flavorXp } from './grade.js';
 import { DE_LEX } from './lex.js';
-import { makeTaggedRoll } from '../../core/rng.js';
+import { makeTaggedRoll, makeRng } from '../../core/rng.js';
 
 /** A url the <img> element cannot show (a webm/mp4 loop). Mirrors engine/util.js
  *  VIDEO_URL_RE; games never import the engine, so the two-line rule is repeated. */
@@ -434,6 +434,11 @@ export default {
     let faceVisWired = false;              // one visibilitychange listener per class
     const faceDemotes = new Set();         // tiers demoted to a still, owed a re-dress at the stamp beat
     const faceStalls = new Map();          // tile node -> {media, id}: the no-frame watchdog
+    /* R3 - stall mercy: a tier the belt demoted may be re-dealt a video ONCE */
+    const faceStallRetry = new Set();      // tiers demoted for stall/error, still owed their one retry
+    const faceStallRetried = new Set();    // tiers whose one retry is spent
+    /* R3 - the rain picker's own tagged stream (new tag = legal; retakes stable) */
+    let rainPickRng = null;
     let stuckShown = false;
     /* pass 5 - THE PERF LADDER */
     let perfSetting = 'auto';              // de_perf: auto | full | lite
@@ -581,6 +586,12 @@ export default {
       channels: () => {
         try { return (ctx.engine && typeof ctx.engine.channels === 'function') ? ctx.engine.channels() : null; }
         catch (e) { return null; }
+      },
+      /* R3: the engine's idle pre-warm seam ('spiral' | 'media'). No rng, no
+       * visuals - a deck may nudge it, never depend on it. */
+      warm: (what) => {
+        try { return (ctx.engine && typeof ctx.engine.warm === 'function') ? ctx.engine.warm(what) : false; }
+        catch (e) { return false; }
       },
     };
     /** The player's own media, as a deck sees it. The pool lands ASYNC (a
@@ -825,6 +836,16 @@ export default {
         });
       } catch (e) { /* the double has no img semantics; fine */ }
     }
+    /** R3 - DECODER HYGIENE: a face <video> being replaced or discarded used
+     *  to keep its decoder session alive until GC (iOS holds a hardware
+     *  session per attached stream). pause + drop the src + load() releases it
+     *  NOW. Safe on any node; a non-video node is untouched. */
+    function releaseFaceVideo(media) {
+      if (!media || String(media.tagName || '').toUpperCase() !== 'VIDEO') return;
+      try { if (typeof media.pause === 'function') media.pause(); } catch (e) { /* ignore */ }
+      try { if (typeof media.removeAttribute === 'function') media.removeAttribute('src'); } catch (e) { /* ignore */ }
+      try { if (typeof media.load === 'function') media.load(); } catch (e) { /* ignore */ }
+    }
     /** The media node that can SHOW this url: the face's <img>, swapped for a
      *  <video> when the tier's url is a webm/mp4 loop (and back for a still).
      *  Same class, same place in the face; the listeners are re-armed. */
@@ -835,6 +856,7 @@ export default {
       const wantVideo = VIDEO_URL_RE.test(String(url || ''));
       const isVideo = !!(cur && String(cur.tagName || '').toUpperCase() === 'VIDEO');
       if (cur && wantVideo === isVideo) return cur;
+      if (isVideo) releaseFaceVideo(cur);          // R3: free the outgoing decoder session
       const next = el(wantVideo ? 'video' : 'img', 'g-de-media');
       armMedia(next, node, wantVideo);
       try {
@@ -1025,7 +1047,16 @@ export default {
       }
       const url = dealFaceUrl(kind);
       if (!url) return null;
-      const face = { url, kind };
+      /* R3 - KIND TRUTH: record what the url IS, not what was asked. A starved
+       * pool answers a 'loop' ask with a placeholder .svg or a still, and the
+       * old record said kind:'loop' anyway - burning one of the FACE_CAP
+       * animated slots (only 2 on touch) on a frozen image FOREVER
+       * (healDupFaces only re-deals duplicates; two different placeholders
+       * never heal). animatedFaces() now counts honestly; `want` remembers the
+       * degraded ask so healDegradedFaces can upgrade it when the pool grows. */
+      const isVid = VIDEO_URL_RE.test(String(url));
+      const face = { url, kind: isVid ? 'loop' : 'still' };
+      if (kind === 'loop' && !isVid) face.want = 'loop';
       faceUrls.set(tier, face);
       if (!faceLogged) {
         faceLogged = true;
@@ -1101,6 +1132,10 @@ export default {
       const tiers = [...faceDemotes];
       faceDemotes.clear();
       for (const tr of tiers) redressTier(tr);
+      /* R3: a promotion just moved the animated set around - the stamp beat
+       * (never the input task) is the moment a stall-demoted tier may take its
+       * one retry / a degraded deal may upgrade, if a slot is actually free. */
+      healDegradedFaces();
     }
     /** PASS 8 - THE BELT (touch only, like the ceiling it guards): a face
      *  <video> that errored (or sat frameless past FACE_VIDEO_STALL_MS) does
@@ -1119,7 +1154,12 @@ export default {
       const still = dealFaceUrl('still');
       if (!still || VIDEO_URL_RE.test(still)) { faceBroken(node); return; }
       faceUrls.set(tier, { url: still, kind: 'still' });
-      say('faces: tier ' + tier + ' video failed or stalled - the tier falls back to a still');
+      /* R3 - STALL MERCY: the demote stands (the phone gets its media NOW),
+       * but the tier is owed ONE retry at a video - on the next pool batch or
+       * the next promotion flush, never a retry storm (faceStallRetried). */
+      if (!faceStallRetried.has(tier)) faceStallRetry.add(tier);
+      say('faces: tier ' + tier + ' video failed or stalled - the tier falls back to a still'
+        + (faceStallRetried.has(tier) ? ' (retry spent)' : ' (one retry armed)'));
       redressTier(tier);
     }
     /** PASS 8 - arm the no-frame watchdog on a freshly dressed <video> face
@@ -1180,6 +1220,39 @@ export default {
      *  replay on show - unless another window still holds them. */
     function onFaceVisibility() { if (!dead) syncFaceVideos(); }
 
+    /* ---- R3: THE ELEMENT-TRUE FACE BUDGET ------------------------------- *
+     * FACE_CAP_* counts TIERS; every live TILE of an animated tier is its own
+     * decoder session. These count the ELEMENTS and hold them under a real
+     * ceiling (3 on touch - the iOS hardware number - 8 on desktop), with the
+     * excess tiles of a tier wearing the tier's still fallback. The FACE_CAP
+     * tier semantics stay layered on top, untouched. */
+    function faceVideoElCeil() {
+      return touch ? PLAYTEST.FACE_VIDEO_EL_CEIL_TOUCH : PLAYTEST.FACE_VIDEO_EL_CEIL;
+    }
+    /** Live tile nodes currently carrying a face <video> WITH a stream (a
+     *  released video - src stripped by releaseFaceVideo - holds no session
+     *  and must not count against the ceiling). */
+    function faceVideoTiles() {
+      const out = [];
+      for (const n of tileEls.values()) {
+        const m = mediaOf(n);
+        if (!m || String(m.tagName || '').toUpperCase() !== 'VIDEO') continue;
+        try { if (typeof m.getAttribute === 'function' && !m.getAttribute('src') && !m.src) continue; } catch (e) { /* count it */ }
+        out.push(n);
+      }
+      return out;
+    }
+    /** The tier's still fallback for its excess tiles, dealt lazily ONCE and
+     *  cached on the face record. Only ever runs on the overflow path (dirty
+     *  state - the clean path's draw order is untouched). */
+    function tierStillFallback(face) {
+      if (!face) return null;
+      if (face.still) return face.still;
+      const still = dealFaceUrl('still');
+      if (!still || VIDEO_URL_RE.test(still)) return null;
+      face.still = still;
+      return still;
+    }
     /** Dress (or re-dress after a merge) a tile with its tier's face. Never
      *  blocks a draw: the plain body shows until the image has a frame. */
     function dressFace(node, tile) {
@@ -1192,15 +1265,58 @@ export default {
       if (!face) {
         if (node.getAttribute('data-face') != null) {        // it wore an older tier's face; strip it
           node.classList.remove('is-loaded');
+          releaseFaceVideo(img);                             // R3: an outgoing video frees its decoder
           try { if (typeof img.removeAttribute === 'function') img.removeAttribute('src'); } catch (e) { /* ignore */ }
           node.setAttribute('data-face', '');
         }
         return;
       }
+      let url = face.url;
+      /* R3 - the element ceiling. A video url only lands on this tile while
+       * the face <video> element count stays under faceVideoElCeil(). Past it:
+       * a tile of a DEEPER tier takes the video by demoting one element of the
+       * shallowest video-wearing tier to that tier's still fallback (the
+       * deepest keeps the video - that is where the eye is); a same-or-
+       * shallower arrival wears its own tier's still fallback instead. */
+      if (VIDEO_URL_RE.test(String(url))) {
+        const vids = faceVideoTiles().filter((n) => n !== node);
+        if (vids.length >= faceVideoElCeil()) {
+          let victim = null;
+          let victimTier = Infinity;
+          for (const vn of vids) {
+            const vt = Number(vn.getAttribute('data-face'));
+            if (vt > 0 && vt < victimTier) { victim = vn; victimTier = vt; }
+          }
+          let ceded = false;
+          if (victim && victimTier < tier) {
+            const vf = faceUrls.get(victimTier);
+            const vstill = vf && !vf.broken && vf.url ? tierStillFallback(vf) : null;
+            if (vstill) {
+              const vm = mediaNodeFor(victim, vstill);       // mediaNodeFor releases the outgoing decoder
+              if (vm) {
+                victim.classList.remove('is-loaded');
+                try { vm.src = vstill; } catch (e) { /* ignore */ }
+                armFaceStall(victim, vm);
+              }
+              ceded = true;
+            }
+          }
+          if (!ceded) url = tierStillFallback(face);
+        }
+      }
+      if (!url) {
+        /* no honest still to overflow onto: the plain body stands (same shape
+         * as the face-null path; the tier's video tiles are untouched) */
+        node.classList.remove('is-loaded');
+        releaseFaceVideo(img);
+        try { if (typeof img.removeAttribute === 'function') img.removeAttribute('src'); } catch (e) { /* ignore */ }
+        node.setAttribute('data-face', String(tier));
+        return;
+      }
       node.setAttribute('data-face', String(tier));
       node.classList.remove('is-loaded');
-      const media = mediaNodeFor(node, face.url) || img;
-      try { media.src = face.url; } catch (e) { /* ignore */ }
+      const media = mediaNodeFor(node, url) || img;
+      try { media.src = url; } catch (e) { /* ignore */ }
       armFaceStall(node, media);             // pass 8: a video face owes a frame within the stall window
     }
     /** A url that failed: this tier goes plain for the rest of the class (no retry storm). */
@@ -1217,6 +1333,7 @@ export default {
           other.classList.remove('is-loaded');
           other.setAttribute('data-face', '');
           const img = mediaOf(other);
+          releaseFaceVideo(img);                       // R3: free the decoder with the face
           try { if (img && typeof img.removeAttribute === 'function') img.removeAttribute('src'); } catch (e) { /* ignore */ }
         }
       }
@@ -1254,11 +1371,80 @@ export default {
         }
         if (!fresh) continue;
         worn.add(fresh);
-        faceUrls.set(tier, { url: fresh, kind: f.kind });
+        /* R3 kind truth here too: the re-deal records what fresh IS, and a
+         * loop ask served a still stays owed (want) for healDegradedFaces. */
+        const freshVid = VIDEO_URL_RE.test(fresh);
+        const nf = { url: fresh, kind: freshVid ? 'loop' : 'still' };
+        if ((f.kind === 'loop' || f.want === 'loop') && !freshVid) nf.want = 'loop';
+        faceUrls.set(tier, nf);
         healed = true;
         redressTier(tier);
       }
       if (healed) say('faces: duplicate tier clips re-dealt (the pool grew)');
+    }
+    /** R3 - THE DEGRADED-DEAL CURE, healDupFaces's sibling (same trigger:
+     *  pool.onUpdate; plus the stamp beat's demote flush). Two dirty states
+     *  only - the clean path never runs this and moves no draw:
+     *    (a) a tier that ASKED for a loop but was served a placeholder/still
+     *        (face.want === 'loop') - re-deal it a real video;
+     *    (b) a tier the stall belt demoted, owed its ONE retry
+     *        (faceStallRetry) - re-deal it a video once, then never again.
+     *  Same draw discipline as dealFaceUrl (six bounded draws, worn-dedup),
+     *  and the tier caps stand: never past faceCap(), never in the shallows. */
+    function healDegradedFaces() {
+      if (!pool || typeof pool.next !== 'function') return;
+      for (const [tier, f] of [...faceUrls]) {
+        if (!f || f.broken || !f.url) continue;
+        const wantsUpgrade = f.want === 'loop' && f.kind !== 'loop';
+        const stallRetry = faceStallRetry.has(tier) && f.kind !== 'loop';
+        if (!wantsUpgrade && !stallRetry) continue;
+        if (tier <= shallowStillMaxTier()) continue;       // the shallows stay still
+        if (animatedFaces() >= faceCap()) continue;        // the tier cap stands
+        const worn = new Set();
+        for (const w of faceUrls.values()) if (w && w.url) worn.add(w.url);
+        let url = null;
+        try {
+          for (let i = 0; i < 6; i += 1) {
+            let u = null;
+            const got = pool.next('loop');
+            u = got && got.url ? String(got.url) : null;
+            if (!u) break;
+            if (VIDEO_URL_RE.test(u) && !worn.has(u)) { url = u; break; }
+          }
+        } catch (e) { url = null; }
+        if (!url) continue;
+        if (stallRetry) { faceStallRetry.delete(tier); faceStallRetried.add(tier); }
+        faceUrls.set(tier, { url, kind: 'loop' });
+        say('faces: tier ' + tier + (stallRetry ? ' takes its one stall retry' : ' upgrades its degraded deal') + ' - video re-dealt');
+        redressTier(tier);
+      }
+    }
+    /** R3 - THE WARM RAIN PICKER (the engine's opts.pick seam). A rain node
+     *  lives ~3-4s; a cold phone fetch cannot land inside that, so the rain
+     *  rained placeholders/blanks. This answers a url that is ALREADY DECODED
+     *  AND ON SCREEN: a worn face whose tier has at least one live is-loaded
+     *  tile. On touch only non-video urls qualify (reusing an mp4 in a rain
+     *  node mints a NEW decoder session; a cached still is free) - the tier's
+     *  still fallback included. Empty set -> null -> the engine's own draw
+     *  stands, exactly today's behavior. Seeded on its own NEW tagged stream
+     *  ('|de|rain-pick') so a retake picks the same sequence. */
+    function pickRainUrl() {
+      if (!rainPickRng) return null;
+      const cands = [];
+      for (const [tier, f] of faceUrls) {
+        if (!f || f.broken || !f.url) continue;
+        let loaded = false;
+        for (const tile of board ? board.tiles : []) {
+          if (tile.silt || tile.tier !== tier) continue;
+          const n = tileEls.get(tile.id);
+          if (n && n.classList && n.classList.contains('is-loaded')) { loaded = true; break; }
+        }
+        if (!loaded) continue;
+        if (!touch || !VIDEO_URL_RE.test(String(f.url))) cands.push(f.url);
+        if (f.still && f.still !== f.url) cands.push(f.still);
+      }
+      if (!cands.length) return null;
+      return cands[Math.min(cands.length - 1, Math.floor(rainPickRng() * cands.length))] || null;
     }
     function motionLevelOf() {
       try { const v = ctx.motion && ctx.motion.motionLevel; return Number.isFinite(Number(v)) ? Number(v) : 2; } catch (e) { return 2; }
@@ -1284,7 +1470,10 @@ export default {
       // a tile leaving the board carries no live state with it
       node.classList.remove('is-deepest', 'is-strain', 'is-new', 'is-merged', ...SLIDE_CLASSES);
       node.classList.add('is-gone');
-      const drop = () => { try { node.remove(); } catch (e) { /* noop */ } };
+      const drop = () => {
+        releaseFaceVideo(mediaOf(node));               // R3: a leaving tile frees its decoder NOW, not at GC
+        try { node.remove(); } catch (e) { /* noop */ }
+      };
       if (delayMs > 0) after(delayMs, drop); else drop();
     }
     function liveTiles() {
@@ -2531,7 +2720,7 @@ export default {
           pool = p;
           run(dressAllFaces);                     // the tiles already on the board get their faces now
           /* a remote batch landing is the one moment a starved deal can be bettered */
-          if (typeof p.onUpdate === 'function') p.onUpdate(() => { if (!dead && pool === p) run(healDupFaces); });
+          if (typeof p.onUpdate === 'function') p.onUpdate(() => { if (!dead && pool === p) run(() => { healDupFaces(); healDegradedFaces(); }); });
         })
         .catch((e) => say('asset claim failed - plain faces, currents fall back to the engine pool: ' + ((e && e.message) || e)));
     }
@@ -2758,6 +2947,9 @@ export default {
           facesHeld = false;
           faceDemotes.clear();
           faceStalls.clear();                // ids died with the registry; the map must not outlive them
+          faceStallRetry.clear();            // R3: the one-retry ledger is per class
+          faceStallRetried.clear();
+          rainPickRng = makeRng(seed + '|de|rain-pick');   // R3: new tagged stream, retake-stable
         }
         // the plan's own draws do not depend on the budget; a free swim deals the
         // same seeded show a 300s class would (never Infinity into the clamp)
@@ -2848,6 +3040,9 @@ export default {
              * params wrapper or a plain gif url - the deck's pin paints its
              * paintable half and the wheel wash rides the engine provider. */
             classSpiral: (ctx && ctx.classSpiral) || null,
+            /* R3 - the warm rain: the deck's gif_rain rides urls this board has
+             * already decoded (engine pick seam; the pool draw still happens). */
+            pickRainUrl,
             log: say,
           });
         } catch (e) { pressure = null; say('pressure refused: ' + ((e && e.message) || e)); }

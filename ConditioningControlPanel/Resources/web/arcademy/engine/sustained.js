@@ -41,7 +41,7 @@
 
 import { clamp01 } from '../core/caps.js';
 import { NODE_CAPS, washSpec, gifRainSpec, ambientSpec, driftSpec, bubbleSpec } from './curves.js';
-import { rand, hasDom, mediaEl, budgetedKind } from './util.js';
+import { rand, hasDom, mediaEl, budgetedKind, isVideoUrl } from './util.js';
 import { createEscapeGuard } from './escape.js';
 import { createLoomWash } from './loomWash.js';
 
@@ -412,7 +412,21 @@ export function createSustained(ctx) {
       if (live.rain >= rainCap) return;
       /* THE DECODER BUDGET (util.js): past it a 'loop' request is served a
        * still, so the rain keeps its node count and drops its decode cost. */
-      const url = ctx.assetUrlSync(budgetedKind(opts.assetKind || 'loop'));
+      const drawn = ctx.assetUrlSync(budgetedKind(opts.assetKind || 'loop'));
+      /* WARM-MEDIA SEAM (opt-in, 2026-08-25): `opts.pick()` may answer a url
+       * the game KNOWS is warm (already decoded on its own board). The original
+       * draw above still happens either way - the provider pool consumes its
+       * own shared rng on next(), so the draw may never be skipped (the
+       * shared-rng law); a null/absent pick falls back to it byte-identically.
+       * A picked VIDEO may only ride a slot the decoder budget already granted
+       * (drawn itself a video), so a pick can never upgrade a still draw into
+       * an uncounted decoder session. */
+      let url = drawn;
+      if (typeof opts.pick === 'function') {
+        let picked = null;
+        try { picked = opts.pick() || null; } catch { picked = null; }
+        if (picked && (!isVideoUrl(picked) || isVideoUrl(drawn))) url = picked;
+      }
       const node = (url && mediaEl(url)) || document.createElement('div');   // <video> for a webm/mp4 loop
       node.className = 'ae-rain';
       node.style.setProperty('--ae-x', Math.round(rand(ctx.rng, 2, 88)) + '%');

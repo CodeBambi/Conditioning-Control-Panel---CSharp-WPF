@@ -250,8 +250,10 @@ function cafFn() {
 /**
  * @param {Object} o   see THE INTERFACE in the pass-4 sheet:
  *   seed, gradeTier, reduced, motionLevel, stage, bench, board,
- *   hud:{score,depth,chain,clock}, engine:{fire,sustain,stop,channels},
- *   assets:{next(kind)}, timers:{after,every,clear}, capsOk:()=>bool, log
+ *   hud:{score,depth,chain,clock}, engine:{fire,sustain,stop,channels,warm?},
+ *   assets:{next(kind)}, timers:{after,every,clear}, capsOk:()=>bool, log,
+ *   pickRainUrl? (R3: () => url|null over the game's already-decoded board
+ *   faces - rides the engine's gif_rain opts.pick seam; optional everywhere)
  */
 export function createDePressure(o) {
   const opts = o || {};
@@ -744,8 +746,21 @@ export function createDePressure(o) {
     if (still || !opts.bench) return null;
     return fire('glitch_swap', { targets: opts.bench, variant: 'vhsroll', seconds: seconds || 0.6, onSwap() {}, sfx: false });
   }
+  /** R3 - the warm-media nudge. Zero rng (the pool's prewarm forecasts over
+   *  cloned cursors), zero visuals; a beat of byte-warm lead so the rain's own
+   *  draws are not stone cold on a phone. Optional at every layer. */
+  function warmMedia() {
+    if (!armedBase || destroyed || typeof eng.warm !== 'function') return;
+    try { eng.warm('media'); } catch (e) { /* optional */ }
+  }
   function rain(variant, ms) {
-    return sustain('gif_rain', { variant, durationMs: Math.round(ms), clickSafe: true });
+    const o2 = { variant, durationMs: Math.round(ms), clickSafe: true };
+    /* R3 - the warm-media seam: the game's picker over its own already-decoded
+     * board faces (index.js pickRainUrl). The engine still performs its
+     * original pool draw either way (shared-rng law); an absent/empty picker
+     * is byte-identical to before. */
+    if (typeof opts.pickRainUrl === 'function') o2.pick = opts.pickRainUrl;
+    return sustain('gif_rain', o2);
   }
   function burstAt(tileEl, n) {
     const at = pctOf(tileEl);
@@ -795,6 +810,10 @@ export function createDePressure(o) {
   function enterRung(k) {
     const row = P.LADDER[k];
     if (!row) return;
+    /* R3: one rung BEFORE the rain arms (rung 5), start byte-warming the pool's
+     * next draws - a rain node lives ~3-4s and a cold phone fetch cannot land
+     * inside that. No rng, no visuals. */
+    if (k === 4) warmMedia();
     for (const key of row.adds) {
       if (present.has(key)) continue;
       present.add(key);
@@ -943,6 +962,7 @@ export function createDePressure(o) {
     /** A new deepest tier this dive: the rung climbs NOW, then the heavy hit. */
     newDeepest(tier, tileEl) {
       if (!started || stopped || !armed()) return;
+      warmMedia();                       // R3: the rain below draws in seconds - warm the deck now
       tierNow = Math.max(1, tierOf(tier));
       stepTo(rungFor(tierNow), false);
       punchBoard(Math.min(P.PUNCH_PX_CAP, P.PUNCH_DEEP_PX + P.PUNCH_DEEP_PER_TIER * tierNow), P.PUNCH_DEEP_MS);
