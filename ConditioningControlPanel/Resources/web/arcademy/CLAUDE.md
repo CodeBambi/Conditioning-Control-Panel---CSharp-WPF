@@ -85,14 +85,31 @@ shell/enrollment.js the once-ever intro (ENROLL_LEX: 3 flavour cards per class)
                    the tenth = the unlock beat)
 shell/room.js      THE ROOM SCENE (VN antechamber): the painted set between the
                    campus door and a class, REPLACING the door card for rooms
-                   listed in its SCENES table. FIVE ROOMS LIVE: daily_trigger
-                   (Homeroom 101, vn-04, chalkboard + painted corridor door),
+                   listed in its SCENES table. ALL TEN ROOMS LIVE, so the door
+                   card is now the exception: daily_trigger (Homeroom 101,
+                   vn-04, chalkboard + painted corridor door),
                    deja_vu (Memory Lab 102, vn-05, the card racks),
                    impulse_control (Discipline Hall 103, vn-06, THE red button
                    under glass + the panelled door), lost_and_found (L&F 104,
                    vn-07, the central shelf bay - NOT the whole 850px wall, a
-                   highlight that big reads as a bug) and the_deep_end (The
-                   Pool 105, vn-08, open lane water + the ladder). campus.js
+                   highlight that big reads as a bug), the_deep_end (The
+                   Pool 105, vn-08, open lane water + the ladder), and the
+                   Semester II + III five: sort (The Sorting Room 201, vn-12,
+                   the card conveyor - the belt, not the three bins),
+                   echo (Music Room 202, vn-13, the four lit drum heads on the
+                   stage), instant_recall (Lecture Hall 203, vn-14, the blank
+                   projection screen - NOT the lectern), anomaly (Darkroom 301,
+                   vn-15, the drying lines framed on the ONE crooked print +
+                   the black light-trap curtain as the painted exit) and
+                   composure (The Studio 302, vn-16, the sliding-tile canvas on
+                   the easel). Three of the ten have a painted exit (101, 103,
+                   301); the other seven are doorless and that is legal.
+                   TWO PLATES ARE COMPOSITED, never regenerated: vn-16's wall
+                   sign was painted "COMPOSUE", so the sign rect was cloned out
+                   and logo-composure-keyed.png pasted back in (the homeroom
+                   "DAILeR" recipe), and vn-12's far-left window pane carried a
+                   stray second neon fragment, cloned out from the next pane
+                   along. campus.js
                    OFFERS every enterable door via handlers.roomScene(key,
                    {plate}) before popping the card; shell.js takes keys the
                    table has (walkThen first - door, THEN room), declines the
@@ -284,6 +301,16 @@ shell/idcard.js    THE STUDENT ID: the laminated card in the corner of the
                    photo IS the `presenceShare` discord rung (owner ruling, see
                    §3) and paints only from the echo. NOT SHAREABLE by ruling -
                    reportcard.js stays the one share pipeline (trap 13)
+shell/accountchip.js THE ACCOUNT CHIP: the round photo miniature at the far right
+                   of the topbar AND of the campus top-right cluster, and the
+                   front-desk menu under it (Signed in as / Open my card /
+                   Profile / Sign out). A HOST SLOT: mounted only when
+                   `init.account` (or `account` on a `profile` frame) arrives -
+                   the C# host never sends it, so the desktop is unchanged. The
+                   page holds NO url: it posts `account-action {action}` and
+                   the host walks (cclabs-web PROFILE-CONTRACT §8). Photo =
+                   same-origin path or a drawn monogram; "Open my card" is the
+                   shell's own showIdCard. No Esc rung (trap 59's shape)
 shell/annexreveal.js THE NIGHT THE WALL MOVED: the once-ever reveal cinematic
                      (cut to black -> a thud from below -> EMI startled -> one
                      second of the records office at night with a wall panel
@@ -630,7 +657,8 @@ the voice's `labSeen` on first entry. Progress is ONE page-owned meta blob under
 metric, subject, experiment, data) are legal DOWNSTAIRS ONLY - `annex/docs.js` and the
 `annex_*` lexicon rows - and nowhere else in the school. The REGISTRY's live counts arrive
 through the host verb `annex-stats` (C# fetches the public aggregate; a null body is LINK
-DOWN, and the page never invents a number).
+DOWN, and the page never invents a number). **The web build has a third key to that door
+and it is not a third gate** - see trap 99, `init.devAnnex`.
 
 ## 3. Cross-agent seams — change these only with the other side
 
@@ -2063,6 +2091,46 @@ DOWN, and the page never invents a number).
     cannot express this failure at all; `proof-asks.mjs` (port 8753) caught it on
     the first run. Any future affordance placed inside `.emi` needs the same
     early return, and a browser assertion to prove it.
+
+99. **`init.devAnnex` IS A PEEK, NOT A REVEAL - AND THE DESKTOP CANNOT SEE IT.**
+    The owner needs to walk the Records Annex on `app.cclabs.app/arcademy` without
+    burning the once-ever reveal, so the WEB host projects one extra init boolean,
+    `devAnnex`, beside `devDoor`. `shell.js` reads it once as `annexPeek` and ORs
+    it into exactly TWO places - the campus hatch's bag (`annex:`) and the Records
+    Office's `ajar` - which is the whole feature: the lab becomes REACHABLE.
+    **It must never widen past that.** In particular:
+    - `maybeAnnexReveal` and the morning-after catch-up probe that schedules it
+      are UNTOUCHED. OR-ing `annexPeek` into the `if (!store.get('annexRevealSeen'))`
+      guard would *suppress* the real beat for good, which is the exact opposite
+      of a peek.
+    - `store.set('annexRevealSeen', ...)` still happens in ONE place and a peek is
+      not it. Nothing about a peek is persisted.
+    - `seenFlags.annex` (the postman's ctx) deliberately keeps reading the real
+      store flag. That flag gates letters, and a delivered letter *is* persisted
+      state; a peek that minted mail would be a reveal wearing a hat.
+    - `shell/seep.js`'s `postReveal()` keeps reading the real flag too, for the
+      same reason - the Seep's escalation is a story beat, not a door.
+
+    **`ArcademyHostService.cs` has never sent this field and must not start.**
+    Absent is false, so the desktop build cannot reach the branch at all; the
+    C# side of this feature is that there isn't one. The web end is
+    `cclabs-web`: `ARCADEMY_ANNEX_PEEK_EMAILS` (server allow-list) + `?annex=1`
+    on the lobby -> `arc-web:annexpeek` in localStorage -> `host/init.js`. The
+    query string alone is never enough, and the lobby REMOVES the key on any
+    visit that is not a peek. None of it is a security boundary - the web meta
+    store is localStorage, so devtools could always reach the annex - it keeps
+    the lab off the *supported* path, which is all it was ever asked to do.
+100. **THE STUDENT ID NEVER `display:none`s ON A SMALL STAGE, IT FOLDS (owner bug 2026-08-25,
+    "I cannot see my profile card on the web").** `styles.css`'s "small stages" query
+    (`max-width:760px, max-height:600px`) is EVERY phone in BOTH orientations - an iPhone is
+    <=430px on its short side, so landscape trips the height clause and portrait the width one -
+    and from the first hub commit it hid `.campus-idcard` outright, written when the card was
+    decoration. PR #299 then built the post row around "once the card is gone the corner is
+    free". The SAME node now folds into a ~185x52 tag (photo, name, number; band / stats / tier
+    / chip / clip hidden by class, never by replacing the node - trap 93 still holds) and the
+    post row steps right of it (`+ 212px`). If a future small-stage rule needs the corner, fold
+    harder; never hide. The web host's account chip (`shell/accountchip.js`) also offers "Open my
+    card" from the bar, so the full ID is one tap away on a phone either way.
 
 ## 5. The game module contract (short version)
 

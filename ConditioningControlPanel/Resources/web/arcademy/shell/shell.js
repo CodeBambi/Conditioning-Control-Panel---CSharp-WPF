@@ -56,6 +56,7 @@ import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
 import { createFirstBell } from '../vn/index.js';
 import { createRecordsRoom } from './recordsroom.js';
 import { createIdSpotlight, idReducedMotion } from './idcard.js';
+import { createAccountChip, readAccount } from './accountchip.js';
 import { createAnnexReveal } from './annexreveal.js';
 /* THE SEEP - the foreshadowing layer. ONE director, and the shell's whole
  * relationship with it is: build it, hand it read-only seams and three gate
@@ -412,9 +413,25 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   /* ---------------------- look & lexicon -------------------------------- */
   setLexicon(src.lexicon);
   applyPalette(src.palette, say);
-  const reducedMotion = !!src.reducedMotion || src.motionLevel === 0;
+  let reducedMotion = !!src.reducedMotion || src.motionLevel === 0;
   if (reducedMotion && document.documentElement) {
     document.documentElement.classList.add('arc-reduced');
+  }
+  /** THE WEB'S MOTION CONTROL. The settings page's 'This device' sheet posts
+   *  `motionLevel` (0 off / 1 reduced / 2 full) and the shim echoes it; this is
+   *  the echo landing. The desktop never echoes the key (its Motion row is
+   *  read-only, the app owns it), so on the app this is never reached. CSS
+   *  rides html.arc-reduced at once; the JS consumers read `reducedMotion` at
+   *  their next build (a class start, a screen change), which is the same
+   *  contract every other setting on that page already makes. */
+  function applyMotionLevel(level) {
+    const n = Number(level);
+    if (!Number.isFinite(n)) return;
+    src.motionLevel = n;
+    src.reducedMotion = n !== 2;
+    reducedMotion = n === 0 || !!src.reducedMotion;
+    const html = document.documentElement;
+    if (html && html.classList) html.classList.toggle('arc-reduced', reducedMotion);
   }
   /* THE MOBILE SEAM (core/device.js). One decision, painted on <html> as
    * `arc-mobile` and kept there across a rotate, so the stylesheet's phone rules
@@ -685,6 +702,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       presenceShare: idRung(src.profile.presenceShare, profile.presenceShare),
     };
   }
+  /* ---------------------- THE ACCOUNT CHIP (shell/accountchip.js) ----------
+   * A HOST SLOT. `init.account` (and `account` on a `profile` frame) is the
+   * web host's word that there is a login to control from this bar: name,
+   * a same-origin photo path and the ACTIONS it will honour. The desktop
+   * never sends it, so `account` stays null and no chip is ever mounted.
+   * ONE state, TWO chips (the topbar's and the campus cluster's) - both paint
+   * from `account` and both post the verb through `postAccountAction`. */
+  let account = readAccount(src.account);
+  let topAccountChip = null;
+  function postAccountAction(action) {
+    try { bridge.send({ type: 'account-action', action: String(action) }); }
+    catch (e) { say('account-action ' + action + ' refused: ' + ((e && e.message) || e)); }
+  }
   /** THE LAB (ANNEX-OS.md). Built fresh per visit and destroyed on every path
    *  out - it runs a cam-wall rAF and holds EMI's bracket, neither of which
    *  may survive the screen. `annexEmiPrev` remembers whether EMI was enabled
@@ -730,6 +760,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   // Host opened the building through the dev switch (`--arcademy`). Unlocks
   // Begin on every campus door regardless of the seed; never true for players.
   const devPass = src.devDoor === true;
+  /* THE ANNEX PEEK (web only, owner only). The web lobby stamps it for an
+   * account on the server's ARCADEMY_ANNEX_PEEK_EMAILS allow-list arriving at
+   * /arcademy?annex=1; the C# host has never sent the field and absent is
+   * false, so the desktop cannot see this branch at all.
+   *
+   * IT IS A PEEK, NOT A REVEAL. It makes the lab REACHABLE - the campus hatch
+   * and the office's ajar door - and touches nothing else. It never writes
+   * `annexRevealSeen`, so maybeAnnexReveal below is untouched and the real
+   * beat still waits for the tenth card and lands once, for real, later. It
+   * deliberately does NOT reach `seenFlags.annex` either: that flag gates the
+   * postman, and a delivered letter is persisted state a peek must not mint. */
+  const annexPeek = src.devAnnex === true;
+  if (annexPeek) say('ANNEX PEEK (owner dev): lab reachable, nothing stamped');
 
   /* ---------------------- registry + timetable -------------------------- */
   const games = await loadGames(say);
@@ -1124,7 +1167,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   function setStage(mode) {
     const html = document.documentElement;
     if (html && html.classList) {
-      html.classList.remove('arc-class-on', 'arc-report-on');
+      html.classList.remove('arc-class-on', 'arc-report-on', 'arc-settings-on');
       if (mode) html.classList.add(mode);
     }
     if (dom && dom.topbar) dom.topbar.hidden = !!mode;
@@ -1189,6 +1232,22 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     gear.type = 'button';
     gear.addEventListener('click', () => showSettings());
     bar.appendChild(gear);
+    /* THE ACCOUNT CHIP, far right, beside SETTINGS. Web host only: the slot
+     * stays empty on a desktop that never sent `init.account`. The bar is
+     * rebuilt on every render, so the chip is too - one mint per render, the
+     * old one destroyed so its document listeners go with it. */
+    if (topAccountChip) { try { topAccountChip.destroy(); } catch (e) { /* noop */ } topAccountChip = null; }
+    if (account) {
+      try {
+        topAccountChip = createAccountChip({
+          t, account, isMobile,
+          onOpenCard: () => showIdCard(),
+          onAction: postAccountAction,
+          log: say,
+        });
+        if (topAccountChip) bar.appendChild(topAccountChip.el);
+      } catch (e) { say('account chip unavailable (' + ((e && e.message) || e) + ')'); topAccountChip = null; }
+    }
   }
 
   /* ============================ SCREEN: BOARD =========================== */
@@ -1510,7 +1569,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
          * hatch joins the plan only after the reveal AND a first visit through
          * the office panel - revisits skip the walk, discovery never does.
          * Same bag contract as `post`: campus draws, the shell keeps state. */
-        annex: (store.get('annexRevealSeen') && (store.get('annex') || {}).visited)
+        annex: (annexPeek || (store.get('annexRevealSeen') && (store.get('annex') || {}).visited))
           ? { open: () => walkThen('annex', () => showAnnex()) }
           : null,
         on: {
@@ -1565,6 +1624,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           /* The photo consent, leaving for the host. ONE function, because
            * there is ONE switch (owner ruling 1). */
           idChip: () => onIdChip(),
+        },
+        /* THE ACCOUNT CHIP in the campus's top-right cluster (web host only -
+         * null on the desktop, and the cluster is what it always was). Same
+         * state and the same two verbs as the topbar's chip. */
+        account: {
+          get: () => account,
+          isMobile,
+          onOpenCard: () => showIdCard(),
+          onAction: postAccountAction,
         },
         log: say,
       });
@@ -1726,11 +1794,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     screen = 'settings';
     clearScreen();
     renderTopbar();
+    /* The marker styles.css keys the phone's settings rules off (the opaque
+     * bottom bar, the scroller's padding, EMI stepping off the title). Not a
+     * stage: the topbar stays up. clearScreen() -> setStage(null) unwinds it. */
+    if (document.documentElement && document.documentElement.classList) {
+      document.documentElement.classList.add('arc-settings-on');
+    }
     settingsPage = createSettingsPage({
       init: src,
       bridge,
       games: games.list,
       keybinds,
+      // The folds bank their open state here (`optionsOpen.<section>`).
+      store,
       /* THE DOOR'S TWO WRITE VERBS, lent to the web Media group so its add
        * and remove buttons ride SORT's `probe-sub` / `library-remove` frames
        * rather than a second copy of them. The group only renders behind
@@ -2115,8 +2191,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       daySeed: utcDateSeed,
       onCorkRead: () => { /* the read rows are the module's own; nothing owed here */ },
       // THE STOREROOM. The shell keeps the gate: the door exists only once the
-      // reveal has fired (ANNEX-OS.md §1), and the room just draws it.
-      ajar: !!store.get('annexRevealSeen'),
+      // reveal has fired (ANNEX-OS.md §1), and the room just draws it. The
+      // owner's peek is the second key to the same door and stamps nothing.
+      ajar: !!store.get('annexRevealSeen') || annexPeek,
       onBack: () => showBoard(),
       onReport: () => showReport(),
       onAnnex: () => showAnnex(),
@@ -4152,6 +4229,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (src.settings && typeof src.settings === 'object' && !isGlobalSettingKey(m.key)) {
         src.settings[m.key] = m.value;
       }
+      if (m.key === 'motionLevel') applyMotionLevel(m.value);
       if (settingsPage) { settingsPage.noteEcho(m.key, m.value); settingsPage.applyEcho(m.key, m.value); }
       if (m.key === SETTING_KEYS.keybinds) keybinds.applyEcho(m.value);
       /* THE PHOTO CHIP IS THE `presenceShare` DISCORD RUNG (owner ruling 1), so
@@ -4196,6 +4274,24 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       clearIdLinkTimer();
       idChipWait = null;
       paintIdProfile();
+      /* THE ACCOUNT CHIP rides the same frame (a late fetch, a name that
+       * landed after init). Additive: a frame without `account` changes
+       * nothing, and a desktop host never sends one. */
+      const acct = readAccount(m && m.account);
+      if (acct) {
+        const first = !account;
+        account = acct;
+        // A chip that never existed (init shipped without `account`) is minted
+        // now; one that did repaints in place.
+        // Only a bar that is UP is re-rendered here: a hidden one (campus, class)
+        // is the next renderTopbar's job, and un-hiding it mid-class would be a
+        // regression of its own.
+        try {
+          if (topAccountChip) topAccountChip.setAccount(acct);
+          else if (first && dom && dom.topbar && !dom.topbar.hidden) renderTopbar();
+        } catch (e) { /* noop */ }
+        try { if (campus && campus.setAccount) campus.setAccount(acct); } catch (e) { /* noop */ }
+      }
       const result = m && typeof m.result === 'string' ? m.result : null;
       if (result === 'linked') {
         runIdPhotoDay();

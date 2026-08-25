@@ -9,8 +9,11 @@
  * The SCENES table is the whole fan-out surface - a room joins the program by
  * adding a row, and every room without one keeps the door card it always had
  * (campus.js only offers the takeover; shell.js declines it for keys this
- * table lacks). Five rooms are painted: Homeroom 101 (the pilot), Memory Lab
- * 102, Discipline Hall 103, Lost & Found 104 and The Pool 105.
+ * table lacks). All ten class rooms are painted now: Homeroom 101 (the pilot),
+ * Memory Lab 102, Discipline Hall 103, Lost & Found 104, The Pool 105, and the
+ * Semester II + III five - The Sorting Room 201, the Music Room 202, Lecture
+ * Hall 203, the Darkroom 301 and the Studio 302. Nothing falls to the dark
+ * stage any more, so a door card is now the exception, not the rule.
  *
  * THE FREE SWIM RULE. The door card carried a second, subordinate button for
  * games that declare `manifest.endless`, and the room REPLACES that card - so
@@ -62,8 +65,8 @@ const APRON_MIN_MOBILE = 72;
  *  - `hotspot`  : the class furniture - the ONE lit thing, wears the action tag.
  *  - `exit`     : optional painted way out (a door in the art). Same verb as
  *                 the apron's back slab; a room without one just keeps the slab.
- *                 Only rooms whose art actually HAS a door get one - three of
- *                 the five are painted doorless and that stays legal.
+ *                 Only rooms whose art actually HAS a door get one - seven of
+ *                 the ten are painted doorless and that stays legal.
  *  - `freeSwim` : optional second furniture, for a game that declares
  *                 `manifest.endless`. Renders only when the shell hands down an
  *                 onFreeSwim; spends the same one-class latch as the hotspot.
@@ -107,6 +110,52 @@ const SCENES = Object.freeze({
     art: 'vn-08-the-pool-105.png',
     hotspot: Object.freeze([490, 368, 400, 104]),
     freeSwim: Object.freeze([335, 408, 132, 140]),
+  }),
+  /* THE SORTING ROOM 201. The card conveyor, not the three bins: the bins are
+   * where a decision LANDS, the belt is where it is asked for, and the deck of
+   * face-down cards riding up it is the two-pile swipe sitting in the furniture.
+   * The rect takes the belt's whole diagonal run, so the last card is caught at
+   * the mouth of the pink bin. Doorless: the far-right recess is a dark alcove
+   * behind a bin, not a painted way out. */
+  sort: Object.freeze({
+    art: 'vn-12-sorting-room-201.png',
+    hotspot: Object.freeze([744, 402, 320, 168]),
+  }),
+  /* THE MUSIC ROOM 202. The four lit drum heads on the low stage - pink, gold,
+   * cream, purple - which is the Simon ring already dealt out as furniture, and
+   * the only thing in the room that is lit from inside. The rect is the row and
+   * the stage lip under it, never the wall sign above. Doorless set: the walls
+   * are acoustic foam and glazing. */
+  echo: Object.freeze({
+    art: 'vn-13-music-room-202.png',
+    hotspot: Object.freeze([478, 392, 418, 110]),
+  }),
+  /* LECTURE HALL 203. The blank projection screen. The lectern is the room's
+   * focal furniture and it is NOT the game - the wall of faces is - so the rect
+   * is the screen fabric, inside the bezel, all 538px of it. Big by the L&F
+   * rule, and it stays big on purpose: the montage is full-bleed, and a
+   * highlight on a corner of a blank screen would be the arbitrary one.
+   * Doorless: the two aisles climb out of frame, no painted door. */
+  instant_recall: Object.freeze({
+    art: 'vn-14-lecture-hall-203.png',
+    hotspot: Object.freeze([420, 136, 538, 254]),
+  }),
+  /* THE DARKROOM 301. The drying lines, framed on the ONE crooked print - the
+   * odd-one-out is the class, so the rect is the block of pegged prints that
+   * holds it near its centre rather than the whole 780px of wall. The black
+   * light-trap curtain on the back wall is a real painted way out. */
+  anomaly: Object.freeze({
+    art: 'vn-15-darkroom-301.png',
+    hotspot: Object.freeze([250, 226, 296, 196]),
+    exit: Object.freeze([936, 200, 128, 276]),
+  }),
+  /* THE STUDIO 302. The sliding-tile canvas on the easel - the rect is the
+   * scrambled grid, not the white board around it, because the board is a
+   * canvas and the grid is the puzzle. Doorless: an arched window one side,
+   * stacked canvases the other. */
+  composure: Object.freeze({
+    art: 'vn-16-studio-302.png',
+    hotspot: Object.freeze([583, 242, 216, 216]),
   }),
 });
 

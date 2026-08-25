@@ -1123,11 +1123,11 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// The ? box's face: the tile keeps the mystery-box art, but its title names today's
-        /// feature outright and the badge says what the box means - free users see the gift tag,
-        /// premium users (who own the whole pool) see no tag at all. Named, not teased: the box
-        /// is a daily doorbell, and a doorbell that will not say who is at the door just gets
-        /// ignored on day three.
+        /// The ? box's face: the tile keeps the mystery-box art and its title is the OFFER, never
+        /// the answer - "FREE TODAY" on the unopened box, today's feature only on the reveal face
+        /// the hover turns up (owner, 2026-08-23). The old face named the feature outright, which
+        /// spent the surprise before the plate ever turned; the doorbell still rings, it just does
+        /// not shout who is at the door through the door.
         /// </summary>
         internal void RefreshMysteryTile()
         {
@@ -1138,10 +1138,18 @@ namespace ConditioningControlPanel
             {
                 var key = App.DailyFree?.TodayKey;
                 var name = MysteryFeatureName(key);
-                dash.CardMystery.Title = name ?? Loc.Get("mosaic_daily_gift");
-                dash.CardMystery.TierBadge = App.Patreon?.HasPremiumAccess == true
-                    ? null
-                    : Loc.Get("mosaic_free_today");
+                // The unopened box says WHAT it is, not WHICH it is: the same two words every
+                // day, whoever is looking. `name` is still resolved here because the reveal face
+                // below (and only it) is where the day's feature gets named.
+                dash.CardMystery.Title = Loc.Get("mosaic_free_today");
+
+                // ...which is why the gift-tag pill is gone from this face. It carried exactly
+                // the words the title now carries, and two "FREE TODAY"s on one 12px plate is a
+                // stutter, not emphasis. Nothing is lost: the free/premium distinction the pill
+                // used to draw is drawn on the reveal face by MysteryRevealBadge's re-stamp
+                // (dimmed tier sign + FREE TODAY stamp for free accounts, no sign for premium),
+                // and the box keeps its gold ring either way.
+                dash.CardMystery.TierBadge = null;
 
                 // The flip plate's reveal face mirrors the box - same feature, said bigger.
                 // Painted on every repaint (not just at ceremony start) so a mid-day server
