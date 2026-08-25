@@ -41,13 +41,19 @@
    noticeboard rendered as four ghosts (caught in a capture, invisible to the
    node run, which has no cascade at all).
 
-   So the block is keyed on all three hosts. `.arc-cork-wall` nests inside
+   So the block is keyed on all FOUR hosts. `.arc-cork-wall` nests inside
    `.arc-corkstage` on the hall's overlay and simply re-declares the same
    derived values there, which costs nothing and cannot drift - they are one
-   list in one place. */
+   list in one place. The fourth is `.arc-cork-reader`, which walked into the
+   same wall from the other side: a sheet taken off the wall is mounted on
+   <body>, so it has no cork host above it at all and came out as ghost type on
+   glass (caught in a capture again, 2026-08-25). ANY host that can carry paper
+   declares the tokens - that sentence is the rule, and it is now on its second
+   demonstration. */
 .arc-corkstage,
 .arc-boardprop,
-.arc-cork-wall {
+.arc-cork-wall,
+.arc-cork-reader {
   --cork:        color-mix(in srgb, var(--gold) 26%, color-mix(in srgb, var(--navy), black 14%));
   --cork-lo:     color-mix(in srgb, var(--cork), black 30%);
   --cork-hi:     color-mix(in srgb, var(--cork), var(--ink) 14%);
@@ -461,3 +467,166 @@ html.arc-reduced .rr-cork .arc-corknote:focus-within { animation: none; }
   .rr-cork .arc-corknote:hover,
   .rr-cork .arc-corknote:focus-within { animation: none; }
 }
+
+/* ======================= THE READER (corkboard.js) =======================
+ * One sheet, off the wall and in your hands. The wall stays a wall - read at a
+ * glance, laid out in the painting's own pixels - and this is the other half
+ * of that bargain: a press takes the paper down at a size nobody squints at.
+ *
+ * z56 is not a taste: a scene room is `position:fixed` at z10 and its apron
+ * band is a <body>-level sibling at z55, so anything under 55 would be read
+ * from behind the carpet. Toasts still win at 60.
+ * ==========================================================================*/
+
+/* THE DOOR ON THE PAPER. A transparent control the exact size of the sheet, so
+   the sheet stays an <article> and the press still lands on a real button with
+   a real name. It is a child of the SLOT, never of the sheet: a torn sheet is
+   a clip-path and a clip-path clips its children (the pin learned this first). */
+.arc-cork-open {
+  position:absolute; inset:0; z-index:3;
+  padding:0; border:0; background:none;
+  border-radius:2px;
+  cursor:pointer;
+}
+.arc-cork-open:focus-visible {
+  outline:2px solid var(--pink); outline-offset:3px;
+}
+
+.arc-cork-reader {
+  position:fixed; inset:0; z-index:56;
+  display:flex; align-items:center; justify-content:center;
+  padding:clamp(10px, 3vh, 34px) clamp(10px, 3vw, 40px);
+}
+.arc-cork-reader-veil {
+  position:absolute; inset:0;
+  background:radial-gradient(ellipse at 50% 42%,
+    rgba(12, 8, 22, .72) 0%, rgba(4, 3, 10, .9) 74%);
+  animation:arc-cork-reader-fade .2s ease-out both;
+}
+@keyframes arc-cork-reader-fade { from { opacity:0; } to { opacity:1; } }
+
+/* The paper itself: the SAME `.arc-corknote` stock, so a sheet in your hands is
+   the sheet off the wall and not a lookalike. What changes is that it is now
+   the subject - real type, a real reading measure, and it scrolls. */
+.arc-cork-readnote {
+  position:relative; z-index:1;
+  width:min(680px, 100%);
+  max-height:100%;
+  overflow:auto;
+  padding:22px 24px 26px;
+  transform:rotate(-.4deg);
+  animation:arc-cork-reader-in .26s cubic-bezier(.2, 1.2, .4, 1) both;
+}
+@keyframes arc-cork-reader-in {
+  from { opacity:0; transform:rotate(-.4deg) translateY(14px) scale(.97); }
+  to   { opacity:1; transform:rotate(-.4deg); }
+}
+/* A sheet in the hand has no lifted corner and no tear: it is flat on a desk,
+   and the corner fold is a shadow that only makes sense against cork. */
+.arc-cork-readnote::after { content:none; }
+.arc-cork-readnote.is-torn { clip-path:none; filter:none; }
+.arc-cork-readnote .arc-cork-notetitle { font-size:20px; line-height:1.25; }
+.arc-cork-readnote .arc-cork-notebody { font-size:15.5px; line-height:1.6; }
+.arc-cork-readnote .arc-cork-kind { font-size:10px; }
+
+.arc-cork-readclose {
+  position:absolute; z-index:2;
+  right:clamp(10px, 3vw, 34px); top:clamp(8px, 3vh, 26px);
+  min-height:44px; padding:9px 16px;
+  display:inline-flex; align-items:center;
+  background:color-mix(in srgb, var(--navy), transparent 18%);
+  color:var(--ink);
+  border:1px solid color-mix(in srgb, var(--pink), transparent 55%);
+  border-radius:999px;
+  font-family:var(--disp); font-size:12px; font-weight:700;
+  letter-spacing:.12em; text-transform:uppercase;
+  cursor:pointer;
+}
+.arc-cork-readclose:hover { border-color:var(--pink); }
+.arc-cork-readclose:focus-visible { outline:2px solid var(--lav); outline-offset:2px; }
+html.arc-reduced .arc-cork-reader-veil,
+html.arc-reduced .arc-cork-readnote { animation:none; }
+
+/* ==================== THE OFFICE CORK, IN A HAND =========================
+ * The Records Office board is a close-up of a PAINTING: its sheets are laid
+ * out in the plate's 1285x692 pixels and scaled with it, and a phone in
+ * landscape fits that plate at about a half. So every one of these numbers is
+ * a stage pixel and comes out halved - which is why the copy read as texture
+ * and the bottom row of sheets hung off the frame and out of the window
+ * (owner screenshot, 2026-08-25).
+ *
+ * Two changes, both scoped to `.rr-cork` on a phone, and neither touches the
+ * hall's board or the desktop's:
+ *   - the paper is CLIPPED TO THE BOARD. The wide-window ruling (pinned paper
+ *     hangs off the rail rather than being cut) needs a wall under the rail to
+ *     hang onto; on a phone the plate IS the window, so the overhang is simply
+ *     gone. Each sheet takes a row's share of the cork and fades out at the
+ *     cut, which is also how a player learns there is more of it.
+ *   - the type comes UP, because a headline you can read is worth more than
+ *     four paragraphs you cannot, and the rest of the sheet is one press away.
+ * ==========================================================================*/
+/* A BUSY TERM SCROLLS RATHER THAN HANGING OFF THE WINDOW. On a desktop the
+   plate is smaller than the window and an overrun spills onto the wall around
+   it, which is the ruling. On a phone the plate IS the window, so the same
+   overrun is simply gone - a fifth row of paper that exists and cannot be
+   reached. `start` instead of `space-between` so the rows stack from the top
+   rail, and the board itself takes the scroll. */
+html.arc-mobile .rr-cork.arc-cork-wall {
+  overflow-y:auto;
+  align-content:start;
+}
+/* ...but never the MINIATURE: scenery does not scroll, and a scrollbar on a
+   thumbnail of a corkboard is a bug wearing a feature's hat. */
+html.arc-mobile .rr-corkmini .rr-cork.arc-cork-wall {
+  overflow:hidden;
+  align-content:space-between;
+}
+html.arc-mobile .rr-cork .arc-corknote {
+  max-height:292px;
+  overflow:hidden;
+  -webkit-mask-image:linear-gradient(180deg, #000 78%, transparent 100%);
+          mask-image:linear-gradient(180deg, #000 78%, transparent 100%);
+}
+html.arc-mobile .rr-cork .arc-cork-notetitle { font-size:25px; line-height:1.2; }
+html.arc-mobile .rr-cork .arc-cork-notebody { font-size:20px; line-height:1.45; }
+html.arc-mobile .rr-cork .arc-cork-kind { font-size:15px; letter-spacing:.14em; }
+
+/* THE LENS. A sheet this small has to say it can be picked up, and the school
+   never bakes a word into a drawn thing (lexicon law) - so the affordance is a
+   glyph: a ring and a handle, in the pin's own pink, sitting on the corner the
+   fade opens up. Drawn on the DOOR, not on the paper, because the paper is a
+   document and this is furniture. */
+html.arc-mobile .rr-cork .arc-cork-open::after {
+  content:''; position:absolute; right:14px; bottom:12px;
+  width:26px; height:26px; border-radius:50%;
+  border:4px solid color-mix(in srgb, var(--pink), var(--paper-ink) 22%);
+  background:color-mix(in srgb, var(--paper), transparent 30%);
+  box-shadow:0 2px 5px rgba(0,0,0,.35);
+}
+html.arc-mobile .rr-cork .arc-cork-open::before {
+  content:''; position:absolute; right:12px; bottom:6px;
+  width:5px; height:13px; border-radius:3px;
+  transform:rotate(-45deg);
+  background:color-mix(in srgb, var(--pink), var(--paper-ink) 22%);
+}
+
+/* THE MINIATURE (recordsroom.js's wide shot). The same wall, painted into the
+   cork rect in the room's own plate so the board has tonight's paper on it
+   before you walk up to it. The wrapper is the measured rect and clips; the
+   inner wall is the rect divided by the scale, so the grid lays itself out for
+   the board's own shape and then the whole thing is stood back from. Scenery:
+   it takes no pointer, so the room's board hotspot owns every press over it. */
+.rr-corkmini {
+  position:absolute;
+  overflow:hidden;
+  pointer-events:none;
+}
+.rr-corkmini .rr-cork {
+  position:absolute; left:0; top:0;
+  transform-origin:0 0;
+}
+/* No lens, no reading affordance, no flutter: from across the room it is
+   paper on a board. */
+.rr-corkmini .arc-cork-open { display:none; }
+.rr-corkmini .arc-corknote:hover,
+.rr-corkmini .arc-corknote:focus-within { animation:none; }

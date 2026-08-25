@@ -617,6 +617,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   let stageClear = false;
   let board = null;
   let campus = null;               // the night-campus hub (OPTIONAL - see showBoard)
+  /* WHICH FULL-BLEED STAGE IS UP, or null. setStage() is the one writer and
+   * renderTopbar() is the one reader - a stage owns the window, so the bar
+   * stays retired for as long as one is up, whoever asks for the repaint. */
+  let stageMode = null;
   // THE STUDENT BODY (PRESENCE.md). Optional in exactly the way the campus is:
   // it hangs off the campus's own ghost layer, so it lives and dies with it and
   // no other screen has ever heard of it.
@@ -1170,6 +1174,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       html.classList.remove('arc-class-on', 'arc-report-on', 'arc-settings-on');
       if (mode) html.classList.add(mode);
     }
+    stageMode = mode || null;
     if (dom && dom.topbar) dom.topbar.hidden = !!mode;
   }
 
@@ -1199,7 +1204,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // (attendance tick, EMI's voice ledger) lands here via store.onChange - the
     // old unconditional unhide resurrected the bar OVER the campus and buried
     // the hanging timetable plaque under it (owner screenshot, 0824).
-    bar.hidden = !!campus;
+    /* AND RETIRED UNDER A FULL-BLEED STAGE, for the same reason (owner bug
+     * 2026-08-25, "the hub header is sitting on top of the corkboard"). The
+     * guard read `campus` alone, so any UNCONDITIONAL repaint - a `meta` push
+     * from the host landing mid-visit, a payout frame - hoisted the bar back
+     * over the Records room, the report card and the annex. It paints at z30
+     * over a room fixed at z10, so it swallowed the close-up's whole top band,
+     * step-back pill and all. A stage owns the window until it hands it back. */
+    bar.hidden = !!campus || !!stageMode;
     bar.textContent = '';
     /* THE WORDMARK IS THE DOOR (owner ruling 2026-08-24). On the campus the
      * name is just the name - a back button pointing at the room you are
