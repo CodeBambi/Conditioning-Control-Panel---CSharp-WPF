@@ -365,22 +365,22 @@ public class TierRefusalRouteHeadlessTests : HeadlessTest
         Press(window, window.FindControl<RadioButton>("DoorPlay")!);
         await PressAndAwaitRefusalAsync(window, dtrh, "FallInButton");
 
-        // (1) NOTHING WAS DROPPED, and (2) one of them is on screen — the newest, so the refusal is
-        // attached to the press that raised it.
+        // (1) NOTHING WAS DROPPED — all three are still owed, newest last.
         Assert.Equal(
             [exported.Message, imported.Message, DtrhGate.TierRefusalMessage],
             window.Toasts.Messages);
-        Assert.Single(ToastRects(window));
 
-        // (3) AND IT COVERS NOTHING, ON ANY PAGE, WITH ALL THREE STILL OWED. Same sweep as
+        // (2) AND THE SURFACE COVERS NOTHING, ON ANY PAGE, WITH ALL THREE OWED. Same sweep as
         // AtTheShellsOwnSize_ALiveToastOverlapsNoInteractiveControlOnAnyPage — that one holds the
         // placement for a single notice, this one holds it for a surface with a queue behind it.
+        // Every realized toast is checked rather than an asserted-single one, so a host that went
+        // back to stacking fails by NAMING the control it covered instead of by counting plates.
         foreach (var door in new[] { "DoorPlay", "DoorStudio", "DoorCompanion", "DoorIntake", "DoorSystem" })
         {
             Press(window, window.FindControl<RadioButton>(door)!);
             window.UpdateLayout();
 
-            var toastRect = Assert.Single(ToastRects(window));
+            var toastRects = ToastRects(window);
             var pageHost = Descendant<ContentControl>(window, "PageHost");
             foreach (var control in pageHost.GetVisualDescendants().OfType<Control>())
             {
@@ -388,11 +388,18 @@ public class TierRefusalRouteHeadlessTests : HeadlessTest
                 if (!control.IsEffectivelyVisible || control.Bounds.Width <= 0) continue;
 
                 var rect = BoundsIn(window, control);
-                Assert.False(
-                    toastRect.Intersects(rect),
-                    $"on {door}, with three notices owed, the toast at {toastRect} overlaps "
-                    + $"{control.Name ?? control.GetType().Name} at {rect}");
+                foreach (var toastRect in toastRects)
+                {
+                    Assert.False(
+                        toastRect.Intersects(rect),
+                        $"on {door}, with three notices owed, the toast at {toastRect} overlaps "
+                        + $"{control.Name ?? control.GetType().Name} at {rect}");
+                }
             }
+
+            // And the footprint is one toast — the newest, so the refusal is attached to the press
+            // that raised it rather than queued behind an export result nobody has closed.
+            Assert.Single(toastRects);
         }
 
         // (4) AND EACH ONE STILL ARRIVES. Newest first, taken away by a real press on the dismiss
