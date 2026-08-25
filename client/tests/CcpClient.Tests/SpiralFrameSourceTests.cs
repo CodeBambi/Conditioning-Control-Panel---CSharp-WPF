@@ -23,12 +23,16 @@ public class SpiralFrameSourceTests
     /// <summary>
     /// Which channel dominates a decoded pixel, out of the OS's own COLORREF (0x00BBGGRR).
     ///
-    /// <para><b>Why the assertion is dominance and not equality.</b> The scale is bicubic — WPF
-    /// picks its resampling from a performance tier and the port takes the quality end once
-    /// (<see cref="GdiPlusFlashFrameSource"/>) — and a bicubic kernel reaching past the edge of a
-    /// 2x2 source lands the centre of an 8x8 upscale a few steps short of the source value (236 of
-    /// 255, measured). Pinning 255 would be pinning the resampler's edge policy, which is not a
-    /// behaviour this port owns; pinning WHICH FRAME IS ON SCREEN is.</para>
+    /// <para><b>Why the assertion is dominance and not equality.</b> A resampling kernel reaching
+    /// past the edge of a 2x2 source lands the centre of an 8x8 upscale short of the source value,
+    /// and HOW short is the resampler's edge policy — which is not a behaviour this port owns.
+    /// Measured on this fixture: 236 of 255 under <c>HighQualityBicubic</c>, 195 under the
+    /// <c>HighQualityBilinear</c> the spiral decoder now takes for upstream's own reason
+    /// (<c>Effects/SpiralFrameSource.cs:176-198</c>). <b>The floor moved from 200 to 128 when that
+    /// filter changed</b>, and 128 is not another calibration: it is the half-scale line, above
+    /// which a channel cannot be anything but this frame. Paired with the "no blue" half below, a
+    /// wrong frame (0 red), a black surface (0) and a swapped crop all still red. Pinning 255, or
+    /// any number derived from one filter, pins the filter instead of WHICH FRAME IS ON SCREEN.</para>
     /// </summary>
     private static (int Red, int Green, int Blue) Channels(uint colourRef) =>
         ((int)(colourRef & 0xFF), (int)((colourRef >> 8) & 0xFF), (int)((colourRef >> 16) & 0xFF));
@@ -36,14 +40,14 @@ public class SpiralFrameSourceTests
     private static void AssertMostlyRed(uint colourRef)
     {
         var (red, green, blue) = Channels(colourRef);
-        Assert.True(red > 200, $"expected a red pixel, got {red},{green},{blue}");
+        Assert.True(red > 128, $"expected a red pixel, got {red},{green},{blue}");
         Assert.True(blue < 40, $"expected no blue in a red pixel, got {red},{green},{blue}");
     }
 
     private static void AssertMostlyBlue(uint colourRef)
     {
         var (red, green, blue) = Channels(colourRef);
-        Assert.True(blue > 200, $"expected a blue pixel, got {red},{green},{blue}");
+        Assert.True(blue > 128, $"expected a blue pixel, got {red},{green},{blue}");
         Assert.True(red < 40, $"expected no red in a blue pixel, got {red},{green},{blue}");
     }
 
