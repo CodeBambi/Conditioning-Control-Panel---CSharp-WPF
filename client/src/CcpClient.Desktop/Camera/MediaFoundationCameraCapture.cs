@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using CcpClient.Desktop.Capabilities;
@@ -63,9 +65,12 @@ namespace CcpClient.Desktop.Camera;
 ///
 /// <para><b>The privacy contract, kept structurally.</b> Pixels exist in exactly two places: a pair
 /// of <c>byte[]</c> locals inside <see cref="WarmUp"/>, which the CLR reclaims when it returns, and
-/// a locked native buffer inside <see cref="ReadFrame"/> that is measured for LENGTH and never
-/// copied at all. This class declares no field, property, parameter or return that can hold a frame,
-/// so there is nothing here for a log line, a settings file or a crash report to reach. Upstream
+/// a locked native buffer inside <see cref="ReadFrame"/> that is NEVER COPIED — a consumer sees a
+/// <see cref="ReadOnlySpan{T}"/> over the driver's own memory, and the compiler will not let it keep
+/// that span past the call. This class declares no field, property or return that can hold a frame;
+/// the one parameter that can reach one is the sink, and a delegate cannot be handed a frame it is
+/// able to retain. So there is nothing here for a log line, a settings file or a crash report to
+/// reach, and nothing in the managed heap for a memory dump to find either. Upstream
 /// writes the same rule as a comment — <i>"Log per-frame numbers (gaze X/Y, eye-state, etc.) — only
 /// state strings and counts"</i> (<c>Services/Webcam/WebcamTrackingService.cs:28-29</c>) — and this
 /// class has no per-frame number to log even if it wanted to.</para>
@@ -111,6 +116,12 @@ public sealed class MediaFoundationCameraCapture : ICameraCaptureSource
     private static Guid MediaTypeMajorType = new("48eba18e-f8c9-4687-bf11-0a74c9f96a8f");
     private static Guid MediaTypeSubType = new("f7e34c9a-42e8-4714-b74b-cb29d72c35e5");
     private static Guid MediaTypeFrameSize = new("1652c33d-d6b2-4012-b834-72030849a37d");
+
+    // MF_MT_DEFAULT_STRIDE (mfapi.h) - stored as UINT32, read as a SIGNED row pitch, negative for a
+    // bottom-up picture. The same constant Video/MediaFoundationInterop.cs:76-79 already carries,
+    // written here rather than shared because this file declares its own interop and every GUID in
+    // it was re-verified against the Windows SDK headers after one was found to be invented.
+    private static Guid MediaTypeDefaultStride = new("644b4e48-1e02-4516-b0eb-c01ca9d49ac6");
     private static Guid MajorTypeVideo = new("73646976-0000-0010-8000-00aa00389b71");
     private static Guid VideoFormatRgb32 = new("00000016-0000-0010-8000-00aa00389b71");
     private static Guid VideoFormatMotionJpeg = new("47504a4d-0000-0010-8000-00aa00389b71");
@@ -120,6 +131,11 @@ public sealed class MediaFoundationCameraCapture : ICameraCaptureSource
     private IMFSourceReader? _reader;
     private IMFMediaSource? _source;
     private int _stream = FirstVideoStream;
+
+    // The OS's declared row pitch for the adopted format: SIGNED, so its sign carries the picture's
+    // orientation. An int, and the only per-open number this class keeps about the picture - there
+    // is still nothing here that can hold a pixel.
+    private int _stride;
     private bool _platformStarted;
     private bool _disposed;
 
@@ -233,11 +249,21 @@ public sealed class MediaFoundationCameraCapture : ICameraCaptureSource
     }
 
     /// <summary>
-    /// Read one frame and drop it. <b>Nothing is copied</b>: the native buffer is locked, its current
-    /// length is read so that "pixels arrived" is a fact rather than an assumption, and it is
-    /// unlocked again. There is no managed buffer on this path at all.
+    /// Read one frame, show it to <paramref name="sink"/>, and drop it. <b>Nothing is copied, with or
+    /// without a consumer</b>: the native buffer is locked, its current length is read so that
+    /// "pixels arrived" is a fact rather than an assumption, the sink sees a
+    /// <see cref="ReadOnlySpan{T}"/> OVER THE DRIVER'S OWN BUFFER, and it is unlocked again. There is
+    /// no managed buffer on this path at all, so a frame never enters the managed heap where a
+    /// garbage collector, a crash dump or a memory snapshot could find it after the fact.
+    ///
+    /// <para><b>Why not a pooled or reused array.</b> A per-call <c>byte[]</c> is 3.7 MB at 720p and
+    /// would be a large-object allocation thirty times a second; the usual answer to that —
+    /// <c>ArrayPool&lt;byte&gt;.Shared</c> — is the wrong answer HERE, because a returned array is
+    /// not cleared, so the last frame this camera saw would sit in a process-wide pool waiting for
+    /// whoever rents that size next. Zero copies is both the faster and the private option, and this
+    /// is the rare case where they are the same choice.</para>
     /// </summary>
-    public bool ReadFrame(CancellationToken cancellationToken)
+    public bool ReadFrame(ReadOnlySpanAction<byte, CameraFrameInfo>? sink, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         cancellationToken.ThrowIfCancellationRequested();
@@ -249,6 +275,11 @@ public sealed class MediaFoundationCameraCapture : ICameraCaptureSource
         IMFSample? sample = null;
         IMFMediaBuffer? buffer = null;
         var locked = false;
+
+        // Set for exactly as long as the consumer's own code is on the stack. The COM filter below
+        // reads it so that a COMException thrown INSIDE a sink is never mistaken for a device fault:
+        // an exception filter runs before the finally, so this is still true when it is asked.
+        var insideSink = false;
         try
         {
             // Synchronous ReadSample BLOCKS until the device produces something, which is why the
@@ -270,7 +301,7 @@ public sealed class MediaFoundationCameraCapture : ICameraCaptureSource
                 return false;
             }
 
-            if (buffer.Lock(out _, out _, out var length) != 0)
+            if (buffer.Lock(out var pixels, out _, out var length) != 0)
             {
                 return false;
             }
@@ -281,13 +312,36 @@ public sealed class MediaFoundationCameraCapture : ICameraCaptureSource
                 return false;
             }
 
+            if (sink is not null)
+            {
+                // The geometry the OS declared must actually describe what arrived. A short buffer
+                // handed over with a trusted Width/Height/Stride is a consumer reading past the end
+                // of the driver's allocation on its first line of arithmetic, so this is a refusal
+                // rather than a best effort: the read is reported as a failure and the sink is not
+                // called at all.
+                var frame = Geometry();
+                if (!frame.Describes || pixels == IntPtr.Zero || frame.Bytes > length)
+                {
+                    return false;
+                }
+
+                FramesRead++;
+                insideSink = true;
+                sink(View(pixels, (int)frame.Bytes), frame);
+                insideSink = false;
+                return true;
+            }
+
             FramesRead++;
             return true;
         }
-        catch (COMException)
+        catch (COMException) when (!insideSink)
         {
             // A device pulled mid-read throws here. It is a read that did not happen, not a fact
-            // about every future read, so the caller's consecutive-failure budget decides.
+            // about every future read, so the caller's consecutive-failure budget decides. The
+            // filter keeps a CONSUMER's own COMException out of that budget: a gaze engine that
+            // throws is not a camera that went away, and thirty of them must not close a healthy
+            // device.
             return false;
         }
         finally
@@ -308,6 +362,29 @@ public sealed class MediaFoundationCameraCapture : ICameraCaptureSource
             Release(sample);
         }
     }
+
+    /// <summary>
+    /// The geometry the operating system declared for the format that was ADOPTED, packaged for a
+    /// consumer. All four numbers come from the reader's own current media type — none is assumed.
+    /// </summary>
+    private CameraFrameInfo Geometry() => new(Width, Height, Math.Abs(_stride), _stride < 0);
+
+    /// <summary>
+    /// A read-only view over the driver's OWN locked buffer. <b>No copy is made anywhere on this
+    /// path</b>, and the view is valid only until the caller unlocks — which is why it is built here,
+    /// used inside one call, and never returned.
+    ///
+    /// <para><b>Why <see cref="Unsafe.NullRef{T}"/> and not an <c>unsafe</c> block.</b> The two are
+    /// the same instruction; the difference is blast radius. <c>&lt;AllowUnsafeBlocks&gt;</c> is a
+    /// PROJECT-wide switch, and turning it on for the whole desktop assembly to serve one seam would
+    /// hand every future file in it a capability none of them asked for. Adding an offset to a null
+    /// reference is the runtime's own supported way to spell "a reference to this address" without
+    /// that, and <see cref="MemoryMarshal.CreateReadOnlySpan{T}"/> is the same API the BCL uses to
+    /// wrap foreign memory. Private, because a method handing back a span of pixels is exactly what
+    /// <c>CameraCapabilityTests</c> forbids on any callable surface.</para>
+    /// </summary>
+    private static ReadOnlySpan<byte> View(IntPtr buffer, int length) =>
+        MemoryMarshal.CreateReadOnlySpan(ref Unsafe.Add(ref Unsafe.NullRef<byte>(), buffer), length);
 
     /// <summary>
     /// Release the device: the reader first, then the media source's own <c>Shutdown</c>, then the
@@ -828,8 +905,16 @@ public sealed class MediaFoundationCameraCapture : ICameraCaptureSource
             : subtype.ToString("D");
     }
 
-    /// <summary>The negotiated frame size, read back from the reader rather than assumed. Silent on
-    /// failure: an unknown size is reported as 0x0 and never as a guess.</summary>
+    /// <summary>The negotiated frame size AND row layout, read back from the reader rather than
+    /// assumed. Silent on failure: an unknown size is reported as 0x0 and never as a guess.
+    ///
+    /// <para><b>The stride is read because its SIGN is behaviour.</b> Media Foundation reports a
+    /// negative <c>MF_MT_DEFAULT_STRIDE</c> for a bottom-up picture, and this port has already
+    /// measured that on its own media (<c>Video/MediaFoundationInterop.cs:76-79</c>). A consumer told
+    /// only "1280x720" would build every gaze vector out of an upside-down face and look merely
+    /// inaccurate. When the attribute is absent the tightly-packed top-down layout is used, which is
+    /// what an RGB32 output type means when nothing says otherwise — the same fallback
+    /// <c>Video/MediaFoundationClipSource.cs:207-215</c> already makes.</para></summary>
     private void ReadFrameSize(IMFSourceReader reader)
     {
         if (reader.GetCurrentMediaType(_stream, out var current) != 0 || current is null)
@@ -843,6 +928,18 @@ public sealed class MediaFoundationCameraCapture : ICameraCaptureSource
             {
                 Width = (int)(packed >> 32);
                 Height = (int)(packed & 0xFFFFFFFF);
+            }
+
+            _stride = Width * CameraFrameProbe.BytesPerPixel;
+            if (current.GetUINT32(ref MediaTypeDefaultStride, out var raw) == 0)
+            {
+                // Stored as UINT32, MEANT as INT32: that is the attribute's documented shape, not a
+                // cast this file invented.
+                var reported = unchecked((int)raw);
+                if (reported != 0)
+                {
+                    _stride = reported;
+                }
             }
         }
         finally
@@ -1347,7 +1444,7 @@ public sealed class MediaFoundationCameraCapture : ICameraCaptureSource
         [PreserveSig] int Slot02_GetItemType();
         [PreserveSig] int Slot03_CompareItem();
         [PreserveSig] int Slot04_Compare();
-        [PreserveSig] int Slot05_GetUINT32();
+        [PreserveSig] int GetUINT32(ref Guid key, out uint value);
         [PreserveSig] int GetUINT64(ref Guid key, out ulong value);
         [PreserveSig] int Slot07_GetDouble();
         [PreserveSig] int GetGUID(ref Guid key, out Guid value);

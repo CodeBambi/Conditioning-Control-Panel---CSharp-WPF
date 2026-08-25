@@ -1,6 +1,46 @@
+using System.Buffers;
 using CcpClient.Desktop.Capabilities;
 
 namespace CcpClient.Desktop.Camera;
+
+/// <summary>
+/// <b>The SHAPE of one frame, handed to a consumer in the same call as its pixels.</b> Four numbers,
+/// no buffer: this type is what makes a <see cref="ReadOnlySpan{T}"/> of bytes interpretable without
+/// anything having to remember anything.
+///
+/// <para><b>Why it travels WITH the pixels instead of being read off the source.</b>
+/// <see cref="ICameraCaptureSource.Width"/> and <see cref="ICameraCaptureSource.Height"/> are
+/// properties of the SOURCE, and a consumer that read them beside a frame would be pairing a buffer
+/// with whatever the source last negotiated — which is a different thing during a format
+/// renegotiation. Upstream refuses to compare two frames whose <c>Size()</c> or <c>Type()</c> differ
+/// for exactly this reason (<c>Services/Webcam/WebcamTrackingService.cs:1403</c>); passing the
+/// geometry as the sink's argument makes the mismatch impossible rather than checked.</para>
+///
+/// <para><b><see cref="BottomUp"/> is not decoration.</b> Media Foundation reports a NEGATIVE
+/// <c>MF_MT_DEFAULT_STRIDE</c> when the first row in the buffer is the picture's LAST row, and this
+/// port has already measured that happening — <c>-1280</c> on its own fixture media
+/// (<c>Video/MediaFoundationInterop.cs:76-79</c>). A gaze consumer that ignored it would see every
+/// face upside down, which a face detector can still partly cope with and a gaze vector cannot; the
+/// bug would look like bad accuracy rather than like a flip. It is reported rather than silently
+/// normalised because normalising means copying, and this seam does not copy frames.</para>
+/// </summary>
+/// <param name="Width">Picture width in pixels, as the operating system negotiated it.</param>
+/// <param name="Height">Picture height in pixels.</param>
+/// <param name="Stride">Bytes per row, ALWAYS POSITIVE — the sign lives in <see cref="BottomUp"/>.
+/// It is <c>Width * <see cref="CameraFrameProbe.BytesPerPixel"/></c> for every layout seen so far and
+/// is still read back from the OS rather than computed, because a padded row is the driver's
+/// choice.</param>
+/// <param name="BottomUp">The buffer's first row is the picture's BOTTOM row.</param>
+public readonly record struct CameraFrameInfo(int Width, int Height, int Stride, bool BottomUp)
+{
+    /// <summary>How many bytes one whole picture occupies at this geometry. The span a sink is
+    /// handed is exactly this long.</summary>
+    public long Bytes => (long)Stride * Height;
+
+    /// <summary>Whether this describes a real picture at all. False when the OS never reported a
+    /// frame size, and a sink is never called with a frame it could not index.</summary>
+    public bool Describes => Width > 0 && Height > 0 && Stride >= Width * CameraFrameProbe.BytesPerPixel;
+}
 
 /// <summary>
 /// <b>The verb that opens a camera.</b> Slice 1 deliberately had none —
@@ -15,13 +55,24 @@ namespace CcpClient.Desktop.Camera;
 /// <see cref="ReadFrame"/> and <see cref="IDisposable.Dispose"/> live on one type. There is no
 /// second lifetime to get wrong and no way to hold a device after the owner is disposed.</para>
 ///
-/// <para><b>NOTHING ON THIS INTERFACE HANDS BACK A PIXEL.</b> <see cref="ReadFrame"/> returns a
-/// <see cref="bool"/>. That is not an oversight and it is not temporary: this build has no gaze
-/// engine, so there is no consumer for a frame, and a seam that returned one would be an escape
-/// route for exactly the data <c>client/docs/capability-inventory.md</c> requires to stay
-/// memory-only. Frames are decoded, measured by <see cref="CameraFrameProbe"/> and dropped inside
-/// the implementation, where the buffers are method locals that cannot outlive the call. The engine
-/// slice will have to add its consumer deliberately, in the open, against this paragraph.</para>
+/// <para><b>NOTHING ON THIS INTERFACE HANDS BACK A PIXEL — AND SINCE 2026-08-25 PIXELS DO REACH A
+/// CALLER.</b> Those are not in tension, and the difference between them is the whole design.
+/// <see cref="ReadFrame"/> still RETURNS a <see cref="bool"/>: nothing is handed BACK, because
+/// anything handed back can be kept. What it does instead is CALL a sink the caller supplies, whose
+/// pixel parameter is a <see cref="ReadOnlySpan{T}"/> — a ref struct the C# compiler refuses to let
+/// anybody store in a field, capture in a closure, box, or put on the heap by any other means. So a
+/// frame is reachable for the duration of one call and unreachable afterwards BY CONSTRUCTION rather
+/// than by care, which is what <c>client/docs/capability-inventory.md</c>'s memory-only rule for
+/// "Webcam, face, and gaze tracking" actually asks for. The previous slice had no consumer at all
+/// and said so here; this paragraph is the deliberate, in-the-open change that paragraph demanded,
+/// and the shape it changed to is the one <c>CameraCapabilityTests</c> pins.</para>
+///
+/// <para><b>The sink is <see cref="ReadOnlySpanAction{T, TArg}"/> from the runtime, not a delegate
+/// declared here</b>, for the same reason the rest of this seam prefers the runtime's shapes: it is
+/// the .NET vocabulary for "here is a buffer and its context, and you may not keep either", and a
+/// hand-written delegate would be one more type able to drift. Its <c>TArg</c> is
+/// <see cref="CameraFrameInfo"/>, so a consumer never has to pair a buffer with geometry it read
+/// somewhere else.</para>
 ///
 /// <para><b>AUDIO IS STILL NEVER OPENED</b> and it is still a property of the type: there is no
 /// audio member here, no audio device class named anywhere in this namespace, and the Windows
@@ -94,14 +145,34 @@ public interface ICameraCaptureSource : IDisposable
     CapabilityState? Open(CameraDevice device, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Read one frame from the open device and DROP IT. Returns whether pixels arrived.
+    /// Read one frame from the open device, show it to <paramref name="sink"/>, and drop it. Returns
+    /// whether pixels arrived.
     ///
     /// <para>False for a read that timed out or returned nothing, which upstream tolerates in a run
     /// of up to <c>MaxConsecutiveReadFails</c> before treating the device as lost
     /// (<c>Services/Webcam/WebcamTrackingService.cs:120</c>, ~1s at 30fps). Deciding when a run of
     /// failures means the camera is gone belongs to the caller that knows what the frames were for.</para>
+    ///
+    /// <para><b>A null sink reads the frame and drops it unseen, and that is what every product path
+    /// does today</b> — there is no gaze engine in this build, so nothing has asked for pixels. The
+    /// two paths are one method rather than two because "did a frame arrive" must not be able to
+    /// answer differently depending on whether anybody was looking.</para>
+    ///
+    /// <para><b>The sink is called at most once per call, and never with a frame it could not
+    /// index.</b> When the operating system's declared geometry (<see cref="CameraFrameInfo"/>) does
+    /// not describe the buffer that arrived, the read is reported as a failure instead of the sink
+    /// being handed a span with a length it cannot trust. An exception thrown BY the sink is the
+    /// consumer's fault rather than the camera's and propagates to the caller unchanged; it is never
+    /// converted into a read failure, because a device declared lost after thirty of them would be
+    /// the wrong diagnosis in the wrong place.</para>
     /// </summary>
-    bool ReadFrame(CancellationToken cancellationToken);
+    /// <param name="sink">
+    /// Called with the frame's pixels and geometry, or null to read and drop. <b>The span is valid
+    /// only for the duration of the call</b>: it may be a view over the driver's own buffer, which is
+    /// unlocked the moment the sink returns. The compiler already forbids storing it; this sentence
+    /// is about the bytes, not about the type.
+    /// </param>
+    bool ReadFrame(ReadOnlySpanAction<byte, CameraFrameInfo>? sink, CancellationToken cancellationToken);
 
     /// <summary>
     /// Release the device. <b>Idempotent, and it must really let go</b> — a camera the user believes
@@ -189,7 +260,13 @@ public sealed class UnsupportedCameraCaptureSource(string backend, string detail
     }
 
     /// <inheritdoc/>
-    public bool ReadFrame(CancellationToken cancellationToken) => false;
+    public bool ReadFrame(ReadOnlySpanAction<byte, CameraFrameInfo>? sink, CancellationToken cancellationToken)
+    {
+        // No device was ever opened here, so there is no frame — and the sink is NOT called with an
+        // empty span, because "a frame of zero pixels" is a thing a consumer would have to defend
+        // against for the rest of its life. Nothing arrived; the answer is false.
+        return false;
+    }
 
     /// <inheritdoc/>
     public void Close()

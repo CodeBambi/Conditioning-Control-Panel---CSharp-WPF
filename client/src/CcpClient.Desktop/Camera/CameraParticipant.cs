@@ -1,3 +1,4 @@
+using System.Buffers;
 using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Persistence;
@@ -385,20 +386,31 @@ public sealed class CameraParticipant : IBackgroundParticipant
     }
 
     /// <summary>
-    /// Read up to <paramref name="frames"/> frames from the open camera and DROP every one of them,
-    /// returning how many really arrived.
+    /// Read up to <paramref name="frames"/> frames from the open camera, show each one to
+    /// <paramref name="sink"/>, and drop it. Returns how many really arrived.
     ///
     /// <para><b>Bounded on purpose, and it is not the session loop.</b> There is no gaze engine in
-    /// this build, so there is no consumer a continuous 30fps pump would be feeding: a perpetual loop
-    /// burning a core to throw pixels away would be a worse thing to ship than no pump at all. This
-    /// exists so that "the camera delivers frames" is something a caller can OBSERVE rather than
-    /// assume, and the engine slice replaces it with a loop that has somewhere to send them.</para>
+    /// this build, so a perpetual 30fps loop would be burning a core for nobody: this exists so that
+    /// "the camera delivers frames" is something a caller can OBSERVE rather than assume, and the
+    /// engine slice replaces it with a loop that runs as long as a session does.</para>
+    ///
+    /// <para><b>The sink runs on the pump's thread, inside the read.</b> That is deliberate: the
+    /// alternative — handing frames to somebody else's thread — requires copying them out of the
+    /// driver's buffer first, which is the one thing this seam refuses to do. A consumer that is
+    /// slower than the camera therefore slows the camera down instead of building a queue of
+    /// retained frames, and a queue of retained frames is exactly what
+    /// <c>client/docs/capability-inventory.md</c>'s memory-only rule forbids.</para>
     ///
     /// <para>Stops early after <see cref="CameraFrameProbe.MaxConsecutiveReadFailures"/> reads in a
     /// row that produce nothing, which is upstream's own budget for deciding an open camera has gone
     /// away (<c>Services/Webcam/WebcamTrackingService.cs:120</c>) rather than a new rule.</para>
     /// </summary>
-    public async Task<int> PumpAsync(int frames, CancellationToken cancellationToken)
+    /// <param name="frames">How many frames to ask for. Never negative.</param>
+    /// <param name="sink">The consumer, or null to read and drop unseen — which is what every
+    /// product path passes today, because nothing in this build consumes a frame.</param>
+    /// <param name="cancellationToken">Observed between every read.</param>
+    public async Task<int> PumpAsync(
+        int frames, ReadOnlySpanAction<byte, CameraFrameInfo>? sink, CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(frames);
         if (!_capture.IsOpen)
@@ -414,7 +426,7 @@ public sealed class CameraParticipant : IBackgroundParticipant
                 while (count < frames && consecutiveFailures < CameraFrameProbe.MaxConsecutiveReadFailures)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    if (_capture.ReadFrame(cancellationToken))
+                    if (_capture.ReadFrame(sink, cancellationToken))
                     {
                         count++;
                         consecutiveFailures = 0;
@@ -429,7 +441,13 @@ public sealed class CameraParticipant : IBackgroundParticipant
             },
             cancellationToken).ConfigureAwait(false);
 
-        _log.Log($"camera: {delivered} frame(s) delivered and dropped — nothing from them was kept");
+        // A COUNT and nothing else, with or without a consumer: upstream's own rule is that per-frame
+        // numbers are never logged (Services/Webcam/WebcamTrackingService.cs:28-29), and a line that
+        // said what a consumer MADE of a frame would be the first per-frame derivative in this build.
+        _log.Log(sink is null
+            ? $"camera: {delivered} frame(s) delivered and dropped unseen — nothing from them was kept"
+            : $"camera: {delivered} frame(s) delivered to a consumer that cannot retain them — the span ended "
+                + "with each call and nothing from them was kept");
         return delivered;
     }
 
