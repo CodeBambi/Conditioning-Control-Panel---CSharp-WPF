@@ -117,6 +117,8 @@ export const IR_LEX = Object.freeze({
   ir_near_spiral: 'So close. That spiral played, but earlier.',
   ir_near_heard: 'So close. That one was whispered, but earlier.',
   ir_jackpot: 'Photographic Memory',
+  /* the fire-branch payout stamp (variable ratio, non-jackpot win) */
+  ir_payout: 'LOCKED IN',
   ir_gotcha: 'That one flashed while the screen was FROZEN.',
   ir_gotcha_heard: 'That one was whispered while the screen was FROZEN.',
   ir_voided: 'Stop voided. The vigil goes on.',

@@ -374,6 +374,7 @@ export default {
     let timerEl = null; let truthEl = null; let msgEl = null; let well = null;
     let endEl = null; let howtoEl = null; let qFaceEl = null;
     let clockChip = null; let stopsChip = null; let densityChip = null;
+    let payoutEl = null;
     let optEls = [];
 
     /* THE DEALER. One timer, one queue: every pool key carries its own due time
@@ -1931,24 +1932,79 @@ export default {
     }
 
     /* ---- variable ratio (the shared canon, with a local fallback) -------- */
+    /**
+     * THE PAYOUT LAYER - the fire branch's pixels. Game-local chrome and
+     * NOTHING else: one solid radial gold bloom over the stage, opacity-only,
+     * no blend mode / no filter / no engine kind and NO ledger write, so it
+     * can never be mistaken for a POOL effect and can never hand the next
+     * question a second honest answer (the same law that keeps the jackpot's
+     * goldleaf off the pool). Created once, reused; restarted reflow-free
+     * (WAAPI rewind first, a rAF class re-add as the fallback - never a
+     * `void offsetWidth` layout flush over a wall of live decodes).
+     */
+    function payoutBloom(big) {
+      if (dead || !stage || !capsArmed()) return;
+      if (!payoutEl) {
+        payoutEl = el('div', 'g-ir-payout');
+        payoutEl.setAttribute('aria-hidden', 'true');
+        stage.appendChild(payoutEl);
+      }
+      try { payoutEl.classList.toggle('is-big', !!big); } catch (e) { /* noop */ }
+      const on = payoutEl.classList.contains('is-on');
+      if (!on) { payoutEl.classList.add('is-on'); return; }
+      if (typeof payoutEl.getAnimations === 'function') {
+        try {
+          const anims = payoutEl.getAnimations();
+          if (anims.length) {
+            for (const a of anims) { a.currentTime = 0; a.play(); }
+            return;
+          }
+        } catch (e) { /* fall through to the class toggle */ }
+      }
+      payoutEl.classList.remove('is-on');
+      const arm = () => { try { if (!dead && payoutEl) payoutEl.classList.add('is-on'); } catch (e) { /* noop */ } };
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(arm); else after(16, arm);
+    }
     function rewardBeat() {
       let outcome = null;
       try {
-        if (ctx.engine && typeof ctx.engine.rewardRoll === 'function') outcome = ctx.engine.rewardRoll({}) || null;
+        if (ctx.engine && typeof ctx.engine.rewardRoll === 'function') {
+          /* the roll is FED now: heat lifts the base chance off its .30 floor
+           * (schedule.js: .30 + .30*smoothstep(heat)), streak rides the
+           * intensity multiplier, success keeps the run bookkeeping honest.
+           * Same shape as the-deep-end / sort. */
+          outcome = ctx.engine.rewardRoll({ heat: currentHeat, streak, success: true }) || null;
+        }
       } catch (e) { outcome = null; }
       if (!outcome && rewardLocal) outcome = rewardLocal();
       if (!outcome) return;
       if (outcome.jackpot) {
         jackpots += 1;
-        try { ctx.ceremonies.reward('jackpot', { target: stage, text: t('ir_jackpot', IR_LEX.ir_jackpot) }); }
-        catch (e) { /* noop */ }
+        /* garnish:false is LOAD-BEARING (casino.js's own law, mosaic rework
+         * 2026-08-23): the engine's jackpot ceremony otherwise FORCES a
+         * drain|spiral wash - both POOL effects in this class - and a wash
+         * the ledger never saw would give the next question a second honest
+         * answer. */
+        try {
+          ctx.ceremonies.reward('jackpot', {
+            target: stage, text: t('ir_jackpot', IR_LEX.ir_jackpot), garnish: false,
+          });
+        } catch (e) { /* noop */ }
         /* "Photographic Memory": gold leaf over the hall. It is DELIBERATELY
          * not a pool primitive - a gif burst here would be a real Corner GIF /
          * Fullscreen GIF that the ledger never saw, and the very next question
-         * would have two honest answers. Dressing pays the ceremony instead. */
-        sustainSafe('ambient_field', { kind: 'goldleaf', density: 0.55 });
+         * would have two honest answers. Dressing pays the ceremony instead.
+         * `count` raises the FLECK count (the alpha ceiling is engine-side and
+         * stays the engine's); the payout layer below is the visible part. */
+        sustainSafe('ambient_field', { kind: 'goldleaf', density: 0.55, count: 48 });
+        payoutBloom(true);
         tick('jackpot', 0.5);
       } else if (outcome.fire) {
+        /* the fire branch was audio-only; now it pays PIXELS - the payout
+         * bloom plus a gild stamp on the HUD, both game-local chrome. */
+        payoutBloom(false);
+        try { ctx.ceremonies.stamp({ text: t('ir_payout', IR_LEX.ir_payout), tone: 'gild', target: hud }); }
+        catch (e) { /* noop */ }
         tick('streak', 0.42);
       }
     }
@@ -2464,6 +2520,7 @@ export default {
         pool = null;
         live = null;
         optEls = [];
+        payoutEl = null;               // removed with the stage below
         try { ctx.root.textContent = ''; } catch (e) { /* noop */ }
         if (liveClass === instance) liveClass = null;
       },
