@@ -4379,6 +4379,48 @@ namespace ConditioningControlPanel.Models
             set { _videoForceHardwareDecoding = value; OnPropertyChanged(); }
         }
 
+        private List<string> _dndProcessList = new();
+        /// <summary>
+        /// Do-not-disturb apps: process names, lower-cased and WITHOUT the ".exe" (e.g. "vlc",
+        /// "mpv", "potplayermini64"). While one of these owns the foreground window the app stops
+        /// scheduling its own media over the top of it - see
+        /// <see cref="Services.UI.DoNotDisturbGuard"/>. Empty by default and never auto-populated:
+        /// guessing which player someone uses would silently turn features off for people who never
+        /// asked, so the list only ever holds apps the user named.
+        /// </summary>
+        [JsonProperty("dnd_process_list", ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> DndProcessList
+        {
+            get => _dndProcessList;
+            set { _dndProcessList = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private bool _dndSuppressVideos = true;
+        /// <summary>
+        /// Whether a do-not-disturb app in the foreground suppresses SCHEDULED mandatory videos.
+        /// Default ON - this is the whole point of naming a player. A video that is already playing
+        /// is never interrupted; only the next spawn is held.
+        /// </summary>
+        [JsonProperty("dnd_suppress_videos")]
+        public bool DndSuppressVideos
+        {
+            get => _dndSuppressVideos;
+            set { _dndSuppressVideos = value; OnPropertyChanged(); }
+        }
+
+        private bool _dndSuppressFlashes = false;
+        /// <summary>
+        /// Whether a do-not-disturb app in the foreground also suppresses ambient flash images.
+        /// Default OFF: flashes are brief and translucent, so plenty of people happily watch a film
+        /// with them running. Opt-in for those who do not.
+        /// </summary>
+        [JsonProperty("dnd_suppress_flashes")]
+        public bool DndSuppressFlashes
+        {
+            get => _dndSuppressFlashes;
+            set { _dndSuppressFlashes = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Avatar Companion
