@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -766,6 +767,167 @@ public sealed class CameraCapabilityTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// <b>PIXELS LEAVE THE SEAM ONLY THROUGH A DELEGATE THAT CANNOT BE HANDED ANYTHING IT COULD
+    /// KEEP</b> — and this fact exists because the retention rule above CANNOT SEE A DELEGATE.
+    ///
+    /// <para><b>The hole, stated exactly, because it was found by using it.</b>
+    /// <see cref="CarriesPixels"/> decides by structure, and a delegate's structure is empty: its
+    /// fields belong to the runtime and its buffer parameter is written in its <c>Invoke</c>
+    /// signature, which no field walk reaches. It catches the delegate shapes whose GENERIC ARGUMENT
+    /// is a buffer — <c>Action&lt;byte[]&gt;</c>, <c>Func&lt;Memory&lt;byte&gt;&gt;</c> — and misses
+    /// every other one. So when the frame surface landed on 2026-08-25, the member that finally lets
+    /// pixels cross the seam passed the retention fact WITHOUT BEING LOOKED AT. It happens to be
+    /// safe. Nothing was checking that it was.</para>
+    ///
+    /// <para><b>What is pinned here.</b> Every delegate type reachable from a member of the camera
+    /// seam — parameter, return, field, property, or nested inside a generic of one — must have an
+    /// <c>Invoke</c> whose every parameter and return is one of: a
+    /// <c>ReadOnlySpan&lt;byte&gt;</c>, which is a <c>ref struct</c> the C# compiler forbids storing
+    /// in a field, capturing in a closure or boxing; a primitive, an enum or a
+    /// <see cref="string"/>; or a type declared in the seam, which the retention rule above has
+    /// already proved cannot hold a frame. A buffer, a stream, a handle, a pooled owner or a type
+    /// from a package is not on that list, and neither is <see cref="Span{T}"/> — a WRITABLE view of
+    /// a driver's own memory is not something this seam hands to anybody.</para>
+    ///
+    /// <para>So <c>ReadOnlySpanAction&lt;byte, CameraFrameInfo&gt;</c> passes and
+    /// <c>Action&lt;byte[]&gt;</c>, <c>Action&lt;IMemoryOwner&lt;byte&gt;&gt;</c>,
+    /// <c>Func&lt;byte[]&gt;</c> and <c>SpanAction&lt;byte, T&gt;</c> all fail — the second of which
+    /// the retention rule cannot see at all, is fully retainable, and is checked below.</para>
+    ///
+    /// <para><b>What it does not prove.</b> Nothing here observes a frame. It is a statement about
+    /// SHAPES: that the only door pixels have out of this namespace is one the compiler holds shut
+    /// behind them. That real pixels go through that door is
+    /// <c>CameraCaptureTests.PixelsREACHAConsumerThroughTheProductsOwnPump…</c>, and that a real
+    /// driver's frame does is the hardware harness in <c>client/spikes</c>.</para>
+    /// </summary>
+    [Fact]
+    public void PixelsLEAVETheSeamOnlyThroughADelegateNothingCanBeHandedAFrameItCouldKEEP()
+    {
+        var product = typeof(CameraCapability).Assembly;
+        var seam = typeof(CameraCapability).Namespace!;
+        var types = product.GetTypes()
+            .Where(type => InTheCameraSeam(type.Namespace, seam))
+            // COMPILER-GENERATED types are skipped HERE and nowhere else. A closure class, a lambda
+            // cache and an async state machine are the compiler's own bookkeeping for code INSIDE
+            // this seam: their delegates are `Func<(a, b), c>` shapes it invented for a LINQ call,
+            // never a door out of the namespace, and treating them as one would make this rule fail
+            // on any authored code that used a lambda. Nothing is lost by it: those types are still
+            // swept, field by field, by the retention rule above, so anything they CAPTURED that
+            // could hold a frame is caught there.
+            .Where(type => !type.IsDefined(typeof(System.Runtime.CompilerServices.CompilerGeneratedAttribute), false))
+            .ToList();
+        Assert.NotEmpty(types);
+
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic
+            | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
+
+        // Every delegate the seam can reach, and the member that reaches it — reported by NAME on
+        // failure, because "some delegate somewhere is wrong" is not an actionable failure.
+        var reachable = new Dictionary<Type, string>();
+        foreach (var type in types)
+        {
+            foreach (var method in type.GetMethods(flags))
+            {
+                CollectDelegates(method.ReturnType, $"{type.Name}.{method.Name}(...)", reachable);
+                foreach (var parameter in method.GetParameters())
+                {
+                    CollectDelegates(parameter.ParameterType, $"{type.Name}.{method.Name}({parameter.Name})", reachable);
+                }
+            }
+
+            foreach (var constructor in type.GetConstructors(flags))
+            {
+                foreach (var parameter in constructor.GetParameters())
+                {
+                    CollectDelegates(parameter.ParameterType, $"{type.Name}.ctor({parameter.Name})", reachable);
+                }
+            }
+
+            foreach (var field in type.GetFields(flags))
+            {
+                CollectDelegates(field.FieldType, $"{type.Name}.{field.Name}", reachable);
+            }
+
+            foreach (var property in type.GetProperties(flags))
+            {
+                CollectDelegates(property.PropertyType, $"{type.Name}.{property.Name}", reachable);
+            }
+        }
+
+        // NON-VACUOUS: the frame surface really is here, and it really is the runtime's own
+        // span-delivering delegate rather than something declared in this namespace that could drift.
+        Assert.NotEmpty(reachable);
+        Assert.Contains(typeof(ReadOnlySpanAction<byte, CameraFrameInfo>), reachable.Keys);
+        var readFrame = typeof(ICameraCaptureSource).GetMethod(nameof(ICameraCaptureSource.ReadFrame))!;
+        Assert.Equal(
+            typeof(ReadOnlySpanAction<byte, CameraFrameInfo>),
+            readFrame.GetParameters()[0].ParameterType);
+
+        // The compiler's half of the guarantee, asserted rather than assumed: the pixel parameter is
+        // a ref struct, which is what makes "cannot be stored, captured or boxed" a compile error
+        // rather than a convention.
+        Assert.True(typeof(ReadOnlySpan<byte>).IsByRefLike);
+        Assert.True(typeof(CameraFrameInfo).IsValueType);
+
+        var offenders = new List<string>();
+        foreach (var (sink, where) in reachable)
+        {
+            var invoke = sink.GetMethod("Invoke");
+            if (invoke is null)
+            {
+                offenders.Add($"{where}: {sink.Name} has no Invoke to check");
+                continue;
+            }
+
+            if (invoke.ReturnType != typeof(void) && !MayCrossToASink(invoke.ReturnType, seam))
+            {
+                offenders.Add($"{where}: {sink.Name} RETURNS {invoke.ReturnType.Name}");
+            }
+
+            foreach (var parameter in invoke.GetParameters())
+            {
+                if (!MayCrossToASink(parameter.ParameterType, seam))
+                {
+                    offenders.Add($"{where}: {sink.Name} takes {parameter.ParameterType.Name} {parameter.Name}");
+                }
+            }
+        }
+
+        output.WriteLine(
+            $"camera sink scan: {reachable.Count} delegate type(s) reachable from '{seam}' and below — "
+            + string.Join(", ", reachable.Select(entry => $"{entry.Key.Name} at {entry.Value}")));
+        Assert.True(
+            offenders.Count == 0,
+            "a delegate the camera seam can reach could be handed something it is able to KEEP, which "
+            + "client/docs/capability-inventory.md requires to be impossible rather than avoided:\n  "
+            + string.Join("\n  ", offenders));
+
+        // ---- and the rule has teeth, over shapes constructed here ----
+        // The first is what the frame surface uses. The rest are the four ways a later slice could
+        // hand a frame to something that keeps it, and the LAST TWO ARE INVISIBLE to the retention
+        // rule above: an IMemoryOwner is a pool ticket with no buffer in its declared structure, and
+        // a writable Span over a driver's buffer is unstorable but is still a licence to overwrite
+        // somebody's camera memory.
+        Assert.True(MayCrossToASink(typeof(ReadOnlySpan<byte>), seam));
+        Assert.True(MayCrossToASink(typeof(CameraFrameInfo), seam));
+        Assert.True(MayCrossToASink(typeof(int), seam));
+        Assert.True(MayCrossToASink(typeof(string), seam));
+        Assert.True(MayCrossToASink(typeof(CameraHostPlatform), seam));
+        Assert.False(MayCrossToASink(typeof(byte[]), seam));
+        Assert.False(MayCrossToASink(typeof(Stream), seam));
+        Assert.False(MayCrossToASink(typeof(IntPtr), seam));
+        Assert.False(MayCrossToASink(typeof(System.Buffers.IMemoryOwner<byte>), seam));
+        Assert.False(MayCrossToASink(typeof(Span<byte>), seam));
+        Assert.False(MayCrossToASink(typeof(ReadOnlyMemory<byte>), seam));
+        Assert.False(MayCrossToASink(typeof(FactAttribute), seam));
+
+        // The retention rule genuinely cannot see the two this one adds — asserted so that if it
+        // ever grows to see them, this comment is corrected by a failure rather than by memory.
+        Assert.False(CarriesPixels(typeof(System.Buffers.IMemoryOwner<byte>), allowNativeHandles: false));
+        Assert.False(CarriesPixels(typeof(ReadOnlySpanAction<byte, CameraFrameInfo>), allowNativeHandles: false));
+    }
+
+    /// <summary>
     /// The consent file is the ONLY thing this capability writes, and it holds consent metadata and
     /// nothing else.
     ///
@@ -1248,6 +1410,72 @@ public sealed class CameraCapabilityTests(ITestOutputHelper output)
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Every delegate type reachable from a declared type: the type itself, what it is an array or
+    /// reference OF, and every generic argument. A delegate's own generic arguments are not followed
+    /// — its <c>Invoke</c> signature is what the caller checks, and that is where its buffers are.
+    /// </summary>
+    private static void CollectDelegates(Type type, string where, Dictionary<Type, string> found, int depth = 0)
+    {
+        if (depth >= 8 || type.IsGenericParameter)
+        {
+            return;
+        }
+
+        if (type.IsByRef || type.IsPointer || type.IsArray)
+        {
+            CollectDelegates(type.GetElementType()!, where, found, depth + 1);
+            return;
+        }
+
+        if (typeof(Delegate).IsAssignableFrom(type) && type != typeof(Delegate) && type != typeof(MulticastDelegate))
+        {
+            found.TryAdd(type, where);
+            return;
+        }
+
+        foreach (var argument in type.GetGenericArguments())
+        {
+            CollectDelegates(argument, where, found, depth + 1);
+        }
+    }
+
+    /// <summary>
+    /// Whether a value may be handed TO a delegate the camera seam calls — the allowance the seam's
+    /// one door is held to.
+    ///
+    /// <para><b>A whitelist, deliberately, and it is the opposite direction from
+    /// <see cref="CarriesPixels"/>.</b> That rule asks whether a shape IS a buffer and is therefore
+    /// always one type behind whoever invents the next one. Across a delegate boundary the question
+    /// can be closed instead: a consumer is given numbers, text, this seam's own descriptors, and one
+    /// <see cref="ReadOnlySpan{T}"/> of bytes the compiler will not let it keep. Everything else —
+    /// including shapes <see cref="CarriesPixels"/> cannot see, such as a pooled
+    /// <c>IMemoryOwner&lt;byte&gt;</c> — needs an argument and an edit here.</para>
+    /// </summary>
+    private static bool MayCrossToASink(Type type, string seam)
+    {
+        // The ONE buffer that may cross, and the only reason it may: a ref struct cannot be stored in
+        // a field, captured in a closure, boxed, or put on the heap by any other means.
+        if (type == typeof(ReadOnlySpan<byte>))
+        {
+            return true;
+        }
+
+        // Everything the structural rule already recognises — arrays, streams, handles, pointers,
+        // spans that are NOT the one above, memories — is refused before the allowance is consulted.
+        if (CarriesPixels(type, allowNativeHandles: false))
+        {
+            return false;
+        }
+
+        return type.IsPrimitive
+            || type.IsEnum
+            || type == typeof(string)
+            // A type declared in the seam has already been swept by the retention rule, so it is
+            // known not to be able to hold a frame.
+            || InTheCameraSeam(type.Namespace, seam);
     }
 
     private static string FixtureRoot()

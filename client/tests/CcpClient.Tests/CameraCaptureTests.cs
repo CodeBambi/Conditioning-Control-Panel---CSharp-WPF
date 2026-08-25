@@ -1,3 +1,4 @@
+using System.Buffers;
 using CcpClient.Desktop.Camera;
 using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Lifecycle;
@@ -245,7 +246,7 @@ public sealed class CameraCaptureTests
             Assert.IsNotType<CapabilityState.Available>(open);
             Assert.Contains("NO GAZE IS BEING TRACKED", open.Reason.Detail, StringComparison.Ordinal);
 
-            Assert.Equal(24, await participant.PumpAsync(24, TestContext.Current.CancellationToken));
+            Assert.Equal(24, await participant.PumpAsync(24, sink: null, TestContext.Current.CancellationToken));
             Assert.Equal(24, participant.FramesRead);
 
             await participant.StopCaptureAsync();
@@ -261,14 +262,14 @@ public sealed class CameraCaptureTests
             // A camera that drops one read in three is WORKING: the failure budget is consecutive,
             // so every frame asked for still arrives.
             capture.FailEveryThirdRead = true;
-            Assert.Equal(12, await participant.PumpAsync(12, TestContext.Current.CancellationToken));
+            Assert.Equal(12, await participant.PumpAsync(12, sink: null, TestContext.Current.CancellationToken));
 
             // A camera that has GONE ends the pump inside the budget rather than spinning forever,
             // and it stops at EXACTLY the budget: a thousand frames were asked for and thirty reads
             // answered the question.
             capture.FailEveryRead = true;
             var readsBeforeTheDeadPump = capture.Reads;
-            Assert.Equal(0, await participant.PumpAsync(1000, TestContext.Current.CancellationToken));
+            Assert.Equal(0, await participant.PumpAsync(1000, sink: null, TestContext.Current.CancellationToken));
             Assert.Equal(
                 CameraFrameProbe.MaxConsecutiveReadFailures,
                 capture.Reads - readsBeforeTheDeadPump);
@@ -376,6 +377,145 @@ public sealed class CameraCaptureTests
     }
 
     // =====================================================================================
+    //  The frame surface: pixels reach a consumer, and nothing can keep them
+    // =====================================================================================
+
+    /// <summary>
+    /// <b>A FRAME'S PIXELS REACH A CONSUMER, WITH THE GEOMETRY THAT DESCRIBES THEM, AND THE SEAM
+    /// STILL KEEPS NOTHING.</b> Until 2026-08-25 the capture seam could only say <i>whether</i> a
+    /// frame arrived — <c>ReadFrame</c> read one and dropped it — so no gaze engine could have been
+    /// fed by it, and an inference dependency admitted then would have been one nothing could
+    /// consume.
+    ///
+    /// <para><b>What this fact is really about is the SHAPE that made it safe to open.</b> The
+    /// consumer is called with a <see cref="ReadOnlySpan{T}"/>, which the C# compiler refuses to let
+    /// it store in a field, capture in a closure or box, so the frame cannot outlive the call BY
+    /// CONSTRUCTION. That property is a compile-time one and no runtime assertion can demonstrate it;
+    /// what this fact demonstrates is that real bytes and their real geometry arrive, that they
+    /// arrive ONLY for a read that produced something, and that the sink is honoured through the
+    /// PRODUCT's own pump rather than by calling a source directly.</para>
+    ///
+    /// <para><b>The pixels are handed on to the port's own pixel boundary</b> rather than merely
+    /// counted: <see cref="CameraFrameProbe.MaxChannelStdDev"/> reads the span the sink was given and
+    /// returns the same number as the same arithmetic over the bytes that were sent. A span that
+    /// arrived truncated, misaligned or empty could not produce that.</para>
+    ///
+    /// <para><b>What it does not prove.</b> No camera is opened here and no Media Foundation code
+    /// runs: the double supplies the frame. That a REAL driver's buffer reaches a consumer with the
+    /// geometry Windows declared was measured separately through the quarantined hardware harness in
+    /// <c>client/spikes</c>, against this machine's integrated camera.</para>
+    /// </summary>
+    [Fact]
+    public async Task PixelsREACHAConsumerThroughTheProductsOwnPump_WithTheirGeometry_AndOnlyForARealRead()
+    {
+        var (participant, directory, _, capture) = NewParticipant(
+            engineAdmitted: true,
+            inventory: CameraInventory.Named("recording route", [Device("one")]));
+        try
+        {
+            await participant.StartAsync(TestContext.Current.CancellationToken);
+            Assert.True(await participant.GrantConsentAsync(
+                new CameraConsentRequest(true, true, true, CameraConsent.ConfirmationWord),
+                DateTimeOffset.UnixEpoch));
+            Assert.IsType<CapabilityState.Degraded>(
+                await participant.StartCaptureAsync(null, TestContext.Current.CancellationToken));
+
+            var seen = 0;
+            var lengths = new List<int>();
+            var geometries = new List<CameraFrameInfo>();
+            var measured = new List<double>();
+
+            // A local function rather than a lambda because it is the shape a real consumer has. It
+            // could not keep the span either way — that is the compiler's rule and not this test's —
+            // so everything it records is a NUMBER about the frame.
+            void Consume(ReadOnlySpan<byte> pixels, CameraFrameInfo frame)
+            {
+                seen++;
+                lengths.Add(pixels.Length);
+                geometries.Add(frame);
+                measured.Add(CameraFrameProbe.MaxChannelStdDev(pixels));
+            }
+
+            Assert.Equal(3, await participant.PumpAsync(3, Consume, TestContext.Current.CancellationToken));
+            Assert.Equal(3, seen);
+            Assert.Equal(3, participant.FramesRead);
+
+            // The geometry describes the buffer: every span is exactly Stride * Height bytes long,
+            // and the four numbers are the ones the source negotiated.
+            var expected = new CameraFrameInfo(640, 480, 640 * CameraFrameProbe.BytesPerPixel, false);
+            Assert.All(geometries, frame => Assert.Equal(expected, frame));
+            Assert.All(lengths, length => Assert.Equal((int)expected.Bytes, length));
+            Assert.Equal(640L * 480 * CameraFrameProbe.BytesPerPixel, expected.Bytes);
+
+            // THE BYTES THEMSELVES ARRIVED, measured through the product's own pixel boundary over
+            // the span the consumer was handed.
+            Assert.NotNull(capture.Pixels);
+            var sent = CameraFrameProbe.MaxChannelStdDev(capture.Pixels);
+            Assert.True(sent > CameraFrameProbe.MinStdDev, $"the fixture frame is degenerate: {sent}");
+            Assert.All(measured, value => Assert.Equal(sent, value, 10));
+
+            // A NULL sink still reads and drops, and the answer about the camera is identical: "did a
+            // frame arrive" must not depend on whether anybody was looking.
+            Assert.Equal(2, await participant.PumpAsync(2, sink: null, TestContext.Current.CancellationToken));
+            Assert.Equal(3, seen);
+            Assert.Equal(5, participant.FramesRead);
+
+            // AND A READ THAT PRODUCED NOTHING NEVER CALLS THE CONSUMER. A sink invoked with an empty
+            // span for a failed read would make every consumer carry a defence against it forever.
+            capture.FailEveryRead = true;
+            Assert.Equal(0, await participant.PumpAsync(4, Consume, TestContext.Current.CancellationToken));
+            Assert.Equal(3, seen);
+            Assert.Equal(5, participant.FramesRead);
+        }
+        finally
+        {
+            await participant.StopAsync();
+            Delete(directory);
+        }
+    }
+
+    /// <summary>
+    /// <b>The frame descriptor either DESCRIBES the buffer or the frame is refused.</b> This is the
+    /// arithmetic behind the one refusal on the capture path that protects a CONSUMER rather than a
+    /// user: a sink handed a real span with a geometry that overstates it reads past the end of the
+    /// driver's allocation on its first line of indexing, and nothing about that crash would point
+    /// back here.
+    ///
+    /// <para><b><see cref="CameraFrameInfo.BottomUp"/> is a fact from the operating system, not a
+    /// default.</b> Media Foundation reports a negative <c>MF_MT_DEFAULT_STRIDE</c> for a picture
+    /// whose first row is the bottom one, and this port has already measured that happening —
+    /// <c>-1280</c> on its own fixture media (<c>Video/MediaFoundationInterop.cs:76-79</c>). A gaze
+    /// consumer that ignored it would build inverted vectors from an upside-down face and look merely
+    /// inaccurate, which is the hardest kind of bug to find.</para>
+    /// </summary>
+    [Fact]
+    public void AFrameDescriptorThatDoesNotDESCRIBETheBufferIsNotAFrame()
+    {
+        var top = new CameraFrameInfo(1280, 720, 1280 * CameraFrameProbe.BytesPerPixel, false);
+        Assert.True(top.Describes);
+        Assert.Equal(1280L * 720 * 4, top.Bytes);
+        Assert.False(top.BottomUp);
+
+        // A padded row is the driver's choice and is described, not rejected.
+        Assert.True(new CameraFrameInfo(1280, 720, (1280 * 4) + 64, false).Describes);
+
+        // Bottom-up is carried rather than absorbed: same byte count, different picture.
+        var bottom = new CameraFrameInfo(1280, 720, 1280 * CameraFrameProbe.BytesPerPixel, true);
+        Assert.True(bottom.BottomUp);
+        Assert.Equal(top.Bytes, bottom.Bytes);
+        Assert.NotEqual(top, bottom);
+
+        // NOTHING ELSE DESCRIBES A FRAME. No size at all is the state a source is in before the OS
+        // has answered, and a stride shorter than one row of pixels is the shape that would let a
+        // consumer index past the buffer it was given.
+        Assert.False(new CameraFrameInfo(0, 0, 0, false).Describes);
+        Assert.False(new CameraFrameInfo(1280, 0, 5120, false).Describes);
+        Assert.False(new CameraFrameInfo(0, 720, 5120, false).Describes);
+        Assert.False(new CameraFrameInfo(1280, 720, (1280 * 4) - 1, false).Describes);
+        Assert.False(new CameraFrameInfo(1280, 720, 0, false).Describes);
+    }
+
+    // =====================================================================================
     //  Identity: a device path, never an index
     // =====================================================================================
 
@@ -450,7 +590,7 @@ public sealed class CameraCaptureTests
         Assert.False(linux.IsOpen);
         Assert.Equal(0, linux.FramesRead);
         Assert.Null(linux.AdoptedRung);
-        Assert.False(linux.ReadFrame(TestContext.Current.CancellationToken));
+        Assert.False(linux.ReadFrame(sink: null, TestContext.Current.CancellationToken));
 
         // Empty until Open is called, and never empty afterwards — the invariant that lets a
         // launch-time fact ask the SEAM "were you asked?" instead of trusting a caller's own tally.
@@ -604,19 +744,31 @@ public sealed class CameraCaptureTests
             return null;
         }
 
-        public bool ReadFrame(CancellationToken cancellationToken)
+        public bool ReadFrame(ReadOnlySpanAction<byte, CameraFrameInfo>? sink, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             Reads++;
             _readsSinceOpen++;
             if (FailEveryRead || (FailEveryThirdRead && _readsSinceOpen % 3 == 0))
             {
+                // A read that produced nothing NEVER calls the sink: a consumer handed an empty span
+                // would have to defend against one on every frame for the rest of its life.
                 return false;
             }
 
             FramesRead++;
+
+            // Allocated only when somebody is actually looking, and held by the TEST rather than by
+            // the seam — a double is allowed to keep a frame, and CameraCapabilityTests proves that
+            // no type under Camera/ is.
+            Pixels ??= Frame(Width, Height, (x, y) => (byte)((x * 7) + (y * 13)));
+            sink?.Invoke(Pixels, new CameraFrameInfo(Width, Height, Width * CameraFrameProbe.BytesPerPixel, false));
             return true;
         }
+
+        /// <summary>The exact bytes the last sink was shown, so a fact can compare what ARRIVED with
+        /// what was SENT. Null until a sink has asked for one.</summary>
+        public byte[]? Pixels { get; private set; }
 
         public void Close()
         {
