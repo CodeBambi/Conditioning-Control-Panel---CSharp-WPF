@@ -113,6 +113,30 @@
    painted way out) live there and are shared with the class rooms. */
 .asc-hot { z-index: 3; }
 
+/* -------------------------- the apron, stepping off ---------------------- */
+
+/* A ZOOM IS A ZOOM (scene.js's header). The midway band is the front edge of
+   the WIDE shot; walking into a close-up takes it off and the walk back brings
+   it in. rooms.css owns how the band LOOKS - this is only the going away.
+
+   `visibility` is on the same transition with a delay in one direction only,
+   the classic pattern: it flips to hidden AFTER the fade so the slab leaves the
+   tab order (a focusable invisible button on a screen the player is not on is
+   an a11y trap), and back to visible IMMEDIATELY so the fade in has something
+   to fade. pointer-events is the belt to that brace for the mid-fade frames. */
+.arm-bar.asc-bar {
+  transition: opacity 200ms ease-out, visibility 0s linear 0s;
+}
+.arm-bar.asc-bar.asc-bar-away {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 200ms ease-out, visibility 0s linear 200ms;
+}
+/* The cut: a reduced-motion player's band is simply not there. */
+.arc-reduced .arm-bar.asc-bar,
+.arc-reduced .arm-bar.asc-bar.asc-bar-away { transition: none; }
+
 /* ------------------------------ step back -------------------------------- */
 
 /* THE PILL, lifted from lab.css's .al-back. The apron's slab LEAVES THE ROOM;

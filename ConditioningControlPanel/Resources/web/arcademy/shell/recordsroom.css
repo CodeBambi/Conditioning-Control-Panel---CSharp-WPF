@@ -4,12 +4,17 @@
  * shell/scene.css + shell/rooms.css, which between them already own everything
  * generic: the stage, the zoom, the hotspot skins, the apron.
  *
- * So this sheet is deliberately SHORT. It owns exactly four things nothing else
- * could know about:
+ * So this sheet is deliberately SHORT. It owns the things nothing else could
+ * know about:
  *   .rr-late    the first-visit hold - the tray alone for two seconds
+ *   .rr-solo    and the tray lit LOUDER for that same window, because a hold
+ *               nobody can see happening is not an introduction
  *   .rr-fresh   the pink tab that says a card has been stamped since you looked
- *   .rr-cards   the old Records Office page, folded down into a scene panel
- *   .rr-cork / .rdb-page where the paper and the spread sit in their close-ups
+ *   .rr-cards   the old Records Office page, folded down into a scene panel -
+ *               including the footer band, which has to be a BAND in here
+ *   .rr-cork / .rdb-side / .rdb-page  where the paper and the spread sit in
+ *               their close-ups, at the full measured rect (the apron steps
+ *               off for a close-up now - scene.js's zoom-is-a-zoom ruling)
  *
  * DECORATION LAW, twice over. `.arc-reduced` gets the room with NO hold and NO
  * tab: recordsroom.js declines to mint either, and the rules below are the
@@ -40,6 +45,46 @@
   opacity: 1;
   pointer-events: auto;
   transition: none;
+}
+
+/* THE SOLO RING, and it is the other half of the same two seconds.
+   Taking the board and the book away only reads if the player can see them go,
+   and what goes is `.arm-swim`'s resting rim: 2px at .30 alpha, on a painted
+   set, over a lamp-lit desk. In the headline capture the first-visit shot and
+   the ordinary shot were the same picture. So the TRAY answers for it - a
+   second ring 6px proud of the first at .55, and a glow with real reach on top
+   of `.arm-main`'s own breath. Faster, too (1.5s against 2.6s): this is the
+   room saying one thing once, not the room's resting state.
+
+   It comes off with the hold and the tray settles back into `arm-main` with no
+   second class to unwind - one selector, one keyframe, one timer. */
+.rr-room .asc-hot.arm-main.rr-solo {
+  animation: rr-solo-breathe 1.5s ease-in-out infinite;
+}
+@keyframes rr-solo-breathe {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(255, 145, 200, 0.62),
+                0 0 0 6px rgba(255, 105, 180, 0.30),
+                0 0 34px 10px rgba(255, 105, 180, 0.24),
+                inset 0 0 34px rgba(255, 105, 180, 0.10);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(255, 175, 215, 0.92),
+                0 0 0 6px rgba(255, 105, 180, 0.55),
+                0 0 60px 20px rgba(255, 105, 180, 0.42),
+                inset 0 0 48px rgba(255, 105, 180, 0.18);
+  }
+}
+/* DECORATION LAW, and here it is the whole ring rather than just its motion:
+   a static screen gets the room's ordinary state, not a frozen shout. The
+   `.arm-main` still frame is restated verbatim from rooms.css because these
+   selectors outrank it and a `box-shadow:none` would leave the verb unlit. */
+.arc-reduced .rr-room .asc-hot.arm-main.rr-solo,
+.arm-lite .asc-hot.arm-main.rr-solo {
+  animation: none;
+  box-shadow: 0 0 0 2px rgba(255, 105, 180, 0.40),
+              0 0 26px 6px rgba(255, 105, 180, 0.18),
+              inset 0 0 30px rgba(255, 105, 180, 0.08);
 }
 
 /* -------------------------------------------------------------- THE TAB */
@@ -96,6 +141,47 @@
 }
 .rr-cards .arc-records-desk { width: 100%; }
 
+/* THE FOOTER BAR HAS TO BE A BAR. `.arc-exitbar` is `position:sticky;bottom:0`
+   and its backing is a gradient that starts TRANSPARENT - which is right on the
+   screen it was written for (a full-bleed page over the desk photograph, where
+   the fade is the point) and wrong the moment the same bar floats over a grid
+   of bright card art two rows deep. In the panel it read as two buttons hanging
+   in mid-air with punch cards showing between them. So the panel's copy of the
+   bar gets an OPAQUE navy band and a rule along its top edge: it is the floor
+   of the box, not a mist over it.
+
+   `--rr-barh` is the one number, and it is spent twice - here as a min-height
+   and below as the scroller's own bottom padding, so the last row of cards can
+   always be scrolled clear of the band rather than parking underneath it. */
+.rr-cards { --rr-barh: 62px; }
+.rr-cards .arc-exitbar {
+  min-height: var(--rr-barh);
+  margin: 16px -24px 0;            /* out to the panel's own edges */
+  padding-left: 24px;
+  padding-right: 24px;
+  border-top: 1px solid color-mix(in srgb, var(--pink), transparent 62%);
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--navy), black 6%) 0%,
+    color-mix(in srgb, var(--navy), black 26%) 100%);
+  box-shadow: 0 -10px 22px rgba(6, 4, 14, 0.55);
+}
+/* THE SCROLLER MAKES ROOM FOR IT. scene.css already pads the panel; this is the
+   band's own share on top, so nothing in the wall ever ends underneath it. */
+.asc-panel.rr-cards { padding-bottom: calc(24px + var(--rr-barh)); }
+
+/* THE STRIP ON A FINISHED CARD FITS THE STRIP. The complete card's MASTERED
+   line came out as "IASTERE" - the text zone is an authored rect on the face
+   (faces.json `text.w` = 0.215 of a 236px small card, so ~51px) with
+   `overflow:hidden`, and MASTERED at 9.5px with .16em of tracking measures ~59.
+   A flex item wider than its column is clamped to the column and its own text
+   spills BOTH ways, so the box clipped an even bite off each end. The strip
+   comes down to fit rather than the zone coming open: the zone clips on purpose
+   (it is a window onto a picture). Same for the closing date, which was wrapping
+   onto a second line inside an 85px-tall strip. Panel-scoped, so the standalone
+   Records screen keeps the type it was signed off with. */
+.rr-cards .arc-pc-small .arc-pc-mastered { font-size: 8px; letter-spacing: .06em; }
+.rr-cards .arc-pc-small .arc-pc-date { font-size: 7.5px; letter-spacing: .02em; }
+
 /* THE SPOTLIGHT STILL LIFTS A CARD, and it is `position:fixed` over the whole
    viewport - which, inside the room's z10 stacking context, means the apron
    band (a <body>-level sibling at z55) paints over its lower edge. fit()
@@ -105,69 +191,107 @@
 
 /* ------------------------------------------------------------- THE CORK */
 
-/* The night's sheets, over the bare cork in the plate. The GRID is
-   corkboard.css's (.arc-cork-wall rides along on the host element), so a notice
-   looks the same on this wall as on the hall's; all that is added here is the
-   box it lives in and the fact that it scrolls when the term is busy. No cork
-   texture, no frame, no heading: the painting already drew all three. */
-.rr-cork {
+/* The night's sheets, over the bare cork in the plate. The SKIN is
+   corkboard.css's (.arc-cork-wall rides along on the host element, and with it
+   the wall's paper tokens), so a notice looks the same on this wall as on the
+   hall's. No cork texture, no frame, no heading: the painting drew all three.
+
+   THE LAYOUT IS THIS FILE'S, though, and it is not the hall's. The hall board
+   is a 900px column and auto-fit gives it two up; the office cork is the whole
+   1285px plate and the same auto-fit dealt FOUR across - which corkboard.css's
+   own comment calls out as wrong ("a four-across wall makes every sheet a
+   column of single words"). Three, hard. */
+/* Doubled class on purpose: corkboard.css's own small-window rule is
+   `.arc-cork-wall{grid-template-columns:1fr}` at the same specificity, and
+   which sheet linked last is not something this file gets to know. */
+.rr-cork.arc-cork-wall {
   overflow: auto;
-  padding: 10px 16px 12px;
-  /* the sheets are authored for a page column and this is a 1285px plate, so
-     hold them to a readable measure rather than letting one run the wall */
-  --paper-scale: 1;
+  padding: 12px 18px 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* THE WALL USES ITS HEIGHT. A cork with four sheets in one band across the
+     top and 40% of bare board underneath reads as a board somebody stripped,
+     not as a board somebody pinned. Two rows, pushed to the two edges: the
+     host is the grid AND the scroller, and its height is the measured rect, so
+     `space-between` has a real box to distribute in. A busy term overflows and
+     scrolls instead, and `space-between` degrades to `start` on its own. */
+  align-content: space-between;
+  row-gap: clamp(16px, 2vw, 30px);
 }
 .rr-cork .arc-cork-slot { animation-duration: .28s; }
+
+/* This paper is read at arm's length across a room, not on a phone in a 900px
+   column: the plate is 1285 stage px wide and a third of it is a big sheet.
+   Type up to match, or the copy is technically dark and practically a texture. */
+.rr-cork .arc-cork-notetitle { font-size: 17px; margin-bottom: 6px; }
+.rr-cork .arc-cork-notebody { font-size: 14.5px; line-height: 1.5; }
+.rr-cork .arc-cork-kind { font-size: 10.5px; margin-bottom: 6px; }
+.rr-cork .arc-corknote { padding: 18px 18px 15px; }
 
 /* ------------------------------------------------------------- THE BOOK */
 
 /* Two pages, two rects, one spread. The plate paints the binding, the leather
-   and the shadow in the gutter; these are the paper. */
+   and the shadow in the gutter; these are the paper.
+
+   THE SIDE is what the room pins to the measured rect, and it does NOT clip -
+   it is the box the index tabs stick out of. THE PAGE fills it and does clip,
+   because a page clips: the copy stops at the fore-edge and the turning leaf
+   sweeps inside the paper. Two boxes, one rect, and the reason is in
+   deskbook.js's header. */
+.rdb-side { position: absolute; }
 .rdb-page {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
-  padding: 18px 20px 44px;
-  color: #2A2118;
-  font: 400 14px/1.62 var(--body, Georgia, serif);
+  padding: 22px 26px 46px;
+  color: #241C2E;
+  font: 400 19px/1.5 var(--body, Georgia, serif);
   overflow: hidden;
   /* the spread is the camera's subject, so the leaf has somewhere to turn in */
   perspective: 1400px;
 }
 .rdb-leaf { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .rdb-head {
-  margin: 0 0 8px;
-  font: 700 12px/1.2 var(--disp, system-ui, sans-serif);
+  margin: 0 0 10px;
+  font: 700 15px/1.2 var(--disp, system-ui, sans-serif);
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: #6B4A2E;
 }
-.rdb-body { margin: 0 0 12px; }
+/* INK, NOT PENCIL. The plate's paper is a warm cream at ~1500px wide and the
+   spread is the camera's whole subject: 14px of soft grey read as a caption
+   somebody forgot to finish. Deep navy-black at 19/1.5 reads as writing. */
+.rdb-body { margin: 0 0 14px; color: #241C2E; }
 .rdb-blank { margin: 0; min-height: 1em; }
 .rdb-folio {
   position: absolute;
   left: 0; right: 0; bottom: 16px;
   text-align: center;
-  font: 400 11px/1 var(--mono, ui-monospace, monospace);
-  color: rgba(42, 33, 24, 0.55);
+  font: 400 13px/1 var(--mono, ui-monospace, monospace);
+  color: rgba(36, 28, 46, 0.55);
 }
 
 /* THE TABS, down the right page's outer edge - a real book's index tabs, which
-   is why they hang OUTSIDE the paper and the live one is pushed proud. */
+   is why they hang OUTSIDE the paper and the live one is pushed proud. They
+   hang off the SIDE (which does not clip), over the painted page-edge in the
+   plate; hung off the PAGE they were laid out at left:100% inside an
+   overflow:hidden box and were never once visible. */
 .rdb-tabs {
   position: absolute;
   left: 100%;
   top: 12%;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 .rdb-tab {
-  padding: 7px 10px 7px 8px;
+  padding: 9px 13px 9px 10px;
   border: 0;
   border-radius: 0 6px 6px 0;
   background: linear-gradient(90deg, #C9A96B 0%, #B08F52 100%);
   color: #2A2118;
-  font: 700 10px/1 var(--disp, system-ui, sans-serif);
+  font: 700 12px/1 var(--disp, system-ui, sans-serif);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   text-align: left;
@@ -189,12 +313,12 @@
 .rdb-arrow {
   position: absolute;
   bottom: 12px;
-  padding: 5px 11px;
-  background: rgba(42, 33, 24, 0.08);
-  border: 1px solid rgba(42, 33, 24, 0.24);
+  padding: 6px 13px;
+  background: rgba(36, 28, 46, 0.08);
+  border: 1px solid rgba(36, 28, 46, 0.26);
   border-radius: 6px;
-  color: #4A3A28;
-  font: 700 11px/1 var(--disp, system-ui, sans-serif);
+  color: #3A2E48;
+  font: 700 13px/1 var(--disp, system-ui, sans-serif);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   cursor: pointer;

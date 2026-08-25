@@ -8,7 +8,9 @@
  *
  *   THE TRAY      the cards, and it is THE verb of the room: it wears the
  *                 breath, it wears the fresh tab, and on a first-ever visit it
- *                 is the only lit thing for two seconds. Pressing it opens
+ *                 is the only lit thing for two seconds - lit LOUDER, with the
+ *                 `.rr-solo` ring, because "the other two went quiet" is not a
+ *                 sentence a player can see. Pressing it opens
  *                 shell/records.js INSIDE a scene panel - the same wall, the
  *                 same docket, the same spotlight - and the way out of that
  *                 panel is the room, never the campus (a door you came through
@@ -33,11 +35,14 @@
  * It touches no store, no bridge and no EMI - the shell hands it narrow caps,
  * the annex's law (`showAnnex`'s), and it calls back.
  *
- * THE APRON OWNS THE FLOOR, and it owns it here too. Three of the four measured
- * rects clear y=640 on their own; the two close-up hosts (the cork, the book's
- * pages) are measured from the PLATE and run under the line, so both are
- * clamped to it on the way in. A sheet of paper behind the band is a sheet of
- * paper the player cannot read.
+ * THE APRON OWNS THE FLOOR OF THE WIDE SHOT, and only of the wide shot. All
+ * four measured rects up there clear y=640 on their own. The two CLOSE-UP hosts
+ * (the cork, the book's pages) are measured from the PLATE and run under that
+ * line - and they are pinned at their FULL measured size, unclamped, because
+ * scene.js's band fades out on the way into a close-up (the zoom-is-a-zoom
+ * ruling, 2026-08-25). The old clamp cost the cork 89px and each page 16px of
+ * paper to hide behind a slab that is no longer there; a sheet of paper is
+ * measured from the painting or it is not measured at all.
  * ==========================================================================*/
 
 import { t as lexT } from '../core/lexicon.js';
@@ -71,9 +76,6 @@ export const LEDGER_PAGES = Object.freeze({
   left: Object.freeze([224, 164, 436, 492]),
   right: Object.freeze([712, 166, 438, 490]),
 });
-
-/** The apron line, scene.js's own (640/768 of the stage). Rects clamp to it. */
-const APRON_STAGE_TOP = 640;
 
 /** How long the other three rects hold back on a first-ever visit. */
 export const LATE_MS = 2000;
@@ -137,12 +139,22 @@ function htmlReduced() {
   return false;
 }
 
-/** Clamp a rect's business above the apron line (scene.js warns; we obey). */
-export function aboveApron(rect) {
-  const r = [Number(rect[0]) || 0, Number(rect[1]) || 0, Number(rect[2]) || 0, Number(rect[3]) || 0];
-  const room = APRON_STAGE_TOP - r[1];
-  if (room > 0 && r[3] > room) r[3] = room;
-  return r;
+/** Walk a subtree for the first node wearing `cls`, BY INDEX and never with a
+ *  selector - `querySelector` does not exist in the node double, and a room
+ *  that only finds its own tray in a browser is a room with no suite. */
+function findCls(node, cls) {
+  if (!node) return null;
+  try {
+    if (node.classList && typeof node.classList.contains === 'function'
+      && node.classList.contains(cls)) return node;
+  } catch (e) { /* noop */ }
+  const kids = node.children;
+  if (!kids) return null;
+  for (let i = 0; i < kids.length; i += 1) {
+    const hit = findCls(kids[i], cls);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 /* ----------------------------------------------------------------------------
@@ -289,14 +301,32 @@ export function createRecordsRoom(caps) {
    * CLASS ON THE ROOT and a rule in the sheet - one timer, no per-node state,
    * and `.arc-reduced` never gets it at all (everything is simply there). */
 
+  /* THE SOLO RING. Holding the other three back is only half a first line: the
+   * headline shot showed a room where the two things that went away were a 2px
+   * rim at .30 nobody could see going. So the TRAY gets `.rr-solo` for exactly
+   * the same window - a second, wider ring and a stronger glow over its normal
+   * breath - and settles back into `.arm-main` when the window closes. The
+   * class rides the TRAY, not the root, because it is the tray's own state, and
+   * the tray is scene.js's one `main` hotspot whichever rect that is. */
+  function soloRing(on) {
+    try {
+      const tray = findCls(scene.root, 'arm-main');
+      if (!tray || !tray.classList) return;
+      if (on) { if (tray.classList.add) tray.classList.add('rr-solo'); }
+      else if (tray.classList.remove) tray.classList.remove('rr-solo');
+    } catch (e) { /* a decoration must never be the thing that throws */ }
+  }
+
   const firstEver = num(c.visits) <= 0;
   try { if (typeof c.markVisit === 'function') c.markVisit(num(c.visits) + 1); }
   catch (e) { log('records room visit bank failed: ' + ((e && e.message) || e)); }
 
   if (firstEver && !reduced()) {
     try { scene.root.classList.add('rr-late'); } catch (e) { /* noop */ }
+    soloRing(true);
     later(function () {
       try { scene.root.classList.remove('rr-late'); } catch (e) { /* noop */ }
+      soloRing(false);
     }, LATE_MS);
   }
 
@@ -361,7 +391,8 @@ export function createRecordsRoom(caps) {
     if (dead || paper) return;
     const host = el('div', 'rr-cork arc-cork-wall');
     attr(host, 'role', 'list');
-    scene.mountInView('board', host, aboveApron(CORK_INNER));
+    /* THE FULL MEASURED CORK. Unclamped: the band is away in a close-up. */
+    scene.mountInView('board', host, CORK_INNER);
     paper = mountNotices(host, {
       daySeed: c.daySeed,
       onRead: typeof c.onCorkRead === 'function' ? c.onCorkRead : undefined,
@@ -384,8 +415,9 @@ export function createRecordsRoom(caps) {
       isActive: function () { return !dead && scene.view() === 'book'; },
     });
     if (!book) { log('records room: the book would not open'); return; }
-    scene.mountInView('book', book.left, aboveApron(LEDGER_PAGES.left));
-    scene.mountInView('book', book.right, aboveApron(LEDGER_PAGES.right));
+    /* Both pages at their full measured height, for the cork's reason. */
+    scene.mountInView('book', book.left, LEDGER_PAGES.left);
+    scene.mountInView('book', book.right, LEDGER_PAGES.right);
   }
 
   /* ------------------------------------------------------------- the fold */
@@ -453,6 +485,12 @@ export function createRecordsRoom(caps) {
     notices: function () { return paper ? paper.notices : null; },
     /** Was this the room's first-ever visit? */
     firstVisit: function () { return firstEver; },
+    /** Is the tray wearing the first-visit solo ring right now? */
+    soloUp: function () {
+      const tray = findCls(scene.root, 'arm-main');
+      try { return !!(tray && tray.classList && tray.classList.contains('rr-solo')); }
+      catch (e) { return false; }
+    },
   };
 }
 

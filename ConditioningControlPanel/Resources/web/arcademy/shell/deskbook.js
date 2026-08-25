@@ -7,6 +7,10 @@
  * and everything between them - the chapters, the tabs down the right edge, the
  * page arrows, the turn - lives here.
  *
+ * `left` and `right` are SIDE HOSTS, one box out from the paper. The paper
+ * clips (a page does); the tabs hang off the fore-edge and must not be clipped.
+ * See the leaves, below - it is the whole reason the second box exists.
+ *
  * THREE THINGS IT IS NOT
  *  - it is not a screen. It mints no stage, binds no Esc, and knows nothing
  *    about the router. The room hands it two rects and takes it away again.
@@ -226,16 +230,35 @@ export function createDeskBook(opts) {
   }
 
   /* ------------------------------------------------------------- the leaves */
+  /* TWO BOXES A SIDE, and the second one is not decoration.
+   *
+   * What the room pins to a measured page rect is a SIDE HOST (`.rdb-side`).
+   * The paper (`.rdb-page`) fills it and CLIPS - it has to, it is a page: a
+   * paragraph must not run off the edge of the sheet and the turning leaf
+   * sweeps inside it. Anything that hangs OFF the paper therefore cannot be a
+   * child of the paper, and the chapter tabs are exactly that: a real book's
+   * index tabs stick out past the fore-edge. Parented to the page they were
+   * laid out at `left:100%` inside an `overflow:hidden` box, which is to say
+   * they were rendered and then clipped away to nothing - three tabs that
+   * existed in the DOM and had never once been seen on screen.
+   *
+   * So they hang off the SIDE, which does not clip, over the painted page-edge
+   * in the plate. The room still gets `left` and `right` and still pins them to
+   * LEDGER_PAGES; the extra box is entirely inside this file. */
+  const left = el('div', 'rdb-side rdb-side-left');
+  const right = el('div', 'rdb-side rdb-side-right');
 
-  const left = el('div', 'rdb-page rdb-left');
-  attr(left, 'role', 'group');
-  const right = el('div', 'rdb-page rdb-right');
-  attr(right, 'role', 'group');
+  const leftPage = el('div', 'rdb-page rdb-left');
+  attr(leftPage, 'role', 'group');
+  const rightPage = el('div', 'rdb-page rdb-right');
+  attr(rightPage, 'role', 'group');
+  left.appendChild(leftPage);
+  right.appendChild(rightPage);
 
   const leftBody = el('div', 'rdb-leaf');
   const rightBody = el('div', 'rdb-leaf');
-  left.appendChild(leftBody);
-  right.appendChild(rightBody);
+  leftPage.appendChild(leftBody);
+  rightPage.appendChild(rightBody);
 
   /* THE TURNING LEAF. One node, parked and invisible until a turn: it sweeps
    * across the spine while the spread underneath repaints at the midpoint. It
@@ -243,12 +266,14 @@ export function createDeskBook(opts) {
    * a reduced-motion reader loses a sweep and nothing else. */
   const flip = el('i', 'rdb-flip');
   attr(flip, 'aria-hidden', 'true');
-  right.appendChild(flip);
+  rightPage.appendChild(flip);
 
   /* --------------------------------------------------------------- the tabs */
   /* Down the RIGHT page's outer edge, the way a real book's index tabs sit -
    * one per chapter, the live one pushed proud. A tab is a jump, never a page
-   * turn: it lands on the chapter's own opening spread. */
+   * turn: it lands on the chapter's own opening spread.
+   *
+   * SIBLING OF THE PAGE, NOT A CHILD OF IT (see the leaves, above). */
   const tabs = el('div', 'rdb-tabs');
   attr(tabs, 'role', 'tablist');
   const tabEls = [];
@@ -275,13 +300,14 @@ export function createDeskBook(opts) {
   prevBtn.type = 'button';
   attr(prevBtn, 'aria-label', prevLabel);
   prevBtn.addEventListener('click', function () { prev(); });
-  left.appendChild(prevBtn);
+  /* The arrows are ON the paper (the tabs are the only thing that hangs off). */
+  leftPage.appendChild(prevBtn);
 
   const nextBtn = el('button', 'rdb-arrow rdb-next', nextLabel + ' ›');
   nextBtn.type = 'button';
   attr(nextBtn, 'aria-label', nextLabel);
   nextBtn.addEventListener('click', function () { next(); });
-  right.appendChild(nextBtn);
+  rightPage.appendChild(nextBtn);
 
   /* ---------------------------------------------------------------- paint */
 

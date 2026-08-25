@@ -22,7 +22,7 @@
  *    REMOVAL (trap 27: `[hidden]` loses to any author `display:`);
  *  - the MIDWAY APRON with its BACK slab, on <body> at z55 the way room.js
  *    mounts it (root is its own stacking context at z10, so nothing inside it
- *    can ever rise above EMI at z50);
+ *    can ever rise above EMI at z50) - AND ITS HIDING, see A ZOOM IS A ZOOM;
  *  - every timer it starts, and their cancellation in destroy().
  *
  * WHAT IT DOES NOT OWN, EVER
@@ -63,9 +63,21 @@
  * only. Neither costs the room a hotspot, a tag or a button.
  *
  * THE APRON LINE. Every VN set was painted with its lower third held calm and
- * dark for a dialogue band, so the apron owns that floor. Hotspot rects must
- * keep their business ABOVE it; a row that crosses is WARNED at construction
- * (never thrown - a scene with one badly-placed rect still opens).
+ * dark for a dialogue band, so the apron owns that floor AT THE WIDE SHOT. A
+ * `wide` hotspot row that crosses it is WARNED at construction (never thrown -
+ * a scene with one badly-placed rect still opens).
+ *
+ * A ZOOM IS A ZOOM (owner ruling 2026-08-25), and it is why the audit is now
+ * WIDE-ONLY. Walking into a close-up FADES THE APRON OUT (~200ms; .arc-reduced
+ * cuts it) and the walk back to `wide` brings it in again. The band is the
+ * front edge of the WIDE STAGE, not a permanent floor across every plate: a
+ * camera that has moved in on the cork has nothing left to say about leaving
+ * the building, and a sheet of paper behind an opaque slab is a sheet of paper
+ * nobody can read. So a CLOSE-UP's rects and props are free to run to the
+ * bottom of the plate - below 640 is legal there and is not warned about - and
+ * `.asc-back`, the step-back pill every close-up draws, is the way out while
+ * the band is away. It goes `visibility:hidden` with the fade, so the slab
+ * never sits in the tab order of a screen it is not on.
  * ==========================================================================*/
 
 import { t as lexT } from '../core/lexicon.js';
@@ -284,6 +296,30 @@ export function createScene(opts) {
     if (doc.body) doc.body.appendChild(bar); else root.appendChild(bar);
   }
 
+  /**
+   * THE BAND STEPS OFF FOR A CLOSE-UP. One class, and the sheet owns both the
+   * ~200ms fade and the `.arc-reduced` cut - the JS is one path, exactly the
+   * way the zoom is (`.asc-zoom` + `transition:none`). `visibility` rides the
+   * same rule so the slab leaves the tab order rather than lurking invisibly
+   * under a plate the player is reading.
+   *
+   * It is a LEVEL keyed on the view, never a toggle: every showView writes it,
+   * so an interrupted walk (a second press mid-zoom) can never strand the band
+   * off-screen at the wide shot.
+   */
+  function apronVisible(show) {
+    if (!bar) return;
+    try {
+      if (bar.classList && typeof bar.classList.toggle === 'function') { bar.classList.toggle('asc-bar-away', !show); return; }
+    } catch (e) { /* noop */ }
+    /* the node double has no toggle: fall back to the string, idempotently */
+    try {
+      const has = hasCls(bar, 'asc-bar-away');
+      if (!show && !has && bar.classList && bar.classList.add) bar.classList.add('asc-bar-away');
+      else if (show && has && bar.classList && bar.classList.remove) bar.classList.remove('asc-bar-away');
+    } catch (e) { /* noop */ }
+  }
+
   /* ------------------------------------------------------------ hotspots */
 
   function placeRect(node, rect) {
@@ -293,16 +329,22 @@ export function createScene(opts) {
     node.style.height = rect[3] + 'px';
   }
 
-  /** Rows are authored above the apron line or the band sits on them. A
+  /** WIDE rows are authored above the apron line or the band sits on them. A
    *  crossing row is a WARNING, never a throw: one bad rect must not cost the
-   *  player the whole room. Checked once, at construction, for every view -
-   *  so it is reported before that slide is ever visited. */
+   *  player the whole room. Checked once, at construction.
+   *
+   *  ONLY `wide` IS AUDITED (the zoom-is-a-zoom ruling in the header): the band
+   *  fades out on the way into any close-up, so a close-up's rects own the
+   *  whole plate and a row below 640 there is CORRECT, not a mistake. Every
+   *  view is still checked for a malformed row - that is a shape error and has
+   *  nothing to do with where the carpet is. */
   function auditRects() {
     Object.keys(views).forEach(function (name) {
       const rows = (views[name] && views[name].hotspots) || [];
       for (let i = 0; i < rows.length; i += 1) {
         const r = rows[i];
         if (!Array.isArray(r) || r.length < 4) { log('scene: malformed hotspot row in view ' + name + ' at index ' + i); continue; }
+        if (name !== 'wide') continue;
         const bottom = Number(r[1]) + Number(r[3]);
         if (bottom > apronStageTop) {
           log('scene: hotspot rect crosses the apron line (view=' + name + ' action=' + r[4]
@@ -479,6 +521,10 @@ export function createScene(opts) {
     }
 
     applyFlags();
+    /* A ZOOM IS A ZOOM: the band belongs to the wide shot and steps off for
+     * every close-up. Written on EVERY move, not just the ones that change it,
+     * so the level always matches the view that is actually up. */
+    apronVisible(name === 'wide');
     if (prevName) sfx(back ? 'door' : 'blip', back ? 0.3 : 0.16, back ? null : { pitch: 1.05 });
     /* Keyboard keeps its place: the room's own verb takes focus once the node
      * is in the document (a fresh node ignores focus() in some engines). */
