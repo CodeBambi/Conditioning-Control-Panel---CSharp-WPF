@@ -150,13 +150,18 @@
    bar gets an OPAQUE navy band and a rule along its top edge: it is the floor
    of the box, not a mist over it.
 
-   `--rr-barh` is the one number, and it is spent twice - here as a min-height
-   and below as the scroller's own bottom padding, so the last row of cards can
-   always be scrolled clear of the band rather than parking underneath it. */
+   THE BAR SITS ON THE FLOOR, AND THE FLOOR IS THE PANEL'S EDGE. A sticky
+   `bottom:0` is measured inside the scroll container's PADDING, so the first
+   cut of this wave - a `padding-bottom` on the panel "to make room" - parked
+   the band a full bar-height up from the floor, straight across row two of the
+   cards (owner screenshot 2026-08-25). The panel keeps NO bottom padding; the
+   bar is the last thing in flow, so at the end of the scroll the final row sits
+   above it naturally, and mid-scroll the cards pass underneath an opaque band
+   instead of behind two floating buttons. */
 .rr-cards { --rr-barh: 62px; }
 .rr-cards .arc-exitbar {
   min-height: var(--rr-barh);
-  margin: 16px -24px 0;            /* out to the panel's own edges */
+  margin: 16px -24px -24px;        /* out to the panel's edges, down to its floor */
   padding-left: 24px;
   padding-right: 24px;
   border-top: 1px solid color-mix(in srgb, var(--pink), transparent 62%);
@@ -165,9 +170,7 @@
     color-mix(in srgb, var(--navy), black 26%) 100%);
   box-shadow: 0 -10px 22px rgba(6, 4, 14, 0.55);
 }
-/* THE SCROLLER MAKES ROOM FOR IT. scene.css already pads the panel; this is the
-   band's own share on top, so nothing in the wall ever ends underneath it. */
-.asc-panel.rr-cards { padding-bottom: calc(24px + var(--rr-barh)); }
+.asc-panel.rr-cards { padding-bottom: 0; }
 
 /* THE STRIP ON A FINISHED CARD FITS THE STRIP. The complete card's MASTERED
    line came out as "IASTERE" - the text zone is an authored rect on the face
@@ -205,15 +208,20 @@
    `.arc-cork-wall{grid-template-columns:1fr}` at the same specificity, and
    which sheet linked last is not something this file gets to know. */
 .rr-cork.arc-cork-wall {
-  overflow: auto;
+  /* PINNED PAPER HANGS. A sheet that runs past the bottom rail of the frame is
+     hanging off the board the way pinned paper does - it is NOT cut by the
+     cork and it does NOT put a scrollbar on a corkboard (owner 2026-08-25). So
+     the host never clips; a busy term's overrun spills over the frame's
+     bottom rail onto the wall, and only the stage edge itself ever cuts it. */
+  overflow: visible;
   padding: 12px 18px 14px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   /* THE WALL USES ITS HEIGHT. A cork with four sheets in one band across the
      top and 40% of bare board underneath reads as a board somebody stripped,
      not as a board somebody pinned. Two rows, pushed to the two edges: the
      host is the grid AND the scroller, and its height is the measured rect, so
-     `space-between` has a real box to distribute in. A busy term overflows and
-     scrolls instead, and `space-between` degrades to `start` on its own. */
+     `space-between` has a real box to distribute in. A busy term overruns the
+     frame and hangs below it, and `space-between` degrades to `start` on its own. */
   align-content: space-between;
   row-gap: clamp(16px, 2vw, 30px);
 }
