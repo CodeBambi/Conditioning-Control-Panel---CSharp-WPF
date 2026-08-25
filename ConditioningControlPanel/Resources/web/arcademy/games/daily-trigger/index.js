@@ -625,7 +625,7 @@ export default {
 
       if (ladder) ladder.absorbDressing(jackpot ? 'confetti' : 'petals');
       if (casino) { casino.gold(true); casino.payout(5); }   // the frame goes gold for the absorb
-      fx('sub_flash', { text: word, variant: 'centre' });
+      fx('sub_flash', { text: word, variant: 'centre', voice: true, voiceKey: 'daily-trigger-whisper' });
       tick(jackpot ? 'jackpot' : 'sting', 0.6);
       if (jackpot) {
         try { if (ctx.ceremonies) ctx.ceremonies.reward('jackpot', { target: wrap }); }
@@ -660,7 +660,10 @@ export default {
        * flashes AT you. Detention is FLAVOUR ONLY - grade C, attendance intact. */
       if (ladder) ladder.detentionDressing();
       if (casino) casino.dimOut();                 // a loss is never silence: the frame sighs out
-      fx('sub_flash', { text: word, variant: 'stamp' });
+      /* VOICE: the stamp carries it. The two echoes land at +520ms and +1100ms,
+         inside the 1400ms voiced-gap floor, so they stay silent - one word said
+         once over three visual beats, not three clips stacked. */
+      fx('sub_flash', { text: word, variant: 'stamp', voice: true, voiceKey: 'daily-trigger-whisper' });
       later(reduced ? 0 : 520, () => fx('sub_flash', { text: word, variant: 'centre' }));
       later(reduced ? 0 : 1100, () => fx('sub_flash', { text: word, variant: 'scatter' }));
       tick('stamp_bad', 0.25);

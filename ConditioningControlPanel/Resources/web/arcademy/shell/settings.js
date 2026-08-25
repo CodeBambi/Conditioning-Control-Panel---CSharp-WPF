@@ -234,8 +234,16 @@ function mult(v) { return (Math.round((Number(v) || 0) * 100) / 100).toFixed(2) 
  *                              An unknown key falls back to the full page (a
  *                              missing group would hide real knobs; too many is
  *                              the lesser bug).
+ * @param {{count:number, source:'host'|'house'}=} o.vocab  THE RESOLVED word
+ *                              pool from the shell (core/vocab.js), not
+ *                              `init.words`: on a day the player's own list is
+ *                              empty the school lends its own vocabulary, and
+ *                              the row has to name the list that is actually
+ *                              flashing. Absent -> the row falls back to
+ *                              `init.words`, which is what any caller that
+ *                              predates the floor already meant.
  */
-export function createSettingsPage({ init, bridge, games, keybinds, assets, store, onClose, log, gameKey } = {}) {
+export function createSettingsPage({ init, bridge, games, keybinds, assets, store, onClose, log, gameKey, vocab } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const src = init || {};
   const root = el('div', 'arc-settings');
@@ -598,9 +606,17 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
     g.body.appendChild(readonlyRow(t('settings_motion', 'Motion'), String(src.motionLevel == null ? 2 : src.motionLevel)
       + (src.reducedMotion ? ' (reduced)' : '')));
     if (src.performanceMode) g.body.appendChild(readonlyRow('Performance mode', 'on'));
-    const words = Array.isArray(src.words) ? src.words.length : 0;
-    g.body.appendChild(readonlyRow('Subliminal vocabulary', words + ' word' + (words === 1 ? '' : 's'),
-      words ? null : 'Empty is legal - word effects simply skip.'));
+    /* THE ROW MUST NAME THE LIST THAT IS FLASHING. `init.words` is the player's
+     * own pool; when it is empty the shell deals the school's vocabulary in its
+     * place, and a row still reading "0 words" would describe a silence the
+     * player is not getting. */
+    const house = !!(vocab && vocab.source === 'house');
+    const words = (vocab && Number.isFinite(+vocab.count)) ? Math.max(0, +vocab.count | 0)
+      : (Array.isArray(src.words) ? src.words.length : 0);
+    g.body.appendChild(readonlyRow('Subliminal vocabulary',
+      words + ' word' + (words === 1 ? '' : 's') + (house ? ' (the school’s own)' : ''),
+      house ? 'Your own list is empty, so the school lends you its vocabulary.'
+        : (words ? null : 'Empty is legal - word effects simply skip.')));
     if (keybinds && keybinds.panicKey) {
       g.body.appendChild(readonlyRow('Panic key', keyLabel(keybinds.panicKey),
         'Never bindable to a class verb.'));

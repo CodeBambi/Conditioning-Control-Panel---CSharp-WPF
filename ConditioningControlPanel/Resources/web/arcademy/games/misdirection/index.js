@@ -1566,7 +1566,14 @@ export default {
             if (ended || !stage) return;
             if (stage.getAttribute('data-phase') === 'pick') return;
             subIdx += 1;
-            fireSafe('sub_flash', { variant: subIdx % 2 ? 'whisper' : 'centre', alpha: 0.32 });
+            /* VOICE: this is a fixed `every(subMs)` with a 5200ms floor at the
+               top tier, well clear of the 1400ms voiced-gap floor. */
+            fireSafe('sub_flash', {
+              variant: subIdx % 2 ? 'whisper' : 'centre',
+              alpha: 0.32,
+              voice: true,
+              voiceKey: 'misdirection-whisper',
+            });
           });
         }
         stallTimer = every(PLAYTEST.STALL_TICK_MS, () => {

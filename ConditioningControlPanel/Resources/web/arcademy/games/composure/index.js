@@ -1136,6 +1136,10 @@ export default {
         const r = fireSafe('sub_flash', {
           anchor: wellEl,
           variant: plan.subVariants[subIdx % plan.subVariants.length],
+          /* VOICE: cadence floor is 5200 * CADENCE_MIN_MULT * (1 - CADENCE_JITTER)
+             = ~1690ms, clear of the 1400ms voiced-gap floor. */
+          voice: true,
+          voiceKey: 'composure-whisper',
         });
         if (r) subFlashes += 1;
         subIdx += 1;

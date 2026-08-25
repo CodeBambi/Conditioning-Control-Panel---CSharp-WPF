@@ -46,6 +46,9 @@ bridge.js    postMessage seam: queue-until-init out, pre-buffer + multi-subscrib
 core/lexicon.js    t(key, fallback) over init.lexicon  (mod display strings ONLY)
 core/timetable.js  §7 seeded generator (PURE)
 core/grades.js     §8 rubric + A-caps (PURE)
+core/vocab.js      HOUSE_WORDS (24, niche-agnostic) + slug() + dayVocabulary()
+                   (PURE): the word FLOOR the shell deals when init.words is
+                   empty. FALLBACK ONLY, never a merge - see trap 108
 core/store.js      meta-command client, local cache + write-through
 core/rng.js        makeRng/hash01            <- NOT ours (engine agent)
 core/caps.js       clampToCaps + heat curve  <- NOT ours (engine agent)
@@ -2443,6 +2446,49 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     when the blink can, so the blink's own guards (busy/hidden/dragging/disabled)
     are its guards. A pool with `maxPerSession` (idlePlayer = 2) still caps itself
     - the multiplier moves the dice, never the ration or the doubles slot.
+
+108. **THE WORD FLOOR IS A FALLBACK, AND THE VOICE ON IT IS OPT-IN WITH A LATCH**
+    (2026-08-25, `core/vocab.js` + `assets/sublim/`). Three rules, and each one is
+    a lie waiting to happen if you invert it.
+    - **HOUSE WORDS ARE A FALLBACK, NEVER A MERGE.** `dayVocabulary(init.words, rng)`
+      returns the host pool untouched when it holds anything and a seeded 12-word slice
+      of `HOUSE_WORDS` only when it is empty (nothing enabled, or a creator mod whose
+      manifest ships no `SubliminalPool` - `ModService.cs:1091`). Merging house words
+      into a configured pool would dilute a list the player deliberately curated, in the
+      one layer they cannot audit while it runs. One call site, `shell/shell.js`'s
+      `dayWords`; `src.words` is NEVER mutated (init is the host's frame and other
+      readers index it), and trap 24 is untouched - `ctx.absorb` pushes into the same
+      array either way and `SubliminalPool` is still never written.
+    - **THE SETTINGS ROW MUST NAME THE LIST THAT IS FLASHING.** The row used to read
+      `init.words.length`; on a house day that says "0 words" while the classes flash
+      twelve. The shell passes the RESOLVED `vocab: {count, source}` into
+      `createSettingsPage` and the row says "12 words (the school's own)". Any caller
+      that omits `vocab` falls back to `init.words` and reads exactly as it did before.
+    - **`ctx.triggers` MUST ALWAYS DESCRIBE `ctx.words`.** On a house day the rows come
+      from `init.houseTriggers` (`ArcademyHostService.BuildHouseTriggers`, a
+      `TopDirectoryOnly` scan of `assets/sublim/*.mp3` cached in a static, empty on a
+      missing folder - trap 86's law) FILTERED to the words actually dealt. Never
+      synthesise `{text, audio:null}` rows for words the host did not list: echo's
+      `triggerPool()` and instant-recall's `clipRows()` both count rows, and audio-less
+      ones they already get off the `ctx.words` leg.
+    - **`voice` IS OPT-IN, ONE CLIP AT A TIME, AND THE SHELL HOLDS THE GATE.**
+      `fire('sub_flash', {voice:true, voiceKey:'<game>-whisper'})` says the word as it
+      paints it, through this file's own `audio_trigger` - never `new Audio()`. It needs
+      `opts.wordAudio[word]`, which the SHELL builds from the day's trigger rows and
+      passes ONLY under `init.audioAudible`, so the flag is inert on a muted day and no
+      game has to gate on `ctx.audioAudible` itself. `VOICE_MIN_GAP_MS` (= `SUB_HOLD_MAX_MS`,
+      1400) is the latch: the stream ticks as fast as `SUB_MS.fast` 360 and six clips a
+      second would empty `CLIP_VOICES` in one breath, so an early tick paints the word and
+      stays silent. A call that passes BOTH `sfx` and `voice` (deja-vu's preview flash)
+      plays the CLIP and skips the synthesised whisper for that tick - the oscillator is
+      the fallback, not a layer over the real voice.
+    - The 24 words are spelled the same in `core/vocab.js` and in `HouseWords` in
+      `ArcademyHostService.cs`, and the filename is `slug(word)` (lowercase, spaces to
+      underscores: "LET GO" -> `let_go.mp3`). Rename a word on one side and you orphan a
+      clip on the other, silently.
+    - The browser host shim lives in the SITE repo (`scripts/arcademy-web-ext`), so it must
+      list `houseTriggers` in its fake init the same way it lists `sfxSamples`, or the web
+      build flashes house words with no voice under them.
 
 ## 5. The game module contract (short version)
 

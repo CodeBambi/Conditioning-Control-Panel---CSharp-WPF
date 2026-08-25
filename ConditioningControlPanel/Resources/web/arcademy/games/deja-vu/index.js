@@ -806,6 +806,10 @@ export default {
         variant: where === 'preview' ? 'centre' : 'whisper',
         anchor: well,
         sfx: where === 'preview',
+        /* VOICE: phase-locked, never a cadence - the preview beat is once per
+           board, the mismatch beat once per failed pair (both well over 1400ms). */
+        voice: true,
+        voiceKey: 'deja-vu-whisper',
       });
       if (r) say('sub_flash poison beat (' + where + ')');
     }
