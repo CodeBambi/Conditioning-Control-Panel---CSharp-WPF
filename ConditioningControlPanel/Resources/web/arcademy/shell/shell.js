@@ -4631,7 +4631,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * draws through the provider the same way a class does (the host fetches,
      * the page never does) and falls back to `init.settings.localAssets`. Both
      * are optional to her - absent means the channel is absent. */
-    if (emiLayer) mountEmi({ layer: emiLayer, store, toast: shout, log: say, assets, settings: src.settings });
+    /* `strings` is the ONE lexicon row EMI renders (the ask strip's Send
+     * button). Resolved HERE because this side of the page has `t` and she has
+     * never imported the lexicon - the same seam orientation.js uses for her
+     * three opening lines. */
+    if (emiLayer) {
+      mountEmi({
+        layer: emiLayer, store, toast: shout, log: say, assets, settings: src.settings,
+        strings: { askSend: t('emi_ask_send', 'send') },
+      });
+    }
   } catch (e) { say('EMI failed to mount (the shell is unaffected): ' + ((e && e.message) || e)); }
 
   /* FIRST BELL. Built here, BEFORE the first showBoard(), for the same reason
