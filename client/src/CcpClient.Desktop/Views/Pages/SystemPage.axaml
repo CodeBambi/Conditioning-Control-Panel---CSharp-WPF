@@ -54,6 +54,25 @@
       </Border>
 
       <!--
+        SETTINGS HANDOVER. Not a control: a SENTENCE, and the only new thing this port has to say
+        about the shipping product's settings file. The two apps keep separate settings, this one
+        imports nothing, and until now nothing anywhere told the user that - so an owner moving
+        across met a rack of dials that looked like his and were not. Every word comes from
+        SettingsHandoverNotices, which is also where the decision NOT to migrate is recorded.
+      -->
+      <Border Classes="module" Margin="0,12,0,0">
+        <StackPanel Spacing="6">
+          <TextBlock x:Name="SettingsHandoverTitle"
+                     Classes="module-title"
+                     AutomationProperties.AutomationId="SettingsHandoverTitle" />
+          <TextBlock x:Name="SettingsHandoverState"
+                     Classes="page-blurb"
+                     AutomationProperties.AutomationId="SettingsHandoverState"
+                     TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <!--
         PHRASE BACKUP (census #9). Upstream's home is App Settings -> Data
         (Views/Controls/AppSettings/DataSettingsSection.xaml:101,:106, handlers at
         MainWindow/MainWindow.PresetIO.cs:62 and :93); this port has no App Settings door, and the
