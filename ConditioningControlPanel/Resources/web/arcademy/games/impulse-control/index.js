@@ -882,6 +882,8 @@ export default {
 
       const record = Number(S.meta.bestRtMs) || 0;
       const newBest = led.bestRt != null && (record === 0 || led.bestRt < record);
+      // EMI ASKS: carried on the result so `submit()` can report it additively.
+      S.result.newBest = newBest;
       /* a PERFECT class: the X row untouched and not one bubble left to drift */
       const perfect = S.tally.xClicked === 0 && S.tally.drifted === 0;
 
@@ -1007,6 +1009,14 @@ export default {
       try {
         ctx.endClass({
           metrics: { composite: led ? led.composite : 0 },
+          /* ADDITIVE, and read by exactly one thing: EMI's `faster than last
+           * time. bet.` (a11). The record was already folded in by writeMeta
+           * above, so `S.result` carries the comparison this run actually made
+           * and nothing recomputes it. Every other consumer ignores the field.
+           * Trap 54's rule: a new frame field is additive or it is a
+           * regression in nine other classes. */
+          newBest: !!(S.result && S.result.newBest),
+          bestRt: led && led.bestRt != null ? Math.round(led.bestRt) : null,
           /* The dual gate survives the rework: an untouched X row AND real
              speed, or the class caps at A. */
           hardGates: { sGate: !!(led && led.sGate.ok) },

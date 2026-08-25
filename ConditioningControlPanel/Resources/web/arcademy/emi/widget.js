@@ -260,6 +260,51 @@ function readStats(raw) {
   return s;
 }
 
+/* ASKS: THE NAME SANITISER, AND IT LIVES HERE ON PURPOSE ---------------------
+ * `emi/asks.js` collects the name and this file reads it back off the stored
+ * blob on every boot, so the rule has to be one function or the two readers
+ * drift. Her voice is lowercase: trim -> strip anything outside [a-z0-9 ] ->
+ * collapse the runs -> 8 characters. An empty answer is a SKIP, never an empty
+ * name - `emi.name` is either a real string or absent. */
+export const ASK_NAME_MAX = 8;
+export function sanitizeAskName(raw) {
+  if (typeof raw !== 'string') return '';
+  let s = raw.toLowerCase().replace(/[^a-z0-9 ]+/g, '');
+  s = s.replace(/\s+/g, ' ').trim();
+  if (s.length > ASK_NAME_MAX) s = s.slice(0, ASK_NAME_MAX).trim();
+  return s;
+}
+
+/* ASKS: THE LEDGER, READ OFF THE SAME `emi` BLOB EVERYTHING ELSE RIDES.
+ * There is exactly ONE writer of the `emi` key on this page (save() below), so
+ * the ask ledger is spliced into that blob rather than minting a second key -
+ * two writers of one key is how a drag comes to eat a name. Every field is
+ * re-derived defensively: an unreadable ledger starts clean and never throws. */
+function readAskState(raw) {
+  const src = raw && typeof raw === 'object' ? raw : {};
+  const out = { ask: {}, name: sanitizeAskName(src.name), lastAskSession: 0, bedSkips: 0 };
+  const n = Number(src.lastAskSession);
+  if (Number.isFinite(n) && n > 0) out.lastAskSession = Math.round(n);
+  const b = Number(src.bedSkips);
+  if (Number.isFinite(b) && b > 0) out.bedSkips = Math.round(b);
+  const rows = src.ask;
+  if (rows && typeof rows === 'object' && !Array.isArray(rows)) {
+    for (const k of Object.keys(rows)) {
+      const r = rows[k];
+      if (!r || typeof r !== 'object') continue;
+      if (typeof r.a !== 'string' || !r.a) continue;
+      const cnt = Number(r.n);
+      const ses = Number(r.s);
+      out.ask[k] = {
+        a: r.a.slice(0, 16),
+        n: Number.isFinite(cnt) && cnt > 0 ? Math.round(cnt) : 1,
+        s: Number.isFinite(ses) && ses > 0 ? Math.round(ses) : 0,
+      };
+    }
+  }
+  return out;
+}
+
 /* ============================================================================
  * createWidget
  * ==========================================================================*/
@@ -295,6 +340,8 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   } catch (e) { say('emi: store read failed - ' + ((e && e.message) || e)); }
 
   const stats = readStats(saved.stats);
+  /* ASKS: the ask ledger, on the same blob and the same writer (see above). */
+  const askState = readAskState(saved);
   /* WIDTH IS A DEFAULT UNTIL SOMEBODY SETS IT. A stored `w` only exists once a
    * resize verb has run (`setWidth`; there is no resize UI yet), so out of the
    * box she follows the window: full size on a roomy one, smaller on a narrow
@@ -343,6 +390,15 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     // viewport rule for ever after the first drag.
     if (userSized && userWidth != null) b.w = userWidth;
     if (hintShown) b.hintShown = true;
+    /* ASKS: the ledger rides out with everything else. Written only when there
+     * is something to write, so a player who has never been asked anything
+     * keeps the blob they always had. */
+    if (askState.name) b.name = askState.name;
+    if (askState.lastAskSession) b.lastAskSession = askState.lastAskSession;
+    if (askState.bedSkips) b.bedSkips = askState.bedSkips;
+    if (askState.ask && Object.keys(askState.ask).length) {
+      b.ask = JSON.parse(JSON.stringify(askState.ask));
+    }
     return b;
   }
 
@@ -392,6 +448,16 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   bubble.className = 'emi-bubble';
   bubble.hidden = true;
 
+  /* ASKS: THE STRIP. One node, minted at birth and empty at rest, so an ask
+   * costs no DOM churn and a page that never asks anything carries one hidden
+   * div. It is a SIBLING of the bubble inside `.emi`, which is what makes the
+   * `.bubble-left` / `.bubble-low` flips apply to both halves for free (the
+   * CSS mirrors them off the same root classes - trap 61). */
+  const askStrip = document.createElement('div');
+  askStrip.className = 'emi-ask';
+  askStrip.hidden = true;
+  if (askStrip.setAttribute) askStrip.setAttribute('role', 'group');
+
   const xBtn = document.createElement('button');
   xBtn.className = 'emi-x';
   xBtn.type = 'button';
@@ -412,6 +478,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   el.appendChild(canvas);
   el.appendChild(fxHost);
   el.appendChild(bubble);
+  el.appendChild(askStrip);      // ASKS
   el.appendChild(xBtn);
 
   const dock = document.createElement('button');
@@ -577,11 +644,27 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     width = next;
     return true;
   }
+  /* ASKS: a06's session-only spot, {x,y} in viewport fractions. NEVER saved. */
+  let askSpot = null;
+
   /** Place EMI from the stored fractions, clamped inside the viewport. */
   function place() {
     const vp = viewport();
     const s = sizePx();
     const m = margin();
+    /* ASKS (a06): "can i sit on the other side today?" is a SESSION move, not
+     * a new home. The fractions are never touched, so tomorrow she is back
+     * where the player left her; this override is what keeps her on the other
+     * side across a resize in the meantime, and it dies with the sitting. */
+    if (askSpot) {
+      const l2 = clamp(askSpot.x * vp.w, m, Math.max(m, vp.w - s.w - m));
+      const t2 = clamp(askSpot.y * vp.h, m, Math.max(m, vp.h - s.h - m));
+      el.style.width = s.w + 'px';
+      el.style.left = Math.round(l2) + 'px';
+      el.style.top = Math.round(t2) + 'px';
+      faceBubble(l2, t2, s.w, vp.w);
+      return { left: l2, top: t2, s, vp };
+    }
     if (fx0 == null || fy0 == null) {
       /* First run: park her bottom-right, clear of the dock's corner. A phone has
        * no room for the desktop's 24/56 standoff, so she docks tight into the
@@ -614,6 +697,11 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     else el.classList.remove('bubble-left');
     if (top < BUBBLE_RISE) el.classList.add('bubble-low');
     else el.classList.remove('bubble-low');
+    /* ASKS: the strip rides the same two flips (the CSS mirrors it off these
+     * exact root classes), and then gets the SAME viewport clamp the bubble's
+     * reach test is - measured, because a strip is wider than a bark and the
+     * reach heuristic above was calibrated for a 104px box. */
+    clampAskStrip();
   }
 
   /** Record the CURRENT pixel position back into the fractions. */
@@ -968,6 +1056,21 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     return !!(tgt.closest && tgt.closest('.emi-x'));
   }
 
+  /* ASKS: A PRESS ON A CHIP IS THE CHIP'S, NOT EMI'S. The strip lives INSIDE
+   * `.emi`, so without this every chip press would run the drag handler below -
+   * which calls `setPointerCapture` on the root and `preventDefault()`, and
+   * between them the browser retargets the release and never fires the chip's
+   * own `click` at all. Caught by the browser pass; the DOM double cannot see
+   * it, because it has neither pointer capture nor compatibility events. The
+   * x button has had exactly this guard since day one, for the same reason. */
+  function inAsk(ev) {
+    const tgt = ev && ev.target;
+    if (!tgt) return false;
+    if (tgt === askStrip) return true;
+    if (tgt.closest) return !!tgt.closest('.emi-ask');
+    return !!(askStrip.contains && askStrip.contains(tgt));
+  }
+
   function onDown(ev) {
     if (!enabled || hidden) return;
     /* TOUCH ALWAYS WINS (W2a, trap 75). A finger on her at ANY point of a field
@@ -977,6 +1080,9 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     // The x is a real button: let it have its own click, and never start a drag
     // from it (a dismiss that could turn into a fling is a trap, not a feature).
     if (inX(ev)) return;
+    // ASKS: and a chip is a real button too - see inAsk(). No drag, no pet, no
+    // capture, no preventDefault: the strip's own click is the whole event.
+    if (inAsk(ev)) return;
     pressing = true;
     dragging = false;
     wasFling = false;
@@ -1003,6 +1109,10 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
 
   function beginDrag() {
     dragging = true;
+    /* ASKS (a06): the player picking her up out-votes "the other side today".
+     * A session spot that survived a drag would fight the drop on every
+     * resize, and the drop is always the more recent word. */
+    askSpot = null;
     stats.drags += 1;
     touchSeen();
     el.classList.add('dragging');
@@ -1265,6 +1375,10 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
    * the voice hears `approach`/`hoverLinger` through the same gesture tap as
    * every pointer verb (no pools yet - wave 2b's writing slot). */
   let gazeTX = 0, gazeTY = 0, gazeX = 0, gazeY = 0, gazeRaf = null;
+  /* ASKS (a08): a standing lean toward the board, -1..1, cleared at the end of
+   * the class. It is ADDED to the cursor lean and clamped with it, so "front
+   * row" reads as a tilt she is holding, never as a face stuck off-centre. */
+  let askGaze = 0;
   let apInside = false, apCoolUntil = 0, apPets0 = 0;
   let apLingerTimer = null, apAwayTimer = null;
   let apLastX = 0, apLastY = 0, apLastT = 0;
@@ -1274,7 +1388,10 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   }
   function gazeStep() {
     gazeRaf = null;
-    const ax = gazeActive() ? gazeTX : 0;
+    /* ASKS: the standing bias rides the same clamp the cursor lean does, so
+     * "front row" can never push the glyph further than GAZE_MAX_PX. */
+    const bias = askGaze * DIALS.GAZE_MAX_PX;
+    const ax = gazeActive() ? clamp(gazeTX + bias, -DIALS.GAZE_MAX_PX, DIALS.GAZE_MAX_PX) : 0;
     const ay = gazeActive() ? gazeTY : 0;
     gazeX += (ax - gazeX) * DIALS.GAZE_EASE;
     gazeY += (ay - gazeY) * DIALS.GAZE_EASE;
@@ -1295,7 +1412,10 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       gazeRaf = requestAnimationFrame(gazeStep);
     }
   }
-  /** Ease the lean home NOW (a hide, a disable, a drag taking over). */
+  /** Ease the lean home NOW (a hide, a disable, a drag taking over). The
+   *  ASKS bias is deliberately NOT cleared here: it belongs to the class, and
+   *  `gazeActive()` already parks the whole lean at 0 while anything else owns
+   *  the glass, so it simply comes back when she is idle again. */
   function restGaze() {
     gazeTX = 0; gazeTY = 0;
     nudgeGaze();
@@ -1746,7 +1866,11 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
    * @param {Function|Object} getRect  a RECT-GETTER, e.g.
    *        `() => node.getBoundingClientRect()`. A bare rect is accepted and is
    *        a bug waiting to happen - see law 1 and trap 73.
-   * @param {{line?:string, face?:string, onDone?:Function}=} opts
+   * @param {{line?:string, face?:string, stay?:boolean, onDone?:Function}=} opts
+   *        ASKS (a06): `stay` ends the trip WHERE SHE LANDED instead of walking
+   *        the two beats home. The spot is session-only (`askSpot`) and the
+   *        stored fractions are never touched, so tomorrow she is back where
+   *        the player actually put her.
    * @returns {Function|null} a cancel function, or null when she refused.
    */
   function apparate(getRect, opts) {
@@ -1804,6 +1928,20 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
           if (!spoke) { setBubble(line); wait = sayHoldMs(line) + DIALS.TRIP_BEAT_MS; }
         }
         tripStep(wait, () => {
+          /* ASKS (a06): a `stay` trip is over the moment the line is. She keeps
+           * the spot for the sitting; nothing is committed and nothing saved. */
+          if (o.stay) {
+            const t2 = trip;
+            trip = null;
+            crtClear();
+            const vp2 = viewport();
+            askSpot = { x: (t2 ? t2.left : 0) / vp2.w, y: (t2 ? t2.top : 0) / vp2.h };
+            idle();
+            if (t2 && typeof t2.onDone === 'function') {
+              try { t2.onDone({ cancelled: false, stay: true }); } catch (e) { /* noop */ }
+            }
+            return;
+          }
           /* 4. HOME. The same two beats, backwards. */
           cancelChain();
           killTimers();
@@ -1832,6 +1970,250 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
 
     return () => cancelTrip();
   }
+
+
+  /* ==========================================================================
+   * ASKS (wave EMI ASKS, 2026-08-25) - ONE BLOCK, DELIBERATELY.
+   *
+   * `emi/asks.js` decides WHEN she asks and WHAT the words are. Everything
+   * below is the HOW: the two chips, the seams the effects need, and the one
+   * honest answer to "may she ask right now".
+   *
+   * INPUT TRUST (trap 59). `#arc-emi` is `pointer-events:none` and exactly two
+   * nodes turned it back on (`.emi`, `.emi-dock`). `.emi-ask .emi-chip` is the
+   * THIRD and last, it is live only while a strip is up, and nothing else on
+   * the layer changed. `preventDefault` is still called in exactly one place
+   * (the `pointerdown` on `.emi`) and still on no document listener.
+   *
+   * THE STRIP IS NOT A CHAIN. It is plain DOM with its own lifetime, so it
+   * survives the say it hangs under and is torn down by exactly one function.
+   * ======================================================================== */
+
+  /** {onChip, onDismiss, nodes} while a strip is up; null the rest of the time. */
+  let askLive = null;
+  /** The viewport clamp, in px, shared with the sheet as `--emi-ask-dx`. */
+  let askDx = 0;
+  function setAskDx(px) {
+    try {
+      if (el.style && typeof el.style.setProperty === 'function') {
+        el.style.setProperty('--emi-ask-dx', Math.round(Number(px) || 0) + 'px');
+      }
+    } catch (e) { /* noop */ }
+  }
+
+  /** THE STRIP NEVER LEAVES THE WINDOW. The bubble's reach test (faceBubble)
+   *  is a heuristic calibrated for a 104px box; a two-chip strip is wider than
+   *  that, so it is MEASURED and pulled back in with a transform. A platform
+   *  with no getBoundingClientRect (the node DOM double) simply skips it. */
+  function clampAskStrip() {
+    if (!askLive || askStrip.hidden) return;
+    try {
+      if (!askStrip.getBoundingClientRect) return;
+      const had = askDx;
+      askDx = 0;
+      setAskDx(0);
+      const r = askStrip.getBoundingClientRect();
+      if (!r || !r.width) { askDx = had; setAskDx(had); return; }
+      const vp = viewport();
+      const pad = 4;
+      let dx = 0;
+      if (r.right > vp.w - pad) dx = Math.round((vp.w - pad) - r.right);
+      if (r.left + dx < pad) dx = Math.round(pad - r.left);
+      askDx = dx;
+      setAskDx(dx);
+    } catch (e) { /* a clamp may never be the thing that throws */ }
+  }
+
+  /** How tall the strip is, handed to the sheet so the BUBBLE can move up out
+   *  of its way. One number, one custom property - the same trick the bubble's
+   *  own `--emi-bubble-dx` uses (trap 62's lesson: whole pixels, no guessing). */
+  function askLift() {
+    let h = 0;
+    try { h = Math.round(Number(askStrip.offsetHeight) || 0); } catch (e) { h = 0; }
+    try {
+      if (el.style && typeof el.style.setProperty === 'function') {
+        el.style.setProperty('--emi-ask-h', (h > 0 ? h + 6 : 0) + 'px');
+      }
+    } catch (e) { /* noop */ }
+  }
+
+  function fireChip(i, text) {
+    if (!askLive) return;
+    const cb = askLive.onChip;
+    try { cb(Math.max(0, i | 0), typeof text === 'string' ? text : ''); }
+    catch (e) { /* a chip may never break a screen transition */ }
+  }
+
+  /**
+   * MOUNT ONE STRIP. `spec` is asks.js's, and this file understands exactly
+   * five fields: {id, chips[2], input, maxLength, onChip(i, text), onDismiss}.
+   * @returns {?Object} {el, pick(i), destroy()} - null when it could not build.
+   */
+  function mountAsk(spec) {
+    if (!spec || !Array.isArray(spec.chips) || !spec.chips.length) return null;
+    if (!enabled || hidden) return null;
+    unmountAsk(false);
+    try {
+      askStrip.textContent = '';
+      askStrip.classList.remove('out');
+      if (askStrip.setAttribute) askStrip.setAttribute('data-ask', String(spec.id || ''));
+      const nodes = [];
+      let field = null;
+
+      /* THE NAME ASK IS THE ONE WITH A KEYBOARD (a14). Chip 1 becomes an
+       * 8-character field; Enter submits it and an empty one is a skip, which
+       * asks.js decides - this file only hands the text over. */
+      if (spec.input === true) {
+        field = document.createElement('input');
+        field.className = 'emi-chip emi-chip-field';
+        if (field.setAttribute) {
+          field.setAttribute('type', 'text');
+          field.setAttribute('maxlength', String(spec.maxLength || ASK_NAME_MAX));
+          field.setAttribute('aria-label', 'your name');
+          field.setAttribute('autocomplete', 'off');
+          field.setAttribute('spellcheck', 'false');
+        }
+        field.addEventListener('keydown', (ev) => {
+          if (!ev || ev.key !== 'Enter') return;
+          fireChip(0, field.value == null ? '' : String(field.value));
+        });
+        askStrip.appendChild(field);
+        nodes.push(field);
+      }
+
+      spec.chips.forEach((label, i) => {
+        if (spec.input === true && i === 0) return;   // the field IS chip one
+        const b = document.createElement('button');
+        b.className = 'emi-chip';
+        b.type = 'button';
+        b.textContent = String(label == null ? '' : label);
+        if (b.setAttribute) b.setAttribute('data-chip', String(i));
+        b.addEventListener('click', () => {
+          fireChip(i, field && i === 0 ? String(field.value || '') : '');
+        });
+        askStrip.appendChild(b);
+        nodes.push(b);
+      });
+
+      askStrip.hidden = false;
+      askLive = {
+        onChip: typeof spec.onChip === 'function' ? spec.onChip : () => {},
+        onDismiss: typeof spec.onDismiss === 'function' ? spec.onDismiss : () => {},
+        nodes, field,
+      };
+      askLift();
+      el.classList.add('ask-up');
+      clampAskStrip();
+      /* FOCUS THE FIELD, NEVER A CHIP. Stealing focus onto a button would put
+       * a school-wide Enter on EMI; the field is the one place a keystroke is
+       * unambiguously hers. */
+      try { if (field && field.focus) field.focus(); } catch (e) { /* noop */ }
+      return {
+        el: askStrip,
+        pick(i) { fireChip(i, field ? String(field.value || '') : ''); },
+        destroy() { unmountAsk(false); },
+      };
+    } catch (e) {
+      say('emi: ask strip failed (' + ((e && e.message) || e) + ')');
+      unmountAsk(false);
+      return null;
+    }
+  }
+
+  /**
+   * TAKE IT DOWN. `slide` plays the leave animation first (the CSS owns it and
+   * reduced motion drops it to a plain hide); anything urgent passes false.
+   */
+  function unmountAsk(slide) {
+    if (!askLive) {
+      try { askStrip.hidden = true; askStrip.textContent = ''; } catch (e) { /* noop */ }
+      return false;
+    }
+    askLive = null;
+    try { el.classList.remove('ask-up'); } catch (e) { /* noop */ }
+    try {
+      if (el.style && typeof el.style.setProperty === 'function') el.style.setProperty('--emi-ask-h', '0px');
+    } catch (e) { /* noop */ }
+    const drop = () => {
+      try {
+        askStrip.hidden = true;
+        askStrip.textContent = '';
+        askStrip.classList.remove('out');
+        askDx = 0;
+        setAskDx(0);
+      } catch (e) { /* noop */ }
+    };
+    if (slide && !reducedMotion()) {
+      try { askStrip.classList.add('out'); } catch (e) { /* noop */ }
+      later(drop, 220);
+    } else {
+      drop();
+    }
+    return true;
+  }
+
+  /** MAY SHE ASK RIGHT NOW. One honest answer, owned by the file that owns the
+   *  verbs: no live say, no chain, no press, no drag, no field trip, no off
+   *  channel, not dismissed, not disabled, and no strip already up. */
+  function askReady() {
+    if (!enabled || hidden || !built) return false;
+    if (askLive || trip || pressing || dragging) return false;
+    if (busy() || saying()) return false;
+    try {
+      if (deck && typeof deck.live === 'function' && deck.live()) return false;
+    } catch (e) { /* a deck that cannot be asked is not a deck that is up */ }
+    return true;
+  }
+
+  /* ---- the effects a YES buys ----------------------------------------- */
+
+  /** a06: THE OTHER SIDE. The mirrored x, through `apparate` and its rect
+   *  GETTER (trap 73 - the rect is resolved inside the dark, one frame before
+   *  she lands, so a resize mid-trip cannot strand her). `stay` is what makes
+   *  it a move rather than a round trip. */
+  function parkMirrored() {
+    if (trip) return false;
+    const getRect = () => {
+      const vp = viewport();
+      const sz = sizePx();
+      let cur = null;
+      try { cur = el.getBoundingClientRect ? el.getBoundingClientRect() : null; } catch (e) { cur = null; }
+      const left = cur && Number.isFinite(Number(cur.left)) ? Number(cur.left) : (fx0 || 0) * vp.w;
+      const top = cur && Number.isFinite(Number(cur.top)) ? Number(cur.top) : (fy0 || 0) * vp.h;
+      const mx = clamp(vp.w - left - sz.w, DIALS.MARGIN, Math.max(DIALS.MARGIN, vp.w - sz.w - DIALS.MARGIN));
+      /* A rect she can stand BESIDE. anchorFor() puts her off the side of it,
+       * so the target is a thin sliver at the mirrored x rather than a box she
+       * would be pushed out of. */
+      return { left: mx, top, right: mx + 1, bottom: top + sz.h, width: 1, height: sz.h };
+    };
+    return !!apparate(getRect, { stay: true });
+  }
+
+  /** a08: SHE WATCHES THE BOARD. A constant added to the gaze lean for the
+   *  rest of the class - the same CSS translate on `.emi-screen` the cursor
+   *  lean already uses (trap 71), never a canvas repaint. `dir` is -1 (toward
+   *  the middle of the school, which is where every board is) or 0 to clear. */
+  function setGazeBias(dir) {
+    const d = Number(dir);
+    askGaze = Number.isFinite(d) ? clamp(d, -1, 1) : 0;
+    nudgeGaze();
+    return askGaze;
+  }
+
+  /** a13: THE CHIP IS A PET. Same counter, same ledger, same `love` beat - a
+   *  second kind of pet that did not count would be the joke not landing. */
+  function creditPet() {
+    if (!enabled || hidden) return false;
+    stats.pets += 1;
+    touchSeen();
+    const cycle = CHAINS && CHAINS.love;
+    if (cycle) play(cycle, { bodyFrame: 'pet', force: true });
+    else raw('(\u3002\u2665\u203f\u2665\u3002)', { hold: 1400, fx: 'hearts', body: 'bounce', bodyFrame: 'pet', force: true });
+    save();
+    emitGesture('pet', { fromAsk: true });
+    return true;
+  }
+  /* ===================== end of the asks ================================ */
 
   /** THE REGISTRY SEAM. `emi/fieldtrips.js` hands over a function answering the
    *  live rects of every fixture EMI has a line about; the widget uses them for
@@ -1869,6 +2251,15 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     /* W2a - the field trip. `apparate` takes a RECT-GETTER (trap 73), refuses
      * over any live verb, and answers a cancel function or null. */
     apparate, setPoiRects, tripping,
+    /* ---- ASKS (2026-08-25): the strip, and the four seams an effect needs -
+     * `emi/asks.js` is the only caller of any of them. `askState()` hands back
+     * the LIVE ledger object and `askSave()` is this file's own debounced
+     * writer, which is what keeps ONE writer on the `emi` key. */
+    mountAsk, unmountAsk, askReady, parkMirrored, setGazeBias, creditPet,
+    askState() { return askState; },
+    askSave(immediate) { save(immediate !== false); },
+    /** True while a chip strip is up. Read-only. */
+    asking() { return !!askLive; },
     hide, show,
     get hidden() { return hidden; },
     /** True once the first-dismiss hint has been spent (persisted). */
@@ -1941,6 +2332,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     destroy() {
       accrueVisible();
       cancelTrip();                  // W2a: never leave a trip timer behind
+      unmountAsk(false);             // ASKS: never leave a live chip behind
       save(true);
       // clearBody() is the easy one to miss: `bodyTimer` outlives everything else
       // and its callback re-adds `.breath` to a node that is no longer in the page.

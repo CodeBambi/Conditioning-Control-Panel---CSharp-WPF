@@ -28,6 +28,8 @@ let singleton = null;
 let voice = null;
 /** emi/fieldtrips.js, once the voice it reads has landed. Null is normal. */
 let trips = null;
+/** emi/asks.js (wave EMI ASKS), on the same terms. Null is normal. */
+let asks = null;
 let voicePending = null;
 /** () => bool: can EMI actually PERFORM right now (is her face attached). */
 let voiceGate = null;
@@ -98,6 +100,9 @@ export function getVoice() { return voice; }
 /** The field-trip scheduler (emi/fieldtrips.js), once it has loaded. */
 export function getTrips() { return trips; }
 
+/** The ask engine (emi/asks.js), once it has loaded. Null is normal. */
+export function getAsks() { return asks; }
+
 /**
  * ASK THE VOICE, SAFELY. `moments.js` routes every moment through here before
  * it reaches the wordless table.
@@ -111,7 +116,21 @@ export function getTrips() { return trips; }
  */
 export function voiceMoment(name, payload) {
   try {
+    /* ASKS: THE LATCHES FIRST, AND UNCONDITIONALLY. `offer` below only ever
+     * sees the moments the voice AND the trips both declined, but the ask
+     * engine's bookkeeping - is a class up, did a dare just resolve, has the
+     * gaze bias expired - has to be right whether she spoke or not. Two entry
+     * points, one order, and this is the one that runs every time. */
+    if (asks) { try { asks.note(name, payload); } catch (e) { /* noop */ } }
     if (voice && voice.ready && (!voiceGate || voiceGate())) {
+      /* ...AND THE ONE THING THAT OUTRANKS THE VOICE. Three skipped "bed?"s
+       * buy a groggy morning, and it REPLACES the greet pool for exactly one
+       * greet - asked after the voice it would be a second line on one beat. */
+      if (name === 'greet' && asks) {
+        let took = false;
+        try { took = !!asks.greetIntercept(payload); } catch (e) { took = false; }
+        if (took) return true;
+      }
       if (voice.onMoment(name, payload)) return true;
       /* ...AND THEN THE FIELD TRIP (wave W2a). Asked LAST and only about the
        * moments it declares, so a night with a line in it is never also a night
@@ -121,7 +140,12 @@ export function voiceMoment(name, payload) {
        * The trips module is asked through the same wrapper the voice is, so a
        * scheduler that throws can no more reach a screen transition than a
        * decision engine that does. */
-      if (trips) return !!trips.offer(name, payload);
+      if (trips && trips.offer(name, payload)) return true;
+      /* ...AND THEN THE ASK (wave EMI ASKS). Last, for the same reason the
+       * trips are: a night with a line in it is never also a night she stops
+       * the player to ask a question. A launched ask answers true - the
+       * wordless table stands down because the bubble is already hers. */
+      if (asks) return !!asks.offer(name, payload);
       return false;
     }
     if (singleton) voicePending = { name, payload, when: Date.now() };
@@ -311,6 +335,10 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
     get voice() { return voice; },
     /** The field-trip scheduler (W2a), once it has loaded. Test/debug only. */
     get trips() { return trips; },
+    /** The ask engine (EMI ASKS), once it has loaded. The shell reads its
+     *  `flags` (a01's comfort faces) and its `classResult` (the dare payout);
+     *  everything else on it is a test/debug handle. */
+    get asks() { return asks; },
     /** Debug: the one moment waiting on the voice + the face, by name. */
     get pendingMoment() { return voicePending ? voicePending.name : null; },
 
@@ -331,12 +359,14 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
 
     destroy() {
       try { widget.destroy(); } catch (e) { /* noop */ }
+      try { if (asks) asks.destroy(); } catch (e) { /* noop */ }
       try { if (trips) trips.destroy(); } catch (e) { /* noop */ }
       try { if (voice) voice.destroy(); } catch (e) { /* noop */ }
       try { if (vox) vox.destroy(); } catch (e) { /* noop */ }
       vox = null;
       voice = null;
       trips = null;
+      asks = null;
       voicePending = null;
       voiceGate = null;
       if (singleton === api) singleton = null;
@@ -386,6 +416,15 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
         log: say,
       });
     }).catch((e) => { say('emi: fieldtrips.js unavailable (' + ((e && e.message) || e) + ')'); });
+    /* THE ASKS, ONE MORE STEP OUT (wave EMI ASKS, 2026-08-25). After the voice
+     * because it reads the voice's session counter and spends the voice's
+     * quirk slot, and optionally for the same reason everything else in this
+     * file is optional: a broken ask engine costs EMI her questions, never her
+     * face, her verbs or the shell's boot. */
+    import('./asks.js').then((a) => {
+      if (singleton !== api || !a || typeof a.createAsks !== 'function') return;
+      asks = a.createAsks({ widget, emi: api, voice, store, log: say });
+    }).catch((e) => { say('emi: asks.js unavailable (' + ((e && e.message) || e) + ')'); });
   }).catch((e) => { say('emi: voice.js unavailable (' + ((e && e.message) || e) + ')'); });
 
   return api;

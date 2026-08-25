@@ -2654,6 +2654,16 @@ internal static class ArcademyHostService
     /// re-inventing the table (SYNTHESIS-NOTES #4).</summary>
     private const double FlavorXpCap = 15;
 
+    /// <summary>EMI's dare bonus (EMI ASKS, owner call 2026-08-25): "bet you can't S this one",
+    /// won. A small FIXED award, host-side like every other number on this page - the frame says
+    /// only WHICH dare was won, never what it is worth.</summary>
+    private const double DareBonusXp = 15;
+
+    /// <summary>The only three dare kinds a page may name. Anything else is dropped in silence:
+    /// the field is free text off a postMessage and it must never be able to widen the table.</summary>
+    private static readonly HashSet<string> DareKinds =
+        new(StringComparer.Ordinal) { "S", "streak", "fast" };
+
     /// <summary>
     /// <c>class-ended</c> -> the ONE XP table, the attendance/streak write, and the
     /// <c>payout-result</c> reply. Every input is re-clamped: the page reports what happened, the
@@ -2704,6 +2714,22 @@ internal static class ArcademyHostService
                 try { App.Progression?.AddXP(xp, XPSource.Other); }
                 catch (Exception ex) { App.Logger?.Debug("ArcademyHost payout AddXP: {E}", ex.Message); }
             }
+            /* EMI'S DARE (EMI ASKS, 2026-08-25). The page flags the run when the player takes the
+               bet and reports the WIN on this same frame; the host owns the number and the farm
+               guard. Gated on `firstToday` for exactly the reason the payout above is: a retake is
+               a free replay of the same script, and a dare that paid on every replay would be the
+               one way to grind XP out of a class that is deliberately free. It is its own AddXP
+               call, tagged XPSource.Quest, so THE BANK flies (BankAccumulator.IsBankable) the way
+               a quest payout does - the class XP itself stays XPSource.Other and is unchanged. */
+            var dareWon = (ReadString(o, "dareWon") ?? "").Trim();
+            if (dareWon.Length > 16) dareWon = dareWon[..16];
+            bool darePaid = firstToday && DareKinds.Contains(dareWon);
+            if (darePaid)
+            {
+                try { App.Progression?.AddXP(DareBonusXp, XPSource.Quest); }
+                catch (Exception ex) { App.Logger?.Debug("ArcademyHost dare AddXP: {E}", ex.Message); }
+            }
+
             int levelAfter = App.Settings?.Current?.PlayerLevel ?? levelBefore;
 
             // LOCAL date rolls attendance; the page's dayUtc only ever seeded the content (#978),
@@ -2760,11 +2786,16 @@ internal static class ArcademyHostService
                 classesToday,
                 // Additive: the report card reads it to explain a 0 XP line. Older pages ignore it.
                 retake = !firstToday,
+                // Additive (EMI ASKS): what the dare bonus actually paid, so the page never has
+                // to guess. 0 on every class that carried no dare, and on a retake.
+                dareXp = darePaid ? DareBonusXp : 0,
             });
             PostPunchCard(gameKey, "daily", punch);
             App.Logger?.Information(
-                "ArcademyHost: class complete ({Game}, tier {Tier}, grade {Grade}) = {Xp:0} XP{Retake}, streak {Streak}, {Today}/4 today",
-                gameKey, tier, grade, xp, firstToday ? "" : " (retake - already paid for " + dayUtc + ")",
+                "ArcademyHost: class complete ({Game}, tier {Tier}, grade {Grade}) = {Xp:0} XP{Dare}{Retake}, streak {Streak}, {Today}/4 today",
+                gameKey, tier, grade, xp,
+                darePaid ? " +" + DareBonusXp.ToString("0", CultureInfo.InvariantCulture) + " dare (" + dareWon + ")" : "",
+                firstToday ? "" : " (retake - already paid for " + dayUtc + ")",
                 streak, classesToday);
         }
         catch (Exception ex) { App.Logger?.Warning("ArcademyHost.OnClassEnded: {E}", ex.Message); }

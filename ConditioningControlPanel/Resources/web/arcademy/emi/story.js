@@ -715,7 +715,10 @@ export const BEATS = deepFreeze([
     priority: 96,
     lead: 'wink',
     fx: 'sparks',
-    say: 'one whole year. gold star for us.',
+    /* EMI ASKS: the third and last name-drop site is a PREFIX, not a new line.
+     * With no name the `{name}` token and its punctuation are removed and this
+     * is byte for byte the line that shipped (voice.js resolveName). */
+    say: '{name}. one whole year. gold star for us.',
     face: '★★★'
   }
 

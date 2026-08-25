@@ -2785,8 +2785,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     renderTopbar();
     // EMI SEAM. `family` rides along for the place-awareness table in
     // moments.js (EMI COLOR): the arrival face knows what kind of room it is.
+    /* ASKS: `soft` is a01's YES, and it only ever softens a FACE. */
     fireMoment('classStart', { gameKey: cls.gameKey, tier: gradeTier,
-      family: manifest.family || null });
+      family: manifest.family || null, soft: askSoft() });
     const chrome = classScreenChrome(
       Object.assign({}, cls, { timeBudgetSec }), gradeTier, retake, endless);
 
@@ -3308,11 +3309,29 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * The payload grew gameKey + perfect: the per-game colour pools key on the
      * first, and the perfect-gated dork line was unreachable without the second. */
     lastGraded = { grade: graded.grade, perfect: allDone(), fresh: true };
-    fireMoment(/^[sab]$/i.test(String(graded.grade)) || graded.grade === 'pass' ? 'win' : 'fail',
-      { grade: graded.grade, streak: store.streak().count,
-        gameKey: cls.gameKey, perfect: allDone() });
+    /* ASKS: `newBest` is impulse-control's, reported additively on its own
+     * endClass frame (trap 54's spirit), and it is what a11's dare resolves
+     * against. Every other class simply never carries it. */
+    const endMoment = /^[sab]$/i.test(String(graded.grade)) || graded.grade === 'pass' ? 'win' : 'fail';
+    const endPayload = {
+      grade: graded.grade, streak: store.streak().count,
+      gameKey: cls.gameKey, perfect: allDone(),
+      newBest: r && r.newBest === true,
+    };
+    fireMoment(endMoment, endPayload);
 
-    bridge.send({
+    /* ASKS: THE DARE RESOLVES ON THE CLASS'S OWN END, and the answer rides the
+     * frame that already pays for the class. A read of one session flag: no
+     * dare armed answers null for ever, and the host awards nothing. */
+    let dareWon = null;
+    try {
+      const e = getEmi();
+      if (e && e.asks && typeof e.asks.classResult === 'function') {
+        dareWon = e.asks.classResult(endMoment, endPayload);
+      }
+    } catch (e) { dareWon = null; }
+
+    const endedFrame = {
       type: 'class-ended',
       gameKey: cls.gameKey,
       gradeTier,
@@ -3320,7 +3339,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       zen: graded.zen,
       flavorXp,
       dayUtc: utcDateSeed,
-    });
+    };
+    // Additive: an older host ignores it, and a page with no dare never sets it.
+    if (typeof dareWon === 'string' && dareWon) endedFrame.dareWon = dareWon;
+    bridge.send(endedFrame);
 
     /* meta writes: per-game progression, the day's row, the streak */
     try {
@@ -3555,6 +3577,55 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     overlay.appendChild(bar);
     active.root.appendChild(overlay);
     active.suspendEl = overlay;
+  }
+
+  /* ==========================================================================
+   * ASKS: THE EXIT AIM (wave EMI ASKS, 2026-08-25)
+   *
+   * a15 is "bed?", and the whole point of it is that it lands while the player
+   * is REACHING for the way out - not once they have already committed. The
+   * ladder's own `exitIntent` is 450ms into a 1200ms Esc hold (boot.js), which
+   * is the wrong end of the gesture for a question: the window is already
+   * closing behind it. So this is a second, EARLIER and much softer signal.
+   *
+   * THE FENCE, and it is the feature (EMI-VOICE-LOCK): this NEVER blocks,
+   * delays, cancels or even observes the exit. It is a `pointermove` in the
+   * BUBBLE phase with `{passive:true}` that does exactly one thing once per
+   * sitting - fire a moment when the cursor reaches the corner the host
+   * window's close button lives in. It calls no preventDefault, adds no rung
+   * to the Esc ladder, registers no `beforeunload`, and if EMI is not mounted
+   * `fireMoment` is a silent no-op like every other call site.
+   * ======================================================================== */
+  const EXIT_AIM_W = 200;         // px of the top-RIGHT corner that counts
+  const EXIT_AIM_H = 120;
+  let exitAimSpent = false;
+  function onExitAim(ev) {
+    if (exitAimSpent || !ev) return;
+    /* Not while a class is up: she may not stop a board to ask a question, and
+     * `asks.js` would refuse it anyway - this is the cheaper of the two nos. */
+    if (screen === 'class' || active) return;
+    let vw = 1280;
+    try { if (typeof window !== 'undefined') vw = Number(window.innerWidth) || vw; } catch (e) { /* noop */ }
+    const x = Number(ev.clientX);
+    const y = Number(ev.clientY);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    if (y > EXIT_AIM_H || x < vw - EXIT_AIM_W) return;
+    exitAimSpent = true;
+    try { fireMoment('exitAim', { reason: 'corner' }); } catch (e) { /* noop */ }
+  }
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('pointermove', onExitAim, { passive: true });
+  }
+
+  /* ASKS: a01's YES buys a SOFT night - comfort faces on arrival and one extra
+   * line on the report card. The flag lives in the ask engine (it is
+   * session-only and it is hers); this is the shell's read of it, and a page
+   * with no EMI, no asks module or no answer all read the same false. */
+  function askSoft() {
+    try {
+      const e = getEmi();
+      return !!(e && e.asks && e.asks.flags && e.asks.flags.soft);
+    } catch (e) { return false; }
   }
 
   /**
@@ -3967,6 +4038,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         annexStatsWait = null;
       }
       setStage(null);
+      /* ASKS: the exit-aim listener is the shell's, so the shell takes it. */
+      if (typeof document !== 'undefined' && document.removeEventListener) {
+        try { document.removeEventListener('pointermove', onExitAim); } catch (e) { /* noop */ }
+      }
       if (orientation) { const ob = orientation; orientation = null; try { ob.destroy(); } catch (e) { /* noop */ } }
       if (ghosts) { try { ghosts.destroy(); } catch (e) { /* noop */ } ghosts = null; }
       if (campus) { try { campus.destroy(); } catch (e) { /* noop */ } campus = null; }
