@@ -2384,6 +2384,7 @@
   "msg_plus_pause_penalty_0": "\n(Más {0} XP de penalización por pausa)",
   "btn_yes_stop_session": "Sí, detener sesión",
   "btn_keep_going": "Seguir adelante",
+  "chk_dont_ask_again": "No volver a preguntar",
   "title_pause_session_confirm": "\u23f8 ¿Pausar Sesión?",
   "msg_pause_session_body": "Pausar te costará 100 XP de tu recompensa de sesión.\n\nPenalización actual: -{0} XP\nDespués de esta pausa: -{1} XP\n\n¿Estás segura?",
   "btn_yes_pause": "Sí, pausar",

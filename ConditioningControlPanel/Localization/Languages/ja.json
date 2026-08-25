@@ -2384,6 +2384,7 @@
   "msg_plus_pause_penalty_0": "\n（さらに{0} XPの一時停止ペナルティ）",
   "btn_yes_stop_session": "はい、停止します",
   "btn_keep_going": "続ける",
+  "chk_dont_ask_again": "今後確認しない",
   "title_pause_session_confirm": "\u23f8 セッションを一時停止しますか？",
   "msg_pause_session_body": "一時停止するとセッション報酬から100 XP差し引かれます。\n\n現在のペナルティ：-{0} XP\nこの一時停止後：-{1} XP\n\nよろしいですか？",
   "btn_yes_pause": "はい、一時停止",

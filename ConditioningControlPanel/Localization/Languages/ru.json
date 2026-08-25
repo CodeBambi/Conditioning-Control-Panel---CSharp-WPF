@@ -2386,6 +2386,7 @@
   "msg_plus_pause_penalty_0": "\n(Плюс штраф за паузу {0} XP)",
   "btn_yes_stop_session": "Да, остановить",
   "btn_keep_going": "Продолжить",
+  "chk_dont_ask_again": "Больше не спрашивать",
   "title_pause_session_confirm": "\u23f8 Приостановить сессию?",
   "msg_pause_session_body": "Пауза будет стоить 100 XP из награды за сессию.\n\nТекущий штраф: -{0} XP\nПосле этой паузы: -{1} XP\n\nТы уверена?",
   "btn_yes_pause": "Да, приостановить",
