@@ -749,6 +749,31 @@ button.aos-chip:hover, button.aos-chip:focus-visible {
 /* ------------------------------ SEARCH ------------------------------------ */
 
 .aos-search-form { max-width: 300px; }
+
+/* M's slip, lying on the form: the one thing in here that says where the code
+   came from. Pale bone stock and the local hand, borrowed from the paper kit
+   with literal fallbacks (lab.css may not be linked on a screen showing the
+   OS alone, the same law the two lab greens obey above). It is deliberately
+   NOT the login's yellow sticky - that note is the only warm pixel in the lab
+   and this slip may not become a second one. */
+.aos-slip {
+  max-width: 300px;
+  margin: 18px 0 2px;
+  padding: 9px 12px 10px;
+  background: #EBE8D6;
+  color: #4A4430;
+  font-family: var(--al-hand, 'Segoe Print', 'Comic Sans MS', cursive);
+  font-size: 12px;
+  line-height: 1.35;
+  transform: rotate(-1.5deg);
+  box-shadow: 2px 3px 9px rgba(0, 0, 0, 0.45);
+}
+.aos-slip-sig {
+  display: block;
+  margin-top: 5px;
+  text-align: right;
+  color: #6B6144;
+}
 .aos-file-sec { margin-bottom: 14px; }
 .aos-file-sec h4 {
   margin: 0 0 6px;
@@ -942,6 +967,7 @@ button.aos-chip:hover, button.aos-chip:focus-visible {
 .aos-cramped .aos-btn { min-height: 44px; padding: 6px 18px; }
 .aos-cramped .aos-input { padding: 10px 8px; }
 .aos-cramped .aos-search-form { max-width: none; }
+.aos-cramped .aos-slip { max-width: none; font-size: 13px; }
 .aos-cramped .aos-file-row { flex-wrap: wrap; gap: 2px 12px; }
 .aos-cramped .aos-file-row dt { width: auto; flex: 1 0 100%; }
 .aos-cramped .aos-reg-note { max-width: none; }

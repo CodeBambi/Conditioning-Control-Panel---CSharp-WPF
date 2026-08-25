@@ -548,9 +548,23 @@ export const DOCS = Object.freeze({
 
 /* ============================================================================
  * THE DESK PAPER (punch 4). The mascot survey dossier, read at the desk view.
- * Rendered in-engine: silhouette + redaction bars + typed notes. `sil` names
- * the built-in silhouette shape the renderer draws. Names are black bars by
- * design, never text.
+ * Case pages carry a real photograph: `img` is a bare filename resolved by the
+ * renderer against the annex art base, the way the slides are. `sil` names the
+ * built-in silhouette the renderer FALLS BACK TO when the file is missing or
+ * fails to load, so a page is a drawn silhouette or a photograph and never a
+ * broken image. Both stay filed on every case page.
+ *
+ * NAMES ARE WITHHELD, AND THE WITHHOLDING LEAKS. `red` carries the two letters
+ * the clerk's bar failed to cover and NOTHING else: `a` the first, `z` the
+ * last, `n` how many letters the bar hides. The middle is never stored, never
+ * spelled out in a comment and never assembled at runtime, so no name can be
+ * read out of this file. The renderer draws `n` as a BAR, an element, never a
+ * run of dashes (the register forbids that punctuation on paper). The typed
+ * heads still read "Name withheld." on purpose: the record says withheld and
+ * the page leaks anyway, and that disagreement is the joke.
+ *
+ * `stamp` is the rubber stamp the plate wears, data the way the intake sheet's
+ * ONGOING and the closed file's CLOSED already are.
  * ==========================================================================*/
 export const MASCOT_PAGES = Object.freeze([
   Object.freeze({
@@ -575,7 +589,9 @@ export const MASCOT_PAGES = Object.freeze([
     ]),
   }),
   Object.freeze({
-    id: 'owl', sil: 'owl',
+    id: 'owl', sil: 'owl', img: 'mascot-owl.png',
+    red: Object.freeze({ a: 'D', z: 'O', n: 6 }),
+    stamp: 'REDACTED',
     head: 'CASE PAGE. Language product. Name withheld.',
     body:
 'subject\'s product reports a **daily reminder** authored in the mascot\'s voice. missed ' +
@@ -587,7 +603,11 @@ export const MASCOT_PAGES = Object.freeze([
       'losses cutting deeper than equal gains', 'effective',
       'the mascot is beloved. the reminders are feared']),
     attachments: Object.freeze([
-      Object.freeze({ kind: 'image', sil: 'owl', mount: 'clip', caption: 'name withheld' }),
+      Object.freeze({
+        kind: 'image', sil: 'owl', img: 'mascot-owl.png',
+        mount: 'clip', caption: 'name withheld',
+        red: Object.freeze({ a: 'D', z: 'O', n: 6 }),
+      }),
       Object.freeze({
         kind: 'chart', mount: 'staple',
         chart: Object.freeze({
@@ -607,7 +627,9 @@ export const MASCOT_PAGES = Object.freeze([
       'app one more time, and nobody has.',
   }),
   Object.freeze({
-    id: 'tiger', sil: 'tiger',
+    id: 'tiger', sil: 'tiger', img: 'mascot-tiger.png',
+    red: Object.freeze({ a: 'T', z: 'Y', n: 2 }),
+    stamp: 'REDACTED',
     head: 'CASE PAGE. Breakfast product. Name withheld.',
     body:
 'subject\'s mascot addresses children **in the second person** and **grades them great** before ' +
@@ -620,7 +642,9 @@ export const MASCOT_PAGES = Object.freeze([
       'outlived four recipe changes', 'the bond survives what the product does not']),
   }),
   Object.freeze({
-    id: 'clip', sil: 'clip',
+    id: 'clip', sil: 'clip', img: 'mascot-clip.png',
+    red: Object.freeze({ a: 'C', z: 'Y', n: 4 }),
+    stamp: 'REDACTED',
     head: 'CASE PAGE. Office assistant. Name withheld.',
     body:
 'subject\'s assistant **offers help unprompted**. surveyed users **report closing it**. it ' +

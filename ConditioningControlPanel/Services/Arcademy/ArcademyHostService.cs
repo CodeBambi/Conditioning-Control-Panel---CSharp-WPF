@@ -2536,6 +2536,7 @@ internal static class ArcademyHostService
         ["annex_os_code"] = "subject code",
         ["annex_os_open_file"] = "open file",
         ["annex_os_notfound"] = "that code is not on file. check the paper in the binder.",
+        ["annex_os_search_slip"] = "codes are issued at intake. your sheet is in the FIELD DATA binder, on the shelf.",
         ["annex_os_file_title"] = "SUBJECT FILE",
         ["annex_os_ongoing"] = "ONGOING",
         // ---- the reading room (waves 1-3, 2026-08-25): explorer, papers, drawer ----

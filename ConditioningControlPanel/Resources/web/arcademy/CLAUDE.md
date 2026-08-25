@@ -1973,6 +1973,24 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     gesture - the host passes `--autoplay-policy=no-user-gesture-required`, a plain browser
     without the flag stays gesture-gated.
 
+    **THE ONE-SHOTS ARE PRE-DECODED NOW (2026-08-26, owner report "late and too loud").** A
+    sample used to mint a fresh `new Audio()` per fire, so every tap paid a fetch off the
+    virtual host plus an mp3 decode before anything sounded - ~0.6s in WebView2 on cues
+    (`paper`, `door`) whose whole job is to be simultaneous with the click. So the moment the
+    context comes up, `audio.js` fetches and `decodeAudioData`s every AVAILABLE sample except
+    `NEVER_BUFFERED` (the five `hold` beds plus `intro_bed`, which the splash strikes at boot
+    long before any decode could land) and fires them from an AudioBufferSourceNode into the
+    same bus graph - same slots, same governor, same `onEnded` reasons. Two consequences to
+    hold on to: **a cue that beats its own decode takes the RECIPE, never the element** (trap
+    70 - instant and quiet beats late and loud; a SAMPLE_ONLY name with nothing decoded drops
+    exactly as a missing file drops), and a fetch/decode failure **strikes the name off
+    `available`** with the same verdict the element's `error` handler passes. Loudness is a
+    separate table, `SAMPLE_TRIM` (paper .45, door .55, whoosh .65, everything else 1),
+    multiplied into the one-shot gain on both paths - the mp3s are mastered near full scale
+    where the recipes they replaced were quiet by construction. `CLIP_GAIN` is deliberately
+    untouched: the trigger whispers ride it too and they were never the loud ones.
+    `stats().buffered` / `.decoded` say whether any of this is actually running in a host.
+
 87. **SPLITFLAP'S CUE TIMING IS HARD-COUPLED TO THE CSS CASCADE.** `cueCascade()` staggers
     its `flap` row ticks at `ROW_STEP_MS = 400` and lands `commit` at `(rows-1)*400 + 1500`,
     mirroring `styles.css`'s `--r * .4s` stagger and meta fade. Change one, move both. The

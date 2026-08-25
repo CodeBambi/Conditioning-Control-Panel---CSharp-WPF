@@ -1079,6 +1079,21 @@ export function createAnnexOs(opts) {
     form.appendChild(f1); form.appendChild(f2); form.appendChild(go); form.appendChild(err);
     w.body.appendChild(form);
 
+    /* THE POINTER BACK TO THE PAPER. The code and the password are on the
+     * intake sheet in the FIELD DATA binder, and until now the arrow only
+     * pointed one way: the paper knew about this window, this window said
+     * nothing about the paper. So M leaves a slip on the form. It is PALE
+     * STOCK, never the login's yellow: that sticky is the only warm pixel
+     * downstairs and it stays the only one (lab.css header).
+     * Once p3 is open the player is holding their own file and the hint has
+     * done its job, so it stops asking. */
+    if (!(safeObj(getPunches()).p3)) {
+      const slip = el('div', 'aos-slip', t('annex_os_search_slip',
+        'codes are issued at intake. your sheet is in the FIELD DATA binder, on the shelf.'));
+      slip.appendChild(el('span', 'aos-slip-sig', '-M'));
+      w.body.appendChild(slip);
+    }
+
     function attempt() {
       const closed = matchArchived(code.value, pw.value);
       if (closed) { sfx('commit', 0.34); renderClosedFile(w, closed); return; }
