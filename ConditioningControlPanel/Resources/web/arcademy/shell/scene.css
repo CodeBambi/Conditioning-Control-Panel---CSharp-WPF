@@ -222,3 +222,37 @@
   opacity: 1;
   transform: none;
 }
+
+/* ======================== THE SCENE ON A PHONE ===========================
+ * The apron's own phone rules are rooms.css's - this chassis wears the same
+ * `.arm-bar` and the same slabs, which is the point of the split at the top of
+ * this file - so all that belongs here is what only a SCENE has.
+ *
+ * THE ANCHOR. scene.js pins the painting to the top of the frame on a phone
+ * (room.js's change, same reasons); the box and the origin move together or
+ * the scale walks the plane off-axis. The ZOOM is untouched: it rides
+ * `.asc-slide`, one level down, and still turns about its own centre.
+ *
+ * Gated on `html.arc-mobile` - core/device.js's one decision - so a desktop
+ * window renders exactly what it rendered before. */
+html.arc-mobile[data-arc-orient="landscape"] .asc-stage { top: 0; transform-origin: 50% 0; }
+
+/* The step-back pill is a thumb target on a phone, and it shares the room's
+   ceiling with the plate. */
+html.arc-mobile .asc-back {
+  left: calc(10px + env(safe-area-inset-left, 0px));
+  top: calc(8px + env(safe-area-inset-top, 0px));
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 14px;
+  font-size: 12px;
+}
+/* A 72px band leaves the overlay more of the glass; it only wants the margins
+   back so the panel is not two words wide. */
+html.arc-mobile .asc-panel {
+  width: min(920px, 96%);
+  padding: 14px 16px 16px;
+  margin-bottom: calc(var(--arm-band-h, 72px) + 8px);
+  max-height: calc(100% - var(--arm-band-h, 72px) - 16px);
+}

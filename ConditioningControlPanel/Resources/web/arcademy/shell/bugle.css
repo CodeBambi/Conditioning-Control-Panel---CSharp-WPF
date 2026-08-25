@@ -283,19 +283,29 @@
 
 /* ============================== THE PROP ================================= */
 /* A folded paper the driver scatters on the campus. Nobody puts a newspaper
-   down straight, so it lies at an angle by default; --np-r overrides it. */
+   down straight, so it lies at an angle by default; --np-r overrides it.
+
+   RELATIVE, NOT ABSOLUTE, BY DEFAULT - the noticeboard prop's story, byte for
+   byte (corkboard.css, `.arc-boardprop`): an absolute prop is out of its
+   parent's flow, so `.campus-postrow` measured 0x0 and both props stacked on
+   one pixel a prop's height below the row's anchor. `relative` rather than
+   `static` because `.arc-bugleprop-new` is pinned inside this button and needs
+   it to stay the containing block. `.is-pinned` keeps the --np-x/--np-y API. */
 .arc-bugleprop {
   --news:      color-mix(in srgb, var(--ink) 88%, var(--slate));
   --news-lo:   color-mix(in srgb, var(--news), var(--slate) 22%);
   --news-ink:  color-mix(in srgb, var(--ground) 82%, var(--panel));
 
-  position:absolute; left:var(--np-x, 68%); top:var(--np-y, 72%);
+  position:relative; left:auto; top:auto;
   width:var(--np-w, 58px);
   display:flex; flex-direction:column; align-items:center; gap:4px;
   padding:0; margin:0; border:0; background:none;
   color:var(--campus-text, var(--ink-dim));
   cursor:pointer;
   transition:transform .16s ease;
+}
+.arc-bugleprop.is-pinned {
+  position:absolute; left:var(--np-x, 68%); top:var(--np-y, 72%);
 }
 .arc-bugleprop:hover, .arc-bugleprop:focus-visible {
   transform:translateY(-2px) scale(1.06);

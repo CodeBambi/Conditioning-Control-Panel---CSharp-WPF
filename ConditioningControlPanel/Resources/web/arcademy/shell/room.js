@@ -31,6 +31,8 @@
  *  - nine-broken-logos law: art resolves module-relative via import.meta.url.
  * ==========================================================================*/
 
+import { isMobile, orientation } from '../core/device.js';
+
 /** Stage plane the art was authored on (the annex's, promoted). */
 const STAGE_W = 1376;
 const STAGE_H = 768;
@@ -45,6 +47,13 @@ const STAGE_H = 768;
 const APRON_STAGE_TOP = 640;
 /** The apron never shrinks below this, even art-to-the-floor (px, real). */
 const APRON_MIN = 110;
+/* THE PHONE'S FLOOR, and why it is a different number. 110px is a quarter of a
+ * landscape phone's 390px of glass, which is a band, not an apron: the room it
+ * is the front edge OF ends up smaller than the furniture in front of it. 72px
+ * still clears the 44px thumb floor for all three slabs (rooms.css sizes them
+ * off --arm-band-h and clamps each one at 44) and hands the painting back the
+ * 38px it was eating. Desktop keeps 110 exactly. */
+const APRON_MIN_MOBILE = 72;
 
 /**
  * The fan-out table. Rects are [x, y, w, h] in stage pixels. Rects must keep
@@ -101,6 +110,25 @@ const SCENES = Object.freeze({
   }),
 });
 
+/* THE ONE MOBILE DECISION (core/device.js). JS asks the function, CSS reads the
+ * class and the `data-arc-orient` attribute it writes, and this module needs
+ * both to agree: the apron's floor and the stage's anchor are computed here and
+ * the box they move is styled there.
+ *
+ * LANDSCAPE ONLY, and that is the half that matters. Portrait is behind the
+ * rotate gate (shell/orientgate.js), so it is not designed for - but a room
+ * left standing while the phone is turned still has to render something sane,
+ * and top-anchoring a 9:19.5 frame would hand the apron two thirds of the
+ * screen. Portrait keeps the centred stage and the 110px floor it always had.
+ * rooms.css carries the SAME `[data-arc-orient="landscape"]` qualifier on the
+ * two rules that move with this flag; drift and the scale walks off-axis.
+ *
+ * Wrapped because a suite's DOM double has no matchMedia and must get `false`
+ * rather than a throw at fit() time. */
+function onPhone() {
+  try { return !!isMobile() && orientation() === 'landscape'; } catch (e) { return false; }
+}
+
 /** Does this game have a painted room? The shell's decline test. */
 export function hasRoomScene(gameKey) {
   return !!SCENES[gameKey];
@@ -109,6 +137,60 @@ export function hasRoomScene(gameKey) {
 function artUrl(file) {
   try { return new URL('../art/vn/' + file, import.meta.url).href; }
   catch (e) { return 'art/vn/' + file; }
+}
+
+/**
+ * THE PLATE'S URL, for anybody who wants it before the room is built. The one
+ * consumer is the shell's prefetch (below): the campus knows tonight's four
+ * keys, and a plate that is already in cache when the door opens is the whole
+ * difference between a painted room and a lit void. Keeps the SCENES table
+ * private - a caller gets a string or null, never the row.
+ * @param {string} gameKey
+ * @returns {?string}
+ */
+export function artUrlFor(gameKey) {
+  const scene = SCENES[gameKey];
+  return scene ? artUrl(scene.art) : null;
+}
+
+/**
+ * WARM THE ROOMS THAT ARE ON TONIGHT. Called once a boot, from the seam where
+ * the campus is shown, with the keys the timetable dealt. Every painted key
+ * gets one `<link rel=prefetch as=image>` in <head>; unpainted keys, repeats
+ * and a second call are no-ops.
+ *
+ * `prefetch`, not `preload`: this is art for a screen the player may never
+ * open, so it must ride at the lowest priority the browser has and must never
+ * warn about an unused preload. A desktop WebView2 window reads these files off
+ * the local disk, where the whole thing costs a file open that would have
+ * happened anyway - which is why this is safe to run everywhere rather than
+ * behind a "is this the web build" test the page has no business taking.
+ *
+ * @param {Array<string>} gameKeys tonight's board (any order, dupes fine)
+ * @returns {number} how many links this call actually added
+ */
+const prefetched = Object.create(null);
+export function prefetchRoomArt(gameKeys) {
+  if (!Array.isArray(gameKeys) || typeof document === 'undefined') return 0;
+  const head = document.head || document.documentElement;
+  if (!head || typeof head.appendChild !== 'function') return 0;
+  if (typeof document.createElement !== 'function') return 0;
+  let n = 0;
+  for (let i = 0; i < gameKeys.length; i += 1) {
+    const key = gameKeys[i];
+    const href = artUrlFor(key);
+    if (!href || prefetched[href]) continue;
+    prefetched[href] = true;
+    try {
+      const link = document.createElement('link');
+      link.rel = 'prefetch';
+      link.as = 'image';
+      link.href = href;
+      head.appendChild(link);
+      n += 1;
+    } catch (e) { /* a browser without prefetch loses nothing but the warm-up */ }
+  }
+  return n;
 }
 
 /* A real file (shell/rooms.css), linked once and lazily, resolved against this
@@ -335,13 +417,21 @@ export function createRoomScene(opts) {
     const w = root.clientWidth || (root.parentNode && root.parentNode.clientWidth) || STAGE_W;
     const h = root.clientHeight || (root.parentNode && root.parentNode.clientHeight) || STAGE_H;
     const s = Math.min(w / STAGE_W, h / STAGE_H) || 1;
-    stage.style.transform = 'translate(-50%,-50%) scale(' + s + ')';
+    /* THE PHONE ANCHORS THE PAINTING TO THE TOP. A centred stage splits its
+     * letterbox above and below; above is the ceiling of the room, which is the
+     * half a player reads the set from, and below is the calm floor the apron
+     * was going to cover anyway. So on a phone the whole void goes to the
+     * bottom, under the band. rooms.css moves the box (`top:0`) and the origin
+     * (`50% 0`) under the same class - the two have to agree or the scale walks
+     * the plane off-axis (lab.css's lesson). Desktop is untouched. */
+    const phone = onPhone();
+    stage.style.transform = 'translate(-50%,' + (phone ? '0' : '-50%') + ') scale(' + s + ')';
     /* The apron hugs the painting's floor line and swallows the letterbox:
-     * top = the APRON_STAGE_TOP row of the scaled, centered stage; bottom =
-     * the viewport. Never thinner than APRON_MIN, even art-to-the-floor. */
-    const artTop = (h - STAGE_H * s) / 2;
+     * top = the APRON_STAGE_TOP row of the scaled stage; bottom = the viewport.
+     * Never thinner than the floor for this frame (APRON_MIN / _MOBILE). */
+    const artTop = phone ? 0 : (h - STAGE_H * s) / 2;
     let apronTop = artTop + APRON_STAGE_TOP * s;
-    if (h - apronTop < APRON_MIN) apronTop = h - APRON_MIN;
+    if (h - apronTop < (phone ? APRON_MIN_MOBILE : APRON_MIN)) apronTop = h - (phone ? APRON_MIN_MOBILE : APRON_MIN);
     if (apronTop < 0) apronTop = 0;
     bar.style.top = apronTop + 'px';
     /* Published on both: the bar is a body-level sibling, so it cannot
@@ -358,8 +448,24 @@ export function createRoomScene(opts) {
    * Refit when the skin lands, when the art decodes, and once next frame -
    * cheap, idempotent, and the resize listener owns every later change. */
   if (cssLink) cssLink.addEventListener('load', onResize);
-  art.addEventListener('load', onResize);
+  /* THE COLD LOAD. The plate starts at opacity 0 over the stage's painted
+   * fallback (rooms.css) and is lit here, on the image's own load - the same
+   * listener that was already refitting, one class heavier. A cached plate is
+   * in on the first frame; a plate off a phone's network eases onto a lit
+   * room-shaped void instead of blinking over a black rectangle. */
+  function lightArt() {
+    try { art.classList.add('is-in'); } catch (e) { /* DOM double: nothing to light */ }
+  }
+  art.addEventListener('load', () => { lightArt(); onResize(); });
+  art.addEventListener('error', lightArt);   // a 404 must never leave a hidden img
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(onResize);
+  /* THE BELT. `load` cannot fire before this turn ends, so the listener above
+   * always sees it - but a decoded-from-cache plate in a browser that skips the
+   * event, or a suite that hands us a fake image, must not be left invisible. */
+  if (art.complete && art.naturalWidth) lightArt();
+  else if (typeof setTimeout === 'function') {
+    setTimeout(() => { if (!destroyed && art.complete) lightArt(); }, 1200);
+  }
 
   /* Focus after the caller has appended us (a fresh node not yet in the
    * document ignores focus() in some engines - the end card's lesson). */

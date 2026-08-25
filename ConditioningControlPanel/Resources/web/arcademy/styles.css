@@ -1923,13 +1923,28 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
 /* ---- the post row (PHANTOM POST furniture: noticeboard + folded Bugle).
    The props style themselves (corkboard.css / bugle.css); this row only says
    where they lean: beside the student ID, on the same baseline. On a phone the
-   card owns that corner, so the row steps up onto the wall above it. */
+   card owns that corner, so the row steps up onto the wall above it.
+
+   THE ROW IS THE ONLY ABSOLUTE THING HERE. Both props default to
+   `position:relative` inside it (corkboard.css / bugle.css, `.is-pinned` for a
+   driver that wants to pin one somewhere else on the plan) - an absolute child
+   is out of flow, which collapsed this flex row to 0x0, stacked the two props
+   on the same pixel and hung them BELOW the `bottom:22px` anchor by their own
+   height. On a desktop window too, which is how it reached the owner.
+
+   THE BREAKPOINT IS THE CARD'S BREAKPOINT, VERBATIM. The step-aside exists to
+   clear `.campus-idcard`, so it has to end on exactly the query that hides the
+   card ("small stages", further down this file). A row that dodged at 740px
+   while the card left at 760px/600px landed the props back on the architecture
+   of every landscape phone. Once the card is gone the corner is free, so the
+   row takes it: the old `bottom:172px` was headroom for a card that is
+   `display:none` at that size. */
 .campus-postrow {
   position:absolute; left:calc(clamp(12px, 2.5vw, 44px) + 256px); bottom:22px;
   z-index:24; display:flex; align-items:flex-end; gap:12px;
 }
-@media (max-width: 740px) {
-  .campus-postrow { left:clamp(12px, 2.5vw, 44px); bottom:172px; }
+@media (max-width:760px), (max-height:600px) {
+  .campus-postrow { left:clamp(12px, 2.5vw, 44px); bottom:22px; }
 }
 
 /* ---- tooltip ---- */

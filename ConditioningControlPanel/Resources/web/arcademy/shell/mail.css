@@ -374,7 +374,24 @@
   .arc-letter-mark { width:34px; height:34px; }
 }
 html.arc-mobile .arc-mail-item { padding:12px; min-height:44px; }
-html.arc-mobile .arc-mailchip { width:40px; height:40px; }
+/* 44px, not 40: the mobile pass's thumb floor is a floor, and the chip was the
+   one control in this file sitting under it. */
+html.arc-mobile .arc-mailchip { width:44px; height:44px; }
+
+/* THE CLOSE BAR IS NOT ON THE LETTER, AND THE HARNESS IS WHY THIS IS 10px.
+   `.arc-exitbar` is `position:sticky; bottom:0`, which on the corkboard means a
+   bar pinned over a scrolling page (corkboard.css carries that fix). Here it
+   does NOT: `.arc-mailbox` is a flex COLUMN with `overflow:hidden`, the body
+   above it has `min-height:0` and shrinks, so the bar is laid out under the
+   panes rather than over them. Measured at 844x390: paper ends at y282, the bar
+   starts at y292. What the pane actually wants at that size is a line of breath
+   at the end of a scroll, not a bar's height of it - 56px of clearance would
+   have cost a third of a 179px reading window to solve a problem that is not
+   there. If this ever DOES overlap, the fix is still here and not on
+   `.arc-mailbox`: a sticky bottom is measured against the scrollport's padding
+   box, so padding the container lifts the bar and opens a gap under it. */
+html.arc-mobile .arc-mail-list,
+html.arc-mobile .arc-mail-paper { padding-bottom:10px; }
 
 /* =========================== REDUCED MOTION ==============================
    The global freeze runs every animation once at .001s, which is the right

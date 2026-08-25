@@ -2057,6 +2057,37 @@ UI: see §6.
 
 ## 6. Verifying changes (no app UI — the owner is remote)
 
+**A PHONE VIEWPORT IS A MERGE GATE for campus props, rooms and overlays.** Any PR that
+touches the campus furniture (`.campus-postrow` and the two `.arc-*prop`s), a room chassis
+(`shell/room.js` + `rooms.css`, `shell/scene.js` + `scene.css`) or an overlay that carries a
+sticky exit bar (corkboard, mailbox, Bugle) gets a **shot at 844x390 AND at 667x375** from
+the CDP screenshot rig before it merges, plus a 1600x900 shot proving the desktop rects did
+not move. Three of the five bugs in the 2026-08-25 web/mobile wave were invisible at desktop
+size, and one of them - both post-row props stacked on a single pixel, hanging off the bottom
+of the window - had been shipping on the DESKTOP too, unseen, because nothing ever measured
+the row.
+
+The rig lives at `scratchpad/web-mobile-diag/`: `server.mjs` serves `site/` on
+127.0.0.1:8731 with stubbed `/api/arcademy/*`, and `shoot.mjs OUTDIR BASEURL shots.json
+seed.js` drives headless Chrome over raw CDP - one entry per shot (`w`, `h`, `query`,
+`script`, `probe`, `touch:true` for touch emulation). Four things it will bite you with:
+
+- **`site/` GOES STALE.** It is a COPY of the web tree, not a link, and it is the whole
+  trap: re-copy this folder into it (keeping `web/`, `web-shim.js`, `SYNC.json` and the
+  `web-shim.js` script tag in `index.html`) before every run, or you screenshot last week's
+  bug. The 2026-08-25 copy was 20 files behind and had no Records room in it at all.
+- A `pointerup` dispatched on `document` is needed to pass the knock gate, and a seeded
+  `arc-web:meta` in localStorage (`seed.js`) to skip Orientation and First Bell.
+- `?forcemobile=1` is what makes `isMobile()` true - headless reports a FINE pointer however
+  the viewport is sized, so `html.arc-mobile` never lands without it. `?dev=1` on localhost
+  enters an unscheduled painted room.
+- **MEASURE, DO NOT EYEBALL.** The `probe` expression returns `getBoundingClientRect()` and
+  `getComputedStyle` for whatever you name, and diffing a BEFORE run (the touched files
+  restored from `HEAD`) against an AFTER run is the only way to prove "desktop is
+  pixel-identical". It is also how a diagnosed fix gets refuted: the corkboard's sticky bar
+  reaches its flow position at the end of the scroll with or without content padding, so the
+  padding that was supposed to clear it bought nothing but dead cork underneath.
+
 Everything here is testable headless. The harness lives in the session scratchpad, not the
 repo: it copies this folder next to a `package.json` with `{"type":"module"}` (node treats
 bare `.js` as CommonJS, the browser loads them as modules) plus a ~130-line DOM double, then

@@ -71,7 +71,7 @@ import { createAnnexLab } from '../annex/lab.js';
  * and a class, replacing the door card for the rooms that have art - room.js
  * owns the SCENES table and the stage; the shell keeps the walk, the launch
  * path and the Esc rung (narrow caps, records.js style). */
-import { createRoomScene, hasRoomScene } from './room.js';
+import { createRoomScene, hasRoomScene, prefetchRoomArt } from './room.js';
 /* THE PHANTOM POST: the mail engine and its three paper overlays. The engines
  * hold NO storage of their own (their STATE-NEEDS law) - the shell hands each
  * an injected blob below and banks it through the store like any page key. */
@@ -1579,6 +1579,20 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       campus.boardMount.appendChild(board.root);
       renderBoardExtras(campus.footMount);
       dom.screen.appendChild(campus.root);
+      /* WARM TONIGHT'S ROOMS. The campus is up and the player is about to spend
+       * a while looking at it; the plates behind tonight's painted doors are
+       * ~1MB each and on a phone they arrive AFTER the room does, which is how
+       * a lit room ships as a black rectangle with a glowing rect in it. One
+       * `<link rel=prefetch as=image>` per painted key, lowest priority, once
+       * per boot (room.js keeps the ledger, so the rebuild on every campus
+       * visit adds nothing the second time). Unpainted keys are skipped. A
+       * desktop WebView2 window reads these off local disk, where it costs a
+       * file open that was going to happen anyway - harmless, and not worth a
+       * "which build am I" test the page has no business taking. */
+      try {
+        const warmed = prefetchRoomArt(timetable.classes.map((c) => c.gameKey));
+        if (warmed) say('prefetched ' + warmed + ' room plate(s)');
+      } catch (e) { say('room art prefetch threw: ' + ((e && e.message) || e)); }
       /* CAMPUS PRESENCE. Built AFTER the stage is in the document and started
        * only by the campus's revealDone hook. It is its own try/catch for the
        * campus's reason: a ghost layer that throws costs the player some company,
