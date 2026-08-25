@@ -20,20 +20,28 @@ namespace CcpClient.Desktop.Camera;
 /// precisely why the consent gate sits ABOVE this class and refuses before it is called
 /// (<see cref="CameraParticipant.ProbeAsync"/>).</para>
 ///
-/// <para><b>What is ported and what is deliberately not.</b> Upstream has a SECOND enumerator —
-/// WinRT <c>DeviceInformation.FindAllAsync(DeviceClass.VideoCapture)</c>
+/// <para><b>THERE IS A SECOND WALK BEHIND THIS ONE, and it runs only when this one names
+/// nothing.</b> Upstream has a second enumerator — WinRT
+/// <c>DeviceInformation.FindAllAsync(DeviceClass.VideoCapture)</c>
 /// (<c>Services/Webcam/WebcamWinRtEnumerator.cs:26-59</c>) — used as a fallback when DirectShow
 /// returns an empty list, because a 64-bit process misses cameras that register only 32-bit
-/// DirectShow filters or are Media-Foundation-only (<c>:12-17</c>, issues #282/#279/#291). That
-/// fallback is NOT ported here and its absence is recorded rather than hidden: WinRT
-/// <c>Windows.Devices.Enumeration</c> needs a <c>net10.0-windows10.0.*</c> target framework, and
-/// this client is deliberately a single cross-platform <c>net10.0</c>
-/// (<c>client/src/CcpClient.Desktop/CcpClient.Desktop.csproj</c>). The user-visible consequence is
-/// real and named: on a machine with only an MF-only camera this route reports
-/// <see cref="CameraReasonCodes.CameraNoDevice"/> where upstream would list it. Closing that needs
-/// a Media Foundation <c>IMFActivate</c> enumeration through <c>mfplat</c>/<c>mf.dll</c>, which is
-/// the capture slice's business because that is the API family the capture path would use anyway.
-/// It is not closed by claiming a device this route did not see.</para>
+/// DirectShow filters or are Media-Foundation-only (<c>:12-17</c>, issues #282/#279/#291). WinRT
+/// itself is not available here: <c>Windows.Devices.Enumeration</c> needs a
+/// <c>net10.0-windows10.0.*</c> target framework and this client is deliberately a single
+/// cross-platform <c>net10.0</c> (<c>client/src/CcpClient.Desktop/CcpClient.Desktop.csproj</c>).
+/// The DEVICE LIST behind WinRT is reachable without it, though, and that is what is used:
+/// <see cref="MediaFoundationCameraCapture.EnumerateDevices"/> reads the same Media Foundation
+/// Frame Server source list through <c>MFEnumDeviceSources</c>, which upstream's own comment names
+/// as what WinRT is backed by (<c>Services/Webcam/WebcamWinRtEnumerator.cs:10-11</c>).</para>
+///
+/// <para>Slice 1 shipped WITHOUT that fallback and recorded the consequence rather than hiding it —
+/// on a machine with only an MF-only camera this route reported
+/// <see cref="CameraReasonCodes.CameraNoDevice"/> where upstream would list it — and deferred the
+/// fix to the capture slice, because that is the API family the capture path would use anyway. The
+/// capture slice landed that API family and then used it only to MATCH a device the roster had
+/// already named, which left the roster gap exactly where it was. It is closed here.
+/// <see cref="CameraEnumerationFallback"/> holds the rule for when the second walk may run, and
+/// the answer is still never a device this process did not really see.</para>
 ///
 /// <para><b>The privacy read is a DOWNGRADE and can never be an upgrade</b>
 /// (<c>runtime-capability-contract.md</c> §2 rule 4, the rule
@@ -61,7 +69,9 @@ public sealed class DirectShowCameraDeviceSource : ICameraDeviceSource
     private static readonly Guid IidPropertyBag = new("55272A00-42CB-11CE-8135-00AA004BB851");
 
     /// <inheritdoc/>
-    public string Route => "DirectShow SystemDeviceEnum over CLSID_VideoInputDeviceCategory";
+    public string Route =>
+        "DirectShow SystemDeviceEnum over CLSID_VideoInputDeviceCategory, then Media Foundation "
+        + "MFEnumDeviceSources when it names none";
 
     /// <inheritdoc/>
     public CameraInventory Enumerate()
@@ -71,9 +81,10 @@ public sealed class DirectShowCameraDeviceSource : ICameraDeviceSource
             return CameraInventory.Refusing(Route, denial);
         }
 
+        CameraInventory monikers;
         try
         {
-            return CameraInventory.Named(Route, EnumerateMonikers());
+            monikers = CameraInventory.Named(Route, EnumerateMonikers());
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -84,6 +95,12 @@ public sealed class DirectShowCameraDeviceSource : ICameraDeviceSource
                 $"the DirectShow device enumeration failed with {ex.GetType().Name}; no claim is made about "
                 + "whether a camera is attached")));
         }
+
+        // The second walk, on upstream's own trigger and no other
+        // (Services/Webcam/WebcamTrackingService.cs:1120-1134). A moniker walk that named even one
+        // camera, and a walk that refused, both return above without Media Foundation being started.
+        return CameraEnumerationFallback.Apply(
+            Route, monikers, MediaFoundationCameraCapture.EnumerateDevices);
     }
 
     /// <summary>

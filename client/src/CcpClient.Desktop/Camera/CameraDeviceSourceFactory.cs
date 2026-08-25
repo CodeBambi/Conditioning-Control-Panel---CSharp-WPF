@@ -38,7 +38,8 @@ public static class CameraDeviceSourceFactory
         CameraHostPlatform.Windows when OperatingSystem.IsWindows() => new DirectShowCameraDeviceSource(),
 
         CameraHostPlatform.Windows => new UnsupportedCameraDeviceSource(
-            "DirectShow SystemDeviceEnum over CLSID_VideoInputDeviceCategory",
+            "DirectShow SystemDeviceEnum over CLSID_VideoInputDeviceCategory, then Media Foundation "
+            + "MFEnumDeviceSources when it names none",
             "the Windows camera-enumeration route was selected on a process that is not running on Windows, so "
             + "nothing was asked and nothing may be said about whether a camera is attached"),
 
