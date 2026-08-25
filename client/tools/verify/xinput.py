@@ -20,7 +20,15 @@
 #   xinput.py "<title needle>" --focus            assert X input focus AND _NET_ACTIVE_WINDOW
 #                                                 both name the app window; print both readings
 #   xinput.py "<title needle>" --click X Y        left-click at WINDOW-RELATIVE device pixels
+#   xinput.py "<title needle>" --rightclick X Y   right-click (button 3) at the same coordinates
+#   xinput.py "<title needle>" --scroll X Y D [N] N wheel notches (button 4 up / 5 down)
 #   xinput.py "<title needle>" --where            print the window's root origin and size
+#
+# THE SECOND AND THIRD BUTTONS ARE NOT DECORATION. The Studio rack's quick-toggle is a RIGHT-click
+# and nothing else reaches it (StudioPage.axaml.cs:449-453 -> :559-569), and every module surface
+# below the rack's fold is reached by a WHEEL, one notch at a time, because a fixed notch count
+# silently stops scrolling far enough the moment a page grows. Both are the same XTest mechanism
+# as the left-click above: buttons 4 and 5 are X11's wheel-up and wheel-down.
 #
 # Exit 0 = the requested action completed (and, for --focus, the assertion held).
 # Exit 2 = the window was not found, or --focus found focus elsewhere.
@@ -159,10 +167,10 @@ def main():
         print("FOCUS OK: X input focus and _NET_ACTIVE_WINDOW both name the app window")
         return 0
 
-    if mode == "--click":
+    if mode in ("--click", "--rightclick", "--scroll"):
         cx, cy = int(sys.argv[3]), int(sys.argv[4])
         if not (0 <= cx < width and 0 <= cy < height):
-            print(f"FAIL: click point {cx},{cy} is outside the window {width}x{height}",
+            print(f"FAIL: pointer target {cx},{cy} is outside the window {width}x{height}",
                   file=sys.stderr)
             return 2
         # XTestFakeMotionEvent takes ROOT coordinates; the button events follow the pointer.
@@ -170,11 +178,30 @@ def main():
         # a press delivered before the pointer arrived lands on whatever was under it.
         XTST.XTestFakeMotionEvent(display, -1, ox + cx, oy + cy, CurrentTime)
         X11.XSync(display, 0)
-        XTST.XTestFakeButtonEvent(display, 1, 1, CurrentTime)
+
+        if mode == "--scroll":
+            direction = sys.argv[5]
+            notches = int(sys.argv[6]) if len(sys.argv) > 6 else 1
+            if direction not in ("up", "down"):
+                print(f"FAIL: scroll direction must be up|down (got '{direction}')",
+                      file=sys.stderr)
+                return 2
+            button = 4 if direction == "up" else 5
+            for _ in range(notches):
+                XTST.XTestFakeButtonEvent(display, button, 1, CurrentTime)
+                X11.XSync(display, 0)
+                XTST.XTestFakeButtonEvent(display, button, 0, CurrentTime)
+                X11.XSync(display, 0)
+            print(f"scroll: {notches}x button {button} ({direction}) at window {cx},{cy} "
+                  f"= root {ox + cx},{oy + cy} (XTest, window 0x{win:x})")
+            return 0
+
+        button = 1 if mode == "--click" else 3
+        XTST.XTestFakeButtonEvent(display, button, 1, CurrentTime)
         X11.XSync(display, 0)
-        XTST.XTestFakeButtonEvent(display, 1, 0, CurrentTime)
+        XTST.XTestFakeButtonEvent(display, button, 0, CurrentTime)
         X11.XSync(display, 0)
-        print(f"click: button 1 at window {cx},{cy} = root {ox + cx},{oy + cy} "
+        print(f"click: button {button} at window {cx},{cy} = root {ox + cx},{oy + cy} "
               f"(XTest, window 0x{win:x})")
         return 0
 
