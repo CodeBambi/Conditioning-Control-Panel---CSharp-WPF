@@ -1552,7 +1552,12 @@ public partial class StudioPage : UserControl
             Text = SessionRackNotices.RowProvenance(session.Origin),
             FontSize = 9,
             FontWeight = FontWeight.Bold,
-            Foreground = new SolidColorBrush(Color.Parse("#FF121220")),
+            // The application ground read back as an INK, through the token layer rather than as a
+            // copy of its byte: the caption is dark-on-colour and the dark it wants is the same
+            // dark the window behind the chip is painted. A theme moves that ground
+            // (WPF MainWindow/MainWindow.xaml.cs:1619 rewrites DarkerBg from the active mod), and
+            // a pasted literal here would keep the seed's while everything around it moved.
+            Foreground = Themes.CcpTheme.Brush("DarkerBgBrush"),
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
         };
         var badge = new Border

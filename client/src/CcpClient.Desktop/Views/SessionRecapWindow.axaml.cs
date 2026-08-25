@@ -138,7 +138,13 @@ public partial class SessionRecapWindow : Window
         return new Border
         {
             Name = "SessionRecapMediaRow" + ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            Background = new SolidColorBrush(Color.Parse("#FF2E2E4A")),
+            // PanelAccent through the token layer, not a copy of its byte. This row is a card
+            // built in C# rather than in markup, so the sweep that tokenised 225 markup sites
+            // could not reach it — and the value it used to paste is a DERIVED one: upstream
+            // recomputes PanelAccent as LightenColor(panel, .15) from the active mod's panel
+            // colour every time the theme moves (WPF MainWindow/MainWindow.xaml.cs:1611), so a
+            // pasted byte here is stale the moment the product is themed at all.
+            Background = Themes.CcpTheme.Brush("PanelAccentBrush"),
             CornerRadius = new Avalonia.CornerRadius(6),
             Padding = new Avalonia.Thickness(10, 6),
             Child = grid,

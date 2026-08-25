@@ -103,7 +103,12 @@ public sealed class CompanionTranscriptWindow : Window
             Text = Heading,
             FontSize = 15,
             FontWeight = FontWeight.SemiBold,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x8F, 0xAF)),
+            // ShellAccentBright through the token layer. This window is built in C#, so the
+            // markup sweep could not reach it — and this is the one colour on it a mod really
+            // re-skins: it is upstream's accent LIGHT step, rewritten from the active mod at
+            // WPF MainWindow/MainWindow.xaml.cs:1657. The three neutrals below are not (no mod
+            // supplies an ink), which is why they stay written out.
+            Foreground = Themes.CcpTheme.Brush("ShellAccentBrightBrush"),
             [AutomationProperties.AutomationIdProperty] = "TranscriptHeading",
         };
         Grid.SetRow(heading, 0);
