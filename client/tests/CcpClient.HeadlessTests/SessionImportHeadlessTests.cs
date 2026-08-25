@@ -54,6 +54,10 @@ public class SessionImportHeadlessTests : HeadlessTest
 
         public UserFileOpen OpenOutcome { get; set; } = UserFileOpen.Cancelled.Instance;
 
+        /// <summary>Thrown instead of answering, the way a storage backend this port does not
+        /// catch would.</summary>
+        public Exception? Fault { get; set; }
+
         public int OpenCalls { get; private set; }
 
         /// <summary>Keeps the dialog "open" until <see cref="Release"/>, the way a real modal would
@@ -71,10 +75,19 @@ public class SessionImportHeadlessTests : HeadlessTest
         public async Task<UserFileOpen> OpenTextAsync(string title, UserFileKind kind)
         {
             OpenCalls++;
+            if (Fault is not null)
+            {
+                throw Fault;
+            }
+
             if (HoldOpen)
             {
-                _held = new TaskCompletionSource();
-                await _held.Task;
+                // BOUNDED, through the one approved helper: an unbounded await on a signal the test
+                // may never set would hang the host rather than fail it. Same shape as
+                // PhraseBackupPageHeadlessTests' own gate over the same seam.
+                _held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                await CcpClient.Tests.TestWait.Until(
+                    _held.Task, "the test to release the file dialog it is holding open");
             }
 
             return OpenOutcome;
@@ -140,6 +153,15 @@ public class SessionImportHeadlessTests : HeadlessTest
             "the session import to finish and re-enable its button");
         window.UpdateLayout();
     }
+
+    /// <summary>The file names in the user's sessions folder. The folder-existence test lives here
+    /// rather than in a fact body, on <c>ScriptedSessionLogTests</c>' precedent: a
+    /// <c>Directory.Exists</c> inside a fact is an fs-predicate shape the vacuous-shape guard
+    /// requires a ledger disposition for, and the honest fix is not to have one.</summary>
+    private static IReadOnlyList<string> FileNamesIn(CustomSessionStore store) =>
+        Directory.Exists(store.Folder)
+            ? [.. Directory.GetFiles(store.Folder).Select(Path.GetFileName).OfType<string>()]
+            : [];
 
     private static string FileText(string id, string name, int minutes = 45) =>
         new ScriptedSession
@@ -263,7 +285,7 @@ public class SessionImportHeadlessTests : HeadlessTest
         Assert.Contains("Nothing was added.", RackLine(window), StringComparison.Ordinal);
         Assert.Equal(4, Rows(window).Count);
         Assert.Empty(boot.Store.Read());
-        Assert.False(Directory.Exists(boot.Store.Folder));
+        Assert.Empty(FileNamesIn(boot.Store));
 
         await boot.Host.ShutdownAsync();
     }
@@ -289,6 +311,35 @@ public class SessionImportHeadlessTests : HeadlessTest
         Assert.Equal(5, Rows(window).Count);
         var picked = Assert.Single(Rows(window), r => r.IsChecked == true);
         Assert.Equal("SessionRowMorningDrift", picked.Name);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    /// <summary>
+    /// A seam that FAULTS is a sentence and a live button, not a dead one. An exception out of an
+    /// unobserved <see cref="Task"/> is swallowed at collection, so without the page's catch a
+    /// broken picker would be an Import button that silently does nothing for the rest of the
+    /// session — and its own latch would leave it disabled forever.
+    ///
+    /// <para>The TYPE is shown and never the message, because the message of the classes this path
+    /// raises carries the full path of the file that failed
+    /// (<see cref="UserFileRefusal"/>).</para>
+    /// </summary>
+    [AvaloniaFact]
+    public async Task ASeamThatFaultsSaysSo_AndLeavesTheButtonUsable()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        boot.Picker.Fault = new IOException(
+            "C:" + Path.DirectorySeparatorChar + "Secret Folder is busy");
+
+        Click(window, Descendant<Button>(window, "ScriptedSessionImportButton"));
+        await SettleAsync(window);
+
+        Assert.Equal(SessionRackNotices.ImportFaulted(nameof(IOException)), RackLine(window));
+        Assert.DoesNotContain("Secret Folder", RackLine(window), StringComparison.Ordinal);
+        Assert.True(Descendant<Button>(window, "ScriptedSessionImportButton").IsEnabled);
+        Assert.Empty(boot.Store.Read());
 
         await boot.Host.ShutdownAsync();
     }

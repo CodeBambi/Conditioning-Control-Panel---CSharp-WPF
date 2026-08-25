@@ -537,6 +537,12 @@ public class SessionEditorTests
     /// The rack's absence notice stops claiming the editor and custom sessions are missing, because
     /// they are not — and goes on naming what still is. §9 D7: named rather than silently missing,
     /// and never a claim that has stopped being true.
+    ///
+    /// <para><b>IMPORTING left this list when <see cref="SessionImport"/> landed</b>, and this fact
+    /// was updated rather than the notice being left to rot — the same correction the editor made
+    /// to it. What it still may not do is drop the two that ARE absent, which is what the
+    /// <c>Contains</c> pair below is for. The corner-GIF half of the notice is
+    /// <c>SessionImportTests</c>'s.</para>
     /// </summary>
     [Fact]
     public void TheRackNoLongerClaimsTheEditorAndCustomSessionsAreMissing()
@@ -545,8 +551,10 @@ public class SessionEditorTests
             "session editor", SessionRackNotices.Absences, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(
             "custom", SessionRackNotices.Absences, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "importing a session file", SessionRackNotices.Absences, StringComparison.Ordinal);
 
-        Assert.Contains("importing a session file", SessionRackNotices.Absences, StringComparison.Ordinal);
+        Assert.Contains("authoring a session's timeline", SessionRackNotices.Absences, StringComparison.Ordinal);
         Assert.Contains("the XP award", SessionRackNotices.Absences, StringComparison.Ordinal);
     }
 }

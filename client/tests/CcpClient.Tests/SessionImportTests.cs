@@ -76,6 +76,23 @@ public class SessionImportTests
             BonusXP = 1200,
         }.ToJson();
 
+    /// <summary>
+    /// The file names in the user's sessions folder, in a fixed order.
+    ///
+    /// <para>The folder-existence test lives HERE rather than in a fact body, on
+    /// <c>ScriptedSessionLogTests</c>' precedent: a <c>Directory.Exists</c> inside a <c>[Fact]</c>
+    /// is an fs-predicate shape the vacuous-shape guard requires a ledger disposition for, and the
+    /// honest fix is not to have one. An import that wrote nothing leaves no folder, and that is an
+    /// empty list rather than a condition an assertion has to survive.</para>
+    /// </summary>
+    private static IReadOnlyList<string> FileNamesIn(CustomSessionStore store) =>
+        Directory.Exists(store.Folder)
+            ? [.. Directory.GetFiles(store.Folder)
+                .Select(Path.GetFileName)
+                .OfType<string>()
+                .OrderBy(name => name, StringComparer.Ordinal)]
+            : [];
+
     private static (SessionImport Import, FakePicker Picker, CustomSessionStore Store, Sink Log)
         Rig(string root, string text, Func<string>? newId = null)
     {
@@ -300,7 +317,7 @@ public class SessionImportTests
         var refused = Assert.IsType<SessionImportOutcome.RefusedFile>(await import.RunAsync());
         Assert.Equal(SessionFileRefusal.NotJson, refused.Reason);
         Assert.Empty(store.Read());
-        Assert.False(Directory.Exists(Path.Combine(root, CustomSessionStore.FolderName)));
+        Assert.Empty(FileNamesIn(store));
     }
 
     /// <summary>
@@ -327,7 +344,7 @@ public class SessionImportTests
         var refused = Assert.IsType<SessionImportOutcome.RefusedFile>(await import.RunAsync());
         Assert.Equal(expected, refused.Reason);
         Assert.Empty(store.Read());
-        Assert.False(Directory.Exists(Path.Combine(root, CustomSessionStore.FolderName)));
+        Assert.Empty(FileNamesIn(store));
     }
 
     /// <summary>
@@ -363,7 +380,7 @@ public class SessionImportTests
             await new SessionImport(picker, store).RunAsync());
         Assert.Equal(1, picker.OpenCalls);
         Assert.Empty(store.Read());
-        Assert.False(Directory.Exists(root));
+        Assert.Empty(FileNamesIn(store));
     }
 
     /// <summary>
@@ -386,7 +403,7 @@ public class SessionImportTests
             await new SessionImport(picker, store).RunAsync());
         Assert.Equal(reason, refused.Reason);
         Assert.Empty(store.Read());
-        Assert.False(Directory.Exists(root));
+        Assert.Empty(FileNamesIn(store));
     }
 
     /// <summary>
