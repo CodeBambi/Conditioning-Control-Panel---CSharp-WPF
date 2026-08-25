@@ -179,17 +179,17 @@ public sealed class GazePreprocessTests
         var eye = new GazeCrop(274, 159, 92);
 
         var left = GazePreprocess.FromCrop(eye, GazePreprocess.IrisInput, 20f, 30f, unflip: false);
-        Near(302.75f, left.X, "left eye x");
-        Near(202.125f, left.Y, "left eye y");
+        Assert.Equal(302.75f, left.X, Tolerance);
+        Assert.Equal(202.125f, left.Y, Tolerance);
 
         var right = GazePreprocess.FromCrop(eye, GazePreprocess.IrisInput, 20f, 30f, unflip: true);
-        Near(337.25f, right.X, "right eye x");
-        Near(202.125f, right.Y, "right eye y");
+        Assert.Equal(337.25f, right.X, Tolerance);
+        Assert.Equal(202.125f, right.Y, Tolerance);
 
         var face = GazePreprocess.FaceCrop(new GazeRect(100, 60, 200, 150));
         var centre = GazePreprocess.FromCrop(face, GazePreprocess.MeshInput, 96f, 96f, unflip: false);
-        Near(200f, centre.X, "face centre x");
-        Near(135f, centre.Y, "face centre y");
+        Assert.Equal(200f, centre.X, Tolerance);
+        Assert.Equal(135f, centre.Y, Tolerance);
     }
 
     // ======================================================================================
@@ -223,47 +223,58 @@ public sealed class GazePreprocessTests
         var box = GazePreprocess.FillDetector(frame, info, tensor);
         Assert.Equal(new GazeLetterbox(128, 0.5f, 128, 128, 0, 0), box);
 
-        // Red is 2*dx + 1: 1, 3, 127, 255 at dx = 0, 1, 63, 127.
-        Near(-0.99215686f, Read(tensor, 128, 0, 0, 0), "red at dx=0");
-        Near(-0.97647059f, Read(tensor, 128, 1, 0, 0), "red at dx=1");
-        Near(-0.00392157f, Read(tensor, 128, 63, 0, 0), "red at dx=63");
-        Near(1f, Read(tensor, 128, 127, 0, 0), "red at dx=127");
+        // Red is 2*dx + 1: bytes 1, 3, 127, 255 at dx = 0, 1, 63, 127.
+        Assert.Equal(-0.99215686f, Read(tensor, 128, 0, 0, 0), Tolerance);
+        Assert.Equal(-0.97647059f, Read(tensor, 128, 1, 0, 0), Tolerance);
+        Assert.Equal(-0.00392157f, Read(tensor, 128, 63, 0, 0), Tolerance);
+        Assert.Equal(1f, Read(tensor, 128, 127, 0, 0), Tolerance);
 
         // Green is 2*dy + 1 and does not vary with x.
-        Near(-0.99215686f, Read(tensor, 128, 40, 0, 1), "green at dy=0");
-        Near(1f, Read(tensor, 128, 40, 127, 1), "green at dy=127");
+        Assert.Equal(-0.99215686f, Read(tensor, 128, 40, 0, 1), Tolerance);
+        Assert.Equal(1f, Read(tensor, 128, 40, 127, 1), Tolerance);
 
         // Blue is the constant 7 everywhere, which is what makes the two above unmistakable.
-        Near(-0.94509804f, Read(tensor, 128, 0, 0, 2), "blue at (0,0)");
-        Near(-0.94509804f, Read(tensor, 128, 127, 127, 2), "blue at (127,127)");
+        Assert.Equal(-0.94509804f, Read(tensor, 128, 0, 0, 2), Tolerance);
+        Assert.Equal(-0.94509804f, Read(tensor, 128, 127, 127, 2), Tolerance);
     }
 
     /// <summary>
     /// <b>The pad is black, and it is where the truncating division puts it.</b> A <c>128x91</c>
     /// source scales by exactly 1, so 91 picture rows sit inside 128 with an 18-row pad above and a
-    /// 19-row pad below. Painting the whole source a flat 200 makes every picture row read
-    /// <c>200 * 2/255 - 1 = 0.5686</c> and every pad row read exactly <c>-1</c>, which is what
-    /// upstream's zeroed square normalises to.
+    /// 19-row pad below. Every pad row must read exactly <c>-1</c>, which is what upstream's zeroed
+    /// square normalises to through <c>b * 2/255 - 1</c>.
     ///
     /// <para>Rows 17 and 18 are asserted as a PAIR, and so are 108 and 109. Either boundary moving by
     /// one is the whole failure.</para>
+    ///
+    /// <para>The three channels are painted <c>200</c>, <c>100</c> and <c>50</c> rather than one flat
+    /// grey, so the picture band's three readings are three DIFFERENT numbers — <c>0.5686</c>,
+    /// <c>-0.2157</c>, <c>-0.6078</c> — and a channel swap cannot hide inside a uniform frame.</para>
     /// </summary>
     [Fact]
     public void TheLetterboxPadIsBlack_AndThePictureBandSitsWhereTheTruncationPutsIt()
     {
         var info = new CameraFrameInfo(128, 91, 128 * 4, BottomUp: false);
-        var frame = Picture(info, (_, _) => (200, 200, 200));
+        var frame = Picture(info, (_, _) => (200, 100, 50));
         var tensor = new float[128 * 128 * 3];
 
         GazePreprocess.FillDetector(frame, info, tensor);
 
-        foreach (var channel in new[] { 0, 1, 2 })
-        {
-            Near(-1f, Read(tensor, 128, 64, 17, channel), $"pad row 17 channel {channel}");
-            Near(0.5686275f, Read(tensor, 128, 64, 18, channel), $"picture row 18 channel {channel}");
-            Near(0.5686275f, Read(tensor, 128, 64, 108, channel), $"picture row 108 channel {channel}");
-            Near(-1f, Read(tensor, 128, 64, 109, channel), $"pad row 109 channel {channel}");
-        }
+        // The pad above the picture, and the pad below it.
+        Assert.Equal(-1f, Read(tensor, 128, 64, 17, 0), Tolerance);
+        Assert.Equal(-1f, Read(tensor, 128, 64, 17, 1), Tolerance);
+        Assert.Equal(-1f, Read(tensor, 128, 64, 17, 2), Tolerance);
+        Assert.Equal(-1f, Read(tensor, 128, 64, 109, 0), Tolerance);
+        Assert.Equal(-1f, Read(tensor, 128, 64, 109, 1), Tolerance);
+        Assert.Equal(-1f, Read(tensor, 128, 64, 109, 2), Tolerance);
+
+        // The first and last rows of picture: 200, 100 and 50 through the [-1, 1] normalisation.
+        Assert.Equal(0.5686275f, Read(tensor, 128, 64, 18, 0), Tolerance);
+        Assert.Equal(-0.21568627f, Read(tensor, 128, 64, 18, 1), Tolerance);
+        Assert.Equal(-0.60784314f, Read(tensor, 128, 64, 18, 2), Tolerance);
+        Assert.Equal(0.5686275f, Read(tensor, 128, 64, 108, 0), Tolerance);
+        Assert.Equal(-0.21568627f, Read(tensor, 128, 64, 108, 1), Tolerance);
+        Assert.Equal(-0.60784314f, Read(tensor, 128, 64, 108, 2), Tolerance);
     }
 
     /// <summary>
@@ -341,10 +352,10 @@ public sealed class GazePreprocessTests
 
         GazePreprocess.FillCrop(frame, info, new GazeCrop(-31, 0, 64), 32, flip: false, tensor);
 
-        Near(0f, Read(tensor, 32, 14, 8, 0), "wholly outside the frame");
-        Near(0.19607843f, Read(tensor, 32, 15, 8, 0), "straddling the frame's edge");
-        Near(0.39215686f, Read(tensor, 32, 16, 8, 0), "wholly inside the frame");
-        Near(0.39215686f, Read(tensor, 32, 31, 8, 0), "the far side of the crop");
+        Assert.Equal(0f, Read(tensor, 32, 14, 8, 0), Tolerance);          // wholly outside the frame
+        Assert.Equal(0.19607843f, Read(tensor, 32, 15, 8, 0), Tolerance); // straddling its edge
+        Assert.Equal(0.39215686f, Read(tensor, 32, 16, 8, 0), Tolerance); // wholly inside
+        Assert.Equal(0.39215686f, Read(tensor, 32, 31, 8, 0), Tolerance); // the far side of the crop
     }
 
     /// <summary>
@@ -367,10 +378,10 @@ public sealed class GazePreprocessTests
 
         GazePreprocess.FillCrop(frame, info, new GazeCrop(-31, 0, 64), 32, flip: true, tensor);
 
-        Near(0f, Read(tensor, 32, 17, 8, 0), "mirrored: the black side is now on the right");
-        Near(0.19607843f, Read(tensor, 32, 16, 8, 0), "mirrored: the straddling column");
-        Near(0.39215686f, Read(tensor, 32, 15, 8, 0), "mirrored: the picture side is now on the left");
-        Near(0.39215686f, Read(tensor, 32, 0, 8, 0), "mirrored: the far side of the crop");
+        Assert.Equal(0f, Read(tensor, 32, 17, 8, 0), Tolerance);          // the black side, now right
+        Assert.Equal(0.19607843f, Read(tensor, 32, 16, 8, 0), Tolerance); // the straddling column
+        Assert.Equal(0.39215686f, Read(tensor, 32, 15, 8, 0), Tolerance); // the picture side, now left
+        Assert.Equal(0.39215686f, Read(tensor, 32, 0, 8, 0), Tolerance);  // the far side of the crop
     }
 
     /// <summary>
@@ -445,12 +456,12 @@ public sealed class GazePreprocessTests
         return flipped;
     }
 
-    /// <summary>One channel of one tensor pixel, channel-last.</summary>
+    /// <summary>One channel of one tensor pixel, channel-last. <b>The comparison stays at the call
+    /// site rather than moving into a <c>Near(expected, actual, where)</c> helper</b>, which is what
+    /// this file did first: a helper that owns the <c>Assert</c> makes every fact read as
+    /// assertion-free to <see cref="VacuousShapeDetector"/>, and four of these facts were caught by
+    /// it on the floor. The right answer was to make the assertion visible, not to write four
+    /// dispositions into the ledger.</summary>
     private static float Read(float[] tensor, int side, int x, int y, int channel) =>
         tensor[(((y * side) + x) * GazePreprocess.TensorChannels) + channel];
-
-    private static void Near(float expected, float actual, string where) =>
-        Assert.True(
-            MathF.Abs(expected - actual) <= Tolerance,
-            $"{where}: expected {expected} but read {actual} (difference {MathF.Abs(expected - actual)})");
 }
