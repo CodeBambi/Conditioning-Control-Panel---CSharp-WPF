@@ -76,7 +76,8 @@
  * which is NOT a third quality level - it is a hardware ceiling laid over
  * whichever rung the class resolved to, and it applies on FULL too. A coarse
  * pointer (or more than one touch point) puts `.ae-touch` on <html> for the
- * life of the class: four animated tiers instead of six, stills four deep
+ * life of the class: two animated tiers instead of six (pass 8; pass 6 dealt
+ * four, then the touch diet froze them all anyway), stills four deep
  * instead of three, three engine decoration videos instead of six, and
  * engine/style.js drops the backdrop-filter, the full-screen blend surfaces,
  * the scanline re-raster and the filters that sit over a live decode. iOS caps
@@ -96,6 +97,22 @@
  * The staging applies on desktop too (an intended cross-platform feel change);
  * the pure cost cuts riding it (tremor gate, pulseWater skip, the shorter
  * --de-n-depth transition, the bubble caps) are touch-only.
+ *
+ * PASS 8 (owner, 2026-08-25): DEEP TILES BREATHE AGAIN ON TOUCH. The pass-6
+ * diet's blanket `|| touch` still is gone; a phone deals loops from tier 5
+ * (SHALLOW_STILL_MAX_TIER_TOUCH stays 4) but only FACE_CAP_TOUCH = 2 animated
+ * tiers live at once, and the DEEPEST tiers hold those slots: a new deepest
+ * tier arriving past the cap demotes the shallowest animated tier to a fresh
+ * still (touch only, deterministic, re-dressed on the stamp beat - never in
+ * the input task). Face videos are paused for the slide window on touch
+ * (held at Phase 0 where busy arms, released at the land beat - flushChoreo
+ * fast-forward included) and pause everywhere with document.hidden and
+ * instance.pause, mirroring engine/loomWash. The fire-reward current stops
+ * smuggling an uncounted video url past the engine's decoder budget (a
+ * webm/mp4 draw is dropped so the burst routes through budgetedKind), and a
+ * face video that errors or shows no frame within FACE_VIDEO_STALL_MS falls
+ * back to a still for its tier. Desktop is pixel-identical except that
+ * budget accounting (and the invisible hidden/suspend pauses).
  *
  * PASS 4 (the owner's third note): THE PRESSURE - the CCP effects ladder and
  * the Balatro tremor live in pressure.js, DECK III. This file owns none of
@@ -400,6 +417,11 @@ export default {
     const faceUrls = new Map();            // tier -> {url, kind} | {broken:true}, frozen per class
     let faceLogged = false;
     let capLogged = false;
+    /* pass 8 - faces alive on touch */
+    let facesHeld = false;                 // the slide window holds face videos (touch only)
+    let faceVisWired = false;              // one visibilitychange listener per class
+    const faceDemotes = new Set();         // tiers demoted to a still, owed a re-dress at the stamp beat
+    const faceStalls = new Map();          // tile node -> {media, id}: the no-frame watchdog
     let stuckShown = false;
     /* pass 5 - THE PERF LADDER */
     let perfSetting = 'auto';              // de_perf: auto | full | lite
@@ -770,14 +792,24 @@ export default {
           img.setAttribute('playsinline', ''); img.setAttribute('preload', 'auto');
           img.addEventListener('loadeddata', () => {
             if (dead) return;
+            if (mediaOf(node) !== img) return;         // replaced while it was loading
+            const rec = faceStalls.get(node);          // pass 8: the watchdog is answered
+            if (rec && rec.media === img) { clearTimer(rec.id); faceStalls.delete(node); }
             node.classList.add('is-loaded');
+            /* pass 8: never nudge play into a paused window (the slide hold, a
+             * suspend, a hidden tab) - syncFaceVideos replays on release. */
+            if (facePlayBlocked()) return;
             try { const p = img.play(); if (p && typeof p.catch === 'function') p.catch(() => {}); } catch (e) { /* ignore */ }
           });
         } else {
           img.decoding = 'async';
           img.addEventListener('load', () => { if (!dead) node.classList.add('is-loaded'); });
         }
-        img.addEventListener('error', () => { if (!dead) faceBroken(node); });
+        img.addEventListener('error', () => {
+          if (dead) return;
+          if (mediaOf(node) !== img) return;           // a stale, replaced node's error is not this face's
+          if (video) faceVideoFailed(node); else faceBroken(node);
+        });
       } catch (e) { /* the double has no img semantics; fine */ }
     }
     /** The media node that can SHOW this url: the face's <img>, swapped for a
@@ -965,27 +997,20 @@ export default {
          * tiles nobody is looking at. */
         kind = 'still';
       } else if (kind === 'loop' && animatedFaces() >= faceCap()) {
-        kind = 'still';
-        if (!capLogged) { capLogged = true; say('faces: ' + faceCap() + ' animated tiers live - new tiers wear stills'); }
-      }
-      let url = null;
-      try {
-        /* NEVER DEAL A WORN URL while the pool can offer a different one. An
-         * online-only class opens on a remote pool of one or two clips (the
-         * host streams batches late), and a uniform draw handed that same clip
-         * to tier after tier - the complaint is a whole board wearing one
-         * video. Bounded: six draws, and the FIRST stands if every one comes
-         * back worn (a genuinely tiny pool may only have the one clip). */
-        const worn = new Set();
-        for (const f of faceUrls.values()) if (f && f.url) worn.add(f.url);
-        for (let i = 0; i < 6; i += 1) {
-          const got = pool.next(kind);
-          const u = got && got.url ? String(got.url) : null;
-          if (!u) break;
-          if (url == null) url = u;
-          if (!worn.has(u)) { url = u; break; }
+        /* PASS 8 - THE PROMOTION (touch only): the cap is 2 on a phone, and
+         * the DEEPEST tiers must be the ones breathing - without this, tiers
+         * 5+6 would keep the loops forever and every deeper arrival would
+         * freeze. A new tier DEEPER than the shallowest animated tier takes
+         * the loop slot; the shallowest is demoted to a fresh still and its
+         * tiles re-dress on the stamp beat (never in the input task -
+         * faceFor for a merged tier runs in the pop beat). Desktop keeps the
+         * pass-5 behavior byte-identical: first six animated tiers hold. */
+        if (!(touch && promoteLoopTo(tier))) {
+          kind = 'still';
+          if (!capLogged) { capLogged = true; say('faces: ' + faceCap() + ' animated tiers live - new tiers wear stills'); }
         }
-      } catch (e) { url = null; }
+      }
+      const url = dealFaceUrl(kind);
       if (!url) return null;
       const face = { url, kind };
       faceUrls.set(tier, face);
@@ -998,6 +1023,150 @@ export default {
       }
       return face;
     }
+    /** One url off the pool, deduped against every worn face. NEVER DEAL A
+     *  WORN URL while the pool can offer a different one: an online-only class
+     *  opens on a remote pool of one or two clips (the host streams batches
+     *  late), and a uniform draw handed that same clip to tier after tier -
+     *  the complaint is a whole board wearing one video. Bounded: six draws,
+     *  and the FIRST stands if every one comes back worn (a genuinely tiny
+     *  pool may only have the one clip). Shared by faceFor, the pass-8
+     *  promotion and the video-fail fallback - same machinery, no rng. */
+    function dealFaceUrl(kind) {
+      if (!pool || typeof pool.next !== 'function') return null;
+      let url = null;
+      try {
+        const worn = new Set();
+        for (const f of faceUrls.values()) if (f && f.url) worn.add(f.url);
+        for (let i = 0; i < 6; i += 1) {
+          const got = pool.next(kind);
+          const u = got && got.url ? String(got.url) : null;
+          if (!u) break;
+          if (url == null) url = u;
+          if (!worn.has(u)) { url = u; break; }
+        }
+      } catch (e) { url = null; }
+      return url;
+    }
+    /** PASS 8 - THE PROMOTION's demote half (touch only; see faceFor). Hand
+     *  the loop slot to `tier` by demoting the SHALLOWEST animated tier to a
+     *  fresh still. Deterministic: the shallowest is a pure min over the
+     *  frozen map, the still comes off the same worn-dedup deal. Returns true
+     *  when the slot was freed (the caller then deals `tier` its loop). The
+     *  demoted tier's tiles are NOT re-dressed here - the stamp beat owns
+     *  that (faceDemotes), so the swap never lands mid-slide. */
+    function promoteLoopTo(tier) {
+      let shallowest = 0;
+      for (const [tr, f] of faceUrls) {
+        if (!f || f.broken || f.kind !== 'loop') continue;
+        if (!shallowest || tr < shallowest) shallowest = tr;
+      }
+      if (!shallowest || shallowest >= tier) return false;
+      const still = dealFaceUrl('still');
+      if (!still || VIDEO_URL_RE.test(still)) return false;   // no honest still: the newcomer waits
+      faceUrls.set(shallowest, { url: still, kind: 'still' });
+      faceDemotes.add(shallowest);
+      say('faces: tier ' + shallowest + ' hands its loop to tier ' + tier + ' (touch cap ' + faceCap() + ') - re-dress on the stamp beat');
+      return true;
+    }
+    /** Re-dress every live tile of a tier against its (changed) faceUrls
+     *  entry. data-face is cleared first or dressFace would early-return on
+     *  the unchanged tier number. */
+    function redressTier(tier) {
+      for (const tile of board ? board.tiles : []) {
+        if (tile.silt || tile.tier !== tier) continue;
+        const node = tileEls.get(tile.id);
+        if (!node) continue;
+        node.setAttribute('data-face', '');
+        node.classList.remove('is-loaded');
+        dressFace(node, tile);
+      }
+    }
+    /** PASS 8 - the stamp beat's flush: demoted tiers swap video -> still
+     *  here, after the pops have landed, never in the input task. */
+    function flushFaceDemotes() {
+      if (!faceDemotes.size) return;
+      const tiers = [...faceDemotes];
+      faceDemotes.clear();
+      for (const tr of tiers) redressTier(tr);
+    }
+    /** PASS 8 - THE BELT (touch only, like the ceiling it guards): a face
+     *  <video> that errored (or sat frameless past FACE_VIDEO_STALL_MS) does
+     *  not blacklist the tier to plain the way a broken still does - the tier
+     *  falls back to a STILL first, so a phone whose decoder ceiling refused
+     *  the stream still shows media. Only when no honest still can be dealt
+     *  does the old faceBroken path run. Desktop keeps the pass-2 answer
+     *  (faceBroken) byte-identical. */
+    function faceVideoFailed(node) {
+      if (!touch) { faceBroken(node); return; }
+      const tier = Number(node.getAttribute('data-face'));
+      if (!(tier > 0)) return;
+      const f = faceUrls.get(tier);
+      if (!f || f.broken) return;
+      if (f.kind !== 'loop') { faceBroken(node); return; }     // its still failed too: plain
+      const still = dealFaceUrl('still');
+      if (!still || VIDEO_URL_RE.test(still)) { faceBroken(node); return; }
+      faceUrls.set(tier, { url: still, kind: 'still' });
+      say('faces: tier ' + tier + ' video failed or stalled - the tier falls back to a still');
+      redressTier(tier);
+    }
+    /** PASS 8 - arm the no-frame watchdog on a freshly dressed <video> face
+     *  (clears any previous watch for the node; an <img> face just clears).
+     *  TOUCH ONLY - the stall is an iOS decoder-ceiling symptom; desktop keeps
+     *  waiting exactly as before. Rides the class's pause-aware registry, so
+     *  a suspend does not tick. */
+    function armFaceStall(node, media) {
+      const prev = faceStalls.get(node);
+      if (prev) { clearTimer(prev.id); faceStalls.delete(node); }
+      if (!touch) return;
+      if (!media || String(media.tagName || '').toUpperCase() !== 'VIDEO') return;
+      const id = after(PLAYTEST.FACE_VIDEO_STALL_MS, () => {
+        faceStalls.delete(node);
+        if (dead) return;
+        if (mediaOf(node) !== media) return;                   // re-dressed under the timer
+        const tid = Number(node.getAttribute('data-id'));
+        if (tileEls.get(tid) !== node) return;                 // the tile left the board
+        if (node.classList.contains('is-loaded')) return;      // a frame arrived after all
+        faceVideoFailed(node);
+      });
+      faceStalls.set(node, { media, id });
+    }
+    /* ---- pass 8: the face-video pause windows --------------------------- */
+    /** True while face videos must not run: the slide window (touch), a
+     *  suspended class, a hidden tab. */
+    function facePlayBlocked() { return facesHeld || paused || hiddenTab(); }
+    /** Pause or (re)play every live face <video> against facePlayBlocked().
+     *  Cheap: one pass over live tiles, no layout reads; play() promises are
+     *  swallowed (an autoplay refusal is retried by the next sync). */
+    function syncFaceVideos() {
+      const stop = facePlayBlocked();
+      for (const node of tileEls.values()) {
+        const m = mediaOf(node);
+        if (!m || String(m.tagName || '').toUpperCase() !== 'VIDEO') continue;
+        try {
+          if (stop) m.pause();
+          else { const p = m.play(); if (p && typeof p.catch === 'function') p.catch(() => {}); }
+        } catch (e) { /* the double has no video semantics */ }
+      }
+    }
+    /** The slide window opens where busy arms (Phase 0's one DOM-write task).
+     *  TOUCH ONLY: desktop faces never pause mid-slide (pixel parity). */
+    function faceSlideHold() {
+      if (!touch || facesHeld) return;
+      facesHeld = true;
+      syncFaceVideos();
+    }
+    /** ...and closes at the land beat - which also fires inside flushChoreo's
+     *  fast-forward and the reduced/hidden/no-rAF sync collapse, so a face is
+     *  never left paused past its slide. */
+    function faceSlideRelease() {
+      if (!facesHeld) return;
+      facesHeld = false;
+      if (!dead) syncFaceVideos();
+    }
+    /** document.hidden mirror (engine/loomWash's pattern): pause on hide,
+     *  replay on show - unless another window still holds them. */
+    function onFaceVisibility() { if (!dead) syncFaceVideos(); }
+
     /** Dress (or re-dress after a merge) a tile with its tier's face. Never
      *  blocks a draw: the plain body shows until the image has a frame. */
     function dressFace(node, tile) {
@@ -1019,6 +1188,7 @@ export default {
       node.classList.remove('is-loaded');
       const media = mediaNodeFor(node, face.url) || img;
       try { media.src = face.url; } catch (e) { /* ignore */ }
+      armFaceStall(node, media);             // pass 8: a video face owes a frame within the stall window
     }
     /** A url that failed: this tier goes plain for the rest of the class (no retry storm). */
     function faceBroken(node) {
@@ -1073,14 +1243,7 @@ export default {
         worn.add(fresh);
         faceUrls.set(tier, { url: fresh, kind: f.kind });
         healed = true;
-        for (const tile of board ? board.tiles : []) {
-          if (tile.silt || tile.tier !== tier) continue;
-          const node = tileEls.get(tile.id);
-          if (!node) continue;
-          node.setAttribute('data-face', '');
-          node.classList.remove('is-loaded');
-          dressFace(node, tile);
-        }
+        redressTier(tier);
       }
       if (healed) say('faces: duplicate tier clips re-dealt (the pool grew)');
     }
@@ -1396,6 +1559,7 @@ export default {
       clearHint();
       deck('trickster', 'stalled', 0);
       busy = true;
+      faceSlideHold();                      // pass 8 (touch): decoders yield the slide window; no layout read
       const moveMs = reduced ? PLAYTEST.MOVE_MS_REDUCED : PLAYTEST.MOVE_MS;
 
       /* 1. slide: vars only; victims ride to the merge cell and dissolve.
@@ -1656,6 +1820,7 @@ export default {
     /** Slide-end: the spawn's node lands, the chips read true. */
     function landBeat(rec) {
       if (dead) return;
+      faceSlideRelease();                   // pass 8: the slide is on screen - faces breathe again
       if (rec.spawnTile && board && !ended) {
         const tile = board.tiles.find((x) => x.id === rec.spawnTile.id);
         if (tile) tileEl(tile, true);
@@ -1715,6 +1880,7 @@ export default {
       if (dead) return;
       paintChain();
       markDeepest();
+      flushFaceDemotes();                   // pass 8: the demoted tier swaps video -> still on THIS beat
       if (board && !isLocked(board) && !ended) strainCheck();
       const d = rec.newDeepest;
       if (!d) return;
@@ -1864,6 +2030,16 @@ export default {
       } catch (e) { /* the engine picks its own spot */ }
       let url;
       try { if (pool && typeof pool.next === 'function') { const got = pool.next('loop'); url = got && got.url ? got.url : undefined; } } catch (e) { url = undefined; }
+      /* PASS 8 - BUDGET HONESTY: an explicit opts.url BYPASSES the engine's
+       * shared decoder budget (oneshots.js `opts.url ||` - the caller's choice
+       * is never second-guessed), so this burst stacked up to 3 UNCOUNTED
+       * <video> decoders on top of the face videos. A gif/image draw still
+       * rides through (the player's own media, budget-irrelevant); a webm/mp4
+       * draw is dropped so the burst routes through budgetedKind('loop') -
+       * counted, and answered with a still once the (touch) budget is spent.
+       * This accounting applies on desktop too - the one intended
+       * cross-platform behavior change of this pass. */
+      if (url && VIDEO_URL_RE.test(String(url))) url = undefined;
       fireSafe('gif_burst', { count: 3, variant: 'scatter', x, y, url, assetKind: 'loop', holdMs: 900 });
     }
 
@@ -2488,11 +2664,18 @@ export default {
         {
           const want = String(ctx.settings && ctx.settings.de_tile_faces != null ? ctx.settings.de_tile_faces : 'media').trim().toLowerCase();
           facesMode = FACE_MODES.includes(want) ? want : 'media';
-          /* pass 6: `touch` joins the still conditions - from tier 5 a phone
-             could otherwise hold up to 4 concurrent <video> faces, and iOS
-             thrashes past its hardware decode session cap. */
-          faceKind = (reduced || motionLevelOf() <= 1 || facesMode === 'still' || touch) ? 'still' : 'loop';
+          /* pass 8: `touch` LEFT the still conditions (the owner wants the
+             deep tiles breathing on phones again). The iOS decoder ceiling is
+             held by the numbers instead: FACE_CAP_TOUCH 2, the deepest-tier
+             promotion, and the slide-window pause. reduced motion, motionLevel
+             <= 1 and the explicit 'still' setting stay hard stops; lite keeps
+             its own caps through faceCap()/shallowStillMaxTier() (lite never
+             forced stills - it rations them). */
+          faceKind = (reduced || motionLevelOf() <= 1 || facesMode === 'still') ? 'still' : 'loop';
           faceUrls.clear();
+          facesHeld = false;
+          faceDemotes.clear();
+          faceStalls.clear();                // ids died with the registry; the map must not outlive them
         }
         // the plan's own draws do not depend on the budget; a free swim deals the
         // same seeded show a 300s class would (never Infinity into the clamp)
@@ -2514,6 +2697,16 @@ export default {
 
         try { injectDeepEndStyle(); } catch (e) { say('style inject failed (class unaffected): ' + ((e && e.message) || e)); }
         buildDom();
+        /* pass 8: face videos pause with the page (engine/loomWash's pattern).
+         * One listener per class; destroy takes it off. */
+        if (!faceVisWired) {
+          try {
+            if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+              document.addEventListener('visibilitychange', onFaceVisibility);
+              faceVisWired = true;
+            }
+          } catch (e) { /* a double without events; fine */ }
+        }
 
         const capsOk = !(ctx.caps && Number(ctx.caps.bgIntensity) === 0);
         try {
@@ -2637,12 +2830,14 @@ export default {
         clearQueue();
         deck('pressure', 'pause');
         if (stage) stage.classList.add('suspended');
+        syncFaceVideos();                    // pass 8: a frozen class spins no decoders
       },
 
       resume() {
         if (!paused) return;
         paused = false;
         if (stage) stage.classList.remove('suspended');
+        syncFaceVideos();                    // pass 8: faces replay (unless the slide window or a hidden tab still holds them)
         deck('pressure', 'resume');
         lastTick = Date.now();
         const q = deferred.splice(0);
@@ -2665,6 +2860,10 @@ export default {
           grabRaf = 0;
         }
         opened = false;
+        if (faceVisWired) {
+          try { document.removeEventListener('visibilitychange', onFaceVisibility); } catch (e) { /* noop */ }
+          faceVisWired = false;
+        }
         try { if (surfaceBtn) surfaceBtn.removeEventListener('click', onSurface); } catch (e) { /* noop */ }
         surfaceBtn = null;
         stopClock();
@@ -2707,6 +2906,7 @@ export default {
         diveDeepest = boardDeepest(board);
         bestDeepest = Math.max(bestDeepest, diveDeepest);
         markDeepest();
+        flushFaceDemotes();                  // pass 8: a staged deal may have promoted; settle the swap now
         paintHud();
         heat();
       },
@@ -2729,6 +2929,8 @@ export default {
           jackpots, currents, subFlashes, shimmers, strains, stallMs, currentHeat, driftOn,
           endless, surfaced, ceilingCelebrated, surfaceBtn, secLeft: secLeft(), clockTruth: clockText(),
           facesMode, faceKind, faces: faceUrls.size, animatedFaces: animatedFaces(),
+          /* pass 8 - faces alive on touch */
+          facesHeld, faceDemotesPending: faceDemotes.size,
           /* pass 5 - THE PERF LADDER */
           perf, perfReason, perfSetting, perfProbeDone,
           faceCap: faceCap(), shallowStillMaxTier: shallowStillMaxTier(),
