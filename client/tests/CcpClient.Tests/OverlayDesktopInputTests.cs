@@ -23,6 +23,22 @@ namespace CcpClient.Tests;
 /// The X11 and Wayland halves of both invariants remain entirely unmeasured, and a green run here
 /// says nothing about them.</para>
 ///
+/// <para><b>THE ONE PRECONDITION THESE FACTS REFUSE ON, and it is a machine class rather than a
+/// quarantine.</b> A window owned by ANOTHER PROCESS can hold a point of the drag path against every
+/// re-assertion this run is able to make — a system shell surface did it here, named from a TRX:
+/// <c>the window manager gives (1453,814) to 0x10420 (class "Windows.UI.Core.CoreWindow") even with
+/// this run's own stack re-asserted over it</c>. The lease cannot exclude that (it is not this
+/// port's harness) and the drag's own hold cannot win it (it is not a race this port can win). So
+/// every leg's whole path is walked BEFORE anything is injected
+/// (<see cref="PointerWindowProbe.HoldWholeDragPath"/>) and the four drag facts refuse by name
+/// instead of reporting the desktop's contention as a broken drag channel. <b>It refuses on nothing
+/// else</b>: a point held by a window of OURS is not this condition and still fails, and both
+/// directions of that rule are measured against a real second process by
+/// <see cref="AForeignWindowOverTheDragPathIsREFUSEDByName_AndAPathInsideOurOwnWindowIsNOTRefused"/>.
+/// The refusal reports as <c>NotExecuted</c> carrying its reason, so each of the four names must be
+/// pinned in <c>client/tests/floor/floor.json</c>'s <c>allowedSkips</c> under its admission
+/// rule.</para>
+///
 /// <para><b>What a green run still does not prove.</b> That a human sees anything: composition,
 /// rendering and the pointer's visible position are headed claims
 /// (<c>client/docs/verification-harness.md</c>). And that a DISPLAY transition restores desktop
@@ -50,6 +66,13 @@ public class OverlayDesktopInputTests : RealDesktopFacts
         var run = Run;
         var expected = run.MachineHasInteractiveDesktop;
         var baseline = run.BaselinePass;
+
+        // THE MACHINE-CLASS REFUSAL, taken before any reading is judged. See the class remarks: a
+        // window of ANOTHER PROCESS holding a point of this leg's drag path is a property of the
+        // desktop that no in-process mechanism can take back, and the pre-flight that detects it ran
+        // before this leg injected anything. It names the window; it is silent on a clean desktop.
+        var foreign = OverlayDesktopInputObservations.ForeignHoldOnTheDragPath(baseline);
+        Assert.SkipWhen(foreign.Contended, foreign.Refusal);
 
         Assert.True(run.UnderneathIsUp == expected,
             $"the probe's own counting window is not on the desktop at {OverlayDesktopInputObservations.UnderneathBounds}. "
@@ -153,6 +176,103 @@ public class OverlayDesktopInputTests : RealDesktopFacts
     }
 
     /// <summary>
+    /// <b>THE REFUSAL'S OWN CONTROL, IN BOTH DIRECTIONS, IN ONE RUN ON ONE DESKTOP.</b>
+    ///
+    /// <para>Four facts in this file now refuse when a window of ANOTHER PROCESS holds a point of
+    /// the drag path (<see cref="PointerWindowProbe.HoldWholeDragPath"/>), because a system shell
+    /// surface can hold one against every re-assertion this run is able to make — measured, and
+    /// captured from a TRX rather than argued: <c>drag path 0/8 steps delivered — the first that did
+    /// not arrive was aimed at (1453,814), which the window manager gives to 0x10420 (class
+    /// "Windows.UI.Core.CoreWindow") even with this run's own stack re-asserted over it</c>.</para>
+    ///
+    /// <para><b>A precondition is only worth having if BOTH of its answers are measured.</b> One
+    /// that never fires leaves the intermittent exactly where it was; one that fires readily deletes
+    /// four facts and nobody finds out, which is the vacuous green this port keeps paying for. So a
+    /// real second process places a real top-most window beside ours, and the SAME walk is taken
+    /// twice with only the travel differing: across the foreign window it must refuse AND name that
+    /// window's exact handle, and inside our own window it must not refuse — having walked every
+    /// point to be able to say so.</para>
+    ///
+    /// <para><b>The index is asserted, and it is the finding in one number.</b> The press point and
+    /// the first three steps are ours; the refusal comes from point
+    /// <see cref="OverlayDesktopInputObservations.FirstCrossedPoint"/>. A pre-flight that only asked
+    /// about the press point — which is all the callers ever did before this — would have passed
+    /// this rig and let the drag run into somebody else's window.</para>
+    ///
+    /// <para><b>What it does NOT establish.</b> That the refusal fires against an OCCLUDING foreign
+    /// window: two overlapping top-most windows are a race no user-mode process can win
+    /// deterministically, and <see cref="OverlayDesktopInputObservations.InterloperBounds"/> states
+    /// that limit rather than hiding it. The rule under test is "a foreign window owns a point of
+    /// the path", and that is exactly what is constructed here. Windows only: <c>WindowFromPoint</c>
+    /// and the top-most band have no X11 or Wayland counterpart, and every reading flips to the
+    /// no-desktop shape there.</para>
+    /// </summary>
+    [Fact]
+    public void AForeignWindowOverTheDragPathIsREFUSEDByName_AndAPathInsideOurOwnWindowIsNOTRefused()
+    {
+        var run = OverlayDesktopInputObservations.ForeignHold;
+        var expected = run.MachineHasInteractiveDesktop;
+
+        // ---- the rig, proved before either direction is read ----
+        Assert.True(run.OursIsUp == expected,
+            $"this run's own window is not on the desktop at {OverlayDesktopInputObservations.PreflightBounds}, so "
+            + $"the press point below belongs to nobody. {run.Trace}");
+        Assert.True(run.InterloperIsUp == expected,
+            $"the child process put no window on the desktop at {OverlayDesktopInputObservations.InterloperBounds}, "
+            + $"so there is nothing foreign for the pre-flight to refuse and both directions below are empty. "
+            + $"{run.Trace}");
+        Assert.True((run.InterloperProcess != 0 && run.InterloperProcess != Environment.ProcessId) == expected,
+            "the interloper is not owned by ANOTHER process, and the pre-flight refuses on nothing else — a window "
+            + $"of ours can never satisfy it, which is the whole reason it cannot become an escape hatch. "
+            + $"{run.Trace}");
+        Assert.True((run.OwnerOfInterloperCentre == run.Interloper) == expected,
+            $"the window manager gives the interloper's own centre to "
+            + $"{PointerWindowProbe.DescribeWindow(run.OwnerOfInterloperCentre)} rather than to the interloper, so "
+            + $"the refusal below would be about some third window that happened to be there. {run.Trace}");
+
+        // THE ANTI-VACUITY CLAUSE OF THE WHOLE FACT: the press point must be OURS. Without it the
+        // refusal below could be earned by the very first point and would say nothing about a PATH.
+        Assert.True((run.OwnerOfPressPoint == run.Ours) == expected,
+            $"the window manager gives the press point to {PointerWindowProbe.DescribeWindow(run.OwnerOfPressPoint)} "
+            + $"rather than to this run's own window, so the crossing path below starts foreign and its refusal "
+            + $"would prove nothing about the path. {run.Trace}");
+
+        // ---- direction one: it REFUSES, and it names the window ----
+        Assert.True(run.AcrossTheInterloper.Contended == expected,
+            "the pre-flight did NOT refuse a drag path that crosses a window owned by another process. The four "
+            + $"drag facts in this file would then run their drag into that window and report the machine's "
+            + $"contention as a broken drag channel, which is the intermittent this was built to replace. "
+            + $"{run.Trace}");
+        Assert.True((run.AcrossTheInterloper.Owner == run.Interloper) == expected,
+            $"the pre-flight refused, but it names {PointerWindowProbe.DescribeWindow(run.AcrossTheInterloper.Owner)} "
+            + $"instead of the interloper {PointerWindowProbe.DescribeWindow(run.Interloper)}. A refusal that names "
+            + $"the wrong window is worse than none: it sends the next reader after the wrong process. {run.Trace}");
+        Assert.True(
+            run.AcrossTheInterloper.Index == (expected ? OverlayDesktopInputObservations.FirstCrossedPoint : -1),
+            $"the refusal came from point {run.AcrossTheInterloper.Index} of the path where the geometry puts the "
+            + $"first crossing at {OverlayDesktopInputObservations.FirstCrossedPoint}. Point 0 is the PRESS point, "
+            + "so an index of 0 would mean this fact never measured a path at all — which is exactly the pre-flight "
+            + $"a press-point-only check would have been. {run.Trace}");
+        Assert.True(
+            run.AcrossTheInterloper.Refusal.Contains($"0x{run.Interloper:X}", StringComparison.Ordinal) == expected,
+            "the refusal text a skipped run reports does not contain the offending window's handle, so the reader "
+            + $"gets a skip with no name in it — the thing this whole mechanism exists to deliver. It said: "
+            + $"{run.AcrossTheInterloper.Refusal}");
+
+        // ---- direction two: it does NOT refuse, and it walked the whole path to say so ----
+        Assert.False(run.InsideOurOwnWindow.Contended,
+            "the pre-flight refused an ordinary drag path wholly inside this run's OWN window, on the same desktop "
+            + "moments after the crossing path was walked. A refusal that fires when the desktop is fine deletes "
+            + $"four facts and nobody ever finds out. {run.Trace}");
+        Assert.True(
+            run.InsideOurOwnWindow.Walked == (expected ? OverlayDesktopInputObservations.DragPathPointCount : 0),
+            $"the pre-flight answered CLEAR after walking {run.InsideOurOwnWindow.Walked} of "
+            + $"{OverlayDesktopInputObservations.DragPathPointCount} points. A walk that stopped early and a path "
+            + "that is genuinely clear must never read the same, or the refusal quietly stops looking at most of "
+            + $"the path. {run.Trace}");
+    }
+
+    /// <summary>
     /// <b>THE INVARIANT THE ROW WAS OPENED FOR.</b> With a click-through overlay covering the point,
     /// the desktop underneath still takes a CLICK, a DRAG, a SCROLL and a keystroke it can TYPE.
     ///
@@ -174,6 +294,11 @@ public class OverlayDesktopInputTests : RealDesktopFacts
         var expected = run.MachineHasInteractiveDesktop;
         var before = run.BaselinePass;
         var during = run.PassThroughPass;
+
+        // BOTH legs, because every count below is a comparison between them: a leg whose drag was
+        // never driven contaminates the side of the comparison it sits on.
+        var foreign = OverlayDesktopInputObservations.ForeignHoldOnTheDragPath(before, during);
+        Assert.SkipWhen(foreign.Contended, foreign.Refusal);
 
         Assert.True(
             expected ? run.PresentState is CapabilityState.Available : run.PresentState is CapabilityState.Unavailable,
@@ -323,6 +448,12 @@ public class OverlayDesktopInputTests : RealDesktopFacts
         var during = run.PassThroughPass;
         var restored = run.RestoredPass;
 
+        // Both legs this fact compares, and only those two: a foreign window during the teardown
+        // leg has nothing to do with this reading, and refusing more widely than the evidence
+        // requires is how a precondition turns into an escape hatch.
+        var foreign = OverlayDesktopInputObservations.ForeignHoldOnTheDragPath(during, restored);
+        Assert.SkipWhen(foreign.Contended, foreign.Refusal);
+
         Assert.True(
             expected
                 ? run.RestoreState is CapabilityState.Available
@@ -379,6 +510,9 @@ public class OverlayDesktopInputTests : RealDesktopFacts
         var expected = run.MachineHasInteractiveDesktop;
         var restored = run.RestoredPass;
         var after = run.WithdrawnPass;
+
+        var foreign = OverlayDesktopInputObservations.ForeignHoldOnTheDragPath(restored, after);
+        Assert.SkipWhen(foreign.Contended, foreign.Refusal);
 
         Assert.True(
             expected

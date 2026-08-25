@@ -2156,6 +2156,54 @@
       "expectDetected": true,
       "verdict": "not-vacuous",
       "reason": "File.Exists/Directory.Exists appears only inside Assert.True at body depth 0 (the payload-root check sits inside a foreach whose emptiness is separately pinned by the globbedRoots.Count > 0 assertion above it) — the predicate IS the assertion; an absent read-only tree or a missing committed model file FAILS the fact rather than silencing it, which is the refuses-to-skip posture a notices guard needs"
+    },
+    {
+      "key": "CcpClient.Tests/OverlayDesktopInputTests.cs::OverlayDesktopInputTests.TheDesktopUnderThisPointTakesAllFourChannels_OrEveryReadingBelowIsATestOfNothingHappening",
+      "path": "CcpClient.Tests/OverlayDesktopInputTests.cs",
+      "line": 64,
+      "method": "OverlayDesktopInputTests.TheDesktopUnderThisPointTakesAllFourChannels_OrEveryReadingBelowIsATestOfNothingHappening",
+      "shapes": [
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "MACHINE GATE OVER THE DESKTOP, not a silenced assertion. This fact reads a DRAG count driven over a nine-point path on the real desktop, and a window owned by ANOTHER PROCESS can hold a point of that path against every re-assertion this run is able to make - captured from a TRX rather than argued: the window manager gave (1453,814) to 0x10420, class Windows.UI.Core.CoreWindow, even with this run's own stack re-asserted over it. The machine-wide RealDesktopLease cannot exclude that window (a system shell surface, not this port's harness) and the drag's own per-step hold cannot win it (a shell band is not a race a user-mode process can win), so the leg's whole path is walked BEFORE anything is injected (PointerWindowProbe.HoldWholeDragPath) and the fact refuses by name instead of driving a drag into somebody else's window and reporting the machine's contention as a broken drag channel. THE PRECONDITION IS DELIBERATELY NARROW AND CANNOT BECOME AN ESCAPE HATCH: it fires only when the owner belongs to a different PROCESS, only after MaxRaiseAttempts applications of this leg's own hold have failed to take the point back, and never off Windows where every handle reads 0 - a point held by a window of OURS is not this condition and still FAILS. Both directions are measured in-suite against a real second process by OverlayDesktopInputTests.AForeignWindowOverTheDragPathIsREFUSEDByName_AndAPathInsideOurOwnWindowIsNOTRefused, which reds on all four mutations tried: a predicate that never fires, one that fires for our own windows, a walk truncated to the press point, and a walk truncated to six of nine points. The gate is Assert.SkipWhen, so a refusal REPORTS as NotExecuted carrying the offending window's handle, class and pid, and the name must be pinned in floor.json allowedSkips under the admission rule. Every assertion below the gate is unchanged and unconditional."
+    },
+    {
+      "key": "CcpClient.Tests/OverlayDesktopInputTests.cs::OverlayDesktopInputTests.AClickThroughOverlayPassesCLICKDRAGSCROLLandTYPE_NotOnlyTheClick",
+      "path": "CcpClient.Tests/OverlayDesktopInputTests.cs",
+      "line": 291,
+      "method": "OverlayDesktopInputTests.AClickThroughOverlayPassesCLICKDRAGSCROLLandTYPE_NotOnlyTheClick",
+      "shapes": [
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "MACHINE GATE OVER THE DESKTOP, not a silenced assertion. This fact reads a DRAG count driven over a nine-point path on the real desktop, and a window owned by ANOTHER PROCESS can hold a point of that path against every re-assertion this run is able to make - captured from a TRX rather than argued: the window manager gave (1453,814) to 0x10420, class Windows.UI.Core.CoreWindow, even with this run's own stack re-asserted over it. The machine-wide RealDesktopLease cannot exclude that window (a system shell surface, not this port's harness) and the drag's own per-step hold cannot win it (a shell band is not a race a user-mode process can win), so the leg's whole path is walked BEFORE anything is injected (PointerWindowProbe.HoldWholeDragPath) and the fact refuses by name instead of driving a drag into somebody else's window and reporting the machine's contention as a broken drag channel. THE PRECONDITION IS DELIBERATELY NARROW AND CANNOT BECOME AN ESCAPE HATCH: it fires only when the owner belongs to a different PROCESS, only after MaxRaiseAttempts applications of this leg's own hold have failed to take the point back, and never off Windows where every handle reads 0 - a point held by a window of OURS is not this condition and still FAILS. Both directions are measured in-suite against a real second process by OverlayDesktopInputTests.AForeignWindowOverTheDragPathIsREFUSEDByName_AndAPathInsideOurOwnWindowIsNOTRefused, which reds on all four mutations tried: a predicate that never fires, one that fires for our own windows, a walk truncated to the press point, and a walk truncated to six of nine points. The gate is Assert.SkipWhen, so a refusal REPORTS as NotExecuted carrying the offending window's handle, class and pid, and the name must be pinned in floor.json allowedSkips under the admission rule. Every assertion below the gate is unchanged and unconditional."
+    },
+    {
+      "key": "CcpClient.Tests/OverlayDesktopInputTests.cs::OverlayDesktopInputTests.RestoringClickThroughGivesAllFourChannelsBack_AndTheSameClickThenDOESActivateWhatIsUnderneath",
+      "path": "CcpClient.Tests/OverlayDesktopInputTests.cs",
+      "line": 444,
+      "method": "OverlayDesktopInputTests.RestoringClickThroughGivesAllFourChannelsBack_AndTheSameClickThenDOESActivateWhatIsUnderneath",
+      "shapes": [
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "MACHINE GATE OVER THE DESKTOP, not a silenced assertion. This fact reads a DRAG count driven over a nine-point path on the real desktop, and a window owned by ANOTHER PROCESS can hold a point of that path against every re-assertion this run is able to make - captured from a TRX rather than argued: the window manager gave (1453,814) to 0x10420, class Windows.UI.Core.CoreWindow, even with this run's own stack re-asserted over it. The machine-wide RealDesktopLease cannot exclude that window (a system shell surface, not this port's harness) and the drag's own per-step hold cannot win it (a shell band is not a race a user-mode process can win), so the leg's whole path is walked BEFORE anything is injected (PointerWindowProbe.HoldWholeDragPath) and the fact refuses by name instead of driving a drag into somebody else's window and reporting the machine's contention as a broken drag channel. THE PRECONDITION IS DELIBERATELY NARROW AND CANNOT BECOME AN ESCAPE HATCH: it fires only when the owner belongs to a different PROCESS, only after MaxRaiseAttempts applications of this leg's own hold have failed to take the point back, and never off Windows where every handle reads 0 - a point held by a window of OURS is not this condition and still FAILS. Both directions are measured in-suite against a real second process by OverlayDesktopInputTests.AForeignWindowOverTheDragPathIsREFUSEDByName_AndAPathInsideOurOwnWindowIsNOTRefused, which reds on all four mutations tried: a predicate that never fires, one that fires for our own windows, a walk truncated to the press point, and a walk truncated to six of nine points. The gate is Assert.SkipWhen, so a refusal REPORTS as NotExecuted carrying the offending window's handle, class and pid, and the name must be pinned in floor.json allowedSkips under the admission rule. Every assertion below the gate is unchanged and unconditional."
+    },
+    {
+      "key": "CcpClient.Tests/OverlayDesktopInputTests.cs::OverlayDesktopInputTests.WithdrawingTheOverlayRestoresAllFourInputChannels_NotOnlyTheHitTest",
+      "path": "CcpClient.Tests/OverlayDesktopInputTests.cs",
+      "line": 507,
+      "method": "OverlayDesktopInputTests.WithdrawingTheOverlayRestoresAllFourInputChannels_NotOnlyTheHitTest",
+      "shapes": [
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "MACHINE GATE OVER THE DESKTOP, not a silenced assertion. This fact reads a DRAG count driven over a nine-point path on the real desktop, and a window owned by ANOTHER PROCESS can hold a point of that path against every re-assertion this run is able to make - captured from a TRX rather than argued: the window manager gave (1453,814) to 0x10420, class Windows.UI.Core.CoreWindow, even with this run's own stack re-asserted over it. The machine-wide RealDesktopLease cannot exclude that window (a system shell surface, not this port's harness) and the drag's own per-step hold cannot win it (a shell band is not a race a user-mode process can win), so the leg's whole path is walked BEFORE anything is injected (PointerWindowProbe.HoldWholeDragPath) and the fact refuses by name instead of driving a drag into somebody else's window and reporting the machine's contention as a broken drag channel. THE PRECONDITION IS DELIBERATELY NARROW AND CANNOT BECOME AN ESCAPE HATCH: it fires only when the owner belongs to a different PROCESS, only after MaxRaiseAttempts applications of this leg's own hold have failed to take the point back, and never off Windows where every handle reads 0 - a point held by a window of OURS is not this condition and still FAILS. Both directions are measured in-suite against a real second process by OverlayDesktopInputTests.AForeignWindowOverTheDragPathIsREFUSEDByName_AndAPathInsideOurOwnWindowIsNOTRefused, which reds on all four mutations tried: a predicate that never fires, one that fires for our own windows, a walk truncated to the press point, and a walk truncated to six of nine points. The gate is Assert.SkipWhen, so a refusal REPORTS as NotExecuted carrying the offending window's handle, class and pid, and the name must be pinned in floor.json allowedSkips under the admission rule. Every assertion below the gate is unchanged and unconditional."
     }
   ]
 }
