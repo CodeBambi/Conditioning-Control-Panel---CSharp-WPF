@@ -259,6 +259,84 @@ public class VisualsModuleTests
         Assert.Equal(1, presence.WithdrawCalls);
     }
 
+    /// <summary>
+    /// <b>At the top of the scale dial a flash is EXACTLY the monitor in whichever axis constrains
+    /// it, and this is the arithmetic behind the owner's reported full white screen.</b>
+    ///
+    /// <para>Reproduced headed on 2026-08-26 with Flash Images armed ALONE at the clamps:
+    /// <b>80.65 % of a 2880x1800 virtual screen read near-white</b> (every channel ≥ 240; 80.32 % at
+    /// ≥ 250) for about a second. The owning window was a
+    /// <c>CcpClientOverlaySurface.&lt;guid&gt;</c> popup at <c>LWA_ALPHA</c> <b>255</b>, rect
+    /// <c>(50, 54, 2880 x 1617)</c> — and 2880 is this monitor's own width. Its OWN buffer read
+    /// 97.05 % near-white with mean (253.7, 253.7, 253.7) through both <c>GetWindowDC</c>+<c>BitBlt</c>
+    /// and <c>PrintWindow</c>, so the pixels were PAINTED white rather than composited wrongly; the
+    /// white came from a white frame of the user's own animated GIF, which the rasteriser drew
+    /// faithfully.</para>
+    ///
+    /// <para><b>Why it fills the screen is a multiplication, not a bug:</b>
+    /// <see cref="FlashGeometry.BaseFraction"/> is 0.4 and
+    /// <see cref="VisualsPresetDocument.MaxImageScalePercent"/> is 250, and 0.4 x 2.5 is exactly 1.
+    /// That is upstream's own <c>CalculateGeometry</c> (<c>Services/Flash/FlashService.cs:2292-2301</c>)
+    /// — so it is PARITY and not a port defect — but it was nobody's stated fact until the
+    /// reproduction found it, and a user at the top of the dial gets a monitor-sized opaque rectangle
+    /// of their own media. Moving either constant silently changes how much of the screen a flash can
+    /// take, which is why both ends are pinned here.</para>
+    ///
+    /// <para>The truncation slack is one pixel and it is real: <c>Size</c> takes <c>(int)</c> of
+    /// <c>source * ratio</c> (<c>Effects/FlashGeometry.cs:60-62</c>), so a ratio that lands a hair
+    /// under an integer loses a pixel. Nothing here claims a human saw a flash.</para>
+    /// </summary>
+    [Theory]
+    // Six aspect ratios so the CONSTRAINING axis is not the same one every time: the first two are
+    // the sources that actually produced the reproduction, then portrait, square, and two strips
+    // extreme enough that the other axis hits FlashGeometry's 50 px floor.
+    [InlineData(455, 337)]
+    [InlineData(540, 304)]
+    [InlineData(600, 800)]
+    [InlineData(1000, 1000)]
+    [InlineData(4000, 100)]
+    [InlineData(100, 4000)]
+    public void AtTheTopOfTheScaleDial_AFlashIsTheWholeMonitorInItsConstrainingAxis(
+        int sourceWidth, int sourceHeight)
+    {
+        var (width, height) = FlashGeometry.Size(
+            sourceWidth, sourceHeight, Display.Width, Display.Height,
+            VisualsPresetDocument.MaxImageScalePercent);
+
+        Assert.True(
+            width <= Display.Width && height <= Display.Height,
+            $"a {sourceWidth}x{sourceHeight} source at the scale ceiling asked for {width}x{height}, "
+            + $"which is LARGER than the {Display.Width}x{Display.Height} monitor it is fitted into");
+
+        Assert.True(
+            width >= Display.Width - 1 || height >= Display.Height - 1,
+            $"a {sourceWidth}x{sourceHeight} source at the scale ceiling asked for only {width}x{height} "
+            + $"on a {Display.Width}x{Display.Height} monitor. BaseFraction x MaxImageScalePercent/100 is "
+            + "no longer 1, so the top of the user's scale dial no longer means 'as big as the screen' — "
+            + "which is a behaviour change upstream's CalculateGeometry does not have "
+            + "(FlashService.cs:2292-2301)");
+
+        // The other end of the same multiplication: at the DEFAULT scale the constraining axis is
+        // 40 % of the monitor and nothing like all of it. Without this half, halving the ceiling to
+        // 200 and raising the base box to 0.5 keeps the product at 1 and passes everything above.
+        //
+        // UPSTREAM'S NUMBER, WRITTEN OUT (FlashService.cs:2292-2293: "Base size is 40% of monitor
+        // dimensions"). Reading FlashGeometry.BaseFraction here instead would make the assertion
+        // TAUTOLOGICAL — it moves with the mutation — and that is not a hypothetical: the first
+        // draft did exactly that and the 0.5-base/200-ceiling mutation walked straight through it.
+        const double upstreamBaseFraction = 0.4;
+        Assert.Equal(upstreamBaseFraction, FlashGeometry.BaseFraction);
+
+        var (baseWidth, baseHeight) = FlashGeometry.Size(
+            sourceWidth, sourceHeight, Display.Width, Display.Height,
+            VisualsPresetDocument.DefaultImageScalePercent);
+        Assert.True(
+            baseWidth <= (Display.Width * upstreamBaseFraction) + 1
+                && baseHeight <= (Display.Height * upstreamBaseFraction) + 1,
+            $"at the DEFAULT scale a {sourceWidth}x{sourceHeight} source asked for {baseWidth}x{baseHeight}, "
+            + "which exceeds the 40 %-of-monitor base box upstream fits it into");
+    }
+
     [Fact]
     public void WithNoDialsAtAll_ThePresenterDrawsExactlyWhatItDrewBeforeSp117()
     {

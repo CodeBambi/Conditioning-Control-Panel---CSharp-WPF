@@ -2,6 +2,7 @@ using System.Reflection;
 using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Lifecycle;
+using CcpClient.Desktop.Overlay;
 using CcpClient.Desktop.Persistence;
 using CcpClient.Desktop.Session;
 using Xunit;
@@ -95,6 +96,44 @@ public class PinkFilterEffectTests
         // Zero is INSIDE WPF's range, which is why the module needs an answer for it below.
         Assert.Equal(0, PinkFilterPresetDocument.MinOpacityPercent);
         Assert.Equal(50, PinkFilterPresetDocument.MaxOpacityPercent);
+    }
+
+    /// <summary>
+    /// <b>The A-001 ceiling as the byte the operating system is actually handed, not as a constant
+    /// anybody asserts.</b>
+    ///
+    /// <para><c>client/docs/architecture.md</c> A-001 makes "the tint never reaches full opacity" a
+    /// hard product rule, and until 2026-08-26 the only thing standing behind it was
+    /// <see cref="PinkFilterPresetDocument.MaxOpacityPercent"/> — a number, never a measurement. It
+    /// was one of three live hypotheses for the owner's reported full white screen, because
+    /// <c>HotPink(255, 105, 180)</c> laid over a whole display IS a very bright wash.</para>
+    ///
+    /// <para><b>Now measured, headed, on the real product</b>: with the dial seeded above its clamp
+    /// and the module armed alone, the live full-monitor overlay read <c>LWA_ALPHA</c> <b>128</b>
+    /// with <c>LWA_ALPHA</c> flags and a buffer of exactly (255, 105, 180), and the whole-screen
+    /// near-white fraction never left the desktop's own baseline. The hypothesis is dead, and this
+    /// fact is the arithmetic that killed it, pinned at the seam where it reaches the OS: the tint's
+    /// opacity becomes <see cref="OverlaySurfaceRequest.Alpha"/> and nothing else.</para>
+    /// </summary>
+    [Fact]
+    public void AtTheTopOfItsDial_TheTintAsksTheOsForHalfOpacityAndCanNeverAskForAll()
+    {
+        // Seeded ABOVE the clamp, so this stays a fact about the CEILING when the ceiling moves.
+        var document = new PinkFilterPresetDocument { OpacityPercent = int.MaxValue };
+        var tint = new PinkFilterTint(
+            PinkFilterColour.HotPink.Red,
+            PinkFilterColour.HotPink.Green,
+            PinkFilterColour.HotPink.Blue,
+            document.OpacityPercent);
+
+        // Linear, and WPF says so at the line that computes it (OverlayService.cs:1174-1175).
+        Assert.Equal(0.5, tint.Opacity);
+
+        var request = new OverlaySurfaceRequest(
+            new OverlayBounds(0, 0, 2880, 1800), tint.Opacity, ClickThrough: true);
+
+        Assert.Equal((byte)128, request.Alpha);
+        Assert.NotEqual(byte.MaxValue, request.Alpha);
     }
 
     // ---------------------------------------------------------------------------------
