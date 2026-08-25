@@ -1,0 +1,200 @@
+/* ============================================================================
+ * THE SCENE CHASSIS. Skin for shell/scene.js: a generalised point-and-click
+ * room. Linked lazily by scene.js AFTER styles.css (so the campus tokens are
+ * already on :root) and BESIDE shell/rooms.css - which is not an accident and
+ * not a duplicate. The two sheets have one job each:
+ *
+ *   rooms.css  owns the LOOK of a hotspot (.arm-hot, the breath on .arm-main,
+ *              the still cyan rim, the painted exit, the tag) and the LOOK of
+ *              the midway apron (.arm-bar and its slabs). scene.js reuses those
+ *              class names verbatim, so a facility room and a class room can
+ *              never drift apart.
+ *   scene.css  owns everything only a SCENE has: the slide stack, the zoom
+ *              between plates, the flag patches, the step-back pill and the
+ *              overlay that rises out of the apron line. Every one of those is
+ *              prefixed `.asc-`.
+ *
+ * The stage is a fixed 1376x768 plane scaled by transform (lab.css's fitStage,
+ * promoted twice now). Hotspot rects are authored in stage pixels and ride the
+ * scale for free. transform-origin stays 50% 50% on the STAGE - the zoom moves
+ * its origin on the SLIDE, one level down, or the scale walks the whole plane
+ * off-axis (lab.css's lesson, learned on the rig's 04 shot).
+ *
+ * DECORATION LAW, and the two classes are not the same rung:
+ *   .arc-reduced  kills the zoom AND the breath (rooms.css owns the breath).
+ *   .arm-lite     kills the breath only - a lite machine can still afford one
+ *                 320ms transform, and a room that changes shape without any
+ *                 camera move reads as a bug rather than as a saving.
+ * ==========================================================================*/
+
+/* FIXED, LIKE .arm-root AND .arc-records: the shell marks <html> arc-report-on
+ * for a screen like this (body overflow hidden) and .arc-screen is a 1080px
+ * COLUMN - an in-flow room would be a postcard in a gutter. */
+.asc-root {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: #0B0B18;
+  overflow: hidden;
+}
+
+.asc-stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1376px;
+  height: 768px;
+  transform-origin: 50% 50%;
+  /* scene.js sets transform: translate(-50%,-50%) scale(s) here and nothing
+     else; the origin must stay centred. */
+}
+
+/* --------------------------------- slides -------------------------------- */
+
+/* One slide per view, stacked. Two are alive only for the length of a zoom;
+   scene.js gives the incoming one the higher z-index going in and the LOWER
+   one coming back, so the close-up always shrinks over the top of home. */
+.asc-slide {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 50%;
+  opacity: 1;
+  will-change: transform, opacity;
+}
+
+/* THE ZOOM. Only a slide mid-move wears this, so nothing pays for a transition
+   it will never run. 320ms is the whole camera move; the crossfade is shorter
+   and sits inside it, which is what stops the outgoing plate from ghosting
+   through the arrival at half opacity for the back half of the move. */
+.asc-slide.asc-zoom {
+  transition: transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1),
+              opacity 220ms ease-out;
+}
+.asc-slide.asc-out { pointer-events: none; }
+
+/* THE CUT. Reduced motion gets the same room one frame later instead of one
+   camera move later. The JS is one path - it always writes the transforms and
+   this rule decides whether they animate. */
+.arc-reduced .asc-slide.asc-zoom { transition: none; }
+
+.asc-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  image-rendering: pixelated;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* THE PATCHES. A small plate laid over the big one at an authored rect, on
+   while its flag is on - how a painted set changes state (a panel ajar, a
+   drawer out) without generating a second full 1376x768 shot. z2: over the
+   art, under every hotspot, so a flag can never reorder the room's input.
+   They come and go by REMOVAL, never by `hidden` (trap 27). */
+.asc-patch {
+  position: absolute;
+  z-index: 2;
+  image-rendering: pixelated;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* THE PROPS. A consumer's own element pinned inside one view (scene.js's
+   mountInView). Same layer as a hotspot and earlier in DOM order, so a lit rect
+   over a prop still wins the press. Everything else about it - the look, the
+   size, whether it scrolls - belongs to whoever mounted it; this rule is the
+   whole of the chassis's opinion. */
+.asc-prop { position: absolute; z-index: 3; }
+
+/* Hotspots are rooms.css's .arm-hot; this only pins the layer. The skins
+   (.arm-main breathes, .arm-swim is the still rim, .arm-exit is the dark
+   painted way out) live there and are shared with the class rooms. */
+.asc-hot { z-index: 3; }
+
+/* ------------------------------ step back -------------------------------- */
+
+/* THE PILL, lifted from lab.css's .al-back. The apron's slab LEAVES THE ROOM;
+   a player two clicks into a close-up needs the other verb and Esc is not a
+   mouse. Warm here rather than the annex's cold green - a facility room is
+   still the school. Home never draws one. */
+.asc-back {
+  position: absolute;
+  z-index: 4;
+  left: 18px;
+  top: 16px;
+  padding: 7px 15px;
+  background: rgba(16, 10, 22, 0.86);
+  color: #EADFF2;
+  border: 1px solid rgba(255, 105, 180, 0.34);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.asc-back:hover, .asc-back:focus-visible {
+  outline: none;
+  color: #FFF;
+  border-color: var(--pink, #FF69B4);
+  background: rgba(28, 14, 30, 0.92);
+}
+
+/* -------------------------------- overlay -------------------------------- */
+
+/* ONE panel at a time, mounted inside root so it sits over the painting and
+   UNDER the apron - the band is a body-level sibling at z55 and stays the
+   front edge of the stage. The panel's floor is the apron line, published by
+   fit() as --arm-band-h, so it rises out of the carpet rather than out of the
+   bottom of the window. Taken off by REMOVAL: there is no `hidden` state here
+   to lose an argument with a `display:` (trap 27). */
+.asc-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.asc-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 4, 14, 0.62);
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+.asc-overlay.is-up .asc-scrim { opacity: 1; }
+
+.asc-panel {
+  position: relative;
+  z-index: 1;
+  width: min(920px, 92%);
+  max-height: calc(100% - var(--arm-band-h, 150px) - 24px);
+  margin-bottom: calc(var(--arm-band-h, 150px) + 12px);
+  padding: 20px 24px 24px;
+  overflow: auto;
+  background: linear-gradient(180deg, #1B1430 0%, #150F27 100%);
+  color: #EADFF2;
+  border: 2px solid rgba(255, 105, 180, 0.34);
+  border-bottom-width: 4px;
+  border-radius: 14px;
+  box-shadow: 0 -6px 40px rgba(0, 0, 0, 0.6);
+  /* parked below the apron line and lifted on .is-up: the panel slides up out
+     of the carpet the way the door card used to drop in from the top */
+  transform: translateY(18px);
+  opacity: 0;
+  transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1), opacity 180ms ease-out;
+}
+.asc-overlay.is-up .asc-panel { transform: translateY(0); opacity: 1; }
+
+/* The cut again: an overlay a reduced-motion player opens is simply THERE. */
+.arc-reduced .asc-scrim,
+.arc-reduced .asc-panel {
+  transition: none;
+  opacity: 1;
+  transform: none;
+}
