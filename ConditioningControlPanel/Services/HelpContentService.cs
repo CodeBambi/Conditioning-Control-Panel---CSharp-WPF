@@ -356,21 +356,25 @@ namespace ConditioningControlPanel.Services
                 SectionId = "IntensityRamp",
                 Icon = "\u26A1",
                 Title = "Intensity Ramp",
-                WhatItDoes = "Gradually increases conditioning intensity over time. Start gentle and build up " +
-                             "to your configured maximum over the ramp duration. Link specific features to " +
-                             "the ramp for coordinated escalation.",
+                WhatItDoes = "Moves conditioning intensity over time instead of holding it flat. Multiplier " +
+                             "mode builds from your settings up to a maximum; Range mode sweeps from a start " +
+                             "percentage to an end percentage, which can also go DOWN for a gentle wind-down. " +
+                             "Link specific features to the ramp for coordinated escalation.",
                 Tips = new List<string>
                 {
                     "Start with a 30-60 minute ramp to ease into sessions",
                     "The multiplier determines how intense the peak will be",
+                    "Range mode with an end below the start winds down instead of stopping hard",
+                    "Range percentages are relative to each linked feature's own setting",
                     "Link Flash, Spiral, and other features for coordinated buildup",
                     "'End at Complete' stops ramp when duration is reached",
                     "Great for longer, more immersive sessions"
                 },
-                HowItWorks = "The ramp calculates a multiplier that starts at 1.0 and increases linearly " +
-                             "to your target multiplier over the ramp duration. Linked features have their " +
-                             "frequency/intensity scaled by this multiplier. For example, if Flash is linked " +
-                             "and you set 2x multiplier over 60 minutes, flash rate doubles by the end."
+                HowItWorks = "The ramp resolves one factor and multiplies every linked feature's own value by " +
+                             "it. In Multiplier mode that factor runs 1.0 to your target multiplier, so a 2x " +
+                             "ramp over 60 minutes doubles the flash rate by the end. In Range mode it runs " +
+                             "start% to end% of your settings, so 100% to 10% fades everything to a tenth " +
+                             "instead. The ramp curve shapes the path between the two ends in either mode."
             },
 
             ["Community"] = new HelpContent
