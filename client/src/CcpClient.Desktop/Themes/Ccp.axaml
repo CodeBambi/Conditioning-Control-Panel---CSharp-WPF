@@ -83,8 +83,12 @@
        WPF Resources/Theme/Colors.xaml:74 TextDim #FF7A7A94. -->
   <Color x:Key="TextDim">#FF6B5B73</Color>
 
-  <!-- Ink that sits ON an accent fill, where the accent is the ground. -->
-  <Color x:Key="TextOnAccent">#FFFFFFFF</Color>
+  <!-- NO TOKEN FOR WHITE, and that is a decision rather than an omission. The product paints
+       #FFFFFFFF at five sites and they do not share a role: three are ink on an accent fill, one
+       is the Play hero's title on a dark card, one is a picker handle. A "TextOnAccent" key would
+       have to be pasted at the two that are not on an accent to keep the sweep mechanical, and a
+       token whose name is wrong at 40% of its uses is worse than the literal it replaced. White
+       is not a palette decision; it is white. -->
 
   <!-- ====================================== ACCENTS ======================================
 
@@ -164,7 +168,6 @@
   <SolidColorBrush x:Key="TextLightBrush" Color="{DynamicResource TextLight}" />
   <SolidColorBrush x:Key="TextMutedBrush" Color="{DynamicResource TextMuted}" />
   <SolidColorBrush x:Key="TextDimBrush" Color="{DynamicResource TextDim}" />
-  <SolidColorBrush x:Key="TextOnAccentBrush" Color="{DynamicResource TextOnAccent}" />
 
   <SolidColorBrush x:Key="PinkBrush" Color="{DynamicResource PinkColor}" />
   <SolidColorBrush x:Key="ShellAccentBrush" Color="{DynamicResource ShellAccent}" />
