@@ -725,6 +725,51 @@ html.arc-reduced .arc-timebar-fill::before { content:none; }
 .arc-row.readonly { opacity:.85; }
 .arc-row .arc-conflict { color:var(--gold); font-size:11px; }
 
+/* ---- the folds (shell/settings.js group()) --------------------------------
+   Every section is a disclosure: a header <button> with the title, a live
+   one-line summary and a chevron, then a body that folds. Height animates on
+   grid rows (0fr -> 1fr) so no pixel height is ever measured; .arc-reduced and
+   prefers-reduced-motion cut the transition and the fold lands at once. The
+   header is the whole row, thumb-sized on a phone. */
+.arc-disc { padding:0; overflow:hidden; }
+.arc-disc-head {
+  display:flex; align-items:center; gap:10px; width:100%; min-height:44px;
+  padding:12px 14px; margin:0; text-align:left; cursor:pointer;
+  background:transparent; border:0; color:inherit; font:inherit;
+}
+.arc-disc-head:hover { background:color-mix(in srgb, var(--panel), transparent 55%); }
+.arc-disc-head:focus-visible { outline:2px solid var(--pink); outline-offset:-2px; }
+.arc-disc-head > h3 {
+  margin:0; flex:0 1 auto; min-width:0;
+  font-family:var(--disp); font-size:13px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.arc-disc-sum {
+  flex:1 1 auto; min-width:0; margin-left:auto; text-align:right;
+  font-family:var(--mono); font-size:11.5px; color:var(--ink-faint);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+.arc-disc.open .arc-disc-sum { color:var(--ink-dim); }
+.arc-disc-chev {
+  flex:0 0 auto; width:22px; text-align:center; font-size:20px; line-height:1;
+  color:var(--lav); transform:rotate(90deg); transition:transform .22s ease;
+}
+.arc-disc.open .arc-disc-chev { transform:rotate(-90deg); }
+.arc-disc-body {
+  display:grid; grid-template-rows:0fr; transition:grid-template-rows .24s ease;
+}
+.arc-disc.open .arc-disc-body { grid-template-rows:1fr; }
+.arc-disc-body[hidden] { display:none; }
+.arc-disc-inner { min-height:0; overflow:hidden; padding:0 14px; }
+.arc-disc.open .arc-disc-inner { padding-bottom:12px; }
+.arc-disc-inner > .arc-row:first-of-type { border-top:0; }
+.arc-disc-inner > .arc-note:first-child { margin-top:0; }
+html.arc-reduced .arc-disc-body, html.arc-reduced .arc-disc-chev { transition:none; }
+@media (prefers-reduced-motion: reduce) {
+  .arc-disc-body, .arc-disc-chev { transition:none; }
+}
+
 /* switch */
 .arc-switch { position:relative; width:42px; height:22px; flex:0 0 auto; }
 .arc-switch input { position:absolute; opacity:0; width:100%; height:100%; margin:0; cursor:pointer; }
@@ -4315,8 +4360,43 @@ html.arc-mobile .arc-exitbar .btn { min-height:44px; }
    above, since the web build is the one that gets held in a hand. */
 html.arc-mobile .arc-settings { gap:11px; }
 html.arc-mobile .arc-group { padding:12px; }
+html.arc-mobile .arc-disc { padding:0; }
+html.arc-mobile .arc-disc-head { padding:13px 12px; min-height:52px; }
+html.arc-mobile .arc-disc-inner { padding:0 12px; }
+/* The title wins the header line on a phone; the summary is what ellipsizes. */
+html.arc-mobile .arc-disc-head > h3 { flex:0 0 auto; max-width:62%; }
+html.arc-mobile .arc-disc-sum { font-size:11px; }
 html.arc-mobile .arc-row select { min-height:44px; }
 html.arc-mobile .arc-row input[type=range] { min-height:32px; }
+/* LEGIBLE IN A HAND (owner brief 2026-08-25). More air per row; the label
+   owns the line and the value column keeps its width; a slider drops under its
+   label instead of sharing the line with it at a third of the width. */
+html.arc-mobile .arc-row { padding:12px 0; gap:6px 12px; }
+html.arc-mobile .arc-row > label, html.arc-mobile .arc-row > .arc-rowlabel {
+  flex:1 1 60%; font-size:14px;
+}
+html.arc-mobile .arc-row .arc-hint { font-size:12px; line-height:1.35; margin-top:2px; }
+html.arc-mobile .arc-row .arc-val { min-width:60px; font-size:13px; }
+html.arc-mobile .arc-row input[type=range] { flex:1 1 100%; order:3; min-height:44px; }
+html.arc-mobile .arc-row select { flex:0 1 auto; max-width:60%; }
+/* The tick chips: two to a line, each a full 44px thumb target. */
+html.arc-mobile .arc-media-chips { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+html.arc-mobile .arc-check { min-height:44px; justify-content:flex-start; font-size:13px; }
+html.arc-mobile .arc-media-btns .btn { min-height:44px; }
+/* THE BACK BAR. Opaque, so the chips no longer read through it, and at the very
+   bottom: `sticky; bottom:0` is measured inside the scroller's padding, so the
+   screen's 64px bottom padding is what floated it mid-page. The padding goes
+   to 0 while this page is up and the bar carries its own safe-area inset. */
+html.arc-mobile.arc-settings-on .arc-screen { padding-bottom:0; }
+html.arc-mobile .arc-settings-exit {
+  margin-top:12px;
+  background:var(--ground);
+  border-top:1px solid color-mix(in srgb, var(--lav), transparent 60%);
+  box-shadow:0 -10px 24px rgba(0,0,0,.35);
+}
+/* EMI stands on the title on a phone; this page has no beat for her. */
+html.arc-mobile.arc-settings-on .arc-emi { display:none; }
+html.arc-mobile .arc-settings > .arc-classbar { padding-right:0; }
 
 /* ---- the campus, whole (owner bugs A and B) ------------------------------
    The plan is `xMidYMid slice` on a desktop and that is right there: the window
