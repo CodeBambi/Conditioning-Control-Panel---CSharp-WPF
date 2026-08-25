@@ -26,6 +26,7 @@ internal static class PointerWindowProbe
     private const uint WsExTopmost = 0x00000008;
     private const uint WsExNoactivate = 0x08000000;
     private const uint WsExTransparent = 0x00000020;
+    private const uint WsExLayered = 0x00080000;
     private const uint WsExAppwindow = 0x00040000;
     private const int GwlExstyle = -20;
     private const uint GwOwner = 4;
@@ -143,10 +144,35 @@ internal static class PointerWindowProbe
         return winner;
     }
 
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetLayeredWindowAttributes(nint window, out uint key, out byte alpha, out uint flags);
+
     internal static uint ExStyleOf(nint window) =>
         WindowsHost && window != 0 ? (uint)GetWindowLongPtrW(window, GwlExstyle) : 0;
 
     internal static bool NonActivatingStyleHeld(nint window) => (ExStyleOf(window) & WsExNoactivate) != 0;
+
+    /// <summary><c>WS_EX_LAYERED</c>, read back out of the OS. Without it the target is an opaque
+    /// rectangle whatever the painter drew inside it.</summary>
+    internal static bool LayeredStyleHeld(nint window) => (ExStyleOf(window) & WsExLayered) != 0;
+
+    /// <summary>
+    /// What the OS holds as the window's colour key, constant alpha and flags — the OS's answer,
+    /// not the value the product passed. <c>Read</c> is false when
+    /// <c>GetLayeredWindowAttributes</c> refuses, which is what it does for a window that is not
+    /// layered at all.
+    /// </summary>
+    internal static (bool Read, uint Key, byte Alpha, uint Flags) LayeredAttributesOf(nint window)
+    {
+        if (!WindowsHost || window == 0
+            || !GetLayeredWindowAttributes(window, out var key, out var alpha, out var flags))
+        {
+            return (false, 0, 0, 0);
+        }
+
+        return (true, key & 0x00FFFFFF, alpha, flags);
+    }
 
     /// <summary>
     /// Write one pixel into a window's own device context from OUTSIDE the capability.
