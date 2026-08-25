@@ -860,8 +860,11 @@ export function runIntraDetector({ repoRoot } = {}) {
         } else {
           counts.quotesChecked += 1;
           checkedANeedle = true;
+          // lastLine, NOT lines.length: a trailing newline makes split("\n") produce one empty tail
+          // element, and letting the bleed reach it would make the row REPORT a window one line
+          // longer than the file — the same off-by-one lastLineOf() exists to prevent above.
           const lo = Math.max(0, from - 1 - QUOTE_BLEED);
-          const hi = Math.min(lines.length, to + QUOTE_BLEED);
+          const hi = Math.min(lastLine, to + QUOTE_BLEED);
           if (!quotePresent(lines.slice(lo, hi).join("\n"), quoted)) {
             const shown = quoted.trim();
             rows.push({

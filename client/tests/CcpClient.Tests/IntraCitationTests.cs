@@ -45,7 +45,7 @@ public sealed partial class IntraCitationTests
 
     /// <summary>
     /// Every fact ID <c>intra-self-test.mjs</c> carries, matched on the <c>In:</c> PREFIX and never
-    /// on the title. The seven <c>m</c> suffixes are the MUTATION facts: each rewrites one span of
+    /// on the title. The twelve <c>m</c> suffixes are the MUTATION facts: each rewrites one span of
     /// the detector's own source and asserts the refusal it removed was actually suppressing a row.
     /// Those are the ones a reviewer should look for first — a refusal with no mutation beside it
     /// can be deleted with this suite green, which is the defect this list exists to prevent.
@@ -62,10 +62,26 @@ public sealed partial class IntraCitationTests
         "I17", "I17m",
         "I18", "I18m",
         "I19", "I20",
+
+        // The QUOTED needle. Two facts say what it catches and five PAIRS pin the five refusals
+        // that keep it from catching correct prose — the mandatory parenthesis on a leading
+        // quotation, the trailing attribution that outranks a leading one, the bare quote excluded
+        // from the lead so a C# string literal is never read as a quotation, the length floor under
+        // a scare-quoted word, and the decision-ledger suppression. Each refusal was forced by a
+        // false row measured on this corpus, and deleting any mutation makes its refusal deletable
+        // with this suite green.
+        "I21", "I21m",
+        "I22", "I22m",
+        "I23",
+        "I24", "I24m",
+        "I25", "I25m",
+        "I26", "I26m",
+        "I27", "I27m",
+        "I28", "I28m", "I28b",
     ];
 
-    /// <summary>Measured on this machine: the detector is ~1.5 s over 623 corpus files and the
-    /// self-test ~1.1 s over 22 temp-directory fixtures. Three minutes is the same window
+    /// <summary>Measured on this machine: the detector is ~1.5 s over 808 corpus files and the
+    /// self-test ~2 s over 44 temp-directory fixtures. Three minutes is the same window
     /// <see cref="CitationSelfTestGateTests"/> uses, and it is a failure ceiling rather than an
     /// expectation: neither run has ever approached it.</summary>
     private static readonly TimeSpan RunWindow = TimeSpan.FromMinutes(3);

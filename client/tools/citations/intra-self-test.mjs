@@ -50,7 +50,15 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { CLASS, REASON, formatIntraReport, runIntraDetector, symbolBelongsToFile } from "./intra.mjs";
+import {
+  CLASS,
+  REASON,
+  formatIntraReport,
+  normaliseProse,
+  quotePresent,
+  runIntraDetector,
+  symbolBelongsToFile,
+} from "./intra.mjs";
 
 const INTRA = fileURLToPath(new URL("./intra.mjs", import.meta.url));
 
@@ -82,6 +90,10 @@ function makeFixture(root) {
       fx.write("client/CcpClient.sln", "");
       fx.write("client/tools/citations/self-test.mjs", "// fixture stand-in\n");
       fx.write("client/tools/citations/intra-self-test.mjs", "// fixture stand-in\n");
+      // The decision ledger LEDGER_DOCUMENTS names. Present in every fixture for the same reason
+      // the two fixture sources are: runIntraDetector refuses to run when a named exclusion points
+      // at nothing, and I28b is the fact that pins that refusal.
+      fx.write("client/docs/task-board.md", "# Board\n\nNo rows.\n");
       return fx;
     },
     run() {
@@ -712,5 +724,342 @@ test("I20: every counter is PRINTED, and rows come out in a stable class-then-ci
     }
     assert.equal(outcome.summary.counts.bareContinuations, 1, "(:12) is bare; every Foo.cs:1 is file-qualified");
     assert.equal(outcome.summary.counts.commaContinuations, 1, "the ,2 of Thing.cs:1,2");
+  });
+});
+
+// ============================ I21-I28b the QUOTED needle: what it checks and what it refuses
+//
+// A REMINDER OF WHY THE REFUSALS OUTNUMBER THE ASSERTIONS HERE. A quoted-string check is the one
+// addition to this detector that could plausibly fire on CORRECT prose, and a guard that cries wolf
+// gets disabled rather than fixed. So the shape of this block mirrors the shape of the risk: two
+// facts say what the check catches, and five pairs pin the five refusals that keep it from catching
+// anything else. Every refusal was forced by a REAL false row measured on the corpus, and every
+// mutation puts that exact row back.
+
+test("I21: a quotation beside a citation is checked against the cited lines, and a stale one is WRONG-LINE", () => {
+  withFixture((fx) => {
+    fx.base();
+    fx.write(
+      "client/src/CcpClient.Desktop/Thing.cs",
+      ["// header", "// EFFECT BACKENDS EXIST, and this comment used to say they did not.", "// tail", ""].join("\n"),
+    );
+    fx.write(
+      "client/docs/notes.md",
+      [
+        'live: `Thing.cs:2` ("EFFECT BACKENDS EXIST, and this comment used to say they did not").',
+        'stale: `Thing.cs:2` ("NO effect backends exist in the greenfield client").',
+        "",
+      ].join("\n"),
+    );
+    const outcome = fx.run();
+    const rows = rowsOf(outcome, CLASS.WRONG_LINE);
+    assert.equal(rows.length, 1, "the live quotation is not a finding; only the stale one is");
+    assert.equal(rows[0].reason, `${REASON.QUOTE_ABSENT} (searched 1-3)`);
+    assert.match(rows[0].cited, /Thing\.cs:2 quoting "NO effect backends exist in the greenfield client"/);
+    assert.match(
+      rows[0].reads,
+      /EFFECT BACKENDS EXIST/,
+      "the row prints what the cited line ACTUALLY reads, so the fix needs no file opened",
+    );
+    assert.equal(outcome.summary.counts.quotesChecked, 2, "both quotations were checked, not just the failing one");
+  });
+});
+
+test("I21m: MUTATION — removing the quoted comparison lets the stale quotation through in silence", async () => {
+  await withMutant(
+    `          if (!quotePresent(lines.slice(lo, hi).join("\\n"), quoted)) {`,
+    `          if (false) {`,
+    async (mutant) =>
+      withFixture((fx) => {
+        fx.base();
+        fx.write("client/src/CcpClient.Desktop/Thing.cs", "// the file says one thing\n");
+        fx.write("client/docs/notes.md", '`Thing.cs:1` ("the file says something else entirely").\n');
+        assert.equal(rowsOf(fx.run(), CLASS.WRONG_LINE).length, 1, "unmutated, this is a row");
+        const mutated = mutant.runIntraDetector({ repoRoot: fx.root });
+        assert.deepEqual(mutated.rows, [], "with the comparison gone the claim is unwatched — that is the gap this closes");
+      }),
+  );
+});
+
+test("I22: the bleed is ONE line — a quotation just outside the cited range passes, two lines out does not", () => {
+  withFixture((fx) => {
+    fx.base();
+    fx.write(
+      "client/src/CcpClient.Desktop/Thing.cs",
+      [
+        "// alpha the first sentence",
+        "// beta the second sentence",
+        "// gamma the third sentence",
+        "// delta the fourth sentence",
+        "// epsilon the fifth sentence",
+        "",
+      ].join("\n"),
+    );
+    fx.write(
+      "client/docs/notes.md",
+      [
+        'one line early: `Thing.cs:3` ("beta the second sentence").',
+        'one line late: `Thing.cs:3` ("delta the fourth sentence").',
+        'two lines out: `Thing.cs:3` ("alpha the first sentence").',
+        "",
+      ].join("\n"),
+    );
+    const rows = rowsOf(fx.run(), CLASS.WRONG_LINE);
+    assert.equal(rows.length, 1, "one line of slack either way is imprecision, not rot");
+    assert.match(rows[0].cited, /"alpha the first sentence"/);
+    assert.equal(rows[0].reason, `${REASON.QUOTE_ABSENT} (searched 2-4)`, "the row states the window it searched");
+  });
+});
+
+test("I22m: MUTATION — a zero bleed reds the one-line imprecision the corpus is full of", async () => {
+  await withMutant("const QUOTE_BLEED = 1;", "const QUOTE_BLEED = 0;", async (mutant) =>
+    withFixture((fx) => {
+      fx.base();
+      fx.write("client/src/CcpClient.Desktop/Thing.cs", "// alpha the first sentence\n// beta the second sentence\n");
+      fx.write("client/docs/notes.md", '`Thing.cs:2` ("alpha the first sentence").\n');
+      assert.deepEqual(fx.run().rows, [], "unmutated, a quotation one line above the cited line is fine");
+      assert.equal(
+        mutant.runIntraDetector({ repoRoot: fx.root }).rows.length,
+        1,
+        "at zero bleed the tolerance is gone and correct prose reds — 10 of the corpus's 26 live quotations are this shape",
+      );
+    }),
+  );
+});
+
+test("I23: normalisation survives markup, entities, wrapping and a C# concatenation seam; ellipsis elides IN ORDER", () => {
+  // quotePresent is exported and pure, so these are asserted directly rather than through a
+  // fixture repository. Each pair is a REAL shape from the corpus, named in normaliseProse's own
+  // comment; asserting them here is what stops a "tidy-up" of that function silently narrowing it.
+  const holds = [
+    [
+      "<para><b>WPF's fourth dial, <c>BubbleCountStrictLock</c>, is ABSENT</b> rather than",
+      "WPF's fourth dial, BubbleCountStrictLock, is ABSENT",
+    ],
+    ["/// Flat pool (phrase -&gt; bool) counts its keys", "Flat pool (phrase -> bool) counts its keys"],
+    ["// endpoint down — stay quiet, don't spin", "Endpoint down — stay quiet, don’t spin"],
+    ["/// a document that is **marked never-runnable** (the row's", "marked never-runnable"],
+    [
+      '        + "dead controls: attention "\n        + "checks and the strict/retry apparatus"',
+      "dead controls: attention checks and the strict/retry apparatus",
+    ],
+    [
+      "/// the port has no <c>DailyFreeService</c> and no <c>/config/daily-feature</c> fetch,\n/// and the override, never the local rotation",
+      "the port has no DailyFreeService and no … override, never the local rotation",
+    ],
+  ];
+  for (const [span, needle] of holds) {
+    assert.ok(quotePresent(span, needle), `should still resolve: ${JSON.stringify(needle)}`);
+  }
+  assert.ok(
+    !quotePresent("first alpha then beta", "beta ... alpha"),
+    "ORDER is required: an elision means text was cut out, not that the pieces may be reassembled backwards",
+  );
+  assert.ok(!quotePresent("the file says one thing", "the file says another"), "a genuinely absent sentence stays absent");
+  assert.equal(normaliseProse("  <c>A</c>,  B  "), "a, b", "tag removal must not leave a space before the comma it exposed");
+});
+
+test("I24: a quotation before a PARENTHESISED citation binds to it; the list form binds to nothing", () => {
+  withFixture((fx) => {
+    fx.base();
+    fx.write("client/src/CcpClient.Desktop/Alpha.cs", "// alpha carries its own sentence\n");
+    fx.write("client/src/CcpClient.Desktop/Beta.cs", "// beta carries a different sentence\n");
+    fx.write(
+      "client/docs/notes.md",
+      [
+        // The list form. Beta's PRECEDING quotation is Alpha's, and binding it would be a false row.
+        'the sources say so: Alpha.cs:1 "alpha carries its own sentence", Beta.cs:1 "beta carries a different sentence".',
+        // The list form again, with the second citation carrying NO quotation of its own. This is
+        // the line that REACHES the refusal: with a trailing quotation present the AFTER form wins
+        // first and QUOTED_PAREN_BEFORE is never consulted, so a fact built only on the line above
+        // would assert a refusal it never exercised.
+        'and again: Alpha.cs:1 "alpha carries its own sentence", Beta.cs:1 and nothing quoted here.',
+        // The parenthesised form, and it is checked.
+        '"alpha carries its own sentence" (Alpha.cs:1).',
+        "",
+      ].join("\n"),
+    );
+    const outcome = fx.run();
+    assert.deepEqual(outcome.rows, [], "every binding here is correct, so there is nothing to report");
+    assert.equal(
+      outcome.summary.counts.quotesChecked,
+      4,
+      "three trailing quotations and one parenthesised leading one — the unquoted Beta.cs:1 is checked for range only",
+    );
+  });
+});
+
+test("I24m: MUTATION — dropping the mandatory parenthesis binds the PREVIOUS citation's quotation", async () => {
+  await withMutant(
+    'const QUOTED_PAREN_BEFORE = /["“]([^"”\\n]+)["”]\\s*\\((?:`|<c>)?$/;',
+    'const QUOTED_PAREN_BEFORE = /["“]([^"”\\n]+)["”][\\s,]*(?:`|<c>)?$/;',
+    async (mutant) =>
+      withFixture((fx) => {
+        fx.base();
+        fx.write("client/src/CcpClient.Desktop/Alpha.cs", "// alpha carries its own sentence\n");
+        fx.write("client/src/CcpClient.Desktop/Beta.cs", "// beta carries a different sentence\n");
+        // Beta carries no quotation of its own, so the leading form is the one under test: with a
+        // trailing quotation present the AFTER form would win first and the mutation would prove
+        // nothing.
+        fx.write("client/docs/notes.md", 'Alpha.cs:1 "alpha carries its own sentence", Beta.cs:1 and nothing quoted here.\n');
+        assert.deepEqual(fx.run().rows, [], "unmutated, the list form is correct prose and is silent");
+        const rows = mutant.runIntraDetector({ repoRoot: fx.root }).rows;
+        assert.equal(rows.length, 1, "the loose rule reads Alpha's quotation as a claim about Beta");
+        assert.match(rows[0].cited, /Beta\.cs:1 quoting "alpha carries its own sentence"/);
+      }),
+  );
+});
+
+test("I25: a TRAILING parenthesised citation owns the quotation, and the citation before it is not held to it", () => {
+  withFixture((fx) => {
+    fx.base();
+    fx.write(
+      "client/src/CcpClient.Desktop/Thing.cs",
+      ["// line one is the creation call", "// filler", "// filler", "// line four is the reason", ""].join("\n"),
+    );
+    // The window manifest's real shape: a creation-site citation, the quotation, and THEN the
+    // citation the quotation actually came from. Adjacency alone holds :1 to text four lines away.
+    fx.write("client/docs/notes.md", 'the flag alone (`Thing.cs:1`) — "line four is the reason" (`Thing.cs:4`)\n');
+    const outcome = fx.run();
+    assert.deepEqual(outcome.rows, [], "the trailing attribution is the author's own, and it is correct");
+    assert.equal(outcome.summary.counts.quotesChecked, 1, "checked ONCE, against the citation that claimed it");
+  });
+});
+
+test("I25m: MUTATION — without the trailing-attribution refusal the earlier citation is held to it and reds", async () => {
+  await withMutant(
+    "  if (after && !QUOTE_CLAIMED_BY_NEXT.test(tail.slice(after[0].length))) return after[1];",
+    "  if (after) return after[1];",
+    async (mutant) =>
+      withFixture((fx) => {
+        fx.base();
+        fx.write(
+          "client/src/CcpClient.Desktop/Thing.cs",
+          ["// line one is the creation call", "// filler", "// filler", "// line four is the reason", ""].join("\n"),
+        );
+        fx.write("client/docs/notes.md", '(`Thing.cs:1`) — "line four is the reason" (`Thing.cs:4`)\n');
+        assert.deepEqual(fx.run().rows, [], "unmutated, correct prose with a trailing attribution is silent");
+        const rows = mutant.runIntraDetector({ repoRoot: fx.root }).rows;
+        assert.equal(rows.length, 1, "adjacency alone invents a row about a sentence the author cited correctly");
+        assert.match(rows[0].cited, /Thing\.cs:1 quoting "line four is the reason"/);
+      }),
+  );
+});
+
+test("I26: a C# string literal beside a citation is NOT a quotation — the closing quote blocks the lead", () => {
+  withFixture((fx) => {
+    fx.base();
+    fx.write("client/src/CcpClient.Desktop/Thing.cs", "// nothing like the literal below\n");
+    fx.write(
+      "client/tests/CcpClient.Tests/ThingTests.cs",
+      '        Assert.Equal("Thing.cs:1", "a totally unrelated expected value");\n',
+    );
+    const outcome = fx.run();
+    assert.deepEqual(outcome.rows, [], "the second literal is not a claim about the first literal's file");
+    assert.equal(outcome.summary.counts.quotesChecked, 0, "nothing here was read as a quotation at all");
+  });
+});
+
+test("I26m: MUTATION — admitting a bare quote into the lead reads the next literal as a quotation and fires", async () => {
+  await withMutant(
+    'const QUOTED_AFTER = /^(?:<\\/c>|<\\/code>|\\/\\/\\/|\\/\\/|[`*_\\s,;|()[\\]:—-])*["“]([^"”\\n]+)["”]/;',
+    'const QUOTED_AFTER = /^(?:<\\/c>|<\\/code>|\\/\\/\\/|\\/\\/|["`*_\\s,;|()[\\]:—-])*["“]([^"”\\n]+)["”]/;',
+    async (mutant) =>
+      withFixture((fx) => {
+        fx.base();
+        fx.write("client/src/CcpClient.Desktop/Thing.cs", "// nothing like the literal below\n");
+        fx.write(
+          "client/tests/CcpClient.Tests/ThingTests.cs",
+          '        Assert.Equal("Thing.cs:1", "a totally unrelated expected value");\n',
+        );
+        assert.deepEqual(fx.run().rows, [], "unmutated, a test's own expected value is not a citation claim");
+        const rows = mutant.runIntraDetector({ repoRoot: fx.root }).rows;
+        assert.equal(rows.length, 1, "this is the shape that returned garbage on the first corpus sweep");
+        assert.match(rows[0].cited, /"a totally unrelated expected value"/);
+      }),
+  );
+});
+
+test("I27: a scare-quoted WORD is below the floor — counted, never checked", () => {
+  withFixture((fx) => {
+    fx.base();
+    fx.write("client/src/CcpClient.Desktop/Thing.cs", "// this line says nothing of the sort\n");
+    fx.write("client/docs/notes.md", '`Thing.cs:1` ("quests") and `Thing.cs:1` ("open").\n');
+    const outcome = fx.run();
+    assert.deepEqual(outcome.rows, [], "naming a term in quotes is not a promise the cited line carries it verbatim");
+    assert.equal(outcome.summary.counts.quotesTooShort, 2);
+    assert.equal(outcome.summary.counts.quotesChecked, 0);
+    assert.match(formatIntraReport(outcome), /2 shorter than 12 characters/, "the floor's cost is printed, not implied");
+  });
+});
+
+test("I27m: MUTATION — a floor of zero holds scare-quoted words to a verbatim match", async () => {
+  await withMutant("export const QUOTE_MIN_LENGTH = 12;", "export const QUOTE_MIN_LENGTH = 0;", async (mutant) =>
+    withFixture((fx) => {
+      fx.base();
+      fx.write("client/src/CcpClient.Desktop/Thing.cs", "// this line says nothing of the sort\n");
+      fx.write("client/docs/notes.md", '`Thing.cs:1` ("quests").\n');
+      assert.deepEqual(fx.run().rows, [], "unmutated, a scare-quoted word is not a quotation");
+      assert.equal(mutant.runIntraDetector({ repoRoot: fx.root }).rows.length, 1, "without the floor the word is a claim");
+    }),
+  );
+});
+
+test("I28: a decision ledger's quotations are counted and never rowed — every OTHER class still watches it", () => {
+  withFixture((fx) => {
+    fx.base();
+    fx.write("client/src/CcpClient.Desktop/Thing.cs", "// the store exists now\n");
+    fx.write(
+      "client/docs/task-board.md",
+      [
+        "# Board",
+        "",
+        '| P1 | DONE | ADMITTED because `Thing.cs:1` ("COMPUTED, never granted - no store") said so. |',
+        "| P2 | WIP | a range that is gone: `Thing.cs:900`. |",
+        "",
+      ].join("\n"),
+    );
+    const outcome = fx.run();
+    const rows = rowsOf(outcome, CLASS.WRONG_LINE);
+    assert.equal(rows.length, 1, "the ledger is still range-checked in full");
+    assert.equal(rows[0].reason, `${REASON.PAST_END} (1 lines)`, "and the row it produces is the RANGE one, not the quote one");
+    assert.equal(outcome.summary.counts.quotesInLedger, 1, "the suppressed quotation is counted rather than hidden");
+    assert.equal(outcome.summary.counts.quotesChecked, 0);
+    assert.match(formatIntraReport(outcome), /1 in a decision ledger \(client\/docs\/task-board\.md\)/);
+  });
+});
+
+test("I28m: MUTATION — an empty ledger list reds the closed row's own justification", async () => {
+  await withMutant(
+    'export const LEDGER_DOCUMENTS = Object.freeze(["client/docs/task-board.md"]);',
+    "export const LEDGER_DOCUMENTS = Object.freeze([]);",
+    async (mutant) =>
+      withFixture((fx) => {
+        fx.base();
+        fx.write("client/src/CcpClient.Desktop/Thing.cs", "// the store exists now\n");
+        fx.write(
+          "client/docs/task-board.md",
+          '| P1 | DONE | ADMITTED because `Thing.cs:1` ("COMPUTED, never granted - no store") said so. |\n',
+        );
+        assert.deepEqual(fx.run().rows, [], "unmutated, a closed row's dated evidence is left alone");
+        const rows = mutant.runIntraDetector({ repoRoot: fx.root }).rows;
+        assert.equal(rows.length, 1, "without the exclusion, finishing the work is what breaks the row that authorised it");
+        assert.equal(rows[0].reason, `${REASON.QUOTE_ABSENT} (searched 1-1)`);
+      }),
+  );
+});
+
+test("I28b: a ledger path that does not exist is a COULD-NOT-RUN, never a silent widening", () => {
+  withFixture((fx) => {
+    fx.base();
+    fs.rmSync(path.join(fx.root, "client", "docs", "task-board.md"));
+    // Through the CLI, the same way I15b pins the fixture exclusion: exit 2 is COULD-NOT-RUN and is
+    // deliberately not exit 1, so a suppression that stopped suppressing can never read as rot.
+    const run = fx.cli();
+    assert.equal(run.status, 2, "an exclusion pointing at nothing has stopped excluding, and that is not a rot verdict");
+    assert.match(run.stderr, /decision-ledger exclusion/, "the failure must name which exclusion broke");
+    assert.match(run.stderr, /LEDGER_DOCUMENTS/, "and the constant to update");
+    assert.match(run.stderr, /task-board\.md/, "and the path it could not find");
+    assert.equal(run.stdout, "", "no report on a broken input, ever");
   });
 });
