@@ -432,6 +432,31 @@
       "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
     },
     {
+      "key": "CcpClient.Tests/DpiAwarenessTests.cs::DpiAwarenessTests.TheShippedApphostCarriesTheProductsOwnPerMonitorV2Declaration",
+      "path": "CcpClient.Tests/DpiAwarenessTests.cs",
+      "line": 66,
+      "method": "DpiAwarenessTests.TheShippedApphostCarriesTheProductsOwnPerMonitorV2Declaration",
+      "shapes": [
+        "platform-predicate",
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "Both arms assert. The MANIFEST SOURCE half runs at body depth 0 on every platform (it is a file in this repository and its content does not vary by OS), so no machine reaches the end of this fact without having asserted; the platform predicate guards only the EMBEDDED half, because an application manifest exists in a Windows apphost and nowhere else. fs-predicate is File.Exists inside Assert.True at depth 0 - the predicate IS the assertion and a missing apphost FAILS with the build command that produces it, the same shape already dispositioned for DataRootChokePointGuardTests. Both loops are over an in-test literal array, and emptying it is an edit to this test."
+    },
+    {
+      "key": "CcpClient.Tests/DpiAwarenessTests.cs::DpiAwarenessTests.UnderTheProductsOwnDpiAwareness_TheDisplayEnumerationIsTheOperatingSystemsPhysicalMode",
+      "path": "CcpClient.Tests/DpiAwarenessTests.cs",
+      "line": 132,
+      "method": "DpiAwarenessTests.UnderTheProductsOwnDpiAwareness_TheDisplayEnumerationIsTheOperatingSystemsPhysicalMode",
+      "shapes": [
+        "platform-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "Exhaustive arms, both asserting. Off Windows the arm asserts the product's own documented answer - OverlayDisplays.Enumerate() returns nothing there - and only then returns; on Windows the fact runs whole. The no-interactive-desktop arm asserts the unaware read is empty too before returning, so a headless session cannot reach the end silently. The per-display loop is the framing-(c) case and carries its pin: Assert.True(compared > 0) at depth 0 fails if the loop compared nothing, so an enumeration that stopped returning displays cannot pass by iterating zero times. No version predicate is used: .NET 10 requires Windows 10 1607, the release that introduced SetThreadDpiAwarenessContext, and the helper asserts the call was honoured rather than assuming it."
+    },
+    {
       "key": "CcpClient.Tests/DtrhBridgeDiffTests.cs::DtrhBridgeDiffTests.Derivative_RetainsEveryOriginalLine_ExceptTheNamedTransportLines",
       "path": "CcpClient.Tests/DtrhBridgeDiffTests.cs",
       "line": 41,

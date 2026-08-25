@@ -66,6 +66,12 @@ public class ToastHostHeadlessTests : HeadlessTest
     /// (<c>Services/Notifications/NotificationService.cs:120-126</c>). A refusal that looked like a
     /// success would be worse than no toast at all — the whole reason the type exists is that a
     /// user can tell which one they are reading without reading it.
+    ///
+    /// <para>All four are raised at once and read one at a time, because this host shows one at a
+    /// time (<see cref="ToastHost"/>): the newest holds the screen and the rest wait. So the accents
+    /// are read NEWEST FIRST, dismissing as it goes, which also means each colour is read off a
+    /// toast that was really attached and really style-resolved rather than off a detached
+    /// <c>Border</c> no style has reached.</para>
     /// </summary>
     [AvaloniaFact]
     public async Task TheFourKindsPaintUpstreamsFourAccents_AndNoTwoOfThemAreTheSame()
@@ -79,7 +85,14 @@ public class ToastHostHeadlessTests : HeadlessTest
             }
 
             window.UpdateLayout();
-            var accents = Toasts(window).Select(AccentOf).ToArray();
+            var accents = new List<Color>();
+            while (window.Toasts.Messages.Count > 0)
+            {
+                var showing = Assert.Single(Toasts(window));
+                accents.Insert(0, AccentOf(showing));
+                Click(window, showing.GetLogicalDescendants().OfType<Button>().Single());
+            }
+
             Assert.Equal(
                 new[]
                 {
@@ -98,9 +111,17 @@ public class ToastHostHeadlessTests : HeadlessTest
     }
 
     /// <summary>
-    /// Toasts STACK and each one is dismissed on its own. Upstream appends to the host panel
-    /// (<c>NotificationService.cs:91</c>) and each toast's × removes only itself (<c>:213-228</c>);
-    /// a dismiss that cleared the stack would take away a message the user has not read.
+    /// Each toast is dismissed on its own, and dismissing one NEVER takes away a message the user
+    /// has not read. Upstream appends to its host panel (<c>NotificationService.cs:91</c>) and each
+    /// toast's × removes only itself (<c>:213-228</c>).
+    ///
+    /// <para><b>Where this port diverges, and it is the whole of the divergence.</b> Upstream's
+    /// three are on screen together; this host's are one at a time, newest on screen and the rest
+    /// waiting, because its host floats over the PAGE and a stack of three covered the Play card's
+    /// launch buttons (<see cref="ToastHost"/>, measured). So "leaves the others" is proved by the
+    /// next one ARRIVING rather than by three plates being visible at once — which is the stronger
+    /// half anyway: a queue that dropped what it could not show would pass a visibility check and
+    /// fail a user.</para>
     /// </summary>
     [AvaloniaFact]
     public async Task DismissingOneToastRemovesThatOne_AndLeavesTheOthersInOrder()
@@ -114,10 +135,23 @@ public class ToastHostHeadlessTests : HeadlessTest
             window.UpdateLayout();
             Assert.Equal(["first", "second", "third"], window.Toasts.Messages);
 
-            var middle = Toasts(window)[1];
-            Click(window, middle.GetLogicalDescendants().OfType<Button>().Single());
+            // One plate, and it is the newest — the other two are owed, not shown.
+            var showing = Assert.Single(Toasts(window));
+            Assert.Equal("third", showing.GetLogicalDescendants().OfType<TextBlock>().First().Text);
 
-            Assert.Equal(["first", "third"], window.Toasts.Messages);
+            Click(window, showing.GetLogicalDescendants().OfType<Button>().Single());
+
+            // Only that one went, and the one behind it took the screen rather than waiting for
+            // another event to nudge it there.
+            Assert.Equal(["first", "second"], window.Toasts.Messages);
+            var next = Assert.Single(Toasts(window));
+            Assert.Equal("second", next.GetLogicalDescendants().OfType<TextBlock>().First().Text);
+
+            Click(window, next.GetLogicalDescendants().OfType<Button>().Single());
+            Assert.Equal(["first"], window.Toasts.Messages);
+            Assert.Equal(
+                "first",
+                Assert.Single(Toasts(window)).GetLogicalDescendants().OfType<TextBlock>().First().Text);
         }
         finally
         {
@@ -315,12 +349,17 @@ public class ToastHostHeadlessTests : HeadlessTest
             Assert.Equal(["the door did not open", "saved 36 phrases"], window.Toasts.Messages);
             Assert.Equal(3, schedule.Requested.Count);
 
-            // And a DIFFERENT sentence still stacks: this is de-duplication, not a one-toast host.
+            // And a DIFFERENT sentence is still a SEPARATE notice: this is de-duplication, not a
+            // one-message host. Three are owed; the newest holds the screen and the other two wait
+            // (ToastHost), which is why nothing here reads three plates.
             window.Toasts.ShowUntilDismissed("and 4 pools were skipped", ToastKind.Info);
             window.UpdateLayout();
             Assert.Equal(
                 ["the door did not open", "saved 36 phrases", "and 4 pools were skipped"],
                 window.Toasts.Messages);
+            Assert.Equal(
+                "and 4 pools were skipped",
+                Assert.Single(Toasts(window)).GetLogicalDescendants().OfType<TextBlock>().First().Text);
         }
         finally
         {

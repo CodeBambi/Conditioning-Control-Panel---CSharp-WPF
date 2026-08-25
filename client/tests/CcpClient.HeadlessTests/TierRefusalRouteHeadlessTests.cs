@@ -328,6 +328,97 @@ public class TierRefusalRouteHeadlessTests : HeadlessTest
         await host.ShutdownAsync();
     }
 
+    /// <summary>
+    /// <b>Three DIFFERENT notices at once, which is the case coalescing never covered.</b> The path
+    /// is the one the user really has and it needs no flag: export phrases, import phrases — both
+    /// dismiss-only, neither expires (<c>Views/Pages/SystemPage.axaml.cs</c>, upstream's two modal
+    /// results, <c>MainWindow/MainWindow.PresetIO.cs:81-83</c>, <c>:125-127</c>) — then walk to Play
+    /// and be refused.
+    ///
+    /// <para><b>The defect this fact reported before the fix, in its own numbers.</b> Stacked
+    /// bottom-up the three occupied y 188..600 of a 610-DIP page area and covered BOTH launch
+    /// buttons: the export result's plate at 819,188 265x46 over <c>FALL IN</c> at 883,157 172x46,
+    /// and over <c>Quick Drop</c> at 905,211 150x28. That is the same defect the top-right dock was
+    /// moved to escape, reached by a different road.</para>
+    ///
+    /// <para><b>A CAP WAS NOT THE ANSWER AND IS NOT WHAT THIS PINS.</b> Dropping an unacknowledged
+    /// notice to make room is itself a defect — the user who never saw the import result is worse
+    /// off than the one whose toast overlapped a button — so all three are still OWED here, and the
+    /// last third of this fact spends real dismiss presses proving each one still arrives. What is
+    /// bounded is the footprint: one toast on screen, the newest, because a refusal queued behind an
+    /// unread export result would arrive attached to nothing.</para>
+    /// </summary>
+    [AvaloniaFact]
+    public async Task ThreeDifferentNoticesAtOnce_AreAllStillOwed_AndCoverNoControlOnAnyPage()
+    {
+        var (host, window, dtrh) = await BootRefusingAsync();
+        window.Toasts.Schedule = (_, _) => new NoDismiss();
+
+        // The real sentences, from the real notice source — a phrase export and the longest import
+        // result this build can produce (not persisted, with skipped pools), which is the tallest
+        // toast in the app at 360x193.
+        var exported = PhraseBackupNotices.Exported(36);
+        var imported = PhraseBackupNotices.Imported(3, 36, ["Affirmations", "Denials"], persisted: false);
+        window.Toasts.ShowUntilDismissed(exported.Message, exported.Kind);
+        window.Toasts.ShowUntilDismissed(imported.Message, imported.Kind);
+
+        Press(window, window.FindControl<RadioButton>("DoorPlay")!);
+        await PressAndAwaitRefusalAsync(window, dtrh, "FallInButton");
+
+        // (1) NOTHING WAS DROPPED — all three are still owed, newest last.
+        Assert.Equal(
+            [exported.Message, imported.Message, DtrhGate.TierRefusalMessage],
+            window.Toasts.Messages);
+
+        // (2) AND THE SURFACE COVERS NOTHING, ON ANY PAGE, WITH ALL THREE OWED. Same sweep as
+        // AtTheShellsOwnSize_ALiveToastOverlapsNoInteractiveControlOnAnyPage — that one holds the
+        // placement for a single notice, this one holds it for a surface with a queue behind it.
+        // Every realized toast is checked rather than an asserted-single one, so a host that went
+        // back to stacking fails by NAMING the control it covered instead of by counting plates.
+        foreach (var door in new[] { "DoorPlay", "DoorStudio", "DoorCompanion", "DoorIntake", "DoorSystem" })
+        {
+            Press(window, window.FindControl<RadioButton>(door)!);
+            window.UpdateLayout();
+
+            var toastRects = ToastRects(window);
+            var pageHost = Descendant<ContentControl>(window, "PageHost");
+            foreach (var control in pageHost.GetVisualDescendants().OfType<Control>())
+            {
+                if (control is not (Button or ToggleButton or Slider or ComboBox or TextBox)) continue;
+                if (!control.IsEffectivelyVisible || control.Bounds.Width <= 0) continue;
+
+                var rect = BoundsIn(window, control);
+                foreach (var toastRect in toastRects)
+                {
+                    Assert.False(
+                        toastRect.Intersects(rect),
+                        $"on {door}, with three notices owed, the toast at {toastRect} overlaps "
+                        + $"{control.Name ?? control.GetType().Name} at {rect}");
+                }
+            }
+
+            // And the footprint is one toast — the newest, so the refusal is attached to the press
+            // that raised it rather than queued behind an export result nobody has closed.
+            Assert.Single(toastRects);
+        }
+
+        // (4) AND EACH ONE STILL ARRIVES. Newest first, taken away by a real press on the dismiss
+        // button the toast itself carries — not by DismissAll, because "the queue drains" is the
+        // whole reason a cap was refused and it has to be driven the way a user drains it.
+        foreach (var expected in new[] { DtrhGate.TierRefusalMessage, imported.Message, exported.Message })
+        {
+            var showing = window.Toasts.GetVisualDescendants().OfType<Border>()
+                .Single(b => b.Classes.Contains("toast"));
+            Assert.Equal(expected, showing.GetVisualDescendants().OfType<TextBlock>().First().Text);
+            Press(window, showing.GetVisualDescendants().OfType<Button>().Single());
+        }
+
+        Assert.Empty(window.Toasts.Messages);
+        Assert.Empty(ToastRects(window));
+
+        await host.ShutdownAsync();
+    }
+
     /// <summary>A toast that never expires on its own, so a fact can hold it up while it presses
     /// underneath it. Disposal is the production seam's cancel and is a no-op here.</summary>
     private sealed class NoDismiss : IDisposable
