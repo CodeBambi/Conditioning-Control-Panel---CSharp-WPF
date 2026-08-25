@@ -150,6 +150,18 @@ function probe(query) {
   } catch (e) { /* noop */ }
   return false;
 }
+/* THE PHONE PROBE (web CLAUDE.md trap 42's seam): coarse pointer or a real
+ * touch digitiser. The CSS side rides the shell's global html.ae-touch; JS
+ * decisions use this local probe so the module answers the same on a bare
+ * harness. A Windows touchscreen laptop also answers true - accepted
+ * deliberately, the ceiling is hardware-protective and cheap. */
+function coarseTouch() {
+  if (probe('(pointer: coarse)')) return true;
+  try {
+    if (typeof navigator !== 'undefined' && navigator && Number(navigator.maxTouchPoints) > 1) return true;
+  } catch (e) { /* noop */ }
+  return false;
+}
 function clamp01(v) {
   const x = Number(v);
   if (!isFinite(x)) return 0;
@@ -225,6 +237,7 @@ export default {
     const timers = createTimers();
     const reduced = probe('(prefers-reduced-motion: reduce)')
       || !!(ctx.motion && ctx.motion.reducedMotion);
+    const touch = coarseTouch();
     const dev = ctx.dev === true;
 
     let S = null;
@@ -390,7 +403,11 @@ export default {
         root: ctx.root,
         t,
         reduced,
-        perf: false,
+        /* the tube's cheap ladder (tube3d: fewer segments, smaller band canvas,
+           4Hz band redraw, fewer particles) arms on a coarse-pointer device -
+           a phone's GPU is the ceiling, not the frame budget. Desktop answers
+           false and renders byte-identically. */
+        perf: touch,
         showRt: settingOf('ic_show_rt', true) !== false,
         seed,                    // the tube grows its skin from the class seed
         log: say,
@@ -618,7 +635,12 @@ export default {
     function swapBackdrop() {
       if (!S || !S.pool) return;
       try {
-        const kind = S.rngFx() < 0.7 ? 'loop' : 'still';
+        /* the desktop draws loops 70% of the time (gifs, cheap in an <img>);
+           a phone flips that share to stills-first so the blurred backdrop
+           never spends one of iOS's few hardware video decode sessions. ONE
+           rng draw either way, so the seeded stream stays aligned. */
+        const roll = S.rngFx();
+        const kind = roll < 0.7 ? (touch ? 'still' : 'loop') : (touch ? 'loop' : 'still');
         const got = S.pool.next(kind);
         if (got && got.url) { S.render.swapBg(got.url); S.swaps++; }
       } catch (e) { /* keep the old one */ }

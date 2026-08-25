@@ -1364,8 +1364,29 @@ export async function createTube3D(opts = {}) {
   /* rAF resolved at call time - absent (harness) means "render on demand". */
   let rafId = 0;
   let last = 0;
+  /* THE VISIBILITY GUARD (mobile web): a hidden tab schedules no frames at
+     all. Coming back cannot teleport the animations: kick() zeroes `last`
+     (first dt defaults to 0.016) and loop() clamps dt to 0.05 regardless. */
+  let hidden = false;
+  const onVis = () => {
+    try {
+      const h = !!(typeof document !== 'undefined' && document.hidden);
+      if (h === hidden) return;
+      hidden = h;
+      if (h) {
+        if (rafId && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rafId);
+        rafId = 0;
+      } else if (!dead && !suspended) kick();
+    } catch (e) { /* noop */ }
+  };
+  try {
+    if (typeof document !== 'undefined' && document.addEventListener) {
+      hidden = !!document.hidden;
+      document.addEventListener('visibilitychange', onVis);
+    }
+  } catch (e) { /* noop */ }
   function loop(ts) {
-    if (dead || suspended) return;
+    if (dead || suspended || hidden) return;
     const dt = last ? Math.min(0.05, (ts - last) / 1000) : 0.016;
     last = ts;
     frame(dt);
@@ -1373,6 +1394,7 @@ export async function createTube3D(opts = {}) {
     if (raf) rafId = raf(loop);
   }
   function kick() {
+    if (hidden) return;    // onVis kicks again when the tab comes back
     const raf = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame : null;
     last = 0;
     if (raf) rafId = raf(loop); else frame(0.016);
@@ -1426,6 +1448,7 @@ export async function createTube3D(opts = {}) {
     destroy() {
       dead = true;
       try { if (rafId && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rafId); } catch (e) { /* noop */ }
+      try { if (typeof document !== 'undefined' && document.removeEventListener) document.removeEventListener('visibilitychange', onVis); } catch (e) { /* noop */ }
       try {
         tubeGeo.dispose(); tubeMat.dispose();
         dish.geometry.dispose(); dishMat.dispose(); dishTex.dispose();
