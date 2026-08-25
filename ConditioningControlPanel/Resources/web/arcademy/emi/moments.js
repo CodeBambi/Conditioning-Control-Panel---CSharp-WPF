@@ -99,6 +99,10 @@ export const MOMENTS = Object.freeze({
    *  locked glance, exactly as before. */
   classStart: {
     pick(p) {
+      /* EMI ASKS: a01's YES makes it a SOFT night, and a soft night is a
+       * kinder arrival - one face, over the top of the room's own. It changes
+       * nothing else: no line, no chain, no length. */
+      if (p && p.soft === true) return { face: '^_^', hold: 1400 };
       const FAMILY_FACE = {
         search: '(◔_◔)', memory: '._.', reflex: 'o_o', comfort: '=_=',
         tracking: '¬_¬', recall: '0_0', puzzle: '(◠‿◠)',

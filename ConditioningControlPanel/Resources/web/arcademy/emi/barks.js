@@ -127,7 +127,11 @@ export const POOLS = Object.freeze({
       { t: "two days. the plants missed you. i have no plants.", face: ';_;' },
       { t: "you're back! full recap: nothing happened. i waited.", face: '^_^' },
       { t: "i practiced my hello. this was it. did it land?", face: '._.' },
-      { t: "day three was quiet. i don't recommend it.", face: ';_;', when: ['longAbsence:3'] }
+      { t: "day three was quiet. i don't recommend it.", face: ';_;', when: ['longAbsence:3'] },
+      /* EMI ASKS: the ONE greet name-drop. Gated `hasName` so an install that
+       * never answered a14 sees the pool it always had, and the token itself
+       * would collapse to the un-named variant even if it ever slipped through. */
+      { t: '{name}. you came back.', face: '^_^', when: ['hasName'] }
     ]
   },
 
@@ -551,7 +555,10 @@ export const POOLS = Object.freeze({
     lines: [
       { t: "a new best. i kept your old one. for contrast.", face: '(⌐■_■)', chain: 'cool',
         double: true },
-      { t: "new record. the old record says congrats. it's crying.", face: '\\o/' }
+      { t: "new record. the old record says congrats. it's crying.", face: '\\o/' },
+      /* EMI ASKS: the record stamp is the second of the three name-drop sites.
+       * Never in a dare, never at exit - see the spec's USE list. */
+      { t: "{name}. that's the one.", face: '*_*', when: ['hasName'] }
     ]
   },
 
@@ -687,6 +694,62 @@ export const POOLS = Object.freeze({
     lines: [
       { t: "i'm sorry dave. i'm afraid i can't do that.", face: '0_0', double: true },
       { t: "that button's on break. union rules. bulb union.", face: '-_-' }
+    ]
+  },
+
+  /* ==========================================================================
+   * THE ASK CALLBACKS (wave EMI ASKS, 2026-08-25)
+   *
+   * She asked, you answered, and some nights later she brings it up. Every one
+   * of these is gated on a STORED answer (`askIs` / `askAnswered`) and on the
+   * wait (`sessionsSinceAsk`), because a recall that lands the next evening
+   * reads as an echo and a recall three sittings later reads as memory. An
+   * IGNORED ask is not an answer and `askAnswered` refuses it, so she can
+   * never reference a conversation you declined to have.
+   * ======================================================================== */
+
+  /** a03's callback - "spiral or flash?", remembered. One line per answer, so
+   *  the pool is one line wide and noRepeat would simply mute it. */
+  askFlavorSpiral: {
+    on: 'classStart', when: ['askIs:a03_flavor:spiral', 'sessionsSinceAsk:a03_flavor:2'],
+    odds: 0.25, ceremony: false, priority: 30, noRepeat: false,
+    maxPerSession: 1, cooldownMs: 600000,
+    lines: [
+      { t: 'you said spiral. i remembered.', face: '^___^', double: true }
+    ]
+  },
+  askFlavorFlash: {
+    on: 'classStart', when: ['askIs:a03_flavor:flash', 'sessionsSinceAsk:a03_flavor:2'],
+    odds: 0.25, ceremony: false, priority: 30, noRepeat: false,
+    maxPerSession: 1, cooldownMs: 600000,
+    lines: [
+      { t: 'flash. your pick. i wrote it down.', face: '^___^', double: true }
+    ]
+  },
+
+  /** a04's callback - the room you said you liked. `askIs` carries the room on
+   *  the key (`a04_room|<gameKey>`), and voice.js has no per-game ledger of its
+   *  own, so the gate is the ROOM's own key through `gameIs`-shaped ids. */
+  askRoomLiked: {
+    on: 'classStart', when: ['askAnswered:a04_room|{game}', 'sessionsSinceAsk:a04_room|{game}:2'],
+    odds: 0.25, ceremony: false, priority: 28, noRepeat: false,
+    maxPerSession: 1, cooldownMs: 600000,
+    lines: [
+      { t: 'your room. the one you liked.', face: '^_^', when: ['askIs:a04_room|{game}:yes'] }
+    ]
+  },
+
+  /** w01 - SHE IS WRONG, on purpose. One sitting in twenty, and it shares the
+   *  humanity-quirk slot with every other `double` in the file (voice.js's
+   *  DOUBLES_PER_SESSION), which is what keeps two of them off one night. */
+  askMisremember: {
+    on: 'greet', when: ['askAnswered:a03_flavor'],
+    odds: 0.05, ceremony: false, priority: 26, noRepeat: false, maxPerSession: 1,
+    lines: [
+      { t: 'you said flash. no wait. spiral. right.', face: '@_@', double: true,
+        when: ['askIs:a03_flavor:spiral'] },
+      { t: 'you said spiral. no wait. flash. right.', face: '@_@', double: true,
+        when: ['askIs:a03_flavor:flash'] }
     ]
   }
 
