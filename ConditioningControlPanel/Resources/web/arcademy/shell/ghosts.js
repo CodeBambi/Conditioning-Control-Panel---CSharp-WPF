@@ -55,6 +55,23 @@ const SVGNS = 'http://www.w3.org/2000/svg';
 export const PRESENCE_V = 1;
 /** Simultaneous drawn ghosts. Overflow feeds the busyness chips, never the map. */
 export const MAX_GHOSTS = 24;
+/** THE TOUCH CEILING (perf/arcademy-mobile-web). Every drawn ghost writes an
+ * SVG transform attribute per rAF frame into the campus plan, and 24 of those
+ * is a standing tax an iPhone pays whenever the campus is up. On a coarse
+ * pointer the map draws at most this many; the rest feed the busyness chips
+ * exactly the way overflow always has. Desktop keeps MAX_GHOSTS untouched. */
+export const TOUCH_MAX_GHOSTS = 8;
+/* Probed ONCE at module init (same probe as trap 42's `.ae-touch` seam):
+ * coarse pointer, or a touch digitiser on a host whose media queries lie. */
+const IS_COARSE = (() => {
+  try {
+    if (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) return true;
+  } catch (e) { /* noop */ }
+  try {
+    return typeof navigator !== 'undefined' && Number(navigator.maxTouchPoints) > 1;
+  } catch (e) { /* noop */ }
+  return false;
+})();
 /** Rooms with at least this many attendees wear a count chip (PRESENCE §6). */
 export const BUSY_MIN = 3;
 /** The replay window. Anything older than this is not a ghost at all. */
@@ -834,7 +851,14 @@ export function createGhosts(o) {
     const nowMs = clock.now();
     const snap = normalizeSnapshot(raw, nowMs);
     if (!snap) { say('presence: snapshot refused (shape or version)'); return; }
-    plan = buildSchedules({ snapshot: snap, nowMs, self: selfId });
+    plan = buildSchedules({
+      snapshot: snap,
+      nowMs,
+      self: selfId,
+      // The touch ceiling (see TOUCH_MAX_GHOSTS). On a fine pointer this is
+      // buildSchedules' own default, byte for byte.
+      cap: IS_COARSE ? TOUCH_MAX_GHOSTS : MAX_GHOSTS,
+    });
     planEpoch = -1;
     planBaseMs = nowMs;
     render();

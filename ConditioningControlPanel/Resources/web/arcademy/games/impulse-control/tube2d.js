@@ -637,8 +637,28 @@ export function createTube2D(opts = {}) {
   }
 
   let rafId = 0, last = 0;
+  /* THE VISIBILITY GUARD - same shape as tube3d.js: a hidden tab schedules no
+     frames; kick() zeroes `last` and loop() clamps dt, so no resume teleport. */
+  let hidden = false;
+  const onVis = () => {
+    try {
+      const h = !!(typeof document !== 'undefined' && document.hidden);
+      if (h === hidden) return;
+      hidden = h;
+      if (h) {
+        if (rafId && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rafId);
+        rafId = 0;
+      } else if (!dead && !suspended) kick();
+    } catch (e) { /* noop */ }
+  };
+  try {
+    if (typeof document !== 'undefined' && document.addEventListener) {
+      hidden = !!document.hidden;
+      document.addEventListener('visibilitychange', onVis);
+    }
+  } catch (e) { /* noop */ }
   function loop(ts) {
-    if (dead || suspended) return;
+    if (dead || suspended || hidden) return;
     const dt = last ? Math.min(0.05, (ts - last) / 1000) : 0.016;
     last = ts;
     try { draw(dt); } catch (e) { /* never kill the loop */ }
@@ -646,6 +666,7 @@ export function createTube2D(opts = {}) {
     if (raf) rafId = raf(loop);
   }
   function kick() {
+    if (hidden) return;    // onVis kicks again when the tab comes back
     const raf = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame : null;
     last = 0;
     if (raf) rafId = raf(loop); else { try { draw(0.016); } catch (e) { /* noop */ } }
@@ -700,6 +721,7 @@ export function createTube2D(opts = {}) {
     destroy() {
       dead = true;
       try { if (rafId && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rafId); } catch (e) { /* noop */ }
+      try { if (typeof document !== 'undefined' && document.removeEventListener) document.removeEventListener('visibilitychange', onVis); } catch (e) { /* noop */ }
       try { if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas); } catch (e) { /* noop */ }
     },
   };

@@ -93,6 +93,18 @@ const AUDIO_CEIL = Object.freeze([0.45, 0.6, 0.75, 0.9]);
  *  a burst. */
 const BUMP_MIN_MS = 250;
 
+/** THE TOUCH PLAY-WINDOW (mobile web, ../CLAUDE.md trap 42). On the web host
+ *  every remote loop is an mp4 <video>, and 2+ simultaneously PLAYING videos
+ *  degrade the compositor on BOTH engines (Chromium locks the page to 30Hz;
+ *  iOS caps hardware decode sessions at ~3-4 and the rest stall or fall to
+ *  CPU). A 12-20 card preview playing every face at once is the worst case in
+ *  the school. So on a coarse-touch device at most TOUCH_PLAY_CAP card videos
+ *  play at a time, and the preview ROTATES that window through the board every
+ *  TOUCH_PREVIEW_STEP_MS so every face is still seen animating. Desktop
+ *  (WebView2, fine pointer) never enters any of these paths. */
+const TOUCH_PLAY_CAP = 2;
+const TOUCH_PREVIEW_STEP_MS = 1000;
+
 /** Diagnostics seam (the engine has one too): the live class, for the scratch
  *  harness and any future "what is the board doing" debug overlay. The shell
  *  never reads this. */
@@ -128,6 +140,24 @@ function probeReduced() {
 }
 
 function isVideoUrl(url) { return /\.(mp4|m4v|webm|mov)(\?|#|$)/i.test(String(url || '')); }
+
+/** Coarse-touch probe - the canonical device test (../CLAUDE.md trap 42):
+ *  pointer:coarse OR maxTouchPoints > 1. The host's own isTouch is OR-ed in at
+ *  start() (ctx.platform is create-scope). A Windows touchscreen laptop
+ *  matching via maxTouchPoints is the trap's deliberately accepted caveat -
+ *  hardware-protective and cheap. */
+function probeTouch() {
+  try {
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+      const m = window.matchMedia('(pointer: coarse)');
+      if (m && m.matches) return true;
+    }
+  } catch (e) { /* ignore */ }
+  try {
+    if (typeof navigator !== 'undefined' && Number(navigator.maxTouchPoints) > 1) return true;
+  } catch (e) { /* ignore */ }
+  return false;
+}
 
 export default {
   key: 'deja_vu',
@@ -215,6 +245,7 @@ export default {
     let boardGlyphs = GLYPHS.slice();   // THIS board's glyph order (re-shuffled per board)
     let reduced = false;
     let posterOnly = false;
+    let touch = false;           // coarse-touch device: TOUCH_PLAY_CAP applies
     let loopPolicy = { play: true, reason: 'auto' };
     let retake = false;
     let ambienceKey = '';        // the sustained-dial signature, so a restart is rare
@@ -521,6 +552,49 @@ export default {
       } catch (e) { /* a poster frame is an acceptable floor */ }
     }
 
+    /* ==================================================================== *
+     * THE TOUCH PLAY-WINDOW (touch only - see TOUCH_PLAY_CAP above).
+     * The whole-board show beats (preview, re-deal) still give every card its
+     * media element and its 'up' face, but only TOUCH_PLAY_CAP of the video
+     * faces PLAY at once; the window rotates through the list on a short
+     * interval so every face gets its animated moment, then the beat's own
+     * flip-down pauses everything. The steps ride after()/run(), so a suspend
+     * defers them and clearTimers() (startBoard, bell, destroy) kills the
+     * chain outright. Never entered on desktop: every caller is touch-gated.
+     * ==================================================================== */
+    let previewing = false;      // a play-window is live (touch only, one-way per beat)
+    let previewList = null;      // the cells the window rotates over
+    let previewCursor = 0;
+
+    function videoFaces(list) {
+      const out = [];
+      for (const c of list) if (c && c.face && c.face.tagName === 'VIDEO') out.push(c);
+      return out;
+    }
+    function playWindowStart(list) {
+      previewList = list;
+      previewCursor = 0;
+      previewing = true;
+      playWindowStep();
+    }
+    function playWindowStep() {
+      if (!previewing || dead || ended || belled) return;
+      const vids = videoFaces(previewList || []);
+      const n = vids.length;
+      if (!n) return;
+      for (const c of vids) playFace(c, false);
+      for (let k = 0; k < Math.min(TOUCH_PLAY_CAP, n); k++) {
+        playFace(vids[(previewCursor + k) % n], true);
+      }
+      previewCursor = (previewCursor + TOUCH_PLAY_CAP) % n;
+      // a board with no more videos than the cap has nothing to rotate
+      if (n > TOUCH_PLAY_CAP) after(TOUCH_PREVIEW_STEP_MS, playWindowStep);
+    }
+    function playWindowStop() {
+      previewing = false;
+      previewList = null;
+    }
+
     /* ---- HUD paint ------------------------------------------------------- */
     function swapChipText() {
       return t('dv_swaps', 'swaps') + ' ' + swapsFired + '/' + dials.swapBudget;
@@ -619,6 +693,7 @@ export default {
        * on the new board. This call is safe from inside a run() step because
        * after() removes its own id before it runs the step. */
       clearTimers();
+      if (touch) playWindowStop();   // a dead board's window must not survive it
 
       boardNo = n;
       /* THE LADDER: board N's dials are the player's tier bumped one gentle
@@ -697,8 +772,11 @@ export default {
       for (const c of cells) {
         applyMedia(c);
         c.card.classList.add('up');
-        playFace(c, true);
+        if (!touch) playFace(c, true);
       }
+      /* On touch the memorize beat plays TOUCH_PLAY_CAP faces at a time and
+       * rotates; on desktop every face plays at once, exactly as before. */
+      if (touch) playWindowStart(cells.slice());
       tick('sting', 0.4);
       // THE MEMORIZE-POISON BEAT: exactly at preview end -400ms.
       const poisonAt = Math.max(0, dials.previewMs - TIMING.poisonLeadMs);
@@ -707,6 +785,7 @@ export default {
     }
 
     function previewDown() {
+      if (touch) playWindowStop();                    // the preview's window dies with it
       if (grid) grid.classList.remove('scanning');    // the machine is done showing
       for (const c of cells) {
         c.card.classList.add('flipping');
@@ -991,12 +1070,15 @@ export default {
         applyMedia(c);
         if (redealLie && c === redealLie.cell) wearLie(c, redealLie.wearPairId);
         c.card.classList.add('up');
-        playFace(c, true);
+        if (!touch) playFace(c, true);
         showing.push(c);
       }
+      /* the re-deal is the preview's beat again: same touch cap, same window */
+      if (touch) playWindowStart(showing.slice());
       say('re-deal: showing ' + showing.length + ' cards'
         + (redealLie ? ' (one is a lie)' : ' (truthful)'));
       after(trickster ? trickster.redealShowMs : 1500, () => {
+        if (touch) playWindowStop();
         for (const c of showing) { c.card.classList.add('flipping'); playFace(c, false); }
         after(reduced ? TIMING.flipReducedMs : TIMING.flipMs, () => {
           for (const c of showing) c.card.classList.remove('flipping', 'up');
@@ -1283,6 +1365,7 @@ export default {
       busy = true;                           // 1. input is shut BEFORE anything else
       stopClock();
       clearTimers();                         // 2. truncate: no step from the live board runs
+      if (touch) playWindowStop();
       flipping = 0;
       faceUp.length = 0;
       clearLie();
@@ -1740,6 +1823,9 @@ export default {
         budgetMs = Math.max(20000, (Number(spec.timeBudgetSec) || 300) * 1000);
         reduced = probeReduced();
         posterOnly = reduced;
+        /* Coarse touch: the local probe OR the host's own flag (the web shim
+         * populates ctx.platform.isTouch; the desktop host answers false). */
+        touch = probeTouch() || !!(ctx.platform && ctx.platform.isTouch);
 
         /* THE BOARD SIZE is the player's for the WHOLE class - the escalation
          * ladder never touches the grid, so a below-par choice is still exactly
@@ -1765,6 +1851,14 @@ export default {
         loopPolicy = matchedLoopPolicy(ctx.settings && ctx.settings.dv_matched_loops, tier, posterOnly);
         if (loopPolicy.reason === 'ceiling') {
           say('dv_matched_loops: "keep-playing" refused by the quality/tier ceiling - frozen');
+        }
+        /* THE TOUCH SETTLE: matchedLoopPolicy's semantics are untouched, but a
+         * phone cannot afford matched pairs looping forever - by the end of a
+         * board that is `pairs` extra live decoders under the play cap. Same
+         * "a knob may use less, never more" direction the ceiling rule takes. */
+        if (touch && loopPolicy.play) {
+          loopPolicy = { play: false, reason: 'touch' };
+          say('dv_matched_loops: matched pairs settle to poster on touch (playing-video cap)');
         }
 
         /* retake detection: the same seed already played today replays the
@@ -1845,6 +1939,7 @@ export default {
       destroy() {
         dead = true;
         hideHowto();
+        if (touch) playWindowStop();
         stopClock();
         clearTimers();
         stopAmbience();
@@ -1899,7 +1994,7 @@ export default {
           revealed: revealed.slice(),
           elapsedMs, budgetMs, classPlayMs, boardPlayMs, ended, busy, paused,
           loopPolicy: Object.assign({}, loopPolicy),
-          posterOnly, reduced,
+          posterOnly, reduced, touch,
           pairUrls: pairUrls.slice(),
           cellsDom: cells.map((c) => c.card),
           well,

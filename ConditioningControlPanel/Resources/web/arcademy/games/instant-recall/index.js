@@ -2333,7 +2333,15 @@ export default {
           cue: (name, level, extra) => tick(name, level, extra),
           seed, tier, reduced,
           coarse: !!(ctx.platform && ctx.platform.isTouch),
-          lite: !!(ctx.motion && Number(ctx.motion.motionLevel) <= 1),
+          /* LITE ENGAGES ON TOUCH TOO (mobile web, ../CLAUDE.md trap 42): a
+           * phone at the default motion level was getting the desktop dials
+           * (LIVE_LOOP_CAP 12 / VIDEO_TILE_CAP 4), and iOS caps hardware video
+           * decode sessions at ~3-4 - so the wall now STARTS from the 6/2 lite
+           * dials on a coarse pointer instead of the governor catching the
+           * fire late. Same signal as `coarse` above; desktop WebView2 answers
+           * isTouch false and keeps the motionLevel test byte-identical. */
+          lite: !!((ctx.motion && Number(ctx.motion.motionLevel) <= 1)
+            || (ctx.platform && ctx.platform.isTouch)),
           density: densityMultFor(densityValue),
           timeScale,
           log: say,

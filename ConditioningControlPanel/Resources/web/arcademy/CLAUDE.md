@@ -1398,8 +1398,20 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     a frame for a backdrop-filter or a full-screen blend surface that a desktop GPU eats for
     free. So The Deep End probes the device once per class - `matchMedia('(pointer: coarse)')`
     or `navigator.maxTouchPoints > 1` - and puts **`.ae-touch` on `<html>`**, the same
-    document-root seam `.ae-lite` uses (the game sets it, the engine only reads it, and
-    BOTH come off on destroy or the lobby inherits a phone's ceiling).
+    document-root seam `.ae-lite` uses (the game sets it, the engine only reads it).
+    - **GLOBALLY ARMED SINCE 2026-08-25 (perf/arcademy-mobile-web):** `core/device.js`
+      arms `.ae-touch` page-wide at paint when `isMobile() && touchProbe()` and stamps
+      `data-ae-touch-global="1"` on `<html>` - ONCE ON, NEVER OFF (a rotate can flip
+      `isMobile()`, the GPU that needed the ceiling still needs it). The Deep End's own
+      lifecycle add/remove SKIPS when the marker is present (its destroy used to hand
+      the lobby back its desktop-cost washes); its per-class probe survives only as the
+      fallback for big tablets/touch laptops where `isMobile()` is false. The arming
+      gates on `isMobile()` too - NOT the bare probe - because desktop WebView2 on a
+      touch-screen laptop must never change visuals, and `isMobile()` (coarse PRIMARY
+      pointer, no fine pointer anywhere) is structurally false there. A phone also gets
+      the engine's lite node budgets (`curves.js` *Lite twins, `ctx.lite()` = coarse or
+      motionLevel<=1), the shell's GPU DIET block at the bottom of `styles.css`, and
+      per-game `html.ae-touch` blocks (impulse-control's blur diet among them).
     - It is **NOT a third rung**: it applies on FULL too, and `de_perf: full` does not opt
       out of it. There is no setting and there must never be one - the device is the setting.
     - It **composes with the rung in the PROTECTIVE direction, and the two dials point

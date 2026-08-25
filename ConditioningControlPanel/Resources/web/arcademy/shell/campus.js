@@ -368,6 +368,24 @@ const ATTRACT_DWELL_MS = 1000;          // how long a room holds its glow
 const ATTRACT_LOOP_GAP_MS = 2600;       // dark beat before the show repeats
 const ATTRACT_TICK_MS = 50;             // cursor lerp tick (20fps - a hint, not a game)
 const ATTRACT_FLIP_MS = 70;             // one split-flap flip
+/* THE PHONE HALF-RATE (perf/arcademy-mobile-web). The attract loop is a 20Hz
+ * SVG cursor transform plus sign textContent rewritten ~14Hz inside filtered
+ * groups - polish that is invisible at phone sizes and expensive on WebKit.
+ * On a coarse pointer both tickers run at HALF rate (tick 100ms, flip 140ms);
+ * glideCursor derives its step count from the tick, so a glide still takes the
+ * same wall time. Probed ONCE at module init (trap 42's own probe pair);
+ * desktop evaluates to the untouched constants above. */
+const ATTRACT_COARSE = (() => {
+  try {
+    if (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) return true;
+  } catch (e) { /* noop */ }
+  try {
+    return typeof navigator !== 'undefined' && Number(navigator.maxTouchPoints) > 1;
+  } catch (e) { /* noop */ }
+  return false;
+})();
+const ATTRACT_TICK_EFF_MS = ATTRACT_COARSE ? ATTRACT_TICK_MS * 2 : ATTRACT_TICK_MS;
+const ATTRACT_FLIP_EFF_MS = ATTRACT_COARSE ? ATTRACT_FLIP_MS * 2 : ATTRACT_FLIP_MS;
 const ATTRACT_FLIPS = 8;                // flips before a sign has fully settled
 const ATTRACT_GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const ATTRACT_GLOW = 'brightness(1.3) saturate(1.12)';
@@ -2365,9 +2383,9 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   }
   function glideCursor(to, ms, done) {
     const from = cursorAt.slice();
-    const steps = Math.max(1, Math.round(ms / ATTRACT_TICK_MS));
+    const steps = Math.max(1, Math.round(ms / ATTRACT_TICK_EFF_MS));
     let i = 0;
-    const id = attractEvery(ATTRACT_TICK_MS, () => {
+    const id = attractEvery(ATTRACT_TICK_EFF_MS, () => {
       if (!attractOn) { attractStop(id); return; }
       i += 1;
       const p = Math.min(1, i / steps);
@@ -2395,7 +2413,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     const truth = ref ? neonLabel(key) : '';
     if (!ref || !truth) { done(); return; }
     let k = 0;
-    const id = attractEvery(ATTRACT_FLIP_MS, () => {
+    const id = attractEvery(ATTRACT_FLIP_EFF_MS, () => {
       if (!attractOn) { attractStop(id); return; }
       k += 1;
       if (k >= ATTRACT_FLIPS) {

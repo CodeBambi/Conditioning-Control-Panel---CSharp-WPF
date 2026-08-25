@@ -21,9 +21,18 @@ export const BUBBLE_MS = Object.freeze({ slow: 2200, fast: 260 });
 export const FLASH_ALPHA_CEIL = 0.85;
 
 /** Node budgets. flash_burst: 20 live desktop / 3 on a coarse-pointer-or-low-motion
- *  device (DTRH FLASH_LIVE_CAP). gif_burst 10, gif_rain 14 (Intake MAX_NODES). */
+ *  device (DTRH FLASH_LIVE_CAP). gif_burst 10, gif_rain 14 (Intake MAX_NODES).
+ *  Every kind now has a *Lite twin (mobile perf, 2026-08-25), picked the same
+ *  way flashBurstLite always was - `ctx.lite()` (coarse pointer OR
+ *  motionLevel <= 1) at the consumption site - so a phone spends fewer live
+ *  nodes per effect while a desktop budget is untouched. */
 export const NODE_CAPS = Object.freeze({
-  flashBurst: 20, flashBurstLite: 3, gifBurst: 10, gifRain: 14, bubbles: 18, ambient: 24, subFlash: 6,
+  flashBurst: 20, flashBurstLite: 3,
+  gifBurst: 10, gifBurstLite: 4,
+  gifRain: 14, gifRainLite: 6,
+  bubbles: 18, bubblesLite: 8,
+  ambient: 24, ambientLite: 10,
+  subFlash: 6, subFlashLite: 3,
 });
 
 /** DTRH's sidechain duck hierarchy — one policy, emitted as duck requests. */

@@ -16,6 +16,9 @@
  * them in step across a rotate or a resize. Desktop never gets the class, so
  * every mobile rule in the sheets is dead code on a desktop window and the
  * WebView2 build stays pixel-identical to what it was before this file existed.
+ * (Since 2026-08-25 the same paint also ARMS the engine's `html.ae-touch` GPU
+ * ceiling on mobile - see THE GLOBAL GPU CEILING below; it rides the same
+ * isMobile() verdict, so the desktop invariant above is untouched.)
  *
  * THE RULE (and why it is shaped like this)
  *   1. The PRIMARY pointer is coarse - `matchMedia('(pointer: coarse)')`.
@@ -50,6 +53,16 @@
 
 /** The class this module writes on <html>. CSS keys every mobile rule off it. */
 export const MOBILE_CLASS = 'arc-mobile';
+
+/** The engine's GPU-ceiling class (engine/style.js reads it, engine/util.js's
+ *  decoder budget reads it). This module may ARM it; it never removes it. */
+export const TOUCH_CLASS = 'ae-touch';
+
+/** The marker that says the ARMING WAS GLOBAL (this module's), so per-class
+ *  owners of the same seam (The Deep End) know not to toggle it on their own
+ *  lifecycle - a destroy() that removed a page-wide ceiling would hand the
+ *  lobby back its desktop-cost effects. */
+export const TOUCH_GLOBAL_ATTR = 'data-ae-touch-global';
 
 /** Short-side ceiling, in CSS px, for "this is a phone-shaped screen". */
 export const MOBILE_MAX_SHORT_SIDE = 820;
@@ -139,12 +152,65 @@ function stateKey() {
   return (isMobile() ? 'm' : 'd') + ':' + orientation();
 }
 
+/** The Deep End's own hardware probe, verbatim: coarse primary pointer OR more
+ *  than one touch point. Broader than isMobile() on purpose - it is a GPU
+ *  ceiling, not a layout verdict - but see armTouchClass() for why the arming
+ *  below still gates on isMobile() as well. */
+function touchProbe() {
+  if (mq('(pointer: coarse)')) return true;
+  try {
+    if (typeof navigator !== 'undefined' && Number(navigator.maxTouchPoints) > 1) return true;
+  } catch (e) { /* ignore */ }
+  return false;
+}
+
+/* ----------------------------------------------------------------------------
+ * THE GLOBAL GPU CEILING (mobile perf, 2026-08-25).
+ *
+ * engine/style.js's `.ae-touch` block kills what WebKit charges a phone most
+ * for (backdrop-filter, full-screen blend surfaces, the scanline re-raster,
+ * filters over live decodes) and engine/util.js drops the decoder budget 6->3
+ * under it - but the ONLY writer used to be The Deep End's class lifecycle, so
+ * nine of ten classes and the whole shell ran desktop-cost effects on phones.
+ * Arm it here instead, once, page-wide, from the same installDeviceClass()
+ * boot.js and shell.js already call.
+ *
+ * WHY `isMobile() && touchProbe()` AND NOT the probe alone: the bare probe
+ * catches a touch-screen Windows laptop, and on the desktop WebView2 host that
+ * would CHANGE DESKTOP VISUALS (blend modes off, scanline still) - desktop must
+ * stay pixel-identical. A host probe is no help either: the web shim
+ * (cclabs-web arcademy-web-ext/web-shim.js) deliberately fakes
+ * `window.chrome.webview`, so "am I the desktop app" is unanswerable from here.
+ * `isMobile()` IS provably false on desktop WebView2 - it requires a coarse
+ * PRIMARY pointer and NO fine pointer anywhere, and every desktop/laptop
+ * WebView2 window has a fine pointer (`?forcemobile=1` never appears in the
+ * host's fixed URL) - so gating on it makes desktop immunity structural.
+ * The cost of the narrower gate: a big tablet (iPad Pro 11"+) or touch laptop
+ * browser does not get the ceiling globally; The Deep End's own per-class
+ * probe still covers it there, exactly as before.
+ *
+ * ONCE ON, NEVER OFF: a rotate or resize can flip isMobile(), but a GPU that
+ * needed the ceiling a minute ago still needs it now. TOUCH_GLOBAL_ATTR is the
+ * marker that tells per-class writers the class is not theirs to toggle.
+ * -------------------------------------------------------------------------- */
+function armTouchClass(html) {
+  try {
+    html.classList.add(TOUCH_CLASS);
+    if (typeof html.setAttribute === 'function') html.setAttribute(TOUCH_GLOBAL_ATTR, '1');
+  } catch (e) { /* never fatal */ }
+}
+
 function paintRoot() {
   try {
     const html = typeof document !== 'undefined' && document.documentElement;
     if (!html || !html.classList) return;
-    if (isMobile()) html.classList.add(MOBILE_CLASS);
-    else html.classList.remove(MOBILE_CLASS);
+    if (isMobile()) {
+      html.classList.add(MOBILE_CLASS);
+      if (touchProbe()) armTouchClass(html);
+    } else {
+      html.classList.remove(MOBILE_CLASS);
+      // ae-touch stays if it was ever armed - see the block comment above.
+    }
     if (typeof html.setAttribute === 'function') html.setAttribute('data-arc-orient', orientation());
   } catch (e) { /* the DOM double has no classList - never fatal */ }
 }
@@ -207,7 +273,7 @@ export function onDeviceChange(fn) {
 }
 
 export default {
-  MOBILE_CLASS, MOBILE_MAX_SHORT_SIDE,
+  MOBILE_CLASS, MOBILE_MAX_SHORT_SIDE, TOUCH_CLASS, TOUCH_GLOBAL_ATTR,
   isMobile, orientation, orientationOk, viewportSize,
   installDeviceClass, onDeviceChange,
 };

@@ -7,7 +7,8 @@
  *   - ONE reused DOM element per WASH KIND (spiral / pink / braindrain / sublim),
  *     refreshing its fade deadline — overlapping triggers never pile DOM
  *     (DTRH holdOn, verbatim posture);
- *   - node budgets: gif_rain 14, bubbles 18, ambient 24;
+ *   - node budgets: gif_rain 14 (6 coarse/low-motion), bubbles 18 (8),
+ *     ambient 24 (10) - the lite twins ride ctx.lite(), flashBurstLite's seam;
  *   - cadences come from the clamped channel vector (bubbleRate 2200->260ms,
  *     rain gap from flashRate, drift speed/amplitude from bgIntensity) and
  *     RETUNE LIVE when setHeat changes them;
@@ -182,7 +183,9 @@ export function createSustained(ctx) {
     if (rate <= 0.001) { ctx.log('bubble_field: bubbleRate is 0 at this heat/cap - no field'); return null; }
     let spec = bubbleSpec(rate);
     const variant = ctx.variant('bubble_field', spec.alpha, opts.variant);
-    const max = Math.min(NODE_CAPS.bubbles, opts.max == null ? NODE_CAPS.bubbles : opts.max | 0);
+    // the lite twin rides flashBurstLite's own seam: ctx.lite() at spend time
+    const bubbleCap = ctx.lite() ? NODE_CAPS.bubblesLite : NODE_CAPS.bubbles;
+    const max = Math.min(bubbleCap, opts.max == null ? bubbleCap : opts.max | 0);
     const clickSafe = !!opts.clickSafe;
     const clickable = !clickSafe && opts.clickable !== false && typeof opts.onPop === 'function';
     let guard = null;
@@ -263,10 +266,13 @@ export function createSustained(ctx) {
     const spec = gifRainSpec(ctx.magnitude(rate), opts.durationMult || 1);
     const clickSafe = opts.clickSafe !== false;      // rain is decoration by default
     const endAt = (opts.durationMs == null ? spec.durationMs : opts.durationMs) + Date.now();
+    // gifRainSpec is PURE (spec.max is the desktop cap); the lite twin is
+    // composed here, on flashBurstLite's own ctx.lite() seam, min = protective.
+    const rainCap = ctx.lite() ? Math.min(spec.max, NODE_CAPS.gifRainLite) : spec.max;
     let timer = 0;
 
     function spawn() {
-      if (live.rain >= spec.max) return;
+      if (live.rain >= rainCap) return;
       /* THE DECODER BUDGET (util.js): past it a 'loop' request is served a
        * still, so the rain keeps its node count and drops its decode cost. */
       const url = ctx.assetUrlSync(budgetedKind(opts.assetKind || 'loop'));
@@ -313,7 +319,11 @@ export function createSustained(ctx) {
     const spec = ambientSpec(ctx.magnitude(ctx.ceiling('bgIntensity', opts.density)), opts.count || 16);
     if (!spec.on) return null;
     const nodes = [];
-    const count = Math.max(1, Math.round(spec.count * (ctx.motion() <= 0 ? 0.4 : 1)));
+    // ambientSpec is PURE (spec.count <= NODE_CAPS.ambient); the lite twin is
+    // composed here on ctx.lite(), exactly the flashBurstLite pick. Up to 24
+    // forever-animating motes is the phone cost this trims to 10.
+    const ambientCap = ctx.lite() ? NODE_CAPS.ambientLite : NODE_CAPS.ambient;
+    const count = Math.max(1, Math.min(ambientCap, Math.round(spec.count * (ctx.motion() <= 0 ? 0.4 : 1))));
     for (let i = 0; i < count; i++) {
       const node = document.createElement('div');
       node.className = 'ae-mote' + (def.shape === 'dot' ? '' : ' ae-mote-' + def.shape);
