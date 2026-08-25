@@ -17,6 +17,46 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
+  <!-- ONE libvlc ARCHITECTURE, not three (THIRD-PARTY-NOTICES.md §4).
+       VideoLAN.LibVLC.Windows keys its copy on $(Platform), NOT on the RID: its own targets
+       default VlcWindowsX64Enabled/X86Enabled/Arm64Enabled to true when Platform is AnyCPU,
+       which it is here. The measured consequence was that every artifact carried all three
+       trees — 956 plugin DLLs, 292.8 MB — of which a win-x64 apphost can load exactly one
+       set. Unreachable BY CONSTRUCTION rather than by policy: LibVLCSharp 3.10.0 picks the
+       directory from RuntimeInformation.ProcessArchitecture (verified against the shipped
+       LibVLCSharp.dll: it references ProcessArchitecture and never OSArchitecture), so an
+       x64 process — including one emulated on an ARM64 host — only ever consults win-x64,
+       and a 64-bit process cannot load a 32-bit DLL at all. RID-driven so a future
+       `-r win-arm64` still gets its own tree; the empty-RID case is a plain `dotnet build`,
+       which is x64 on every machine this product builds on. Nothing in win-x64 is filtered:
+       the decode surface is byte-identical to before. -->
+  <PropertyGroup>
+    <VlcWindowsX64Enabled>false</VlcWindowsX64Enabled>
+    <VlcWindowsX86Enabled>false</VlcWindowsX86Enabled>
+    <VlcWindowsArm64Enabled>false</VlcWindowsArm64Enabled>
+    <VlcWindowsX64Enabled Condition="'$(RuntimeIdentifier)' == '' or '$(RuntimeIdentifier)' == 'win-x64'">true</VlcWindowsX64Enabled>
+    <VlcWindowsX86Enabled Condition="'$(RuntimeIdentifier)' == 'win-x86'">true</VlcWindowsX86Enabled>
+    <VlcWindowsArm64Enabled Condition="'$(RuntimeIdentifier)' == 'win-arm64'">true</VlcWindowsArm64Enabled>
+  </PropertyGroup>
+
+  <!-- LGPL-2.1 §6, THE MANAGED HALF (THIRD-PARTY-NOTICES.md §4).
+       The named publish strategy is self-contained SINGLE-FILE, which bundles every managed
+       assembly into the apphost — including the LGPL-2.1-or-later LibVLCSharp.dll. A user
+       cannot substitute their own build of an assembly fused into the executable, and that
+       substitution is exactly what §6 exists to preserve. Marking it ExcludeFromSingleFile
+       ships it as an ordinary replaceable sidecar; the native half was already satisfied
+       (libvlc is unmodified, dynamically loaded, and lives in its own directory).
+       BeforeTargets is the SDK's own _ComputeFilesToBundle, the target that filters
+       ResolvedFileToPublish on this metadata (Microsoft.NET.Publish.targets). Non-single-file
+       publishes and plain builds are unaffected — the metadata has no other reader. -->
+  <Target Name="ExcludeLgplAssemblyFromSingleFile" BeforeTargets="_ComputeFilesToBundle">
+    <ItemGroup>
+      <ResolvedFileToPublish Condition="'%(Filename)%(Extension)' == 'LibVLCSharp.dll'">
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
@@ -35,9 +75,12 @@
     <PackageReference Include="Buttplug" Version="5.0.1" />
     <PackageReference Include="SoundFlow" Version="1.4.1" />
     <!-- video-handoff-spike.md §1 (live-feed re-confirmed 2026-07-22): LibVLCSharp
-         3.10.0 (LGPL-2.1-or-later — sidecar note, pending-owner) + bundled libvlc
-         win-x64 3.0.23.1. Linux uses the distro libvlc 3.0.23-1 (apt libvlc5/libvlccore9 —
-         no official Linux libvlc nuget exists). -->
+         3.10.0 (LGPL-2.1-or-later) + bundled libvlc win-x64 3.0.23.1. Linux uses the distro
+         libvlc 3.0.23-1 (apt libvlc5/libvlccore9 — no official Linux libvlc nuget exists).
+         The LGPL sidecar note is no longer pending: THIRD-PARTY-NOTICES.md §4 states every
+         obligation, and both halves of the §6 relink are now discharged by the packaging
+         wiring at the top of this file (native = its own directory; managed = the
+         ExcludeFromSingleFile target). -->
     <PackageReference Include="LibVLCSharp" Version="3.10.0" />
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23.1" />
   </ItemGroup>
@@ -110,6 +153,17 @@
          (Services/Session/SessionFileService.cs:37-44, BaseDirectory/assets/sessions). -->
     <Content Include="..\..\..\ConditioningControlPanel\assets\sessions\*.session.json">
       <Link>sessions\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <!-- THE NOTICES FILE TRAVELS WITH THE ARTIFACT, which is the only place the obligation
+         binds. Apache-2.0 §4 and LGPL-2.1 §1/§6 oblige the licence and attribution to
+         accompany REDISTRIBUTION; a notices file that stays in the repository discharges
+         nothing. Lands beside the binary in every artifact mode (build output and publish
+         alike — Debug/Release/published are three separate gates, release-publish-gates.md
+         §3, and a user who has the binary has the notices in all three). -->
+    <Content Include="..\..\THIRD-PARTY-NOTICES.md">
+      <Link>THIRD-PARTY-NOTICES.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>

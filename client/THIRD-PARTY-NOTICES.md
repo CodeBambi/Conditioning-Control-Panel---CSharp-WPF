@@ -178,8 +178,29 @@ which the detector does read.)*
 
 **What ships.** `LibVLCSharp` 3.10.0 (managed, LGPL-2.1-or-later) and, on Windows,
 `VideoLAN.LibVLC.Windows` 3.0.23.1 — `libvlc.dll`, `libvlccore.dll`, an `hrtfs/` and `lua/` tree, and
-**323 plugin modules** under `plugins/`, copied to `libvlc/win-x64/` (and `win-x86/`, `win-arm64/`)
-beside the executable. On Linux the client uses the distribution's own libvlc and bundles nothing.
+**323 plugin modules** under `plugins/`, in `libvlc/win-x64/` beside the executable. On Linux the
+client uses the distribution's own libvlc and bundles nothing.
+
+**One architecture, not three — corrected 2026-08-25 by listing a real publish rather than reading
+the project file.** The nuget keys its copy on MSBuild's `$(Platform)`, never on the RID, so under
+`AnyCPU` its own targets enabled `win-x64`, `win-x86` **and** `win-arm64` at once: every artifact
+carried **956 plugin DLLs across three architectures, 292.8 MB**, of which a `win-x64` apphost can
+load exactly one set. Unreachable by construction rather than by policy — LibVLCSharp chooses the
+directory from `RuntimeInformation.ProcessArchitecture` (the shipped `LibVLCSharp.dll` references
+`ProcessArchitecture` and never `OSArchitecture`, so even an x64 process emulated on an ARM64 host
+reads `win-x64`), and a 64-bit process cannot load a 32-bit DLL at all. The project file now enables
+only the tree matching the RID. **The decode surface did not change** — `win-x64` is the same 323
+modules it always was, unfiltered — and this much stopped being redistributed, measured on real
+publishes rather than estimated:
+
+| RID | libvlc before | libvlc after | artifact total |
+|---|---|---|---|
+| `win-x64` | 292.8 MB, 956 plugin DLLs | 105.8 MB, 323 plugin DLLs | −187.0 MB. |
+| `linux-x64` | 292.8 MB, 962 Windows DLLs | none | 979.7 MB → 686.9 MB. |
+
+The Linux row is the sharper one: the nuget's copy is not conditioned on the OS either, so a
+`linux-x64` artifact was carrying the entire Windows libvlc tree — three architectures of DLLs that no
+Linux process can load — while the client's Linux video path uses the distribution's own libvlc.
 
 **Source availability.** LGPL-2.1 §4 requires the complete corresponding source of the library, or a
 written offer for it. VideoLAN publishes both: <https://code.videolan.org/videolan/vlc> for libvlc and
@@ -192,28 +213,57 @@ are `3.0.23.1` and `3.10.0`. The full LGPL-2.1 text is at
 unmodified, dynamically loaded, and lives in its own directory beside the binary; replacing
 `libvlc/win-x64/libvlc.dll` requires nothing from us.
 
-**Relinking — THE MANAGED HALF IS NOT SATISFIED, and this is the open item.** The named publish
+**Relinking — the managed half, satisfied 2026-08-25, and it was a real defect.** The named publish
 strategy is self-contained **single-file** (`client/docs/release-publish-gates.md` §1), which bundles
-every managed assembly — including `LibVLCSharp.dll` — into the apphost. A user cannot substitute a
-modified LibVLCSharp in that artifact, which is exactly the substitution §6 exists to preserve. Two
-discharges, both real, neither taken here because both are packaging changes outside this work's
-scope:
+every managed assembly into the apphost. `LibVLCSharp.dll` went in with the rest, and an assembly
+fused into an executable cannot be substituted — which is precisely the right §6 exists to preserve.
+`LibVLCSharp.dll` is now marked `ExcludeFromSingleFile` and ships as an ordinary sidecar; the artifact
+was already a directory rather than a literal single file (`client/docs/release-publish-gates.md` §1,
+native-library layout), so nothing was traded away. The alternative discharge — shipping the complete
+corresponding source of LibVLCSharp, or a written offer valid for three years — was not needed.
 
-- **Cheap:** keep `LibVLCSharp.dll` out of the bundle
-  (`<ExcludeFromSingleFile>` on that assembly) so it ships as a replaceable sidecar. Costs one
-  file beside the exe; the artifact is already a directory rather than a literal single file
-  (`client/docs/release-publish-gates.md` §1, native-library layout), so nothing is lost.
-- **Or:** ship the complete corresponding source of LibVLCSharp with the artifact, or a written
-  offer valid for three years.
+**Verified against the published bytes, because a build property that silently does nothing is the
+failure mode here.** Three checks, each with a control:
 
-**A licence discrepancy inside the plugin tree, found while checking and not resolved.**
-`VideoLAN.LibVLC.Windows` declares `LGPL-2.1-or-later` at package level, but its `plugins/` tree — all
-323 modules of which the nuget's own targets copy by default — includes modules whose upstream
-libraries are **GPL-2.0-or-later**, among them `libx26410b_plugin.dll` (x264 10-bit encoder) and
-`libzvbi_plugin.dll`. Shipping those makes the aggregate obligation stricter than the package's own
-declaration. **The client decodes and never encodes**, so the cheap resolution is to stop copying what
-is never used: the nuget supports `VlcWindowsX64ExcludeFiles` for exactly this. Recorded as an owner
-item; nothing here asserts it is fine.
+- The `win-x64` publish root holds `LibVLCSharp.dll` as a real 229,888-byte file, and the apphost
+  shrank by 233,513 bytes — the assembly plus its manifest entry.
+- Parsing the apphost's single-file bundle manifest lists **356 entries and none named LibVLCSharp**.
+  Within-artifact control: `SoundFlow.dll`, a peer third-party managed assembly published the same
+  way, **is** in the manifest and is **not** on disk. So the one copy in the artifact is the file.
+- On a minimal probe carrying the identical target, a bundled build reports
+  `Assembly.Location == ""` and no sidecar; the excluded build reports the sidecar's real path — and
+  **overwriting that sidecar changes what the process loads** (it then fails to resolve
+  `LibVLCSharp, Version=3.10.0.0`, with no bundled copy to fall back on). That failure is the
+  substitution right working.
+
+**The plugin tree is GPL-2.0-or-later, and no module is excluded — reasoning, not reflex.** The
+earlier finding was that the package declares `LGPL-2.1-or-later` while `plugins/` carries
+GPL-upstream modules, and it proposed dropping the unreachable ones via `VlcWindowsX64ExcludeFiles`.
+Reachability was established first, from the shipped binaries, and it inverts the conclusion.
+
+Each VLC module embeds its own licence header. Scanning all 323 `win-x64` modules for it: **4 carry a
+GPL notice, 319 carry LGPL-2.1-or-later** — `codec/libx26410b_plugin.dll`, `lua/liblua_plugin.dll`,
+`audio_filter/libdolby_surround_decoder_plugin.dll`, `audio_filter/libheadphone_channel_mixer_plugin.dll`.
+Two things follow, and the second is decisive:
+
+- `libzvbi_plugin.dll` is **not** among them: its own header reads *"Licensed under the terms of the
+  GNU Lesser General Public License, version 2.1 or later."* The GPL exposure there is the
+  statically-linked upstream libzvbi, which the binary never states — so the header scan is a **lower
+  bound on GPL content, not an upper one**, and a per-module census cannot be trusted to find it all.
+- `codec/libavcodec_plugin.dll` embeds FFmpeg's own configure line, and it contains
+  **`--enable-gpl --enable-postproc`**. That plugin is the client's principal decoder and is reached
+  by essentially every file it plays. **The aggregate is GPL-2.0-or-later whatever else is removed.**
+
+So excluding modules buys nothing. Dropping `libx26410b_plugin.dll` — an x264 10-bit *encoder*, and
+genuinely unreachable here (the client passes exactly `--no-video-title-show` and `--avcodec-hw=none`,
+opens media as `FromType.FromPath`, and never sets `:sout`, records, or transcodes) — would leave the
+obligation exactly where it is while adding a way to break decoding. The other three are worse
+candidates still: the Dolby Surround decoder is a decoder, and lua backs playlist and metadata
+handling. **Nothing is excluded from `win-x64`.** What the finding actually obliges is what is done
+here: name it, and keep the source available. VideoLAN publishes the complete corresponding source for
+every module at <https://code.videolan.org/videolan/vlc> at tag `3.0.23`. The client links only
+libvlc's LGPL C API and is never linked against any GPL module; whether that separation is the right
+legal characterisation of the aggregate is the owner's call and is not asserted here.
 
 ---
 
@@ -269,11 +319,18 @@ entry states the origin as fact and the terms as unresolved rather than blending
 
 ---
 
-## 6. Not yet wired
+## 6. This file travels with the artifact
 
-**This file does not yet travel with the artifact.** The publish strategy produces a self-contained
-directory per RID via `client/tools/publish/publish.ps1` / `.sh`, and neither script nor the project
-file copies this document into it. Copying it is a one-line addition to the publish scripts or a
-`<Content>` item in `CcpClient.Desktop.csproj`; both files belong to other lanes and were deliberately
-not edited here. **Until that lands, the obligations in §1, §4 and §5 are documented but not
-discharged at the point they bind — which is distribution, not the repository.**
+**Wired 2026-08-25.** Apache-2.0 §4 and LGPL-2.1 §1 oblige the licence and attribution to accompany
+**redistribution**, so a notices file that stays in the repository discharges nothing. A `<Content>`
+item in `CcpClient.Desktop.csproj` copies this document to both the build output and the publish
+directory, and it lands beside the binary in all three artifact modes
+(`client/docs/release-publish-gates.md` §3 treats Debug, Release and published as separate gates).
+Confirmed on the real `win-x64` publish, by listing the output rather than by reading the project
+file: `THIRD-PARTY-NOTICES.md` sits in the publish root next to `CcpClient.Desktop.exe`, and the
+artifact's own `--verify-assets` still passes with a clean sweep.
+
+`CcpClient.Tests/ThirdPartyNoticesTests` keeps it that way: one fact requires the file to exist beside
+the running test binary — which it can only do by riding the project's copy wiring — and requires that
+same project item to declare `CopyToPublishDirectory`. Delete the item and the floor goes red rather
+than the artifact going quietly bare.

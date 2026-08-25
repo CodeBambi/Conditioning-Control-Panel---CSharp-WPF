@@ -264,6 +264,84 @@ public sealed class ThirdPartyNoticesTests
         return [.. ids];
     }
 
+    /// <summary>
+    /// The notices file travels WITH THE ARTIFACT, which is the only place the obligation binds.
+    ///
+    /// <para><b>Why this is not a shape check.</b> The first half asserts an OUTCOME: the document is
+    /// beside the running test binary. Nothing in this test project copies it there — it can only
+    /// arrive by riding the shipping project's own copy wiring out through the ProjectReference, so
+    /// deleting that wiring reds this line rather than quietly emptying the artifact.</para>
+    ///
+    /// <para>The second half is the part an outcome cannot reach from here: build output is not
+    /// redistribution, and Apache-2.0 §4 and LGPL-2.1 §1 bind at DISTRIBUTION. A unit test cannot
+    /// afford a self-contained publish, so the publish leg is asserted on the project item that
+    /// carries it. The real publish is evidence on the row, not here.</para>
+    /// </summary>
+    [Fact]
+    public void TheNoticesFile_TravelsWithTheArtifact_AndNotOnlyTheRepo()
+    {
+        var shipped = Directory.GetFiles(AppContext.BaseDirectory, "THIRD-PARTY-NOTICES.md");
+        Assert.True(
+            shipped.Length == 1,
+            $"THIRD-PARTY-NOTICES.md is not beside the binary at {AppContext.BaseDirectory}. It "
+            + "reaches this directory only through the shipping project's copy wiring, so its "
+            + "absence means the artifact ships without the notices — and a notices file that stays "
+            + "in the repository discharges nothing, because the obligation binds on distribution.");
+
+        var root = FindRepoRoot();
+        Assert.True(
+            File.ReadAllText(shipped[0]) == ReadNotices(root),
+            "the THIRD-PARTY-NOTICES.md beside the binary is not the repository's copy. A stale "
+            + "notices file is worse than none: it travels with the artifact stating attribution "
+            + "and licences that no longer describe what the artifact contains.");
+
+        var csproj = File.ReadAllText(Path.Combine([root, .. ProjectParts]));
+        var item = Regex.Match(
+            csproj,
+            @"<Content\s+Include=""[^""]*THIRD-PARTY-NOTICES\.md""\s*>(.*?)</Content>",
+            RegexOptions.Singleline);
+
+        Assert.True(
+            item.Success,
+            "CcpClient.Desktop.csproj has no <Content> item for THIRD-PARTY-NOTICES.md, so nothing "
+            + "puts it into a published artifact even if a stale copy still sits in bin/.");
+
+        Assert.Contains("CopyToPublishDirectory", item.Groups[1].Value, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The LGPL managed assembly stays OUT of the single-file bundle, so a user can substitute it.
+    ///
+    /// <para><b>What this guards, and why it is a project-file assertion.</b> The publish strategy is
+    /// self-contained single-file, which fuses every managed assembly into the apphost — and an
+    /// assembly fused into an executable cannot be replaced, which is exactly the substitution right
+    /// LGPL-2.1 §6 preserves. <c>THIRD-PARTY-NOTICES.md</c> §4 now STATES that obligation is
+    /// discharged. Delete the target and the document becomes a false statement about a licence,
+    /// silently, at the next publish. Proving the outcome needs a real self-contained publish, which
+    /// is minutes and gigabytes and belongs to the publish evidence rather than the floor; what is
+    /// affordable here is that the claim and the wiring cannot drift apart.</para>
+    /// </summary>
+    [Fact]
+    public void TheLgplManagedAssembly_IsKeptOutOfTheSingleFileBundle()
+    {
+        var csproj = File.ReadAllText(Path.Combine([FindRepoRoot(), .. ProjectParts]));
+        var target = Regex.Match(
+            csproj,
+            @"<Target\b[^>]*BeforeTargets=""_ComputeFilesToBundle""[^>]*>(.*?)</Target>",
+            RegexOptions.Singleline);
+
+        Assert.True(
+            target.Success,
+            "CcpClient.Desktop.csproj no longer has a target running before the SDK's "
+            + "_ComputeFilesToBundle, which is the only place ExcludeFromSingleFile metadata is "
+            + "read. Without it the single-file publish bundles LibVLCSharp.dll into the apphost, "
+            + "and THIRD-PARTY-NOTICES.md §4 claims an LGPL-2.1 §6 discharge the artifact does not "
+            + "have.");
+
+        Assert.Contains("LibVLCSharp.dll", target.Groups[1].Value, StringComparison.Ordinal);
+        Assert.Contains("ExcludeFromSingleFile", target.Groups[1].Value, StringComparison.Ordinal);
+    }
+
     /// <summary>The payload trees the shipping csproj globs out of the read-only tree, parsed from
     /// the csproj itself so a seventh glob extends the sweep automatically.</summary>
     private static List<string> GlobbedPayloadRoots(string root)

@@ -21,5 +21,19 @@ if (Test-Path $Out) { Remove-Item $Out -Recurse -Force }
 dotnet publish $Csproj -c Release -r $Rid --self-contained true -p:PublishSingleFile=true -o $Out --nologo
 if ($LASTEXITCODE -ne 0) { throw "FAIL: dotnet publish exit $LASTEXITCODE" }
 
+# REDISTRIBUTION OBLIGATIONS, checked against the real output directory rather than trusted.
+# Both properties are carried by project-file wiring, and a build property that silently stops
+# doing anything is the failure mode this whole area has: it leaves a green build and an artifact
+# that is out of compliance. So the script that produces the artifact is where they are asserted.
+#   THIRD-PARTY-NOTICES.md — Apache-2.0 §4 / LGPL-2.1 §1: the notices must accompany the
+#   distribution; a file that stays in the repository discharges nothing.
+#   LibVLCSharp.dll as a SIDECAR — LGPL-2.1 §6: single-file would fuse the LGPL assembly into the
+#   apphost, and a user cannot substitute their own build of a fused assembly.
+foreach ($required in @("THIRD-PARTY-NOTICES.md", "LibVLCSharp.dll")) {
+    if (-not (Test-Path (Join-Path $Out $required))) {
+        throw "FAIL: $required is missing from $Out — the artifact does not carry what its licences oblige (see client/THIRD-PARTY-NOTICES.md §4, §6)"
+    }
+}
+
 Write-Host "PUBLISHED $Name"
 Write-Host "ARTIFACT $Out"

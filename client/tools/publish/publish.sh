@@ -22,5 +22,20 @@ OUT="$ROOT/artifacts/publish/$NAME"
 rm -rf "$OUT"
 dotnet publish "$CSPROJ" -c Release -r "$RID" --self-contained true -p:PublishSingleFile=true -o "$OUT" --nologo
 
+# REDISTRIBUTION OBLIGATIONS, checked against the real output directory rather than trusted.
+# Both properties are carried by project-file wiring, and a build property that silently stops
+# doing anything is the failure mode this whole area has: it leaves a green build and an artifact
+# that is out of compliance. So the script that produces the artifact is where they are asserted.
+#   THIRD-PARTY-NOTICES.md — Apache-2.0 §4 / LGPL-2.1 §1: the notices must accompany the
+#   distribution; a file that stays in the repository discharges nothing.
+#   LibVLCSharp.dll as a SIDECAR — LGPL-2.1 §6: single-file would fuse the LGPL assembly into the
+#   apphost, and a user cannot substitute their own build of a fused assembly.
+for REQUIRED in THIRD-PARTY-NOTICES.md LibVLCSharp.dll; do
+  [ -f "$OUT/$REQUIRED" ] || {
+    echo "FAIL: $REQUIRED is missing from $OUT — the artifact does not carry what its licences oblige (see client/THIRD-PARTY-NOTICES.md §4, §6)"
+    exit 1
+  }
+done
+
 echo "PUBLISHED $NAME"
 echo "ARTIFACT $OUT"
