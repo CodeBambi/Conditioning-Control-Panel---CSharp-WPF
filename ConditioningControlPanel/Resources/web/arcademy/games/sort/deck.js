@@ -180,6 +180,10 @@ export function wrapQuickPool(claimPool) {
     thin(tag) { return seen[tag === 'noise' ? 'noise' : 'target'].size < DECK.PER_SOURCE_MIN; },
     empty(tag) { return served[tag === 'noise' ? 'noise' : 'target'] === 0 && seen[tag === 'noise' ? 'noise' : 'target'].size === 0; },
     prewarm() { /* the claim pool prewarmed itself */ },
+    /** The tagged pool's spare(tag): rows held beyond the deal. The ordinary
+     *  claim pool keeps no tagged reserve, so the honest answer is none - the
+     *  substitute widener just falls back to the deck's own survivors. */
+    spare() { return []; },
     /* THE MANIFEST SEAM (0825) rides through to the wrapped claim pool, so the
      * room speaks one media API whichever pool shape stands behind it. Absent
      * verbs answer the inert thing: nothing warmed, nothing broken, ready NOW

@@ -21,7 +21,7 @@
  *   });
  *   pool.next('target', { prefer:'loop' })  -> row | null
  *   pool.counts() / pool.thin(tag) / pool.empty(tag) / pool.prewarm(n)
- *   pool.dealt() / pool.dispose()
+ *   pool.spare(tag) / pool.dealt() / pool.dispose()
  *
  * FIVE LAWS
  *  1. THE TAG IS THE TRUTH. A row keeps the tag of the SOURCE that served it
@@ -363,6 +363,16 @@ export function createTaggedPool({ spec, channel, platform, prewarm, log, remote
         total += urls.length;
       }
       return total;
+    },
+
+    /** Every distinct row the pool holds for ONE tag, in ARRIVAL order (stable
+     *  for a given claim, so a pure-hash pick over it repeats on a retake).
+     *  The substitute widener's window onto media the deck froze out: the pool
+     *  keeps filling to targetFor() after the deal, and those late rows never
+     *  reach a frozen deck any other way. */
+    spare(tag) {
+      const x = tags[String(tag || '')];
+      return x ? x.rows.slice() : [];
     },
 
     /** Every DISTINCT row, for the retake cache (a superset of {url,tag,src}). */
