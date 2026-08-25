@@ -38,9 +38,19 @@ public sealed record ArcademyAppFacts
     /// <summary><c>init.remoteMediaEnabled</c> (<c>:551</c> → <c>RemoteMediaEnabled</c>,
     /// <c>:1628-1631</c>: <c>MediaSource != "local" &amp;&amp; HasRemoteMediaConsent</c>).
     /// <b>DIVERGENCE, defaulting to the honest value:</b> this build ships no remote-media broker
-    /// (that is slice 7 of the board row, explicitly out of this scope) and opens no outbound
-    /// connection, so there is nothing for a consent flag to enable. False is what the page must
-    /// be told, not a placeholder.</summary>
+    /// and opens no outbound connection, so there is nothing for a consent flag to enable. False
+    /// is what the page must be told, not a placeholder.
+    ///
+    /// <para><b>Slice 7 resolved this rather than deferring it further, and in the safe
+    /// direction.</b> Upstream's broker fetches from a third party
+    /// (<c>ScrolllerSource.cs:48</c>) under a consent union this port has no surface for; the
+    /// dependency is an owner decision that has not been made
+    /// (<c>client/docs/fyp-census.md</c> §5.1). What landed is upstream's closed-gate reply and
+    /// nothing else — see <c>ArcademySession.AssetsRequest</c>. <b>Setting this field true
+    /// therefore enables nothing</b>: it changes one projected boolean the page reads, and the
+    /// host still answers every <c>assets-request</c> with an empty batch. That is pinned by
+    /// <c>ArcademyRemoteMediaTests</c>, so nobody can mistake this flag for a working
+    /// gate.</para></summary>
     public bool RemoteMediaEnabled { get; init; }
 
     /// <summary><c>init.remoteMediaRatio</c> (<c>:552</c>, stored 5-95 and projected 0..1 —
@@ -51,7 +61,9 @@ public sealed record ArcademyAppFacts
     /// <summary><c>init.offlineMode</c> (<c>:553</c>). <b>DIVERGENCE, same reason:</b> upstream
     /// projects the user's own offline switch; here the app IS offline for this surface, and the
     /// page reads this as "kill every remote fetch" (<c>arcademy/provider/remote.js:72</c>,
-    /// <c>provider/index.js:96</c>). True is the truth about this build.</summary>
+    /// <c>provider/index.js:96</c>). True is the truth about this build. Setting it false enables
+    /// nothing either, for the reason on <see cref="RemoteMediaEnabled"/>: it stops the PAGE
+    /// suppressing its own asks, and the host answers each one empty.</summary>
     public bool OfflineMode { get; init; } = true;
 
     /// <summary><c>init.audioAudible</c> (<c>:554</c>, <c>SubAudioAudible ?? false</c>) — whether

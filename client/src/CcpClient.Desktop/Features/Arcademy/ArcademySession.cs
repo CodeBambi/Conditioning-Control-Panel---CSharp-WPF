@@ -4,10 +4,11 @@ using CcpClient.Desktop.Persistence;
 namespace CcpClient.Desktop.Features.Arcademy;
 
 /// <summary>
-/// The host half of the Arcademy bridge for slices 1 to 4 and 6: the BOOT HANDSHAKE, the
-/// SET-SETTING ECHO LOOP, the META COMMAND loop, the CLASS PAYOUT and the PANIC LADDER
+/// The host half of the Arcademy bridge for slices 1 to 7: the BOOT HANDSHAKE, the
+/// SET-SETTING ECHO LOOP, the META COMMAND loop, the CLASS PAYOUT, the PANIC LADDER
 /// (<see cref="PanicPress"/>, the rung a modal game window must own so two Esc taps cannot reach
-/// the application). Upstream keeps them all in
+/// the application) and the CLOSED-GATE remote-media reply (<see cref="AssetsRequest"/>, which is
+/// the whole of slice 7 in this build and says why). Upstream keeps them all in
 /// <c>ArcademyHostService</c>'s static state (<c>OnPageReady</c> <c>:388-404</c>,
 /// <c>OnPageMessage</c> <c>:444-498</c>, <c>OnSetSetting</c> <c>:1164-1188</c>,
 /// <c>OnClassEnded</c> <c>:1354-1428</c>, <c>OnSettingsCurrentReplaced</c> <c>:1777-1794</c>);
@@ -281,10 +282,6 @@ public sealed class ArcademySession : IDisposable
             case ArcademyProtocol.ArcademyPageParseResult.Parsed parsed:
                 Dispatch(parsed.Message);
                 return;
-            case ArcademyProtocol.ArcademyPageParseResult.LaterSlice later:
-                // Real vocabulary this build does not own yet. Named, never acted on.
-                _log.Log($"arcademy: '{later.Type}' belongs to a later slice — acknowledged, not acted on");
-                return;
             case ArcademyProtocol.ArcademyPageParseResult.ForwardVersion forward:
                 _log.Log($"arcademy: '{forward.Type}' declares protocol {forward.Protocol} (this host speaks {ArcademyProtocol.Version}) — ignored");
                 return;
@@ -365,7 +362,55 @@ public sealed class ArcademySession : IDisposable
                 _log.Log("arcademy: exit-done");
                 RequestClose("exit-done", ArcademyClosePlan.Immediate);
                 return;
+            case ArcademyProtocol.ArcademyPageMessage.AssetsRequest assetsRequest:
+                AssetsRequest(assetsRequest.ReqId);
+                return;
         }
+    }
+
+    // ==================== remote media: the closed gate (slice 7) ====================
+
+    /// <summary>
+    /// Answer an <c>assets-request</c> the only way this build can: upstream's CLOSED-GATE reply
+    /// (<c>ArcademyHostService.cs:1501-1505</c>) — the same <c>reqId</c>, no urls, <c>done</c>.
+    ///
+    /// <para><b>The reply is unconditional and reads no consent flag, on purpose.</b> Upstream's
+    /// gate (<c>:1628-1631</c>) exists because the other branch fetches: through
+    /// <c>FypOnlineCoordinator</c> into <c>ScrolllerSource.cs:48</c>,
+    /// <c>POST https://api.scrolller.com/admin</c>, an unofficial third-party API, with the
+    /// request shaped by the user's own adult-content niche selection and dwell profile. That
+    /// dependency is an OWNER decision this port has not been given
+    /// (<c>client/docs/fyp-census.md</c> §5.1 records it as owner-flagged and unanswered), and the
+    /// consent it would need is upstream's union of two one-time cards
+    /// (<c>Models/AppSettings.cs:3354</c>), neither of which exists here. So this build has no
+    /// fetch path at all, and a consent check in front of one would be a gate with nothing behind
+    /// it — protection-shaped, protecting nothing. <b>Nothing leaves this machine on this path
+    /// under any setting, which is a stronger property than a gate and is proved as one</b>
+    /// (<c>ArcademyRemoteMediaTests</c>: zero socket connects, under every combination of
+    /// <see cref="ArcademyAppFacts.RemoteMediaEnabled"/> and
+    /// <see cref="ArcademyAppFacts.OfflineMode"/>).</para>
+    ///
+    /// <para><b>Why it answers at all rather than staying silent.</b> Upstream's own reason, at
+    /// <c>:1479-1481</c>: <i>"A closed gate answers with an empty array rather than silence,
+    /// because silence is what leaves a page spinning."</i> The page holds one <c>pending</c>
+    /// entry per <c>reqId</c> until a <c>done</c> arrives (<c>arcademy/provider/remote.js:48-55</c>)
+    /// and re-asks up to eight times per kind (<c>provider/index.js:209-233</c>). Until this slice
+    /// the port classified the frame as a later slice's, logged it and dropped it — which is
+    /// exactly the silence that comment names.</para>
+    ///
+    /// <para><b>The shipped payload does not ask, and that does not make this dead.</b> With
+    /// <c>remoteMediaEnabled=false</c> the page's provider never opens the channel
+    /// (<c>provider/index.js:95</c>, <c>remote.js:72</c>), so no <c>assets-request</c> is sent on
+    /// the normal path. The frame can still arrive — the gate upstream enforces is the HOST's, not
+    /// the page's, precisely because the page captured its copy of the flag at <c>init</c> and a
+    /// mid-session change never reaches it.</para>
+    /// </summary>
+    private void AssetsRequest(string reqId)
+    {
+        _log.Log(
+            $"arcademy: assets-request '{reqId}' answered empty — this build has no remote-media " +
+            "broker, so nothing was fetched and nothing left the machine");
+        _post(ArcademyProtocol.BuildAssetsClosed(reqId));                            // :1502-1504
     }
 
     // ============================ the panic ladder (slice 6) ============================
