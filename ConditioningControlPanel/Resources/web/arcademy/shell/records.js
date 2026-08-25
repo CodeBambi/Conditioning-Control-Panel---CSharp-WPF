@@ -262,10 +262,20 @@ export function createRecords({ gameName, punchCard, log } = {}) {
    * @param {Function=} state.onBack
    * @param {Function=} state.onReport
    * @param {string=} state.reportLabel
+   * @param {boolean=} state.embedded   this wall is INSIDE something (the room's
+   *                   card panel), so the way out is that thing and not the
+   *                   campus - see EMBEDDED below. Absent = the screen it was.
    */
   function render(state) {
     const s = state || {};
     const keys = Array.isArray(s.gameKeys) ? s.gameKeys.slice() : [];
+    /* EMBEDDED. shell/recordsroom.js opens this wall in a panel inside the
+     * painted office, and a panel's exits are the panel's: the crest pill
+     * ("back to campus") would walk a player out of the building they are
+     * standing in, and Back has to put the cards away rather than leave. Two
+     * differences, both here, and OFF by default - a caller that never passes
+     * the flag renders the screen byte for byte. */
+    const embedded = s.embedded === true;
     // A render empties the root, so any spotlight node is already gone with it.
     dismissSpotlight(true);
     root.textContent = '';
@@ -281,12 +291,14 @@ export function createRecords({ gameName, punchCard, log } = {}) {
      * the scroller; the crest rides the top of it, so the office answers "how
      * do I get out of here" without the player having to scroll to find out.
      * It is the SAME verb the bar's Back runs - one door, two handles. */
-    desk.appendChild(campusPillRow({
-      onActivate: () => {
-        try { if (s.onBack) s.onBack(); }
-        catch (e) { say('records pill: ' + ((e && e.message) || e)); }
-      },
-    }));
+    if (!embedded) {
+      desk.appendChild(campusPillRow({
+        onActivate: () => {
+          try { if (s.onBack) s.onBack(); }
+          catch (e) { say('records pill: ' + ((e && e.message) || e)); }
+        },
+      }));
+    }
 
     desk.appendChild(el('p', 'arc-kicker', t('records_kicker', 'Records Office')));
     desk.appendChild(el('h1', 'arc-h1', t('campus_records', 'Records')));
@@ -428,7 +440,9 @@ export function createRecords({ gameName, punchCard, log } = {}) {
     toReport.addEventListener('click', () => { try { if (s.onReport) s.onReport(); } catch (e) { say('records report: ' + ((e && e.message) || e)); } });
     signExit(toReport, { dir: 'go', quiet: true });
 
-    const back = el('button', 'btn primary', t('back', 'Back'));
+    const back = el('button', 'btn primary', embedded
+      ? t('records_close_panel', 'Put the cards back')
+      : t('back', 'Back'));
     back.type = 'button';
     back.addEventListener('click', () => { try { if (s.onBack) s.onBack(); } catch (e) { say('records back: ' + ((e && e.message) || e)); } });
     signExit(back, { dir: 'back' });

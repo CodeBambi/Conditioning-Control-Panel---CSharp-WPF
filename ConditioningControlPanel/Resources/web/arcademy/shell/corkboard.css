@@ -28,8 +28,26 @@
  * (50) and the toast (60).
  * ==========================================================================*/
 
-.arc-corkstage {
-  /* --- the wall's own tokens, all derived --- */
+/* ---------------------------------------------------------- THE WALL TOKENS */
+/* EVERY HOST THAT CAN CARRY PAPER DECLARES THEM, and that is the whole reason
+   this is its own block. The tokens used to live on `.arc-corkstage` and (a
+   short set) on `.arc-boardprop`, which was fine while those were the only two
+   places a sheet could hang. Then the Records Office pinned `mountNotices`
+   straight onto a `.rr-cork.arc-cork-wall` inside a scene slide - no corkstage
+   anywhere above it - and every one of these lookups fell through to nothing:
+   `background:var(--paper)` with no value is invalid-at-computed-value-time, so
+   the sheets came out TRANSPARENT, and `color:var(--paper-ink)` fell back to
+   the inherited light ink, so the copy came out chalk-on-cork. A whole night's
+   noticeboard rendered as four ghosts (caught in a capture, invisible to the
+   node run, which has no cascade at all).
+
+   So the block is keyed on all three hosts. `.arc-cork-wall` nests inside
+   `.arc-corkstage` on the hall's overlay and simply re-declares the same
+   derived values there, which costs nothing and cannot drift - they are one
+   list in one place. */
+.arc-corkstage,
+.arc-boardprop,
+.arc-cork-wall {
   --cork:        color-mix(in srgb, var(--gold) 26%, color-mix(in srgb, var(--navy), black 14%));
   --cork-lo:     color-mix(in srgb, var(--cork), black 30%);
   --cork-hi:     color-mix(in srgb, var(--cork), var(--ink) 14%);
@@ -41,7 +59,9 @@
   --paper-ink:   color-mix(in srgb, var(--ground) 76%, var(--panel));
   --paper-dim:   color-mix(in srgb, var(--paper-ink), var(--paper) 42%);
   --paper-under: color-mix(in srgb, var(--paper), var(--cork) 34%);
+}
 
+.arc-corkstage {
   position:fixed; inset:0; z-index:38;
   display:flex; align-items:center; justify-content:center;
   padding:clamp(14px, 4vh, 44px);
@@ -284,11 +304,7 @@
 /* A small board hung somewhere on the campus. The driver places it: override
    --bp-x / --bp-y on the element, or position it from campus CSS. */
 .arc-boardprop {
-  --cork:       color-mix(in srgb, var(--gold) 26%, color-mix(in srgb, var(--navy), black 14%));
-  --cork-lo:    color-mix(in srgb, var(--cork), black 30%);
-  --cork-frame: color-mix(in srgb, var(--cork), black 52%);
-  --paper:      color-mix(in srgb, var(--ink) 82%, var(--panel));
-
+  /* the tokens are up top now, on the shared THE WALL TOKENS block */
   position:absolute; left:var(--bp-x, 12%); top:var(--bp-y, 54%);
   width:var(--bp-w, 74px);
   display:flex; flex-direction:column; align-items:center; gap:5px;
@@ -363,7 +379,12 @@ html.arc-reduced .arc-boardprop-new { transition:none; }
 .arc-corknote.look-pencil .arc-cork-notebody,
 .arc-corknote.look-pencil .arc-cork-notetitle {
   font-family: var(--mono);
-  color: color-mix(in srgb, var(--ink), transparent 16%);
+  /* GRAPHITE IS ON THE PAPER, so it is derived from `--paper-ink` and never
+     from `--ink`. `--ink` is the CHALK on this dark campus: a pencil note that
+     reached for it wrote in white on cream and read as a blank sheet with a
+     title (the office wall's headline shot). Pressed hard = nearly the full
+     paper ink, softened by a sixteenth. */
+  color: color-mix(in srgb, var(--paper-ink), transparent 16%);
   letter-spacing: .01em;
 }
 .arc-corknote.look-pencil { background-image: none; }

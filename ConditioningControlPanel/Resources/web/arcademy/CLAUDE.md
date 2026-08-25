@@ -146,9 +146,69 @@ shell/records.js   THE RECORDS OFFICE screen: the wall of ten cards, the per-car
                    ken burns on the text strip; styles.css THE SPOTLIGHT block).
                    Presentation only - no data moves, the docket still paints.
                    Esc closes it FIRST via a rung in shell.js escapeStep
-                   (recordsPage.dismissSpotlight(), trap 48's shape); reduced
-                   motion (html.arc-reduced / the media query) = one plain fade,
-                   no cues
+                   (recordsRoom.escapeStep() folds it before the chassis's own,
+                   trap 48's shape); reduced motion (html.arc-reduced / the
+                   media query) = one plain fade, no cues.
+                   IT IS NO LONGER A SCREEN: shell.js opens the ROOM below, and
+                   this file renders inside its card panel with
+                   `render({embedded:true})` - no campus pill, and Back reads
+                   "put the cards back" instead of walking out of the building.
+                   The flag is OFF by default, so any other caller renders the
+                   screen byte for byte
+shell/scene.js     THE SCENE CHASSIS: a generalised point-and-click ROOM (the
+                   1376x768 stage, the slides + the zoom out of the pressed
+                   rect, flag PATCHES, mountInView PROPS, one overlay at a
+                   time, the apron's back slab on <body>, the inward-out Esc
+                   fold that answers FALSE at home). Dumb by construction - it
+                   renders a table it was handed and calls back; it owns no
+                   store, no bridge, no key and no lexicon row. + scene.css
+                   A ZOOM IS A ZOOM (owner ruling 0825): the apron band belongs
+                   to the WIDE shot and FADES OUT on showView(non-wide) (~200ms,
+                   `.asc-bar-away`; .arc-reduced cuts; visibility rides the same
+                   rule so the slab leaves the tab order), coming back on the
+                   walk home. `.asc-back`, the step-back pill every close-up
+                   draws, is the way out while it is away. So THE APRON-LINE
+                   WARNING IS WIDE-ONLY: a close-up's rects and props are free
+                   to run below y=640 and are never warned about. A consumer
+                   must NOT clamp a close-up host to 640 - the paper is measured
+                   from the painting or it is not measured at all
+shell/recordsroom.js THE RECORDS OFFICE AS A ROOM (0825), the chassis's first
+                   tenant. Four rects on vn-09: the TRAY (the one breathing
+                   verb - it opens records.js in a scene panel, and wears the
+                   two nudges), the CORKBOARD (a close-up of the cork with
+                   corkboard.js's own mountNotices pinned over `corkInner`,
+                   FULL measured rect - the band is away in a close-up),
+                   the BOOK (a close-up with deskbook.js over `ledgerPages`)
+                   and the STOREROOM (`when:'ajar'`, so no flag = no rect, no
+                   patch, nothing at all). THE TWO NUDGES: `.rr-fresh`, a pink
+                   tab on the tray while the total stamp count beats
+                   `recordsRoomSeenStamps` (banked at every panel open), and
+                   `.rr-late`, the first-ever visit holding the other three
+                   rects back for 2s so the tray lights alone
+                   (`recordsRoomVisits`) - WITH `.rr-solo` on the tray for that
+                   same window, a second brighter ring, because `.arm-swim`'s
+                   2px/.30 resting rim going away is not something a player can
+                   see. Both are OFF under .arc-reduced (and .arm-lite gets no
+                   solo ring either - static state only).
+                   Narrow caps, the annex's law: the shell keeps the store, the
+                   bridge and EMI. AND IT MUST BE TORN DOWN IN clearScreen -
+                   the apron is on <body>, so a room left standing leaves a
+                   slab across the next screen. + recordsroom.css
+shell/deskbook.js  THE BOOK ON THE DESK: a two-page spread mounted over the two
+                   painted page rects. `left`/`right` are SIDE HOSTS (.rdb-side,
+                   no clip) with the paper (.rdb-page, overflow:hidden) inside:
+                   the chapter tabs hang off the right SIDE's outer edge, over
+                   the painted page-edge. As a child of the clipped page they
+                   were laid out at left:100% and clipped away to nothing -
+                   three tabs that had never once rendered. Chapters + tabs,
+                   page arrows and ArrowLeft/ArrowRight (guarded on an injected
+                   isActive(), never Escape - trap 80's lesson), a CSS leaf that
+                   turns on the spine with the spread repainting at its midpoint,
+                   and the last spread remembered in `recordsBookPage`. `BOOK` is
+                   a PLACEHOLDER table until the owner's prose lands. The prose
+                   does NOT go through the lexicon (trap 26 caps a row at 96
+                   chars and a paragraph is not a label) - only the chapter tabs
+                   and the two arrows are keyed
 shell/idcard.js    THE STUDENT ID: the laminated card in the corner of the
                    campus, and the spotlight it opens (records.js's shape, z 46,
                    veil + key light + placard + Tab trap + one Esc rung above

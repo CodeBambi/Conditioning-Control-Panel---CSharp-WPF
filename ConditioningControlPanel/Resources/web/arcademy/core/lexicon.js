@@ -280,6 +280,22 @@ export const DEFAULT_LEXICON = Object.freeze({
   records_flip_hint: 'Pick a card to read its stamps.',
   records_empty_wall: 'Nothing on the wall yet. Attend a class and the first card gets pinned.',
   records_spot_close: 'Close',
+  /* THE ROOM (shell/recordsroom.js, 0825). Four things you can touch in the
+     painted office, plus the chrome of its two close-ups. `records_book` is
+     deliberate and so is its value: the other word for that volume is a
+     register word, and the register is barred from every user-facing string
+     in this school. */
+  records_tray: 'The card tray',
+  records_board: 'The noticeboard',
+  records_book: 'The book',
+  records_storeroom: 'The storeroom',
+  records_fresh: 'New',
+  records_close_panel: 'Put the cards back',
+  records_book_next: 'Next page',
+  records_book_prev: 'Back a page',
+  records_book_ch_school: 'The Arcademy',
+  records_book_ch_rules: 'House rules',
+  records_book_ch_tips: 'Tips',
 
   /* THE STUDENT ID (shell/campus.js's furniture card + shell/idcard.js's
      spotlight). The card is a document, not a share: nothing here names a

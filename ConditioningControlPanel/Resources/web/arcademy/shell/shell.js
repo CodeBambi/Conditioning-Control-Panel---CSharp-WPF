@@ -54,7 +54,7 @@ import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
  * success, on a throw, on a missing plate and on a watchdog. A returning
  * player's whole experience of this import is one controller that stands down. */
 import { createFirstBell } from '../vn/index.js';
-import { createRecords } from './records.js';
+import { createRecordsRoom } from './recordsroom.js';
 import { createIdSpotlight, idReducedMotion } from './idcard.js';
 import { createAnnexReveal } from './annexreveal.js';
 /* THE SEEP - the foreshadowing layer. ONE director, and the shell's whole
@@ -650,8 +650,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   /** The Deck V one-more card. It sits OVER the report card, never instead of
    *  it (see showEndCard) - `{root, destroy}` while live, null otherwise. */
   let endCard = null;
-  /** The Records Office screen (PUNCHCARD §6) - built lazily, kept for reuse. */
-  let recordsPage = null;
+  /** THE RECORDS OFFICE (shell/recordsroom.js). A painted ROOM since the 0825
+   *  wave, not a page: built fresh per visit and destroyed on every path out
+   *  through clearScreen, which is the room scene's lifecycle and it is not
+   *  optional here - the scene chassis hangs its apron on <body>, so a cached
+   *  handle would leave a band over the next screen. */
+  let recordsRoom = null;
   /* ---------------------- THE STUDENT ID (shell/idcard.js) ----------------
    * The card in the corner of the campus is a document you can pick up now.
    * The shell owns three things about it and the card owns none of them: the
@@ -1083,6 +1087,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       const rp = roomPage;
       roomPage = null;
       try { rp.destroy(); } catch (e) { /* noop */ }
+    }
+    /* ...AND SO DOES THE OFFICE, for one reason the class rooms only share by
+     * accident: the scene chassis hangs its midway apron on <body>, outside
+     * anything `dom.screen.textContent = ''` can reach. destroy() is the only
+     * thing that takes that band off, so a records room that is not torn down
+     * here leaves a slab across the bottom of whatever comes next. */
+    if (recordsRoom) {
+      const rr = recordsRoom;
+      recordsRoom = null;
+      try { rr.destroy(); } catch (e) { /* noop */ }
     }
     extrasBox = null;
     /* THE ROTATE GATE BELONGS TO A SCREEN, NOT TO THE PAGE. Every screen change
@@ -2029,10 +2043,32 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   }
 
   /* ============================ SCREEN: RECORDS =========================
-   * PUNCHCARD §6. The campus's Records door used to open the day's report card
-   * and nothing else; it opens the office now, and the report card is one press
-   * further in - still the ONE share pipeline (trap 13), still unchanged.
+   * PUNCHCARD §6, and it is a ROOM now (0825). The campus's Records door used
+   * to open the day's report card, then the office as a page; it opens the
+   * painted office itself - the tray of cards, the noticeboard, the book on the
+   * desk and, once the wall has moved, the storeroom. The old page is still the
+   * old page: shell/records.js renders it verbatim inside the tray's panel, and
+   * the report card is still one press further in and still the ONE share
+   * pipeline (trap 13).
+   *
+   * Everything that touches state stays HERE. The room gets narrow caps - the
+   * annex's law - and three page-owned meta keys it can only read and write
+   * through this seam: `recordsRoomVisits`, `recordsRoomSeenStamps` and
+   * `recordsBookPage`. None of them is host-owned; `ArcademyMetaStore.Set`
+   * takes any new top-level key under its own caps, so no C# change is owed.
    * ==================================================================== */
+
+  /** Every stamp on every card, right now. The tray's fresh tab is this number
+   *  against the one banked at the last time the drawer was opened. */
+  function totalStamps() {
+    let n = 0;
+    for (const entry of games.list) {
+      try { n += Math.max(0, Math.round(Number(store.punchCard(entry.key).punches) || 0)); }
+      catch (e) { /* a junk card is worth nothing, never a throw */ }
+    }
+    return n;
+  }
+
   function showRecords() {
     screen = 'records';
     dismissEndCard();
@@ -2040,28 +2076,40 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     dismissAnnexStage();
     clearScreen();
     renderTopbar();
-    if (!recordsPage) {
-      recordsPage = createRecords({
-        gameName,
-        // The card reader, not the blob: store.punchCard normalizes, so the
-        // screen never has to guess what a half-written card means.
-        punchCard: (key) => store.punchCard(key),
-        log: say,
-      });
-    }
-    recordsPage.render({
+    recordsRoom = createRecordsRoom({
+      mount: dom && dom.screen,
+      t,
+      log: say,
+      lite: !!src.performanceMode,
+      reduced: reducedMotion,
       // Registry order, every registered class - including the ones never
       // played. An unattended card on the wall IS the advertisement (§6).
       gameKeys: games.list.map((e) => e.key),
+      gameName,
+      // The card reader, not the blob: store.punchCard normalizes, so the
+      // room never has to guess what a half-written card means.
+      punchCard: (key) => store.punchCard(key),
+      stampTotal: () => totalStamps(),
+      seenStamps: () => Number(store.get('recordsRoomSeenStamps')) || 0,
+      markSeen: (n) => { try { store.set('recordsRoomSeenStamps', n); } catch (e) { say('records seen write failed'); } },
+      visits: () => Number(store.get('recordsRoomVisits')) || 0,
+      markVisit: (n) => { try { store.set('recordsRoomVisits', n); } catch (e) { say('records visit write failed'); } },
+      bookPage: () => Number(store.get('recordsBookPage')) || 0,
+      saveBookPage: (n) => { try { store.set('recordsBookPage', n); } catch (e) { say('records book page write failed'); } },
+      // THE SAME NIGHT'S WALL the hall prop shows: one seed, one table, one
+      // state (corkboard.js is already initCorkboard'd with both above).
+      daySeed: utcDateSeed,
+      onCorkRead: () => { /* the read rows are the module's own; nothing owed here */ },
+      // THE STOREROOM. The shell keeps the gate: the door exists only once the
+      // reveal has fired (ANNEX-OS.md §1), and the room just draws it.
+      ajar: !!store.get('annexRevealSeen'),
       onBack: () => showBoard(),
       onReport: () => showReport(),
+      onAnnex: () => showAnnex(),
       reportLabel: t('report_card', 'Report Card'),
-      // THE WALL PANEL. The shell keeps the gate: the ajar seam exists only
-      // once the reveal has fired (ANNEX-OS.md §1); records just draws it.
-      onAnnex: store.get('annexRevealSeen') ? () => showAnnex() : null,
     });
-    if (dom && dom.screen) dom.screen.appendChild(recordsPage.root);
     setStage('arc-report-on');
+    if (recordsRoom && typeof recordsRoom.fit === 'function') recordsRoom.fit();
   }
 
   /* ---------------------- the graded launch ----------------------------
@@ -2392,6 +2440,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     /* Seen is stamped at MOUNT, not at finish - a beat half-watched is a beat
      * watched; it must never replay into a farce. */
     store.set('annexRevealSeen', true);
+    /* THE OFFICE LEARNS IT THE SAME BREATH THE SAVE DOES. `ajar` is the one
+     * gate the storeroom door and its patch read, and it is set from this key
+     * on room entry - so a room already standing when the wall moves has to be
+     * told, or the door stays painted shut until the next visit. It cannot
+     * happen mid-class (the reveal refuses one) and a room that is not up is
+     * simply null: one line, both orderings, mirroring exactly the read
+     * showRecords does. */
+    try { if (recordsRoom) recordsRoom.setAjar(true); } catch (e) { /* noop */ }
     annexStage = createAnnexReveal({
       mount: document.body,
       reducedMotion,
@@ -4329,12 +4385,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // is not tied to a screen (it lifts off the campus). Trap 48's shape -
       // one rung, and everything below it is the ladder it always was.
       if (dismissIdCard(false)) return true;
-      // THE RECORDS SPOTLIGHT is a modal the player opened one press ago (a
-      // card lifted off the wall) - Esc puts the card back first and the
-      // office stays put. Trap 48's shape: one rung, above the screen's own.
-      if (screen === 'records' && recordsPage
-        && typeof recordsPage.dismissSpotlight === 'function') {
-        try { if (recordsPage.dismissSpotlight()) return true; } catch (e) { /* noop */ }
+      // THE OFFICE FOLDS INWARD-OUT, the annex's shape one room over. The
+      // room's own escapeStep runs the ladder in the order the player built it:
+      // the SPOTLIGHT first (a card lifted off the wall one press ago - trap
+      // 48), then the chassis's fold (the card panel, then a close-up back to
+      // the wide shot), and FALSE at the wide shot so the rung below walks out
+      // of the building. No key is bound anywhere down there; this asks.
+      if (screen === 'records' && recordsRoom) {
+        try { if (recordsRoom.escapeStep()) return true; } catch (e) { /* noop */ }
       }
       // The Records Office is a screen like settings: Esc walks back to campus.
       if (screen === 'records') { showBoard(); return true; }

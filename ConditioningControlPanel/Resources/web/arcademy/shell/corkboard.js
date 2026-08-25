@@ -601,35 +601,41 @@ export function hasUnread(daySeed, override) {
 }
 
 /* ----------------------------------------------------------------------------
- * THE OVERLAY
+ * THE PAPER, AND IT IS THE SAME PAPER ON BOTH WALLS
+ *
+ * There are two places in the school with this cork on them now - the hall prop
+ * opens the overlay below, and the Records Office has the board painted into its
+ * own set (shell/recordsroom.js's `board` close-up, sheets pinned over the bare
+ * cork in the plate). ONE TABLE, ONE STATE, ONE NIGHT'S SET: the owner's call,
+ * and this function is how it is kept true. Everything that decides WHAT is up
+ * and marks it read lives here; the overlay below is now only the stage, the
+ * heading and the way out.
+ *
+ * It writes exactly what the overlay always wrote, in the same order and at the
+ * same moment: the per-notice `seenAt` rows as each sheet is pinned, then the
+ * one banked visit (lastPinDay / openedAt / visits) at the end. So opening the
+ * office's board and opening the hall's board are the same visit to the same
+ * wall, which is why the prop's fresh dot clears from either.
  * -------------------------------------------------------------------------- */
 
-let live = null;   // the one open board, or null. Two walls is a bug, not a feature.
-
 /**
- * Open the noticeboard.
+ * Pin tonight's sheets into `hostEl`.
  *
+ * @param {Object} hostEl               where the slots go (the caller's wall)
  * @param {Object=} opts
- * @param {Object=} opts.mount          where to append (default document.body)
  * @param {string=} opts.daySeed        UTC day string; defaults to today
  * @param {Object=} opts.state          injected persistence (see STATE-NEEDS)
  * @param {Function=} opts.save         save(state) callback
  * @param {number=} opts.slots          how many sheets are up (default 4)
- * @param {boolean=} opts.bindEscape    self-bind Esc (default FALSE - the shell
- *                                      owns the ladder; this is for demos)
- * @param {Function=} opts.onClose      called once, after the stage is gone
  * @param {Function=} opts.onRead       onRead(noticeId) per sheet marked read
- * @returns {?Object} {root, close(), destroy(), notices} - null with no DOM
+ * @param {Function=} opts.log
+ * @returns {?Object} {notices, daySeed, first, destroy()} - null with no DOM
  */
-export function openCorkboard(opts) {
+export function mountNotices(hostEl, opts) {
   const o = opts || {};
   const doc = (typeof document !== 'undefined') ? document : null;
   if (!doc || typeof doc.createElement !== 'function') return null;
-  const mount = o.mount || deps.mount || doc.body;
-  if (!mount || typeof mount.appendChild !== 'function') return null;
-
-  // ONE WALL. A second open is the first one raised, not a second stage.
-  if (live && !live.closed) { focusSoon(live.firstButton); return live.handle; }
+  if (!hostEl || typeof hostEl.appendChild !== 'function') return null;
 
   ensureStyles(doc);
 
@@ -637,37 +643,21 @@ export function openCorkboard(opts) {
   const s = stateOf(o.state);
   const up = pickNotices(seed, o.slots, eligibleNotices());
   const today = localDay();
+  const say = (msg) => {
+    const fn = (typeof o.log === 'function') ? o.log : deps.log;
+    if (typeof fn === 'function') { try { fn(msg); } catch (e) { /* noop */ } }
+  };
 
-  const root = el('div', 'arc-corkstage');
-  attr(root, 'role', 'dialog');
-  attr(root, 'aria-modal', 'true');
-  attr(root, 'aria-label', t('board_title', 'Noticeboard'));
-
-  const board = el('div', 'arc-corkboard');
-  const frame = el('div', 'arc-cork-frame');
-  board.appendChild(frame);
-
-  /* ------------------------------ the head ----------------------------- */
-  const head = el('div', 'arc-cork-head');
-  head.appendChild(el('p', 'arc-kicker', t('board_kicker', 'Pinned up')));
-  head.appendChild(el('h1', 'arc-h1 arc-cork-title', t('board_title', 'Noticeboard')));
-  head.appendChild(el('p', 'arc-lede arc-cork-lede', t('board_lede',
-    'What is up on the wall tonight. Some of it stays. Most of it does not.')));
-  frame.appendChild(head);
-
-  /* ------------------------------ the wall ----------------------------- */
-  const wall = el('div', 'arc-cork-wall');
-  attr(wall, 'role', 'list');
-  frame.appendChild(wall);
+  const mounted = [];
+  let first = null;
 
   if (!up.length) {
     // A wall with nothing on it is a real state (a table trimmed to nothing),
     // and saying so is cheaper than an empty frame reading as a broken screen.
-    wall.appendChild(el('p', 'arc-note arc-cork-empty', t('board_empty',
-      'Nothing pinned up tonight.')));
+    const empty = el('p', 'arc-note arc-cork-empty', t('board_empty', 'Nothing pinned up tonight.'));
+    hostEl.appendChild(empty);
+    mounted.push(empty);
   }
-
-  let firstButton = null;
 
   for (let i = 0; i < up.length; i += 1) {
     const notice = up[i];
@@ -716,8 +706,9 @@ export function openCorkboard(opts) {
     const pin = el('i', 'arc-cork-pin');
     attr(pin, 'aria-hidden', 'true');
     slot.appendChild(pin);
-    wall.appendChild(slot);
-    if (!firstButton) firstButton = sheet;
+    hostEl.appendChild(slot);
+    mounted.push(slot);
+    if (!first) first = sheet;
 
     /* READING THE WALL IS OPENING IT. There is no per-sheet open verb - a
      * corkboard is read at a glance, and a click-to-expand on a paragraph of
@@ -726,9 +717,98 @@ export function openCorkboard(opts) {
     if (!seenBefore) {
       s.notices[notice.id] = { seenAt: today };
       try { if (typeof o.onRead === 'function') o.onRead(notice.id); }
-      catch (e) { if (deps.log) { try { deps.log('corkboard onRead: ' + ((e && e.message) || e)); } catch (e2) { /* noop */ } } }
+      catch (e) { say('corkboard onRead: ' + ((e && e.message) || e)); }
     }
   }
+
+  /* THE VISIT, BANKED. One write per mount, at the end, never per sheet. */
+  s.lastPinDay = seed;
+  s.openedAt = today;
+  s.visits = Math.max(0, Math.round(Number(s.visits) || 0)) + 1;
+  persist(s, o.save);
+
+  return {
+    notices: up,
+    daySeed: seed,
+    first: first,
+    destroy() {
+      for (let i = 0; i < mounted.length; i += 1) {
+        try { mounted[i].remove(); } catch (e) { /* noop */ }
+      }
+      mounted.length = 0;
+    },
+  };
+}
+
+/* ----------------------------------------------------------------------------
+ * THE OVERLAY
+ * -------------------------------------------------------------------------- */
+
+let live = null;   // the one open board, or null. Two walls is a bug, not a feature.
+
+/**
+ * Open the noticeboard.
+ *
+ * @param {Object=} opts
+ * @param {Object=} opts.mount          where to append (default document.body)
+ * @param {string=} opts.daySeed        UTC day string; defaults to today
+ * @param {Object=} opts.state          injected persistence (see STATE-NEEDS)
+ * @param {Function=} opts.save         save(state) callback
+ * @param {number=} opts.slots          how many sheets are up (default 4)
+ * @param {boolean=} opts.bindEscape    self-bind Esc (default FALSE - the shell
+ *                                      owns the ladder; this is for demos)
+ * @param {Function=} opts.onClose      called once, after the stage is gone
+ * @param {Function=} opts.onRead       onRead(noticeId) per sheet marked read
+ * @returns {?Object} {root, close(), destroy(), notices} - null with no DOM
+ */
+export function openCorkboard(opts) {
+  const o = opts || {};
+  const doc = (typeof document !== 'undefined') ? document : null;
+  if (!doc || typeof doc.createElement !== 'function') return null;
+  const mount = o.mount || deps.mount || doc.body;
+  if (!mount || typeof mount.appendChild !== 'function') return null;
+
+  // ONE WALL. A second open is the first one raised, not a second stage.
+  if (live && !live.closed) { focusSoon(live.firstButton); return live.handle; }
+
+  ensureStyles(doc);
+
+  const root = el('div', 'arc-corkstage');
+  attr(root, 'role', 'dialog');
+  attr(root, 'aria-modal', 'true');
+  attr(root, 'aria-label', t('board_title', 'Noticeboard'));
+
+  const board = el('div', 'arc-corkboard');
+  const frame = el('div', 'arc-cork-frame');
+  board.appendChild(frame);
+
+  /* ------------------------------ the head ----------------------------- */
+  const head = el('div', 'arc-cork-head');
+  head.appendChild(el('p', 'arc-kicker', t('board_kicker', 'Pinned up')));
+  head.appendChild(el('h1', 'arc-h1 arc-cork-title', t('board_title', 'Noticeboard')));
+  head.appendChild(el('p', 'arc-lede arc-cork-lede', t('board_lede',
+    'What is up on the wall tonight. Some of it stays. Most of it does not.')));
+  frame.appendChild(head);
+
+  /* ------------------------------ the wall ----------------------------- */
+  /* THE PAPER IS mountNotices'S, NOT THIS FUNCTION'S. The office wall runs the
+   * same call over the cork in its own painted set, so the night's set, the
+   * seen rows and the banked visit are one piece of code with two stages. */
+  const wall = el('div', 'arc-cork-wall');
+  attr(wall, 'role', 'list');
+  frame.appendChild(wall);
+
+  const paper = mountNotices(wall, {
+    daySeed: o.daySeed,
+    state: o.state,
+    save: o.save,
+    slots: o.slots,
+    onRead: o.onRead,
+    log: o.log,
+  });
+  const seed = paper ? paper.daySeed
+    : String(o.daySeed != null ? o.daySeed : (deps.daySeed || utcDaySeed()));
+  const up = paper ? paper.notices : [];
 
   /* THE SLOW CLOCK, SAID OUT LOUD. A board that changes silently reads as a
    * board that forgot what was on it. */
@@ -782,12 +862,8 @@ export function openCorkboard(opts) {
     escBound = true;
   }
 
-  /* THE VISIT, BANKED. One write per open, at the end, never per sheet. */
-  s.lastPinDay = seed;
-  s.openedAt = today;
-  s.visits = Math.max(0, Math.round(Number(s.visits) || 0)) + 1;
-  persist(s, o.save);
-
+  /* The visit is banked by mountNotices, at the end of the pinning, exactly
+   * where it was banked when this function did the pinning itself. */
   sfx('paper', 0.25);
   focusSoon(back);
 
