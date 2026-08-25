@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Primitives;
@@ -460,34 +460,27 @@ public partial class MainWindow : Window
     /// be quieter than the other by accident.</para>
     ///
     /// <para>The toast is <see cref="ToastKind.Warning"/> and stays until dismissed, the treatment
-    /// the shell already gives a panic key the OS refused (<c>App.axaml.cs:148</c>): a surface that
+    /// the shell already gives a panic key the OS refused (<c>App.axaml.cs:162</c>): a surface that
     /// may still be on the user's screen after they asked for everything to stop is not something to
     /// tell them for three seconds.</para>
     /// </summary>
     private void ReportStopFailures(string gesture)
     {
-        var failures = Session.Engine.StopFailures;
-        if (failures.Count == 0)
+        // The way out the sentence names is the one this process really holds: PanicGesture is set
+        // from App's own Arm result and nothing else sets it, so a chord the OS refused is never
+        // offered as an escape.
+        var notice = Session.Engine.StopFailureNotice(gesture, PanicGesture);
+        if (notice is null)
         {
             return;
         }
 
-        foreach (var (id, reason) in failures)
+        foreach (var (id, reason) in Session.Engine.StopFailures)
         {
             _host.LogDiagnostic($"stop: module '{id}' failed to disarm [{reason.Code}] {reason.Detail}");
         }
 
-        // The way out named here is the one this process really holds: the chord only when the OS
-        // granted it (PanicGesture is set from App's own Arm result and nothing else sets it), and
-        // otherwise the window, which is always there.
-        var wayOut = PanicGesture is null
-            ? "Closing this window exits the application."
-            : $"Pressing {PanicGesture} twice exits the application.";
-
-        Toasts.ShowUntilDismissed(
-            $"{gesture} could not fully stop {string.Join(", ", failures.Select(f => f.Id))}. "
-            + $"Nothing more is scheduled, but anything those modules had on screen may still be up. {wayOut}",
-            ToastKind.Warning);
+        Toasts.ShowUntilDismissed(notice, ToastKind.Warning);
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Lifecycle;
 
@@ -244,18 +245,36 @@ public abstract class OwnedSessionEffect : ISessionEffect
             _armed = false;
         }
 
+        ExceptionDispatchInfo? failure = null;
         try
         {
             ReleaseWork();
             OnDisarmed();
         }
-        finally
+        catch (Exception ex)
         {
-            if (wasArmed)
+            failure = ExceptionDispatchInfo.Capture(ex);
+        }
+
+        if (wasArmed)
+        {
+            try
             {
                 _owner.Cancel();
             }
+            catch (Exception ex)
+            {
+                // Cancelling runs the generation's own cancellation callback, which releases the
+                // work a SECOND time — so a module whose release is broken throws here too, and the
+                // token source hands it back wrapped in an AggregateException. The first, unwrapped
+                // account is the better one and wins; this one is reported only when the direct
+                // release somehow succeeded and this one did not. Either way the generation is
+                // already cancelled before any callback runs, which is the guarantee that matters.
+                failure ??= ExceptionDispatchInfo.Capture(ex);
+            }
         }
+
+        failure?.Throw();
 
         if (wasArmed)
         {
@@ -388,8 +407,22 @@ public abstract class OwnedSessionEffect : ISessionEffect
         // straight to ReleaseWork so a dead generation cannot take a live one's work down.
         using var registration = token.Register(() =>
         {
-            ReleaseIfStillOurs(generation);
-            stopped.TrySetResult();
+            // THE SIGNAL IS IN A FINALLY, and the reason was found by a test rather than by reading.
+            // ReleaseIfStillOurs runs the subclass's ReleaseWork — native window teardown, decoders,
+            // audio — and a throw there used to skip the line below, so this parked operation NEVER
+            // terminated: the module's Completion hung for the life of the process, and teardown's
+            // drain spent its whole bounded wait on it and then recorded it unobserved. That is the
+            // emergency stop's own hazard one layer down from Disarm's, so it gets the same answer:
+            // the exception still leaves (the canceller wraps it and Disarm reports it), but the
+            // operation always ends.
+            try
+            {
+                ReleaseIfStillOurs(generation);
+            }
+            finally
+            {
+                stopped.TrySetResult();
+            }
         });
 
         await stopped.Task.ConfigureAwait(false);

@@ -120,6 +120,33 @@ public sealed class SessionEngine
     /// </summary>
     public IReadOnlyList<(string Id, CapabilityReason Reason)> StopFailures => _stopFailures;
 
+    /// <summary>
+    /// What a user is told when the last stop did not fully take, or <c>null</c> when it did.
+    ///
+    /// <para>It lives on the ENGINE rather than on the shell because the engine is what knows: which
+    /// modules broke, and — more importantly — exactly how much the stop is still entitled to claim.
+    /// Every module's schedule really is dead, so the sentence says nothing more is scheduled; a
+    /// surface whose withdrawal threw may still be up, so the sentence says that too and does not
+    /// round it off to "stopped". Rounding it off is the failure this whole path exists to prevent.</para>
+    /// </summary>
+    /// <param name="gesture">What the user just did, in their words ("STOP", "the emergency stop").</param>
+    /// <param name="panicGesture">The emergency chord IF this process really holds it, otherwise
+    /// null — the way out named must be one that exists.</param>
+    public string? StopFailureNotice(string gesture, string? panicGesture)
+    {
+        if (_stopFailures.Count == 0)
+        {
+            return null;
+        }
+
+        var wayOut = panicGesture is null
+            ? "Closing the main window exits the application."
+            : $"Pressing {panicGesture} twice exits the application.";
+
+        return $"{gesture} could not fully stop {string.Join(", ", _stopFailures.Select(f => f.Id))}. "
+            + $"Nothing more is scheduled, but anything those modules had on screen may still be up. {wayOut}";
+    }
+
     /// <summary>WPF's <c>_isRunning</c>/<c>App.IsEngineRunning</c> (<c>MainWindow.StartStop.cs:268-269</c>).</summary>
     public bool Running { get; private set; }
 

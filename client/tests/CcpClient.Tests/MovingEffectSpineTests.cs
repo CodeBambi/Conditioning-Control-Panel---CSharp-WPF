@@ -282,15 +282,15 @@ public class MovingEffectSpineTests
     {
         // The shared body's teardown is not one call and it does not all happen on the
         // caller's thread. Per stop, EXACTLY three:
-        //   1. Disarm's own, synchronous, on the caller's thread (OwnedSessionEffect.cs:219);
-        //   2. the generation's cancellation registration (:352), which runs inside
+        //   1. Disarm's own, synchronous, on the caller's thread (OwnedSessionEffect.cs:249);
+        //   2. the generation's cancellation registration (:389), which runs inside
         //      AsyncOperationOwner.Cancel on the disarming thread when the parked body has already
         //      registered, and inline on the POOL thread when it has not (registering an
         //      already-cancelled token invokes the callback immediately);
-        //   3. the tail after `await stopped.Task` (:357), which is a thread-pool continuation
+        //   3. the tail after `await stopped.Task` (:396), which is a thread-pool continuation
         //      because the TCS carries RunContinuationsAsynchronously — so it lands an unbounded
         //      time after Disarm returned, and Disarm does not clear _generation, so the guard at
-        //      :417 lets it through.
+        //      :460 lets it through.
         // The count is deterministic and so is the ordering against Completion: the tail runs
         // BEFORE the owned task completes, which is exactly what makes awaiting Completion a real
         // edge rather than a hopeful pause. This is why the contract requires ReleaseWork to be

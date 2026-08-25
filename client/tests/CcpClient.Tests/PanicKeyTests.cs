@@ -32,10 +32,17 @@ namespace CcpClient.Tests;
 /// KEYED to the platform, while the second injects real input and would be vacuous with nothing to
 /// inject, so it GATES on the machine and refuses by name.</para>
 ///
-/// <para>What a green run still does not prove: that a human sees anything (headed), and that the
-/// chord is reachable while the UI thread is WEDGED — the message is posted and would be delivered
-/// the moment the pump ran again, but a pump that never runs is not tested here and is named in the
-/// report rather than implied.</para>
+/// <para><b>The wedged case USED to be named here as untested, and now it is a fact.</b> That
+/// paragraph said the message "would be delivered the moment the pump ran again" — which is exactly
+/// the problem, because the thread whose pump had to run was the UI thread, and a measurement on
+/// this product at maximum settings recorded that thread failing to answer its message loop for
+/// 607-1734 ms at a stretch, peaking past a 2000 ms probe ceiling. The panic key now owns its own
+/// thread and its own pump, and the third fact below drives a real injected chord past a thread that
+/// never pumps again.</para>
+///
+/// <para>What a green run still does not prove: that a human sees anything (headed), and what
+/// happens after the press reaches the shell — the answer to a UI thread that never takes it is
+/// <c>PanicWatchdog</c>'s, pinned in <see cref="EmergencyStopTests"/>.</para>
 /// </summary>
 [Collection(nameof(RealDesktopCollection))]
 public class PanicKeyTests : RealDesktopFacts
@@ -118,44 +125,92 @@ public class PanicKeyTests : RealDesktopFacts
         Assert.True(WindowFromPoint(new Point { X = centre.X, Y = centre.Y }) != 0,
             "no window owns the centre of the display, so the hit-test instrument is not reading anything");
 
+        // Pressed is raised on the panic key's OWN thread now, so the counter crosses a thread
+        // boundary and is read as one: the instrument does not carry the defect it measures.
         using var live = new Win32PanicKey();
         var pressesOnLive = 0;
-        live.Pressed += () => pressesOnLive++;
+        live.Pressed += () => Interlocked.Increment(ref pressesOnLive);
         var armed = live.Arm();
         Assert.True(armed is CapabilityState.Available, $"the chord was not granted ({armed})");
 
         Assert.True(InjectChord(), "the OS refused the injection, so nothing below measures a delivery");
 
         TestWait.UntilSync(
-            () => { Pump(); return pressesOnLive > 0; },
+            () => { Pump(); return Volatile.Read(ref pressesOnLive) > 0; },
             "the panic chord to reach the app with a full-monitor topmost click sink over the screen",
-            () => $"presses={pressesOnLive}");
+            () => $"presses={Volatile.Read(ref pressesOnLive)}");
 
-        Assert.Equal(1, pressesOnLive);
+        Assert.Equal(1, Volatile.Read(ref pressesOnLive));
 
         // ---- the negative control: one delivery, read by a live key and a dead one ----
         live.Dispose();
 
         using var successor = new Win32PanicKey();
         var pressesOnSuccessor = 0;
-        successor.Pressed += () => pressesOnSuccessor++;
+        successor.Pressed += () => Interlocked.Increment(ref pressesOnSuccessor);
         var reclaimed = successor.Arm();
         Assert.True(reclaimed is CapabilityState.Available,
             $"the chord could not be re-claimed after the first key was disposed ({reclaimed}) — the disposed key "
             + "never gave it back, so Ctrl+Alt+Esc is now gone from the whole machine");
 
-        var pressesOnLiveBefore = pressesOnLive;
+        var pressesOnLiveBefore = Volatile.Read(ref pressesOnLive);
         Assert.True(InjectChord());
 
         TestWait.UntilSync(
-            () => { Pump(); return pressesOnSuccessor > 0; },
+            () => { Pump(); return Volatile.Read(ref pressesOnSuccessor) > 0; },
             "the re-claimed chord to reach the successor key",
-            () => $"successor={pressesOnSuccessor} disposed={pressesOnLive}");
+            () => $"successor={Volatile.Read(ref pressesOnSuccessor)} disposed={Volatile.Read(ref pressesOnLive)}");
 
-        Assert.Equal(pressesOnLiveBefore, pressesOnLive);
-        Assert.Equal(1, pressesOnSuccessor);
+        Assert.Equal(pressesOnLiveBefore, Volatile.Read(ref pressesOnLive));
+        Assert.Equal(1, Volatile.Read(ref pressesOnSuccessor));
 
         overlay.Withdraw();
+    }
+
+    /// <summary>The same gate, for the same reason, on the fact that matters most. Named separately
+    /// rather than shared with <see cref="RefusalReason"/> so a reader of either refusal sees what
+    /// THAT run would have measured.</summary>
+    private const string WedgeRefusalReason =
+        "this run asks USER32 for a system-wide hotkey and injects a real Ctrl+Alt+Esc through SendInput while the "
+        + "thread that armed the key is deliberately never pumped again. Neither RegisterHotKey nor SendInput "
+        + "exists off Windows, and neither can be exercised in a Windows session with no desktop — a green run "
+        + "there would be a wedged thread that nothing was ever sent to, which measures nothing at all";
+
+    [Fact]
+    public void ThePressARRIVESWhileTheThreadThatARMEDTheKeyNEVERPumpsAgain()
+    {
+        Assert.SkipUnless(PointerWindowProbe.MachineHasInteractiveDesktop, WedgeRefusalReason);
+
+        // THE STATE THE OWNER WAS ACTUALLY IN. A measurement on this product at maximum settings
+        // recorded the UI thread failing to answer its message loop for 607-1734 ms at a stretch,
+        // peaking past a 2000 ms probe ceiling, with one core pegged and fifteen idle. WM_HOTKEY is
+        // POSTED to the queue of the thread that registered the hotkey — so while that thread was
+        // the UI thread, a press during a stall could not be OBSERVED at all, and the escape hatch
+        // was asleep exactly when it was needed.
+        //
+        // This fact arms the key on THIS thread and then never pumps this thread again: the wait
+        // below is the approved helper's sleep loop, which dispatches nothing. Before the panic key
+        // owned its own thread, that made the press undeliverable and this fact would spend its
+        // whole window and red with CONDITION-NEVER-TRUE.
+        using var key = new Win32PanicKey();
+        var presses = 0;
+        key.Pressed += () => Interlocked.Increment(ref presses);
+        var armed = key.Arm();
+        Assert.True(armed is CapabilityState.Available, $"the chord was not granted ({armed})");
+
+        // Non-vacuity: the window really exists and really belongs to somebody, so "it arrived"
+        // below is about a delivery rather than about an object that was never built.
+        Assert.True(IsWindow(key.OwnerWindow),
+            $"USER32 does not recognise 0x{key.OwnerWindow:X} as a window, so nothing could be posted to it");
+
+        Assert.True(InjectChord(), "the OS refused the injection, so nothing below measures a delivery");
+
+        TestWait.UntilSync(
+            () => Volatile.Read(ref presses) > 0,
+            "the panic chord to be delivered while the thread that armed the key never pumps a message again",
+            () => $"presses={Volatile.Read(ref presses)}, ownerWindow=0x{key.OwnerWindow:X}");
+
+        Assert.Equal(1, Volatile.Read(ref presses));
     }
 
     /// <summary>
@@ -189,9 +244,11 @@ public class PanicKeyTests : RealDesktopFacts
 
     /// <summary>
     /// Drain this thread's message queue. <c>WM_HOTKEY</c> is POSTED, not called back, so nothing
-    /// arrives until somebody dispatches it — in the product that somebody is Avalonia's own Win32
-    /// loop on the UI thread, and here it is this. The pump is inside the wait's condition so the
-    /// wait is on a real signal rather than on a clock.
+    /// arrives until somebody dispatches it — and WHICH thread that is has changed: the panic key
+    /// now owns the window, so it pumps its own queue and this pump is no longer the delivery path.
+    /// It is kept because it costs nothing and because a fact that stopped pumping would be silently
+    /// asserting something different from the one above it; the fact that the arming thread's pump
+    /// is NOT needed is proved separately, by wedging it.
     /// </summary>
     private static void Pump()
     {

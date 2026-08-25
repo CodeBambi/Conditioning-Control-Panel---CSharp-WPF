@@ -107,7 +107,42 @@ public class PanicLadderHeadlessTests : HeadlessTest
 
         // Rung two, inside the window: the exit request the tray menu's Exit reaches.
         window.PanicPress();
-        Assert.Contains(diagnostics, l => l.Contains("panic: second press with nothing running", StringComparison.Ordinal));
+        Assert.Contains(diagnostics, l => l.Contains("panic: second press inside the double-press window", StringComparison.Ordinal));
+        Assert.Contains(diagnostics, l => l.Contains("Exit chosen", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// <b>The exit rung is reached with a session RUNNING, which is the fix for the way this ladder
+    /// could trap somebody.</b>
+    ///
+    /// <para>The rungs used to be ordered stop-then-exit with the exit gated on <c>!Running</c>, and
+    /// the emergency stop's review found what that costs: a module that throws on the way down left
+    /// <c>Running</c> true, so every later press re-entered the stop rung, threw again, and the
+    /// double-press exit became permanently unreachable — no log line, no toast, and a desktop full
+    /// of topmost surfaces. The exit is now evaluated FIRST and reads no engine state at all, so no
+    /// failure inside the stop can take it away.</para>
+    ///
+    /// <para>A throwing module cannot be injected into the real composed rack from here (that half
+    /// is <see cref="Tests.EmergencyStopTests"/>'s, on a real engine with a real throwing module), so
+    /// this drives the same branch through the only other way to be running at press two: the
+    /// session came back between the presses — a scheduler auto-start, or the user restarting it.
+    /// The ladder's answer is the same in both cases and it is deliberate: two presses of the
+    /// emergency chord inside the window mean OUT, whatever the engine believes about itself.</para>
+    /// </summary>
+    [AvaloniaFact]
+    public async Task ASecondPressWithASessionRUNNINGStillASKSTheApplicationToEXIT()
+    {
+        var (window, diagnostics) = await BootAsync();
+
+        window.PanicPress();
+        Assert.DoesNotContain(diagnostics, l => l.Contains("Exit chosen", StringComparison.Ordinal));
+
+        // Running at the moment of the second press — the state that used to send this press back
+        // into the stop rung instead of out of the application.
+        Assert.True(window.Session.Engine.Start());
+        Assert.True(window.Session.Engine.Running);
+
+        window.PanicPress();
         Assert.Contains(diagnostics, l => l.Contains("Exit chosen", StringComparison.Ordinal));
     }
 
