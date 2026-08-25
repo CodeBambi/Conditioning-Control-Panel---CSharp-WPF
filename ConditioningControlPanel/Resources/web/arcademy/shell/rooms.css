@@ -31,8 +31,24 @@
   transform-origin: 50% 50%;
   /* room.js sets transform: translate(-50%,-50%) scale(s); origin must stay
      center or the scale walks the stage off-axis (lab.css's lesson) */
+
+  /* THE PAINTED FALLBACK. A ~1MB plate over a phone's network takes real
+     seconds, and until it decodes the stage was flat #0B0B18 - a black
+     rectangle with a glowing rect and a marquee slab floating in it, which
+     reads as a broken room rather than a loading one. A warm dark tint with a
+     lamp high in the frame gives the same beat a LIT room-shaped void: the
+     shape is right, the light is right, only the furniture is late. It costs
+     one gradient, it is painted once, and the art covers it completely. */
+  background:
+    radial-gradient(58% 42% at 50% 18%,
+      rgba(120, 74, 106, 0.42) 0%, rgba(58, 34, 62, 0.30) 46%, transparent 78%),
+    linear-gradient(180deg, #1A1026 0%, #150E20 52%, #0D0916 100%);
 }
 
+/* THE ART FADES IN, IT DOES NOT SNAP. `is-in` is written by room.js on the
+   image's own `load` (the same listener that already refits), so a plate that
+   was in cache is lit on the first frame and a plate off a slow network eases
+   onto the fallback instead of replacing it in one jarring blink. */
 .arm-art {
   position: absolute;
   inset: 0;
@@ -42,7 +58,14 @@
   image-rendering: pixelated;
   pointer-events: none;
   user-select: none;
+  opacity: 0;
+  transition: opacity 240ms ease-out;
 }
+.arm-art.is-in { opacity: 1; }
+/* Decoration law: reduced motion gets the room, not the fade. Never a rule that
+   leaves the art at 0 - the freeze at the bottom of styles.css runs animations
+   at .001s, and a TRANSITION it does not touch, so this is the honest still. */
+.arc-reduced .arm-art, .arm-lite .arm-art { transition: none; }
 
 /* ------------------------------ hotspots -------------------------------- */
 
@@ -468,3 +491,108 @@
 }
 .arm-glyph-knobs::before { left: 3px; top: -2px; }
 .arm-glyph-knobs::after { right: 4px; top: 12px; }
+
+/* ========================= THE ROOM ON A PHONE ===========================
+ * Every rule below is gated on `html.arc-mobile` - core/device.js's one
+ * decision, the same gate the rest of the mobile pass uses (styles.css). A
+ * desktop WebView2 window never carries the class, so this block is dead code
+ * there and the app renders what it rendered before it existed. Prove it, do
+ * not trust it: the harness reads `.arm-bar` and `.arm-hero`'s computed rects
+ * at 1600x900 before and after and they must be identical.
+ *
+ * WHAT A LANDSCAPE PHONE CHANGES, AND WHY:
+ *   The band. room.js drops its floor from 110px to 72px there, because 110 on
+ *   390px of glass is 28% of the room spent on the strip in front of it.
+ *   The slabs then have to fit 72px, and every one of them still clears the
+ *   44px thumb floor - that is the constraint this block is written against,
+ *   not "smaller".
+ *   The anchor. room.js pins the painting to the top of the frame; `top` and
+ *   `transform-origin` move together here or the scale walks the plane
+ *   off-axis (rooms.css header, lab.css's lesson).
+ *
+ * PORTRAIT IS BEHIND THE ROTATE GATE (shell/orientgate.js) and is not designed
+ * for - these rules simply must not throw or hide anything there, which they
+ * cannot: they are three sizes and an anchor. */
+
+/* LANDSCAPE ONLY, and room.js's `onPhone()` carries the SAME qualifier - the
+   box and the origin move together with the JS that writes the transform, or
+   the scale walks the plane off-axis. Portrait is behind the rotate gate and
+   keeps the centred stage. */
+html.arc-mobile[data-arc-orient="landscape"] .arm-stage { top: 0; transform-origin: 50% 0; }
+
+html.arc-mobile .arm-bar {
+  gap: 10px;
+  padding: 7px calc(clamp(10px, 2.6vw, 22px) + env(safe-area-inset-right, 0px))
+           env(safe-area-inset-bottom, 0px)
+           calc(clamp(10px, 2.6vw, 22px) + env(safe-area-inset-left, 0px));
+}
+/* The route tape is a seam, not a fence: at 72px a 10px stripe is an eighth of
+   the band. */
+html.arc-mobile .arm-bar::before { height: 6px; }
+html.arc-mobile .arm-bar::after { top: 8px; }
+html.arc-mobile .arm-hero-group { gap: 10px; }
+
+/* THE HERO KEEPS ITS BULBS. It is the verb; a phone gets a smaller marquee, not
+   a plain button. The ring, the face inset and the bulb pitch all come down
+   together so the gutter still reads as bulbs rather than as a gold smear. */
+html.arc-mobile .arm-hero {
+  height: clamp(44px, calc(var(--arm-band-h, 72px) - 18px), 68px);
+  min-width: clamp(140px, 30vw, 240px);
+  padding: 7px;
+  border-radius: 12px;
+}
+html.arc-mobile .arm-hero::before, html.arc-mobile .arm-hero::after {
+  inset: 2px;
+  padding: 6px;
+  border-radius: 10px;
+  background-image: radial-gradient(circle, #FFD700 1.5px, rgba(255, 215, 0, 0.28) 2.1px, transparent 3px);
+  background-size: 15px 15px;
+  background-position: 3px 2px;
+}
+html.arc-mobile .arm-hero::after { background-position: 10px 9px; }
+html.arc-mobile .arm-hero .arm-hero-face {
+  inset: 7px;
+  border-radius: 7px;
+  font-size: clamp(14px, calc(var(--arm-band-h, 72px) * 0.26), 24px);
+  letter-spacing: 0.12em;
+}
+
+/* The side door, subordinate at any size. */
+html.arc-mobile .arm-hero-alt {
+  height: clamp(44px, calc(var(--arm-band-h, 72px) - 26px), 56px);
+  min-width: clamp(104px, 20vw, 160px);
+  padding: 6px;
+  border-radius: 11px;
+}
+html.arc-mobile .arm-hero-alt .arm-hero-face {
+  inset: 6px;
+  font-size: clamp(11px, calc(var(--arm-band-h, 72px) * 0.16), 15px);
+  letter-spacing: 0.1em;
+}
+
+/* THE SIDE SLABS STAY 44px TALL. `clamp(44px, ...)` is the floor and it is the
+   whole point of the rule - the label may ellipsis, the target may not shrink. */
+html.arc-mobile .arm-bar-ghost {
+  gap: 8px;
+  height: clamp(44px, calc(var(--arm-band-h, 72px) - 24px), 60px);
+  padding: 0 clamp(9px, 2vw, 16px);
+  border-bottom-width: 3px;
+  border-radius: 11px;
+  font-size: clamp(10px, calc(var(--arm-band-h, 72px) * 0.14), 13px);
+  letter-spacing: 0.08em;
+}
+html.arc-mobile .arm-glyph-arrow { width: 10px; height: 10px; border-width: 3px; }
+html.arc-mobile .arm-glyph-knobs { width: 18px; height: 13px; }
+
+/* The room sign, out of the way of a 390px frame's ceiling. */
+html.arc-mobile .arm-plate {
+  left: calc(10px + env(safe-area-inset-left, 0px));
+  top: calc(8px + env(safe-area-inset-top, 0px));
+  max-width: min(260px, 46vw);
+  padding: 8px 11px;
+  border-radius: 8px;
+}
+html.arc-mobile .arm-plate-name { font-size: 15px; }
+html.arc-mobile .arm-plate-room { font-size: 9px; }
+html.arc-mobile .arm-plate-status { font-size: 10px; margin-top: 4px; }
+html.arc-mobile .arm-plate-xp { font-size: 10.5px; margin-top: 5px; }

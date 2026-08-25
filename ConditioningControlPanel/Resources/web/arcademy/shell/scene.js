@@ -81,6 +81,17 @@
  * ==========================================================================*/
 
 import { t as lexT } from '../core/lexicon.js';
+import { isMobile, orientation } from '../core/device.js';
+
+/* THE ONE MOBILE DECISION (core/device.js), asked the way room.js asks it, and
+ * LANDSCAPE ONLY for room.js's reason: portrait is behind the rotate gate, and
+ * top-anchoring a 9:19.5 frame would hand the apron two thirds of the screen.
+ * The apron floor and the stage anchor are computed here, the box they move is
+ * styled from `html.arc-mobile[data-arc-orient="landscape"]` in scene.css, and
+ * the two must not drift. The wrapper is for the DOM double, no matchMedia. */
+function onPhone() {
+  try { return !!isMobile() && orientation() === 'landscape'; } catch (e) { return false; }
+}
 
 /** The plane the VN art was authored on. Overridable, rarely overridden. */
 const STAGE_W = 1376;
@@ -92,6 +103,9 @@ const STAGE_H = 768;
 const APRON_FRACTION = 640 / 768;
 /** The band never shrinks below this, even art-to-the-floor (px, real). */
 const APRON_MIN = 110;
+/** The phone's floor. room.js's number and room.js's reasons - the two chassis
+ *  share rooms.css's slab sizing, so they must share the band it sizes off. */
+const APRON_MIN_MOBILE = 72;
 
 /** The zoom between slides. One number, mirrored in scene.css. */
 const ZOOM_MS = 320;
@@ -652,13 +666,22 @@ export function createScene(opts) {
     const w = root.clientWidth || (root.parentNode && root.parentNode.clientWidth) || stageW;
     const h = root.clientHeight || (root.parentNode && root.parentNode.clientHeight) || stageH;
     const s = Math.min(w / stageW, h / stageH) || 1;
-    stage.style.transform = 'translate(-50%,-50%) scale(' + s + ')';
+    /* THE PHONE ANCHORS THE PAINTING TO THE TOP and takes a 72px band instead
+     * of 110 - room.js's change, for room.js's reasons, on the chassis that
+     * shares its apron. scene.css moves the box and the origin together under
+     * `html.arc-mobile`; the origin must follow the anchor or the scale walks
+     * the plane off-axis (this file's own header). The ZOOM is untouched: it
+     * lives on `.asc-slide`, one level down, and still turns about its own
+     * centre. */
+    const phone = onPhone();
+    stage.style.transform = 'translate(-50%,' + (phone ? '0' : '-50%') + ') scale(' + s + ')';
 
     let bandH = 0;
     if (bar) {
-      const artTop = (h - stageH * s) / 2;
+      const floor = phone ? APRON_MIN_MOBILE : APRON_MIN;
+      const artTop = phone ? 0 : (h - stageH * s) / 2;
       let apronTop = artTop + apronStageTop * s;
-      if (h - apronTop < APRON_MIN) apronTop = h - APRON_MIN;
+      if (h - apronTop < floor) apronTop = h - floor;
       if (apronTop < 0) apronTop = 0;
       bandH = h - apronTop;
       bar.style.top = apronTop + 'px';

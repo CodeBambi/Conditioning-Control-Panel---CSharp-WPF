@@ -300,18 +300,59 @@
   border-top:1px solid color-mix(in srgb, var(--cork-frame), transparent 40%);
 }
 
+/* THE BACK BAR ON A PHONE. `.arc-corkstage` is the scroller and the bar is
+   `position:sticky; bottom:0` inside the frame, so for the whole scroll it is
+   pinned to the bottom of the window with the wall running under it. On a
+   390px-tall screen that bar was 71px - an eighth of the glass - and its
+   default backing is a gradient that starts at `transparent`, so the notices
+   read THROUGH the top half of it. That is the "bar over the text" the phone
+   capture shows, and it is a backing-and-height problem, not a spacing one.
+
+   IT IS NOT FIXED WITH BOTTOM PADDING, AND THE HARNESS IS WHY THIS COMMENT IS
+   HERE. Padding the scroller is wrong twice over (a sticky bottom:0 is measured
+   against the scrollport's padding box, so it lifts the bar and opens a strip
+   of dusk under it). Padding the CONTENT WRAPPER was the next guess and it was
+   measured too: at 844x390 the bar reaches its flow position at the end of the
+   scroll either way - the last notice cleared it before the change (foot bottom
+   y268, bar top y280) - so all 68px bought was dead cork under the bar at the
+   one place the wall was already legible. Mid-scroll, which is where the
+   problem actually is, padding does nothing at all. So: keep the bar where it
+   is, make it shorter, and make it OPAQUE. */
+html.arc-mobile .arc-cork-frame .arc-exitbar {
+  margin-top:8px;
+  padding:9px 6px calc(9px + env(safe-area-inset-bottom, 0px));
+  background:linear-gradient(180deg,
+    color-mix(in srgb, var(--cork-lo), transparent 22%) 0,
+    var(--cork-lo) 30%,
+    var(--cork-lo) 100%);
+}
+
 /* ============================== THE PROP ================================= */
-/* A small board hung somewhere on the campus. The driver places it: override
-   --bp-x / --bp-y on the element, or position it from campus CSS. */
+/* A small board hung somewhere on the campus. The driver places it: put it in a
+   row (the campus post row does) and it simply leans there, or add `.is-pinned`
+   and override --bp-x / --bp-y to hang it at a spot on the plan.
+
+   RELATIVE, NOT ABSOLUTE, BY DEFAULT. The prop used to be `position:absolute`
+   unconditionally, which took it out of its parent's flow: `.campus-postrow` is
+   a flex row, so it measured 0x0, both props stacked on the same pixel and both
+   hung a prop's height BELOW the row's bottom anchor. `relative` (not `static`)
+   is deliberate - `.arc-boardprop-new`, the unread dot, is absolutely positioned
+   INSIDE the button and needs this element to stay its containing block. */
 .arc-boardprop {
   /* the tokens are up top now, on the shared THE WALL TOKENS block */
-  position:absolute; left:var(--bp-x, 12%); top:var(--bp-y, 54%);
+  position:relative; left:auto; top:auto;
   width:var(--bp-w, 74px);
   display:flex; flex-direction:column; align-items:center; gap:5px;
   padding:0; margin:0; border:0; background:none;
   color:var(--campus-text, var(--ink-dim));
   cursor:pointer;
   transition:transform .16s ease, filter .16s ease;
+}
+/* THE PIN. The documented free-placement API, kept intact and opt-in: a driver
+   that wants the board hung at a spot on the plan rather than leaning in a row
+   asks for it by name. Nothing in the shipped campus uses it today. */
+.arc-boardprop.is-pinned {
+  position:absolute; left:var(--bp-x, 12%); top:var(--bp-y, 54%);
 }
 .arc-boardprop:hover, .arc-boardprop:focus-visible { transform:translateY(-2px) scale(1.04); }
 .arc-boardprop:focus-visible { outline:2px solid var(--pink); outline-offset:4px; }
