@@ -161,6 +161,42 @@ public class DescentFusePhaseMathTests
     {
         Assert.Equal(4, DescentCountdownService.DimStepFor(At(TimeSpan.Zero), Now));
         Assert.Equal(4, DescentCountdownService.DimStepFor(At(TimeSpan.FromHours(-5)), Now));
+        Assert.Equal(4, DescentCountdownService.DimStepFor(At(-DescentCountdownService.DimHoldPastZero), Now));
+    }
+
+    /// <summary>
+    /// ...but not forever (0825 F4). A "Not tonight", or an account the server never offered,
+    /// used to keep a dimmed app until the owner unset the timestamp — which the auto-fire
+    /// contract says never to do. Once the night is long over the chrome lets go by itself.
+    /// </summary>
+    [Fact]
+    public void DimStepFor_LetsGoLongAfterZero()
+    {
+        var justPast = -DescentCountdownService.DimHoldPastZero - TimeSpan.FromSeconds(1);
+        Assert.Equal(0, DescentCountdownService.DimStepFor(At(justPast), Now));
+        Assert.Equal(0, DescentCountdownService.DimStepFor(At(TimeSpan.FromDays(-3)), Now));
+        // The migrated overload still restores immediately, unchanged.
+        Assert.Equal(0, DescentCountdownService.DimStepFor(At(TimeSpan.FromMinutes(-1)), Now, migrationCompleted: true));
+    }
+
+    // ------------------------------------------------------------ the late zero (0825 F5)
+
+    /// <summary>
+    /// A tick that first notices zero within the grace is the live night; one that notices it
+    /// hours later (sleep, hibernate, a wedged UI thread) is not, and must take the away fork
+    /// rather than play the full crack and mint a "you were there" keepsake.
+    /// </summary>
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(30, false)]
+    [InlineData(299, false)]
+    [InlineData(301, true)]
+    [InlineData(8 * 3600, true)]
+    public void IsZeroObservedLate_GraceIsFiveMinutes(int secondsAfterZero, bool expectedLate)
+    {
+        var zero = Now;
+        Assert.Equal(expectedLate,
+            DescentCountdownService.IsZeroObservedLate(zero, zero + TimeSpan.FromSeconds(secondsAfterZero)));
     }
 
     /// <summary>
