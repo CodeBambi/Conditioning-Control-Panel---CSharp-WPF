@@ -525,6 +525,15 @@
          page at the sizes where the page has least room - at 800x560 a 16 DIP one would put its
          top edge through Quick Drop's centre.
 
+         THE CLEARANCE ABOVE IS A CLEARANCE FOR ONE TOAST, AND THAT IS WHY THE HOST NOW SHOWS ONE.
+         Coalescing settled the repeated sentence; three DIFFERENT ones - export phrases, import
+         phrases, then a refused launch, all reachable with no flag - stacked to y 188..600 of this
+         610-DIP page area and covered FALL IN at 883,157 and Quick Drop at 905,211, which is the
+         top-right dock's defect reached by another road. Nothing is dropped to buy that back: the
+         newest holds the screen and the rest are still owed, the oldest arriving as the ones above
+         it are dismissed (Views/ToastHost.axaml.cs). TierRefusalRouteHeadlessTests holds both
+         halves - the placement with a queue behind it, and every notice arriving.
+
          The host has NO Background, which is why the empty area around a toast does not eat
          clicks on the page underneath (Services/Notifications/NotificationService.cs:16-18). -->
     <Panel>
