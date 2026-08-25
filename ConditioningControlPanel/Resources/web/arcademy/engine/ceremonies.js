@@ -22,19 +22,28 @@ export function createCeremonies(ctx) {
   let segs = [];
 
   /* ---- stamp ------------------------------------------------------------- */
-  /** opts: { label, tone:'good'|'bad'|'gild', variant, durMs, sfx } */
+  /** opts: { label, tone:'good'|'bad'|'gild', variant, durMs, sfx, dom }
+   *  `dom:false` (2026-08-26, the double-stamp fix): the shell's ceremony
+   *  module renders its own arc-stamp at the caller's target and delegates
+   *  here for the BEAT - the fx event and the cue. Until now both sides
+   *  appended a node, so every delegated stamp rendered twice (once here in
+   *  the fx layer, once at the target). The shell now asks for the beat
+   *  alone; a direct caller that says nothing keeps the node, as ever. */
   function stamp(opts = {}) {
     if (!hasDom()) return null;
     const variant = ctx.variant('stamp', 0.6, opts.variant);
-    const node = document.createElement('div');
-    const tone = opts.tone === 'bad' ? ' ae-stamp-bad' : (opts.tone === 'gild' || variant.name === 'gild' ? ' ae-stamp-gild' : '');
-    node.className = 'ae-stamp' + tone;
-    node.textContent = String(opts.label == null ? '' : opts.label);
-    ctx.layers.front.appendChild(node);
-    ctx.timers.own(node);
+    let node = null;
+    if (opts.dom !== false) {
+      node = document.createElement('div');
+      const tone = opts.tone === 'bad' ? ' ae-stamp-bad' : (opts.tone === 'gild' || variant.name === 'gild' ? ' ae-stamp-gild' : '');
+      node.className = 'ae-stamp' + tone;
+      node.textContent = String(opts.label == null ? '' : opts.label);
+      ctx.layers.front.appendChild(node);
+      ctx.timers.own(node);
+      ctx.timers.after(opts.durMs == null ? 1000 : opts.durMs, () => ctx.timers.release(node));
+    }
     ctx.fx('stamp', variant.name);
     ctx.sfx(opts.sfx || (opts.tone === 'bad' ? 'stamp_bad' : 'stamp'), 0.55, { duck: 'voice' });
-    ctx.timers.after(opts.durMs == null ? 1000 : opts.durMs, () => ctx.timers.release(node));
     return { kind: 'stamp', variant: variant.name, node };
   }
 

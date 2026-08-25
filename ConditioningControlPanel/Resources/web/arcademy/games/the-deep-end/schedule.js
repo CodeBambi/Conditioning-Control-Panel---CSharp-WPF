@@ -100,14 +100,26 @@ export const PLAYTEST = Object.freeze({
    *  FULL as well as on lite. iOS caps CONCURRENT HARDWARE VIDEO DECODE
    *  SESSIONS (practically three or four before VideoToolbox starts thrashing
    *  and every one of them stutters), and a phone pays several ms a frame for a
-   *  backdrop-filter or a blend surface that a desktop GPU eats for free. So a
-   *  touch device gets four animated tiers and stills five deep no matter what
-   *  rung it is on. It COMPOSES with the rung in the PROTECTIVE direction, so
+   *  backdrop-filter or a blend surface that a desktop GPU eats for free.
+   *  PASS 8 (owner, 2026-08-25) re-opened loops on touch (the pass-6 diet had
+   *  frozen EVERY phone face still) and paid for them by TIGHTENING this cap
+   *  to 2: only the two DEEPEST animated tiers wear video on a phone - that is
+   *  where the eye is - and 2 face tiers + the engine's touch decoration
+   *  budget of 3 (util.js VIDEO_BUDGET_TOUCH, now honestly charged by the
+   *  fire-reward current too) stays at the session ceiling iOS survives. The
+   *  deepest tiers keep the slots via the promotion in faceFor(): a NEW
+   *  deepest tier past the cap demotes the shallowest animated tier to a
+   *  still. It COMPOSES with the rung in the PROTECTIVE direction, so
    *  touch never makes a lite board heavier: the animated-tier cap takes the
    *  MIN (fewer decoders wins) and the still-shallows line takes the MAX (more
    *  stills wins) - see faceCap()/shallowStillMaxTier() in index.js. */
-  FACE_CAP_TOUCH: 4,
+  FACE_CAP_TOUCH: 2,
   SHALLOW_STILL_MAX_TIER_TOUCH: 4,
+  /** PASS 8 - THE BELT: a face <video> with no frame (no loadeddata) this long
+   *  after its url landed is treated as failed - the tier falls back to a
+   *  still via faceVideoFailed instead of holding a decoder session hostage on
+   *  a stream iOS is thrashing on. */
+  FACE_VIDEO_STALL_MS: 4000,
 
   /** PASS 5 - THE AUTO PROBE. After the board is dealt we sample rAF deltas
    *  for PERF_SAMPLE_MS, skipping PERF_WARMUP_MS of first-frame cost (style
@@ -156,6 +168,20 @@ export const PLAYTEST = Object.freeze({
   /** Streak meter visible from this chain length; chain links cap here. */
   STREAK_VISIBLE: 2,
   CHAIN_CAP: 8,
+
+  /** Pass 7 - THE CHOREOGRAPHY (owner's mobile note: "the slide starts, then
+   *  suddenly everything is merged... all happening at once"). A move DECIDES
+   *  synchronously and PRESENTS in phases anchored to the first painted frame
+   *  of the slide: the pops cascade along the swipe (stagger = min(
+   *  POP_STAGGER_MS, POP_CASCADE_MS / merges), so the cascade never outstays
+   *  ~POP_CASCADE_MS), the stamp beat lands at slide-end + STAMP_BEAT_MS, the
+   *  reward show at slide-end + REWARD_BEAT_MS. CHOREO_SAFETY_MS is the
+   *  stranded-anchor net (a tab hidden between the anchor frames). */
+  POP_STAGGER_MS: 50,
+  POP_CASCADE_MS: 200,
+  STAMP_BEAT_MS: 140,
+  REWARD_BEAT_MS: 300,
+  CHOREO_SAFETY_MS: 650,
 });
 
 export function clamp01(v) { const n = Number(v); return !Number.isFinite(n) ? 0 : n < 0 ? 0 : n > 1 ? 1 : n; }

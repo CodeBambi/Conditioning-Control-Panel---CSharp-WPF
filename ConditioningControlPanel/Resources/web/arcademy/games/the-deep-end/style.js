@@ -1003,6 +1003,16 @@ html.ae-touch .g-de-mq.g-de-mq-flash,
 html.ae-touch .g-de-mq.g-de-mq-bell.g-de-mq-flash{animation:g-de-mqflash-t .6s ease-out 1}
 @keyframes g-de-mqflash-t{0%{opacity:1}100%{opacity:var(--g-de-mqa,.26)}}
 html.ae-touch img.g-de-media{animation:none}
+/* pass 7 (the merge choreography): --de-n-depth is a REGISTERED, INHERITING
+   number with a transition on the whole stage, so every new-deepest write is a
+   window of per-frame inherited-value recompute across the stage subtree. On a
+   phone 1.6s of that lands right on the reward beat; .6s keeps the
+   step-darker read and drops the window to a third. The transition list is
+   restated whole (a transition property does not merge). Desktop keeps 1.6s. */
+html.ae-touch .g-de-stage{
+  transition:--de-n-depth .6s ease, --de-n-a-bands 3.2s ease, --de-n-a-rays 3.2s ease,
+    --de-n-a-lens 3.2s ease, --de-n-a-vortex 3.2s ease, --de-n-a-motes 3.2s ease,
+    --de-n-a-veil 3.2s ease, --de-n-tilt 4s ease, --de-n-scale 4s ease}
 /* the OS-level reduced-motion query pins the bench flat at LOWER specificity
    than the touch rule above, so the touch sheet restates it (the class-based
    html.arc-reduced rule below already outranks by order). */

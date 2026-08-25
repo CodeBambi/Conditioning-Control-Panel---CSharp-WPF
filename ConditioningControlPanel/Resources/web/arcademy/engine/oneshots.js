@@ -313,6 +313,23 @@ export function createOneshots(ctx) {
       if (Number.isFinite(Number(opts.maxMs))) detail.maxMs = Number(opts.maxMs);
       if (Number.isFinite(Number(opts.fadeMs))) detail.fadeMs = Number(opts.fadeMs);
     }
+    // THE CASCADE (2026-08-26, deep-end choreography): `steps` are follow-up
+    // blips pre-scheduled on the mixer's own timeline INSIDE this one dispatch
+    // ({atMs, name?, pitch?, level?} each) - one graph build for a whole run of
+    // pops instead of one per pop. Every step level is clamped exactly like the
+    // main cue's; the mixer clamps pitch. Pass-through otherwise, like pitch.
+    if (Array.isArray(opts.steps) && opts.steps.length) {
+      const steps = [];
+      for (const s of opts.steps.slice(0, 16)) {
+        if (!s) continue;
+        const st = { atMs: Math.max(0, Number(s.atMs) || 0) };
+        if (s.name != null) st.name = String(s.name);
+        if (s.pitch != null && Number.isFinite(Number(s.pitch))) st.pitch = Number(s.pitch);
+        if (s.level != null) st.level = ctx.magnitude(ctx.pct(s.level) * (0.8 + 0.2 * clamp01(chans.binauralDepth)));
+        steps.push(st);
+      }
+      if (steps.length) detail.steps = steps;
+    }
     if (duckKind && DUCK[duckKind] != null) {
       // depth of the duck is the player's duckDepth channel against the policy
       const policy = DUCK[duckKind];

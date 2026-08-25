@@ -679,6 +679,17 @@ export function createEngine(options = {}) {
     isPlainBeat: (i01, floor, early) => isPlainBeat(i01, rng(), floor, early),
     cadenceMs,
     rewardRoll: (o = {}) => schedule.roll(Object.assign({ heat }, o)),
+    /** Pre-warm a heavy path in idle time (2026-08-26). 'spiral' (the default
+     *  and only kind) mounts the loom wash canvas + compiles its shader while
+     *  the element sits at opacity 0, so the first jackpot garnish / spiral
+     *  sustain reuses it instead of paying WebGL setup on a reward frame.
+     *  No rng, no fx, nothing visible; safe to skip, safe to repeat. */
+    warm(what) {
+      if (disposed || suspended) return false;
+      if (what != null && what !== 'spiral') return false;
+      ensureLayer();
+      try { return sustained.warmSpiral(); } catch (e) { log('warm refused: ' + ((e && e.message) || e)); return false; }
+    },
     garnish: (o = {}) => applyGarnish(garnishBag.draw(o.avail || ['pink', 'drain', 'spiral', 'sublim']), o.intensity),
     escapeGuard: (o = {}) => createEscapeGuard(Object.assign({ timers }, o)),
     deadBeat,

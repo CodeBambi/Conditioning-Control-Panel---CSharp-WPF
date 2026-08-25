@@ -419,13 +419,83 @@ export function createDePressure(o) {
       node.classList.add(name);
     } catch (e) { /* ignore */ }
   }
-  /** A tile's centre as a % of the viewport (the engine layer's own units). */
+  /* ---- board geometry, measured ONCE (pass 7, FIX 1) ----------------------
+   * burstAt used to getBoundingClientRect a MID-TRANSITION tile: a forced
+   * layout inside the merge path AND an interpolated anchor, so the bursts
+   * landed wherever the slide happened to be. Same cure the casino's
+   * anchorOf got (casino.js 2026-08-25): the board rect + grid step are
+   * cached (invalidated by resize/orientation) and a tile's centre is derived
+   * from its honest --r/--c vars - no flush, and the TRUE cell. */
+  let bgeom = null;                 // {left, top, w, h, n, tile, step} viewport px
+  let geomBound = false;
+  const invalidateGeom = () => { bgeom = null; };
+  function measureGeom() {
+    const r = rectOf(opts.board);
+    if (!r || !r.width || !r.height) { bgeom = null; return null; }
+    const g = { left: r.left, top: r.top, w: r.width, h: r.height, n: 0, tile: 0, step: 0 };
+    try {
+      const cells = opts.board && typeof opts.board.querySelectorAll === 'function'
+        ? opts.board.querySelectorAll('.g-de-cell').length : 0;
+      if (cells > 0) g.n = Math.round(Math.sqrt(cells));
+    } catch (e) { /* stays 0 */ }
+    if (g.n > 0) {
+      let gap = 0;
+      try {
+        if (typeof getComputedStyle === 'function') gap = parseFloat(getComputedStyle(opts.board).columnGap) || 0;
+      } catch (e) { gap = 0; }
+      g.tile = (g.w - (g.n - 1) * gap) / g.n;
+      g.step = g.tile + gap;
+    }
+    bgeom = g;
+    return g;
+  }
+  function geomNow() { return bgeom || measureGeom(); }
+  function bindGeom() {
+    if (geomBound || typeof window === 'undefined' || !window.addEventListener) return;
+    try {
+      window.addEventListener('resize', invalidateGeom);
+      window.addEventListener('orientationchange', invalidateGeom);
+      geomBound = true;
+    } catch (e) { /* stays unbound; the first measure keeps standing */ }
+  }
+  function unbindGeom() {
+    if (!geomBound) return;
+    geomBound = false;
+    try {
+      window.removeEventListener('resize', invalidateGeom);
+      window.removeEventListener('orientationchange', invalidateGeom);
+    } catch (e) { /* ignore */ }
+  }
+  /** A tile's honest row/col, read (never written) off its inline --r/--c. */
+  function cellOf(tileEl) {
+    if (!tileEl || !tileEl.style || typeof tileEl.style.getPropertyValue !== 'function') return null;
+    try {
+      const r = parseFloat(tileEl.style.getPropertyValue('--r'));
+      const c = parseFloat(tileEl.style.getPropertyValue('--c'));
+      if (Number.isFinite(r) && Number.isFinite(c)) return { r, c };
+    } catch (e) { /* fall through */ }
+    return null;
+  }
+  /** A tile's centre as a % of the viewport (the engine layer's own units) -
+   *  derived from --r/--c against the cached grid, never a live rect read. */
   function pctOf(tileEl) {
-    const r = rectOf(tileEl);
+    if (!tileEl) return null;
+    const g = geomNow();
     let w = 0; let h = 0;
     try { w = typeof window !== 'undefined' ? Number(window.innerWidth) || 0 : 0; h = typeof window !== 'undefined' ? Number(window.innerHeight) || 0 : 0; } catch (e) { /* none */ }
-    if (!r || !r.width || !w || !h) return null;
-    return { x: Math.round((r.left + r.width / 2) / w * 100), y: Math.round((r.top + r.height / 2) / h * 100), size: Math.round(r.width) };
+    if (!g || !w || !h) return null;
+    const cell = cellOf(tileEl);
+    let cx; let cy; let size;
+    if (cell && g.step > 0) {
+      cx = g.left + cell.c * g.step + g.tile / 2;
+      cy = g.top + cell.r * g.step + g.tile / 2;
+      size = g.tile;
+    } else {
+      cx = g.left + g.w / 2;
+      cy = g.top + g.h / 2;
+      size = g.tile || g.w / 4;
+    }
+    return { x: Math.round((cx / w) * 100), y: Math.round((cy / h) * 100), size: Math.round(size) };
   }
   function nextAsset() {
     const a = opts.assets;
@@ -610,7 +680,11 @@ export function createDePressure(o) {
   /* ------------------------------------------------------------ the rungs */
   function retune() {
     const base = tremorAmpPx(tierNow, heat, reduced) * P.MOTION_MUL[motion] * (exhaleOn ? P.EXHALE_TREMOR_MUL : 1);
-    tremorAmp = (stopped || outOn || !armed()) ? 0 : Math.min(P.TREMOR_CAP_PX, base);
+    /* pass 7, FIX 3: touchDev mirrors punchBoard's gate - the idle tremor is
+     * a board.style.translate write per FRAME from rung 3+, and that restyles
+     * the whole board subtree; the exact cost the punch gate was added to
+     * remove. A phone never arms the tremor loop. Desktop unchanged. */
+    tremorAmp = (stopped || outOn || touchDev || !armed()) ? 0 : Math.min(P.TREMOR_CAP_PX, base);
     if (pin) {
       setVar(pin, '--de-p-pa', lerp(P.PIN_ALPHA, heat).toFixed(2));
       const spin = lerp(P.PIN_SPIN_S, heat) * (has('wheel') ? P.PIN_FAST_MUL : 1) * (exhaleOn ? P.EXHALE_SPIN_MUL : 1);
@@ -801,6 +875,8 @@ export function createDePressure(o) {
       if (!armed()) { say('pressure: caps 0 - the ladder climbs for SOUND only'); return; }
       mount();
       retune();
+      bindGeom();
+      measureGeom();   // one deliberate layout HERE, not in the merge path (FIX 1)
       say('pressure: mounted ' + [pin, ring, glitch].filter(Boolean).length + ' layers, wheel ' + spiral.file);
     },
 
@@ -829,7 +905,11 @@ export function createDePressure(o) {
       if (roll('slide-g') < lerp(P.SLIDE_GLITCH_CHANCE, heat)) benchRoll(P.SLIDE_GLITCH_S);
     },
 
-    /** Every merge, after the ledger: the punch, the juice, the rung's riders. */
+    /** Every merge, after the ledger: the punch, the juice, the rung's riders.
+     *  Pass 7: called per POP of the swipe's cascade; `chip:false` on the
+     *  follow-up pops keeps the chip punch (and its reduced-motion bloom
+     *  restart, a forced layout) to ONE per swipe - the board punch itself is
+     *  extend-not-stack and stays per pop. */
     merge(m) {
       if (!started || stopped || !armed()) return;
       const info = m || {};
@@ -837,8 +917,10 @@ export function createDePressure(o) {
       const tier = Math.max(1, Math.min(11, Number(info.tier) || 1));
       const p = punchFor({ link, tier, deltaScore: info.deltaScore });
       punchBoard(p.px, p.ms);
-      punchChip('score', p.scale, p.ms + 60);
-      if (link > 1) punchChip('chain', 1 + P.CHAIN_SCALE_PER_LINK * Math.min(8, link), 220);
+      if (info.chip !== false) {
+        punchChip('score', p.scale, p.ms + 60);
+        if (link > 1) punchChip('chain', 1 + P.CHAIN_SCALE_PER_LINK * Math.min(8, link), 220);
+      }
       if (has('burst') && roll('burst') < lerp(P.BURST_CHANCE, heat) + 0.05 * Math.min(4, link - 1)) {
         burstAt(info.tileEl, Math.round(lerp(P.BURST_COUNT, heat)) + (link >= 3 ? 1 : 0));
       }
@@ -937,6 +1019,7 @@ export function createDePressure(o) {
       if (destroyed) return;
       api.stop();
       destroyed = true;
+      unbindGeom();
       for (const id of Array.from(live)) cancel(id);
       live.clear();
       haltLoop();
