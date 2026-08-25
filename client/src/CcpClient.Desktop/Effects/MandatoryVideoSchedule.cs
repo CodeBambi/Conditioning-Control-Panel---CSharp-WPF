@@ -18,9 +18,20 @@ namespace CcpClient.Desktop.Effects;
 /// </summary>
 public static class MandatoryVideoSchedule
 {
-    /// <summary>WPF's slider default (<c>Features/VideoFeatureControl.xaml:79</c>,
-    /// <c>Value="2"</c>).</summary>
-    public const int DefaultPerHour = 2;
+    /// <summary>
+    /// WPF default (<c>Models/AppSettings.cs:992</c>, <c>private int _videosPerHour = 6;</c>): six
+    /// clips an hour.
+    ///
+    /// <para><b>This constant used to be 2, and 2 came from the slider's markup</b>
+    /// (<c>Features/VideoFeatureControl.xaml:79</c>, <c>Value="2"</c>). That literal is overwritten
+    /// the moment the control loads — <c>SliderPerHour.Value = s.VideosPerHour;</c>
+    /// (<c>Features/VideoFeatureControl.xaml.cs:54</c>) — so no fresh upstream install has ever
+    /// shown it. <b>A XAML literal is a design-time placeholder, not a default</b>, and that lesson
+    /// is general rather than this constant's alone: the settings model is the only thing that
+    /// decides what a fresh install runs at. Pinned against upstream's own field initializer by
+    /// <c>PresetDefaultParityTests</c>, which reads it out of this checkout rather than retyping it.</para>
+    /// </summary>
+    public const int DefaultPerHour = 6;
 
     /// <summary>WPF's slider minimum (<c>Features/VideoFeatureControl.xaml:79</c>,
     /// <c>Minimum="1"</c>), which is also <c>Math.Max(1, …)</c> at
