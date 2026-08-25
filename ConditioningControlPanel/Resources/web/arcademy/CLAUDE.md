@@ -46,6 +46,9 @@ bridge.js    postMessage seam: queue-until-init out, pre-buffer + multi-subscrib
 core/lexicon.js    t(key, fallback) over init.lexicon  (mod display strings ONLY)
 core/timetable.js  §7 seeded generator (PURE)
 core/grades.js     §8 rubric + A-caps (PURE)
+core/vocab.js      HOUSE_WORDS (24, niche-agnostic) + slug() + dayVocabulary()
+                   (PURE): the word FLOOR the shell deals when init.words is
+                   empty. FALLBACK ONLY, never a merge - see trap 108
 core/store.js      meta-command client, local cache + write-through
 core/rng.js        makeRng/hash01            <- NOT ours (engine agent)
 core/caps.js       clampToCaps + heat curve  <- NOT ours (engine agent)
@@ -602,7 +605,7 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
                row: any `game:*` name (a class-commentary note from
                `ctx.mood.note()`) answers out of GAME_NOTE_FACES by
                `payload.kind`, so a name this table has never heard of still
-               gets a face. Traps 111-112.
+               gets a face. Traps 112-113.
   heartbeat.js THE METRONOME (2026-08-25): createHeartbeat({widget, emi, voice,
                asks, trips}) -> {start, stop, tick, state, destroy}. ONE
                setInterval at HB_DIALS.TICK_MS that measures how long since
@@ -612,7 +615,7 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
                bark / ask. It owns no data, no rations and no verbs - it decides
                WHEN, and the engines that own each act decide whether. The one
                sanctioned unattended spender in EMI; mounted last from index.js
-               and destroyed first. Traps 108-110.
+               and destroyed first. Traps 109-111.
   widget.css   the layer (.arc-emi, fixed, z 50), the grab/grabbing cursors, the
                x affordance, the edge dock, and the bubble's `.bubble-left` /
                `.bubble-low` flips (right margin / top edge). Plus THE CRT
@@ -2020,7 +2023,7 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
 
 90. **`ctx.mood` IS THE TENSION MIRROR, AND IT IS FACE-ONLY BY LAW (EMI COLOR,
     2026-08-24).** **LAW (1) WAS REVERSED BY THE OWNER ON 2026-08-25 - READ TRAP
-    111 WITH THIS ONE.** A game may tell the mascot how the room feels -
+    112 WITH THIS ONE.** A game may tell the mascot how the room feels -
     `ctx.mood.tense()`
     latches until `.calm()`, `.clutch()` is the one big moment, `.stumble()` is a small
     >_<, `.runLost()` the once-per-class K.O. - and every one of them is throttled in
@@ -2464,7 +2467,49 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     are its guards. A pool with `maxPerSession` (idlePlayer = 2) still caps itself
     - the multiplier moves the dice, never the ration or the doubles slot.
 
-108. **THE HEARTBEAT IS THE ONE SANCTIONED UNATTENDED SPENDER, AND IT EXISTS SO
+108. **THE WORD FLOOR IS A FALLBACK, AND THE VOICE ON IT IS OPT-IN WITH A LATCH**
+    (2026-08-25, `core/vocab.js` + `assets/sublim/`). Three rules, and each one is
+    a lie waiting to happen if you invert it.
+    - **HOUSE WORDS ARE A FALLBACK, NEVER A MERGE.** `dayVocabulary(init.words, rng)`
+      returns the host pool untouched when it holds anything and a seeded 12-word slice
+      of `HOUSE_WORDS` only when it is empty (nothing enabled, or a creator mod whose
+      manifest ships no `SubliminalPool` - `ModService.cs:1091`). Merging house words
+      into a configured pool would dilute a list the player deliberately curated, in the
+      one layer they cannot audit while it runs. One call site, `shell/shell.js`'s
+      `dayWords`; `src.words` is NEVER mutated (init is the host's frame and other
+      readers index it), and trap 24 is untouched - `ctx.absorb` pushes into the same
+      array either way and `SubliminalPool` is still never written.
+    - **THE SETTINGS ROW MUST NAME THE LIST THAT IS FLASHING.** The row used to read
+      `init.words.length`; on a house day that says "0 words" while the classes flash
+      twelve. The shell passes the RESOLVED `vocab: {count, source}` into
+      `createSettingsPage` and the row says "12 words (the school's own)". Any caller
+      that omits `vocab` falls back to `init.words` and reads exactly as it did before.
+    - **`ctx.triggers` MUST ALWAYS DESCRIBE `ctx.words`.** On a house day the rows come
+      from `init.houseTriggers` (`ArcademyHostService.BuildHouseTriggers`, a
+      `TopDirectoryOnly` scan of `assets/sublim/*.mp3` cached in a static, empty on a
+      missing folder - trap 86's law) FILTERED to the words actually dealt. Never
+      synthesise `{text, audio:null}` rows for words the host did not list: echo's
+      `triggerPool()` and instant-recall's `clipRows()` both count rows, and audio-less
+      ones they already get off the `ctx.words` leg.
+    - **`voice` IS OPT-IN, ONE CLIP AT A TIME, AND THE SHELL HOLDS THE GATE.**
+      `fire('sub_flash', {voice:true, voiceKey:'<game>-whisper'})` says the word as it
+      paints it, through this file's own `audio_trigger` - never `new Audio()`. It needs
+      `opts.wordAudio[word]`, which the SHELL builds from the day's trigger rows and
+      passes ONLY under `init.audioAudible`, so the flag is inert on a muted day and no
+      game has to gate on `ctx.audioAudible` itself. `VOICE_MIN_GAP_MS` (= `SUB_HOLD_MAX_MS`,
+      1400) is the latch: the stream ticks as fast as `SUB_MS.fast` 360 and six clips a
+      second would empty `CLIP_VOICES` in one breath, so an early tick paints the word and
+      stays silent. A call that passes BOTH `sfx` and `voice` (deja-vu's preview flash)
+      plays the CLIP and skips the synthesised whisper for that tick - the oscillator is
+      the fallback, not a layer over the real voice.
+    - The 24 words are spelled the same in `core/vocab.js` and in `HouseWords` in
+      `ArcademyHostService.cs`, and the filename is `slug(word)` (lowercase, spaces to
+      underscores: "LET GO" -> `let_go.mp3`). Rename a word on one side and you orphan a
+      clip on the other, silently.
+    - The browser host shim lives in the SITE repo (`scripts/arcademy-web-ext`), so it must
+      list `houseTriggers` in its fake init the same way it lists `sfxSamples`, or the web
+      build flashes house words with no voice under them.
+109. **THE HEARTBEAT IS THE ONE SANCTIONED UNATTENDED SPENDER, AND IT EXISTS SO
     NOTHING ELSE HAS TO BE (owner, 2026-08-25: "It's awfully quiet, tho we got a
     lot of lines. Never be completely idle: something new every 10 seconds ...
     Always do something. It has to feel alive").** This REVERSES the 2026-08-24
@@ -2491,7 +2536,7 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     and `destroy()` (called BEFORE the widget's, from `emi/index.js`) takes the
     interval, the visibility listener and the activity subscription with it.
 
-109. **THE CLOCK IS MEASURED, NOT SLEPT, AND IT MEASURES `widget.onActivity`.**
+110. **THE CLOCK IS MEASURED, NOT SLEPT, AND IT MEASURES `widget.onActivity`.**
     The tick asks one question - how long since anything visible happened - so
     the period stays honest even though the interval is coarse. `onActivity` is
     fired from FOUR choke points, and the exclusion is the trap: `play()` (every
@@ -2511,7 +2556,7 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     funnel every take-the-glass path already runs through. The widget's old
     internal `nudgeGaze()` (kick the rAF) is now `kickGaze()`.
 
-110. **THE SEQUENCE LAW IS THE OWNER'S RHYTHM, AND IT IS WHY THE WHEEL IS NOT
+111. **THE SEQUENCE LAW IS THE OWNER'S RHYTHM, AND IT IS WHY THE WHEEL IS NOT
     JUST WEIGHTS.** Never the same KIND twice in a row (a second face counts as
     a repeat even when the glyph differs); a SPOKEN kind (bark, ask) is always
     followed by at least one WORDLESS one; a screen never follows a screen; and
@@ -2535,7 +2580,7 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     keep the interval out of its way does not silently lengthen the period
     underneath itself - that cost twenty red assertions the first time.
 
-111. **MID-CLASS SPEECH IS LEGAL NOW, AND IT IS PAID FOR WITH A CEILING AND A
+112. **MID-CLASS SPEECH IS LEGAL NOW, AND IT IS PAID FOR WITH A CEILING AND A
     DANGER GATE (owner, 2026-08-25: "it needs to comment ALSO WHILE IN A
     SESSION and react to what's happening").** This reverses trap 90's first law
     - "NO BARK POOL may ever sit on `tense` or `clutch`" - and the wider "no
@@ -2564,7 +2609,7 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     as the last moment the shell fired. The campus cadence did not move:
     `BARK_FLOOR_MS` 40s and `CAMPUS_ODDS_MULT` x1.5 are as trap 107 left them.
 
-112. **A `game:*` NOTE ALWAYS GETS A FACE, AND A PAYLOAD TOKEN WITH NOTHING
+113. **A `game:*` NOTE ALWAYS GETS A FACE, AND A PAYLOAD TOKEN WITH NOTHING
     BEHIND IT KILLS THE LINE.** `ctx.mood.note(id, extra)` mints the moment
     `game:<id>` - and `<id>` IS the bark pool's key, so renaming one orphans the
     other. There will be dozens of those names and `MOMENTS` deliberately has a

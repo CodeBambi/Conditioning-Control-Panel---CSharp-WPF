@@ -795,7 +795,7 @@ export const POOLS = Object.freeze({
    * pools (her own clock, BOTH sides of the door, so every one carries `campus`
    * or `inClass`) and `on:'game:<id>'` pools (one scouted class moment each,
    * `<id>` VERBATIM from the string the game passes to `ctx.mood.note()` -
-   * renaming either orphans the other, trap 112).
+   * renaming either orphans the other, trap 113).
    *
    * REGISTER: ~90% CLOWN by brief, and the brief is the ration. These are the
    * most frequent beats in the file; a `double` on a line she might say every

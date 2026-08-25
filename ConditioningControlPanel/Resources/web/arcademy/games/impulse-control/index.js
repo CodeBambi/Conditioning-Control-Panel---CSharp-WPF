@@ -905,6 +905,12 @@ export default {
       S.phaseTimer = timers.after(b.gapMs, nextBubble);
     }
 
+    /* VOICE throttle for the 'sub' pop. The flavour bag can seat two 'sub'
+       bubbles back to back across a bag boundary, and the shortest bubble cycle
+       is LOAD_MS + SLIDE_END_MS + GAP_MS = ~1110ms - under the 1400ms voiced-gap
+       floor. Every second sub pop speaks; the visual beat is untouched. */
+    let subBeatIdx = 0;
+
     /** The pop's effect beat - one of exactly three, all decoration. */
     function beat(flavor) {
       if (flavor === 'flash') {
@@ -917,7 +923,13 @@ export default {
         const went = deckEngine.fire('flash_burst', { clickSafe: true, strength: 0.6, sizePx: Math.round(vmin * 0.34), holdMs });
         if (went) deck('pressure', 'beat', { flavor, holdMs });
       } else if (flavor === 'sub') {
-        deckEngine.fire('sub_flash', { clickSafe: true, strength: 0.6 });
+        deckEngine.fire('sub_flash', {
+          clickSafe: true,
+          strength: 0.6,
+          voice: subBeatIdx % 2 === 0,
+          voiceKey: 'impulse-control-whisper',
+        });
+        subBeatIdx += 1;
       } else if (flavor === 'spiral') {
         S.render.flourish();
       }

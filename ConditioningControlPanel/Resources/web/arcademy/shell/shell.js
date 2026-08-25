@@ -28,6 +28,7 @@
 
 import { t, setLexicon, tierLabel } from '../core/lexicon.js';
 import { makeRng } from '../core/rng.js';
+import { dayVocabulary } from '../core/vocab.js';
 import { buildTimetable, dayAdd } from '../core/timetable.js';
 import { gradeClass, capsRaised } from '../core/grades.js';
 import { createStore } from '../core/store.js';
@@ -521,18 +522,41 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * (DECISIONS #10, the ramp-never-writes precedent). Reload and it is gone. */
   const ABSORB_MAX_LEN = 40;         // a subliminal card, not a paragraph
   const ABSORB_MAX_ADDED = 64;       // a runaway game cannot grow this unbounded
-  const dayWords = (Array.isArray(src.words) ? src.words : [])
-    .filter((w) => typeof w === 'string' && w.trim());
+  /* THE FLOOR UNDER THE FLOOR (core/vocab.js). With nothing enabled in the
+   * player's pool - or a creator mod that ships none - init.words arrives empty
+   * and the word layer simply stops existing. dayVocabulary() lends the school's
+   * own 24-word vocabulary in that one case and hands the host's list straight
+   * back in every other, so a configured day is byte-identical. src.words is
+   * never mutated: init is the host's frame and other readers index it. */
+  const dayVocab = dayVocabulary(src.words, makeRng(utcDateSeed + '|vocab'));
+  const dayWords = dayVocab.words;
+  const wordSource = dayVocab.source;      // 'host' | 'house', for the settings row
   let absorbed = 0;
 
   /* THE DAY'S TRIGGERS: init.triggers = [{text, audio}] - the same phrases as
    * init.words, each with its whisper clip url (ccp.subaudio / ccp.modaudio) or
    * null. Frozen, never absorbed into: a game that wants a clip reads
    * ctx.triggers, a game that wants words reads ctx.words. Echo's pads are the
-   * consumer (0823). Garbage rows are dropped, never thrown on. */
-  const dayTriggers = Object.freeze((Array.isArray(src.triggers) ? src.triggers : [])
+   * consumer (0823). Garbage rows are dropped, never thrown on.
+   *
+   * ON A HOUSE DAY they come from init.houseTriggers instead, filtered to the
+   * words actually dealt. ctx.triggers must always describe ctx.words: rows for
+   * a pool the classes are not flashing would have echo's triggerPool() and
+   * instant-recall's clipRows() reading a vocabulary nobody sees. */
+  const triggerRows = (rows) => (Array.isArray(rows) ? rows : [])
     .filter((t) => t && typeof t.text === 'string' && t.text.trim())
-    .map((t) => Object.freeze({ text: t.text, audio: typeof t.audio === 'string' && t.audio ? t.audio : null })));
+    .map((t) => Object.freeze({ text: t.text, audio: typeof t.audio === 'string' && t.audio ? t.audio : null }));
+  const dayTriggers = Object.freeze(wordSource === 'house'
+    ? triggerRows(src.houseTriggers).filter((r) => dayWords.indexOf(r.text) >= 0)
+    : triggerRows(src.triggers));
+
+  /* THE VOICED WORD MAP the engine gets (engine/oneshots.js `voice`). Built from
+   * the rows that actually carry a clip, and ONLY when the app-wide whisper mute
+   * is off - which is why no game has to gate its own `voice:true` on
+   * ctx.audioAudible: on a silent day this is empty and the flag does nothing. */
+  const dayWordAudio = Object.freeze((src.audioAudible ? dayTriggers : [])
+    .filter((r) => r.audio)
+    .reduce((m, r) => { m[r.text] = r.audio; return m; }, Object.create(null)));
 
   /** @returns {boolean} true when the word was taken (new, legal, under the cap). */
   function absorbWord(word) {
@@ -1920,6 +1944,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
        * `init.settings.mediaControls === true`, so on the app this is an
        * unread argument. */
       assets,
+      /* THE RESOLVED WORD POOL, not init.words. With the house floor under it
+       * the two can disagree, and the row that says "0 words" while the classes
+       * flash twelve is a straight lie about a layer the player cannot audit. */
+      vocab: { count: dayWords.length, source: wordSource },
       log: say,
       gameKey: gameKey || null,
       onClose: () => {
@@ -3417,6 +3445,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         // The DAY pool, not init.words: a word absorbed by an earlier class this
         // session is in here (ctx.absorb), and createEngine copies at construction.
         words: dayWords.slice(),
+        // ...and which of those words the school can SAY. Empty on a day the
+        // whisper mute is on, so `voice:true` in a class is inert by itself.
+        wordAudio: dayWordAudio,
         assets,
         motionLevel: src.motionLevel == null ? 2 : src.motionLevel,
         reducedMotion,

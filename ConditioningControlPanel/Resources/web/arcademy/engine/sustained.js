@@ -130,6 +130,29 @@ export function createSustained(ctx) {
   }
 
   /**
+   * Pre-warm the spiral wash's live-loom path (2026-08-26, the deep-end merge
+   * choreography). The first jackpot garnish / spiral sustain used to pay
+   * WebGL context creation + two shader compiles + a draw INLINE on a reward
+   * frame. This mounts the loom canvas on the spiral hold NOW - the element
+   * sits at its CSS opacity 0, one frame renders, the rAF loop is idled - so
+   * the first real trigger reuses the same canvas and compiled program.
+   * No rng, no fx event, nothing visible; a gif-path class (no loom wrapper
+   * from the provider) is a no-op, and a hold already live is left alone.
+   * @returns {boolean} true when a canvas was warmed.
+   */
+  function warmSpiral() {
+    if (!hasDom() || typeof ctx.spiralUrl !== 'function') return false;
+    let src = null;
+    try { src = ctx.spiralUrl(); } catch (e) { src = null; }
+    if (!isLoomWrap(src)) return false;
+    const h = ensureWash('spiral');
+    if (!h || h.loom || h.forever) return false;   // live or held: already paid for
+    const took = loomMount(h, src);
+    loomActive(h, false);
+    return took != null;
+  }
+
+  /**
    * wash: snap ON at alpha, then fade after holdMs. A fresh trigger REFRESHES the
    * deadline on the same element (never a second element for the same kind).
    */
@@ -494,7 +517,7 @@ export function createSustained(ctx) {
     for (const [, h] of active) { try { h.retune(); } catch { /* ignore */ } }
   }
 
-  return { sustain, stop, stopAll, retuneAll, live, active, AMBIENT_KINDS };
+  return { sustain, stop, stopAll, retuneAll, warmSpiral, live, active, AMBIENT_KINDS };
 }
 
 export default createSustained;

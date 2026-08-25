@@ -180,6 +180,27 @@ export function wrapQuickPool(claimPool) {
     thin(tag) { return seen[tag === 'noise' ? 'noise' : 'target'].size < DECK.PER_SOURCE_MIN; },
     empty(tag) { return served[tag === 'noise' ? 'noise' : 'target'] === 0 && seen[tag === 'noise' ? 'noise' : 'target'].size === 0; },
     prewarm() { /* the claim pool prewarmed itself */ },
+    /* THE MANIFEST SEAM (0825) rides through to the wrapped claim pool, so the
+     * room speaks one media API whichever pool shape stands behind it. Absent
+     * verbs answer the inert thing: nothing warmed, nothing broken, ready NOW
+     * (a pool with no warm rail is the desktop's local disk - already instant). */
+    warmManifest(entries, opts) {
+      try { return p && typeof p.warmManifest === 'function' ? p.warmManifest(entries, opts) : 0; }
+      catch (e) { return 0; }
+    },
+    warmCursor(i) {
+      try { if (p && typeof p.warmCursor === 'function') p.warmCursor(i); } catch (e) { /* noop */ }
+    },
+    ready(url, opts) {
+      try { if (p && typeof p.ready === 'function') return p.ready(url, opts); } catch (e) { /* fall through */ }
+      return Promise.resolve(true);
+    },
+    markBroken(url) {
+      try { if (p && typeof p.markBroken === 'function') p.markBroken(url); } catch (e) { /* noop */ }
+    },
+    isBroken(url) {
+      try { return !!(p && typeof p.isBroken === 'function' && p.isBroken(url)); } catch (e) { return false; }
+    },
     dealt() {
       const rows = [];
       for (const tg of DECK.TAGS) for (const url of seen[tg]) rows.push({ url, tag: tg, src: 'local' });

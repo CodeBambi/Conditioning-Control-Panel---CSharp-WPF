@@ -988,7 +988,15 @@ export default {
       const ms = cadenceMs(plan.subFlashMs, currentHeat, plan.subJitter[subIdx % plan.subJitter.length]);
       subTimer = after(ms, () => {
         subTimer = 0;
-        const r = fireSafe('sub_flash', { anchor: wellEl, variant: subIdx % 2 ? 'scatter' : 'whisper' });
+        /* VOICE: the cadence floor here is 4500 * CADENCE_MIN_MULT * (1 - CADENCE_JITTER)
+           = ~1316ms, under the 1400ms voiced-gap floor - so only every second beat
+           is voiced (>= ~2632ms apart). The visual cadence is untouched. */
+        const r = fireSafe('sub_flash', {
+          anchor: wellEl,
+          variant: subIdx % 2 ? 'scatter' : 'whisper',
+          voice: subIdx % 2 === 0,
+          voiceKey: 'anomaly-whisper',
+        });
         if (r) subFlashes += 1;
         subIdx += 1;
         armSubFlash();

@@ -76,7 +76,8 @@
  * which is NOT a third quality level - it is a hardware ceiling laid over
  * whichever rung the class resolved to, and it applies on FULL too. A coarse
  * pointer (or more than one touch point) puts `.ae-touch` on <html> for the
- * life of the class: four animated tiers instead of six, stills four deep
+ * life of the class: two animated tiers instead of six (pass 8; pass 6 dealt
+ * four, then the touch diet froze them all anyway), stills four deep
  * instead of three, three engine decoration videos instead of six, and
  * engine/style.js drops the backdrop-filter, the full-screen blend surfaces,
  * the scanline re-raster and the filters that sit over a live decode. iOS caps
@@ -85,6 +86,33 @@
  * find - there is no setting, the device is the setting. It composes with the
  * rung in the PROTECTIVE direction (cap = min, still-line = max), so a phone on
  * lite is still lite. It comes off on destroy, exactly like `.ae-lite`.
+ *
+ * PASS 7 (the owner's mobile note: "the slide animation starts, then suddenly
+ * everything is merged, I hear and see the stamp and spiral or reward all
+ * happening at once"): DECIDE SYNCHRONOUSLY, PRESENT IN PHASES. The input task
+ * keeps ALL game-state decisions and rng draws in their old order (Law V) and
+ * writes ONLY the slide vars; the merge pops, the stamp and the reward show
+ * play back on a paint-anchored timeline - see THE CHOREOGRAPHER below. A new
+ * press fast-forwards every pending beat, so choreography never rate-limits.
+ * The staging applies on desktop too (an intended cross-platform feel change);
+ * the pure cost cuts riding it (tremor gate, pulseWater skip, the shorter
+ * --de-n-depth transition, the bubble caps) are touch-only.
+ *
+ * PASS 8 (owner, 2026-08-25): DEEP TILES BREATHE AGAIN ON TOUCH. The pass-6
+ * diet's blanket `|| touch` still is gone; a phone deals loops from tier 5
+ * (SHALLOW_STILL_MAX_TIER_TOUCH stays 4) but only FACE_CAP_TOUCH = 2 animated
+ * tiers live at once, and the DEEPEST tiers hold those slots: a new deepest
+ * tier arriving past the cap demotes the shallowest animated tier to a fresh
+ * still (touch only, deterministic, re-dressed on the stamp beat - never in
+ * the input task). Face videos are paused for the slide window on touch
+ * (held at Phase 0 where busy arms, released at the land beat - flushChoreo
+ * fast-forward included) and pause everywhere with document.hidden and
+ * instance.pause, mirroring engine/loomWash. The fire-reward current stops
+ * smuggling an uncounted video url past the engine's decoder budget (a
+ * webm/mp4 draw is dropped so the burst routes through budgetedKind), and a
+ * face video that errors or shows no frame within FACE_VIDEO_STALL_MS falls
+ * back to a still for its tier. Desktop is pixel-identical except that
+ * budget accounting (and the invisible hidden/suspend pauses).
  *
  * PASS 4 (the owner's third note): THE PRESSURE - the CCP effects ladder and
  * the Balatro tremor live in pressure.js, DECK III. This file owns none of
@@ -401,6 +429,11 @@ export default {
     const faceUrls = new Map();            // tier -> {url, kind} | {broken:true}, frozen per class
     let faceLogged = false;
     let capLogged = false;
+    /* pass 8 - faces alive on touch */
+    let facesHeld = false;                 // the slide window holds face videos (touch only)
+    let faceVisWired = false;              // one visibilitychange listener per class
+    const faceDemotes = new Set();         // tiers demoted to a still, owed a re-dress at the stamp beat
+    const faceStalls = new Map();          // tile node -> {media, id}: the no-frame watchdog
     let stuckShown = false;
     /* pass 5 - THE PERF LADDER */
     let perfSetting = 'auto';              // de_perf: auto | full | lite
@@ -772,14 +805,24 @@ export default {
           img.setAttribute('playsinline', ''); img.setAttribute('preload', 'auto');
           img.addEventListener('loadeddata', () => {
             if (dead) return;
+            if (mediaOf(node) !== img) return;         // replaced while it was loading
+            const rec = faceStalls.get(node);          // pass 8: the watchdog is answered
+            if (rec && rec.media === img) { clearTimer(rec.id); faceStalls.delete(node); }
             node.classList.add('is-loaded');
+            /* pass 8: never nudge play into a paused window (the slide hold, a
+             * suspend, a hidden tab) - syncFaceVideos replays on release. */
+            if (facePlayBlocked()) return;
             try { const p = img.play(); if (p && typeof p.catch === 'function') p.catch(() => {}); } catch (e) { /* ignore */ }
           });
         } else {
           img.decoding = 'async';
           img.addEventListener('load', () => { if (!dead) node.classList.add('is-loaded'); });
         }
-        img.addEventListener('error', () => { if (!dead) faceBroken(node); });
+        img.addEventListener('error', () => {
+          if (dead) return;
+          if (mediaOf(node) !== img) return;           // a stale, replaced node's error is not this face's
+          if (video) faceVideoFailed(node); else faceBroken(node);
+        });
       } catch (e) { /* the double has no img semantics; fine */ }
     }
     /** The media node that can SHOW this url: the face's <img>, swapped for a
@@ -967,27 +1010,20 @@ export default {
          * tiles nobody is looking at. */
         kind = 'still';
       } else if (kind === 'loop' && animatedFaces() >= faceCap()) {
-        kind = 'still';
-        if (!capLogged) { capLogged = true; say('faces: ' + faceCap() + ' animated tiers live - new tiers wear stills'); }
-      }
-      let url = null;
-      try {
-        /* NEVER DEAL A WORN URL while the pool can offer a different one. An
-         * online-only class opens on a remote pool of one or two clips (the
-         * host streams batches late), and a uniform draw handed that same clip
-         * to tier after tier - the complaint is a whole board wearing one
-         * video. Bounded: six draws, and the FIRST stands if every one comes
-         * back worn (a genuinely tiny pool may only have the one clip). */
-        const worn = new Set();
-        for (const f of faceUrls.values()) if (f && f.url) worn.add(f.url);
-        for (let i = 0; i < 6; i += 1) {
-          const got = pool.next(kind);
-          const u = got && got.url ? String(got.url) : null;
-          if (!u) break;
-          if (url == null) url = u;
-          if (!worn.has(u)) { url = u; break; }
+        /* PASS 8 - THE PROMOTION (touch only): the cap is 2 on a phone, and
+         * the DEEPEST tiers must be the ones breathing - without this, tiers
+         * 5+6 would keep the loops forever and every deeper arrival would
+         * freeze. A new tier DEEPER than the shallowest animated tier takes
+         * the loop slot; the shallowest is demoted to a fresh still and its
+         * tiles re-dress on the stamp beat (never in the input task -
+         * faceFor for a merged tier runs in the pop beat). Desktop keeps the
+         * pass-5 behavior byte-identical: first six animated tiers hold. */
+        if (!(touch && promoteLoopTo(tier))) {
+          kind = 'still';
+          if (!capLogged) { capLogged = true; say('faces: ' + faceCap() + ' animated tiers live - new tiers wear stills'); }
         }
-      } catch (e) { url = null; }
+      }
+      const url = dealFaceUrl(kind);
       if (!url) return null;
       const face = { url, kind };
       faceUrls.set(tier, face);
@@ -1000,6 +1036,150 @@ export default {
       }
       return face;
     }
+    /** One url off the pool, deduped against every worn face. NEVER DEAL A
+     *  WORN URL while the pool can offer a different one: an online-only class
+     *  opens on a remote pool of one or two clips (the host streams batches
+     *  late), and a uniform draw handed that same clip to tier after tier -
+     *  the complaint is a whole board wearing one video. Bounded: six draws,
+     *  and the FIRST stands if every one comes back worn (a genuinely tiny
+     *  pool may only have the one clip). Shared by faceFor, the pass-8
+     *  promotion and the video-fail fallback - same machinery, no rng. */
+    function dealFaceUrl(kind) {
+      if (!pool || typeof pool.next !== 'function') return null;
+      let url = null;
+      try {
+        const worn = new Set();
+        for (const f of faceUrls.values()) if (f && f.url) worn.add(f.url);
+        for (let i = 0; i < 6; i += 1) {
+          const got = pool.next(kind);
+          const u = got && got.url ? String(got.url) : null;
+          if (!u) break;
+          if (url == null) url = u;
+          if (!worn.has(u)) { url = u; break; }
+        }
+      } catch (e) { url = null; }
+      return url;
+    }
+    /** PASS 8 - THE PROMOTION's demote half (touch only; see faceFor). Hand
+     *  the loop slot to `tier` by demoting the SHALLOWEST animated tier to a
+     *  fresh still. Deterministic: the shallowest is a pure min over the
+     *  frozen map, the still comes off the same worn-dedup deal. Returns true
+     *  when the slot was freed (the caller then deals `tier` its loop). The
+     *  demoted tier's tiles are NOT re-dressed here - the stamp beat owns
+     *  that (faceDemotes), so the swap never lands mid-slide. */
+    function promoteLoopTo(tier) {
+      let shallowest = 0;
+      for (const [tr, f] of faceUrls) {
+        if (!f || f.broken || f.kind !== 'loop') continue;
+        if (!shallowest || tr < shallowest) shallowest = tr;
+      }
+      if (!shallowest || shallowest >= tier) return false;
+      const still = dealFaceUrl('still');
+      if (!still || VIDEO_URL_RE.test(still)) return false;   // no honest still: the newcomer waits
+      faceUrls.set(shallowest, { url: still, kind: 'still' });
+      faceDemotes.add(shallowest);
+      say('faces: tier ' + shallowest + ' hands its loop to tier ' + tier + ' (touch cap ' + faceCap() + ') - re-dress on the stamp beat');
+      return true;
+    }
+    /** Re-dress every live tile of a tier against its (changed) faceUrls
+     *  entry. data-face is cleared first or dressFace would early-return on
+     *  the unchanged tier number. */
+    function redressTier(tier) {
+      for (const tile of board ? board.tiles : []) {
+        if (tile.silt || tile.tier !== tier) continue;
+        const node = tileEls.get(tile.id);
+        if (!node) continue;
+        node.setAttribute('data-face', '');
+        node.classList.remove('is-loaded');
+        dressFace(node, tile);
+      }
+    }
+    /** PASS 8 - the stamp beat's flush: demoted tiers swap video -> still
+     *  here, after the pops have landed, never in the input task. */
+    function flushFaceDemotes() {
+      if (!faceDemotes.size) return;
+      const tiers = [...faceDemotes];
+      faceDemotes.clear();
+      for (const tr of tiers) redressTier(tr);
+    }
+    /** PASS 8 - THE BELT (touch only, like the ceiling it guards): a face
+     *  <video> that errored (or sat frameless past FACE_VIDEO_STALL_MS) does
+     *  not blacklist the tier to plain the way a broken still does - the tier
+     *  falls back to a STILL first, so a phone whose decoder ceiling refused
+     *  the stream still shows media. Only when no honest still can be dealt
+     *  does the old faceBroken path run. Desktop keeps the pass-2 answer
+     *  (faceBroken) byte-identical. */
+    function faceVideoFailed(node) {
+      if (!touch) { faceBroken(node); return; }
+      const tier = Number(node.getAttribute('data-face'));
+      if (!(tier > 0)) return;
+      const f = faceUrls.get(tier);
+      if (!f || f.broken) return;
+      if (f.kind !== 'loop') { faceBroken(node); return; }     // its still failed too: plain
+      const still = dealFaceUrl('still');
+      if (!still || VIDEO_URL_RE.test(still)) { faceBroken(node); return; }
+      faceUrls.set(tier, { url: still, kind: 'still' });
+      say('faces: tier ' + tier + ' video failed or stalled - the tier falls back to a still');
+      redressTier(tier);
+    }
+    /** PASS 8 - arm the no-frame watchdog on a freshly dressed <video> face
+     *  (clears any previous watch for the node; an <img> face just clears).
+     *  TOUCH ONLY - the stall is an iOS decoder-ceiling symptom; desktop keeps
+     *  waiting exactly as before. Rides the class's pause-aware registry, so
+     *  a suspend does not tick. */
+    function armFaceStall(node, media) {
+      const prev = faceStalls.get(node);
+      if (prev) { clearTimer(prev.id); faceStalls.delete(node); }
+      if (!touch) return;
+      if (!media || String(media.tagName || '').toUpperCase() !== 'VIDEO') return;
+      const id = after(PLAYTEST.FACE_VIDEO_STALL_MS, () => {
+        faceStalls.delete(node);
+        if (dead) return;
+        if (mediaOf(node) !== media) return;                   // re-dressed under the timer
+        const tid = Number(node.getAttribute('data-id'));
+        if (tileEls.get(tid) !== node) return;                 // the tile left the board
+        if (node.classList.contains('is-loaded')) return;      // a frame arrived after all
+        faceVideoFailed(node);
+      });
+      faceStalls.set(node, { media, id });
+    }
+    /* ---- pass 8: the face-video pause windows --------------------------- */
+    /** True while face videos must not run: the slide window (touch), a
+     *  suspended class, a hidden tab. */
+    function facePlayBlocked() { return facesHeld || paused || hiddenTab(); }
+    /** Pause or (re)play every live face <video> against facePlayBlocked().
+     *  Cheap: one pass over live tiles, no layout reads; play() promises are
+     *  swallowed (an autoplay refusal is retried by the next sync). */
+    function syncFaceVideos() {
+      const stop = facePlayBlocked();
+      for (const node of tileEls.values()) {
+        const m = mediaOf(node);
+        if (!m || String(m.tagName || '').toUpperCase() !== 'VIDEO') continue;
+        try {
+          if (stop) m.pause();
+          else { const p = m.play(); if (p && typeof p.catch === 'function') p.catch(() => {}); }
+        } catch (e) { /* the double has no video semantics */ }
+      }
+    }
+    /** The slide window opens where busy arms (Phase 0's one DOM-write task).
+     *  TOUCH ONLY: desktop faces never pause mid-slide (pixel parity). */
+    function faceSlideHold() {
+      if (!touch || facesHeld) return;
+      facesHeld = true;
+      syncFaceVideos();
+    }
+    /** ...and closes at the land beat - which also fires inside flushChoreo's
+     *  fast-forward and the reduced/hidden/no-rAF sync collapse, so a face is
+     *  never left paused past its slide. */
+    function faceSlideRelease() {
+      if (!facesHeld) return;
+      facesHeld = false;
+      if (!dead) syncFaceVideos();
+    }
+    /** document.hidden mirror (engine/loomWash's pattern): pause on hide,
+     *  replay on show - unless another window still holds them. */
+    function onFaceVisibility() { if (!dead) syncFaceVideos(); }
+
     /** Dress (or re-dress after a merge) a tile with its tier's face. Never
      *  blocks a draw: the plain body shows until the image has a frame. */
     function dressFace(node, tile) {
@@ -1021,6 +1201,7 @@ export default {
       node.classList.remove('is-loaded');
       const media = mediaNodeFor(node, face.url) || img;
       try { media.src = face.url; } catch (e) { /* ignore */ }
+      armFaceStall(node, media);             // pass 8: a video face owes a frame within the stall window
     }
     /** A url that failed: this tier goes plain for the rest of the class (no retry storm). */
     function faceBroken(node) {
@@ -1075,14 +1256,7 @@ export default {
         worn.add(fresh);
         faceUrls.set(tier, { url: fresh, kind: f.kind });
         healed = true;
-        for (const tile of board ? board.tiles : []) {
-          if (tile.silt || tile.tier !== tier) continue;
-          const node = tileEls.get(tile.id);
-          if (!node) continue;
-          node.setAttribute('data-face', '');
-          node.classList.remove('is-loaded');
-          dressFace(node, tile);
-        }
+        redressTier(tier);
       }
       if (healed) say('faces: duplicate tier clips re-dealt (the pool grew)');
     }
@@ -1374,6 +1548,11 @@ export default {
         refused();                            // the briefing: nothing to play against yet
         return false;
       }
+      /* FAST-FORWARD (pass 7): a committed press never waits on the last
+       * move's presentation. Every pending beat lands NOW, synchronously and
+       * in order, BEFORE the new board math - so the deck streams replay in
+       * the same per-tag order at any play speed and paint never desyncs. */
+      flushChoreo();
       const result = boardMove(board, dir);
       if (!result.moved) {
         // THE WALL: a swipe that slides nothing. No spawn, no count - but the
@@ -1398,6 +1577,7 @@ export default {
       clearHint();
       deck('trickster', 'stalled', 0);
       busy = true;
+      faceSlideHold();                      // pass 8 (touch): decoders yield the slide window; no layout read
       const moveMs = reduced ? PLAYTEST.MOVE_MS_REDUCED : PLAYTEST.MOVE_MS;
 
       /* 1. slide: vars only; victims ride to the merge cell and dissolve.
@@ -1449,7 +1629,14 @@ export default {
         pitch: 1 - PLAYTEST.SLIDE_PITCH_DROP * depthLineFor(boardDeepest(board)),
       });
 
-      /* 2. merges: score, chain, light, the descending chime.
+      /* 2. merges: score, chain - THE DECIDE/PRESENT SEAM (pass 7, the owner's
+       * mobile note: "the slide starts, then suddenly everything is merged...
+       * all happening at once"). Everything below DECIDES synchronously - the
+       * ledger and every GAME-STATE rng draw (reward roll, spawn, trickster)
+       * in exactly the order they always ran, so a retake replays
+       * byte-identical - but the merge POPS, the stamp and the reward SHOW
+       * are only RECORDED here and play back on the paint-anchored timeline
+       * (scheduleChoreo below).
        * THE CHAIN IS A STREAK, NOT A SNAPSHOT (owner report, 2026-08-24: "I
        * keep merging stuff but the streak disappears"). It used to be
        * RE-ASSIGNED to this one move's merge count, so a swipe that merged a
@@ -1462,7 +1649,7 @@ export default {
        * honestly starts a fresh chain. */
       const burst = result.merges.length;
       chain = burst > 0 ? chain + burst : 0;
-      let deepestMergeEl = null;
+      let deepestMergeId = 0;
       let deepestMergeTier = 0;
       /* Law I is untouched: `score` still moves in ONE place (below, by
        * result.score). This walks the same arithmetic board.js already did -
@@ -1470,24 +1657,21 @@ export default {
        * merge was worth and what the running total will read. The two agree
        * by construction: result.score IS the sum of these. */
       let runScore = score;
+      const pops = [];
       for (const m of result.merges) {
         merges += 1;
         const deltaScore = Math.pow(2, m.tier);
         runScore += deltaScore;
         const tile = board.tiles.find((x) => x.id === m.id);
-        const node = tile ? tileEl(tile, false) : null;
-        if (node) {
-          paintName(node, tile);
-          node.classList.remove('is-new');
-          node.classList.add('is-merged');
-          after(moveMs + 320, () => node.classList.remove('is-merged'));
-        }
-        deck('casino', 'merge', { tier: m.tier, link: m.link, tileEl: node });
-        deck('pressure', 'merge', { tier: m.tier, link: m.link, tileEl: node, deltaScore, score: runScore });
-        // one chime family, a semitone DOWN per link: you hear yourself sinking
-        tick('streak', 0.3 + 0.04 * m.tier, { pitch: Math.pow(2, -m.link / 12) });
-        if (m.tier > deepestMergeTier) { deepestMergeTier = m.tier; deepestMergeEl = node; }
+        pops.push({
+          id: m.id, tier: m.tier, link: m.link, deltaScore, score: runScore,
+          r: tile ? tile.r : 0, c: tile ? tile.c : 0,
+        });
+        if (m.tier > deepestMergeTier) { deepestMergeTier = m.tier; deepestMergeId = m.id; }
       }
+      /* the CASCADE plays along the direction of travel - the tiles nearest
+       * the wall the board slid into pop first. Fixed arithmetic, no rng. */
+      pops.sort((a, b) => (v.x !== 0 ? (b.c - a.c) * v.x : (b.r - a.r) * v.y));
       score += result.score;
       /* chainLinks stays a CASCADE ledger (extra pairs beyond the first in a
        * single swipe) - the report card's "links" must not inflate just
@@ -1495,35 +1679,54 @@ export default {
       if (burst >= 2) chainLinks += burst - 1;
       if (burst >= 2) note('de.chainBurst', { kind: 'celebrate', n: burst, streak: chain, tile: tierName(deepestMergeTier) });
       maxChain = Math.max(maxChain, chain);
-      paintChain();
 
-      /* 3. a new deepest tier */
+      /* 3. a new deepest tier: the STATE moves now; the show is the beats'. */
       const d = boardDeepest(board);
+      let newDeep = 0;
+      let rewardShow = null;
       if (d > diveDeepest) {
         diveDeepest = d;
         bestDeepest = Math.max(bestDeepest, d);
-        onNewDeepest(d, deepestMergeEl);
+        newDeep = d;
+        if (d < TIER_MAX) {
+          /* the variable-ratio ROLL is decided here - same stream, same order
+           * as it always drew (the engine's, else the seeded |de-vr local) -
+           * and only its spectacle waits for the reward beat. */
+          rewardShow = rewardRollNow();
+          if (rewardShow && rewardShow.jackpot) jackpots += 1;
+        }
       }
-      markDeepest();
-      paintHud();
 
       /* THE CEILING: tier_11 ends a TIMED class, warm - no spawn, the board is
        * done. A FREE SWIM keeps going: the royal fires once per dive and the
-       * move finishes normally (spawn, trickster, heat, lock check). */
+       * move finishes normally (spawn, trickster, heat, lock check). The royal
+       * is the ONE everything-at-once beat left, on purpose: the pops land
+       * inline (the tier-11 tile must wear its face before the gold) and
+       * ceiling() owns the stage from here. */
+      let popsPending = pops;
       if (d >= TIER_MAX) {
+        playChoreoNow({
+          moveMs, pops, stagger: 0, maxTier: deepestMergeTier, maxLink: maxLinkOf(pops),
+          newDeepest: newDeep, lifetimeNew: false, rewardShow: null, deepestMergeId,
+          spawnTile: null, siltMsg: false,
+        });
+        popsPending = [];
+        newDeep = 0;
+        rewardShow = null;
         if (!endless) { ceiling(); return true; }
         if (!ceilingCelebrated) { ceilingCelebrated = true; ceiling(); }
       }
 
-      /* 4. one seeded spawn (the exhale guarantee rides the flag) */
+      /* 4. one seeded spawn (the exhale guarantee rides the flag). The MODEL
+       * spawns now (rng order untouched); its node reveals on the land beat. */
       const sp = boardSpawn(board, {
         table: plan.spawnTable, siltChance: plan.siltChance, siltMax: plan.siltMax,
         airlockChance: plan.airlockChance, exhale: exhalePending,
       });
       if (sp.exhaled) exhalePending = false;
       if (sp.airlock) removeTileEl(sp.airlock.id, moveMs + 200);
-      if (sp.tile) tileEl(sp.tile, true);
-      if (sp.silt && !siltSeen) { siltSeen = true; msg('de_silt_line', DE_LEX.de_silt_line); }
+      let siltMsg = false;
+      if (sp.silt && !siltSeen) { siltSeen = true; siltMsg = true; }
 
       /* 5. the trickster sees the truth AFTER the ledger moved */
       const locked = isLocked(board);
@@ -1534,19 +1737,33 @@ export default {
         locked,
       });
 
-      /* 6. heat, then the board's verdicts */
+      /* 6. heat, then the playback, then the board's verdicts */
       heat();
+      scheduleChoreo({
+        moveMs,
+        pops: popsPending,
+        stagger: staggerOf(popsPending.length),
+        maxTier: deepestMergeTier,
+        maxLink: maxLinkOf(popsPending),
+        newDeepest: newDeep,
+        lifetimeNew: newDeep > lifetimeBefore,
+        rewardShow,
+        deepestMergeId,
+        spawnTile: sp.tile || null,
+        siltMsg,
+      });
       if (locked) {
         after(moveMs + 80, resurface);
         return true;
       }
       if (!exhaleUsed && occupancy(board) >= plan.exhaleAt) startExhale();
-      strainCheck();
       /* The lock comes off at MOVE_MS and nothing extends it: every step
        * above is synchronous, `after` is only scaled by the harness's own
        * timeScale (1 in production), and a merge victim left tileEls the
        * moment it was removed, so a queued move landing here can never
-       * re-slide or resurrect one. */
+       * re-slide or resurrect one. A queued move draining right after the
+       * release fast-forwards the pending beats (flushChoreo above), so the
+       * choreography never rate-limits a fast player. */
       after(moveMs, release);
       return true;
     }
@@ -1585,37 +1802,231 @@ export default {
       for (const c of cellEls) c.classList.remove('is-hint');
     }
 
-    function onNewDeepest(d, node) {
-      deck('casino', 'newDeepest', d, node);
-      deck('pressure', 'newDeepest', d, node);
+    /* ==================================================================== *
+     * THE CHOREOGRAPHER (pass 7) - decide synchronously, present in phases.
+     *
+     * input() computes the whole "what happened" record in its own task (all
+     * game-state rng in its old order - Law V untouched) and hands it here.
+     * The PHASE CLOCK IS ANCHORED TO PAINT, not to the task: the slide's CSS
+     * transition clock starts on the first frame that SEES the new --r/--c,
+     * so two rAFs land just past that frame and the beats then ride the
+     * class's pause-aware timer registry:
+     *   land beat   slide-end       spawn reveal, HUD truth
+     *   pops        slide-end..+~200  is-merged cascade along the swipe,
+     *                               casino payout once, pressure punch per pop
+     *   stamp beat  slide-end +140  chain meter, strain, the depth stamp
+     *   reward beat slide-end +300  the room darkens, the pre-rolled reward
+     * FAST-FORWARD: flushChoreo() lands every unfired beat synchronously, in
+     * order - called before a new move, a resurface, the bell, the ceiling
+     * and the end, so state and paint always converge and a fast player is
+     * never rate-limited by the show. Reduced motion, a hidden tab and a host
+     * with no frame clock (the harness double reads the DOM synchronously)
+     * collapse the whole timeline to "now", which is exactly pass-6 behavior.
+     * ==================================================================== */
+    let choreo = null;                     // the pending playback, or null
+
+    function hiddenTab() {
+      try { return typeof document !== 'undefined' && document.hidden === true; } catch (e) { return false; }
+    }
+    function staggerOf(n) {
+      return n > 1 ? Math.min(PLAYTEST.POP_STAGGER_MS, Math.round(PLAYTEST.POP_CASCADE_MS / n)) : 0;
+    }
+    function maxLinkOf(pops) {
+      let k = 1;
+      for (const p of pops) if (p.link > k) k = p.link;
+      return k;
+    }
+    function nodeOfTile(id) { return id ? (tileEls.get(id) || null) : null; }
+
+    /** Slide-end: the spawn's node lands, the chips read true. */
+    function landBeat(rec) {
+      if (dead) return;
+      faceSlideRelease();                   // pass 8: the slide is on screen - faces breathe again
+      if (rec.spawnTile && board && !ended) {
+        const tile = board.tiles.find((x) => x.id === rec.spawnTile.id);
+        if (tile) tileEl(tile, true);
+      }
+      if (rec.siltMsg) msg('de_silt_line', DE_LEX.de_silt_line);
+      paintHud();
+    }
+
+    /** One pop of the cascade: the tile wears its new tier, the decks hit. */
+    function popBeat(rec, pop, i) {
+      if (dead) return;
+      const tile = board ? board.tiles.find((x) => x.id === pop.id) : null;
+      let node = null;
+      if (tile) {
+        node = tileEl(tile, false);        // data-tier + face + numeral, at pop time
+        paintName(node, tile);
+        node.classList.remove('is-new');
+        node.classList.add('is-merged');
+        after(320, () => node.classList.remove('is-merged'));
+      }
+      if (i === 0) {
+        /* the casino payout fires ONCE per swipe, aggregated (marquee flash +
+         * water pulse + one capped bubble burst), and the whole cascade's
+         * audio is ONE graph build: the follow-up pops ride the same dispatch
+         * as pre-scheduled blips (shell/audio.js `steps`). */
+        deck('casino', 'merge', { tier: rec.maxTier, link: rec.maxLink, count: rec.pops.length, tileEl: node });
+        tickCascade(rec);
+      }
+      deck('pressure', 'merge', {
+        tier: pop.tier, link: pop.link, tileEl: node,
+        deltaScore: pop.deltaScore, score: pop.score, chip: i === 0,
+      });
+    }
+
+    /** One chime family, a semitone DOWN per link: you hear yourself sinking.
+     *  First pop = the full streak cue; the rest are light blips scheduled on
+     *  the SAME context timeline in the same dispatch. */
+    function tickCascade(rec) {
+      const pops = rec.pops;
+      if (!pops.length) return;
+      const ceil = plan ? plan.audioCeil : 0.45;
+      const steps = [];
+      for (let i = 1; i < pops.length; i++) {
+        steps.push({
+          atMs: i * rec.stagger,
+          name: 'blip',
+          pitch: Math.pow(2, -pops[i].link / 12),
+          level: Math.min(ceil, 0.2 + 0.03 * pops[i].tier),
+        });
+      }
+      tick('streak', 0.3 + 0.04 * pops[0].tier,
+        Object.assign({ pitch: Math.pow(2, -pops[0].link / 12) }, steps.length ? { steps } : null));
+    }
+
+    /** Slide-end +140ms: the meter, the strain, the depth stamp + its punch. */
+    function stampBeat(rec) {
+      if (dead) return;
+      paintChain();
+      markDeepest();
+      flushFaceDemotes();                   // pass 8: the demoted tier swaps video -> still on THIS beat
+      if (board && !isLocked(board) && !ended) strainCheck();
+      const d = rec.newDeepest;
+      if (!d) return;
+      deck('pressure', 'newDeepest', d, nodeOfTile(rec.deepestMergeId));
+      if (d >= TIER_MAX || ended) return;    // the ceiling has its own ceremony
+      if (d >= 3) {
+        try { ctx.ceremonies.stamp({ text: tierName(d), target: bench }); } catch (e) { /* noop */ }
+        msg(rec.lifetimeNew ? 'de_lifetime_new' : 'de_new_depth',
+          rec.lifetimeNew ? DE_LEX.de_lifetime_new : DE_LEX.de_new_depth);
+      }
+    }
+
+    /** Slide-end +300ms: the room steps darker, then the pre-rolled reward. */
+    function rewardShowBeat(rec) {
+      if (dead) return;
+      const d = rec.newDeepest;
+      if (!d) return;
+      deck('casino', 'newDeepest', d, nodeOfTile(rec.deepestMergeId));
       /* EMI COLOR: the mascot leans in as the dive gets real (tier 6) and
        * shivers at the truly deep water (tier 9). Face only; shell-throttled. */
       try {
         if (ctx.mood && d >= 9) ctx.mood.clutch();
         else if (ctx.mood && d >= 6) ctx.mood.tense();
       } catch (e) { /* noop */ }
-      if (d >= TIER_MAX) return;             // the ceiling has its own ceremony
+      if (d >= TIER_MAX || ended) return;
       if (d >= 3) {
-        try { ctx.ceremonies.stamp({ text: tierName(d), target: bench }); } catch (e) { /* noop */ }
-        msg(d > lifetimeBefore ? 'de_lifetime_new' : 'de_new_depth',
-          d > lifetimeBefore ? DE_LEX.de_lifetime_new : DE_LEX.de_new_depth);
         // the depth THIS dive just reached for the first time
-        note('de.newDeepest', { kind: 'celebrate', n: d, tile: tierName(d), streak: chain });
+        note('de.newDeepest', { kind: 'celebrate', n: d, tile: tierName(d) });
         // and, separately, the all-time rung: deeper than the player has EVER been
-        if (d > lifetimeBefore) note('de.lifetimeDepth', { kind: 'celebrate', n: d, tile: tierName(d) });
+        if (rec.lifetimeNew) note('de.lifetimeDepth', { kind: 'celebrate', n: d, tile: tierName(d) });
       }
-      rewardBeat();
+      rewardShowNow(rec.rewardShow);
     }
 
-    /** The variable-ratio canon: the engine's roll, else a seeded local one. */
-    function rewardBeat() {
+    function choreoSteps(rec) {
+      const steps = [];
+      steps.push({ at: 0, fired: false, fn: () => landBeat(rec) });
+      rec.pops.forEach((pop, i) => {
+        steps.push({ at: i * rec.stagger, fired: false, fn: () => popBeat(rec, pop, i) });
+      });
+      steps.push({ at: PLAYTEST.STAMP_BEAT_MS, fired: false, fn: () => stampBeat(rec) });
+      if (rec.newDeepest) steps.push({ at: PLAYTEST.REWARD_BEAT_MS, fired: false, fn: () => rewardShowBeat(rec) });
+      steps.sort((a, b) => a.at - b.at);     // stable: equal `at` keeps land -> pop order
+      return steps;
+    }
+
+    /** The whole record, NOW (the royal's inline path). */
+    function playChoreoNow(rec) {
+      for (const s of choreoSteps(rec)) {
+        try { s.fn(); } catch (e) { say('choreo step failed: ' + ((e && e.message) || e)); }
+      }
+    }
+
+    /** Land every unfired beat synchronously, in order. Idempotent. */
+    function flushChoreo() {
+      const c = choreo;
+      if (!c) return;
+      choreo = null;                         // orphans the pending rAF anchor
+      if (c.safety) { clearTimer(c.safety); c.safety = 0; }
+      for (const id of c.timers) clearTimer(id);
+      c.timers.length = 0;
+      for (const s of c.steps) {
+        if (s.fired) continue;
+        s.fired = true;
+        try { s.fn(); } catch (e) { say('choreo step failed: ' + ((e && e.message) || e)); }
+      }
+    }
+
+    function scheduleChoreo(rec) {
+      const steps = choreoSteps(rec);
+      if (!steps.length) return;
+      const raf = (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function')
+        ? (fn) => window.requestAnimationFrame(fn) : null;
+      if (reduced || !raf || hiddenTab()) {
+        /* reduced motion keeps its everything-now (the slide is 60ms and the
+         * animations are gone - staging classes against no transition is only
+         * lag); a hidden tab must not stack timers; no rAF = the harness. */
+        for (const s of steps) {
+          s.fired = true;
+          try { s.fn(); } catch (e) { say('choreo step failed: ' + ((e && e.message) || e)); }
+        }
+        return;
+      }
+      const c = { steps, timers: [], safety: 0 };
+      choreo = c;
+      raf(() => raf(() => {
+        if (dead || choreo !== c) return;
+        if (hiddenTab()) { flushChoreo(); return; }
+        const base = Math.max(0, rec.moveMs - 16);
+        for (const s of c.steps) {
+          const id = after(base + s.at, () => {
+            if (s.fired) return;
+            s.fired = true;
+            try { s.fn(); } catch (e) { say('choreo step failed: ' + ((e && e.message) || e)); }
+            if (choreo === c && c.steps.every((x) => x.fired)) {
+              choreo = null;
+              if (c.safety) { clearTimer(c.safety); c.safety = 0; }
+            }
+          });
+          c.timers.push(id);
+        }
+      }));
+      /* the net: a tab hidden between the anchor frames (or a starved frame
+       * clock) must not strand the beats. A completed timeline cleared it. */
+      c.safety = after(rec.moveMs + PLAYTEST.CHOREO_SAFETY_MS, () => {
+        c.safety = 0;
+        if (choreo === c) flushChoreo();
+      });
+    }
+
+    /** The variable-ratio canon, SPLIT at the decide/present seam (pass 7):
+     *  the roll draws in the input task - same stream, same order as always
+     *  (the engine's, else the seeded |de-vr fallback) - and only the
+     *  spectacle waits for the reward beat. */
+    function rewardRollNow() {
       let r = null;
       try {
         if (ctx.engine && typeof ctx.engine.rewardRoll === 'function') r = ctx.engine.rewardRoll({ streak: chain, success: true }) || null;
       } catch (e) { r = null; }
       if (!r) r = rollLocal();
+      return r;
+    }
+    function rewardShowNow(r) {
+      if (!r) return;
       if (r.jackpot) {
-        jackpots += 1;
         try { ctx.ceremonies.reward('jackpot', { target: boardEl, text: t('de_jackpot', DE_LEX.de_jackpot) }); } catch (e) { /* noop */ }
         fireSafe('flash_burst', { count: 2, alpha: 0.45 });     // decoration (fireSafe welds it)
         tick('jackpot', 0.7);
@@ -1647,6 +2058,16 @@ export default {
       } catch (e) { /* the engine picks its own spot */ }
       let url;
       try { if (pool && typeof pool.next === 'function') { const got = pool.next('loop'); url = got && got.url ? got.url : undefined; } } catch (e) { url = undefined; }
+      /* PASS 8 - BUDGET HONESTY: an explicit opts.url BYPASSES the engine's
+       * shared decoder budget (oneshots.js `opts.url ||` - the caller's choice
+       * is never second-guessed), so this burst stacked up to 3 UNCOUNTED
+       * <video> decoders on top of the face videos. A gif/image draw still
+       * rides through (the player's own media, budget-irrelevant); a webm/mp4
+       * draw is dropped so the burst routes through budgetedKind('loop') -
+       * counted, and answered with a still once the (touch) budget is spent.
+       * This accounting applies on desktop too - the one intended
+       * cross-platform behavior change of this pass. */
+      if (url && VIDEO_URL_RE.test(String(url))) url = undefined;
       fireSafe('gif_burst', { count: 3, variant: 'scatter', x, y, url, assetKind: 'loop', holdMs: 900 });
     }
 
@@ -1697,6 +2118,7 @@ export default {
 
     function resurface() {
       if (dead || ended) return;
+      flushChoreo();                      // the locking move's beats land before the drain
       busy = true;
       clearQueue();                       // the dive that press was aimed at is over
       setPhase('resurface');
@@ -1772,6 +2194,7 @@ export default {
      *  dive ends in a resurface like any other, which re-arms the ceremony. */
     function ceiling() {
       if (dead || ended) return;
+      flushChoreo();                      // whatever was mid-show lands before the gold
       clearQueue();                       // the royal owns the board now
       ceilingReached = true;
       survived = true;
@@ -1820,6 +2243,7 @@ export default {
 
     function bell() {
       if (dead || ended) return;
+      flushChoreo();                      // the last move's beats land before the dim-out
       busy = true;
       clearQueue();                       // the water is closed; nothing drains after the bell
       clearGrab();
@@ -1844,6 +2268,7 @@ export default {
      * ==================================================================== */
     function finish(viaCeiling) {
       if (ended) return;
+      flushChoreo();                      // belt: the ledger and the paint converge first
       ended = true;
       busy = true;
       stopClock();
@@ -1972,7 +2397,14 @@ export default {
       const ms = cadenceMs(plan.subFlashMs, currentHeat, plan.subJitter[subIdx % plan.subJitter.length]);
       subTimer = after(ms, () => {
         subTimer = 0;
-        const r = fireSafe('sub_flash', { anchor: well, variant: plan.subVariants[subIdx % plan.subVariants.length] });
+        /* VOICE: cadence floor is 5200 * CADENCE_MIN_MULT * (1 - CADENCE_JITTER)
+           = ~1521ms, clear of the 1400ms voiced-gap floor. */
+        const r = fireSafe('sub_flash', {
+          anchor: well,
+          variant: plan.subVariants[subIdx % plan.subVariants.length],
+          voice: true,
+          voiceKey: 'the-deep-end-whisper',
+        });
         if (r) subFlashes += 1;
         subIdx += 1;
         armSubFlash();
@@ -2037,6 +2469,27 @@ export default {
       });
     }
     function stopClock() { if (clockId) { clearTimer(clockId); clockId = 0; } }
+
+    /** Pass 7, FIX 4: warm the engine's loom-spiral path in IDLE time so the
+     *  first jackpot garnish / rung-6 wheel doesn't create a WebGL context and
+     *  compile shaders on the merge frame. requestIdleCallback when the host
+     *  has one, else a pause-aware timer; the engine's warm() is a no-op on a
+     *  gif-path class, consumes no rng and paints nothing visible. */
+    function armLoomWarm() {
+      const go = () => {
+        if (dead || ended) return;
+        try { if (ctx.engine && typeof ctx.engine.warm === 'function') ctx.engine.warm('spiral'); } catch (e) { /* optional */ }
+      };
+      let ric = null;
+      try {
+        ric = (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function')
+          ? window.requestIdleCallback : null;
+      } catch (e) { ric = null; }
+      if (ric) {
+        try { ric(() => run(go), { timeout: 4000 }); return; } catch (e) { /* fall through */ }
+      }
+      after(1500, go);
+    }
 
     /* ---- assets (never block a draw) ------------------------------------ */
     function claimAssets() {
@@ -2262,11 +2715,18 @@ export default {
         {
           const want = String(ctx.settings && ctx.settings.de_tile_faces != null ? ctx.settings.de_tile_faces : 'media').trim().toLowerCase();
           facesMode = FACE_MODES.includes(want) ? want : 'media';
-          /* pass 6: `touch` joins the still conditions - from tier 5 a phone
-             could otherwise hold up to 4 concurrent <video> faces, and iOS
-             thrashes past its hardware decode session cap. */
-          faceKind = (reduced || motionLevelOf() <= 1 || facesMode === 'still' || touch) ? 'still' : 'loop';
+          /* pass 8: `touch` LEFT the still conditions (the owner wants the
+             deep tiles breathing on phones again). The iOS decoder ceiling is
+             held by the numbers instead: FACE_CAP_TOUCH 2, the deepest-tier
+             promotion, and the slide-window pause. reduced motion, motionLevel
+             <= 1 and the explicit 'still' setting stay hard stops; lite keeps
+             its own caps through faceCap()/shallowStillMaxTier() (lite never
+             forced stills - it rations them). */
+          faceKind = (reduced || motionLevelOf() <= 1 || facesMode === 'still') ? 'still' : 'loop';
           faceUrls.clear();
+          facesHeld = false;
+          faceDemotes.clear();
+          faceStalls.clear();                // ids died with the registry; the map must not outlive them
         }
         // the plan's own draws do not depend on the budget; a free swim deals the
         // same seeded show a 300s class would (never Infinity into the clamp)
@@ -2288,6 +2748,16 @@ export default {
 
         try { injectDeepEndStyle(); } catch (e) { say('style inject failed (class unaffected): ' + ((e && e.message) || e)); }
         buildDom();
+        /* pass 8: face videos pause with the page (engine/loomWash's pattern).
+         * One listener per class; destroy takes it off. */
+        if (!faceVisWired) {
+          try {
+            if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+              document.addEventListener('visibilitychange', onFaceVisibility);
+              faceVisWired = true;
+            }
+          } catch (e) { /* a double without events; fine */ }
+        }
 
         const capsOk = !(ctx.caps && Number(ctx.caps.bgIntensity) === 0);
         try {
@@ -2364,6 +2834,7 @@ export default {
           newDive();
           startPerfProbe();                    // the board is dealt: start counting frames
           startClock();
+          armLoomWarm();                       // idle-time shader warm (pass 7, FIX 4)
           stallTimer = every(PLAYTEST.STALL_TICK_MS, () => {
             if (ended || busy) return;
             stallMs += PLAYTEST.STALL_TICK_MS;
@@ -2410,12 +2881,14 @@ export default {
         clearQueue();
         deck('pressure', 'pause');
         if (stage) stage.classList.add('suspended');
+        syncFaceVideos();                    // pass 8: a frozen class spins no decoders
       },
 
       resume() {
         if (!paused) return;
         paused = false;
         if (stage) stage.classList.remove('suspended');
+        syncFaceVideos();                    // pass 8: faces replay (unless the slide window or a hidden tab still holds them)
         deck('pressure', 'resume');
         lastTick = Date.now();
         const q = deferred.splice(0);
@@ -2438,10 +2911,15 @@ export default {
           grabRaf = 0;
         }
         opened = false;
+        if (faceVisWired) {
+          try { document.removeEventListener('visibilitychange', onFaceVisibility); } catch (e) { /* noop */ }
+          faceVisWired = false;
+        }
         try { if (surfaceBtn) surfaceBtn.removeEventListener('click', onSurface); } catch (e) { /* noop */ }
         surfaceBtn = null;
         stopClock();
         clearTimers();
+        choreo = null;                       // its timers just died with the registry
         stopAmbience();
         unbindInput();
         try { if (trickster) trickster.destroy(); } catch (e) { /* noop */ }
@@ -2473,11 +2951,13 @@ export default {
       /** Re-sync every tile element to the model after the harness staged a board. */
       resync() {
         if (!board) return;
+        flushChoreo();                       // a staged board must not race a pending show
         for (const id of Array.from(tileEls.keys())) if (!board.tiles.some((x) => x.id === id)) removeTileEl(id, 0);
         for (const tile of board.tiles) { const node = tileEl(tile, false); paintName(node, tile); }
         diveDeepest = boardDeepest(board);
         bestDeepest = Math.max(bestDeepest, diveDeepest);
         markDeepest();
+        flushFaceDemotes();                  // pass 8: a staged deal may have promoted; settle the swap now
         paintHud();
         heat();
       },
@@ -2500,6 +2980,8 @@ export default {
           jackpots, currents, subFlashes, shimmers, strains, stallMs, currentHeat, driftOn,
           endless, surfaced, ceilingCelebrated, surfaceBtn, secLeft: secLeft(), clockTruth: clockText(),
           facesMode, faceKind, faces: faceUrls.size, animatedFaces: animatedFaces(),
+          /* pass 8 - faces alive on touch */
+          facesHeld, faceDemotesPending: faceDemotes.size,
           /* pass 5 - THE PERF LADDER */
           perf, perfReason, perfSetting, perfProbeDone,
           faceCap: faceCap(), shallowStillMaxTier: shallowStillMaxTier(),
@@ -2514,6 +2996,8 @@ export default {
           grabX: grab ? grab.gx : 0,
           grabY: grab ? grab.gy : 0,
           queued, drained, opened,
+          /* pass 7 - THE CHOREOGRAPHER: beats still owed by the last move */
+          choreoPending: choreo ? choreo.steps.filter((s) => !s.fired).length : 0,
           elapsedMs, budgetMs, ended, reported, busy, paused, dead,
           phase: stage ? stage.getAttribute('data-phase') : null,
           liveTileEls: tileEls.size,
