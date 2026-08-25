@@ -98,6 +98,90 @@ public sealed partial class UpstreamPayloadInventoryTests
         RunGuard(root, line => _output.WriteLine(line));
     }
 
+    /// <summary>
+    /// The second half of the sync protocol's step 3 — <i>"a source change is not synchronized until
+    /// the client inventory and copied output agree"</i> (<c>client/docs/upstream-sync.md:12-13</c>).
+    /// The guard above compares the upstream SOURCE against this inventory; this one compares this
+    /// inventory against the bytes the build actually copied.
+    ///
+    /// <para><b>Why it is worth a second fact.</b> <c>disposition</c> was the one field in this
+    /// document that nothing asserted. Every other field — the count, the digest, the pin version,
+    /// even the phrasing of <c>pinReason</c> — is mechanical; "served" and "not-ported" were prose,
+    /// so a tree could be RECORDED as served while the glob that copies it was edited, excluded or
+    /// dropped, and the whole suite would stay green on a payload the port no longer ships. The
+    /// port serves from <c>payload/</c>, not from the legacy tree, so the copied side is the side a
+    /// user gets.</para>
+    ///
+    /// <para><b>What it does not duplicate.</b> <c>AssetManifestTests</c> pins the MANIFEST against
+    /// the output and is a different authority with a different failure: it knows nothing about
+    /// upstream dispositions, and this knows nothing about manifest entries. Between them the chain
+    /// closes — upstream source ↔ inventory ↔ disposition ↔ copied output.</para>
+    ///
+    /// <para><b>What it still cannot see</b> is the same hole the digest leaves everywhere in this
+    /// file: an EDIT inside an unchanged path. The list digest catches an arrival, a removal, a
+    /// rename and an equal swap on both sides, and deliberately not a byte change, for the
+    /// <c>core.autocrlf</c> reason in this class's remarks.</para>
+    /// </summary>
+    [Fact]
+    public void RealRepo_EveryServedTreeIsCopiedAtItsPinnedShape_AndNoNotPortedTreeIsCopiedAtAll()
+    {
+        var inventory = ParseInventory(File.ReadAllText(Path.Combine([FindRepoRoot(), .. InventoryParts])));
+        var payloadRoot = FindCopiedPayloadRoot(); // throws (fails) if absent — never a skip
+        var copied = EnumerateTrees(payloadRoot);
+        var served = inventory.Trees.Where(t => t.Disposition == "served").ToArray();
+        Assert.NotEmpty(served); // broken-detector: a gutted inventory must not pass here either
+
+        var violations = new List<string>();
+        foreach (var entry in inventory.Trees)
+        {
+            var present = copied.TryGetValue(entry.Name, out var shape);
+
+            if (entry.Disposition == "not-ported")
+            {
+                if (present)
+                {
+                    violations.Add(
+                        $"'{entry.Name}' is recorded not-ported but {shape!.FileCount} file(s) of it were "
+                        + "copied into the build output. Either the client now serves it — in which case "
+                        + "its disposition, evidence and board row are what changed — or a glob is copying "
+                        + "a tree nobody asked for");
+                }
+
+                continue;
+            }
+
+            if (!present)
+            {
+                violations.Add(
+                    $"'{entry.Name}' is recorded served with {entry.FileCountAtBaseline} file(s) and NOTHING "
+                    + $"of it is in the build output at {payloadRoot}. The inventory is claiming a serving "
+                    + "relationship the build does not have");
+                continue;
+            }
+
+            if (shape!.FileCount != entry.FileCountAtBaseline
+                || !string.Equals(shape.ListSha256, entry.ListSha256, StringComparison.Ordinal))
+            {
+                violations.Add(
+                    $"'{entry.Name}' is pinned at {entry.FileCountAtBaseline} file(s) / {entry.ListSha256} "
+                    + $"but the COPIED tree is {shape.FileCount} file(s) / {shape.ListSha256}. The source "
+                    + "and the copy disagree, so whichever of the two a reader trusts, the other is wrong");
+            }
+        }
+
+        Assert.True(
+            violations.Count == 0,
+            "The inventory and the copied payload disagree, which the sync protocol calls not "
+            + "synchronized (client/docs/upstream-sync.md:12-13). Do NOT edit the inventory to match "
+            + "the output or the output to match the inventory without deciding which one is right:\n  "
+            + string.Join("\n  ", violations));
+
+        _output.WriteLine(
+            $"copied payload agrees with the inventory: {served.Length} served tree(s) "
+            + $"({string.Join(", ", served.Select(t => $"{t.Name} {t.FileCountAtBaseline}"))}), "
+            + $"{inventory.Trees.Count - served.Length} not-ported and absent from {payloadRoot}");
+    }
+
     // ------------------------------------------------------------------
     // Guard machinery (pinned by the fixture tests below).
     // ------------------------------------------------------------------
@@ -165,6 +249,24 @@ public sealed partial class UpstreamPayloadInventoryTests
         throw new InvalidOperationException(
             $"repo root not found walking up from {AppContext.BaseDirectory} " +
             $"(anchor: {string.Join('/', RepoAnchorParts)}) — the upstream-tree guard refuses to skip");
+    }
+
+    /// <summary>The build output's copied payload root. Kept OUT of the <c>[Fact]</c> body with the
+    /// rest of the tree-existence plumbing so no <c>fs-predicate</c> shape lands in a fact — the same
+    /// placement <c>NativeWindowCensusTests</c> and <c>ArcademyServingTests</c> use for the same
+    /// reason — and it throws rather than returning a sentinel, because a guard that cannot find the
+    /// bytes it compares must fail and not pass over an empty set.</summary>
+    private static string FindCopiedPayloadRoot()
+    {
+        var payloadRoot = Path.Combine(AppContext.BaseDirectory, "payload");
+        if (!Directory.Exists(payloadRoot))
+        {
+            throw new InvalidOperationException(
+                $"no payload root at {payloadRoot}. The client's web payloads are copied there by the "
+                + "linked globs in CcpClient.Desktop.csproj; without it this guard is looking at nothing");
+        }
+
+        return payloadRoot;
     }
 
     /// <summary>The guard body, parameterized on the repo root so fixture tests can
