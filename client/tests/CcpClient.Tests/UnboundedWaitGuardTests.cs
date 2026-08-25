@@ -29,6 +29,19 @@ namespace CcpClient.Tests;
 /// the short literal, mark it, pin it — <c>TestWait</c> population 2), or it must not decide the
 /// outcome and belongs on <see cref="TestWait.InjectedBudget"/>.</para>
 ///
+/// <para>(c) HOISTED BUDGET — a named <c>TimeSpan</c> constant whose initialiser is a wall-clock
+/// LITERAL. Shape (b) reads the injection site and is NAME-KEYED there, so the moment a budget is
+/// lifted out of the call into a field it can be passed POSITIONALLY under any name at all and
+/// both guards go blind: the wall-clock guard's token list holds no bare <c>TimeSpan.From</c> (a
+/// duration is ordinary data 300+ times in this suite, so it cannot), and its one budget token,
+/// <c>Timeout =</c> <c>TimeSpan.</c> (split here so this paragraph does not trip that guard, which
+/// reads comments too), matches only an option assignment. That is not hypothetical — it is
+/// how <c>TeardownBoundTests</c>'s 200 ms teardown bound landed unreviewed the day after this
+/// guard was written, named <c>ShortBound</c>, which contains none of shape (b)'s five needle
+/// words. The declaration form is the ONE place this is cheap: 14 in the whole tree against 300+
+/// bare literals, so every one is classified in <see cref="WallClockConstants"/> with a verdict
+/// and a reason, and a new one cannot land without that edit.</para>
+///
 /// <para>SCOPE, STATED PLAINLY BECAUSE IT IS THE HONEST MEASURE OF THE GUARD: this scans
 /// <c>client/tests/**</c> HAND-WRITTEN sources only, exactly as the wall-clock guard does.
 /// Generated sources under <c>obj/</c> are skipped: the xunit v3 entry point the SDK writes is
@@ -121,6 +134,100 @@ public class UnboundedWaitGuardTests
         ("CcpClient.Tests/SoundArbitrationTests.cs", "private static readonly TimeSpan ConstructionBudget = TimeSpan.FromMilliseconds(200);", 1),
     ];
 
+    /// <summary>Shape (c)'s declaration form: a named <c>TimeSpan</c> binding — field, property or
+    /// local — initialised from a wall-clock LITERAL. Deliberately NOT name-keyed, because being
+    /// name-keyed is the hole this closes; and deliberately restricted to a literal argument, so a
+    /// computed <c>TimeSpan.FromMilliseconds(now - started)</c> reading of ELAPSED time is not a
+    /// budget and is not swept in.</summary>
+    private static readonly Regex WallClockConstant = new(
+        @"\b(?:TimeSpan|var)\s+\w+\s*(?:=>|=)\s*TimeSpan\.From\w+\(\s*[0-9][0-9_.]*\s*\)",
+        RegexOptions.Compiled);
+
+    /// <summary>The three verdicts a hoisted constant may carry. A closed set on purpose: an
+    /// open-ended verdict field is a place to write anything, and then the reason column stops
+    /// being reviewable.</summary>
+    private static readonly string[] Verdicts =
+    [
+        // A wall-clock budget handed into a subject that then WAITS on it. The machine can decide
+        // the outcome, so the reason must say why that elapsing IS the fact.
+        "budget",
+        // The give-up window handed to TestWait. The helper returns on its SIGNAL, so this can
+        // never decide a green outcome — only how long a genuinely stuck run takes to say so.
+        "helper-window",
+        // A duration that is advanced on a fake clock, compared, or rendered. Nothing waits on it.
+        "data",
+    ];
+
+    /// <summary>(repo-relative path under <c>client/tests</c>, exact trimmed declaration before any
+    /// marker, verdict, reason). An unclassified declaration → fail. A verdict outside
+    /// <see cref="Verdicts"/> or an empty reason → fail. A classified declaration that is gone or
+    /// reworded → fail (stale entries cannot rot). The edit is the review.</summary>
+    private static readonly (string Path, string Code, string Verdict, string Reason)[] WallClockConstants =
+    [
+        ("CcpClient.HeadlessTests/SessionRecapOnAppCloseTests.cs",
+            "private static readonly TimeSpan RunLength = TimeSpan.FromSeconds(45);", "data",
+            "a session LENGTH advanced on a FAKE clock (Clock.Advance(RunLength)) and then compared to the run's own "
+            + "Duration. No real time passes and nothing waits on it"),
+        ("CcpClient.Tests/AudioModuleSpineTests.cs",
+            "protected override TimeSpan Window => TimeSpan.FromSeconds(10);", "data",
+            "a stub module's cadence property, read by the module spine as configuration alongside its probability and "
+            + "volume. Nothing in the file waits for it to elapse"),
+        ("CcpClient.Tests/CitationSelfTestGateTests.cs",
+            "private static readonly TimeSpan SelfTestWindow = TimeSpan.FromMinutes(3);", "helper-window",
+            "passed as TestWait.Until's window: for a CHILD PROCESS's exit. The helper returns on the exit signal, so "
+            + "this cannot buy a green outcome; it is wider than the default only because starting an external "
+            + "interpreter is slower than an in-process signal"),
+        ("CcpClient.Tests/IntraCitationTests.cs",
+            "private static readonly TimeSpan RunWindow = TimeSpan.FromMinutes(3);", "helper-window",
+            "the same shape as the self-test gate's, for the same reason: TestWait.Until's window: for an external "
+            + "interpreter's exit, returned on by the signal and never by the clock"),
+        ("CcpClient.Tests/SoundArbitrationTests.cs",
+            "private static readonly TimeSpan GiveUpBudget = TimeSpan.FromMilliseconds(200);", "budget",
+            "the budget's elapsing IS the subject, and this site is ALSO marked and pinned above as shape (b) — it is "
+            + "carried here so the two tables agree about what a budget is, which is what made the ShortBound gap "
+            + "visible"),
+        ("CcpClient.Tests/SoundArbitrationTests.cs",
+            "private static readonly TimeSpan ConstructionBudget = TimeSpan.FromMilliseconds(200);", "budget",
+            "the same, for the wedged construction's give-up and the lifecycle-lock give-up; marked and pinned above "
+            + "as shape (b) as well"),
+        ("CcpClient.Tests/SystemScheduleClockTests.cs",
+            "private static readonly TimeSpan DoomedDue = TimeSpan.FromMilliseconds(1000);", "budget",
+            "a due time on the REAL system clock whose arriving IS that file's subject — the schedule was due in TEN "
+            + "MINUTES until that was corrected, which made its assertion incapable of failing. The waits themselves "
+            + "go through TestWait.Until, and the fact detects a machine that stalled past it and blames the "
+            + "environment rather than the product"),
+        ("CcpClient.Tests/SystemScheduleClockTests.cs",
+            "private static readonly TimeSpan BarrierDue = TimeSpan.FromMilliseconds(2000);", "budget",
+            "the ordering barrier for the line above: a whole DoomedDue later, so its firing puts the doomed "
+            + "schedule's own moment past by a margin in which the pool demonstrably ran other work"),
+        ("CcpClient.Tests/SystemSessionClockTests.cs",
+            "private static readonly TimeSpan DoomedDue = TimeSpan.FromMilliseconds(1000);", "budget",
+            "the session clock's copy of the schedule clock's due time, deliberately the same shape so the two files "
+            + "read side by side; same subject and same environment-failure detection"),
+        ("CcpClient.Tests/SystemSessionClockTests.cs",
+            "private static readonly TimeSpan BarrierDue = TimeSpan.FromMilliseconds(2000);", "budget",
+            "the session clock's copy of the ordering barrier, same shape and same reason"),
+        ("CcpClient.Tests/SystemSoundClockTests.cs",
+            "private static readonly TimeSpan DoomedDue = TimeSpan.FromMilliseconds(1000);", "budget",
+            "the sound clock's copy of the same due time, same subject and same environment-failure detection"),
+        ("CcpClient.Tests/SystemSoundClockTests.cs",
+            "private static readonly TimeSpan BarrierDue = TimeSpan.FromMilliseconds(2000);", "budget",
+            "the sound clock's copy of the ordering barrier, same shape and same reason"),
+        ("CcpClient.Tests/TeardownBoundTests.cs",
+            "private static readonly TimeSpan ShortBound = TimeSpan.FromMilliseconds(200);", "budget",
+            "THE FIND THAT MADE THIS CENSUS: the teardown bound handed POSITIONALLY into ApplicationHost, whose "
+            + "participant loop then waits on it. Invisible to both sibling guards — the wall-clock guard has no bare "
+            + "TimeSpan.From token and its one option-assignment budget token does not match a readonly field "
+            + "declaration, and shape (b) is keyed on timeout/budget/deadline/grace/linger, none of which is a "
+            + "substring of ShortBound. It STAYS: "
+            + "its elapsing IS the fact (the bound fires and teardown carries on to the participants behind the wedged "
+            + "one). What was missing was any record that a human had decided that, and this entry is it"),
+        ("CcpClient.Tests/TestWaitVerdictTests.cs",
+            "private static readonly TimeSpan Window = TimeSpan.FromSeconds(20);", "data",
+            "the window a verdict STRING is rendered from. The facts assert the text the helper produces; no wait is "
+            + "taken and no clock is read"),
+    ];
+
     [Fact]
     public void NoUnboundedJoinsOrInjectedBudgetsInClientTests()
     {
@@ -184,6 +291,118 @@ public class UnboundedWaitGuardTests
 
         Assert.True(violations.Count == 0,
             "unbounded-wait guard violations:" + Environment.NewLine + string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
+    /// <b>SHAPE (c).</b> Every named <c>TimeSpan</c> constant in the test tree that holds a
+    /// wall-clock literal is classified, with a verdict and a reason a human wrote.
+    ///
+    /// <para>Why a CENSUS and not a ban: a bare duration is ordinary data hundreds of times over
+    /// here, so banning the literal would mean hundreds of pins and a guard nobody could read. The
+    /// DECLARATION is the narrow place — 14 sites in the whole tree — and it is also the exact
+    /// laundering step, because once a budget has a name it can be handed in positionally under
+    /// any spelling and neither line-local scan sees it again.</para>
+    ///
+    /// <para>What this does NOT claim: it does not decide whether a verdict is TRUE. A site
+    /// classified <c>data</c> that is in fact waited on passes here. What it removes is the site
+    /// nobody ever classified — which is what <c>ShortBound</c> was.</para>
+    /// </summary>
+    [Fact]
+    public void EveryHoistedWallClockConstant_IsClassifiedWithAVerdictAndAReason()
+    {
+        var testsRoot = Path.Combine([FindRepoRoot(), .. TestsParts]);
+        var violations = new List<string>();
+        var seen = new Dictionary<(string Path, string Code), int>();
+        var scanned = 0;
+        // Every declaration the regex matched, classified or not. Kept apart from `seen` (which is
+        // the classification bookkeeping) so the non-vacuity control below measures whether the
+        // SCAN worked — an unclassified site is a finding, not evidence that the regex went blind,
+        // and folding the two together let the generic control preempt the named violation.
+        var matched = 0;
+
+        foreach (var file in Directory.EnumerateFiles(testsRoot, "*.cs", SearchOption.AllDirectories))
+        {
+            var normalized = file.Replace('\\', '/');
+            if (normalized.Contains("/obj/", StringComparison.Ordinal)
+                || ExemptFileNames.Any(e => normalized.EndsWith("/" + e, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            scanned++;
+            var relative = normalized[(normalized.IndexOf("tests/", StringComparison.Ordinal) + "tests/".Length)..];
+            var lines = File.ReadAllLines(file);
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                var match = WallClockConstant.Match(line);
+                if (!match.Success)
+                {
+                    continue;
+                }
+
+                var commentAt = line.IndexOf("//", StringComparison.Ordinal);
+                if (commentAt >= 0 && commentAt < match.Index)
+                {
+                    continue; // prose quoting a declaration, not a declaration
+                }
+
+                matched++;
+                var markerAt = line.IndexOf(UnboundedWaitScan.Marker, StringComparison.Ordinal);
+                var code = (markerAt < 0 ? line : line[..markerAt]).Trim();
+                var entry = WallClockConstants.FirstOrDefault(c => c.Path == relative && c.Code == code);
+                if (entry.Code is null)
+                {
+                    violations.Add($"{relative}:{i + 1}: a named TimeSpan constant holding a wall-clock literal is "
+                        + "NOT CLASSIFIED in UnboundedWaitGuardTests.WallClockConstants. Hoisting a budget into a "
+                        + "field is how it stops being visible to both wait guards: shape (b) reads the injection "
+                        + "site and is keyed on the argument's NAME, and the wall-clock guard's token list cannot "
+                        + "hold a bare TimeSpan.From. Classify it (budget / helper-window / data) with the reason, "
+                        + $"or delete it: {code}");
+                    continue;
+                }
+
+                if (!Verdicts.Contains(entry.Verdict, StringComparer.Ordinal))
+                {
+                    violations.Add($"{relative}:{i + 1}: verdict \"{entry.Verdict}\" is not one of "
+                        + $"{string.Join(" / ", Verdicts)} — an open-ended verdict makes the reason column "
+                        + "unreviewable");
+                }
+                else if (entry.Reason.Trim().Length == 0)
+                {
+                    violations.Add($"{relative}:{i + 1}: classified \"{entry.Verdict}\" with NO reason — name why "
+                        + "the machine either does or does not get to decide this fact's outcome");
+                }
+
+                seen[(relative, code)] = seen.GetValueOrDefault((relative, code)) + 1;
+            }
+        }
+
+        foreach (var entry in WallClockConstants)
+        {
+            var actual = seen.GetValueOrDefault((entry.Path, entry.Code));
+            if (actual != 1)
+            {
+                violations.Add($"stale classification: {entry.Path} \"{entry.Code}\" ({entry.Verdict}) found "
+                    + $"{actual} time(s), expected exactly 1 — a renamed, reworded or deleted constant must force "
+                    + "this table to be re-read (stale entries cannot rot)");
+            }
+        }
+
+        // The non-vacuity controls, BEFORE the verdict: a walk over an empty tree, or one whose
+        // exemptions swallowed everything, would satisfy the assertion below by finding nothing.
+        Assert.True(scanned > 100,
+            $"the hoisted-budget scan walked only {scanned} hand-written source file(s) under {testsRoot} — that is "
+            + "not this test tree, so a clean result would mean nothing");
+        // Deliberately >=, and deliberately over MATCHED rather than over the classified ones: a
+        // renamed or added declaration is a real finding and must red through the named violation
+        // below, not through this control's generic message.
+        Assert.True(matched >= WallClockConstants.Length,
+            $"the scan matched {matched} declaration(s) where {WallClockConstants.Length} are classified — the regex "
+            + "is not reading the tree it is pinned against");
+
+        Assert.True(violations.Count == 0,
+            "hoisted wall-clock constant violations:" + Environment.NewLine + string.Join(Environment.NewLine, violations));
     }
 
     // ---------- the scanner's own facts: each fails on one shape, on three lines of source ----------
