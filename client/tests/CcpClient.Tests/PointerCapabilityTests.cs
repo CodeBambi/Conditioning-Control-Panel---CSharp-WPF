@@ -544,6 +544,69 @@ public class PointerCapabilityTests : RealDesktopFacts
     }
 
     [Fact]
+    public void APLACEMENTSWEEPSANEIGHTHOfTheDisc_ButItsFIRSTOneReadsAllOfIt()
+    {
+        // WHY THIS EXISTS, measured on the running product at maximum settings rather than argued:
+        // the ink read was 7.6 ms of a 7.7-9.1 ms read-back — 98 % of it — running for up to three
+        // targets every 30 ms on the UI thread, and the field achieved 1.0-1.2 Hz against 33.
+        // PointerInkSweepTests proves the geometry with no window; this proves that the capability
+        // on a REAL desktop really does narrow the read after the first placement, and says so.
+        var run = PointerSurfaceObservations.Delivery;
+
+        Assert.Equal(8, PointerInkSweep.Phases);
+        Assert.Equal(run.MachineHasInteractiveDesktop, run.InkProofAtOpen.Contains("the whole disc"));
+        Assert.True(run.EveryMoveWhileInkedIsAvailable == run.MachineHasInteractiveDesktop,
+            "a move of a target that is up, routable and painted did not come back Available, so nothing below "
+            + $"about WHICH pixels it read means anything: {string.Join(" | ", run.InkProofsWhileMoving)}");
+
+        // The phases come round in order and cover the disc between them, so a target that stopped
+        // holding ink ANYWHERE is found within eight placements — 240 ms at the 30 ms step — and one
+        // that stopped holding it everywhere is found on the very next placement, because a blank
+        // disc reads blank in every phase (PointerInkSweepTests, the central-third guarantee).
+        for (var phase = 0; phase < PointerInkSweep.Phases; phase++)
+        {
+            var expected = $"sweep phase {phase + 1} of {PointerInkSweep.Phases}";
+            Assert.True(run.InkProofsWhileMoving[phase].Contains(expected) == run.MachineHasInteractiveDesktop,
+                $"move {phase + 1} after the open said \"{run.InkProofsWhileMoving[phase]}\" rather than naming "
+                + $"{expected}; the sweep is not cycling, so its bounded re-proof cadence is not bounded");
+        }
+    }
+
+    [Fact]
+    public void ATARGETTHATHOLDSNOINKISSTILLCAUGHT_AndTheFailureIsNEVERLatchedIntoTheSweep()
+    {
+        // THE GUARANTEE THE SWEEP MAY NOT WEAKEN, and the exact failure it exists to catch: a
+        // window that is on screen, holds its rectangle and its styles, and shows NOTHING — a
+        // bubble the user cannot see that still eats his clicks. The harness builds it by filling
+        // the whole client area with the target's own fill, which is also its transparency key;
+        // nothing inside the product can, because every placement repaints before it reads.
+        //
+        // THE PAIR IS THE FACT. Both halves are Observe-then-Move on the same live target, and the
+        // ONLY difference between them is whether the observation found ink.
+        var run = PointerSurfaceObservations.Delivery;
+
+        Assert.Equal(run.MachineHasInteractiveDesktop, run.DiscBlanked);
+        Assert.Equal(run.MachineHasInteractiveDesktop, run.HealthyObservationInked);
+        Assert.Equal(run.MachineHasInteractiveDesktop ? 484 : 0, run.HealthyObservationSampled);
+
+        // Caught: the read found the disc blank. Note WHICH leg caught it — the four background
+        // control points are fill and correctly read as held, so the count is the only thing left.
+        Assert.False(run.BlankedObservationInked,
+            "the whole client area was overwritten with the fill colour and the capability still called the "
+            + $"target inked ({run.BlankedObservationInkedPixels} of {run.BlankedObservationSampled})");
+        Assert.Equal(0, run.BlankedObservationInkedPixels);
+        Assert.Equal(run.MachineHasInteractiveDesktop, run.BlankedObservationBackgroundHeld);
+        Assert.Equal(run.MachineHasInteractiveDesktop ? 484 : 0, run.BlankedObservationSampled);
+
+        // NEVER LATCHED. A read that found ink leaves the next placement free to sweep; a read that
+        // did not forces the whole disc again, so a target that goes blank is re-proved in full on
+        // every step until it recovers instead of being asked about an eighth at a time.
+        Assert.Equal(run.MachineHasInteractiveDesktop,
+            run.ProofAfterHealthyObserve.Contains($"sweep phase 1 of {PointerInkSweep.Phases}"));
+        Assert.Equal(run.MachineHasInteractiveDesktop, run.ProofAfterBlankedObserve.Contains("the whole disc"));
+    }
+
+    [Fact]
     public void DIRTYINGTheFARCornerFromOutsideTurnsBACKGROUNDHELDFalse_WhichIsWhyThereAreFOUROfThem()
     {
         // The ink differential exists BECAUSE a window's device context is not guaranteed to hold

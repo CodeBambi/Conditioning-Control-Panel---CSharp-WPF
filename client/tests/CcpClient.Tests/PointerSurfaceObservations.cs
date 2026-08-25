@@ -203,7 +203,33 @@ internal static class PointerSurfaceObservations
         nint HitTestAfterClose,
         nint ForegroundAfterClose,
         bool WindowExistsAfterDispose,
-        string? TeardownDiagnostic);
+        string? TeardownDiagnostic,
+        string InkProofAtOpen,
+        IReadOnlyList<string> InkProofsWhileMoving,
+        bool EveryMoveWhileInkedIsAvailable,
+        bool HealthyObservationInked,
+        int HealthyObservationSampled,
+        string ProofAfterHealthyObserve,
+        bool DiscBlanked,
+        bool BlankedObservationInked,
+        bool BlankedObservationBackgroundHeld,
+        int BlankedObservationInkedPixels,
+        int BlankedObservationSampled,
+        string ProofAfterBlankedObserve);
+
+    /// <summary>
+    /// What a placement SAID it read back, taken out of the capability's own detail text rather
+    /// than re-derived here. The detail is the only place a caller learns whether the OS was asked
+    /// for the whole disc or for one sweep phase of it, so reading it is the point: a capability
+    /// that quietly narrowed its read and kept saying "the whole disc" would be the defect.
+    /// </summary>
+    private static string Proof(CapabilityState state) => state switch
+    {
+        CapabilityState.Available available => available.Detail,
+        CapabilityState.Degraded degraded => degraded.Reason.Detail,
+        CapabilityState.Unavailable unavailable => unavailable.Reason.Detail,
+        _ => state.ToString() ?? string.Empty,
+    };
 
     private static DeliveryRun RunDelivery()
     {
@@ -237,6 +263,37 @@ internal static class PointerSurfaceObservations
         var openState = surface.Open(new PointerTargetRequest(askedBounds, Fill, Ink), out var target);
         var foregroundAfterOpen = PointerWindowProbe.Foreground();
         var window = surface.NativeHandlesFor(target).Window;
+
+        // ---- HOW MUCH OF THE DISC EACH PLACEMENT READS BACK, and the guarantee that survives it ----
+        // Taken FIRST, before anything pumps a message: the WM_PAINT arm drops the sweep's latch, so
+        // a run that had dispatched one could not say which read the phase sequence below started
+        // from. Nothing here pumps, so the sequence is the capability's and not the desktop's.
+        //
+        // Open reads the WHOLE disc (nothing is proved about a target nobody has read yet); each Move
+        // after it reads one phase of PointerInkSweep.Phases, which is the ~8x the placement path is
+        // here to save. Both are read out of the capability's OWN words rather than re-derived.
+        var inkProofAtOpen = Proof(openState);
+        var inkProofsWhileMoving = new string[PointerInkSweep.Phases];
+        var everyMoveWhileInkedIsAvailable = true;
+        for (var move = 0; move < inkProofsWhileMoving.Length; move++)
+        {
+            var moved = surface.Move(target, askedBounds);
+            everyMoveWhileInkedIsAvailable &= moved is CapabilityState.Available;
+            inkProofsWhileMoving[move] = Proof(moved);
+        }
+
+        // THE DISCRIMINATING PAIR. Both halves are Observe-then-Move on the same live target, and
+        // the ONLY difference between them is whether the observation found ink: a read that found
+        // it leaves the next placement free to sweep, a read that did not forces the whole disc.
+        var healthyObservation = surface.Observe(target);
+        var proofAfterHealthyObserve = Proof(surface.Move(target, askedBounds));
+
+        // The failure the ink read exists to catch, built from outside because nothing in the
+        // product can build it: every pixel of the client area set to the target's own fill, which
+        // is also its transparency key. On screen, routable, and INVISIBLE.
+        var discBlanked = PointerWindowProbe.FillClient(window, TargetSide, TargetSide, Fill);
+        var blankedObservation = surface.Observe(target);
+        var proofAfterBlankedObserve = Proof(surface.Move(target, askedBounds));
 
         // Read WHILE THE TARGET IS UP. Every one of these is a question about a live window, and
         // the run closes and disposes the surface further down: taking them at the end would be
@@ -379,7 +436,19 @@ internal static class PointerSurfaceObservations
             HitTestAfterClose: hitAfterClose,
             ForegroundAfterClose: foregroundAfterClose,
             WindowExistsAfterDispose: existsAfterDispose,
-            TeardownDiagnostic: teardown);
+            TeardownDiagnostic: teardown,
+            InkProofAtOpen: inkProofAtOpen,
+            InkProofsWhileMoving: inkProofsWhileMoving,
+            EveryMoveWhileInkedIsAvailable: everyMoveWhileInkedIsAvailable,
+            HealthyObservationInked: healthyObservation.Inked,
+            HealthyObservationSampled: healthyObservation.SampledPixels,
+            ProofAfterHealthyObserve: proofAfterHealthyObserve,
+            DiscBlanked: discBlanked,
+            BlankedObservationInked: blankedObservation.Inked,
+            BlankedObservationBackgroundHeld: blankedObservation.BackgroundHeld,
+            BlankedObservationInkedPixels: blankedObservation.InkedPixels,
+            BlankedObservationSampled: blankedObservation.SampledPixels,
+            ProofAfterBlankedObserve: proofAfterBlankedObserve);
     }
 
     // ---------------------------------------------------------------------------------------
