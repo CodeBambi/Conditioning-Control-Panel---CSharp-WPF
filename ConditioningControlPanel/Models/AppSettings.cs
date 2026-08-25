@@ -1436,6 +1436,16 @@ namespace ConditioningControlPanel.Models
             set { _subTextColor = value ?? "#FF00FF"; OnPropertyChanged(); }
         }
 
+        // Family name of any font installed on Windows, or the "Fredoka (bundled)" sentinel.
+        // Read per flash by SubliminalService.CreateTextBlock via Helpers.FontPickerHelper.Resolve
+        // (chains to Arial, this feature's historical face, if the pick is gone).
+        private string _subliminalFont = "Arial";
+        public string SubliminalFont
+        {
+            get => _subliminalFont;
+            set { _subliminalFont = string.IsNullOrWhiteSpace(value) ? "Arial" : value; OnPropertyChanged(); }
+        }
+
         private bool _subTextTransparent = false;
         public bool SubTextTransparent
         {
@@ -4129,6 +4139,16 @@ namespace ConditioningControlPanel.Models
         {
             get => _bouncingTextFixedColor;
             set { _bouncingTextFixedColor = value ?? ""; OnPropertyChanged(); }
+        }
+
+        // Family name of any font installed on Windows, or the "Fredoka (bundled)" sentinel for
+        // the face that ships with the app. Resolved through Helpers.FontPickerHelper.Resolve,
+        // which chains to Segoe UI so uninstalling the pick degrades instead of throwing.
+        private string _bouncingTextFont = "Segoe UI";
+        public string BouncingTextFont
+        {
+            get => _bouncingTextFont;
+            set { _bouncingTextFont = string.IsNullOrWhiteSpace(value) ? "Segoe UI" : value; OnPropertyChanged(); }
         }
 
         private bool _bouncingTextFxBreathing = false;

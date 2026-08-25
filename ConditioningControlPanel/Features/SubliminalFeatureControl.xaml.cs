@@ -61,6 +61,7 @@ namespace ConditioningControlPanel.Features
                 SliderWhisperVol.Value = s.SubAudioVolume;
                 TxtWhisperVol.Text = $"{s.SubAudioVolume}%";
                 ChkSolidMode.IsChecked = s.SubliminalSolidMode;
+                Helpers.FontPickerHelper.Populate(CmbFont, s.SubliminalFont, "Arial");
             }
             finally { _isLoading = false; }
         }
@@ -73,7 +74,8 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.SubliminalOpacity) ||
                 e.PropertyName == nameof(Models.AppSettings.SubAudioEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.SubAudioVolume) ||
-                e.PropertyName == nameof(Models.AppSettings.SubliminalSolidMode))
+                e.PropertyName == nameof(Models.AppSettings.SubliminalSolidMode) ||
+                e.PropertyName == nameof(Models.AppSettings.SubliminalFont))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
@@ -148,6 +150,19 @@ namespace ConditioningControlPanel.Features
             App.Settings?.Save();
             // No service bounce needed: each show reads the setting, so the next subliminal
             // uses the new renderer. An in-flight card finishes out on whichever spawned it.
+        }
+
+        // No service bounce: the text blocks are built per flash, so the next subliminal picks
+        // the new face up on its own.
+        private void CmbFont_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var name = Helpers.FontPickerHelper.SelectedName(CmbFont);
+            if (string.IsNullOrWhiteSpace(name) || s.SubliminalFont == name) return;
+            s.SubliminalFont = name;
+            App.Settings?.Save();
         }
 
         private void BtnManageMessages_Click(object sender, RoutedEventArgs e)

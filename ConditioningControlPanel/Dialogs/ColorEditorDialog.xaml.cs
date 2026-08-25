@@ -32,6 +32,9 @@ namespace ConditioningControlPanel
             ChkTextTransparent.IsChecked = settings.SubTextTransparent;
             ChkStealsFocus.IsChecked = settings.SubliminalStealsFocus;
 
+            // Preview in the face the real subliminal will use, not a hard-coded Arial.
+            PreviewText.FontFamily = Helpers.FontPickerHelper.Resolve(settings.SubliminalFont, "Arial");
+
             UpdateColorButtons();
         }
 
