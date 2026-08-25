@@ -175,6 +175,9 @@ html.arc-reduced .g-ic-dusk{transition:none}
 .g-ic-bubble.on{opacity:1;pointer-events:auto;animation:g-ic-reveal .16s cubic-bezier(.2,1.6,.4,1) forwards}
 @keyframes g-ic-reveal{from{transform:translate(-50%,-50%) scale(.24)}to{transform:translate(-50%,-50%) scale(1)}}
 .g-ic-bubble.pop{animation:g-ic-pop .32s ease-out forwards}
+/* a spiral pop hands the whole exit to the flourish (same artwork - letting
+   both play reads as TWO bubbles popping): the bubble snaps out instantly */
+.g-ic-bubble.gone{opacity:0;pointer-events:none;animation:none}
 @keyframes g-ic-pop{0%{transform:translate(-50%,-50%) scale(1);opacity:1}
   45%{transform:translate(-50%,-50%) scale(1.28);opacity:.85}
   100%{transform:translate(-50%,-50%) scale(1.55);opacity:0}}
