@@ -83,12 +83,26 @@ public class RealDesktopCollectionGuardTests
     /// holds a pinned wait, that helper's NAME is a string literal in the guard's own table. It
     /// declares one class, that class is a source walk over <c>client/tests/**</c>, and it reaches
     /// no window manager — blind spot (3) of this file's own honesty paragraph, in the one other
-    /// file in the project shaped like this one.</para></summary>
+    /// file in the project shaped like this one.</para>
+    ///
+    /// <para><c>WindowsOnlyFactGuardTests.cs</c> is the third, and it is the same shape as the
+    /// second with one addition worth stating rather than hiding. Its first fact is a source walk
+    /// over <c>client/tests/**</c> asserting that no fact body calls a P/Invoke directly. Its
+    /// second CALLS a member of a real-desktop helper — <c>PointerWindowProbe.SameWindow</c> — but
+    /// that member is <c>a != 0 &amp;&amp; a == b</c>: no window is created, nothing is raised,
+    /// nothing is injected, no pixel is read, and <c>PointerWindowProbe</c> declares no static
+    /// constructor and no static field, so touching it initialises nothing. The call is pinned
+    /// there deliberately: deleting that non-zero clause is invisible to every Windows fact in this
+    /// project (a placed surface's handle is never 0) and turns thirteen Linux facts vacuous, so
+    /// the ONE place it reds on Windows is that self-check. What this exemption costs is
+    /// blind spot (3) for that file: a genuine desktop call added to it later would not be
+    /// seen here.</para></summary>
     private static readonly string[] ExemptFileNames =
     [
         "RealDesktopCollectionGuardTests.cs",
         "RealDesktopCollection.cs",
         "UnboundedWaitGuardTests.cs",
+        "WindowsOnlyFactGuardTests.cs",
     ];
 
     /// <summary>

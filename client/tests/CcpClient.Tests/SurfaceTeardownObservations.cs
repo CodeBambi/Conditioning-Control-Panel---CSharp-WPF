@@ -285,10 +285,11 @@ internal static class SurfaceTeardownObservations
         // Not "the hit test happens to name it": the pointer target is raised into the top of the
         // topmost band first, exactly as PointerWindowProbe does everywhere else, so the reading is
         // about this surface's input policy and not about who else is contesting the band.
-        var pointerOwnsItsPointBefore =
-            PointerWindowProbe.HitTestAfterRaising(pointerWindow, pointerX, pointerY) == pointerWindow;
-        var cardHeldTheInputBefore = InputWindowProbe.Foreground() == cardWindow
-            && InputWindowProbe.SystemKeyboardFocus() == cardWindow;
+        var pointerOwnsItsPointBefore = PointerWindowProbe.SameWindow(
+            PointerWindowProbe.HitTestAfterRaising(pointerWindow, pointerX, pointerY), pointerWindow);
+        var cardHeldTheInputBefore =
+            PointerWindowProbe.SameWindow(InputWindowProbe.Foreground(), cardWindow)
+            && PointerWindowProbe.SameWindow(InputWindowProbe.SystemKeyboardFocus(), cardWindow);
 
         // ---- PHASE B: the leak ----
         // The application tears down through its ONE guarded entry point (Lifecycle/ApplicationHost.cs,
@@ -309,7 +310,8 @@ internal static class SurfaceTeardownObservations
 
         // No raising here. With every other surface of ours gone the target has to win its own
         // centre unaided, which is exactly the state a user would be left in.
-        var leakedStillEatsItsPoint = Os.HitTest(pointerX, pointerY) == pointerWindow;
+        var leakedStillEatsItsPoint =
+            PointerWindowProbe.SameWindow(Os.HitTest(pointerX, pointerY), pointerWindow);
 
         // ---- PHASE C: the leak repaired, and the invariant read off the window manager ----
         var repairing = new SurfaceParticipant("surfaces", pointer: pointer);

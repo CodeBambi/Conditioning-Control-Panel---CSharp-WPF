@@ -106,10 +106,23 @@ closed and `LinuxEvidenceGateTests` enforces it, so no row can degrade into "not
   accessible tree holds **two** `push button` elements both named `Start Session` — the
   confirmation's own at `518,456 123x39` and the panel's at `505,518 220x45`. `capture.ps1` tells
   them apart as `ScriptedSessionConfirmButton` and `ScriptedSessionStartButton`
-  (`client/src/CcpClient.Desktop/Views/Pages/StudioPage.axaml:2303-2309` and
-  `client/src/CcpClient.Desktop/Views/Pages/StudioPage.axaml:2338-2344`). Every check below needs a real
+  (`client/src/CcpClient.Desktop/Views/Pages/StudioPage.axaml:2308-2313` and
+  `client/src/CcpClient.Desktop/Views/Pages/StudioPage.axaml:2343-2349`). Every check below needs a real
   scripted session, there is no flag for one and deliberately so, and the confirmation is the second
   of the four gestures that start one — so the gate binds before any pixel is taken.
+
+  **THE COLLISION IS FIXED IN PRODUCT SOURCE, AND THESE FIVE ROWS STILL SAY GATED. Both halves of
+  that sentence are deliberate.** On 2026-08-25 the confirmation's accessible name became
+  `Start Session (confirm)` while its caption stayed upstream's `Start Session`
+  (`client/src/CcpClient.Desktop/Views/Pages/StudioPage.axaml.cs:2099-2113`), pinned by
+  `SessionRackHeadlessTests.TheTwoStartButtonsThatAreOnScreenTogether_DoNotAnswerToTheSameACCESSIBLENAME`
+  and re-verified headed on Windows — all five pairs below captured and every named check green
+  (`studio-dial/locked`, `audio-dial/running`, `session-start/running`, `session-history/kept`,
+  `session-history/not-kept`). What that changes is the MECHANISM; what it does not change is the
+  EVIDENCE. No Linux run has been taken since, so nothing here has photographed those five checks on
+  X11, and a row moved to REACHED on the strength of a Windows result would be exactly the
+  unmeasured claim this record exists to refuse. The next Linux headed lane can expect the drive to
+  get past the confirmation; until it has, these rows stay where they are.
 - **`no-webkit-on-this-image`** — `Avalonia.Controls.WebView` 12.0.1 ships a GTK adapter
   (`Avalonia.Controls.Gtk.GtkWebViewAdapter`) that binds `libWPEWebKit-2.0.so.1` /
   `libwebkit2gtk`, and this image has **none of them**: `ldconfig -p` finds no
@@ -206,9 +219,13 @@ distinction between "this platform cannot" and "nobody has yet" survives the nex
    rather than only a harness inconvenience: any assistive technology that addresses controls by
    name — which is what AT-SPI clients do, and what a screen reader announces — offers the user two
    indistinguishable "Start Session, button" targets, one of which starts a session and one of which
-   does not. A distinct `AutomationProperties.Name` on `ScriptedSessionConfirmButton` would lift both
-   the defect and the gate. This lane did not make that change: it is product source outside a
-   harness packet's scope, and it would need its own Windows headed re-verification.
+   does not. A distinct `AutomationProperties.Name` on `ScriptedSessionConfirmButton` lifts both the
+   defect and the gate, and **that change was made on 2026-08-25**: the confirmation now publishes
+   `Start Session (confirm)` and its visible caption is untouched, because the caption is the ported
+   outcome. The Windows headed re-verification this asked for was taken — the five captures the gate
+   names, every declared check green. The DEFECT is therefore closed; the GATE row above is a
+   statement about evidence rather than about the mechanism, and it stays until a Linux run
+   re-measures it.
 
 ## What none of this establishes
 

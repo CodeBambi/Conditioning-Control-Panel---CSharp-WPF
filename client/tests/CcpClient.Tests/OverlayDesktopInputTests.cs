@@ -86,7 +86,7 @@ public class OverlayDesktopInputTests : RealDesktopFacts
             "the window underneath could not take the foreground and the keyboard on this machine, so the TYPE "
             + "channel below is being asked of a window the OS would never have typed into anyway");
 
-        Assert.True((baseline.Routed == run.UnderneathWindow) == expected,
+        Assert.True(PointerWindowProbe.SameWindow(baseline.Routed, run.UnderneathWindow) == expected,
             $"before any overlay existed the window manager routed the point to "
             + $"{PointerWindowProbe.DescribeWindow(baseline.Routed)} instead of the window underneath "
             + $"{PointerWindowProbe.DescribeWindow(run.UnderneathWindow)}. Something foreign owns this point and no "
@@ -152,10 +152,10 @@ public class OverlayDesktopInputTests : RealDesktopFacts
 
         // The two anti-vacuity clauses, and they are the whole construction: the press point must be
         // the target's and the path must NOT be, or the asymmetry under test does not exist.
-        Assert.True((run.OwnerOfPressPoint == run.Target) == expected,
+        Assert.True(PointerWindowProbe.SameWindow(run.OwnerOfPressPoint, run.Target) == expected,
             $"the window manager gives the press point to {PointerWindowProbe.DescribeWindow(run.OwnerOfPressPoint)} "
             + $"rather than to the drag target, so the press below lands somewhere else. {run.Trace}");
-        Assert.True((run.OwnerOfFirstStep == run.Contender) == expected,
+        Assert.True(PointerWindowProbe.SameWindow(run.OwnerOfFirstStep, run.Contender) == expected,
             $"the window manager gives the drag's first step to "
             + $"{PointerWindowProbe.DescribeWindow(run.OwnerOfFirstStep)} rather than to the contender, so the path "
             + $"was never contested and the drag below had nothing to hold against. {run.Trace}");
@@ -225,14 +225,14 @@ public class OverlayDesktopInputTests : RealDesktopFacts
             "the interloper is not owned by ANOTHER process, and the pre-flight refuses on nothing else — a window "
             + $"of ours can never satisfy it, which is the whole reason it cannot become an escape hatch. "
             + $"{run.Trace}");
-        Assert.True((run.OwnerOfInterloperCentre == run.Interloper) == expected,
+        Assert.True(PointerWindowProbe.SameWindow(run.OwnerOfInterloperCentre, run.Interloper) == expected,
             $"the window manager gives the interloper's own centre to "
             + $"{PointerWindowProbe.DescribeWindow(run.OwnerOfInterloperCentre)} rather than to the interloper, so "
             + $"the refusal below would be about some third window that happened to be there. {run.Trace}");
 
         // THE ANTI-VACUITY CLAUSE OF THE WHOLE FACT: the press point must be OURS. Without it the
         // refusal below could be earned by the very first point and would say nothing about a PATH.
-        Assert.True((run.OwnerOfPressPoint == run.Ours) == expected,
+        Assert.True(PointerWindowProbe.SameWindow(run.OwnerOfPressPoint, run.Ours) == expected,
             $"the window manager gives the press point to {PointerWindowProbe.DescribeWindow(run.OwnerOfPressPoint)} "
             + $"rather than to this run's own window, so the crossing path below starts foreign and its refusal "
             + $"would prove nothing about the path. {run.Trace}");
@@ -243,7 +243,7 @@ public class OverlayDesktopInputTests : RealDesktopFacts
             + $"drag facts in this file would then run their drag into that window and report the machine's "
             + $"contention as a broken drag channel, which is the intermittent this was built to replace. "
             + $"{run.Trace}");
-        Assert.True((run.AcrossTheInterloper.Owner == run.Interloper) == expected,
+        Assert.True(PointerWindowProbe.SameWindow(run.AcrossTheInterloper.Owner, run.Interloper) == expected,
             $"the pre-flight refused, but it names {PointerWindowProbe.DescribeWindow(run.AcrossTheInterloper.Owner)} "
             + $"instead of the interloper {PointerWindowProbe.DescribeWindow(run.Interloper)}. A refusal that names "
             + $"the wrong window is worse than none: it sends the next reader after the wrong process. {run.Trace}");
@@ -311,7 +311,7 @@ public class OverlayDesktopInputTests : RealDesktopFacts
             + $"underneath at {run.UnderneathIndexWhilePassing}, so the overlay was not above it when the pass-through "
             + "was read. Every channel below would then have reached the desktop because nothing was in the way");
 
-        Assert.True((during.Routed == run.UnderneathWindow) == expected,
+        Assert.True(PointerWindowProbe.SameWindow(during.Routed, run.UnderneathWindow) == expected,
             $"with the click-through overlay up, the window manager routes the point to "
             + $"{PointerWindowProbe.DescribeWindow(during.Routed)} rather than to the window underneath "
             + $"{PointerWindowProbe.DescribeWindow(run.UnderneathWindow)}");
@@ -335,7 +335,7 @@ public class OverlayDesktopInputTests : RealDesktopFacts
 
         // The other half of "overlays do not unexpectedly activate or steal focus" (SKILL.md:29),
         // measured at the moment it matters rather than at the moment of presentation.
-        Assert.True((during.Foreground == run.UnderneathWindow) == expected,
+        Assert.True(PointerWindowProbe.SameWindow(during.Foreground, run.UnderneathWindow) == expected,
             $"presenting the overlay moved the foreground away from the window underneath, to "
             + $"{PointerWindowProbe.DescribeWindow(during.Foreground)}. {run.Trace}");
     }
@@ -388,7 +388,7 @@ public class OverlayDesktopInputTests : RealDesktopFacts
             $"clearing click-through answered {PointerSurfaceObservations.Describe(run.HandledState)}, so the overlay "
             + "was never in the handled polarity this fact is about");
 
-        Assert.True((run.HandledRouted == run.OverlayWindow) == expected,
+        Assert.True(PointerWindowProbe.SameWindow(run.HandledRouted, run.OverlayWindow) == expected,
             $"with click-through cleared the window manager routes the point to "
             + $"{PointerWindowProbe.DescribeWindow(run.HandledRouted)} rather than to the overlay "
             + $"{PointerWindowProbe.DescribeWindow(run.OverlayWindow)}, so the click below never landed on a handled "
@@ -396,7 +396,7 @@ public class OverlayDesktopInputTests : RealDesktopFacts
 
         // Read immediately before the click as well as after it, so "it did not move" cannot be
         // satisfied by a foreground that moved away during the style flip and happened to come back.
-        Assert.True((run.ForegroundBeforeHandledClick == run.KeeperWindow) == expected,
+        Assert.True(PointerWindowProbe.SameWindow(run.ForegroundBeforeHandledClick, run.KeeperWindow) == expected,
             $"the foreground had already left the keeper before the handled click, for "
             + $"{PointerWindowProbe.DescribeWindow(run.ForegroundBeforeHandledClick)}, so the reading after the "
             + $"click cannot be attributed to the click. {run.Trace}");
@@ -418,7 +418,7 @@ public class OverlayDesktopInputTests : RealDesktopFacts
             + $"activation is a separate decision — and the user still lost whatever they were doing. {run.Trace}");
 
         // Leak shape 3: the foreground, and what that costs the user, read as an outcome.
-        Assert.True((run.ForegroundAfterHandled == run.KeeperWindow) == expected,
+        Assert.True(PointerWindowProbe.SameWindow(run.ForegroundAfterHandled, run.KeeperWindow) == expected,
             $"the handled overlay click moved the foreground to "
             + $"{PointerWindowProbe.DescribeWindow(run.ForegroundAfterHandled)} instead of leaving it on the keeper "
             + $"{PointerWindowProbe.DescribeWindow(run.KeeperWindow)}. {run.Trace}");
@@ -460,7 +460,7 @@ public class OverlayDesktopInputTests : RealDesktopFacts
                 : run.RestoreState is CapabilityState.Unavailable,
             $"restoring click-through answered {PointerSurfaceObservations.Describe(run.RestoreState)}");
 
-        Assert.True((restored.Routed == run.UnderneathWindow) == expected,
+        Assert.True(PointerWindowProbe.SameWindow(restored.Routed, run.UnderneathWindow) == expected,
             $"after the flip the window manager routes the point to "
             + $"{PointerWindowProbe.DescribeWindow(restored.Routed)} rather than back to the window underneath");
 
@@ -481,7 +481,7 @@ public class OverlayDesktopInputTests : RealDesktopFacts
             "a click that passed THROUGH the overlay did not activate the application underneath either, so the "
             + "handled leg's 'it was not activated' proves nothing: this rig cannot activate that window at all. "
             + $"{run.Trace}");
-        Assert.True((restored.Foreground == run.UnderneathWindow) == expected,
+        Assert.True(PointerWindowProbe.SameWindow(restored.Foreground, run.UnderneathWindow) == expected,
             $"a click that passed through the overlay left the foreground on "
             + $"{PointerWindowProbe.DescribeWindow(restored.Foreground)} rather than moving it to the window "
             + $"underneath, so the handled leg's 'the foreground did not move' proves nothing. {run.Trace}");
@@ -534,7 +534,7 @@ public class OverlayDesktopInputTests : RealDesktopFacts
             $"the overlay is still at position {run.OverlayZIndexAfterWithdraw} of the OS's own visible top-level "
             + $"z-order after being withdrawn. {run.Trace}");
 
-        Assert.True((after.Routed == run.UnderneathWindow) == expected,
+        Assert.True(PointerWindowProbe.SameWindow(after.Routed, run.UnderneathWindow) == expected,
             $"after the overlay was withdrawn the window manager routes the point to "
             + $"{PointerWindowProbe.DescribeWindow(after.Routed)} rather than back to the window underneath");
 

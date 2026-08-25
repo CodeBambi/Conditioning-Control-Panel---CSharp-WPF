@@ -56,6 +56,24 @@ public class PanicKeyTests : RealDesktopFacts
     /// TYPED REFUSAL rather than skipping.</summary>
     private static bool WindowsHost => OperatingSystem.IsWindows();
 
+    /// <summary>
+    /// <b>USER32's answer, asked only where USER32 exists.</b> The three facts below read
+    /// <c>IsWindow</c> directly against the panic key's own window, and the first of them is KEYED
+    /// rather than gated — so it runs off Windows, where a <c>[DllImport("user32.dll")]</c> call is
+    /// not a false reading but a <c>DllNotFoundException</c> that never considered the platform at
+    /// all. That is what it did on Linux on 2026-08-25. The short-circuit is the convention every
+    /// probe in this suite already follows (<c>PointerWindowProbe.WindowExists</c>,
+    /// <c>SurfaceTeardownObservations.Os.IsWindowHandle</c>), and the <c>window != 0</c> half closes
+    /// the other end of the same defect: <c>IsWindow(0)</c> would be a question about a window that
+    /// was never created.
+    /// </summary>
+    private static bool IsARealWindow(nint window) => WindowsHost && window != 0 && IsWindow(window);
+
+    /// <summary>The window the OS puts under a screen point, or 0 where there is no window manager
+    /// to ask. Same short-circuit and same reason as <see cref="IsARealWindow"/>.</summary>
+    private static nint WindowUnder(int x, int y) =>
+        WindowsHost ? WindowFromPoint(new Point { X = x, Y = y }) : 0;
+
     [Fact]
     public void TheChordIsHeldSystemWide_AndTheOperatingSystemConfirmsTheWindowItIsPostedTo()
     {
@@ -72,7 +90,7 @@ public class PanicKeyTests : RealDesktopFacts
         // panic key with nowhere for the press to land.
         Assert.True(key.OwnerWindow != 0 == WindowsHost,
             "the panic key claims to hold the chord but owns no window for the OS to post WM_HOTKEY to");
-        Assert.True(IsWindow(key.OwnerWindow) == WindowsHost,
+        Assert.True(IsARealWindow(key.OwnerWindow) == WindowsHost,
             $"USER32 does not recognise 0x{key.OwnerWindow:X} as a window, so nothing could ever be delivered to it");
 
         // And the release. A hotkey held past its owner's life is a chord taken away from the whole
@@ -80,7 +98,7 @@ public class PanicKeyTests : RealDesktopFacts
         var window = key.OwnerWindow;
         key.Dispose();
         Assert.False(key.IsArmed);
-        Assert.False(IsWindow(window),
+        Assert.False(IsARealWindow(window),
             "the panic key's owner window survived Dispose, so the chord may still be registered to it");
     }
 
@@ -122,7 +140,7 @@ public class PanicKeyTests : RealDesktopFacts
             + "about an unobstructed desktop and would prove nothing about the situation it names");
 
         var centre = bounds.Centre;
-        Assert.True(WindowFromPoint(new Point { X = centre.X, Y = centre.Y }) != 0,
+        Assert.True(WindowUnder(centre.X, centre.Y) != 0,
             "no window owns the centre of the display, so the hit-test instrument is not reading anything");
 
         // Pressed is raised on the panic key's OWN thread now, so the counter crosses a thread
@@ -200,7 +218,7 @@ public class PanicKeyTests : RealDesktopFacts
 
         // Non-vacuity: the window really exists and really belongs to somebody, so "it arrived"
         // below is about a delivery rather than about an object that was never built.
-        Assert.True(IsWindow(key.OwnerWindow),
+        Assert.True(IsARealWindow(key.OwnerWindow),
             $"USER32 does not recognise 0x{key.OwnerWindow:X} as a window, so nothing could be posted to it");
 
         Assert.True(InjectChord(), "the OS refused the injection, so nothing below measures a delivery");

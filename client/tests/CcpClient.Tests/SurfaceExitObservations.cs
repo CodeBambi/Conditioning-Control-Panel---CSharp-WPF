@@ -276,9 +276,10 @@ internal static class SurfaceExitObservations
         CardPlaced: child.CardPlaced,
         PointerVisible: Os.IsVisibleWindow(child.Pointer),
         PointerTopmost: Os.IsTopmost(child.Pointer),
-        PointerAteItsPoint: Os.HitTest(child.PointerCentre.X, child.PointerCentre.Y) == child.Pointer,
+        PointerAteItsPoint: PointerWindowProbe.SameWindow(
+            Os.HitTest(child.PointerCentre.X, child.PointerCentre.Y), child.Pointer),
         CardVisible: Os.IsVisibleWindow(child.Card),
-        CardHeldForeground: Os.Foreground() == child.Card,
+        CardHeldForeground: PointerWindowProbe.SameWindow(Os.Foreground(), child.Card),
         VisibleWindows: Os.VisibleWindowsOf(child.Pid).Length);
 
     /// <summary>Sends the release line the child is parked on, then collects everything it printed

@@ -426,6 +426,27 @@ internal static class PointerWindowProbe
         return ours;
     }
 
+    /// <summary>
+    /// <b>Two handles name the SAME window — which first requires there to BE a window.</b>
+    ///
+    /// <para>Every reading in this suite that identifies a window (<c>WindowFromPoint</c>,
+    /// <c>GetForegroundWindow</c>, <c>GetFocus</c>, a surface's own <c>NativeHandles.Window</c>)
+    /// answers 0 where the mechanism does not exist — off Windows, and in a Windows session with no
+    /// interactive desktop. A bare <c>routed == target</c> then reads <c>0 == 0</c> and answers
+    /// <b>YES</b> about a window that was never created: the reading does not go absent, it goes
+    /// WRONG, and a fact keyed to <c>MachineHasInteractiveDesktop</c> that compares two absences
+    /// reports the machine's silence as the surface winning its own point. That exact shape put
+    /// thirteen facts red on Linux on 2026-08-25 (7 <c>OverlayDesktopInputTests</c>,
+    /// 3 <c>SurfaceExitTests</c>, 3 <c>SurfaceTeardownTests</c>) and, where the keying ran the other
+    /// way, would have reported them GREEN having measured nothing.</para>
+    ///
+    /// <para>So identity is asked through here: <c>a != 0 &amp;&amp; a == b</c>. On Windows with a
+    /// desktop it is exactly the comparison it replaced (a placed surface's handle is never 0);
+    /// everywhere else it answers NO, which is the honest reading and the one a keyed fact expects.
+    /// <b>Never assert <c>handle == handle</c> directly in a fact or an observation.</b></para>
+    /// </summary>
+    internal static bool SameWindow(nint window, nint other) => window != 0 && window == other;
+
     /// <summary>The OS thread that owns a window, or 0. The foreground is scoped to a thread's
     /// input queue, so "these two windows are on different queues" is a question only this can
     /// answer.</summary>

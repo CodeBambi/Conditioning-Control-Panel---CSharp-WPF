@@ -44,6 +44,11 @@ public static partial class VacuousShapeDetector
         public string Key => $"{Path}::{ClassName}.{MethodName}";
     }
 
+    /// <summary>One [Fact]/[Theory] with its sanitised body. <paramref name="Path"/> is relative to
+    /// <c>client/tests</c> and <paramref name="Line"/> is the method declaration's, so a violation
+    /// reports as file:line.</summary>
+    public sealed record FactBody(string Path, int Line, string ClassName, string MethodName, string Body);
+
     private static readonly string[] RepoAnchorParts = ["client", "CcpClient.sln"];
     private static readonly string[] TestsParts = ["client", "tests"];
 
@@ -66,6 +71,40 @@ public static partial class VacuousShapeDetector
     /// silently) when the tree is missing — the guard turns that into a failure.</summary>
     public static IReadOnlyList<Site> Scan()
     {
+        var sites = new List<Site>();
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var fact in Bodies())
+        {
+            var shapes = Classify(fact.Body);
+            if (shapes.Count == 0)
+            {
+                continue;
+            }
+
+            var site = new Site(fact.Path, fact.Line, fact.ClassName, fact.MethodName, shapes);
+            if (!keys.Add(site.Key))
+            {
+                throw new InvalidOperationException(
+                    $"duplicate ledger key {site.Key} — method-name collisions break name-anchored coverage; " +
+                    "rename one of the facts so the ledger stays keyed by name");
+            }
+
+            sites.Add(site);
+        }
+
+        return sites;
+    }
+
+    /// <summary>
+    /// <b>Every <c>[Fact]</c>/<c>[Theory]</c> body in both test projects, comments and string
+    /// literals blanked.</b> The ONE parse this file owns: <see cref="Scan"/> classifies these
+    /// bodies into silencing shapes, and <c>WindowsOnlyFactGuardTests</c> reads the same bodies for
+    /// a different question (does a fact call a P/Invoke directly?). Two scanners over the same
+    /// text would drift, and the sanitising is the load-bearing part either way — a P/Invoke name
+    /// mentioned in a remark or an assertion message is not a call.
+    /// </summary>
+    public static IReadOnlyList<FactBody> Bodies()
+    {
         var testsRoot = Path.Combine([FindRepoRoot(), .. TestsParts]);
         if (!Directory.Exists(testsRoot))
         {
@@ -73,8 +112,7 @@ public static partial class VacuousShapeDetector
                 $"client/tests not found at {testsRoot} — the vacuous-shape detector refuses to skip");
         }
 
-        var sites = new List<Site>();
-        var keys = new HashSet<string>(StringComparer.Ordinal);
+        var facts = new List<FactBody>();
         foreach (var file in Directory.EnumerateFiles(testsRoot, "*.cs", SearchOption.AllDirectories).OrderBy(f => f, StringComparer.Ordinal))
         {
             var normalized = file.Replace('\\', '/');
@@ -83,34 +121,19 @@ public static partial class VacuousShapeDetector
             var lineStarts = LineStarts(sanitized);
             foreach (Match attr in FactAttribute().Matches(sanitized))
             {
-                var site = AnalyzeMethod(relative, sanitized, lineStarts, attr.Index);
-                if (site is null)
-                {
-                    throw new InvalidOperationException(
+                var fact = ExtractBody(relative, sanitized, lineStarts, attr.Index)
+                    ?? throw new InvalidOperationException(
                         $"{relative}: [Fact]/[Theory] at offset {attr.Index} did not resolve to a method body — " +
                         "the detector refuses to go blind on a shape it cannot parse");
-                }
 
-                if (site.Shapes.Count == 0)
-                {
-                    continue;
-                }
-
-                if (!keys.Add(site.Key))
-                {
-                    throw new InvalidOperationException(
-                        $"duplicate ledger key {site.Key} — method-name collisions break name-anchored coverage; " +
-                        "rename one of the facts so the ledger stays keyed by name");
-                }
-
-                sites.Add(site);
+                facts.Add(fact);
             }
         }
 
-        return sites;
+        return facts;
     }
 
-    private static Site? AnalyzeMethod(string relative, string text, int[] lineStarts, int attrIndex)
+    private static FactBody? ExtractBody(string relative, string text, int[] lineStarts, int attrIndex)
     {
         var decl = MethodDecl().Match(text, attrIndex);
         if (!decl.Success)
@@ -174,6 +197,14 @@ public static partial class VacuousShapeDetector
         }
 
         var body = text[bodyStart..bodyEnd];
+        var line = Array.BinarySearch(lineStarts, decl.Index) is var li && li >= 0 ? li + 1 : ~li;
+        return new FactBody(relative, line, className, methodName, body);
+    }
+
+    /// <summary>The silencing shapes a fact body carries, or an empty list. Split out of the parse
+    /// so both public entry points read one text extraction.</summary>
+    private static List<string> Classify(string body)
+    {
         var shapes = new List<string>();
 
         var assertions = new List<(int Offset, int Depth)>();
@@ -233,8 +264,7 @@ public static partial class VacuousShapeDetector
             shapes.Add(DynamicSkip);
         }
 
-        var line = Array.BinarySearch(lineStarts, decl.Index) is var li && li >= 0 ? li + 1 : ~li;
-        return new Site(relative, line, className, methodName, shapes);
+        return shapes;
     }
 
     /// <summary>Names of every class whose brace-matched body contains <paramref name="offset"/>,

@@ -91,6 +91,36 @@ public class SurfaceExitTests : RealDesktopFacts
     }
 
     /// <summary>
+    /// <b>The refusal the two RECLAMATION facts take rather than running vacuously, and the one
+    /// place in this file where keying is not available.</b>
+    ///
+    /// <para>Every other reading here has an honest off-Windows answer and is KEYED to
+    /// <c>MachineHasInteractiveDesktop</c> - "no surface reached the desktop" is a true and useful
+    /// statement about a machine with no Win32 window manager. The reclamation question is not like
+    /// that. <c>Os.RoutesAwayFrom</c> requires the point to resolve to a REAL window belonging to
+    /// somebody else, because an answer of 0 on a live desktop means the reading was taken
+    /// off-screen rather than "the desktop got its input back" - so off Windows it answers NO and
+    /// there is no way to key it that does not amount to asserting the INVERSE of the invariant.
+    /// The remaining clauses ("no visible window of the dead process survived", "the handle is
+    /// gone", "the foreground left") are all trivially true of a process that never created a
+    /// window, which is a PASS with nothing behind it.</para>
+    ///
+    /// <para>So this refuses by name, the way <see cref="PanicKeyTests"/> does, and the name is
+    /// pinned in <c>client/tests/floor/floor.json</c>'s <c>allowedSkips</c> under its machine class.
+    /// The X11 and Wayland halves of this invariant are unmeasured - this port has no non-Win32
+    /// surface implementation for either child to place - and no green run here says anything about
+    /// them.</para>
+    /// </summary>
+    private const string ReclamationRefusalReason =
+        "this fact asks the WINDOW MANAGER what it still holds after a process died: whether a visible top-level "
+        + "window of the dead process survives in the z-order, and whether the point where a surface used to be now "
+        + "routes to a real window belonging to somebody else. Neither question exists off Windows, and neither can "
+        + "be asked in a Windows session with no interactive desktop: the child places nothing, every handle is 0, "
+        + "the hit test resolves to no window at all, and 'nothing survived' would be true of a process that never "
+        + "put anything on the screen. Its siblings above are KEYED to the machine instead, because 'the surfaces "
+        + "never reached the desktop' IS a true statement there; this one has no such reading and refuses instead";
+
+    /// <summary>
     /// <b>THE PRODUCT'S STATED ORDINARY PATH, MEASURED.</b> The child tears down through the real
     /// <c>ApplicationHost.ShutdownAsync</c> with its UI dispatch boundary bound, exactly as the
     /// shipping app's is, to a dispatch that accepts posts and never delivers them — which is what
@@ -106,6 +136,8 @@ public class SurfaceExitTests : RealDesktopFacts
     [Fact]
     public void OnTheOrdinaryPath_NoDisposalRuns_AndTheOperatingSystemReclaimsEverySurfaceAtProcessExit()
     {
+        Assert.SkipUnless(OverlayWindowProbe.MachineHasInteractiveDesktop, ReclamationRefusalReason);
+
         var run = SurfaceExitObservations.Observed;
 
         Assert.Contains("DONE posted=2 delivered=0", run.OrdinaryTail, StringComparison.Ordinal);
@@ -158,6 +190,8 @@ public class SurfaceExitTests : RealDesktopFacts
     [Fact]
     public void AbnormalTermination_ReclaimsTheSurfacesToo_WhichIsTheOnlyRemedyForASynchronousWedge()
     {
+        Assert.SkipUnless(OverlayWindowProbe.MachineHasInteractiveDesktop, ReclamationRefusalReason);
+
         var run = SurfaceExitObservations.Observed;
 
         Assert.True(run.KilledAfter.Exited, "the killed child is still in the process table");
