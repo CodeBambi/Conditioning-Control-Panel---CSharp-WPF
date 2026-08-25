@@ -210,6 +210,29 @@ export function createDeck(o = {}) {
   const seed = String(o.seed || 'emi-off-channels');
   const bump = typeof o.onStat === 'function' ? o.onStat : () => {};
 
+  /* ----------------------------------------------------------------------
+   * W3 P0-36: THE CRT BLIP GETS ITS TICK.
+   *
+   * The squeeze in and the squeeze out are the deck's two whole-screen events
+   * and both played silently, which made a channel look like a rendering fault
+   * rather than like something happening. One `glitch` each, pitched apart so
+   * the pair reads as one gesture with a direction: DOWN going in (something
+   * arriving over her face), UP coming out (it letting go).
+   *
+   * `shell/audio.js` holds the only audio node (trap 18), so this is a request
+   * on the injected document and never a sound. Voice bus: the glass is hers.
+   * -------------------------------------------------------------------- */
+  function sfx(name, level, pitch) {
+    try {
+      if (!doc || typeof doc.dispatchEvent !== 'function') return;
+      const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+      if (!Ctor) return;
+      doc.dispatchEvent(new Ctor('arcademy-sfx', {
+        detail: { name: String(name || 'blip'), level: Number(level) || 0.1, bus: 'voice', pitch },
+      }));
+    } catch (e) { /* a cue must never be the thing that throws */ }
+  }
+
   const counters = { takeovers: 0, caught: 0, reveals: 0 };
   const cooldowns = Object.create(null);
   let sessionTakeovers = 0;
@@ -392,6 +415,11 @@ export function createDeck(o = {}) {
     };
     // The blip's opening frame is the channel's own first frame, collapsed.
     if (live.phase === 'in') {
+      /* W3 P0-36: the cue rides the PHASE, which is what makes both silences
+       * free. Reduced motion has no squeeze to sound, and the WRONG CHANNEL
+       * comes in on `noBlipIn` on purpose - you are supposed to catch it in
+       * the corner of your eye, and a sound would point straight at it. */
+      sfx('glitch', 0.14, 0.9);
       try { painter.frame(g, spec, 0); } catch (e) { /* noop */ }
       live.snap = snapshot();
     }
@@ -421,6 +449,10 @@ export function createDeck(o = {}) {
       finish();
       return true;
     }
+    /* W3 P0-36: ...and the way out, quieter and pitched UP - the glass letting
+     * go. Below the `noBlip` return above, so a silent cut stays silent and the
+     * poke that catches a `noBlip` channel keeps its own silence too. */
+    sfx('glitch', 0.10, 1.2);
     live.snap = snapshot();
     live.phase = 'out';
     live.t0 = null;

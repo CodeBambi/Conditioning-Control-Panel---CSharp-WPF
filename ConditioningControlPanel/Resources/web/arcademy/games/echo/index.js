@@ -346,6 +346,10 @@ export default {
     let stallMs = 0;
     let lastPressAt = 0;
     let newRecord = false;
+    /** W3 P0-4: the record cue is once a class, not once a clear. */
+    let recordCued = false;
+    /** W3 P1-8 / P2-4: one breath per stall, never one per stall tick. */
+    let stallCued = false;
 
     /* ---- pads / faces --------------------------------------------------- */
     let faceMode = 'words';             // ec_pad_words, after the empty-pool rule
@@ -1433,7 +1437,9 @@ export default {
       /* THE RESHUFFLE. Every sequence after the first re-deals the phrases -
        * the ENCORE deliberately does not, because it is the same melody again
        * and moving the words under it would be a different room. */
-      if (sequencesDealt > 0) { roundIdx += 1; dealFaces(); }
+      /* W3 P1-11: the ring re-deals its words and that is a real change to the
+       * board, so it gets the paper it deserves instead of happening silently. */
+      if (sequencesDealt > 0) { roundIdx += 1; dealFaces(); tone('paper', 0.25, 1); }
       sequencesDealt += 1;
       expectIdx = 0;
       stepIdx = 0;
@@ -1448,6 +1454,10 @@ export default {
       const telegraphed = round.decoys.some((d) => d.telegraph);
       if (telegraphed) {
         msg('ec_msg_decoy_warn', EC_LEX.ec_msg_decoy_warn);
+        /* W3 P1-11: the TELEGRAPHED tier says so out loud - a low tell under the
+         * banner. Tier 3+ never reaches this branch and must not: a decoy the
+         * ear can hear coming is not a decoy. */
+        tone('tell', 0.3, 0.7);
         if (stage) stage.setAttribute('data-telegraph', '1');
       } else {
         if (stage) stage.removeAttribute('data-telegraph');
@@ -1471,6 +1481,9 @@ export default {
       setPhase('encore');
       if (stage) stage.setAttribute('data-encore', '1');
       msg('ec_msg_encore', EC_LEX.ec_msg_encore);
+      /* W3 P1-11: the comeback. One low whoosh with a duck under it, so the
+       * room visibly and audibly makes space for the same melody again. */
+      tone('whoosh', 0.35, 0.75, { duck: 'voice', duckMs: 500 });
       deck('casino', 'encore', true);
       after(reduced ? 500 : 800, () => startPlayback());
     }
@@ -1482,6 +1495,10 @@ export default {
       stepIdx = 0;
       resetSteps();
       setPhase(inEncore ? 'encore' : 'echo');
+      /* W3 P1-11: the room's turn is signed. The hand-off bell, dropped well
+       * below its own pitch, so "now it is me" and "now it is you" are the same
+       * bell at two ends of the room and can never be confused. */
+      tone(HANDOFF_SFX, 0.3, 0.66);
       if (!audible && sequencesDealt <= 1) msg('ec_msg_silent', EC_LEX.ec_msg_silent);
       else if (!inEncore) msg('ec_msg_watch', EC_LEX.ec_msg_watch);
       playStep();
@@ -1580,6 +1597,7 @@ export default {
        * never lock its pad out of the next turn. */
       try { heldByKey.clear(); } catch (e) { heldByKey = new Set(); }
       stallMs = 0;
+      stallCued = false;
       lastPressAt = Date.now();
       armInputWindow();
       /* Tier 2+ pressure DURING the input turn (the dossier's ladder). Every
@@ -1594,10 +1612,17 @@ export default {
     let windowTimer = 0;
     let windowTick = 0;
     let windowUntil = 0;
+    /* W3 P0-2 / P0-15. The countdown's own state: the last whole-seconds figure
+     * we sounded, and how many ticks this window has spent. The ring repaints
+     * every 60ms, so the cue rides the SECOND BOUNDARY and nothing else. */
+    let windowTickSec = -1;
+    let windowTickN = 0;
     function armInputWindow() {
       if (windowTimer) { clearTimer(windowTimer); windowTimer = 0; }
       if (!round || !round.windowMs) return;
       windowUntil = Date.now() + round.windowMs;
+      windowTickSec = -1;
+      windowTickN = 0;
       if (timerEl) {
         timerEl.hidden = false;
         try { timerEl.style.setProperty('--ec-k', '1'); } catch (e) { /* noop */ }
@@ -1615,11 +1640,23 @@ export default {
       if (!timerEl || !round || !round.windowMs || !inputOpen) return;
       const k = Math.max(0, Math.min(1, (windowUntil - Date.now()) / round.windowMs));
       try { timerEl.style.setProperty('--ec-k', k.toFixed(3)); } catch (e) { /* noop */ }
+      /* W3 P0-2 / P0-15: the last third of the window enters the ear. One tick
+       * per whole second, climbing in pitch and level, and the whole thing is
+       * killed by disarmInputWindow the moment the press lands. */
+      const secs = Math.ceil(Math.max(0, windowUntil - Date.now()) / 1000);
+      if (k < 0.35 && secs !== windowTickSec) {
+        windowTickSec = secs;
+        const n = Math.min(4, windowTickN);
+        tone('clock_tick', 0.1 + 0.02 * n, 1 + 0.06 * n);
+        windowTickN += 1;
+      }
     }
     function disarmInputWindow() {
       if (windowTimer) { clearTimer(windowTimer); windowTimer = 0; }
       if (windowTick) { clearTimer(windowTick); windowTick = 0; }
       windowUntil = 0;
+      windowTickSec = -1;
+      windowTickN = 0;
       if (timerEl) {
         timerEl.hidden = true;
         try { timerEl.style.setProperty('--ec-k', ''); } catch (e) { /* noop */ }
@@ -1633,6 +1670,7 @@ export default {
       const dt = Math.max(0, now - lastPressAt);
       lastPressAt = now;
       stallMs = 0;
+      stallCued = false;
       presses += 1;
       latencySum += dt;
       latencyCount += 1;
@@ -1684,6 +1722,10 @@ export default {
       /* WRONG. The pad flashes RED and its face shakes - a state of its own, so
        * a still frame of the room says "that was wrong" with no sound at all. */
       padState(i, 'wrong', reduced ? 260 : 420);
+      /* W3 P1-11: a wrong pad still sounds its OWN note, quiet and a hair flat,
+       * so the mistake is a wrong note rather than the absence of one. The
+       * buzzer in fail() answers the miss; this answers the finger. */
+      padVoice(i, 0.2, pitchFor(i, 0) * 0.98);
       deck('casino', 'padPressed', i, false, pressStreak);
       fail(i, how === 'timeout' ? 'timeout' : 'wrong');
     }
@@ -1695,6 +1737,14 @@ export default {
       disarmInputWindow();
       const len = round.seq.length;
       if (len > bestLen) { bestLen = len; if (bestLen > lifetimeBefore) newRecord = true; }
+      /* W3 P0-4: a LIFETIME best is the rarest thing this class can hand out and
+       * it used to sound exactly like an ordinary clear. It lands 150ms behind
+       * the clear cue so the ear hears the win first and then the topper, and it
+       * is latched: once a class, however many records the run stacks up. */
+      if (newRecord && !recordCued) {
+        recordCued = true;
+        after(150, () => { tone('record', 0.45, 1); });
+      }
       sequencesCleared += 1;
       clearStreak += 1;
       paintHud();
@@ -1947,7 +1997,10 @@ export default {
           deck('casino', 'bell', true);
           deck('pressure', 'beat', 'bell');
           msg('ec_msg_bell_warn', EC_LEX.ec_msg_bell_warn);
-          tone('sting', 0.4, 1);
+          /* W3 P0-3: the bell vocabulary. The warning used to be a `sting`,
+           * which is what a hundred other things in the school are. One school,
+           * one bell: warn at .3, the end at .5. */
+          tone('bell', 0.3, 1);
         }
         if (elapsedMs >= budgetMs) { stopClock(); run(bell); }
       });
@@ -1972,6 +2025,10 @@ export default {
       clearPads();
       stopAmbience();
       setPhase('ended');
+      /* W3 P0-3: the class ends on the bell, and the debrief's own `slide`
+       * follows it 420ms later (see renderEnd) rather than landing on the same
+       * frame. Two beats, in the order the school says them. */
+      tone('bell', 0.5, 1);
       deck('casino', 'dimOut');
       deck('pressure', 'stop');
       deck('trickster', 'stop');
@@ -2040,7 +2097,8 @@ export default {
        * card fades in as one object (.g-ec-end / g-ec-endin), so there is no
        * visual stagger for a blip ladder to ride: the House Book's answer to an
        * unstaggered debrief is ONE `slide`, on the same beat as the fade. */
-      tone('slide', 0.35, 1);
+      /* W3 P0-3: +420ms, so the bell finish() struck has the frame to itself. */
+      after(420, () => { tone('slide', 0.35, 1); });
       endEl.appendChild(el('h3', 'g-ec-end-title', t('ec_end_title', EC_LEX.ec_end_title)));
       const row = (cls, k, v) => {
         const r = el('div', 'g-ec-end-row' + (cls ? ' ' + cls : ''));
@@ -2099,6 +2157,8 @@ export default {
         inEncore = false;
         ratchet = 0;
         newRecord = false;
+        recordCued = false;
+        stallCued = false;
         faceUrls.clear();
         clipsFired = 0;
         faceKind = (reduced || motionLevelOf() <= 1) ? 'still' : 'loop';
@@ -2231,7 +2291,13 @@ export default {
         every(PLAYTEST.STALL_TICK_MS, () => {
           if (ended || !inputOpen) return;
           stallMs += PLAYTEST.STALL_TICK_MS;
-          if (stallMs >= PLAYTEST.STALL_MS) deck('trickster', 'stalled', stallMs);
+          if (stallMs >= PLAYTEST.STALL_MS) {
+            /* W3 P1-8 / P2-4: the ghost cursor's lure gets a breath, ONCE per
+             * stall. It is non-tonal on purpose - a pitched cue here would read
+             * as a hint about which pad comes next. */
+            if (!stallCued) { stallCued = true; tone('whisper', 0.12, 0.85); }
+            deck('trickster', 'stalled', stallMs);
+          }
         });
 
         msg('ec_brief', EC_LEX.ec_brief);

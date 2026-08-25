@@ -254,6 +254,8 @@ export default {
     let boardNo = 0;             // 1-based; 0 = nothing dealt yet
     let boardsCleared = 0;       // the class's score, and the grade's main term
     let belled = false;          // the bell has taken the board (one-way)
+    /** W3 P0-2: the widest a countdown window may be heard, in ms. */
+    const COUNTDOWN_MS = 3000;
     let lastCallDone = false;    // the last-ten-seconds drum has beaten
     const boardLog = [];         // {board, pairs, attempts, clearSec} per cleared board
 
@@ -490,6 +492,8 @@ export default {
     function rackAdd(pairId) {
       if (!rack) return;
       try {
+        /* W3 P2-3: a specimen sliding into the rack is paper on paper. */
+        tick('paper', 0.16);
         rack.appendChild(el('span', 'g-dv-slide', glyphFor(pairId)));
         const slides = rack.querySelectorAll ? rack.querySelectorAll('.g-dv-slide') : null;
         if (slides && slides.length > RACK_MAX) slides[0].remove();
@@ -563,6 +567,7 @@ export default {
      * chain outright. Never entered on desktop: every caller is touch-gated.
      * ==================================================================== */
     let previewing = false;      // a play-window is live (touch only, one-way per beat)
+    let previewTicks = false;    // W3 P0-2: the memorize countdown is armed
     let previewList = null;      // the cells the window rotates over
     let previewCursor = 0;
 
@@ -750,10 +755,18 @@ export default {
      * PHASE 0 - deal & preview (with the first poison beat)
      * ==================================================================== */
     function deal() {
+      /* W3 P0-12: the cards LAND. Twelve to twenty of them at the stagger
+       * would be a hiss, so the ear gets the first six and the last one - the
+       * deal starting and the deal finishing - each jittered off the class
+       * stream so no two land on the same note. The re-deal path (runRedeal)
+       * is a re-showing, not a deal, and stays out of this. */
+      const lastDealt = layout.dealOrder.length - 1;
       layout.dealOrder.forEach((cellIndex, n) => {
+        const audible = n < 6 || n === lastDealt;
         after(n * TIMING.dealStaggerMs, () => {
           const c = cells[cellIndex];
           if (!c) return;
+          if (audible) tick('card_deal', 0.22, { pitch: 1 + (roll('deal') - 0.5) * 0.08 });
           applyMedia(c);
           c.card.classList.add('dealt');
         });
@@ -777,14 +790,38 @@ export default {
       /* On touch the memorize beat plays TOUCH_PLAY_CAP faces at a time and
        * rotates; on desktop every face plays at once, exactly as before. */
       if (touch) playWindowStart(cells.slice());
-      tick('sting', 0.4);
+      /* W3 P1-10: the board coming up is air moving, not a generic sting. */
+      tick('whoosh', 0.35);
+      /* W3 P0-2: the memorize window is a countdown, so it ticks - one per
+       * whole second inside its last third (capped at three), pitch climbing.
+       * The whole ladder is scheduled up front off a known window and dies
+       * with `previewTicks` at previewDown, or with clearTimers() at the bell. */
+      armPreviewTicks(dials.previewMs);
       // THE MEMORIZE-POISON BEAT: exactly at preview end -400ms.
       const poisonAt = Math.max(0, dials.previewMs - TIMING.poisonLeadMs);
       if (dials.subFlash) after(poisonAt, () => poison('preview'));
       after(dials.previewMs, previewDown);
     }
 
+    /** W3 P0-2: the memorize window's own countdown ladder. */
+    function armPreviewTicks(ms) {
+      previewTicks = true;
+      const gate = Math.min(COUNTDOWN_MS, Math.round(ms / 3));
+      const notes = Math.floor(gate / 1000);
+      for (let k = notes; k >= 1; k--) {
+        const step = notes - k;                       // 0 is the first one heard
+        after(Math.max(0, ms - k * 1000), () => {
+          if (!previewTicks || dead || ended || belled) return;
+          tick('clock_tick', Math.min(0.18, 0.1 + 0.04 * step), { pitch: 1 + 0.06 * step });
+        });
+      }
+    }
+
     function previewDown() {
+      previewTicks = false;                           // W3 P0-2: the window is over
+      /* W3 P0-13: the board goes face down and the clock starts. The thud is
+       * the inverse of the whoosh that opened it. */
+      tick('thud', 0.3, { pitch: 1.2 });
       if (touch) playWindowStop();                    // the preview's window dies with it
       if (grid) grid.classList.remove('scanning');    // the machine is done showing
       for (const c of cells) {
@@ -880,6 +917,9 @@ export default {
     function judge() {
       busy = true;
       attempts += 1;
+      /* W3 P0-14: judgeMs is a held breath and it used to be held in silence.
+       * A pad under the pause, resolving into the streak or the stamp. */
+      tick('pad', 0.2, { pitch: 0.95 });
       const [a, b] = faceUp;
       cells[a].card.classList.add('judge');
       cells[b].card.classList.add('judge');
@@ -908,6 +948,9 @@ export default {
         trackedThis = true;
         tracked += 1;
         swapAttempt.delete(pairId);
+        /* W3 P1-10: the rarest skill this class measures - you followed a card
+         * through the static. It lands over the match cue, not under it. */
+        after(120, () => tick('chime', 0.45, { pitch: 1.5 }));
         setHint('dv_tracked', 'Tracked through the static.', true);
       }
 
@@ -990,6 +1033,9 @@ export default {
     function pressure() {
       if (cramEnabled() && peekBtn) {
         peekBtn.classList.add('armed');
+        /* W3 P1-10: the assist offering itself. Quiet - it is a door, not a
+         * reward, and it costs the class its A. */
+        tick('lift', 0.25, { pitch: 0.9 });
         setHint('dv_cram_ready', 'Cram Assist ready. Hold it - it caps this class at A.', true);
       }
       if (dials.burstPressure) {
@@ -1090,6 +1136,11 @@ export default {
           const lied = !!redealLie;
           watchLie = lied ? redealLie.cell.index : -1;
           clearLie();
+          /* W3 P1-10: the gift and the lie were the same silence, which is
+           * the one thing they must never be - the tell is what the called-it
+           * bonus is scored on. */
+          if (lied) tick('decoy', 0.3);
+          else tick('chime', 0.3, { pitch: 1.2 });
           if (lied) setHint('dv_redeal_hint', 'One of those was a lie.', true);
           else setHint('dv_redeal_gift', 'The machine blinked.', true);
           busy = false;
@@ -1155,7 +1206,8 @@ export default {
       cells[a].card.classList.add('tell');
       cells[b].card.classList.add('tell');
       cells[b].holder.appendChild(note);
-      tick('glitch', 0.55);
+      /* W3 P1-10: the TELL. */
+      tick('glitch', 0.5);
       setHint('dv_swap_hint', 'The board is moving.', true);
 
       after(TIMING.tellMs, () => {
@@ -1166,7 +1218,9 @@ export default {
           swapCells(a, b);
           swapsFired += 1;
           entry.swappedAt = settledWindow;
-          tick('glitch', 0.4);
+          /* W3 P1-10: and the LAND. Two glitches 600ms apart said nothing had
+           * happened yet; a body knock says the board settled. */
+          tick('thud', 0.3, { pitch: 1.1 });
           paintHud();
         };
         const res = fireSafe('glitch_swap', {
@@ -1381,7 +1435,11 @@ export default {
       if (casino) casino.dimOut();           // the bell is never silence
       setHint('dv_bell', 'The bell. Class over.', true);
       try { ctx.ceremonies.stamp({ text: t('dv_stamp_bell', 'BELL'), tone: 'pink', target: grid }); } catch (e) { /* noop */ }
-      tick('stamp_bad', 0.6);
+      /* W3 P0-3: the bell is this class's NORMAL ending (trap 82) and it was
+       * playing the loudest error sound in the school. The school's own bell,
+       * with the stamp landing after it. */
+      tick('bell', 0.5);
+      after(420, () => tick('stamp', 0.5));
       after(TIMING.ceremonyMs, () => finish(true));   // 3. the ONE surviving timer
     }
 

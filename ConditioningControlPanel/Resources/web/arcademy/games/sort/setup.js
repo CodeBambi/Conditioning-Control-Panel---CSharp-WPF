@@ -338,6 +338,10 @@ function isVideoRow(row) {
  *                                removeLibrarySub / onLibrary)
  * @param {Function} o.onPlay     (setup, resolved) - G1 saves + claims
  * @param {Function} o.onLeave    the player took the door back out
+ * @param {Function=} o.cue       (name, level, extra) - THE GAME'S clamped cue
+ *                                helper, threaded in (W3 P0-20). The door owns
+ *                                no audio node and imports no mixer; without
+ *                                the closure it is simply silent, as it was.
  * @returns {{el, destroy, setBusy, ghost, warnThin, step, diagnostics}}
  */
 export function createSetupDoor(o) {
@@ -347,6 +351,13 @@ export function createSetupDoor(o) {
   const onPlay = typeof opts.onPlay === 'function' ? opts.onPlay : () => {};
   const onLeave = typeof opts.onLeave === 'function' ? opts.onLeave : () => {};
   const say = (m) => { try { if (typeof ctx.log === 'function') ctx.log('door: ' + m); } catch (e) { /* noop */ } };
+  /* W3 P0-20: the door was the one surface in the school with ZERO cue sites -
+   * five steps of picking, probing and pressing, all of it silent. G1 hands
+   * this in; a missing closure is a silent door, never a thrown one. */
+  const cue = (name, level, extra) => {
+    if (typeof opts.cue !== 'function' || destroyed) return;
+    try { opts.cue(name, level, extra); } catch (e) { /* a cue never opens a door */ }
+  };
 
   const t = (key, fallback) => {
     const dflt = fallback == null ? SETUP_LEX[key] : fallback;
@@ -521,7 +532,10 @@ export function createSetupDoor(o) {
     if (extra && extra.state) attr(b, 'data-state', extra.state);
     if (extra && extra.disabled) b.disabled = true;
     if (extra && extra.title) attr(b, 'title', extra.title);
-    if (handler) on(b, 'click', handler);
+    /* W3 P0-20: every chip in the door answers. Chrome-quiet - a chip is a
+     * choice being noted, not a verdict - and the wrapper is here rather than
+     * at the six call sites so a chip added later cannot be born mute. */
+    if (handler) on(b, 'click', () => { cue('blip', 0.15); handler(); });
     ((extra && extra.host) || group).appendChild(b);
     (group._sdChips || (group._sdChips = [])).push(b);
     return b;
@@ -709,15 +723,17 @@ export function createSetupDoor(o) {
     const clean = sanitizeSub(raw);
     if (!clean) {
       if (quiet && raw.length < 2) return;
-      probeState.name = raw; probeState.state = 'bad'; render(); return;
+      /* W3 P0-20: a refusal, and refusals in this school are quiet. */
+      probeState.name = raw; probeState.state = 'bad'; cue('bump', 0.08); render(); return;
     }
     const side = sideOf(sideName);
-    if (hasCI(side.subs, clean)) { probeState.name = clean; probeState.state = 'dupe'; render(); return; }
+    if (hasCI(side.subs, clean)) { probeState.name = clean; probeState.state = 'dupe'; cue('bump', 0.08); render(); return; }
     const known = cat.subLibrary.find((r) => lc(r.name) === lc(clean) && r.ok === true);
     if (known) {
       side.subs.push(known.name);
       searchText = '';
       probeState.name = known.name; probeState.state = 'ok';
+      cue('chime', 0.3);          // W3 P0-20: the library already had it
       render();
       return;
     }
@@ -748,6 +764,7 @@ export function createSetupDoor(o) {
         if (fromStarter) deadStarters.add(lc(name));
         if (probeState.name === name || !fromStarter) { probeState.name = answered; probeState.state = 'missing'; }
         if (!fromStarter) pendingFocus = 'search';
+        cue('bump', 0.08);        // W3 P0-20: there is no such sub
         render();
         return;
       }
@@ -767,11 +784,15 @@ export function createSetupDoor(o) {
       if (!hasCI(side.subs, answered)) side.subs.push(answered);
       if (!fromStarter) { searchText = ''; probeState.name = answered; probeState.state = 'ok'; pendingFocus = 'search'; }
       errKey = '';
+      /* W3 P0-20: the probe came back and the pill is real. The one payoff
+       * beat in the door, so it is the only thing in here above chrome. */
+      cue('chime', 0.3);
       render();
     }).catch(() => {
       if (destroyed) return;
       probingStarters.delete(lc(name));
       probeState.state = 'missing';
+      cue('bump', 0.08);          // W3 P0-20: the probe never answered
       render();
     });
   }
@@ -1029,9 +1050,14 @@ export function createSetupDoor(o) {
     if (!resolved.ok) {
       errKey = resolved.reason === 'same' ? 'sort_need_split' : 'sort_need_pick';
       if (step === 'same') { step = 'source'; staleNote = true; }
+      cue('bump', 0.08);          // W3 P0-20: PLAY refused, and it says so
       render();
       return;
     }
+    /* W3 P0-20: THE START PRESS. Trap 69's chrome vocabulary, the same `lift`
+     * at the same level the other nine classes open on - this door opens a
+     * class, so it opens like one. */
+    cue('lift', 0.5);
     /* Persist BEFORE handing off: G1's claim may take seconds and a player who
      * kills the app mid-deal should still come back to a lit "same sort". */
     try {

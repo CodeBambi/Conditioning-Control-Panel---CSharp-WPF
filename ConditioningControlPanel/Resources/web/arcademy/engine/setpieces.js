@@ -16,14 +16,22 @@
  *   minGap           anti-clump: min beats between fires of THIS key (default 0)
  *   cosmetic         true = opts out of the gateUsedThisBeat mutual exclusion
  *   run              optional callback invoked when it fires (also reported)
+ *   sfx              optional cue name, or {name, level, pitch, bus} (W3 P1-17)
  *
  * GATE: at most ONE non-cosmetic set-piece owns a beat (`gateUsedThisBeat`).
  * All rolls come off the seeded rng — nothing here touches Math.random.
+ *
+ * THE CUE RIDES THE GATE (W3 P1-17). A set-piece is the biggest thing a beat
+ * can deal and it had no sound at all. `descriptor.sfx` names one, and the beat
+ * plays at most ONE of them however many cosmetics ride along, on the same
+ * argument the visual gate is built on: two set-pieces announcing themselves in
+ * the same frame is one set-piece and a smear. A forced fire always cues - it
+ * is a big moment somebody asked for by hand.
  * ==========================================================================*/
 
 import { clamp01 } from '../core/caps.js';
 
-export function createSetpieceDirector({ rng = Math.random, log = () => {} } = {}) {
+export function createSetpieceDirector({ rng = Math.random, log = () => {}, sfx = null } = {}) {
   const specs = new Map();
   const state = new Map();     // key -> { firedRun, firedPhase, lastBeat }
   let beatIndex = 0;
@@ -48,6 +56,8 @@ export function createSetpieceDirector({ rng = Math.random, log = () => {} } = {
       minGap: Number.isFinite(descriptor.minGap) ? Math.max(0, descriptor.minGap) : 0,
       cosmetic: !!descriptor.cosmetic,
       run: typeof descriptor.run === 'function' ? descriptor.run : null,
+      sfx: descriptor.sfx == null ? null
+        : (typeof descriptor.sfx === 'string' ? { name: descriptor.sfx } : descriptor.sfx),
     };
     specs.set(d.key, d);
     st(d.key);
@@ -74,12 +84,26 @@ export function createSetpieceDirector({ rng = Math.random, log = () => {} } = {
     return null;
   }
 
+  /** W3 P1-17: one cue per beat, whoever else rides it. `forced` is exempt. */
+  let cuedThisBeat = false;
+  function cue(d, why) {
+    if (!d.sfx || typeof sfx !== 'function') return;
+    if (why !== 'forced') {
+      if (cuedThisBeat) return;
+      cuedThisBeat = true;
+    }
+    const c = d.sfx;
+    try { sfx(c.name || 'chime', c.level == null ? 0.3 : c.level, { pitch: c.pitch, bus: c.bus }); }
+    catch (e) { log('setpiece ' + d.key + ' cue refused'); }
+  }
+
   function fireOne(d, ctx, why) {
     const s = st(d.key);
     s.firedRun += 1;
     s.firedPhase += 1;
     s.lastBeat = beatIndex;
     let result;
+    cue(d, why);
     if (d.run) { try { result = d.run(ctx || {}); } catch (e) { log('setpiece ' + d.key + ' threw: ' + (e && e.message)); } }
     return { key: d.key, why, beat: beatIndex, phase, result };
   }
@@ -106,6 +130,7 @@ export function createSetpieceDirector({ rng = Math.random, log = () => {} } = {
    */
   function beat(ctx) {
     beatIndex += 1;
+    cuedThisBeat = false;
     let gateUsed = false;
     const fired = [];
     const order = [...specs.values()];

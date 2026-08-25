@@ -292,7 +292,7 @@ export function createEngine(options = {}) {
   const variantPools = new Map();
   const garnishBag = createGarnishBag(rng);
   const schedule = createRewardSchedule({ seed: seed + '|reward', mode: RewardMode.VariableRatio });
-  const director = createSetpieceDirector({ rng, log: (m) => log(m) });
+  const director = createSetpieceDirector({ rng, log: (m) => log(m), sfx });
 
   /* ---- asset pool (never blocks a draw) ---------------------------------- */
   let pool = null;
@@ -351,8 +351,14 @@ export function createEngine(options = {}) {
   function log(msg) { emit('arcademy-log', { msg: 'engine: ' + msg }); }
   function fx(kind, variant) { emit('arcademy-fx', { kind, variant: variant || null }); }
   function sfxRaw(detail) { emit('arcademy-sfx', detail); }
+  /* W3 P1-17: `extra.pitch` rides through to the mixer the way audio_trigger's
+   * detail already did. Half of the engine's W3 rows are one recipe at two
+   * pitches (the teardown wash under the entrance wash, the hydra's pop over
+   * the plain one), and without this each of them would have had to reach for
+   * sfxRaw and re-do the clamp. The mixer owns the 0.5-2 window. */
   function sfx(name, level, extra) {
     const detail = { name, level: clampIntensity(level == null ? 0.5 : level, capsVec), bus: (extra && extra.bus) || 'fx' };
+    if (extra && extra.pitch != null && Number.isFinite(Number(extra.pitch))) detail.pitch = Number(extra.pitch);
     if (extra && extra.duck) {
       const policy = { voice: 0.4, spotlight: 0.25, voiceUnderSpotlight: 0.15 }[extra.duck];
       if (policy != null) detail.duck = { target: extra.duck, mult: 1 - (1 - policy) * clamp01(channels.duckDepth), ms: 250 };
@@ -667,7 +673,8 @@ export function createEngine(options = {}) {
       // and a claim nobody releases closes the haunting for the whole session.
       seepClear();
       if (layers.root) layers.root.classList.add('ae-suspended');
-      try { sustained.stopAll(true); } catch { /* ignore */ }
+      // W3 P1-17: `quiet` - a panic freeze is the one teardown that says nothing.
+      try { sustained.stopAll(true, true); } catch { /* ignore */ }
       if (subStream.timer) { timers.cancel(subStream.timer); subStream.timer = 0; }
       timers.kill();
       oneshots.reset();
@@ -716,7 +723,11 @@ export function createEngine(options = {}) {
       try { return sustained.warmSpiral(); } catch (e) { log('warm refused: ' + ((e && e.message) || e)); return false; }
     },
     garnish: (o = {}) => applyGarnish(garnishBag.draw(o.avail || ['pink', 'drain', 'spiral', 'sublim']), o.intensity),
-    escapeGuard: (o = {}) => createEscapeGuard(Object.assign({ timers }, o)),
+    /* W3 P0-24: a guard that trips is a blocking effect LETTING GO, and that
+     * is the one beat in the engine the player is relieved by. The guard holds
+     * no ctx, so sfx is threaded in here and at the two internal call sites; it
+     * fires once per trip, never per note(). */
+    escapeGuard: (o = {}) => createEscapeGuard(Object.assign({ timers, sfx }, o)),
     deadBeat,
     channels: () => Object.assign({}, channels),
     visual: () => channelsToVisual(channels),

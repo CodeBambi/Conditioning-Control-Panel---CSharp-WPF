@@ -317,15 +317,17 @@ export function createCpPressure(o) {
     if (typeof eng.stop !== 'function') return;
     try { eng.stop(kind); } catch (e) { /* ignore */ }
   }
-  function cue(name, rung) {
+  function cueAt(name, level, extra) {
     if (!name || !sounds()) return;
     /* deliberately NOT through fire(): that road gates on armed(), and the
      * whole point of the decouple is that a cue does not (W2) */
     count('audio_trigger');
     if (typeof eng.fire !== 'function') return;
-    const level = Math.min(audioCeil, P.CUE_LEVEL_BASE + P.CUE_LEVEL_STEP * rung) * (zen ? 0.6 : 1);
-    try { eng.fire('audio_trigger', { name, level }); } catch (e) { /* a refused cue is not an error */ }
+    const lv = Math.min(audioCeil, level) * (zen ? 0.6 : 1);
+    try { eng.fire('audio_trigger', Object.assign({ name, level: lv }, extra || {})); }
+    catch (e) { /* a refused cue is not an error */ }
   }
+  function cue(name, rung) { cueAt(name, P.CUE_LEVEL_BASE + P.CUE_LEVEL_STEP * rung); }
 
   /* ---- state -------------------------------------------------------------- */
   let started = false; let stopped = false; let paused = false;
@@ -620,11 +622,16 @@ export function createCpPressure(o) {
     retune();
     say('pressure: rung ' + from + ' -> ' + r + ' (frac ' + frac.toFixed(2) + ') on: ' + Array.from(present).join(','));
   }
-  function descend(r) {
+  function descend(r, quiet) {
     if (r >= rung) return;
     const from = rung;
     for (let k = from; k > r; k--) leaveRung(k, r);
     rung = r;
+    /* W3 P1-7: the ladder only ever announced its climb. Coming down is
+     * relief and sounds like it - ONE cue per descend call however many rungs
+     * were shed, half the climb's level and pitched under it. The teardown
+     * walk to zero passes `quiet`: the bell owns that beat. */
+    if (!quiet) cueAt('slide', (P.CUE_LEVEL_BASE + P.CUE_LEVEL_STEP * r) / 2, { pitch: 0.8 });
     retune();
     say('pressure: rung ' + from + ' -> ' + r + ' (fade)');
   }
@@ -644,7 +651,7 @@ export function createCpPressure(o) {
   }
   function everythingOff() {
     cancelHyst();
-    descend(0);
+    descend(0, true);
     if (ringTimer) { cancel(ringTimer); ringTimer = 0; }
     if (flareTimer) { cancel(flareTimer); flareTimer = 0; }
     cls(ring, 'is-hit', false); cls(ring, 'is-deep', false);

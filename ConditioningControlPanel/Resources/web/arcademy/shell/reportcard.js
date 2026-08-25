@@ -211,6 +211,36 @@ export function createReportCard({ ceremonies, seep, toast, log } = {}) {
     }
     put(strip);
 
+    /* W3 P0-29: THE STRIP COUNTS ITSELF OUT. Four grades and the day's XP used
+     * to land in one silent paint, which is the one moment of the night the
+     * player is actually reading numbers. One `pip` per graded class, 160ms
+     * apart and a step higher each time so a run of four reads as a tally, then
+     * a short `clock_tick` roll under the XP total - the adding machine, quiet
+     * enough to stay under the pips. The whole thing is ONE dispatch: `steps`
+     * are scheduled on the mixer's own timeline, so nothing here owns a timer.
+     * Drops bus (this is the payout), and never on a repaint (see `arrived`). */
+    if (s.arrived) {
+      const graded = classes.filter((c) => results[c.gameKey]).length;
+      const xpTotal = classes.reduce((sum, c) => {
+        const r = results[c.gameKey];
+        return sum + ((r && r.xp) ? Math.round(r.xp) : 0);
+      }, 0);
+      if (graded > 0) {
+        const steps = [];
+        for (let i = 1; i < graded; i += 1) {
+          steps.push({ atMs: 160 * i, pitch: 1 + 0.08 * i });
+        }
+        if (xpTotal > 0) {
+          // The roll starts after the last pip and never runs past 600ms.
+          const rollFrom = 160 * (graded - 1) + 240;
+          for (let k = 0; k < 6; k += 1) {
+            steps.push({ atMs: rollFrom + 90 * k, name: 'clock_tick', level: 0.12, pitch: 1 + 0.03 * k });
+          }
+        }
+        sfx('pip', 0.3, { bus: 'drops', steps });
+      }
+    }
+
     /* --- attendance --- */
     const att = el('div', 'arc-classbar');
     const streak = s.streak || { count: 0, perfectDays: 0 };

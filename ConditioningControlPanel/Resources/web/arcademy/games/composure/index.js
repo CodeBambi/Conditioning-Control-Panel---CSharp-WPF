@@ -893,7 +893,14 @@ export default {
        * the one thing the deal must never hand them). */
       if (banking) return false;
       if (busy) {
-        if (PLAYTEST.QUEUE_SLOTS > 0) { queued = { kind, v }; return false; }
+        if (PLAYTEST.QUEUE_SLOTS > 0) {
+          queued = { kind, v };
+          /* W3 P0-10: a press taken into the lock slot is ACCEPTED, not
+           * refused, and it gets its own answer - held, it is coming. The
+           * lock itself is the rate limit. */
+          tick('queue', 0.12);
+          return false;
+        }
         bumpCue();                       // no queue slot to take it: simply refused
         return false;
       }
@@ -954,6 +961,9 @@ export default {
       if (isBack) {
         backtracks += 1;
         lockStreak = 0;
+        /* W3 P2-1: an undo is a move with a direction of its own, so it is
+         * the ordinary slide dropped a whole step. */
+        if (!washOn) tick('slide', 0.16, { pitch: 0.88 });
         if (washOn) {
           thrash += 1;
           deck('casino', 'thrash');
@@ -973,6 +983,9 @@ export default {
         lockStreak += 1;
         bestLockStreak = Math.max(bestLockStreak, lockStreak);
         lastLockAtMs = elapsedMs;
+        /* W3 P1-4: the assist letting go is the player taking the board back.
+         * The false edge only - a lock with no rescue up says nothing. */
+        if (rescueActive) tick('lift', 0.22, { pitch: 1.1 });
         clearHint();
         rescueActive = false;
         deck('casino', 'lock', locked, tileCount(n));
@@ -986,7 +999,9 @@ export default {
       /* 4. the decks see the truth AFTER the ledger moved */
       deck('casino', 'slide', { id: res.id, locked: locked > prevLocked, moves });
       deck('trickster', 'afterSlide');
-      tick('slide', 0.13 + 0.05 * Math.min(1, lockedFrac()), { pitch: 1 + 0.12 * lockedFrac() });
+      /* W3 P1-1: the slide cue is casino.js's alone (it carries heat and the
+       * progress pitch). Two of them on one move was the most frequent sound
+       * in the class, doubled into mush. */
 
       paintHud();
       heat();
@@ -1124,6 +1139,12 @@ export default {
         washOn = false;
         if (stage) stage.removeAttribute('data-wash');
         deck('trickster', 'washOn', false);
+        /* W3 P0-11: the room letting go of the board. The same wash pitched
+         * down is the honest inverse of its arrival, and the beat pressure.js
+         * has always answered to but nobody dispatched clears the haze flare
+         * it would otherwise leave lingering. */
+        tick('wash', 0.18, { pitch: 0.8 });
+        deck('pressure', 'beat', 'unwash');
       });
     }
 
@@ -1333,7 +1354,10 @@ export default {
       try { ctx.ceremonies.stamp({ text: t('cp_stamp_bell', CP_LEX.cp_stamp_bell), tone: 'pink', target: frame }); }
       catch (e) { /* noop */ }
       msg('cp_bell_line', CP_LEX.cp_bell_line);
-      tick('stamp', 0.55);
+      /* W3 P0-3: the bell IS the end of the class, and the stamp lands after
+       * it - the school speaks first and the paperwork follows. */
+      tick('bell', 0.5);
+      after(420, () => tick('stamp', 0.55));
       after(reduced ? PLAYTEST.CEREMONY_MS_REDUCED : PLAYTEST.CEREMONY_MS, () => finish('bell'));
     }
 
@@ -1347,6 +1371,9 @@ export default {
       closing = true;
       banking = false;
       try { if (finishBtn) finishBtn.disabled = true; } catch (e) { /* noop */ }
+      /* W3 P1-4: an ending the player CHOSE is a committed press, not a
+       * silent exit. */
+      tick('commit', 0.4);
       if (boardEl) boardEl.classList.remove('is-dealing');
       stopClock();
       finish('left');
@@ -1500,7 +1527,9 @@ export default {
           bellOn = true;
           deck('casino', 'bell', true);
           msg('cp_bell_warn', CP_LEX.cp_bell_warn, 2200);
-          tick('sting', 0.36);
+          /* W3 P0-3: the warn is the end bell struck softer, one vocabulary
+           * across the school. `bellOn` above is the latch, so it lands once. */
+          tick('bell', 0.3);
         }
         if (elapsedMs >= budgetMs) { stopClock(); run(bell); }
       });

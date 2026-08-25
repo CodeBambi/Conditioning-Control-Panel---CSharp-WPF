@@ -91,6 +91,26 @@ export const GATE_KEY = 'gate';
 /** The document events that snap a walk to its end (attract Law II's list). */
 const SNAP_EVENTS = ['pointerdown', 'pointerup', 'wheel', 'touchstart', 'keydown'];
 
+/* ONE AUDIO DOOR (W3 P0-30, shell/ceremonies.js's pattern verbatim). The walk
+ * had no voice at all: you crossed the whole campus in silence and arrived at a
+ * class without ever having been anywhere. shell/audio.js owns the only audio
+ * node on the page (trap 18), so this is a REQUEST on `document` - guarded like
+ * every other touch in this file, because the pure half must import into node
+ * with no DOM under it. A dropped cue is not an error. */
+function sfx(name, level, extra) {
+  try {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    document.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: Object.assign(
+        { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+        extra || {}
+      ),
+    }));
+  } catch (e) { /* a cue must never be the thing that throws */ }
+}
+
 /* ============================================================================
  * THE PURE HALF - no DOM, node-testable, and the only place the numbers live.
  * ==========================================================================*/
@@ -452,6 +472,25 @@ export function createWalker(o) {
     }
     draw(null);
     paintTrace(r.legs);
+    /* W3 P0-30: ARRIVAL. Two slowing footfalls and the room's air under them,
+     * so the walk lands rather than stopping. A SKIP gets one clipped step -
+     * the player cut the crossing short and the sound is cut with it - and a
+     * walk that was superseded, torn down or never animated says nothing at
+     * all, because nobody arrived anywhere. One dispatch: the follow-ups ride
+     * the mixer's own timeline, so this file owns no cue timer. */
+    if (!still) {
+      if (reason === 'skipped') {
+        sfx('step', 0.05, { pitch: 0.92 });
+      } else if (reason === 'arrived') {
+        sfx('step', 0.07, {
+          pitch: 0.94,
+          steps: [
+            { atMs: 150, pitch: 0.88 },
+            { atMs: 320, name: 'pad', level: 0.08, pitch: 1 },
+          ],
+        });
+      }
+    }
     retire(r);
     if (!r.fired) {
       r.fired = true;
@@ -473,6 +512,20 @@ export function createWalker(o) {
     pos = [at.x, at.y];
     if (at.facing) facing = at.facing;
     draw(t);
+    /* W3 P0-30: THE FOOTFALL, ON THE BOB AND NOT ON THE FRAME. This loop runs
+     * at the frame clock; the bob runs at BOB_MS. A cue per frame would be a
+     * machine gun (trap 110), so it fires on the phase PEAK of the bob - the
+     * top of each half-cycle, at BOB_MS/2 + k*BOB_MS - which is one footfall
+     * per step of the animation and nothing else. Two feet, so the pitch
+     * alternates; quiet, because it is distant lino under a miniature. Reduced
+     * motion never bobs, so it never walks either. */
+    if (!still) {
+      const feet = Math.floor((t + BOB_MS / 2) / BOB_MS);
+      if (feet > r.feet) {
+        r.feet = feet;
+        sfx('step', 0.06, { pitch: (feet % 2) ? 0.96 : 1.04 });
+      }
+    }
     paintTrace(r.legs.slice(0, at.leg + 1).concat([[at.x, at.y]]));
     r.rafId = clock.raf(frame);
     /* No frame clock answered mid-walk. Rather than freeze half way across the
@@ -522,6 +575,8 @@ export function createWalker(o) {
       rafId: 0,
       onDone,
       fired: false,
+      /** How many footfalls this walk has already sounded (W3 P0-30). */
+      feet: 0,
       to: Array.isArray(target) ? 'point' : String(target),
     };
 

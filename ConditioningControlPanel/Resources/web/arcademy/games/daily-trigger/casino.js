@@ -137,6 +137,14 @@ export function createDtCasino(o) {
     set('--dt-n-mq', 'hsl(' + hue.toFixed(0) + ',86%,68%)');
     set('--dt-n-tilt', ((roll('tilt') - 0.5) * 1.6).toFixed(2) + 'deg');
     night = { hue: Math.round(hue), offArc, warm: Math.round(warm) };
+    /* W3 P1-9: a teal night is the rarest thing the room deals just for
+     * showing up, and it used to arrive in total silence. The pad is the room
+     * changing colour, the chime over it is the bonus round announcing
+     * itself. Off-arc only, once, at the deal. */
+    if (offArc && sounds()) {
+      cue('pad', 0.3);
+      timers.after(180, () => { if (sounds()) cue('chime', 0.3, { pitch: 1.25 }); });
+    }
     say('casino: tonight hue ' + night.hue + (offArc ? ' (OFF-ARC night)' : ''));
   }
 

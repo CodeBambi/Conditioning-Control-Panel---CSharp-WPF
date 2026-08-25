@@ -194,6 +194,23 @@ const FRESH_H = 20;
  * PLUMBING
  * -------------------------------------------------------------------------- */
 
+/* ONE AUDIO DOOR (trap 18): shell/audio.js owns the only audio node on the
+ * page, so every sound this room makes is a REQUEST on `document` - the exact
+ * defensive shape shell/ceremonies.js set. A dropped cue is not an error. */
+function sfx(name, level, extra) {
+  try {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    document.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: Object.assign(
+        { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+        extra || {}
+      ),
+    }));
+  } catch (e) { /* a cue must never be the thing that throws */ }
+}
+
 function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -374,24 +391,23 @@ export function createRecordsRoom(caps) {
   scene.setFlag('ajar', ajar);
   mountMiniCork();
 
-  /* THE ROOM TONE IS NOT WIRED, AND THAT IS A DELIBERATE ABSENCE.
-   *
-   * The design asked for an ambient bed under this room - one
-   * `arcademy-sfx {name:'records_bed', level:.12, bus:'fx', loop:true}` on
-   * entry and a `{name:'records_bed', stop:true}` on the way out. THE SFX
-   * CONTRACT CANNOT CARRY IT. `shell/audio.js`'s `onSfx` reads exactly
-   * `{name, level, bus, duck, pitch, url, key, maxMs}` and one control message
-   * (`name:'stop_clips'`); `detail.loop` is read nowhere, and there is no
-   * per-name stop. Every cue it plays is a ONE-SHOT that schedules its own
-   * `stop()` on the audio clock.
-   *
-   * So the bed is not here. Wiring it would mean either a looping node in this
-   * file - which is trap 18, the law that says a room owns no audio node - or
-   * a private timer re-firing a one-shot forever, which is worse. What is
-   * MISSING is a contract: `detail.loop` plus a keyed stop on the
-   * `arcademy-sfx` bus, owned by audio.js. When that lands, the two calls go
-   * here and in destroy(), and nothing else in this file has to move.
-   * TODO(audio.js): `arcademy-sfx` has no loop/stop contract - see above. */
+  /* THE ROOM TONE, WIRED AT LAST (W3 P1-22). This file carried a TODO for two
+   * waves saying the bed could not be built: `arcademy-sfx` had no loop and no
+   * per-name stop, so a room tone meant either an audio node in here (trap 18,
+   * the law that says a room owns no node) or a private timer re-firing a
+   * one-shot forever, which is worse. The HOLD contract closed that gap - a
+   * SAMPLED name with `detail.hold` loops in a keyed slot and `detail.stop`
+   * fades it out - and the two calls landed exactly where the TODO said they
+   * would: here, and in destroy().
+   * Two rules ride with it. EVERY HOLD HAS AN OWNER: destroy() below is this
+   * one's, without exception, and the shell's clearScreen reaches it. And a
+   * bed is SAMPLE-ONLY: with no mp3 shipped the hold is dropped and the room
+   * is silent, which is the honest answer - a synthesised impression of a room
+   * tone is a different room. The `pad` under it is the INTERIM: one breath of
+   * air on the way in, so the door still means something on a build with no
+   * files behind the beds. */
+  sfx('records_bed', 0.25, { bus: 'music', hold: true });
+  sfx('pad', 0.06);
 
   /* ------------------------------------------------------- THE FRESH TAB */
   /* A pink tab on the tray whenever the school has stamped a card since the
@@ -674,6 +690,7 @@ export function createRecordsRoom(caps) {
   function destroy() {
     if (dead) return;
     dead = true;
+    sfx('records_bed', 0.25, { bus: 'music', stop: true });   // W3 P1-22: the bed's owner
     for (let i = 0; i < timers.length; i += 1) { try { clearTimeout(timers[i]); } catch (e) { /* noop */ } }
     timers.length = 0;
     if (book) { try { book.destroy(); } catch (e) { /* noop */ } book = null; }

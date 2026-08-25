@@ -33,7 +33,7 @@ import {
 } from './bank.js';
 import {
   markGuess, isSolved, isNearMiss, hitCount, foldKeyboard, hardModeViolation,
-  layoutRows, autoLayout, cellPlan, HIT,
+  layoutRows, autoLayout, cellPlan, HIT, NEAR,
 } from './board.js';
 import { createLadder, tierStartFor, rungCapFor } from './ladder.js';
 import { createDtCasino } from './casino.js';
@@ -531,6 +531,9 @@ export default {
       const marks = markGuess(guess, entry.answer);
       committed.push({ guess, marks });
       msg('');
+      /* W3 P0-6: the guess is ACCEPTED. Until now only the refusal had a
+       * sound, so the room answered a bad word and ignored a good one. */
+      tick('commit', 0.45);
       revealRow(rowIndex, marks, () => afterReveal(guess, marks));
     }
 
@@ -550,6 +553,9 @@ export default {
           // the pitch ratchet degrades to a level ratchet: the sfx seam carries
           // name/level/bus only (see the build report's shared-layer asks)
           if (m === HIT) { chain += 1; tick('pop', Math.min(0.75, 0.3 + 0.08 * chain), 1 + 0.07 * chain); }
+          /* W3 P1-9: a NEAR is the letter you have in the wrong place - the
+           * hit's own sound dropped a third, never the dead miss tick. */
+          else if (m === NEAR) { chain = 0; tick('pop', 0.22, 0.7); }
           else { chain = 0; tick('blip', 0.16); }
         });
       });
@@ -626,7 +632,10 @@ export default {
       if (ladder) ladder.absorbDressing(jackpot ? 'confetti' : 'petals');
       if (casino) { casino.gold(true); casino.payout(5); }   // the frame goes gold for the absorb
       fx('sub_flash', { text: word, variant: 'centre', voice: true, voiceKey: 'daily-trigger-whisper' });
-      tick(jackpot ? 'jackpot' : 'sting', 0.6);
+      /* W3 P0-5: solving the word is a GUARANTEED win and must always sound
+       * like one. The plain solve gets the same arp a shade under and a hair
+       * flat; the variable-ratio roll then stacks its ceremony over it. */
+      tick('jackpot', jackpot ? 0.6 : 0.55, jackpot ? 1 : 0.95);
       if (jackpot) {
         try { if (ctx.ceremonies) ctx.ceremonies.reward('jackpot', { target: wrap }); }
         catch (e) { say('jackpot ceremony: ' + ((e && e.message) || e)); }
@@ -664,8 +673,17 @@ export default {
          inside the 1400ms voiced-gap floor, so they stay silent - one word said
          once over three visual beats, not three clips stacked. */
       fx('sub_flash', { text: word, variant: 'stamp', voice: true, voiceKey: 'daily-trigger-whisper' });
-      later(reduced ? 0 : 520, () => fx('sub_flash', { text: word, variant: 'centre' }));
-      later(reduced ? 0 : 1100, () => fx('sub_flash', { text: word, variant: 'scatter' }));
+      /* W3 P1-9: three flashes AT you, and two of them were mute. Each echo
+       * gets its own stamp, quieter and lower than the one before - a third
+       * loss in a row is the quietest (owner's error rule). */
+      later(reduced ? 0 : 520, () => {
+        fx('sub_flash', { text: word, variant: 'centre' });
+        tick('stamp_bad', 0.22, 0.92);
+      });
+      later(reduced ? 0 : 1100, () => {
+        fx('sub_flash', { text: word, variant: 'scatter' });
+        tick('stamp_bad', 0.18, 0.85);
+      });
       tick('stamp_bad', 0.25);
       mintStudyHint();
 
@@ -724,6 +742,9 @@ export default {
           ctx.store.mergeGameMeta('daily_trigger', { studyHint: null });
         }
       } catch (e) { /* noop */ }
+      /* W3 P1-9: yesterday's failure handing today a letter is a GIFT, and a
+       * gift arrives out loud. */
+      tick('chime', 0.3, 1.15);
       msg(t('dt_study_hint', 'Study hint: one letter is already in place. It costs you nothing.'));
     }
 
@@ -741,6 +762,8 @@ export default {
         if (done) return;
         done = true;
         ceremonyOpen = false;
+        /* W3 P1-9: the press that puts the card away. */
+        tick('slide', 0.28);
         try { over.remove(); } catch (e) { /* noop */ }
         try { if (typeof window !== 'undefined') window.removeEventListener('keydown', skipKey); }
         catch (e) { /* noop */ }
@@ -1101,6 +1124,7 @@ export default {
           paintHud();                      // the opening rung, now that it exists
 
           startMs = Date.now();
+          let budgetWarned = false;      // W3 P2-2: the warn chip lands once
           const clock = () => {
             if (finished) return;
             if (!paused && !suspended) {
@@ -1112,7 +1136,12 @@ export default {
                 // log line - is exact and never routes through the trickster.
                 const face = trickster ? trickster.clockFace(elapsedSec, budget) : elapsedSec;
                 clockChip.textContent = face + 's';
-                if (elapsedSec >= budget) clockChip.className = 'chip num warn';
+                if (elapsedSec >= budget) {
+                  /* W3 P2-2: the chip going warn is the ONE time signal this
+                   * class has, so it lands once, low, on the transition. */
+                  if (!budgetWarned) { budgetWarned = true; tick('clock_tick', 0.16, 0.9); }
+                  clockChip.className = 'chip num warn';
+                }
               }
             }
             later(1000, clock);
@@ -1191,6 +1220,10 @@ export default {
           n.classList.remove('glitched');
         });
       });
+      /* W3 P1-9: ONE glitch per scramble, not one per keycap. Without it the
+       * glyphs moving under the finger read as a render fault rather than as
+       * something the room did on purpose. */
+      tick('glitch', 0.28);
       say('keycap glyphs glitched (' + list.length + ', ' + (variant || 'pooled') + ') - hitboxes unchanged');
     }
   },

@@ -269,6 +269,33 @@ export function createBoard({ mount, rows, reducedMotion, animate, onSelect, mis
     destroy() { dropCues(); root.remove(); },
   };
 
+  /* W3 P2-11: A ROW THAT WILL NOT TAKE THE PRESS SAYS SO. A class already sat,
+   * or a room the school has shut, renders as a disabled <button> - and a
+   * disabled button dispatches nothing at all, which is why the refusal has to
+   * be caught on the BOARD and hit-tested back to the row rather than bound to
+   * the row itself. Same `bump` at the same 250ms throttle as every other
+   * refused input in the school (the chrome vocabulary, trap 69), and quiet:
+   * refusals are the quietest things in the building. The listener rides
+   * `root`, so destroy() takes it off with the board. */
+  let lastRefuse = 0;
+  try {
+    root.addEventListener('pointerdown', (e) => {
+      if (typeof document === 'undefined' || typeof document.elementFromPoint !== 'function') return;
+      let node = null;
+      try { node = document.elementFromPoint(e.clientX, e.clientY); } catch (err) { return; }
+      while (node && node !== root) {
+        if (String((node.className && node.className.baseVal) || node.className || '')
+          .split(/\s+/).indexOf('brow') >= 0) break;
+        node = node.parentNode;
+      }
+      if (!node || node === root || !node.disabled) return;
+      const now = (typeof Date !== 'undefined' && Date.now) ? Date.now() : 0;
+      if (now && now - lastRefuse < 250) return;
+      lastRefuse = now;
+      sfx('bump', 0.08);
+    });
+  } catch (e) { /* a board without a refusal cue is still a board */ }
+
   build();
   if (mount) mount.appendChild(root);
   if (animate !== false) replay();

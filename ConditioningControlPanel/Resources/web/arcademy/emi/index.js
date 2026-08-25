@@ -366,6 +366,16 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
     /** Her babble (emi/vox.js), once it has loaded. Test/debug handle only. */
     get vox() { return vox; },
 
+    /**
+     * W3 P1-19: WHICH POSE SHE IS WEARING, read-only. The widget already
+     * resolved the mood when it drew the face (`frameForFace`, or the chain's
+     * own `bodyFrame`), so a caller that wants the FEELING of the reaction it
+     * just fired reads it here instead of keeping a second copy of the table.
+     * `emi/moments.js` is the one caller: it hands this straight to
+     * `vox.react()` so a wordless moment sounds like the face it put on.
+     */
+    get bodyFrame() { try { return widget.bodyFrame; } catch (e) { return 'idle'; } },
+
     destroy() {
       try { widget.destroy(); } catch (e) { /* noop */ }
       try { if (asks) asks.destroy(); } catch (e) { /* noop */ }

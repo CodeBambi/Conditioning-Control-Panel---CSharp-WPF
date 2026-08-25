@@ -219,6 +219,10 @@ function onKnock() {
   try { if (knockHint) knockHint.classList.add('is-heard'); } catch (e) { /* noop */ }
   if (!splashIsUp()) return;         // failBoot got there first: nothing to score
   cancelIntroCues();                 // the stitched beats yield to the real bed
+  /* W3 P0-32. The hint says "Knock to enter" and nothing ever knocked. It lands
+   * BEFORE the bed so the bed reads as the door answering, and `knock` falls to
+   * the `door` recipe on a build where the sample has not shipped. */
+  sfx('knock', 0.4);
   strikeBed();
   /* KNOCK_EXIT_MS is now a FLOOR, not the whole wait: a bed that is still
    * playing sends this call straight back to the queue and settleBed re-issues
@@ -753,6 +757,27 @@ let escTimer = 0;
 let escIntentTimer = 0;
 let escHint = null;
 
+/* THE CLOCK UNDER THE HOLD (W3 P0-33, vn/index.js's skip pill verbatim). 1200ms
+ * of nothing is a long time to wonder whether the key was heard, so the reach
+ * for the door counts itself out loud: one soft tick every 250ms, climbing a
+ * step each time, and the door itself on the way out. The first tick is 250ms
+ * in, so a TAP is silent and the ladder's rungs keep their own voices. It stops
+ * three ways - a release, the hold completing, and losing the window. */
+const ESC_TICK_MS = 250;
+let escTickTimer = 0;
+let escTicks = 0;
+
+function stopEscTicks() {
+  if (escTickTimer) { clearTimeout(escTickTimer); escTickTimer = 0; }
+}
+
+function escTick() {
+  escTickTimer = 0;
+  escTicks += 1;
+  sfx('clock_tick', 0.2, { pitch: 1 + 0.08 * escTicks });
+  escTickTimer = setTimeout(escTick, ESC_TICK_MS);
+}
+
 /* EMI, LAZILY AND OPTIONALLY. boot.js knows nothing about the mascot and keeps
  * it that way: the module is only reached for when a hold has actually started,
  * the promise is cached (a failure is permanent silence) and the call is fired
@@ -783,8 +808,14 @@ if (win) {
   win.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape' || e.repeat) return;
     if (escTimer) return;
+    escTicks = 0;
+    escTickTimer = setTimeout(escTick, ESC_TICK_MS);   // W3 P0-33
     escTimer = setTimeout(() => {
       escTimer = 0;
+      stopEscTicks();
+      // W3 P0-33: the hold landed. The school shuts its door behind you, and
+      // the cue goes out before the teardown because nothing may delay an exit.
+      sfx('door', 0.3);
       shutdown('hold-esc');
     }, HOLD_EXIT_MS);
     // EMI SEAM: the hold is past a tap, so the player is leaving the Arcademy.
@@ -800,6 +831,11 @@ if (win) {
     if (!escTimer) return;          // the hold already fired
     clearTimeout(escTimer);
     escTimer = 0;
+    // W3 P0-33: let go part-way and the count-out gets its own answer. A tap
+    // never ticked, so it never sighs either - the rung below keeps that beat.
+    stopEscTicks();
+    if (escTicks > 0) sfx('slide', 0.18, { pitch: 0.9 });
+    escTicks = 0;
     // A tap: walk the ladder one rung.
     let consumed = false;
     try { consumed = !!(shell && shell.escapeStep()); }
@@ -818,6 +854,8 @@ if (win) {
   const cancelEscHold = () => {
     if (escIntentTimer) { clearTimeout(escIntentTimer); escIntentTimer = 0; }
     if (escTimer) { clearTimeout(escTimer); escTimer = 0; }
+    stopEscTicks();                 // W3 P0-33: a lost window ticks no further
+    escTicks = 0;
   };
   win.addEventListener('blur', cancelEscHold);
   if (doc) doc.addEventListener('visibilitychange', () => { if (doc.hidden) cancelEscHold(); });

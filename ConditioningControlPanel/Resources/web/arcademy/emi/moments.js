@@ -212,6 +212,37 @@ export const MOMENTS = Object.freeze({
 const seen = Object.create(null);
 
 /**
+ * W3 P1-19: THE WORDLESS REACTIONS GET A VOICE.
+ *
+ * Fifteen of the rows above are a face and nothing else, and every one of them
+ * landed in silence - which is the one thing a mascot who murmurs at every
+ * LINE cannot afford, because it reads as her only being there when there are
+ * words. `vox.react()` answers with one or two blips in the mood of the pose
+ * she just put on.
+ *
+ * THIS FILE ONLY CALLS IT. The melody, the timbre and the ration all live in
+ * `emi/vox.js` beside `speak`, for the reason trap 70 gives: one stop cuts
+ * everything she can be heard making, and that stop is reached from exactly one
+ * place (widget.js `setBubble(null)`).
+ *
+ * A LINE OUTRANKS IT. If a bubble is up she is already babbling, and a react
+ * over the top would be two EMIs. `emi.saying` is the honest read of that.
+ *
+ * @param {Object} emi   the mounted handle
+ * @param {boolean} ok   did the reaction actually land
+ * @returns {boolean} ok, unchanged - a cue never decides what a moment returns
+ */
+function react(emi, ok) {
+  if (!ok) return false;
+  try {
+    if (emi.saying) return true;
+    const vox = emi.vox;
+    if (vox && typeof vox.react === 'function') vox.react(emi.bodyFrame);
+  } catch (e) { /* a cue may never break a screen transition */ }
+  return true;
+}
+
+/**
  * Fire one moment. Unknown names, an unmounted EMI and a dismissed EMI are all
  * silent no-ops - a call site is one line and never needs a guard.
  * @param {string} name
@@ -253,9 +284,11 @@ export function fireMoment(name, payload) {
       if (!out.line) return false;
       return !!emi.say(out.line, { face: out.face, nod: !!out.nod });
     }
-    if (entry.chain) return !!emi.emote(entry.chain);
+    /* W3 P1-19: the pose is put on FIRST and the blips read it off her, so the
+     * reaction sounds like the face the player is looking at. */
+    if (entry.chain) return react(emi, !!emi.emote(entry.chain));
     if (entry.face) {
-      return !!emi.emote(entry.face, { hold: entry.hold, fx: entry.fx, body: entry.body });
+      return react(emi, !!emi.emote(entry.face, { hold: entry.hold, fx: entry.fx, body: entry.body }));
     }
   } catch (e) { /* a mascot may never break a screen transition */ }
   return false;

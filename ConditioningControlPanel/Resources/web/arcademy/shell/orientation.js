@@ -314,19 +314,25 @@ export function createOrientation(o) {
     catch (e) { say('orientation moment threw: ' + ((e && e.message) || e)); return false; }
   }
 
-  /** ONE stamp-family cue, through the document event shell/audio.js owns
-   *  (trap 18 - this module may not hold an audio node). ceremonies.js's
-   *  grammar, verbatim. */
-  function stampCue() {
+  /** Every cue this module makes, through the document event shell/audio.js
+   *  owns (trap 18 - this module may not hold an audio node). ceremonies.js's
+   *  grammar, verbatim. A dropped cue is not an error. */
+  function sfx(name, level, extra) {
     try {
       if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
       const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
       if (!Ctor) return;
       document.dispatchEvent(new Ctor('arcademy-sfx', {
-        detail: { name: 'stamp', level: 0.6, bus: 'fx' },
+        detail: Object.assign(
+          { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+          extra || {}
+        ),
       }));
     } catch (e) { /* a cue must never be the thing that throws */ }
   }
+
+  /** The stamp on the ID card. The loudest thing Orientation Day has. */
+  function stampCue() { sfx('stamp', 0.6); }
 
   /** The Front Office sign notices you: two blinks, using the sheet's own
    *  `.off` modifier on `.campus-neon`. No new CSS surface (§4). */
@@ -564,10 +570,18 @@ export function createOrientation(o) {
     try { if (card) card.hidden = false; } catch (e) { /* noop */ }
     markInflight(true);
     const flew = flip(card);
+    /* W3 P0-38: THE HANDOVER FLIES. The card crossed the whole stage in silence
+     * and the only sound in the beat was the stamp at the end of it, so the
+     * biggest movement of the night arrived from nowhere. Air on the way out,
+     * the landing under the stamp, and both suppressed when `flip` declined -
+     * a card that never flew must not sound like one that did. Tutorial bus:
+     * this is the school showing a new student how the place works. */
+    if (flew) sfx('whoosh', 0.28, { bus: 'tutorial', pitch: 1.1 });
     at(flew ? FLIP_MS : 0, () => {
       if (state !== 'running') return;
       landCard();
       sheen(card);
+      if (flew) sfx('slide', 0.2, { bus: 'tutorial' });
       stampCue();
       moment('card');
       at(SEND_OFF_MS, complete);

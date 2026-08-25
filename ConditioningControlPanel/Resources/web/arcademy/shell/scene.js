@@ -385,7 +385,10 @@ export function createScene(opts) {
       : t(apron.lexKey || 'rake_back_to_campus', 'Back to campus');
     back.appendChild(el('span', 'arm-slab-text', backText));
     back.setAttribute('aria-label', backText);
-    back.addEventListener('click', goBack);
+    /* W3 P2-11: the slab answers the press. On the BUTTON, never inside
+     * goBack/escapeStep - those are also walked by Esc, and a key that is
+     * already answered elsewhere must not pick up a second voice here. */
+    back.addEventListener('click', function () { sfx('blip', 0.14, { pitch: 0.95 }); goBack(); });
     left.appendChild(back);
     bar.appendChild(left);
     /* The empty right side is not decoration: the two 1fr sides are what hold
@@ -443,7 +446,10 @@ export function createScene(opts) {
   /* The pill runs the SAME fold Esc runs: a panel opened over a close-up is
    * the thing one press ago, so it closes first. At the wide shot escapeStep
    * answers false and does nothing - and the pill is not up there anyway. */
-  backPill.addEventListener('click', function () { escapeStep(); });
+  backPill.addEventListener('click', function () {
+    sfx('blip', 0.14, { pitch: 0.95 });   // W3 P2-11: on the button, not the rung
+    escapeStep();
+  });
   let backUp = false;
   function backVisible(show) {
     const want = !!show;
@@ -1077,7 +1083,13 @@ export function createScene(opts) {
     /* ...and the pill is the other half of the same law: the band and the pill
      * are never both up, and never both away. */
     backVisible(name !== 'wide');
-    if (prevName) sfx(back ? 'door' : 'blip', back ? 0.3 : 0.16, back ? null : { pitch: 1.05 });
+    /* W3 P1-24: A CAMERA MOVE IS AIR, NOT A DOOR. Pushing in played a `blip`
+     * (a digital tick for a lens moving) and stepping back played a full
+     * `door` thump - for a shot change inside one room, with no door in it.
+     * `door` is reserved for real doors now. Same whoosh both ways, pitched up
+     * on the way in and down on the way out, quieter going back because
+     * leaving a close-up is a smaller gesture than committing to one. */
+    if (prevName) sfx('whoosh', back ? 0.12 : 0.16, { pitch: back ? 0.85 : 1.2 });
     /* Keyboard keeps its place: the room's own verb takes focus once the node
      * is in the document (a fresh node ignores focus() in some engines). */
     later(function () {

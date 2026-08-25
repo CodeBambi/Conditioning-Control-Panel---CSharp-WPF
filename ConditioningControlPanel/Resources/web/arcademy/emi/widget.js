@@ -334,6 +334,31 @@ function readAskState(raw) {
   return out;
 }
 
+/* ----------------------------------------------------------------------------
+ * W3 "EVERY INPUT ANSWERED" (2026-08-25): SHE ANSWERS A TOUCH NOW.
+ *
+ * Picking her up, putting her down, patting her and the ask strip coming up
+ * were all silent, which is the one gap the wave is named after: a press that
+ * makes no sound reads as a press the page did not get.
+ *
+ * `shell/audio.js` holds the only audio node on the page (trap 18), so this is
+ * a REQUEST on `document` and never a sound - the same defensive shape
+ * `emi/fieldtrips.js` and `shell/ceremonies.js` already use, and a dropped cue
+ * is not an error. Everything fired from this file rides the VOICE bus and sits
+ * at or under her Blipese (`emi_blip` goes out at .10, and the loudest touch
+ * cue is a .16 thud), because the mascot is never the loudest thing on screen.
+ * -------------------------------------------------------------------------- */
+function sfx(name, level, pitch) {
+  try {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    document.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: { name: String(name || 'blip'), level: Number(level) || 0.1, bus: 'voice', pitch },
+    }));
+  } catch (e) { /* a cue must never be the thing that throws */ }
+}
+
 /* ============================================================================
  * createWidget
  * ==========================================================================*/
@@ -1262,6 +1287,11 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     askSpot = null;
     stats.drags += 1;
     touchSeen();
+    /* W3 P1-19: SHE IS OFF THE GROUND. A soft pad up a tone - the lightest cue
+     * in the file, because a lift is a beginning and the drop is the event. It
+     * fires on the DRAG, never on the press: a tap that never travelled is a
+     * pet and already has its own answer. */
+    sfx('pad', 0.08, 1.2);
     el.classList.add('dragging');
     // The reaction is a raw face, not a chain: a chain would fight the next
     // frame of movement. A live SAY keeps the glass (law 3).
@@ -1348,6 +1378,12 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       clearDangle(false);
       const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { left: 0, top: 0 };
       commit(r.left, r.top);
+      /* W3 P1-19: SHE LANDS. The body move here is already NAMED `thud` for a
+       * throw and `bounce` for a set-down, so the ear gets the same two things:
+       * a low sawtooth knock pitched down for the fling, a lighter one for the
+       * ordinary drop. It rides the DROP and not the animation, so a reduced-
+       * motion player - who gets no move at all - still hears her land. */
+      sfx(wasFling ? 'thud' : 'bump', wasFling ? 0.16 : 0.12, wasFling ? 0.8 : 1);
       if (wasFling) stats.flings += 1;
       // SETTLE: ^_^ for a beat, then back to resting. The landing move is the
       // playbook's BOUNCE, or a THUD when she was thrown.
@@ -1414,6 +1450,12 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     if (takeoverAtePet()) return;
     stats.pets += 1;
     touchSeen();
+    /* W3 P1-19: EVERY PAT IS ANSWERED, INCLUDING THE COOLED ONE. A small pop,
+     * under the drop cues, on the guaranteed floor - the third pat then STACKS
+     * its chime over the top of this rather than replacing it, which is the
+     * reward rule the plan writes down (a payoff never removes the answer the
+     * input already earned). */
+    sfx('pop', 0.08, 1);
     const t = nowMs();
     if (t < petCooldownUntil) {
       // Spam guard: she still notices you, she just does not do the whole show.
@@ -1429,6 +1471,10 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       petTimes = [];
       petCooldownUntil = t + DIALS.PET_COOLDOWN_MS;
       stats.petStreaks3 += 1;
+      /* W3 P1-19: ...and the THIRD one pays. A clean bell over the pop above:
+       * the rarest sound she makes for a touch, and the only one a player can
+       * work out how to earn. */
+      sfx('chime', 0.14, 1);
       // THE LOCK SAYS THE THIRD PET LANDS ON (≧◡≦) - that is `glee`, not
       // `love` (which ends on the lovestruck kaomoji and is a different beat).
       /* THE POSE IS THE PET ONE, not the ceremony one. `glee` is shared: it is
@@ -2195,6 +2241,12 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
 
   function fireChip(i, text) {
     if (!askLive) return;
+    /* W3 P0-35: THE ANSWER IS HEARD. A chip press moved a real decision (a06's
+     * seat, a14's name) and answered nothing at all. One pop, on the press, so
+     * it lands before the strip starts leaving. Every route in - the chip, the
+     * Send button, the Enter key and the suite's `pick()` - comes through here,
+     * which is why the cue is here and not on the buttons. */
+    sfx('pop', 0.12, 1);
     const cb = askLive.onChip;
     try { cb(Math.max(0, i | 0), typeof text === 'string' ? text : ''); }
     catch (e) { /* a chip may never break a screen transition */ }
@@ -2281,6 +2333,12 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       };
       askLift();
       el.classList.add('ask-up');
+      /* W3 P0-35: SHE IS WAITING FOR YOU NOW. The strip arrives STRIP_LEAD_MS
+       * after the question, so it is a second event and it needs a second
+       * sound - one blip of her own voice, up a tone and a half from resting,
+       * which reads as the question mark the line already ended on. Deliberately
+       * `emi_blip` and not a piece of chrome: an ask is EMI asking. */
+      sfx('emi_blip', 0.10, 1.15);
       clampAskStrip();
       /* FOCUS THE FIELD, NEVER A CHIP. Stealing focus onto a button would put
        * a school-wide Enter on EMI; the field is the one place a keystroke is

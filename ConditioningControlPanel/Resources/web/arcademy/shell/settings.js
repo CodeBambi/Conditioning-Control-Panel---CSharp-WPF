@@ -309,6 +309,25 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
     }, PREVIEW_DEBOUNCE_MS);
   }
 
+  /* THE SHEET'S OWN VOICE (W3 P0-34 / P1-23). Same defensive dispatch as the
+   * preview above, minus the debounce: these are one-per-press answers, not a
+   * slider being swept. TUTORIAL bus, because a settings page is the school
+   * explaining itself, and quiet by construction - chrome is never the loudest
+   * thing on a screen. A dropped cue is not an error. */
+  function sfx(name, level, extra) {
+    try {
+      if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+      const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+      if (!Ctor) return;
+      document.dispatchEvent(new Ctor('arcademy-sfx', {
+        detail: Object.assign(
+          { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'tutorial' },
+          extra || {}
+        ),
+      }));
+    } catch (e) { /* a cue must never be the thing that throws */ }
+  }
+
   /* ---------------------- row builders --------------------------------- */
   function sliderRow({ key, label, hint, value, min, max, step, fmt }) {
     const row = el('div', 'arc-row');
@@ -439,8 +458,11 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
       const res = keybinds.bind(gameKey, slot.verb, e.code || e.key);
       if (res.ok) {
         msg.textContent = '';
+        sfx('commit', 0.25);        // W3 P1-23: the key is yours now
         paintCap();
       } else {
+        // W3 P1-23: refused, and refusals are quiet (owner's standing rule).
+        sfx('bump', 0.08);
         const r = res.conflict && res.conflict.reason;
         msg.textContent = r === 'panic' ? ' - that is the panic key'
           : r === 'taken' ? ' - already bound to ' + res.conflict.with
@@ -452,6 +474,9 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
     cap.addEventListener('click', () => {
       if (capturing) { stop(); paintCap(); return; }
       capturing = true;
+      // W3 P1-23: ARMED. The cap is listening, and a cap that is listening has
+      // to say so - the glyph swaps to "press a key" and nothing else changes.
+      sfx('tell', 0.2, { pitch: 1.1 });
       cap.classList.add('capturing');
       cap.classList.add('wide');
       cap.textContent = 'press a key';
@@ -1403,6 +1428,15 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
       catch (e) { say('settings echo ' + key + ' failed: ' + ((e && e.message) || e)); }
       if (mine && typeof key === 'string' && key.indexOf('audioLevels.') === 0) {
         previewBusLevel(key.slice('audioLevels.'.length));
+      } else if (mine) {
+        /* W3 P0-34: EVERY OTHER CONTROL LANDS TOO. The mixer sliders have had
+         * their preview since AV CLUB and every other row on the sheet - the
+         * toggles, the enums, the per-game dials - moved in total silence, so
+         * the one page in the school that is nothing but input answered none
+         * of it. Same law as the preview and for the same reason (trap 88): it
+         * rides the ECHO, and only OUR echo, so a host-initiated push never
+         * beeps at a player who touched nothing. Up for on, down for off. */
+        sfx('tell', 0.22, { pitch: value ? 1.08 : 0.92 });
       }
     },
     /** Current per-game values as a game sees them (see shell.js ctx.settings). */

@@ -196,6 +196,11 @@ export function mountMailChip(parentEl, o) {
     catch (e) { /* a bad handler must not brick the chrome */ }
   });
 
+  /** The last unread count this chip PAINTED, so the arrival cue below can be
+   *  an edge and not a state (W3 P1-18). `null` until the first paint: a chip
+   *  that mounts with three letters in the box has not just received three. */
+  let lastUnread = null;
+
   /**
    * Repaint the counts.
    * @param {Object|number=} next  {unread, total}, or just an unread number.
@@ -220,6 +225,14 @@ export function mountMailChip(parentEl, o) {
     // An empty box has no chip at all: nothing has ever arrived, so there is
     // nothing to advertise (and no lie about a room that is not open yet).
     root.hidden = total <= 0;
+    /* W3 P1-18: YOU'VE GOT MAIL. Strictly an EDGE - the count going UP, never
+     * the count being high - because `update` is called on every repaint and a
+     * cue on the state would post the same letter through the door all night.
+     * `mail_drop` falls to `flap` where the sample has not shipped. */
+    if (lastUnread != null && unread > lastUnread && !root.hidden) {
+      sfx('mail_drop', 0.16, { pitch: 0.9 });
+    }
+    lastUnread = unread;
   }
 
   update();

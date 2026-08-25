@@ -383,6 +383,20 @@ export default {
         return deckEngine.fire('audio_trigger', Object.assign({ name, level: lv }, extra || {}));
       },
     };
+
+    /**
+     * W3 P0-20 - THE DOOR'S CUE. setup.js runs BEFORE the class exists, and
+     * `halted()` is true while `S` is null, so deckEngine.audio() would have
+     * swallowed every cue the door fired. This is the same road with the same
+     * ceiling (tier 1's, since no tier is dealt yet) and the same one owner -
+     * setup.js is handed this closure, holds no node and imports no mixer.
+     */
+    function doorCue(name, level, extra) {
+      if (destroyed || !ctx.engine || typeof ctx.engine.fire !== 'function') return;
+      const lv = Math.min(audioCeil(), level == null ? 0.4 : Number(level) || 0);
+      try { ctx.engine.fire('audio_trigger', Object.assign({ name, level: lv }, extra || {})); }
+      catch (e) { /* a cue never takes the door down */ }
+    }
     const deckTimers = {
       after(ms, fn) { return timers.after(ms, () => { if (halted()) return; fn(); }); },
       every(ms, fn) { return timers.every(ms, () => { if (halted()) return; fn(); }); },
@@ -608,6 +622,7 @@ export default {
         try {
           door = createSetupDoor({
             ctx, t, mount: ctx.root, existing, assets: ctx.assets, onPlay, onLeave,
+            cue: doorCue,                     // W3 P0-20: the door's one road to sound
           }) || null;
         } catch (e) {
           say('the door refused to open (' + ((e && e.message) || e) + ') - QUICK SORT');
@@ -1226,6 +1241,12 @@ export default {
       setAttr(S.nodes.stage, 'data-chase', S.rung >= 6 ? '1' : '0');
       if (top.ring) top.ring.set(1, 'fresh');
       if (S.swipe) S.swipe.enabled(true);
+      /* W3 P1-15: the GO of every beat in this class. The ring lights, the hand
+       * comes up, and it happened in silence; `tell` is the house's "look at
+       * this" and it climbs with the rung, because a deeper rung is a shorter
+       * ring and the beat matters more. */
+      cue('tell', Math.min(0.3, 0.2 + 0.012 * S.rung));
+      armCountdown();                 // W3 P0-2: a fresh ring, a fresh count
       timers.cancel(S.ringTimer);
       S.ringTimer = timers.every(reduced ? RING_TICK_MS_REDUCED : RING_TICK_MS, ringTick);
       /* THE NODE RIDES THE DEAL (LOT D). A deck that dresses the top card -
@@ -1241,11 +1262,13 @@ export default {
       const elapsed = now() - S.ringStart;
       const v = verdictFor(elapsed, S.ringMs);
       if (top.ring) top.ring.set(1 - Math.min(1, elapsed / S.ringMs), v.just ? 'just' : v.perfect ? 'ripe' : 'fresh');
+      countdown(S.ringMs - elapsed, S.ringMs);   // W3 P0-2, on the second, not the tick
       if (elapsed >= S.ringMs) onPass();
     }
     function disarm() {
       if (!S) return;
       S.armed = false;
+      armCountdown();                 // W3 P0-2: the window is gone, so is its count
       timers.cancel(S.ringTimer);
       S.ringTimer = 0;
       if (S.swipe) S.swipe.enabled(false);
@@ -1285,7 +1308,10 @@ export default {
         if (v.just) S.just += 1;
         beat.chain = S.chain;
         beat.rung = S.rung;
-        cue('bubble_pop', 0.42, { pitch: chimePitch(Math.min(CHAIN.CHIME_CAP, S.chain)) });
+        /* W3 P1-15: a card is not a bubble. The verb of this room is filing,
+         * so the clean sort is the sound of paper being swept off a stack; the
+         * chain ladder rides it unchanged, which is the part that was right. */
+        cue('slide', 0.42, { pitch: chimePitch(Math.min(CHAIN.CHIME_CAP, S.chain)) });
         if (v.just) verdictWord(t('sort_just', 'JUST'), 'gold');
         else if (v.perfect) verdictWord(t('sort_perfect', 'PERFECT'), 'gold');
         if (step.rungUp) onRungUp(step.from, step.rung);
@@ -1414,6 +1440,43 @@ export default {
     }
     function cue(name, level, extra) { deckEngine.audio(name, level, extra); }
 
+    /**
+     * W3 P0-2 - THE COUNTDOWN CONVENTION. The ring drains on RING_TICK_MS and
+     * the ear wants a SECOND, so the cue is gated on the ceil'd seconds value
+     * changing, it only speaks inside the last third of the ring (or its last
+     * three seconds, whichever is shorter), and the pitch climbs a step a tick
+     * so a run reads as a run. armCountdown() is the disarm and disarm() calls
+     * it, which is what keeps a countdown from outliving its window (trap 110).
+     */
+    let cdSec = -1;
+    let cdN = 0;
+    function armCountdown() { cdSec = -1; cdN = 0; }
+    function countdown(msLeft, totalMs) {
+      const s = Math.ceil(Math.max(0, msLeft) / 1000);
+      if (s === cdSec) return;
+      cdSec = s;
+      if (s <= 0) return;
+      /* THE LAST THIRD OR THE LAST THREE SECONDS, WHICHEVER IS SHORTER. A
+       * 6s window ticks twice; a 2.4s ring ticks once, at the end; a class
+       * clock would tick three times and no more. Taking the LONGER of the
+       * two would have made Sort's 750ms ring tick from the frame it armed,
+       * which is a metronome, not a countdown. */
+      if (msLeft > Math.min(3000, (Number(totalMs) || 0) / 3)) return;
+      cue('clock_tick', Math.min(0.18, 0.1 + cdN * 0.02), { pitch: 1 + 0.06 * cdN });
+      cdN += 1;
+    }
+
+    /** W3 P1-15 - the rubber band, throttled the way every refusal in the
+     *  school is. A hand that keeps testing the threshold gets one answer, not
+     *  a stutter of them. */
+    let lastBandAt = 0;
+    function bandRefused() {
+      const at = now();
+      if (at - lastBandAt < 250) return;
+      lastBandAt = at;
+      cue('bump', 0.15);   /* owner 2026-08-24: error cues -50% */
+    }
+
     /* ------------------------------------------------------------- the fly */
     function flyOut(live, dir, wrong) {
       if (!live) return;
@@ -1440,6 +1503,9 @@ export default {
       setVar(live.node, '--sort-tilt', (dir === 'right' ? SWIPE.TILT_CAP : -SWIPE.TILT_CAP) + 'deg');
       setVar(live.node, '--sort-a-yes', dir === 'right' ? '1' : '0');
       setVar(live.node, '--sort-a-no', dir === 'left' ? '1' : '0');
+      /* W3 P0-19: the FLIGHT. Quiet - it is the travel between the verdict and
+       * the landing, and the landing is the loud half. */
+      cue('paper', 0.2);
       const card = live.card;
       const flyMs = reduced ? SWIPE.FADE_MS : SWIPE.FLY_MS;
       const shrinkMs = reduced ? 0 : SWIPE.SHRINK_MS;
@@ -1450,7 +1516,13 @@ export default {
         try { if (S.wall) tile = S.wall.land(card, { wrong: !!wrong }) || null; } catch (e) { /* noop */ }
         /* THE THUD, as an event. The wall slot is where the casino's BANK
          * token leaves from and where the surge's shudder is felt, and only
-         * this callback knows which tile the card actually landed in. */
+         * this callback knows which tile the card actually landed in.
+         * W3 P0-19: and now as a SOUND. This file has called it the thud since
+         * it was written and it never made one. Per instance and deliberately
+         * unthrottled - it is the verb of the room, and a room whose verb is
+         * rate-limited feels broken. Level by rung (a deeper wall is a heavier
+         * landing), pitch by side, gently: the side is a hint, not a klaxon. */
+        cue('thud', Math.min(0.5, 0.3 + 0.025 * S.rung), { pitch: dir === 'right' ? 1.08 : 0.92 });
         bus.emit('land', { card, tile, dir, wrong: !!wrong });
       });
     }
@@ -1485,10 +1557,18 @@ export default {
       }
       setVar(n.ladder, '--sort-ladder', String(ladderFrac(S.chain, S.rung, S.rungCap).toFixed(3)));
     }
+    const BELL_WARN_MS = 20000;
     function paintClock() {
       if (!S || !S.nodes || !S.nodes.chipClock) return;
       const left = Math.max(0, S.budgetMs - (now() - S.startedAt));
       S.nodes.chipClock.set(clockFace(left));
+      /* W3 P0-3: this room had NO warning branch at all - the only class in the
+       * school where the clock ran out without a word first. Twenty seconds
+       * out, one quiet strike of the same bell that ends it. Once a class. */
+      if (S.budgetMs > 0 && !S.bellWarned && left > 0 && left <= BELL_WARN_MS) {
+        S.bellWarned = true;
+        cue('bell', 0.3);
+      }
       if (S.budgetMs > 0 && left <= 0) bell();
     }
     /* HEAT IS A RATIO, NOT A STOPWATCH: `progress` is elapsed over the class's
@@ -1572,6 +1652,11 @@ export default {
         const dismiss = () => {
           if (done || !S) return;
           done = true;
+          /* W3 P0-20: the GO of a one-page sheet IS the start press of the
+           * class (trap 69's chrome vocabulary), and it is the only cue the
+           * sheet gets - a turn cue as well would be two sounds for one
+           * gesture. */
+          cue('lift', 0.5);
           const list = howtoSeenTiers();
           if (list.indexOf(S.gradeTier) < 0) { list.push(S.gradeTier); mergeMeta({ howtoTiers: list }); }
           try { veil.remove(); } catch (e) { /* noop */ }
@@ -1621,6 +1706,10 @@ export default {
         heat: 0.2,
         armed: false, pendingArm: false, ringMs: ringMsFor(0), ringStart: 0, ringTimer: 0,
         clockTimer: 0, autoTimer: 0,
+        /* W3: the two latches the sound needs. `dragSide` is the stamp
+           crossing's memory (P1-15) and `bellWarned` the T-20s warning's
+           once-a-class gate (P0-3). Neither is ever read by the ledger. */
+        dragSide: '', bellWarned: false,
         startedAt: now(),
         frozenAt: 0, frozenElapsed: 0,
         paused: false, suspended: false, over: false, submitted: false,
@@ -1658,6 +1747,7 @@ export default {
           if (!S || !S.armed) return;
           const top = S.live[0];
           if (top) addCls(top.node, 'is-held');
+          S.dragSide = '';                      // W3 P1-15: a fresh hand, no side yet
           bus.emit('grab', { card: top ? top.card : null, rung: S.rung });
         },
         onDrag: (d) => {
@@ -1673,6 +1763,14 @@ export default {
           setVar(top.node, '--sort-tilt', d.tilt.toFixed(2) + 'deg');
           setVar(top.node, '--sort-a-yes', d.side === 'right' ? d.alpha.toFixed(3) : '0');
           setVar(top.node, '--sort-a-no', d.side === 'left' ? d.alpha.toFixed(3) : '0');
+          /* W3 P1-15: THE CROSSING. The stamp fades in with the lean, and the
+           * moment it picks a side is the moment the hand has said something.
+           * Latched on the side CHANGING, so a drag that hovers on one side is
+           * one blip and not a stream of them - the drag runs per pointermove. */
+          if (d.side !== S.dragSide) {
+            S.dragSide = d.side;
+            if (d.side) cue('blip', 0.12, { pitch: d.side === 'right' ? 1.2 : 0.8 });
+          }
           bus.emit('drag', { dx: d.dx, side: d.side, alpha: d.alpha, card: top.card });
         },
         onRelease: (r) => {
@@ -1680,9 +1778,13 @@ export default {
           const top = S.live[0];
           if (!top) return;
           delCls(top.node, 'is-held');
+          S.dragSide = '';                      // W3 P1-15: the lean is over
           if (r.commit) return;
           /* THE RUBBER BAND: under both the threshold and the fling, home in
-           * 260ms. The class is unchanged; a look is not a swipe. */
+           * 260ms. The class is unchanged; a look is not a swipe.
+           * W3 P1-15: and it is ANSWERED now. A swipe that did not reach the
+           * threshold is a refused input, so it gets the school's refusal. */
+          bandRefused();
           addCls(top.node, 'is-band');
           setVar(top.node, '--sort-dx', '0px');
           setVar(top.node, '--sort-tilt', '0deg');
@@ -1833,9 +1935,15 @@ export default {
     function bell() {
       if (!S || S.over) return;
       S.over = true;
+      S.bellWarned = true;
       disarm();
       timers.cancel(S.clockTimer);
       S.clockTimer = 0;
+      /* W3 P0-3: the bell itself, at full weight. The stamp is not doubled up
+       * behind it here the way it was in the other two classes - this room's
+       * grade lands on the ticket a whole BLEED_MS later, which is already the
+       * pause the convention asks for. */
+      cue('bell', 0.5);
       decksCall('end');
       /* THE WALL TAKES THE STAGE for three seconds before anything is said
        * about it. What you sorted is the last thing the room shows you. */

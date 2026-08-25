@@ -108,10 +108,13 @@ export const ENROLL_LEX = Object.freeze({
  * shell/ceremonies.js sfx() set. A dropped cue is not an error.
  * -------------------------------------------------------------------------- */
 /* The three cues below belong to THE INTRO - the once-ever flavour cards and
- * the moment they hand the class over. THE CEREMONY further down is deliberately
- * left alone: punchcard.js thud() already sounds every hole and the unlock beat
- * (trap 67's precedent), and a second cue on top of a hole that is already
- * knocking is the double this wave exists to avoid.
+ * the moment they hand the class over. THE CEREMONY further down still leaves
+ * the HOLES alone: punchcard.js thud() sounds every one of them and the unlock
+ * beat too (trap 67's precedent), and a second cue on top of a hole that is
+ * already knocking is the double this wave exists to avoid. W3 P0-39 adds two
+ * beats AROUND that, not over it - the stage arriving, and the payout 320ms
+ * behind the tenth thud, which is the one hole in ten days that is not just
+ * another hole.
  */
 function sfx(name, level, extra) {
   try {
@@ -307,9 +310,11 @@ export function createEnrollmentIntro(o) {
   function next() {
     if (page >= pages.length - 1) { finish('read', true); return; }
     page += 1;
-    // The turn between two cards. Pitched a touch up so it reads as forward
-    // motion rather than as the class's own UI answering.
-    sfx('blip', 0.2, { pitch: 1.05 });
+    /* The turn between two cards. W3 P2-11: it was a `blip` - a digital tick
+     * under a piece of card being physically turned over. Paper turns like
+     * paper, and the pitch keeps it reading as forward motion rather than as
+     * the class's own UI answering. */
+    sfx('paper', 0.2, { pitch: 1.05 });
     paint();
   }
 
@@ -383,6 +388,9 @@ export function createPunchCeremony(o) {
   const timers = new Set();
   let destroyed = false;
   let punchedDone = false;
+  /** The unlock pays ONCE (W3 P0-39). Both the schedule and a late reconcile
+   *  can reach unlockBeat, and a ten-day arc does not get to land twice. */
+  let unlockSounded = false;
 
   function later(fn, ms) {
     const id = setTimeout(() => {
@@ -450,6 +458,17 @@ export function createPunchCeremony(o) {
     // panel below carries the sentence. Neither invents the other's copy.
     face.markComplete(unlockedAt || card.unlockedAt);
     thud(THUD_PITCH.unlock);
+    /* W3 P0-39: TEN DAYS END ON MORE THAN A HOLE. The tenth punch used to be
+     * the same thud as the second, which made the rarest beat in the building
+     * sound exactly like an ordinary Tuesday. The thud stays - it is the hole
+     * landing - and 320ms behind it the room pays out, with everything else
+     * ducked under it so nothing argues. Drops bus, and once ever. */
+    if (!unlockSounded) {
+      unlockSounded = true;
+      later(() => {
+        sfx('jackpot', 0.75, { bus: 'drops', duck: { target: 'spotlight', mult: 0.25, ms: 600 } });
+      }, 320);
+    }
     // The panel carries the unlock line; the dialogue line deliberately does NOT
     // repeat it. Printing the same sentence twice, one above the other, is what
     // the first capture did and it read as a rendering bug.
@@ -533,6 +552,10 @@ export function createPunchCeremony(o) {
   };
 
   s.mount.appendChild(root);
+  /* W3 P0-39: THE CARD ARRIVES. Fired after the mount, like the intro's own
+   * paper cue, so a stage that never mounted is silent. Air only - the holes
+   * below do the knocking. Drops bus, with the payout it is the front of. */
+  sfx('whoosh', 0.22, { bus: 'drops' });
   focusSoon(done);
   schedule();
   return api;
