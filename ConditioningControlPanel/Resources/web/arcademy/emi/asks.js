@@ -49,17 +49,21 @@
  *   5. ONE ASK A SITTING. Session-local on purpose: banking it would make a
  *      reload the way to farm a second one.
  *
- * ANY PRESS CANCELS, AND CANCELLING IS FREE. A pointerdown or a keypress that
- * is not the strip's own ends the ask as `ignored` and spends NO cadence - the
- * player was doing something else, and charging them three sessions for that
- * would be the feature punishing them for playing the game. Touch always wins
- * (trap 75's law, one level up).
+ * A PRESS NO LONGER CANCELS (owner, 2026-08-25: "keep the prompt there till we
+ * respond - if we click elsewhere or on emi we trigger a new bark and we lose
+ * it"). The question WAITS: clicking the campus, petting her, dragging her,
+ * even wandering off the screen leaves the strip standing, and the glass hold
+ * (`askOwnsGlass`) keeps every bark parked until it comes down. Exactly four
+ * things end an unanswered ask, each one deliberate: a chip, the Esc key, a
+ * screen that kills her (`hide`/`gone`), and `classStart` - a strip may never
+ * sit over a live board (trap 59/97). All four spend NO cadence and the
+ * interrupted ones come back (`rememberReask`).
  *
- * THE LISTENERS ARE TRAP 80's SHAPE. `document` pointerdown + keydown, both
- * `{passive:true}`, both in the BUBBLE phase, neither ever calling
- * `preventDefault` or `stopPropagation`, both removed on `destroy()`. EMI adds
- * no rung to the Esc ladder here either: Esc dismisses the ask on its way past
- * and the ladder never notices.
+ * THE ONE LISTENER LEFT IS TRAP 80's SHAPE. `document` keydown, `{passive:
+ * true}`, BUBBLE phase, never `preventDefault` or `stopPropagation`, removed
+ * on `destroy()`. The pointerdown listener is GONE with the rule that needed
+ * it. EMI adds no rung to the Esc ladder: Esc dismisses the ask on its way
+ * past and the ladder never notices.
  *
  * INPUT TRUST (trap 59). `#arc-emi` is `pointer-events:none` and exactly two
  * nodes turned it back on. The chips are the THIRD, and they are the only new
@@ -87,8 +91,8 @@ export const ASK_DIALS = Object.freeze({
    * need to keep the bubble in sight till we respond"). Zero is not "expire
    * immediately", it is NO AUTO-HIDE: the question and its chips stay on the
    * glass until they are answered or dismissed, and the player can never be
-   * trapped by that because ANY press anywhere is a free dismiss (see the
-   * header). It was 40000 through the EMI ASKS wave. */
+   * trapped by that because Esc is a free dismiss and an answer is two chips
+   * away (see the header). It was 40000 through the EMI ASKS wave. */
   GIVE_UP_MS: 0,
   /* ...WITH ONE CARVE-OUT, AND IT IS TRAP 97's. A dare is offered on
    * `classStart`, one beat before a board takes input; a strip that sat there
@@ -721,25 +725,12 @@ export function createAsks(o = {}) {
     return true;
   }
 
-  /* ---------------------- any press cancels ----------------------------- */
+  /* ---------------------- the keyboard ---------------------------------- */
   /* TRAP 80's SHAPE, one level up: passive, bubble phase, no preventDefault,
-   * no stopPropagation, never a rung on the Esc ladder. A press that lands on
-   * the strip itself is the ANSWER and is left alone; anything else ends the
-   * ask as ignored and spends NO cadence. */
-  function insideStrip(target) {
-    try {
-      if (!live || !live.strip || !live.strip.el || !target) return false;
-      const el = live.strip.el;
-      if (target === el) return true;
-      return !!(el.contains && el.contains(target));
-    } catch (e) { return false; }
-  }
-
-  const onDocDown = (ev) => {
-    if (!live) return;
-    if (insideStrip(ev && ev.target)) return;
-    ignored(live.ask, live.ctx, { noSpend: true });
-  };
+   * no stopPropagation, never a rung on the Esc ladder. Until 2026-08-25 ANY
+   * press or stray key was a dismiss; now the question waits (see the header)
+   * and the keyboard keeps exactly three verbs: the chip shortcuts, the name
+   * field's own keys, and Esc - the one deliberate "not now". */
   const onDocKey = (ev) => {
     if (!live || !ev) return;
     const k = String(ev.key || '');
@@ -749,36 +740,31 @@ export function createAsks(o = {}) {
      * on the last keystroke. A question with a keyboard has no chip shortcuts;
      * it has a field, a Send button and Enter. */
     if (live.ask && live.ask.input) {
-      if (k === 'Tab' || k === 'Enter' || k === ' ') return;
-      if (k.length === 1) return;                            // typing a name
-      if (k === 'Backspace' || k === 'Delete') return;
-      if (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'Home' || k === 'End') return;
-      ignored(live.ask, live.ctx, { noSpend: true });
-      return;
+      if (k === 'Escape') ignored(live.ask, live.ctx, { noSpend: true });
+      return;                                                // every other key is typing
     }
-    /* THE KEYBOARD REACH (spec): 1 and 2 pick the chips. Anything else is a
-     * player doing something else, and that is a dismiss. */
+    /* THE KEYBOARD REACH (spec): 1 and 2 pick the chips; Esc is the one
+     * deliberate dismiss. Every other key belongs to whatever the player is
+     * doing, and the question just keeps waiting. */
     if (k === '1' || k === '2') {
       if (live.strip && typeof live.strip.pick === 'function') { live.strip.pick(k === '1' ? 0 : 1); return; }
     }
-    if (k === 'Tab' || k === 'Enter' || k === ' ') return;   // focus + activate
-    ignored(live.ask, live.ctx, { noSpend: true });
+    if (k === 'Escape') ignored(live.ask, live.ctx, { noSpend: true });
   };
   if (typeof document !== 'undefined' && document.addEventListener) {
-    document.addEventListener('pointerdown', onDocDown, { passive: true });
     document.addEventListener('keydown', onDocKey, { passive: true });
   }
-  /* The widget's own pointer verbs are the other half: a pet, a drag or a
-   * fling on EMI herself never reaches `document` before the widget acts. */
+  /* The widget's own pointer verbs SURVIVE the question now (owner, same
+   * ruling): a pet, a drag or a fling on EMI herself is the player fidgeting
+   * with the mascot, not walking away from her, and the reaction each would
+   * spend is refused by `askOwnsGlass` anyway. Only the screen changes that
+   * legitimately KILL her still close it: `hide` is the x button, `gone` is
+   * an API hide and `setEnabled(false)`. Both spend nothing, and both bank
+   * the question for the next quiet moment (`rememberReask`). */
   const unGesture = typeof widget.onGesture === 'function'
     ? widget.onGesture((kind) => {
       if (!live) return;
-      /* `gone` is the x button, an API hide and `setEnabled(false)` - the
-       * screen changes that legitimately kill her. It spends nothing, exactly
-       * like the presses, and it is what closes the ask when the question goes
-       * away with the mascot rather than with an answer. */
-      if (kind === 'pet' || kind === 'petStreak3' || kind === 'drag'
-        || kind === 'fling' || kind === 'dropAt' || kind === 'hide' || kind === 'gone') {
+      if (kind === 'hide' || kind === 'gone') {
         ignored(live.ask, live.ctx, { noSpend: true });
       }
     })
@@ -829,6 +815,13 @@ export function createAsks(o = {}) {
         /* The dare offer is evaluated BEFORE this latch closes (see `offer`),
          * which is the whole reason the two entry points exist. */
         S.midClass = true;
+        /* A question still standing when a board goes live comes down HERE.
+         * Presses stopped cancelling on 2026-08-25, so "the player clicked
+         * Begin" no longer closes it as a side effect - and a chip strip is a
+         * pointer-active node that may never sit over a precision board
+         * (trap 59/97). It was interrupted, not declined: no cadence, and it
+         * comes back on the next quiet moment. */
+        if (live) ignored(live.ask, live.ctx, { noSpend: true });
         return;
       }
       if (name === 'win' || name === 'fail' || name === 'runLost') {
@@ -989,7 +982,6 @@ export function createAsks(o = {}) {
       unmount(false);
       try { unGesture(); } catch (e) { /* noop */ }
       if (typeof document !== 'undefined' && document.removeEventListener) {
-        document.removeEventListener('pointerdown', onDocDown);
         document.removeEventListener('keydown', onDocKey);
       }
     },

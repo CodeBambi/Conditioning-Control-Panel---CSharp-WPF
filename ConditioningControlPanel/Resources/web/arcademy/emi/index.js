@@ -328,6 +328,14 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
     setWidth(px) { return widget.setWidth(px); },
     get width() { return widget.width; },
 
+    /**
+     * How long her lines hang on the glass, as a scale on the say-hold curve
+     * (owner option, 2026-08-25). Clamped by the widget, persisted on the emi
+     * blob; 1 is the shipped cadence. The options page is the caller.
+     */
+    setBubbleHold(scale) { return widget.setBubbleHold(scale); },
+    get bubbleHold() { return widget.bubbleHold; },
+
     /** Lifetime telemetry, read-only. A later Records Office beat reads this. */
     stats() { return widget.stats(); },
     /** Force the debounced persistence write out now (host shutdown, tests). */

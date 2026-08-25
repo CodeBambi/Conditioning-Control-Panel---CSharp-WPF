@@ -224,8 +224,27 @@ export function sayHoldMs(line, explicitMs) {
   const n = typeof line === 'string' ? line.length : 0;
   const grown = DIALS.SAY_HOLD_BASE_MS + n * DIALS.SAY_HOLD_PER_CHAR_MS;
   const asked = (typeof explicitMs === 'number' && isFinite(explicitMs)) ? Math.round(explicitMs) : 0;
-  return Math.max(DIALS.SAY_HOLD_MIN_MS, grown, asked);
+  /* THE PLAYER'S OWN DIAL (owner, 2026-08-25: "make the bark bubble permanence
+   * time an option in the options"). The scale multiplies the floor and the
+   * growth but NOT an explicit ask - ASK_HOLD_MS is an hour because a question
+   * waits, and a "short" player has not asked for short questions. Applied
+   * here for the same reason the x1.35 was: every line in the page becomes a
+   * hold through this one function. */
+  return Math.max(Math.round(Math.max(DIALS.SAY_HOLD_MIN_MS, grown) * holdScale), asked);
 }
+/* The scale `sayHoldMs` reads. MODULE-level on purpose: there is one EMI on a
+ * page and the pure helpers (chains.js callers included) have no instance to
+ * ask. The widget seeds it from its blob on boot and `setBubbleHold` is the
+ * one writer after that. */
+const HOLD_SCALE_MIN = 0.6;
+const HOLD_SCALE_MAX = 3;
+let holdScale = 1;
+export function setSayHoldScale(x) {
+  const n = typeof x === 'number' && isFinite(x) ? x : 1;
+  holdScale = Math.min(HOLD_SCALE_MAX, Math.max(HOLD_SCALE_MIN, n));
+  return holdScale;
+}
+export function getSayHoldScale() { return holdScale; }
 /** Everything in a locked SAY that is NOT the hold: . / .. / ... plus the clear. */
 export const SAY_LEAD_MS = 420 + 420 + 520 + 200;
 /* The bubble hangs UP OFF EMI's right ear (emi.css: left:58%, bottom:96%,
@@ -424,6 +443,11 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   let fy0 = num(saved.y);
   let hidden = saved.hidden === true;
   let hintShown = saved.hintShown === true;
+  /* The bubble-hold scale rides the same blob (see `setSayHoldScale`). A blob
+   * without one is a player who never touched the option: scale 1, unwritten. */
+  if (typeof saved.holdScale === 'number' && isFinite(saved.holdScale) && saved.holdScale !== 1) {
+    setSayHoldScale(saved.holdScale);
+  }
   let enabled = true;
 
   let saveTimer = null;
@@ -454,6 +478,8 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     // viewport rule for ever after the first drag.
     if (userSized && userWidth != null) b.w = userWidth;
     if (hintShown) b.hintShown = true;
+    // The bubble-hold option, written only when it is not the default.
+    if (holdScale !== 1) b.holdScale = holdScale;
     /* ASKS: the ledger rides out with everything else. Written only when there
      * is something to write, so a player who has never been asked anything
      * keeps the blob they always had. */
@@ -1408,6 +1434,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       clearDangle(false);
       const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { left: 0, top: 0 };
       commit(r.left, r.top);
+      remeasureAsk();   // a question survives a drag now; its clamp does not
       /* W3 P1-19: SHE LANDS. The body move here is already NAMED `thud` for a
        * throw and `bounce` for a set-down, so the ear gets the same two things:
        * a low sawtooth knock pitched down for the fling, a lighter one for the
@@ -1464,6 +1491,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     endPress();
     if (wasDragging) {
       commit(r ? r.left : 0, r ? r.top : 0);
+      remeasureAsk();   // same law as the ordinary drop
       save();
       if (!saying()) idle();
     }
@@ -1887,6 +1915,8 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       wasNarrowVp = narrow;
       if (narrow && !hidden && enabled) emitGesture('windowSquish');
     }
+    // A standing question re-fits against the new box (phones rotate).
+    remeasureAsk();
   }
   if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('resize', onResize);
@@ -2265,6 +2295,8 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
 
   /** {onChip, onDismiss, nodes} while a strip is up; null the rest of the time. */
   let askLive = null;
+  /** The late re-measure's timer - see `remeasureAsk`. */
+  let askFitTimer = null;
   /** The leave animation's own timer - see `dropStrip`. */
   let askDropTimer = null;
   /** The viewport clamp, in px, shared with the sheet as `--emi-ask-dx`. */
@@ -2311,6 +2343,31 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
         el.style.setProperty('--emi-ask-h', (h > 0 ? h + 6 : 0) + 'px');
       }
     } catch (e) { /* noop */ }
+  }
+
+  /** RE-FIT A STANDING STRIP. `askLift` reads `offsetHeight` the instant the
+   *  strip mounts - but on a phone Press Start 2P lands LATE, the 44px thumb
+   *  floor grows the chips, and `max-width: min(84vw, 248px)` can wrap a row
+   *  that measured as one line into two. A stale `--emi-ask-h` is exactly the
+   *  bubble sitting ON the chips (owner, 2026-08-25: "on mobile the prompt and
+   *  the box to respond get overlapped and we cant see the question"). So the
+   *  measurement is taken AGAIN: one beat after mount, once more when the
+   *  document's fonts resolve, and on every resize / rotate / drag-drop while
+   *  a strip stands. Idempotent and cheap - two reads, two custom props. */
+  function remeasureAsk() {
+    if (!askLive || askStrip.hidden) return;
+    askLift();
+    clampAskStrip();
+  }
+  function scheduleAskFit() {
+    if (askFitTimer !== null) { clearTimeout(askFitTimer); askFitTimer = null; }
+    askFitTimer = setTimeout(() => { askFitTimer = null; remeasureAsk(); }, 280);
+    try {
+      if (typeof document !== 'undefined' && document.fonts && document.fonts.ready
+        && typeof document.fonts.ready.then === 'function') {
+        document.fonts.ready.then(() => remeasureAsk()).catch(() => {});
+      }
+    } catch (e) { /* a font API may never break a question */ }
   }
 
   function fireChip(i, text) {
@@ -2414,6 +2471,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
        * `emi_blip` and not a piece of chrome: an ask is EMI asking. */
       sfx('emi_blip', 0.10, 1.15);
       clampAskStrip();
+      scheduleAskFit();
       /* FOCUS THE FIELD, NEVER A CHIP. Stealing focus onto a button would put
        * a school-wide Enter on EMI; the field is the one place a keystroke is
        * unambiguously hers. */
@@ -2448,6 +2506,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
      * this branch on its way in, and a 220ms drop left running would hide the
      * strip that is replacing it. */
     if (askDropTimer !== null) { clearTimeout(askDropTimer); askDropTimer = null; }
+    if (askFitTimer !== null) { clearTimeout(askFitTimer); askFitTimer = null; }
     if (!askLive) {
       try { askStrip.hidden = true; askStrip.textContent = ''; askStrip.classList.remove('out'); } catch (e) { /* noop */ }
       return false;
@@ -2625,6 +2684,15 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     get hidden() { return hidden; },
     /** True once the first-dismiss hint has been spent (persisted). */
     get hintShown() { return hintShown; },
+    /** The options page's one verb (owner, 2026-08-25): how long her lines
+     *  hang, as a scale on the say-hold curve. Persists on the emi blob;
+     *  this file stays the blob's only writer. */
+    setBubbleHold(scale) {
+      const v = setSayHoldScale(scale);
+      save();
+      return v;
+    },
+    get bubbleHold() { return getSayHoldScale(); },
     /**
      * THE RESIZE SEAM. There is no UI for it yet; the moment there is, calling
      * this is what turns the width from "the window's default" into "the

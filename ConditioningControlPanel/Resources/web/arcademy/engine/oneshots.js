@@ -338,7 +338,7 @@ export function createOneshots(ctx) {
 
     /* W3 P1-17: ONE cue used to fire for the whole burst, before any node was
      * on screen, so a four-node stagger sounded exactly like a single flash.
-     * The cue now rides the nodes: one each, capped at three (trap 111 - bursts
+     * The cue now rides the nodes: one each, capped at three (trap 117 - bursts
      * are the per-instance exception, and the cap is what keeps them from being
      * a machine gun), each quieter than the last so the burst reads as one
      * gesture arriving rather than as three separate events. */

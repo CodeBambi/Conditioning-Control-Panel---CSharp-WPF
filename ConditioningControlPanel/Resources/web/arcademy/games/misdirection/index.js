@@ -408,7 +408,7 @@ export default {
      * third of the window or its last three seconds, whichever is shorter, and
      * the pitch climbs a step a tick so a run of them reads as a run rather
      * than as a repeated beep. Every window that arms one disarms it when it
-     * resolves - a countdown that outlives its window is trap 110.
+     * resolves - a countdown that outlives its window is trap 116.
      */
     let cdSec = -1;
     let cdN = 0;

@@ -45,12 +45,18 @@ import { makeRng } from '../core/rng.js';
 export const SL_DIALS = Object.freeze({
   /* RETUNED 2026-08-25 (owner: "the screen animations are entertaining, they
    * should be frequent and used to distance the barks"). Was 90s / 20s / 180s
-   * / 6 - the lab-experiment cadence. Now a channel can roll after half a
-   * minute of silence and about once a minute after that. */
+   * / 6 - the lab-experiment cadence. RETUNED AGAIN the same day, after the
+   * heartbeat shipped and the owner played it: "we need to see the animations
+   * wayy more often". The global gap halves (60s -> 30s), the sitting cap
+   * more than doubles, and the per-channel rests below halve again - with
+   * five channels in the wheel the OLD rests starved the frequent global
+   * cadence anyway: a minute after the last takeover nothing was off
+   * cooldown, so the dial that read "about once a minute" delivered a third
+   * of that. */
   THEATRE_IDLE_MS: 30000,     // the floor: no channel before this much player silence
   ROLL_MS: 10000,             // wheel cadence while eligible
-  GLOBAL_COOLDOWN_MS: 60000,  // no two takeovers closer than this (deep idle exempt)
-  PER_SESSION_CAP: 14,        // rolled channels per sitting (deep idle exempt)
+  GLOBAL_COOLDOWN_MS: 30000,  // no two takeovers closer than this (deep idle exempt)
+  PER_SESSION_CAP: 30,        // rolled channels per sitting (deep idle exempt)
   TAKEOVER_MAX_MS: 10000,     // the hard cap (the screensaver alone is exempt)
   BLIP_MS: 180,               // collapse-to-line + line-to-dot, total
   OFFER_MS: 5000,             // the "wanna see?" window
@@ -62,9 +68,9 @@ export const SL_DIALS = Object.freeze({
   WRONG_ODDS: 1 / 40,         // per rolled-channel exit, labSeen, 1/session
   WRONG_MAX_MS: 400,
   WEIGHTS: Object.freeze({ pong: 30, browsing: 30, watching: 18, reruns: 12, shop: 7 }),
-  COOLDOWN_MS: Object.freeze({           // per channel, halved 2026-08-25 with the cadence above
-    pong: 240000, browsing: 240000, watching: 480000,
-    reruns: 600000, shop: 900000,
+  COOLDOWN_MS: Object.freeze({           // per channel, halved 0825 and halved again (see above)
+    pong: 120000, browsing: 120000, watching: 240000,
+    reruns: 300000, shop: 480000,
   }),
 });
 

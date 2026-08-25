@@ -1558,7 +1558,7 @@ export default {
      * changing, it only speaks inside the last third of the ring (or its last
      * three seconds, whichever is shorter), and the pitch climbs a step a tick
      * so a run reads as a run. armCountdown() is the disarm and disarm() calls
-     * it, which is what keeps a countdown from outliving its window (trap 110).
+     * it, which is what keeps a countdown from outliving its window (trap 116).
      */
     let cdSec = -1;
     let cdN = 0;
