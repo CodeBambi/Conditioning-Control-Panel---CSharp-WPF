@@ -48,6 +48,14 @@ param(
         'bubblecount', 'lockcard', 'popquiz', 'mindwipe', 'braindrain', 'ramp', 'all', 'owner', 'idle')]
     [string]$Mode,
     [int]$Seconds = 60,
+    # THE SAMPLE PERIOD, and why it is a knob. The default 200 ms (~4 Hz once a tick's own
+    # read is counted) is what reproduced the white screen: a full-screen event that lasts a
+    # second is impossible to miss at that rate. A FADE is not that shape - upstream ramps a
+    # flash in over about 417 ms (FADE_PER_SEC 2.4, Services/Flash/FlashService.cs:2018) - so a
+    # 4 Hz sampler sees one or two points on the whole ramp and cannot show its shape. Lower
+    # this to watch an onset; leave it alone for the original measurement, which every earlier
+    # profile in this file was taken at.
+    [int]$SampleMs = 200,
     [double]$WhiteThreshold = 0.35,
     [string]$MediaRoot = 'C:\Code\ccp media',
     [switch]$NoMedia,
@@ -606,7 +614,7 @@ try {
         }
         $line += '}'
         Emit $line
-        Start-Sleep -Milliseconds 200
+        Start-Sleep -Milliseconds $SampleMs
     }
 
     $peakText = $peak.ToString([cultureinfo]::InvariantCulture)
