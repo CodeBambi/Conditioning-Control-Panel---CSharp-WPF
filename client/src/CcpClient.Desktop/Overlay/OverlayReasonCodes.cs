@@ -97,6 +97,20 @@ public static class OverlayReasonCodes
     public const string OverlayNoDisplay = "overlay-no-display";
 
     /// <summary>
+    /// Every surface in the pool is already showing something, so this one had nowhere to go.
+    ///
+    /// <para>Distinct from <see cref="OverlayNoDisplay"/> and from every backend refusal above,
+    /// because nothing failed: the cap is a product decision (WPF's own
+    /// <c>MAX_CONCURRENT_FLASH</c>, <c>Services/Flash/FlashService.cs:50</c>, which exists there
+    /// for "memory explosion / compositor backup from too many concurrent flash windows",
+    /// <c>:1174-1176</c>) and the surfaces that took the slots are on screen doing their job. It
+    /// exists because the alternative is what the port shipped first — a bare <c>return</c> — and
+    /// at the maximum-settings configuration the pool saturates, so later images were being
+    /// dropped with no counter, no state and no reason anywhere.</para>
+    /// </summary>
+    public const string OverlaySurfacePoolFull = "overlay-surface-pool-full";
+
+    /// <summary>
     /// A frame was offered whose pixel size is not the presented surface's size. Stretching it
     /// would put a rectangle on the user's screen that nobody asked for and would hide a stale
     /// frame behind a plausible picture; refusing names the mismatch instead.

@@ -195,6 +195,18 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
     /// build cannot decode. WPF's own normal case (<c>LoadImagesUntilAsync</c>).</summary>
     public int UndecodableImages { get; private set; }
 
+    /// <summary>
+    /// Images this presenter could not place because every surface in the pool was still showing an
+    /// earlier one.
+    ///
+    /// <para>It is a COUNT rather than a flag because saturation is not an event: at the top of both
+    /// dials it is the steady state. Together with <see cref="SurfacesShown"/> and
+    /// <see cref="UndecodableImages"/> it accounts for every image a flash was handed — an image
+    /// that reached no screen is now attributable to exactly one of the three, which is what a bare
+    /// <c>return</c> made impossible.</para>
+    /// </summary>
+    public int ImagesDroppedWhilePoolFull => _surfaces.PlacementsRefusedWhileFull;
+
     /// <summary>Surfaces currently showing a CLIP rather than a picture. Diagnostics and facts;
     /// never a claim about a screen.</summary>
     public int LiveClips => _clips.Count;
@@ -305,8 +317,18 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
             return;
         }
 
+        // The pool is full. Recorded, not swallowed: at the maximum-settings configuration this is
+        // not an edge case but the ordinary state — the images-per-flash dial goes to twenty
+        // (Persistence/SessionPresetDocument.cs:56) against a pool of ten, and at the top of the
+        // frequency dial a surface's lifetime overlaps the next flash — so a bare return here drops
+        // a user's images invisibly for the whole session.
+        //
+        // BEFORE the decode, which is why this check is not left to Acquire: rendering an image
+        // that has nowhere to go is a full-frame raster spent to learn something already known, at
+        // exactly the moment the machine is busiest.
         if (_surfaces.LiveSurfaces >= MaxConcurrentSurfaces)
         {
+            _surfaces.RecordPoolFull();
             return;
         }
 
@@ -322,9 +344,13 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
             return;
         }
 
+        // Acquire is the authority on whether there is a slot; the check above is only the cheap
+        // half of the same question, taken early to save the raster. They cannot disagree today,
+        // and the day they can this must not be the branch that goes quiet.
         var slot = _surfaces.Acquire();
         if (slot is null)
         {
+            _surfaces.RecordPoolFull();
             return;
         }
 

@@ -54,9 +54,9 @@ public readonly record struct OverlayNativeHandles(nint Window);
 /// those pixels. GDI, not <c>UpdateLayeredWindow</c>: ULW is mutually exclusive with
 /// <c>SetLayeredWindowAttributes</c>, so taking it would remove the alpha read-back that
 /// <see cref="OverlayReasonCodes.OverlayNotComposited"/> — the check that catches the exact defect
-/// the first attempt shipped — depends on. The frame is retained in a DIB section and re-blitted
-/// on <c>WM_PAINT</c>, so an invalidated overlay does not go blank. <b>None of this is a claim that
-/// a human saw anything</b>; that is a headed capture.</para>
+/// the first attempt shipped — depends on. The frame is retained in a DIB section, re-blitted on
+/// <c>WM_PAINT</c> while the surface is up and handed back at <see cref="Withdraw"/>. <b>None of
+/// this is a claim that a human saw anything</b>; that is a headed capture.</para>
 ///
 /// <para><b>Thread affinity.</b> The window belongs to the thread that first called
 /// <see cref="Present"/>. Call <see cref="Dispose"/> from that same thread; disposing from another
@@ -103,9 +103,9 @@ public sealed class Win32OverlayPresence : IOverlayPresence
     private OverlaySurfaceRequest? _current;
 
     // The retained frame: a top-down 32bpp DIB section selected into a memory DC. It is the
-    // window's content, kept so WM_PAINT can be serviced from it — an overlay that the OS
-    // invalidates (a move, a resolution change, a compositor restart) must not go blank while the
-    // effect still believes it is showing something.
+    // window's content, kept so WM_PAINT can be serviced from it — an overlay the OS invalidates
+    // (a move, a resolution change, a compositor restart) must not go blank while the effect still
+    // believes it is showing something. For exactly that long: Withdraw hands the pair back.
     private nint _frameDc;
     private nint _frameBitmap;
     private nint _frameBits;
@@ -381,9 +381,9 @@ public sealed class Win32OverlayPresence : IOverlayPresence
         }
 
         _presenting = false;
-        return new CapabilityState.Available(
-            $"window 0x{_window:X} is off screen: the OS reports it not visible and its hit test no longer routes "
-            + $"the point {x},{y} to it. The window itself is kept for the next Present");
+        // A pooled presence outlives the flash that used it, so the pixels go back HERE.
+        ReleaseFrameSurfaces();
+        return new CapabilityState.Available(WithdrawnDetail(x, y));
     }
 
     public void Dispose()
@@ -1017,4 +1017,34 @@ public sealed class Win32OverlayPresence : IOverlayPresence
 
     private static CapabilityState.Unavailable Unavailable(string code, string detail) =>
         new(new CapabilityReason(code, detail));
+
+    /// <summary>
+    /// What a confirmed withdrawal says, including the half that used to be untrue by omission.
+    ///
+    /// <para><b>Why <see cref="Withdraw"/> releases the frame surfaces at all.</b> A presence is
+    /// POOLED and is never removed from its set (<c>Effects/OverlaySurfaceSet.cs:238-258</c>), so
+    /// "freed at <see cref="Dispose"/>" meant "held until the session ends". Measured before that
+    /// call existed (<c>tests/CcpClient.Tests/OverlayFrameSurfaceRetentionTests.cs</c>): one flash
+    /// pool of ten presences kept 40 GDI objects and 129 MB of private commit after the operating
+    /// system had confirmed every one of its surfaces off screen — at the image-scale dial's
+    /// ceiling, where a flash frame is the whole monitor. The same run at the dial's default kept
+    /// 20 MB, which is the same defect and the reason the number scales with a user's slider.</para>
+    ///
+    /// <para><b>What the pooling still buys, unchanged.</b> The window and its registered class:
+    /// <see cref="Withdraw"/> hides rather than destroys, and that is what the pool was for
+    /// (<c>Effects/OverlaySurfaceSet.cs:230-237</c> names it). It was never for the pixels —
+    /// <see cref="EnsureFrameSurfaces"/> already rebuilds the pair whenever the frame size changes,
+    /// and a flash frame is sized per SOURCE image, so a recycled slot rebuilds it on almost every
+    /// show in any case. Measured on the same run: the present-and-paint phase for ten
+    /// monitor-sized surfaces did not move (87-123 ms before, 98-99 ms after), because the paint
+    /// already copies the whole frame twice (the figures skip each run's JIT-warming first pass);
+    /// the withdraw phase went from 5-7 ms to 16-17 ms for all ten. What remains after a
+    /// withdrawal is exactly the state a presence that has never painted is in, which every
+    /// session's first flash already runs through.</para>
+    /// </summary>
+    private string WithdrawnDetail(int x, int y) =>
+        $"window 0x{_window:X} is off screen: the OS reports it not visible and its hit test no longer routes "
+        + $"the point {x},{y} to it. The window itself is kept for the next Present; the frame surfaces it was "
+        + "holding are not — those went back to the OS here rather than at Dispose, because a pooled presence "
+        + "outlives the flash that used it";
 }

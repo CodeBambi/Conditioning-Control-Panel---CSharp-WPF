@@ -197,6 +197,87 @@ public class FlashSurfacePresenterTests
         Assert.Equal(10, rig.Presences.Count);
     }
 
+    /// <summary>
+    /// <b>Every image a flash is handed ends up in exactly one of three places, and none of them is
+    /// nowhere.</b> It is on a surface, or it produced no pixels, or the pool was full — and the
+    /// third used to be a bare <c>return</c>: no counter, no state, no reason code.
+    ///
+    /// <para><b>This is the maximum-settings configuration, not an edge case.</b> The
+    /// images-per-flash dial goes to twenty (<c>Persistence/SessionPresetDocument.cs:56</c>) against
+    /// a pool of ten, so the flash below is one a user can really ask for, and half of it has
+    /// nowhere to go. <c>client/port.txt</c> names exactly that configuration as the performance
+    /// contract.</para>
+    ///
+    /// <para>The accounting identity is asserted rather than the arithmetic: "twenty images, ten
+    /// surfaces, so ten were dropped" would be the implementation's own subtraction written twice,
+    /// and it would keep agreeing with itself if both halves were wrong. "No image is unaccounted
+    /// for" is a property of the outcome and holds whatever the cap is.</para>
+    /// </summary>
+    [Fact]
+    public void EveryImageOfAMaximumFlashIsAccountedFor_IncludingTheOnesTheFullPoolTurnsAway()
+    {
+        var rig = new Rig();
+        var paths = Enumerable.Range(0, SessionPresetDocument.MaxImagesPerFlash)
+            .Select(i => $"image-{i}.png")
+            .ToArray();
+
+        // Two the decoder cannot read, so the third bucket is live too and "accounted for" cannot be
+        // satisfied by a presenter that simply calls everything it did not place undecodable.
+        rig.Frames.Undecodable.Add(paths[0]);
+        rig.Frames.Undecodable.Add(paths[1]);
+
+        rig.Presenter.Show(paths);
+
+        // Far enough for the whole stagger to have fired (WPF's 300 ms per image), so every image
+        // has had its turn.
+        rig.Clock.Advance(
+            TimeSpan.FromMilliseconds((long)FlashSurfacePresenter.StaggerMilliseconds * (paths.Length - 1)));
+
+        Assert.Equal(
+            paths.Length,
+            rig.Presenter.SurfacesShown + rig.Presenter.UndecodableImages
+                + rig.Presenter.ImagesDroppedWhilePoolFull);
+        Assert.Equal(2, rig.Presenter.UndecodableImages);
+        Assert.True(
+            rig.Presenter.ImagesDroppedWhilePoolFull > 0,
+            $"a {paths.Length}-image flash against a pool of {FlashSurfacePresenter.MaxConcurrentSurfaces} placed "
+            + $"{rig.Presenter.SurfacesShown} surfaces and reports nothing turned away, so this fact would be "
+            + "proving the accounting of a case that never happened");
+
+        // And the refusal is a TYPED outcome a caller can read, in the vocabulary the panel already
+        // renders — not a silence. Degraded rather than Unavailable because the ten surfaces that
+        // took the slots are on screen: "nothing was drawn" would be false in front of a user
+        // watching ten flashes.
+        var degraded = Assert.IsType<CapabilityState.Degraded>(rig.Presenter.LastPlacement);
+        Assert.Equal(OverlayReasonCodes.OverlaySurfacePoolFull, degraded.Reason.Code);
+        Assert.False(
+            string.IsNullOrWhiteSpace(degraded.SurvivingSemantics),
+            "a Degraded state that cannot name what survives is not degradation "
+            + "(runtime-capability-contract.md §1)");
+    }
+
+    /// <summary>
+    /// The control for the fact above: a flash that FITS turns nothing away and leaves the
+    /// placement outcome the ordinary confirmed one. Without this, a presenter that recorded a
+    /// pool-full refusal on every image would satisfy the accounting fact just as well.
+    /// </summary>
+    [Fact]
+    public void AFlashThatFitsInThePool_TurnsNothingAway()
+    {
+        var rig = new Rig();
+        var paths = Enumerable.Range(0, FlashSurfacePresenter.MaxConcurrentSurfaces - 1)
+            .Select(i => $"image-{i}.png")
+            .ToArray();
+
+        rig.Presenter.Show(paths);
+        rig.Clock.Advance(
+            TimeSpan.FromMilliseconds((long)FlashSurfacePresenter.StaggerMilliseconds * (paths.Length - 1)));
+
+        Assert.Equal(paths.Length, rig.Presenter.SurfacesShown);
+        Assert.Equal(0, rig.Presenter.ImagesDroppedWhilePoolFull);
+        Assert.IsType<CapabilityState.Available>(rig.Presenter.LastPlacement);
+    }
+
     // ---------------------------------------------------------------------------------
     //  what happens when there is nothing to draw on, or nothing to draw
     // ---------------------------------------------------------------------------------
