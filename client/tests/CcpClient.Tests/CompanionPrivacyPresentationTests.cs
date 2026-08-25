@@ -120,6 +120,57 @@ public class CompanionPrivacyPresentationTests
     }
 
     /// <summary>
+    /// The token layer (2026-08-25) put one indirection between this guard and the value it reads.
+    /// The companion surface names a key now — <c>{DynamicResource SeatBgBrush}</c> — and the byte
+    /// lives in <c>Themes/Ccp.axaml</c>. Resolving it here keeps the guard pointed at the colour
+    /// the product actually paints instead of at the spelling it happens to use; a guard that only
+    /// grepped for a literal would have gone quiet the moment the literal moved, which is the
+    /// failure mode this whole class exists to prevent.
+    ///
+    /// <para>Deliberately a two-step text resolution and not a XAML load: this is a pure-logic
+    /// fact in the non-Avalonia project, and the point is to read what the SOURCE declares.</para>
+    /// </summary>
+    private static string ResolveDeclaredColour(string range, string role)
+    {
+        var brushRef = System.Text.RegularExpressions.Regex.Match(range, @"\{DynamicResource (\w+)\}");
+        var literal = System.Text.RegularExpressions.Regex.Match(range, @"#[0-9A-Fa-f]{8}");
+        Assert.True(brushRef.Success || literal.Success,
+            $"{role} declares neither a token nor a colour literal");
+
+        // WHICHEVER COMES FIRST, and the ordering is the whole point rather than a tidiness
+        // preference: these ranges are style blocks that set several brush properties, so
+        // "the first token anywhere in the range" and "the first colour anywhere in the range"
+        // are different sites. Preferring tokens unconditionally read the badge ring's
+        // ShellAccentBright for the selected dial seat's fill and passed a confident wrong answer.
+        if (!brushRef.Success || (literal.Success && literal.Index < brushRef.Index))
+        {
+            // Still a literal at this site: a surface that has not been tokenised is checked
+            // exactly as it was.
+            return literal.Value.ToUpperInvariant();
+        }
+
+        var brushKey = brushRef.Groups[1].Value;
+        var tokens = ThemeTokens();
+
+        // Brush -> the Color key it binds -> that key's value. Both hops are asserted rather than
+        // defaulted: a brush that resolves to nothing would otherwise read as "no colour declared"
+        // and pass the caller a silent empty string.
+        var brush = System.Text.RegularExpressions.Regex.Match(
+            tokens, $@"<SolidColorBrush x:Key=""{brushKey}"" Color=""\{{DynamicResource (\w+)\}}""");
+        Assert.True(brush.Success, $"{role}: Themes/Ccp.axaml declares no brush '{brushKey}'");
+
+        var colourKey = brush.Groups[1].Value;
+        var colour = System.Text.RegularExpressions.Regex.Match(
+            tokens, $@"<Color x:Key=""{colourKey}"">(#[0-9A-Fa-f]{{8}})</Color>");
+        Assert.True(colour.Success, $"{role}: Themes/Ccp.axaml declares no colour '{colourKey}'");
+        return colour.Groups[1].Value.ToUpperInvariant();
+    }
+
+    private static string ThemeTokens() =>
+        File.ReadAllText(Path.Combine(
+            FindRepoRoot(), "client", "src", "CcpClient.Desktop", "Themes", "Ccp.axaml"));
+
+    /// <summary>
     /// The colours in the manifest are the colours the PRODUCT paints. A manifest that agreed only
     /// with itself would keep passing after a restyle, over captures of the new colour it no longer
     /// describes.
@@ -135,20 +186,54 @@ public class CompanionPrivacyPresentationTests
         var seat = markup.IndexOf("<Style Selector=\"Border.dial-seat\">", StringComparison.Ordinal);
         var selected = markup.IndexOf("<Style Selector=\"Border.dial-seat.selected\">", StringComparison.Ordinal);
         Assert.True(seat < selected, "the selected arm must follow the base seat style, or it never wins");
-        Assert.Contains("#FF1E1822", markup[seat..selected], StringComparison.Ordinal);
-        Assert.Contains("#FF4A2C55", markup[selected..], StringComparison.Ordinal);
+
+        // Bounded at each style's own </Style>, so a later style's brush can never answer for
+        // this one.
+        var selectedEnd = markup.IndexOf("</Style>", selected, StringComparison.Ordinal);
+        Assert.True(selectedEnd > selected, "the selected dial-seat style is never closed");
+        Assert.Equal("#FF1E1822", ResolveDeclaredColour(markup[seat..selected], "the unselected dial seat"));
+        Assert.Equal("#FF4A2C55", ResolveDeclaredColour(markup[selected..selectedEnd], "the selected dial seat"));
 
         // The transcript pair's `closed` half is the companion window's own ground.
-        Assert.Contains("Background=\"#FF141018\"", markup, StringComparison.Ordinal);
+        var groundAt = markup.IndexOf("Background=", StringComparison.Ordinal);
+        Assert.True(groundAt >= 0, "the companion window declares no Background at all");
+        Assert.Equal(
+            "#FF141018",
+            ResolveDeclaredColour(markup[groundAt..(groundAt + 80)], "the companion window ground"));
+
+        // Every colour the surface can declare, resolved through the token layer where it uses one.
+        var declaredColours = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Text.RegularExpressions.Match m in
+                 System.Text.RegularExpressions.Regex.Matches(markup, @"#[0-9A-Fa-f]{8}"))
+        {
+            declaredColours.Add(m.Value);
+        }
+
+        var tokens = ThemeTokens();
+        foreach (System.Text.RegularExpressions.Match m in
+                 System.Text.RegularExpressions.Regex.Matches(markup, @"\{DynamicResource (\w+)\}"))
+        {
+            var brush = System.Text.RegularExpressions.Regex.Match(
+                tokens, $@"<SolidColorBrush x:Key=""{m.Groups[1].Value}"" Color=""\{{DynamicResource (\w+)\}}""");
+            if (!brush.Success)
+            {
+                continue; // a geometry or font token, which carries no colour to check
+            }
+
+            var colour = System.Text.RegularExpressions.Regex.Match(
+                tokens, $@"<Color x:Key=""{brush.Groups[1].Value}"">(#[0-9A-Fa-f]{{8}})</Color>");
+            Assert.True(colour.Success,
+                $"Themes/Ccp.axaml declares brush '{m.Groups[1].Value}' over a colour key that does not exist");
+            declaredColours.Add(colour.Groups[1].Value);
+        }
 
         foreach (var check in ChecksFor("companion-privacy").Concat(ChecksFor("companion-transcript")))
         {
             var (r, g, b) = CheckManifest.ParseColor(check.ExpectedColor, $"check '{check.Name}':");
             var declared = $"#FF{r:X2}{g:X2}{b:X2}";
-            var inMarkup = markup.Contains(declared, StringComparison.OrdinalIgnoreCase);
             // The transcript's own ground is set in code, not markup — it is the same #1E1822.
             var inTranscript = declared.Equals("#FF1E1822", StringComparison.OrdinalIgnoreCase);
-            Assert.True(inMarkup || inTranscript,
+            Assert.True(declaredColours.Contains(declared) || inTranscript,
                 $"check '{check.Name}' expects {check.ExpectedColor}, which the companion surface does not declare");
         }
     }

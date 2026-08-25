@@ -1,0 +1,241 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!--
+    THE PRODUCT'S TOKEN LAYER. One file, and before it existed there were none: App.axaml was
+    eight lines of bare FluentTheme, and across every .axaml under client/src there were zero
+    ResourceDictionary, zero StaticResource and zero DynamicResource. Colour was pasted as hex at
+    342 sites, 102 of them the same ink.
+
+    THE SHAPE IS WPF'S OWN, deliberately and for one reason: the shipping product re-themes at
+    runtime. `RefreshThemeAwareElements` rewrites `Application.Current.Resources` by KEY - the
+    Colour entry and its Brush sibling, both - every time the active mod changes
+    (WPF MainWindow/MainWindow.xaml.cs:1611-1682), and everything downstream repaints because it
+    referenced the key rather than a value. So this file is Colours first, Brushes derived from
+    them, and every consumer binds the BRUSH dynamically. Mod-driven re-theming is a separate
+    capability and is NOT built here; this is the structure that makes it a small feature instead
+    of a second sweep.
+
+    ============================ THE VALUES, AND WHAT IS NOT DECIDED HERE ============================
+    Every colour below carries the port's CURRENT measured value, and beside it the shipping
+    product's value for the same role. They are not the same palette: the port is violet-tinted,
+    upstream is navy-and-pink. This file does not change that, because the conversion that
+    populated it was mechanical and value-preserving - nine files read these exact bytes back off
+    real pixels or real markup (client/tools/verify/checks.json, RackPresentationTests,
+    TrainerCardTests, TrainerCardRecordPresentationTests, CompanionPrivacyPresentationTests,
+    NavigationShellHeadlessTests and their siblings), and a sweep that recoloured while it
+    tokenised would have been two changes wearing one commit.
+
+    WHAT IT DOES BUY: the palette is now ONE LINE PER ROLE. Flipping the shell onto upstream's
+    palette is editing the values in this block and re-deriving the tolerances in checks.json -
+    a bounded, reviewable change instead of 342 scattered edits.
+
+    THE ONE EXCEPTION, and it is the reason this file exists at all: FLUENT'S ACCENT FAMILY at
+    the foot of this file had NO port value to preserve. It resolved from the user's Windows
+    personalisation setting, so the product's checkboxes and sliders were Windows blue in a
+    magenta app AND A DIFFERENT COLOUR ON EVERY MACHINE. There is nothing to conserve in that,
+    so it takes the shipping product's accent verbatim.
+  -->
+
+  <!-- ================================= GROUNDS AND SURFACES ================================= -->
+
+  <!-- The application ground: the shell window's own Background, and the page ground behind
+       every card. WPF Resources/Theme/Colors.xaml:9 DarkerBg #FF121220. -->
+  <Color x:Key="DarkerBg">#FF141018</Color>
+
+  <!-- Structural chrome that frames content rather than carrying it: the nav rail, the Studio
+       rack, the diagnostic footer, the session action bar.
+       WPF Resources/Theme/Colors.xaml:10 SurfaceBg #FF181830. -->
+  <Color x:Key="SurfaceBg">#FF19141F</Color>
+
+  <!-- A card that carries content: the module panel, the Play hero.
+       WPF Resources/Theme/Colors.xaml:7 PanelBg #FF1C1C35. -->
+  <Color x:Key="PanelBg">#FF1B1622</Color>
+
+  <!-- A seat a control sits in: a rail door at rest, a companion dial seat. Upstream has no
+       distinct key for this tier - it seats controls on SurfaceBg - so the port keeps its own. -->
+  <Color x:Key="SeatBg">#FF1E1822</Color>
+
+  <!-- One step above a panel: a notice, a badge, a hovered rack row.
+       WPF Resources/Theme/Colors.xaml:71 ElevatedSurface #FF222240. -->
+  <Color x:Key="ElevatedSurface">#FF241E2A</Color>
+
+  <!-- The interactive tier: a selected row's fill, a secondary button's face, a progress track.
+       WPF Resources/Theme/Colors.xaml:19 PanelAccent #FF2E2E4A. -->
+  <Color x:Key="PanelAccent">#FF2A2130</Color>
+
+  <!-- A border at rest, and the hairline between chrome regions.
+       WPF Resources/Theme/Colors.xaml:20 PanelAccentHover #FF3A3A5C. -->
+  <Color x:Key="PanelAccentHover">#FF3A2F3E</Color>
+
+  <!-- ======================================== INK ======================================== -->
+
+  <!-- Primary ink. The single most-pasted literal in the product before this file existed: 102
+       sites, 48 of them in StudioPage.axaml alone.
+       WPF Resources/Theme/Colors.xaml:11 TextLight #FFF0F0F5. -->
+  <Color x:Key="TextLight">#FFE8E0EE</Color>
+
+  <!-- Secondary ink: description lines, units, hints.
+       WPF Resources/Theme/Colors.xaml:15 TextMuted #FFA0A0BC. -->
+  <Color x:Key="TextMuted">#FF9A8FA3</Color>
+
+  <!-- Decorative-only, and it stays that way: never carry information in TextDim. Also the
+       pointer-over border and the rack's off/armed state dot.
+       WPF Resources/Theme/Colors.xaml:74 TextDim #FF7A7A94. -->
+  <Color x:Key="TextDim">#FF6B5B73</Color>
+
+  <!-- Ink that sits ON an accent fill, where the accent is the ground. -->
+  <Color x:Key="TextOnAccent">#FFFFFFFF</Color>
+
+  <!-- ====================================== ACCENTS ======================================
+
+       THREE accent colours, because the product really paints three, and naming what is there
+       beats inventing a scale nothing uses.
+
+       For the later mod-re-theme capability: upstream's rewrite targets the key `PinkColor`
+       (WPF MainWindow/MainWindow.xaml.cs:1655), so a mod reaching into this dictionary by that
+       name repaints the Fluent accent and the info toast. The shell's own two accents are
+       separate keys and would need naming in that feature's own mapping - recorded here so that
+       work discovers it from the file rather than from a capture.
+  -->
+
+  <!-- Upstream's accent, verbatim, and already the port's own value at the info toast
+       (ToastHost.axaml) and the Studio picker. This is also what Fluent's accent family below
+       resolves to. WPF Resources/Theme/Colors.xaml:5 PinkColor #FFFF69B4 - EXACT MATCH. -->
+  <Color x:Key="PinkColor">#FFFF69B4</Color>
+
+  <!-- The shell's accent: the session START button's idle livery, the module action rim, the
+       intake gate. WPF's own START is PinkBrush (WPF MainWindow/MainWindow.StartStop.cs:779),
+       so the ROLE matches PinkColor above and only the value diverges.
+       WPF Resources/Theme/Colors.xaml:5 PinkColor #FFFF69B4. -->
+  <Color x:Key="ShellAccent">#FFD05CE8</Color>
+
+  <!-- The bright accent: SELECTION and LIVE. Rail door checked border, rack row selection
+       marker, the rack's live state dot.
+
+       THIS COLOUR IS THE HEADED HARNESS'S SEEDED-REGRESSION ANCHOR and this file is now where
+       it lives: client/tools/verify/self-test.ps1 replaces the value on the line below with a
+       wrong one, rebuilds, and requires BOTH `rail-door-selected-border` and
+       `rack-row-selected-marker` to trip on real pixels. It used to seed MainWindow.axaml, where
+       the same literal appeared at three sites; seeding the token is strictly stronger, because
+       every present and future surface that selects reads this one key.
+       client/tools/verify/checks.json reads it back as #E066FF. Do not inline it back into a
+       surface, and do not write the seed value anywhere in this file - the self-test proves its
+       own restore by requiring the seed to be absent afterwards.
+       WPF Resources/Theme/Colors.xaml:66 PinkVibrant #FFFF5CA8. -->
+  <Color x:Key="ShellAccentBright">#FFE066FF</Color>
+
+  <!-- The tier-2 / tier-3 entitlement rim and its refusal plate.
+       WPF Resources/Theme/Colors.xaml:129 NeonPurple #FFB47BFF - EXACT MATCH. -->
+  <Color x:Key="NeonPurple">#FFB47BFF</Color>
+
+  <!-- ===================================== SEMANTICS =====================================
+       Severity, not brand. These stay put when the accent moves, exactly as upstream's Danger
+       and SuccessGreen do (WPF Resources/Theme/Colors.xaml:23-28 say so in their own words).
+  -->
+
+  <!-- A session that is RUNNING repaints the one START button red. Upstream builds this in code
+       as Color.FromRgb(255,107,107) (WPF MainWindow/MainWindow.StartStop.cs:756) - so the value
+       is upstream's exactly, and only the key is the port's.
+       WPF Resources/Theme/Colors.xaml:23 Danger #FFE53935 is upstream's other red, for dialogs. -->
+  <Color x:Key="Danger">#FFFF6B6B</Color>
+
+  <!-- The FAILURE livery, which exists to be told apart at a glance from the two REFUSAL
+       liveries above. Upstream never needs it: its failure surface is a modal MessageBox with
+       MessageBoxImage.Warning (WPF MainWindow/MainWindow.Lab.cs:164-165), a different WINDOW.
+       The port reuses the plate idiom on the same page, so the severity signal has to be
+       carried by the colour instead of by the window. -->
+  <Color x:Key="Warning">#FFF0A02E</Color>
+
+  <!-- ====================================== BRUSHES ======================================
+       Derived from the colours above through DynamicResource, which is upstream's own structure
+       and its own stated reason: "use DynamicResource so runtime color changes propagate"
+       (WPF Resources/Theme/Brushes.xaml:4). Consumers bind the BRUSH; nothing in the product
+       binds a Color except a gradient stop.
+  -->
+
+  <SolidColorBrush x:Key="DarkerBgBrush" Color="{DynamicResource DarkerBg}" />
+  <SolidColorBrush x:Key="SurfaceBgBrush" Color="{DynamicResource SurfaceBg}" />
+  <SolidColorBrush x:Key="PanelBgBrush" Color="{DynamicResource PanelBg}" />
+  <SolidColorBrush x:Key="SeatBgBrush" Color="{DynamicResource SeatBg}" />
+  <SolidColorBrush x:Key="ElevatedSurfaceBrush" Color="{DynamicResource ElevatedSurface}" />
+  <SolidColorBrush x:Key="PanelAccentBrush" Color="{DynamicResource PanelAccent}" />
+  <SolidColorBrush x:Key="PanelAccentHoverBrush" Color="{DynamicResource PanelAccentHover}" />
+
+  <SolidColorBrush x:Key="TextLightBrush" Color="{DynamicResource TextLight}" />
+  <SolidColorBrush x:Key="TextMutedBrush" Color="{DynamicResource TextMuted}" />
+  <SolidColorBrush x:Key="TextDimBrush" Color="{DynamicResource TextDim}" />
+  <SolidColorBrush x:Key="TextOnAccentBrush" Color="{DynamicResource TextOnAccent}" />
+
+  <SolidColorBrush x:Key="PinkBrush" Color="{DynamicResource PinkColor}" />
+  <SolidColorBrush x:Key="ShellAccentBrush" Color="{DynamicResource ShellAccent}" />
+  <SolidColorBrush x:Key="ShellAccentBrightBrush" Color="{DynamicResource ShellAccentBright}" />
+  <SolidColorBrush x:Key="NeonPurpleBrush" Color="{DynamicResource NeonPurple}" />
+
+  <SolidColorBrush x:Key="DangerBrush" Color="{DynamicResource Danger}" />
+  <SolidColorBrush x:Key="WarningBrush" Color="{DynamicResource Warning}" />
+
+  <!-- ==================================== TYPOGRAPHY ====================================
+       The product had NO FontFamily anywhere before this line: six occurrences across the whole
+       tree, every one a Consolas probe inside a web-host window. Upstream sets Segoe UI on the
+       Window and inherits it everywhere (WPF MainWindow/MainWindow.xaml:24).
+
+       THE FALLBACK CHAIN IS NOT DECORATION. Segoe UI does not exist on Linux, and this client
+       ships there. Noto Sans and DejaVu Sans are the two faces a desktop Linux install can be
+       relied on to carry; the trailing generic hands the last word to the platform's own font
+       manager rather than to whatever Avalonia happens to pick first.
+  -->
+  <FontFamily x:Key="CcpFontFamily">Segoe UI, Noto Sans, DejaVu Sans, sans-serif</FontFamily>
+
+  <!-- ================================== GEOMETRY SCALE ==================================
+       The radii the shell really uses, stated once. Adopted by the shell's own style block
+       (Views/MainWindow.axaml); per-page one-off geometry is still written inline.
+  -->
+  <CornerRadius x:Key="RadiusChip">4</CornerRadius>
+  <CornerRadius x:Key="RadiusControl">6</CornerRadius>
+  <CornerRadius x:Key="RadiusPanel">8</CornerRadius>
+  <CornerRadius x:Key="RadiusPlate">10</CornerRadius>
+  <CornerRadius x:Key="RadiusGate">12</CornerRadius>
+  <CornerRadius x:Key="RadiusPill">14</CornerRadius>
+  <!-- 15 is 16 minus the card's 1px border, which is where upstream derives it
+       (WPF Views/Tabs/PlayTabView.xaml:252). A band inside RadiusCard must use this. -->
+  <CornerRadius x:Key="RadiusBand">15</CornerRadius>
+  <CornerRadius x:Key="RadiusCard">16</CornerRadius>
+
+  <!-- The uniform paddings. Non-uniform ones stay inline: a "12,6" is a layout decision at one
+       site, not a token, and hiding it behind a name would cost a lookup and buy nothing. -->
+  <Thickness x:Key="PadRack">8</Thickness>
+  <Thickness x:Key="PadNotice">12</Thickness>
+  <Thickness x:Key="PadPanel">16</Thickness>
+  <Thickness x:Key="PadCard">24</Thickness>
+
+  <!-- ============================== FLUENT'S ACCENT FAMILY ==============================
+
+       THE DEFECT THIS CLOSES, measured on captured pixels before it existed: every unstyled
+       Fluent control resolved its accent from the user's Windows personalisation setting
+       (HKCU\...\Explorer\Accent\AccentColorMenu). The port's checkboxes and sliders measured
+       #0078D4 - 3,500 exact-hex pixels in a port capture and ZERO in the same capture of the
+       shipping product - so the most-touched controls in a magenta application were Windows
+       blue, and a different blue on every machine.
+
+       Application.Resources is consulted BEFORE the theme's own dictionaries, so declaring the
+       seven keys here shadows Fluent's without forking a control theme or restating a template.
+       All seven are written out rather than left to Fluent's shade calculator: the calculator
+       runs off the platform accent, which is the thing being removed.
+
+       The shades are the standard Fluent ladder around the base - Light1/2/3 lift toward white,
+       Dark1/2/3 toward black - so hover, pressed and disabled states stay distinguishable
+       instead of collapsing onto one flat pink.
+
+       WPF Resources/Theme/Colors.xaml:5 PinkColor #FFFF69B4 is the base, and upstream paints the
+       same accent on the same controls: its 18-unit circle checkbox takes PinkBrush on hover and
+       on check (WPF Resources/Theme/Inputs.xaml:218-262).
+  -->
+  <Color x:Key="SystemAccentColor">#FFFF69B4</Color>
+  <Color x:Key="SystemAccentColorLight1">#FFFF85C2</Color>
+  <Color x:Key="SystemAccentColorLight2">#FFFFA1D0</Color>
+  <Color x:Key="SystemAccentColorLight3">#FFFFBDDE</Color>
+  <Color x:Key="SystemAccentColorDark1">#FFD9599A</Color>
+  <Color x:Key="SystemAccentColorDark2">#FFB34A80</Color>
+  <Color x:Key="SystemAccentColorDark3">#FF8C3A66</Color>
+
+</ResourceDictionary>

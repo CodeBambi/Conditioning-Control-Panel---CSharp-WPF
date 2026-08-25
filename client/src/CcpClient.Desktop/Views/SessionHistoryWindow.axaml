@@ -5,7 +5,7 @@
         Width="560" Height="560"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
-        Background="#FF141018">
+        Background="{DynamicResource DarkerBgBrush}">
   <!--
     RECENT SESSIONS — upstream's Windows/SessionLogHistoryWindow.xaml(.cs), opened by the door
     button (MainWindow/MainWindow.Presets.cs:1440, Views/Tabs/PresetsTabView.xaml:646-651). It
@@ -18,16 +18,16 @@
   -->
   <Window.Styles>
     <Style Selector="Border.plate">
-      <Setter Property="Background" Value="#FF241E2A" />
-      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentHoverBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="6" />
       <Setter Property="Padding" Value="12" />
     </Style>
     <Style Selector="Button.history-row">
-      <Setter Property="Background" Value="#FF2A2130" />
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
-      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentHoverBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="6" />
       <Setter Property="Padding" Value="10,8" />
@@ -36,12 +36,12 @@
     </Style>
     <Style Selector="Button.history-row:pointerover /template/ ContentPresenter">
       <Setter Property="Background" Value="#FF36305A" />
-      <Setter Property="BorderBrush" Value="#FFD05CE8" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ShellAccentBrush}" />
     </Style>
     <Style Selector="Button.history-close">
-      <Setter Property="Background" Value="#FF2A2130" />
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
-      <Setter Property="BorderBrush" Value="#FFD05CE8" />
+      <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ShellAccentBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="6" />
       <Setter Property="Padding" Value="24,8" />
@@ -52,11 +52,11 @@
     <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
       <TextBlock Grid.Column="0" x:Name="Header"
                  AutomationProperties.AutomationId="SessionHistoryHeader"
-                 Foreground="#FFD05CE8" FontSize="20" FontWeight="Bold"
+                 Foreground="{DynamicResource ShellAccentBrush}" FontSize="20" FontWeight="Bold"
                  Text="Recent Sessions" />
       <TextBlock Grid.Column="1" x:Name="HistoryCount"
                  AutomationProperties.AutomationId="SessionHistoryCount"
-                 Foreground="#FFE8E0EE" Opacity="0.7" FontSize="12"
+                 Foreground="{DynamicResource TextLightBrush}" Opacity="0.7" FontSize="12"
                  VerticalAlignment="Center" Text="" />
     </Grid>
 
@@ -72,7 +72,7 @@
       <Panel>
         <TextBlock x:Name="EmptyLine"
                    AutomationProperties.AutomationId="SessionHistoryEmpty"
-                   Foreground="#FFE8E0EE" Opacity="0.6" FontSize="12" FontStyle="Italic"
+                   Foreground="{DynamicResource TextLightBrush}" Opacity="0.6" FontSize="12" FontStyle="Italic"
                    HorizontalAlignment="Center" VerticalAlignment="Center"
                    TextWrapping="Wrap" IsVisible="False" Text="" />
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">

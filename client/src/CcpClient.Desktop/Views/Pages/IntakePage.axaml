@@ -207,21 +207,21 @@
             <TextBlock x:Name="TrainerCardRankLine"
                        Classes="module-title"
                        FontSize="13"
-                       Foreground="#FFD05CE8"
+                       Foreground="{DynamicResource ShellAccentBrush}"
                        VerticalAlignment="Center"
                        IsVisible="False"
                        AutomationProperties.AutomationId="TrainerCardRankLine" />
           </StackPanel>
 
           <Border x:Name="TrainerCardXpTrack"
-                  Background="#FF2A2130"
+                  Background="{DynamicResource PanelAccentBrush}"
                   CornerRadius="4"
                   Height="8"
                   Width="420"
                   HorizontalAlignment="Left"
                   IsVisible="False">
             <Grid x:Name="TrainerCardXpBar" ColumnDefinitions="0*,1*">
-              <Border x:Name="TrainerCardXpFill" Background="#FFD05CE8" CornerRadius="4" />
+              <Border x:Name="TrainerCardXpFill" Background="{DynamicResource ShellAccentBrush}" CornerRadius="4" />
             </Grid>
           </Border>
 

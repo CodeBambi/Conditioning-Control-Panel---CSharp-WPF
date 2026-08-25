@@ -5,7 +5,7 @@
         Width="540" Height="620"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
-        Background="#FF141018">
+        Background="{DynamicResource DarkerBgBrush}">
   <!--
     THE SESSION COMPLETE RECAP — upstream's Windows/SessionCompleteWindow.xaml(.cs), shown for
     COMPLETION AND ABORT ALIKE (MainWindow/MainWindow.Presets.cs:1681, reached from the media log's
@@ -26,33 +26,33 @@
   -->
   <Window.Styles>
     <Style Selector="Border.plate">
-      <Setter Property="Background" Value="#FF241E2A" />
-      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentHoverBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="6" />
       <Setter Property="Padding" Value="12" />
     </Style>
     <Style Selector="TextBlock.stat-label">
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
       <Setter Property="Opacity" Value="0.6" />
       <Setter Property="FontSize" Value="11" />
       <Setter Property="HorizontalAlignment" Value="Center" />
     </Style>
     <Style Selector="TextBlock.stat-value">
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
       <Setter Property="FontSize" Value="15" />
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="HorizontalAlignment" Value="Center" />
       <Setter Property="Margin" Value="0,3,0,0" />
     </Style>
     <Style Selector="TextBlock.note">
-      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
       <Setter Property="Opacity" Value="0.7" />
       <Setter Property="FontSize" Value="11" />
       <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
     <Style Selector="Button.recap-action">
-      <Setter Property="Background" Value="#FFD05CE8" />
+      <Setter Property="Background" Value="{DynamicResource ShellAccentBrush}" />
       <Setter Property="Foreground" Value="#FFFFFFFF" />
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="CornerRadius" Value="14" />
@@ -66,11 +66,11 @@
     <StackPanel DockPanel.Dock="Top" Spacing="4">
       <TextBlock x:Name="Headline"
                  AutomationProperties.AutomationId="SessionRecapHeadline"
-                 Foreground="#FFD05CE8" FontSize="26" FontWeight="Bold"
+                 Foreground="{DynamicResource ShellAccentBrush}" FontSize="26" FontWeight="Bold"
                  HorizontalAlignment="Center" TextWrapping="Wrap" Text="" />
       <TextBlock x:Name="Subtitle"
                  AutomationProperties.AutomationId="SessionRecapSubtitle"
-                 Foreground="#FFE8E0EE" Opacity="0.7" FontSize="14"
+                 Foreground="{DynamicResource TextLightBrush}" Opacity="0.7" FontSize="14"
                  HorizontalAlignment="Center" TextWrapping="Wrap" Text="" />
     </StackPanel>
 
@@ -113,16 +113,16 @@
     <Border Classes="plate" Margin="0,12,0,0">
       <DockPanel>
         <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
-          <TextBlock Grid.Column="0" Foreground="#FFD05CE8" FontSize="13" FontWeight="SemiBold"
+          <TextBlock Grid.Column="0" Foreground="{DynamicResource ShellAccentBrush}" FontSize="13" FontWeight="SemiBold"
                      Text="Played This Session" />
           <TextBlock Grid.Column="1" x:Name="MediaCount"
                      AutomationProperties.AutomationId="SessionRecapMediaCount"
-                     Foreground="#FFE8E0EE" Opacity="0.7" FontSize="12"
+                     Foreground="{DynamicResource TextLightBrush}" Opacity="0.7" FontSize="12"
                      VerticalAlignment="Center" Text="" />
         </Grid>
         <TextBlock DockPanel.Dock="Top" x:Name="NoMedia"
                    AutomationProperties.AutomationId="SessionRecapNoMedia"
-                   Foreground="#FFE8E0EE" Opacity="0.6" FontSize="12" FontStyle="Italic"
+                   Foreground="{DynamicResource TextLightBrush}" Opacity="0.6" FontSize="12" FontStyle="Italic"
                    HorizontalAlignment="Center" Margin="0,20" IsVisible="False"
                    TextWrapping="Wrap" Text="" />
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">

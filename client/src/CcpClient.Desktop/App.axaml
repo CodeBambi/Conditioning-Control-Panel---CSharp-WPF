@@ -1,8 +1,45 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="CcpClient.Desktop.App"
-             RequestedThemeVariant="Default">
+             RequestedThemeVariant="Dark">
+  <!--
+    THEME VARIANT IS PINNED, and this used to say "Default".
+
+    Default means FOLLOW THE OPERATING SYSTEM's light/dark setting, and every ground in this
+    product is a hard dark hex. The test machine happens to be set to dark, so the port had never
+    once been seen rendered on a light-mode machine - where roughly ninety unstyled Fluent
+    controls would have painted light chrome onto those dark grounds. The shipping product has no
+    such switch: it is a dark application and its window grounds say so
+    (WPF MainWindow/MainWindow.xaml:14 binds DarkerBgBrush unconditionally). This is one word and
+    it removes the whole class.
+
+    A LIGHT VARIANT IS NOT A FUTURE FEATURE THIS BLOCKS - it is a product decision nobody has
+    taken. When someone takes it, the token layer is where it lands.
+  -->
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://CcpClient.Desktop/Themes/Ccp.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+
   <Application.Styles>
     <FluentTheme />
+    <!--
+      Typography, inherited the way upstream inherits it. Upstream sets FontFamily on the Window
+      and every descendant picks it up (WPF MainWindow/MainWindow.xaml:24); Avalonia's
+      FontFamily is an inheriting property too, so one selector over Window does the same job for
+      every window this application opens - including the ones a feature creates later without
+      knowing this rule exists.
+
+      A Style setter, NOT a per-window local value: local values beat style setters, so the two
+      web-host windows that deliberately probe in Consolas keep doing so.
+
+      AFTER FluentTheme on purpose. Later styles win, and this has to beat the theme's own.
+    -->
+    <Style Selector="Window">
+      <Setter Property="FontFamily" Value="{DynamicResource CcpFontFamily}" />
+    </Style>
   </Application.Styles>
 </Application>
