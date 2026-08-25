@@ -35,7 +35,7 @@ public sealed record SubliminalCardObservations(
     public const int CardHeight = 360;
 
     /// <summary>The phrase the measurement uses. Short, upper-case and from WPF's own shipped pool
-    /// (<c>CCP.Core/Models/AppSettings.cs:1267</c>).</summary>
+    /// (<c>CCP.Core/Models/AppSettings.cs:1295</c>).</summary>
     public const string Phrase = "GOOD GIRL";
 
     private static readonly Lazy<SubliminalCardObservations> Lazy = new(Measure, LazyThreadSafetyMode.ExecutionAndPublication);
@@ -47,16 +47,16 @@ public sealed record SubliminalCardObservations(
     {
         var source = new GdiPlusSubliminalFrameSource();
         var available = GdiPlusRuntime.Available;
-        var frame = source.Render(Phrase, CardWidth, CardHeight);
+        var frame = source.Render(Phrase, CardWidth, CardHeight, SubliminalPalette.Default);
 
         // A zero-width card is a caller bug, not a raster failure: it must come back null rather
         // than throwing on a timer thread or allocating a zero-byte buffer the surface would blit.
-        var emptyRefused = source.Render(Phrase, 0, CardHeight) is null
-            && source.Render(Phrase, CardWidth, 0) is null;
+        var emptyRefused = source.Render(Phrase, 0, CardHeight, SubliminalPalette.Default) is null
+            && source.Render(Phrase, CardWidth, 0, SubliminalPalette.Default) is null;
 
         // A phrase far wider than the card: WPF measures with infinite width and lets it overflow
         // (SubliminalService.cs:778), so this must still produce a card rather than failing.
-        var longPhrase = source.Render(new string('W', 200), CardWidth, CardHeight);
+        var longPhrase = source.Render(new string('W', 200), CardWidth, CardHeight, SubliminalPalette.Default);
 
         if (frame is null)
         {
@@ -75,18 +75,18 @@ public sealed record SubliminalCardObservations(
             frame.Width,
             frame.Height,
             CornersAreBackground(frame),
-            CountColour(frame, GdiPlusSubliminalFrameSource.TextArgb) > 0,
-            CountColour(frame, GdiPlusSubliminalFrameSource.OutlineArgb) > 0,
+            CountColour(frame, SubliminalPalette.DefaultTextArgb) > 0,
+            CountColour(frame, SubliminalPalette.DefaultOutlineArgb) > 0,
             emptyRefused,
             SurvivedAPhraseLongerThanTheCard: longPhrase is not null);
     }
 
     /// <summary>All four corners hold the background: the card is opaque edge to edge, which is what
-    /// <c>SubBackgroundTransparent = false</c> ships as (<c>AppSettings.cs:1333</c>) and what stops
+    /// <c>SubBackgroundTransparent = false</c> ships as (<c>AppSettings.cs:1359</c>) and what stops
     /// the desktop showing through a surface with one uniform alpha.</summary>
     private static bool CornersAreBackground(OverlayFrame frame)
     {
-        var background = GdiPlusSubliminalFrameSource.BackgroundArgb & 0x00FFFFFF;
+        var background = SubliminalPalette.DefaultBackgroundArgb & 0x00FFFFFF;
         return frame.ColourAt(0, 0) == background
             && frame.ColourAt(frame.Width - 1, 0) == background
             && frame.ColourAt(0, frame.Height - 1) == background

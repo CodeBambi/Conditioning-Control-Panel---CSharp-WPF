@@ -77,6 +77,24 @@ public static class EffectReasonCodes
     public const string SubliminalNoActivePhrase = "subliminal-no-active-phrase";
 
     /// <summary>
+    /// Subliminals: the user turned <c>SubBackgroundTransparent</c> on and this build's card surface
+    /// cannot express it. The three COLOUR settings beside it are honoured; this one is not.
+    ///
+    /// <para><b>Why it is a refusal and not a bug.</b> Upstream drops the background rectangle from
+    /// the card's visual tree (<c>Services/Subliminal/SubliminalService.cs:969-980</c>) and WPF's
+    /// compositor gives it real per-pixel transparency for free. The port's card is one layered
+    /// window at a single uniform <c>LWA_ALPHA</c> over a B,G,R,<b>X</b> frame whose fourth byte is
+    /// padding, so there is no per-pixel "absent" to write. The card will be opaque whatever this
+    /// flag says.</para>
+    ///
+    /// <para><b>Why it is said out loud.</b> The alternative is a settings toggle that the user
+    /// flips and that changes nothing at all on screen — the dead dial the port refuses everywhere
+    /// else. Degraded, with the phrase pool and the colours all still working, is the honest
+    /// state: <see cref="SubliminalNoActivePhrase"/>'s shape, for a dial rather than for a pool.</para>
+    /// </summary>
+    public const string SubliminalOpaqueBackgroundOnly = "subliminal-opaque-background-only";
+
+    /// <summary>
     /// A CONTINUOUS module's work is a native window, and this composition has no surface to place
     /// one on. Distinct from <see cref="EffectNoUiThread"/>: there, a surface exists and
     /// there is no thread that may legally touch it; here there is no surface at all, which is what
@@ -99,7 +117,7 @@ public static class EffectReasonCodes
     /// <summary>
     /// Pink Filter: the opacity dial is at zero, so the module is engaged and there is nothing to
     /// draw. WPF's clamp allows it — <c>Math.Clamp(value, 0, 50)</c>
-    /// (<c>CCP.Core/Models/AppSettings.cs:3737</c>) — and WPF at zero still puts a full-screen
+    /// (<c>CCP.Core/Models/AppSettings.cs:3764</c>) — and WPF at zero still puts a full-screen
     /// layered window on the desktop holding alpha 0. The port refuses to place an invisible
     /// always-on-top window (<c>Overlay/OverlaySurfaceRequest.cs</c> will not construct one), so the
     /// arm result is <see cref="Capabilities.CapabilityState.Degraded"/>: the module really took the session, and
@@ -130,7 +148,7 @@ public static class EffectReasonCodes
 
     /// <summary>
     /// Spiral Overlay: the opacity dial is at zero, so the module is engaged and there is nothing to
-    /// draw. WPF's clamp allows it (<c>CCP.Core/Models/AppSettings.cs:2675</c>) and WPF at zero still
+    /// draw. WPF's clamp allows it (<c>CCP.Core/Models/AppSettings.cs:2702</c>) and WPF at zero still
     /// puts a full-screen always-on-top window on the desktop holding a fully transparent image. The
     /// <see cref="PinkFilterTransparent"/> case, on the module next to it, with the same answer:
     /// <see cref="Capabilities.CapabilityState.Degraded"/> from the module, nothing placed, and a dot
