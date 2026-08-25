@@ -65,7 +65,7 @@ export function createSustained(ctx) {
   const active = new Map();
   const washHolds = new Map();   // washKind -> { el, hideTimer } — the one-element law
   const live = { rain: 0, bubbles: 0 };
-  /* W3 (trap 111): a sustain is cued PER WAVE, never per node, so the three
+  /* W3 (trap 117): a sustain is cued PER WAVE, never per node, so the three
    * things a re-entrant starter has to remember live up here.
    *   lastWashKind  the wash that last took the air, so a refresh of the SAME
    *                 wash is silent and a change of kind is not (P0-25);
@@ -324,7 +324,7 @@ export function createSustained(ctx) {
       });
       guard.arm();
     }
-    /* W3 P1-17: the field's own air, ONE cue for the wave (trap 111). The
+    /* W3 P1-17: the field's own air, ONE cue for the wave (trap 117). The
      * clickSafe field - decoration, nobody pops it - was silent from entrance
      * to exit, which is the whole reason the row exists. The exit is the
      * teardown's coalesced wash, not a second cue here. */
@@ -558,7 +558,7 @@ export function createSustained(ctx) {
   /**
    * stopAll(immediate, quiet)
    * W3 P1-17: the teardown tears six things down on one frame, so it gets ONE
-   * cue and not six (trap 111) - the wash recipe pitched down, quiet, the exit
+   * cue and not six (trap 117) - the wash recipe pitched down, quiet, the exit
    * half of every entrance above. Two guards on it. It only speaks when
    * something was actually up (a stopAll over an empty stage is not a beat),
    * and `quiet` silences it for the SUSPEND path: a panic, a mandatory video

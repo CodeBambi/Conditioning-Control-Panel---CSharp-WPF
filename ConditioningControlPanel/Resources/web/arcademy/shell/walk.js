@@ -514,7 +514,7 @@ export function createWalker(o) {
     draw(t);
     /* W3 P0-30: THE FOOTFALL, ON THE BOB AND NOT ON THE FRAME. This loop runs
      * at the frame clock; the bob runs at BOB_MS. A cue per frame would be a
-     * machine gun (trap 110), so it fires on the phase PEAK of the bob - the
+     * machine gun (trap 116), so it fires on the phase PEAK of the bob - the
      * top of each half-cycle, at BOB_MS/2 + k*BOB_MS - which is one footfall
      * per step of the animation and nothing else. Two feet, so the pitch
      * alternates; quiet, because it is distant lino under a miniature. Reduced

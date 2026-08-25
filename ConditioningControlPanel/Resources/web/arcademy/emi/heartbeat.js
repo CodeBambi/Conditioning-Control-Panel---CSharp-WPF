@@ -72,8 +72,12 @@ export const HB_DIALS = Object.freeze({
   TRIES_PER_ACT: 3,          // a refused kind is re-drawn (bounded), never queued
 
   /* THE WHEEL. Weights, not odds: the sequence law below removes kinds before
-   * the draw and the remaining weights are re-normalised by the draw itself. */
-  WEIGHTS: Object.freeze({ face: 22, fidget: 18, nudge: 18, screen: 22, bark: 14, ask: 6 }),
+   * the draw and the remaining weights are re-normalised by the draw itself.
+   * `screen` was 22 (face 22 / fidget 18 / nudge 18) until the owner played
+   * the shipped heartbeat, 2026-08-25: "we need to see the animations wayy
+   * more often". The deck's own cooldowns (SL_DIALS) were loosened with it -
+   * a heavier wheel slot alone would mostly have drawn refusals. */
+  WEIGHTS: Object.freeze({ face: 18, fidget: 14, nudge: 14, screen: 34, bark: 14, ask: 6 }),
   /* IN CLASS THERE IS NO SCREEN AND NO ASK. The deck already refuses a channel
    * while a class owns the screen and an ask is barred mid-class by its own
    * gate - the zero weights here mean she does not waste a beat finding out. */
