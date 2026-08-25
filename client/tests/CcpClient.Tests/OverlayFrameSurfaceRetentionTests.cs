@@ -46,6 +46,10 @@ public class OverlayFrameSurfaceRetentionTests : RealDesktopFacts
         var all = OverlayFrameSurfaceObservations.DescribeAll();
         _output.WriteLine(all);
 
+        // At body depth 0 on purpose: every assertion below is inside the loop, so an arm list that
+        // silently became empty would take this whole fact with it and still pass.
+        Assert.NotEmpty(OverlayFrameSurfaceObservations.Cycles);
+
         foreach (var cycle in OverlayFrameSurfaceObservations.Cycles)
         {
             Assert.True(

@@ -257,6 +257,7 @@ public class RealDesktopCollectionGuardTests
         "InputOverlayCoexistenceTests.cs",
         "OverlayCapabilityTests.cs",
         "OverlayDesktopInputTests.cs",
+        "OverlayFrameSurfaceRetentionTests.cs",
         "OverlayTopmostRebuildObservations.cs",
         "PointerCapabilityTests.cs",
         "PointerCoexistenceTests.cs",

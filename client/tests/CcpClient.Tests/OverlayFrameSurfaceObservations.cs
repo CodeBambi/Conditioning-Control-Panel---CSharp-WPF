@@ -94,7 +94,7 @@ internal static class OverlayFrameSurfaceObservations
         if (!machine || screenWidth <= 0 || screenHeight <= 0)
         {
             return new Cycle(scalePercent, pass, 0, 0, machine, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, "this session has no interactive desktop with a display on it");
+                0, 0, 0, 0, "this session has no interactive desktop with a display on it");
         }
 
         // The product's own geometry, over a source image half the monitor's size on each axis: at
@@ -143,7 +143,6 @@ internal static class OverlayFrameSurfaceObservations
             // That is the product's order too — present, then paint, per surface
             // (Effects/OverlaySurfaceSet.cs:279-294).
             var painted = 0;
-            var placeWatch = Stopwatch.StartNew();
             for (var i = 0; i < presences.Length; i++)
             {
                 presences[i].Present(request);
@@ -155,13 +154,11 @@ internal static class OverlayFrameSurfaceObservations
                 }
             }
 
-            placeWatch.Stop();
             var (gdiPaint, privatePaint, workingPaint) = Sample();
 
             // Phase 3 — every surface off screen again. Nothing is disposed: this is the pooled
             // state a session sits in between flashes, which is the whole question.
             var withdrawn = 0;
-            var withdrawWatch = Stopwatch.StartNew();
             for (var i = 0; i < presences.Length; i++)
             {
                 var state = presences[i].Withdraw();
@@ -172,7 +169,6 @@ internal static class OverlayFrameSurfaceObservations
                 }
             }
 
-            withdrawWatch.Stop();
             var (gdiWithdraw, privateWithdraw, workingWithdraw) = Sample();
 
             for (var i = 0; i < presences.Length; i++)
@@ -187,7 +183,6 @@ internal static class OverlayFrameSurfaceObservations
                 gdiPresent, gdiPaint, gdiWithdraw, gdiDispose,
                 privatePresent, privatePaint, privateWithdraw, privateDispose,
                 workingPresent, workingPaint, workingWithdraw, workingDispose,
-                placeWatch.Elapsed.TotalMilliseconds, withdrawWatch.Elapsed.TotalMilliseconds,
                 firstRefusal);
         }
         finally
@@ -255,8 +250,6 @@ internal static class OverlayFrameSurfaceObservations
     /// <param name="WorkingAfterPaint">Ditto.</param>
     /// <param name="WorkingAfterWithdraw">Ditto.</param>
     /// <param name="WorkingAfterDispose">Ditto.</param>
-    /// <param name="PresentMilliseconds">Elapsed for the whole present-and-paint phase.</param>
-    /// <param name="WithdrawMilliseconds">Elapsed for the whole withdraw phase.</param>
     /// <param name="FirstRefusal">The first non-Available outcome of the pass, for failure messages.</param>
     internal sealed record Cycle(
         int ScalePercent,
@@ -279,8 +272,6 @@ internal static class OverlayFrameSurfaceObservations
         long WorkingAfterPaint,
         long WorkingAfterWithdraw,
         long WorkingAfterDispose,
-        double PresentMilliseconds,
-        double WithdrawMilliseconds,
         string? FirstRefusal)
     {
         /// <summary>GDI objects the paints added and the withdrawals did not give back.</summary>
@@ -304,8 +295,7 @@ internal static class OverlayFrameSurfaceObservations
             + $"present={Mb(PrivateAfterPresent)} paint={Mb(PrivateAfterPaint)} "
             + $"withdraw={Mb(PrivateAfterWithdraw)} dispose={Mb(PrivateAfterDispose)}; working MB "
             + $"present={Mb(WorkingAfterPresent)} paint={Mb(WorkingAfterPaint)} "
-            + $"withdraw={Mb(WorkingAfterWithdraw)} dispose={Mb(WorkingAfterDispose)}; "
-            + $"present+paint {PresentMilliseconds:F0} ms, withdraw {WithdrawMilliseconds:F0} ms"
+            + $"withdraw={Mb(WorkingAfterWithdraw)} dispose={Mb(WorkingAfterDispose)}"
             + (FirstRefusal is null ? string.Empty : $"; first refusal: {FirstRefusal}");
 
         private static string Mb(long bytes) => (bytes / (1024.0 * 1024.0)).ToString("F1");
