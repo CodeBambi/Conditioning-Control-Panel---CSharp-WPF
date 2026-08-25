@@ -34,6 +34,19 @@ evidence or owner decision.
   Record the exact unavailable platform gate when evidence cannot yet be obtained.
 - Do not broaden webcam, biometric, secret, path, logging, capture, moderation, consent, or
   network boundaries without an owner decision.
+- The product must stay LIGHT AT MAXIMUM SETTINGS, not merely at defaults. A session with every
+  effect enabled at its highest values - video on every monitor, spiral, tint, flashes, subliminals,
+  animated GIFs, bubbles, moving text - is the performance contract, and it is the configuration to
+  measure. A cost that is invisible at defaults and unusable at maximum is a defect, not a tuning
+  preference.
+- Optimization claims require a MEASUREMENT, before and after, taken on the running product at
+  maximum settings. Frame cadence, CPU, GPU, memory, allocation rate, and native window/surface
+  count are the units. A reasoned argument, a green build, or a lower number in a micro-benchmark
+  does not discharge a performance claim.
+- Reducing the number of native surfaces must never silently change an effect's INPUT POLICY.
+  Which layers pass clicks through to the desktop and which capture them is a per-effect product
+  contract, and any grouping that merges layers must preserve each one's documented policy, z-order,
+  capture visibility, and monitor scope.
 - Use deterministic test synchronization. Do not introduce wall-clock waits or process-wide
   `CCP_DATA_ROOT`; set an isolated data root only for the individual operation that needs it.
 - The active workflow harness is not frozen. While porting to Avalonia it must keep working on the
