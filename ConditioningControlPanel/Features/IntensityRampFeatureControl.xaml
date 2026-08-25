@@ -52,8 +52,29 @@
                                    Foreground="{DynamicResource PinkBrush}"/>
                     </Grid>
 
-                    <!-- Multiplier -->
-                    <Grid Height="36">
+                    <!-- Ramp mode. Multiplier is the legacy behaviour and the default; Range
+                         swaps the single "up to Nx" dial for a start to end pair expressed as a
+                         PERCENT OF EACH LINKED FEATURE'S OWN SETTING, which is what makes one pair
+                         of sliders able to drive spiral opacity, flash rate and volume at once -
+                         and what makes end below start (the wind-down) possible at all. The runtime
+                         difference is one formula in Helpers/RampMath.cs; nothing per-feature. -->
+                    <Grid Height="36" ToolTip="{loc:Str tooltip_ramp_mode}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str label_ramp_mode}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <ComboBox Grid.Column="1" x:Name="CmbRampMode"
+                                  Height="26" MaxWidth="220" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  SelectionChanged="CmbRampMode_Changed">
+                            <ComboBoxItem Content="{loc:Str ramp_mode_multiplier}" Tag="Multiplier"/>
+                            <ComboBoxItem Content="{loc:Str ramp_mode_range}" Tag="Range"/>
+                        </ComboBox>
+                    </Grid>
+
+                    <!-- Multiplier (Multiplier mode only) -->
+                    <Grid x:Name="RowMultiplier" Height="36">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" MinWidth="120"/>
                             <ColumnDefinition Width="*"/>
@@ -66,6 +87,45 @@
                                 VerticalAlignment="Center" Margin="10,0"
                                 ValueChanged="SliderMultiplier_Changed"/>
                         <TextBlock Grid.Column="2" x:Name="TxtMultiplier" Text="1.5x" HorizontalAlignment="Right"
+                                   VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
+                                   Foreground="{DynamicResource PinkBrush}"/>
+                    </Grid>
+
+                    <!-- Range start/end (Range mode only). 0..300% of the feature's own value;
+                         100 to 100 is the default and a deliberate no-op, so flipping the mode
+                         alone never changes what the user already had. -->
+                    <Grid x:Name="RowRangeStart" Height="36" Visibility="Collapsed"
+                          ToolTip="{loc:Str tooltip_ramp_range}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto" MinWidth="56"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str label_ramp_start}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <Slider Grid.Column="1" x:Name="SliderRangeStart" Minimum="0" Maximum="300" Value="100"
+                                SmallChange="5" LargeChange="25" TickFrequency="5" IsSnapToTickEnabled="True"
+                                VerticalAlignment="Center" Margin="10,0"
+                                ValueChanged="SliderRangeStart_Changed"/>
+                        <TextBlock Grid.Column="2" x:Name="TxtRangeStart" Text="100%" HorizontalAlignment="Right"
+                                   VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
+                                   Foreground="{DynamicResource PinkBrush}"/>
+                    </Grid>
+
+                    <Grid x:Name="RowRangeEnd" Height="36" Visibility="Collapsed"
+                          ToolTip="{loc:Str tooltip_ramp_range}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto" MinWidth="56"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str label_ramp_end}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <Slider Grid.Column="1" x:Name="SliderRangeEnd" Minimum="0" Maximum="300" Value="100"
+                                SmallChange="5" LargeChange="25" TickFrequency="5" IsSnapToTickEnabled="True"
+                                VerticalAlignment="Center" Margin="10,0"
+                                ValueChanged="SliderRangeEnd_Changed"/>
+                        <TextBlock Grid.Column="2" x:Name="TxtRangeEnd" Text="100%" HorizontalAlignment="Right"
                                    VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
                                    Foreground="{DynamicResource PinkBrush}"/>
                     </Grid>
@@ -100,6 +160,30 @@
                             <ComboBoxItem Content="{loc:Str ramp_curve_scurve}" Tag="SCurve"/>
                             <ComboBoxItem Content="{loc:Str ramp_curve_exponential}" Tag="Exponential"/>
                         </ComboBox>
+                    </Grid>
+
+                    <!-- Live curve preview. Not decoration: "Ease In on a 100 to 10 percent range"
+                         is hard to picture and easy to get backwards, and this is the one place the
+                         mode, the curve and the endpoints are visible as one shape. Drawn in
+                         code-behind off the same Helpers/RampMath.ResolveFactor the runtime uses,
+                         so it cannot drift from what the ramp actually does. -->
+                    <Grid Height="52" Margin="0,4,0,2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str label_ramp_preview}" FontSize="12"
+                                   Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                        <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="8" MinWidth="120"
+                                Background="{StaticResource SectionHueStudioWashBrush}"
+                                BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}">
+                            <Canvas x:Name="CurvePreviewCanvas" ClipToBounds="True" Margin="6,5,6,5"
+                                    Background="Transparent" SizeChanged="CurvePreviewCanvas_SizeChanged">
+                                <Polyline x:Name="CurvePreviewLine" StrokeThickness="2"
+                                          Stroke="{DynamicResource PinkBrush}"
+                                          StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                            </Canvas>
+                        </Border>
                     </Grid>
 
                     <!-- Stays VISIBLE, not a ToolTip: it is the reason the dials above look inert

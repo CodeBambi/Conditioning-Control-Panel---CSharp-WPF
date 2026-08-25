@@ -445,8 +445,9 @@ namespace ConditioningControlPanel
             _rampTimer.Tick += RampTimer_Tick;
             _rampTimer.Start();
             
-            App.Logger?.Information("Ramp timer started - Duration: {Duration}min, Multiplier: {Mult}x", 
-                settings.RampDurationMinutes, settings.SchedulerMultiplier);
+            App.Logger?.Information("Ramp timer started - Duration: {Duration}min, Mode: {Mode}, Multiplier: {Mult}x, Range: {Start}%->{End}%",
+                settings.RampDurationMinutes, settings.RampMode, settings.SchedulerMultiplier,
+                settings.RampStartPercent, settings.RampEndPercent);
         }
 
         private void StopRampTimer()
@@ -502,7 +503,6 @@ namespace ConditioningControlPanel
             var settings = App.Settings.Current;
             var elapsed = (DateTime.Now - _rampStartTime).TotalMinutes;
             var duration = settings.RampDurationMinutes;
-            var multiplier = settings.SchedulerMultiplier;
 
             // Skip visual effect ramping if a session is active - sessions have their own built-in ramping
             // This prevents the two systems from fighting and causing values to jump around
@@ -511,21 +511,28 @@ namespace ConditioningControlPanel
             // Calculate progress (0.0 to 1.0)
             var progress = Math.Min(elapsed / duration, 1.0);
 
-            // Shape the progress by the selected easing curve (#660). Linear leaves it
-            // untouched; the completion check below still uses the raw linear progress so
-            // the ramp ends at its configured duration regardless of curve.
-            var easedProgress = ConditioningControlPanel.Helpers.RampCurves.ApplyCurve(progress, settings.RampCurve);
+            // Resolve the factor every linked feature's BASE value is multiplied by. The easing
+            // curve (#660) is applied inside; the completion check below still uses the raw linear
+            // progress so the ramp ends at its configured duration regardless of curve.
+            //
+            // Multiplier mode is the original 1x -> max climb, unchanged. Range mode interpolates
+            // between two percentages of the feature's own setting, so it can resolve BELOW 1.0 -
+            // that is the ramp-down (wind-down) the community asked for, and it needs no
+            // per-feature code because it rides this same multiply. See Helpers/RampMath.cs.
+            var currentMult = ConditioningControlPanel.Helpers.RampMath.ResolveFactor(settings, progress);
 
-            // Calculate current multiplier based on eased progress (1.0 -> max)
-            var currentMult = 1.0 + (multiplier - 1.0) * easedProgress;
-
-            // Update linked sliders and settings
+            // Update linked sliders and settings.
+            //
+            // Every link below clamps to [0, its own cap]. It used to be Math.Min(value, cap) with
+            // no floor, which was safe only because the multiplier could never dip under 1x. Range
+            // mode CAN, so the floor is explicit now - identical arithmetic in Multiplier mode
+            // (base * factor >= base >= 0), and a legal wind-down to nothing in Range mode.
             Dispatcher.Invoke(() =>
             {
                 // Only apply visual effect ramps when no session is active
                 if (!sessionActive && settings.RampLinkFlashOpacity && _rampBaseValues.TryGetValue("FlashOpacity", out var flashBase))
                 {
-                    var newVal = (int)Math.Min(flashBase * currentMult, 100);
+                    var newVal = (int)Math.Clamp(flashBase * currentMult, 0, 100);
                     settings.FlashOpacity = newVal;
                 }
 
@@ -533,19 +540,19 @@ namespace ConditioningControlPanel
                 {
                     // Cap matches the spiral opacity slider's own max, raised 50 -> 100 in f56eaaf9c (#866).
                     // Phase 8: settings-only. The Studio panels repaint off PropertyChanged.
-                    var newVal = (int)Math.Min(spiralBase * currentMult, 100);
+                    var newVal = (int)Math.Clamp(spiralBase * currentMult, 0, 100);
                     settings.SpiralOpacity = newVal;
                 }
 
                 if (!sessionActive && settings.RampLinkPinkFilterOpacity && _rampBaseValues.TryGetValue("PinkFilterOpacity", out var pinkBase))
                 {
-                    var newVal = (int)Math.Min(pinkBase * currentMult, 50);
+                    var newVal = (int)Math.Clamp(pinkBase * currentMult, 0, 50);
                     settings.PinkFilterOpacity = newVal;
                 }
                 
                 if (settings.RampLinkMasterAudio && _rampBaseValues.TryGetValue("MasterVolume", out var masterBase))
                 {
-                    var newVal = (int)Math.Min(masterBase * currentMult, 100);
+                    var newVal = (int)Math.Clamp(masterBase * currentMult, 0, 100);
                     AppSettingsTab.SliderMaster.Value = newVal;
                     AppSettingsTab.TxtMaster.Text = $"{newVal}%";
                     settings.MasterVolume = newVal;
@@ -553,7 +560,7 @@ namespace ConditioningControlPanel
                 
                 if (settings.RampLinkSubliminalAudio && _rampBaseValues.TryGetValue("SubAudioVolume", out var subBase))
                 {
-                    var newVal = (int)Math.Min(subBase * currentMult, 100);
+                    var newVal = (int)Math.Clamp(subBase * currentMult, 0, 100);
                     settings.SubAudioVolume = newVal;
                 }
 
@@ -564,7 +571,7 @@ namespace ConditioningControlPanel
                 // PropertyChanged and re-presses the live overlay for us.
                 if (!sessionActive && settings.RampLinkBrainDrain && _rampBaseValues.TryGetValue("BrainDrainBlurStrength", out var bdBase))
                 {
-                    var newVal = (int)Math.Min(bdBase * currentMult, 100);
+                    var newVal = (int)Math.Clamp(bdBase * currentMult, 0, 100);
                     settings.BrainDrainBlurStrength = newVal;
                 }
             });

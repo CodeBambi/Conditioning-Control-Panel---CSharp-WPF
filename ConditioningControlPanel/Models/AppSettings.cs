@@ -2735,6 +2735,39 @@ namespace ConditioningControlPanel.Models
             set { _rampCurve = value; OnPropertyChanged(); }
         }
 
+        // Range ramping (community request). Stored by ordinal like RampCurve above; a settings
+        // file written before this shipped has no field, so it deserializes to Multiplier and the
+        // ramp behaves exactly as it did. See Helpers/RampMath.cs for the factor formula.
+        private RampMode _rampMode = RampMode.Multiplier;
+        public RampMode RampMode
+        {
+            get => _rampMode;
+            set { _rampMode = value; OnPropertyChanged(); }
+        }
+
+        // Range-mode endpoints, as a PERCENT OF EACH LINKED FEATURE'S OWN CONFIGURED VALUE, not
+        // absolute units - that is what lets one pair of dials drive spiral opacity, flash rate and
+        // volume at once with no per-feature ramp matrix. 100 -> 100 is a deliberate no-op default:
+        // flipping to Range mode changes nothing until the user moves a slider.
+        private int _rampStartPercent = 100;
+        public int RampStartPercent
+        {
+            get => _rampStartPercent;
+            set { _rampStartPercent = Math.Clamp(value, 0, 300); OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// End of the Range-mode sweep. May be BELOW <see cref="RampStartPercent"/> - a ramp-down
+        /// is the point (wakener audio, gentle wind-down instead of a hard stop), and the
+        /// Multiplier mode's 1x floor cannot express it.
+        /// </summary>
+        private int _rampEndPercent = 100;
+        public int RampEndPercent
+        {
+            get => _rampEndPercent;
+            set { _rampEndPercent = Math.Clamp(value, 0, 300); OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Spiral Overlay (Unlocks Lv.10)
