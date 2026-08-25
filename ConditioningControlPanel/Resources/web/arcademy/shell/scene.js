@@ -1196,6 +1196,9 @@ export function createScene(opts) {
 
   /* ---------------------------------------------------------------- fit */
 
+  /** The last scale `fit()` computed - the stage's, never a prop's own. */
+  let lastScale = 1;
+
   /** Scale to fit, then hang the apron off the painting's floor line and
    *  publish the band height. `--arm-band-h` goes on BOTH root and bar: the
    *  bar is a body-level sibling and cannot inherit a var set on root alone. */
@@ -1204,6 +1207,14 @@ export function createScene(opts) {
     const w = root.clientWidth || (root.parentNode && root.parentNode.clientWidth) || stageW;
     const h = root.clientHeight || (root.parentNode && root.parentNode.clientHeight) || stageH;
     const s = Math.min(w / stageW, h / stageH) || 1;
+    /* ONE STAGE, ONE SCALE, and a consumer may ask for it. A prop that has to
+     * reason in SCREEN pixels (the corkboard's type floor is 10 real pixels,
+     * whatever the plate is doing) cannot measure its own host: the miniature
+     * on the wide shot carries a second scale of its own, so its rect would
+     * answer a different number than the close-up's and the two walls would
+     * lay out differently. This is the stage's number, the same for every prop
+     * on it, and `scale()` below is the only way to read it. */
+    lastScale = s;
     /* THE PHONE ANCHORS THE PAINTING TO THE TOP and takes a 72px band instead
      * of 110 - room.js's change, for room.js's reasons, on the chassis that
      * shares its apron. scene.css moves the box and the origin together under
@@ -1306,6 +1317,8 @@ export function createScene(opts) {
     setFlag: setFlag,
     escapeStep: escapeStep,
     fit: fit,
+    /** Stage px -> screen px, as of the last fit. See fit(). */
+    scale: function () { return lastScale; },
     destroy: destroy,
     /* ---------------------------------------------- the alive layer's seams */
     /** {records, timers, held} - `timers` MUST be 0 after destroy(). */

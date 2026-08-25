@@ -222,7 +222,13 @@ shell/scene.js     THE SCENE CHASSIS: a generalised point-and-click ROOM (the
                    WARNING IS WIDE-ONLY: a close-up's rects and props are free
                    to run below y=640 and are never warned about. A consumer
                    must NOT clamp a close-up host to 640 - the paper is measured
-                   from the painting or it is not measured at all
+                   from the painting or it is not measured at all.
+                   `scale()` is the chassis's one measurement seam: the stage
+                   scale as of the last `fit()`. A prop that has to reason in
+                   SCREEN pixels asks the STAGE, never its own host - the
+                   Records miniature carries a second scale of its own, so its
+                   host would answer a different number than the close-up's and
+                   the two walls would lay out differently
 shell/recordsroom.js THE RECORDS OFFICE AS A ROOM (0825), the chassis's first
                    tenant. Four rects on vn-09: the TRAY (the one breathing
                    verb - it opens records.js in a scene panel, and wears the
@@ -235,10 +241,17 @@ shell/recordsroom.js THE RECORDS OFFICE AS A ROOM (0825), the chassis's first
                    apron band and below the toasts, and the FIRST rung of this
                    room's Esc fold. It is the answer to a wall that is painted
                    at stage scale: on a phone the close-up's body copy lands
-                   near 7px and a busy term's fifth row hangs out of the
-                   window, so on `html.arc-mobile` the office cork also clips
-                   each sheet to a row's share (with a fade and a drawn lens
-                   glyph) and scrolls. Desktop keeps the ruled overhang),
+                   near 7px, so the type comes up and a drawn lens glyph says
+                   the paper can be picked up.
+                   A PRINTED SHEET SHOWS ALL OF ITSELF (owner ruling 0825):
+                   the old phone rule capped a sheet at 292px and faded it out
+                   with a `mask-image`, which dissolved a notice mid-sentence.
+                   Gone. A sheet is now exactly as tall as its copy;
+                   corkboard.js's FIT shrinks one sheet's `--note-fs` toward a
+                   floor of 10 real screen px on a phone / 11 on a desktop
+                   while that buys a row its share of the board; and the
+                   close-up host SCROLLS (both sizes now, scrollbar hidden)
+                   rather than hanging a term's worth of paper off the rail),
                    the BOOK (a close-up with deskbook.js over `ledgerPages`)
                    and the STOREROOM (`when:'ajar'`, so no flag = no rect, no
                    patch, nothing at all). THE TWO NUDGES: `.rr-fresh`, a pink
@@ -251,6 +264,16 @@ shell/recordsroom.js THE RECORDS OFFICE AS A ROOM (0825), the chassis's first
                    2px/.30 resting rim going away is not something a player can
                    see. Both are OFF under .arc-reduced (and .arm-lite gets no
                    solo ring either - static state only).
+                   THE MINIATURE hangs on `CORK_WIDE` [237,165,302,152], the
+                   PAINTED cork measured off vn-09 (frame inner edges x 236 and
+                   539, y 163 and 362, so the cork face is 237..538 x 165..361)
+                   and trimmed to stop 5px above `LAMP_SHADE_TOP` (322). It is
+                   NOT `RECTS.corkboard` - that rect is the framed OBJECT with
+                   press slack under it, and paper hung on it sat on the frame,
+                   ran onto the desk and landed on the banker's lamp (trap 105).
+                   The mini is dealt the close-up's own `fit` (same `boxH`, same
+                   stage `scale`) plus `wholeRows:true`, so it is a picture of
+                   the top of the board and never a sheet sliced along a rail.
                    THE ROOM'S FX TABLE (W2 0825) is `recordsFx()`, exported
                    beside the rects and crop-verified on the plate: the sign
                    [577,169,346,91], the lamp pool [383,433,282,42], the dust
@@ -2252,6 +2275,64 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
 
     Sitting behind all of it: **a phone viewport is a merge gate** (section 6). Every one
     of these was invisible at 1600x900 and obvious in the first 844x390 shot.
+
+105. **`background:` IS A SHORTHAND, AND THAT IS WHY THE NOTICE READER WAS A PANE OF
+    GLASS (owner bugs 2026-08-25, three defects on one corkboard).** All three of the
+    owner's phone shots were one wave; only the first is a geometry bug and the other two
+    share a single root.
+
+    **(a) A HOTSPOT RECT IS NOT A PLACE TO HANG PAPER.** The wide shot's miniature was
+    pinned to `RECTS.corkboard` [226,153,323,226] - the rect you PRESS, which covers the
+    timber frame and carries a few pixels of slack under it so a thumb is comfortable. The
+    painted cork inside that frame is [237,165,302,197]: nine pixels lower at the top and
+    seventeen higher at the bottom. So the preview started on the frame, ended on the desk,
+    and its bottom-right sheet landed on the banker's lamp - which breaks the cork plane at
+    y=322 and reaches back to x=480, INSIDE the board's own right third. Every number here
+    was measured off `art/vn/vn-09-records-office.png` with a script, not read off
+    `records-room-spec.json`, and the constant that came out of it (`CORK_WIDE`, trimmed to
+    152 tall so the paper stops above the shade) carries the derivation in its comment. The
+    rule: **a rect you press and a rect you decorate are two different measurements of the
+    same object**, and a room that has both must name both.
+
+    **(b) A SHORTHAND RESETS WHAT IT DOES NOT MENTION.** `.arc-corknote` painted its paper
+    as `background:linear-gradient(...)`, which sets background-IMAGE and resets
+    background-COLOR to `transparent`. Every sheet was therefore one `background-image:none`
+    away from being a window - and `.arc-corknote.look-pencil { background-image: none; }`
+    is exactly that rule, shipped, for the groundskeeper's notices. On the board they read
+    as cork-through-paper. In the READER, which mounts the same `.arc-corknote` stock over
+    the dusk on `<body>`, the same sheet was a transparent rectangle with dark ink on it and
+    the whole noticeboard legible through it. Nobody had seen it because the look is dealt
+    per NOTICE and the reader is opened per SHEET: it took a specific night and a specific
+    press. The paper colour is a `background-color` now and the stocks are
+    `background-image`s over it, so a rule that turns a texture off can never take the
+    opacity with it. **Any element whose colour matters declares that colour as a colour.**
+
+    **(c) A PERCENTAGE THAT WAS SAFE ON A CAPPED SHEET IS NOT SAFE ON AN UNCAPPED ONE.**
+    Dropping the `max-height:292px` + `mask-image` fade (owner: "that is not how printed
+    paper works, we should see the full doc") let a sheet grow to its copy - and the torn
+    corner, `clip-path` at `100% 89%`, bit 11% of the height: 20px on the old sheet and 66px
+    on a 600px one, eating sentences. It is `calc(100% - var(--tear))` now, with a matching
+    `padding-bottom`, so the bite and the blank paper under the copy are the same fixed
+    number. **When you remove a cap, re-read every percentage that was measured against it.**
+
+    Three smaller things the wave settled, each of which cost a run:
+    - **THE FIT MUST UNTRIM BEFORE IT MEASURES.** A `display:none` slot measures zero, and a
+      zero-height sheet is a sheet the fit believes already fits - so a fit run over an
+      already-trimmed wall leaves everything below the cut at full type, and the next trim
+      cuts higher for that reason alone. Untrim, fit, trim, in that order, every time. Two
+      passes of the wrong order took the desktop miniature from six sheets to three.
+    - **A PROP INSIDE A SCALED ROOM CANNOT MEASURE ITS OWN SCALE** (trap 101's cousin). The
+      corkboard's type floor is 10 REAL pixels, so the fit has to divide by the stage scale
+      - and the miniature carries a second scale of its own, so `rect.width / offsetWidth`
+      on ITS host answers a fifth of the truth and prints the thumbnail in bigger type than
+      the board it is a picture of. `scene.js` exposes `scale()` (the stage's, as of the
+      last `fit()`) and both walls are handed the same one.
+    - **TWO SHEETS, ONE SELECTOR, NO WINNER.** `.rr-cork.arc-cork-wall` is written in
+      corkboard.css AND in recordsroom.css at the same (0,2,1... 0,2,0) specificity, and the
+      two files are lazy-linked by two different modules in whatever order the network
+      answers. Whichever landed last won. Every declaration on that selector now has exactly
+      one owner, and the room suite greps recordsroom.css (comments stripped - the prose
+      explaining what left names the properties) to keep it that way.
 
 ## 5. The game module contract (short version)
 

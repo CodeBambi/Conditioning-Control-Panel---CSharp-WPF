@@ -149,6 +149,32 @@ export function recordsFx(now) {
 /** The bare cork inside the board close-up - where the paper goes. */
 export const CORK_INNER = Object.freeze([43, 37, 1285, 692]);
 
+/* ----------------------------------------------------------------------------
+ * THE PAINTED CORK ON THE WIDE PLATE, and the lamp that stands in front of it.
+ *
+ * `RECTS.corkboard` is the HOTSPOT - the whole framed object, timber and all,
+ * with a few pixels of slack under it so the press is comfortable. It is not a
+ * place to hang paper, and hanging paper on it is exactly what the first
+ * miniature did: the sheets started 9px above the cork (on the frame), ran 17px
+ * below its bottom rail onto the desk, and the bottom-right one landed on the
+ * banker's lamp (owner screenshot, 2026-08-25).
+ *
+ * These two numbers are measured off `art/vn/vn-09-records-office.png` itself,
+ * not read off a spec sheet:
+ *   - the frame's INNER edges are the dark outline at x=236 and x=539, y=163
+ *     and y=362, so the cork face is x 237..538, y 165..361 (302 x 197);
+ *   - the lamp's shade breaks that plane at y=322 and reaches back to x=480,
+ *     which is inside the cork's own right third.
+ * So the paper stops five pixels above the shade: [237, 165, 302, 152]. The
+ * bottom band of the board is bare on purpose - it is the part of the board
+ * the lamp is standing in front of.
+ * -------------------------------------------------------------------------- */
+
+/** The painted cork on the WIDE plate, trimmed to clear the lamp shade. */
+export const CORK_WIDE = Object.freeze([237, 165, 302, 152]);
+/** The top edge of the banker's lamp shade on that plate (stage px). */
+export const LAMP_SHADE_TOP = 322;
+
 /** The two blank pages inside the book close-up. */
 export const LEDGER_PAGES = Object.freeze({
   left: Object.freeze([224, 164, 436, 492]),
@@ -505,12 +531,20 @@ export function createRecordsRoom(caps) {
    * CLOSE-UP's own width, so a sheet in the miniature is the same shape as the
    * sheet you walk up to, and the whole thing is then scaled by the ratio the
    * two rects give us. Its height is the rect divided back out by that scale,
-   * which is what lets the grid deal two rows into the board's own proportions
-   * rather than into a letterboxed strip.
+   * so the miniature is the TOP of the close-up's own board - the same grid,
+   * the same rows, the same type - ending where the painted cork ends.
+   *
+   * IT HANGS ON `CORK_WIDE`, NOT ON THE HOTSPOT. See that constant: the rect
+   * you press is the framed object and the rect paper hangs on is the cork
+   * inside it, minus the band the lamp stands in front of.
+   *
+   * AND IT IS DEALT THE CLOSE-UP'S OWN FIT. Same `boxH`, same `scale`, so the
+   * two walls shrink the same sheet by the same amount and the thumbnail is a
+   * picture of the board rather than a second, differently-typeset board.
    */
   function mountMiniCork() {
     if (dead || mini) return;
-    const rect = RECTS.corkboard;
+    const rect = CORK_WIDE;
     const scale = rect[2] / CORK_INNER[2];
     if (!(scale > 0)) return;
     const wrap = el('div', 'rr-corkmini');
@@ -526,11 +560,36 @@ export function createRecordsRoom(caps) {
     } catch (e) { /* the node double has no style box - the wall still mounts */ }
     wrap.appendChild(inner);
     miniOff = scene.mountInView('wide', wrap, rect);
-    mini = mountNotices(inner, { daySeed: c.daySeed, preview: true, log: log });
+    mini = mountNotices(inner, {
+      daySeed: c.daySeed,
+      preview: true,
+      fit: corkFit(),
+      /* The board has a bottom rail painted into it: a sheet sliced flat along
+       * that rail is a rendering fault, a shorter wall is a wall. */
+      wholeRows: true,
+      log: log,
+    });
     if (!mini) log('records room: the miniature wall could not be pinned');
   }
 
   /* ------------------------------------------------------------ THE BOARD */
+
+  /**
+   * THE FIT BOTH WALLS SHARE. `boxH` is the close-up cork's height in stage px
+   * and `scale` is the STAGE's, read live off the chassis (a window resize
+   * moves it, and corkboard.js re-runs the fit on its own resize listener).
+   * The miniature must never measure its own host for this: it carries a
+   * second scale of its own, which would answer a smaller number and print the
+   * thumbnail in bigger type than the board it is a picture of.
+   */
+  function corkFit() {
+    return {
+      boxH: CORK_INNER[3],
+      scale: function () {
+        try { return scene.scale ? scene.scale() : 1; } catch (e) { return 1; }
+      },
+    };
+  }
 
   /** Pin the night's sheets over the bare cork, once per visit to the room. */
   function mountBoard() {
@@ -548,6 +607,9 @@ export function createRecordsRoom(caps) {
        * full size over the window (corkboard.js's READER). The wall is still
        * read at a glance - this is what a glance you cannot resolve does next. */
       readable: true,
+      /* The board's own box, and the stage's own scale - the miniature above
+       * is handed this same pair on purpose. */
+      fit: corkFit(),
       log: log,
     });
     if (!paper) log('records room: the wall could not be pinned');
@@ -636,7 +698,14 @@ export function createRecordsRoom(caps) {
     escapeStep: escapeStep,
     dismissSpotlight: dismissSpotlight,
     setAjar: setAjar,
-    fit: function () { try { return scene.fit(); } catch (e) { return null; } },
+    fit: function () {
+      let s = null;
+      try { s = scene.fit(); } catch (e) { s = null; }
+      /* The stage moved, so the type floor moved with it. */
+      if (paper && paper.refit) { try { paper.refit(); } catch (e) { /* noop */ } }
+      if (mini && mini.refit) { try { mini.refit(); } catch (e) { /* noop */ } }
+      return s;
+    },
     destroy: destroy,
     /* ------------------------------------------------------- test seams */
     scene: scene,
