@@ -1,4 +1,4 @@
-﻿using CcpClient.Desktop.Capabilities;
+using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Pointer;
 using Xunit;
@@ -94,6 +94,53 @@ public class PointerCapabilityTests : RealDesktopFacts
             "the OS holds WS_EX_TRANSPARENT for a target that exists to CATCH clicks. Every click aimed at it "
             + "falls through to the desktop and the bubble is unpoppable");
         Assert.Equal(run.MachineHasInteractiveDesktop, run.OsPutsItAboveEveryOrdinaryWindow);
+    }
+
+    /// <summary>
+    /// <b>The target has no rectangle of its own, and the OS is the one that says so.</b>
+    ///
+    /// <para>Upstream's bubble window is <c>WindowStyle.None</c> + <c>AllowsTransparency = true</c>
+    /// + <c>Background = null</c> (<c>Services/BubbleService.cs:2155-2160</c>): a window that shows
+    /// its art and nothing else. Before this fact existed the port's targets carried neither
+    /// <c>WS_EX_LAYERED</c> nor a colour key, so every bubble reached the desktop as an OPAQUE
+    /// rectangle of <see cref="PointerSurfaceObservations.Fill"/> with a disc painted inside it —
+    /// which is what the owner saw and reported.</para>
+    ///
+    /// <para><b>The key is asserted to be the FILL specifically, and that is the whole mechanism
+    /// rather than a coincidence.</b> The painter fills the entire client rectangle with the fill
+    /// and then draws the bubble over it (<c>Pointer/Win32PointerSurface.cs</c>, <c>PaintInto</c>);
+    /// the compositor removes exactly the pixels still holding that colour. A key that drifted from
+    /// the fill would put the rectangle straight back, and a fill that drifted toward the bubble's
+    /// own rim colour would punch holes in the bubble. Neither is visible in a style read alone,
+    /// which is why the OS's own <c>GetLayeredWindowAttributes</c> answer is read rather than the
+    /// value the product passed.</para>
+    ///
+    /// <para><b>What this does NOT say.</b> It says nothing about how the bubble LOOKS. The
+    /// constant alpha is one number for the whole window, so upstream's 180→80 alpha ramp
+    /// (<c>Services/BubbleService.cs:2940-2942</c>) is not reproduced, and upstream's ordinary
+    /// bubble is a photographic sprite (<c>Resources/bubble.png</c>) this port does not bundle at
+    /// all. Both are recorded on <c>BubblePopSurfacePresenter.TargetInk</c>; neither is a claim
+    /// made here.</para>
+    /// </summary>
+    [Fact]
+    public void TheTargetIsLayeredAndKeyedOnItsOwnFill_SoWhatReachesTheDesktopIsABubbleAndNotABox()
+    {
+        var run = PointerSurfaceObservations.Delivery;
+
+        Assert.Equal(run.MachineHasInteractiveDesktop, run.OsHoldsLayeredStyle);
+        Assert.Equal(run.MachineHasInteractiveDesktop, run.OsLayeredAttributes.Read);
+
+        if (!run.MachineHasInteractiveDesktop)
+        {
+            return;
+        }
+
+        Assert.Equal(PointerSurfaceObservations.Fill & 0x00FFFFFF, run.OsLayeredAttributes.Key);
+        Assert.Equal(Win32PointerSurface.BubbleBodyAlpha, run.OsLayeredAttributes.Alpha);
+        // LWA_COLORKEY (0x1) and LWA_ALPHA (0x2), spelled as values because the interop class that
+        // names them is internal to the product. BOTH are required: the key alone leaves an opaque
+        // bubble, the alpha alone leaves the rectangle.
+        Assert.Equal(0x00000001u | 0x00000002u, run.OsLayeredAttributes.Flags);
     }
 
     [Fact]

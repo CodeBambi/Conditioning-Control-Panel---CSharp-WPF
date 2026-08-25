@@ -33,7 +33,10 @@ internal static class PointerSurfaceObservations
     /// widest one-step displacement the race legs apply.</summary>
     internal const int TargetSide = 160;
 
-    private const uint Fill = 0x00201020;
+    /// <summary>The fill this fixture asks for. <b>Also the transparency key</b> the OS is expected
+    /// to hold for the target's window, which is why the tests need to name it.</summary>
+    internal const uint Fill = 0x00201020;
+
     private const uint Ink = 0x00E0C0FF;
 
     private static readonly Lazy<DeliveryRun> LazyDelivery =
@@ -91,6 +94,14 @@ internal static class PointerSurfaceObservations
     /// <param name="AskedBounds">The rectangle that was asked for.</param>
     /// <param name="OsHoldsNonActivatingStyle"><c>WS_EX_NOACTIVATE</c>, read back out of the OS.</param>
     /// <param name="OsHoldsClickThroughStyle"><c>WS_EX_TRANSPARENT</c>, which must be false.</param>
+    /// <param name="OsHoldsLayeredStyle"><c>WS_EX_LAYERED</c>, read back out of the OS. It is what
+    /// gives the target no rectangle of its own — upstream's <c>AllowsTransparency = true</c> +
+    /// <c>Background = null</c> outcome (<c>Services/BubbleService.cs:2155-2160</c>). Without it a
+    /// bubble is a box with a disc in it, whatever the painter drew.</param>
+    /// <param name="OsLayeredAttributes">What the OS holds as the window's colour key, constant
+    /// alpha and flags. <b>The key is compared against the FILL</b>, because that is the whole
+    /// mechanism: the painter fills the margin with it and the compositor then removes exactly
+    /// those pixels.</param>
     /// <param name="OsPutsItAboveEveryOrdinaryWindow">The OS's own z-order walk.</param>
     /// <param name="HitTestWinner">What <c>WindowFromPoint</c> at the target's centre returned.</param>
     /// <param name="ForegroundBeforeOpen">The foreground before anything was placed.</param>
@@ -157,6 +168,8 @@ internal static class PointerSurfaceObservations
         (int X, int Y, int Width, int Height) AskedBounds,
         bool OsHoldsNonActivatingStyle,
         bool OsHoldsClickThroughStyle,
+        bool OsHoldsLayeredStyle,
+        (bool Read, uint Key, byte Alpha, uint Flags) OsLayeredAttributes,
         bool OsPutsItAboveEveryOrdinaryWindow,
         nint HitTestWinner,
         nint ForegroundBeforeOpen,
@@ -235,6 +248,8 @@ internal static class PointerSurfaceObservations
         var osHeldBounds = PointerWindowProbe.BoundsOf(window);
         var osHoldsNonActivating = PointerWindowProbe.NonActivatingStyleHeld(window);
         var osHoldsClickThrough = PointerWindowProbe.ClickThroughStyleHeld(window);
+        var osHoldsLayered = PointerWindowProbe.LayeredStyleHeld(window);
+        var osLayeredAttributes = PointerWindowProbe.LayeredAttributesOf(window);
 
         // The capability's OWN public observation, taken through Observe while the target is up.
         // SampledPixels is a function of the disc's box AND of the stride derived from it, so it is
@@ -329,6 +344,8 @@ internal static class PointerSurfaceObservations
             AskedBounds: (askedBounds.X, askedBounds.Y, askedBounds.Width, askedBounds.Height),
             OsHoldsNonActivatingStyle: osHoldsNonActivating,
             OsHoldsClickThroughStyle: osHoldsClickThrough,
+            OsHoldsLayeredStyle: osHoldsLayered,
+            OsLayeredAttributes: osLayeredAttributes,
             OsPutsItAboveEveryOrdinaryWindow: zOrder.AboveEveryOrdinaryWindow,
             HitTestWinner: hitWinner,
             ForegroundBeforeOpen: foregroundBeforeOpen,

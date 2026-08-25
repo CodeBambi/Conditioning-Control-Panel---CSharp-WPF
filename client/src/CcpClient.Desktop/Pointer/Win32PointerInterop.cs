@@ -46,6 +46,35 @@ internal static class Win32PointerInterop
     /// have (<c>Services/BubbleService.cs:4900</c>, applied at <c>:4891-4892</c>).</summary>
     public const uint WsExTransparent = 0x00000020;
 
+    /// <summary>
+    /// <b>Per-window composition, which is what makes a target a bubble rather than a box.</b>
+    /// Upstream's bubble window is <c>WindowStyle.None</c> + <c>AllowsTransparency = true</c> +
+    /// <c>Background = null</c> (<c>Services/BubbleService.cs:2155-2160</c>) — a window with no
+    /// rectangle of its own, showing only its art. WPF spells that with
+    /// <c>AllowsTransparency</c>; USER32 spells it <c>WS_EX_LAYERED</c>, and this port takes the
+    /// same outcome through the mechanism this surface actually has.
+    ///
+    /// <para><b>Why the attribute form and not <c>UpdateLayeredWindow</c>.</b> This surface's whole
+    /// evidence contract — <c>Win32PointerSurface.ReadInk</c> — is a <c>GetPixel</c> read of the
+    /// window's OWN device context, i.e. the OS's copy of what the painter drew. A window driven by
+    /// <c>UpdateLayeredWindow</c> has no such device context: its content lives in a DIB the caller
+    /// owns, so reading it back would be reading our own buffer and proving nothing. With
+    /// <see cref="SetLayeredWindowAttributes"/> the window still paints through an ordinary DC and
+    /// the key/alpha are applied at COMPOSITION, so every clause of the ink differential survives
+    /// untouched. The price is stated where it is paid (<c>Win32PointerSurface.PaintInto</c>):
+    /// binary keyed transparency and ONE constant alpha, never the per-pixel alpha ramp upstream's
+    /// sprite carries.</para>
+    /// </summary>
+    public const uint WsExLayered = 0x00080000;
+
+    /// <summary>Treat one colour as fully transparent (<see cref="SetLayeredWindowAttributes"/>).
+    /// It is what removes the target's rectangle.</summary>
+    public const uint LwaColorkey = 0x00000001;
+
+    /// <summary>Apply one constant alpha to the whole window
+    /// (<see cref="SetLayeredWindowAttributes"/>).</summary>
+    public const uint LwaAlpha = 0x00000002;
+
     public const int GwlExstyle = -20;
 
     public static readonly nint HwndTopmost = -1;
@@ -264,6 +293,10 @@ internal static class Win32PointerInterop
 
     [DllImport("gdi32.dll")]
     public static extern uint GetPixel(nint dc, int x, int y);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetLayeredWindowAttributes(nint window, uint colourKey, byte alpha, uint flags);
 
     /// <summary><c>NULL_PEN</c>: the disc is filled and not outlined, so the fill colour is the only
     /// thing the ink read-back can find.</summary>

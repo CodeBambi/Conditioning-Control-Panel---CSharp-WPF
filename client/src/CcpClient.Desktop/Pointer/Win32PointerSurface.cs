@@ -192,7 +192,7 @@ public sealed class Win32PointerSurface : IPointerSurface
                 + "of anybody, so nothing was placed and nothing is claimed");
         }
 
-        var window = CreateTargetWindow(request.Bounds, out var creationFailure);
+        var window = CreateTargetWindow(request.Bounds, request.Fill, out var creationFailure);
         if (window == 0)
         {
             return LastPlacement = Unavailable(PointerReasonCodes.PointerWindowCreationFailed, creationFailure);
@@ -603,6 +603,20 @@ public sealed class Win32PointerSurface : IPointerSurface
     //  Content
     // ---------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// The colour the bubble's ramp ends on at its rim: upstream's own outer stop, white
+    /// (<c>Services/BubbleService.cs:2941</c>, the RGB of <c>ARGB(80,255,255,255)</c>). Its centre
+    /// colour is the caller's <see cref="PointerTargetRequest.Ink"/>.
+    /// </summary>
+    public const uint BubbleRim = 0x00FFFFFF;
+
+    /// <summary>
+    /// The one alpha the whole target composites at. Upstream's own body alpha at the bubble's
+    /// centre (<c>Services/BubbleService.cs:2942</c>, the 180 of <c>ARGB(180,200,220,255)</c>);
+    /// upstream ramps it to 80 at the rim and <c>SetLayeredWindowAttributes</c> cannot.
+    /// </summary>
+    public const byte BubbleBodyAlpha = 180;
+
     /// <summary>The disc's bounding box inside a target of this size, in client coordinates. Inset
     /// far enough that <see cref="ControlMargin"/> is never inside it at any legal size.</summary>
     internal static (int Left, int Top, int Right, int Bottom) DiscBox(int width, int height)
@@ -642,19 +656,81 @@ public sealed class Win32PointerSurface : IPointerSurface
             Win32PointerInterop.DeleteObject(fillBrush);
         }
 
-        var inkBrush = Win32PointerInterop.CreateSolidBrush(entry.Ink);
-        if (inkBrush == 0)
+        var (left, top, right, bottom) = DiscBox(width, height);
+        var previousPen = Win32PointerInterop.SelectObject(
+            dc, Win32PointerInterop.GetStockObject(Win32PointerInterop.NullPen));
+
+        // The body, and whose shape it is. Upstream's bubble is a sprite; when the sprite is not
+        // there upstream draws THIS instead -- a radial brush from ARGB(180,200,220,255) at the
+        // centre to ARGB(80,255,255,255) at the rim, stroked with a 2px white pen
+        // (Services/BubbleService.cs:2938-2946). This port bundles no art, so it is permanently in
+        // upstream's sprite-less case and renders upstream's sprite-less answer rather than
+        // inventing one.
+        //
+        // GDI has no radial gradient, so the ramp is N concentric FILLED ellipses drawn rim-inward.
+        // Filled and not stroked is load-bearing: a stroked ring at a radius step wider than one
+        // pixel would leave the fill colour showing between rings, and the fill colour is now the
+        // transparency key -- the bubble would come out striped with holes.
+        //
+        // NOT reproduced, and the reason is the mechanism rather than the effort:
+        // SetLayeredWindowAttributes gives ONE alpha for the whole window, so upstream's 180->80
+        // alpha ramp is a single 180 here and the bubble does not thin out towards its rim.
+        // Upstream's 2px white pen is not drawn either -- the ramp already ends at white, so the
+        // stroke would be white on white.
+        var steps = GradientSteps(right - left, bottom - top);
+        var previousBrush = (nint)0;
+        for (var step = 0; step < steps; step++)
         {
-            return;
+            // 0 at the rim, 1 at the centre -- the direction upstream's two endpoint colours run.
+            var t = step / (double)(steps - 1);
+            var ringBrush = Win32PointerInterop.CreateSolidBrush(Blend(BubbleRim, entry.Ink, t));
+            if (ringBrush == 0)
+            {
+                continue;
+            }
+
+            var selected = Win32PointerInterop.SelectObject(dc, ringBrush);
+            if (previousBrush == 0)
+            {
+                previousBrush = selected;
+            }
+
+            var insetX = (int)Math.Round((right - left) / 2.0 * t);
+            var insetY = (int)Math.Round((bottom - top) / 2.0 * t);
+            Win32PointerInterop.Ellipse(dc, left + insetX, top + insetY, right - insetX, bottom - insetY);
+            Win32PointerInterop.DeleteObject(ringBrush);
         }
 
-        var previousBrush = Win32PointerInterop.SelectObject(dc, inkBrush);
-        var previousPen = Win32PointerInterop.SelectObject(dc, Win32PointerInterop.GetStockObject(Win32PointerInterop.NullPen));
-        var (left, top, right, bottom) = DiscBox(width, height);
-        Win32PointerInterop.Ellipse(dc, left, top, right, bottom);
         Win32PointerInterop.SelectObject(dc, previousPen);
-        Win32PointerInterop.SelectObject(dc, previousBrush);
-        Win32PointerInterop.DeleteObject(inkBrush);
+        if (previousBrush != 0)
+        {
+            Win32PointerInterop.SelectObject(dc, previousBrush);
+        }
+    }
+
+    /// <summary>
+    /// How many concentric rings approximate the radial ramp at this size. Bounded both ways: a
+    /// small target does not need many, and a large one must not band. Roughly one ring per two
+    /// pixels of radius, which is below what the eye resolves at these sizes.
+    /// </summary>
+    internal static int GradientSteps(int width, int height) =>
+        Math.Clamp(Math.Min(width, height) / 4, 8, 64);
+
+    /// <summary>
+    /// Linear interpolation between two <c>COLORREF</c>s (<c>0x00bbggrr</c>), per channel,
+    /// <paramref name="t"/> running 0 = <paramref name="from"/> to 1 = <paramref name="to"/>.
+    /// </summary>
+    internal static uint Blend(uint from, uint to, double t)
+    {
+        var clamped = Math.Clamp(t, 0.0, 1.0);
+        uint Channel(int shift)
+        {
+            var a = (from >> shift) & 0xFF;
+            var b = (to >> shift) & 0xFF;
+            return (uint)Math.Clamp((int)Math.Round(a + ((double)b - a) * clamped), 0, 255) << shift;
+        }
+
+        return Channel(0) | Channel(8) | Channel(16);
     }
 
     /// <summary>
@@ -823,7 +899,7 @@ public sealed class Win32PointerSurface : IPointerSurface
         }
     }
 
-    private nint CreateTargetWindow(PointerBounds bounds, out string failure)
+    private nint CreateTargetWindow(PointerBounds bounds, uint fill, out string failure)
     {
         failure = string.Empty;
 
@@ -850,8 +926,15 @@ public sealed class Win32PointerSurface : IPointerSurface
         // WS_EX_NOACTIVATE and WS_EX_TOOLWINDOW at creation, and WS_EX_TRANSPARENT deliberately
         // absent: upstream's own three-flag decision, made once per (re)show from a known base
         // rather than OR-ed onto whatever was there (Services/BubbleService.cs:4877-4894).
+        //
+        // WS_EX_LAYERED joins them for the reason written out on the constant: upstream's bubble
+        // window has no rectangle of its own (WindowStyle.None + AllowsTransparency + Background =
+        // null, Services/BubbleService.cs:2155-2160), and without this flag every target here is an
+        // opaque box with a disc painted in it -- which is what the owner saw.
         var window = Win32PointerInterop.CreateWindowExW(
-            Win32PointerInterop.WsExNoactivate | Win32PointerInterop.WsExToolwindow,
+            Win32PointerInterop.WsExNoactivate
+                | Win32PointerInterop.WsExToolwindow
+                | Win32PointerInterop.WsExLayered,
             _windowClassName,
             "CCP pointer target",
             Win32PointerInterop.WsPopup,
@@ -864,6 +947,20 @@ public sealed class Win32PointerSurface : IPointerSurface
                 + $"(last-error {Marshal.GetLastWin32Error()})";
             return 0;
         }
+
+        // The fill colour is now a KEY, not a colour anybody sees: every pixel the painter leaves at
+        // the fill -- the whole margin outside the disc -- composites away, so what reaches the
+        // desktop is the bubble and nothing else. The constant alpha is upstream's own body alpha
+        // for a sprite-less bubble (Services/BubbleService.cs:2942, the 180 of ARGB(180,200,220,255));
+        // upstream ramps it to 80 at the rim and this cannot, which is stated on
+        // Win32PointerInterop.WsExLayered and again on PaintInto.
+        //
+        // A refusal here is not fatal and is deliberately not reported as one: the window exists and
+        // is placeable, it is merely an opaque box. Place() then describes what the OS really holds,
+        // which is the honest outcome -- a target nobody can see is a different failure, and this is
+        // not it.
+        Win32PointerInterop.SetLayeredWindowAttributes(
+            window, fill & 0x00FFFFFF, BubbleBodyAlpha, Win32PointerInterop.LwaColorkey | Win32PointerInterop.LwaAlpha);
 
         return window;
     }

@@ -90,13 +90,36 @@ public interface IBubblePopSurface
 /// </summary>
 public sealed class BubblePopSurfacePresenter : IBubblePopSurface, IDisposable
 {
-    /// <summary>The fill every target's client area is painted with, and the colour the ink
-    /// differential's control points must read back EXACTLY.</summary>
+    /// <summary>
+    /// The fill every target's client area is painted with, the colour the ink differential's
+    /// control points must read back EXACTLY, <b>and now the target's transparency key</b>: the
+    /// window is <c>WS_EX_LAYERED</c> and this colour composites away
+    /// (<c>Pointer/Win32PointerSurface.cs</c>, <c>CreateTargetWindow</c>), so nothing painted at the
+    /// fill reaches the desktop and the target has no rectangle of its own -- upstream's
+    /// <c>AllowsTransparency = true</c> + <c>Background = null</c> outcome
+    /// (<c>Services/BubbleService.cs:2155-2160</c>) through the mechanism this surface has.
+    ///
+    /// <para>It is therefore no longer free to choose. The bubble body ramps to
+    /// <see cref="Win32PointerSurface.BubbleRim"/> (white) at its rim, so a key anywhere near white
+    /// would punch holes in the bubble itself.</para>
+    /// </summary>
     public const uint TargetFill = 0x00201020;
 
-    /// <summary>The disc's colour. Chosen only to differ from <see cref="TargetFill"/>; this port
-    /// bundles no bubble art (D86), so the target is a plain disc and says so.</summary>
-    public const uint TargetInk = 0x00E0C0FF;
+    /// <summary>
+    /// The bubble's CENTRE colour -- upstream's own inner gradient stop for a bubble with no sprite
+    /// behind it, <c>ARGB(180,200,220,255)</c> as a <c>COLORREF</c>
+    /// (<c>Services/BubbleService.cs:2940-2942</c>). This port bundles no art (D86) and is therefore
+    /// permanently in upstream's sprite-less case, so it renders upstream's sprite-less bubble
+    /// rather than a colour of its own. The rim colour and the ramp between them live with the
+    /// painter (<see cref="Win32PointerSurface.BubbleRim"/>).
+    ///
+    /// <para><b>What is still not upstream's bubble, plainly.</b> Upstream's ORDINARY bubble is a
+    /// photographic soap-bubble sprite (<c>Resources/bubble.png</c>, loaded at
+    /// <c>Services/BubbleService.cs:830-840</c>, drawn <c>Stretch.Uniform</c> at <c>:2911</c>) with
+    /// an iridescent rim and a near-transparent core. That asset is not in this port's payload and
+    /// bundling it is an asset decision, not a rendering one.</para>
+    /// </summary>
+    public const uint TargetInk = 0x00FFDCC8;
 
     /// <summary>How many messages one pump drains. Bounded iteration, never a wall-clock wait.</summary>
     public const int PumpBudget = 64;
