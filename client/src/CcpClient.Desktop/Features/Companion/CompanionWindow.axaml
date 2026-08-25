@@ -10,8 +10,8 @@
         Background="{DynamicResource DarkerBgBrush}">
 
   <!-- Hand-authored smallest AXAML (A-013 advisory runs on this file — advisory
-       only). Evolved dashboard grammar: dark #FF141018 base, neon #FFE066FF accent,
-       #FF3A2F3E borders, restrained glow (MainWindow.axaml/FeaturePopupWindow.axaml
+       only). Evolved dashboard grammar: dark #FF121220 base, neon #FFFF8FAF accent,
+       #FF3A3A5C borders, restrained glow (MainWindow.axaml/FeaturePopupWindow.axaml
        lineage) — designed, never WPF-cloned (owner decree 2026-08-04). Styling is
        selectors + conditional classes + pseudo-classes (v12; never WPF triggers).
        Escape: ONE path through the VM (confirm-open -> cancel (default No); else close). -->

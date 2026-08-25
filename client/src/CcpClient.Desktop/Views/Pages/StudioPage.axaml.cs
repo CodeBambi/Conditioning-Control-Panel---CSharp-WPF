@@ -1431,7 +1431,7 @@ public partial class StudioPage : UserControl
     {
         Name = name,
         Text = text,
-        Foreground = new SolidColorBrush(Color.Parse("#FFE8E0EE")),
+        Foreground = new SolidColorBrush(Color.Parse("#FFF0F0F5")),
         Opacity = 0.7,
         FontSize = 12,
         TextWrapping = TextWrapping.Wrap,
@@ -1552,7 +1552,7 @@ public partial class StudioPage : UserControl
             Text = SessionRackNotices.RowProvenance(session.Origin),
             FontSize = 9,
             FontWeight = FontWeight.Bold,
-            Foreground = new SolidColorBrush(Color.Parse("#FF141018")),
+            Foreground = new SolidColorBrush(Color.Parse("#FF121220")),
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
         };
         var badge = new Border

@@ -144,25 +144,29 @@ public class RackPresentationTests
 
     /// <summary>
     /// THE TOLERANCE RULE, MECHANICAL. A tolerance is the size of the defect it hides, and here the
-    /// defect has a name and a number: <c>RadioButton.rack-row:pointerover</c> is <c>#FF241E2A</c>
-    /// (<c>MainWindow.axaml:98-100</c>), which is 11/10/11 from the rack's <c>#FF19141F</c> ground,
-    /// and the checked fill <c>#FF2A2130</c> is 17/13/17 from it. At the rail-door precedent of 24
+    /// defect has a name and a number: <c>RadioButton.rack-row:pointerover</c> is <c>#FF222240</c>
+    /// (<c>MainWindow.axaml:98-100</c>), which is 10/10/16 from the rack's <c>#FF181830</c> ground,
+    /// and the checked fill <c>#FF2E2E4A</c> is 22/22/26 from it. At the rail-door precedent of 24
     /// the ground check would pass with the mouse merely RESTING on the row, and the fill check
     /// would pass on a row that is not open.
     ///
     /// <para>So this asserts the property rather than the constant: no rack check may accept the
     /// colour of a DIFFERENT rack state. Widen a tolerance past a neighbour and this names both.</para>
+    ///
+    /// <para><b>And one neighbour that is not a rack state at all.</b> It was added when the
+    /// palette moved onto the shipping product's values, and it is the tighter of the two
+    /// constraints on this surface — see the second half of the fact.</para>
     /// </summary>
     [Fact]
     public void NoRackCheckAcceptsTheColourOfAnotherRackState()
     {
         (string Name, byte R, byte G, byte B)[] neighbours =
         [
-            ("the rack ground (Border.rack Background #FF19141F)", 0x19, 0x14, 0x1F),
-            ("the checked row fill (rack-row:checked Background #FF2A2130)", 0x2A, 0x21, 0x30),
-            ("the hovered row (rack-row:pointerover Background #FF241E2A)", 0x24, 0x1E, 0x2A),
-            ("the armed dot (Ellipse.dot.armed Fill #FF6B5B73)", 0x6B, 0x5B, 0x73),
-            ("the selection marker (rack-row:checked BorderBrush #FFE066FF)", 0xE0, 0x66, 0xFF),
+            ("the rack ground (Border.rack Background #FF181830)", 0x18, 0x18, 0x30),
+            ("the checked row fill (rack-row:checked Background #FF2E2E4A)", 0x2E, 0x2E, 0x4A),
+            ("the hovered row (rack-row:pointerover Background #FF222240)", 0x22, 0x22, 0x40),
+            ("the armed dot (Ellipse.dot.armed Fill #FF7A7A94)", 0x7A, 0x7A, 0x94),
+            ("the selection marker (rack-row:checked BorderBrush #FFFF8FAF)", 0xFF, 0x8F, 0xAF),
         ];
 
         var checks = RackChecks();
@@ -192,11 +196,32 @@ public class RackPresentationTests
         // check expecting a colour the rack does not paint is a check nothing can ever satisfy.
         Assert.NotEmpty(checks);
         Assert.Equal(checks.Count * (neighbours.Length - 1), compared);
+
+        // THE NEIGHBOUR THAT IS NOT A RACK STATE, and it is what pins this surface's tightest
+        // tolerance. The rack's ground is upstream's SurfaceBg #FF181830
+        // (WPF Resources/Theme/Colors.xaml:10) and the pop quiz card's GDI ground is upstream's own
+        // COLORREF 0x002E1A1A = #1A1A2E (Input/Win32InputPresence): the shipping product really
+        // paints those two surfaces 2/2/2 apart, so NO tolerance above 1 can tell a photograph of
+        // the rack from a photograph of that card. It is asserted HERE as well as in
+        // PopQuizCardPresentationTests because that guard only sizes the CARD's tolerances - with
+        // nothing on this side, the rack's ground could be widened back to its pre-flip 6 and
+        // nothing at all would go red.
+        (byte R, byte G, byte B) popQuizCardGround = (0x1A, 0x1A, 0x2E);
+        var rackGround = checks.Single(c => c.Name == "rack-row-unselected-ground");
+        var (gr, gg, gb) = CheckManifest.ParseColor(rackGround.ExpectedColor, "check 'rack-row-unselected-ground':");
+        var toCard = Math.Max(
+            Math.Abs(popQuizCardGround.R - gr),
+            Math.Max(Math.Abs(popQuizCardGround.G - gg), Math.Abs(popQuizCardGround.B - gb)));
+        Assert.True(rackGround.Tolerance < toCard,
+            $"check 'rack-row-unselected-ground' expects {rackGround.ExpectedColor} with tolerance "
+            + $"{rackGround.Tolerance}, which also ACCEPTS the pop quiz card's own ground #1A1A2E - they are only "
+            + $"{toCard} apart on the widest channel, so a photograph of that card would pass a check that exists "
+            + "to say the Studio rack was on the screen");
     }
 
     /// <summary>
     /// <b>THE THRESHOLD IS THE WHOLE BITE OF THE NARROWEST CHECK, AND NOTHING PINNED IT.</b>
-    /// <c>Ellipse.dot</c> strokes <c>#FF6B5B73</c> and <c>Ellipse.dot.armed</c> FILLS AND STROKES
+    /// <c>Ellipse.dot</c> strokes <c>#FF7A7A94</c> and <c>Ellipse.dot.armed</c> FILLS AND STROKES
     /// the same colour (<c>MainWindow.axaml:386-389</c>), so <c>rack-row-dot-armed</c> separates a
     /// filled disc from a hollow ring by AREA alone — 0.714 against 0.224. Drop its
     /// <c>minPixelFraction</c> from 0.5 to 0.2 and it passes on the real <c>off</c> capture while
@@ -253,11 +278,11 @@ public class RackPresentationTests
     /// <see cref="EveryRackThresholdSitsBetweenTheFractionsItsOwnCapturesProduced"/>, not here.
     /// </summary>
     [Theory]
-    [InlineData("rack-row-unselected-ground", 0x2A, 0x21, 0x30)]   // the row is OPEN
-    [InlineData("rack-row-selected-marker", 0x19, 0x14, 0x1F)]     // no marker: rack ground in the band
-    [InlineData("rack-row-selected-fill", 0x19, 0x14, 0x1F)]       // the row is CLOSED
-    [InlineData("rack-row-dot-armed", 0x2A, 0x21, 0x30)]           // no disc: fill showing through
-    [InlineData("rack-row-dot-off", 0x6B, 0x5B, 0x73)]             // a filled disc, not a ring
+    [InlineData("rack-row-unselected-ground", 0x2E, 0x2E, 0x4A)]   // the row is OPEN
+    [InlineData("rack-row-selected-marker", 0x18, 0x18, 0x30)]     // no marker: rack ground in the band
+    [InlineData("rack-row-selected-fill", 0x18, 0x18, 0x30)]       // the row is CLOSED
+    [InlineData("rack-row-dot-armed", 0x2E, 0x2E, 0x4A)]           // no disc: fill showing through
+    [InlineData("rack-row-dot-off", 0x7A, 0x7A, 0x94)]             // a filled disc, not a ring
     public void EachRackCheckRejectsTheOtherStatesColour(string name, byte r, byte g, byte b)
     {
         var check = RackChecks().Single(c => c.Name == name);
@@ -269,11 +294,11 @@ public class RackPresentationTests
     /// <summary>And the other half, which is not redundant: a check nobody can PASS is as useless
     /// as one nobody can fail, and a region shape typo produces exactly that.</summary>
     [Theory]
-    [InlineData("rack-row-unselected-ground", 0x19, 0x14, 0x1F)]
-    [InlineData("rack-row-selected-marker", 0xE0, 0x66, 0xFF)]
-    [InlineData("rack-row-selected-fill", 0x2A, 0x21, 0x30)]
-    [InlineData("rack-row-dot-armed", 0x6B, 0x5B, 0x73)]
-    [InlineData("rack-row-dot-off", 0x2A, 0x21, 0x30)]
+    [InlineData("rack-row-unselected-ground", 0x18, 0x18, 0x30)]
+    [InlineData("rack-row-selected-marker", 0xFF, 0x8F, 0xAF)]
+    [InlineData("rack-row-selected-fill", 0x2E, 0x2E, 0x4A)]
+    [InlineData("rack-row-dot-armed", 0x7A, 0x7A, 0x94)]
+    [InlineData("rack-row-dot-off", 0x2E, 0x2E, 0x4A)]
     public void EachRackCheckAcceptsItsOwnStatesColour(string name, byte r, byte g, byte b)
     {
         var check = RackChecks().Single(c => c.Name == name);

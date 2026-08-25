@@ -90,11 +90,14 @@ public class ScriptedSessionPresentationTests
     }
 
     /// <summary>
-    /// THE TOLERANCE RULE, MECHANICAL, and on this surface it has a named victim. The idle button
-    /// is <c>#FFD05CE8</c> and the rail door's SELECTED border is <c>#FFE066FF</c> — 23 apart on
-    /// their widest channel and 10 on their narrowest. At the rail door's own precedent of 32 the
-    /// idle check would pass on a photograph of a selected rail door, which is a different control
-    /// on a different part of the shell.
+    /// THE TOLERANCE RULE, MECHANICAL, and on this surface it once had a named victim. Before the
+    /// palette flip onto upstream's values the idle button was <c>#FFD05CE8</c> and the rail door's
+    /// SELECTED border <c>#FFE066FF</c> — 23 apart on their widest channel and 10 on their
+    /// narrowest — so at the rail door's own precedent of 32 the idle check passed on a photograph
+    /// of a selected rail door, a different control on a different part of the shell. The two are
+    /// now upstream's accent DARK and LIGHT steps (<c>#FFFF1493</c> and <c>#FFFF8FAF</c>, WPF
+    /// <c>MainWindow/MainWindow.xaml.cs:1566-1567</c>) and 123 apart, and the tolerance stays at 4:
+    /// a tolerance is never widened back because it became comfortable.
     ///
     /// <para>So this asserts the property rather than the constants: no session check may accept a
     /// colour this app declares somewhere else. Widen a tolerance past a neighbour and this names
@@ -109,13 +112,13 @@ public class ScriptedSessionPresentationTests
             ("the Medium stripe (Colors.xaml:193 SessionDiffMedium)", 0xF5, 0xC2, 0x42),
             ("the Hard stripe (Colors.xaml:195 SessionDiffHard)", 0xFF, 0x8A, 0x4C),
             ("the Extreme stripe (Colors.xaml:197 SessionDiffExtreme)", 0xF2, 0x35, 0x57),
-            ("the idle session button (Button.session-start, MainWindow.axaml:352)", 0xD0, 0x5C, 0xE8),
+            ("the idle session button (Button.session-start, MainWindow.axaml:352)", 0xFF, 0x14, 0x93),
             ("the running session button (session-start.running, :364)", 0xFF, 0x6B, 0x6B),
-            ("the selected rail door (RadioButton.door:checked, :69)", 0xE0, 0x66, 0xFF),
-            ("the module panel ground (Border.module, :122)", 0x1B, 0x16, 0x22),
-            ("the notice ground (Border.notice, :129) and the history plate", 0x24, 0x1E, 0x2A),
-            ("the rack ground (Border.rack, :117)", 0x19, 0x14, 0x1F),
-            ("the selected rack row and the history row card (:102, Button.history-row)", 0x2A, 0x21, 0x30),
+            ("the selected rail door (RadioButton.door:checked, :69)", 0xFF, 0x8F, 0xAF),
+            ("the module panel ground (Border.module, :122)", 0x1C, 0x1C, 0x35),
+            ("the notice ground (Border.notice, :129) and the history plate", 0x22, 0x22, 0x40),
+            ("the rack ground (Border.rack, :117)", 0x18, 0x18, 0x30),
+            ("the selected rack row and the history row card (:102, Button.history-row)", 0x2E, 0x2E, 0x4A),
         ];
 
         var checks = SessionChecks();
@@ -202,9 +205,9 @@ public class ScriptedSessionPresentationTests
             ("session-row-easy-stripe", 0xFF, 0x8A, 0x4C),      // the Hard row's stripe
             ("session-row-hard-stripe", 0x57, 0xD9, 0xA3),      // the Easy row's stripe
             ("session-start-idle-fill", 0xFF, 0x6B, 0x6B),      // the button while a session runs
-            ("session-start-running-fill", 0xD0, 0x5C, 0xE8),   // the button before one does
-            ("session-history-kept-row-fill", 0x24, 0x1E, 0x2A),     // the empty plate, where the row is not
-            ("session-history-not-kept-plate", 0x2A, 0x21, 0x30),    // the row card, where the plate is not
+            ("session-start-running-fill", 0xFF, 0x14, 0x93),   // the button before one does
+            ("session-history-kept-row-fill", 0x22, 0x22, 0x40),     // the empty plate, where the row is not
+            ("session-history-not-kept-plate", 0x2E, 0x2E, 0x4A),    // the row card, where the plate is not
         ];
 
         // The cardinality pin the vacuous-shape ledger asks for: a loop is the only assertion in
@@ -228,10 +231,10 @@ public class ScriptedSessionPresentationTests
         [
             ("session-row-easy-stripe", 0x57, 0xD9, 0xA3),
             ("session-row-hard-stripe", 0xFF, 0x8A, 0x4C),
-            ("session-start-idle-fill", 0xD0, 0x5C, 0xE8),
+            ("session-start-idle-fill", 0xFF, 0x14, 0x93),
             ("session-start-running-fill", 0xFF, 0x6B, 0x6B),
-            ("session-history-kept-row-fill", 0x2A, 0x21, 0x30),
-            ("session-history-not-kept-plate", 0x24, 0x1E, 0x2A),
+            ("session-history-kept-row-fill", 0x2E, 0x2E, 0x4A),
+            ("session-history-not-kept-plate", 0x22, 0x22, 0x40),
         ];
 
         // The same cardinality pin, for the same reason.

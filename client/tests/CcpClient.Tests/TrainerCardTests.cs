@@ -395,8 +395,8 @@ public sealed class TrainerCardTests : IDisposable
     /// CAPTURE PASS over an all-black image.
     ///
     /// <para>The card's two checks in <c>client/tools/verify/checks.json</c> expect the module
-    /// ground (<c>#1B1622</c>, <c>MainWindow.axaml:122</c>) and the module title's ink
-    /// (<c>#E8E0EE</c>, <c>MainWindow.axaml:320</c>). This proves the property rather than the
+    /// ground (<c>#1C1C35</c>, <c>MainWindow.axaml:122</c>) and the module title's ink
+    /// (<c>#F0F0F5</c>, <c>MainWindow.axaml:320</c>). This proves the property rather than the
     /// numbers: no single colour lies inside every check's tolerance band, so a UNIFORM capture —
     /// black, the page ground behind the card, the card's own ground, anything at all — must fail
     /// at least one of them. Widen a tolerance or drop one of the pair and this reddens.</para>
@@ -450,8 +450,8 @@ public sealed class TrainerCardTests : IDisposable
         foreach (var (what, colour) in new (string, (byte R, byte G, byte B))[]
                  {
                      ("an all-black capture", ((byte)0, (byte)0, (byte)0)),
-                     ("the page ground behind the card (#141018)", ((byte)0x14, (byte)0x10, (byte)0x18)),
-                     ("a card that painted its fill and nothing else (#1B1622)", ((byte)0x1B, (byte)0x16, (byte)0x22)),
+                     ("the page ground behind the card (#121220)", ((byte)0x14, (byte)0x10, (byte)0x18)),
+                     ("a card that painted its fill and nothing else (#1C1C35)", ((byte)0x1B, (byte)0x16, (byte)0x22)),
                  })
         {
             var image = Solid(64, 64, colour);

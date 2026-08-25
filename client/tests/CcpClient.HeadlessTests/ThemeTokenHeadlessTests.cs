@@ -96,7 +96,7 @@ public class ThemeTokenHeadlessTests
     public void ReplacingAColourKeyRepaintsEveryBrushDerivedFromIt()
     {
         var app = Application.Current!;
-        var original = Color.Parse("#FFD05CE8");
+        var original = Color.Parse("#FFFF1493");
 
         Assert.True(app.TryFindResource("ShellAccentBrush", ThemeVariant.Dark, out var found));
         var brush = Assert.IsType<SolidColorBrush>(found);

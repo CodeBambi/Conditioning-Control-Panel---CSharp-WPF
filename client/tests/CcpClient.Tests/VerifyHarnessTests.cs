@@ -55,9 +55,9 @@ public class VerifyHarnessTests
     [Fact]
     public void BorderBand_Pass_WhenBandMatchesExpectedColor()
     {
-        var image = Solid(100, 50, (0x14, 0x10, 0x18));
-        Paint(image, 0, 0, 100, 3, (0xE0, 0x66, 0xFF)); // top 3 rows = border color
-        var result = CheckEvaluator.Evaluate(BorderCheck("#E066FF", 32, 0.9), image);
+        var image = Solid(100, 50, (0x12, 0x12, 0x20));
+        Paint(image, 0, 0, 100, 3, (0xFF, 0x8F, 0xAF)); // top 3 rows = border color
+        var result = CheckEvaluator.Evaluate(BorderCheck("#FF8FAF", 32, 0.9), image);
         Assert.True(result.Passed);
         Assert.Equal(300, result.Sampled);
         Assert.Equal(300, result.Matched);
@@ -67,8 +67,8 @@ public class VerifyHarnessTests
     [Fact]
     public void BorderBand_Fail_WhenBandIsWrongColor()
     {
-        var image = Solid(100, 50, (0x3A, 0x2F, 0x3E)); // unlit color where lit expected
-        var result = CheckEvaluator.Evaluate(BorderCheck("#E066FF", 32, 0.5), image);
+        var image = Solid(100, 50, (0x3A, 0x3A, 0x5C)); // unlit color where lit expected
+        var result = CheckEvaluator.Evaluate(BorderCheck("#FF8FAF", 32, 0.5), image);
         Assert.False(result.Passed);
         Assert.Equal(0, result.Matched);
         Assert.Equal("test-border", result.Name); // the failed check is NAMED
@@ -77,21 +77,21 @@ public class VerifyHarnessTests
     [Fact]
     public void ToleranceBoundary_ExactDeltaPasses_PlusOneFails()
     {
-        var image = Solid(10, 3, (0xE0, 0x66, 0xFF));
-        Paint(image, 0, 0, 10, 3, (0xE0 - 32, 0x66, 0xFF)); // exactly tolerance away on R
-        Assert.True(CheckEvaluator.Evaluate(BorderCheck("#E066FF", 32, 1.0), image).Passed);
+        var image = Solid(10, 3, (0xFF, 0x8F, 0xAF));
+        Paint(image, 0, 0, 10, 3, (0xFF - 32, 0x8F, 0xAF)); // exactly tolerance away on R
+        Assert.True(CheckEvaluator.Evaluate(BorderCheck("#FF8FAF", 32, 1.0), image).Passed);
 
-        Paint(image, 0, 0, 10, 3, (0xE0 - 33, 0x66, 0xFF)); // tolerance + 1
-        Assert.False(CheckEvaluator.Evaluate(BorderCheck("#E066FF", 32, 1.0), image).Passed);
+        Paint(image, 0, 0, 10, 3, (0xFF - 33, 0x8F, 0xAF)); // tolerance + 1
+        Assert.False(CheckEvaluator.Evaluate(BorderCheck("#FF8FAF", 32, 1.0), image).Passed);
     }
 
     [Fact]
     public void MinPixelFractionBoundary_ExactFractionPasses_BelowFails()
     {
-        var image = Solid(100, 3, (0x14, 0x10, 0x18));
-        Paint(image, 0, 0, 50, 3, (0xE0, 0x66, 0xFF)); // exactly half the band matches
-        Assert.True(CheckEvaluator.Evaluate(BorderCheck("#E066FF", 32, 0.5), image).Passed);
-        Assert.False(CheckEvaluator.Evaluate(BorderCheck("#E066FF", 32, 0.51), image).Passed);
+        var image = Solid(100, 3, (0x12, 0x12, 0x20));
+        Paint(image, 0, 0, 50, 3, (0xFF, 0x8F, 0xAF)); // exactly half the band matches
+        Assert.True(CheckEvaluator.Evaluate(BorderCheck("#FF8FAF", 32, 0.5), image).Passed);
+        Assert.False(CheckEvaluator.Evaluate(BorderCheck("#FF8FAF", 32, 0.51), image).Passed);
     }
 
     [Fact]
@@ -106,15 +106,15 @@ public class VerifyHarnessTests
             EvidenceClass = CheckManifest.EvidencePresentation,
             Kind = CheckManifest.KindRegionColor,
             Region = new CheckRegion { Rect = new RectFraction { X = 0.0, Y = 0.0, W = 0.5, H = 0.5 } },
-            ExpectedColor = "#141018",
+            ExpectedColor = "#121220",
             Tolerance = 8,
             MinPixelFraction = 1.0,
         };
 
-        var small = Solid(100, 80, (0x14, 0x10, 0x18));
-        Paint(small, 50, 40, 100, 80, (0xE0, 0x66, 0xFF)); // bottom-right quadrant different
-        var large = Solid(200, 160, (0x14, 0x10, 0x18));
-        Paint(large, 100, 80, 200, 160, (0xE0, 0x66, 0xFF));
+        var small = Solid(100, 80, (0x12, 0x12, 0x20));
+        Paint(small, 50, 40, 100, 80, (0xFF, 0x8F, 0xAF)); // bottom-right quadrant different
+        var large = Solid(200, 160, (0x12, 0x12, 0x20));
+        Paint(large, 100, 80, 200, 160, (0xFF, 0x8F, 0xAF));
 
         Assert.True(CheckEvaluator.Evaluate(check, small).Passed);
         Assert.True(CheckEvaluator.Evaluate(check, large).Passed);
@@ -123,19 +123,19 @@ public class VerifyHarnessTests
     [Fact]
     public void Bands_LeftRightBottom_SampleTheCorrectEdge()
     {
-        var image = Solid(60, 40, (0x14, 0x10, 0x18));
-        Paint(image, 0, 0, 2, 40, (0xE0, 0x66, 0xFF)); // left edge
-        Paint(image, 58, 0, 60, 40, (0x3A, 0x2F, 0x3E)); // right edge
+        var image = Solid(60, 40, (0x12, 0x12, 0x20));
+        Paint(image, 0, 0, 2, 40, (0xFF, 0x8F, 0xAF)); // left edge
+        Paint(image, 58, 0, 60, 40, (0x3A, 0x3A, 0x5C)); // right edge
 
         ManifestCheck For(string band, string color) => BorderCheck(color, 8, 0.9) with
         {
             Region = new CheckRegion { Band = band, ThicknessPx = 2 },
         };
 
-        Assert.True(CheckEvaluator.Evaluate(For("left", "#E066FF"), image).Passed);
-        Assert.True(CheckEvaluator.Evaluate(For("right", "#3A2F3E"), image).Passed);
-        Assert.False(CheckEvaluator.Evaluate(For("left", "#3A2F3E"), image).Passed);
-        Assert.False(CheckEvaluator.Evaluate(For("bottom", "#E066FF"), image).Passed);
+        Assert.True(CheckEvaluator.Evaluate(For("left", "#FF8FAF"), image).Passed);
+        Assert.True(CheckEvaluator.Evaluate(For("right", "#3A3A5C"), image).Passed);
+        Assert.False(CheckEvaluator.Evaluate(For("left", "#3A3A5C"), image).Passed);
+        Assert.False(CheckEvaluator.Evaluate(For("bottom", "#FF8FAF"), image).Passed);
     }
 
     [Fact]
@@ -143,10 +143,10 @@ public class VerifyHarnessTests
     {
         var checks = new[]
         {
-            BorderCheck("#E066FF", 32, 0.5),
-            BorderCheck("#3A2F3E", 24, 0.5) with { Name = "other", State = "unlit" },
+            BorderCheck("#FF8FAF", 32, 0.5),
+            BorderCheck("#3A3A5C", 24, 0.5) with { Name = "other", State = "unlit" },
         };
-        var image = Solid(100, 3, (0xE0, 0x66, 0xFF));
+        var image = Solid(100, 3, (0xFF, 0x8F, 0xAF));
         var results = CheckEvaluator.EvaluateCapture(checks, "dashboard-card", "lit", image);
         Assert.Single(results);
         Assert.Equal("test-border", results[0].Name);
@@ -170,7 +170,7 @@ public class VerifyHarnessTests
         var valid = Write("valid.json", """
             { "version": 1, "checks": [ { "name": "a", "surface": "s", "state": "t",
               "evidenceClass": "presentation-verified", "kind": "border-color-band",
-              "region": { "band": "top", "thicknessPx": 3 }, "expectedColor": "#E066FF",
+              "region": { "band": "top", "thicknessPx": 3 }, "expectedColor": "#FF8FAF",
               "tolerance": 32, "minPixelFraction": 0.5 } ] }
             """);
         Assert.Single(CheckManifest.Load(valid));
@@ -178,7 +178,7 @@ public class VerifyHarnessTests
         Assert.Throws<InvalidDataException>(() => CheckManifest.Load(Write("bad-kind.json", """
             { "version": 1, "checks": [ { "name": "a", "surface": "s", "state": "t",
               "evidenceClass": "presentation-verified", "kind": "magic",
-              "region": { "band": "top", "thicknessPx": 3 }, "expectedColor": "#E066FF",
+              "region": { "band": "top", "thicknessPx": 3 }, "expectedColor": "#FF8FAF",
               "tolerance": 32, "minPixelFraction": 0.5 } ] }
             """)));
         Assert.Throws<InvalidDataException>(() => CheckManifest.Load(Write("bad-color.json", """
@@ -194,15 +194,15 @@ public class VerifyHarnessTests
             { "version": 1, "checks": [
               { "name": "a", "surface": "s", "state": "t", "evidenceClass": "draw-verified",
                 "kind": "region-color", "region": { "rect": { "x": 0, "y": 0, "w": 1, "h": 1 } },
-                "expectedColor": "#141018", "tolerance": 8, "minPixelFraction": 0.5 },
+                "expectedColor": "#121220", "tolerance": 8, "minPixelFraction": 0.5 },
               { "name": "a", "surface": "s", "state": "t", "evidenceClass": "draw-verified",
                 "kind": "region-color", "region": { "rect": { "x": 0, "y": 0, "w": 1, "h": 1 } },
-                "expectedColor": "#141018", "tolerance": 8, "minPixelFraction": 0.5 } ] }
+                "expectedColor": "#121220", "tolerance": 8, "minPixelFraction": 0.5 } ] }
             """)));
         Assert.Throws<InvalidDataException>(() => CheckManifest.Load(Write("bad-class.json", """
             { "version": 1, "checks": [ { "name": "a", "surface": "s", "state": "t",
               "evidenceClass": "looks-verified", "kind": "border-color-band",
-              "region": { "band": "top", "thicknessPx": 3 }, "expectedColor": "#E066FF",
+              "region": { "band": "top", "thicknessPx": 3 }, "expectedColor": "#FF8FAF",
               "tolerance": 32, "minPixelFraction": 0.5 } ] }
             """)));
     }
@@ -241,11 +241,11 @@ public class VerifyHarnessTests
     [Fact]
     public void Census_RefusesACaptureThatIsEntirelyTheBackground_AndNamesTheColour()
     {
-        var census = CaptureCensus.Of(Solid(64, 64, (0x1B, 0x16, 0x22)));
+        var census = CaptureCensus.Of(Solid(64, 64, (0x1C, 0x1C, 0x35)));
 
         Assert.True(census.IsVacuous);
         Assert.Contains("1 distinct colour", census.ToString(), StringComparison.Ordinal);
-        Assert.Contains("RGB(27,22,34) #1B1622", census.ToString(), StringComparison.Ordinal);
+        Assert.Contains("RGB(28,28,53) #1C1C35", census.ToString(), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -257,7 +257,7 @@ public class VerifyHarnessTests
     public void Census_AcceptsACaptureCarryingASecondColour()
     {
         var image = Solid(175, 44, (0, 0, 0));
-        Paint(image, 0, 0, 175, 3, (0xE0, 0x66, 0xFF));
+        Paint(image, 0, 0, 175, 3, (0xFF, 0x8F, 0xAF));
 
         var census = CaptureCensus.Of(image);
 

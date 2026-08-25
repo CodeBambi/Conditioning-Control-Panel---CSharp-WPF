@@ -138,7 +138,7 @@ public partial class SessionRecapWindow : Window
         return new Border
         {
             Name = "SessionRecapMediaRow" + ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            Background = new SolidColorBrush(Color.Parse("#FF2A2130")),
+            Background = new SolidColorBrush(Color.Parse("#FF2E2E4A")),
             CornerRadius = new Avalonia.CornerRadius(6),
             Padding = new Avalonia.Thickness(10, 6),
             Child = grid,

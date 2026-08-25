@@ -6,7 +6,7 @@
 #   3. restore (from the bytes captured in memory, never git), rebuild, re-capture, assert green
 #
 # THE ANCHOR MOVED, 2026-08-25, AND THE SEED GOT STRONGER FOR IT.
-# This used to seed Views/MainWindow.axaml, where #FFE066FF was pasted at three sites. The product
+# This used to seed Views/MainWindow.axaml, where #FFFF8FAF was pasted at three sites. The product
 # has a token layer now: that colour is declared ONCE, as `ShellAccentBright` in
 # src/CcpClient.Desktop/Themes/Ccp.axaml, and every surface that paints a selection binds the key
 # rather than the value. So the file this script edits moved with it.
@@ -218,17 +218,17 @@ function Fail([string]$msg) {
     exit 1
 }
 
-if ($original -notmatch '#FFE066FF') { Fail "$axaml does not declare the selected-door brush #FFE066FF - self-test anchor missing" }
+if ($original -notmatch '#FFFF8FAF') { Fail "$axaml does not declare the selected-door brush #FFFF8FAF - self-test anchor missing" }
 
 # Exactly ONE occurrence, and the token file says so in its own comment. If a second ever appears -
 # a worked example, a duplicate key, a hex quoted in prose - the -replace below would rewrite it
 # too, and the restore proof further down would then be checking a file this script had edited in
 # two places for one reason. Cheaper to refuse than to explain.
-$anchorCount = ([regex]::Matches($original, '#FFE066FF')).Count
-if ($anchorCount -ne 1) { Fail "expected exactly ONE #FFE066FF in $axaml, found $anchorCount - the seed would touch more than the token" }
+$anchorCount = ([regex]::Matches($original, '#FFFF8FAF')).Count
+if ($anchorCount -ne 1) { Fail "expected exactly ONE #FFFF8FAF in $axaml, found $anchorCount - the seed would touch more than the token" }
 
 Write-Output '--- phase 1: seed the regression (ShellAccentBright token -> #FF336633) ---'
-[IO.File]::WriteAllText($axaml, ($original -replace '#FFE066FF', '#FF336633'), [Text.UTF8Encoding]::new($false))
+[IO.File]::WriteAllText($axaml, ($original -replace '#FFFF8FAF', '#FF336633'), [Text.UTF8Encoding]::new($false))
 
 try {
     dotnet build (Join-Path $clientDir 'CcpClient.sln') -c Debug --nologo | Out-Null

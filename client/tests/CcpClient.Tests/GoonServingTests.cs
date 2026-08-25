@@ -750,7 +750,9 @@ public sealed class GoonServingTests : IDisposable
     ///
     /// <para>The first draft pinned <c>goon-page-backdrop</c> at tolerance 8. It cleared the loader
     /// rule comfortably (distance 14) and it PASSED a real capture of the DASHBOARD at 1.0000,
-    /// because <c>dashboard-background</c> is <c>#141018</c> and sits only 7 away per channel. A
+    /// because <c>dashboard-background</c> was <c>#141018</c> then and sat only 8 away on its
+    /// widest channel; after the palette flip onto upstream's values it is <c>#121220</c> and 10
+    /// away, and the tolerance was NOT widened to match. A
     /// check that accepts a photograph of a different window is the "cannot fail on a wrong
     /// capture" defect, and it would have shipped.</para>
     ///

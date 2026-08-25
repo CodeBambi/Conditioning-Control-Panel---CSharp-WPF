@@ -74,7 +74,7 @@ public class CompanionPrivacyPresentationTests
 
     /// <summary>
     /// Neither half of either pair accepts a colour the surface it samples can really show. The
-    /// arithmetic that matters: the transcript pair is 10/8/10 apart (the companion ground against
+    /// arithmetic that matters: the transcript pair is 13/13/26 apart (the companion ground against
     /// the panel fill), which is exactly the separation the permissions pair already runs at
     /// tolerance 4 — widen either past it and the pair stops proving anything.
     /// </summary>
@@ -83,11 +83,11 @@ public class CompanionPrivacyPresentationTests
     {
         (string Name, byte R, byte G, byte B)[] neighbours =
         [
-            ("the companion window ground (CompanionWindow.axaml Background)", 0x14, 0x10, 0x18),
-            ("the unselected dial seat / panel fill (Border.dial-seat)", 0x1E, 0x18, 0x22),
+            ("the companion window ground (CompanionWindow.axaml Background)", 0x12, 0x12, 0x20),
+            ("the unselected dial seat / panel fill (Border.dial-seat)", 0x1F, 0x1F, 0x3A),
             ("the SELECTED dial seat (Border.dial-seat.selected)", 0x4A, 0x2C, 0x55),
             ("the companion header plate (#FF241A2B)", 0x24, 0x1A, 0x2B),
-            ("the companion button face (Button.companion, #FF2A2130)", 0x2A, 0x21, 0x30),
+            ("the companion button face (Button.companion, #FF2E2E4A)", 0x2E, 0x2E, 0x4A),
         ];
 
         var checks = ChecksFor("companion-privacy").Concat(ChecksFor("companion-transcript")).ToList();
@@ -191,14 +191,14 @@ public class CompanionPrivacyPresentationTests
         // this one.
         var selectedEnd = markup.IndexOf("</Style>", selected, StringComparison.Ordinal);
         Assert.True(selectedEnd > selected, "the selected dial-seat style is never closed");
-        Assert.Equal("#FF1E1822", ResolveDeclaredColour(markup[seat..selected], "the unselected dial seat"));
+        Assert.Equal("#FF1F1F3A", ResolveDeclaredColour(markup[seat..selected], "the unselected dial seat"));
         Assert.Equal("#FF4A2C55", ResolveDeclaredColour(markup[selected..selectedEnd], "the selected dial seat"));
 
         // The transcript pair's `closed` half is the companion window's own ground.
         var groundAt = markup.IndexOf("Background=", StringComparison.Ordinal);
         Assert.True(groundAt >= 0, "the companion window declares no Background at all");
         Assert.Equal(
-            "#FF141018",
+            "#FF121220",
             ResolveDeclaredColour(markup[groundAt..(groundAt + 80)], "the companion window ground"));
 
         // Every colour the surface can declare, resolved through the token layer where it uses one.
@@ -231,8 +231,8 @@ public class CompanionPrivacyPresentationTests
         {
             var (r, g, b) = CheckManifest.ParseColor(check.ExpectedColor, $"check '{check.Name}':");
             var declared = $"#FF{r:X2}{g:X2}{b:X2}";
-            // The transcript's own ground is set in code, not markup — it is the same #1E1822.
-            var inTranscript = declared.Equals("#FF1E1822", StringComparison.OrdinalIgnoreCase);
+            // The transcript's own ground is set in code, not markup — it is the same #1F1F3A.
+            var inTranscript = declared.Equals("#FF1F1F3A", StringComparison.OrdinalIgnoreCase);
             Assert.True(declaredColours.Contains(declared) || inTranscript,
                 $"check '{check.Name}' expects {check.ExpectedColor}, which the companion surface does not declare");
         }

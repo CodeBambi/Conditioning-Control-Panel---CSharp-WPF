@@ -60,7 +60,7 @@ public class StudioDialPresentationTests
     /// Neither half accepts the other's colour, nor the ground they are both drawn on.
     ///
     /// <para>The measurement behind the numbers: the sampled band is 936 px and holds exactly three
-    /// colours across the two captures — the module panel's ground <c>#1B1622</c> at 728 px in
+    /// colours across the two captures — the module panel's ground <c>#1C1C35</c> at 728 px in
     /// both, Fluent's slider accent <c>#0078D4</c> at 208 px when the dial is the user's, and its
     /// disabled track <c>#333333</c> at 208 px when the session owns it. Widen either tolerance
     /// past the separation and the pair stops proving anything; this names both colours when that
@@ -73,7 +73,7 @@ public class StudioDialPresentationTests
         [
             ("the enabled slider track (Fluent SliderTrackValueFill)", 0x00, 0x78, 0xD4),
             ("the disabled slider track (Fluent SliderTrackValueFillDisabled)", 0x33, 0x33, 0x33),
-            ("the module panel ground (Border.module, MainWindow.axaml:122)", 0x1B, 0x16, 0x22),
+            ("the module panel ground (Border.module, MainWindow.axaml:122)", 0x1C, 0x1C, 0x35),
         ];
 
         var checks = DialChecks();

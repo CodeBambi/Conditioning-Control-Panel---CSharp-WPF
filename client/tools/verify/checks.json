@@ -8,7 +8,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "border-color-band",
       "region": { "band": "top", "thicknessPx": 3 },
-      "expectedColor": "#3A2F3E",
+      "expectedColor": "#3A3A5C",
       "tolerance": 24,
       "minPixelFraction": 0.5
     },
@@ -19,7 +19,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "border-color-band",
       "region": { "band": "top", "thicknessPx": 3 },
-      "expectedColor": "#E066FF",
+      "expectedColor": "#FF8FAF",
       "tolerance": 32,
       "minPixelFraction": 0.5
     },
@@ -30,7 +30,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.0, "y": 0.0, "w": 1.0, "h": 0.06 } },
-      "expectedColor": "#141018",
+      "expectedColor": "#121220",
       "tolerance": 8,
       "minPixelFraction": 0.8
     },
@@ -39,15 +39,25 @@
     // row; every one has been shown FAILING on a real capture of the opposite state.
     //
     // TOLERANCES ARE SIZED BELOW 10 ON PURPOSE, and this is the tolerance rule in its natural
-    // habitat. RadioButton.rack-row:pointerover is #FF241E2A (MainWindow.axaml:98-100), 11/10/11
-    // from the rack's #FF19141F ground, and the selected fill #FF2A2130 is 17/13/17 from that same
+    // habitat. RadioButton.rack-row:pointerover is #FF222240 (MainWindow.axaml:98-100), 10/10/16
+    // from the rack's #FF181830 ground, and the selected fill #FF2E2E4A is 22/22/26 from that same
     // ground. At the rail-door precedent of 24 the ground check would pass with the mouse merely
-    // RESTING on the row, and the fill check would pass on an unselected row. Measured, not
-    // supposed: the unselected strip scores 0.0000 against #2A2130 at tolerance 16 and 1.0000 at
-    // tolerance 20. The right precedent here is dashboard-background's 8, not rail-door's 24/32.
+    // RESTING on the row, and the fill check would pass on an unselected row. The right precedent
+    // here is dashboard-background's 8, not rail-door's 24/32.
     //
-    // The two #2A2130 checks go tighter still, to 4, because their nearest neighbour is the
-    // HOVERED row at only 6/3/6 away — RackPresentationTests.NoRackCheckAcceptsTheColourOfAnother-
+    // AND THE GROUND GOES TO 1, WHICH IS THE TIGHTEST NUMBER IN THIS FILE, because of something
+    // the palette flip onto upstream's values brought with it. The rack's ground is upstream's
+    // SurfaceBg #FF181830 (Colors.xaml:10) and the pop quiz card's GDI ground is upstream's own
+    // COLORREF 0x002E1A1A = #1A1A2E (Input/Win32InputPresence): the shipping product really does
+    // paint those two surfaces 2/2/2 apart, so NO tolerance above 1 can tell a photograph of the
+    // rack from a photograph of that card. It costs nothing here and it is asserted on the other
+    // side too - popquiz-card-ground carries the same 1 for the same pair, and
+    // PopQuizCardPresentationTests reds by name if either is widened. The region is a flat fill
+    // that measured 7605/7605 EXACT, which is why a tolerance of 1 is affordable at all.
+    //
+    // The two #2E2E4A checks stay at 4, tighter than their nearest neighbour needs: the HOVERED
+    // row is 12/12/10 away and the mantra game's dim ink #353550 is 7/7/6 away, so 6 is the
+    // ceiling and 4 is what they keep. RackPresentationTests.NoRackCheckAcceptsTheColourOfAnother-
     // RackState asserts that separation mechanically, so widening any of these back reddens the
     // floor and names both colours. It costs nothing: these regions are flat fills that measure
     // 7605/7605 and 36/36 EXACT, with no antialiasing in them at all.
@@ -55,7 +65,7 @@
     // TWO LIMITS OF THE DOT PAIR, STATED HERE BECAUSE THEY ARE NOT VISIBLE FROM THE ROWS BELOW.
     // (1) rack-row-dot-off reads the open row's fill showing THROUGH a hollow ring, so it also
     // passes if the dot is not rendered at all. Only rack-row-dot-armed constrains that the dot
-    // exists. (2) Ellipse.dot strokes #FF6B5B73 and Ellipse.dot.armed fills AND strokes the same
+    // exists. (2) Ellipse.dot strokes #FF7A7A94 and Ellipse.dot.armed fills AND strokes the same
     // colour (MainWindow.axaml:386-389), so rack-row-dot-armed separates a filled disc from a
     // 1-DIP ring by AREA alone — 0.714 against 0.224. Its minPixelFraction is therefore the whole
     // bite, and RackPresentationTests.EveryRackThresholdSitsBetweenTheFractionsItsOwnCaptures-
@@ -67,8 +77,8 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.45, "y": 0.15, "w": 0.42, "h": 0.7 } },
-      "expectedColor": "#19141F",
-      "tolerance": 6,
+      "expectedColor": "#181830",
+      "tolerance": 1,
       "minPixelFraction": 0.98
     },
     {
@@ -78,7 +88,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "border-color-band",
       "region": { "band": "left", "thicknessPx": 3 },
-      "expectedColor": "#E066FF",
+      "expectedColor": "#FF8FAF",
       "tolerance": 8,
       "minPixelFraction": 0.5
     },
@@ -89,7 +99,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.45, "y": 0.15, "w": 0.42, "h": 0.7 } },
-      "expectedColor": "#2A2130",
+      "expectedColor": "#2E2E4A",
       "tolerance": 4,
       "minPixelFraction": 0.98
     },
@@ -100,7 +110,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0 } },
-      "expectedColor": "#6B5B73",
+      "expectedColor": "#7A7A94",
       "tolerance": 8,
       "minPixelFraction": 0.5
     },
@@ -111,7 +121,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.28, "y": 0.28, "w": 0.44, "h": 0.44 } },
-      "expectedColor": "#2A2130",
+      "expectedColor": "#2E2E4A",
       "tolerance": 4,
       "minPixelFraction": 0.9
     },
@@ -138,10 +148,11 @@
     //
     // (3) IS THE ONE THAT CHANGED THESE NUMBERS, and it is recorded because assuming it would have
     // shipped the defect. The first draft pinned the backdrop at tolerance 8, and at 8 it PASSED
-    // the dashboard capture 1.0000 -- dashboard-background is #141018, only 7 away per channel. A
+    // the dashboard capture 1.0000 -- dashboard-background was #141018 then, only 8 away on its
     // check that accepts a photograph of a different window is the defect this project has found
     // fourteen times. Both tolerances now sit strictly below the distance to the NEAREST colour
-    // any other check in this file declares (backdrop: 6 against 8; card: 8 against 11), and
+    // any other check in this file declares - now #121220, 10 from each after the palette flip
+    // onto upstream's values (backdrop: 6 against 10; card: 8 against 10) - and
     // GoonServingTests.NoGoonCheckAcceptsTheColourOfAnotherDeclaredState asserts that mechanically
     // over the manifest itself, so widening either one reddens the floor and names both colours.
     //
@@ -178,7 +189,7 @@
     // the no-runs-yet record note — and the geometry both regions below are fractions of.
     //
     // THE PAIR IS THE POINT, AND IT IS WHY THERE ARE TWO. A capture that is ONE colour cannot pass
-    // this surface: #1B1622 with tolerance 2 and #E8E0EE with tolerance 24 are 205 apart on red and
+    // this surface: #1C1C35 with tolerance 2 and #F0F0F5 with tolerance 24 are 212 apart on red and
     // 26 is as close as their two bands can reach, so no single value is inside both.
     // TrainerCardTests.NoUniformCaptureCanPassTheHeadedTrainerCardChecks asserts that arithmetic
     // over this file rather than trusting the numbers here, because the failure it forbids has
@@ -186,15 +197,15 @@
     // all-black image. An all-black capture scores 0.000 on both of these.
     //
     // WHAT THE TWO COLOURS ARE, FROM SOURCE, NOT FROM THE CAPTURE. Border.module paints
-    // Background #FF1B1622 (MainWindow.axaml:122) and TextBlock.module-title paints Foreground
-    // #FFE8E0EE at no opacity (MainWindow.axaml:320); the card is a Border.module carrying a
+    // Background #FF1C1C35 (MainWindow.axaml:122) and TextBlock.module-title paints Foreground
+    // #FFF0F0F5 at no opacity (MainWindow.axaml:320); the card is a Border.module carrying a
     // module-title (IntakePage.axaml). Neither number was read off a screenshot.
     //
     // THE GROUND TOLERANCE IS 2, WHICH IS TIGHTER THAN ANYTHING ELSE IN THIS FILE, and for a
-    // named reason: the rack's ground #FF19141F is only 3 away on its widest channel, so at the
-    // rail-door precedent of 24 — or even at the rack's own 6 — this check would pass on a
-    // photograph of the Studio rack. The page ground behind the card (#141018, Window Background)
-    // is 10 away, so tolerance 2 also fails on a card that did not paint its own fill at all.
+    // named reason: the rack's ground #FF181830 is only 5 away on its widest channel, so at the
+    // rail-door precedent of 24 — or even at the rack's old 6 — this check would pass on a
+    // photograph of the Studio rack. The page ground behind the card (#121220, Window Background)
+    // is 21 away, so tolerance 2 also fails on a card that did not paint its own fill at all.
     // These are flat fills with no antialiasing in them, exactly like the rack's, which measured
     // 7605/7605 EXACT.
     //
@@ -211,7 +222,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.82, "y": 0.30, "w": 0.15, "h": 0.65 } },
-      "expectedColor": "#1B1622",
+      "expectedColor": "#1C1C35",
       "tolerance": 2,
       "minPixelFraction": 0.98
     },
@@ -237,17 +248,21 @@
     //
     // THE TWO BUTTON CHECKS ARE THE SAME CONTROL IN ITS TWO STATES, which is upstream's own
     // one-button-two-liveries shape (MainWindow.StartStop.cs:756 paints the running one
-    // #FFFF6B6B; the idle pink #FFD05CE8 is the shell's session-start livery). `running` is only
+    // #FFFF6B6B; the idle pink #FFFF1493 is the shell's session-start livery). `running` is only
     // reachable by really starting a scripted session through its confirmation, so the pair also
     // proves the ceremony completed.
     //
     // TOLERANCES ARE 4, WHICH IS TIGHTER THAN EVERYTHING ABOVE EXCEPT THE TRAINER CARD'S GROUND,
-    // and for the same kind of named reason. #FFD05CE8 is only 23 from the rail door's selected
-    // #FFE066FF on its widest channel and 10 on its narrowest, so at the rail-door precedent of
-    // 32 this check would pass on a photograph of a selected rail door. ScriptedSessionPresentation
-    // Tests.NoSessionCheckAcceptsTheColourOfAnotherDeclaredState asserts that separation
-    // mechanically over this file, so widening any of these four reddens the floor and names both
-    // colours.
+    // and the reason is HISTORY worth keeping. Before the palette flip onto upstream's values the
+    // idle button was #FFD05CE8 and the selected rail door #FFE066FF - 23 apart on the widest
+    // channel and 10 on the narrowest - so at the rail door's own precedent of 32 this check
+    // passed on a photograph of a selected rail door. The two are now the shipping product's own
+    // accent DARK and LIGHT steps (#FFFF1493 and #FFFF8FAF, WPF
+    // MainWindow/MainWindow.xaml.cs:1566-1567), 123 apart, so the pressure is off - and the
+    // tolerance stays at 4 anyway, because a tolerance is never widened back for comfort.
+    // ScriptedSessionPresentationTests.NoSessionCheckAcceptsTheColourOfAnotherDeclaredState
+    // asserts that separation mechanically over this file, so widening any of these four reddens
+    // the floor and names both colours.
     {
       "name": "session-row-easy-stripe",
       "surface": "session-row",
@@ -277,7 +292,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.25, "y": 0.08, "w": 0.5, "h": 0.12 } },
-      "expectedColor": "#D05CE8",
+      "expectedColor": "#FF1493",
       "tolerance": 4,
       "minPixelFraction": 0.98
     },
@@ -317,9 +332,10 @@
     // inset so no border pixel is ever sampled.
     //
     // TOLERANCE 4 IS THE WHOLE POINT HERE and it is the rack's number for the rack's reason: the
-    // row card #FF2A2130 and the plate #FF241E2A are only 6/3/6 apart, which is the same distance
-    // the rack's selected fill sits from its hovered row. At 8 either check would pass on the other
-    // capture and the pair would prove nothing. ScriptedSessionPresentationTests
+    // row card #FF2E2E4A and the plate #FF222240 are only 12/12/10 apart, which is the same
+    // distance the rack's selected fill sits from its hovered row. At 12 either check would pass
+    // on the other capture and the pair would prove nothing; 4 is kept from before the palette
+    // flip, when those same two roles were 6/3/6 apart. ScriptedSessionPresentationTests
     // .NoSessionCheckAcceptsTheColourOfAnotherDeclaredState asserts that separation mechanically
     // over this file, so widening either one reddens the floor and names both colours.
     {
@@ -329,7 +345,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.02, "y": 0.79, "w": 0.96, "h": 0.19 } },
-      "expectedColor": "#2A2130",
+      "expectedColor": "#2E2E4A",
       "tolerance": 4,
       "minPixelFraction": 0.98
     },
@@ -340,7 +356,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.02, "y": 0.79, "w": 0.96, "h": 0.19 } },
-      "expectedColor": "#241E2A",
+      "expectedColor": "#222240",
       "tolerance": 4,
       "minPixelFraction": 0.98
     },
@@ -351,7 +367,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.02, "y": 0.042, "w": 0.10, "h": 0.026 } },
-      "expectedColor": "#E8E0EE",
+      "expectedColor": "#F0F0F5",
       "tolerance": 24,
       "minPixelFraction": 0.05
     },
@@ -364,7 +380,7 @@
     // pixels in each - so the only thing separating them is the disabled livery.
     //
     // MEASURED, NOT CHOSEN. The band x 0.02..0.10, y 0.40..0.60 is 936 px and holds two colours and
-    // no antialiasing at all: the panel ground #1B1622 at 728 px in both states, and the track at
+    // no antialiasing at all: the panel ground #1C1C35 at 728 px in both states, and the track at
     // 208 px - Fluent's accent #0078D4 when the dial is the user's, its disabled grey #333333 when
     // the session owns it. 208/936 = 0.2222, which is why the fraction is 0.20: the wrong capture
     // scores 0.0000, not a near miss.
@@ -452,12 +468,14 @@
     },
     // THE AI PERMISSIONS GRID. Both checks read the SAME derived band - 380x4 DIP, 8 DIP below the
     // master switch's own UIA rect - in the two states one press of that switch produces. In
-    // `admitted` those pixels are the permissions panel's own padding (#FF1E1822 behind its amber
-    // border); in `closed` there is no panel and they are the window's ground (#FF141018).
+    // `admitted` those pixels are the permissions panel's own padding (#FF1F1F3A behind its amber
+    // border); in `closed` there is no panel and they are the window's ground (#FF121220).
     //
     // TOLERANCE 4, for the session pair's reason and by the same arithmetic: the two colours are
-    // only 10/8/10 apart, so at 8 either check would pass on the other capture and the pair would
-    // prove nothing about the default. The band is flat fill in both states, which is why the
+    // 13/13/26 apart (they were 10/8/10 before the palette flip onto upstream's values, which is
+    // where the 4 came from), so at 8 either check would pass on the other capture and the pair
+    // would prove nothing about the default. It is not widened back: 4 still bites and a tolerance
+    // relaxed because it became comfortable is a gate weakened for nothing. The band is flat fill in both states, which is why the
     // fractions can sit this high - measured, then pinned strictly between the two captures'
     // own numbers.
     {
@@ -467,7 +485,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.02, "y": 0.60, "w": 0.96, "h": 0.38 } },
-      "expectedColor": "#1E1822",
+      "expectedColor": "#1F1F3A",
       "tolerance": 4,
       "minPixelFraction": 0.98
     },
@@ -478,7 +496,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.02, "y": 0.60, "w": 0.96, "h": 0.38 } },
-      "expectedColor": "#141018",
+      "expectedColor": "#121220",
       "tolerance": 4,
       "minPixelFraction": 0.90
     },
@@ -486,14 +504,17 @@
     // THE PRIVACY DIAL'S THIRD SEAT (audit row A3 over row A4). Both checks read the SAME band -
     // the 3 DIP of seat padding directly above the "+ Page titles" segment's own UIA rect - in the
     // two states ONE TYPED APP NAME apart. In `broad` the user has asked for page titles and named
-    // nobody, so the seat is unselected fill (#FF1E1822); in `titles` one app has been named and it
+    // nobody, so the seat is unselected fill (#FF1F1F3A); in `titles` one app has been named and it
     // is the selected fill (#FF4A2C55).
     //
     // WHY THE PIXEL IS WORTH ANYTHING HERE. capture.ps1 has already proved through UIA that the
     // dial refuses to move on the press alone and moves on the name - what it cannot say is that
     // the strip a user LOOKS at shows which stop is live. The seat fill is the only thing in the
-    // band that carries that, and the two fills are 44/20/51 apart, so at tolerance 4 neither check
-    // can accept the other's capture.
+    // band that carries that, and the two fills are 43/13/27 apart, so at tolerance 4 neither check
+    // can accept the other's capture. NOTE for whoever flips the selected fill: #FF4A2C55 is a
+    // ONE-OFF literal in CompanionWindow.axaml, not a token, so the palette flip onto upstream's
+    // values left it violet-tinted while its seat went navy. It is the last un-tokenised selection
+    // tint in the product.
     {
       "name": "companion-privacy-broad-seat",
       "surface": "companion-privacy",
@@ -501,7 +522,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.05, "y": 0.50, "w": 0.90, "h": 0.48 } },
-      "expectedColor": "#1E1822",
+      "expectedColor": "#1F1F3A",
       "tolerance": 4,
       "minPixelFraction": 0.95
     },
@@ -520,19 +541,19 @@
     // THE TRANSCRIPT (audit row D11). Both checks read the SAME screen band in the two states one
     // press apart, and both read the same sub-rect of it: the part right of where the transcript's
     // left edge falls, below the settings panel's own top rule. In `closed` those pixels are the
-    // companion window's ground (#FF141018); in `open` the read-only transcript is over them and
-    // they are its ground (#FF1E1822).
+    // companion window's ground (#FF121220); in `open` the read-only transcript is over them and
+    // they are its ground (#FF1F1F3A).
     //
     // THE BAND USED TO BE THE WHOLE CAPTURE and that is what broke it: cropped to 3 DIP of flat
     // padding, BOTH captures were a single colour and the capture step's non-vacuity gate refused
     // them - correctly, because a picture of a flat fill cannot be told from a picture of nothing.
     // NO PER-SURFACE OPT-OUT WAS ADDED. The crop was widened until it carries a boundary in each
     // state, which is strictly more than either flat fill ever proved:
-    //   closed - the settings Border's 1 DIP top rule (#FF3A2F3E, CompanionWindow.axaml:146) runs
+    //   closed - the settings Border's 1 DIP top rule (#FF3A3A5C, CompanionWindow.axaml:146) runs
     //            the full width above the sampled rows; measured 2 distinct colours.
     //   open   - the transcript's own left edge crosses the band 16 DIP in, with the companion's
     //            ground and rule (in the transcript's drop shadow) to its left; measured 41.
-    // So a #FF1E1822 flood over the whole screen - which is what the old `open` capture could not
+    // So a #FF1F1F3A flood over the whole screen - which is what the old `open` capture could not
     // be told from - is now refused as a one-colour image before any check runs, and a `closed`
     // capture whose rule has gone is refused the same way.
     //
@@ -544,9 +565,10 @@
     // 3 px (measured 1), and asserts the band straddles it - so a transcript that opened somewhere
     // else, or at another size, fails by name rather than passing on the companion's own ground.
     //
-    // The two grounds are 10/8/10 apart - the companion permissions pair's separation exactly, and
-    // pinned at the same tolerance 4 for the same reason: at 8 either check would accept the
-    // other's capture and the pair would prove nothing.
+    // The two grounds are 13/13/26 apart - the companion permissions pair's separation exactly, and
+    // pinned at the same tolerance 4 for the same reason: they were 10/8/10 before the palette flip
+    // onto upstream's values, where at 8 either check would accept the other's capture and the pair
+    // would prove nothing. Kept at 4.
     {
       "name": "companion-transcript-closed-ground",
       "surface": "companion-transcript",
@@ -554,7 +576,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.30, "y": 0.65, "w": 0.65, "h": 0.30 } },
-      "expectedColor": "#141018",
+      "expectedColor": "#121220",
       "tolerance": 4,
       "minPixelFraction": 0.98
     },
@@ -565,7 +587,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.30, "y": 0.65, "w": 0.65, "h": 0.30 } },
-      "expectedColor": "#1E1822",
+      "expectedColor": "#1F1F3A",
       "tolerance": 4,
       "minPixelFraction": 0.98
     },
@@ -579,8 +601,8 @@
     // THE ACCENTS ARE UPSTREAM'S OWN (Services/Notifications/NotificationService.cs:122-124):
     // #4CAF50 for a Success and #FF6B6B for an Error. They are 179 apart on red, so at tolerance 8
     // neither check can accept the other's capture - and neither can accept the plate they are both
-    // drawn against (#241E2A, MainWindow.axaml:128), which is 39/141/38 from the green and 219/77/
-    // 149 from the red. ToastPresentationTests asserts that separation mechanically over this file.
+    // drawn against (#222240, MainWindow.axaml:128), which is 42/141/16 from the green and 221/73/
+    // 43 from the red. ToastPresentationTests asserts that separation mechanically over this file.
     //
     // THE PLATE CHECKS ARE NOT A SECOND OPINION ABOUT THE STATE - they pass in both, deliberately.
     // What they establish is that the capture is really of a TOAST: an accent bar alone could be
@@ -613,7 +635,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.40, "y": 0.0, "w": 0.50, "h": 1.0 } },
-      "expectedColor": "#241E2A",
+      "expectedColor": "#222240",
       "tolerance": 4,
       "minPixelFraction": 0.98
     },
@@ -635,7 +657,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.40, "y": 0.0, "w": 0.50, "h": 1.0 } },
-      "expectedColor": "#241E2A",
+      "expectedColor": "#222240",
       "tolerance": 4,
       "minPixelFraction": 0.98
     },
@@ -681,7 +703,7 @@
       "kind": "region-color",
       "region": { "rect": { "x": 0.01, "y": 0.0, "w": 0.04, "h": 1.0 } },
       "expectedColor": "#1A1A2E",
-      "tolerance": 4,
+      "tolerance": 1,
       "minPixelFraction": 0.99
     },
     {
@@ -700,7 +722,7 @@
     // FRACTION rather than a colour, which is a first on this manifest.
     //
     // Both captures are the same 420x8 DIP bar on the same card on the same page, painted in the
-    // same two colours: a #2A2130 track with a #D05CE8 fill in front of part of it. The only thing
+    // same two colours: a #2E2E4A track with a #FF1493 fill in front of part of it. The only thing
     // that differs is HOW MUCH of the track the fill covers, and that comes from progression.json
     // and nowhere else. `fresh` is the ledger REMOVED — TrainerCardLevel.Read's missing-file arm
     // answers upstream's level 1 with nothing banked (Models/AppSettings.cs:237), so the bar is all
@@ -721,9 +743,10 @@
     // randomly chosen question whose inked fraction the product varies, and this one draws a flat
     // rectangle whose colour the product does not.
     //
-    // TOLERANCE 4, with 166/59/184 between the two colours. It is the session rack's number for the
-    // same reason: #2A2130 is only 6/3/6 from the notice ground #241E2A, so at 8 the `fresh` check
-    // would pass on a photograph of a notice panel. TrainerCardLevelPresentationTests asserts that
+    // TOLERANCE 4, with 209/26/73 between the two colours. It is the session rack's number for the
+    // same reason: #2E2E4A is only 12/12/10 from the notice ground #222240 and 7/7/6 from the
+    // mantra game's dim ink #353550, so at 12 the `fresh` check would pass on a photograph of a
+    // notice panel and at 8 on a photograph of the mantra line. TrainerCardLevelPresentationTests asserts that
     // separation mechanically against every colour this shell declares.
     //
     // WHAT THESE TWO DO NOT COVER. They prove a fill's colour at a named offset of a derived rect.
@@ -737,7 +760,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.10, "y": 0.20, "w": 0.20, "h": 0.60 } },
-      "expectedColor": "#D05CE8",
+      "expectedColor": "#FF1493",
       "tolerance": 4,
       "minPixelFraction": 0.98
     },
@@ -748,7 +771,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.10, "y": 0.20, "w": 0.20, "h": 0.60 } },
-      "expectedColor": "#2A2130",
+      "expectedColor": "#2E2E4A",
       "tolerance": 4,
       "minPixelFraction": 0.98
     },
@@ -776,12 +799,17 @@
     // Viewbox scale - so a floor placed near a measurement would red a perfectly good capture on
     // its second run. That is the pop quiz lesson applied rather than re-learned.
     //
-    // TOLERANCE 12, AND IT IS SIZED AGAINST TWO NEIGHBOURS. The nearest declared colour to #353550
-    // in this manifest is rail-door-unselected-border's #3A2F3E at 18 per channel, so 12 cannot
-    // accept it. The nearer hazard is in the window itself: the mantra carries a DropShadow glow
-    // of #9966CC (MantraIntensity.GlowColour at streak 0), which is 34 per channel from #9988DD -
-    // a tolerance anywhere near that would let the halo around DIM text pass the LIT check and the
-    // inversion would be fake. MantraPresentationTests asserts both separations mechanically.
+    // TOLERANCE 6 ON THE DIM CHECK AND 12 ON THE LIT ONE, AND THE ASYMMETRY IS THE PALETTE FLIP.
+    // Both were 12 while the shell's interactive tier was #FF2A2130. It is now upstream's
+    // PanelAccent #FF2E2E4A (WPF Resources/Theme/Colors.xaml:19), which sits 7/7/6 from the mantra
+    // game's dim ink - so 6 is the largest tolerance at which mantra-window-fresh-dim cannot
+    // accept a photograph of a selected rack row, a history row card or the trainer card's level
+    // track. Its next nearest is rail-door-unselected-border's #3A3A5C at 5/5/12. The LIT check
+    // has no such neighbour and keeps 12, sized against the hazard in the window itself: the
+    // mantra carries a DropShadow glow of #9966CC (MantraIntensity.GlowColour at streak 0), which
+    // is 34 per channel from #9988DD - a tolerance anywhere near that would let the halo around
+    // DIM text pass the LIT check and the inversion would be fake. MantraPresentationTests asserts
+    // every one of those separations mechanically over this file.
     {
       "name": "mantra-window-fresh-dim",
       "surface": "mantra-window",
@@ -790,7 +818,7 @@
       "kind": "region-color",
       "region": { "rect": { "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0 } },
       "expectedColor": "#353550",
-      "tolerance": 12,
+      "tolerance": 6,
       "minPixelFraction": 0.01
     },
     {
@@ -819,7 +847,7 @@
     // which is the only path that ever adds honor_roll.
     //
     // THE CLAIM IS AN EXTENT, NOT A COLOUR - the level bar's shape applied to text. Every line on
-    // this card is card ground #1B1622 behind and one of two inks in front, in all three states, so
+    // this card is card ground #1C1C35 behind and one of two inks in front, in all three states, so
     // nothing here can be separated by hue. What the record decides is WHERE THE INK STOPS on the
     // two ledger rows' status lines, and the sampled column x 0.15..0.45 is where that answer
     // flips: "Earned." stops at 0.0857 of the crop, "Not earned yet. 1 of 3 categories cleared at
@@ -857,18 +885,19 @@
     // manifest, so a later edit cannot quietly leave two states that no capture could tell apart.
     //
     // ONE INK AND ONE GROUND IN EVERY STATE, so no uniform capture can pass any of the three:
-    // #1B1622 at tolerance 2 and either ink at 16 are 184 and 205 apart on red, and 18 is as close
+    // #1C1C35 at tolerance 2 and either ink at 16 are 190 and 212 apart on red, and 18 is as close
     // as the two bands can reach. TrainerCardRecordPresentationTests asserts that arithmetic over
     // this file rather than trusting the numbers above, because the failure it forbids has already
     // happened once here: capture-wslg.sh printed CAPTURE PASS over an all-black image.
     //
     // THE TWO INKS ARE DIFFERENT COLOURS AND THAT IS WHAT SIZES THE TOLERANCE. A status line is
-    // page-blurb #FFE8E0EE at a local Opacity 0.9 (IntakePage.axaml's award template), which
-    // composites over the card's #FF1B1622 to #D3CBD9; a row NAME is module-title at no opacity, so
-    // it is #E8E0EE exactly. Those are 21 per channel apart, so 16 is the largest tolerance at
+    // page-blurb #FFF0F0F5 at a local Opacity 0.9 (IntakePage.axaml's award template), which
+    // composites over the card's #FF1C1C35 to #DADAE1; a row NAME is module-title at no opacity, so
+    // it is #F0F0F5 exactly. Those are 20 per channel apart at their closest, so 16 is the largest
+    // tolerance at
     // which a title's glyphs cannot pass a status check and vice versa - the two ink bands stay two
     // different claims. THE GROUND TOLERANCE IS 2, the trainer-card-ground number for the
-    // trainer-card-ground reason: the rack's #FF19141F is 3 away on its widest channel, so at the
+    // trainer-card-ground reason: the rack's #FF181830 is 5 away on its widest channel, so at the
     // rail door's 24 these checks would pass on a photograph of the Studio rack.
     //
     // FLOORS SIT WELL BELOW THE MEASUREMENTS AND THE FAILURES ARE NOT NEAR THEM. Glyph coverage in
@@ -891,7 +920,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.15, "y": 0.34, "w": 0.30, "h": 0.07 } },
-      "expectedColor": "#1B1622",
+      "expectedColor": "#1C1C35",
       "tolerance": 2,
       "minPixelFraction": 0.98
     },
@@ -902,7 +931,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.15, "y": 0.84, "w": 0.30, "h": 0.08 } },
-      "expectedColor": "#D3CBD9",
+      "expectedColor": "#DADAE1",
       "tolerance": 16,
       "minPixelFraction": 0.02
     },
@@ -913,7 +942,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.15, "y": 0.84, "w": 0.30, "h": 0.08 } },
-      "expectedColor": "#1B1622",
+      "expectedColor": "#1C1C35",
       "tolerance": 2,
       "minPixelFraction": 0.98
     },
@@ -924,7 +953,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.02, "y": 0.045, "w": 0.10, "h": 0.07 } },
-      "expectedColor": "#E8E0EE",
+      "expectedColor": "#F0F0F5",
       "tolerance": 16,
       "minPixelFraction": 0.05
     },
@@ -935,7 +964,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.15, "y": 0.34, "w": 0.30, "h": 0.07 } },
-      "expectedColor": "#D3CBD9",
+      "expectedColor": "#DADAE1",
       "tolerance": 16,
       "minPixelFraction": 0.02
     },
@@ -946,7 +975,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.15, "y": 0.84, "w": 0.30, "h": 0.08 } },
-      "expectedColor": "#D3CBD9",
+      "expectedColor": "#DADAE1",
       "tolerance": 16,
       "minPixelFraction": 0.02
     },
@@ -957,7 +986,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.75, "y": 0.05, "w": 0.23, "h": 0.90 } },
-      "expectedColor": "#1B1622",
+      "expectedColor": "#1C1C35",
       "tolerance": 2,
       "minPixelFraction": 0.98
     }

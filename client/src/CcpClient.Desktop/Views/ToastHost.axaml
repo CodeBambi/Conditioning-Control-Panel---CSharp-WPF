@@ -19,7 +19,7 @@
   -->
   <UserControl.Styles>
     <!-- The plate. Upstream's is #252542 with a 1px accent border all round
-         (NotificationService.cs:130-135); this port uses its OWN notice plate (#FF241E2A,
+         (NotificationService.cs:130-135); this port uses its OWN notice plate (#FF222240,
          MainWindow.axaml:128) and thickens the LEFT edge to 4 so the type is legible at a glance
          and readable by the headed harness - the same accent-marker grammar
          RadioButton.rack-row:checked already uses (MainWindow.axaml:104). Upstream's padding,

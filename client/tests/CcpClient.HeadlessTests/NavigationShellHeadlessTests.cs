@@ -239,20 +239,20 @@ public class NavigationShellHeadlessTests : HeadlessTest
     {
         // A-012 mechanism proof, retargeted from the retired card's conditional-class ring onto
         // a product control: selection state is the control's own :checked pseudo-class and the
-        // selector resolves a real brush. #FFE066FF is also the headed harness's seeded-
+        // selector resolves a real brush. #FFFF8FAF is also the headed harness's seeded-
         // regression anchor (client/tools/verify/self-test.ps1).
         var (host, window) = await BootAsync();
 
         var studio = Door(window, "DoorStudio");
         var companion = Door(window, "DoorCompanion");
 
-        Assert.Equal(Color.Parse("#FFE066FF"), ((ISolidColorBrush)studio.BorderBrush!).Color);
-        Assert.Equal(Color.Parse("#FF3A2F3E"), ((ISolidColorBrush)companion.BorderBrush!).Color);
+        Assert.Equal(Color.Parse("#FFFF8FAF"), ((ISolidColorBrush)studio.BorderBrush!).Color);
+        Assert.Equal(Color.Parse("#FF3A3A5C"), ((ISolidColorBrush)companion.BorderBrush!).Color);
 
         Click(window, companion);
 
-        Assert.Equal(Color.Parse("#FFE066FF"), ((ISolidColorBrush)companion.BorderBrush!).Color);
-        Assert.Equal(Color.Parse("#FF3A2F3E"), ((ISolidColorBrush)studio.BorderBrush!).Color);
+        Assert.Equal(Color.Parse("#FFFF8FAF"), ((ISolidColorBrush)companion.BorderBrush!).Color);
+        Assert.Equal(Color.Parse("#FF3A3A5C"), ((ISolidColorBrush)studio.BorderBrush!).Color);
 
         await host.ShutdownAsync();
     }

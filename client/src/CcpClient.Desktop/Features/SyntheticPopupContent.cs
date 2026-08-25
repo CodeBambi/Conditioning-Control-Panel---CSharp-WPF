@@ -17,7 +17,7 @@ public static class SyntheticPopupContent
     /// <summary>UIA needle for the bottom-most control of tall/nested content.</summary>
     public const string FinalControlName = "popup final control";
 
-    private static readonly IBrush RowBrush = new SolidColorBrush(Color.Parse("#FFE8E0EE"));
+    private static readonly IBrush RowBrush = new SolidColorBrush(Color.Parse("#FFF0F0F5"));
 
     public static Control BuildTall()
     {
