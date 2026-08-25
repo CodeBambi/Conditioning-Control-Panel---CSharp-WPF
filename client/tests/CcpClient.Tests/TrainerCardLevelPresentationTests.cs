@@ -86,17 +86,18 @@ public class TrainerCardLevelPresentationTests
             + "satisfies both and a capture of an empty rectangle would pass this surface");
 
         // (b) And neither may accept a colour this shell paints somewhere ELSE. The named victim
-        // here is the track: #2E2E4A is only 12/12/10 from the notice ground #222240, so at the
-        // dashboard's tolerance of 8 the `fresh` check would pass on a photograph of a notice panel.
+        // here is the track: PanelAccent is only 18/18/4 from the notice ground #222240 under the
+        // CCP Default theme (it was 12/12/10 on the seed), so at the dashboard's tolerance of 8 the
+        // `fresh` check would still pass on a photograph of a notice panel.
         (string Name, byte R, byte G, byte B)[] neighbours =
         [
-            ("the module panel ground (Border.module, MainWindow.axaml:122)", 0x1C, 0x1C, 0x35),
-            ("the notice ground (Border.notice, :129)", 0x22, 0x22, 0x40),
-            ("the rack ground (Border.rack, :117)", 0x18, 0x18, 0x30),
-            ("the page ground behind the card (Window Background)", 0x12, 0x12, 0x20),
-            ("the selected rail door (RadioButton.door:checked, :69)", 0xFF, 0x8F, 0xAF),
+            ("the module panel ground (Border.module, MainWindow.axaml:122, PanelBg)", 0x11, 0x11, 0x1A),
+            ("the notice ground (Border.notice, :129, ElevatedSurface)", 0x22, 0x22, 0x40),
+            ("the rack ground (Border.rack, :117, SurfaceBg)", 0x0C, 0x0C, 0x13),
+            ("the page ground behind the card (Window Background, DarkerBg)", 0x08, 0x08, 0x0C),
+            ("the selected rail door (RadioButton.door:checked, :69, ShellAccentBright)", 0xFF, 0x6F, 0xB5),
             ("the running session button (session-start.running, :364)", 0xFF, 0x6B, 0x6B),
-            ("the module title's ink (TextBlock.module-title, :320)", 0xF0, 0xF0, 0xF5),
+            ("the module title's ink (TextBlock.module-title, :320, TextLight)", 0xF0, 0xF0, 0xF5),
         ];
 
         var compared = 0;

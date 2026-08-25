@@ -13,9 +13,14 @@ namespace CcpClient.Tests;
 /// <c>mantra-window-fresh-dim</c> scored 0.281 on its own capture, 0.003 on the other state's and
 /// 21/2560250 (0.000) on a capture of the whole dashboard - ALL THREE AT TOLERANCE 12, which is
 /// what that check carried until the palette flip onto upstream's values put PanelAccent #FF2E2E4A
-/// 7/7/6 from the dim ink and forced it to 6. The floor it is pinned against is 0.01, an order of
-/// magnitude under the lowest of those, and the fractions have NOT been re-measured headed at the
-/// new tolerance; <c>mantra-window-typed-lit</c> scored
+/// 7/7/6 from the dim ink and forced it to 6. THE CCP DEFAULT THEME THEN MOVED PanelAccent AWAY
+/// AGAIN - it is derived from the mod's panel colour now and lands on #FF34343C, 1/1/20 from the
+/// dim ink - so the ceiling went 7 to 19 and the tolerance STAYED at 6, because a tolerance is
+/// never widened back because it became comfortable. THE DIM CHECK HAS NOW BEEN RE-MEASURED HEADED
+/// AT 6 AND ON THE THEMED PALETTE - 0.276 on a real <c>fresh</c> capture (62542/226380), against
+/// the 0.281 it scored at 12 on the seed's - so the "not re-measured" caveat this line used to
+/// carry is discharged. The floor it is pinned against is 0.01, an order of magnitude under the
+/// lowest of those; <c>mantra-window-typed-lit</c> scored
 /// 0.273 on its own and 0.000 EXACT on both of the others. TWO PAIRS were taken, and the mantra is
 /// drawn at random: the first drew different sentences in the two states ('I am deeply relaxed'
 /// over 2450x473 and 'My mind is open and receptive' over 2450x307), the second drew the same

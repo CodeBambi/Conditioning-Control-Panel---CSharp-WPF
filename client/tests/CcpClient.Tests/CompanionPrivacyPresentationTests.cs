@@ -74,20 +74,22 @@ public class CompanionPrivacyPresentationTests
 
     /// <summary>
     /// Neither half of either pair accepts a colour the surface it samples can really show. The
-    /// arithmetic that matters: the transcript pair is 13/13/26 apart (the companion ground against
-    /// the panel fill), which is exactly the separation the permissions pair already runs at
-    /// tolerance 4 — widen either past it and the pair stops proving anything.
+    /// arithmetic that matters: the transcript pair is the companion ground against the panel fill,
+    /// and only the first of those two is themed — the seat is <c>SeatBg</c>, which no mod supplies
+    /// — so under the CCP Default theme the pair is 23/23/46 apart where it was 13/13/26. The
+    /// tolerance stays at 4. The TIGHTEST pair on this table is now the seat against the companion
+    /// header plate at 5/9/15, unchanged and still four times the tolerance.
     /// </summary>
     [Fact]
     public void NoCheckAcceptsAnotherColourItsOwnSurfaceCanShow()
     {
         (string Name, byte R, byte G, byte B)[] neighbours =
         [
-            ("the companion window ground (CompanionWindow.axaml Background)", 0x12, 0x12, 0x20),
-            ("the unselected dial seat / panel fill (Border.dial-seat)", 0x1F, 0x1F, 0x3A),
+            ("the companion window ground (CompanionWindow.axaml Background, DarkerBg)", 0x08, 0x08, 0x0C),
+            ("the unselected dial seat / panel fill (Border.dial-seat, SeatBg)", 0x1F, 0x1F, 0x3A),
             ("the SELECTED dial seat (Border.dial-seat.selected)", 0x4A, 0x2C, 0x55),
             ("the companion header plate (#FF241A2B)", 0x24, 0x1A, 0x2B),
-            ("the companion button face (Button.companion, #FF2E2E4A)", 0x2E, 0x2E, 0x4A),
+            ("the companion button face (Button.companion, PanelAccent)", 0x34, 0x34, 0x3C),
         ];
 
         var checks = ChecksFor("companion-privacy").Concat(ChecksFor("companion-transcript")).ToList();
@@ -159,9 +161,29 @@ public class CompanionPrivacyPresentationTests
             tokens, $@"<SolidColorBrush x:Key=""{brushKey}"" Color=""\{{DynamicResource (\w+)\}}""");
         Assert.True(brush.Success, $"{role}: Themes/Ccp.axaml declares no brush '{brushKey}'");
 
-        var colourKey = brush.Groups[1].Value;
+        return ValueOfKey(brush.Groups[1].Value, role);
+    }
+
+    /// <summary>
+    /// A colour key's value AS THE PRODUCT PAINTS IT — the theme's, where the theme owns the key,
+    /// and the token dictionary's where it does not.
+    ///
+    /// <para><b>The distinction is the whole reason this helper exists.</b>
+    /// <c>Themes/Ccp.axaml</c> is a design-time seed: "CCP Default" is itself a mod, and
+    /// <c>CcpTheme.CcpDefault.ApplyTo</c> rewrites eight of its colour keys in
+    /// <c>App.Initialize</c> before any window exists. Reading the seed for a themed key answers
+    /// with a colour no user ever sees — which is precisely the failure this whole class was
+    /// written to prevent, one layer further down than it was originally written to look.</para>
+    /// </summary>
+    private static string ValueOfKey(string colourKey, string role)
+    {
+        if (CcpClient.Desktop.Themes.CcpTheme.CcpDefault.Tokens().TryGetValue(colourKey, out var themed))
+        {
+            return $"#{themed.A:X2}{themed.R:X2}{themed.G:X2}{themed.B:X2}";
+        }
+
         var colour = System.Text.RegularExpressions.Regex.Match(
-            tokens, $@"<Color x:Key=""{colourKey}"">(#[0-9A-Fa-f]{{8}})</Color>");
+            ThemeTokens(), $@"<Color x:Key=""{colourKey}"">(#[0-9A-Fa-f]{{8}})</Color>");
         Assert.True(colour.Success, $"{role}: Themes/Ccp.axaml declares no colour '{colourKey}'");
         return colour.Groups[1].Value.ToUpperInvariant();
     }
@@ -198,7 +220,7 @@ public class CompanionPrivacyPresentationTests
         var groundAt = markup.IndexOf("Background=", StringComparison.Ordinal);
         Assert.True(groundAt >= 0, "the companion window declares no Background at all");
         Assert.Equal(
-            "#FF121220",
+            "#FF08080C",
             ResolveDeclaredColour(markup[groundAt..(groundAt + 80)], "the companion window ground"));
 
         // Every colour the surface can declare, resolved through the token layer where it uses one.
@@ -220,11 +242,10 @@ public class CompanionPrivacyPresentationTests
                 continue; // a geometry or font token, which carries no colour to check
             }
 
-            var colour = System.Text.RegularExpressions.Regex.Match(
-                tokens, $@"<Color x:Key=""{brush.Groups[1].Value}"">(#[0-9A-Fa-f]{{8}})</Color>");
-            Assert.True(colour.Success,
-                $"Themes/Ccp.axaml declares brush '{m.Groups[1].Value}' over a colour key that does not exist");
-            declaredColours.Add(colour.Groups[1].Value);
+            // Through the THEME where the theme owns the key, for the reason ValueOfKey states.
+            declaredColours.Add(ValueOfKey(
+                brush.Groups[1].Value,
+                $"Themes/Ccp.axaml declares brush '{m.Groups[1].Value}' over"));
         }
 
         foreach (var check in ChecksFor("companion-privacy").Concat(ChecksFor("companion-transcript")))

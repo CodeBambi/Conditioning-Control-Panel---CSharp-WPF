@@ -37,11 +37,20 @@ public sealed class TrainerCardRecordPresentationTests : IDisposable
 
     /// <summary>The card ground every "clear" check names (<c>Border.module</c>,
     /// <c>MainWindow.axaml:122</c>).</summary>
-    private static readonly (byte R, byte G, byte B) CardGround = (0x1C, 0x1C, 0x35);
+    private static readonly (byte R, byte G, byte B) CardGround = (0x11, 0x11, 0x1A);
 
     /// <summary>A status line: <c>page-blurb</c>'s <c>#FFF0F0F5</c> at the award template's local
-    /// <c>Opacity="0.9"</c>, composited over <see cref="CardGround"/>.</summary>
-    private static readonly (byte R, byte G, byte B) StatusInk = (0xDA, 0xDA, 0xE1);
+    /// <c>Opacity="0.9"</c>, composited over <see cref="CardGround"/>.
+    ///
+    /// <para>IT MOVES WITH THE GROUND, which is why the ground beside it is a constant too. It was
+    /// <c>#DADAE1</c> over the seed's <c>#1C1C35</c>; over the CCP Default theme's <c>#11111A</c>
+    /// the same 90% composite lands two units darker on blue and leaves the other two where they
+    /// were. MEASURED on the real <c>trainer-card-record</c> captures — 194 px of the read state's
+    /// band and 142 of the unreadable state's — and NOT computed: the hand arithmetic says
+    /// <c>#D9D9DF</c>, because 0.9 × 240 + 0.1 × 17 = 217.7 and the compositor ROUNDS the channel
+    /// where the seed's own value happened to truncate. A composite is the compositor's arithmetic
+    /// and this port does not get to assume its rounding.</para></summary>
+    private static readonly (byte R, byte G, byte B) StatusInk = (0xDA, 0xDA, 0xDF);
 
     /// <summary>A row NAME: <c>module-title</c> at no opacity at all.</summary>
     private static readonly (byte R, byte G, byte B) TitleInk = (0xF0, 0xF0, 0xF5);
@@ -49,9 +58,11 @@ public sealed class TrainerCardRecordPresentationTests : IDisposable
     /// <summary>The Studio rack's ground (<c>Border.rack</c>, <c>MainWindow.axaml:117</c>), which is
     /// upstream's <c>SurfaceBg</c> (WPF <c>Resources/Theme/Colors.xaml:10</c>). It is here as a
     /// CONSTANT rather than as a literal in the assertion below because the number that separates
-    /// it from the card ground is what sizes the ground tolerance, and that number moved with the
-    /// palette flip - it was 3, and a hard-coded 3 is exactly what went stale.</summary>
-    private static readonly (byte R, byte G, byte B) RackGround = (0x18, 0x18, 0x30);
+    /// it from the card ground is what sizes the ground tolerance, and that number has now moved
+    /// TWICE - it was 3, then 5 after the palette flip, and 7 under the CCP Default theme. A
+    /// hard-coded 3 is exactly what went stale, and deriving it is what let the two later moves
+    /// pass through this file without anybody having to notice them.</summary>
+    private static readonly (byte R, byte G, byte B) RackGround = (0x0C, 0x0C, 0x13);
 
     private readonly string _root = Path.Combine(
         Path.GetTempPath(), "ccp-trainer-card-record-" + Guid.NewGuid().ToString("N"));
@@ -118,7 +129,11 @@ public sealed class TrainerCardRecordPresentationTests : IDisposable
             foreach (var (what, colour) in new (string, (byte R, byte G, byte B))[]
                      {
                          ("an all-black capture", ((byte)0, (byte)0, (byte)0)),
-                         ("the page ground behind the card (#121220)", ((byte)0x14, (byte)0x10, (byte)0x18)),
+                         // DarkerBg, the window's own ground. The bytes here were #141018 - the
+                         // port's DEAD violet ground, two palettes ago - while the label beside
+                         // them said #121220: a uniform-capture list is only evidence if the
+                         // colours in it are ones the product could really hand you.
+                         ("the page ground behind the card (DarkerBg #08080C)", ((byte)0x08, (byte)0x08, (byte)0x0C)),
                          ("a card that painted its fill and nothing else", CardGround),
                          ("a rectangle of nothing but status ink", StatusInk),
                          ("a rectangle of nothing but title ink", TitleInk),
@@ -168,11 +183,13 @@ public sealed class TrainerCardRecordPresentationTests : IDisposable
     public void TheTwoInksStayTwoDifferentClaims_AndTheGroundAcceptsNoOtherShellColour()
     {
         // TOLERANCE IS THE SIZE OF THE DEFECT IT HIDES, and here the defect has a name. A status
-        // line composites to #DADAE1 and a row name is #F0F0F5: 22 per channel apart on the widest
+        // line composites to #DADADF and a row name is #F0F0F5: 22 per channel apart on the widest
         // channel, which is small for text. At a tolerance of 22 or more the earned state's ROW
         // NAME check would pass on a band of status ink and the two ink bands would stop being
-        // different claims. (It was 21 while the ink was #E8E0EE over #1B1622; the palette flip
-        // onto upstream's TextLight #FFF0F0F5 and PanelBg #FF1C1C35 moved it by one.)
+        // different claims. (It was 21 while the ink was #E8E0EE over #1B1622, and the palette flip
+        // onto upstream's TextLight and the seed's PanelBg moved it to 22. The CCP Default theme's
+        // darker PanelBg #11111A did NOT move it again, which was not obvious in advance: the
+        // composite lost two units of blue and none of the widest channel.)
         var perChannel = Math.Max(
             Math.Abs(StatusInk.R - TitleInk.R),
             Math.Max(Math.Abs(StatusInk.G - TitleInk.G), Math.Abs(StatusInk.B - TitleInk.B)));
@@ -192,7 +209,7 @@ public sealed class TrainerCardRecordPresentationTests : IDisposable
                     Math.Abs(CardGround.R - RackGround.R),
                     Math.Max(Math.Abs(CardGround.G - RackGround.G), Math.Abs(CardGround.B - RackGround.B)));
                 Assert.True(check.Tolerance < toRack,
-                    $"'{check.Name}' would accept the Studio rack's ground #181830 at tolerance "
+                    $"'{check.Name}' would accept the Studio rack's ground at tolerance "
                     + $"{check.Tolerance}; the two grounds are only {toRack} apart on their widest channel");
                 continue;
             }

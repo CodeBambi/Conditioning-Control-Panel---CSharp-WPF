@@ -1,5 +1,30 @@
 ﻿{
   "version": 1,
+
+  // ================================ THE PALETTE THESE PIN =================================
+  // Every colour below is what the port PAINTS, and since 2026-08-25 that is the CCP Default
+  // theme applied over the token seed at startup (src/CcpClient.Desktop/Themes/CcpTheme.cs),
+  // not the seed dictionary itself. The shipping product does the same thing in the same order
+  // - "CCP Default" is itself a mod (WPF Models/BuiltInMods.cs:918-926) and
+  // RefreshThemeAwareElements rewrites the matching keys during the shell's construction
+  // (MainWindow/MainWindow.xaml.cs:317 -> :1619-1623, :1655-1657) - so these bytes are now the
+  // ones a headed capture of EITHER product produces.
+  //
+  // The five that moved with it, and what they were before, so every re-derivation below stays
+  // reviewable:
+  //   DarkerBg          #121220 -> #08080C   (mod BackgroundColor)
+  //   SurfaceBg         #181830 -> #0C0C13   (mod SurfaceColor)
+  //   PanelBg           #1C1C35 -> #11111A   (mod PanelColor)
+  //   PanelAccent       #2E2E4A -> #34343C   (DERIVED: LightenColor(panel, .15), :1611)
+  //   PanelAccentHover  #3A3A5C -> #4C4C53   (DERIVED: LightenColor(panel, .25), :1612)
+  //   PinkColor         #FF69B4 -> #E84393   (mod AccentColor; also Fluent's accent family)
+  //   ShellAccent       #FF1493 -> #B83078   (mod AccentDarkColor)
+  //   ShellAccentBright #FF8FAF -> #FF6FB5   (mod AccentLightColor)
+  // and the five that did NOT, because no mod theme supplies them and upstream leaves them on
+  // the seed: ElevatedSurface #222240, SeatBg #1F1F3A, and the three inks.
+  //
+  // NOT ONE TOLERANCE WAS WIDENED FOR THIS. Every separation that moved is re-derived in the
+  // block that owns it, and where a constraint RELAXED the tolerance stayed where it was.
   "checks": [
     {
       "name": "rail-door-unselected-border",
@@ -8,7 +33,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "border-color-band",
       "region": { "band": "top", "thicknessPx": 3 },
-      "expectedColor": "#3A3A5C",
+      "expectedColor": "#4C4C53",
       "tolerance": 24,
       "minPixelFraction": 0.5
     },
@@ -19,7 +44,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "border-color-band",
       "region": { "band": "top", "thicknessPx": 3 },
-      "expectedColor": "#FF8FAF",
+      "expectedColor": "#FF6FB5",
       "tolerance": 32,
       "minPixelFraction": 0.5
     },
@@ -30,7 +55,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.0, "y": 0.0, "w": 1.0, "h": 0.06 } },
-      "expectedColor": "#121220",
+      "expectedColor": "#08080C",
       "tolerance": 8,
       "minPixelFraction": 0.8
     },
@@ -39,28 +64,33 @@
     // row; every one has been shown FAILING on a real capture of the opposite state.
     //
     // TOLERANCES ARE SIZED BELOW 10 ON PURPOSE, and this is the tolerance rule in its natural
-    // habitat. RadioButton.rack-row:pointerover is #FF222240 (MainWindow.axaml:98-100), 10/10/16
-    // from the rack's #FF181830 ground, and the selected fill #FF2E2E4A is 22/22/26 from that same
-    // ground. At the rail-door precedent of 24 the ground check would pass with the mouse merely
-    // RESTING on the row, and the fill check would pass on an unselected row. The right precedent
-    // here is dashboard-background's 8, not rail-door's 24/32.
+    // habitat. RadioButton.rack-row:pointerover is ElevatedSurface #FF222240
+    // (MainWindow.axaml:98-100), which a mod theme does NOT supply and which therefore stayed
+    // where it was; the rack ground is SurfaceBg and the selected fill is PanelAccent, and both
+    // moved when the CCP Default theme landed. The separations after it: hovered to ground
+    // 22/22/45, selected fill to ground 40/40/41, selected fill to hovered 18/18/4. At the
+    // rail-door precedent of 24 the fill check would still pass on a hovered row, so the right
+    // precedent here is dashboard-background's 8 and not rail-door's 24/32 - the same conclusion
+    // the pre-theme numbers reached, from different arithmetic.
     //
-    // AND THE GROUND GOES TO 1, WHICH IS THE TIGHTEST NUMBER IN THIS FILE, because of something
-    // the palette flip onto upstream's values brought with it. The rack's ground is upstream's
-    // SurfaceBg #FF181830 (Colors.xaml:10) and the pop quiz card's GDI ground is upstream's own
-    // COLORREF 0x002E1A1A = #1A1A2E (Input/Win32InputPresence): the shipping product really does
-    // paint those two surfaces 2/2/2 apart, so NO tolerance above 1 can tell a photograph of the
-    // rack from a photograph of that card. It costs nothing here and it is asserted on the other
-    // side too - popquiz-card-ground carries the same 1 for the same pair, and
-    // PopQuizCardPresentationTests reds by name if either is widened. The region is a flat fill
-    // that measured 7605/7605 EXACT, which is why a tolerance of 1 is affordable at all.
+    // AND THE GROUND STAYS AT 1, WHICH IS THE TIGHTEST NUMBER IN THIS FILE, THOUGH ITS REASON
+    // HAS CHANGED. It went to 1 because the seed's SurfaceBg #FF181830 was 2/2/2 from the pop quiz
+    // card's GDI ground (upstream's own COLORREF 0x002E1A1A = #1A1A2E,
+    // Input/Win32InputPresence), so no tolerance above 1 could tell a photograph of the rack from
+    // a photograph of that card. Under the theme the rack's ground is #0C0C13 and that pair is
+    // 14/14/27 apart, so the constraint has RELAXED to a ceiling of 14. The 1 stays: a tolerance
+    // is never widened back because it became comfortable, and the region is a flat fill that
+    // measured 7605/7605 EXACT, so it costs nothing. Asserted on both sides -
+    // RackPresentationTests re-derives the distance rather than hard-coding it, which is exactly
+    // why this move did not go stale silently.
     //
-    // The two #2E2E4A checks stay at 4, tighter than their nearest neighbour needs: the HOVERED
-    // row is 12/12/10 away and the mantra game's dim ink #353550 is 7/7/6 away, so 6 is the
-    // ceiling and 4 is what they keep. RackPresentationTests.NoRackCheckAcceptsTheColourOfAnother-
-    // RackState asserts that separation mechanically, so widening any of these back reddens the
-    // floor and names both colours. It costs nothing: these regions are flat fills that measure
-    // 7605/7605 and 36/36 EXACT, with no antialiasing in them at all.
+    // The two PanelAccent checks stay at 4, and their ceiling MOVED UP too: the hovered row is now
+    // 18 away on its widest channel (it was 12) and the mantra game's dim ink #353550 is 20 (it
+    // was 7). So 18 is the ceiling and 4 is what they keep, for the reason above.
+    // RackPresentationTests.NoRackCheckAcceptsTheColourOfAnotherRackState asserts that separation
+    // mechanically, so widening any of these back reddens the floor and names both colours. It
+    // costs nothing: these regions are flat fills that measure 7605/7605 and 36/36 EXACT, with no
+    // antialiasing in them at all.
     //
     // TWO LIMITS OF THE DOT PAIR, STATED HERE BECAUSE THEY ARE NOT VISIBLE FROM THE ROWS BELOW.
     // (1) rack-row-dot-off reads the open row's fill showing THROUGH a hollow ring, so it also
@@ -77,7 +107,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.45, "y": 0.15, "w": 0.42, "h": 0.7 } },
-      "expectedColor": "#181830",
+      "expectedColor": "#0C0C13",
       "tolerance": 1,
       "minPixelFraction": 0.98
     },
@@ -88,7 +118,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "border-color-band",
       "region": { "band": "left", "thicknessPx": 3 },
-      "expectedColor": "#FF8FAF",
+      "expectedColor": "#FF6FB5",
       "tolerance": 8,
       "minPixelFraction": 0.5
     },
@@ -99,7 +129,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.45, "y": 0.15, "w": 0.42, "h": 0.7 } },
-      "expectedColor": "#2E2E4A",
+      "expectedColor": "#34343C",
       "tolerance": 4,
       "minPixelFraction": 0.98
     },
@@ -121,7 +151,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.28, "y": 0.28, "w": 0.44, "h": 0.44 } },
-      "expectedColor": "#2E2E4A",
+      "expectedColor": "#34343C",
       "tolerance": 4,
       "minPixelFraction": 0.9
     },
@@ -151,8 +181,11 @@
     // the dashboard capture 1.0000 -- dashboard-background was #141018 then, only 8 away on its
     // check that accepts a photograph of a different window is the defect this project has found
     // fourteen times. Both tolerances now sit strictly below the distance to the NEAREST colour
-    // any other check in this file declares - now #121220, 10 from each after the palette flip
-    // onto upstream's values (backdrop: 6 against 10; card: 8 against 10) - and
+    // any other check in this file declares. That nearest colour moved twice: it was the shell
+    // ground #141018 at 8, then #121220 at 10 after the palette flip, and under the CCP Default
+    // theme it is the TRAINER CARD's ground #11111A at 11 from each (backdrop: 6 against 11;
+    // card: 8 against 11). This block is the tightest squeeze on the manifest and it got no
+    // roomier - three units of headroom on the card check - so neither number moves, and
     // GoonServingTests.NoGoonCheckAcceptsTheColourOfAnotherDeclaredState asserts that mechanically
     // over the manifest itself, so widening either one reddens the floor and names both colours.
     //
@@ -189,7 +222,7 @@
     // the no-runs-yet record note — and the geometry both regions below are fractions of.
     //
     // THE PAIR IS THE POINT, AND IT IS WHY THERE ARE TWO. A capture that is ONE colour cannot pass
-    // this surface: #1C1C35 with tolerance 2 and #F0F0F5 with tolerance 24 are 212 apart on red and
+    // this surface: #11111A with tolerance 2 and #F0F0F5 with tolerance 24 are 223 apart on red and
     // 26 is as close as their two bands can reach, so no single value is inside both.
     // TrainerCardTests.NoUniformCaptureCanPassTheHeadedTrainerCardChecks asserts that arithmetic
     // over this file rather than trusting the numbers here, because the failure it forbids has
@@ -197,17 +230,22 @@
     // all-black image. An all-black capture scores 0.000 on both of these.
     //
     // WHAT THE TWO COLOURS ARE, FROM SOURCE, NOT FROM THE CAPTURE. Border.module paints
-    // Background #FF1C1C35 (MainWindow.axaml:122) and TextBlock.module-title paints Foreground
-    // #FFF0F0F5 at no opacity (MainWindow.axaml:320); the card is a Border.module carrying a
-    // module-title (IntakePage.axaml). Neither number was read off a screenshot.
+    // Background PanelBg (MainWindow.axaml:122) and TextBlock.module-title paints Foreground
+    // TextLight #FFF0F0F5 at no opacity (MainWindow.axaml:320); the card is a Border.module
+    // carrying a module-title (IntakePage.axaml). Neither number was read off a screenshot. Under
+    // the CCP Default theme PanelBg is the mod's own PanelColor #11111A; the ink is not themed,
+    // because no mod theme supplies an ink.
     //
     // THE GROUND TOLERANCE IS 2, WHICH IS TIGHTER THAN ANYTHING ELSE IN THIS FILE, and for a
-    // named reason: the rack's ground #FF181830 is only 5 away on its widest channel, so at the
-    // rail-door precedent of 24 — or even at the rack's old 6 — this check would pass on a
-    // photograph of the Studio rack. The page ground behind the card (#121220, Window Background)
-    // is 21 away, so tolerance 2 also fails on a card that did not paint its own fill at all.
-    // These are flat fills with no antialiasing in them, exactly like the rack's, which measured
-    // 7605/7605 EXACT.
+    // named reason: the rack's ground is only 7 away on its widest channel (SurfaceBg #0C0C13
+    // against this PanelBg #11111A - it was 5 when both were on the seed), so at the rail-door
+    // precedent of 24 - or even at the rack's old 6 - this check would pass on a photograph of the
+    // Studio rack. The page ground behind the card (DarkerBg #08080C, Window Background) is 14
+    // away, so tolerance 2 also fails on a card that did not paint its own fill at all. These are
+    // flat fills with no antialiasing in them, exactly like the rack's, which measured 7605/7605
+    // EXACT. TrainerCardRecordPresentationTests DERIVES the 7 from the two constants rather than
+    // writing it down, which is why this pair survived the theme without anybody remembering to
+    // look at it.
     //
     // THE LIMIT OF THE PAIR, STATED BECAUSE IT IS NOT VISIBLE FROM THE ROWS BELOW: these two
     // checks prove a module's livery and a title's glyphs at named offsets. They do NOT prove
@@ -222,7 +260,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.82, "y": 0.30, "w": 0.15, "h": 0.65 } },
-      "expectedColor": "#1C1C35",
+      "expectedColor": "#11111A",
       "tolerance": 2,
       "minPixelFraction": 0.98
     },
@@ -248,18 +286,21 @@
     //
     // THE TWO BUTTON CHECKS ARE THE SAME CONTROL IN ITS TWO STATES, which is upstream's own
     // one-button-two-liveries shape (MainWindow.StartStop.cs:756 paints the running one
-    // #FFFF6B6B; the idle pink #FFFF1493 is the shell's session-start livery). `running` is only
-    // reachable by really starting a scripted session through its confirmation, so the pair also
-    // proves the ceremony completed.
+    // #FFFF6B6B; the idle livery is ShellAccent, the shell's session-start pink). `running` is
+    // only reachable by really starting a scripted session through its confirmation, so the pair
+    // also proves the ceremony completed. The running red is a SEMANTIC and is not themed - it is
+    // built in upstream's own code, not read from a mod - so only the idle half moved.
     //
     // TOLERANCES ARE 4, WHICH IS TIGHTER THAN EVERYTHING ABOVE EXCEPT THE TRAINER CARD'S GROUND,
     // and the reason is HISTORY worth keeping. Before the palette flip onto upstream's values the
     // idle button was #FFD05CE8 and the selected rail door #FFE066FF - 23 apart on the widest
     // channel and 10 on the narrowest - so at the rail door's own precedent of 32 this check
-    // passed on a photograph of a selected rail door. The two are now the shipping product's own
-    // accent DARK and LIGHT steps (#FFFF1493 and #FFFF8FAF, WPF
-    // MainWindow/MainWindow.xaml.cs:1566-1567), 123 apart, so the pressure is off - and the
-    // tolerance stays at 4 anyway, because a tolerance is never widened back for comfort.
+    // passed on a photograph of a selected rail door. The two are the shipping product's accent
+    // DARK and LIGHT steps, and under the CCP Default theme they are the mod's own
+    // AccentDarkColor #B83078 and AccentLightColor #FF6FB5 (WPF Models/BuiltInMods.cs:921-922),
+    // 71 apart on their widest channel. That is a good deal closer than the 123 the seed's ladder
+    // gave, and it is still eighteen times the tolerance. The idle button's TIGHTEST neighbour on
+    // this manifest is now the Extreme difficulty stripe #F23557 at 58, not the rail door.
     // ScriptedSessionPresentationTests.NoSessionCheckAcceptsTheColourOfAnotherDeclaredState
     // asserts that separation mechanically over this file, so widening any of these four reddens
     // the floor and names both colours.
@@ -292,7 +333,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.25, "y": 0.08, "w": 0.5, "h": 0.12 } },
-      "expectedColor": "#FF1493",
+      "expectedColor": "#B83078",
       "tolerance": 4,
       "minPixelFraction": 0.98
     },
@@ -332,10 +373,14 @@
     // inset so no border pixel is ever sampled.
     //
     // TOLERANCE 4 IS THE WHOLE POINT HERE and it is the rack's number for the rack's reason: the
-    // row card #FF2E2E4A and the plate #FF222240 are only 12/12/10 apart, which is the same
-    // distance the rack's selected fill sits from its hovered row. At 12 either check would pass
-    // on the other capture and the pair would prove nothing; 4 is kept from before the palette
-    // flip, when those same two roles were 6/3/6 apart. ScriptedSessionPresentationTests
+    // row card is PanelAccent and the plate is ElevatedSurface, and only the first of the two is
+    // themed - so under CCP Default they are #34343C against #222240, 18/18/4 apart. That is the
+    // same pair, and the same distance, as the rack's selected fill against its hovered row, and
+    // it is the RED channel that separates them now rather than the blue. The evaluator requires
+    // every channel to be inside the tolerance (CheckEvaluator.cs:29-31), so 18 is the ceiling; at
+    // 18 or above either check would pass on the other capture and the pair would prove nothing.
+    // 4 is kept from before the palette flip, when those same two roles were 6/3/6 apart.
+    // ScriptedSessionPresentationTests
     // .NoSessionCheckAcceptsTheColourOfAnotherDeclaredState asserts that separation mechanically
     // over this file, so widening either one reddens the floor and names both colours.
     {
@@ -345,7 +390,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.02, "y": 0.79, "w": 0.96, "h": 0.19 } },
-      "expectedColor": "#2E2E4A",
+      "expectedColor": "#34343C",
       "tolerance": 4,
       "minPixelFraction": 0.98
     },
@@ -379,15 +424,29 @@
     // measure 653x88 with the dial reading '3x', and the sampled band holds exactly 208 track
     // pixels in each - so the only thing separating them is the disabled livery.
     //
-    // MEASURED, NOT CHOSEN. The band x 0.02..0.10, y 0.40..0.60 is 936 px and holds two colours and
-    // no antialiasing at all: the panel ground #1C1C35 at 728 px in both states, and the track at
-    // 208 px - Fluent's accent #0078D4 when the dial is the user's, its disabled grey #333333 when
-    // the session owns it. 208/936 = 0.2222, which is why the fraction is 0.20: the wrong capture
-    // scores 0.0000, not a near miss.
+    // MEASURED, NOT CHOSEN, AND RE-MEASURED ON 2026-08-25 AFTER THE THEME LANDED. The band
+    // x 0.02..0.10, y 0.40..0.60 is 936 px and holds two colours and no antialiasing at all: the
+    // panel ground at 728 px in both states, and the track at 208 px. 208/936 = 0.2222, which is
+    // why the fraction is 0.20: the wrong capture scores 0.0000, not a near miss. The exact
+    // histogram of the `live` capture taken for this change is 728 x #11111A + 208 x #E84393 -
+    // the same geometry as before, so nothing but colour moved.
     //
-    // TOLERANCE 8 with 51/69/161 between the two colours. There is no third state to confuse them
-    // with - a slider is enabled or it is not - so the tightening the rack's checks needed against
-    // a hover livery does not apply here, and 8 is dashboard-background's number.
+    // THE LIVE TRACK WAS #0078D4 AND THAT WAS ALREADY A LIE BEFORE THIS CHANGE. Fluent resolves a
+    // slider's value fill from SystemAccentColor, which used to come from the machine's Windows
+    // personalisation setting; the token layer shadowed all seven of Fluent's accent keys with the
+    // product's own pink and NOTHING UPDATED THESE THREE CHECKS, so for a day they described a
+    // colour the port had stopped painting while the floor stayed green - because the tests over
+    // them assert manifest self-consistency, and a manifest can be perfectly consistent about a
+    // colour that is not on the screen. The headed capture is what caught it and is the only thing
+    // that could have.
+    //
+    // TOLERANCE 8, and the arithmetic behind it is re-derived rather than inherited: the live
+    // track #E84393 and the disabled grey #333333 are 181/16/96 apart, so the GREEN channel is the
+    // binding one at 16 (it was 69 against the platform blue). The evaluator requires every
+    // channel inside the tolerance (CheckEvaluator.cs:29-31), so 16 is the ceiling and 8 is half
+    // of it. There is no third state to confuse them with - a slider is enabled or it is not - so
+    // the tightening the rack's checks needed against a hover livery does not apply, and 8 remains
+    // dashboard-background's number. It is NOT widened: it was 8 before and it is 8 now.
     //
     // WHAT THESE TWO CHECKS DO NOT COVER. They are about ONE dial of the thirty the lock owns; the
     // other twenty-nine are headless facts (SessionFeatureLockHeadlessTests), which is a claim
@@ -401,7 +460,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.02, "y": 0.40, "w": 0.08, "h": 0.20 } },
-      "expectedColor": "#0078D4",
+      "expectedColor": "#E84393",
       "tolerance": 8,
       "minPixelFraction": 0.20
     },
@@ -432,6 +491,13 @@
     // capture. Measured on real captures at scale 1.75: this band holds 208 track pixels of 936
     // (0.2222) in every one of the four, so the two liveries are separated by colour alone.
     //
+    // THE LIVE COLOUR MOVED WITH THE THEME, and these two were stale for the same day the studio
+    // pair above was: Fluent's SystemAccentColor is the product's accent now, and under CCP
+    // Default that is the mod's own AccentColor #E84393 (WPF Models/BuiltInMods.cs:920). Nothing
+    // about the claim changed - the geometry, the fractions and the inversion are identical - and
+    // the tolerance is re-derived to 8 by the same arithmetic as the block above: 16 on the green
+    // channel against the disabled grey is the binding separation.
+    //
     // THE FRACTION IS 0.12 AGAINST A LOWEST MEASUREMENT OF 0.2222, and the number is not the point
     // - THE MARGIN RULE IS. A floor set near a value the product moves reds a perfectly good
     // capture (the pop quiz ink lesson, and the trainer-card level bar's 0.10..0.30 against a 0.5949
@@ -451,7 +517,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.02, "y": 0.40, "w": 0.08, "h": 0.20 } },
-      "expectedColor": "#0078D4",
+      "expectedColor": "#E84393",
       "tolerance": 8,
       "minPixelFraction": 0.12
     },
@@ -462,7 +528,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.02, "y": 0.40, "w": 0.08, "h": 0.20 } },
-      "expectedColor": "#0078D4",
+      "expectedColor": "#E84393",
       "tolerance": 8,
       "minPixelFraction": 0.12
     },
@@ -496,7 +562,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.02, "y": 0.60, "w": 0.96, "h": 0.38 } },
-      "expectedColor": "#121220",
+      "expectedColor": "#08080C",
       "tolerance": 4,
       "minPixelFraction": 0.90
     },
@@ -576,7 +642,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.30, "y": 0.65, "w": 0.65, "h": 0.30 } },
-      "expectedColor": "#121220",
+      "expectedColor": "#08080C",
       "tolerance": 4,
       "minPixelFraction": 0.98
     },
@@ -676,6 +742,34 @@
     // keyboard focus and a differential INK read-back of the card's device context - before a pixel
     // is read.
     //
+    // THE INK'S TOLERANCE WENT 24 -> 4, AND THE COLLISION THAT FORCED IT IS UPSTREAM'S OWN.
+    // The card's question is #FF69B4 and it is NOT themed: upstream's own lock card reads it from
+    // AppSettings.LockCardTextColor, whose default is the literal "#FF69B4"
+    // (Models/AppSettings.cs:3420). The mod-accent fallback beside it
+    // (Windows/LockCardWindow.xaml.cs:515) is unreachable on a fresh install, because ParseColor
+    // only falls back on an EMPTY string and that setting is never empty. So the port's COLORREF
+    // is right, and it stays.
+    //
+    // What moved is the SHELL. ShellAccentBright is upstream's accent LIGHT step, and under CCP
+    // Default that is the mod's AccentLightColor #FF6FB5 (WPF Models/BuiltInMods.cs:921) - which
+    // is SIX from this card's ink on its widest channel. Two pinks six apart, on two surfaces, in
+    // the palette the shipping product really wears. That is not a port defect and no tolerance
+    // can make them different colours; what it means is that this check may no longer reach as far
+    // as 24, because at 24 a photograph of a selected rail door or a selected rack row would pass
+    // a check that exists to say a POP QUIZ CARD was on the screen
+    // (PopQuizCardPresentationTests.NoPopQuizCardCheckAcceptsAnotherDeclaredStatesColour).
+    //
+    // 4 IS MEASURED, AND THE MEASUREMENT SAYS THE OLD 24 WAS BUYING NOTHING. The ceiling is 5.
+    // On the real capture taken for this change the ink band holds 2756 px of 63360 - and it holds
+    // exactly 2756 at EVERY tolerance from 0 to 24, because this card's text is not antialiased at
+    // all: every ink pixel is the COLORREF exactly and there is no ramp to widen onto. So the
+    // tightening costs zero pixels and the fraction stays 0.0435 against a floor of 0.002.
+    //
+    // NOT 0, THOUGH, AND THAT IS DELIBERATE. A tolerance of 0 would red the first time anything
+    // turned font smoothing on for that device context - a change with no defect in it - and this
+    // check's job is "glyphs or no glyphs", where the wrong answer is 0.0000. 4 is the manifest's
+    // own tight number, it is under the ceiling, and it has a unit of room the ceiling does not.
+    //
     // THE GROUND BAND IS THE CARD'S LEFT MARGIN, x 0.01..0.05, and it is background by
     // CONSTRUCTION rather than by luck: every text band the painter writes into is inset by at least
     // width/12 (8.3%) on the left (Win32InputPresence.Band), so no glyph can ever enter this strip.
@@ -714,7 +808,7 @@
       "kind": "region-color",
       "region": { "rect": { "x": 0.33, "y": 0.20, "w": 0.34, "h": 0.16 } },
       "expectedColor": "#FF69B4",
-      "tolerance": 24,
+      "tolerance": 4,
       "minPixelFraction": 0.002
     },
 
@@ -722,7 +816,9 @@
     // FRACTION rather than a colour, which is a first on this manifest.
     //
     // Both captures are the same 420x8 DIP bar on the same card on the same page, painted in the
-    // same two colours: a #2E2E4A track with a #FF1493 fill in front of part of it. The only thing
+    // same two colours: a PanelAccent #34343C track with a ShellAccent #B83078 fill in front of
+    // part of it (both moved with the CCP Default theme; they were #2E2E4A and #FF1493 on the
+    // seed, and the track's is DERIVED - LightenColor(panel, .15)). The only thing
     // that differs is HOW MUCH of the track the fill covers, and that comes from progression.json
     // and nowhere else. `fresh` is the ledger REMOVED — TrainerCardLevel.Read's missing-file arm
     // answers upstream's level 1 with nothing banked (Models/AppSettings.cs:237), so the bar is all
@@ -743,11 +839,15 @@
     // randomly chosen question whose inked fraction the product varies, and this one draws a flat
     // rectangle whose colour the product does not.
     //
-    // TOLERANCE 4, with 209/26/73 between the two colours. It is the session rack's number for the
-    // same reason: #2E2E4A is only 12/12/10 from the notice ground #222240 and 7/7/6 from the
-    // mantra game's dim ink #353550, so at 12 the `fresh` check would pass on a photograph of a
-    // notice panel and at 8 on a photograph of the mantra line. TrainerCardLevelPresentationTests asserts that
-    // separation mechanically against every colour this shell declares.
+    // TOLERANCE 4, with 132/4/60 between the two colours - and it is RED that separates them, not
+    // green. They are only four apart on green now (52 against 48; it was 26 on the seed's
+    // values), which changes nothing, because the evaluator requires EVERY channel inside the
+    // tolerance (CheckEvaluator.cs:29-31) and 132 on red is unreachable at any tolerance this
+    // manifest would tolerate. It is still the session rack's number for the session rack's
+    // reason: #34343C is 18/18/4 from the notice ground #222240 and 1/1/20 from the mantra
+    // game's dim ink #353550, so at 18 the `fresh` check would pass on a photograph of a notice
+    // panel and at 20 on a photograph of the mantra line. TrainerCardLevelPresentationTests
+    // asserts that separation mechanically against every colour this shell declares.
     //
     // WHAT THESE TWO DO NOT COVER. They prove a fill's colour at a named offset of a derived rect.
     // They do NOT prove the number beside the bar, the rank, or that the bar is the Trainer Card's
@@ -760,7 +860,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.10, "y": 0.20, "w": 0.20, "h": 0.60 } },
-      "expectedColor": "#FF1493",
+      "expectedColor": "#B83078",
       "tolerance": 4,
       "minPixelFraction": 0.98
     },
@@ -771,7 +871,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.10, "y": 0.20, "w": 0.20, "h": 0.60 } },
-      "expectedColor": "#2E2E4A",
+      "expectedColor": "#34343C",
       "tolerance": 4,
       "minPixelFraction": 0.98
     },
@@ -800,11 +900,14 @@
     // its second run. That is the pop quiz lesson applied rather than re-learned.
     //
     // TOLERANCE 6 ON THE DIM CHECK AND 12 ON THE LIT ONE, AND THE ASYMMETRY IS THE PALETTE FLIP.
-    // Both were 12 while the shell's interactive tier was #FF2A2130. It is now upstream's
-    // PanelAccent #FF2E2E4A (WPF Resources/Theme/Colors.xaml:19), which sits 7/7/6 from the mantra
-    // game's dim ink - so 6 is the largest tolerance at which mantra-window-fresh-dim cannot
-    // accept a photograph of a selected rack row, a history row card or the trainer card's level
-    // track. Its next nearest is rail-door-unselected-border's #3A3A5C at 5/5/12. The LIT check
+    // Both were 12 while the shell's interactive tier was #FF2A2130. The flip onto upstream's
+    // seed put PanelAccent #FF2E2E4A 7/7/6 from the mantra game's dim ink and forced the dim check
+    // down to 6. THE CCP DEFAULT THEME MOVED IT AGAIN AND THE OTHER WAY: PanelAccent is derived
+    // from the mod's panel colour now (LightenColor(#11111A, .15) = #34343C), which sits 1/1/20
+    // from the dim ink, and the tightest neighbour on the whole manifest is the notice plate
+    // #222240 at 19/19/16. So the ceiling went 7 -> 19 and the tolerance STAYS AT 6, because a
+    // tolerance is never widened back because it became comfortable - and because the fractions
+    // behind this check were measured at 12 and re-measured at nothing since. The LIT check
     // has no such neighbour and keeps 12, sized against the hazard in the window itself: the
     // mantra carries a DropShadow glow of #9966CC (MantraIntensity.GlowColour at streak 0), which
     // is 34 per channel from #9988DD - a tolerance anywhere near that would let the halo around
@@ -885,20 +988,29 @@
     // manifest, so a later edit cannot quietly leave two states that no capture could tell apart.
     //
     // ONE INK AND ONE GROUND IN EVERY STATE, so no uniform capture can pass any of the three:
-    // #1C1C35 at tolerance 2 and either ink at 16 are 190 and 212 apart on red, and 18 is as close
+    // #11111A at tolerance 2 and either ink at 16 are 200 and 223 apart on red, and 18 is as close
     // as the two bands can reach. TrainerCardRecordPresentationTests asserts that arithmetic over
     // this file rather than trusting the numbers above, because the failure it forbids has already
     // happened once here: capture-wslg.sh printed CAPTURE PASS over an all-black image.
     //
     // THE TWO INKS ARE DIFFERENT COLOURS AND THAT IS WHAT SIZES THE TOLERANCE. A status line is
-    // page-blurb #FFF0F0F5 at a local Opacity 0.9 (IntakePage.axaml's award template), which
-    // composites over the card's #FF1C1C35 to #DADAE1; a row NAME is module-title at no opacity, so
-    // it is #F0F0F5 exactly. Those are 20 per channel apart at their closest, so 16 is the largest
-    // tolerance at
-    // which a title's glyphs cannot pass a status check and vice versa - the two ink bands stay two
-    // different claims. THE GROUND TOLERANCE IS 2, the trainer-card-ground number for the
-    // trainer-card-ground reason: the rack's #FF181830 is 5 away on its widest channel, so at the
-    // rail door's 24 these checks would pass on a photograph of the Studio rack.
+    // page-blurb TextLight #FFF0F0F5 at a local Opacity 0.9 (IntakePage.axaml's award template),
+    // which composites over the card's ground; a row NAME is module-title at no opacity, so it is
+    // #F0F0F5 exactly.
+    //
+    // THE COMPOSITE MOVES WITH THE GROUND, WHICH IS WHY IT IS RE-MEASURED RATHER THAN CARRIED.
+    // It was #DADAE1 over the seed's #1C1C35 and is #DADADF over the CCP Default theme's #11111A.
+    // MEASURED off the real read/unreadable captures at 194/3856 and 142/3374 of their bands, NOT
+    // computed - the hand arithmetic said #D9D9DF, because 0.9 x 240 + 0.1 x 17 = 217.7 and the
+    // compositor ROUNDS the channel where the seed's own value happened to truncate. A composite
+    // is the compositor's arithmetic and this port does not get to assume its rounding; one unit
+    // is invisible at tolerance 16 and it is exactly the kind of guess that becomes a pinned lie.
+    // The two inks are still 22 per channel apart, so 16 is still comfortably the largest
+    // tolerance at which a title's glyphs cannot pass a status check and vice versa, and the two
+    // ink bands stay two different claims. THE GROUND TOLERANCE IS 2, the trainer-card-ground
+    // number for the trainer-card-ground reason: the rack's SurfaceBg is 7 away on its widest
+    // channel (it was 5 on the seed), so at the rail door's 24 these checks would pass on a
+    // photograph of the Studio rack.
     //
     // FLOORS SIT WELL BELOW THE MEASUREMENTS AND THE FAILURES ARE NOT NEAR THEM. Glyph coverage in
     // a text band is a fraction the product varies - a different sentence is a different number of
@@ -920,7 +1032,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.15, "y": 0.34, "w": 0.30, "h": 0.07 } },
-      "expectedColor": "#1C1C35",
+      "expectedColor": "#11111A",
       "tolerance": 2,
       "minPixelFraction": 0.98
     },
@@ -931,7 +1043,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.15, "y": 0.84, "w": 0.30, "h": 0.08 } },
-      "expectedColor": "#DADAE1",
+      "expectedColor": "#DADADF",
       "tolerance": 16,
       "minPixelFraction": 0.02
     },
@@ -942,7 +1054,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.15, "y": 0.84, "w": 0.30, "h": 0.08 } },
-      "expectedColor": "#1C1C35",
+      "expectedColor": "#11111A",
       "tolerance": 2,
       "minPixelFraction": 0.98
     },
@@ -964,7 +1076,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.15, "y": 0.34, "w": 0.30, "h": 0.07 } },
-      "expectedColor": "#DADAE1",
+      "expectedColor": "#DADADF",
       "tolerance": 16,
       "minPixelFraction": 0.02
     },
@@ -975,7 +1087,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.15, "y": 0.84, "w": 0.30, "h": 0.08 } },
-      "expectedColor": "#DADAE1",
+      "expectedColor": "#DADADF",
       "tolerance": 16,
       "minPixelFraction": 0.02
     },
@@ -986,7 +1098,7 @@
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
       "region": { "rect": { "x": 0.75, "y": 0.05, "w": 0.23, "h": 0.90 } },
-      "expectedColor": "#1C1C35",
+      "expectedColor": "#11111A",
       "tolerance": 2,
       "minPixelFraction": 0.98
     }

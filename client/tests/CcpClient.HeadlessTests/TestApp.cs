@@ -37,6 +37,13 @@ public class TestApp : Application
             Source = new Uri("avares://CcpClient.Desktop/Themes/Ccp.axaml"),
         });
 
+        // AND THE SKIN OVER IT, for the same reason the dictionary is here at all. Ccp.axaml is the
+        // design-time seed; the product paints CCP Default's own six colours over it in App's
+        // Initialize before any window exists. A test application that merged only the seed would
+        // resolve every key to a colour NO USER EVER SEES and would still pass every assertion
+        // about it - the quiet failure this whole file exists to prevent.
+        CcpClient.Desktop.Themes.CcpTheme.CcpDefault.ApplyTo(Resources);
+
         // DynamicResourceExtension, not a direct lookup: ResourceDictionary's indexer reads only
         // its OWN entries and answers null for anything reached through a merged dictionary
         // (measured, 12.1.1), which would have handed the setter a null and left every window on

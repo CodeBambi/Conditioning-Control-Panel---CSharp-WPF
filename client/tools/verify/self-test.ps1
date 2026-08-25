@@ -1,23 +1,30 @@
-# CCP greenfield verification harness - seeded-regression self-test.
+﻿# CCP greenfield verification harness - seeded-regression self-test.
 # Proves the targeted gate catches a REAL visual regression, throwaway-edit pattern
 # (AVLN2000 precedent; NO defect-injection flags in product code):
-#   1. edit the REAL Themes/Ccp.axaml — break the SELECTED rail-door border brush
+#   1. edit the REAL Themes/CcpTheme.cs — break the SELECTED rail-door border colour
 #   2. build, capture rail-door/selected, assert CcpVerify FAILS the SPECIFIC NAMED check
 #   3. restore (from the bytes captured in memory, never git), rebuild, re-capture, assert green
 #
-# THE ANCHOR MOVED, 2026-08-25, AND THE SEED GOT STRONGER FOR IT.
-# This used to seed Views/MainWindow.axaml, where #FFFF8FAF was pasted at three sites. The product
-# has a token layer now: that colour is declared ONCE, as `ShellAccentBright` in
-# src/CcpClient.Desktop/Themes/Ccp.axaml, and every surface that paints a selection binds the key
-# rather than the value. So the file this script edits moved with it.
+# THE ANCHOR HAS MOVED TWICE, AND EACH MOVE FOLLOWED THE COLOUR A USER ACTUALLY SEES.
+# It first seeded Views/MainWindow.axaml, where #FFFF8FAF was pasted at three sites. The token
+# layer arrived and the colour was declared ONCE, as `ShellAccentBright` in
+# src/CcpClient.Desktop/Themes/Ccp.axaml, so the seed moved there - strictly stronger, because it
+# then reached every consumer of the key rather than the three sites that happened to carry the
+# literal.
 #
-# Seeding the token is strictly stronger than seeding one surface's markup was. Before, a seed
-# reached exactly the three sites that happened to carry the literal, and any FOURTH surface added
-# later - in another file, by another lane - was invisible to this test the day it was written.
-# Now the seed reaches every consumer of the key, present and future, because there is only one
-# place the colour exists. The two named checks below still have to trip, for the same reason as
-# before: that is what separates a check that catches a REAL regression in product markup from one
-# that only distinguishes two captures of a working build.
+# THEN THE PRODUCT LEARNED TO THEME ITSELF (2026-08-26) AND Ccp.axaml BECAME A DESIGN-TIME SEED.
+# "CCP Default" is itself a mod - that is a fact about the SHIPPING product, measured headed
+# (WPF Models/BuiltInMods.cs:918-926, applied at MainWindow/MainWindow.xaml.cs:317) - and the port
+# does the same thing: CcpTheme.CcpDefault.ApplyTo rewrites `ShellAccentBright` from the theme's
+# AccentLightColor in App.Initialize, before any window exists.
+#
+# SO A SEED IN Ccp.axaml WOULD NOW REACH NO PIXEL AT ALL. It would be painted over three lines into
+# startup, both named checks would stay GREEN on the seeded build, and this script would report
+# that its own regression detector had stopped working - a red for the wrong reason, on a product
+# with no defect in it. The anchor is therefore the AccentLight line of CcpTheme.CcpDefault, which
+# is where the colour a user sees is declared. The claim is unchanged: the two named checks below
+# still have to trip, and that is what separates a check that catches a REAL regression in product
+# source from one that only distinguishes two captures of a working build.
 #
 # The SAME seed covers the RACK, and it costs one extra capture per build to prove it.
 # `ShellAccentBright` is not door-specific — it is also RadioButton.rack-row:checked's BorderBrush
@@ -66,7 +73,7 @@ $ErrorActionPreference = 'Stop'
 
 $verifyDir = $PSScriptRoot
 $clientDir = Resolve-Path (Join-Path $verifyDir '..\..')
-$axaml = Join-Path $clientDir 'src\CcpClient.Desktop\Themes\Ccp.axaml'
+$anchorFile = Join-Path $clientDir 'src\CcpClient.Desktop\Themes\CcpTheme.cs'
 $verify = Join-Path $clientDir 'tools\verify\CcpVerify\bin\Debug\net10.0\CcpVerify.exe'
 $manifest = Join-Path $verifyDir 'checks.json'
 $capture = Join-Path $verifyDir 'artifacts\windows-rail-door-selected.png'
@@ -205,30 +212,30 @@ if ($Sweep) {
 # The exact bytes are captured here, before any mutation, and every restore path writes
 # them back. That is also STRICTER than git: it restores what was actually there, so an
 # uncommitted work-in-progress survives the run untouched.
-$original = [IO.File]::ReadAllText($axaml)
+$original = [IO.File]::ReadAllText($anchorFile)
 
-function Restore-Axaml {
-    [IO.File]::WriteAllText($axaml, $original, [Text.UTF8Encoding]::new($false))
+function Restore-Anchor {
+    [IO.File]::WriteAllText($anchorFile, $original, [Text.UTF8Encoding]::new($false))
 }
 
 function Fail([string]$msg) {
     Write-Output "SELF-TEST FAIL: $msg"
     # Never leave the product source mutated -- and never discard anything either.
-    Restore-Axaml
+    Restore-Anchor
     exit 1
 }
 
-if ($original -notmatch '#FFFF8FAF') { Fail "$axaml does not declare the selected-door brush #FFFF8FAF - self-test anchor missing" }
+if ($original -notmatch '#FF6FB5') { Fail "$anchorFile does not declare the theme's AccentLightColor #FF6FB5 - self-test anchor missing" }
 
-# Exactly ONE occurrence, and the token file says so in its own comment. If a second ever appears -
-# a worked example, a duplicate key, a hex quoted in prose - the -replace below would rewrite it
-# too, and the restore proof further down would then be checking a file this script had edited in
-# two places for one reason. Cheaper to refuse than to explain.
-$anchorCount = ([regex]::Matches($original, '#FFFF8FAF')).Count
-if ($anchorCount -ne 1) { Fail "expected exactly ONE #FFFF8FAF in $axaml, found $anchorCount - the seed would touch more than the token" }
+# Exactly ONE occurrence, and CcpTheme says so in its own comment. If a second ever appears - a
+# worked example, another theme, a hex quoted in prose - the -replace below would rewrite it too,
+# and the restore proof further down would then be checking a file this script had edited in two
+# places for one reason. Cheaper to refuse than to explain.
+$anchorCount = ([regex]::Matches($original, '#FF6FB5')).Count
+if ($anchorCount -ne 1) { Fail "expected exactly ONE #FF6FB5 in $anchorFile, found $anchorCount - the seed would touch more than the theme" }
 
-Write-Output '--- phase 1: seed the regression (ShellAccentBright token -> #FF336633) ---'
-[IO.File]::WriteAllText($axaml, ($original -replace '#FFFF8FAF', '#FF336633'), [Text.UTF8Encoding]::new($false))
+Write-Output '--- phase 1: seed the regression (CCP Default AccentLightColor -> #336633) ---'
+[IO.File]::WriteAllText($anchorFile, ($original -replace '#FF6FB5', '#336633'), [Text.UTF8Encoding]::new($false))
 
 try {
     dotnet build (Join-Path $clientDir 'CcpClient.sln') -c Debug --nologo | Out-Null
@@ -260,13 +267,13 @@ try {
 }
 finally {
     Write-Output '--- phase 2: restore ---'
-    Restore-Axaml
+    Restore-Anchor
     # Prove the restore, rather than trusting the write: the seeded brush must be gone and
     # the anchor back. A silent partial restore would leave the product mutated and the
     # remaining phases would then be measuring the wrong tree.
-    $restored = [IO.File]::ReadAllText($axaml)
-    if ($restored -ne $original) { Fail 'restore did not reproduce the original AXAML byte-for-byte' }
-    if ($restored -match '#FF336633') { Fail 'the seeded brush survived the restore - AXAML is still mutated' }
+    $restored = [IO.File]::ReadAllText($anchorFile)
+    if ($restored -ne $original) { Fail 'restore did not reproduce the anchor file byte-for-byte' }
+    if ($restored -match '#336633') { Fail 'the seeded colour survived the restore - the anchor file is still mutated' }
 }
 
 dotnet build (Join-Path $clientDir 'CcpClient.sln') -c Debug --nologo | Out-Null

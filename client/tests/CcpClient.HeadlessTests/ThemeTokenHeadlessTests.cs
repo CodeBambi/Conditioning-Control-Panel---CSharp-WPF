@@ -40,14 +40,21 @@ public class ThemeTokenHeadlessTests
     /// OWN brush, built inside the theme over its own <c>SystemAccentColor</c>, and it comes back
     /// carrying the product's accent.</para>
     /// </summary>
+    /// <remarks>
+    /// The seven values are the CCP Default theme's, not the token file's: the base is the mod's
+    /// own <c>AccentColor</c> and the six shades are upstream's <c>LightenColor</c> and
+    /// <c>DarkenColor</c> at 0.15 / 0.30 / 0.45 (<c>CcpTheme.Tokens</c>). They are written out
+    /// rather than recomputed here on purpose — a fact that recomputed the thing it is checking
+    /// would pass whatever the arithmetic did.
+    /// </remarks>
     [AvaloniaTheory]
-    [InlineData("SystemAccentColor", "#FFFF69B4")]
-    [InlineData("SystemAccentColorLight1", "#FFFF85C2")]
-    [InlineData("SystemAccentColorLight2", "#FFFFA1D0")]
-    [InlineData("SystemAccentColorLight3", "#FFFFBDDE")]
-    [InlineData("SystemAccentColorDark1", "#FFD9599A")]
-    [InlineData("SystemAccentColorDark2", "#FFB34A80")]
-    [InlineData("SystemAccentColorDark3", "#FF8C3A66")]
+    [InlineData("SystemAccentColor", "#FFE84393")]
+    [InlineData("SystemAccentColorLight1", "#FFEB5FA3")]
+    [InlineData("SystemAccentColorLight2", "#FFEE7BB3")]
+    [InlineData("SystemAccentColorLight3", "#FFF297C3")]
+    [InlineData("SystemAccentColorDark1", "#FFC5387C")]
+    [InlineData("SystemAccentColorDark2", "#FFA22E66")]
+    [InlineData("SystemAccentColorDark3", "#FF7F2450")]
     public void FluentsAccentFamilyResolvesToTheProductAccentAndNeverToThePlatforms(string key, string expected)
     {
         var app = Application.Current!;
@@ -74,7 +81,7 @@ public class ThemeTokenHeadlessTests
             app.TryFindResource("SystemControlHighlightAccentBrush", ThemeVariant.Dark, out var brush),
             "Fluent 12.1.1 no longer publishes SystemControlHighlightAccentBrush — the accent "
             + "override needs re-pointing at whatever replaced it");
-        Assert.Equal(Color.Parse("#FFFF69B4"), Assert.IsAssignableFrom<ISolidColorBrush>(brush).Color);
+        Assert.Equal(Color.Parse("#FFE84393"), Assert.IsAssignableFrom<ISolidColorBrush>(brush).Color);
     }
 
     /// <summary>
@@ -96,7 +103,11 @@ public class ThemeTokenHeadlessTests
     public void ReplacingAColourKeyRepaintsEveryBrushDerivedFromIt()
     {
         var app = Application.Current!;
-        var original = Color.Parse("#FFFF1493");
+
+        // The CCP Default theme's AccentDarkColor, which is what the token really holds at runtime
+        // now — TestApp applies the theme over the seed exactly as App does. The seed's #FFFF1493
+        // is the value in Themes/Ccp.axaml and is NOT what a lookup returns.
+        var original = Color.Parse("#FFB83078");
 
         Assert.True(app.TryFindResource("ShellAccentBrush", ThemeVariant.Dark, out var found));
         var brush = Assert.IsType<SolidColorBrush>(found);
@@ -117,5 +128,60 @@ public class ThemeTokenHeadlessTests
         }
 
         Assert.Equal(original, brush.Color);
+    }
+
+    /// <summary>
+    /// <b>What a LOOKUP returns is the theme's value and not the token file's</b>, which is the one
+    /// thing about this mechanism that no source-level fact can state.
+    ///
+    /// <para><c>Themes/Ccp.axaml</c> is a design-time seed — every ground in it is the shipping
+    /// product's own <c>Resources/Theme/Colors.xaml</c> line, and that file is a design-time seed
+    /// too. The skin over it is the built-in mod, applied in <c>App.Initialize</c> before any
+    /// window exists. So a surface that binds <c>PanelBgBrush</c> resolves the MOD's panel colour,
+    /// and the seed's value is not reachable from a running application at all. Both are asserted:
+    /// the seed is named explicitly, because "the theme was applied" and "the theme happens to
+    /// agree with the seed" are different facts and only one of them is this one.</para>
+    ///
+    /// <para><b>What it does not show.</b> Nothing composited. A resolved brush is what a control
+    /// WOULD paint with; the headed <c>studio-dial/live</c> capture is what says it did.</para>
+    /// </summary>
+    [AvaloniaTheory]
+    [InlineData("DarkerBg", "#FF08080C", "#FF121220")]
+    [InlineData("SurfaceBg", "#FF0C0C13", "#FF181830")]
+    [InlineData("PanelBg", "#FF11111A", "#FF1C1C35")]
+    [InlineData("PanelAccent", "#FF34343C", "#FF2E2E4A")]
+    [InlineData("PanelAccentHover", "#FF4C4C53", "#FF3A3A5C")]
+    [InlineData("PinkColor", "#FFE84393", "#FFFF69B4")]
+    [InlineData("ShellAccent", "#FFB83078", "#FFFF1493")]
+    [InlineData("ShellAccentBright", "#FFFF6FB5", "#FFFF8FAF")]
+    public void AThemedKeyResolvesToTheSkinAndNotToTheSeedItWasPaintedOver(
+        string key, string skin, string seed)
+    {
+        var app = Application.Current!;
+
+        Assert.True(app.TryFindResource(key, ThemeVariant.Dark, out var value), $"'{key}' resolves to nothing");
+        Assert.Equal(Color.Parse(skin), Assert.IsType<Color>(value));
+        Assert.NotEqual(Color.Parse(seed), (Color)value!);
+    }
+
+    /// <summary>
+    /// <b>And the keys a mod theme does not supply keep their seed value.</b> The asymmetry is
+    /// upstream's, and it is the half that is easy to get wrong by being thorough: a port that
+    /// re-derived every colour from the accent would look plausible and would stop matching the
+    /// product it was ported from. Measured on the shipping product, <c>ElevatedSurface</c>'s seed
+    /// value <c>#222240</c> is 5.13% of its window.
+    /// </summary>
+    [AvaloniaTheory]
+    [InlineData("ElevatedSurface", "#FF222240")]
+    [InlineData("SeatBg", "#FF1F1F3A")]
+    [InlineData("TextLight", "#FFF0F0F5")]
+    [InlineData("TextMuted", "#FFA0A0BC")]
+    [InlineData("TextDim", "#FF7A7A94")]
+    public void AKeyNoModThemeSuppliesStillResolvesToItsSeed(string key, string seed)
+    {
+        var app = Application.Current!;
+
+        Assert.True(app.TryFindResource(key, ThemeVariant.Dark, out var value), $"'{key}' resolves to nothing");
+        Assert.Equal(Color.Parse(seed), Assert.IsType<Color>(value));
     }
 }

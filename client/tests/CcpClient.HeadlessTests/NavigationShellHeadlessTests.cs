@@ -239,20 +239,26 @@ public class NavigationShellHeadlessTests : HeadlessTest
     {
         // A-012 mechanism proof, retargeted from the retired card's conditional-class ring onto
         // a product control: selection state is the control's own :checked pseudo-class and the
-        // selector resolves a real brush. #FFFF8FAF is also the headed harness's seeded-
-        // regression anchor (client/tools/verify/self-test.ps1).
+        // selector resolves a real brush.
+        //
+        // THE TWO COLOURS ARE THE THEME'S, NOT THE TOKEN FILE'S. ShellAccentBright and
+        // PanelAccentHover are both rewritten from the built-in mod before any window exists
+        // (CcpTheme.ApplyTo), so a door resolving Themes/Ccp.axaml's seed values would mean the
+        // theme never reached the tree. #FFFF6FB5 is also the colour the headed harness's
+        // seeded-regression anchor moves (client/tools/verify/self-test.ps1 seeds it in
+        // Themes/CcpTheme.cs, which is where it is declared).
         var (host, window) = await BootAsync();
 
         var studio = Door(window, "DoorStudio");
         var companion = Door(window, "DoorCompanion");
 
-        Assert.Equal(Color.Parse("#FFFF8FAF"), ((ISolidColorBrush)studio.BorderBrush!).Color);
-        Assert.Equal(Color.Parse("#FF3A3A5C"), ((ISolidColorBrush)companion.BorderBrush!).Color);
+        Assert.Equal(Color.Parse("#FFFF6FB5"), ((ISolidColorBrush)studio.BorderBrush!).Color);
+        Assert.Equal(Color.Parse("#FF4C4C53"), ((ISolidColorBrush)companion.BorderBrush!).Color);
 
         Click(window, companion);
 
-        Assert.Equal(Color.Parse("#FFFF8FAF"), ((ISolidColorBrush)companion.BorderBrush!).Color);
-        Assert.Equal(Color.Parse("#FF3A3A5C"), ((ISolidColorBrush)studio.BorderBrush!).Color);
+        Assert.Equal(Color.Parse("#FFFF6FB5"), ((ISolidColorBrush)companion.BorderBrush!).Color);
+        Assert.Equal(Color.Parse("#FF4C4C53"), ((ISolidColorBrush)studio.BorderBrush!).Color);
 
         await host.ShutdownAsync();
     }

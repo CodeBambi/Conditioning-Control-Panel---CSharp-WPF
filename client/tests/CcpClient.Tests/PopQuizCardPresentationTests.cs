@@ -153,6 +153,22 @@ public class PopQuizCardPresentationTests : RealDesktopFacts
         const double lowestMeasured = 0.025;
         var ink = CardChecks().Single(c => c.Name == "popquiz-card-question-ink");
 
+        // AND THE TOLERANCE THAT CANNOT GO BACK UP. ShellAccentBright - the shell's selection
+        // livery, and upstream's accent LIGHT step under the CCP Default theme (#FF6FB5, WPF
+        // Models/BuiltInMods.cs:921) - is SIX from this card's ink on its widest channel. Two
+        // pinks six apart on two surfaces is the shipping product's own palette, not a port
+        // defect, so this check is what has to move: at the 24 it carried, a photograph of a
+        // selected rail door would pass the check that says a pop quiz card was on the screen.
+        // NoPopQuizCardCheckAcceptsAnotherDeclaredStatesColour is the guard; this is the reason,
+        // written where somebody widening the number will read it.
+        //
+        // IT COSTS NOTHING, MEASURED: the ink band holds exactly 2756 px of 63360 at EVERY
+        // tolerance from 0 to 24, because the card's GDI text is not antialiased and every ink
+        // pixel is the COLORREF exactly.
+        Assert.True(ink.Tolerance < 6,
+            $"popquiz-card-question-ink has tolerance {ink.Tolerance}; the shell's selection livery is 6 away "
+            + "and a capture of a selected rail door would satisfy this check");
+
         Assert.True(ink.MinPixelFraction > 0,
             "a floor of zero would pass on a blank card, which is the one state this check exists to fail on");
         Assert.True(

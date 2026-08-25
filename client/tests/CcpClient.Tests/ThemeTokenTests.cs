@@ -180,6 +180,16 @@ public class ThemeTokenTests
         Assert.Contains(Uri, app, StringComparison.Ordinal);
         Assert.Contains(Uri, testApp, StringComparison.Ordinal);
 
+        // AND BOTH PAINT THE SKIN OVER IT, which became the sharper half of this fact the day the
+        // dictionary stopped being what a lookup returns. Ccp.axaml is a design-time seed now; the
+        // built-in mod is applied over it in App.Initialize. A test application that merged the
+        // seed and skipped that call would resolve every key to a colour NO USER EVER SEES and
+        // would still pass every assertion about it — the quiet failure this fact exists for,
+        // rediscovered one layer down.
+        const string Apply = "CcpTheme.CcpDefault.ApplyTo";
+        Assert.Contains(Apply, File.ReadAllText(Path.Combine(SourceRoot(), "App.axaml.cs")), StringComparison.Ordinal);
+        Assert.Contains(Apply, testApp, StringComparison.Ordinal);
+
         // And both set the font from the same key, which is the other half of what a window
         // inherits from the application.
         Assert.Contains("CcpFontFamily", app, StringComparison.Ordinal);
@@ -237,6 +247,13 @@ public class ThemeTokenTests
     /// without a decision about where it came from fails here by name, because every declared
     /// colour must be either in the table below or in the small exception list beside it, and each
     /// exception carries its own reason.</para>
+    ///
+    /// <para><b>It compares two SEEDS, and that is the right comparison.</b> Neither file is what a
+    /// user sees: "CCP Default" is itself a mod and both products paint it over their own
+    /// dictionary before a window is shown (<c>CcpTheme</c> here,
+    /// <c>RefreshThemeAwareElements</c> there). The seeds still have to agree, because the keys a
+    /// mod theme does NOT supply — <c>ElevatedSurface</c>, the inks — are served straight off them,
+    /// and because a seed that drifted would make the next re-theme land somewhere else.</para>
     ///
     /// <para><b>What it does not show.</b> That the values look right, that they contrast, or that
     /// anything renders. It is a byte comparison between two files.</para>

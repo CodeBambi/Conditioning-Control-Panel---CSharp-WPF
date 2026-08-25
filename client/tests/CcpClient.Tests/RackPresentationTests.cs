@@ -144,11 +144,11 @@ public class RackPresentationTests
 
     /// <summary>
     /// THE TOLERANCE RULE, MECHANICAL. A tolerance is the size of the defect it hides, and here the
-    /// defect has a name and a number: <c>RadioButton.rack-row:pointerover</c> is <c>#FF222240</c>
-    /// (<c>MainWindow.axaml:98-100</c>), which is 10/10/16 from the rack's <c>#FF181830</c> ground,
-    /// and the checked fill <c>#FF2E2E4A</c> is 22/22/26 from it. At the rail-door precedent of 24
-    /// the ground check would pass with the mouse merely RESTING on the row, and the fill check
-    /// would pass on a row that is not open.
+    /// defect has a name and a number: <c>RadioButton.rack-row:pointerover</c> is
+    /// <c>ElevatedSurface</c> (<c>MainWindow.axaml:98-100</c>), which is 22/22/45 from the rack's
+    /// <c>SurfaceBg</c> ground under the CCP Default theme, and the checked <c>PanelAccent</c> fill
+    /// is 18/18/4 from the hovered row. At the rail-door precedent of 24 the fill check would still
+    /// pass on a row the mouse is merely RESTING on.
     ///
     /// <para>So this asserts the property rather than the constant: no rack check may accept the
     /// colour of a DIFFERENT rack state. Widen a tolerance past a neighbour and this names both.</para>
@@ -160,13 +160,16 @@ public class RackPresentationTests
     [Fact]
     public void NoRackCheckAcceptsTheColourOfAnotherRackState()
     {
+        // THE FIVE LIVERIES, AS THE THEME PAINTS THEM. Three of these five are mod-supplied and
+        // moved when CCP Default was applied over the token seed; the hovered row (ElevatedSurface)
+        // and the armed dot (TextDim) are supplied by no mod theme and did not.
         (string Name, byte R, byte G, byte B)[] neighbours =
         [
-            ("the rack ground (Border.rack Background #FF181830)", 0x18, 0x18, 0x30),
-            ("the checked row fill (rack-row:checked Background #FF2E2E4A)", 0x2E, 0x2E, 0x4A),
-            ("the hovered row (rack-row:pointerover Background #FF222240)", 0x22, 0x22, 0x40),
-            ("the armed dot (Ellipse.dot.armed Fill #FF7A7A94)", 0x7A, 0x7A, 0x94),
-            ("the selection marker (rack-row:checked BorderBrush #FFFF8FAF)", 0xFF, 0x8F, 0xAF),
+            ("the rack ground (Border.rack, SurfaceBg #FF0C0C13)", 0x0C, 0x0C, 0x13),
+            ("the checked row fill (rack-row:checked, PanelAccent #FF34343C)", 0x34, 0x34, 0x3C),
+            ("the hovered row (rack-row:pointerover, ElevatedSurface #FF222240)", 0x22, 0x22, 0x40),
+            ("the armed dot (Ellipse.dot.armed Fill, TextDim #FF7A7A94)", 0x7A, 0x7A, 0x94),
+            ("the selection marker (rack-row:checked, ShellAccentBright #FFFF6FB5)", 0xFF, 0x6F, 0xB5),
         ];
 
         var checks = RackChecks();
@@ -197,15 +200,20 @@ public class RackPresentationTests
         Assert.NotEmpty(checks);
         Assert.Equal(checks.Count * (neighbours.Length - 1), compared);
 
-        // THE NEIGHBOUR THAT IS NOT A RACK STATE, and it is what pins this surface's tightest
-        // tolerance. The rack's ground is upstream's SurfaceBg #FF181830
-        // (WPF Resources/Theme/Colors.xaml:10) and the pop quiz card's GDI ground is upstream's own
-        // COLORREF 0x002E1A1A = #1A1A2E (Input/Win32InputPresence): the shipping product really
-        // paints those two surfaces 2/2/2 apart, so NO tolerance above 1 can tell a photograph of
-        // the rack from a photograph of that card. It is asserted HERE as well as in
-        // PopQuizCardPresentationTests because that guard only sizes the CARD's tolerances - with
-        // nothing on this side, the rack's ground could be widened back to its pre-flip 6 and
-        // nothing at all would go red.
+        // THE NEIGHBOUR THAT IS NOT A RACK STATE, and it is why the rack's ground carries the
+        // tightest tolerance in the manifest. The rack's ground is SurfaceBg and the pop quiz
+        // card's GDI ground is upstream's own COLORREF 0x002E1A1A = #1A1A2E
+        // (Input/Win32InputPresence). When both products were on the SEED dictionary those two
+        // surfaces were 2/2/2 apart and no tolerance above 1 could tell a photograph of the rack
+        // from a photograph of that card. Under the CCP Default theme SurfaceBg is the mod's own
+        // #0C0C13 and the pair is 14/14/27 apart, so the ceiling RELAXED to 14 - and the tolerance
+        // stayed at 1, because a tolerance is never widened back because it became comfortable.
+        //
+        // THE DISTANCE IS DERIVED HERE RATHER THAN WRITTEN DOWN, which is what let this survive the
+        // theme without anybody remembering to look at it: the assertion reads the manifest's own
+        // colour and recomputes. It is asserted HERE as well as in PopQuizCardPresentationTests
+        // because that guard only sizes the CARD's tolerances - with nothing on this side, the
+        // rack's ground could be widened back to its pre-flip 6 and nothing at all would go red.
         (byte R, byte G, byte B) popQuizCardGround = (0x1A, 0x1A, 0x2E);
         var rackGround = checks.Single(c => c.Name == "rack-row-unselected-ground");
         var (gr, gg, gb) = CheckManifest.ParseColor(rackGround.ExpectedColor, "check 'rack-row-unselected-ground':");
@@ -278,10 +286,10 @@ public class RackPresentationTests
     /// <see cref="EveryRackThresholdSitsBetweenTheFractionsItsOwnCapturesProduced"/>, not here.
     /// </summary>
     [Theory]
-    [InlineData("rack-row-unselected-ground", 0x2E, 0x2E, 0x4A)]   // the row is OPEN
-    [InlineData("rack-row-selected-marker", 0x18, 0x18, 0x30)]     // no marker: rack ground in the band
-    [InlineData("rack-row-selected-fill", 0x18, 0x18, 0x30)]       // the row is CLOSED
-    [InlineData("rack-row-dot-armed", 0x2E, 0x2E, 0x4A)]           // no disc: fill showing through
+    [InlineData("rack-row-unselected-ground", 0x34, 0x34, 0x3C)]   // the row is OPEN
+    [InlineData("rack-row-selected-marker", 0x0C, 0x0C, 0x13)]     // no marker: rack ground in the band
+    [InlineData("rack-row-selected-fill", 0x0C, 0x0C, 0x13)]       // the row is CLOSED
+    [InlineData("rack-row-dot-armed", 0x34, 0x34, 0x3C)]           // no disc: fill showing through
     [InlineData("rack-row-dot-off", 0x7A, 0x7A, 0x94)]             // a filled disc, not a ring
     public void EachRackCheckRejectsTheOtherStatesColour(string name, byte r, byte g, byte b)
     {
@@ -294,11 +302,11 @@ public class RackPresentationTests
     /// <summary>And the other half, which is not redundant: a check nobody can PASS is as useless
     /// as one nobody can fail, and a region shape typo produces exactly that.</summary>
     [Theory]
-    [InlineData("rack-row-unselected-ground", 0x18, 0x18, 0x30)]
-    [InlineData("rack-row-selected-marker", 0xFF, 0x8F, 0xAF)]
-    [InlineData("rack-row-selected-fill", 0x2E, 0x2E, 0x4A)]
+    [InlineData("rack-row-unselected-ground", 0x0C, 0x0C, 0x13)]
+    [InlineData("rack-row-selected-marker", 0xFF, 0x6F, 0xB5)]
+    [InlineData("rack-row-selected-fill", 0x34, 0x34, 0x3C)]
     [InlineData("rack-row-dot-armed", 0x7A, 0x7A, 0x94)]
-    [InlineData("rack-row-dot-off", 0x2E, 0x2E, 0x4A)]
+    [InlineData("rack-row-dot-off", 0x34, 0x34, 0x3C)]
     public void EachRackCheckAcceptsItsOwnStatesColour(string name, byte r, byte g, byte b)
     {
         var check = RackChecks().Single(c => c.Name == name);

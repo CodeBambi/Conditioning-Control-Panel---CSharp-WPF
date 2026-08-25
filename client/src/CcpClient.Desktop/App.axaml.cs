@@ -80,7 +80,26 @@ public partial class App : Application
         _goonDemo = goonDemo;
     }
 
-    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+    public override void Initialize()
+    {
+        AvaloniaXamlLoader.Load(this);
+
+        // THE SKIN OVER THE SEED, and the reason it is here rather than in the markup. "CCP
+        // Default" is itself a mod (WPF Models/BuiltInMods.cs:918-926) and the shipping product
+        // rewrites its resource keys from the active one before the shell is ever shown
+        // (MainWindow/MainWindow.xaml.cs:317 -> :1619-1623, :1655-1657), so Themes/Ccp.axaml is
+        // the design-time SEED in this product for exactly the reason Resources/Theme/Colors.xaml
+        // is in that one. Measured headed on the shipping product against a throwaway data
+        // directory: four of that seed dictionary's own values are down at single-digit pixel
+        // counts on a 4.5-million-pixel window while the mod's six are most of what is on screen.
+        //
+        // BEFORE ANY WINDOW EXISTS. Initialize runs ahead of OnFrameworkInitializationCompleted,
+        // so nothing has been constructed yet and no surface can be built against the seed and
+        // then repainted - which is the flash upstream's own comment at :310-316 records having
+        // shipped, where three elements missed the startup path and only took the theme when the
+        // user re-picked the mod by hand.
+        Themes.CcpTheme.CcpDefault.ApplyTo(Resources);
+    }
 
     public override void OnFrameworkInitializationCompleted()
     {
