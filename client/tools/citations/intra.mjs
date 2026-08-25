@@ -78,8 +78,12 @@
 // shorthand prefix as a missing file would have produced dozens of false rows on day one.
 //
 // THE FOUR CLASSES, AND EACH STATES SOMETHING CERTAINLY TRUE
-//   WRONG-LINE          the file resolves, and either the cited span runs past its last line
-//                       (arithmetic) or the citation names a symbol the cited span does not carry.
+//   WRONG-LINE          the file resolves, and one of three things is false about the cited span:
+//                       it runs past the file's last line (arithmetic), it does not carry a SYMBOL
+//                       the citation names beside it, or it does not carry a QUOTATION the
+//                       citation puts beside it. The third is the one a resolving range cannot
+//                       catch by itself — a sentence can be rewritten, moved 150 lines or reversed
+//                       outright while `File.cs:15` still points at a line that exists.
 //   UNRESOLVABLE        the citation's own prefix says `client/` and no file of that name exists
 //                       anywhere in this repository. A name that resolves nowhere and names NO
 //                       tree has no direction at all — 174 references on the first run were of
@@ -119,8 +123,12 @@
 //   - It does not resolve a COMMA continuation (`AiAwarenessService.cs:440,472` — the `,472` half).
 //     The first line of such a reference IS checked; the rest are counted and skipped.
 //   - It checks a SYMBOL only where the citation itself names one, in the one adjacency form the
-//     port actually writes (see QUOTED_NEIGHBOUR). A bare `path:line` is checked for existence and
-//     range and nothing more: no needle knows what a bare citation intended.
+//     port actually writes (see QUOTED_NEIGHBOUR), and a QUOTATION only where the citation puts a
+//     double-quoted run of at least QUOTE_MIN_LENGTH characters immediately beside it (see
+//     QUOTED_AFTER / QUOTED_PAREN_BEFORE). A bare `path:line` is checked for existence and range
+//     and nothing more: no needle knows what a bare citation intended.
+//   - The quoted check is SUPPRESSED on the documents named in LEDGER_DOCUMENTS, which record
+//     dated decisions rather than describe the tree; the number it hides there is printed.
 //   - It cannot see inside the two CITATION FIXTURE SOURCES, which write fake citations as test
 //     data. They are excluded BY NAME, the exclusion refuses to run when one of the named paths
 //     stops existing, and the number of references hidden is printed. Real citations inside those
@@ -165,6 +173,7 @@ const CLASS_ORDER = [CLASS.WRONG_LINE, CLASS.DEAD_ANCHOR, CLASS.UNRESOLVABLE, CL
 export const REASON = Object.freeze({
   PAST_END: "past the end of the file",
   SYMBOL_ABSENT: "the cited line does not carry the symbol",
+  QUOTE_ABSENT: "the cited lines do not carry the quoted text",
   NO_SUCH_FILE: "no file of that name exists anywhere in this repository",
   MANY_IN_CLIENT: "the basename resolves at more than one path under client/",
   BOTH_TREES: "the basename exists under client/ AND outside it, and the citation names neither",
@@ -277,6 +286,161 @@ const QUOTED_NEIGHBOUR =
  *  shape above admits dots, so the second half of `` `A.cs:1`, `B.cs:2` `` would otherwise be read
  *  as the symbol `B.cs` and its "member" checked as `cs`. The extension set is REFERENCE's own. */
 const NEIGHBOUR_IS_A_FILENAME = /\.(?:csproj|axaml|props|json|html|mjs|sln|ps1|cs|md|js|sh|py)$/i;
+
+// --------------------------------------------------------------- the quoted needle
+//
+// THE SECOND NEEDLE, AND THE ROT IT EXISTS FOR.
+// QUOTED_NEIGHBOUR above checks a citation that names a SYMBOL. It refuses a quoted SENTENCE, and
+// on the day it was written that refusal was right: nothing had measured whether a prose quotation
+// beside a citation could be checked without crying wolf. It has now been measured, and the answer
+// is that it can — 41 candidates on this checkout, and at the tolerance below every single row it
+// produced was real. The rot it catches is the shape the range check structurally cannot: a
+// citation whose RANGE STILL RESOLVES while the sentence it quotes has been rewritten, moved 150
+// lines, or reversed outright. The clean example is `Ai/AiCommandExecutor.cs:15`, which a census
+// entry cited as saying that NO effect backends exist in the greenfield client. That line now
+// opens "EFFECT BACKENDS EXIST, and this comment used to say they did not" — so the citation
+// resolves, sits in range, names a real file, and is false. Nothing before this check could see it.
+
+/** How far past the cited range the quotation may be found, in lines.
+ *
+ *  ONE, AND THE NUMBER IS THE KNEE OF A MEASURED CURVE RATHER THAN A GUESS. Sweeping the 41
+ *  candidates on this checkout over the bleed:
+ *      +/-0  16 match   +/-1  26   +/-2  26   +/-3  26   +/-5  27   +/-10  27   +/-25  29   all 33
+ *  The jump is entirely at the first line and then it is FLAT for two more. That shape says what
+ *  the one line of slack is for: prose cites the line the quotation's SUBJECT sits on rather than
+ *  the line its first word does, and a quotation of a wrapped comment routinely runs one line past
+ *  the range. Both are imprecision, not rot, and firing on them is the cry-wolf shape.
+ *  Everything the curve adds ABOVE one line is text that MOVED, by 4 lines to 154: the census's
+ *  `App.axaml.cs:302` quotation had drifted to :323, and its `Views/Pages/StudioPage.axaml:869`
+ *  one to :1023. Those are exactly the rows this check is for, so widening past one line does not
+ *  buy tolerance — it buys silence. */
+const QUOTE_BLEED = 1;
+
+/** Shortest quoted run treated as a QUOTATION. Below this a `"…"` beside a citation is a
+ *  scare-quoted WORD (`"open"`, `"quests"`, `"grace"`) — the author is naming a term, not claiming
+ *  the cited lines carry that text, and holding them to a verbatim match reads their punctuation as
+ *  a promise they did not make. The count of runs dropped by this floor is printed on every run. */
+export const QUOTE_MIN_LENGTH = 12;
+
+/** THE QUOTATION IMMEDIATELY AFTER THE CITATION, which is the form the corpus overwhelmingly
+ *  writes — 40 of the 41 candidates measured. Three real ones, all of them live today:
+ *      client/src/CcpClient.Desktop/Features/Intake/IntakeNiche.cs:5-6 "Greenfield has NO mod system"
+ *      `Effects/BubbleCountGame.cs:132` ("the port has one surface on the primary display")
+ *      Effects/BrainDrainEffect.cs:9-40 — "Brain Drain — the AUDIO half, and only the audio half"
+ *
+ *  THE LEAD ADMITS MARKUP, PUNCTUATION AND A WRAPPED COMMENT LEADER — NOTHING ELSE. No prose word,
+ *  which is what stops a quotation in the next sentence binding to this citation. The `///` and
+ *  `//` are there for the same reason ANCHOR_LEAD carries them: an XML doc comment wraps, and a
+ *  citation at the end of one line with its quotation at the start of the next is one claim.
+ *  AND IT ADMITS NO `"`, which is the refusal that keeps this whole check out of C# string
+ *  literals: in `Assert.Equal("Foo.cs:12", "bar")` the closing quote of the first literal is the
+ *  first character the lead sees, so the second literal is never read as a quotation of the file.
+ *  Without that one exclusion the corpus sweep returned garbage like `") && l.Contains("`. */
+const QUOTED_AFTER = /^(?:<\/c>|<\/code>|\/\/\/|\/\/|[`*_\s,;|()[\]:—-])*["“]([^"”\n]+)["”]/;
+
+/** THE QUOTATION BEFORE A PARENTHESISED CITATION — `"the quoted text" (Foo.cs:12)` — and the
+ *  parenthesis is MANDATORY, which is the whole refusal.
+ *
+ *  The obvious looser rule, "a quotation ending just before the citation", is wrong on this corpus
+ *  and measurably so. The census writes LISTS (line numbers dropped here so this illustration is
+ *  not itself a citation):
+ *      IntakeNiche.cs "Greenfield has NO mod system …", IntakeMediaManifest.cs "The mod bubble
+ *      sprite is null …", Companion/BarkRules.cs "The mod-override merge …"
+ *  Every citation in that list has a quotation ending just before it — the PREVIOUS citation's.
+ *  Two of the three bare-before candidates on this checkout were exactly that misbind, and both
+ *  would have been false rows. Requiring the citation to open a parenthesis the quotation closes
+ *  against costs one true candidate and removes the whole misbinding class. */
+const QUOTED_PAREN_BEFORE = /["“]([^"”\n]+)["”]\s*\((?:`|<c>)?$/;
+
+/** THE ONE THING BOTH SIDES ARE PUT THROUGH BEFORE THEY ARE COMPARED, and every rule in it was
+ *  forced by a real pair that a plain substring test called rot when it was not:
+ *
+ *    XML doc tags      `<para><b>WPF's fourth dial, <c>BubbleCountStrictLock</c>, is ABSENT`
+ *                      quoted in a doc as plain prose. Replaced by a SPACE rather than deleted, so
+ *                      `</para><para>` cannot weld two words together.
+ *    space before      that same space then leaves `bubblecountstrictlock , is` against a needle
+ *    punctuation       reading `bubblecountstrictlock, is`. Removed after the collapse.
+ *    HTML entities     an XML doc comment must write `-&gt;` for `->`.
+ *    curly forms       a doc reflowed through a word processor carries ’ “ ” and en/em dashes where
+ *                      the source carries ' " and -.
+ *    emphasis marks    `` ` ``, `*` and `_` are markdown, not text: **marked never-runnable** is
+ *                      quoted as `marked never-runnable`.
+ *    comment leaders   `///`, `//`, `*`, `#`, `--`, `<!--` at the head of a wrapped line.
+ *    concatenation     a C# multi-line message is `"… dead controls: attention "` + `"checks and`
+ *    seams             `the strict/retry apparatus"`, and the reader quoting it never saw the
+ *                      seam. Removed AFTER the whitespace collapse, when it is exactly `" + "`.
+ *  Case is folded last: two live citations on this checkout quote the same comment with different
+ *  capitalisation, and neither is wrong about what the file says. */
+export function normaliseProse(text) {
+  return text
+    .replace(
+      /<\/?(?:c|b|i|em|strong|para|summary|remarks|see|seealso|item|list|term|description|code|paramref|typeparamref|value|returns|exception|example|inheritdoc)\b[^>]*>/gi,
+      " ",
+    )
+    .replace(/&gt;/g, ">")
+    .replace(/&lt;/g, "<")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[‐-―]/g, "-")
+    .replace(/[`*_]/g, "")
+    .replace(/^[ \t]*(?:\/\/\/|\/\/|\*|#|--|<!--)+[ \t]?/gm, " ")
+    .replace(/\s+/g, " ")
+    .replace(/" \+ "/g, "")
+    .replace(/\s+([,.;:!?)\]])/g, "$1")
+    .replace(/([([])\s+/g, "$1")
+    .trim()
+    .toLowerCase();
+}
+
+/** True when `span` still carries `needle`.
+ *
+ *  ELLIPSIS IS AN ELISION, NOT A CHARACTER. The port quotes long comments the way a reader quotes
+ *  anything long — `"NOT ported … override, never the local rotation"` — so a needle is SPLIT at
+ *  every `...` or `…` and each fragment must appear, IN ORDER. Order is the half that keeps the
+ *  elision from becoming a licence: requiring only presence would let a needle match a span that
+ *  carries its pieces backwards, which is not what the author quoted. */
+export function quotePresent(span, needle) {
+  const haystack = normaliseProse(span);
+  const fragments = normaliseProse(needle)
+    .split(/\s*(?:\.\.\.|…)\s*/)
+    .filter((f) => f.length > 0);
+  if (fragments.length === 0) return true;
+  let cursor = 0;
+  for (const fragment of fragments) {
+    const at = haystack.indexOf(fragment, cursor);
+    if (at < 0) return false;
+    cursor = at + fragment.length;
+  }
+  return true;
+}
+
+/** The quoted run this citation claims, or null. `start`/`end` bound the citation token itself. */
+export function quotedNeighbour(text, start, end) {
+  const after = QUOTED_AFTER.exec(text.slice(end, end + 400));
+  if (after) return after[1];
+  const before = QUOTED_PAREN_BEFORE.exec(text.slice(Math.max(0, start - 400), start));
+  return before ? before[1] : null;
+}
+
+/** DOCUMENTS THAT RECORD DECISIONS RATHER THAN DESCRIBE THE TREE, named rather than pattern-matched
+ *  and counted rather than implied, on the same discipline as FIXTURE_SOURCES above.
+ *
+ *  The task board is a DATED LEDGER. Its rows carry the evidence that justified admitting a piece
+ *  of work — a COORDINATOR DECISION dated 2026-08-23 admitted the XP spine because four landed
+ *  features said in their own source that they computed XP and granted none, and it quoted
+ *  `Features/Intake/IntakeDraft.cs` saying so (line number dropped here, so this illustration is
+ *  not itself a citation). A row reaching DONE is precisely what makes that quotation false: the
+ *  XP store now exists, so the source no longer says it does not. Checking a closed row's evidence
+ *  against today's tree asks the wrong question of it, and answering it would mean deleting the
+ *  reasoning that authorised the work.
+ *
+ *  THIS SUPPRESSES THE QUOTED CHECK ONLY. Every other class still watches this document in full:
+ *  its citations are still resolved, still range-checked, still direction-split, and its anchors
+ *  are still checked. A file that vanished from this list would take three real rows with it, so
+ *  the list is verified before it is trusted and the number it hides is printed on every run. */
+export const LEDGER_DOCUMENTS = Object.freeze(["client/docs/task-board.md"]);
 
 /** THE SECOND HALF OF THE SYMBOL RULE, AND THE TWO FALSE ROWS THAT PRODUCED IT.
  *  Adjacency alone read 9 citations as symbol-bearing on this tree and TWO of them were wrong —
@@ -457,18 +621,24 @@ export function runIntraDetector({ repoRoot } = {}) {
   const clientIndex = indexByBasename(clientFiles);
   const outsideIndex = indexByBasename(outsideFiles);
 
-  // --- 2. the fixture exclusion, verified before it is trusted
-  const fixtureSources = new Set();
-  for (const rel of FIXTURE_SOURCES) {
-    if (!fs.existsSync(path.join(root, rel))) {
-      throw new DetectorError(
-        `the citation-fixture exclusion names ${rel}, which does not exist under ${root}. An exclusion ` +
-          `pointing at nothing has silently stopped excluding, and a detector that cannot say what it ` +
-          `skipped cannot say what it checked. Update FIXTURE_SOURCES. No report was printed.`,
-      );
+  // --- 2. the two exclusions, each verified before it is trusted. An exclusion pointing at nothing
+  //        has silently stopped excluding, and a detector that cannot say what it skipped cannot
+  //        say what it checked.
+  const verifiedExclusion = (paths, what, constant) => {
+    const set = new Set();
+    for (const rel of paths) {
+      if (!fs.existsSync(path.join(root, rel))) {
+        throw new DetectorError(
+          `the ${what} names ${rel}, which does not exist under ${root}. An exclusion pointing at ` +
+            `nothing has silently stopped excluding. Update ${constant}. No report was printed.`,
+        );
+      }
+      set.add(rel);
     }
-    fixtureSources.add(rel);
-  }
+    return set;
+  };
+  const fixtureSources = verifiedExclusion(FIXTURE_SOURCES, "citation-fixture exclusion", "FIXTURE_SOURCES");
+  const ledgerDocuments = verifiedExclusion(LEDGER_DOCUMENTS, "decision-ledger exclusion", "LEDGER_DOCUMENTS");
 
   // --- 3. the corpus
   const corpus = [];
@@ -508,6 +678,9 @@ export function runIntraDetector({ repoRoot } = {}) {
     intra: 0,
     resolved: 0,
     symbolChecked: 0,
+    quotesChecked: 0,
+    quotesTooShort: 0,
+    quotesInLedger: 0,
     bareCitations: 0,
     shorthandPrefixes: 0,
     bareContinuations: 0,
@@ -658,6 +831,42 @@ export function runIntraDetector({ repoRoot } = {}) {
         continue;
       }
 
+      // --- the QUOTATION beside the citation. Run before the symbol check because it is the more
+      // specific claim: a quotation says which WORDS the cited lines carry, where a symbol says
+      // only which NAME they carry. The two adjacency forms are mutually exclusive on the trailing
+      // side (a symbol is backtick- or <c>-quoted, a quotation is double-quoted), so a citation
+      // reaching both needles carried its quotation on the LEADING side, and both are checked.
+      let checkedANeedle = false;
+      const quoted = quotedNeighbour(text, m.index, m.index + m[0].length);
+      if (quoted !== null) {
+        if (ledgerDocuments.has(rel)) {
+          counts.quotesInLedger += 1;
+        } else if (quoted.trim().length < QUOTE_MIN_LENGTH) {
+          counts.quotesTooShort += 1;
+        } else {
+          counts.quotesChecked += 1;
+          checkedANeedle = true;
+          const lo = Math.max(0, from - 1 - QUOTE_BLEED);
+          const hi = Math.min(lines.length, to + QUOTE_BLEED);
+          if (!quotePresent(lines.slice(lo, hi).join("\n"), quoted)) {
+            const shown = quoted.trim();
+            rows.push({
+              cls: CLASS.WRONG_LINE,
+              at,
+              cited:
+                `${target}:${m[2]}${m[3] ? `-${m[3]}` : ""} quoting ` +
+                JSON.stringify(shown.length > 110 ? `${shown.slice(0, 110)}…` : shown),
+              reason: `${REASON.QUOTE_ABSENT} (searched ${lo + 1}-${hi})`,
+              reads: lines[from - 1] ?? "",
+              action:
+                "the sentence this claim quotes is not there any more — re-read the file and quote what it " +
+                "says now, or keep the old words and mark the citation historical (`@ <sha>`)",
+            });
+            continue;
+          }
+        }
+      }
+
       const neighbour = QUOTED_NEIGHBOUR.exec(text.slice(m.index + m[0].length, m.index + m[0].length + 80));
       const named = neighbour ? (neighbour[1] ?? neighbour[2]) : null;
       const symbol =
@@ -665,7 +874,7 @@ export function runIntraDetector({ repoRoot } = {}) {
           ? null
           : named;
       if (symbol === null) {
-        counts.bareCitations += 1;
+        if (!checkedANeedle) counts.bareCitations += 1;
         counts.resolved += 1;
         continue;
       }
@@ -774,9 +983,15 @@ export function formatIntraCoverage(summary) {
       `NEVER reported here; upstream citations are detect.mjs's territory and reporting them twice ` +
       `is how a review list gets skimmed instead of read`,
     `  intra-client checked: ${c.resolved} resolved clean — ${c.symbolChecked} had a symbol beside ` +
-      `them and were checked against the cited line, ${c.bareCitations} were bare path:line and ` +
-      `were checked for EXISTENCE AND RANGE ONLY. A bare citation says nothing this tool can verify ` +
-      `about what the line means.`,
+      `them and were checked against the cited line, ${c.quotesChecked} had a QUOTATION beside them ` +
+      `and were checked against the cited lines +/-${QUOTE_BLEED}, ${c.bareCitations} were bare ` +
+      `path:line and were checked for EXISTENCE AND RANGE ONLY. A bare citation says nothing this ` +
+      `tool can verify about what the line means.`,
+    `  quoted runs NOT checked: ${c.quotesTooShort} shorter than ${QUOTE_MIN_LENGTH} characters — a ` +
+      `scare-quoted word ("open", "quests") names a term rather than claiming the cited lines carry ` +
+      `that text — and ${c.quotesInLedger} in a decision ledger (${LEDGER_DOCUMENTS.join(", ")}), ` +
+      `whose rows quote the evidence that justified admitting work and are made false BY that work ` +
+      `landing. Every other class still watches those documents in full.`,
     `  document anchors: ${c.anchorsFound} found, ${c.anchorsChecked} checked against a client ` +
       `document, ${c.anchorsOutsideClient} into a document outside client/ (not checked), ` +
       `${c.namedAnchorsNotChecked} named rather than numbered (§Privacy — not resolvable without judgment)`,
