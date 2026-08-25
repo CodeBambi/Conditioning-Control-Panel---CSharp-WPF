@@ -89,7 +89,11 @@ Every check in the manifest declares an evidence class:
 
 ### What `presentation-verified` covers for the Studio rack, and what it does not
 
-**Covered.** Composited pixels, read back off the real Windows desktop through a fenced `CopyFromScreen`, for four states of two rack surfaces, driven by real mouse input and confirmed by a UIA read before any pixel was taken. Five named checks, each shown FAILING twice over: once against a real capture of the opposite state, and once against the seeded `#FFE066FF -> #FF336633` regression `self-test.ps1` drives through `MainWindow.axaml`, where `rack-row-selected-marker` scored 0/189 while `rack-row-selected-fill` still passed — the seed moved one brush and exactly one check noticed. Fractions, pass state then wrong state: marker 0.862 / 0.000, fill 1.000 / 0.000, ground 1.000 / 0.000, dot-armed 0.714 / 0.224, dot-off 1.000 / 0.000. The check manifest retains the measured thresholds.
+**Covered.** Composited pixels, read back off the real Windows desktop through a fenced `CopyFromScreen`, for four states of two rack surfaces, driven by real mouse input and confirmed by a UIA read before any pixel was taken. Five named checks, each shown FAILING twice over: once against a real capture of the opposite state, and once against the seeded regression `self-test.ps1` drives through the `ShellAccentBright` token, where `rack-row-selected-marker` scored 0/189 while `rack-row-selected-fill` still passed — the seed moved one brush and exactly one check noticed. Fractions, pass state then wrong state: marker 0.862 / 0.000, fill 1.000 / 0.000, ground 1.000 / 0.000, dot-armed 0.714 / 0.224, dot-off 1.000 / 0.000. The check manifest retains the measured thresholds.
+
+**Re-measured 2026-08-25, after the palette flip onto the shipping product's values, and the numbers did not move.** The seed is now `#FFFF8FAF -> #FF336633` (the token's value changed, the mechanism did not): seeded `rail-door-selected-border` 0/918, seeded `rack-row-selected-marker` 0/189 with `rack-row-selected-fill` still 7605/7605, restored 888/918 (0.967), 163/189 (0.862) and 7605/7605 (1.000) — the same three fractions the pre-flip run recorded, to the pixel. That is not a coincidence and it is worth stating: these checks count pixels within a tolerance of a border colour, the geometry and the antialiasing RAMP are unchanged by a recolour, and the tolerances were not widened, so the same pixels land inside. A fraction that HAD moved would have meant the flip changed something other than colour.
+
+**And one tolerance was re-derived rather than re-measured, with its own headed pair.** Upstream's `SurfaceBg` `#181830` is 2/2/2 from the pop quiz card's own GDI ground `#1A1A2E`, so `rack-row-unselected-ground` went 6 -> 1 and `popquiz-card-ground` 4 -> 1. Measured on real captures of both surfaces: each scores EXACT on its own (7605/7605 and 46800/46800) and 0 on the other's, and at the pre-flip tolerance of 4 `popquiz-card-ground` scored **1008/1008 on a real capture of the Studio rack** — a check that had stopped being able to tell the two surfaces apart. The pair is held mechanically from both sides now (`PopQuizCardPresentationTests` and `RackPresentationTests.NoRackCheckAcceptsTheColourOfAnotherRackState`).
 
 **NOT covered, and none of it should be read into the class.**
 
@@ -322,7 +326,7 @@ Zero warnings and zero errors, positively read, from a forced full compilation o
       "evidenceClass": "presentation-verified",
       "kind": "border-color-band",
       "region": { "band": "top", "thicknessPx": 3 },
-      "expectedColor": "#E066FF",
+      "expectedColor": "#FF8FAF",
       "tolerance": 32,
       "minPixelFraction": 0.5
     }
@@ -347,7 +351,7 @@ Re-runnable proof that the targeted gate catches real regressions (throwaway-edi
 pwsh client/tools/verify/self-test.ps1
 ```
 
-Sequence: (1) edit the REAL `MainWindow.axaml` — break the selected-door border brush (`#E066FF` → wrong value); (2) build; (3) capture `dashboard`/`selected`; (4) assert the SPECIFIC named check `rail-door-selected-border` fails with its name in the output; (5) restore the AXAML (git checkout); (6) re-capture, assert green. A self-test pass requires BOTH the seeded failure AND the restored green.
+Sequence: (1) edit the REAL `Themes/Ccp.axaml` — break the `ShellAccentBright` token the selected-door border and the rack's selection marker both read (`#FFFF8FAF` → wrong value), and refuse to run unless that literal appears in the file EXACTLY ONCE; (2) build; (3) capture `rail-door`/`selected`; (4) assert the SPECIFIC named check `rail-door-selected-border` fails with its name in the output; (5) do the same at `rack-row`/`selected`; (6) restore the AXAML and assert the seed value is gone; (7) re-capture both, assert green. A self-test pass requires BOTH seeded failures AND both restored greens.
 
 ## Runtime budgets (measured, never invented)
 

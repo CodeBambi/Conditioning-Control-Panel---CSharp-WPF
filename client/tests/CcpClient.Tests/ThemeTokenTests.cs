@@ -303,11 +303,19 @@ public class ThemeTokenTests
     /// <b>The three pinks are upstream's own accent ladder, in upstream's own order.</b>
     ///
     /// <para><c>RefreshThemeAwareElements</c> reads an accent, a DARK companion and a LIGHT one
-    /// from the active mod and falls back to the shipping default's own triad when no mod supplies
-    /// them (WPF MainWindow/MainWindow.xaml.cs:1565-1567); it then rewrites the keys
-    /// <c>PinkColor</c>, <c>DarkPink</c> and <c>PinkButtonHovered</c> from exactly those three
-    /// (:1655-1657). So the port's three accent keys are that ladder, and this reads the fallbacks
-    /// out of the shipping source rather than restating them.</para>
+    /// from the active mod and falls back to a triad of its own when nothing supplies them (WPF
+    /// MainWindow/MainWindow.xaml.cs:1565-1567); those three fallbacks are the same three the seed
+    /// dictionary declares as <c>PinkColor</c>, <c>DarkPink</c> and <c>PinkButtonHovered</c>
+    /// (Colors.xaml:5, :6, :34), which are the keys it then rewrites (:1655-1657). So the port's
+    /// three accent keys are the SEED dictionary's ladder, and this reads it out of the shipping
+    /// source rather than restating it.</para>
+    ///
+    /// <para><b>They are not what a user with no mod sees, and that is measured.</b> "CCP Default"
+    /// is itself a mod (<c>Models/BuiltInMods.cs:908-926</c>) supplying accent <c>#E84393</c>,
+    /// light <c>#FF6FB5</c> and dark <c>#B83078</c>, and a headed capture of the shipping product
+    /// on a throwaway data directory counts <c>#E84393</c> at 2.83% of the window and this file's
+    /// three pinks at 205 px, 0 and 0. Targeting the seed dictionary is the owner-level decision
+    /// this port is executing; the gap is written up on the token file itself.</para>
     ///
     /// <para><b>Why ShellAccent is the DARK step and not simply PinkColor</b>, given upstream's
     /// START button really is <c>PinkBrush</c>: the pop quiz card's question ink is upstream's own

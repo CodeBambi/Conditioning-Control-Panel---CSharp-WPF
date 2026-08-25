@@ -29,11 +29,41 @@
     two changes wearing one commit; the tokens bought the flip, and the flip was one line per role
     here plus the re-derived tolerances there, instead of 342 scattered edits.
 
-    THE THREE PINKS ARE NOT A GUESS. The shipping product names its own accent ladder in one
-    place: RefreshThemeAwareElements falls back to accent #FF69B4, dark #FF1493 and light #FF8FAF
-    when no mod supplies them (WPF MainWindow/MainWindow.xaml.cs:1565-1567), and rewrites the keys
-    PinkColor / DarkPink / PinkButtonHovered from that triad (:1655-1657). The port's three accent
-    keys take that triad in the same order.
+    THE THREE PINKS ARE NOT A GUESS. The seed dictionary's accent ladder is named twice over:
+    Colors.xaml declares PinkColor #FFFF69B4 (:5), DarkPink #FFFF1493 (:6) and PinkButtonHovered
+    #FFFF8FAF (:34), and RefreshThemeAwareElements names the SAME three as accent / dark / light in
+    its own fallbacks (WPF MainWindow/MainWindow.xaml.cs:1565-1567) before rewriting those three
+    keys from whatever the active mod supplies (:1655-1657). The port's three accent keys take that
+    triad in that order.
+
+    =============== WHAT THIS FILE MATCHES, AND WHAT IT MEASURABLY DOES NOT ===============
+    MEASURED 2026-08-25, headed, on the shipping product built from this repository and run against
+    a throwaway CCP_USERDATA_DIR so no mod but the shipping default was installed (its own selector
+    read "CCP Default", its mod chooser read "Installed"). Exact-hex counts over the whole 2735x1650
+    window:
+
+      #1C1C35  2.86%  and  #222240  9.53%   - PanelBg and ElevatedSurface, THIS FILE'S VALUES,
+                                              twelve per cent of the shipping product's pixels.
+      #08080C 13.39%, #0C0C13 13.30%, #11111A 4.39%, #E84393 2.83%, #B83078 0.17%
+      #121220 73px, #181830 9px, #2E2E4A 23px, #3A3A5C 0, #7A7A94 0, #FFFF1493 0, #FFFF8FAF 0
+
+    THE REASON IS THAT "CCP DEFAULT" IS ITSELF A MOD. Models/BuiltInMods.cs:908-926 declares it with
+    BackgroundColor #08080C, SurfaceColor #0C0C13, PanelColor #11111A, AccentColor #E84393,
+    AccentLightColor #FF6FB5 and AccentDarkColor #B83078, and RefreshThemeAwareElements rewrites the
+    matching keys from it at startup. Resources/Theme/Colors.xaml is therefore the DESIGN-TIME SEED,
+    not the skin a user with no mod sees; the two keys the mod does not supply - PanelBg's neighbour
+    ElevatedSurface, and PanelBg itself at every site that did not follow the rewrite - are the ones
+    that survive at their seed value, which is exactly what the counts above show.
+
+    SO THIS FILE TARGETS THE SEED DICTIONARY, DELIBERATELY AND ON AN OWNER-LEVEL DECISION, and the
+    gap is recorded rather than closed. Closing it is not a value swap: PanelAccent and
+    PanelAccentHover are DERIVED at runtime from the mod's panel colour by LightenColor(.15/.25)
+    (MainWindow.xaml.cs:1611-1612), ElevatedSurface and the three inks are supplied by nothing at
+    all, and a port whose palette followed a mod manifest would be doing mod-driven re-theming -
+    a separate capability this file is shaped for and does not implement. What the flip did buy is
+    the HUE: the port was violet (its ground #FF141018 reads R>G, magenta-cast) and both the seed
+    and the shipping default are blue-black with pink accents. The port's accent is now 47 per
+    channel from the one a user really sees, where the old violet #FFD05CE8 was 85.
 
     FLUENT'S ACCENT FAMILY at the foot of this file had no port value to preserve in the first
     place. It resolved from the user's Windows personalisation setting, so the product's checkboxes
@@ -102,11 +132,13 @@
 
   <!-- ====================================== ACCENTS ======================================
 
-       THREE accent colours, because the product really paints three - and upstream declares
-       exactly three too, which is the flip's luckiest fact. RefreshThemeAwareElements reads an
-       accent, a DARK companion and a LIGHT one, and when no mod supplies them it falls back to
-       #FF69B4 / #FF1493 / #FF8FAF (WPF MainWindow/MainWindow.xaml.cs:1565-1567) - the shipping
-       default's own ladder. The three keys below are that ladder in that order.
+       THREE accent colours, because the product really paints three - and the seed dictionary
+       declares exactly three too, which is the flip's luckiest fact. RefreshThemeAwareElements
+       reads an accent, a DARK companion and a LIGHT one, and when nothing supplies them it falls
+       back to #FF69B4 / #FF1493 / #FF8FAF (WPF MainWindow/MainWindow.xaml.cs:1565-1567) - the same
+       three Colors.xaml declares at :5, :6 and :34. The keys below are that ladder in that order.
+       They are the SEED's ladder and not the skin a user sees; the measured gap is in the header
+       block above, under WHAT THIS FILE MATCHES.
 
        For the later mod-re-theme capability: upstream's rewrite targets the keys `PinkColor`,
        `DarkPink` and `PinkButtonHovered` (WPF MainWindow/MainWindow.xaml.cs:1655-1657), so a mod
