@@ -416,10 +416,24 @@ export function quotePresent(span, needle) {
   return true;
 }
 
+/** A TRAILING ATTRIBUTION, and it OUTRANKS a leading one. The window manifest writes
+ *
+ *      `WS_EX_TOOLWINDOW` alone (`Input/Win32InputPresence.cs:1101`) — "deliberately carrying
+ *      neither `WS_EX_NOACTIVATE` nor `WS_EX_TRANSPARENT` …" (`Input/Win32InputPresence.cs:1097-1099`)
+ *
+ *  and the quotation is the SECOND citation's, not the first's. Adjacency alone binds it to :1101,
+ *  which is a false row about a sentence the author cited correctly two tokens later. So a quoted
+ *  run whose very next non-space character opens a parenthesis around a citation is already
+ *  claimed, and the citation BEFORE it never sees it. This is the one place the two directions can
+ *  disagree, and the trailing one wins because it is the one the author wrote as an attribution. */
+const QUOTE_CLAIMED_BY_NEXT =
+  /^\s*\((?:`|<c>)?[A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:csproj|axaml|props|json|html|mjs|sln|ps1|cs|md|js|sh|py):\d/;
+
 /** The quoted run this citation claims, or null. `start`/`end` bound the citation token itself. */
 export function quotedNeighbour(text, start, end) {
-  const after = QUOTED_AFTER.exec(text.slice(end, end + 400));
-  if (after) return after[1];
+  const tail = text.slice(end, end + 400);
+  const after = QUOTED_AFTER.exec(tail);
+  if (after && !QUOTE_CLAIMED_BY_NEXT.test(tail.slice(after[0].length))) return after[1];
   const before = QUOTED_PAREN_BEFORE.exec(text.slice(Math.max(0, start - 400), start));
   return before ? before[1] : null;
 }
