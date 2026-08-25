@@ -429,7 +429,11 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
       try { rec.el.pause(); } catch { /* ignore */ }
       // Releasing the src lets the decoder go; a MediaElementSource cannot be
       // re-created for the same element, so the element is never reused.
-      try { rec.el.src = ''; } catch { /* ignore */ }
+      // REMOVE THE ATTRIBUTE, never `src = ''`: an EMPTY string is still a
+      // resource the element goes and tries to select, so it fails and fires an
+      // `error` at us on every ordinary teardown. Attribute gone + load() aborts
+      // selection with `emptied` instead - no error, same released decoder.
+      try { rec.el.removeAttribute('src'); rec.el.load(); } catch { /* ignore */ }
       try { if (rec.node) rec.node.disconnect(); } catch { /* ignore */ }
       try { if (rec.gain) rec.gain.disconnect(); } catch { /* ignore */ }
     };
@@ -514,7 +518,18 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
     try { el.addEventListener('ended', () => { if (clips.get(key) === rec) { clips.delete(key); killClip(rec, 0); } }); } catch { /* ignore */ }
     try {
       el.addEventListener('error', () => {
-        if (clips.get(key) === rec) { clips.delete(key); killClip(rec, 0); }
+        // STILL IN THE MAP IS WHAT MAKES THIS A VERDICT ON THE FILE. Every
+        // legitimate teardown - the maxMs timer, `ended`, a re-fire on the same
+        // key, the voice-cap eviction, stopAllClips - deletes the record BEFORE
+        // it calls killClip, and killClip releases the src; a release used to
+        // fire a spurious `error` here (and, once, struck a perfectly good
+        // sample off `available` a second after its one and only play). So that
+        // ORDERING is load-bearing: a teardown path that kills first and deletes
+        // after would look exactly like a broken file. Kill the event where it
+        // is not ours and the rest of this handler reads as it always did.
+        if (clips.get(key) !== rec) return;
+        clips.delete(key);
+        killClip(rec, 0);
         // The file the host promised is not playable. Take the name back rather
         // than spending a decoder on it once a beat for the rest of the night;
         // from the next cue on it is a recipe again (or, for the sample-only
