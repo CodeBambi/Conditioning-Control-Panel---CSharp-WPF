@@ -55,13 +55,37 @@ export function scaled(ms) {
 /* ----------------------------------------------------------------------------
  * TIMINGS (dossier core loop) - one table, scaled at use.
  * -------------------------------------------------------------------------- */
+/* THE TURN IS 30% SHORTER (owner pass, 2026-08-25). It was 220/160/250/240 and
+ * every one of those four is now 0.7 of what it was. Two of them are HALF a
+ * number: 'flipMs' and 'flipReducedMs' are each also a CSS transition duration
+ * in style.js ('.g-dv-card' transform .154s, and the reduced-motion pair's
+ * opacity .112s), because index.js sets '.flipping', waits the constant, then
+ * swaps the face and rotates back. Change one side alone and the plate either
+ * snaps mid-turn (JS shorter) or hangs at 62deg (CSS shorter). They move
+ * together, always.
+ *   flipMs        220 -> 154   (style.js  transform .22s -> .154s)
+ *   flipReducedMs 160 -> 112   (style.js  opacity   .16s -> .112s)
+ *   judgeMs       250 -> 175   no CSS pair - '.judge' is an infinite pulse this
+ *                              simply shows less of - but it sits between the
+ *                              reveal and the verdict, so it is the other half
+ *                              of "the flip feels slow"
+ *   previewDownMs 240 -> 168   NOT a difficulty knob (dials.previewMs is the
+ *                              memorise hold, and it is untouched): this is the
+ *                              down-wave's own window, and it rides the SAME
+ *                              '.flipping' transition, so leaving it at 240
+ *                              would have parked the whole board at 62deg for
+ *                              86ms of nothing
+ * 'mismatchHoldMs' is deliberately NOT in that list. It is the peek - a tuned
+ * difficulty knob, not an animation - and it stays at 900.
+ * The face crossfade ('.g-dv-face' opacity .18s -> .126s) keeps the ratio it
+ * always had to the turn. */
 export const TIMING = Object.freeze({
   dealStaggerMs: 120,       // seeded card-toss cascade
-  previewDownMs: 240,       // the single flip-down wave
+  previewDownMs: 168,       // the single flip-down wave (rides .flipping)
   poisonLeadMs: 400,        // sub_flash at preview end -400ms
-  flipMs: 220,              // 3D Y-flip
-  flipReducedMs: 160,       // reduced motion: crossfade
-  judgeMs: 250,             // both loops playing, before the verdict
+  flipMs: 154,              // 3D Y-flip  == style.js transform .154s
+  flipReducedMs: 112,       // reduced motion: crossfade == style.js .112s
+  judgeMs: 175,             // both loops playing, before the verdict
   mismatchHoldMs: 900,      // x DejaVuPeekHold (dv_peek_hold)
   matchLockMs: 520,         // pulse + wax stamp
   tellMs: 600,              // swap telegraph BEFORE the swap
