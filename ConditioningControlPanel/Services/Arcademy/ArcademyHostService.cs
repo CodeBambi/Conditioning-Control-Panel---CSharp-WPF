@@ -2535,6 +2535,13 @@ internal static class ArcademyHostService
         ["settings_sum_keys"] = "{n} keys",
         ["settings_sum_key_one"] = "1 key",
         ["settings_sum_nothing"] = "Nothing to set",
+        // ---- THE ACCOUNT CHIP (2026-08-25): a host slot the web build fills (init.account); the desktop
+        // never sends it, so these rows are here for the mirror law and mod skins only.
+        ["account_menu"] = "Account",
+        ["account_signed_in_as"] = "Signed in as",
+        ["account_open_card"] = "Open my card",
+        ["account_profile"] = "Profile",
+        ["account_sign_out"] = "Sign out",
     };
 
     /// <summary>The mockup's owner-approved tokens (BUILD-CONTRACT §10). A mod overrides them via

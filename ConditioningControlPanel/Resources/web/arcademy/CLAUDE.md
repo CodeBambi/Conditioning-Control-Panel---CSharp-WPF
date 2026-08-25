@@ -241,6 +241,16 @@ shell/idcard.js    THE STUDENT ID: the laminated card in the corner of the
                    photo IS the `presenceShare` discord rung (owner ruling, see
                    §3) and paints only from the echo. NOT SHAREABLE by ruling -
                    reportcard.js stays the one share pipeline (trap 13)
+shell/accountchip.js THE ACCOUNT CHIP: the round photo miniature at the far right
+                   of the topbar AND of the campus top-right cluster, and the
+                   front-desk menu under it (Signed in as / Open my card /
+                   Profile / Sign out). A HOST SLOT: mounted only when
+                   `init.account` (or `account` on a `profile` frame) arrives -
+                   the C# host never sends it, so the desktop is unchanged. The
+                   page holds NO url: it posts `account-action {action}` and
+                   the host walks (cclabs-web PROFILE-CONTRACT §8). Photo =
+                   same-origin path or a drawn monogram; "Open my card" is the
+                   shell's own showIdCard. No Esc rung (trap 59's shape)
 shell/annexreveal.js THE NIGHT THE WALL MOVED: the once-ever reveal cinematic
                      (cut to black -> a thud from below -> EMI startled -> one
                      second of the records office at night with a wall panel
@@ -2050,6 +2060,17 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     visit that is not a peek. None of it is a security boundary - the web meta
     store is localStorage, so devtools could always reach the annex - it keeps
     the lab off the *supported* path, which is all it was ever asked to do.
+100. **THE STUDENT ID NEVER `display:none`s ON A SMALL STAGE, IT FOLDS (owner bug 2026-08-25,
+    "I cannot see my profile card on the web").** `styles.css`'s "small stages" query
+    (`max-width:760px, max-height:600px`) is EVERY phone in BOTH orientations - an iPhone is
+    <=430px on its short side, so landscape trips the height clause and portrait the width one -
+    and from the first hub commit it hid `.campus-idcard` outright, written when the card was
+    decoration. PR #299 then built the post row around "once the card is gone the corner is
+    free". The SAME node now folds into a ~185x52 tag (photo, name, number; band / stats / tier
+    / chip / clip hidden by class, never by replacing the node - trap 93 still holds) and the
+    post row steps right of it (`+ 212px`). If a future small-stage rule needs the corner, fold
+    harder; never hide. The web host's account chip (`shell/accountchip.js`) also offers "Open my
+    card" from the bar, so the full ID is one tap away on a phone either way.
 
 ## 5. The game module contract (short version)
 
