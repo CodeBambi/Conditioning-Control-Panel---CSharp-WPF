@@ -135,6 +135,7 @@ const DRAWER = Object.freeze([
 const SILS = Object.freeze({
   owl: 'M50 8 L38 22 Q18 26 14 52 Q12 78 30 88 L70 88 Q88 78 86 52 Q82 26 62 22 L50 8 Z',
   tiger: 'M22 30 Q14 12 30 14 Q40 4 50 12 Q60 4 70 14 Q86 12 78 30 Q88 46 80 64 Q70 86 50 86 Q30 86 20 64 Q12 46 22 30 Z',
+  ghost: 'M50 8 Q20 8 20 44 L20 82 L30 72 L40 84 L50 72 L60 84 L70 72 L80 82 L80 44 Q80 8 50 8 Z',
   clip: 'M36 18 Q36 8 48 8 Q60 8 60 18 L60 66 Q60 78 48 78 Q36 78 36 66 L36 30 Q36 24 43 24 Q50 24 50 30 L50 62',
 });
 
@@ -579,8 +580,9 @@ export function createAnnexLab(caps) {
       path.setAttribute('class', 'al-sil-shape');
     }
     svg.appendChild(path);
-    if (name === 'owl') {
-      [[38, 46], [62, 46]].forEach(([ex, ey]) => {
+    if (name === 'owl' || name === 'ghost') {
+      const eyeY = name === 'ghost' ? 42 : 46;
+      [[38, eyeY], [62, eyeY]].forEach(([ex, ey]) => {
         const eye = doc.createElementNS(SVG_NS, 'circle');
         eye.setAttribute('cx', String(ex));
         eye.setAttribute('cy', String(ey));
@@ -590,6 +592,57 @@ export function createAnnexLab(caps) {
       });
     }
     return svg;
+  }
+
+  /**
+   * The case PHOTOGRAPH, and the honest-or-absent law applied to art. A page
+   * that files an `img` prints it; if the file is missing or the decode fails
+   * the print takes itself off the sheet and the drawn silhouette goes back in
+   * exactly its place, so a case page is a photograph or a silhouette and is
+   * never a broken-image icon. `fallback` is called only on that path.
+   */
+  function caseImg(file, cls, fallback) {
+    const img = doc.createElement('img');
+    img.className = cls;
+    img.alt = '';
+    img.draggable = false;
+    img.addEventListener('error', () => {
+      const host = img.parentNode;
+      if (!host) return;
+      let sil = null;
+      try { sil = fallback(); } catch (e) { sil = null; }
+      if (sil) host.insertBefore(sil, img);
+      img.remove();
+      log('annex case photo missing: ' + file);
+    });
+    img.src = ART_BASE + file;
+    return img;
+  }
+
+  /**
+   * A NAME WITHHELD, BADLY. The clerk's bar covers the middle and misses both
+   * ends, so the page leaks a first letter and a last one while the typed head
+   * above it still says the name is withheld. Two laws:
+   * - the middle is a BAR, an element with a width, and never a run of dash
+   *   characters: the register forbids that punctuation on paper, and a drawn
+   *   bar is what actually happened to the sheet.
+   * - the hidden letters are a COUNT (`red.n`), never a string, so the name is
+   *   not in this bundle to be read. `per` is the width one hidden letter buys,
+   *   clamped so a short name still reads as a bar and a long one stays on the
+   *   page. Returns null when the page filed no leak, and the caller falls back
+   *   to whatever it drew before.
+   */
+  function nameRedaction(red, cls, per, min, max) {
+    if (!red || !red.a || !red.z) return null;
+    const row = el('span', cls);
+    row.appendChild(el('span', 'al-name-l', String(red.a).toUpperCase()));
+    const bar = el('span', 'al-name-bar');
+    const n = Number(red.n);
+    const w = (isFinite(n) && n > 0 ? n : 1) * per;
+    bar.style.width = Math.round(Math.max(min, Math.min(max, w))) + 'px';
+    row.appendChild(bar);
+    row.appendChild(el('span', 'al-name-l', String(red.z).toUpperCase()));
+    return row;
   }
 
   /** The shared parse (os.js), painted in paper's own materials: a **run** is
@@ -621,16 +674,24 @@ export function createAnnexLab(caps) {
 
   /* ------------------------------------------------------ the four mounts */
 
-  /** 'clip': a photo card pinned by a drawn paperclip. The silhouette printed
-   *  SMALL and dark on a pale ground, the caption in the clerk's own hand. */
+  /** 'clip': a photo card pinned by a drawn paperclip. The case photograph if
+   *  the page filed one, else the silhouette printed SMALL and dark on a pale
+   *  ground. Either way the caption is in the clerk's own hand. */
   function clipPhoto(att) {
     const box = el('div', 'al-photo');
     box.appendChild(el('span', 'al-clip'));
     const im = el('div', 'al-photo-im');
-    const svg = silSvg(att.sil, 58);
-    if (svg) im.appendChild(svg);
+    const face = att.img
+      ? caseImg(att.img, 'al-photo-img', () => silSvg(att.sil, 58))
+      : silSvg(att.sil, 58);
+    if (face) im.appendChild(face);
     box.appendChild(im);
-    if (att.caption) box.appendChild(el('small', 'al-photo-cap', att.caption));
+    /* the caption is the same withholding as the plate's namebar, in the
+     * clerk's hand and in miniature; the written caption is what a card
+     * without a leak still says */
+    const leak = nameRedaction(att.red, 'al-photo-cap al-name is-hand', 6, 16, 90);
+    if (leak) box.appendChild(leak);
+    else if (att.caption) box.appendChild(el('small', 'al-photo-cap', att.caption));
     return box;
   }
 
@@ -885,10 +946,23 @@ export function createAnnexLab(caps) {
       /* a page WITHOUT its own photograph keeps the old centred plate; a page
        * that carries one is a photographed page and the plate steps aside */
       if (pg.sil && !hasPhoto) {
-        const svg = silSvg(pg.sil, 96);
-        if (svg) {
-          faceHost.appendChild(svg);
-          faceHost.appendChild(el('span', 'al-namebar'));
+        const plate = pg.img
+          ? caseImg(pg.img, 'al-plate-img', () => silSvg(pg.sil, 96))
+          : silSvg(pg.sil, 96);
+        if (plate) {
+          if (pg.stamp) {
+            /* THE STAMP IS AN OVERLAY, never baked into the art: it has to
+             * land the same way over a photograph and over the silhouette the
+             * room falls back to when the photograph is not there */
+            const box = el('div', 'al-plate');
+            box.appendChild(plate);
+            box.appendChild(el('span', 'al-stamp', String(pg.stamp)));
+            faceHost.appendChild(box);
+          } else {
+            faceHost.appendChild(plate);
+          }
+          faceHost.appendChild(
+            nameRedaction(pg.red, 'al-name', 10, 26, 150) || el('span', 'al-namebar'));
         }
       }
       const bodyEl = el('div', 'al-paper-body');

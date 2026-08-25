@@ -284,6 +284,25 @@
 }
 .al-photo .al-sil { margin: 0; }
 .al-photo .al-sil-eye { fill: #F2F0E4; }
+/* the same leak the plate's namebar carries, written under the photo card in
+   the clerk's own hand. The rules below beat .al-photo-cap's `display: block`
+   on specificity, so the class pair can stay one element. */
+.al-photo-cap.al-name { display: flex; margin-top: 5px; gap: 4px; }
+.al-photo-cap.al-name .al-name-l { font-family: var(--al-hand); font-size: 13px; }
+.al-photo-cap.al-name .al-name-bar { height: 10px; }
+/* the case PHOTOGRAPH in the card: chunky pixel art printed small, so no
+   smoothing, and it fills the frame the silhouette used to sit inside. The
+   art is square and the card is not, so it crops the way a print does. The
+   #D3CFBA frame is already on .al-photo-im - the print does not add a second. */
+.al-photo-img {
+  display: block;
+  align-self: stretch;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  image-rendering: pixelated;
+}
 .al-photo-cap {
   display: block;
   margin-top: 5px;
@@ -574,6 +593,71 @@ button.al-row:hover, button.al-row:focus-visible {
   height: 14px;
   margin: 0 auto 12px;
   background: #141410;
+}
+/* A NAME WITHHELD, BADLY: first letter, the clerk's bar over the middle, last
+   letter. The bar is this ELEMENT and never a run of dash characters, and its
+   width is set inline from the count of letters it hides. */
+.al-name {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin: 0 auto 12px;
+  line-height: 1;
+}
+.al-name-l {
+  font-weight: bold;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  color: #141410;
+}
+.al-name-bar {
+  display: inline-block;
+  flex: none;
+  height: 14px;
+  background: #141410;
+}
+
+/* the plate box: the print (or the silhouette under it) and the rubber stamp
+   that landed on its lower right. The stamp keeps the intake sheet's stamp
+   FORM - bordered, all caps, letterspaced, rotated, slightly transparent so
+   the print shows through - in the red the annex saves for a withholding. */
+.al-plate {
+  position: relative;
+  display: block;
+  width: 96px;
+  margin: 0 auto;
+}
+.al-stamp {
+  position: absolute;
+  right: -18px;
+  bottom: 2px;
+  z-index: 2;
+  padding: 2px 8px;
+  border: 3px solid #9E3B34;
+  color: #9E3B34;
+  font-weight: bold;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  white-space: nowrap;
+  transform: rotate(-12deg);
+  opacity: 0.82;
+  pointer-events: none;
+}
+
+/* the dossier plate as a PHOTOGRAPH: the same block the drawn plate occupies
+   (.al-sil's own margins, so a fallback to the silhouette shifts nothing under
+   it), framed 1px the way the photo card is so it reads as a print on paper. */
+.al-plate-img {
+  display: block;
+  box-sizing: border-box;
+  width: 96px;
+  height: 96px;
+  margin: 4px auto 10px;
+  object-fit: cover;
+  object-position: center;
+  border: 1px solid #D3CFBA;
+  image-rendering: pixelated;
 }
 
 /* ------------------------------ the OS ---------------------------------- */
