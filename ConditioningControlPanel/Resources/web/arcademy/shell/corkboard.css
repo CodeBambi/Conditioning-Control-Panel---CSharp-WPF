@@ -179,12 +179,31 @@
 .arc-cork-slot:nth-child(6) { animation-delay:.25s; }
 
 /* -------------------------------------------------------------- the sheet */
+/* PAPER IS OPAQUE, AND THE COLOUR IS A `background-color`, NOT A GRADIENT.
+   `background:` is a shorthand: it paints the stock as a background-IMAGE and
+   resets background-color to `transparent` underneath it. Every sheet was
+   therefore one `background-image:none` away from being a window, and
+   `.look-pencil` is exactly that rule - the groundskeeper's sheets rendered as
+   cork-through-paper on the wall AND as an unreadable pane of glass in the
+   READER, which mounts the same `.arc-corknote` stock over the dusk (owner
+   screenshots, 2026-08-25). So the colour is declared as a colour and the
+   stock is layered over it as an image; a sheet that loses its gradient loses
+   its texture and never its opacity.
+
+   --note-fs IS THE ONE TYPE DIAL. The three type rules below are ratios of it,
+   so a host can set the wall's size in one place and corkboard.js's fit can
+   shrink ONE sheet (see THE FIT) without touching three declarations. */
 .arc-corknote {
   position:relative;
+  --note-fs:13px;
+  /* how far up the sheet a torn corner may reach, and the blank paper the
+     sheet keeps below its copy so the tear can never eat a word */
+  --tear:20px;
   padding:20px 16px 16px;
   border-radius:2px;
   color:var(--paper-ink);
-  background:linear-gradient(184deg, var(--paper), var(--paper-lo));
+  background-color:var(--paper);
+  background-image:linear-gradient(184deg, var(--paper), var(--paper-lo));
   box-shadow:
     0 10px 22px rgba(0,0,0,.5),
     0 1px 0 rgba(255,255,255,.5) inset,
@@ -202,11 +221,23 @@
 /* THE TORN CORNER. clip-path removes a box-shadow along with the corner, so a
    torn sheet swaps its shadow for one drop-shadow pass. It is static paper -
    no live decode underneath it, nothing re-rasters per frame (trap 36).
-   THE TEAR IS A CORNER, NOT A NOTCH: it may only eat the last tenth of the
+   THE TEAR IS A CORNER, NOT A NOTCH: it may only eat the last `--tear` of the
    height and the last seventh of the width. The first pass ran the polygon up
-   to 62% and the sheets came out looking like pennants. */
+   to 62% and the sheets came out looking like pennants.
+
+   IT IS MEASURED IN PIXELS, NOT IN PERCENT, and that is a consequence of the
+   sheets growing: the polygon used to bite the last 11% of the height, which
+   is 20px on a 180px notice and 66px on a 600px one. Now that a sheet is as
+   tall as its copy (no mask, no max-height - see THE OFFICE CORK below) a
+   percentage tear would eat whole sentences off the bottom of a long notice.
+   A fixed bite plus the matching bottom padding is the pair: the corner is
+   gone and the words are all still there. */
 .arc-corknote.is-torn {
-  clip-path:polygon(0 0, 100% 0, 100% 89%, 93% 91.5%, 96.5% 94%, 90% 96%, 94% 100%, 0 100%);
+  clip-path:polygon(0 0, 100% 0,
+    100% calc(100% - var(--tear)), 93% calc(100% - var(--tear) * .77),
+    96.5% calc(100% - var(--tear) * .55), 90% calc(100% - var(--tear) * .36),
+    94% 100%, 0 100%);
+  padding-bottom:calc(16px + var(--tear));
   box-shadow:0 1px 0 rgba(255,255,255,.45) inset;
   filter:drop-shadow(0 9px 15px rgba(0,0,0,.55));
 }
@@ -244,24 +275,31 @@
 .arc-corknote.kind-notice  { --pin-hue:var(--pink); }
 .arc-corknote.kind-flyer {
   --pin-hue:var(--gold);
-  background:linear-gradient(184deg,
+  background-image:linear-gradient(184deg,
     color-mix(in srgb, var(--paper), var(--pink) 13%),
     color-mix(in srgb, var(--paper-lo), var(--pink) 9%));
 }
 .arc-corknote.kind-minutes {
   --pin-hue:var(--lav);
-  background:
+  background-image:
     repeating-linear-gradient(180deg, transparent 0 21px,
       color-mix(in srgb, var(--paper-ink), transparent 88%) 21px 22px),
     linear-gradient(184deg,
       color-mix(in srgb, var(--paper), var(--lav) 8%),
       color-mix(in srgb, var(--paper-lo), var(--lav) 6%));
 }
-.arc-corknote.kind-minutes .arc-cork-notebody { font-family:var(--mono); font-size:12px; }
+.arc-corknote.kind-minutes .arc-cork-notebody {
+  font-family:var(--mono);
+  font-size:calc(var(--note-fs) * .923);
+}
 
-/* A sheet the player has had up before sits back a little. It is a TONE, not a
-   badge: nothing on this wall is a task. */
-.arc-corknote.is-read { opacity:.9; }
+/* READ AND UNREAD ARE TOLD BY THE TAG, NEVER BY FADING THE PAPER (owner
+   ruling, 2026-08-25: "that is not how printed paper works"). `.is-read` used
+   to carry `opacity:.9`, which is a translucent sheet with cork showing
+   through it - and a wall of those reads as half-PRINTED rather than half-read.
+   The fresh sheet's KIND TAG is filled pink and a read one's is the quiet
+   stock grey; that difference is the whole signal, and it costs the paper
+   nothing. */
 .arc-corknote.is-fresh .arc-cork-kind {
   background:color-mix(in srgb, var(--pink), var(--paper) 42%);
   color:var(--paper);
@@ -270,16 +308,16 @@
 .arc-cork-kind {
   display:inline-block; margin:0 0 8px;
   padding:2px 7px; border-radius:2px;
-  font-family:var(--mono); font-size:10px; letter-spacing:.2em;
+  font-family:var(--mono); font-size:calc(var(--note-fs) * .769); letter-spacing:.2em;
   background:color-mix(in srgb, var(--paper-ink), transparent 84%);
   color:var(--paper-dim);
 }
 .arc-cork-notetitle {
-  font-family:var(--disp); font-size:15px; letter-spacing:.03em;
+  font-family:var(--disp); font-size:calc(var(--note-fs) * 1.154); letter-spacing:.03em;
   margin:0 0 8px; color:var(--paper-ink); line-height:1.25;
 }
 .arc-cork-notebody {
-  margin:0; font-size:13px; line-height:1.5;
+  margin:0; font-size:var(--note-fs); line-height:1.5;
   color:color-mix(in srgb, var(--paper-ink), var(--paper) 18%);
 }
 
@@ -508,11 +546,22 @@ html.arc-reduced .rr-cork .arc-corknote:focus-within { animation: none; }
 /* The paper itself: the SAME `.arc-corknote` stock, so a sheet in your hands is
    the sheet off the wall and not a lookalike. What changes is that it is now
    the subject - real type, a real reading measure, and it scrolls. */
+/* IT IS ALWAYS AN OPAQUE CREAM SHEET AT FULL OPACITY. Two belts, because the
+   owner's phone shot was a reader you could read the BOARD through: the paper
+   colour is a `background-color` on `.arc-corknote` now (see THE SHEET), and
+   the declarations below refuse any state a future sheet class might walk in
+   with. A sheet in the hand is off the wall - it is not read, not fresh, not
+   torn and not faded, whatever the wall thought of it. */
 .arc-cork-readnote {
   position:relative; z-index:1;
   width:min(680px, 100%);
   max-height:100%;
   overflow:auto;
+  --note-fs:15.5px;
+  opacity:1;
+  background-color:var(--paper);
+  -webkit-mask-image:none;
+          mask-image:none;
   padding:22px 24px 26px;
   transform:rotate(-.4deg);
   animation:arc-cork-reader-in .26s cubic-bezier(.2, 1.2, .4, 1) both;
@@ -524,9 +573,9 @@ html.arc-reduced .rr-cork .arc-corknote:focus-within { animation: none; }
 /* A sheet in the hand has no lifted corner and no tear: it is flat on a desk,
    and the corner fold is a shadow that only makes sense against cork. */
 .arc-cork-readnote::after { content:none; }
-.arc-cork-readnote.is-torn { clip-path:none; filter:none; }
+.arc-cork-readnote.is-torn { clip-path:none; filter:none; padding-bottom:26px; }
 .arc-cork-readnote .arc-cork-notetitle { font-size:20px; line-height:1.25; }
-.arc-cork-readnote .arc-cork-notebody { font-size:15.5px; line-height:1.6; }
+.arc-cork-readnote .arc-cork-notebody { line-height:1.6; }
 .arc-cork-readnote .arc-cork-kind { font-size:10px; }
 
 .arc-cork-readclose {
@@ -552,50 +601,58 @@ html.arc-reduced .arc-cork-readnote { animation:none; }
  * out in the plate's 1285x692 pixels and scaled with it, and a phone in
  * landscape fits that plate at about a half. So every one of these numbers is
  * a stage pixel and comes out halved - which is why the copy read as texture
- * and the bottom row of sheets hung off the frame and out of the window
- * (owner screenshot, 2026-08-25).
+ * (owner screenshot, 2026-08-25) and the type comes UP on a phone.
  *
- * Two changes, both scoped to `.rr-cork` on a phone, and neither touches the
- * hall's board or the desktop's:
- *   - the paper is CLIPPED TO THE BOARD. The wide-window ruling (pinned paper
- *     hangs off the rail rather than being cut) needs a wall under the rail to
- *     hang onto; on a phone the plate IS the window, so the overhang is simply
- *     gone. Each sheet takes a row's share of the cork and fades out at the
- *     cut, which is also how a player learns there is more of it.
- *   - the type comes UP, because a headline you can read is worth more than
- *     four paragraphs you cannot, and the rest of the sheet is one press away.
+ * A PRINTED SHEET SHOWS ALL OF ITSELF (owner ruling, 2026-08-25: "that is not
+ * how printed paper works, we should see the full doc"). The first pass at the
+ * phone gave every sheet `max-height:292px` and a `mask-image` fade, so a long
+ * notice dissolved mid-sentence and the rest of it existed only in the reader.
+ * Both are GONE. What replaces them is three rules that never cut a word:
+ *   - a sheet is exactly as tall as its copy (the grid's rows are content-
+ *     sized, so no two rows can ever overlap);
+ *   - corkboard.js's FIT shrinks one sheet's `--note-fs` toward a floor (10px
+ *     of screen on a phone, 11px on a desktop) while that buys a row its share
+ *     of the board, and stops the moment it does not;
+ *   - and whatever is still over hangs on the SCROLL, below.
  * ==========================================================================*/
-/* A BUSY TERM SCROLLS RATHER THAN HANGING OFF THE WINDOW. On a desktop the
-   plate is smaller than the window and an overrun spills onto the wall around
-   it, which is the ruling. On a phone the plate IS the window, so the same
-   overrun is simply gone - a fifth row of paper that exists and cannot be
-   reached. `start` instead of `space-between` so the rows stack from the top
-   rail, and the board itself takes the scroll. */
-html.arc-mobile .rr-cork.arc-cork-wall {
+/* THE BOARD TAKES THE SCROLL. The wide-window ruling (pinned paper hangs off
+   the rail rather than being cut) needed a wall under the rail to hang onto; a
+   term's worth of full-height sheets is three boards deep, which is not paper
+   hanging off a rail, it is paper on the floor. So the close-up host scrolls -
+   on a phone AND on a desktop - and the scrollbar is hidden, because a
+   corkboard with a scrollbar down the side of it is furniture wearing a
+   widget. `start` rather than `space-between`: the rows stack from the top
+   rail, which is the only way the MINIATURE on the wide shot can be the same
+   picture as the board you walk up to (recordsroom.js's CORK_WIDE). */
+.rr-cork.arc-cork-wall {
   overflow-y:auto;
+  overflow-x:hidden;
+  align-content:start;
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}
+.rr-cork.arc-cork-wall::-webkit-scrollbar { width:0; height:0; }
+/* ...but never the MINIATURE: scenery does not scroll, and a scrollbar on a
+   thumbnail of a corkboard is a bug wearing a feature's hat. It keeps `start`
+   so its rows are the close-up's rows, and it simply ends where the painted
+   cork ends. */
+.rr-cork-mini.arc-cork-wall {
+  overflow:hidden;
   align-content:start;
 }
-/* ...but never the MINIATURE: scenery does not scroll, and a scrollbar on a
-   thumbnail of a corkboard is a bug wearing a feature's hat. */
-html.arc-mobile .rr-corkmini .rr-cork.arc-cork-wall {
-  overflow:hidden;
-  align-content:space-between;
-}
-html.arc-mobile .rr-cork .arc-corknote {
-  max-height:292px;
-  overflow:hidden;
-  -webkit-mask-image:linear-gradient(180deg, #000 78%, transparent 100%);
-          mask-image:linear-gradient(180deg, #000 78%, transparent 100%);
-}
-html.arc-mobile .rr-cork .arc-cork-notetitle { font-size:25px; line-height:1.2; }
-html.arc-mobile .rr-cork .arc-cork-notebody { font-size:20px; line-height:1.45; }
-html.arc-mobile .rr-cork .arc-cork-kind { font-size:15px; letter-spacing:.14em; }
+html.arc-mobile .rr-cork .arc-corknote { --note-fs:20px; }
+html.arc-mobile .rr-cork .arc-cork-notetitle { font-size:calc(var(--note-fs) * 1.25); line-height:1.2; }
+html.arc-mobile .rr-cork .arc-cork-notebody { line-height:1.45; }
+html.arc-mobile .rr-cork .arc-cork-kind { font-size:calc(var(--note-fs) * .75); letter-spacing:.14em; }
 
 /* THE LENS. A sheet this small has to say it can be picked up, and the school
    never bakes a word into a drawn thing (lexicon law) - so the affordance is a
-   glyph: a ring and a handle, in the pin's own pink, sitting on the corner the
-   fade opens up. Drawn on the DOOR, not on the paper, because the paper is a
-   document and this is furniture. */
+   glyph: a ring and a handle, in the pin's own pink, on the bottom corner of
+   the paper. Drawn on the DOOR, not on the paper, because the paper is a
+   document and this is furniture. (It used to sit in the gap the mask's fade
+   opened up; the fade is gone and the corner is not.) */
 html.arc-mobile .rr-cork .arc-cork-open::after {
   content:''; position:absolute; right:14px; bottom:12px;
   width:26px; height:26px; border-radius:50%;

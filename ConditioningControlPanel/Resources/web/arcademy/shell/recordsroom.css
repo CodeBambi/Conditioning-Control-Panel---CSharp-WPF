@@ -286,32 +286,41 @@ html.arc-mobile .rr-cards .arc-records-docket { min-height: 0; }
    `.arc-cork-wall{grid-template-columns:1fr}` at the same specificity, and
    which sheet linked last is not something this file gets to know. */
 .rr-cork.arc-cork-wall {
-  /* PINNED PAPER HANGS. A sheet that runs past the bottom rail of the frame is
-     hanging off the board the way pinned paper does - it is NOT cut by the
-     cork and it does NOT put a scrollbar on a corkboard (owner 2026-08-25). So
-     the host never clips; a busy term's overrun spills over the frame's
-     bottom rail onto the wall, and only the stage edge itself ever cuts it. */
-  overflow: visible;
+  /* THE SCROLL AND THE STACK ARE corkboard.css'S NOW, and this rule must not
+     take them back: `.rr-cork.arc-cork-wall` there and `.rr-cork.arc-cork-wall`
+     here are the SAME specificity (0,2,0), so whichever sheet the lazy links
+     happened to land in last would win - and the two sheets are linked by two
+     different modules, in whatever order the network answers. One owner per
+     declaration is the only stable arrangement.
+
+     What went, and why (owner ruling 2026-08-25, "we should see the full doc"):
+     `overflow:visible` hung a busy term's overrun off the bottom rail, which
+     was fine while a sheet was capped at 292px and faded out. A sheet is as
+     tall as its copy now, so the overrun is boards deep - it scrolls. And
+     `align-content:space-between` spread the rows over the host's own height,
+     which the MINIATURE on the wide shot cannot reproduce (its box is the
+     painted cork, 45 stage px shorter): `start` in both is what makes the
+     thumbnail the same picture as the board. */
   padding: 12px 18px 14px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  /* THE WALL USES ITS HEIGHT. A cork with four sheets in one band across the
-     top and 40% of bare board underneath reads as a board somebody stripped,
-     not as a board somebody pinned. Two rows, pushed to the two edges: the
-     host is the grid AND the scroller, and its height is the measured rect, so
-     `space-between` has a real box to distribute in. A busy term overruns the
-     frame and hangs below it, and `space-between` degrades to `start` on its own. */
-  align-content: space-between;
   row-gap: clamp(16px, 2vw, 30px);
 }
 .rr-cork .arc-cork-slot { animation-duration: .28s; }
 
 /* This paper is read at arm's length across a room, not on a phone in a 900px
    column: the plate is 1285 stage px wide and a third of it is a big sheet.
-   Type up to match, or the copy is technically dark and practically a texture. */
-.rr-cork .arc-cork-notetitle { font-size: 17px; margin-bottom: 6px; }
-.rr-cork .arc-cork-notebody { font-size: 14.5px; line-height: 1.5; }
-.rr-cork .arc-cork-kind { font-size: 10.5px; margin-bottom: 6px; }
-.rr-cork .arc-corknote { padding: 18px 18px 15px; }
+   Type up to match, or the copy is technically dark and practically a texture.
+
+   ONE DIAL. `--note-fs` is corkboard.css's single type size and the title and
+   the tag are ratios of it, which is what lets corkboard.js's FIT shrink one
+   sheet toward the floor without knowing anything about three rules. */
+.rr-cork .arc-corknote { --note-fs: 14.5px; padding: 18px 18px 15px; }
+.rr-cork .arc-cork-notetitle { font-size: calc(var(--note-fs) * 1.172); margin-bottom: 6px; }
+.rr-cork .arc-cork-notebody { line-height: 1.5; }
+.rr-cork .arc-cork-kind { font-size: calc(var(--note-fs) * .724); margin-bottom: 6px; }
+/* A torn corner is a fixed bite out of the bottom (corkboard.css THE TEAR), so
+   the blank paper under the copy is the same fixed number in this room too. */
+.rr-cork .arc-corknote.is-torn { padding-bottom: calc(15px + var(--tear)); }
 
 /* ------------------------------------------------------------- THE BOOK */
 
