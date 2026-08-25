@@ -55,6 +55,10 @@ public sealed class GlyphRotEffect : PossessionEffectBase
 
     private TextBlock? _tb;
     private string? _originalText;
+    /// <summary>The LATEST string we painted. This effect walks the label through a couple of dozen
+    /// intermediate values, so "what we wrote" is a moving target; both Paint and the restore compare
+    /// against this one to tell "still ours" from "someone else owns the label now".</summary>
+    private string? _writtenText;
     private string[]? _cells;      // one display cell per original character
     private int _wordStart;
     private int _wordEnd;          // exclusive
@@ -85,9 +89,13 @@ public sealed class GlyphRotEffect : PossessionEffectBase
         if (!FindWord(_originalText, ctx.Rng, out _wordStart, out _wordEnd))
         {
             _originalText = null;
+            _writtenText = null;
             _tb = null;
             return Task.CompletedTask;
         }
+
+        // Nothing painted yet, so what stands on screen is still the original - and that IS ours.
+        _writtenText = _originalText;
 
         _cells = new string[_originalText.Length];
         for (int i = 0; i < _originalText.Length; i++) _cells[i] = _originalText[i].ToString();
@@ -135,23 +143,40 @@ public sealed class GlyphRotEffect : PossessionEffectBase
             var tb = _tb;
             var cells = _cells;
             if (tb == null || cells == null) return;
+
+            // Someone else wrote this label since our last step (a level-up, a counter tick): it is
+            // theirs now. Stop painting rather than fighting them, and leave _writtenText where it is
+            // so the restore below stands down too.
+            if (_writtenText != null && !string.Equals(tb.Text, _writtenText, StringComparison.Ordinal)) return;
+
             var sb = new StringBuilder(cells.Length + 8);
             foreach (var c in cells) sb.Append(c);
-            tb.Text = sb.ToString();
+            var painted = sb.ToString();
+            tb.Text = painted;
+            _writtenText = painted;
         }
         catch (Exception ex) { App.Logger?.Warning("Possession glyphrot paint failed: {Error}", ex.Message); }
     }
 
+    /// <summary>
+    /// The exact original string, but only while the label still says what we last painted. The labels
+    /// this effect can take are code-driven ones ({loc:Str} is a Binding and IsRewritable declines
+    /// those), so they are exactly the ones that change underneath us; putting our snapshot back over a
+    /// fresher value would lose it. Same guard as XpDrainEffect.RestoreTheLevel.
+    /// </summary>
     protected override Task UndoCoreAsync(TimeSpan duration)
     {
         try
         {
-            if (_tb != null && _originalText != null) _tb.Text = _originalText;   // exact original string
+            if (_tb != null && _originalText != null && _writtenText != null
+                && string.Equals(_tb.Text, _writtenText, StringComparison.Ordinal))
+                _tb.Text = _originalText;
         }
         catch (Exception ex) { App.Logger?.Warning("Possession glyphrot restore failed: {Error}", ex.Message); }
 
         _tb = null;
         _originalText = null;
+        _writtenText = null;
         _cells = null;
         return Task.CompletedTask;
     }

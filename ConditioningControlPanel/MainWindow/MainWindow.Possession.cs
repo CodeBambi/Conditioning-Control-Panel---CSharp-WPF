@@ -218,15 +218,21 @@ namespace ConditioningControlPanel
         /// gets picked up before the next haunt.</summary>
         private static readonly TimeSpan PossessionCacheMaxAge = TimeSpan.FromSeconds(10);
 
-        /// <summary>Never a victim, subtree and all. The timer VALUE and the secret exit box are
-        /// POSSESSION.md hard rules; the Emergency Exit button is the friction door (EMERGENCY_EXIT.md)
-        /// and has to stay exactly where the user last saw it; the gate is the premium wall; the rung
-        /// readout and pips are the feature's own instrumentation - haunting the dial that tells you how
-        /// haunted you are is a joke that reads as a bug.</summary>
+        /// <summary>Never a victim, subtree and all - UNLESS an author hand-tagged it with an explicit
+        /// poss:Possession.Role, which is a louder statement than this list (see WalkPossession). The
+        /// timer VALUE and the secret exit box are POSSESSION.md hard rules; the Emergency Exit button is
+        /// the friction door (EMERGENCY_EXIT.md) and has to stay exactly where the user last saw it; the
+        /// gate is the premium wall; the rung readout and pips are the feature's own instrumentation -
+        /// haunting the dial that tells you how haunted you are is a joke that reads as a bug.
+        ///
+        /// <para><c>TxtXP</c> is here for a mechanical reason rather than a rule: the BANK odometer
+        /// (MainWindow.BankFx.cs, StepBankCounter) rewrites that readout roughly every 70 ms for the
+        /// length of a token flight. A text effect that took it would be a silent no-op - overwritten
+        /// before anyone could read it - while still burning a ghost slot and a 45 s target cooldown.</para></summary>
         private static readonly HashSet<string> PossessionNeverNames = new(StringComparer.Ordinal)
         {
             "TxtLockdownTimer", "TxtLockdownExit", "BtnEmergencyExit", "EERoot",
-            "LockdownGate", "TxtPossessionRung", "PossessionPips",
+            "LockdownGate", "TxtPossessionRung", "PossessionPips", "TxtXP",
         };
 
         /// <summary>Labels are the one role that can run to the hundreds on a dense tab, and a deck full
@@ -322,18 +328,35 @@ namespace ConditioningControlPanel
                 return default;
 
             FrameworkElement? fe = node as FrameworkElement;
+            var handRole = PossessionRole.None;
+
             if (fe != null)
             {
                 // A collapsed tab is a whole subtree of invisible controls; stopping here rather than
-                // filtering leaf by leaf is what keeps the walk cheap.
+                // filtering leaf by leaf is what keeps the walk cheap. These two still come first: they
+                // PRUNE, and pruning is why the walk is measured in single-digit milliseconds.
                 if (!fe.IsVisible) return default;
                 if (Services.Possession.Possession.GetExclude(fe)) return default;
-                if (!string.IsNullOrEmpty(fe.Name) && PossessionNeverNames.Contains(fe.Name)) return default;
+
+                // Hand tags win, always: an author who wrote poss:Possession.Role said something the
+                // type system cannot - and something louder than the never-names blocklist, which is
+                // therefore read AFTER it rather than before.
+                //
+                // TxtLockdownTimer is the case that made this matter. It is the first never-name (its
+                // VALUE is a POSSESSION.md hard rule) AND it carries Role="Timer", the only Timer tag in
+                // the app. Reading the blocklist first meant no Timer target ever existed, which made
+                // WobbleEffect - the only effect that declares that role - dead code, and the ladder's
+                // R2 promise "timer digits wobble (value stays TRUE)" something that never fired.
+                // Wobble rotates a TransformLease and never reads or writes the string, so the number
+                // stays true; the rule was never "do not touch the timer", it was "do not touch its
+                // value". Nothing else changes: an element with no hand tag is blocked exactly as
+                // before, and no other never-name carries a Role (TxtLockdownExit and BtnEmergencyExit
+                // additionally sit behind Possession.Exclude, which is checked above and still wins).
+                handRole = Services.Possession.Possession.GetRole(fe);
+                if (handRole == PossessionRole.None
+                    && !string.IsNullOrEmpty(fe.Name) && PossessionNeverNames.Contains(fe.Name)) return default;
             }
 
-            // Hand tags win, always: an author who wrote poss:Possession.Role said something the type
-            // system cannot.
-            var handRole = fe != null ? Services.Possession.Possession.GetRole(fe) : PossessionRole.None;
             var role = handRole;
             if (fe != null && role == PossessionRole.None) role = InferLeafRole(fe);
 
@@ -614,9 +637,25 @@ namespace ConditioningControlPanel
                     // is haunted whether or not something is playing in it; what still stops us is a
                     // window that has TAKEN OVER the screen, because an ember ripple painted on a
                     // window nobody can see is a bark about a button nobody is looking at.
+                    //
+                    // EVERY ChaosWebViewHost room, not the three that happened to exist when this was
+                    // written: the same class of window with the same posture (owned by MainWindow,
+                    // sized over it, holding the keyboard). Behind the six that were missing the haunt
+                    // went on charging, barking and burning target cooldowns at a window nobody could
+                    // see - including behind the Emergency Exit minigame, which is the one moment the
+                    // room is supposed to be listening rather than talking. Each check is a static
+                    // null-test on the service's own host field, so the whole block is a handful of
+                    // field reads on a path that runs at every pick.
                     if (DtrhHostService.IsActive) return false;
                     if (LoomHostService.IsActive) return false;
                     if (ArcademyHostService.IsActive) return false;
+                    if (Services.Bureau.BureauHostService.IsActive) return false;
+                    if (Services.GoonGame.GoonHostService.IsActive) return false;
+                    if (Services.JustDrop.JustDropHostService.IsActive) return false;
+                    if (Services.Fyp.FypHostService.IsActive) return false;
+                    if (Services.Quiz.IntakeHostService.IsActive) return false;
+                    // IsOpen rather than IsActive - same shape, older name (EMERGENCY_EXIT.md).
+                    if (Services.EmergencyExit.EmergencyExitHostService.IsOpen) return false;
                     // The Lock Card owns the user's attention (and their input) while it is up.
                     if (LockCardWindow.IsAnyOpen()) return false;
 

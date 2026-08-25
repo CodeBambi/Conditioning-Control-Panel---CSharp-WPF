@@ -50,10 +50,22 @@ public sealed class PossessionDirector : IDisposable
     private DateTime _lastTripwireAt = DateTime.MinValue;
     private DateTime _lastStareAt = DateTime.MinValue;
     private DateTime _lastReactiveAt = DateTime.MinValue;
+    private DateTime _lastRestartAt = DateTime.MinValue;
     private bool _picking;
     private bool _disposed;
 
+    /// <summary>Bumped on every activation. Anything with a long tail of awaits (the reassembly exit
+    /// is three seconds of undo plus up to fifteen of warden) captures it first and bails when it has
+    /// moved: by then a NEW lockdown may own the room, and the previous one's curtain call must not
+    /// strip its outlines or reset its rung.</summary>
+    private int _generation;
+
     private static readonly TimeSpan TripwireThrottle = TimeSpan.FromSeconds(1.5);
+
+    /// <summary>How long after a timer restart a rung change counts as "the restart's own". The
+    /// restart sets the rung, pulses the edge and spends the rung bark itself; a tick landing inside
+    /// this window must not do any of it a second time, whichever of the two events arrived first.</summary>
+    private static readonly TimeSpan RestartQuiet = TimeSpan.FromSeconds(2);
 
     /// <summary>Floor between event-driven ghosts (B15). The reactive layer answers what the USER does,
     /// and a user clicking around a tab generates events far faster than the room should answer them -
@@ -133,6 +145,8 @@ public sealed class PossessionDirector : IDisposable
     {
         try
         {
+            // Release() (inside UndoGhostSync) is what owns the ledger; these two are a belt, and they
+            // are only safe HERE because there is no await above them for a new ghost to arrive in.
             foreach (var g in _live.ToArray()) UndoGhostSync(g);
             _live.Clear();
             _liveKeys.Clear();
@@ -149,6 +163,10 @@ public sealed class PossessionDirector : IDisposable
     {
         try
         {
+            // Bumped before the enabled check so a lockdown that runs WITHOUT possession still
+            // invalidates a reassembly the previous one left in flight.
+            _generation++;
+
             var s = App.Settings?.Current;
             if (s == null || !s.LockdownPossessionEnabled)
             {
@@ -162,10 +180,19 @@ public sealed class PossessionDirector : IDisposable
 
             _barkedRungs.Clear();
             _cooldowns.Clear();
-            _liveKeys.Clear();
+            // The live ledger belongs to Release(). Wiping it wholesale would orphan any ghost the
+            // PREVIOUS lockdown's reassembly is still unwinding underneath us - its control would go
+            // back into the pool while it is still possessed. Sweep it only when nothing is live,
+            // which is the case this is here for (a leaked key must never ban a control forever).
+            if (_live.Count == 0) _liveKeys.Clear();
             _lastTargetKey = null;
             _lastTripwireAt = DateTime.MinValue;
             _lastStareAt = DateTime.MinValue;
+            _lastReactiveAt = DateTime.MinValue;
+            _lastRestartAt = DateTime.MinValue;
+            // A pick that died with a torn-down window never reaches StartOneAsync's finally, and a
+            // stuck flag shuts the cadence loop for every LATER lockdown as well.
+            _picking = false;
             CurrentRung = PossessionRung.Settle;
             IsHaunting = true;
 
@@ -205,10 +232,16 @@ public sealed class PossessionDirector : IDisposable
                 App.Logger?.Information("Possession rung {From} -> {To} at {Pct:P0}", previous, rung, frac);
                 try { RungChanged?.Invoke(rung); } catch { }
 
+                // Belt for the timer restart: a restart sets the rung, pulses the edge at 0.6 and
+                // spends that rung's bark itself, so a tick landing on the same moment would flare
+                // and announce it twice. LockdownService raises TimerRestarted and CountdownTick from
+                // the same rewind; this makes the pair idempotent whichever order they arrive in.
+                var justRestarted = DateTime.Now - _lastRestartAt < RestartQuiet;
+
                 // The rung change itself is an event: the whole window flares once so the escalation is
                 // never something the user only notices in hindsight.
-                PulseAll(0.35 + 0.15 * (int)rung);
-                if (_barkedRungs.Add(rung)) { try { App.Bark?.NotifyPossessionRung((int)rung); } catch { } }
+                if (!justRestarted) PulseAll(0.35 + 0.15 * (int)rung);
+                if (_barkedRungs.Add(rung) && !justRestarted) { try { App.Bark?.NotifyPossessionRung((int)rung); } catch { } }
 
                 if (rung == PossessionRung.ItKnows && _wardenEnabled && Warden?.IsAvailable == true)
                     FireAndForget(RunWardenAsync(ct => Warden!.LeaveAsync(ct), "leave"), "warden leave");
@@ -216,7 +249,7 @@ public sealed class PossessionDirector : IDisposable
 
             if (_picking) return;
             if (DateTime.Now < _nextDue) return;
-            if (LiveSlots >= PossessionDeck.MaxLive(rung)) return;
+            if (!PossessionDeck.FitsConcurrency(LiveSlots, 1, rung)) return;
             // A3 (wave 2): the video check that used to live here is GONE. It read as "content is king",
             // but in practice a lockdown run is mostly video, so the haunt spent most of its life
             // paused and the owner's first live run felt empty. What still stops us is the host's own
@@ -433,9 +466,18 @@ public sealed class PossessionDirector : IDisposable
                 eligible.Add(sc);
             }
             if (eligible.Count == 0) return false;
-            if (LiveSlots + 2 > PossessionDeck.MaxLive(rung)) return false;
 
+            // Elect FIRST, then check the cap against what THIS scene actually costs. The old order
+            // checked a flat "+2" and then booked Math.Max(1, scene.Beats): a three-beat scene elected
+            // into a Melt room (cap 3) that already had one ghost live pushed the room to four.
             var scene = eligible[_rng.Next(eligible.Count)];
+            var slots = Math.Max(1, scene.Beats);
+            if (!PossessionDeck.FitsConcurrency(LiveSlots, slots, rung))
+            {
+                App.Logger?.Debug("Possession scene {Scene} ({Slots} slots) does not fit at rung {Rung} (live {Live}/{Max})",
+                    scene.Id, slots, rung, LiveSlots, PossessionDeck.MaxLive(rung));
+                return false;
+            }
 
             // The scene books its own victims through this callback so the director keeps ownership of
             // the ledger: everything it claims is marked live here and released (with a cooldown) when
@@ -489,7 +531,7 @@ public sealed class PossessionDirector : IDisposable
 
             var adapter = new PossessionSceneEffect(scene, Picker);
             var cts = new CancellationTokenSource();
-            ghost = new LiveGhost(adapter, null, host, cts) { Slots = Math.Max(1, scene.Beats) };
+            ghost = new LiveGhost(adapter, null, host, cts) { Slots = slots };
             ghost.OnRelease = () =>
             {
                 var until = DateTime.Now + PossessionDeck.TargetCooldown;
@@ -541,17 +583,26 @@ public sealed class PossessionDirector : IDisposable
     public void RequestReactive(string effectId, PossessionTarget? target, PossessionRung minRung = PossessionRung.Settle)
     {
         if (_disposed || !IsHaunting || string.IsNullOrEmpty(effectId)) return;
+
+        // Safe from any thread. Most callers are WPF input handlers, but the SettingChanged reaction
+        // rides AppSettings.PropertyChanged, which fires on whatever thread wrote the setter, and the
+        // body below mutates the live ledger and walks the visual tree. RunOnUI executes inline when
+        // we are already on the UI thread, so the input path is unchanged.
+        DispatcherHelper.RunOnUI(() => RequestReactiveCore(effectId, target, minRung));
+    }
+
+    private void RequestReactiveCore(string effectId, PossessionTarget? target, PossessionRung minRung)
+    {
+        // Re-checked on the UI thread: a queued request can land after the lockdown has ended.
+        if (_disposed || !IsHaunting) return;
         try
         {
-            var dispatcher = Application.Current?.Dispatcher;
-            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
-
             var rung = CurrentRung;
             if (rung < minRung) return;
 
             var now = DateTime.Now;
             if (now - _lastReactiveAt < ReactiveThrottle) return;
-            if (LiveSlots >= PossessionDeck.MaxLive(rung)) return;
+            if (!PossessionDeck.FitsConcurrency(LiveSlots, 1, rung)) return;
 
             var host = _hosts.FirstOrDefault(h => SafeIsUsable(h.Host));
             if (host == null) return;
@@ -695,9 +746,8 @@ public sealed class PossessionDirector : IDisposable
             try
             {
                 var frac = _lockdown.ElapsedFraction;
-                CurrentRung = PossessionDeck.RungFor(frac, _intensity);
-                _barkedRungs.Clear();
-                _lastTargetKey = null;
+                _lastRestartAt = DateTime.Now;
+                ApplyRestartReset(PossessionDeck.RungFor(frac, _intensity));
 
                 FireAndForget(QuickUndoAsync(), "restart undo");
                 PulseAll(0.6);
@@ -718,6 +768,53 @@ public sealed class PossessionDirector : IDisposable
         try { return _lockdown.RestartCount; } catch { return 0; }
     }
 
+    /// <summary>
+    /// Everything the ladder has to FORGET when the clock is rewound to its full duration. The room is
+    /// claiming to start over, so anything that contradicts that goes with it: the rung, the rung
+    /// barks, the last victim, the reactive floor, and every per-target cooldown - 45 s of banned
+    /// controls is a memory of a lockdown that supposedly just began.
+    ///
+    /// <para>The rung the restart just set is added straight back to <c>_barkedRungs</c>: a
+    /// <c>CountdownTick</c> from the same rewind sees the new elapsed fraction and would otherwise
+    /// announce that rung a second time (the spurious Settle bark). That also makes this idempotent -
+    /// it does not matter whether the tick or the restart arrives first, or how often it is called.</para>
+    /// </summary>
+    internal void ApplyRestartReset(PossessionRung rung)
+    {
+        CurrentRung = rung;
+
+        _barkedRungs.Clear();
+        _barkedRungs.Add(rung);
+
+        _lastTargetKey = null;
+        _lastReactiveAt = DateTime.MinValue;
+
+        // A pick still in flight owns this flag through StartOneAsync's finally and will clear it
+        // again in a moment; one that died with a torn-down window never does, and the cadence loop
+        // stays shut for the rest of the lockdown. The restart hands out a full FirstDelay of quiet
+        // straight after this, so nothing can slip a second pick in behind a live one.
+        _picking = false;
+
+        _cooldowns.Clear();
+        foreach (var h in _hosts)
+        {
+            IReadOnlyList<PossessionTarget> targets;
+            try { targets = h.Host.Targets ?? Array.Empty<PossessionTarget>(); }
+            catch { continue; }
+            foreach (var t in targets)
+            {
+                // A victim that is still possessed keeps its booking; Release() gives it a fresh
+                // cooldown when its ghost finally comes down.
+                try { if (t != null && !t.IsLive) t.CooldownUntil = DateTime.MinValue; } catch { }
+            }
+        }
+    }
+
+    /// <summary>Rungs whose one-per-rung bark has already been spent. Exposed for the restart tests,
+    /// which pin that a rewind re-arms the ladder WITHOUT letting the next tick re-announce the rung
+    /// the rewind itself just set.</summary>
+    internal IReadOnlyCollection<PossessionRung> AnnouncedRungs => _barkedRungs;
+
     /// <summary>The reassembly path, but quick: everything comes back over about a second, in parallel
     /// rather than staggered, because this is a reset and not a curtain call.</summary>
     private async Task QuickUndoAsync()
@@ -731,8 +828,13 @@ public sealed class PossessionDirector : IDisposable
                 try { await UndoGhostAsync(g, TimeSpan.FromMilliseconds(500)).ConfigureAwait(true); }
                 catch (Exception ex) { App.Logger?.Warning("Possession restart undo step failed: {Error}", ex.Message); }
             }
-            _live.Clear();
-            _liveKeys.Clear();
+
+            // No Clear() here. Release() already took every ghost in the snapshot off the books, and
+            // IsHaunting stays TRUE across a restart - so the loop above is a ~2 s window in which the
+            // reactive layer can add a brand new ghost. Wiping the ledger would drop it without ever
+            // undoing it: its control stays possessed forever, the shared catalog effect's IsLive
+            // stays true so CanApply refuses it for the rest of the session, and a HoldFor==Zero
+            // effect (RoomWarp) never runs its Undo at all, leaking its event handlers with it.
         }
         catch (Exception ex) { App.Logger?.Warning("Possession restart undo failed: {Error}", ex.Message); }
     }
@@ -858,6 +960,9 @@ public sealed class PossessionDirector : IDisposable
     /// whole thing read as authored instead of broken.</summary>
     private async Task ReassembleAsync()
     {
+        // Captured before the first await: the whole tail below belongs to THIS lockdown, and the
+        // three seconds of undo plus up to fifteen of warden are long enough for the next one to start.
+        var generation = _generation;
         try
         {
             var ghosts = _live.ToArray();
@@ -872,12 +977,22 @@ public sealed class PossessionDirector : IDisposable
                 catch (Exception ex) { App.Logger?.Warning("Possession reassembly step failed: {Error}", ex.Message); }
             }
 
-            _live.Clear();
-            _liveKeys.Clear();
+            // No Clear() here either: Release() took every ghost in the snapshot off the books, so
+            // anything still on them was added underneath us and belongs to a NEW lockdown.
+            if (!ShouldFinishReassembly(generation, _generation, IsHaunting))
+            {
+                App.Logger?.Debug("Possession: reassembly tail skipped, a new lockdown started underneath it");
+                return;
+            }
+
             foreach (var h in _hosts) { try { h.Attribution.ReleaseAll(); } catch { } }
 
             if (_wardenEnabled && Warden != null)
                 await RunWardenAsync(ct => Warden.ReturnAsync(ct), "return").ConfigureAwait(true);
+
+            // The warden's return is up to 15 s of awaiting on its own, so ask again before stamping
+            // the rung: a lockdown that started inside it owns the readout now.
+            if (!ShouldFinishReassembly(generation, _generation, IsHaunting)) return;
 
             CurrentRung = PossessionRung.Settle;
             try { RungChanged?.Invoke(CurrentRung); } catch { }
@@ -885,6 +1000,15 @@ public sealed class PossessionDirector : IDisposable
         }
         catch (Exception ex) { App.Logger?.Warning("Possession reassembly failed: {Error}", ex.Message); }
     }
+
+    /// <summary>Is the reassembly that started at <paramref name="startGeneration"/> still the room's
+    /// current business? Every activation bumps the generation and turns the haunt back on, and the
+    /// reassembly tail is destructive: it strips every ember outline and the cursor ring off every
+    /// host and forces the rung display back to Settle. Run against a lockdown that started inside
+    /// those three seconds it would silently un-dress a room that is actively haunting.
+    /// Pure so the invariant can be pinned in PossessionDeckTests.</summary>
+    internal static bool ShouldFinishReassembly(int startGeneration, int currentGeneration, bool haunting)
+        => startGeneration == currentGeneration && !haunting;
 
     // ---------------------------------------------------------------------------------------------
     //  Tripwires

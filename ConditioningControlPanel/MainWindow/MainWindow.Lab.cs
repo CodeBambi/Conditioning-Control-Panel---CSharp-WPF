@@ -82,6 +82,11 @@ namespace ConditioningControlPanel
             warn.Append("- You CANNOT close the application (minimizing still works)\n");
             warn.Append("- The only escape is waiting for the timer to expire\n");
             warn.Append("  (or Ctrl+Alt+Del → Task Manager as a safety valve)");
+            // The Emergency Exit is a GAMBLE, and consent has to say so before the timer starts:
+            // pressing it can end the lockdown early, and it can just as easily hand back a fresh
+            // full-length one (EMERGENCY_EXIT.md, verdict `sendback`).
+            warn.Append("\n- The Emergency Exit button is a gamble: win its little game and you may leave early,\n")
+                .Append("  lose it and the timer restarts at its FULL length");
             if (cfg?.LockdownDoseKeeperEnabled == true)
                 warn.Append("\n- Nothing running? Lockdown starts the engine and picks features for you\n")
                     .Append("  (and switches them back on if you turn them all off - one more each time)");

@@ -93,7 +93,11 @@ lives in a Viewbox over a 1585x901 design canvas, so `ActualWidth` is design uni
 
 Never enrolled, subtree and all: `Possession.Exclude`, the GhostLayer / RubbleFloor, and the names
 `TxtLockdownTimer`, `TxtLockdownExit`, `BtnEmergencyExit`, `EERoot`, `LockdownGate`,
-`TxtPossessionRung`, `PossessionPips`. Other windows (avatar tube, playback, content) are separate
+`TxtPossessionRung`, `PossessionPips`, `TxtXP` (THE BANK's odometer rewrites it ~every 70 ms during
+token flights, so a text effect there is a silent no-op and its undo would stamp a stale number).
+An explicit hand-tag `poss:Possession.Role` beats the name blocklist - that is what lets
+`TxtLockdownTimer` carry `Role="Timer"` for the wobble while staying auto-untouchable; `Exclude`
+and `IsVisible` still win over everything. Other windows (avatar tube, playback, content) are separate
 visual trees and are unreachable from this walk by construction; popups likewise.
 
 Names: `Possession.Name` -> string `Content` -> `ToolTip` string -> `AutomationProperties.Name` ->
@@ -166,10 +170,10 @@ clears `_barkedRungs` so every rung can announce itself again, undoes every live
 second (the reassembly path, but quick - this is a reset, not a curtain call), pulses the edge at 0.6,
 and sets `_nextDue` to a full `FirstDelay` so there is a silence to notice before it all starts again.
 
-**Open wiring:** the bark trigger `PossessionBarkTriggers.TimerRestarted` exists but its BarkService
-wrapper does not. The director probes for `NotifyPossessionTimerRestarted(string reason, int restart)`
-once and logs a Warning when it is absent; adding that wrapper is all it takes to make the moment
-speak. Replace the probe with a direct call when it lands.
+The bark wrapper `BarkService.NotifyPossessionTimerRestarted(string reason, int restart)` exists and
+the director calls it directly (the reflection probe this section once described is gone). The pack
+rules fire it only from the second restart on (`restart_gte: 2`); the first sendback is voiced by
+`ee_sendback` instead.
 
 ## Tripwires (escape attempts)
 
@@ -262,8 +266,10 @@ Hard rules for every file:
   dodge, it must stay clickable where it lands).
 - Never start an effect while `IPossessionHost.IsUsable` is false; live effects may finish. A playing
   video is NOT a reason to stop (wave 2, A3): a lockdown run is mostly video, so the old pause meant
-  the haunt spent most of its life asleep. What still stops it: minimized / not loaded, a content
-  window that has taken the screen (DTRH, Loom, Arcademy), and an open Lock Card.
+  the haunt spent most of its life asleep. What still stops it: minimized / not loaded, an open Lock
+  Card, and ANY content window that has taken the screen - every `ChaosWebViewHost` takeover host is
+  checked (DTRH, Loom, Arcademy, Bureau, Goon, JustDrop, FYP, Intake, and the Emergency Exit game
+  window itself).
 - Everything dispatcher-safe (`Application.Current?.Dispatcher`), wrapped in try/catch, logs via
   `App.Logger` at Debug for routine picks and Warning for failures. A failing effect undoes itself.
 - Photosafe + `SystemParameters.ClientAreaAnimation == false` = no flicker effects, static charge.
@@ -311,7 +317,7 @@ the shipped behaviour, not the plan.
 | B15 event-driven ghosts (FeatureOpened -> card breathes, SettingChanged -> its label retypes, hover Stop -> dodge, door click -> letter drop) | FOUNDATION | `PossessionDirector.cs` (+ an `PossessionEvents.cs` adapter) |
 | Timer restart handling (`LockdownService.TimerRestarted`): rung -> Settle, `_barkedRungs` cleared, UndoAll over 1 s, EdgePulse, bark `PossessionBarkTriggers.TimerRestarted` | FOUNDATION | `PossessionDirector.cs` |
 | B1 ghost cursor, B2 predictive dodge incl. title-bar X/min, B3 real Start/Stop swap + "Stay" relabel, B4 slider ghost-thumb creep + toggle lies, B5 label rewrite + glyph rot (per-mod line packs) | Opus EFFECTS-A | `Effects/GhostCursorEffect.cs`, `Effects/Dodge*` (edit), `Effects/Swap*` (edit), `Effects/SliderCreepEffect.cs`, `Effects/ToggleLieEffect.cs`, `Effects/RewriteEffect.cs`, `Effects/GlyphRotEffect.cs`, `Effects/PossessionEffectCatalog.WaveA.cs` |
-| B7 XP drain / level lie, B8 tube steals an ACTIVE card (a usable card on the current tab - the option is really gone until reassembly), B9 room tilt/sag/deepen + per-escape 1 px shrink/2 px nudge (self-contained service on the lockdown events), B10 tab misroute + door reorder, B11 crimson toasts, B14 scroll hijack, C1 fake "deleting your sessions" dialog (Full Doki) | Opus EFFECTS-B | `Effects/XpDrainEffect.cs`, `Effects/StealCardEffect.cs` (+ `Warden.cs` steal verb), `Services/Possession/RoomWarp.cs`, `Effects/MisrouteEffect.cs`, `Effects/ReorderDoorsEffect.cs`, `Effects/ToastEffect.cs`, `Effects/ScrollHijackEffect.cs`, `Effects/DeleteDialogEffect.cs`, `Effects/PossessionEffectCatalog.WaveB.cs`, `MainWindow/MainWindow.NavRail.cs` (misroute hook only) |
+| B7 XP drain / level lie, B8 tube steals an ACTIVE card (a usable card on the current tab - the option is really gone until reassembly), B9 room tilt/sag/deepen + per-escape 1 px shrink/2 px nudge (self-contained service on the lockdown events), B10 tab misroute + door reorder, B11 crimson toasts, B14 scroll hijack, C1 fake "deleting your sessions" dialog (Full Doki) | Opus EFFECTS-B | `Effects/XpDrainEffect.cs`, `Effects/StealCardEffect.cs` (+ `Warden.cs` steal verb), `Effects/RoomWarpEffect.cs`, `Effects/MisrouteEffect.cs`, `Effects/ReorderDoorsEffect.cs`, `Effects/ToastEffect.cs`, `Effects/ScrollHijackEffect.cs`, `Effects/DeleteDialogEffect.cs`, `Effects/PossessionEffectCatalog.WaveB.cs`, `MainWindow/MainWindow.NavRail.cs` (misroute hook only) |
 | B12 chat knows (lockdown flag in the companion prompt), B13 audio tics (ember tick SFX on big effects + 300 ms pitch-dip at rung change / tripwire repeat 3), C2 it remembers (flag + next-launch tic + line), C3 portrait glitch frames (R4, photosafe-gated), C4 Full Doki retitle at R3 + note in the empty tube | Opus COMPANION | `Services/Possession/PossessionAudio.cs`, `Effects/RetitleEffect.cs`, `Warden.cs` (note), `AvatarTubeWindow` glitch hook, companion prompt builder, `Models/AppSettings.cs` (`LockdownPossessionRemembers*`), `Effects/PossessionEffectCatalog.WaveC.cs` |
 
 REJECTED by owner: B6 name drop (sensitive userbase - never use the Windows username), D2/D3

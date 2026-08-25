@@ -161,12 +161,25 @@ namespace ConditioningControlPanel
             if (!_isRunning) StartEngine();
         }
 
-        public void StartEngine()
+        /// <summary>
+        /// Starts the engine.
+        /// </summary>
+        /// <param name="systemInitiated">
+        /// True when the app started the engine on the user's behalf rather than the user pressing
+        /// START - today that is the Lockdown Dose keeper (Services/Haptics/LockdownDoseKeeper.cs),
+        /// which starts the engine at activation and again after every engine-idle grace. Those starts
+        /// are not sessions the user chose, so they skip the three side effects that only make sense
+        /// for a deliberate press: the Relapse achievement, the TotalSessions counter and the
+        /// mandatory-video enhancement prompt. Pressing Stop inside a lockdown used to farm Relapse,
+        /// inflate TotalSessions once every four seconds and pop a prompt the user could not act on.
+        /// Everything else about the start is identical.
+        /// </param>
+        public void StartEngine(bool systemInitiated = false)
         {
             SaveSettings();
 
             // Check for Relapse achievement (restart within 10s of ESC)
-            App.Achievements?.CheckRelapse();
+            if (!systemInitiated) App.Achievements?.CheckRelapse();
 
             var settings = App.Settings.Current;
 
@@ -176,7 +189,7 @@ namespace ConditioningControlPanel
             bool audioOnly = settings.AudioOnlySession;
 
             // Track session count and start skill tree service
-            settings.TotalSessions++;
+            if (!systemInitiated) settings.TotalSessions++;
             App.SkillTree?.Start();
             App.SkillTree?.TrackTimeOfDayUsage(); // For secret skill unlocks
 
@@ -254,13 +267,7 @@ namespace ConditioningControlPanel
                 App.Autonomy?.Start();
             }
 
-            // Start pop quiz if enabled
-            if (!audioOnly && settings.PopQuizEnabled)
-            {
-                App.PopQuiz?.Start();
-            }
-
-            // Start pop quiz service
+            // Start pop quiz if enabled (this block was duplicated verbatim - PopQuiz.Start() ran twice)
             if (!audioOnly && settings.PopQuizEnabled)
             {
                 App.PopQuiz?.Start();
@@ -295,8 +302,10 @@ namespace ConditioningControlPanel
             // If the mandatory video folder holds enhanced videos the current
             // settings won't fully honour (enhancement off, or webcam rules but
             // webcam not running), offer to flip the missing switch(es). Fire-and-
-            // forget: scans off the UI thread and never blocks engine start.
-            MaybePromptMandatoryVideoEnhancement();
+            // forget: scans off the UI thread and never blocks engine start. Never for a system start:
+            // a prompt that appears inside a lockdown is a dialog the user did not ask for and cannot
+            // reasonably answer.
+            if (!systemInitiated) MaybePromptMandatoryVideoEnhancement();
         }
 
         private bool _stopInProgress;

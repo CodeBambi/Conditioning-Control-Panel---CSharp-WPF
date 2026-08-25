@@ -26,6 +26,10 @@ public sealed class TypoEffect : PossessionEffectBase
     private TextBlock? _tb;
     private string? _originalText;
 
+    /// <summary>The exact string we last WROTE. Undo only puts the original back when the label still
+    /// says this - see the note on UndoCoreAsync.</summary>
+    private string? _writtenText;
+
     public override string Id => "typo";
     public override PossessionRung MinRung => PossessionRung.Settle;
     public override PossessionIntensity MinIntensity => PossessionIntensity.Gentle;
@@ -53,22 +57,34 @@ public sealed class TypoEffect : PossessionEffectBase
         if (typo == null || string.Equals(typo, _originalText, StringComparison.Ordinal))
         {
             _originalText = null;
+            _writtenText = null;
             return Task.CompletedTask;
         }
 
         _tb.Text = typo;
+        _writtenText = typo;
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Put the word back only if the label still says what WE made it say. The only labels this effect
+    /// can take are code-driven ones ({loc:Str} is a Binding, and IsRewritable declines those), which
+    /// makes them exactly the labels something else rewrites underneath us - a level-up writing
+    /// TxtLevelLabel, a counter ticking. Stamping a four-second-old string over that would be the one
+    /// restore that loses something instead of giving it back. Same guard as XpDrainEffect.RestoreTheLevel.
+    /// </summary>
     protected override Task UndoCoreAsync(TimeSpan duration)
     {
         try
         {
-            if (_tb != null && _originalText != null) _tb.Text = _originalText;
+            if (_tb != null && _originalText != null && _writtenText != null
+                && string.Equals(_tb.Text, _writtenText, StringComparison.Ordinal))
+                _tb.Text = _originalText;
         }
         catch (Exception ex) { App.Logger?.Warning("Possession typo restore failed: {Error}", ex.Message); }
         _tb = null;
         _originalText = null;
+        _writtenText = null;
         return Task.CompletedTask;
     }
 

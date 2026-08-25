@@ -44,7 +44,82 @@ public sealed class Warden : IPossessionWarden
     /// only announces a "return" when there was a leaving to undo.</summary>
     private bool _hasLeft;
 
+    // The leave is the one verb the director fires and forgets while the lockdown may end underneath
+    // it: a glide takes about half a second, and ReturnAsync running in the middle of one used to
+    // clear the tube's captured home BEFORE the leave finished, which parked a detached tube at the
+    // bottom of the screen with the note up, after the lockdown was over. So the leave is tracked.
+    private readonly object _leaveGate = new();
+    private Task? _leaveTask;
+    private CancellationTokenSource? _leaveCts;
+
+    /// <summary>Bumped by every <see cref="ReturnAsync"/> / <see cref="Reset"/>. A leave captures it
+    /// when it starts and refuses to finish (no note, no bark, no _hasLeft) if it changed underneath.</summary>
+    private int _returnEpoch;
+
+    private bool _hooked;
+
     private static AvatarTubeWindow? Tube => App.AvatarWindow;
+
+    public Warden()
+    {
+        EnsureHooked();
+    }
+
+    /// <summary>True while a warden verb owns the tube. Read by other Possession effects that move the
+    /// tube themselves (StealCardEffect) so a theft and a knock can never fight over it.</summary>
+    public bool IsBusy => Volatile.Read(ref _busy) != 0;
+
+    /// <summary>Take the tube for a NON-warden mover (the steal card). False when a verb owns it. The
+    /// caller must <see cref="ReleaseTube"/> when it is done - including after its own ReturnHomeAsync,
+    /// because that call clears the capture a warden verb would otherwise need to get home.</summary>
+    public bool TryTakeTube() => Interlocked.Exchange(ref _busy, 1) == 0;
+
+    /// <summary>Give the tube back after <see cref="TryTakeTube"/>.</summary>
+    public void ReleaseTube() => Interlocked.Exchange(ref _busy, 0);
+
+    /// <summary>A new lockdown starts with a clean warden: cooldown stamps cleared (otherwise the first
+    /// verb of this lockdown is blocked by the last one's 90 s appearance stamp), no leave in flight,
+    /// and <see cref="_hasLeft"/> false so reassembly cannot announce a "return" for a leaving that
+    /// happened in a previous lockdown.
+    ///
+    /// <para>The director has no warden-lifecycle seam - it never calls into the warden on activation -
+    /// so the warden hooks LockdownActivated itself, the same shape StealCardEffect uses for its own
+    /// per-lockdown state. If a call site ever appears in PossessionDirector.OnLockdownActivated,
+    /// calling Reset() there instead is equivalent (it is idempotent).</para></summary>
+    public void Reset()
+    {
+        try
+        {
+            Interlocked.Increment(ref _returnEpoch);
+            lock (_leaveGate)
+            {
+                try { _leaveCts?.Cancel(); } catch { }
+                _leaveCts = null;
+                _leaveTask = null;
+            }
+            _lastAppearance = DateTime.MinValue;
+            _lastStare = DateTime.MinValue;
+            _hasLeft = false;
+            ClearNote();
+        }
+        catch (Exception ex) { App.Logger?.Debug("Possession warden reset failed: {Error}", ex.Message); }
+    }
+
+    /// <summary>Subscribe to LockdownActivated once. Lazy as well as constructor-driven: App.Lockdown is
+    /// assigned a line before the warden is built, but a test (or a future re-order) must not silently
+    /// lose the per-lockdown reset.</summary>
+    private void EnsureHooked()
+    {
+        if (_hooked) return;
+        try
+        {
+            var lockdown = App.Lockdown;
+            if (lockdown == null) return;
+            _hooked = true;
+            lockdown.LockdownActivated += Reset;
+        }
+        catch { /* no lockdown service yet; retried from IsAvailable */ }
+    }
 
     public bool IsAvailable
     {
@@ -52,6 +127,7 @@ public sealed class Warden : IPossessionWarden
         {
             try
             {
+                EnsureHooked();
                 if (App.Settings?.Current?.LockdownWardenEnabled != true) return false;
                 var tube = Tube;
                 if (tube == null || !tube.CanPerformPossessionMove) return false;
@@ -161,14 +237,28 @@ public sealed class Warden : IPossessionWarden
     // =================================================================================================
     //  LEAVE - R4: the companion is not in the tube any more.
     // =================================================================================================
-    public async Task LeaveAsync(CancellationToken ct)
+    public Task LeaveAsync(CancellationToken ct)
+    {
+        if (Tube == null || _hasLeft) return Task.CompletedTask;
+
+        // Publish the leave BEFORE it starts: ReturnAsync has to be able to cancel and await it, or
+        // the lockdown can end mid-glide and the leave finishes after the tube's home was cleared.
+        lock (_leaveGate)
+        {
+            if (_leaveTask is { IsCompleted: false }) return Task.CompletedTask;
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(VerbTimeout);
+            _leaveCts = cts;
+            return _leaveTask = LeaveCoreAsync(cts, Volatile.Read(ref _returnEpoch));
+        }
+    }
+
+    private async Task LeaveCoreAsync(CancellationTokenSource cts, int epoch)
     {
         var tube = Tube;
-        if (tube == null || _hasLeft) return;
-        if (Interlocked.Exchange(ref _busy, 1) != 0) return;
+        if (tube == null) { cts.Dispose(); return; }
+        if (Interlocked.Exchange(ref _busy, 1) != 0) { cts.Dispose(); return; }
 
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(VerbTimeout);
         var token = cts.Token;
         try
         {
@@ -180,12 +270,23 @@ public sealed class Warden : IPossessionWarden
             if (!tube.TryGetTubeScreenRect(out var self)) return;
             var screen = System.Windows.Forms.Screen.FromPoint(
                 new System.Drawing.Point((int)self.X, (int)self.Y));
-            var wa = screen.WorkingArea;
+
+            // Bounds, NOT WorkingArea: the working area EXCLUDES the taskbar, so parking the tube's
+            // TOP-LEFT on that line left a taskbar-height slice of her on screen - topmost - through
+            // the entire "she's gone" beat. Bounds is the whole monitor, so the frame is really empty.
+            var bottom = screen.Bounds.Bottom;
 
             _lastAppearance = DateTime.UtcNow;
-            _hasLeft = true;
-            await tube.GlideToScreenPointAsync(new Point(self.X, wa.Bottom), token, clampToWorkArea: false)
+            await tube.GlideToScreenPointAsync(new Point(self.X, bottom), token, clampToWorkArea: false)
                       .ConfigureAwait(true);
+
+            // A return (reassembly, or the knock's delayed homeward leg) that began while we were
+            // gliding owns the tube now: it has already cleared the tube's captured home, so finishing
+            // here would pin a note in a frame nobody is coming back to and leave _hasLeft true for the
+            // NEXT lockdown to announce a phantom return.
+            if (token.IsCancellationRequested || Volatile.Read(ref _returnEpoch) != epoch) return;
+
+            _hasLeft = true;
 
             // The note goes up AFTER the glide, so it appears in a frame that is already empty rather
             // than riding down the screen with her.
@@ -195,7 +296,11 @@ public sealed class Warden : IPossessionWarden
         }
         catch (OperationCanceledException) { /* lockdown ended mid-exit; ReturnAsync still restores */ }
         catch (Exception ex) { App.Logger?.Warning("Possession warden leave failed: {Error}", ex.Message); }
-        finally { Interlocked.Exchange(ref _busy, 0); }
+        finally
+        {
+            Interlocked.Exchange(ref _busy, 0);
+            try { cts.Dispose(); } catch { }
+        }
     }
 
     // =================================================================================================
@@ -203,6 +308,12 @@ public sealed class Warden : IPossessionWarden
     // =================================================================================================
     public async Task ReturnAsync(CancellationToken ct)
     {
+        // FIRST, before anything else looks at the tube: stop and drain a leave that is still in
+        // flight. ReturnHomeAsync clears the tube's captured home, so a leave finishing after this
+        // point would strand a detached tube off the bottom of the screen with the note up - after
+        // the lockdown ended - and leave _hasLeft true for the next one to bark a phantom return.
+        await CancelInFlightLeaveAsync().ConfigureAwait(true);
+
         var tube = Tube;
         if (tube == null) { _hasLeft = false; return; }
 
@@ -235,6 +346,31 @@ public sealed class Warden : IPossessionWarden
     // =================================================================================================
     //  helpers
     // =================================================================================================
+
+    /// <summary>Cancel a leave that is still gliding and wait for it to unwind, so the caller owns the
+    /// tube outright afterwards. Bumping the epoch is what stops the leave placing its note / setting
+    /// _hasLeft even if it wins the race to the line after the cancel. No-op when nothing is in flight,
+    /// and never throws (a faulted leave already logged itself).</summary>
+    private async Task CancelInFlightLeaveAsync()
+    {
+        Task? task;
+        CancellationTokenSource? cts;
+        Interlocked.Increment(ref _returnEpoch);
+        lock (_leaveGate)
+        {
+            task = _leaveTask;
+            cts = _leaveCts;
+            if (task is { IsCompleted: true }) { _leaveTask = null; _leaveCts = null; task = null; cts = null; }
+        }
+        if (task == null) return;
+
+        try { cts?.Cancel(); } catch { }
+        try { await task.ConfigureAwait(true); } catch { }
+        lock (_leaveGate)
+        {
+            if (ReferenceEquals(_leaveTask, task)) { _leaveTask = null; _leaveCts = null; }
+        }
+    }
 
     /// <summary>Send the tube home shortly after a verb that deliberately stayed put. Fire-and-forget,
     /// so it carries its own dispatcher/shutdown guard and can never surface an unobserved exception.</summary>

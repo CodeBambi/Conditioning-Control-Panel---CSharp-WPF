@@ -94,6 +94,18 @@ public static class PossessionDeck
         _ => 4,
     };
 
+    /// <summary>Does a haunt worth <paramref name="slots"/> still fit under the rung's cap? A single
+    /// effect is one slot; a SCENE is its beat count (POSSESSION.md: "a scene counts as its beat
+    /// count"), which is why this takes a weight instead of assuming one. The director used to elect a
+    /// scene only after checking a flat "+2", so a three-beat choreography could be waved into a Melt
+    /// room (cap 3) that already had a ghost live and push it to four.</summary>
+    public static bool FitsConcurrency(int liveSlots, int slots, PossessionRung rung)
+    {
+        if (slots <= 0) slots = 1;
+        if (liveSlots < 0) liveSlots = 0;
+        return liveSlots + slots <= MaxLive(rung);
+    }
+
     // ---------------------------------------------------------------------------------------------
     //  Cadence
     // ---------------------------------------------------------------------------------------------
