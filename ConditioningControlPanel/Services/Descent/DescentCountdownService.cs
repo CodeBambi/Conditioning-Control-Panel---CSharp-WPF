@@ -103,6 +103,24 @@ namespace ConditioningControlPanel.Services.Descent
         internal static readonly TimeSpan VigilAt    = TimeSpan.FromHours(1);
         internal static readonly TimeSpan TerminalAt = TimeSpan.FromMinutes(10);
 
+        /// <summary>
+        /// How late a tick may first notice zero and still count as "live" (0825 F5). A laptop that
+        /// slept from T-2h to T+8h wakes to a tick with <c>remaining &lt;= 0</c>; without this the
+        /// full crack would play eight hours after the night and mint a "you were there" keepsake
+        /// for someone who was not. Past this grace the tick takes the away fork instead — the
+        /// catch-up crack, exactly as if the app had been closed.
+        /// </summary>
+        internal static readonly TimeSpan LateZeroGrace = TimeSpan.FromMinutes(5);
+
+        /// <summary>
+        /// How long step 4 holds after zero before the chrome lets go on its own (0825 F4). Step 4
+        /// deliberately holds THROUGH zero so the room does not brighten while the show opens, and
+        /// a migrated account restores immediately — but a subject who said "Not tonight", or whom
+        /// the server never offered, used to keep a dimmed app until the owner unset the timestamp,
+        /// which the auto-fire contract (§1.4) says never to do. Twelve hours is long past any show.
+        /// </summary>
+        internal static readonly TimeSpan DimHoldPastZero = TimeSpan.FromHours(12);
+
         /// <summary>Coarse cadence. Thirty seconds is invisible on a day counter and costs nothing.</summary>
         private static readonly TimeSpan SlowTick = TimeSpan.FromSeconds(30);
 
@@ -151,6 +169,16 @@ namespace ConditioningControlPanel.Services.Descent
         /// opens its window from here.
         /// </summary>
         public event EventHandler? ZeroReached;
+
+        /// <summary>
+        /// Zero was first noticed more than <see cref="LateZeroGrace"/> after the instant, in a
+        /// process that was open across it (sleep, hibernate, a frozen UI thread). This is the
+        /// in-session twin of <see cref="ZeroPassedWhileAway"/>: by the time it fires that flag is
+        /// already TRUE, so <see cref="ShouldPlayCatchUp"/> answers correctly and the director can
+        /// run the catch-up path it would have run at launch. Never fires on the same night as
+        /// <see cref="ZeroReached"/>.
+        /// </summary>
+        public event EventHandler? ZeroObservedLate;
 
         // ------------------------------------------------------------------
         // State
@@ -332,7 +360,8 @@ namespace ConditioningControlPanel.Services.Descent
                 // server keeps re-sending must not re-log and re-arm on every sync.
                 if (string.Equals(settings.DescentCeremonyAtUtc, incoming, StringComparison.Ordinal)) return;
 
-                var hadFuse = ParseCeremonyAt(settings.DescentCeremonyAtUtc).HasValue;
+                var previousAt = ParseCeremonyAt(settings.DescentCeremonyAtUtc);
+                var hadFuse = previousAt.HasValue;
                 settings.DescentCeremonyAtUtc = incoming;
                 App.Settings?.Save();
 
@@ -357,6 +386,21 @@ namespace ConditioningControlPanel.Services.Descent
                 {
                     _spokenPhases.Clear();
                     _scriptedSilence = false;
+                }
+
+                // A NEW INSTANT IS A NEW ZERO (0825 F3). The owner's one lever on a bad night is
+                // to push the timestamp back an hour — and before this, a process that had already
+                // raised ZeroReached for the old instant (or launched between the old instant and
+                // the postponement and so settled "already passed") could never fire the new one:
+                // _zeroRaised was never reset and the away fork was decided once. Re-settle both
+                // on the same rule Start uses, but only when the instant actually moved — a
+                // formatting-only change (".000Z" vs "Z") is the same fuse.
+                if (_started && hadFuse && previousAt != parsed)
+                {
+                    _zeroRaised = false;
+                    ZeroPassedWhileAway = parsed.Value <= DateTime.UtcNow;
+                    Log.Information("[Fuse] The instant moved ({From:o} -> {To:o}); zero is re-armed{Away}.",
+                        previousAt!.Value, parsed.Value, ZeroPassedWhileAway ? " (already passed)" : "");
                 }
 
                 if (!_started)
@@ -410,7 +454,10 @@ namespace ConditioningControlPanel.Services.Descent
             }
 
             _fastCadence = wantFast;
-            _timer = new DispatcherTimer(DispatcherPriority.Background, dispatcher)
+            // Normal, not Background (0825 F7): a running session's flash bursts and overlays
+            // starve Background ticks, which stutters the one-second readout and lets zero land
+            // seconds late. Normal is what the rest of the app's user-visible timers use.
+            _timer = new DispatcherTimer(DispatcherPriority.Normal, dispatcher)
             {
                 Interval = wantFast ? FastTick : SlowTick
             };
@@ -454,9 +501,24 @@ namespace ConditioningControlPanel.Services.Descent
                 if (!_zeroRaised && remaining <= TimeSpan.Zero && !ZeroPassedWhileAway)
                 {
                     _zeroRaised = true;
-                    Log.Information("[Fuse] Zero, live. Raising ZeroReached.");
-                    try { ZeroReached?.Invoke(this, EventArgs.Empty); }
-                    catch (Exception ex) { Log.Error(ex, "[Fuse] A ZeroReached handler threw."); }
+
+                    if (IsZeroObservedLate(at.Value, DateTime.UtcNow))
+                    {
+                        // The process was open across the instant but nobody was at it (0825 F5).
+                        // Flip to the away fork BEFORE anyone hears about it, so ShouldPlayCatchUp
+                        // and the witness ratchet both read this as a night that was missed.
+                        ZeroPassedWhileAway = true;
+                        Log.Information("[Fuse] Zero noticed {Late:c} late (sleep/resume?) — taking the away fork, not the live show.",
+                            DateTime.UtcNow - at.Value);
+                        try { ZeroObservedLate?.Invoke(this, EventArgs.Empty); }
+                        catch (Exception ex) { Log.Error(ex, "[Fuse] A ZeroObservedLate handler threw."); }
+                    }
+                    else
+                    {
+                        Log.Information("[Fuse] Zero, live. Raising ZeroReached.");
+                        try { ZeroReached?.Invoke(this, EventArgs.Empty); }
+                        catch (Exception ex) { Log.Error(ex, "[Fuse] A ZeroReached handler threw."); }
+                    }
                 }
 
                 // Past zero the clock has nothing left to say; the show owns the moment now.
@@ -861,12 +923,21 @@ namespace ConditioningControlPanel.Services.Descent
 
             var left = ceremonyAtUtc.Value - nowUtc;
             if (left > DimmingAt) return 0;
-            if (left <= TimeSpan.Zero) return 4;
+            // Holds through zero — and lets go on its own once the night is long over
+            // (DimHoldPastZero), so a deferral is not a permanently dimmed app.
+            if (left <= TimeSpan.Zero) return -left > DimHoldPastZero ? 0 : 4;
 
             var elapsed = DimmingAt - left;
             var step = 1 + (int)Math.Floor(elapsed.TotalHours / 6.0);
             return Math.Clamp(step, 1, 4);
         }
+
+        /// <summary>
+        /// Whether a zero first noticed at <paramref name="nowUtc"/> is too late to be the live
+        /// show (0825 F5). Pure; the tick's fork and the tests both read it.
+        /// </summary>
+        internal static bool IsZeroObservedLate(DateTime ceremonyAtUtc, DateTime nowUtc) =>
+            nowUtc - ceremonyAtUtc > LateZeroGrace;
 
         public void Dispose()
         {

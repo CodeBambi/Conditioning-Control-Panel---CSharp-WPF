@@ -49,8 +49,14 @@ namespace ConditioningControlPanel.Services.Descent
     /// </summary>
     public sealed class DescentFuseHandoff
     {
-        /// <summary>Give up on the offer after this. §2.3's number.</summary>
-        public const double TimeoutSeconds = 45.0;
+        /// <summary>
+        /// Give up on the offer after this. §2.3 said forty-five; raised to seventy-five on the
+        /// 0825 hunt (D1): with the thirty-second cooldown on BOTH ends, a client that synced in
+        /// the last half-minute before zero cannot land a request before ~T+37s, and one 429 on
+        /// that attempt pushed the next past forty-five — a healthy install missing the happy path
+        /// maybe one time in six. Seventy-five leaves room for two full cooldown windows.
+        /// </summary>
+        public const double TimeoutSeconds = 75.0;
 
         /// <summary>How often to ask for a sync while waiting. See the cooldown note above.</summary>
         public const double ResyncEverySeconds = 8.0;
