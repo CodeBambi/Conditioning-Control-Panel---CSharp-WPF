@@ -288,7 +288,14 @@ export function createOneshots(ctx) {
     const chans = ctx.channels();
     const name = opts.name || opts.id || 'sting';
     const base = opts.level == null ? 0.6 : ctx.pct(opts.level);
-    const level = ctx.magnitude(base * (0.55 + 0.45 * clamp01(chans.binauralDepth)));
+    // THE BINAURAL FLOOR (2026-08-25, Echo's silence). binauralDepth is
+    // smoothstep(heat) x caps x master, so a low-heat class sees ~0.03-0.05 and
+    // the old (0.55 + 0.45*depth) term halved every tone before the mixer ever
+    // saw it - on a phone speaker that WAS the difference between a game with
+    // sound and one without. The effects dial may COLOUR loudness, never
+    // near-silence it: mute/masterVolume/the bus law is the honest volume
+    // control. Floor 0.8, depth buys the last 20%.
+    const level = ctx.magnitude(base * (0.8 + 0.2 * clamp01(chans.binauralDepth)));
     const duckKind = opts.duck === true ? 'voice' : (opts.duck || null);
     const detail = { name, level, bus: opts.bus || 'fx' };
     // The pitch ratchet (shell/audio.js clamps 0.5..2): three games send it and

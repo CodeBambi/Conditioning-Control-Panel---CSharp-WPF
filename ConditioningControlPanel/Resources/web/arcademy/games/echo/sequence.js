@@ -86,8 +86,12 @@ export const PLAYTEST = Object.freeze({
   /** SOFT INPUT TIMER (dossier: tier 3 soft, tier 4 strict). 0 = untimed. */
   INPUT_WINDOW_MS: Object.freeze({ 1: 0, 2: 0, 3: 4200, 4: 3200 }),
 
-  /** audio_trigger level ceilings by tier (the engine clamps again). */
-  AUDIO_CEIL: Object.freeze({ 1: 0.45, 2: 0.6, 3: 0.75, 4: 0.9 }),
+  /** audio_trigger level ceilings by tier (the engine clamps again).
+   *  RAISED 2026-08-25 ("no sound in Echo on mobile or web"): the old
+   *  .45/.6/.75/.9 ladder, under the engine's binaural scaler and the mixer's
+   *  chain, put tier 1 near -25 dBFS - inaudible on a phone speaker. The
+   *  ladder still climbs; it just starts audible. */
+  AUDIO_CEIL: Object.freeze({ 1: 0.7, 2: 0.8, 3: 0.9, 4: 1 }),
 
   /** HEAT: the class's own ladder is the sequence length; the tier caps it. */
   HEAT_CAP: Object.freeze({ 1: 0.45, 2: 0.65, 3: 0.85, 4: 1 }),
@@ -143,6 +147,13 @@ export const PLAYTEST = Object.freeze({
   /* ---- ROUND 2 (owner play-test, 2026-08-23) --------------------------- */
   /** THE VEIL: how long the frost takes to clear off a word and come back. */
   VEIL_FADE_MS: 200,
+  /** THE TRIGGER FLASH (owner, 2026-08-25: "show trigger words briefly on
+   *  press instead of desktop's hover"). A finger has no hover, so EVERY
+   *  press - refused and locked taps included - unveils the pad's word for
+   *  this long before the frost returns. Longer under reduced motion: with
+   *  the crossfade off, the word needs more dwell to be read at all. */
+  FLASH_MS: 450,
+  FLASH_MS_REDUCED: 600,
   /** THE FIT. The word's box is FIT_LINES lines tall measured in `em`, so it
    *  scales with whatever size the search lands on - a smaller font simply
    *  fits more of the phrase into the same glass. These bound the search;

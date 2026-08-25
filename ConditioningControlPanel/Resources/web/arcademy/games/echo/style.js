@@ -443,15 +443,29 @@ ${padRules()}
     0 1px .5em rgba(0,0,0,.6)}
 /* THE UNVEIL. Same specificity as the rule above (class + attribute + class vs
    class + pseudo-class + class), so ORDER is what decides - these must stay
-   BELOW it. index.js clears data-veil for every non-idle state; these three add
-   the pointer, the finger and the keyboard on top of that. */
-.g-ec-pad:hover .g-ec-word,
+   BELOW it. index.js clears data-veil for every non-idle state AND flashes it
+   off on every press (touch parity, 2026-08-25); these add the pointer, the
+   finger and the keyboard on top of that.
+   THE HOVER RUNG IS DESKTOP-ONLY: iOS keeps :hover stuck on the last-tapped
+   element, which left one pad permanently unveiled, so under html.ae-touch the
+   hover half stands down and the press flash (data-veil="off") is the look.
+   :not() keeps the no-touch cascade identical. */
+html:not(.ae-touch) .g-ec-pad:hover .g-ec-word,
 .g-ec-pad:focus-visible .g-ec-word,
 .g-ec-pad:focus .g-ec-word,
 .g-ec-pad:active .g-ec-word,
 .g-ec-pad[data-veil="off"] .g-ec-word{color:hsl(var(--ec-h) 92% calc(88% + 8% * var(--ec-lamp)));
   text-shadow:0 0 calc(5px + 16px * var(--ec-lamp)) hsl(var(--ec-h) 95% 70% / .95),
     0 2px 4px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,.9)}
+/* THE POP (2026-08-25): a press-flashed word arrives with a small settle -
+   transform/opacity only (never a filter over live media - trap 36), and the
+   translate is repeated because a keyframe transform REPLACES the centring one.
+   Neutralised under .arc-reduced / prefers-reduced-motion by the blanket
+   `.g-ec-stage *{animation:none}` rules below - the word still unveils, it
+   just does not move. */
+.g-ec-pad[data-veil="off"] .g-ec-word{animation:g-ec-wordpop .2s ease-out 1}
+@keyframes g-ec-wordpop{from{transform:translate(-50%,-50%) scale(1.06);opacity:.82}
+  to{transform:translate(-50%,-50%) scale(1);opacity:1}}
 /* The GLYPH is the truth node and is NEVER veiled (Law IV) - it is how you know
    which pad is which while the phrase is still frosted. */
 /* THE REVEAL CAPTION. On every pad, shown only when the pad IS the answer. */
