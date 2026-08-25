@@ -401,6 +401,12 @@ export const DEFAULT_LEXICON = Object.freeze({
      re-voices the whole beat. The room this walks to is the Front Office and it
      is NEVER named in any of them. */
   orientation_kicker: 'Orientation Day',
+  /* EMI ASKS: the Send button on the one question with a keyboard (a14, "what
+     do i call you?"). The ONLY display string EMI renders - her questions,
+     chips and reactions are all VERBATIM content and never pass through t().
+     shell/shell.js resolves it and hands the answer to mountEmi. Her voice is
+     lowercase, so this row is too. */
+  emi_ask_send: 'send',
   emi_orientation_hi: 'a new student! i did a little spin. you missed it.',
   emi_orientation_card: "official! now you have to come back. it's the rules.",
   emi_orientation_go: "go! your first class doesn't know how lucky it is.",

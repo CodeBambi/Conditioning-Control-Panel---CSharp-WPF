@@ -91,11 +91,19 @@
  * counts it on both sides of its reach test, so the extra 15px can never push
  * the mirrored line back off the edge the flip exists to stay clear of. */
 .arc-emi .emi .emi-bubble {
-  left: calc(58% + var(--emi-bubble-dx, 15px));
+  /* `--emi-bubble-cx` is widget.js's MEASURED viewport clamp - the same one
+     the ask strip gets, for the same reason. The reach test that picks
+     `.bubble-left` is a heuristic sized against the desktop pair (a 150px EMI,
+     a 104px box); on a phone the pair is 86 and 168 and a long line hangs off
+     the window edge even after the flip. The clamp is on `left`, never on
+     `transform`, because `.emi-bubble.pop` animates the transform and would
+     out-rank an inline one for the whole 280ms of its landing. */
+  left: calc(58% + var(--emi-bubble-dx, 15px) + var(--emi-bubble-cx, 0px));
 }
 .arc-emi .emi.bubble-left .emi-bubble {
   left: auto;
-  right: calc(58% + var(--emi-bubble-dx, 15px));
+  /* MIRRORED, so the clamp's sign is too: this edge is anchored from the right. */
+  right: calc(58% + var(--emi-bubble-dx, 15px) - var(--emi-bubble-cx, 0px));
   text-align: right;
   transform-origin: 100% 100%;
 }
@@ -159,7 +167,11 @@
   flex-wrap: wrap;
   gap: 4px;
   width: max-content;
-  max-width: 148px;
+  /* 148 fitted the two-chip pair exactly. a14's row is THREE things now
+     (field, Send, out) and 148 broke the out chip onto a line of its own, so
+     the box gets the 48px that keeps one question on one row. A two-chip strip
+     is unchanged: the width is `max-content` and only the cap moved. */
+  max-width: 196px;
   z-index: 4;
   pointer-events: none;
   transform-origin: 0 100%;
@@ -224,6 +236,11 @@
   border-color: #FF69B4;
 }
 .arc-emi .emi .emi-chip-field:hover { background: #F5F0E1; color: #1A1A2E; }
+/* a14's SEND. It is chip ONE, so it wears chip one's pink - the `+ .emi-chip`
+   rule above would otherwise hand it the lavender that belongs to the OUT
+   chip, and the pair would read backwards. */
+.arc-emi .emi .emi-chip.emi-chip-send { border-color: #FF69B4; }
+.arc-emi .emi .emi-chip.emi-chip-send:hover { background: #FF69B4; color: #F5F0E1; }
 
 @keyframes emi-ask-in {
   from { opacity: 0; transform: translate(var(--emi-ask-dx, 0px), 6px); }
@@ -245,8 +262,23 @@
 :root.arc-reduced .arc-emi .emi .emi-ask.out { animation: none; }
 :root.arc-reduced .arc-emi .emi .emi-chip:active { transform: none; }
 
-/* The phone gets the same rope the bubble does (see THE PHONE CLAMP below). */
-:root.arc-mobile .arc-emi .emi .emi-ask { max-width: min(72vw, 200px); }
+/* The phone gets the same rope the bubble does (see THE PHONE CLAMP below) -
+   widened on 2026-08-25 because a14's row is now three things (field, send,
+   out) and 200px wrapped the out chip onto a line of its own. */
+:root.arc-mobile .arc-emi .emi .emi-ask { max-width: min(84vw, 248px); }
+/* THE 44px FLOOR IS THE ONLY REASON THIS BLOCK EXISTS. A chip is 8px Press
+   Start 2P in a 5px/7px box - about 22px tall, which is a fine mouse target
+   and half of what a thumb needs. On a phone the box grows to the platform
+   floor and the TEXT does not, because the pixel grid is absolute (trap 62):
+   the padding does the work. `box-sizing` is set here rather than inherited
+   because a border-box chip would eat the min-height with its own 2px border. */
+:root.arc-mobile .arc-emi .emi .emi-chip {
+  box-sizing: border-box;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 6px 10px;
+}
+:root.arc-mobile .arc-emi .emi .emi-chip-field { width: 88px; }
 
 /* ---- the dock -----------------------------------------------------------
  * Where a dismissed EMI lives. Semi-transparent so it never competes with the

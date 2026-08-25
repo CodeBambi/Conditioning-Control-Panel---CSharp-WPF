@@ -163,7 +163,7 @@ export function voiceMoment(name, payload) {
  * @param {Function=} o.log
  * @returns {Object|null} the controller, or null when there is nothing to mount
  */
-export function mountEmi({ layer, store, toast, enabled = true, log, assets, settings } = {}) {
+export function mountEmi({ layer, store, toast, enabled = true, log, assets, settings, strings } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   if (!layer) return null;
   if (singleton) return singleton;
@@ -172,7 +172,12 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
    * is `init.settings`. NOW WATCHING is the only thing in EMI that wants
    * either, and both are optional - a host that hands neither simply plans that
    * channel out of the wheel (never a stub, never a black glass). */
-  const widget = createWidget({ root: layer, store, toast, log: say, assets, settings });
+  /* `strings` is the SHELL's resolved lexicon rows - today exactly one,
+   * `askSend`. EMI has never imported core/lexicon.js and this does not change
+   * that: the side of the page that has `t` does the resolving and hands the
+   * ANSWER down, the way shell/orientation.js already hands her three lines
+   * over as `payload.line`. */
+  const widget = createWidget({ root: layer, store, toast, log: say, assets, settings, strings });
   if (!widget) return null;
 
   /* THE OPENING BEAT LANDS LATE OR NOT AT ALL. The renderer is one dynamic
@@ -253,7 +258,7 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
      * is. `opts.hold` still wins when it asks for MORE; it can never ask for
      * less. The typing cadence is untouched.
      * @param {string} line
-     * @param {{face?:string, hold?:number, nod?:boolean}=} opts
+     * @param {{face?:string, hold?:number, nod?:boolean, ask?:boolean}=} opts
      */
     say(line, opts) {
       const o = opts || {};
@@ -280,7 +285,11 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
       try { chain = make(line, o.face || '^_^', sayHoldMs(line, o.hold)); }
       catch (e) { say('emi: makeSay threw - ' + ((e && e.message) || e)); return false; }
       if (o.nod) chain = Object.assign({}, chain, { body: 'nod' });
-      return widget.play(chain, { protect: true, force: true });
+      /* `ask` IS THE ONE LINE THAT OUTRANKS A LIVE ASK, because it IS the ask
+       * (emi/asks.js is its only caller). Everything else offered while she is
+       * waiting is held or refused - see widget.js's ask-owns-the-glass block
+       * and trap 104. */
+      return widget.play(chain, { protect: true, force: true, ask: o.ask === true });
     },
 
     /** Back to the resting state (0_0 + blink + breath). */

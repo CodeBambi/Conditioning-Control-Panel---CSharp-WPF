@@ -2253,6 +2253,68 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     Sitting behind all of it: **a phone viewport is a merge gate** (section 6). Every one
     of these was invisible at 1600x900 and obvious in the first 844x390 shot.
 
+104. **AN ASK IS A BUBBLE THAT IS WAITING FOR YOU, AND THE SAY LAW ALONE CANNOT
+    PROTECT ONE (owner bug 2026-08-25: "the how can I call you prompt got removed
+    because I think I triggered another speech").** widget.js's law 3 is "a protected
+    chain refuses to be replaced by an UNPROTECTED one" - and every line EMI says is
+    protected, so a bark landing thirty seconds into a question walked straight over it.
+    The question text was replaced, the chips stayed, and the first click the player made
+    to get rid of the orphaned strip dismissed the ask for free. **An ask therefore
+    raises a second, higher fence:** `askOwnsGlass()` is true from the question's own
+    `emi.say(q, {ask:true})` until `unmountAsk()`, a later SAY is parked in ONE slot and
+    released afterwards if it is still worth saying (`ASK_QUEUE_MS`, 8s), and every other
+    reaction - a raw face, a chain, an emote, `force` and all - is refused outright.
+    Four things fall out of it and each one was its own half-bug:
+    - **THE HOLD OPENS WITH THE LINE, NOT WITH THE STRIP.** The chips land
+      `STRIP_LEAD_MS` (1560ms) after the question does, and that gap is the window the
+      owner's bug actually fell through. `mountAsk` therefore calls `dropStrip()` - the
+      half WITHOUT the release - so clearing a previous strip on the way in cannot take
+      down the question that is landing.
+    - **THE QUESTION HAS NO AUTO-HIDE AT ALL.** `GIVE_UP_MS` is **0**, which is not
+      "expire immediately" but "she waits": the hold handed to the say is an hour
+      (`DIALS.ASK_HOLD_MS`, a large FINITE number because `chains.js makeSay` does
+      `holdMs | 0` and `Infinity | 0` is a 400ms flash), and `releaseAskLine()` is the
+      only thing that ever ends it. The player cannot be trapped by that - any press
+      anywhere is a free dismiss - and there is exactly ONE carve-out: the dares still
+      leave after `DARE_GIVE_UP_MS`, because trap 97 says a strip may not be sitting over
+      a board that is about to take input.
+    - **THE 220ms LEAVE ANIMATION CANNOT RIDE `later()`.** Every resolution an ask has is
+      followed in the same tick by her reaction to it, and a reaction runs `killTimers()`.
+      The drop timer went with it, so `.out` faded the strip to opacity 0 and left a node
+      with two `pointer-events:auto` chips over the board for the rest of the sitting -
+      trap 59's failure mode, and invisible in every screenshot. It has its own handle.
+    - **AN INTERRUPTED ASK IS NOT AN ANSWERED ONE, AND `a14_name` PAID FOR THAT TWICE.**
+      A press records nothing (trap 96), so an interrupted question simply vanished; it
+      now comes back once a sitting on the next `idlePlayer` or the next firing of its own
+      trigger (`S.reask`, dares excluded for the reason above). And the name ask's window
+      was `sessions === 3` **exactly**, so one stray click on session three meant EMI
+      could never learn your name on that save. It is `>= 3` while unanswered now, held
+      off by a once-a-sitting latch the way a15's `bedAsked` is.
+    The one display string she renders (the Send button's label, `emi_ask_send`) is
+    resolved by **shell.js** and handed to `mountEmi` as `strings.askSend`: no lexicon
+    reaches EMI, and this did not change that.
+
+    Two more the phone shot found, both of them trap 61's heuristic coming due:
+    - **THE BUBBLE'S EAR TEST IS SIZED OFF HER BODY, AND THE PHONE PAIR DOES NOT FIT
+      IT.** `faceBubble`'s reach is `left + w * 1.55`, where `w` is EMI's WIDTH -
+      calibrated for the desktop pair (150px EMI, 104px box). A phone runs an 86px EMI
+      beside a box allowed `min(72vw, 168px)`, so the correct ear still left "what do i
+      call you?" 75px off the right edge at 844x390. The bubble now gets the same
+      MEASURED pull-back the strip has had (`--emi-bubble-cx`, on `left`, never on
+      `transform` - `.emi-bubble.pop` animates the transform and would out-rank an
+      inline one for its whole 280ms).
+    - **AND IT HAS TO BE MEASURED WITH `offsetWidth`, NOT WITH A RECT.** That same pop
+      is a scale keyframe, and `getBoundingClientRect` reports the TRANSFORMED box
+      (trap 74's twin half). A rect read on the frame the line lands measures the box
+      at about 60% and produces a clamp a sixth of the size it should be - which is
+      exactly what the first attempt shipped, and it looked almost right.
+
+    **The suite: `scratchpad/emihold/test-askhold.mjs`, 117 assertions**, real widget +
+    real asks.js + real chains.js over the DOM double and a VIRTUAL CLOCK (an hour-long
+    hold cannot be asserted on the wall clock). `before-probe.mjs` beside it is the
+    before/after: point its `arc/` at main and watch "rough day?" become "you came back."
+    with the chips still up.
+
 ## 5. The game module contract (short version)
 
 ```js

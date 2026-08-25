@@ -2334,6 +2334,13 @@ internal static class ArcademyHostService
         ["emi_orientation_card"] = "official! now you have to come back. it's the rules.",
         ["emi_orientation_go"] = "go! your first class doesn't know how lucky it is.",
 
+        // EMI ASKS: the Send button on the one question with a keyboard (a14,
+        // "what do i call you?"). The ONLY display string EMI renders - her
+        // questions, chips and reactions are verbatim content and never pass
+        // through the lexicon. shell/shell.js resolves this one and hands the
+        // answer to mountEmi. Her voice is lowercase, so this row is too.
+        ["emi_ask_send"] = "send",
+
         // THE PHANTOM POST chrome (shell/mail.js, mailbox.js, corkboard.js,
         // bugle.js). Copy of core/lexicon.js's block - copy the values, do not
         // re-word them (the IC_LEX rule). Letter bodies, notices and newspaper
