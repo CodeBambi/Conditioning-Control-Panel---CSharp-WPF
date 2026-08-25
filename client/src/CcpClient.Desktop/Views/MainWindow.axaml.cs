@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private string? _loggedLayoutProbe;
     private readonly FeaturePopupManager _popups;
     private Features.Companion.CompanionWindow? _companion;
+    private DateTimeOffset _lastPanicPress = DateTimeOffset.MinValue;
 
     /// <summary>
     /// The navigation shell. A rail of doors, one page host, and — for the first time
@@ -312,6 +313,15 @@ public partial class MainWindow : Window
     /// real menu and the real window transitions.</summary>
     public ShellTray ShellTray { get; }
 
+    /// <summary>
+    /// The emergency-stop chord, once the app has really claimed it from the OS — <c>App</c> sets
+    /// this after <see cref="Input.Win32PanicKey.Arm"/> returns Available, and nothing sets it when
+    /// the OS refused. It is therefore a promise the process is keeping, never a label: the running
+    /// session's own status line names it (<see cref="RenderSessionState"/>), which is the only
+    /// place a user finds out the escape exists.
+    /// </summary>
+    public string? PanicGesture { get; set; }
+
     /// <summary>The conditioning session START drives; public so tests drive the real
     /// engine and the real effect rather than a shell-local copy of either.</summary>
     public Session.SessionParticipant Session { get; }
@@ -348,7 +358,7 @@ public partial class MainWindow : Window
         SessionStartButton.SetValue(Avalonia.Automation.AutomationProperties.NameProperty, running ? "STOP" : "START");
         SessionStartButton.Classes.Set("running", running);
         SessionStatusText.Text = running
-            ? "Session running."
+            ? PanicGesture is null ? "Session running." : $"Session running. {PanicGesture} stops everything."
             : string.Empty;
     }
 
@@ -359,6 +369,84 @@ public partial class MainWindow : Window
     /// now lives once, in the producer, for every module and every panel that will ever subscribe.
     /// </summary>
     private void OnSessionEngineChanged() => RenderSessionState();
+
+    /// <summary>
+    /// How long a second panic press still counts as part of the first. Upstream's window, reached
+    /// through the constant the port already derived from it for the Arcademy's own ladder
+    /// (<see cref="Features.Arcademy.ArcademySession.PanicDoublePressWindow"/>, WPF
+    /// <c>ConditioningControlPanel/MainWindow/MainWindow.xaml.cs:1156</c>).
+    /// </summary>
+    public static TimeSpan PanicDoublePressWindow => Features.Arcademy.ArcademySession.PanicDoublePressWindow;
+
+    /// <summary>
+    /// <b>The emergency stop's ladder, and the shortest thing in this file that matters most.</b>
+    /// Public so a test drives the real one rather than a copy of it; also called by
+    /// <see cref="Input.Win32PanicKey.Pressed"/> on the UI thread.
+    ///
+    /// <para>Two rungs, upstream's (<c>ConditioningControlPanel/MainWindow/MainWindow.xaml.cs:1164</c>
+    /// and <c>:1227</c>): <b>press 1 while a session is running stops it</b> — every module is
+    /// disarmed, which is what posts each surface's withdrawal — and <b>a press within
+    /// <see cref="PanicDoublePressWindow"/> with nothing running exits the application</b> through
+    /// the same guarded teardown the tray menu's Exit reaches. So the pair "stop, then out" is two
+    /// presses of one chord, exactly as it is upstream.</para>
+    ///
+    /// <para>The scheduler is told the stop was MANUAL before the engine is touched, for the reason
+    /// the START button's handler gives at its own call site: without it the next scheduler tick
+    /// would start the session the user just panicked out of.</para>
+    ///
+    /// <para>The shell is un-ducked and raised on every press. A user who has just stopped a session
+    /// has to be able to SEE the window that owns it, and the surfaces they were escaping were on
+    /// top of it a moment ago.</para>
+    ///
+    /// <para><b>What this deliberately does NOT do.</b> It does not touch windows the user opened
+    /// and can close themselves (DTRH, Goon, Intake, the companion), and it does not reach
+    /// <c>ArcademySession.PanicPress</c> — the Arcademy's door is shut in this build, and wiring a
+    /// hand-off to a surface nobody can open would be a branch no test could reach through the
+    /// product. Both are named rather than silently absent.</para>
+    /// </summary>
+    public void PanicPress()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var doubleTap = now - _lastPanicPress <= PanicDoublePressWindow;
+        _lastPanicPress = now;
+
+        if (Session.Engine.Running)
+        {
+            _host.LogDiagnostic("panic: session running — stopping every module");
+            Scheduler.NoteManualToggle(true);
+            Session.Engine.Stop();
+            RenderSessionState();
+            SurfaceTheShell();
+            return;
+        }
+
+        if (doubleTap)
+        {
+            _host.LogDiagnostic("panic: second press with nothing running — exiting");
+            RequestApplicationExit();
+            return;
+        }
+
+        _host.LogDiagnostic("panic: nothing running — shell raised; press again to exit");
+        SurfaceTheShell();
+    }
+
+    /// <summary>
+    /// Put the window that owns the STOP button back in front of the user. Restores a ducked shell
+    /// first (that also takes the tray icon down), then un-minimizes and activates.
+    /// </summary>
+    private void SurfaceTheShell()
+    {
+        ShellTray.Restore();
+
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        Show();
+        Activate();
+    }
 
     /// <summary>The page currently mounted in the host, by route id.</summary>
     public Control PageFor(string routeId) => _pages[routeId];

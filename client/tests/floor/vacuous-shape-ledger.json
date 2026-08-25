@@ -675,6 +675,18 @@
       "reason": "fs usage is the FindRepoRoot anchor probe + Assert.True(Directory.Exists(...)) at depth 0 — the guard never skips by design (a missing directory FAILS). The per-surface Assert.True(File.Exists(path)) in the second half is the same shape and the same intent: a hosted surface that vanished from the list FAILS rather than being quietly walked past."
     },
     {
+      "key": "CcpClient.Tests/PanicKeyTests.cs::PanicKeyTests.ThePressARRIVESThroughAFullMonitorTopmostClickSink_AndTheDISPOSEDKeyMissesTheSameDelivery",
+      "path": "CcpClient.Tests/PanicKeyTests.cs",
+      "line": 98,
+      "method": "PanicKeyTests.ThePressARRIVESThroughAFullMonitorTopmostClickSink_AndTheDISPOSEDKeyMissesTheSameDelivery",
+      "shapes": [
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "MACHINE GATE, not a silenced assertion, and it was written as one from the start rather than converted: the fact drives a REAL Win32 rig - a full-monitor HWND_TOPMOST click-absorbing overlay of this build's own type placed on the interactive desktop, RegisterHotKey asked for Ctrl+Alt+Esc, and a real chord injected through SendInput and waited for as a real WM_HOTKEY. None of RegisterHotKey, WM_HOTKEY or SendInput exists off Windows and none can be exercised in a Windows session with no desktop, so every reading would be about a window that was never created and a chord nobody holds - which is a PASS with nothing behind it. The gate is Assert.SkipUnless(PointerWindowProbe.MachineHasInteractiveDesktop), so the refusal REPORTS as NotExecuted carrying its reason, and it must be pinned by NAME in floor.json allowedSkips under the admission rule (a machine/OS property, never satisfiable by configuration) before any run on a machine without an interactive desktop. Every assertion below the gate is UNCONDITIONAL. The sibling fact TheChordIsHeldSystemWide_AndTheOperatingSystemConfirmsTheWindowItIsPostedTo is deliberately NOT gated: its off-Windows answer is meaningful (the capability must return the typed Unavailable rather than pretend), so it is keyed to the platform in the TrayCapabilityTests idiom and runs everywhere. The X11/Wayland half of the emergency stop is measured by nothing in this port - there is no system-wide hotkey mechanism there at all - and this refusal is where that shows rather than being absorbed into a green."
+    },
+    {
       "key": "CcpClient.Tests/PersistenceTests.cs::PersistenceTests.ConcurrentWrites_Serialized_NoInterleave_LatestStateWins",
       "path": "CcpClient.Tests/PersistenceTests.cs",
       "line": 153,
