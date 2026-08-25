@@ -809,6 +809,37 @@ DOWN, and the page never invents a number).
     zip ingest only. Both write through to the page's view of `init.settings` so a second trip
     through the front office does not repaint yesterday's answer.
 
+- **`engine.deadBeat(beat, opts)` is THE SEEP'S CLASS-SIDE DOOR, and the only one.** A class
+  names a DEAD MOMENT it is standing in - `'round_gap'` / `'resume'` / `'resurface'` /
+  `'stream'`, the names in `shell/seep.js BEATS` - and the engine asks the director, which
+  answers **null** the overwhelming majority of the time. The engine holds the director as an
+  INJECTION (`createEngine({ seep: { beat, feed } })`, wired in `shell.js startClass`) and never
+  imports `seep.js`; `feed` is `seep.feedTag(gameKey)`, so nobody keeps a second copy of the
+  Annex camera map. The handle is `{tell, ms, cancel()}`.
+  - `opts.draw(ms) -> undo` lets a game own the pixels where they have to live inside its own
+    furniture (The Deep End's backdrop, one Instant Recall tile). With no `draw` the engine
+    paints the two tells it owns, on `.ae-layer`.
+  - **`opts.onClear` runs on the tell's LAST FRAME**, after the pixels are gone and after the
+    claim is released. It is the input re-arm hook, and it is how `pauseClass(false)` proves
+    that input comes back only once the Resume Slate has cleared. **A null answer does NOT call
+    it** - the caller re-arms itself, synchronously, and the common case pays no latency.
+  - One claim per engine; `suspend(true)` and `dispose()` both clear a live one BEFORE
+    `timers.kill()`, or the claim is stranded and the director's global cooldown eats it.
+  - It is **not an effect**: no channel, no ceiling, no `effectsConsumed` allowlist, no
+    `arcademy-fx`, no log line. The school does not report itself.
+- **THE CLASS CLOCK GOES BACK INSIDE THE SAME THUNK AS THE GAME.** `pauseClass(false)` packs
+  `timeBarSet(true)` *and* `instance.resume()` into one `lift` and hands it to
+  `resumeAfterSlate`. Split them and a 120ms Resume Slate costs the player 120ms of graded
+  time, which is the one thing no tell may ever do. The pause card is dropped first and
+  unconditionally - the door the player pressed must open at once.
+- **The Unlisted Frame is no-ledger AT WRITE TIME, not at read time.**
+  `montage.seepFrame()` hangs one child inside a tile element and touches no `tile.url`, no
+  face, no `seen` set and no counter - so `snapshot()`, `unseen()` and the (never-written) wall
+  ledger are all blind to it by construction. If you ever route it through `setUrl` /
+  `startSwapTo` "for consistency", the blueprint becomes quiz material and a stop can ask about
+  a frame the player was never meant to be tested on. `freeze(true)`, `reshuffle()` and
+  `destroy()` all take it down.
+
 ## 4. Traps (each one cost real time)
 
 1. **Only the echo moves a setting.** Every control posts `set-setting` and paints

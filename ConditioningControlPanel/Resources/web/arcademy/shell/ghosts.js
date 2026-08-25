@@ -823,6 +823,7 @@ export function createGhosts(o) {
   let planBaseMs = 0;
   const nodes = new Map();     // id -> {g, sprite, chip, name, bubble, lastSeg, lagMs, facing}
   let live = null;             // the encounter currently on stage
+  let looker = null;           // THE LOOKER (shell/seep.js tell 05), or null
   let sparkTimers = [];
   let lastNearCue = -1e9;      // wall ms of the last pass-by cue (see NEAR_GAP_MS)
 
@@ -876,6 +877,7 @@ export function createGhosts(o) {
     sparkTimers = [];
     nodes.clear();
     live = null;
+    looker = null;      // the node it pointed at has just gone
     if (mount) { try { mount.textContent = ''; } catch (e) { /* noop */ } }
   }
 
@@ -1075,6 +1077,61 @@ export function createGhosts(o) {
     live = null;
   }
 
+  /* ------------------------------------------------- THE LOOKER, UPSTAIRS --
+   * On the cam wall downstairs, one student sometimes stops and looks straight
+   * into the lens (annex/cams.js LOOK_P / LOOK_COOLDOWN_S / LOOK_HOLD_S). This
+   * is the same student on the campus side, and it is the SAME SHAPE the
+   * encounter scene already uses: one ghost is frozen at a scaled timestamp,
+   * paints from there, and pays the stop back afterwards through `lagMs`.
+   *
+   * TWO THINGS THIS FILE DELIBERATELY DOES NOT OWN: the rarity and the
+   * cooldown. `shell/seep.js` is the one authority on when a tell may run - a
+   * second roll here would be a second haunting nobody could tune. This is a
+   * verb, not a scheduler, and it is a no-op unless somebody calls it.
+   * ------------------------------------------------------------------------ */
+  /** The Main Gate's own line - the x every route enters the plan on. */
+  const LOOK_MID_X = 720;
+
+  function endLook() {
+    if (!looker) return;
+    const rec = looker.rec;
+    const spent = Math.max(0, clock.now() - looker.t0) * timeScale;
+    looker = null;
+    try { rec.g.removeAttribute('data-seep-look'); } catch (e) { /* noop */ }
+    // The stop cost them the beats it lasted; CATCHUP_RATE pays it back.
+    rec.lagMs += spent;
+  }
+
+  /**
+   * Stop one student mid-crossing and face them out of the plan.
+   * @param {{ms?:number}=} o2
+   * @returns {boolean} false when there is nobody to stop (no plan, nobody on
+   *   screen, a scene already staged, reduced motion) - the caller then owns
+   *   nothing and releases its claim.
+   */
+  function lookOut(o2) {
+    if (destroyed || !started || paused || still) return false;
+    if (looker || live || !plan || !plan.schedules.length) return false;
+    const ms = Math.max(200, Math.min(4000, Math.round((o2 && Number(o2.ms)) || 900)));
+    const wall = clock.now();
+    const scaled = T(wall);
+    let best = null;
+    let bestD = Infinity;
+    for (const s of plan.schedules) {
+      const rec = nodes.get(s.id);
+      if (!rec || rec.hiddenNow) continue;
+      let at = null;
+      try { at = evalAt(s, scaled - rec.lagMs, plan.nowMs); } catch (e) { at = null; }
+      if (!at || !at.visible || !at.seg || at.seg.kind !== 'walk') continue;
+      const d = Math.abs(at.x - LOOK_MID_X);
+      if (d < bestD) { bestD = d; best = rec; }
+    }
+    if (!best) return false;
+    looker = { rec: best, t0: wall, tf: scaled, ms };
+    try { best.g.setAttribute('data-seep-look', '1'); } catch (e) { /* noop */ }
+    return true;
+  }
+
   /* ------------------------------------------------------------ the loop -- */
 
   let lastFrameMs = 0;
@@ -1086,6 +1143,7 @@ export function createGhosts(o) {
     const dt = lastFrameMs ? Math.min(250, wall - lastFrameMs) : 0;
     lastFrameMs = wall;
     ensurePlan(scaled);
+    if (looker && wall - looker.t0 >= looker.ms) endLook();
 
     // The one encounter that may be on stage right now.
     if (!still) {
@@ -1103,12 +1161,15 @@ export function createGhosts(o) {
       const rec = nodes.get(s.id);
       if (!rec) continue;
       const frozen = !!live && (live.ra === rec || live.rb === rec);
-      if (!frozen && rec.lagMs > 0 && dt > 0) {
+      /* THE LOOKER is frozen the same way a scene freezes a pair, and it is NOT
+       * `frozen`: no stand-apart mark, no eased step, just a stop. */
+      const held = !frozen && !!looker && looker.rec === rec;
+      if (!frozen && !held && rec.lagMs > 0 && dt > 0) {
         // A SMALL SPEED-UP, never a teleport: the debt drains at 35% of real
         // time, so ~7s of slightly brisk walking puts them back on schedule.
         rec.lagMs = Math.max(0, rec.lagMs - dt * CATCHUP_RATE * timeScale);
       }
-      const at = evalAt(s, (frozen ? live.tf : scaled) - rec.lagMs, plan.nowMs);
+      const at = evalAt(s, (frozen ? live.tf : (held ? looker.tf : scaled)) - rec.lagMs, plan.nowMs);
       if (frozen) {
         // Ease OUT to the mark and back again, so the step apart is a step.
         const stand = live.ra === rec ? live.posA : live.posB;
@@ -1118,7 +1179,7 @@ export function createGhosts(o) {
         at.x += (stand[0] - at.x) * k2;
         at.y += (stand[1] - at.y) * k2;
       }
-      place(rec, s, at, frozen);
+      place(rec, s, at, frozen || held);
     }
   }
 
@@ -1202,6 +1263,7 @@ export function createGhosts(o) {
     if (paused) {
       if (rafId) { clock.caf(rafId); rafId = 0; }
       endScene();
+      endLook();
       lastFrameMs = 0;
     } else {
       lastFrameMs = 0;
@@ -1233,6 +1295,7 @@ export function createGhosts(o) {
     applyVisibility();
     if (rafId) { clock.caf(rafId); rafId = 0; }
     endScene();
+    endLook();
   }
 
   function destroy() {
@@ -1288,6 +1351,10 @@ export function createGhosts(o) {
     stop,
     setPaused,
     setSnapshot,
+    /** THE SEEP'S SEAM (shell/seep.js tell 05): stop one student mid-crossing
+     *  and face them out of the plan. A verb, never a scheduler - the director
+     *  owns the rarity and the cooldown. */
+    lookOut,
     /** Test seam: drive one frame at an explicit wall time. */
     tick,
     destroy,
@@ -1301,6 +1368,7 @@ export function createGhosts(o) {
         epoch: planEpoch,
         encounters: encounters.length,
         onStage: !!live,
+        looking: !!looker,
         self: selfId,
       };
     },

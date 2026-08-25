@@ -481,6 +481,28 @@ html.arc-reduced .g-ir-howto-art::before,html.arc-reduced .g-ir-howto-art::after
 html.arc-reduced .g-ir-howto-art[data-art="freeze"]::after{transform:translate(-50%,6%) rotate(-1deg)}
 html.arc-reduced .g-ir-howto-art[data-art="wall"]::after{opacity:.95}
 html.arc-reduced .g-ir-howto-ico{animation:none !important;opacity:1}
+/* ---- 16 THE UNLISTED FRAME (the seep) ------------------------------------
+   The campus plan, rendered the way the monitors downstairs render it: cold
+   ground, dead-channel scanlines and blueprint linework. It is CSS, not an
+   asset - one more tile-sized image on a wall that already carries a dozen
+   decodes is a cost the pass-5 budget will not pay, and the look is four
+   gradients and a border.
+
+   It hangs INSIDE one .g-ir-tile, above both faces (z 3, over .is-in's z 2) and
+   pointer-events:none, so it covers a face without ever touching one. Opacity
+   only; no blend mode, no filter, nothing over a live decode. montage.js
+   removes the node - there is no forwards fill anywhere near it. */
+.g-ir-seep{position:absolute;inset:0;display:block;pointer-events:none;z-index:3;
+  border-radius:inherit;overflow:hidden;opacity:0;
+  background:var(--seep-deep,#0D2724);
+  background-image:repeating-linear-gradient(180deg,rgba(143,224,206,.10) 0 1px,transparent 1px 3px);
+  animation:g-ir-seep var(--ir-seep-ms,400ms) ease-out 1}
+.g-ir-seep::after{content:'';position:absolute;inset:16%;
+  border:1px solid var(--seep-blue,#8ECBFF);opacity:.85}
+.g-ir-seep::before{content:'';position:absolute;left:16%;right:16%;top:52%;height:1px;
+  background:var(--seep-blue,#8ECBFF);opacity:.45}
+@keyframes g-ir-seep{0%{opacity:0}16%{opacity:.92}76%{opacity:.92}100%{opacity:0}}
+
 @media (prefers-reduced-motion: reduce){
   .g-ir-stage *{animation:none !important}
   .g-ir-tile.is-swapping .g-ir-face.is-in{animation:g-ir-in var(--ir-swap,900ms) linear both !important}

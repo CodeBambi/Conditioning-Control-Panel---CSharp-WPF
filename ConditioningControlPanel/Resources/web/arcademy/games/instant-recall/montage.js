@@ -70,6 +70,15 @@
  * reads a snapshot at the freeze and books it. A plant that failed is simply not
  * in `snapshot.dups`, and the question falls back like any other.
  *
+ * ---------------------------------------------------------------------------
+ * THE UNLISTED FRAME (tell 16, the seep). `seepFrame()` hangs ONE extra child
+ * inside one tile's element for about 400ms. It is the only thing in this file
+ * that paints without going through the swap path, and that is exactly the
+ * point: it touches no `tile.url`, no face, no `seen` set and no counter, so
+ * every read CORE has - `snapshot()`, `unseen()`, `plantState()` - is blind to
+ * it BY CONSTRUCTION rather than by filtering. See seepFrame's own header for
+ * the whole argument.
+ *
  * DETERMINISM, STATED HONESTLY. The PLAN is seeded (Law V). The wall's CONTENTS
  * come from the provider and the frame governor (Math.random, by design) and are
  * therefore NOT replay-identical. WALL_* questions are DOM-truth at the freeze,
@@ -499,6 +508,8 @@ export function createMontage(o = {}) {
   const liveUse = new Map();
   let videoTiles = 0;
   let destroyed = false;
+  /** The Unlisted Frame's live undo, or null. See seepFrame(). */
+  let seepUndo = null;
   let frozen = false;
   let containers = [];
   let pool = null;
@@ -1005,6 +1016,7 @@ export function createMontage(o = {}) {
    *  staggered - the wall's answer to "a new layout on resume". It writes NO
    *  ledger entry: the wall is the room, not an effect. */
   function reshuffle() {
+    seepClear();          // the frame belonged to a tile this generation is losing
     if (destroyed) return 0;
     reshuffles += 1;
     /* A NEW GENERATION. What a tile has WORN resets to what it is still showing
@@ -1062,6 +1074,10 @@ export function createMontage(o = {}) {
     const want = !!on;
     if (want === frozen) return frozen;
     frozen = want;
+    /* THE STOP CLEARS THE SEEP. A blueprint sitting over a tile the quiz is
+     * about to read would be a frame in the way of an honest question, even
+     * though it can never BE one. See seepFrame's no-ledger note. */
+    if (want) seepClear();
     applyFreeze();
     if (want && !(o2 && o2.silent === true)) cue('shutter', 0.46, { pitch: 1 });
     return frozen;
@@ -1315,6 +1331,67 @@ export function createMontage(o = {}) {
     return n;
   }
 
+  /* --------------------------------------------------- 16 THE UNLISTED FRAME
+   * Mid-stream, one tile is briefly the campus plan: cold, lined, sliding by
+   * with everything else. The class will never ask about it.
+   *
+   * THE NO-LEDGER LAW, ENFORCED AT WRITE TIME. This does NOT ride `setUrl` or
+   * `startSwapTo` and it changes nothing a question can be built from. It hangs
+   * one extra child inside the tile's own element and takes it away again:
+   *   - THE LEDGER. The wall writes no ledger entry at all (the fifth law
+   *     above), so there is no entry to exclude from the tail. CORE writes
+   *     every entry itself, from the primitive it fired, and it never fired
+   *     this.
+   *   - THE SNAPSHOT. `snapshot()` reads `t.url`, which this never assigns, so
+   *     the frame is not a truth, not a dup, not a single and not painted
+   *     multiplicity. A WALL question asked over the top of it resolves against
+   *     the face underneath, which is the honest answer and the same answer it
+   *     would have given a second earlier.
+   *   - THE DECOYS. `unseen()` walks `seen`, which this never adds to, so the
+   *     frame can never be offered as "the one that never showed" either.
+   * There is no code path from here to an answer key, which is what makes the
+   * frame fair - and it is the reason the taste call could be said yes to.
+   *
+   * SEEDED, LIKE EVERYTHING ELSE THAT PICKS (Law V): the tile comes off the
+   * wall's own tagged roll, never Math.random - the frame governor is the only
+   * thing in this file allowed that, and only for a SLEEPER seat.
+   *
+   * @param {number=} ms  how long the director wants it held
+   * @returns {?Function} an idempotent undo, or null when there is no painted,
+   *   settled tile to hang it on (a wall mid-reshuffle simply does not get one)
+   */
+  function seepFrame(ms) {
+    if (destroyed || frozen) return null;
+    const live = [];
+    for (const t of tiles) {
+      if (t.node && !t.swapping && isPainted(t)) live.push(t);
+    }
+    if (!live.length) return null;
+    const tile = live[Math.min(live.length - 1, Math.floor(roll('seep-frame') * live.length))];
+    const node = el('i', 'g-ir-seep');
+    if (!node) return null;
+    try { node.setAttribute('aria-hidden', 'true'); } catch (e) { /* DOM double */ }
+    if (node.style && ms) {
+      try { node.style.setProperty('--ir-seep-ms', ms + 'ms'); } catch (e) { /* DOM double */ }
+    }
+    try { tile.node.appendChild(node); } catch (e) { return null; }
+    let gone = false;
+    const undo = () => {
+      if (gone) return;
+      gone = true;
+      if (seepUndo === undo) seepUndo = null;
+      try { node.remove(); } catch (e) { /* ignore */ }
+    };
+    seepUndo = undo;
+    return undo;
+  }
+
+  /** Take the frame down NOW. A freeze, a reshuffle and a teardown all call it:
+   *  a stop must never find a blueprint sitting over a tile it is quizzing, and
+   *  a reshuffle would strand the node on a tile that has moved on. The engine
+   *  still holds its own deadline; both ends are idempotent. */
+  function seepClear() { if (seepUndo) { try { seepUndo(); } catch (e) { /* ignore */ } } }
+
   const api = {
     /* ---- structure ---- */
     build,
@@ -1328,6 +1405,9 @@ export function createMontage(o = {}) {
     /* ---- media ---- */
     dress,
     reshuffle,
+
+    /* ---- THE SEEP (tell 16). Writes nothing a question can be built from. ---- */
+    seepFrame,
 
     /* ---- THE WALL AS AN ANSWER (CORE reads these; the wall never answers) ---- */
     snapshot,
@@ -1378,6 +1458,7 @@ export function createMontage(o = {}) {
     stop() { stopDriver(); },
     destroy() {
       destroyed = true;
+      seepClear();
       api.stopGovernor();
       stopDriver();
       for (const h of dressTimers) { try { clearTimeout(h); } catch (e) { /* ignore */ } }

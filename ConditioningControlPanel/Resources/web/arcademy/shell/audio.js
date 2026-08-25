@@ -179,6 +179,23 @@ const SOUNDS = {
                layer: { arp: [392, 587.33], ms: 90, gain: 0.34 } },
   paper:     { noise: true, hp: 1500, lp: 6000, ms: 140, gain: 0.45, attack: 0.25 },
   whoosh:    { noise: true, hp: 300,  lp: 1800, ms: 350, gain: 0.5, attack: 0.4, sweep: 3.2 },
+  /* THE HUM (THE SEEP, tell 04). Fluorescent ballast and a tape motor somewhere
+     under the floor: two detuned partials at mains frequency and its octave,
+     700ms, gone before the ear names it. The sound design of the reveal (the
+     THUD) gets an ancestor.
+     TRIANGLE AND SINE, NOT SAWTOOTH, and that is the whole recipe decision. The
+     pitch's sketch is "two detuned sawtooths through a 420Hz lowpass" - but this
+     table's oscillator branch has no filter (only `noise` recipes are filtered),
+     and a raw 50Hz saw is all upper harmonics on a laptop speaker, i.e. a buzz
+     rather than a hum. A triangle plus a sine IS the lowpassed saw: partials
+     falling off as 1/n^2 with almost nothing above the third. The `layer` field
+     (bell / commit's own) carries the second partial, deliberately a hair sharp
+     of the octave so the two BEAT against each other - the beat is the tell.
+     Quiet by construction: gain .3 under a fired level of .22 is roughly a
+     quarter of a game one-shot, which is where a thing you are not sure you
+     heard has to sit. Rides every mute / duck / bus law for free. */
+  seep_hum:  { type: 'triangle', f0: 50, f1: 49.4, ms: 700, gain: 0.3, attack: 0.16,
+               layer: { type: 'sine', f0: 100.6, f1: 99.2, ms: 640, gain: 0.2, attack: 0.18 } },
 };
 
 /** THE SAMPLE DOOR (AV CLUB, 2026-08-24): cue name -> a file beside the page.

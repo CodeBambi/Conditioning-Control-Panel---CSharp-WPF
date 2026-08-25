@@ -701,11 +701,18 @@ function el(tag, cls, text) {
  * @param {boolean=} o.boardPulse  the timetable has NOT been opened yet today:
  *   the collapsed plaque's clock pulses until the first expand. The shell
  *   decides (it owns the local date + the store); the campus only wears it.
+ * @param {Function=} o.seep  THE CHALK GHOST'S DOOR (tell 12). A GETTER that
+ *   answers the shell's seep director, or nothing. It is a getter and not a
+ *   handle for the same reason every other seam of that director is (trap 73):
+ *   the campus is torn down and rebuilt under it. The campus NEVER imports
+ *   shell/seep.js - it asks `beat('door_card')` and paints what it is told,
+ *   exactly the way the split-flap board takes `misprintFor`. Absent = a school
+ *   that is simply quiet, and the card is what it always was.
  * @param {Function=} o.log
  * @returns {{root, boardMount, footMount, update, closeCard, destroy}}
  */
 export function createCampus({ state, gameName, banner, stats, reducedMotion, on, log,
-  dateSeed, attractIdleMs, boardPulse, idCardMode, holdAttract, post, annex } = {}) {
+  dateSeed, attractIdleMs, boardPulse, idCardMode, holdAttract, post, seep, annex } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const handlers = on || {};
   const name = typeof gameName === 'function' ? gameName : (k) => String(k);
@@ -717,6 +724,8 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   let boardProp = null;
   let bugleProp = null;
   const holdsAttract = typeof holdAttract === 'function' ? holdAttract : () => false;
+  /* The seep director, always ASKED and never held (see the `seep` param). */
+  const seepDir = typeof seep === 'function' ? seep : () => null;
 
   const root = el('div', 'campus-stage enter');
   root.appendChild(el('div', 'campus-stars'));
@@ -1196,11 +1205,17 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
      * rooms. The neon sign, the hover card, the door card and the hanging board
      * all still name the class either way. */
     const tight = w < 170;
-    g.appendChild(svgText(x + w / 2, nameY + (tight ? 16 : 18),
+    /* THE SEEP READS THIS NODE (shell/seep.js, tell 02 "The File Name"): the
+     * plate is what flashes the room's bare DEV KEY. It is kept on `roomRefs` so
+     * the director never has to guess at a selector - and update() rewrites the
+     * room's `class`, never this text, so a plate restored after a 90ms flash
+     * cannot be stomped by a repaint. */
+    const sub = svgText(x + w / 2, nameY + (tight ? 16 : 18),
       tight ? 'campus-rsub tiny' : 'campus-rsub',
       (tight
         ? t('campus_rm', 'RM') + ' ' + spec.rm
-        : t('campus_rm', 'RM') + ' ' + spec.rm + ' · ' + name(key)).toUpperCase()));
+        : t('campus_rm', 'RM') + ' ' + spec.rm + ' · ' + name(key)).toUpperCase());
+    g.appendChild(sub);
     doorFor(spec).forEach((n) => g.appendChild(n));
     const neonY = spec.neonY != null ? spec.neonY : (spec.side === 'n' ? 398 : 694);
     const neon = svg('g', null, 'campus-neon');
@@ -1217,7 +1232,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       x: signX - 47, y: neonY, width: 94, height: 16,
     }, 'campus-marquee'));
     g.appendChild(neon);
-    roomRefs[key] = { g, neon, neonText, ping, spec };
+    roomRefs[key] = { g, neon, neonText, ping, spec, sub };
     g.addEventListener('click', () => openClassCard(key));
     attachTip(g, () => classTip(key));
     plan.appendChild(g);
@@ -1632,6 +1647,15 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
 
   root.appendChild(el('div', 'campus-vignette'));
 
+  /* THE SEEP'S LAYER (shell/seep.js). One empty, pointer-events:none div at
+   * z 12 inside the stage - above the plan, under every piece of campus chrome,
+   * and under the page's fx / ceremony / reveal / EMI layers for free because
+   * the stage is its own stacking context. It costs nothing at rest and the
+   * campus knows nothing about what the director puts in it. */
+  const seepLayer = el('div', 'campus-seep');
+  seepLayer.setAttribute('aria-hidden', 'true');
+  root.appendChild(seepLayer);
+
   /* ------------------------------ tooltip -------------------------------- */
   const tip = el('div', 'campus-tip');
   const tipName = el('div', 't-name');
@@ -1790,10 +1814,72 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     if (!cardOpen) return false;
     cardOpen = false;
     scrim.classList.remove('on');
+    chalkClear();          // a card that shut mid-ghost still settles its title
     return true;
   }
 
   function chip(text) { const c = el('span', 'cc-mod', text); ccChips.appendChild(c); return c; }
+
+  /* --------------------------- 12 THE CHALK GHOST ------------------------
+   * THE FILE NAME, FOLLOWING YOU TO CLASS. The door card writes its title and,
+   * for two frames, the chalk spells the room's OTHER name - the bare dev key,
+   * the thing the filing system calls it - before it settles to the real one.
+   *
+   * WHY THIS IS FREE. It is asked in the deadest moment a class has: between
+   * the door click and the first input, with the card not yet on screen and the
+   * game not yet built. Nothing is armed, so nothing is at risk; you were only
+   * reading. It costs no input, no point, no grade and no timing window, which
+   * is the law above every other law in the class-side kit.
+   *
+   * ASKED BEFORE popCard(), ALWAYS. The shell's `busy` rung reads
+   * `seepSeam().cardIsOpen()`, so a card that is already up refuses the beat -
+   * which is correct for a repaint and wrong for the draw. One call site, right
+   * before the card pops, and the ordering is the whole guard.
+   *
+   * THE STRING IS THE ROOM KEY, BARE. Owner ruling 0824: bare key on plates, the
+   * cam tag only inside Slips, and the cam tag never comes indoors. It is
+   * hardcoded and deliberately NOT lexicon-skinnable for the same reason the
+   * plates are - this is the code talking, not the school.
+   * -------------------------------------------------------------------- */
+  let chalkTimer = 0;
+  let chalkUndo = null;
+
+  /** Put the title back and free the claim. Idempotent; every exit calls it. */
+  function chalkClear() {
+    if (chalkTimer) { try { clearTimeout(chalkTimer); } catch (e) { /* noop */ } chalkTimer = 0; }
+    const undo = chalkUndo;
+    chalkUndo = null;
+    if (undo) { try { undo(); } catch (e) { /* noop */ } }
+  }
+
+  function chalkGhost(key) {
+    if (chalkUndo) return;                 // one ghost at a time, never stacked
+    if (!ROOMS[key]) return;               // a facility card has no dev key
+    let token = null;
+    try {
+      const d = seepDir();
+      token = (d && typeof d.beat === 'function') ? d.beat('door_card', { gameKey: key }) : null;
+    } catch (e) { token = null; }
+    if (!token) return;
+    let before = '';
+    try { before = String(ccCourse.textContent == null ? '' : ccCourse.textContent); }
+    catch (e) { try { token.release(); } catch (e2) { /* noop */ } return; }
+    let done = false;
+    chalkUndo = () => {
+      if (done) return;
+      done = true;
+      try { ccCourse.textContent = before; } catch (e) { /* noop */ }
+      try { ccCourse.classList.remove('arc-seep-chalk'); } catch (e) { /* noop */ }
+      try { token.release(); } catch (e) { /* noop */ }
+    };
+    try {
+      ccCourse.textContent = key;
+      ccCourse.classList.add('arc-seep-chalk');
+    } catch (e) { chalkClear(); return; }
+    const ms = Math.max(40, Math.round(Number(token.ms) || 90));
+    if (typeof setTimeout === 'function') chalkTimer = setTimeout(chalkClear, ms);
+    else chalkClear();
+  }
 
   function openClassCard(key) {
     const spec = ROOMS[key];
@@ -1870,6 +1956,8 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       try { fireMoment('lockedClick', { what: 'room', gameKey: key }); } catch (e) { /* noop */ }
     }
     setAltButton(key, r);
+    /* THE CHALK GHOST, and it must be asked BEFORE the card pops - see above. */
+    chalkGhost(key);
     popCard();
   }
 
@@ -2212,7 +2300,53 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
 
   /* ------------------------------ bell tick ------------------------------ */
   let bellTimer = 0;
-  function tickBell() { try { bellText.textContent = bellLabel(bellSecondsLeft()); } catch (e) { /* noop */ } }
+  /* THE SLOW SECOND (shell/seep.js, tell 07) and its ONE law: this is a
+   * DISPLAY freeze and nothing else. `bellSecondsLeft()` is never touched, no
+   * offset is ever kept, and every consumer downstream of the real clock is
+   * unaware any of this happened - the picture of the clock stutters, the clock
+   * does not. `bellHeld` is the value the frozen picture is showing; while it is
+   * a number the tick repaints nothing, and the catch-up paints the two skipped
+   * seconds and then the truth, 110ms apart, the way a feed resyncs. */
+  let bellHeld = null;
+  let bellCatch = [];
+  function paintBell(sec) {
+    try { bellText.textContent = bellLabel(sec == null ? bellSecondsLeft() : sec); }
+    catch (e) { /* noop */ }
+  }
+  function tickBell() { if (bellHeld == null) paintBell(null); }
+  function clearBellCatch() {
+    for (const id of bellCatch) { try { clearTimeout(id); } catch (e) { /* noop */ } }
+    bellCatch = [];
+  }
+  /**
+   * Freeze the COUNTDOWN DISPLAY for `ms`, then triple-tick back to the truth.
+   * @param {number} ms
+   * @returns {boolean} false when there is nothing to freeze (no chip, no timers,
+   *   reduced motion, or a hold already running - a second stutter on top of the
+   *   first would read as a broken clock rather than as a dropped frame).
+   */
+  function holdBell(ms) {
+    if (destroyed || reducedMotion || bellHeld != null) return false;
+    if (!bellText || typeof setTimeout !== 'function') return false;
+    const hold = Math.max(300, Math.min(6000, Math.round(Number(ms) || 3000)));
+    let start = 0;
+    try { start = bellSecondsLeft(); } catch (e) { return false; }
+    bellHeld = start;
+    paintBell(start);
+    try { bellText.classList.add('arc-seep-held'); } catch (e) { /* noop */ }
+    bellCatch.push(setTimeout(() => {
+      try { bellText.classList.remove('arc-seep-held'); } catch (e) { /* noop */ }
+      try { bellText.classList.add('arc-seep-catch'); } catch (e) { /* noop */ }
+      paintBell(start - 1);
+      bellCatch.push(setTimeout(() => paintBell(start - 2), 110));
+      bellCatch.push(setTimeout(() => {
+        bellHeld = null;
+        try { bellText.classList.remove('arc-seep-catch'); } catch (e) { /* noop */ }
+        paintBell(null);
+      }, 220));
+    }, hold));
+    return true;
+  }
   if (!reducedMotion && typeof setInterval === 'function') {
     bellTimer = setInterval(tickBell, 1000);
   }
@@ -2267,6 +2401,30 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     },
     /** True once the entry reveal has finished (ghosts may not start before). */
     revealDone() { return revealed; },
+    /**
+     * THE SEEP'S SEAM (shell/seep.js). Five reads and one verb, and every one of
+     * them is something the director cannot get any other way without guessing
+     * at a selector. The campus knows nothing about the haunting: it hands over
+     * nodes and a display-only clock freeze, and the director owns the rest.
+     * @returns {{stage, plan, layer, roomKeys, roomNode, roomSub, holdBell}}
+     */
+    seepSeam() {
+      return {
+        stage: root,
+        plan,
+        layer: seepLayer,
+        /** Every GAME room that actually built tonight (a closed semester has none). */
+        roomKeys() { return Object.keys(roomRefs); },
+        /** The room's whole `<g>` - what a Slip toggles. */
+        roomNode(key) { return (roomRefs[key] && roomRefs[key].g) || null; },
+        /** The room's `RM 101 · HOMEROOM` plate - what the File Name flashes. */
+        roomSub(key) { return (roomRefs[key] && roomRefs[key].sub) || null; },
+        /** Is the door card up? A READ - `closeCard()` would have closed it. */
+        cardIsOpen() { return !!cardOpen; },
+        /** Freeze the next-bell DISPLAY for ms, then triple-tick. See holdBell. */
+        holdBell,
+      };
+    },
     update,
     noteDescriptors,
     closeCard,
@@ -2281,7 +2439,8 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     destroy() {
       if (destroyed) return;
       destroyed = true;
-      if (mailChip) { try { mailChip.destroy(); } catch (e) { /* noop */ } mailChip = null; }
+      chalkClear();          // the title goes back and the claim is freed (trap 30)
+    if (mailChip) { try { mailChip.destroy(); } catch (e) { /* noop */ } mailChip = null; }
       if (boardProp) { try { boardProp.destroy(); } catch (e) { /* noop */ } boardProp = null; }
       if (bugleProp) { try { bugleProp.destroy(); } catch (e) { /* noop */ } bugleProp = null; }
       cancelAttract(false);
@@ -2289,6 +2448,9 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       try { INPUT_EVENTS.forEach((n) => root.removeEventListener(n, onInput, true)); } catch (e) { /* noop */ }
       if (docBound) { try { document.removeEventListener('keydown', onInput, true); } catch (e) { /* noop */ } }
       if (bellTimer) { try { clearInterval(bellTimer); } catch (e) { /* noop */ } bellTimer = 0; }
+      /* A Slow Second in flight must not outlive its clock. */
+      clearBellCatch();
+      bellHeld = null;
       if (enterTimer) { try { clearTimeout(enterTimer); } catch (e) { /* noop */ } enterTimer = 0; }
       try { unfit(); } catch (e) { /* noop */ }
       if (document.documentElement && document.documentElement.classList) {

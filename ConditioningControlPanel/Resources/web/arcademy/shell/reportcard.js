@@ -138,10 +138,15 @@ async function copyText(text) {
 /**
  * @param {Object} o
  * @param {Object=} o.ceremonies   createCeremonies() handle
+ * @param {Object=} o.seep         THE SEEP's director (shell/seep.js), or null.
+ *                                 The card asks it ONE question - `stampGhost()`
+ *                                 - as the grade stamp comes down, and draws
+ *                                 whatever it is handed. Absent = the card the
+ *                                 shell always rendered.
  * @param {Function=} o.toast
  * @param {Function=} o.log
  */
-export function createReportCard({ ceremonies, toast, log } = {}) {
+export function createReportCard({ ceremonies, seep, toast, log } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const shout = typeof toast === 'function' ? toast : () => {};
   // The report is a fullscreen beat now (shell marks <html> arc-report-on):
@@ -229,6 +234,32 @@ export function createReportCard({ ceremonies, toast, log } = {}) {
     if (s.perfect) {
       const stampHost = el('div', 'arc-classbar');
       put(stampHost);
+      /* THE OTHER STAMP (THE SEEP, tell 08). The stamp comes down, and for a
+       * single frame the mark it leaves is not a grade. Then the ink settles and
+       * it always was one.
+       *
+       * It rides a beat the PLAYER caused and is already watching, and it costs
+       * the card nothing: the ghost lives in a zero-height relatively-positioned
+       * box laid before the ceremony's own target, so no row on this paper ever
+       * moves, and it is gone before the stamp keyframe starts. `seep` answering
+       * null is the overwhelmingly common case and the whole block is skipped. */
+      if (seep && typeof seep.stampGhost === 'function') {
+        let spec = null;
+        try { spec = seep.stampGhost(); } catch (e) { spec = null; }
+        if (spec) {
+          const box = el('div', 'arc-seep-stampbox');
+          const mark = el('span', 'arc-seep-stamp', String(spec.text || ''));
+          box.setAttribute('aria-hidden', 'true');
+          box.appendChild(mark);
+          stampHost.appendChild(box);
+          const clear = () => {
+            try { box.remove(); } catch (e) { /* noop */ }
+            try { if (spec.done) spec.done(); } catch (e) { /* noop */ }
+          };
+          if (typeof setTimeout === 'function') setTimeout(clear, Math.max(40, Number(spec.ms) || 80));
+          else clear();
+        }
+      }
       if (ceremonies) {
         try {
           ceremonies.stamp({

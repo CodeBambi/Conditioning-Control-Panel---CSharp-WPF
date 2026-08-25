@@ -536,6 +536,12 @@ export const CLAUSES = Object.freeze({
   dayIs: (a, c) => num(c.day) === num(a),
   /** Stamps earned across every card. */
   punchesAtLeast: (a, c) => num(c.punches) >= num(a),
+  /** SEALED CARDS - cards that reached their tenth hole. Not the same question
+   *  as `punchesAtLeast`: nine cards at nine holes is 81 stamps and zero seals.
+   *  It is the count the Records Annex reveal arms on, and the count THE SEEP's
+   *  escalation ladder runs on (shell/seep.js `tierForSealed`), which is what
+   *  lets a notice go up at the same moment the school starts getting thin. */
+  sealedAtLeast: (a, c) => num(c.sealed) >= num(a),
   /** The host-owned attendance streak. */
   streakAtLeast: (a, c) => num(c.streak) >= num(a),
   streakIs: (a, c) => num(c.streak) === num(a),
@@ -616,6 +622,7 @@ export function triggerHolds(trigger, ctx, log) {
   const c = {
     day: num(ctx && ctx.day),
     punches: num(ctx && ctx.punches),
+    sealed: num(ctx && ctx.sealed),
     streak: num(ctx && ctx.streak),
     dateIs: (ctx && typeof ctx.dateIs === 'string') ? ctx.dateIs : '',
     seenFlags: (ctx && isObj(ctx.seenFlags)) ? ctx.seenFlags : {},
@@ -703,6 +710,10 @@ export function initMail({ ctx, state, save, catalog, now, log } = {}) {
     return {
       day: num(c.day),
       punches: num(c.punches),
+      /* SEALED CARDS. Named through explicitly like every other fact: this
+       * projection is a whitelist by design, so a field the shell adds and this
+       * line does not name is a field every clause reads as nought. */
+      sealed: num(c.sealed),
       streak: num(c.streak),
       // A shell that does not carry the date gets today's, LOCAL, off the clock
       // it handed us - never a UTC one (trap 8).

@@ -456,6 +456,43 @@ export default {
     }
     function stopSafe(kind) { try { if (ctx.engine) ctx.engine.stop(kind); } catch (e) { /* noop */ } }
 
+    /* ==================================================================== *
+     * 16 THE UNLISTED FRAME - the seep's one Instant Recall special, and the
+     * boldest card in its pitch: mid-stream, one montage tile is briefly the
+     * campus plan, cold and lined, sliding by with everything else.
+     *
+     * THE DEAD MOMENT is the watch-only wall between stops: no card is up, no
+     * option is armed, nothing is being timed, and by this class's own
+     * discipline a stop never lands mid-swap.
+     *
+     * THE LEAD GUARD is ours, not the director's. The director cannot see the
+     * schedule, so we refuse the beat unless the next stop is comfortably
+     * further away than the frame is long - a frame still on the wall when the
+     * shutter falls would be a blueprint over a tile the quiz is reading. The
+     * wall clears it on `freeze(true)` as well, which is the second brace.
+     *
+     * THE FRAME CAN NEVER BE AN ANSWER, and that is enforced at WRITE TIME, not
+     * at read time: `montage.seepFrame()` writes no ledger entry, assigns no
+     * `tile.url` and adds nothing to `seen`, so the ledger tail the questions
+     * are built from, the freeze snapshot they are resolved against and the
+     * decoy pool they draw from are all blind to it by construction. See
+     * montage.js seepFrame() for the full argument.
+     * ==================================================================== */
+    const SEEP_STREAM_LEAD_MS = 2000;
+
+    function seepStream() {
+      if (dead || ended || halted || live) return;
+      if (!montage || !ctx.engine || typeof ctx.engine.deadBeat !== 'function') return;
+      const nx = nextStop();
+      const lead = nx ? nx.atMs - elapsedMs : Infinity;
+      if (!(lead >= SEEP_STREAM_LEAD_MS)) return;
+      try {
+        ctx.engine.deadBeat('stream', {
+          draw: (ms) => (montage ? montage.seepFrame(ms) : null),
+        });
+      } catch (e) { /* a refused frame is not an error */ }
+    }
+
     /* ---- THE WALL, PRESENCE-CHECKED -------------------------------------
      * montage.js's snapshot / unseen / plant / highlight are LOT B's surface.
      * Every call goes through one of these, so a build without them simply
@@ -1887,6 +1924,10 @@ export default {
       seedDealer();
       armDealer();
       armWallPlant();
+      /* THE WATCH-ONLY WALL is back and nothing is armed on it. See seepStream:
+       * asked last, so the plan above has already decided where the next stop
+       * is and the lead guard has a real number to read. */
+      seepStream();
     }
 
     /* ---- variable ratio (the shared canon, with a local fallback) -------- */

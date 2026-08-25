@@ -483,6 +483,44 @@ export default {
       try { return ctx.engine.sustain(kind, opts || {}) || null; } catch (e) { return null; }
     }
     function stopSafe(kind) { try { if (ctx.engine) ctx.engine.stop(kind); } catch (e) { /* noop */ } }
+
+    /* ==================================================================== *
+     * 15 SOMETHING BELOW - the seep's one Deep End special.
+     *
+     * The room with the water gets the thing that lives in water. On the exhale
+     * after a resurface - board locked, `busy` set, every tile draining, the
+     * player's hands off the glass by the game's own law - something long and
+     * dark drifts once behind the tiles, far below. It does not come back and
+     * the game never mentions it.
+     *
+     * WE ASK, WE NEVER DECIDE. `engine.deadBeat('resurface')` puts the question
+     * to the shell's director, which answers null the overwhelming majority of
+     * the time; the tell is T3+, at most once a class, and LITE never sees it at
+     * all (this class puts `.ae-lite` on <html> itself, and the director reads
+     * that rung before anything else). Nothing here re-checks any of that.
+     *
+     * THE SPRITE IS FURNITURE. It hangs in `.g-de-backdrop`, which is z 0 behind
+     * the board's z 1 and is `pointer-events:none` for itself AND every child.
+     * Opacity and transform only, never past .12, no blur and no filter - the
+     * cam-wall budget law, and a phone pays for a live blur in exactly the way
+     * pass 5 measured. The claim releases itself on the sprite's last frame.
+     * ==================================================================== */
+    function belowSprite(ms) {
+      if (!backdrop || typeof backdrop.appendChild !== 'function') return null;
+      const node = el('div', 'g-de-seep');
+      if (!node) return null;
+      try { node.setAttribute('aria-hidden', 'true'); } catch (e) { /* noop */ }
+      if (node.style && ms) {
+        try { node.style.setProperty('--de-seep-ms', ms + 'ms'); } catch (e) { /* noop */ }
+      }
+      try { backdrop.appendChild(node); } catch (e) { return null; }
+      return () => { try { node.remove(); } catch (e) { /* noop */ } };
+    }
+
+    function deadBeatSafe(name, draw) {
+      if (dead || paused || !ctx.engine || typeof ctx.engine.deadBeat !== 'function') return null;
+      try { return ctx.engine.deadBeat(name, { draw }) || null; } catch (e) { return null; }
+    }
     /** The engine, as a deck sees it: the three welded primitives plus the
      *  READ of the clamped channel vector (THE CEILING RULE - a deck asks, it
      *  never raises). Every member is null-safe and may answer null. */
@@ -1591,6 +1629,10 @@ export default {
       stopDrift();
       for (const node of liveTiles()) node.classList.add('is-gone');
       sustainSafe('bubble_field', { clickSafe: true, variant: 'rise', max: 10 });
+      /* THE EXHALE. `busy` is set, the queue is cleared and the whole board is
+       * draining: this is the one long beat this class already owns, and it is
+       * the deadest moment in the collection. See belowSprite above. */
+      deadBeatSafe('resurface', belowSprite);
       const drainMs = reduced ? PLAYTEST.DRAIN_MS_REDUCED : PLAYTEST.DRAIN_MS;
       after(drainMs, () => {
         stopSafe('bubble_field');

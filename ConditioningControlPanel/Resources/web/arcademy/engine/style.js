@@ -167,6 +167,49 @@ export const STYLE_TEXT = `
 .ae-lite .ae-wash-drain{backdrop-filter:none;-webkit-backdrop-filter:none}
 .ae-lite .ae-wash-spiral{animation:none}
 
+/* ---- THE SEEP, class-side (tells 13 and 14) -------------------------------
+   engine.deadBeat()'s pixels, and nothing else in this sheet may use them. The
+   same five laws the shell's own seep block lives under:
+     - compositor only: opacity and transform. No blend modes, no filters, and
+       NO background-position drift - the scanline sheet is oversized by exactly
+       one tile period and TRANSLATED by that period (trap 36).
+     - pointer-events:none on every layer, always. .ae-layer is already
+       pointer-events:none by construction; this is the belt to that brace, so a
+       frame can never eat a tap however badly it is timed (traps 27 and 59).
+     - no 'forwards' fill anywhere (trap 74): the node is removed on its last
+       frame, and a welded opacity would outlive it.
+     - one pulse per tell, no repeat, sub-quarter-second (photosensitivity).
+     - reduced motion never sees either of them - the director retires every
+       animated tell before it is ever asked, and the media query at the bottom
+       of this sheet is the second brace.
+   THE COLD PALETTE reads the shell's tokens when they are there and carries the
+   Annex phosphor as its fallback. It is deliberately NOT skinnable through the
+   --ac-* mod vars the rest of this sheet uses: the seep is the feed showing
+   through, and the whole point is that it does not match the school. */
+.ae-seep{position:absolute;pointer-events:none;
+  --ae-seep-cold:var(--seep-cold,#8FE0CE);--ae-seep-deep:var(--seep-deep,#0D2724)}
+
+/* 13 THE OVERSEEN FRAME - between rounds the stage is a monitor for a blink. */
+.ae-seep-overseen{inset:0;overflow:hidden;opacity:0;
+  animation:ae-seep-blink var(--ae-seep-ms,240ms) ease-out 1}
+.ae-seep-scan{inset:-6px 0;
+  background:repeating-linear-gradient(180deg,rgba(0,0,0,.5) 0 1px,rgba(0,0,0,0) 1px 3px);
+  animation:ae-seep-drift .24s linear infinite}
+.ae-seep-rec{right:10px;top:8px;color:var(--ae-seep-cold);letter-spacing:.12em;
+  font:400 13px/1 ui-monospace,'Cascadia Mono',Consolas,monospace}
+@keyframes ae-seep-blink{0%{opacity:0}18%{opacity:.85}72%{opacity:.85}100%{opacity:0}}
+@keyframes ae-seep-drift{to{transform:translateY(3px)}}
+
+/* 14 THE RESUME SLATE - a feed reacquiring, between the press and the re-arm. */
+.ae-seep-slate{inset:0;overflow:hidden;display:flex;align-items:center;justify-content:center;
+  background:var(--ae-seep-deep);
+  background-image:repeating-linear-gradient(180deg,rgba(143,224,206,.10) 0 1px,transparent 1px 3px);
+  color:var(--ae-seep-cold);letter-spacing:.14em;
+  font:400 clamp(16px,3.2vw,26px)/1 ui-monospace,'Cascadia Mono',Consolas,monospace;
+  animation:ae-seep-sync var(--ae-seep-ms,120ms) steps(1,end) 1}
+.ae-seep-slate-id{position:static}
+@keyframes ae-seep-sync{0%,86%{opacity:1}100%{opacity:0}}
+
 /* ---- the touch rung: html.ae-touch ----------------------------------------
    Set the same way .ae-lite is (the game knows the device; the engine only
    reads the class), but it is NOT a quality rung - it is a HARDWARE ceiling
@@ -200,6 +243,9 @@ export const STYLE_TEXT = `
     transition-duration:.12s !important}
   .ae-wash-spiral,.ae-crt-live,.ae-mote,.ae-drift-breathe{animation:none !important}
   .ae-sub,.ae-burst,.ae-rain,.ae-bubble,.ae-stamp{animation:none !important;opacity:var(--ae-alpha,.5) !important}
+  /* the seep's animated tells are already retired at the director; this is the
+     brace that survives a director nobody wired */
+  .ae-seep{animation:none !important;opacity:0 !important}
 }
 `;
 

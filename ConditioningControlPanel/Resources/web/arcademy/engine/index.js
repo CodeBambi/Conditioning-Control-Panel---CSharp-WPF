@@ -37,6 +37,45 @@
  *   engine.sustain('sub_flash')  additive alias: drives fire('sub_flash') on the
  *                                heat-scaled cadence (games asked for a rung, not
  *                                a loop of their own); stop('sub_flash') ends it
+ *   engine.deadBeat(name, opts)  THE SEEP'S CLASS-SIDE DOOR (see below)
+ *
+ * ---------------------------------------------------------------------------
+ * engine.deadBeat(beatName, opts) - THE SEEP'S CLASS-SIDE DOOR
+ *
+ * A class names a DEAD MOMENT it is standing in - a beat where no input is
+ * armed, no point is on the table and no timing window is open - and the engine
+ * asks the shell's seep director whether anything lives there. It answers NULL
+ * the overwhelming majority of the time and that is the feature.
+ *
+ *   deadBeat('round_gap')   between rounds / after a clear    -> the Overseen Frame
+ *   deadBeat('resume')      the pause lift, BEFORE input re-arms -> the Resume Slate
+ *   deadBeat('resurface', { draw })   The Deep End's exhale
+ *   deadBeat('stream',    { draw })   Instant Recall's watch-only wall
+ *
+ *   opts.payload?  free-form, handed straight to the director
+ *   opts.draw?     (ms) => (undo|void). A GAME-OWNED painter, for the two beats
+ *                  whose pixels live inside the game's own furniture (behind The
+ *                  Deep End's tiles, inside one Instant Recall montage tile).
+ *                  Omit it and the engine paints the shared tell it owns; a beat
+ *                  the engine has no painter for AND no `draw` answers null.
+ *   opts.onClear?  () => void, run on the tell's LAST FRAME, after the pixels are
+ *                  gone and the director's claim is released. THIS IS THE INPUT
+ *                  RE-ARM HOOK: the resume path re-arms here and nowhere else, so
+ *                  the ordering ("input re-arms only after the slate clears") is
+ *                  a property of the code rather than of a comment.
+ *
+ * Returns `{ tell, ms, cancel() }` or NULL. When it answers null the caller does
+ * its ordinary thing SYNCHRONOUSLY and `onClear` is never called - a caller that
+ * needs a thing done writes it twice, once in `onClear` and once on the null
+ * path, and the 7-in-8 case pays no latency at all.
+ *
+ * LAWS. Every layer it mints is pointer-events:none and rides the engine's own
+ * `.ae-layer` (which is pointer-events:none by construction), so even a mistimed
+ * frame cannot eat a tap. It binds no listener, adds no Esc rung and touches no
+ * channel, ceiling or manifest: a seep frame is not an effect and the class
+ * never spends anything on it. One claim at a time per engine, and suspend() and
+ * dispose() both clear it - a claim that is never released closes the seep for
+ * the session, which is a bug, not a mood.
  *
  * ---------------------------------------------------------------------------
  * PARAMETER SCALE: every `strength` / `alpha` / `level` / `density` opt accepts
@@ -328,6 +367,107 @@ export function createEngine(options = {}) {
     return root;
   }
 
+  /* ---- THE SEEP'S CLASS-SIDE DOOR ---------------------------------------
+   * `opts.seep` is an INJECTION, never an import: the engine must not know that
+   * shell/seep.js exists (it imports clean and no-ops headless, and a null
+   * director is simply a quiet school). Two fields, both optional:
+   *   beat(name, payload) -> claim|null   the director's own door
+   *   feed: 'FEED 05'                     this room's camera tag, per the Annex
+   *                                       map. The shell knows the game key, so
+   *                                       it resolves the number; the engine
+   *                                       only ever prints the string.
+   * -------------------------------------------------------------------- */
+  const seepSeam = (opts.seep && typeof opts.seep.beat === 'function') ? opts.seep : null;
+  const seepFeed = (seepSeam && typeof seepSeam.feed === 'string' && seepSeam.feed) ? seepSeam.feed : 'FEED 09';
+  let seepLive = null;
+
+  function seepNode(cls, ms) {
+    const node = document.createElement('div');
+    node.className = 'ae-seep ' + cls;
+    try { node.setAttribute('aria-hidden', 'true'); } catch { /* ignore */ }
+    /* THE DIRECTOR OWNS THE LENGTH, so the sheet reads it rather than hardcoding
+     * it: one table, in shell/seep.js, and the CSS follows whatever it says. */
+    if (ms && node.style) { try { node.style.setProperty('--ae-seep-ms', ms + 'ms'); } catch { /* ignore */ } }
+    return node;
+  }
+
+  /** TELL 13, THE OVERSEEN FRAME. The whole stage reads as a monitor for a
+   *  blink: one oversized scanline sheet drifting by TRANSFORM (never
+   *  background-position - trap 36) plus a corner REC glyph. REC is a machine
+   *  tag, not prose: hardcoded on purpose, like the campus FEED 09. */
+  function paintOverseen(ms) {
+    ensureLayer();
+    if (!layers.front) return null;
+    const node = seepNode('ae-seep-overseen', ms);
+    const scan = seepNode('ae-seep-scan');
+    const rec = seepNode('ae-seep-rec');
+    rec.textContent = 'REC \u00b7';
+    node.appendChild(scan);
+    node.appendChild(rec);
+    layers.front.appendChild(node);
+    return () => { try { node.remove(); } catch { /* ignore */ } };
+  }
+
+  /** TELL 14, THE RESUME SLATE. A feed reacquiring, for a tenth of a second,
+   *  between the resume press and the moment input comes back. */
+  function paintResumeSlate(ms) {
+    ensureLayer();
+    if (!layers.front) return null;
+    const node = seepNode('ae-seep-slate', ms);
+    const id = seepNode('ae-seep-slate-id');
+    id.textContent = seepFeed + ' \u00b7 SYNC';
+    node.appendChild(id);
+    layers.front.appendChild(node);
+    return () => { try { node.remove(); } catch { /* ignore */ } };
+  }
+
+  const SEEP_PAINTERS = { round_gap: paintOverseen, resume: paintResumeSlate };
+
+  /** See the header block. Cheap, synchronous, and null is the common answer. */
+  function deadBeat(name, o) {
+    if (disposed || suspended || !seepSeam) return null;
+    if (seepLive) return null;
+    const key = String(name || '');
+    const opt = o || {};
+    const draw = typeof opt.draw === 'function' ? opt.draw : null;
+    const painter = Object.prototype.hasOwnProperty.call(SEEP_PAINTERS, key) ? SEEP_PAINTERS[key] : null;
+    if (!draw && !painter) return null;
+    if (!draw && !hasDom()) return null;
+    let token = null;
+    try { token = seepSeam.beat(key, opt.payload || null); } catch { token = null; }
+    if (!token || typeof token.release !== 'function') return null;
+    const ms = Math.max(40, Math.round(Number(token.ms) || 120));
+    let undo = null;
+    try { undo = draw ? draw(ms) : painter(ms); }
+    catch (e) { log('seep ' + key + ' painter threw: ' + (e && e.message)); undo = null; }
+    let cleared = false;
+    let timer = 0;
+    /* THE FINALLY-SHAPED PATH. Every exit lands here exactly once: the deadline,
+     * an explicit cancel, a suspend, a dispose. The pixels go, the claim is
+     * released, and ONLY THEN does the caller's re-arm run. */
+    function clear() {
+      if (cleared) return;
+      cleared = true;
+      if (timer) { try { timers.cancel(timer); } catch { /* ignore */ } timer = 0; }
+      if (typeof undo === 'function') { try { undo(); } catch { /* ignore */ } }
+      if (seepLive === handle) seepLive = null;
+      try { token.release(); } catch { /* ignore */ }
+      if (typeof opt.onClear === 'function') {
+        try { opt.onClear(); } catch (e) { log('seep ' + key + ' onClear threw: ' + (e && e.message)); }
+      }
+    }
+    const handle = { tell: token.tell || key, ms, cancel: clear };
+    seepLive = handle;
+    timer = timers.after(ms, clear);
+    /* NO FX EVENT, NO LOG LINE, NO ANYTHING ON THE WAY OUT. The seep's own
+     * doctrine: a haunting that keeps records is a feature with a settings page,
+     * and the school does not report itself. A rig that needs to see a tell fire
+     * reads diagnostics().seep or looks at the layer. */
+    return handle;
+  }
+
+  function seepClear() { if (seepLive) { try { seepLive.cancel(); } catch { /* ignore */ } } }
+
   /* ---- ctx handed to the primitive families ------------------------------ */
   const motionScalar = () => (reducedMotion || motionLevel === 0 ? 0 : (motionLevel === 1 ? 0.6 : 1));
   const ctx = {
@@ -498,6 +638,9 @@ export function createEngine(options = {}) {
     suspended = want;
     if (suspended) {
       // EVERYTHING, NOW: hide the layer, stop sustains, kill every timer/rAF.
+      // The seep claim goes FIRST: timers.kill() below would strand its deadline,
+      // and a claim nobody releases closes the haunting for the whole session.
+      seepClear();
       if (layers.root) layers.root.classList.add('ae-suspended');
       try { sustained.stopAll(true); } catch { /* ignore */ }
       if (subStream.timer) { timers.cancel(subStream.timer); subStream.timer = 0; }
@@ -514,6 +657,7 @@ export function createEngine(options = {}) {
 
   function dispose() {
     if (disposed) return;
+    seepClear();                       // release the claim before the timers die
     disposed = true;
     try { sustained.stopAll(true); } catch { /* ignore */ }
     timers.dispose();
@@ -537,6 +681,7 @@ export function createEngine(options = {}) {
     rewardRoll: (o = {}) => schedule.roll(Object.assign({ heat }, o)),
     garnish: (o = {}) => applyGarnish(garnishBag.draw(o.avail || ['pink', 'drain', 'spiral', 'sublim']), o.intensity),
     escapeGuard: (o = {}) => createEscapeGuard(Object.assign({ timers }, o)),
+    deadBeat,
     channels: () => Object.assign({}, channels),
     visual: () => channelsToVisual(channels),
     words: () => wordsIn.slice(),
@@ -561,6 +706,8 @@ export function createEngine(options = {}) {
         phase: director.phase,
         refused: [...refusals],
         timers: timers.size,
+        seep: seepLive ? seepLive.tell : null,
+        seepArmed: !!seepSeam,
         suspended, disposed,
       };
     },
