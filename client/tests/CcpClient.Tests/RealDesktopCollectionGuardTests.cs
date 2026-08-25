@@ -36,6 +36,20 @@ namespace CcpClient.Tests;
 /// name is invisible, so the helper census (fact 2) exists to make a NEW probe file fail loudly
 /// rather than join silently; (3) tokens inside string literals count, which is why this file is
 /// exempt from its own scan (the same self-exemption <c>TestTimingGuardTests</c> takes).</para>
+///
+/// <para><b>FACT 5 — THE PLATFORM KEY, AND WHY IT BELONGS BESIDE MEMBERSHIP.</b> A real-desktop
+/// class that never names the machine is a class whose whole off-Windows column is meaningless,
+/// and it fails in the WORSE of the two possible directions. Every probe in this project folds
+/// <c>IsWindows()</c> into its own reading, so off Windows a handle is 0 and a comparison of two
+/// absent windows is <c>0 == 0</c> — the fact does not go RED, it goes VACUOUSLY GREEN about a
+/// window that was never created. Both remedies this suite already uses are accepted: SKIP on an
+/// OS predicate (the idiom pinned by name in <c>floor.json</c>'s <c>allowedSkips</c>), or KEY the
+/// expectation to a machine property the test establishes for itself. Fact 5 makes doing NEITHER
+/// impossible to land. It binds at FILE granularity because that is the granularity the
+/// convention actually lives at: these classes reach their run through a class-level alias
+/// property, so a per-fact rule would have to resolve that alias and a per-file rule does not —
+/// and a per-fact rule would additionally red the platform-independent facts (record-clause,
+/// arithmetic and factory-selection facts) that correctly run on both.</para>
 /// </summary>
 public class RealDesktopCollectionGuardTests
 {
@@ -170,6 +184,33 @@ public class RealDesktopCollectionGuardTests
 
     private const string MessageOnlyToken = "HwndMessage";
 
+    /// <summary>
+    /// The machine/OS properties a real-desktop class may key its expectation to (fact 5). Two
+    /// spellings of one discipline: the OS predicate the skip idiom takes
+    /// (<c>Assert.SkipUnless</c>), and the machine facts the probes establish for themselves and
+    /// compare every window expectation against. Both are established BY THE TEST and never taken
+    /// from the product, which is what makes either of them an honest key.
+    /// </summary>
+    private static readonly string[] MachineKeys =
+    [
+        "OperatingSystem.Is",
+        "RuntimeInformation.IsOSPlatform",
+        "WindowsHost",
+        "MachineHasInteractiveDesktop",
+    ];
+
+    /// <summary>
+    /// The ONE class that names a real-desktop helper and keys nothing, with its reason.
+    /// <c>PopQuizCardPresentationTests</c> mentions <c>Win32InputPresence</c> only to read two
+    /// compile-time colour constants out of it: it opens no window, reads no pixel and asks the
+    /// operating system for nothing, and it is in the collection at all only because fact 1 is
+    /// LEXICAL (its own remarks say exactly that). Copying the two hex strings in by hand to evade
+    /// membership would break the product link its first fact exists to hold, so the serialisation
+    /// is paid instead — and there is no machine reading here to key. Pinned by NAME so a new file
+    /// cannot quietly take the exemption, and a file that LATER gains a key reds as stale.
+    /// </summary>
+    private static readonly string[] UnkeyedExemptFiles = ["PopQuizCardPresentationTests.cs"];
+
     /// <summary>Broken-detector controls: these must always come out bound.</summary>
     private static readonly string[] BoundControls =
     [
@@ -300,6 +341,93 @@ public class RealDesktopCollectionGuardTests
             $"the membership walk found {members.Count} file(s) carrying {MembershipAttribute}, fewer than the "
             + $"{BoundControls.Length} broken-detector controls that must always be in it. The scan is not "
             + "reading the collection at all, so the check above proves nothing");
+    }
+
+    /// <summary>
+    /// <b>FACT 5.</b> Every class that reaches the real desktop names the machine somewhere — an OS
+    /// predicate it skips on, or a machine property it compares its expectations against.
+    ///
+    /// <para>This is the guard the first Linux run of this port needed and did not have. That run
+    /// left roughly 66 facts red for one reason: they measured a Win32 mechanism and were written
+    /// where that mechanism is always present. Every one of those was fixed by hand, and nothing
+    /// stopped the next one — five new real-desktop classes landed the day after. They all followed
+    /// the convention, which is what makes it worth binding rather than rewriting.</para>
+    ///
+    /// <para><b>What this does NOT claim.</b> It cannot tell a well-keyed expectation from a badly
+    /// keyed one, and it does not run on Linux to find out. A class that keys ONE control fact and
+    /// leaves its invariants unconditional still passes here while those invariants read all-zero
+    /// off Windows — that is the shape most of this collection is in, it is named in the classes
+    /// themselves, and closing it is a per-fact question this file deliberately does not answer.
+    /// What fact 5 removes is the class that keys NOTHING, whose entire off-Windows column is
+    /// either red noise or vacuous green with no reading behind it either way.</para>
+    /// </summary>
+    [Fact]
+    public void EveryRealDesktopClass_KeysItsExpectationToTheMachine_OrOffWindowsItPassesVacuously()
+    {
+        var files = UnitProjectSources();
+        var keyed = new List<string>();
+        var violations = new List<string>();
+        var staleExemptions = new List<string>();
+
+        foreach (var (name, raw) in files)
+        {
+            if (ExemptFileNames.Contains(name, StringComparer.Ordinal))
+            {
+                continue;
+            }
+
+            var code = StripComments(raw);
+            if (!code.Contains(MembershipAttribute, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var reasons = RealDesktopHelpers.Where(h => code.Contains(h, StringComparison.Ordinal)).ToArray();
+            if (reasons.Length == 0)
+            {
+                // In the collection for serialisation alone (the lease's own facts, the preflight):
+                // no probe, so no reading that could go zero, so nothing to key.
+                continue;
+            }
+
+            var exempt = UnkeyedExemptFiles.Contains(name, StringComparer.Ordinal);
+            if (MachineKeys.Any(k => code.Contains(k, StringComparison.Ordinal)))
+            {
+                keyed.Add(name);
+                if (exempt)
+                {
+                    staleExemptions.Add($"CcpClient.Tests/{name}: is pinned in UnkeyedExemptFiles as a class with no "
+                        + "machine reading to key, but it now names one. Either the exemption's reason is no longer "
+                        + "true and the pin must go, or the key is accidental — an exemption nobody re-reads is a hole "
+                        + "with a comment.");
+                }
+
+                continue;
+            }
+
+            if (exempt)
+            {
+                continue;
+            }
+
+            violations.Add($"CcpClient.Tests/{name}: reaches the real desktop [{string.Join("; ", reasons)}] but "
+                + $"names no machine or OS property ({string.Join(", ", MachineKeys)}). Every probe in this project "
+                + "folds the Windows check into its own reading, so off Windows this class's handles are all 0 and "
+                + "its comparisons are 0 == 0: it does not go RED, it goes VACUOUSLY GREEN about windows that were "
+                + "never created. Gate each fact that drives a real Win32 rig on an OS predicate (Assert.SkipUnless, "
+                + "pinned by name in floor.json's allowedSkips with the machine class where it executes), or key the "
+                + "expectation to the machine fact the probe already establishes. Never neither, and never a weakened "
+                + "assertion.");
+        }
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+        Assert.True(staleExemptions.Count == 0, string.Join(Environment.NewLine, staleExemptions));
+
+        // The detector's own control, and the non-vacuity proof: a walk that keyed NOTHING would
+        // satisfy both assertions above for the worst possible reason. Every broken-detector control
+        // drives a real Win32 rig, so every one of them must come out KEYED.
+        Assert.Equal(BoundControls.OrderBy(n => n, StringComparer.Ordinal),
+            keyed.Where(BoundControls.Contains).OrderBy(n => n, StringComparer.Ordinal));
     }
 
     [Fact]
