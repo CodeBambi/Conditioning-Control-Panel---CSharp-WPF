@@ -412,9 +412,25 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   /* ---------------------- look & lexicon -------------------------------- */
   setLexicon(src.lexicon);
   applyPalette(src.palette, say);
-  const reducedMotion = !!src.reducedMotion || src.motionLevel === 0;
+  let reducedMotion = !!src.reducedMotion || src.motionLevel === 0;
   if (reducedMotion && document.documentElement) {
     document.documentElement.classList.add('arc-reduced');
+  }
+  /** THE WEB'S MOTION CONTROL. The settings page's 'This device' sheet posts
+   *  `motionLevel` (0 off / 1 reduced / 2 full) and the shim echoes it; this is
+   *  the echo landing. The desktop never echoes the key (its Motion row is
+   *  read-only, the app owns it), so on the app this is never reached. CSS
+   *  rides html.arc-reduced at once; the JS consumers read `reducedMotion` at
+   *  their next build (a class start, a screen change), which is the same
+   *  contract every other setting on that page already makes. */
+  function applyMotionLevel(level) {
+    const n = Number(level);
+    if (!Number.isFinite(n)) return;
+    src.motionLevel = n;
+    src.reducedMotion = n !== 2;
+    reducedMotion = n === 0 || !!src.reducedMotion;
+    const html = document.documentElement;
+    if (html && html.classList) html.classList.toggle('arc-reduced', reducedMotion);
   }
   /* THE MOBILE SEAM (core/device.js). One decision, painted on <html> as
    * `arc-mobile` and kept there across a rotate, so the stylesheet's phone rules
@@ -1124,7 +1140,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   function setStage(mode) {
     const html = document.documentElement;
     if (html && html.classList) {
-      html.classList.remove('arc-class-on', 'arc-report-on');
+      html.classList.remove('arc-class-on', 'arc-report-on', 'arc-settings-on');
       if (mode) html.classList.add(mode);
     }
     if (dom && dom.topbar) dom.topbar.hidden = !!mode;
@@ -1726,11 +1742,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     screen = 'settings';
     clearScreen();
     renderTopbar();
+    /* The marker styles.css keys the phone's settings rules off (the opaque
+     * bottom bar, the scroller's padding, EMI stepping off the title). Not a
+     * stage: the topbar stays up. clearScreen() -> setStage(null) unwinds it. */
+    if (document.documentElement && document.documentElement.classList) {
+      document.documentElement.classList.add('arc-settings-on');
+    }
     settingsPage = createSettingsPage({
       init: src,
       bridge,
       games: games.list,
       keybinds,
+      // The folds bank their open state here (`optionsOpen.<section>`).
+      store,
       /* THE DOOR'S TWO WRITE VERBS, lent to the web Media group so its add
        * and remove buttons ride SORT's `probe-sub` / `library-remove` frames
        * rather than a second copy of them. The group only renders behind
@@ -4152,6 +4176,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (src.settings && typeof src.settings === 'object' && !isGlobalSettingKey(m.key)) {
         src.settings[m.key] = m.value;
       }
+      if (m.key === 'motionLevel') applyMotionLevel(m.value);
       if (settingsPage) { settingsPage.noteEcho(m.key, m.value); settingsPage.applyEcho(m.key, m.value); }
       if (m.key === SETTING_KEYS.keybinds) keybinds.applyEcho(m.value);
       /* THE PHOTO CHIP IS THE `presenceShare` DISCORD RUNG (owner ruling 1), so
