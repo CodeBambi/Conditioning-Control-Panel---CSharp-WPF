@@ -125,7 +125,21 @@ export const ASK_DIALS = Object.freeze({
 /** The moments this module is willing to be woken by. */
 export const ASK_TRIGGERS = Object.freeze([
   'greet', 'classStart', 'idlePlayer', 'reportCard', 'streakBroken', 'exitAim',
+  /* THE HEARTBEAT'S SLOT (2026-08-25). Not a new question and not a new
+   * cadence - a WAY IN. The metronome fills campus silence every ten seconds
+   * or so, and one of the things it may draw is "her question, now" rather
+   * than making an eligible ask wait for the next `greet` or the next
+   * `idlePlayer` edge, which on a quiet campus can be minutes away. Every gate
+   * in this file still runs, and NO frequency dial moved. */
+  'heartbeat',
 ]);
+
+/** Which `on` rows a `heartbeat` may stand in for. The heartbeat IS campus
+ *  idle, so it answers for the two triggers that already mean that - the
+ *  arrival and the quiet - and for nothing else. A dare (`classStart`) is
+ *  emphatically not on this list: trap 97 owns where those may be offered,
+ *  and `exitAim` is a hand travelling to the close button (trap 95). */
+const HEARTBEAT_STANDS_IN = Object.freeze({ idlePlayer: true, greet: true });
 
 /** The three dare kinds, and the only strings the payout frame may carry. */
 export const DARE_KINDS = Object.freeze(['S', 'streak', 'fast']);
@@ -490,8 +504,11 @@ export function createAsks(o = {}) {
 
   function eligible(name, c) {
     const out = [];
+    /* A HEARTBEAT IS A SLOT, NOT A TRIGGER. It matches the rows that already
+     * ride campus idle; every other gate below is untouched. */
+    const hb = name === 'heartbeat';
     for (const a of TABLE) {
-      if (a.on !== name) continue;
+      if (hb ? !HEARTBEAT_STANDS_IN[a.on] : a.on !== name) continue;
       if (spent(a, c)) continue;
       if (a.id === 'a15_bed' && S.bedAsked) continue;
       if (a.id === 'a14_name' && S.nameAsked) continue;
@@ -903,7 +920,9 @@ export function createAsks(o = {}) {
        * next firing of its own trigger, whichever comes first. */
       const back = S.reask ? (TABLE.find((a) => a.id === S.reask) || null) : null;
       if (S.reask && !back) S.reask = null;
-      if (back && (name === 'idlePlayer' || name === back.on)) {
+      // ...and a `heartbeat` is the quiet moment too (2026-08-25), so the one
+      // owed question does not have to wait for an idle EDGE to come round.
+      if (back && (name === 'idlePlayer' || name === 'heartbeat' || name === back.on)) {
         S.reask = null;
         let ok = !spent(back, c);
         if (ok && typeof back.when === 'function') {

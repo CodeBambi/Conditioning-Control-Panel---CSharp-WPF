@@ -121,6 +121,12 @@ function sfx(name, level, extra) {
  *  the router is `screen` and it stays exactly where it was. */
 const SCREEN_DEPTH = Object.freeze({ board: 0, room: 1, records: 1, annex: 2, report: 2, settings: 3, class: 4 });
 
+/** Walk targets EMI never remarks on arriving at. The three office doors are
+ *  voice.js's geofence read from the other end: she is silent on the Records
+ *  side of them anyway, so a `campus.walkArrived` there would be a line spent
+ *  on the last step before she is switched off (heartbeat wave, 2026-08-25). */
+const SILENT_WALK_TARGETS = new Set(['records', 'registrar', 'annex']);
+
 /* ----------------------------------------------------------------------------
  * DECK V - THE RAKE (house-rules.txt). Built ONCE here so all ten classes wear
  * it, and bounded by Law VI end to end: nothing below blocks, delays or moves an
@@ -664,11 +670,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     const up = currentCorkboard();
     if (up && !up.closed) return;
     openCorkboard({ daySeed: utcDateSeed, onClose: refreshCampusPost, log: say });
+    fireMoment('campus.corkboardOpened', { inClass: false });   // EMI SEAM
   }
   function openBugleOverlay() {
     const up = currentBugle();
     if (up && !up.closed) return;
     openBugle(null, { onClose: refreshCampusPost, log: say });
+    fireMoment('campus.bugleOpened', { inClass: false });       // EMI SEAM
   }
 
   /** gameKey -> {grade, zen, composite, capped, tier, xp, levelUp} for TODAY. */
@@ -1531,7 +1539,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
        * (mail.js law 2), the campus built below paints the chip already
        * knowing about it, and a silent repaint is not an arrival - walking in
        * and out of the settings page cannot stack the box. */
-      try { mail.deliver(); } catch (e) { say('mail deliver threw: ' + ((e && e.message) || e)); }
+      // EMI SEAM: the pip on the envelope chip is a moment. Null = nothing landed.
+      try {
+        const landed = mail.deliver();
+        if (landed) fireMoment('campus.mailLanded', { letter: landed.id, inClass: false });
+      } catch (e) { say('mail deliver threw: ' + ((e && e.message) || e)); }
     }
     /* THE MORNING-AFTER CATCH-UP: a save that sealed its last card before this
      * wave shipped (or whose final-seal ceremony was torn down by a host-forced
@@ -1605,6 +1617,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           return;
         }
         lastRoomKey = targetKey;
+        // EMI SEAM: the miniature arrived. The three office doors are the
+        // geofence's, so she never comments on the walk to Records.
+        if (!SILENT_WALK_TARGETS.has(String(targetKey))) {
+          fireMoment('campus.walkArrived', {
+            targetKey, trips: (residueTrail && residueTrail.length) || 0, inClass: false,
+          });
+        }
         fire();
       };
       try { walker.walkTo(targetKey, { onDone: go }); }
@@ -1707,6 +1726,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
               if (store.get('boardOpenedDate') !== localDate) store.set('boardOpenedDate', localDate);
             } catch (e) { say('boardOpenedDate write failed: ' + ((e && e.message) || e)); }
             if (board) board.replay();
+            fireMoment('campus.boardOpened', { inClass: false });   // EMI SEAM
           },
           begin: (gameKey) => walkThen(gameKey, () => launchGraded(gameKey)),
           /* THE ROOM SCENE TAKEOVER. campus.js offers every enterable door
@@ -2236,6 +2256,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     if (!idEmiPrev) return;
     idEmiPrev = false;
     try { const emi = getEmi(); if (emi && emi.setEnabled) emi.setEnabled(true); } catch (e) { /* noop */ }
+    // EMI SEAM: she is only switched back on HERE, so this is the one edge of
+    // the spotlight she is allowed to have watched.
+    fireMoment('campus.idCardClosed', { inClass: false });
   }
 
   /** Put the card back, wherever the ask came from. True when one was up. */
@@ -2419,6 +2442,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     if (dom && dom.screen) dom.screen.appendChild(roomPage.root);
     setStage('arc-report-on');
     if (typeof roomPage.fit === 'function') roomPage.fit();
+    // EMI SEAM: standing in the painted room, nothing armed yet. Always BEFORE
+    // classStart, which has eleven pools of its own further in.
+    fireMoment('campus.roomEntered', { gameKey, done, scheduled, inClass: false });
   }
 
   /* ============================ THE ANNEX ===============================
@@ -2914,6 +2940,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       box.appendChild(el('p', 'arc-note', t(drop.lineKey, drop.line)));
       card.appendChild(box);
       say('rake drop minted for ' + gameKey + ': ' + drop.id + ' (no XP - C# owns that)');
+      /* EMI SEAM (heartbeat wave, 2026-08-25). `rareDrop` has carried a MOMENTS
+       * row and a bark pool since the first wave and had NO caller anywhere, so
+       * the whole beat was unreachable. This is the caller. */
+      fireMoment('rareDrop', {
+        gameKey, drop: drop.id, grade: graded && graded.grade, isRetake: false, inClass: false,
+      });
     }
 
     /* --- THE BUTTONS. Order is fixed: the lit one first, then the two small
@@ -2978,6 +3010,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     function doRetake() {
       if (taken) return;
       taken = true;
+      fireMoment('campus.endCardRetake', { gameKey, grade: graded && graded.grade });  // EMI SEAM
       dismissEndCard();
       // A free swim never reaches this card, so this is always a real class.
       try { startClass(cls); }
@@ -3468,18 +3501,45 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     let ended = false;
 
     /* ---- ctx.mood (EMI COLOR, 2026-08-24): THE TENSION MIRROR ------------
-     * A game may TELL the mascot how the room feels; it may not make her talk.
-     * `tense`/`clutch` reach only the wordless MOMENTS table (no pool exists on
-     * either name, by design - mid-class speech stays barred), `stumble` fires
-     * the small 'miss' face whose pool always said "one wrong answer, one
-     * dropped tile" and finally means it (its own maxPerClass:1 still rations
-     * the words), and `runLost` is the mid-class K.O. All throttled HERE so no
-     * game can flood her: tense latches until calm, everything shares a 15s
-     * spacing, stumbles cap at 3 a class, the K.O. spends once. Opt-in per
-     * game; a class that never calls it plays exactly as before. */
+     * A game may TELL the mascot how the room feels. `tense`/`clutch` are the
+     * two big ones and are still mostly wordless, `stumble` fires the small
+     * 'miss' face whose pool always said "one wrong answer, one dropped tile"
+     * and finally means it (its own maxPerClass:1 still rations the words), and
+     * `runLost` is the mid-class K.O. All throttled HERE so no game can flood
+     * her: tense latches until calm, everything shares a 15s spacing, stumbles
+     * cap at 3 a class, the K.O. spends once. Opt-in per game; a class that
+     * never calls it plays exactly as before.
+     *
+     * THE 2026-08-25 HEARTBEAT WAVE ADDED THE OTHER TWO VERBS, and reversed one
+     * rule while it was there. "Mid-class speech is barred" is gone - the owner
+     * wants her commenting during a class - so a pool on `tense`/`clutch` is
+     * legal now and voice.js rations mid-class WORDS on its own (a 20s floor, a
+     * per-class ceiling, and the danger gate below).
+     *
+     *   note(id, extra)  the ordinary road for class commentary. Fires the
+     *                    moment `game:<id>`; moments.js answers EVERY note with
+     *                    a face keyed off `extra.kind` and the voice decides
+     *                    separately whether it also earns a line. The throttles
+     *                    here are a FLOOD GUARD, not a ration - the voice does
+     *                    the rationing, and a game must never build its own.
+     *   hold(on)         THE DANGER GATE. A timing-critical window (a go/no-go,
+     *                    a playback, a shuffle) where a sentence would actually
+     *                    cost the player the round. While held she may not spend
+     *                    WORDS on class commentary; faces still land, because a
+     *                    one-second face on her own glass is the mirror working.
+     *                    It auto-releases when the class ends, so a game that
+     *                    throws mid-window cannot mute her for the sitting. */
     const mood = (() => {
       let tenseLatch = false, stumbles = 0, lastAt = 0, koSpent = false;
       const MOOD_SPACING_MS = 15000;
+      /* THE NOTE THROTTLES, and they are deliberately NOT the 15s spacing
+       * above: a note is a small true thing about the board and there are many
+       * of them, where a `tense` is a whole change of weather. */
+      const NOTE_SPACING_MS = 2500;    // between any two notes
+      const NOTE_SAME_MS = 6000;       // between two notes of the SAME id
+      const NOTE_CAP = 40;             // per class - a flood guard, nothing more
+      let notes = 0, lastNoteAt = 0, held = false;
+      const noteAt = Object.create(null);
       const fire = (name, extra) => {
         try { fireMoment(name, Object.assign({ gameKey: cls.gameKey, midClass: true }, extra || {})); }
         catch (e) { /* a mascot may never break a class */ }
@@ -3502,6 +3562,33 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           stumbles += 1; lastAt = now; fire('miss');
         },
         runLost() { if (koSpent) return; koSpent = true; fire('runLost'); },
+        /**
+         * ONE THING THAT JUST HAPPENED ON THE BOARD.
+         * @param {string} id     stable, dotted, the game's own namespace
+         *                        ('lf.tile.repeat'). It IS the pool key
+         *                        (`game:lf.tile.repeat`) and the bark data
+         *                        hangs off it, so renaming one orphans a pool.
+         * @param {Object=} extra `kind` picks the face (celebrate, commiserate,
+         *                        tease, tension, curiosity, ambient) and the
+         *                        payload tokens {n} {tile} {word} {left}
+         *                        {streak} {grade} are read off it by voice.js.
+         */
+        note(id, extra) {
+          if (typeof id !== 'string' || !id) return;
+          if (notes >= NOTE_CAP) return;
+          const now = Date.now();
+          if (now - lastNoteAt < NOTE_SPACING_MS) return;
+          if (now - (noteAt[id] || 0) < NOTE_SAME_MS) return;
+          notes += 1; lastNoteAt = now; noteAt[id] = now;
+          fire('game:' + id, extra);
+        },
+        /** The danger gate. Edge-triggered: a game may call it every frame. */
+        hold(on) {
+          const next = on !== false;
+          if (next === held) return;
+          held = next;
+          fire('moodHold', { on: next });
+        },
       });
     })();
 

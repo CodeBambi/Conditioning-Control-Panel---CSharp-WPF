@@ -284,6 +284,21 @@ export default {
     };
     const say = (m) => { try { ctx.log('[ec] ' + m); } catch (e) { /* noop */ } };
 
+    /* EMI COMMENTARY SEAMS (the heartbeat wave). note() names a moment the
+     * mascot may react to - the shell prefixes 'game:' and its own voice engine
+     * decides whether the moment is worth a face, a line or nothing at all.
+     * hold() fences a timing-critical window where she may pull faces but never
+     * words. Both are additive, one-way and fully guarded: an older shell has
+     * neither, and a mascot may never break a class. */
+    const note = (id, extra) => {
+      try { if (ctx.mood && typeof ctx.mood.note === 'function') ctx.mood.note(id, extra); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+    const holdWords = (on) => {
+      try { if (ctx.mood && typeof ctx.mood.hold === 'function') ctx.mood.hold(!!on); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+
     /* ---- lifecycle flags ------------------------------------------------ */
     let dead = false;
     let paused = false;
@@ -344,6 +359,9 @@ export default {
     let currentHeat = 0;
     let bellOn = false;
     let stallMs = 0;
+    let emiStallNoted = false;          // one stall seam per input turn, never per tick
+    let emiLongestDealt = 0;            // high-water length, so the long-echo seam never repeats itself
+    let emiInPlayback = false;          // is the playback word-fence currently owed? (pause drops it, resume owes it back)
     let lastPressAt = 0;
     let newRecord = false;
 
@@ -1433,7 +1451,11 @@ export default {
       /* THE RESHUFFLE. Every sequence after the first re-deals the phrases -
        * the ENCORE deliberately does not, because it is the same melody again
        * and moving the words under it would be a different room. */
-      if (sequencesDealt > 0) { roundIdx += 1; dealFaces(); }
+      if (sequencesDealt > 0) {
+        roundIdx += 1;
+        dealFaces();
+        note('ec.reshuffled', { kind: 'curiosity', n: want, word: padWords[0] || '' });
+      }
       sequencesDealt += 1;
       expectIdx = 0;
       stepIdx = 0;
@@ -1443,6 +1465,12 @@ export default {
       paintHud();
       heat();
       setPhase('play');
+      /* A GENUINELY LONG ONE. 8 is the tier-1 S length, and the high-water mark
+       * keeps it to the first deal at each new length. */
+      if (want >= 8 && want > emiLongestDealt) {
+        emiLongestDealt = want;
+        note('ec.longEcho', { kind: 'tension', n: want });
+      }
       /* TIER 2 TELEGRAPHS THE DECOY (SYNTHESIS #2 - the signature twist enters
        * at tier 2, announced; tier 3+ says nothing at all). */
       const telegraphed = round.decoys.some((d) => d.telegraph);
@@ -1472,6 +1500,7 @@ export default {
       if (stage) stage.setAttribute('data-encore', '1');
       msg('ec_msg_encore', EC_LEX.ec_msg_encore);
       deck('casino', 'encore', true);
+      note('ec.encoreStart', { kind: 'tension', n: curLen });
       after(reduced ? 500 : 800, () => startPlayback());
     }
 
@@ -1479,6 +1508,13 @@ export default {
       if (dead || ended || !round) return;
       busy = true;
       inputOpen = false;
+      /* THE ONE WINDOW THAT IS SACRED. Playback IS the signal - light plus note,
+       * and at a silent desk the light alone. A word over it is a word over the
+       * thing the player is trying to hold, so from here to the end of the last
+       * step she may pull faces and nothing else. Released in seam() (the normal
+       * end), and again on every other way out of a round. */
+      holdWords(true);
+      emiInPlayback = true;
       stepIdx = 0;
       resetSteps();
       setPhase(inEncore ? 'encore' : 'echo');
@@ -1529,6 +1565,10 @@ export default {
     /** THE INTERFERENCE BEAT: the seam between playback and input is the
      *  Distraction Engine's, and only the engine's - it never moves a hitbox. */
     function seam() {
+      /* PLAYBACK IS OVER - the last pad has gone dark. Release before the
+       * guards, so a class that died mid-sequence never leaves her muted. */
+      holdWords(false);
+      emiInPlayback = false;
       if (dead || ended || !round) return;
       beatSafe();
       deck('trickster', 'afterPlayback');
@@ -1580,6 +1620,7 @@ export default {
        * never lock its pad out of the next turn. */
       try { heldByKey.clear(); } catch (e) { heldByKey = new Set(); }
       stallMs = 0;
+      emiStallNoted = false;
       lastPressAt = Date.now();
       armInputWindow();
       /* Tier 2+ pressure DURING the input turn (the dossier's ladder). Every
@@ -1633,6 +1674,7 @@ export default {
       const dt = Math.max(0, now - lastPressAt);
       lastPressAt = now;
       stallMs = 0;
+      emiStallNoted = false;
       presses += 1;
       latencySum += dt;
       latencyCount += 1;
@@ -1644,6 +1686,9 @@ export default {
         decoysTaken += 1;
         padState(i, 'decoy', reduced ? 260 : 420);
         deck('casino', 'padPressed', i, false, pressStreak);
+        note('ec.decoyTaken', {
+          kind: 'commiserate', n: expectIdx, left: round.seq.length - expectIdx, tile: padWords[i] || '',
+        });
         fail(i, 'decoy');
         return;
       }
@@ -1697,6 +1742,12 @@ export default {
       if (len > bestLen) { bestLen = len; if (bestLen > lifetimeBefore) newRecord = true; }
       sequencesCleared += 1;
       clearStreak += 1;
+      /* The sequence is complete: whatever the playback hold left standing comes
+       * off here too, so no path out of a round can strand it. */
+      holdWords(false);
+      emiInPlayback = false;
+      if (inEncore) note('ec.encoreCleared', { kind: 'celebrate', n: len, streak: clearStreak });
+      if (clearStreak >= 3) note('ec.clearStreak', { kind: 'celebrate', streak: clearStreak, n: len });
       paintHud();
       deck('casino', 'sequenceDone', len);
       deck('pressure', 'beat', 'clear');
@@ -1756,7 +1807,16 @@ export default {
       /* THE BUZZER: low, short, and nothing else in the room sounds like it. */
       tone(FAIL_SFX, 0.2, 1);
       stopInputPressure();
-      if (near) { nearMisses += 1; ceremonySafe('near_miss', {}); }
+      /* The round is over on the other path too - never leave her muted. */
+      holdWords(false);
+      emiInPlayback = false;
+      if (near) {
+        nearMisses += 1;
+        ceremonySafe('near_miss', {});
+        note('ec.nearMiss', { kind: 'commiserate', n: expectIdx, left: len - expectIdx });
+      }
+      /* ONE FAIL IS NOT THE CLASS, and the first one is where that gets learned. */
+      if (fails === 1) note('ec.firstFail', { kind: 'commiserate', n: expectIdx, left: len - expectIdx, word: why });
       /* THE DOT that broke it goes red, and stays red through the hold. */
       if (expectIdx >= 0 && expectIdx < stepEls.length) stepFillSet(expectIdx, 'bad');
       const late = why === 'timeout';
@@ -1787,6 +1847,7 @@ export default {
         if (encoreArmed && !inEncore) { startEncore(); return; }
         if (inEncore) {
           msg('ec_msg_encore_fail', EC_LEX.ec_msg_encore_fail);
+          note('ec.encoreFailed', { kind: 'commiserate', n: len, left: len - expectIdx });
           inEncore = false;
           if (stage) stage.removeAttribute('data-encore');
           deck('casino', 'encore', false);
@@ -1967,6 +2028,10 @@ export default {
       ended = true;
       inputOpen = false;
       busy = true;
+      /* THE BELL. Nothing is timing-critical after it, and the end card is the
+       * one place in the class she is allowed to talk over. */
+      holdWords(false);
+      emiInPlayback = false;
       disarmInputWindow();
       stopClock();
       clearPads();
@@ -2007,6 +2072,15 @@ export default {
           });
         }
       } catch (e) { say('meta merge failed (the class still grades): ' + ((e && e.message) || e)); }
+
+      /* THE TWO END-OF-CLASS SEAMS, once each and never before the bell: a
+       * lifetime record, and a class with no wrong pad in it at all. */
+      if (newRecord) {
+        note('ec.newBest', { kind: 'celebrate', n: bestLen, streak: bestStreak });
+      }
+      if (presses > 0 && correctPresses === presses) {
+        note('ec.perfectClass', { kind: 'celebrate', n: bestLen, streak: bestStreak });
+      }
 
       renderEnd(graded, meanLatencyMs, stepMs, lifetimeAfter);
 
@@ -2231,7 +2305,17 @@ export default {
         every(PLAYTEST.STALL_TICK_MS, () => {
           if (ended || !inputOpen) return;
           stallMs += PLAYTEST.STALL_TICK_MS;
-          if (stallMs >= PLAYTEST.STALL_MS) deck('trickster', 'stalled', stallMs);
+          if (stallMs >= PLAYTEST.STALL_MS) {
+            deck('trickster', 'stalled', stallMs);
+            /* THE WATCHING BEAT - once per input turn, and only where no window
+             * is burning. Tiers 1-2 are untimed (windowMs 0), so a freeze there
+             * costs the player nothing; at tier 3-4 a soft window is running out
+             * under the silence and a word over it would be a word over a timer. */
+            if (!emiStallNoted && round && !round.windowMs) {
+              emiStallNoted = true;
+              note('ec.stall', { kind: 'ambient', n: expectIdx, left: curLen - expectIdx });
+            }
+          }
         });
 
         msg('ec_brief', EC_LEX.ec_brief);
@@ -2266,6 +2350,10 @@ export default {
       pause() {
         if (paused) return;
         paused = true;
+        /* A frozen class is not a timing-critical one, so the fence comes off
+         * even mid-playback. `emiInPlayback` remembers that it is still owed, and
+         * resume() puts it back before the deferred steps replay. */
+        holdWords(false);
         deck('pressure', 'pause');
         deck('trickster', 'pause');
         deck('casino', 'pause');
@@ -2281,6 +2369,9 @@ export default {
         deck('casino', 'resume');
         lastTick = Date.now();
         lastPressAt = Date.now();
+        /* The fence was owed when we froze - put it back BEFORE the deferred
+         * playback steps replay, not after. */
+        if (emiInPlayback) holdWords(true);
         const q = deferred.splice(0);
         for (const fn of q) run(fn);
       },
@@ -2290,6 +2381,10 @@ export default {
 
       destroy() {
         dead = true;
+        /* TEARDOWN. The last release, unconditional: a class that goes away must
+         * never take her voice with it. */
+        holdWords(false);
+        emiInPlayback = false;
         stopClock();
         disarmInputWindow();
         clearTimers();

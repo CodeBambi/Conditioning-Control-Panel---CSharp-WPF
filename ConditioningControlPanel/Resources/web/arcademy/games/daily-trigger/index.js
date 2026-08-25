@@ -153,6 +153,18 @@ export default {
       try { return ctx.lexicon(k, f); } catch (e) { return f; }
     };
     const say = (m) => { try { ctx.log(m); } catch (e) { /* noop */ } };
+
+    /* EMI COMMENTARY SEAMS (the heartbeat wave). note() names a moment the
+     * mascot may react to - the shell prefixes 'game:' and its own voice engine
+     * decides whether the moment is worth a face, a line or nothing at all.
+     * Homeroom is clockless and has no timing-critical input, so there is no
+     * hold() window here. Additive, one-way and fully guarded: an older shell
+     * has no note() at all, and a mascot may never break a class. */
+    const note = (id, extra) => {
+      try { if (ctx.mood && typeof ctx.mood.note === 'function') ctx.mood.note(id, extra); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+
     const reduced = probeReduced();
     const coarse = probeCoarse();
 
@@ -199,6 +211,13 @@ export default {
     let paused = false;
     let suspended = false;
     let retake = false;             // already played this UTC day (see readMeta)
+
+    /* EMI seam bookkeeping only - never read by game logic. The two keystroke
+     * seams live on a per-keypress path, so they are latched (once per class /
+     * once per row); the reject counter is the `n` the shell throttles on. */
+    let emiFirstLetterDone = false;
+    let emiRowFilledAt = -1;
+    let emiRejects = 0;
 
     const timers = new Set();
     const later = (ms, fn) => {
@@ -404,12 +423,21 @@ export default {
       clockChip = el('span', 'chip num', '0s');
       hud.appendChild(clockChip);
       if (hardMode) hud.appendChild(el('span', 'chip warn', t('dt_hard_chip', 'HARD')));
-      if (entry.goldDay) hud.appendChild(el('span', 'chip warn', t('dt_gold_chip', 'GOLD ✨')));
+      if (entry.goldDay) {
+        hud.appendChild(el('span', 'chip warn', t('dt_gold_chip', 'GOLD ✨')));
+        note('dt.goldDay', { kind: 'curiosity', n: Number(entry.goldIndex) | 0 });
+      }
       if (entry.kind === 'phrase') hud.appendChild(el('span', 'chip', t('dt_phrase_chip', 'PHRASE')));
-      if (entry.revisionOf) hud.appendChild(el('span', 'chip', t('revision_day', 'Revision')));
+      if (entry.revisionOf) {
+        hud.appendChild(el('span', 'chip', t('revision_day', 'Revision')));
+        note('dt.revisionDay', { kind: 'curiosity', word: String(entry.revisionOf) });
+      }
       // One graded play per UTC day is the shell's rule to enforce; all this class
       // can honestly do is say so, and replay the identical seeded script.
-      if (retake) hud.appendChild(el('span', 'chip', t('dt_retake', 'Retake')));
+      if (retake) {
+        hud.appendChild(el('span', 'chip', t('dt_retake', 'Retake')));
+        note('dt.retakeSpotted', { kind: 'tease', n: Number(readMeta().lastRows) | 0 });
+      }
       host.appendChild(hud);
     }
 
@@ -464,6 +492,15 @@ export default {
       tick('blip', 0.18);
       msg('');
       paintCurrentRow();
+      // latched: the opener fires once a class, the full row once a row
+      if (!emiFirstLetterDone) {
+        emiFirstLetterDone = true;
+        note('dt.firstLetterTyped', { kind: 'ambient', tile: cur[i], n: Number(entry.letters) | 0 });
+      }
+      if (emiRowFilledAt !== rowIndex && nextEmpty() < 0) {
+        emiRowFilledAt = rowIndex;
+        note('dt.rowFilled', { kind: 'tension', n: rowIndex + 1, word: cur.join('') });
+      }
     }
 
     function backspace() {
@@ -509,6 +546,12 @@ export default {
       msg(line, true);
       shake();
       tick('stamp_bad', 0.15);
+      // only the made-up word, never the short row - and `n` is the count so far
+      // this class, which is what the shell throttles a mashy player on
+      if (reason === REJECT.NOT_A_WORD) {
+        emiRejects += 1;
+        note('dt.notAWord', { kind: 'tease', n: emiRejects, word: cur.join('') });
+      }
     }
 
     function commit() {
@@ -558,6 +601,8 @@ export default {
         if (chain >= 3) {
           tick('streak', 0.4, 1 + 0.06 * chain);
           if (casino) casino.payout(chain);      // a strong row pays light
+          // a solved row is all hits by definition - that one belongs to dt.solvedRow
+          if (!isSolved(marks)) note('dt.hitChainRow', { kind: 'celebrate', streak: chain, n: hitCount(marks) });
         }
         try { done(); } catch (e) { say('afterReveal: ' + ((e && e.message) || e)); }
       });
@@ -595,6 +640,10 @@ export default {
         if (c && !reduced) { c.classList.add('wobble'); later(700, () => c.classList.remove('wobble')); }
         // near-miss staging: the solved underline starts to draw, dies partway
         if (casino) casino.almost(rowEls[rowIndex - 1]);
+        note('dt.nearMissRow', {
+          kind: (ROWS - rowIndex) <= 1 ? 'tension' : 'commiserate',
+          n: hitCount(marks), left: ROWS - rowIndex, word: guess,
+        });
       }
 
       /* Taste of the twist from Year 2: ONE telegraphed, gentle pollution flash,
@@ -622,6 +671,10 @@ export default {
       // afterReveal only advances it on a miss)
       const solvedRow = rowEls[rowIndex];
       if (solvedRow) solvedRow.classList.add('solved');
+      // rows used is the whole brag, and the band is settled by here
+      note('dt.solvedRow', {
+        kind: 'celebrate', n: committed.length, grade: bandFor(), word: entry.answer,
+      });
 
       if (ladder) ladder.absorbDressing(jackpot ? 'confetti' : 'petals');
       if (casino) { casino.gold(true); casino.payout(5); }   // the frame goes gold for the absorb
@@ -630,6 +683,7 @@ export default {
       if (jackpot) {
         try { if (ctx.ceremonies) ctx.ceremonies.reward('jackpot', { target: wrap }); }
         catch (e) { say('jackpot ceremony: ' + ((e && e.message) || e)); }
+        note('dt.jackpotAbsorb', { kind: 'celebrate', n: committed.length, grade: bandFor() });
       }
       absorbWord(entry.answer);
 
@@ -668,6 +722,10 @@ export default {
       later(reduced ? 0 : 1100, () => fx('sub_flash', { text: word, variant: 'scatter' }));
       tick('stamp_bad', 0.25);
       mintStudyHint();
+      // n is the hits on the row that ran out, so "one letter" is legible to her
+      note('dt.detention', {
+        kind: 'commiserate', n: hitCount(lastMarks || []), grade: bandFor(), word: entry.answer,
+      });
 
       ceremony({
         word,
@@ -725,6 +783,10 @@ export default {
         }
       } catch (e) { /* noop */ }
       msg(t('dt_study_hint', 'Study hint: one letter is already in place. It costs you nothing.'));
+      // only reachable on a day that actually inherited yesterday's failure
+      note('dt.studyHintConsumed', {
+        kind: 'curiosity', tile: String(hintLetter || '').toUpperCase(), n: hintIndex,
+      });
     }
 
     /* ---------------------- ceremony overlay ----------------------------- */

@@ -364,14 +364,18 @@ export function createDeck(o = {}) {
   }
 
   /**
-   * screenTakeover(painter, {ms, spec, uncapped, silent}) -> bool
+   * screenTakeover(painter, {ms, spec, uncapped, silent, source}) -> bool
    * The ONE capability of this wave. Returns false when it refused, and a
    * refusal is a normal answer.
+   *
+   * `source:'heartbeat'` lifts ONE leg of the gate and only one - the
+   * player-silence floor (see `eligible`). Everything else refuses exactly as
+   * it always did.
    */
   function screenTakeover(painter, opts = {}) {
     if (destroyed || !painter) return false;
     if (live) return false;
-    if (!eligible(opts.deep)) return false;
+    if (!eligible(opts.deep, opts.source)) return false;
     if (!glassCtx()) return false;
     let spec = opts.spec;
     if (!spec) {
@@ -434,8 +438,16 @@ export function createDeck(o = {}) {
   function idleMs() { return now() - lastInput; }
 
   /** The conjunctive gate. Every leg has to hold, and any leg failing mid
-   *  channel cancels it (the roll re-checks, and input cancels on its own). */
-  function eligible(deep) {
+   *  channel cancels it (the roll re-checks, and input cancels on its own).
+   *
+   *  THE HEARTBEAT LIFTS EXACTLY ONE LEG (2026-08-25, owner: "a screen
+   *  animation ... always do something"). `source:'heartbeat'` skips the
+   *  THEATRE_IDLE_MS player-silence floor - the metronome has already measured
+   *  a longer silence of its own, and measuring it twice is what made the
+   *  channels feel absent. Every other leg is UNTOUCHED: dismissed, disabled,
+   *  dragging, mid-say, a class owning the screen, a hidden document and a live
+   *  caught arc all refuse a heartbeat pulse exactly as they refuse a roll. */
+  function eligible(deep, source) {
     if (destroyed) return false;
     if (state.hidden && state.hidden()) return false;
     if (state.enabled && !state.enabled()) return false;
@@ -445,6 +457,7 @@ export function createDeck(o = {}) {
     if (doc && doc.hidden) return false;
     if (arc.open) return false;
     if (deep) return idleMs() >= dials.SAVER_IDLE_MS;
+    if (source === 'heartbeat') return true;
     return idleMs() >= dials.THEATRE_IDLE_MS;
   }
 
@@ -475,22 +488,40 @@ export function createDeck(o = {}) {
   function roll() {
     rollTimer = null;
     if (!destroyed) rollTimer = setTimeout(roll, dials.ROLL_MS);
-    if (live || arc.open || destroyed) return;
+    runWheel(null);
+  }
+
+  /**
+   * THE HEARTBEAT'S DOOR (2026-08-25). One wheel tick, right now, with the
+   * player-silence floor lifted and NOTHING else lifted: the per-channel
+   * cooldowns, GLOBAL_COOLDOWN_MS and PER_SESSION_CAP all still refuse, and so
+   * does every leg of `eligible`. The deep-idle pair is deliberately out of
+   * reach here - a screensaver that could be summoned is not a screensaver.
+   * @returns {boolean} true when a channel actually took the glass on this tick
+   *          (a channel that had to fetch its material answers false and may
+   *          still open a beat later - the deck's own `onStat` is what the
+   *          heartbeat's clock listens to).
+   */
+  function pulse() { return runWheel('heartbeat'); }
+
+  function runWheel(source) {
+    const hb = source === 'heartbeat';
+    if (live || arc.open || destroyed) return false;
 
     // DEEP IDLE IS DETERMINISTIC. Real screensavers are not lucky, so the
     // saver / off-air look is not on the wheel and skips the cap and the
     // global cooldown outright.
-    if (eligible(true)) {
+    if (!hb && eligible(true)) {
       const deep = pickDeepIdle(planCtx());
-      if (deep) screenTakeover(deep.painter, { spec: deep.spec, deep: true, uncapped: true });
-      return;
+      if (deep) return screenTakeover(deep.painter, { spec: deep.spec, deep: true, uncapped: true });
+      return false;
     }
-    if (!eligible(false)) return;
-    if (sessionTakeovers >= dials.PER_SESSION_CAP) return;
-    if (now() - lastTakeoverEnd < dials.GLOBAL_COOLDOWN_MS) return;
+    if (!eligible(false, source)) return false;
+    if (sessionTakeovers >= dials.PER_SESSION_CAP) return false;
+    if (now() - lastTakeoverEnd < dials.GLOBAL_COOLDOWN_MS) return false;
 
     const hit = rollChannel(planCtx());
-    if (!hit) return;
+    if (!hit) return false;
 
     // THE ONE PLACE A CHANNEL MAY WAIT ON MATERIAL, and a miss SKIPS the
     // takeover rather than opening on a black glass.
@@ -500,15 +531,15 @@ export function createDeck(o = {}) {
       try { p = hit.painter.prepare(hit.spec, ctx); } catch (e) { p = null; }
       const budget = new Promise((res) => setTimeout(() => res(false), dials.FETCH_BUDGET_MS));
       Promise.race([Promise.resolve(p), budget]).then((okay) => {
-        if (!okay || live || !eligible(false)) {
+        if (!okay || live || !eligible(false, source)) {
           if (hit.spec && hit.spec.item && hit.spec.item.release) { try { hit.spec.item.release(); } catch (e) { /* noop */ } }
           return;
         }
-        screenTakeover(hit.painter, { spec: hit.spec });
+        screenTakeover(hit.painter, { spec: hit.spec, source });
       }).catch(() => {});
-      return;
+      return false;
     }
-    screenTakeover(hit.painter, { spec: hit.spec });
+    return screenTakeover(hit.painter, { spec: hit.spec, source });
   }
 
   /**
@@ -752,6 +783,9 @@ export function createDeck(o = {}) {
     stage() { return arc.open ? arc.stage : null; },
     /** Force one wheel tick (the suites drive time rather than waiting on it). */
     roll,
+    /** HEARTBEAT (2026-08-25): one wheel tick with the player-silence floor
+     *  lifted and every other refusal intact. */
+    pulse,
     /** True when a rAF is currently scheduled: the zero-cost-at-rest assertion. */
     rafLive() { return raf != null; },
     idleMs,
