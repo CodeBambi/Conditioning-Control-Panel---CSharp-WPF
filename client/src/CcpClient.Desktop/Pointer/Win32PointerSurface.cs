@@ -283,7 +283,7 @@ public sealed class Win32PointerSurface : IPointerSurface
         }
 
         var foreground = Win32PointerInterop.GetForegroundWindow();
-        return Read(entry, foreground);
+        return Read(entry, foreground, wholeDisc: true);
     }
 
     /// <inheritdoc/>
@@ -409,7 +409,7 @@ public sealed class Win32PointerSurface : IPointerSurface
         // thing the user is being asked to hit.
         PaintNow(entry);
 
-        var observation = Read(entry, foregroundBefore);
+        var observation = Read(entry, foregroundBefore, wholeDisc: !entry.InkHeld);
         entry.LastObservation = observation;
 
         return Classify(entry, bounds, observation);
@@ -473,7 +473,7 @@ public sealed class Win32PointerSurface : IPointerSurface
                 "the target is on screen, above every ordinary window, routable, and took nothing from anybody",
                 new CapabilityReason(PointerReasonCodes.PointerTargetBlank,
                     $"the OS holds {observation.InkedPixels} non-background pixels of {observation.SampledPixels} "
-                    + $"sampled in target {entry.Handle}'s client area, and background-held="
+                    + $"sampled in target {entry.Handle}'s client area ({entry.InkProof}), background-held="
                     + $"{observation.BackgroundHeld}. A clickable rectangle nobody can see is not a bubble"));
         }
 
@@ -481,11 +481,11 @@ public sealed class Win32PointerSurface : IPointerSurface
         return Available(
             $"the OS holds target {entry.Handle} at {observation.HeldBounds} with WS_EX_NOACTIVATE and without "
             + $"WS_EX_TRANSPARENT, above every ordinary window, routes the point {hx},{hy} to it, holds "
-            + $"{observation.InkedPixels} of {observation.SampledPixels} sampled pixels as ink over a confirmed "
-            + $"background, and left the foreground on {Describe(observation.ForegroundAfter)} throughout");
+            + $"{observation.InkedPixels} of {observation.SampledPixels} sampled pixels ({entry.InkProof}) as ink "
+            + $"over a confirmed background, and left the foreground on {Describe(observation.ForegroundAfter)}");
     }
 
-    private PointerTargetObservation Read(Target entry, nint foregroundBefore)
+    private PointerTargetObservation Read(Target entry, nint foregroundBefore, bool wholeDisc)
     {
         var window = entry.Window;
         var exists = Win32PointerInterop.IsWindow(window);
@@ -505,8 +505,8 @@ public sealed class Win32PointerSurface : IPointerSurface
         var (px, py) = held.Width > 0 ? held.Centre : entry.Bounds.Centre;
         var winner = HitTest(window, new Win32PointerInterop.Point { X = px, Y = py });
 
-        ReadInk(entry, out var backgroundHeld, out var inked, out var sampled);
-
+        ReadInk(entry, wholeDisc, out var backgroundHeld, out var inked, out var sampled);
+        entry.InkHeld = backgroundHeld && inked > 0;   // never latch a failure: PointerInkSweep
         return new PointerTargetObservation(
             Asked: true,
             Window: window,
@@ -742,7 +742,7 @@ public sealed class Win32PointerSurface : IPointerSurface
     /// does. So a control point in a margin the painter fills and never draws on must read back
     /// EXACTLY the fill, and only then does a differing pixel inside the disc count as ink.</para>
     /// </summary>
-    private static void ReadInk(Target entry, out bool backgroundHeld, out int inked, out int sampled)
+    private static void ReadInk(Target entry, bool wholeDisc, out bool backgroundHeld, out int inked, out int sampled)
     {
         backgroundHeld = false;
         inked = 0;
@@ -759,23 +759,23 @@ public sealed class Win32PointerSurface : IPointerSurface
             var width = entry.Bounds.Width;
             var height = entry.Bounds.Height;
             var fill = entry.Fill & 0x00FFFFFF;
-
             // Four control points, one per corner margin, because a single one is satisfied by a
-            // single stray pixel of the right colour.
+            // single stray pixel of the right colour. NEVER swept — see PointerInkSweep.
             backgroundHeld =
                 (Win32PointerInterop.GetPixel(dc, ControlMargin - 1, ControlMargin - 1) & 0x00FFFFFF) == fill
                 && (Win32PointerInterop.GetPixel(dc, width - ControlMargin, ControlMargin - 1) & 0x00FFFFFF) == fill
                 && (Win32PointerInterop.GetPixel(dc, ControlMargin - 1, height - ControlMargin) & 0x00FFFFFF) == fill
                 && (Win32PointerInterop.GetPixel(dc, width - ControlMargin, height - ControlMargin) & 0x00FFFFFF) == fill;
-
-            var (left, top, right, bottom) = DiscBox(width, height);
-            var step = SampleStep(right - left, bottom - top);
-            for (var y = top; y < bottom; y += step)
+            var grid = PointerInkSweep.GridFor(width, height);
+            var stride = wholeDisc ? 1 : PointerInkSweep.Phases;
+            var phase = entry.InkPhaseRead = PointerInkSweep.Next(entry.InkPhaseRead, wholeDisc);
+            for (var row = 0; row < grid.Rows; row++)
             {
-                for (var x = left; x < right; x += step)
+                var y = grid.Top + (row * grid.Step);
+                for (var col = PointerInkSweep.FirstColumn(row, phase, stride); col < grid.Columns; col += stride)
                 {
                     sampled++;
-                    if ((Win32PointerInterop.GetPixel(dc, x, y) & 0x00FFFFFF) != fill)
+                    if ((Win32PointerInterop.GetPixel(dc, grid.Left + (col * grid.Step), y) & 0x00FFFFFF) != fill)
                     {
                         inked++;
                     }
@@ -843,8 +843,8 @@ public sealed class Win32PointerSurface : IPointerSurface
                         && _targets.TryGetValue(repaintHandle, out var repaintTarget))
                     {
                         PaintInto(dc, repaintTarget);
+                        repaintTarget.InkHeld = false;   // the OS redrew it: PointerInkSweep
                     }
-
                     Win32PointerInterop.EndPaint(window, ref paint);
                     return 0;
                 }
@@ -1015,5 +1015,35 @@ public sealed class Win32PointerSurface : IPointerSurface
         internal uint Ink { get; } = ink;
 
         internal PointerTargetObservation LastObservation { get; set; } = PointerTargetObservation.NotAsked;
+
+        /// <summary>
+        /// Whether the LAST read of this target's client area found ink over a held background.
+        ///
+        /// <para>It is the only input to the whole-disc-versus-sweep decision, and every writer of it
+        /// is one line: the read itself (<see cref="Win32PointerSurface.Read"/>, which sets it to
+        /// exactly <see cref="PointerTargetObservation.Inked"/>, so a failure is never latched) and
+        /// the <c>WM_PAINT</c> arm of the window procedure, which clears it because the operating
+        /// system made the window redraw itself and the sweep may assume nothing after that.</para>
+        ///
+        /// <para>False at construction, so a target's FIRST placement always reads the whole disc.</para>
+        /// </summary>
+        internal bool InkHeld { get; set; }
+
+        /// <summary>Which sweep phase the last read took, or <see cref="PointerInkSweep.WholeDisc"/>
+        /// when it read the whole disc. Both the cursor the next sweep advances from and the thing
+        /// <see cref="InkProof"/> reports.</summary>
+        internal int InkPhaseRead { get; set; } = PointerInkSweep.WholeDisc;
+
+        /// <summary>What the last read actually covered, in words, for the placement's own detail
+        /// string. A capability that says the OS was asked for its content back and read an eighth of
+        /// it has to SAY an eighth — the same bar <c>Win32OverlayPresence.LastContentProof</c> sets.</summary>
+        /// <remarks>The two arms share NO phrase, deliberately: a caller — or a fact — that tells
+        /// them apart by substring must not be satisfied by both, and the first draft's sweep arm
+        /// said "the whole disc having been re-read within..." which contained the other arm's
+        /// entire text. A mutation that latched a failed read went green against it.</remarks>
+        internal string InkProof => InkPhaseRead == PointerInkSweep.WholeDisc
+            ? "the whole disc"
+            : $"sweep phase {InkPhaseRead + 1} of {PointerInkSweep.Phases}, every point re-read within "
+                + "that many placements";
     }
 }

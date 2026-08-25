@@ -175,6 +175,61 @@ internal static class PointerWindowProbe
     }
 
     /// <summary>
+    /// Ask the operating system to make a window repaint ITSELF — the one content event a placement
+    /// never performs and can never vouch for, and the reason <c>Win32PointerSurface</c>'s
+    /// <c>WM_PAINT</c> arm drops the ink sweep's latch. The message is not posted: an invalid region
+    /// is created and the OS synthesises <c>WM_PAINT</c> for it when the queue is next drained, so
+    /// this is the real event rather than an imitation of it.
+    /// </summary>
+    internal static bool Invalidate(nint window) =>
+        WindowsHost && window != 0 && InvalidateRect(window, 0, false);
+
+    /// <summary>
+    /// Fill a window's WHOLE client area with one colour from OUTSIDE the capability — the same
+    /// licence <see cref="DirtyPixel"/> takes, at the scale that matters for the ink read.
+    ///
+    /// <para>Passed the target's own FILL colour this constructs the exact failure the ink read
+    /// exists to catch and which nothing inside the product can produce: a window that is on
+    /// screen, holds its rectangle and its styles, routes a click at its own centre — and shows
+    /// NOTHING, because every pixel of it is the transparency key. A bubble the user cannot see
+    /// that still eats his clicks. The four background control points read back as held (they are
+    /// fill, correctly), so the failure has to be found by the disc count and by nothing
+    /// else.</para>
+    /// </summary>
+    /// <returns>True when the OS reports the disc's own centre back as the colour written.</returns>
+    internal static bool FillClient(nint window, int width, int height, uint colour)
+    {
+        if (!WindowsHost || window == 0)
+        {
+            return false;
+        }
+
+        var dc = GetDC(window);
+        if (dc == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            var brush = CreateSolidBrush(colour);
+            if (brush == 0)
+            {
+                return false;
+            }
+
+            var area = new RectNative { Left = 0, Top = 0, Right = width, Bottom = height };
+            var filled = FillRect(dc, ref area, brush) != 0;
+            DeleteObject(brush);
+            return filled && (GetPixel(dc, width / 2, height / 2) & 0x00FFFFFF) == (colour & 0x00FFFFFF);
+        }
+        finally
+        {
+            ReleaseDC(window, dc);
+        }
+    }
+
+    /// <summary>
     /// Write one pixel into a window's own device context from OUTSIDE the capability.
     ///
     /// <para><b>Why the harness is allowed to do this, and why it is the only way.</b> The ink
@@ -1456,4 +1511,8 @@ internal static class PointerWindowProbe
     [DllImport("user32.dll")] private static extern int ReleaseDC(nint window, nint dc);
     [DllImport("gdi32.dll")] private static extern uint SetPixel(nint dc, int x, int y, uint colour);
     [DllImport("gdi32.dll")] private static extern uint GetPixel(nint dc, int x, int y);
+    [DllImport("gdi32.dll")] private static extern nint CreateSolidBrush(uint colour);
+    [DllImport("gdi32.dll")] private static extern bool DeleteObject(nint handle);
+    [DllImport("user32.dll")] private static extern int FillRect(nint dc, ref RectNative rect, nint brush);
+    [DllImport("user32.dll")] private static extern bool InvalidateRect(nint window, nint rect, bool erase);
 }
