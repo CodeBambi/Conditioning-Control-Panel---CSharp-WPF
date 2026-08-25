@@ -156,6 +156,20 @@ export const PLAYTEST = Object.freeze({
   /** Streak meter visible from this chain length; chain links cap here. */
   STREAK_VISIBLE: 2,
   CHAIN_CAP: 8,
+
+  /** Pass 7 - THE CHOREOGRAPHY (owner's mobile note: "the slide starts, then
+   *  suddenly everything is merged... all happening at once"). A move DECIDES
+   *  synchronously and PRESENTS in phases anchored to the first painted frame
+   *  of the slide: the pops cascade along the swipe (stagger = min(
+   *  POP_STAGGER_MS, POP_CASCADE_MS / merges), so the cascade never outstays
+   *  ~POP_CASCADE_MS), the stamp beat lands at slide-end + STAMP_BEAT_MS, the
+   *  reward show at slide-end + REWARD_BEAT_MS. CHOREO_SAFETY_MS is the
+   *  stranded-anchor net (a tab hidden between the anchor frames). */
+  POP_STAGGER_MS: 50,
+  POP_CASCADE_MS: 200,
+  STAMP_BEAT_MS: 140,
+  REWARD_BEAT_MS: 300,
+  CHOREO_SAFETY_MS: 650,
 });
 
 export function clamp01(v) { const n = Number(v); return !Number.isFinite(n) ? 0 : n < 0 ? 0 : n > 1 ? 1 : n; }

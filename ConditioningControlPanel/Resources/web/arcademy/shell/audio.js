@@ -363,8 +363,10 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
     return noiseBuf;
   }
 
-  function envelope(node, peak, ms, attackFrac) {
-    const t = ac.currentTime;
+  function envelope(node, peak, ms, attackFrac, at) {
+    // `at` (seconds, optional): schedule the whole envelope ahead on the
+    // context timeline - the cascade's follow-up blips ride one dispatch.
+    const t = ac.currentTime + (at > 0 ? at : 0);
     const dur = Math.max(0.02, ms / 1000);
     const atk = Math.max(0.004, dur * (attackFrac == null ? 0.06 : attackFrac));
     const g = node.gain;
@@ -392,16 +394,16 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
    *     the envelope. A static band is a texture; a moving one is a gesture,
    *     and `whoosh` needed to be a gesture.
    * Neither field exists on any older recipe, so nothing above sounds different. */
-  function playRecipe(rec, bus, amp, pitch, depth) {
+  function playRecipe(rec, bus, amp, pitch, depth, at) {
     const p = clampPitch(pitch);
     if (rec.layer && !(depth > 0)) {
-      try { playRecipe(rec.layer, bus, amp, pitch, 1); } catch { /* a layer is a garnish */ }
+      try { playRecipe(rec.layer, bus, amp, pitch, 1, at); } catch { /* a layer is a garnish */ }
     }
     const env = ac.createGain();
     voiceOut(bus, env);
     // Duration is deliberately NOT scaled: a pitch ratchet should climb, not
     // speed up - the cadence belongs to whoever is firing the cues.
-    const { t, dur } = envelope(env, amp * (rec.gain == null ? 0.7 : rec.gain), rec.ms, rec.attack);
+    const { t, dur } = envelope(env, amp * (rec.gain == null ? 0.7 : rec.gain), rec.ms, rec.attack, at);
     const stop = t + dur + 0.02;
 
     if (rec.noise) {
@@ -448,7 +450,7 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
       const f = ac.createBiquadFilter();
       f.type = 'lowpass'; f.frequency.value = hz(420, p);
       const g = ac.createGain();
-      envelope(g, amp * 0.5, Math.min(90, rec.ms));
+      envelope(g, amp * 0.5, Math.min(90, rec.ms), undefined, at);
       n.connect(f); f.connect(g); voiceOut(bus, g);
       n.start(t); n.stop(t + 0.12);
     }
@@ -682,6 +684,24 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
       stats.dropped += 1;
       settle('dropped');
       say('[audio] ' + (name || '?') + ' failed: ' + ((err && err.message) || err));
+    }
+    /* THE CASCADE (2026-08-26, deep-end choreography). `detail.steps` are
+     * follow-up blips pre-scheduled on the SAME context timeline inside this
+     * one dispatch - one graph build for a whole run of merge pops instead of
+     * one per pop. Each step: {atMs, name?, pitch?, level?}; a missing field
+     * inherits the main cue's. Recipes only (a clip cannot be scheduled ahead
+     * without a decoder per step, which is the cost this exists to avoid). */
+    if (ac && Array.isArray(d.steps) && d.steps.length) {
+      for (const s of d.steps.slice(0, 16)) {
+        if (!s) continue;
+        const at = Math.max(0, Math.min(4000, Number(s.atMs) || 0)) / 1000;
+        const sAmp = Math.sqrt(clamp01(s.level == null ? (d.level == null ? 0.5 : d.level) : s.level));
+        if (sAmp <= 0) continue;
+        try {
+          playRecipe(SOUNDS[String(s.name || name)] || SOUNDS.blip, bus, sAmp,
+            clampPitch(s.pitch == null ? pitch : s.pitch), 0, at);
+        } catch { /* a step must never break the bus */ }
+      }
     }
     if (d.duck) duck(d.duck);
   }

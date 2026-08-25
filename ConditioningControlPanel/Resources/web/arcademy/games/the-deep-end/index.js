@@ -86,6 +86,17 @@
  * rung in the PROTECTIVE direction (cap = min, still-line = max), so a phone on
  * lite is still lite. It comes off on destroy, exactly like `.ae-lite`.
  *
+ * PASS 7 (the owner's mobile note: "the slide animation starts, then suddenly
+ * everything is merged, I hear and see the stamp and spiral or reward all
+ * happening at once"): DECIDE SYNCHRONOUSLY, PRESENT IN PHASES. The input task
+ * keeps ALL game-state decisions and rng draws in their old order (Law V) and
+ * writes ONLY the slide vars; the merge pops, the stamp and the reward show
+ * play back on a paint-anchored timeline - see THE CHOREOGRAPHER below. A new
+ * press fast-forwards every pending beat, so choreography never rate-limits.
+ * The staging applies on desktop too (an intended cross-platform feel change);
+ * the pure cost cuts riding it (tremor gate, pulseWater skip, the shorter
+ * --de-n-depth transition, the bubble caps) are touch-only.
+ *
  * PASS 4 (the owner's third note): THE PRESSURE - the CCP effects ladder and
  * the Balatro tremor live in pressure.js, DECK III. This file owns none of
  * that look; it owns the WIRING. The deck is built after the casino and the
@@ -1361,6 +1372,11 @@ export default {
         refused();                            // the briefing: nothing to play against yet
         return false;
       }
+      /* FAST-FORWARD (pass 7): a committed press never waits on the last
+       * move's presentation. Every pending beat lands NOW, synchronously and
+       * in order, BEFORE the new board math - so the deck streams replay in
+       * the same per-tag order at any play speed and paint never desyncs. */
+      flushChoreo();
       const result = boardMove(board, dir);
       if (!result.moved) {
         // THE WALL: a swipe that slides nothing. No spawn, no count - but the
@@ -1431,7 +1447,14 @@ export default {
         pitch: 1 - PLAYTEST.SLIDE_PITCH_DROP * depthLineFor(boardDeepest(board)),
       });
 
-      /* 2. merges: score, chain, light, the descending chime.
+      /* 2. merges: score, chain - THE DECIDE/PRESENT SEAM (pass 7, the owner's
+       * mobile note: "the slide starts, then suddenly everything is merged...
+       * all happening at once"). Everything below DECIDES synchronously - the
+       * ledger and every GAME-STATE rng draw (reward roll, spawn, trickster)
+       * in exactly the order they always ran, so a retake replays
+       * byte-identical - but the merge POPS, the stamp and the reward SHOW
+       * are only RECORDED here and play back on the paint-anchored timeline
+       * (scheduleChoreo below).
        * THE CHAIN IS A STREAK, NOT A SNAPSHOT (owner report, 2026-08-24: "I
        * keep merging stuff but the streak disappears"). It used to be
        * RE-ASSIGNED to this one move's merge count, so a swipe that merged a
@@ -1444,7 +1467,7 @@ export default {
        * honestly starts a fresh chain. */
       const burst = result.merges.length;
       chain = burst > 0 ? chain + burst : 0;
-      let deepestMergeEl = null;
+      let deepestMergeId = 0;
       let deepestMergeTier = 0;
       /* Law I is untouched: `score` still moves in ONE place (below, by
        * result.score). This walks the same arithmetic board.js already did -
@@ -1452,59 +1475,75 @@ export default {
        * merge was worth and what the running total will read. The two agree
        * by construction: result.score IS the sum of these. */
       let runScore = score;
+      const pops = [];
       for (const m of result.merges) {
         merges += 1;
         const deltaScore = Math.pow(2, m.tier);
         runScore += deltaScore;
         const tile = board.tiles.find((x) => x.id === m.id);
-        const node = tile ? tileEl(tile, false) : null;
-        if (node) {
-          paintName(node, tile);
-          node.classList.remove('is-new');
-          node.classList.add('is-merged');
-          after(moveMs + 320, () => node.classList.remove('is-merged'));
-        }
-        deck('casino', 'merge', { tier: m.tier, link: m.link, tileEl: node });
-        deck('pressure', 'merge', { tier: m.tier, link: m.link, tileEl: node, deltaScore, score: runScore });
-        // one chime family, a semitone DOWN per link: you hear yourself sinking
-        tick('streak', 0.3 + 0.04 * m.tier, { pitch: Math.pow(2, -m.link / 12) });
-        if (m.tier > deepestMergeTier) { deepestMergeTier = m.tier; deepestMergeEl = node; }
+        pops.push({
+          id: m.id, tier: m.tier, link: m.link, deltaScore, score: runScore,
+          r: tile ? tile.r : 0, c: tile ? tile.c : 0,
+        });
+        if (m.tier > deepestMergeTier) { deepestMergeTier = m.tier; deepestMergeId = m.id; }
       }
+      /* the CASCADE plays along the direction of travel - the tiles nearest
+       * the wall the board slid into pop first. Fixed arithmetic, no rng. */
+      pops.sort((a, b) => (v.x !== 0 ? (b.c - a.c) * v.x : (b.r - a.r) * v.y));
       score += result.score;
       /* chainLinks stays a CASCADE ledger (extra pairs beyond the first in a
        * single swipe) - the report card's "links" must not inflate just
        * because the chip above now remembers across moves. */
       if (burst >= 2) chainLinks += burst - 1;
       maxChain = Math.max(maxChain, chain);
-      paintChain();
 
-      /* 3. a new deepest tier */
+      /* 3. a new deepest tier: the STATE moves now; the show is the beats'. */
       const d = boardDeepest(board);
+      let newDeep = 0;
+      let rewardShow = null;
       if (d > diveDeepest) {
         diveDeepest = d;
         bestDeepest = Math.max(bestDeepest, d);
-        onNewDeepest(d, deepestMergeEl);
+        newDeep = d;
+        if (d < TIER_MAX) {
+          /* the variable-ratio ROLL is decided here - same stream, same order
+           * as it always drew (the engine's, else the seeded |de-vr local) -
+           * and only its spectacle waits for the reward beat. */
+          rewardShow = rewardRollNow();
+          if (rewardShow && rewardShow.jackpot) jackpots += 1;
+        }
       }
-      markDeepest();
-      paintHud();
 
       /* THE CEILING: tier_11 ends a TIMED class, warm - no spawn, the board is
        * done. A FREE SWIM keeps going: the royal fires once per dive and the
-       * move finishes normally (spawn, trickster, heat, lock check). */
+       * move finishes normally (spawn, trickster, heat, lock check). The royal
+       * is the ONE everything-at-once beat left, on purpose: the pops land
+       * inline (the tier-11 tile must wear its face before the gold) and
+       * ceiling() owns the stage from here. */
+      let popsPending = pops;
       if (d >= TIER_MAX) {
+        playChoreoNow({
+          moveMs, pops, stagger: 0, maxTier: deepestMergeTier, maxLink: maxLinkOf(pops),
+          newDeepest: newDeep, lifetimeNew: false, rewardShow: null, deepestMergeId,
+          spawnTile: null, siltMsg: false,
+        });
+        popsPending = [];
+        newDeep = 0;
+        rewardShow = null;
         if (!endless) { ceiling(); return true; }
         if (!ceilingCelebrated) { ceilingCelebrated = true; ceiling(); }
       }
 
-      /* 4. one seeded spawn (the exhale guarantee rides the flag) */
+      /* 4. one seeded spawn (the exhale guarantee rides the flag). The MODEL
+       * spawns now (rng order untouched); its node reveals on the land beat. */
       const sp = boardSpawn(board, {
         table: plan.spawnTable, siltChance: plan.siltChance, siltMax: plan.siltMax,
         airlockChance: plan.airlockChance, exhale: exhalePending,
       });
       if (sp.exhaled) exhalePending = false;
       if (sp.airlock) removeTileEl(sp.airlock.id, moveMs + 200);
-      if (sp.tile) tileEl(sp.tile, true);
-      if (sp.silt && !siltSeen) { siltSeen = true; msg('de_silt_line', DE_LEX.de_silt_line); }
+      let siltMsg = false;
+      if (sp.silt && !siltSeen) { siltSeen = true; siltMsg = true; }
 
       /* 5. the trickster sees the truth AFTER the ledger moved */
       const locked = isLocked(board);
@@ -1515,19 +1554,33 @@ export default {
         locked,
       });
 
-      /* 6. heat, then the board's verdicts */
+      /* 6. heat, then the playback, then the board's verdicts */
       heat();
+      scheduleChoreo({
+        moveMs,
+        pops: popsPending,
+        stagger: staggerOf(popsPending.length),
+        maxTier: deepestMergeTier,
+        maxLink: maxLinkOf(popsPending),
+        newDeepest: newDeep,
+        lifetimeNew: newDeep > lifetimeBefore,
+        rewardShow,
+        deepestMergeId,
+        spawnTile: sp.tile || null,
+        siltMsg,
+      });
       if (locked) {
         after(moveMs + 80, resurface);
         return true;
       }
       if (!exhaleUsed && occupancy(board) >= plan.exhaleAt) startExhale();
-      strainCheck();
       /* The lock comes off at MOVE_MS and nothing extends it: every step
        * above is synchronous, `after` is only scaled by the harness's own
        * timeScale (1 in production), and a merge victim left tileEls the
        * moment it was removed, so a queued move landing here can never
-       * re-slide or resurrect one. */
+       * re-slide or resurrect one. A queued move draining right after the
+       * release fast-forwards the pending beats (flushChoreo above), so the
+       * choreography never rate-limits a fast player. */
       after(moveMs, release);
       return true;
     }
@@ -1564,33 +1617,223 @@ export default {
       for (const c of cellEls) c.classList.remove('is-hint');
     }
 
-    function onNewDeepest(d, node) {
-      deck('casino', 'newDeepest', d, node);
-      deck('pressure', 'newDeepest', d, node);
+    /* ==================================================================== *
+     * THE CHOREOGRAPHER (pass 7) - decide synchronously, present in phases.
+     *
+     * input() computes the whole "what happened" record in its own task (all
+     * game-state rng in its old order - Law V untouched) and hands it here.
+     * The PHASE CLOCK IS ANCHORED TO PAINT, not to the task: the slide's CSS
+     * transition clock starts on the first frame that SEES the new --r/--c,
+     * so two rAFs land just past that frame and the beats then ride the
+     * class's pause-aware timer registry:
+     *   land beat   slide-end       spawn reveal, HUD truth
+     *   pops        slide-end..+~200  is-merged cascade along the swipe,
+     *                               casino payout once, pressure punch per pop
+     *   stamp beat  slide-end +140  chain meter, strain, the depth stamp
+     *   reward beat slide-end +300  the room darkens, the pre-rolled reward
+     * FAST-FORWARD: flushChoreo() lands every unfired beat synchronously, in
+     * order - called before a new move, a resurface, the bell, the ceiling
+     * and the end, so state and paint always converge and a fast player is
+     * never rate-limited by the show. Reduced motion, a hidden tab and a host
+     * with no frame clock (the harness double reads the DOM synchronously)
+     * collapse the whole timeline to "now", which is exactly pass-6 behavior.
+     * ==================================================================== */
+    let choreo = null;                     // the pending playback, or null
+
+    function hiddenTab() {
+      try { return typeof document !== 'undefined' && document.hidden === true; } catch (e) { return false; }
+    }
+    function staggerOf(n) {
+      return n > 1 ? Math.min(PLAYTEST.POP_STAGGER_MS, Math.round(PLAYTEST.POP_CASCADE_MS / n)) : 0;
+    }
+    function maxLinkOf(pops) {
+      let k = 1;
+      for (const p of pops) if (p.link > k) k = p.link;
+      return k;
+    }
+    function nodeOfTile(id) { return id ? (tileEls.get(id) || null) : null; }
+
+    /** Slide-end: the spawn's node lands, the chips read true. */
+    function landBeat(rec) {
+      if (dead) return;
+      if (rec.spawnTile && board && !ended) {
+        const tile = board.tiles.find((x) => x.id === rec.spawnTile.id);
+        if (tile) tileEl(tile, true);
+      }
+      if (rec.siltMsg) msg('de_silt_line', DE_LEX.de_silt_line);
+      paintHud();
+    }
+
+    /** One pop of the cascade: the tile wears its new tier, the decks hit. */
+    function popBeat(rec, pop, i) {
+      if (dead) return;
+      const tile = board ? board.tiles.find((x) => x.id === pop.id) : null;
+      let node = null;
+      if (tile) {
+        node = tileEl(tile, false);        // data-tier + face + numeral, at pop time
+        paintName(node, tile);
+        node.classList.remove('is-new');
+        node.classList.add('is-merged');
+        after(320, () => node.classList.remove('is-merged'));
+      }
+      if (i === 0) {
+        /* the casino payout fires ONCE per swipe, aggregated (marquee flash +
+         * water pulse + one capped bubble burst), and the whole cascade's
+         * audio is ONE graph build: the follow-up pops ride the same dispatch
+         * as pre-scheduled blips (shell/audio.js `steps`). */
+        deck('casino', 'merge', { tier: rec.maxTier, link: rec.maxLink, count: rec.pops.length, tileEl: node });
+        tickCascade(rec);
+      }
+      deck('pressure', 'merge', {
+        tier: pop.tier, link: pop.link, tileEl: node,
+        deltaScore: pop.deltaScore, score: pop.score, chip: i === 0,
+      });
+    }
+
+    /** One chime family, a semitone DOWN per link: you hear yourself sinking.
+     *  First pop = the full streak cue; the rest are light blips scheduled on
+     *  the SAME context timeline in the same dispatch. */
+    function tickCascade(rec) {
+      const pops = rec.pops;
+      if (!pops.length) return;
+      const ceil = plan ? plan.audioCeil : 0.45;
+      const steps = [];
+      for (let i = 1; i < pops.length; i++) {
+        steps.push({
+          atMs: i * rec.stagger,
+          name: 'blip',
+          pitch: Math.pow(2, -pops[i].link / 12),
+          level: Math.min(ceil, 0.2 + 0.03 * pops[i].tier),
+        });
+      }
+      tick('streak', 0.3 + 0.04 * pops[0].tier,
+        Object.assign({ pitch: Math.pow(2, -pops[0].link / 12) }, steps.length ? { steps } : null));
+    }
+
+    /** Slide-end +140ms: the meter, the strain, the depth stamp + its punch. */
+    function stampBeat(rec) {
+      if (dead) return;
+      paintChain();
+      markDeepest();
+      if (board && !isLocked(board) && !ended) strainCheck();
+      const d = rec.newDeepest;
+      if (!d) return;
+      deck('pressure', 'newDeepest', d, nodeOfTile(rec.deepestMergeId));
+      if (d >= TIER_MAX || ended) return;    // the ceiling has its own ceremony
+      if (d >= 3) {
+        try { ctx.ceremonies.stamp({ text: tierName(d), target: bench }); } catch (e) { /* noop */ }
+        msg(rec.lifetimeNew ? 'de_lifetime_new' : 'de_new_depth',
+          rec.lifetimeNew ? DE_LEX.de_lifetime_new : DE_LEX.de_new_depth);
+      }
+    }
+
+    /** Slide-end +300ms: the room steps darker, then the pre-rolled reward. */
+    function rewardShowBeat(rec) {
+      if (dead) return;
+      const d = rec.newDeepest;
+      if (!d) return;
+      deck('casino', 'newDeepest', d, nodeOfTile(rec.deepestMergeId));
       /* EMI COLOR: the mascot leans in as the dive gets real (tier 6) and
        * shivers at the truly deep water (tier 9). Face only; shell-throttled. */
       try {
         if (ctx.mood && d >= 9) ctx.mood.clutch();
         else if (ctx.mood && d >= 6) ctx.mood.tense();
       } catch (e) { /* noop */ }
-      if (d >= TIER_MAX) return;             // the ceiling has its own ceremony
-      if (d >= 3) {
-        try { ctx.ceremonies.stamp({ text: tierName(d), target: bench }); } catch (e) { /* noop */ }
-        msg(d > lifetimeBefore ? 'de_lifetime_new' : 'de_new_depth',
-          d > lifetimeBefore ? DE_LEX.de_lifetime_new : DE_LEX.de_new_depth);
-      }
-      rewardBeat();
+      if (d >= TIER_MAX || ended) return;
+      rewardShowNow(rec.rewardShow);
     }
 
-    /** The variable-ratio canon: the engine's roll, else a seeded local one. */
-    function rewardBeat() {
+    function choreoSteps(rec) {
+      const steps = [];
+      steps.push({ at: 0, fired: false, fn: () => landBeat(rec) });
+      rec.pops.forEach((pop, i) => {
+        steps.push({ at: i * rec.stagger, fired: false, fn: () => popBeat(rec, pop, i) });
+      });
+      steps.push({ at: PLAYTEST.STAMP_BEAT_MS, fired: false, fn: () => stampBeat(rec) });
+      if (rec.newDeepest) steps.push({ at: PLAYTEST.REWARD_BEAT_MS, fired: false, fn: () => rewardShowBeat(rec) });
+      steps.sort((a, b) => a.at - b.at);     // stable: equal `at` keeps land -> pop order
+      return steps;
+    }
+
+    /** The whole record, NOW (the royal's inline path). */
+    function playChoreoNow(rec) {
+      for (const s of choreoSteps(rec)) {
+        try { s.fn(); } catch (e) { say('choreo step failed: ' + ((e && e.message) || e)); }
+      }
+    }
+
+    /** Land every unfired beat synchronously, in order. Idempotent. */
+    function flushChoreo() {
+      const c = choreo;
+      if (!c) return;
+      choreo = null;                         // orphans the pending rAF anchor
+      if (c.safety) { clearTimer(c.safety); c.safety = 0; }
+      for (const id of c.timers) clearTimer(id);
+      c.timers.length = 0;
+      for (const s of c.steps) {
+        if (s.fired) continue;
+        s.fired = true;
+        try { s.fn(); } catch (e) { say('choreo step failed: ' + ((e && e.message) || e)); }
+      }
+    }
+
+    function scheduleChoreo(rec) {
+      const steps = choreoSteps(rec);
+      if (!steps.length) return;
+      const raf = (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function')
+        ? (fn) => window.requestAnimationFrame(fn) : null;
+      if (reduced || !raf || hiddenTab()) {
+        /* reduced motion keeps its everything-now (the slide is 60ms and the
+         * animations are gone - staging classes against no transition is only
+         * lag); a hidden tab must not stack timers; no rAF = the harness. */
+        for (const s of steps) {
+          s.fired = true;
+          try { s.fn(); } catch (e) { say('choreo step failed: ' + ((e && e.message) || e)); }
+        }
+        return;
+      }
+      const c = { steps, timers: [], safety: 0 };
+      choreo = c;
+      raf(() => raf(() => {
+        if (dead || choreo !== c) return;
+        if (hiddenTab()) { flushChoreo(); return; }
+        const base = Math.max(0, rec.moveMs - 16);
+        for (const s of c.steps) {
+          const id = after(base + s.at, () => {
+            if (s.fired) return;
+            s.fired = true;
+            try { s.fn(); } catch (e) { say('choreo step failed: ' + ((e && e.message) || e)); }
+            if (choreo === c && c.steps.every((x) => x.fired)) {
+              choreo = null;
+              if (c.safety) { clearTimer(c.safety); c.safety = 0; }
+            }
+          });
+          c.timers.push(id);
+        }
+      }));
+      /* the net: a tab hidden between the anchor frames (or a starved frame
+       * clock) must not strand the beats. A completed timeline cleared it. */
+      c.safety = after(rec.moveMs + PLAYTEST.CHOREO_SAFETY_MS, () => {
+        c.safety = 0;
+        if (choreo === c) flushChoreo();
+      });
+    }
+
+    /** The variable-ratio canon, SPLIT at the decide/present seam (pass 7):
+     *  the roll draws in the input task - same stream, same order as always
+     *  (the engine's, else the seeded |de-vr fallback) - and only the
+     *  spectacle waits for the reward beat. */
+    function rewardRollNow() {
       let r = null;
       try {
         if (ctx.engine && typeof ctx.engine.rewardRoll === 'function') r = ctx.engine.rewardRoll({ streak: chain, success: true }) || null;
       } catch (e) { r = null; }
       if (!r) r = rollLocal();
+      return r;
+    }
+    function rewardShowNow(r) {
+      if (!r) return;
       if (r.jackpot) {
-        jackpots += 1;
         try { ctx.ceremonies.reward('jackpot', { target: boardEl, text: t('de_jackpot', DE_LEX.de_jackpot) }); } catch (e) { /* noop */ }
         fireSafe('flash_burst', { count: 2, alpha: 0.45 });     // decoration (fireSafe welds it)
         tick('jackpot', 0.7);
@@ -1667,6 +1910,7 @@ export default {
 
     function resurface() {
       if (dead || ended) return;
+      flushChoreo();                      // the locking move's beats land before the drain
       busy = true;
       clearQueue();                       // the dive that press was aimed at is over
       setPhase('resurface');
@@ -1739,6 +1983,7 @@ export default {
      *  dive ends in a resurface like any other, which re-arms the ceremony. */
     function ceiling() {
       if (dead || ended) return;
+      flushChoreo();                      // whatever was mid-show lands before the gold
       clearQueue();                       // the royal owns the board now
       ceilingReached = true;
       survived = true;
@@ -1782,6 +2027,7 @@ export default {
 
     function bell() {
       if (dead || ended) return;
+      flushChoreo();                      // the last move's beats land before the dim-out
       busy = true;
       clearQueue();                       // the water is closed; nothing drains after the bell
       clearGrab();
@@ -1802,6 +2048,7 @@ export default {
      * ==================================================================== */
     function finish(viaCeiling) {
       if (ended) return;
+      flushChoreo();                      // belt: the ledger and the paint converge first
       ended = true;
       busy = true;
       stopClock();
@@ -1995,6 +2242,27 @@ export default {
       });
     }
     function stopClock() { if (clockId) { clearTimer(clockId); clockId = 0; } }
+
+    /** Pass 7, FIX 4: warm the engine's loom-spiral path in IDLE time so the
+     *  first jackpot garnish / rung-6 wheel doesn't create a WebGL context and
+     *  compile shaders on the merge frame. requestIdleCallback when the host
+     *  has one, else a pause-aware timer; the engine's warm() is a no-op on a
+     *  gif-path class, consumes no rng and paints nothing visible. */
+    function armLoomWarm() {
+      const go = () => {
+        if (dead || ended) return;
+        try { if (ctx.engine && typeof ctx.engine.warm === 'function') ctx.engine.warm('spiral'); } catch (e) { /* optional */ }
+      };
+      let ric = null;
+      try {
+        ric = (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function')
+          ? window.requestIdleCallback : null;
+      } catch (e) { ric = null; }
+      if (ric) {
+        try { ric(() => run(go), { timeout: 4000 }); return; } catch (e) { /* fall through */ }
+      }
+      after(1500, go);
+    }
 
     /* ---- assets (never block a draw) ------------------------------------ */
     function claimAssets() {
@@ -2322,6 +2590,7 @@ export default {
           newDive();
           startPerfProbe();                    // the board is dealt: start counting frames
           startClock();
+          armLoomWarm();                       // idle-time shader warm (pass 7, FIX 4)
           stallTimer = every(PLAYTEST.STALL_TICK_MS, () => {
             if (ended || busy) return;
             stallMs += PLAYTEST.STALL_TICK_MS;
@@ -2400,6 +2669,7 @@ export default {
         surfaceBtn = null;
         stopClock();
         clearTimers();
+        choreo = null;                       // its timers just died with the registry
         stopAmbience();
         unbindInput();
         try { if (trickster) trickster.destroy(); } catch (e) { /* noop */ }
@@ -2431,6 +2701,7 @@ export default {
       /** Re-sync every tile element to the model after the harness staged a board. */
       resync() {
         if (!board) return;
+        flushChoreo();                       // a staged board must not race a pending show
         for (const id of Array.from(tileEls.keys())) if (!board.tiles.some((x) => x.id === id)) removeTileEl(id, 0);
         for (const tile of board.tiles) { const node = tileEl(tile, false); paintName(node, tile); }
         diveDeepest = boardDeepest(board);
@@ -2472,6 +2743,8 @@ export default {
           grabX: grab ? grab.gx : 0,
           grabY: grab ? grab.gy : 0,
           queued, drained, opened,
+          /* pass 7 - THE CHOREOGRAPHER: beats still owed by the last move */
+          choreoPending: choreo ? choreo.steps.filter((s) => !s.fired).length : 0,
           elapsedMs, budgetMs, ended, reported, busy, paused, dead,
           phase: stage ? stage.getAttribute('data-phase') : null,
           liveTileEls: tileEls.size,

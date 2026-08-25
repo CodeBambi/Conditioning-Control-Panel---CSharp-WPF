@@ -105,7 +105,11 @@ export function createCeremonies({ engine, layer, reducedMotion, log } = {}) {
       // rendering BLANK on every delegated beat (W0 audit). Both ride so either
       // reader is served; the engine's own tone names (good/bad/gild) differ
       // from ours ('pink') on purpose - a wrong tone is a default, never a throw.
-      const opts = { text, label: text, tone, target };
+      // `dom:false` (2026-08-26): the delegate carries the BEAT (fx + cue);
+      // the ONE stamp node is built below, at the caller's target. Before
+      // this, every delegated stamp rendered twice - the engine's ae-stamp in
+      // its fx layer AND our arc-stamp here.
+      const opts = { text, label: text, tone, target, dom: false };
       const engineTook = delegate('stamp', opts);
       // The engine path plays its own stamp cue; the floor plays the same one.
       // `pitch` (gradeObject's rank ladder) rides only the floor - the engine's

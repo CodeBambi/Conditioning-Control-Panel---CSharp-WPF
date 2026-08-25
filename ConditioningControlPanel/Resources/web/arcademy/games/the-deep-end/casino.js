@@ -97,6 +97,10 @@ export const DE_CASINO = Object.freeze({
   BUB_DEEP: 7,
   BUB_RESURFACE: 14,
   BUB_ROYAL: 24,
+  /** Pass 7: the merge payout fires once per SWIPE (aggregated), and the one
+   *  bubble burst is hard-capped per swipe - fewer minted nodes on a phone. */
+  BUB_SWIPE_CAP: 10,
+  BUB_SWIPE_CAP_TOUCH: 6,
   /** Off-arc pools (teal night): ~1 in 16. */
   OFF_ARC: 0.06,
   /** The journey: 2-4 stops through the caustic families. */
@@ -503,32 +507,42 @@ export function createDeCasino(o) {
     mq.style.setProperty('--g-de-mqa', a.toFixed(2));
   }
 
-  function flashMarquee(strength) {
-    if (!mq || !mq.classList) return;
-    mq.classList.remove('g-de-mq-flash');
-    if (typeof mq.offsetWidth === 'number') void mq.offsetWidth;   // restart the CSS animation
-    mq.style.setProperty('--g-de-mqf', String(Math.max(1, Math.min(2.2, strength))));
-    mq.classList.add('g-de-mq-flash');
-    if (flashTimer) cancel(flashTimer);
-    flashTimer = after(DE_CASINO.FLASH_MS, () => {
-      flashTimer = 0;
-      if (mq && mq.classList) mq.classList.remove('g-de-mq-flash');
-    });
-  }
-
-  /** The water pulses: the flash layer runs its keyframe once. */
-  function pulseWater(strength, deep) {
-    const f = layers.flash;
-    if (!f || !f.classList || reduced) return;
-    f.classList.remove('g-de-on', 'g-de-deep');
-    if (typeof f.offsetWidth === 'number') void f.offsetWidth;
-    setProp('--de-n-pay', clamp01(strength).toFixed(2));
-    f.classList.add(deep ? 'g-de-deep' : 'g-de-on');
-    if (deepTimer) cancel(deepTimer);
-    deepTimer = after(deep ? DE_CASINO.DEEP_MS : DE_CASINO.FLASH_MS, () => {
-      deepTimer = 0;
-      if (f.classList) f.classList.remove('g-de-on', 'g-de-deep');
-    });
+  /**
+   * The payout pair, restarted with ONE forced layout (pass 7, FIX 5): the
+   * marquee flash and the water pulse always fire on the same beat, and each
+   * used its own `void offsetWidth` - two flushes per payout, both landing in
+   * the merge path. Clear both, flush ONCE, re-arm both.
+   * `waterStrength == null` skips the water entirely - on touch the pulse's
+   * keyframe is DEAD by specificity (html.ae-touch .g-de-bd beats
+   * .g-de-bd-flash.g-de-on), so the caller keeps the look and drops the cost.
+   */
+  function restartPayout(mqStrength, waterStrength, deep) {
+    const mqOk = !!(mq && mq.classList);
+    const f = waterStrength == null ? null : layers.flash;
+    const fOk = !!(f && f.classList) && !reduced;
+    if (!mqOk && !fOk) return;
+    if (mqOk) mq.classList.remove('g-de-mq-flash');
+    if (fOk) f.classList.remove('g-de-on', 'g-de-deep');
+    const probe = mqOk ? mq : f;
+    if (typeof probe.offsetWidth === 'number') void probe.offsetWidth;   // the ONE flush
+    if (mqOk) {
+      mq.style.setProperty('--g-de-mqf', String(Math.max(1, Math.min(2.2, mqStrength))));
+      mq.classList.add('g-de-mq-flash');
+      if (flashTimer) cancel(flashTimer);
+      flashTimer = after(DE_CASINO.FLASH_MS, () => {
+        flashTimer = 0;
+        if (mq && mq.classList) mq.classList.remove('g-de-mq-flash');
+      });
+    }
+    if (fOk) {
+      setProp('--de-n-pay', clamp01(waterStrength).toFixed(2));
+      f.classList.add(deep ? 'g-de-deep' : 'g-de-on');
+      if (deepTimer) cancel(deepTimer);
+      deepTimer = after(deep ? DE_CASINO.DEEP_MS : DE_CASINO.FLASH_MS, () => {
+        deepTimer = 0;
+        if (f.classList) f.classList.remove('g-de-on', 'g-de-deep');
+      });
+    }
   }
 
   /* ------------------------------------------------------------- bubbles */
@@ -709,16 +723,24 @@ export function createDeCasino(o) {
       walkJourney(lastHeat);
     },
 
-    /** A merge pays light scaled by its chain link. */
+    /** A merge pays light scaled by its chain link. Pass 7: called ONCE per
+     *  swipe (the cascade's first pop) with the swipe's biggest link/tier and
+     *  the merge count - one marquee flash, one water pulse, one capped
+     *  bubble burst per swipe instead of one of each per merge. */
     merge(m) {
       if (!armed || destroyed || !started) return;
       const info = m || {};
       const link = Math.max(1, Math.min(8, Number(info.link) || 1));
       const tier = Math.max(1, Math.min(11, Number(info.tier) || 1));
-      flashMarquee(1 + 0.12 * link);
-      pulseWater(0.28 + 0.08 * link + (tier >= 6 ? 0.1 : 0), false);
+      const count = Math.max(1, Math.min(8, Number(info.count) || 1));
+      restartPayout(1 + 0.12 * link,
+        touchDev ? null : (0.28 + 0.08 * link + (tier >= 6 ? 0.1 : 0)), false);
       const a = anchorOf(info.tileEl);
-      if (a) bubblesAt(a.x, a.y, DE_CASINO.BUB_MERGE_BASE + Math.min(5, link) + (tier >= 6 ? 2 : 0), tier, a.w * 0.6);
+      if (a) {
+        const want = DE_CASINO.BUB_MERGE_BASE + Math.min(5, link) + (tier >= 6 ? 2 : 0) + Math.min(3, count - 1);
+        const cap = touchDev ? DE_CASINO.BUB_SWIPE_CAP_TOUCH : DE_CASINO.BUB_SWIPE_CAP;
+        bubblesAt(a.x, a.y, Math.min(cap, want), tier, a.w * 0.6);
+      }
     },
 
     /** A new deepest tier: heavier pulse, and the room steps one stop darker. */
@@ -726,8 +748,7 @@ export function createDeCasino(o) {
       if (!armed || destroyed || !started) return;
       const t = Math.max(1, Math.min(11, Number(tier) || 1));
       setProp('--de-n-depth', (t / 11).toFixed(3));
-      flashMarquee(1.6 + t / 22);
-      pulseWater(0.7, true);
+      restartPayout(1.6 + t / 22, touchDev ? null : 0.7, true);
       const a = anchorOf(tileEl);
       if (a) bubblesAt(a.x, a.y, DE_CASINO.BUB_DEEP, t, (a.w || 60) * 0.8);
     },
@@ -857,8 +878,7 @@ export function createDeCasino(o) {
       if (cs && cs.classList) cs.classList.add('g-de-royal');
       if (mq && mq.classList) mq.classList.add('g-de-mq-bell');
       paintMarquee();
-      flashMarquee(2.2);
-      pulseWater(1, true);
+      restartPayout(2.2, touchDev ? null : 1, true);
       const g = geomNow();
       if (g && g.gw) {
         bubblesAt(g.gx + g.gw / 2, g.gy + g.gh * 0.9, DE_CASINO.BUB_ROYAL, 11, g.gw);
