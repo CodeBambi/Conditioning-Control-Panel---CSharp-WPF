@@ -4935,8 +4935,19 @@ html.arc-mobile .arc-acct-menu {
 }
 html.arc-mobile .arc-acct-item { min-height:44px; padding:12px 12px; font-size:13px; }
 
-/* The account chip made the campus top-right cluster 54px wider, and on a
-   landscape phone the bell chip was already brushing the hanging TIMETABLE
-   plaque. The bell keeps its icon and its time; the NEXT BELL caption is the
-   part a thumb never needed. */
-html.arc-mobile .campus-bellchip .cap { display:none; }
+/* THE BELL CHIP IS TWO LINES ON A PHONE (owner, 2026-08-25). One row of chip
+   (149px wide) lay straight across the bell tower's own painted clock face at
+   the top right of the plan (x ~690-720 of 844), and at 667 it brushed the
+   hanging TIMETABLE plaque. Now: the icon on the left spanning both rows, the
+   NEXT BELL caption over the time, smaller type (~90px wide), and the whole chip
+   stepped left of the tower by clamp(32px, 5vw, 48px): 33 at 667, 42 at 844,
+   47 at 932. Desktop keeps the one-row pill above; every rule here is
+   html.arc-mobile-scoped. */
+html.arc-mobile .campus-bellchip {
+  display:grid; grid-template-columns:auto auto; column-gap:7px; row-gap:2px;
+  align-items:center; padding:5px 11px 5px 9px; border-radius:14px;
+  margin-right:clamp(32px, 5vw, 48px);
+}
+html.arc-mobile .campus-bellchip .ic { grid-row:1 / 3; font-size:13px; }
+html.arc-mobile .campus-bellchip .cap { display:block; font-size:7.5px; letter-spacing:.18em; line-height:1; }
+html.arc-mobile .campus-bellchip .tm { font-size:10px; line-height:1; }

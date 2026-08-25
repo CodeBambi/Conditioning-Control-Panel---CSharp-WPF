@@ -327,6 +327,7 @@ function settleBed(reason) {
   if (!bedHolding) return;              // already settled, or never struck
   bedHolding = false;
   if (bedCapTimer) { clearTimeout(bedCapTimer); bedCapTimer = 0; }
+  stopEarlyBed();
   log('intro bed settled (' + reason + ') at ' + (Date.now() - introT0) + 'ms');
   if (!bedDismissQueued) return;
   bedDismissQueued = false;
@@ -337,6 +338,107 @@ function cancelBedHold() {
   bedHolding = false;
   bedDismissQueued = false;
   if (bedCapTimer) { clearTimeout(bedCapTimer); bedCapTimer = 0; }
+  stopEarlyBed();
+}
+
+/* ----------------------------------------------------------------------------
+ * THE BED STRIKES ON THE FIRST FRAME (owner report, third time of asking,
+ * 2026-08-25: "wait for the jingle to end before entering, the jingle should
+ * start sooner").
+ *
+ * The hold above was right and still did nothing on the desktop, because the
+ * bed it waits for was never struck there. strikeBed lives behind the mixer,
+ * the mixer lives behind `init`, and on the WebView2 host `init` lands about
+ * three seconds after the page (log: launched 10:28:49.686, sent init
+ * 10:28:52.922) - five times INTRO_BED_WINDOW_MS. scheduleIntroCues therefore
+ * took the stitched beats every time, the splash walked out at INTRO_MIN_MS,
+ * and the one jingle in the school played late or not at all.
+ *
+ * So on the app host the bed is a plain media element struck HERE, at module
+ * evaluation, before anyone has said init - the same file, the same level, the
+ * same hold. `bedStruck` is set, so the mixer's strikeBed later declines (the
+ * bed is the one cue that may never be re-fired) and scheduleIntroCues deals no
+ * stitched beats over it. When init does land, tuneEarlyBed() applies the real
+ * levels: the mixer's own element math (sqrt(level) * CLIP_GAIN * fx * master),
+ * and a muted school, a zero bus, or reduced motion (trap 66: no cues) STOPS it
+ * and releases the hold on the spot, which is the timing those hosts had.
+ *
+ * WHICH HOST: only a real WebView2 (`window.chrome.webview` without the web
+ * shim's `__deliver` seam). The shim fakes the bridge for app.cclabs.app, where
+ * play() without a gesture is refused - and a refused play hands the strike
+ * back (bedStruck cleared) so the knock strikes the bed through the mixer as it
+ * always has. A missing file 404s into 'error', which releases the hold with
+ * nothing else changed. Nothing here can throw past its try.
+ * -------------------------------------------------------------------------- */
+const EARLY_BED_URL = './assets/sfx/intro_bed.mp3';   // shell/audio.js SAMPLES.intro_bed
+const EARLY_BED_LEVEL = 0.6;   // what strikeBed asks the mixer for
+const EARLY_BED_GAIN = 0.5;    // shell/audio.js CLIP_GAIN
+const EARLY_BED_FX = 0.85;     // shell/audio.js DEFAULT_LEVELS.fx
+let earlyBed = null;           // the element in the air, or null
+let earlyBedStruckAt = -1;     // ms from introT0, -1 = never (test seam)
+
+function clamp01(v) { v = Number(v); return v > 1 ? 1 : (v > 0 ? v : 0); }
+function earlyBedVolume(fx, master) {
+  return clamp01(Math.sqrt(EARLY_BED_LEVEL) * EARLY_BED_GAIN * clamp01(fx) * clamp01(master));
+}
+function isRealWebView2() {
+  try {
+    const wv = win && win.chrome && win.chrome.webview;
+    return !!wv && typeof wv.__deliver !== 'function';
+  } catch (e) { return false; }
+}
+
+function stopEarlyBed() {
+  const el = earlyBed;
+  if (!el) return;
+  earlyBed = null;
+  try { el.pause(); } catch (e) { /* noop */ }
+  try { el.removeAttribute('src'); el.load(); } catch (e) { /* noop */ }
+}
+
+function strikeEarlyBed() {
+  try {
+    if (bedStruck || !isRealWebView2() || !splashIsUp()) return;
+    if (typeof Audio !== 'function') return;
+    const el = new Audio(EARLY_BED_URL);
+    el.preload = 'auto';
+    el.volume = earlyBedVolume(EARLY_BED_FX, 1);
+    bedStruck = true;
+    bedHolding = true;
+    earlyBed = el;
+    earlyBedStruckAt = Date.now() - introT0;
+    const settle = (reason) => { if (earlyBed !== el) return; settleBed(reason); };
+    el.addEventListener('ended', () => settle('ended'));
+    el.addEventListener('error', () => settle('error'));
+    let p = null;
+    try { p = el.play(); } catch (e) { p = null; }
+    if (p && typeof p.catch === 'function') {
+      p.catch(() => {
+        // Refused without a gesture: this is a browser after all. Hand the
+        // strike back to the knock, which reaches the bed through the mixer.
+        if (earlyBed !== el) return;
+        settleBed('blocked');
+        bedStruck = false;
+      });
+    }
+    bedCapTimer = setTimeout(() => { bedCapTimer = 0; settleBed('cap-local'); }, BED_HOLD_CAP_MS);
+    log('intro bed struck early at ' + earlyBedStruckAt + 'ms');
+  } catch (e) { /* the opening may never cost us the boot */ }
+}
+
+/** init has landed: the early bed takes the school's real levels, or stops. */
+function tuneEarlyBed() {
+  const el = earlyBed;
+  if (!el) return;
+  try {
+    const src = initMsg || {};
+    const fx = (src.audioLevels && src.audioLevels.fx != null) ? clamp01(src.audioLevels.fx) : EARLY_BED_FX;
+    const master = src.masterVolume == null ? 1 : clamp01(src.masterVolume);
+    const quiet = !!src.audioMute || master <= 0 || fx <= 0
+      || !!src.reducedMotion || src.motionLevel === 0;
+    if (quiet) { settleBed('muted-at-init'); return; }
+    el.volume = earlyBedVolume(fx, master);
+  } catch (e) { /* a volume is not worth the boot */ }
 }
 
 /* ----------------------------------------------------------------------------
@@ -403,6 +505,7 @@ function scheduleIntroCues() {
     // The same derivation the shell uses for the class it paints on <html>.
     if (!!src.reducedMotion || src.motionLevel === 0) return;
     if (!splashIsUp()) return;
+    if (bedStruck) return;            // the early bed owns the opening: no stitched beats over it
     const elapsed = Date.now() - introT0;
     // hasSample is feature-detected: an older consumer simply stitches.
     const hasBed = !!(audio && typeof audio.hasSample === 'function' && audio.hasSample('intro_bed'));
@@ -492,6 +595,10 @@ async function start() {
      * and one that re-lays itself out the moment the school opens. Idempotent:
      * the shell calls it again for the harness case where boot never ran. */
     try { installDeviceClass(); } catch (e) { /* never worth a boot */ }
+    /* An early bed takes the school's real levels first, or stops if the school
+     * is muted - BEFORE the mixer, because it needs only `init`, and a host whose
+     * audio consumer fails to load must not keep playing at the default level. */
+    tuneEarlyBed();
     // The sfx consumer first, so a cue fired during the shell's own boot is heard.
     // OPTIONAL by construction: no audio must never cost us the page.
     try {
@@ -730,6 +837,7 @@ bridge.startHeartbeat(5000);
 armBootDeadline();
 bridge.announceReady();
 log('boot: ready posted, waiting for init');
+strikeEarlyBed();
 
 if (!bridge.isHosted) {
   // Standalone (a plain browser, e.g. a future gated web app or a dev harness):
@@ -743,6 +851,11 @@ export { dom, toast };
 
 /** Test seam: the live sfx consumer (null until init). */
 export function audioConsumer() { return audio; }
+
+/** Test seam: the opening bed - struck, holding, early element live, ms of the early strike. */
+export function introBedState() {
+  return { struck: bedStruck, holding: bedHolding, early: !!earlyBed, earlyAt: earlyBedStruckAt };
+}
 
 /** Test seam: the suspend frame buffered while the shell was still booting. */
 export function bufferedSuspend() { return pendingSuspend; }

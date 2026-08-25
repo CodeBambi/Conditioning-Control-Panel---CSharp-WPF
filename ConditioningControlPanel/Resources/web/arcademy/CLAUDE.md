@@ -2396,6 +2396,26 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
       one owner, and the room suite greps recordsroom.css (comments stripped - the prose
       explaining what left names the properties) to keep it that way.
 
+106. **THE BED IS STRUCK BEFORE INIT ON THE APP HOST, OR IT IS NOT STRUCK AT ALL (owner,
+    third report, 2026-08-25: "wait for the jingle to end before entering, the jingle should
+    start sooner").** Trap 105's neighbour, THE SPLASH WAITS FOR THE JINGLE, was correct and
+    did nothing on the desktop: strikeBed sits behind the mixer, the mixer behind `init`, and
+    the WebView2 host sends init ~3s after the page (log: launched 10:28:49.686, sent init
+    10:28:52.922) - five times INTRO_BED_WINDOW_MS - so scheduleIntroCues dealt the stitched
+    beats every time and the splash walked out at INTRO_MIN_MS. boot.js now strikes
+    `assets/sfx/intro_bed.mp3` as a plain element at module evaluation (`strikeEarlyBed`) on a
+    REAL WebView2 only (`window.chrome.webview` without the web shim's `__deliver` seam), sets
+    `bedStruck` so the mixer never re-fires it and no stitched beat lands over it, and
+    `tuneEarlyBed()` on init applies the mixer's own element math (sqrt(level) * CLIP_GAIN *
+    fx * master) or STOPS it under audioMute / zero bus / reduced motion (trap 66). A refused
+    play() (a browser) hands the strike back to the knock. tuneEarlyBed runs BEFORE the audio
+    consumer import: a host whose mixer fails to load must not keep a muted school's bed
+    playing. Test seam `introBedState()`; suite in session fe888044 scratchpad
+    `bell/test-earlybed.mjs` (boot.js under a fake DOM, `?instance=n` per world; bridge.js is
+    ONE shared instance, so its webview listener belongs to the first world - keep it).
+    Same PR: the phone bell chip is two lines (grid, icon spanning both rows) stepped left
+    of the bell tower's painted clock by clamp(32px, 5vw, 48px); every rule html.arc-mobile.
+
 ## 5. The game module contract (short version)
 
 ```js
