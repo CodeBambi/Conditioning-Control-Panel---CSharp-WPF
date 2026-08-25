@@ -4257,6 +4257,7 @@
   "tooltip_nav_door_webapp": "Открывает веб-приложение CC Labs в браузере",
   "nav_search_label": "Поиск",
   "nav_search_keys": "Ctrl+K",
+  "nav_tag_premium_tip": "Премиум-функция. Открывается на любом уровне подписки.",
   "tooltip_nav_search": "Поиск настроек и экранов (Ctrl+K)",
   "label_banner_web_xp": "Твой XP теперь общий для аккаунта -",
   "label_banner_web_link": "смотри в веб-приложении",

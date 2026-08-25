@@ -4804,6 +4804,7 @@
   "tooltip_nav_door_webapp": "Open the CC Labs web app in your browser",
   "nav_search_label": "Search",
   "nav_search_keys": "Ctrl+K",
+  "nav_tag_premium_tip": "Premium feature. Any patron tier unlocks it.",
   "tooltip_nav_search": "Search settings and screens (Ctrl+K)",
   "label_banner_web_xp": "Your XP is account-wide now -",
   "label_banner_web_link": "see it on the web app",

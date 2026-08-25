@@ -4257,6 +4257,7 @@
   "tooltip_nav_door_webapp": "브라우저에서 CC Labs 웹 앱을 엽니다",
   "nav_search_label": "검색",
   "nav_search_keys": "Ctrl+K",
+  "nav_tag_premium_tip": "프리미엄 기능입니다. 후원 등급이 있으면 잠금이 해제됩니다.",
   "tooltip_nav_search": "설정과 화면 검색 (Ctrl+K)",
   "label_banner_web_xp": "XP는 이제 계정 단위로 쌓입니다 -",
   "label_banner_web_link": "웹 앱에서 확인",
