@@ -165,8 +165,12 @@ public class FlashAnimationTests
         var top = frame.ColourAt(4, 0);
         var bottom = frame.ColourAt(4, 1);
 
-        Assert.True((top & 0xFF) > 200, $"expected a red top row, got 0x{top:X6}");
-        Assert.True(((bottom >> 16) & 0xFF) > 200, $"expected a blue bottom row, got 0x{bottom:X6}");
+        // 128 is the half-scale line rather than a calibration against one resampler — see
+        // SpiralFrameSourceTests.Channels for the measurement and for why the number moved when the
+        // decoder took upstream's HighQualityBilinear. The CROP fact is carried by the pair: a
+        // centre-cropped clip puts red in BOTH rows, and the second assertion reds.
+        Assert.True((top & 0xFF) > 128, $"expected a red top row, got 0x{top:X6}");
+        Assert.True(((bottom >> 16) & 0xFF) > 128, $"expected a blue bottom row, got 0x{bottom:X6}");
     }
 
     [Fact]

@@ -72,11 +72,11 @@ public sealed class Win32OverlayPresence : IOverlayPresence
     public const int MaxRaiseAttempts = 32;
 
     /// <summary>
-    /// How many points of a painted frame the content read-back compares. A bounded, spread
-    /// sample rather than the whole buffer: the confirmation runs on the UI thread once per
-    /// surface per flash, and a full memcmp of a full-screen frame there would be a rendering
-    /// cost paid to learn something a spread sample already answers. The four corners and the
-    /// centre are always included.
+    /// How many points of a painted frame the content read-back compares when it compares the
+    /// WHOLE surface. A bounded, spread sample rather than the whole buffer: a full memcmp of a
+    /// full-screen frame on the UI thread would be a rendering cost paid to learn something a
+    /// spread sample already answers. The four corners and the centre are always included, and
+    /// <see cref="ContentBands"/> decides what a steady-state frame re-reads instead.
     ///
     /// <para><b>The exact limit of what this can catch, measured (divergence D64).</b> It
     /// catches the class that matters and the class that actually happens: the blit reported
@@ -194,7 +194,7 @@ public sealed class Win32OverlayPresence : IOverlayPresence
                 + $"0x{window:X} (last-error {error}); nothing is on screen");
         }
 
-        _current = request;
+        SetCurrent(request);
 
         var refusal = Confirm(request);
         if (refusal is not null)
@@ -239,7 +239,7 @@ public sealed class Win32OverlayPresence : IOverlayPresence
 
         var request = new OverlaySurfaceRequest(_current.Bounds, _current.Opacity, clickThrough);
         ApplyClickThroughStyle(_window, clickThrough);
-        _current = request;
+        SetCurrent(request);
 
         var refusal = ConfirmInputRouting(request);
         if (refusal is not null)
@@ -322,8 +322,8 @@ public sealed class Win32OverlayPresence : IOverlayPresence
 
         return new CapabilityState.Available(
             $"window 0x{_window:X} holds a {frame.Width}x{frame.Height} frame: the pixels were blitted into the "
-            + $"surface and then read BACK out of it from the OS at {ContentSampleTarget} spread sample points "
-            + "including all four corners and the centre, and every one of them is the colour the frame carries. "
+            + $"surface and then read BACK out of it from the OS — {LastContentProof} — and every point read is "
+            + "the colour the frame carries. "
             + $"The surface composites at LWA_ALPHA {_current.Alpha}, so this is content the compositor has "
             + "something to draw. That a human SEES it is a headed claim and is not made here");
     }
@@ -336,7 +336,7 @@ public sealed class Win32OverlayPresence : IOverlayPresence
             return;
         }
 
-        Raise();
+        Reraise();
     }
 
     public CapabilityState Withdraw()
@@ -651,7 +651,8 @@ public sealed class Win32OverlayPresence : IOverlayPresence
 
     /// <summary>
     /// The content fact: read the surface's own pixels back OUT of the OS and require them to be
-    /// the frame's.
+    /// the frame's — the WHOLE surface on the first paint after anything about the window changed,
+    /// and one <see cref="ContentBands"/>th of it on each unchanged frame after that.
     ///
     /// <para><b>Why the read-back is from the window and not from the buffer.</b> The blit's return
     /// value says a GDI call succeeded. Reading the WINDOW's device context back into an
@@ -662,6 +663,15 @@ public sealed class Win32OverlayPresence : IOverlayPresence
     /// </summary>
     private CapabilityState? ConfirmContent(OverlayFrame frame)
     {
+        // A frame that differs from the one before it ONLY in content, on a surface whose size,
+        // style, position and topmost band have not moved, is not the event this confirmation
+        // exists to catch, and re-reading a whole 2880x1800 surface for it costs 4.6 ms of the UI
+        // thread per frame (measured; ContentBands carries the run).
+        var full = !_contentConfirmedFully;
+        var height = full ? frame.Height : BandHeight(frame.Height);
+        var top = full ? 0 : Math.Min(frame.Height - 1, _bandCursor * height);
+        height = Math.Min(height, frame.Height - top);
+
         var windowDc = Win32OverlayInterop.GetDC(_window);
         if (windowDc == 0)
         {
@@ -670,8 +680,9 @@ public sealed class Win32OverlayPresence : IOverlayPresence
                 + $"(last-error {Marshal.GetLastWin32Error()}); the paint cannot be confirmed and is not claimed");
         }
 
+        // The read-back lands at the coordinates it came FROM: one offset arithmetic, both cases.
         var copied = Win32OverlayInterop.BitBlt(
-            _readbackDc, 0, 0, frame.Width, frame.Height, windowDc, 0, 0, Win32OverlayInterop.Srccopy);
+            _readbackDc, 0, top, frame.Width, height, windowDc, 0, top, Win32OverlayInterop.Srccopy);
         var error = Marshal.GetLastWin32Error();
         Win32OverlayInterop.ReleaseDC(_window, windowDc);
 
@@ -682,26 +693,15 @@ public sealed class Win32OverlayPresence : IOverlayPresence
                 + "reported success and the surface cannot be asked what it holds, so nothing is claimed");
         }
 
-        var step = SampleStep(frame.Width, frame.Height);
-        for (var y = 0; y < frame.Height; y += step)
+        var mismatch = CompareRegion(frame, top, height);
+        if (mismatch is not null)
         {
-            for (var x = 0; x < frame.Width; x += step)
-            {
-                if (!SamplesMatch(frame, x, y, out var held))
-                {
-                    return ContentMismatch(frame, x, y, held);
-                }
-            }
+            // Left NOT confirmed: the next paint re-reads the whole surface rather than the next
+            // band, because a surface that failed once has nothing a band sweep may assume.
+            return mismatch;
         }
 
-        foreach (var (x, y) in Corners(frame))
-        {
-            if (!SamplesMatch(frame, x, y, out var held))
-            {
-                return ContentMismatch(frame, x, y, held);
-            }
-        }
-
+        RecordContentProof(full, top, height);
         return null;
     }
 
@@ -1047,4 +1047,150 @@ public sealed class Win32OverlayPresence : IOverlayPresence
         + $"the point {x},{y} to it. The window itself is kept for the next Present; the frame surfaces it was "
         + "holding are not — those went back to the OS here rather than at Dispose, because a pooled presence "
         + "outlives the flash that used it";
+
+    // ---------- the steady-state content check ----------
+    //
+    // EVERYTHING BELOW THIS LINE IS APPENDED, and that is deliberate rather than tidy: forty-one
+    // citations in twenty-two files point INTO this file by line number, one of them from
+    // client/docs/task-board.md, which a lane may not edit. So the change that added this section
+    // is line-neutral above it — every edit above replaced the same number of lines it removed —
+    // and no citation moved.
+
+    /// <summary>
+    /// How many horizontal bands the surface is re-proved in when nothing about the WINDOW has
+    /// changed. Every band is read back and compared in turn, so a surface that stops holding its
+    /// frame is caught in the band it happens in — immediately for any content that differs there,
+    /// and within this many frames for anything at all.
+    ///
+    /// <para><b>Why this exists, measured on the running product at maximum settings rather than
+    /// argued.</b> The full-surface read-back is 4.6 ms of the UI thread per frame at 2880x1800
+    /// (per-stage probe, one spiral surface: copy 0.9 ms, blit 2.2 ms, confirm 4.6 ms). It was
+    /// UNCONDITIONAL on every frame of every moving surface, and a moving surface repaints tens of
+    /// times a second. <b>It is NOT the dominant cost</b> — the same probe puts 130 ms of the same
+    /// frame in one GDI+ resample — and the honest size of this change is stated where the numbers
+    /// are, not inflated here.</para>
+    ///
+    /// <para><b>What the guarantee still is.</b> <see cref="IOverlayPresence.Paint"/> promises the
+    /// operating system was asked for the surface's content BACK. It still is, on every single
+    /// frame; what changed is how much of it, and only for a frame that differs from the one
+    /// before it in NOTHING BUT CONTENT. The whole surface is re-read on the first paint after a
+    /// <see cref="Present"/>, after a <see cref="SetClickThrough"/>, after any resize, after a
+    /// <see cref="Reassert"/> re-asserts the band, and after any failed comparison — every event
+    /// that could have changed the surface out from under a frame.</para>
+    /// </summary>
+    public const int ContentBands = 16;
+
+    /// <summary>
+    /// True once the WHOLE surface has been read back and matched for the frame it currently
+    /// holds, and false again the moment anything about the window changes. It is the only input
+    /// to the full-versus-band decision, and every writer of it is one line: <see cref="SetCurrent"/>
+    /// (present and click-through), <see cref="Reraise"/> (the band), and the failure arm of
+    /// <see cref="ConfirmContent"/>.
+    /// </summary>
+    private bool _contentConfirmedFully;
+
+    /// <summary>Which band the next steady-state frame reads back. Sweeps, so an unchanged surface
+    /// is re-proved end to end within <see cref="ContentBands"/> frames.</summary>
+    private int _bandCursor;
+
+    /// <summary>
+    /// What the last confirmed paint actually read back out of the operating system, in words, for
+    /// the <see cref="CapabilityState.Available"/> detail. A capability that says "the OS was asked
+    /// for the content back" and reads a sixteenth of the surface has to SAY a sixteenth: the
+    /// detail string is the only place a reader learns which of the two was done.
+    /// </summary>
+    public string LastContentProof { get; private set; } = "nothing has been painted on this surface yet";
+
+    /// <summary>
+    /// The rows in one band, never zero for a one-row surface. <b>Public because the sweep's
+    /// COVERAGE is the fact worth checking</b> and checking it needs no window: a band height that
+    /// rounds down leaves the last rows of the surface in no band at all, which on a 1800-row
+    /// monitor is eight rows the capability would never read back again.
+    /// </summary>
+    public static int BandHeight(int frameHeight) =>
+        Math.Max(1, (frameHeight + ContentBands - 1) / ContentBands);
+
+    /// <summary>
+    /// The one place the current request is recorded — and therefore the one place the "the whole
+    /// surface is proved" latch is dropped. Present and SetClickThrough both land here, which is
+    /// why a geometry, alpha or style change can never be followed by a band-only confirmation.
+    /// </summary>
+    private void SetCurrent(OverlaySurfaceRequest request)
+    {
+        _current = request;
+        _contentConfirmedFully = false;
+    }
+
+    /// <summary>
+    /// <see cref="Raise"/> for <see cref="Reassert"/>: the same single <c>SetWindowPos</c>, plus
+    /// the admission that the band was contested. A re-assertion is the OS being asked to move
+    /// this window in the z-order, so the next paint re-reads the whole surface rather than one
+    /// band of it — which is also what gives the steady state a bounded full re-proof cadence, on
+    /// the caller's own topmost cadence (<c>Effects/OverlaySurfaceSet.cs:466-473</c>), with no
+    /// timer of this class's own.
+    /// </summary>
+    private void Reraise()
+    {
+        _contentConfirmedFully = false;
+        Raise();
+    }
+
+    /// <summary>
+    /// Compare the read-back against the frame over <paramref name="height"/> rows starting at
+    /// <paramref name="top"/>: the spread grid of <see cref="SampleStep"/> plus every corner that
+    /// falls inside the region. Called with the whole surface it is exactly the comparison this
+    /// class has always made; called with one band it is that comparison restricted to the band.
+    /// </summary>
+    private CapabilityState? CompareRegion(OverlayFrame frame, int top, int height)
+    {
+        var step = SampleStep(frame.Width, frame.Height);
+        for (var y = top; y < top + height; y += step)
+        {
+            for (var x = 0; x < frame.Width; x += step)
+            {
+                if (!SamplesMatch(frame, x, y, out var held))
+                {
+                    return ContentMismatch(frame, x, y, held);
+                }
+            }
+        }
+
+        foreach (var (x, y) in Corners(frame))
+        {
+            if (y < top || y >= top + height)
+            {
+                continue;
+            }
+
+            if (!SamplesMatch(frame, x, y, out var held))
+            {
+                return ContentMismatch(frame, x, y, held);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Record what was proved and move the sweep on. Nothing here decides anything: the latch is
+    /// set only on the path where the WHOLE surface matched, so a band comparison can never be the
+    /// thing that lets the next band comparison happen.
+    /// </summary>
+    private void RecordContentProof(bool full, int top, int height)
+    {
+        if (full)
+        {
+            _contentConfirmedFully = true;
+            _bandCursor = 0;
+            LastContentProof = $"the WHOLE {_frameWidth}x{_frameHeight} surface, at about {ContentSampleTarget} "
+                + "spread sample points including all four corners and the centre";
+            return;
+        }
+
+        var band = _bandCursor;
+        _bandCursor = (_bandCursor + 1) % ContentBands;
+        LastContentProof = $"rows {top}-{top + height - 1} of {_frameHeight}, band {band + 1} of {ContentBands} "
+            + "of a sweep that re-reads every row of an unchanged surface within that many frames, the whole "
+            + "surface having been read back and matched when this one was last presented, re-styled or re-raised";
+    }
 }

@@ -172,9 +172,31 @@ public sealed class GdiPlusSpiralFrameSource : ISpiralFrameSource
         /// <summary>32bpp, no alpha channel in the target: the frame is opaque over black.</summary>
         private const int PixelFormat32bppRgb = 0x00022009;
 
-        /// <summary>GDI+ <c>InterpolationModeHighQualityBicubic</c>, the same quality end
-        /// <see cref="GdiPlusFlashFrameSource"/> takes and for the same reason.</summary>
-        private const int HighQualityBicubic = 7;
+        /// <summary>
+        /// GDI+ <c>InterpolationModeHighQualityBilinear</c> — <b>upstream's own filter at the one
+        /// place it resamples a spiral frame</b>
+        /// (<c>Services/Notifications/OverlayService.cs:1633</c>:
+        /// <c>g.InterpolationMode = InterpolationMode.HighQualityBilinear</c>).
+        ///
+        /// <para><b>It was <c>HighQualityBicubic</c>, and that was 130 ms of the UI thread per
+        /// frame.</b> Measured on the running product at maximum settings with one spiral surface
+        /// and a per-stage probe: of a 141 ms frame at 2880x1800, the GDI+ draw was 130 ms, the
+        /// GIF frame select 5.9 ms, the clear 1.1 ms, the copy into the DIB 0.9 ms, the blit into
+        /// the window 2.2 ms and the content read-back 4.6 ms. On this filter the draw is 83 ms
+        /// and the surface's achieved cadence goes from 4.6-4.9 Hz to 6.2 Hz. Plain
+        /// <c>Bilinear</c> (3) was also measured and is <b>worse</b>, not better — 1.8 Hz — which
+        /// is why the choice is upstream's named filter rather than the cheapest one.</para>
+        ///
+        /// <para><b>Why the quality question is smaller than it looks.</b> Upstream does not
+        /// resample to the screen at all: it decodes each frame ONCE into a cache capped at 1280
+        /// on the long side and lets the compositor stretch that to the monitor
+        /// (<c>OverlayService.cs:1601-1640</c>), and its own comment for the cap says the spiral is
+        /// drawn over the whole screen at low opacity, so
+        /// "capping the long side loses nothing" (<c>:1604</c>). A filter change is a smaller delta than
+        /// the resolution cap upstream already accepts. <b>NOT PROVED:</b> no side-by-side headed
+        /// capture of the two filters was taken.</para>
+        /// </summary>
+        private const int HighQualityBilinear = 6;
 
         /// <summary>GDI+ <c>UnitPixel</c>: the source rectangle is in source pixels.</summary>
         private const int UnitPixel = 2;
@@ -264,7 +286,7 @@ public sealed class GdiPlusSpiralFrameSource : ISpiralFrameSource
                     return null;
                 }
 
-                GdiPlus.GdipSetInterpolationMode(graphics, HighQualityBicubic);
+                GdiPlus.GdipSetInterpolationMode(graphics, HighQualityBilinear);
                 opened = true;
                 return new GdiPlusSpiralAnimation(
                     image, target, graphics, pixels, pinned, width, height,

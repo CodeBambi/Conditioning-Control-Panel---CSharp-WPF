@@ -88,6 +88,17 @@ public interface IOverlayPresence : IDisposable
     /// (<see cref="OverlayReasonCodes.OverlayFrameSizeMismatch"/> otherwise): this capability
     /// scales nothing, because a scaler here would silently decide the port's DPI policy on a
     /// surface whose coordinates are physical pixels (divergence D55).</para>
+    ///
+    /// <para><b>HOW MUCH of it is read back, and this is the one place the answer lives.</b> The
+    /// whole surface, on the first paint after anything about the WINDOW changed — a
+    /// <see cref="Present"/>, a <see cref="SetClickThrough"/>, a resize, a <see cref="Reassert"/>,
+    /// or a comparison that failed. One band of it, sweeping, on a frame that differs from the one
+    /// before it in NOTHING BUT CONTENT (<c>Overlay/Win32OverlayPresence.cs</c>
+    /// <c>ContentBands</c>). What is unconditional is that the OS is asked and answers on EVERY
+    /// frame: a surface that is on screen and does not hold what was drawn into it is still
+    /// detected, and its caller still takes it down (<c>Effects/OverlaySurfaceSet.cs:344-352</c>).
+    /// The reason is measured and not a preference — the full read-back is 4.6 ms of the UI thread
+    /// per frame at 2880x1800, and a moving surface repaints tens of times a second.</para>
     /// </summary>
     CapabilityState Paint(OverlayFrame frame);
 
