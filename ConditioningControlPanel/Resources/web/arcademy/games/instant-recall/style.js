@@ -468,6 +468,21 @@ html.ae-touch .g-ir-opt-face{max-height:18vh}
 @keyframes g-ir-hw-gopulse{50%{box-shadow:0 0 34px rgba(255,105,180,.85), 0 6px 16px rgba(0,0,0,.45)}}
 @media (max-width: 560px){.g-ir-howto-row{grid-template-columns:1fr}.g-ir-howto-art{max-width:220px;margin:0 auto}}
 
+/* ---- THE PAYOUT LAYER (CORE's reward pixels) ------------------------------
+   One solid gold bloom over the whole stage when a fully-correct stop's
+   variable-ratio roll fires. GAME-LOCAL CHROME by law: it is not an engine
+   kind, it writes no ledger entry, and it wears no blend mode / no filter /
+   no backdrop-filter - a composited opacity keyframe is the entire cost, so
+   it is legal over a wall of live decodes. z 3: over the screen, under the
+   flashwell (6) and the slip (7), so it can never obscure a quiz card or be
+   read as one. .is-big is the jackpot stop - stronger gradient, same law
+   (trap 37: never a backtick inside this template). */
+.g-ir-payout{position:absolute;inset:0;pointer-events:none;z-index:3;opacity:0;
+  background:radial-gradient(circle at 50% 40%, rgba(240,194,75,.34), transparent 70%)}
+.g-ir-payout.is-big{background:radial-gradient(circle at 50% 40%, rgba(240,194,75,.5), transparent 72%)}
+.g-ir-payout.is-on{animation:g-ir-payout 900ms ease-out 1 both}
+@keyframes g-ir-payout{0%{opacity:0}22%{opacity:1}100%{opacity:0}}
+
 /* ---- reduced motion (both gates): keyframes die, transitions survive -------
    ONE exception, and it is deliberate: the wall's face swap survives as a PLAIN
    CROSSFADE. A fade is not motion (this file's own doctrine), and Law III says
@@ -481,6 +496,11 @@ html.arc-reduced .g-ir-howto-art::before,html.arc-reduced .g-ir-howto-art::after
 html.arc-reduced .g-ir-howto-art[data-art="freeze"]::after{transform:translate(-50%,6%) rotate(-1deg)}
 html.arc-reduced .g-ir-howto-art[data-art="wall"]::after{opacity:.95}
 html.arc-reduced .g-ir-howto-ico{animation:none !important;opacity:1}
+/* the payout survives reduced as a HALVED opacity fade - a fade is not motion
+   (this file's own doctrine), and the reward has to exist on every rung */
+html.arc-reduced .g-ir-payout{background:radial-gradient(circle at 50% 40%, rgba(240,194,75,.17), transparent 70%)}
+html.arc-reduced .g-ir-payout.is-big{background:radial-gradient(circle at 50% 40%, rgba(240,194,75,.25), transparent 72%)}
+html.arc-reduced .g-ir-payout.is-on{animation:g-ir-payout 450ms ease-out 1 both !important}
 /* ---- 16 THE UNLISTED FRAME (the seep) ------------------------------------
    The campus plan, rendered the way the monitors downstairs render it: cold
    ground, dead-channel scanlines and blueprint linework. It is CSS, not an
@@ -511,6 +531,9 @@ html.arc-reduced .g-ir-howto-ico{animation:none !important;opacity:1}
   .g-ir-howto-art[data-art="freeze"]::after{transform:translate(-50%,6%) rotate(-1deg)}
   .g-ir-howto-art[data-art="wall"]::after{opacity:.95}
   .g-ir-howto-ico{animation:none !important;opacity:1}
+  .g-ir-payout{background:radial-gradient(circle at 50% 40%, rgba(240,194,75,.17), transparent 70%)}
+  .g-ir-payout.is-big{background:radial-gradient(circle at 50% 40%, rgba(240,194,75,.25), transparent 72%)}
+  .g-ir-payout.is-on{animation:g-ir-payout 450ms ease-out 1 both !important}
 }
 /* touch: bigger options, no hover lift */
 @media (pointer: coarse){

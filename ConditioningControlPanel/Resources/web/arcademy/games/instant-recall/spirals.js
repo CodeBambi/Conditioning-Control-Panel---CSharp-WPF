@@ -21,17 +21,33 @@
  * KIN-FIRST so the near-misses are look-alikes (rings vs rings, hearts vs hearts,
  * Loom vs Loom) rather than obviously-other pictures. Recall, not elimination.
  *
+ * THE GENERATED LOOM (2026-08-25, the owner's "all games weave" directive).
+ * The class spiral can now be WOVEN live (engine/loom/), and its ledger id is
+ * 'loom:xxxxxxxx' - a params hash, not a url. The doctrine above holds
+ * unchanged and is worth restating for this family: the decoys for a woven
+ * spiral are THREE GENUINELY DIFFERENT seeded weaves from the same generator
+ * (`loomDecoyParams`) - real spirals the engine could equally have shown -
+ * never a recolour/mirror of the truth (the generator's palette lean makes
+ * every weave a look-alike already, which is exactly kin-first). Option
+ * thumbnails render ONE frame of the params at ~96px (`loomThumbDataUrl`),
+ * square, unspun - the same "asset AS SHIPPED" posture the gif previews keep.
+ *
  * ---------------------------------------------------------------------------
- * LAWS. Every export here except `preloadSpirals` is PURE and SEEDED (Law V) -
- * no clock, no DOM, no Math.random, no ledger. `preloadSpirals` touches the DOM
- * (one `new Image()` per url) and is best-effort: it is never awaited and its
- * failure is invisible. This module imports `../../core/rng.js` and NOTHING
- * else - in particular never `vigil.js`, so the RING SIZE is the caller's
+ * LAWS. `buildSpiralSet` / `spiralDecoys` / `kinOf` / `loomRowsOf` /
+ * `loomDecoyParams` are PURE and SEEDED (Law V) - no clock, no DOM, no
+ * Math.random, no ledger. `preloadSpirals` and `loomThumbDataUrl` touch the
+ * DOM (an Image / a canvas) and are best-effort: never awaited, failure is
+ * invisible (null thumb = the option keeps its backing colour). This module
+ * imports `../../core/rng.js` and the engine's VENDORED loom pair
+ * (`engine/loom/seeded.js`, `engine/loom/loomField.js`) and nothing else - in
+ * particular never `vigil.js`, so the RING SIZE is the caller's
  * (`PLAYTEST.SPIRAL_RING[tier]`) and the plan file stays the only owner of the
  * tier dials.
  * ==========================================================================*/
 
-import { makeTaggedRoll, shuffled } from '../../core/rng.js';
+import { makeRng, makeTaggedRoll, shuffled } from '../../core/rng.js';
+import { seededParams2, loomId, LOOM_ID_RE } from '../../engine/loom/seeded.js';
+import { createFieldRenderer, composeFrame, drawFallbackFrame, normalizeParams2 } from '../../engine/loom/loomField.js';
 
 /** Which bundled files LOOK like each other. Data, filed by eye (all seven
  *  viewed 2026-08-23): sp1/sp7 monochrome ring tunnels, sp2 a green/magenta
@@ -61,15 +77,17 @@ function basenameOf(url) {
 }
 
 /**
- * The look-alike family of a spiral url.
+ * The look-alike family of a spiral url OR ledger id.
  * A player's own Loom spirals are their own kin - they share a generator, so
- * they look like each other and like nothing bundled.
- * @param {string} url
+ * they look like each other and like nothing bundled. A GENERATED spiral's
+ * 'loom:xxxxxxxx' id (engine/loom/seeded.js) is the same family for the same
+ * reason: one generator, one look.
+ * @param {string} url  a spiral url, or a 'loom:' ledger id
  * @returns {'rings'|'hearts'|'kaleido'|'loom'|'other'}
  */
 export function kinOf(url) {
   const s = String(url == null ? '' : url);
-  if (LOOM_RE.test(s)) return 'loom';
+  if (LOOM_RE.test(s) || LOOM_ID_RE.test(s)) return 'loom';
   const kin = SPIRAL_KIN[basenameOf(s)];
   return kin || 'other';
 }
@@ -228,4 +246,114 @@ export function preloadSpirals(urls) {
   return n;
 }
 
-export default { SPIRAL_KIN, kinOf, buildSpiralSet, spiralDecoys, preloadSpirals };
+/* ============================================================================
+ * THE GENERATED-LOOM HELPERS (2026-08-25)
+ * ==========================================================================*/
+
+/**
+ * The WOVEN rows of `ctx.spiralPool`, whole. The shell ships a generated loom
+ * as `{loom:true, id, params, href, weight}` with deliberately NO `url` key,
+ * so the string-normalising `rowsOf` above skips it - THIS is the read that
+ * takes it. PURE; de-duplicated by id; a row without params is dropped.
+ * @param {Array} pool  raw ctx.spiralPool
+ * @returns {{id:string, params:Object, href:?string, weight:number}[]}
+ */
+export function loomRowsOf(pool) {
+  const out = [];
+  const seen = new Set();
+  const list = Array.isArray(pool) ? pool : [];
+  for (const row of list) {
+    if (!row || row.loom !== true || !row.params || typeof row.params !== 'object') continue;
+    let id;
+    try {
+      id = (typeof row.id === 'string' && LOOM_ID_RE.test(row.id)) ? row.id : loomId(row.params);
+    } catch (e) { continue; }
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const w = Number(row.weight);
+    out.push({
+      id,
+      params: row.params,
+      href: typeof row.href === 'string' && row.href ? row.href : null,
+      weight: Number.isFinite(w) && w > 0 ? w : 1,
+    });
+  }
+  return out;
+}
+
+/**
+ * THREE GENUINELY DIFFERENT woven decoys for a generated-spiral question -
+ * fresh seeded params from the same generator, never a filtered copy of the
+ * truth (the doctrine at the top of this file, applied to the loom family).
+ * PURE AND SEEDED: attempt i rides makeRng(seed+'|ir-loom-decoy|'+i), and a
+ * hash collision (with the truth or an earlier decoy) skips to the next
+ * attempt deterministically - same seed, same decoys, forever.
+ * @param {string} seed       the class seed (or any stable per-class string)
+ * @param {number} [count]    how many (default 3, capped 6)
+ * @param {string} [excludeId]  the truth's 'loom:' id - never dealt back
+ * @returns {{id:string, params:Object}[]}
+ */
+export function loomDecoyParams(seed, count = 3, excludeId = '') {
+  const want = Math.max(0, Math.min(6, Math.round(Number(count) || 0)));
+  const out = [];
+  const seen = new Set([String(excludeId == null ? '' : excludeId)]);
+  const base = String(seed == null ? '' : seed) + '|ir-loom-decoy|';
+  for (let i = 0; out.length < want && i < want * 8 + 8; i++) {
+    let id; let params;
+    try {
+      params = seededParams2(makeRng(base + i), { centerpiece: false });
+      id = loomId(params);
+    } catch (e) { break; }
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, params });
+  }
+  return out;
+}
+
+/** The cached thumb renderer ({field}|false once WebGL refused). */
+let _thumbField = null;
+
+/**
+ * ONE still frame of a woven spiral as a data url, for a quiz option's face -
+ * ~96px, square, phase 0: unspun and uncoloured-by-us, exactly the "asset AS
+ * SHIPPED" posture the gif previews keep (style.js). Synchronous-ish: one
+ * offscreen render, no fetch. Best-effort by construction - `null` on any
+ * failure (headless, no canvas, no 2D context) and the option simply keeps
+ * its backing colour, same as a gif that never loaded. WebGL is preferred
+ * (the exact wash pipeline); the vendored 2D fallback draws when it refuses,
+ * which is also what a no-WebGL player's wash gif approximates.
+ * @param {Object} params  loomField v2 params (normalized or not)
+ * @param {number} [size]  face edge in px (default 96, clamped 32..256)
+ * @returns {?string} a PNG data url, or null
+ */
+export function loomThumbDataUrl(params, size = 96) {
+  try {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const q = normalizeParams2(params);
+    const s = Math.max(32, Math.min(256, Math.round(Number(size) || 96)));
+    const out = document.createElement('canvas');
+    out.width = s; out.height = s;
+    const ctx2d = out.getContext('2d');
+    if (!ctx2d) return null;
+    if (_thumbField !== false && !_thumbField) {
+      try {
+        const c = document.createElement('canvas');
+        c.width = s; c.height = s;
+        _thumbField = createFieldRenderer(c) || false;
+      } catch (e) { _thumbField = false; }
+    }
+    if (_thumbField) {
+      if (_thumbField.canvas.width !== s) { _thumbField.canvas.width = s; _thumbField.canvas.height = s; }
+      composeFrame(ctx2d, _thumbField, q, 0, s);
+    } else {
+      drawFallbackFrame(ctx2d, q, 0, s);
+    }
+    return out.toDataURL('image/png');
+  } catch (e) { return null; }
+}
+
+export default {
+  SPIRAL_KIN, kinOf, buildSpiralSet, spiralDecoys, preloadSpirals,
+  loomRowsOf, loomDecoyParams, loomThumbDataUrl,
+};

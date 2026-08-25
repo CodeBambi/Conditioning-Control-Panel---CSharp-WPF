@@ -353,6 +353,10 @@ export default {
     let merges = 0;
     let chainLinks = 0;
     let chain = 0;
+    /* the streak meter as RENDERED: paintChain rebuilds it (and the ceremony
+       chimes) only when the lit segment count or the gold state changes. */
+    let meterLit = -1;
+    let meterGold = false;
     let maxChain = 0;
     let dives = 0;
     let resurfaces = 0;
@@ -1128,13 +1132,31 @@ export default {
     }
     function paintChain() {
       if (!chainChip) return;
-      if (chain < PLAYTEST.STREAK_VISIBLE) { chainChip.hidden = true; chainChip.textContent = 'x ' + chain; return; }
+      if (chain < PLAYTEST.STREAK_VISIBLE) {
+        chainChip.hidden = true;
+        chainChip.textContent = 'x ' + chain;
+        meterLit = -1; meterGold = false;
+        return;
+      }
       chainChip.hidden = false;
+      const lit = Math.min(PLAYTEST.CHAIN_CAP, chain);
+      const gold = chain >= PLAYTEST.CHAIN_CAP;
+      /* BUG FIX (2026-08-25): this used to re-mint the 11-node meter - and the
+         ceremony's streak CHIME rode every mint - on EVERY merging move, even
+         when the lit segment count had not changed (a capped chain re-chimed
+         and re-built forever). Rebuild + chime only when the meter would
+         actually look different; otherwise only the number is repainted. */
+      if (lit === meterLit && gold === meterGold
+        && chainChip.firstChild && chainChip.firstChild.nodeType === 3) {
+        try { chainChip.firstChild.nodeValue = 'x ' + chain; return; }
+        catch (e) { /* an odd first child: fall through to the full rebuild */ }
+      }
       chainChip.textContent = 'x ' + chain;
+      meterLit = lit; meterGold = gold;
       // the meter is the SHELL's primitive (10 segments, always); it rides
       // inside the chip so the contract's DOM gains no extra node
       try {
-        const meter = ctx.ceremonies.streakMeter({ filled: Math.min(PLAYTEST.CHAIN_CAP, chain), gold: chain >= PLAYTEST.CHAIN_CAP });
+        const meter = ctx.ceremonies.streakMeter({ filled: lit, gold });
         if (meter) chainChip.appendChild(meter);
       } catch (e) { /* a ceremony must never be the thing that fails */ }
     }
@@ -1176,6 +1198,28 @@ export default {
       if (gx !== grab.gx) { grab.gx = gx; try { boardEl.style.setProperty('--de-grab-x', String(gx)); } catch (e) { /* noop */ } }
       if (gy !== grab.gy) { grab.gy = gy; try { boardEl.style.setProperty('--de-grab-y', String(gy)); } catch (e) { /* noop */ } }
     }
+    /* perf (2026-08-25): --de-grab-x/y INHERIT into every tile, so one write
+       is a style recalc of the whole board - and a ProMotion phone delivers
+       pointermove at 120Hz. Coalesce to ONE write per frame; the paint cannot
+       show more than that anyway. No rAF (the headless double) = write through,
+       so the harness still sees the vars synchronously. */
+    let grabRaf = 0;
+    let grabPend = null;                   // {g, x, y} - g guards against a stale frame
+    function flushGrabVars() {
+      grabRaf = 0;
+      const p = grabPend;
+      grabPend = null;
+      if (!p || p.g !== grab) return;      // the gesture this write belonged to is gone
+      setGrabVars(p.x, p.y);
+    }
+    function queueGrabVars(x, y) {
+      if (!grab) return;
+      const raf = (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function')
+        ? window.requestAnimationFrame : null;
+      if (!raf) { setGrabVars(x, y); return; }
+      grabPend = { g: grab, x, y };
+      if (!grabRaf) { try { grabRaf = raf(flushGrabVars) || 1; } catch (e) { grabRaf = 0; setGrabVars(x, y); } }
+    }
     /** The dominant direction of the drag, and whether that wall is solid. */
     function setGrabDir(dir) {
       if (!grab || !boardEl) return;
@@ -1192,6 +1236,7 @@ export default {
     function clearGrab() {
       const g = grab;
       grab = null;
+      grabPend = null;                     // a scheduled rAF write dies with the gesture
       if (!boardEl) return;
       if (g && g.captured && g.id != null) {
         try { if (typeof boardEl.releasePointerCapture === 'function') boardEl.releasePointerCapture(g.id); } catch (e) { /* the pointer is already gone */ }
@@ -1230,7 +1275,7 @@ export default {
       if (!e || !grab || !samePointer(e)) return;
       const dx = (Number(e.clientX) || 0) - grab.x;
       const dy = (Number(e.clientY) || 0) - grab.y;
-      setGrabVars(dx / PLAYTEST.GRAB_PX, dy / PLAYTEST.GRAB_PX);
+      queueGrabVars(dx / PLAYTEST.GRAB_PX, dy / PLAYTEST.GRAB_PX);
       const ax = Math.abs(dx); const ay = Math.abs(dy);
       setGrabDir(Math.max(ax, ay) < PLAYTEST.GRAB_DEAD ? '' : (ax >= ay ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up')));
     }
@@ -2175,7 +2220,10 @@ export default {
         {
           const want = String(ctx.settings && ctx.settings.de_tile_faces != null ? ctx.settings.de_tile_faces : 'media').trim().toLowerCase();
           facesMode = FACE_MODES.includes(want) ? want : 'media';
-          faceKind = (reduced || motionLevelOf() <= 1 || facesMode === 'still') ? 'still' : 'loop';
+          /* pass 6: `touch` joins the still conditions - from tier 5 a phone
+             could otherwise hold up to 4 concurrent <video> faces, and iOS
+             thrashes past its hardware decode session cap. */
+          faceKind = (reduced || motionLevelOf() <= 1 || facesMode === 'still' || touch) ? 'still' : 'loop';
           faceUrls.clear();
         }
         // the plan's own draws do not depend on the budget; a free swim deals the
@@ -2203,7 +2251,7 @@ export default {
         try {
           casino = createDeCasino({
             seed, tier, stage, bench, board: boardEl, backdrop,
-            timers: deckTimers, reduced, capsOk, log: say,
+            timers: deckTimers, reduced, capsOk, touch, log: say,
             /* W2 - THE DECK'S CUE ROAD: the game's own clamped helper, so a
                deck can never out-shout this tier's audio ceiling. */
             cue: tick,
@@ -2243,6 +2291,7 @@ export default {
             seed,
             gradeTier: tier,
             reduced,
+            touch,
             motionLevel: motionLevelOf(),
             stage,
             bench,
@@ -2252,6 +2301,10 @@ export default {
             assets: deckAssets,
             timers: deckTimers,
             capsOk: capsArmed,
+            /* the shell's class spiral (Loom directive 2026-08-25): the loom
+             * params wrapper or a plain gif url - the deck's pin paints its
+             * paintable half and the wheel wash rides the engine provider. */
+            classSpiral: (ctx && ctx.classSpiral) || null,
             log: say,
           });
         } catch (e) { pressure = null; say('pressure refused: ' + ((e && e.message) || e)); }
@@ -2338,6 +2391,10 @@ export default {
         setTouchClass(false);                // and so does .ae-touch - same seam, same cleanup
         clearQueue();
         clearGrab();
+        if (grabRaf) {
+          try { if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') window.cancelAnimationFrame(grabRaf); } catch (e) { /* noop */ }
+          grabRaf = 0;
+        }
         opened = false;
         try { if (surfaceBtn) surfaceBtn.removeEventListener('click', onSurface); } catch (e) { /* noop */ }
         surfaceBtn = null;

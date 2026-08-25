@@ -81,7 +81,9 @@ export const EC_LEX = Object.freeze({
   ec_msg_decoy_warn: 'One of them lies tonight. Do not echo it.',
   ec_msg_resisted: 'You let it pass. Good.',
   ec_msg_bell_warn: 'Last of the class.',
-  ec_msg_silent: 'No sound tonight. Watch the light.',
+  /* audioAudible=false means the whisper CLIPS are off, not the tones - the
+   * old line ("No sound tonight...") told the player a lie about the notes. */
+  ec_msg_silent: 'No whispers tonight - listen for the tones.',
 
   /* ---- the end card ----------------------------------------------------- */
   ec_end_title: 'Class dismissed',

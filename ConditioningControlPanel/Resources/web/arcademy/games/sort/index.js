@@ -201,6 +201,14 @@ const RING_TICK_MS = 50;
 const RING_TICK_MS_REDUCED = 100;
 const SPRING_MS = SWIPE.SPRING_MS;
 const INTRO_MS = 900;
+/** The ring may not start against a face that has not PAINTED (owner,
+ *  2026-08-25: the countdown ran while the gif was still downloading -
+ *  unplayable on a slow link, and a cold video at a 750ms ring could time out
+ *  into a PASS before its first frame existed). faceReady() below resolves on
+ *  decode / loadeddata; this is the ceiling a hung url may hold the class for -
+ *  past it the round runs anyway, which is exactly what a broken url already
+ *  does (its face removes itself and the drawn back is the fair round). */
+const READY_FALLBACK_MS = 1000;
 const AUTO_SUBMIT_MS = 45000;
 /** Live <video> nodes this class may hold at once (trap 36). A CONCURRENCY
  *  ceiling, not a supply one: the stack is three cards deep whatever the class
@@ -726,8 +734,12 @@ export default {
           root.setAttribute('preserveAspectRatio', 'none');
         } catch (e) { /* noop */ }
         const track = svg('rect', 'g-sort-ring-track');
+        /* the BLOOM: a second, wider stroke behind the arc reading the same
+         * --sort-ring var - a cheap halo with no filter and no blend, so it is
+         * safe over a live video (trap 36) and it survives the touch rung. */
+        const bloom = svg('rect', 'g-sort-ring-bloom');
         const arc = svg('rect', 'g-sort-ring-arc');
-        for (const r of [track, arc]) {
+        for (const r of [track, bloom, arc]) {
           if (!r) continue;
           try {
             r.setAttribute('x', '2'); r.setAttribute('y', '2');
@@ -744,8 +756,14 @@ export default {
         el: box,
         /** @param {number} left 1 -> full ring, 0 -> closed */
         set(left, ripe) {
-          setVar(box, '--sort-ring', String(Math.round(clamp01(left) * 1000) / 1000));
+          const v = clamp01(left);
+          setVar(box, '--sort-ring', String(Math.round(v * 1000) / 1000));
           setAttr(box, 'data-ripe', ripe || 'fresh');
+          /* THE LAST 12% BREATHES. ringTick drives this through set() on the
+           * same tick that writes --sort-ring, so the breathe can never argue
+           * with the number; armTop's set(1,'fresh') clears it. Reduced motion
+           * neutralises the animation in the sheet, never the class. */
+          if (v < 0.12) addCls(box, 'is-closing'); else delCls(box, 'is-closing');
         },
       };
     }
@@ -766,15 +784,24 @@ export default {
       setAttr(node, 'data-seen', card.seen ? '1' : '0');
       setVar(node, '--sort-depth', String(depth));
       setVar(node, '--sort-scale', String(scaleForDepth(depth)));
+      /* THE CLIP LAYER. The card node itself no longer clips - its old
+       * overflow:hidden was eating the ripe ring (the ringbox hangs at
+       * inset:-10px, so only an inner sliver of the stroke survived and the
+       * glow died entirely). The rounded clip the MEDIA needs (the ken-burns
+       * face scales past the box every cycle) lives on this inner layer; the
+       * stamps and the ring stay the card's own children, above it. */
+      const clip = el('div', 'g-sort-clip');
+      if (clip) node.appendChild(clip);
+      const mediaHost = clip || node;
       const back = el('div', 'g-sort-back');
       if (back) {
         const h = Math.round(hash01(card.url + '|back') * 360);
         setVar(back, '--sort-back-h', String(h));
         setVar(back, '--sort-back-h2', String((h + 310) % 360));
-        node.appendChild(back);
+        mediaHost.appendChild(back);
       }
       const face = mintFace(card, depth);
-      if (face) node.appendChild(face);
+      if (face) mediaHost.appendChild(face);
       const yes = stampNode('yes', '♥', t('sort_stamp_yes', 'YES'));
       const no = stampNode('no', '⊘', t('sort_stamp_no', 'NO'));
       if (yes) node.appendChild(yes);
@@ -784,7 +811,7 @@ export default {
         ring = makeRing();
         if (ring && ring.el) node.appendChild(ring.el);
       }
-      return { node, face, ring, yes, no, card, depth, video: face && face.tagName === 'VIDEO' };
+      return { node, clip, face, ring, yes, no, card, depth, video: face && face.tagName === 'VIDEO' };
     }
     function stampNode(side, glyph, text) {
       const n = el('div', 'g-sort-stamp ' + side);
@@ -800,15 +827,25 @@ export default {
       if (!card || !card.url) return null;
       if (depth > 1) return null;                       // the third card is a back
       const isVid = isVideoUrl(card.url, card.mime);
-      const wantVideo = depth === 0 && isVid;
+      /* A VIDEO MAY NOW MINT AT DEPTH 1 TOO - warm, not playing. preload=auto
+       * with no play() call pulls bytes and readies the first frame while the
+       * card is still second, so the promotion's faceReady gate is usually a
+       * no-op. It COUNTS against DECODER_CEILING like any live <video> (the
+       * ceiling is a concurrency claim and the warm holds a demuxer), and the
+       * card is already MOUNTED in the stack - never a detached video (trap:
+       * a detached demuxer the ceiling could not see). Over budget the back
+       * stands, exactly as before, and the ordinary depth-0 grow still runs. */
+      const wantVideo = depth <= 1 && isVid;
+      const isTop = depth === 0;
       if (wantVideo && videoCount < DECODER_CEILING) {
         const v = el('video', 'g-sort-face');
         if (!v) return null;
         videoCount += 1;
-        v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true;
+        v.muted = true; v.loop = true; v.autoplay = isTop; v.playsInline = true;
         try {
           v.setAttribute('muted', ''); v.setAttribute('loop', '');
-          v.setAttribute('playsinline', ''); v.setAttribute('preload', 'metadata');
+          v.setAttribute('playsinline', '');
+          v.setAttribute('preload', isTop ? 'metadata' : 'auto');
           v.setAttribute('disablepictureinpicture', '');
         } catch (e) { /* DOM double */ }
         try { v.disableRemotePlayback = true; } catch (e) { /* not everywhere */ }
@@ -819,7 +856,7 @@ export default {
           });
         }
         v.src = card.url;
-        if (typeof v.play === 'function') {
+        if (isTop && typeof v.play === 'function') {
           try { const p = v.play(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* autoplay policy */ }
         }
         return v;
@@ -1048,11 +1085,28 @@ export default {
           if (face) {
             live.face = face;
             live.video = face.tagName === 'VIDEO';
-            /* seat it where mintCard does: over the back, UNDER the stamps -
-             * appended last it would paint over the yes/no verdict stamps. */
-            try { live.node.insertBefore(face, live.node.children[1] || null); }
-            catch (e) { try { live.node.appendChild(face); } catch (e2) { /* noop */ } }
+            /* seat it where mintCard does: inside the clip layer, over the
+             * back. The stamps and the ring are the card node's own children
+             * and stay above the clip either way; the insertBefore fallback is
+             * for a card whose clip never minted (DOM double). */
+            try {
+              if (live.clip) live.clip.appendChild(face);
+              else live.node.insertBefore(face, live.node.children[1] || null);
+            } catch (e) { try { live.node.appendChild(face); } catch (e2) { /* noop */ } }
           }
+        }
+        /* A PREWARMED VIDEO PLAYS THE MOMENT IT SURFACES. Depth 1 minted it
+         * with preload and NO play() (a warm holds the decoder slot, it does
+         * not run); depth 0 is where it runs. paused === false means it is
+         * already playing (the ordinary top card) and there is nothing to do. */
+        if (i === 0 && live.video && live.face) {
+          try {
+            const v = live.face;
+            if (v.paused !== false) {
+              v.autoplay = true;
+              if (typeof v.play === 'function') { const p = v.play(); if (p && p.catch) p.catch(() => {}); }
+            }
+          } catch (e) { /* autoplay policy */ }
         }
         if (i === 0 && !live.ring) {
           live.ring = makeRing();
@@ -1070,6 +1124,70 @@ export default {
     /* ==================================================================== *
      * THE RING CLOCK - ours, not a keyframe's.
      * ==================================================================== */
+    /**
+     * THE MEDIA-READY GATE. The ring used to start on a bare timer, so on a
+     * slow link the countdown ran against a face still downloading. done()
+     * fires exactly ONCE: on a painted first frame (img decode / video
+     * loadeddata), on a broken url (error RESOLVES - the face removes itself
+     * and the drawn back is the fair round), or on READY_FALLBACK_MS,
+     * whichever lands first. The fallback rides the class's own timer
+     * registry, so the bell, a destroy and the fake clock all own it; a card
+     * with no face at all (the drawn back) is ready NOW, which is also what
+     * the DOM double answers - the scratch harness sees no new asynchrony.
+     */
+    function faceReady(live, done) {
+      let spent = false;
+      let guardId = 0;
+      const finish = () => {
+        if (spent) return;
+        spent = true;
+        timers.cancel(guardId);
+        try { done(); } catch (e) { /* noop */ }
+      };
+      const face = live ? live.face : null;
+      if (!face) { finish(); return; }                  // the drawn back IS ready
+      let hooked = false;
+      try {
+        if (face.tagName === 'VIDEO') {
+          /* a double without a readyState is not LOADING anything: answer now
+           * rather than parking a suite on the fallback timer */
+          if (typeof face.readyState !== 'number') { finish(); return; }
+          if (Number(face.readyState) >= 2) { finish(); return; }
+          if (typeof face.addEventListener === 'function') {
+            face.addEventListener('loadeddata', finish, { once: true });
+            face.addEventListener('error', finish, { once: true });
+            hooked = true;
+          }
+        } else {
+          /* same law for the img double: no boolean `complete`, no network */
+          if (typeof face.complete !== 'boolean') { finish(); return; }
+          if (face.complete && Number(face.naturalWidth) > 0) { finish(); return; }
+          if (typeof face.decode === 'function') {
+            face.decode().then(finish, finish);
+            hooked = true;
+          } else if (typeof face.addEventListener === 'function') {
+            face.addEventListener('load', finish, { once: true });
+            face.addEventListener('error', finish, { once: true });
+            hooked = true;
+          }
+        }
+      } catch (e) { hooked = false; }
+      if (!hooked) { finish(); return; }                // the DOM double answers now
+      guardId = timers.after(READY_FALLBACK_MS, finish);
+    }
+    /**
+     * armTop, deferred until the class can honestly take it. A gate (or the
+     * plain 200ms advance timer) that resolves during a freeze PARKS the arm
+     * on S.pendingArm and thaw() plays it - WHICH ALSO FIXES A PRE-EXISTING
+     * PAUSE STALL: the old arm callback fired during a pause, armTop() bailed
+     * on halted() without ever setting S.armed, and thaw() only re-armed if
+     * S.armed - so the class came back with a live card, no ring, no input.
+     */
+    function armWhenReady() {
+      if (destroyed || !S || S.over) return;
+      if (halted()) { S.pendingArm = true; return; }
+      armTop();
+    }
     function armTop() {
       if (!S || halted() || S.over) return;
       const top = S.live[0];
@@ -1175,7 +1293,9 @@ export default {
       timers.after(reduced ? SWIPE.FADE_MS : SPRING_MS, () => {
         if (!S || destroyed || S.over) return;
         fillStack();
-        armTop();
+        /* the delay above is FEEL (the spring), the gate after it is NETWORK:
+         * the ring arms when the new top card's face has actually painted. */
+        faceReady(S.live[0], armWhenReady);
       });
       return true;
     }
@@ -1204,7 +1324,9 @@ export default {
       timers.after(reduced ? SWIPE.FADE_MS : SPRING_MS, () => {
         if (!S || destroyed || S.over) return;
         fillStack();
-        armTop();
+        /* the delay above is FEEL (the spring), the gate after it is NETWORK:
+         * the ring arms when the new top card's face has actually painted. */
+        faceReady(S.live[0], armWhenReady);
       });
     }
 
@@ -1464,7 +1586,7 @@ export default {
         correct: 0, wrong: 0, passed: 0, perfect: 0, just: 0,
         wrongsSinceRoyalFloor: 0, majorsPaid: [], royal: false, jackpots: 0,
         heat: 0.2,
-        armed: false, ringMs: ringMsFor(0), ringStart: 0, ringTimer: 0,
+        armed: false, pendingArm: false, ringMs: ringMsFor(0), ringStart: 0, ringTimer: 0,
         clockTimer: 0, autoTimer: 0,
         startedAt: now(),
         frozenAt: 0, frozenElapsed: 0,
@@ -1623,7 +1745,9 @@ export default {
         fillStack();
         timers.after(reduced ? 0 : INTRO_MS, () => {
           if (!S || destroyed || S.over) return;
-          armTop();
+          /* reduced motion keeps its shorter intro but STILL gets the gate -
+           * a reduced class on a slow link was the worst case (0ms intro). */
+          faceReady(S.live[0], armWhenReady);
         });
       });
     }
@@ -1818,6 +1942,16 @@ export default {
         if (S.armed) S.ringStart = now() - (S.frozenElapsed || 0);
         S.frozenAt = 0;
       }
+      /* AN ARM THAT LANDED DURING THE FREEZE PLAYS NOW. armWhenReady parked it
+       * (the ring was never armed, so the re-base above touched only the bell
+       * clock); armTop deals a FRESH ring and a fresh deal event, and the
+       * decks resume the same way the ordinary thaw resumes them. */
+      if (S.pendingArm) {
+        S.pendingArm = false;
+        armTop();
+        decksCall('resume');
+        return;
+      }
       if (S.armed) {
         if (S.swipe) S.swipe.enabled(true);
         timers.cancel(S.ringTimer);
@@ -1911,6 +2045,7 @@ export default {
            * freeze - which is the opposite of what the freeze did. */
           ring: {
             armed: S.armed,
+            pending: !!S.pendingArm,
             ms: S.ringMs,
             frozen: !!S.frozenAt,
             elapsed: !S.armed ? 0 : (S.frozenAt ? (S.frozenElapsed || 0) : now() - S.ringStart),

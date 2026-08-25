@@ -315,6 +315,13 @@ export default {
      *  `ring` the subset the emission ring walks (PLAYTEST.SPIRAL_RING). */
     let spirals = null;
     let spiralSet = { set: [], ring: [], kin: {} };
+    /** THE WOVEN CLASS SPIRAL (Loom directive 2026-08-25): the shell's
+     *  generated loom pool row {loom:true, id, params, href}, when one exists.
+     *  Its params live in loomParamsById so a 'loom:' id can grow a thumbnail
+     *  face wherever it appears - truth or decoy. */
+    let loomSpiralRow = null;
+    const loomParamsById = new Map();
+    const isLoomId = (v) => typeof v === 'string' && v.indexOf('loom:') === 0;
     /**
      * THE WALL BOOK. One frozen `montage.snapshot()` per stop, captured AFTER
      * the freeze and the quench, capped at 16. Every WALL_* question is read
@@ -374,6 +381,7 @@ export default {
     let timerEl = null; let truthEl = null; let msgEl = null; let well = null;
     let endEl = null; let howtoEl = null; let qFaceEl = null;
     let clockChip = null; let stopsChip = null; let densityChip = null;
+    let payoutEl = null;
     let optEls = [];
 
     /* THE DEALER. One timer, one queue: every pool key carries its own due time
@@ -1005,7 +1013,17 @@ export default {
             alpha: PLAYTEST.SPIRAL_ALPHA[0]
               + (PLAYTEST.SPIRAL_ALPHA[1] - PLAYTEST.SPIRAL_ALPHA[0]) * band,
           };
-          if (ring.length) opts.url = ring[walk[ringIndex('spiral') % walk.length] % ring.length];
+          if (ring.length) {
+            const entry = ring[walk[ringIndex('spiral') % walk.length] % ring.length];
+            /* a WOVEN ring row goes to the engine WHOLE (the loom wrapper
+             * contract, engine/sustained.js): the handle still answers a
+             * STRING - the stable 'loom:' id, or the fallback gif url the
+             * WebGL floor actually painted - so the ledger line below is
+             * unchanged either way. */
+            opts.url = (entry && typeof entry === 'object' && entry.loom === true)
+              ? { loom: true, id: entry.id, params: entry.params, href: entry.href }
+              : entry;
+          }
           r = sustainSafe('wash', opts);
           if (r) {
             note('spiral', {
@@ -1350,14 +1368,51 @@ export default {
       if (template === 'SPIRAL') {
         const truth = avail.spiralTruth.payload.url;
         const set = (spiralSet && Array.isArray(spiralSet.set)) ? spiralSet.set : [];
+        /** a WOVEN option's face: value = the ledger id, url = a rendered
+         *  ~96px thumb (spirals.loomThumbDataUrl). null = not paintable here
+         *  (headless / no canvas) - the option, or the question, stands down. */
+        const loomFace = (id, params) => {
+          const thumb = (spirals && typeof spirals.loomThumbDataUrl === 'function' && params)
+            ? spirals.loomThumbDataUrl(params, 96) : null;
+          return thumb ? { value: id, url: thumb, media: 'spiral', label: '' } : null;
+        };
+        if (isLoomId(truth)) {
+          /* a WOVEN truth: three genuinely different seeded weaves from the
+           * same generator (the doctrine in spirals.js) - never the gif set,
+           * never a filtered copy of what played. */
+          const tp = loomParamsById.get(truth)
+            || (loomSpiralRow && loomSpiralRow.id === truth ? loomSpiralRow.params : null);
+          if (!tp || !spirals || typeof spirals.loomDecoyParams !== 'function') return null;
+          const tFace = loomFace(truth, tp);
+          if (!tFace) return null;
+          const dFaces = [];
+          for (const d of (spirals.loomDecoyParams(seed, 3, truth) || [])) {
+            const f = loomFace(d.id, d.params);
+            if (f) { loomParamsById.set(d.id, d.params); dFaces.push(f); }
+          }
+          if (dFaces.length < 3) return null;
+          return mk('ir_q_spiral', IR_LEX.ir_q_spiral, [tFace].concat(dFaces.slice(0, 3)), truth, { kind: 'spiral' });
+        }
         let ds = [];
         if (spirals && typeof spirals.spiralDecoys === 'function') {
           try { ds = spirals.spiralDecoys(truth, set, qroll) || []; } catch (e) { ds = []; }
         }
-        if (!Array.isArray(ds) || ds.length < 3) ds = set.filter((u) => u !== truth).slice(0, 3);
-        ds = ds.filter((u) => typeof u === 'string' && u && u !== truth).slice(0, 3);
-        if (ds.length < 3) return null;
-        const opts = [face(truth, 'spiral')].concat(ds.map((u) => face(u, 'spiral')));
+        if (!Array.isArray(ds) || ds.length < 3) ds = set.filter((u) => u !== truth).slice(0, 4);
+        /* the set may now hold the woven id: it decoys a gif truth through its
+         * thumb, and an unpaintable weave simply stands down (never a bare
+         * 'loom:' string into an <img>). */
+        const opts = [face(truth, 'spiral')];
+        for (const u of ds) {
+          if (opts.length >= 4) break;
+          if (typeof u !== 'string' || !u || u === truth) continue;
+          if (isLoomId(u)) {
+            const f = loomFace(u, loomParamsById.get(u));
+            if (f) opts.push(f);
+            continue;
+          }
+          opts.push(face(u, 'spiral'));
+        }
+        if (opts.length < 4) return null;
         return mk('ir_q_spiral', IR_LEX.ir_q_spiral, opts, truth, { kind: 'spiral' });
       }
       if (template === 'WALL_PICK') {
@@ -1931,24 +1986,79 @@ export default {
     }
 
     /* ---- variable ratio (the shared canon, with a local fallback) -------- */
+    /**
+     * THE PAYOUT LAYER - the fire branch's pixels. Game-local chrome and
+     * NOTHING else: one solid radial gold bloom over the stage, opacity-only,
+     * no blend mode / no filter / no engine kind and NO ledger write, so it
+     * can never be mistaken for a POOL effect and can never hand the next
+     * question a second honest answer (the same law that keeps the jackpot's
+     * goldleaf off the pool). Created once, reused; restarted reflow-free
+     * (WAAPI rewind first, a rAF class re-add as the fallback - never a
+     * `void offsetWidth` layout flush over a wall of live decodes).
+     */
+    function payoutBloom(big) {
+      if (dead || !stage || !capsArmed()) return;
+      if (!payoutEl) {
+        payoutEl = el('div', 'g-ir-payout');
+        payoutEl.setAttribute('aria-hidden', 'true');
+        stage.appendChild(payoutEl);
+      }
+      try { payoutEl.classList.toggle('is-big', !!big); } catch (e) { /* noop */ }
+      const on = payoutEl.classList.contains('is-on');
+      if (!on) { payoutEl.classList.add('is-on'); return; }
+      if (typeof payoutEl.getAnimations === 'function') {
+        try {
+          const anims = payoutEl.getAnimations();
+          if (anims.length) {
+            for (const a of anims) { a.currentTime = 0; a.play(); }
+            return;
+          }
+        } catch (e) { /* fall through to the class toggle */ }
+      }
+      payoutEl.classList.remove('is-on');
+      const arm = () => { try { if (!dead && payoutEl) payoutEl.classList.add('is-on'); } catch (e) { /* noop */ } };
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(arm); else after(16, arm);
+    }
     function rewardBeat() {
       let outcome = null;
       try {
-        if (ctx.engine && typeof ctx.engine.rewardRoll === 'function') outcome = ctx.engine.rewardRoll({}) || null;
+        if (ctx.engine && typeof ctx.engine.rewardRoll === 'function') {
+          /* the roll is FED now: heat lifts the base chance off its .30 floor
+           * (schedule.js: .30 + .30*smoothstep(heat)), streak rides the
+           * intensity multiplier, success keeps the run bookkeeping honest.
+           * Same shape as the-deep-end / sort. */
+          outcome = ctx.engine.rewardRoll({ heat: currentHeat, streak, success: true }) || null;
+        }
       } catch (e) { outcome = null; }
       if (!outcome && rewardLocal) outcome = rewardLocal();
       if (!outcome) return;
       if (outcome.jackpot) {
         jackpots += 1;
-        try { ctx.ceremonies.reward('jackpot', { target: stage, text: t('ir_jackpot', IR_LEX.ir_jackpot) }); }
-        catch (e) { /* noop */ }
+        /* garnish:false is LOAD-BEARING (casino.js's own law, mosaic rework
+         * 2026-08-23): the engine's jackpot ceremony otherwise FORCES a
+         * drain|spiral wash - both POOL effects in this class - and a wash
+         * the ledger never saw would give the next question a second honest
+         * answer. */
+        try {
+          ctx.ceremonies.reward('jackpot', {
+            target: stage, text: t('ir_jackpot', IR_LEX.ir_jackpot), garnish: false,
+          });
+        } catch (e) { /* noop */ }
         /* "Photographic Memory": gold leaf over the hall. It is DELIBERATELY
          * not a pool primitive - a gif burst here would be a real Corner GIF /
          * Fullscreen GIF that the ledger never saw, and the very next question
-         * would have two honest answers. Dressing pays the ceremony instead. */
-        sustainSafe('ambient_field', { kind: 'goldleaf', density: 0.55 });
+         * would have two honest answers. Dressing pays the ceremony instead.
+         * `count` raises the FLECK count (the alpha ceiling is engine-side and
+         * stays the engine's); the payout layer below is the visible part. */
+        sustainSafe('ambient_field', { kind: 'goldleaf', density: 0.55, count: 48 });
+        payoutBloom(true);
         tick('jackpot', 0.5);
       } else if (outcome.fire) {
+        /* the fire branch was audio-only; now it pays PIXELS - the payout
+         * bloom plus a gild stamp on the HUD, both game-local chrome. */
+        payoutBloom(false);
+        try { ctx.ceremonies.stamp({ text: t('ir_payout', IR_LEX.ir_payout), tone: 'gild', target: hud }); }
+        catch (e) { /* noop */ }
         tick('streak', 0.42);
       }
     }
@@ -2226,9 +2336,28 @@ export default {
             pool: spiralPool(), seed, ringSize: PLAYTEST.SPIRAL_RING[tier],
           });
           if (built && Array.isArray(built.set)) {
-            spiralSet = { set: built.set.slice(), ring: (built.ring || built.set).slice(), kin: built.kin || {} };
+            spiralSet = { set: built.set.slice(), ring: (built.ring || built.set).slice(), kin: Object.assign({}, built.kin || {}) };
+            /* THE WOVEN ROW (Loom directive 2026-08-25). The shell ships the
+             * generated class loom as a URL-LESS pool row, so buildSpiralSet's
+             * string reader skipped it by design; loomRowsOf is the read that
+             * takes it. It LEADS the ring - it is the very spiral the shell's
+             * own washes wear - and its id joins the set so it can stand as a
+             * decoy on a gif question. The emitter below unwraps ring rows. */
+            if (typeof spirals.loomRowsOf === 'function') {
+              try {
+                const woven = (spirals.loomRowsOf(spiralPool()) || [])[0] || null;
+                if (woven && woven.id && woven.params) {
+                  loomSpiralRow = woven;
+                  loomParamsById.set(woven.id, woven.params);
+                  spiralSet.ring.unshift(woven);
+                  if (spiralSet.set.indexOf(woven.id) < 0) spiralSet.set.push(woven.id);
+                  spiralSet.kin[woven.id] = 'loom';
+                }
+              } catch (e) { /* the woven row is a nicety; the gif ring stands */ }
+            }
             if (typeof spirals.preloadSpirals === 'function') {
-              try { spirals.preloadSpirals(spiralSet.set); } catch (e) { /* best effort */ }
+              // 'loom:' ids are params hashes, not fetchable urls - never Image.src them
+              try { spirals.preloadSpirals(spiralSet.set.filter((u) => !isLoomId(u))); } catch (e) { /* best effort */ }
             }
           }
         }
@@ -2464,6 +2593,7 @@ export default {
         pool = null;
         live = null;
         optEls = [];
+        payoutEl = null;               // removed with the stage below
         try { ctx.root.textContent = ''; } catch (e) { /* noop */ }
         if (liveClass === instance) liveClass = null;
       },

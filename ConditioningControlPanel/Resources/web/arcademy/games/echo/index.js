@@ -1256,9 +1256,46 @@ export default {
      * indistinguishable. Hover / focus / press clear it as well, but that half
      * is CSS (style.js) because a pointer is not a game state.
      * ==================================================================== */
+    /* THE TRIGGER FLASH (owner, 2026-08-25). Desktop reads a frosted word by
+     * hovering; a finger cannot hover, so EVERY press - refused and locked taps
+     * included - flashes the pad's word for FLASH_MS. The flash OWNS the veil
+     * while it runs: `flashOn` gates setVeil so a shorter state hold (a 130ms
+     * `pressed`, say) cannot re-frost the word mid-read, and the restore rides
+     * the pause-aware timer registry like every other beat. A pad that is in a
+     * non-idle state when the flash expires is left alone - that state already
+     * unveils, and its own idle restore re-frosts (padState's timer). */
+    const flashTimers = new Map();      // pad index -> the timer that re-frosts
+    const flashOn = new Set();          // pads whose word a press is showing
+    function flashWord(i, ms) {
+      const pad = padEls[i];
+      if (!pad) return;
+      const dur = Number(ms) > 0 ? Number(ms)
+        : (reduced ? PLAYTEST.FLASH_MS_REDUCED : PLAYTEST.FLASH_MS);
+      const prev = flashTimers.get(i);
+      if (prev) clearTimer(prev);
+      flashOn.add(i);
+      setVeil(pad, false);
+      flashTimers.set(i, after(dur, () => {
+        flashTimers.delete(i);
+        flashOn.delete(i);
+        const p = padEls[i];
+        if (p && p.getAttribute('data-state') === 'idle') setVeil(p, true);
+      }));
+    }
+    function clearFlashes() {
+      for (const id of Array.from(flashTimers.values())) clearTimer(id);
+      flashTimers.clear();
+      flashOn.clear();
+    }
     function setVeil(pad, on) {
       if (!pad) return;
-      try { pad.setAttribute('data-veil', on ? 'on' : 'off'); } catch (e) { /* noop */ }
+      let want = !!on;
+      if (want) {
+        /* A live flash refuses the frost - whoever asked (a state hold ending,
+         * a re-deal) the player is still owed the rest of the read. */
+        try { if (flashOn.has(Number(pad.getAttribute('data-pad')))) want = false; } catch (e) { /* noop */ }
+      }
+      try { pad.setAttribute('data-veil', want ? 'on' : 'off'); } catch (e) { /* noop */ }
     }
     function padState(i, state, holdMs) {
       const pad = padEls[i];
@@ -1282,6 +1319,7 @@ export default {
     function clearPads() {
       for (const id of Array.from(padTimers.values())) clearTimer(id);
       padTimers.clear();
+      clearFlashes();                   // a fresh deal never inherits a live flash
       for (const pad of padEls) {
         if (!pad) continue;
         pad.setAttribute('data-state', 'idle');
@@ -1328,6 +1366,10 @@ export default {
      *  with no sensory echo is a broken slot handle) - but it moves nothing. */
     function press(i, how) {
       if (dead || paused || ended) return;
+      /* THE FLASH rides the ONE press funnel, refused taps included: on touch
+       * the press IS the hover, and even a locked tap during LISTEN answers by
+       * showing you what that pad says (the tell you were owed anyway). */
+      flashWord(i);
       if (!inputOpen) {
         padState(i, 'pressed', reduced ? 90 : 130);
         tone(PAD_SFX, 0.16, pitchFor(i, 0));
@@ -1466,13 +1508,16 @@ export default {
           }
         } else {
           /* At tier 3+ a decoy is indistinguishable from a real step, and that
-           * includes its trigger: a pad that sounded silent would be a free tell. */
-          padVoice(step.pad, 0.34, pitchFor(step.pad, ratchet));
+           * includes its trigger: a pad that sounded silent would be a free tell.
+           * (Level matches the real step below - always.) */
+          padVoice(step.pad, 0.55, pitchFor(step.pad, ratchet));
         }
         deck('casino', 'padLit', step.pad, i, round.len);
       } else {
         padState(step.pad, 'lit', lit);
-        padVoice(step.pad, 0.34, pitchFor(step.pad, ratchet));
+        /* .55, was .34 (2026-08-25, "no sound in Echo"): the note is the second
+         * half of the SIGNAL, not a garnish - it plays at signal level. */
+        padVoice(step.pad, 0.55, pitchFor(step.pad, ratchet));
         /* THE STRIP DURING LISTEN: the room fills the dots as it plays, so the
          * player can see how much of the sequence is still coming. */
         stepFillSet(step.index, 'on');
@@ -1610,7 +1655,8 @@ export default {
         bestStreak = Math.max(bestStreak, pressStreak);
         ratchet = Math.min(PLAYTEST.RATCHET_CAP, ratchet + 1);
         padState(i, 'pressed', reduced ? 140 : 200);
-        padVoice(i, 0.42, pitchFor(i, ratchet));
+        /* .65, was .42 (2026-08-25): your own note answers you at full voice. */
+        padVoice(i, 0.65, pitchFor(i, ratchet));
         /* The soft tick: the note is the melody, this is the "yes". */
         tone(TICK_SFX, 0.22, 1);
         /* THE DOT the player just earned. */
@@ -2266,6 +2312,8 @@ export default {
         onResize = null;
         fitPending = 0;
         padTimers.clear();
+        flashTimers.clear();
+        flashOn.clear();
         padEls.length = 0;
         stepEls.length = 0;
         stepFill.length = 0;

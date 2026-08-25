@@ -50,6 +50,7 @@ import {
   ASSEMBLE_STAGGER_MS, CLAIM_TIMEOUT_MS, POOL_OVERPROVISION, DISCRETE_STEP_MS,
   DENSITY_LEVELS, DENSITY_HARD_CAP, DENSITY_COARSE_CAP,
 } from './constants.js';
+import { makeRng } from '../../core/rng.js';
 import { createBoard, paintLook, isVideoUrl, isAnimatedUrl } from './board.js';
 import { createHud } from './hud.js';
 import { createTrickster } from './trickster.js';
@@ -182,6 +183,8 @@ export default {
     let bellFind = finalBellFindForTier(1);
     let reduced = false;
     let coarse = false;
+    let touch = false;            // coarse probe OR ctx.platform.isTouch
+    let classSeed = 'lf';         // spec.seed, for the per-round rotation streams
 
     let board = null;
     let hud = null;
@@ -846,6 +849,53 @@ export default {
       return moved;
     }
 
+    /**
+     * PER-ROUND TARGET ROTATION (owner 2026-08-25): a NEW target look every
+     * round. The class PROMOTES a different tile that is already on the wall -
+     * a fresh grad+hue+url for free, zero provider draws, zero new decoders
+     * (the look is already dealt and budgeted).
+     *
+     * DETERMINISM: the draw rides a FRESH per-round stream
+     * (seed|lf-target|round - the decks' append-only per-tag makeRng idiom).
+     * It NEVER consumes ctx.rng: finds are player-paced, so a shared-stream
+     * draw here would shift every downstream seeded choice on a retake.
+     * assignWarm re-keys the near-twins off the SAME round stream, so the
+     * whole rotation is one self-contained draw.
+     *
+     * The OLD target's look stays on the wall as a red herring - intended;
+     * the re-brief card (ceremony tail below) is the fairness guarantee.
+     * TIER4_MIDHUNT_RELOCATE stays seat-only: it calls relocate(), never this.
+     */
+    function rotateTarget(round) {
+      if (!board) return false;
+      const r = makeRng(classSeed + '|lf-target|' + round);
+      const old = board.targetTile();
+      // candidates: a real look to memorise - never the outgoing target, never
+      // a warm twin (its look is a tease of the OLD target), never the bundled
+      // glyph floor; fall back to any other tile on a bare board
+      let cands = board.tiles.filter((tile) => tile !== old && !tile.warm
+        && tile.url && !wearsPlaceholder(tile));
+      if (!cands.length) cands = board.tiles.filter((tile) => tile !== old);
+      if (!cands.length) return false;
+      const pick = cands[Math.floor(r() * cands.length)];
+      board.setTarget(pick);
+      pick.warm = false;             // setTarget marks, it never un-warms - and
+                                     // a target that is warm would tease, not find
+      // Near-twins re-key to the NEW look, seeded off the round stream. On
+      // touch the strong-twin repaint is capped and staggered so the ceremony
+      // tail never lands on a decode stampede (paintDelayMs = board.js seam).
+      board.assignWarm({
+        share: dials.nearTwinShare,
+        rng: r,
+        urlCap: touch ? Math.min(2, PLAYTEST.NEAR_TWIN_URL_CAP) : undefined,
+        paintDelayMs: touch ? 240 : 0,
+      });
+      // THE FUNNEL: refreshCards repaints the chip AND any live peek/spot card
+      // and the howto polaroid - never setTargetArt alone.
+      if (hud) hud.refreshCards(targetLook());
+      return true;
+    }
+
     /* ------------------------------------------------------------- how-to */
     /** Tiers this player has already had the rules sheet for (persisted). */
     function howtoSeenTiers() {
@@ -1162,10 +1212,31 @@ export default {
         if (phase === 'done') return;
         if (hud) hud.hideSpot();
         if (finds >= findsTarget) { finish(true); return; }
-        relocate();
-        // the churn resumes unless the board has already relented
-        if (!clutchOn) churnTimer = timers.every(dials.swapMs, () => { if (!halted) noiseSwap(); });
-        beginHunt();
+        /* PER-ROUND ROTATION (owner 2026-08-25): rotate the LOOK, re-brief,
+           THEN relocate the seat under the collapse - the same fake-out as the
+           opening briefing, so the player never sees where the new look lands.
+           The re-brief runs ON the clock exactly like the ceremony it extends
+           (the opening briefing is off the clock only because the clock has
+           not started yet; mid-class there is no pause to borrow). phase stays
+           'ceremony' through it: clicks bump, the trickster holds, the hover
+           tell is silent, and dressBoard's late-target guard stays shut. The
+           board stays dimmed and frozen from the ceremony; beginHunt() lifts
+           both. */
+        rotateTarget(finds);
+        if (hud) hud.showBriefing(targetLook(), t('lf_rebrief', 'New target. Memorize her.'));
+        const holdMs = reduced ? 700 : Math.min(Math.round(dials.previewSec * 1000), 1400);
+        timers.after(holdMs, () => {
+          if (phase === 'done') return;
+          if (hud) hud.collapseBriefing();
+          relocate();
+          timers.after(reduced ? 60 : 420, () => {
+            if (phase === 'done') return;
+            if (hud) hud.hideBriefing();
+            // the churn resumes unless the board has already relented
+            if (!clutchOn) churnTimer = timers.every(dials.swapMs, () => { if (!halted) noiseSwap(); });
+            beginHunt();
+          });
+        });
       });
     }
 
@@ -1245,7 +1316,9 @@ export default {
       stopEffects();
       if (trickster) trickster.stop();
       if (casino) { casino.stop(); casino.dimOut(); }
-      if (hud) { hud.hideSpot(); hud.hidePeek(); hud.dim(false); hud.setClock(zen ? null : secLeft()); }
+      // hideBriefing: the bell can land mid-RE-BRIEF (per-round rotation) and
+      // killAll() has just eaten the timer that would have dismissed the card
+      if (hud) { hud.hideSpot(); hud.hidePeek(); hud.hideBriefing(); hud.dim(false); hud.setClock(zen ? null : secLeft()); }
       if (board) board.freeze(true);
 
       const peeks = peeksNow();
@@ -1338,6 +1411,8 @@ export default {
         zen = !!(ctx.settings && ctx.settings.lf_zen);
         reduced = probeReduced();
         coarse = probeCoarse();
+        touch = coarse || !!(ctx.platform && ctx.platform.isTouch);
+        classSeed = String(spec.seed || 'lf');
         density = effectiveDensity();
 
         injectStyles();

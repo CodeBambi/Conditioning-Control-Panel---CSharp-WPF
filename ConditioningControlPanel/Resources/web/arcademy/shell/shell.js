@@ -242,6 +242,11 @@ export function tierProgress(gameMeta) {
  * resolved pool a class may OFFER as answers (`ctx.spiralPool`). They walk the
  * same rows in the same order at the same weights, so factoring the second one
  * out moved no pick for any seed.
+ *
+ * SINCE 2026-08-25 this gif pool is the FLOOR, not the default: pickClassLoom
+ * (below) weaves the class spiral with the vendored Loom generator, and the
+ * gif pick survives as the wrapper's `href` (the no-WebGL fallback) and as the
+ * whole answer when the generator module is unavailable.
  * -------------------------------------------------------------------------- */
 const SPIRAL_POOL = Object.freeze([
   ['sp6.gif', 34], ['sp7.gif', 26], ['sp1.gif', 9], ['sp2.webp', 9],
@@ -311,6 +316,59 @@ function pickSpiralUrl(seed, settings) {
     return spiralUrlFor(file);
   } catch (e) { return null; }
 }
+
+/* ----------------------------------------------------------------------------
+ * THE GENERATED LOOM (owner directive, 2026-08-25: "on ALL the games the
+ * spirals should be generated with the Loom"). The class spiral is now WOVEN
+ * per class by the vendored Loom generator (engine/loom/seeded.js) instead of
+ * dealt from the gif pool - the engine's wash routes a params WRAPPER to a
+ * live shader canvas (engine/loomWash.js). The wrapper's shape is the page's
+ * contract with every consumer:
+ *
+ *   { loom: true,
+ *     id:     'loom:xxxxxxxx'   stable hash of the normalized params - the
+ *                               LEDGER id a class records and quizzes on,
+ *     params: <loomField v2>,   what the shader draws,
+ *     href:   <bundled gif url> the WebGL floor AND the paintable url for any
+ *                               consumer that needs a static image (a pin, a
+ *                               legacy string-path wash),
+ *     toString() -> id }        so accidental string coercion prints the id
+ *
+ * POLICY: with SAVED user looms (init.settings.loomSpirals), a seeded coin
+ * gives the owner's own hand-woven gifs half the classes and the generator the
+ * other half; with none, every class weaves. The `href` fallback is the OLD
+ * pick (pickSpiralUrl, its own '|spiral' stream, untouched), so a no-WebGL
+ * player sees exactly the class spiral they always saw. All new dice ride the
+ * NEW '|loom' tagged stream - the append-only stream law; nothing existing
+ * moved a pick for any seed. `loomSeed` is the shell's dynamically-imported
+ * {seededParams2, loomId} pair, null when the module refused to load - and
+ * null simply hands the class the old gif pick.
+ */
+function pickClassLoom(seed, settings, loomSeed) {
+  if (!loomSeed || typeof loomSeed.seededParams2 !== 'function'
+    || typeof loomSeed.loomId !== 'function') return null;
+  try {
+    const rng = makeRng(String(seed == null ? '' : seed) + '|loom');
+    const userRows = loomSpiralRows(settings);
+    // the seeded coin: hand-woven half the time, when there is a hand to honour
+    if (userRows.length && rng() < 0.5) {
+      const row = userRows[Math.floor(rng() * userRows.length)];
+      return row && typeof row[0] === 'string' ? row[0] : null;
+    }
+    /* centerpiece:false - the live wash shader draws no centerpiece, and the
+     * quiz thumbnails (composeFrame) must show the same picture the wash wore */
+    const params = loomSeed.seededParams2(rng, { centerpiece: false });
+    const id = loomSeed.loomId(params);
+    return Object.freeze({
+      loom: true, id, params,
+      href: pickSpiralUrl(seed, settings),
+      toString() { return id; },
+    });
+  } catch (e) { return null; }
+}
+/** The generated loom's weight among the class's OFFERED spirals (ctx.spiralPool):
+ *  level with sp6, the pool's current top row - prominent, never dominant. */
+const LOOM_GEN_WEIGHT = 34;
 
 /** Monotonic-if-available clock for the time bar (a wall-clock step must not
  *  teleport the fill; performance.now cannot be moved by the system clock). */
@@ -803,6 +861,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
   const createEngine = await loadOptional('../engine/index.js', 'createEngine', NULL_ENGINE_FACTORY, say);
   const createAssets = await loadOptional('../provider/index.js', 'createAssets', NULL_ASSETS_FACTORY, say);
+
+  /* THE LOOM GENERATOR - optional in exactly the engine's way: a module that
+   * fails to import costs the woven spirals and nothing else (pickClassLoom
+   * answers null and every class wears the old gif pick). Pure math at import
+   * time; the shader only wakes inside the engine when a wash mounts. */
+  let loomSeed = null;
+  try {
+    const m = await import('../engine/loom/seeded.js');
+    if (m && typeof m.seededParams2 === 'function' && typeof m.loomId === 'function') loomSeed = m;
+    else say('engine/loom/seeded.js: no seededParams2/loomId export - gif spirals only');
+  } catch (e) {
+    say('engine/loom/seeded.js import failed (' + ((e && e.message) || e) + ') - gif spirals only');
+  }
 
   let assets;
   try {
@@ -3275,17 +3346,33 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * engine asks per wash, and a fresh answer every time would swap the image
      * mid-fade. Never awaited, never preloaded here - the browser fetches it
      * when the first spiral wash actually mounts, and the CSS conic gradient
-     * is still the fallback if it 404s. */
-    const classSpiral = pickSpiralUrl(seed, src.settings);
+     * is still the fallback if it 404s.
+     * SINCE 2026-08-25 the pick is WOVEN first: pickClassLoom answers the
+     * params wrapper (or a saved user-loom gif url), and only a dead generator
+     * falls back to the old gif pick - see the contract block above. */
+    const classSpiral = pickClassLoom(seed, src.settings, loomSeed)
+      || pickSpiralUrl(seed, src.settings);
     /* THIS ROOM'S CAMERA, for the class-side kit's Resume Slate (`FEED 05 - SYNC`
      * in The Deep End). The DIRECTOR owns the Annex map, so it resolves the tag
      * and the shell keeps no second copy of a table it does not own. */
     const seepFeedTag = seep ? seep.feedTag(cls.gameKey) : '';
     /* The whole pool, frozen, for a class that needs to OFFER spirals rather
      * than only wear one (Instant Recall's SPIRAL question). Same rows, same
-     * order, same weights the pick walks - see spiralPoolRows. */
+     * order, same weights the pick walks - see spiralPoolRows.
+     * PLUS the woven row (2026-08-25): when the class spiral is a generated
+     * loom, its wrapper rides the pool tail as {loom:true, id, params, href,
+     * weight} - deliberately with NO `url` key, so a consumer that normalises
+     * rows to string urls (Instant Recall's rowsOf today) skips it cleanly
+     * instead of trying to paint 'loom:...' as an image. A loom-aware consumer
+     * reads `row.loom` and takes id/params/href whole. */
     const spiralPool = Object.freeze(spiralPoolRows(src.settings)
-      .map((r) => Object.freeze({ url: r.url, weight: r.weight })));
+      .map((r) => Object.freeze({ url: r.url, weight: r.weight }))
+      .concat((classSpiral && typeof classSpiral === 'object' && classSpiral.loom === true)
+        ? [Object.freeze({
+          loom: true, id: classSpiral.id, params: classSpiral.params,
+          href: classSpiral.href, weight: LOOM_GEN_WEIGHT,
+        })]
+        : []));
     let engine;
     try {
       engine = createEngine({
@@ -3430,9 +3517,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       sessionWords,
       // The phrases WITH their whisper clips (frozen rows; see dayTriggers).
       triggers: dayTriggers.slice(),
-      // The class's spiral POOL (frozen `{url, weight}` rows) beside the one
+      // The class's spiral POOL (frozen `{url, weight}` rows, plus at most one
+      // `{loom:true, id, params, href, weight}` woven row) beside the one
       // spiral the engine wears. A class that never reads it is unaffected.
       spiralPool,
+      /* THE CLASS SPIRAL ITSELF, opaque (2026-08-25): the exact value the
+       * engine's spiralUrl() provider answers - a url string, or the loom
+       * wrapper {loom:true, id, params, href}. For a game that paints a STATIC
+       * image of it (The Deep End's pin), `classSpiral.href || classSpiral` is
+       * always a paintable url. Pass it to sustain('wash', {url}) whole -
+       * never stringify the wrapper. Additive; nothing that ignores it moves. */
+      classSpiral,
 
       /* ---- THE EXITS (shell/exits.js) ------------------------------------
        * A shell PRIMITIVE, like peek and ceremonies: a class never mints its

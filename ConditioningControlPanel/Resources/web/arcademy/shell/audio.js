@@ -133,12 +133,22 @@ const SOUNDS = {
      `lift` are Misdirection's trackability tell and the decoy-lid sting; `near` the
      Anomaly near-miss ping (distinct from the long `near_miss` riser); `chime` a
      clean bell for the streak ladders; `shutter` the darkroom's camera click. */
-  pad:       { type: 'triangle', f0: 392, f1: 392, ms: 200, gain: 0.55 },
+  /* ECHO'S SILENCE (2026-08-25, "no sound in Echo on mobile or web"). The pad
+     was a lone 392Hz triangle at gain .55 - after the engine's binaural scaler,
+     the perceptual sqrt and the bus/master law it landed near -25 dBFS, which a
+     phone speaker rounds down to nothing. Three changes, one recipe: gain up to
+     .9 (a game NOTE, not chrome - it may sit at the top of the table), f0 down
+     to 330 (phone speakers roll off less there, and the pitch ladder's 0.67..2x
+     spread keeps every pad inside the mixer's clamp), and a sine OCTAVE layer at
+     .3 - the existing `layer` field, so it rides pitch, mute and duck for free
+     and gives the tone a second partial a tiny speaker can actually find. */
+  pad:       { type: 'triangle', f0: 330, f1: 330, ms: 200, gain: 0.9,
+               layer: { type: 'sine', f0: 660, f1: 660, ms: 200, gain: 0.3 } },
   decoy:     { noise: true, hp: 600,  lp: 3800, ms: 120, gain: 0.6, bits: 5 },
-  tell:      { type: 'sine',     f0: 880, f1: 880, ms: 70,  gain: 0.5 },
+  tell:      { type: 'sine',     f0: 880, f1: 880, ms: 70,  gain: 0.7 },
   lift:      { type: 'triangle', f0: 330, f1: 495, ms: 120, gain: 0.55 },
   near:      { type: 'sine',     f0: 740, f1: 620, ms: 110, gain: 0.55 },
-  chime:     { type: 'sine',     f0: 1046.5, f1: 1046.5, ms: 160, gain: 0.5 },
+  chime:     { type: 'sine',     f0: 1046.5, f1: 1046.5, ms: 160, gain: 0.7 },
   shutter:   { noise: true, hp: 1800, lp: 9000, ms: 40,  gain: 0.7 },
   /* EMI's VOICE, "Blipese" (2026-08-24, emi/vox.js). Two recipes and no third:
      the mascot babbles by firing `emi_blip` many times with a per-blip `pitch`,
