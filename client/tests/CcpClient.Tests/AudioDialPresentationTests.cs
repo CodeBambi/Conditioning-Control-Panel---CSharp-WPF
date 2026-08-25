@@ -95,7 +95,7 @@ public class AudioDialPresentationTests
         (string Name, byte R, byte G, byte B)[] neighbours =
         [
             ("the disabled slider track (Fluent SliderTrackValueFillDisabled)", 0x33, 0x33, 0x33),
-            ("the module panel ground (Border.module, MainWindow.axaml:122)", 0x1B, 0x16, 0x22),
+            ("the module panel ground (Border.module, MainWindow.axaml:122)", 0x1C, 0x1C, 0x35),
         ];
 
         var checks = AudioChecks();

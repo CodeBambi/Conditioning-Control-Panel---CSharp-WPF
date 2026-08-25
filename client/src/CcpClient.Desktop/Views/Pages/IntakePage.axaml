@@ -202,7 +202,7 @@
                        Classes="module-title"
                        VerticalAlignment="Center"
                        AutomationProperties.AutomationId="TrainerCardLevelLine" />
-            <!-- WPF paints the rank title in PinkBrush (MainWindow.xaml:1544); #FFD05CE8 is this
+            <!-- WPF paints the rank title in PinkBrush (MainWindow.xaml:1544); #FFFF1493 is this
                  shell's existing pink for the same brush. -->
             <TextBlock x:Name="TrainerCardRankLine"
                        Classes="module-title"

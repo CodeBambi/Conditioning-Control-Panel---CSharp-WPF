@@ -333,7 +333,7 @@ public class HarnessLeaseGuardTests
     /// all, so this covers every comment in the tree it walks.
     ///
     /// <para>Only a line that STARTS with <c>#</c> is dropped, never from a <c>#</c> found mid-line. That is
-    /// deliberate: <c>capture.ps1</c> is full of <c>'#FFE066FF'</c> colour literals, and a scanner that cut
+    /// deliberate: <c>capture.ps1</c> is full of <c>'#FFFF8FAF'</c> colour literals, and a scanner that cut
     /// at the first <c>#</c> anywhere would silently delete real code after them. The cost is that a trailing
     /// comment on a code line still counts as code, which is the harmless direction.</para>
     /// </summary>

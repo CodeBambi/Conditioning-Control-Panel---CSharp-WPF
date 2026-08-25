@@ -86,8 +86,8 @@ public class ToastPresentationTests
             ("the Warning accent (NotificationService.cs:123)", 0xFF, 0xB3, 0x47),
             ("the Error accent (NotificationService.cs:124)", 0xFF, 0x6B, 0x6B),
             ("the Info accent (NotificationService.cs:125)", 0xFF, 0x69, 0xB4),
-            ("the toast plate (Border.notice, MainWindow.axaml:128)", 0x24, 0x1E, 0x2A),
-            ("the shell ground (MainWindow.axaml:6)", 0x14, 0x10, 0x18),
+            ("the toast plate (Border.notice, MainWindow.axaml:128)", 0x22, 0x22, 0x40),
+            ("the shell ground (MainWindow.axaml:6)", 0x12, 0x12, 0x20),
         ];
 
         var checks = ToastChecks();

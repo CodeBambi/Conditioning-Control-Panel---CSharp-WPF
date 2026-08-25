@@ -68,8 +68,8 @@ public sealed class CompanionTranscriptWindow : Window
         ShowInTaskbar = false;
         CanResize = false;
         // The companion surface's own panel colour (CompanionWindow.axaml chat-bubble ground),
-        // which is what the headed pair reads against the window's #FF141018 ground beneath it.
-        Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x18, 0x22));
+        // which is what the headed pair reads against the window's #FF121220 ground beneath it.
+        Background = new SolidColorBrush(Color.FromRgb(0x1F, 0x1F, 0x3A));
 
         var body = new StackPanel { Spacing = 9 };
         if (turns.Count == 0)
@@ -77,7 +77,7 @@ public sealed class CompanionTranscriptWindow : Window
             body.Children.Add(new TextBlock
             {
                 Text = EmptyCopy,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x9A, 0x8F, 0xA3)),
+                Foreground = new SolidColorBrush(Color.FromRgb(0xA0, 0xA0, 0xBC)),
                 FontStyle = FontStyle.Italic,
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 14, 0, 0),
@@ -103,7 +103,7 @@ public sealed class CompanionTranscriptWindow : Window
             Text = Heading,
             FontSize = 15,
             FontWeight = FontWeight.SemiBold,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xE0, 0x66, 0xFF)),
+            Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x8F, 0xAF)),
             [AutomationProperties.AutomationIdProperty] = "TranscriptHeading",
         };
         Grid.SetRow(heading, 0);
@@ -122,7 +122,7 @@ public sealed class CompanionTranscriptWindow : Window
         var note = new TextBlock
         {
             Text = StorageNote,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x6B, 0x5B, 0x73)),
+            Foreground = new SolidColorBrush(Color.FromRgb(0x7A, 0x7A, 0x94)),
             FontSize = 11,
             TextWrapping = TextWrapping.Wrap,
             [AutomationProperties.AutomationIdProperty] = "TranscriptNote",
@@ -152,7 +152,7 @@ public sealed class CompanionTranscriptWindow : Window
                     FontWeight = FontWeight.Bold,
                     Foreground = new SolidColorBrush(mine
                         ? Color.FromRgb(0x8F, 0xB4, 0xD9)
-                        : Color.FromRgb(0xE0, 0x66, 0xFF)),
+                        : Color.FromRgb(0xFF, 0x8F, 0xAF)),
                 },
                 new TextBlock
                 {

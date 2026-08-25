@@ -15,73 +15,113 @@
     capability and is NOT built here; this is the structure that makes it a small feature instead
     of a second sweep.
 
-    ============================ THE VALUES, AND WHAT IS NOT DECIDED HERE ============================
-    Every colour below carries the port's CURRENT measured value, and beside it the shipping
-    product's value for the same role. They are not the same palette: the port is violet-tinted,
-    upstream is navy-and-pink. This file does not change that, because the conversion that
-    populated it was mechanical and value-preserving - nine files read these exact bytes back off
-    real pixels or real markup (client/tools/verify/checks.json, RackPresentationTests,
-    TrainerCardTests, TrainerCardRecordPresentationTests, CompanionPrivacyPresentationTests,
-    NavigationShellHeadlessTests and their siblings), and a sweep that recoloured while it
-    tokenised would have been two changes wearing one commit.
+    ================================ THE VALUES ARE UPSTREAM'S ================================
+    The port used to be violet-tinted where the shipping product is navy-and-pink, and the owner's
+    requirement is that the two look the same. As of this file's second revision every colour below
+    is the shipping product's own value for the same role, cited to the line that declares it, and
+    the port's former value is kept beside it so the flip stays reviewable.
 
-    WHAT IT DOES BUY: the palette is now ONE LINE PER ROLE. Flipping the shell onto upstream's
-    palette is editing the values in this block and re-deriving the tolerances in checks.json -
-    a bounded, reviewable change instead of 342 scattered edits.
+    WHY IT LANDED IN TWO COMMITS AND NOT ONE. The sweep that created this file was deliberately
+    value-preserving, because nine files read the port's exact bytes back off real pixels or real
+    markup (client/tools/verify/checks.json, RackPresentationTests, TrainerCardTests,
+    TrainerCardRecordPresentationTests, CompanionPrivacyPresentationTests,
+    NavigationShellHeadlessTests and their siblings). Recolouring while tokenising would have been
+    two changes wearing one commit; the tokens bought the flip, and the flip was one line per role
+    here plus the re-derived tolerances there, instead of 342 scattered edits.
 
-    THE ONE EXCEPTION, and it is the reason this file exists at all: FLUENT'S ACCENT FAMILY at
-    the foot of this file had NO port value to preserve. It resolved from the user's Windows
-    personalisation setting, so the product's checkboxes and sliders were Windows blue in a
-    magenta app AND A DIFFERENT COLOUR ON EVERY MACHINE. There is nothing to conserve in that,
-    so it takes the shipping product's accent verbatim.
+    THE THREE PINKS ARE NOT A GUESS. The seed dictionary's accent ladder is named twice over:
+    Colors.xaml declares PinkColor #FFFF69B4 (:5), DarkPink #FFFF1493 (:6) and PinkButtonHovered
+    #FFFF8FAF (:34), and RefreshThemeAwareElements names the SAME three as accent / dark / light in
+    its own fallbacks (WPF MainWindow/MainWindow.xaml.cs:1565-1567) before rewriting those three
+    keys from whatever the active mod supplies (:1655-1657). The port's three accent keys take that
+    triad in that order.
+
+    =============== WHAT THIS FILE MATCHES, AND WHAT IT MEASURABLY DOES NOT ===============
+    MEASURED 2026-08-25, headed, on the shipping product built from this repository and run against
+    a throwaway CCP_USERDATA_DIR so no mod but the shipping default was installed (its own selector
+    read "CCP Default", its mod chooser read "Installed"). Exact-hex counts over the whole 2735x1650
+    window:
+
+      #1C1C35  2.86%  and  #222240  9.53%   - PanelBg and ElevatedSurface, THIS FILE'S VALUES,
+                                              twelve per cent of the shipping product's pixels.
+      #08080C 13.39%, #0C0C13 13.30%, #11111A 4.39%, #E84393 2.83%, #B83078 0.17%
+      #121220 73px, #181830 9px, #2E2E4A 23px, #3A3A5C 0, #7A7A94 0, #FFFF1493 0, #FFFF8FAF 0
+
+    THE REASON IS THAT "CCP DEFAULT" IS ITSELF A MOD. Models/BuiltInMods.cs:908-926 declares it with
+    BackgroundColor #08080C, SurfaceColor #0C0C13, PanelColor #11111A, AccentColor #E84393,
+    AccentLightColor #FF6FB5 and AccentDarkColor #B83078, and RefreshThemeAwareElements rewrites the
+    matching keys from it at startup. Resources/Theme/Colors.xaml is therefore the DESIGN-TIME SEED,
+    not the skin a user with no mod sees; the two keys the mod does not supply - PanelBg's neighbour
+    ElevatedSurface, and PanelBg itself at every site that did not follow the rewrite - are the ones
+    that survive at their seed value, which is exactly what the counts above show.
+
+    SO THIS FILE TARGETS THE SEED DICTIONARY, DELIBERATELY AND ON AN OWNER-LEVEL DECISION, and the
+    gap is recorded rather than closed. Closing it is not a value swap: PanelAccent and
+    PanelAccentHover are DERIVED at runtime from the mod's panel colour by LightenColor(.15/.25)
+    (MainWindow.xaml.cs:1611-1612), ElevatedSurface and the three inks are supplied by nothing at
+    all, and a port whose palette followed a mod manifest would be doing mod-driven re-theming -
+    a separate capability this file is shaped for and does not implement. What the flip did buy is
+    the HUE: the port was violet (its ground #FF141018 reads R>G, magenta-cast) and both the seed
+    and the shipping default are blue-black with pink accents. The port's accent is now 47 per
+    channel from the one a user really sees, where the old violet #FFD05CE8 was 85.
+
+    FLUENT'S ACCENT FAMILY at the foot of this file had no port value to preserve in the first
+    place. It resolved from the user's Windows personalisation setting, so the product's checkboxes
+    and sliders were Windows blue in a pink application AND A DIFFERENT COLOUR ON EVERY MACHINE.
+    There is nothing to conserve in that, so it takes the shipping product's accent verbatim.
   -->
 
   <!-- ================================= GROUNDS AND SURFACES ================================= -->
 
   <!-- The application ground: the shell window's own Background, and the page ground behind
-       every card. WPF Resources/Theme/Colors.xaml:9 DarkerBg #FF121220. -->
-  <Color x:Key="DarkerBg">#FF141018</Color>
+       every card. WPF Resources/Theme/Colors.xaml:9 DarkerBg #FF121220. Was #FF141018. -->
+  <Color x:Key="DarkerBg">#FF121220</Color>
 
   <!-- Structural chrome that frames content rather than carrying it: the nav rail, the Studio
        rack, the diagnostic footer, the session action bar.
-       WPF Resources/Theme/Colors.xaml:10 SurfaceBg #FF181830. -->
-  <Color x:Key="SurfaceBg">#FF19141F</Color>
+       WPF Resources/Theme/Colors.xaml:10 SurfaceBg #FF181830. Was #FF19141F. -->
+  <Color x:Key="SurfaceBg">#FF181830</Color>
 
   <!-- A card that carries content: the module panel, the Play hero.
-       WPF Resources/Theme/Colors.xaml:7 PanelBg #FF1C1C35. -->
-  <Color x:Key="PanelBg">#FF1B1622</Color>
+       WPF Resources/Theme/Colors.xaml:7 PanelBg #FF1C1C35. Was #FF1B1622. -->
+  <Color x:Key="PanelBg">#FF1C1C35</Color>
 
-  <!-- A seat a control sits in: a rail door at rest, a companion dial seat. Upstream has no
-       distinct key for this tier - it seats controls on SurfaceBg - so the port keeps its own. -->
-  <Color x:Key="SeatBg">#FF1E1822</Color>
+  <!-- A seat a control sits in: a rail door at rest, a companion dial seat. THE ONE COLOUR BELOW
+       THAT IS NOT A LINE OF UPSTREAM'S, because upstream has no key for this tier - it seats
+       controls on SurfaceBg. The port's own tier is kept (removing it would flatten the rail door
+       onto the rack), and it is DERIVED rather than invented: the arithmetic midpoint of the two
+       upstream tiers it sits between, PanelBg #FF1C1C35 (Colors.xaml:7) and ElevatedSurface
+       #FF222240 (Colors.xaml:71), which is where the port's old value sat in the port's old ramp.
+       Was #FF1E1822. -->
+  <Color x:Key="SeatBg">#FF1F1F3A</Color>
 
   <!-- One step above a panel: a notice, a badge, a hovered rack row.
-       WPF Resources/Theme/Colors.xaml:71 ElevatedSurface #FF222240. -->
-  <Color x:Key="ElevatedSurface">#FF241E2A</Color>
+       WPF Resources/Theme/Colors.xaml:71 ElevatedSurface #FF222240. Was #FF241E2A. -->
+  <Color x:Key="ElevatedSurface">#FF222240</Color>
 
   <!-- The interactive tier: a selected row's fill, a secondary button's face, a progress track.
-       WPF Resources/Theme/Colors.xaml:19 PanelAccent #FF2E2E4A. -->
-  <Color x:Key="PanelAccent">#FF2A2130</Color>
+       WPF Resources/Theme/Colors.xaml:19 PanelAccent #FF2E2E4A. Was #FF2A2130. -->
+  <Color x:Key="PanelAccent">#FF2E2E4A</Color>
 
   <!-- A border at rest, and the hairline between chrome regions.
-       WPF Resources/Theme/Colors.xaml:20 PanelAccentHover #FF3A3A5C. -->
-  <Color x:Key="PanelAccentHover">#FF3A2F3E</Color>
+       WPF Resources/Theme/Colors.xaml:20 PanelAccentHover #FF3A3A5C. Was #FF3A2F3E. -->
+  <Color x:Key="PanelAccentHover">#FF3A3A5C</Color>
 
   <!-- ======================================== INK ======================================== -->
 
   <!-- Primary ink. The single most-pasted literal in the product before this file existed: 102
        sites, 48 of them in StudioPage.axaml alone.
-       WPF Resources/Theme/Colors.xaml:11 TextLight #FFF0F0F5. -->
-  <Color x:Key="TextLight">#FFE8E0EE</Color>
+       WPF Resources/Theme/Colors.xaml:11 TextLight #FFF0F0F5. Was #FFE8E0EE. -->
+  <Color x:Key="TextLight">#FFF0F0F5</Color>
 
   <!-- Secondary ink: description lines, units, hints.
-       WPF Resources/Theme/Colors.xaml:15 TextMuted #FFA0A0BC. -->
-  <Color x:Key="TextMuted">#FF9A8FA3</Color>
+       WPF Resources/Theme/Colors.xaml:15 TextMuted #FFA0A0BC. Was #FF9A8FA3. -->
+  <Color x:Key="TextMuted">#FFA0A0BC</Color>
 
   <!-- Decorative-only, and it stays that way: never carry information in TextDim. Also the
        pointer-over border and the rack's off/armed state dot.
-       WPF Resources/Theme/Colors.xaml:74 TextDim #FF7A7A94. -->
-  <Color x:Key="TextDim">#FF6B5B73</Color>
+       WPF Resources/Theme/Colors.xaml:74 TextDim #FF7A7A94. Was #FF6B5B73. -->
+  <Color x:Key="TextDim">#FF7A7A94</Color>
 
   <!-- NO TOKEN FOR WHITE, and that is a decision rather than an omission. The product paints
        #FFFFFFFF at five sites and they do not share a role: three are ink on an accent fill, one
@@ -92,14 +132,30 @@
 
   <!-- ====================================== ACCENTS ======================================
 
-       THREE accent colours, because the product really paints three, and naming what is there
-       beats inventing a scale nothing uses.
+       THREE accent colours, because the product really paints three - and the seed dictionary
+       declares exactly three too, which is the flip's luckiest fact. RefreshThemeAwareElements
+       reads an accent, a DARK companion and a LIGHT one, and when nothing supplies them it falls
+       back to #FF69B4 / #FF1493 / #FF8FAF (WPF MainWindow/MainWindow.xaml.cs:1565-1567) - the same
+       three Colors.xaml declares at :5, :6 and :34. The keys below are that ladder in that order.
+       They are the SEED's ladder and not the skin a user sees; the measured gap is in the header
+       block above, under WHAT THIS FILE MATCHES.
 
-       For the later mod-re-theme capability: upstream's rewrite targets the key `PinkColor`
-       (WPF MainWindow/MainWindow.xaml.cs:1655), so a mod reaching into this dictionary by that
-       name repaints the Fluent accent and the info toast. The shell's own two accents are
-       separate keys and would need naming in that feature's own mapping - recorded here so that
-       work discovers it from the file rather than from a capture.
+       For the later mod-re-theme capability: upstream's rewrite targets the keys `PinkColor`,
+       `DarkPink` and `PinkButtonHovered` (WPF MainWindow/MainWindow.xaml.cs:1655-1657), so a mod
+       reaching into this dictionary by the first of those names repaints the Fluent accent and the
+       info toast. The shell's own two accents are separate keys HERE - `ShellAccent` is upstream's
+       DarkPink slot and `ShellAccentBright` is its PinkButtonHovered slot - and that mapping is
+       what that feature's own table will need. Recorded here so the work discovers it from the
+       file rather than from a capture.
+
+       AND WHY `ShellAccent` IS NOT SIMPLY `PinkColor`, since upstream's START button really is
+       PinkBrush. Two token keys may hold the same value, but two CHECKS may not: the pop quiz
+       card's question ink is upstream's own COLORREF 0x00B469FF = #FF69B4
+       (Input/Win32InputPresence), it is declared in client/tools/verify/checks.json at tolerance
+       24, and PopQuizCardPresentationTests refuses any other surface's check within that distance
+       - a separation of zero is not fixable by any tolerance. So the shell's CTA livery takes the
+       ladder's DARK step, which is the pink upstream paints on an active or hovered pink surface
+       (WPF Resources/Theme/Controls.xaml:57, :352, :409), and the two stay 85 apart.
   -->
 
   <!-- Upstream's accent, verbatim, and already the port's own value at the info toast
@@ -108,10 +164,12 @@
   <Color x:Key="PinkColor">#FFFF69B4</Color>
 
   <!-- The shell's accent: the session START button's idle livery, the module action rim, the
-       intake gate. WPF's own START is PinkBrush (WPF MainWindow/MainWindow.StartStop.cs:779),
-       so the ROLE matches PinkColor above and only the value diverges.
-       WPF Resources/Theme/Colors.xaml:5 PinkColor #FFFF69B4. -->
-  <Color x:Key="ShellAccent">#FFD05CE8</Color>
+       intake gate, the trainer card's XP fill. WPF's own START is PinkBrush
+       (WPF MainWindow/MainWindow.StartStop.cs:779), so the ROLE is upstream's base accent; the
+       VALUE is the ladder's dark step for the reason stated in the block above.
+       WPF MainWindow/MainWindow.xaml.cs:1566 darkHex #FF1493 = Resources/Theme/Colors.xaml:6
+       DarkPink. Was #FFD05CE8. -->
+  <Color x:Key="ShellAccent">#FFFF1493</Color>
 
   <!-- The bright accent: SELECTION and LIVE. Rail door checked border, rack row selection
        marker, the rack's live state dot.
@@ -122,11 +180,13 @@
        `rack-row-selected-marker` to trip on real pixels. It used to seed MainWindow.axaml, where
        the same literal appeared at three sites; seeding the token is strictly stronger, because
        every present and future surface that selects reads this one key.
-       client/tools/verify/checks.json reads it back as #E066FF. Do not inline it back into a
+       client/tools/verify/checks.json reads it back as #FF8FAF and self-test.ps1 requires the
+       literal on the line below to appear EXACTLY ONCE in this file. Do not inline it back into a
        surface, and do not write the seed value anywhere in this file - the self-test proves its
        own restore by requiring the seed to be absent afterwards.
-       WPF Resources/Theme/Colors.xaml:66 PinkVibrant #FFFF5CA8. -->
-  <Color x:Key="ShellAccentBright">#FFE066FF</Color>
+       WPF MainWindow/MainWindow.xaml.cs:1567 lightHex #FF8FAF = Resources/Theme/Colors.xaml:34
+       PinkButtonHovered. Was #FFE066FF. -->
+  <Color x:Key="ShellAccentBright">#FFFF8FAF</Color>
 
   <!-- The tier-2 / tier-3 entitlement rim and its refusal plate.
        WPF Resources/Theme/Colors.xaml:129 NeonPurple #FFB47BFF - EXACT MATCH. -->

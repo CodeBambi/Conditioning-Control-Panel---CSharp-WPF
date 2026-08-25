@@ -37,14 +37,21 @@ public sealed class TrainerCardRecordPresentationTests : IDisposable
 
     /// <summary>The card ground every "clear" check names (<c>Border.module</c>,
     /// <c>MainWindow.axaml:122</c>).</summary>
-    private static readonly (byte R, byte G, byte B) CardGround = (0x1B, 0x16, 0x22);
+    private static readonly (byte R, byte G, byte B) CardGround = (0x1C, 0x1C, 0x35);
 
-    /// <summary>A status line: <c>page-blurb</c>'s <c>#FFE8E0EE</c> at the award template's local
+    /// <summary>A status line: <c>page-blurb</c>'s <c>#FFF0F0F5</c> at the award template's local
     /// <c>Opacity="0.9"</c>, composited over <see cref="CardGround"/>.</summary>
-    private static readonly (byte R, byte G, byte B) StatusInk = (0xD3, 0xCB, 0xD9);
+    private static readonly (byte R, byte G, byte B) StatusInk = (0xDA, 0xDA, 0xE1);
 
     /// <summary>A row NAME: <c>module-title</c> at no opacity at all.</summary>
-    private static readonly (byte R, byte G, byte B) TitleInk = (0xE8, 0xE0, 0xEE);
+    private static readonly (byte R, byte G, byte B) TitleInk = (0xF0, 0xF0, 0xF5);
+
+    /// <summary>The Studio rack's ground (<c>Border.rack</c>, <c>MainWindow.axaml:117</c>), which is
+    /// upstream's <c>SurfaceBg</c> (WPF <c>Resources/Theme/Colors.xaml:10</c>). It is here as a
+    /// CONSTANT rather than as a literal in the assertion below because the number that separates
+    /// it from the card ground is what sizes the ground tolerance, and that number moved with the
+    /// palette flip - it was 3, and a hard-coded 3 is exactly what went stale.</summary>
+    private static readonly (byte R, byte G, byte B) RackGround = (0x18, 0x18, 0x30);
 
     private readonly string _root = Path.Combine(
         Path.GetTempPath(), "ccp-trainer-card-record-" + Guid.NewGuid().ToString("N"));
@@ -111,7 +118,7 @@ public sealed class TrainerCardRecordPresentationTests : IDisposable
             foreach (var (what, colour) in new (string, (byte R, byte G, byte B))[]
                      {
                          ("an all-black capture", ((byte)0, (byte)0, (byte)0)),
-                         ("the page ground behind the card (#141018)", ((byte)0x14, (byte)0x10, (byte)0x18)),
+                         ("the page ground behind the card (#121220)", ((byte)0x14, (byte)0x10, (byte)0x18)),
                          ("a card that painted its fill and nothing else", CardGround),
                          ("a rectangle of nothing but status ink", StatusInk),
                          ("a rectangle of nothing but title ink", TitleInk),
@@ -161,13 +168,15 @@ public sealed class TrainerCardRecordPresentationTests : IDisposable
     public void TheTwoInksStayTwoDifferentClaims_AndTheGroundAcceptsNoOtherShellColour()
     {
         // TOLERANCE IS THE SIZE OF THE DEFECT IT HIDES, and here the defect has a name. A status
-        // line composites to #D3CBD9 and a row name is #E8E0EE: 21 per channel apart, which is
-        // small for text. At a tolerance of 21 or more the earned state's ROW NAME check would pass
-        // on a band of status ink and the two ink bands would stop being different claims.
+        // line composites to #DADAE1 and a row name is #F0F0F5: 22 per channel apart on the widest
+        // channel, which is small for text. At a tolerance of 22 or more the earned state's ROW
+        // NAME check would pass on a band of status ink and the two ink bands would stop being
+        // different claims. (It was 21 while the ink was #E8E0EE over #1B1622; the palette flip
+        // onto upstream's TextLight #FFF0F0F5 and PanelBg #FF1C1C35 moved it by one.)
         var perChannel = Math.Max(
             Math.Abs(StatusInk.R - TitleInk.R),
             Math.Max(Math.Abs(StatusInk.G - TitleInk.G), Math.Abs(StatusInk.B - TitleInk.B)));
-        Assert.Equal(21, perChannel);
+        Assert.Equal(22, perChannel);
 
         foreach (var check in RecordChecks())
         {
@@ -175,11 +184,16 @@ public sealed class TrainerCardRecordPresentationTests : IDisposable
             if (expected == CardGround)
             {
                 // The trainer-card-ground number for the trainer-card-ground reason: the rack's
-                // #FF19141F is 3 away on its widest channel, so at the rail door's 24 these checks
-                // would pass on a photograph of the Studio rack, and the page ground behind the
-                // card (#141018, the window's Background) is 10 away.
-                Assert.True(check.Tolerance < 3,
-                    $"'{check.Name}' would accept the Studio rack's ground #19141F at tolerance {check.Tolerance}");
+                // ground is a few away on its widest channel, so at the rail door's 24 these checks
+                // would pass on a photograph of the Studio rack. DERIVED, not written down: the
+                // literal 3 that used to sit here was the OLD palette's distance and it went stale
+                // the moment the shell took upstream's values.
+                var toRack = Math.Max(
+                    Math.Abs(CardGround.R - RackGround.R),
+                    Math.Max(Math.Abs(CardGround.G - RackGround.G), Math.Abs(CardGround.B - RackGround.B)));
+                Assert.True(check.Tolerance < toRack,
+                    $"'{check.Name}' would accept the Studio rack's ground #181830 at tolerance "
+                    + $"{check.Tolerance}; the two grounds are only {toRack} apart on their widest channel");
                 continue;
             }
 

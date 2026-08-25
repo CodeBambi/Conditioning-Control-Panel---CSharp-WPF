@@ -252,7 +252,7 @@
          never has to make a failure look unlike a refusal. The port reuses the plate idiom, which
          means the differentiation has to be carried here.
 
-         Amber, not the tier-2 violet #FFB47BFF or the intake's #FFD05CE8: that is
+         Amber, not the tier-2 violet #FFB47BFF or the intake's #FFFF1493: that is
          MessageBoxImage.Warning's own severity signal, moved from a glyph to the rim and the
          headline. The scrim stays TRANSLUCENT for PlayTabView.xaml:247-248's reason — the card
          underneath still reads, so the user can see the thing that failed to open — and slightly
@@ -344,7 +344,7 @@
       <Setter Property="Padding" Value="20,12" />
     </Style>
 
-    <!-- Idle: WPF's PinkBrush, the shell's existing #FFD05CE8 (MainWindow.StartStop.cs:779).
+    <!-- Idle: WPF's PinkBrush, the shell's existing #FFFF1493 (MainWindow.StartStop.cs:779).
          WPF's caption is the literal "▶ START"/"■ STOP" pair built in code, NOT the localized
          btn_start/btn_stop keys (:761-762, :786-787) — the port keeps the literals and drops
          the glyphs, which is the §9 D8 emoji-stripping rule. -->

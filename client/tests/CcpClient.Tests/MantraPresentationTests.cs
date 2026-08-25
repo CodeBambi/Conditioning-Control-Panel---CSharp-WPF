@@ -11,7 +11,11 @@ namespace CcpClient.Tests;
 /// the running game on a real Windows desktop at scale 1.75, taken through a door a user can press,
 /// and checked by <c>CcpVerify</c> against <c>client/tools/verify/checks.json</c>:
 /// <c>mantra-window-fresh-dim</c> scored 0.281 on its own capture, 0.003 on the other state's and
-/// 21/2560250 (0.000) on a capture of the whole dashboard; <c>mantra-window-typed-lit</c> scored
+/// 21/2560250 (0.000) on a capture of the whole dashboard - ALL THREE AT TOLERANCE 12, which is
+/// what that check carried until the palette flip onto upstream's values put PanelAccent #FF2E2E4A
+/// 7/7/6 from the dim ink and forced it to 6. The floor it is pinned against is 0.01, an order of
+/// magnitude under the lowest of those, and the fractions have NOT been re-measured headed at the
+/// new tolerance; <c>mantra-window-typed-lit</c> scored
 /// 0.273 on its own and 0.000 EXACT on both of the others. TWO PAIRS were taken, and the mantra is
 /// drawn at random: the first drew different sentences in the two states ('I am deeply relaxed'
 /// over 2450x473 and 'My mind is open and receptive' over 2450x307), the second drew the same

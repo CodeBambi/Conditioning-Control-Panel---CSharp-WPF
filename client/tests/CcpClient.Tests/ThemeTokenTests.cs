@@ -36,6 +36,20 @@ public class ThemeTokenTests
         Directory.EnumerateFiles(SourceRoot(), "*.axaml", SearchOption.AllDirectories)
             .Where(p => !string.Equals(Path.GetFileName(p), "Ccp.axaml", StringComparison.Ordinal));
 
+    /// <summary>The shipping product's own colour dictionary, read as read-only evidence.</summary>
+    private static string UpstreamThemeFile(string name) =>
+        File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources", "Theme", name));
+
+    /// <summary>Upstream's <c>Resources/Theme/Colors.xaml</c>, key to <c>#AARRGGBB</c>.</summary>
+    private static Dictionary<string, string> UpstreamColours() =>
+        Regex.Matches(UpstreamThemeFile("Colors.xaml"), @"<Color x:Key=""(\w+)"">(#[0-9A-Fa-f]{8})</Color>")
+            .ToDictionary(m => m.Groups[1].Value, m => m.Groups[2].Value.ToUpperInvariant(), StringComparer.Ordinal);
+
+    private static (byte R, byte G, byte B) Rgb(string argb) => (
+        Convert.ToByte(argb.Substring(3, 2), 16),
+        Convert.ToByte(argb.Substring(5, 2), 16),
+        Convert.ToByte(argb.Substring(7, 2), 16));
+
     /// <summary>Every <c>x:Key</c> the token file declares, whatever its type.</summary>
     private static HashSet<string> DeclaredKeys() =>
         [.. Regex.Matches(TokenFile(), @"x:Key=""(\w+)""").Select(m => m.Groups[1].Value)];
@@ -86,7 +100,7 @@ public class ThemeTokenTests
     /// <b>No surface re-pastes a colour the token file already names.</b>
     ///
     /// <para>The guard that makes the sweep stick. Converting 225 literals is worth nothing if the
-    /// next page pastes <c>#FFE8E0EE</c> again — that is precisely how the product arrived at 102
+    /// next page pastes <c>#FFF0F0F5</c> again — that is precisely how the product arrived at 102
     /// copies of one ink — and no compiler, linter or headless frame has any opinion about it.
     /// A colour genuinely new to the product still passes: this only refuses the bytes the token
     /// file has already given a name to.</para>
@@ -206,5 +220,174 @@ public class ThemeTokenTests
             Assert.True(colours.ContainsKey(colourRef.Groups[1].Value),
                 $"brush '{m.Groups[1].Value}' follows '{colourRef.Groups[1].Value}', which no <Color> declares");
         }
+    }
+
+    /// <summary>
+    /// <b>Every ground and every ink is the shipping product's own byte, and the table is
+    /// exhaustive.</b>
+    ///
+    /// <para>This is the fact the palette flip exists for. The port was violet-tinted where the
+    /// shipping product is navy-and-pink, and the owner's requirement is that the two look the
+    /// same; the token layer made that a one-line-per-role edit, and this is what keeps it edited.
+    /// Nothing else in this repository compares the two palettes: the headed manifest pins the
+    /// PORT's bytes, so a token quietly moved back would be re-derived into checks.json by the
+    /// next person and the divergence would simply become the new normal.</para>
+    ///
+    /// <para>The second half is the part that does not rot. A NEW colour token added to the file
+    /// without a decision about where it came from fails here by name, because every declared
+    /// colour must be either in the table below or in the small exception list beside it, and each
+    /// exception carries its own reason.</para>
+    ///
+    /// <para><b>What it does not show.</b> That the values look right, that they contrast, or that
+    /// anything renders. It is a byte comparison between two files.</para>
+    /// </summary>
+    [Fact]
+    public void EveryGroundAndInkCarriesTheShippingProductsOwnValue()
+    {
+        // port key -> the key in WPF Resources/Theme/Colors.xaml it is taken from.
+        var fromUpstream = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["DarkerBg"] = "DarkerBg",                 // Colors.xaml:9
+            ["SurfaceBg"] = "SurfaceBg",               // Colors.xaml:10
+            ["PanelBg"] = "PanelBg",                   // Colors.xaml:7
+            ["ElevatedSurface"] = "ElevatedSurface",   // Colors.xaml:71
+            ["PanelAccent"] = "PanelAccent",           // Colors.xaml:19
+            ["PanelAccentHover"] = "PanelAccentHover", // Colors.xaml:20
+            ["TextLight"] = "TextLight",               // Colors.xaml:11
+            ["TextMuted"] = "TextMuted",               // Colors.xaml:15
+            ["TextDim"] = "TextDim",                   // Colors.xaml:74
+            ["PinkColor"] = "PinkColor",               // Colors.xaml:5
+            ["NeonPurple"] = "NeonPurple",             // Colors.xaml:129
+        };
+
+        // Declared here, with a reason each, because they are NOT a line of upstream's dictionary.
+        var deliberateExceptions = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["SeatBg"] = "upstream has no key for this tier; derived, and pinned by its own fact",
+            ["ShellAccent"] = "upstream's accent DARK step, pinned by the accent-ladder fact",
+            ["ShellAccentBright"] = "upstream's accent LIGHT step, pinned by the accent-ladder fact",
+            ["Danger"] = "upstream builds it in code, MainWindow.StartStop.cs:756 FromRgb(255,107,107)",
+            ["Warning"] = "no upstream equivalent: upstream's failure surface is a MessageBox",
+        };
+
+        var upstream = UpstreamColours();
+        Assert.True(upstream.Count > 50, $"only {upstream.Count} colours read out of upstream's dictionary");
+
+        foreach (var (portKey, upstreamKey) in fromUpstream)
+        {
+            Assert.True(DeclaredColours().TryGetValue(portKey, out var mine),
+                $"the token file no longer declares '{portKey}'");
+            Assert.True(upstream.TryGetValue(upstreamKey, out var theirs),
+                $"WPF Resources/Theme/Colors.xaml no longer declares '{upstreamKey}'");
+            Assert.True(string.Equals(mine, theirs, StringComparison.Ordinal),
+                $"token '{portKey}' is {mine} but the shipping product's '{upstreamKey}' is {theirs} — the two "
+                + "products are supposed to look the same, and this is the whole of that claim");
+        }
+
+        // Exhaustive: Fluent's seven accent keys are shadowed rather than owned, so they are named
+        // by prefix; everything else must be accounted for above.
+        foreach (var key in DeclaredColours().Keys)
+        {
+            if (key.StartsWith("SystemAccentColor", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            Assert.True(fromUpstream.ContainsKey(key) || deliberateExceptions.ContainsKey(key),
+                $"colour token '{key}' is neither taken from upstream's dictionary nor listed as a deliberate "
+                + "exception — a new palette entry is a decision, and undocumented is how the two products drift");
+        }
+    }
+
+    /// <summary>
+    /// <b>The three pinks are upstream's own accent ladder, in upstream's own order.</b>
+    ///
+    /// <para><c>RefreshThemeAwareElements</c> reads an accent, a DARK companion and a LIGHT one
+    /// from the active mod and falls back to a triad of its own when nothing supplies them (WPF
+    /// MainWindow/MainWindow.xaml.cs:1565-1567); those three fallbacks are the same three the seed
+    /// dictionary declares as <c>PinkColor</c>, <c>DarkPink</c> and <c>PinkButtonHovered</c>
+    /// (Colors.xaml:5, :6, :34), which are the keys it then rewrites (:1655-1657). So the port's
+    /// three accent keys are the SEED dictionary's ladder, and this reads it out of the shipping
+    /// source rather than restating it.</para>
+    ///
+    /// <para><b>They are not what a user with no mod sees, and that is measured.</b> "CCP Default"
+    /// is itself a mod (<c>Models/BuiltInMods.cs:908-926</c>) supplying accent <c>#E84393</c>,
+    /// light <c>#FF6FB5</c> and dark <c>#B83078</c>, and a headed capture of the shipping product
+    /// on a throwaway data directory counts <c>#E84393</c> at 2.83% of the window and this file's
+    /// three pinks at 205 px, 0 and 0. Targeting the seed dictionary is the owner-level decision
+    /// this port is executing; the gap is written up on the token file itself.</para>
+    ///
+    /// <para><b>Why ShellAccent is the DARK step and not simply PinkColor</b>, given upstream's
+    /// START button really is <c>PinkBrush</c>: the pop quiz card's question ink is upstream's own
+    /// COLORREF <c>0x00B469FF</c> = <c>#FF69B4</c>, it is declared in
+    /// <c>client/tools/verify/checks.json</c> at tolerance 24, and
+    /// <c>PopQuizCardPresentationTests</c> refuses any other surface's check within that distance.
+    /// A separation of zero is not fixable by any tolerance, so the shell's CTA livery takes the
+    /// ladder's dark step and the two stay 123 apart.</para>
+    /// </summary>
+    [Fact]
+    public void TheThreeAccentsAreTheShippingProductsOwnAccentLadder()
+    {
+        var refresh = File.ReadAllText(
+            Path.Combine(RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+
+        static string Fallback(string source, string getter)
+        {
+            var m = Regex.Match(source, getter + @"\(\)\s*\?\?\s*""(#[0-9A-Fa-f]{6})""");
+            Assert.True(m.Success,
+                $"WPF MainWindow.xaml.cs no longer states a fallback for {getter}() — the accent ladder this "
+                + "palette is derived from has moved and the port's three pinks are now unanchored");
+            return "#FF" + m.Groups[1].Value[1..].ToUpperInvariant();
+        }
+
+        var colours = DeclaredColours();
+        var ladder = new (string Port, string Getter)[]
+        {
+            ("PinkColor", "GetAccentColorHex"),
+            ("ShellAccent", "GetAccentDarkColorHex"),
+            ("ShellAccentBright", "GetAccentLightColorHex"),
+        };
+
+        foreach (var (port, getter) in ladder)
+        {
+            var expected = Fallback(refresh, getter);
+            Assert.True(colours.TryGetValue(port, out var mine), $"the token file no longer declares '{port}'");
+            Assert.True(string.Equals(mine, expected, StringComparison.Ordinal),
+                $"token '{port}' is {mine} but upstream's {getter}() fallback is {expected}");
+        }
+
+        // The ladder is only a ladder if its three rungs are apart: the pop quiz card's ink is the
+        // base, and a shell accent within 24 of it collapses that surface's check.
+        var (br, bg, bb) = Rgb(colours["PinkColor"]);
+        foreach (var key in (string[])["ShellAccent", "ShellAccentBright"])
+        {
+            var (r, g, b) = Rgb(colours[key]);
+            var apart = Math.Max(Math.Abs(br - r), Math.Max(Math.Abs(bg - g), Math.Abs(bb - b)));
+            Assert.True(apart > 24,
+                $"'{key}' is only {apart} from PinkColor on its widest channel; popquiz-card-question-ink is "
+                + "PinkColor at tolerance 24 and PopQuizCardPresentationTests reds on any nearer neighbour");
+        }
+    }
+
+    /// <summary>
+    /// <b>SeatBg is derived, not invented.</b>
+    ///
+    /// <para>It is the one colour in the file that is not a line of the shipping product's
+    /// dictionary, because upstream has no key for the tier — it seats controls straight on
+    /// <c>SurfaceBg</c>. The port's rail door and companion dial seat do sit on their own step, and
+    /// flattening that would put the door on the rack's ground, so the tier is kept and its value
+    /// is the arithmetic midpoint of the two upstream tiers it sits between. A hand-picked
+    /// "roughly right" value here is exactly how a palette drifts back off upstream's one channel
+    /// at a time.</para>
+    /// </summary>
+    [Fact]
+    public void SeatBgIsTheMidpointOfTheTwoUpstreamTiersItSitsBetween()
+    {
+        var colours = DeclaredColours();
+        var (lr, lg, lb) = Rgb(colours["PanelBg"]);
+        var (hr, hg, hb) = Rgb(colours["ElevatedSurface"]);
+        var expected = $"#FF{(lr + hr) / 2:X2}{(lg + hg) / 2:X2}{(lb + hb) / 2:X2}";
+
+        Assert.Equal(expected, colours["SeatBg"]);
     }
 }
