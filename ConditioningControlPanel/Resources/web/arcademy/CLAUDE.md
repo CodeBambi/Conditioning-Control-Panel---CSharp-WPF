@@ -162,6 +162,33 @@ shell/scene.js     THE SCENE CHASSIS: a generalised point-and-click ROOM (the
                    fold that answers FALSE at home). Dumb by construction - it
                    renders a table it was handed and calls back; it owns no
                    store, no bridge, no key and no lexicon row. + scene.css
+                   THE ALIVE LAYER (W2 0825): a DECLARATIVE `fx` table, the
+                   same grammar as `hotspots` and `patches` and the same stage
+                   pixels - `[{kind, view, rect:[x,y,w,h] | circle:{cx,cy,r},
+                   when?, seed?, ...opts}]` - mounted as ONE `.asc-fx` per
+                   view between the plate and the rects,
+                   `pointer-events:none`, riding the scale. Seven kinds, all
+                   generic: `neon` (halo breath + a seeded 120ms stutter every
+                   9-20s), `lamp` (warm radial, .96-1 over 4s), `motes` (THE
+                   one canvas: ~25 edge-masked particles drifting up), `window`
+                   (halo pulse + a seeded headlight pass ~40s), `clock` (a
+                   cream disc over the painted hands + DOM hands on the
+                   player's REAL local time, `now` injectable, re-read every
+                   20s with the seconds carried as a fraction), `seam` (a cold
+                   edge + a floor pool, `when`-gated), `tilt` (2px mouse
+                   parallax, moved on the PAINTING not the slide - the slide's
+                   transform is the zoom's - desktop pointers only).
+                   FOUR LAWS: `.arc-reduced` gets NO LAYER AT ALL (not a paused
+                   one - the nodes are never created); `.arm-lite` keeps the
+                   keyframes and loses the CANVAS; everything pauses on a
+                   hidden tab / blurred window (`.asc-fx-hold` for the
+                   keyframes, every timer and rAF CLEARED) and re-arms on
+                   return; and EVERY TIMER IS OWNED - `fxStats().timers` is 0
+                   after a camera move and after destroy(), which is the one
+                   assertion that can catch an orphan interval in a room the
+                   player walked out of. Test seams: `fxStats`, `fxCount`,
+                   `fxHands`, `fxHold`. An unknown kind is LOGGED, never
+                   thrown - a table is data
                    A ZOOM IS A ZOOM (owner ruling 0825): the apron band belongs
                    to the WIDE shot and FADES OUT on showView(non-wide) (~200ms,
                    `.asc-bar-away`; .arc-reduced cuts; visibility rides the same
@@ -190,6 +217,24 @@ shell/recordsroom.js THE RECORDS OFFICE AS A ROOM (0825), the chassis's first
                    2px/.30 resting rim going away is not something a player can
                    see. Both are OFF under .arc-reduced (and .arm-lite gets no
                    solo ring either - static state only).
+                   THE ROOM'S FX TABLE (W2 0825) is `recordsFx()`, exported
+                   beside the rects and crop-verified on the plate: the sign
+                   [577,169,346,91], the lamp pool [383,433,282,42], the dust
+                   cone [420,300,200,180], the window [52,120,64,291], the
+                   clock {1009,187,r44} with a `faceR` of 19 (the painted hands
+                   reach r16 and the numerals start at r21, so the disc buries
+                   one and leaves the other painted), and - `when:'ajar'` only
+                   - the seam's edge [1180,132,6,444] plus a floor pool
+                   [1107,552,180,148] that runs BELOW the apron line on
+                   purpose, because it is light on a floor and not a rect. The
+                   corkboard's paper flutter is pure CSS in corkboard.css
+                   scoped to `.rr-cork`, animating `rotate` and NOT `transform`
+                   (the slot deals each sheet a rotation and `.look-askew` adds
+                   its own; a `transform` keyframe would snap every sheet
+                   straight on hover). NO AMBIENT BED: `arcademy-sfx` reads no
+                   `loop` and has no per-name stop, so the room asks for none
+                   and says so in a TODO rather than owning an audio node
+                   (trap 18)
                    Narrow caps, the annex's law: the shell keeps the store, the
                    bridge and EMI. AND IT MUST BE TORN DOWN IN clearScreen -
                    the apron is on <body>, so a room left standing leaves a
@@ -204,11 +249,26 @@ shell/deskbook.js  THE BOOK ON THE DESK: a two-page spread mounted over the two
                    page arrows and ArrowLeft/ArrowRight (guarded on an injected
                    isActive(), never Escape - trap 80's lesson), a CSS leaf that
                    turns on the spine with the spread repainting at its midpoint,
-                   and the last spread remembered in `recordsBookPage`. `BOOK` is
-                   a PLACEHOLDER table until the owner's prose lands. The prose
-                   does NOT go through the lexicon (trap 26 caps a row at 96
-                   chars and a paragraph is not a label) - only the chapter tabs
-                   and the two arrows are keyed
+                   and the last spread remembered in `recordsBookPage`. THE PROSE
+                   LANDED (W2 0825): `BOOK` is the owner's approved draft
+                   transcribed VERBATIM - 3 chapters (`story` / `rules` /
+                   `tips`, keeping the three `records_book_ch_*` rows the C#
+                   NeutralLexicon already mirrors), 26 pages, 13 spreads, two
+                   BLANK cream pages (the inside cover's verso and the back)
+                   and the ten house rules as a real `<ol>` whose every item
+                   carries its own `value`, so THE REST opens at six. A page is
+                   `{head, body, list?, blank?}`; `body` is PARAGRAPHS split on
+                   a blank line and painted one `<p>` each. SIX PAGES ARE
+                   CONTINUATIONS with no head: the draft budgeted 90-140 words
+                   a page and the real ceiling at the shipped 19px on a 436x492
+                   rect is nearer 95 with a heading, so four of its pages ran
+                   31-167px past the fore-edge (measured headless on every
+                   spread) and TURN at a paragraph or rule boundary rather than
+                   dropping the type. Every chapter still starts on an EVEN
+                   page so a tab lands on a whole spread. The prose does NOT go
+                   through the lexicon (trap 26 caps a row at 96 chars and a
+                   paragraph is not a label) - only the chapter tabs and the
+                   two arrows are keyed
 shell/idcard.js    THE STUDENT ID: the laminated card in the corner of the
                    campus, and the spotlight it opens (records.js's shape, z 46,
                    veil + key light + placard + Tab trap + one Esc rung above

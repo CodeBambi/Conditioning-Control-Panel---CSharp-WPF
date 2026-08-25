@@ -13,6 +13,10 @@
        ?panel=cards            open the card-wall panel over the wide shot
        ?ajar=1                 the storeroom reveal has fired (door patch + rect)
        ?visits=0               first-ever visit (the 2s tray-only window)
+       ?spread=N               which of the book's spreads is open (0-9)
+       ?reduced=1              force the decoration cut (no fx layer at all)
+       ?lite=1                 the performance rung (fx minus the canvas)
+       ?forcemobile=1          core/device.js's override - the phone rules
 
      The store is core/store.js with NO bridge, which makes it exactly an
      in-memory get/set over a plain object - the same normalizer the shell
@@ -35,12 +39,26 @@
   import { t as lexT } from '../core/lexicon.js';
   import { loadFaceGeometry } from './punchcard.js';
   import { initCorkboard } from './corkboard.js';
+  import { installDeviceClass } from '../core/device.js';
+
+  /* THE PHONE GATE IS BOOT'S JOB and this page has no boot: without it
+     `html.arc-mobile` never lands and a 844x390 shot renders the DESKTOP rules,
+     which is exactly the blind spot CLAUDE.md section 6 exists to close.
+     `?forcemobile=1` still decides - this only makes the answer land. */
+  installDeviceClass();
 
   const q = new URLSearchParams(location.search);
   const wanted = (q.get('view') || 'wide').toLowerCase();
   const wantCards = q.has('panel') && q.get('panel') === 'cards';
   const ajar = q.get('ajar') === '1';
   const visitsParam = q.has('visits') ? Number(q.get('visits')) : 4;
+  const spreadParam = q.has('spread') ? Number(q.get('spread')) : 0;
+  const reduced = q.get('reduced') === '1';
+  const lite = q.get('lite') === '1';
+  /* The shell paints this class; a page with no shell has to paint it itself,
+     or `?reduced=1` would only reach the room's own `reduced` cap and none of
+     the sheets that read `html.arc-reduced`. */
+  if (reduced) { try { document.documentElement.classList.add('arc-reduced'); } catch (e) {} }
 
   const log = (m) => { try { console.log('[rr-demo] ' + m); } catch (e) {} };
 
@@ -69,7 +87,7 @@
       recordsRoomVisits: isFinite(visitsParam) ? visitsParam : 4,
       /* Deliberately BEHIND the live total, so the tray wears the pink tab. */
       recordsRoomSeenStamps: 12,
-      recordsBookPage: 0,
+      recordsBookPage: isFinite(spreadParam) ? spreadParam : 0,
       annexRevealSeen: ajar,
     },
     log,
@@ -100,8 +118,8 @@
     mount: document.body,
     t: lexT,
     log,
-    lite: false,
-    reduced: false,
+    lite,
+    reduced,
     gameKeys: GAME_KEYS,
     gameName,
     punchCard: (k) => store.punchCard(k),
@@ -124,6 +142,7 @@
   document.getElementById('rrdemo-tag').textContent =
     'recordsroom.demo · view=' + wanted + (wantCards ? ' panel=cards' : '')
     + ' ajar=' + (ajar ? '1' : '0') + ' visits=' + visitsParam
+    + ' spread=' + spreadParam + (reduced ? ' reduced' : '') + (lite ? ' lite' : '')
     + ' stamps=' + totalStamps();
 
   if (!room) { log('createRecordsRoom returned null'); }
