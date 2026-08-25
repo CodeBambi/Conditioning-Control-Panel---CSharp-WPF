@@ -2456,6 +2456,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * verb the lab wave owns - which arms b27, the glitch and the wrong
    * channel without adding a word of dialogue.
    * ==================================================================== */
+  /** 'yyyy-mm-dd' as a whole day count. Calendar arithmetic only - the keys
+   *  ARE local dates (trap 8) and never go near a timezone on the way back. */
+  function annexDayNumber(key) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key || ''));
+    if (!m) return 0;
+    return Math.floor(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 86400000);
+  }
+
   function showAnnex() {
     screen = 'annex';
     dismissEndCard();
@@ -2480,6 +2488,32 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       saveAnnex: (patch) => { try { store.merge('annex', patch); } catch (e) { say('annex merge failed'); } },
       liveFile: () => subjectFile(),
       fetchStats: () => requestAnnexStats(),
+      /* THE ONE LIVE THING ON PAPER: nights attended per week for the last
+       * six weeks, oldest first, off the page's own graded `days`. A night
+       * counts once whatever it graded. No rows at all answers [] and the
+       * paper draws nothing - a strip that invents a bar is the one lie this
+       * room does not tell. */
+      attendance: () => {
+        const out = [0, 0, 0, 0, 0, 0];
+        let any = false;
+        try {
+          const today = annexDayNumber(localDate);
+          if (!today) return [];
+          const days = store.get('days') || {};
+          for (const key of Object.keys(days)) {
+            const row = days[key];
+            const classes = (row && row.classes) || null;
+            if (!classes || !Object.keys(classes).length) continue;
+            const n = annexDayNumber(key);
+            if (!n) continue;
+            const back = today - n;
+            if (back < 0 || back > 41) continue;
+            out[5 - Math.floor(back / 7)] += 1;
+            any = true;
+          }
+        } catch (e) { return []; }
+        return any ? out : [];
+      },
       onExit: () => showRecords(),
     });
     if (dom && dom.screen) dom.screen.appendChild(annexPage.root);

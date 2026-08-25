@@ -9,6 +9,18 @@
  * pixels so they ride the same scale for free. Scanlines and every other
  * decorative move live in cams.css and obey trap 36 there; this sheet adds
  * no animation beyond opacity fades, and the lite rung kills those.
+ *
+ * WHAT RIDES THE SCALE, AND WHAT DOES NOT (wave 3). Only the SLIDE rides it:
+ * the art, its hotspots and the descent black. The OS layer, the paper layer,
+ * the drawer and the step-back pill are children of `.al-root` and are sized
+ * in REAL CSS px, because a painting scales fine and 13px type does not. At
+ * 1376x768 the root rect and the stage rect are the same rectangle, so every
+ * number below lands exactly where wave 2 left it; on a phone they are the
+ * phone's own pixels, which is the whole point of the move.
+ *
+ * `.al-narrow` is lab.js's fitStage measuring the ROOT under 700 real px -
+ * the same edge os.js's `aos-cramped` folds on, so the paper and the terminal
+ * never disagree about what a small screen is.
  * ==========================================================================*/
 
 .al-root {
@@ -90,10 +102,12 @@
 
 /* ------------------------------ back pill ------------------------------- */
 
-/* z 9 is above EVERY overlay this stage mints (paper 6, the OS 7, descent 8):
+/* z 9 is above EVERY overlay this room mints (paper 6, the OS 7, descent 8):
    the way out of a close-up may never be painted over by what the close-up
    opened - the OS layer's own backdrop used to swallow both the pixels and
-   the click. */
+   the click. It is a child of the ROOT now, beside those layers rather than
+   inside the slide, which is also what stopped it being multiplied down to a
+   4px pill on a phone. */
 .al-back {
   position: absolute;
   z-index: 9;
@@ -126,7 +140,39 @@
 .al-descent.is-out { opacity: 0; pointer-events: none; }
 .arc-reduced .al-descent, .al-lite .al-descent { transition: none; }
 
-/* ------------------------------ papers ---------------------------------- */
+/* ============================== THE PAPER ===============================
+ * THE MATERIAL KIT (wave 2, Plate 2). A document on paper is a document plus
+ * its MOUNTS: a photo under a drawn paperclip, a figure on a stapled strip, a
+ * sticky, a pen note down the margin, and a dog-eared corner that turns the
+ * sheet over. Tokens are the pitch's paper plate, re-declared LOCALLY because
+ * the annex is the one cold room on campus and may not reach for the campus
+ * palette (nothing here touches --pink).
+ *
+ * Two laws the sheet is built around:
+ * - THE HAND IS LOCAL. 'Segoe Print' / 'Comic Sans MS' / cursive, and never a
+ *   remote face (trap 2 - the webview is offline).
+ * - THE MOUNTS HANG OFF THE SHEET, so the SHEET may not clip. The scroll went
+ *   to the layer for exactly that reason: a photo at top:-14px and a sticky at
+ *   left:-18px are both outside the page, which is what makes them objects on
+ *   it rather than pictures in it.
+ * ==================================================================== */
+
+.al-root {
+  --al-paper: #E8DFA8;      /* the sticky's own yellow                       */
+  --al-paper2: #D9D6C4;     /* the sheet                                     */
+  --al-letter: #E4E2D2;     /* letterhead stock, one shade brighter          */
+  --al-ink: #34342A;
+  --al-ink2: #6E6C58;
+  --al-rule: #B4B09A;
+  --al-hl: #F4E36A;         /* highlighter                                   */
+  --al-pen: #2B4C8C;        /* the pen somebody argued in                    */
+  --al-amber: #D9A66A;      /* the one warm pixel downstairs (and the sticky)*/
+  --al-hand: 'Segoe Print', 'Comic Sans MS', cursive;
+}
+
+/* trap 27, locally: this sheet toggles sides with the hidden PROPERTY, and a
+   bare display: on any of these rules would out-rank the user-agent's. */
+.al-paperlayer [hidden], .al-drawerlayer [hidden] { display: none !important; }
 
 .al-paperlayer {
   position: absolute;
@@ -135,46 +181,256 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: auto;              /* the LAYER scrolls; the sheet never clips   */
+  padding: 30px 24px 34px;
   background: rgba(4, 7, 8, 0.72);
 }
 .al-paper {
   position: relative;
   width: min(560px, 86%);
-  max-height: 86%;
-  overflow: auto;
-  background: #D9D6C4;
-  color: #34342A;
+  margin: auto;
+  flex: none;
+  background: var(--al-paper2);
+  color: var(--al-ink);
   font-family: 'Consolas', 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.5;
-  padding: 26px 30px 30px;
+  padding: 26px 30px 34px;
   box-shadow: 0 14px 50px rgba(0, 0, 0, 0.65);
+  transform: rotate(-0.6deg);
+  transition: transform 170ms ease, opacity 170ms ease;
 }
-.al-paper-head {
-  border-bottom: 1px solid #B4B09A;
-  padding-bottom: 10px;
+.al-paper.is-letter { background: var(--al-letter); }
+.al-paper.is-turning { opacity: 0.1; transform: rotate(-0.6deg) scaleX(0.84); }
+.arc-reduced .al-paper, .al-lite .al-paper { transition: none; }
+
+/* the letterhead row: what it is on the left, where you are on the right */
+.al-lh {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid var(--al-rule);
+  padding-bottom: 8px;
   margin-bottom: 12px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: #4A4A3C;
+  text-transform: uppercase;
+}
+.al-lh-n { flex: none; opacity: 0.8; }
+/* the page mark and the photograph both want the top right corner, and the
+   photograph was pinned there first */
+.al-paper.has-photo .al-lh { padding-right: 124px; }
+
+.al-paper-head {
+  padding-bottom: 10px;
+  margin-bottom: 10px;
   white-space: pre-wrap;
   letter-spacing: 0.04em;
-  color: #4A4A3C;
+  color: var(--al-ink2);
 }
-.al-paper-body { white-space: pre-wrap; }
+.al-paper-body { margin: 0; }
+.al-p { margin: 0 0 10px; }
+.al-backside .al-p { margin: 0 0 10px; color: #43433A; }
 .al-paper-x {
   position: absolute;
   top: 8px;
   right: 10px;
   background: none;
   border: none;
-  color: #6E6C58;
+  color: var(--al-ink2);
   font: inherit;
   font-size: 15px;
   cursor: pointer;
+  z-index: 4;
 }
-.al-paper-x:hover, .al-paper-x:focus-visible { color: #34342A; outline: none; }
+.al-paper-x:hover, .al-paper-x:focus-visible { color: var(--al-ink); outline: none; }
+
+/* THE TWO MARKS. Yellow band for a keyword, blue underline for the two or
+   three words somebody on the floor disagreed with. The band is a gradient
+   so it sits BEHIND the ink the way a highlighter does, short of the
+   ascenders and descenders. */
+.al-mark {
+  background: linear-gradient(transparent 12%, var(--al-hl) 12% 88%, transparent 88%);
+  color: var(--al-ink);
+  padding: 0 1px;
+}
+.al-pen {
+  text-decoration: none;
+  border-bottom: 2px solid var(--al-pen);
+}
+
+/* ------------------------------ the mounts ------------------------------ */
+
+/* 'clip': the photograph, printed small, held by a drawn paperclip */
+.al-photo {
+  position: absolute;
+  top: -14px;
+  right: 22px;
+  width: 118px;
+  padding: 6px 6px 10px;
+  background: #F2F0E4;
+  box-shadow: 2px 4px 10px rgba(0, 0, 0, 0.4);
+  transform: rotate(4deg);
+  z-index: 3;
+}
+.al-photo-im {
+  height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #EBE8D6;
+  border: 1px solid #D3CFBA;
+}
+.al-photo .al-sil { margin: 0; }
+.al-photo .al-sil-eye { fill: #F2F0E4; }
+.al-photo-cap {
+  display: block;
+  margin-top: 5px;
+  text-align: center;
+  font-family: var(--al-hand);
+  font-size: 12px;
+  color: #4A4430;
+}
+.al-clip {
+  position: absolute;
+  top: -11px;
+  left: 14px;
+  width: 12px;
+  height: 30px;
+  border: 2.5px solid #8A8F92;
+  border-radius: 6px;
+  border-bottom-color: transparent;
+}
+
+/* 'staple': the figure, cut out and stapled on. Two staples, drawn.
+   A CUTTING IS NARROWER THAN THE PAGE: charts.js draws a 180x80 viewBox and a
+   full-width svg would be 250px tall, which reads as a poster glued over the
+   sheet rather than a strip stapled to it. */
+.al-strip {
+  position: relative;
+  width: 320px;
+  max-width: 100%;
+  margin: 12px -6px 4px;
+  padding: 8px 10px 6px;
+  background: #F4F2E6;
+  border: 1px solid var(--al-rule);
+  transform: rotate(1.2deg);
+}
+.al-strip.al-strip-live { transform: rotate(-1deg); }
+.al-strip::before, .al-strip::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  width: 9px;
+  height: 4px;
+  background: #7A7F82;
+}
+.al-strip::before { left: 14px; transform: rotate(-20deg); }
+.al-strip::after { right: 14px; transform: rotate(15deg); }
+.al-strip-t {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--al-ink2);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.al-strip svg { display: block; width: 100%; height: auto; }
+
+/* 'sticky': the warm one. Same hand as the slip, because it is the same -M */
+.al-sticky {
+  position: absolute;
+  left: -18px;
+  bottom: 60px;
+  width: 116px;
+  padding: 10px 10px 14px;
+  background: var(--al-paper);
+  color: #4A4430;
+  font-family: var(--al-hand);
+  font-size: 13.5px;
+  line-height: 1.2;
+  white-space: pre-line;
+  transform: rotate(-5deg);
+  box-shadow: 2px 3px 8px rgba(0, 0, 0, 0.45);
+  z-index: 3;
+}
+.al-sticky::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 36px;
+  width: 30px;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.35);
+}
+.al-sticky.is-slip {
+  left: auto;
+  right: -16px;
+  bottom: 44px;
+  transform: rotate(4deg);
+}
+
+/* 'margin': a remark in pen, down the right hand side. A MARGIN IS SPACE THE
+   SHEET GIVES UP - `has-margin` widens the page and pays the note a column of
+   its own, because a note laid over the text is a note nobody can read and a
+   note hanging off the paper is a note on the desk. */
+.al-paper.has-margin { width: min(660px, 92%); padding-right: 146px; }
+.al-paper.has-margin .al-photo { right: 158px; }
+.al-margin {
+  position: absolute;
+  right: 14px;
+  top: 120px;
+  width: 118px;
+  font-family: var(--al-hand);
+  font-size: 14px;
+  line-height: 1.15;
+  color: var(--al-pen);
+  transform: rotate(3deg);
+  z-index: 3;
+}
+
+/* THE FLIP: the dog-eared corner and the word for it */
+.al-flip {
+  position: absolute;
+  right: 12px;
+  bottom: 8px;
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  font-family: var(--al-hand);
+  font-size: 13px;
+  color: var(--al-ink2);
+  cursor: pointer;
+  z-index: 4;
+}
+.al-flip::before {
+  content: '';
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: linear-gradient(135deg, transparent 50%, var(--al-rule) 50%);
+}
+.al-flip:hover, .al-flip:focus-visible { color: var(--al-ink); outline: none; }
+/* a sheet with a back owes its corner a row of its own, or the affordance
+   lands on top of whatever the page put at the bottom (the pager) */
+.al-paper.has-back { padding-bottom: 50px; }
+.al-backside { min-height: 92px; }
+/* the back of a sheet carries none of the front's furniture */
+.al-paper.is-back .al-photo,
+.al-paper.is-back .al-sticky,
+.al-paper.is-back .al-margin,
+.al-paper.is-back .al-pager { display: none; }
+.al-paper.is-back.has-margin { width: min(660px, 92%); padding-right: 30px; }
+
+/* THE PHOTO TAKES A COLUMN, so the first paragraph gives one up. Anything
+   further down the page is already clear of it. */
+.al-paper.has-photo .al-paper-body > .al-p:first-child { max-width: 60%; }
 
 /* intake sheet form furniture */
 .al-sheet-row { display: flex; gap: 12px; padding: 3px 0; }
-.al-sheet-row dt { flex: none; width: 150px; color: #6E6C58; }
+.al-sheet-row dt { flex: none; width: 150px; color: var(--al-ink2); }
 .al-sheet-row dd { margin: 0; }
 .al-sheet-stamp {
   display: inline-block;
@@ -188,15 +444,105 @@
   transform: rotate(-3deg);
   opacity: 0.85;
 }
-.al-slip {
-  margin-top: 18px;
-  padding: 10px 12px;
-  background: #EDEBDC;
-  border-top: 1px dashed #B4B09A;
-  font-family: 'Comic Sans MS', 'Segoe Print', cursive;
-  color: #4A4430;
-  white-space: pre-line;
-  transform: rotate(1deg);
+
+/* ============================== THE DRAWER ==============================
+ * Plate 3. The paper twin of the explorer: tab = folder, row = file, sheet =
+ * preview. A LAYER at z 5, under the paper at 6, so a sheet opened from a row
+ * lands ON the drawer and putting it down comes back here.
+ * ==================================================================== */
+
+.al-drawerlayer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: 24px;
+  background: rgba(4, 7, 8, 0.72);
+}
+.al-drawer {
+  position: relative;
+  margin: auto;
+  flex: none;
+  width: min(940px, 92%);
+  padding: 26px 22px 22px;
+  background: #0C1516;
+  border: 1px solid #24312E;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.7);
+}
+.al-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.al-tab {
+  position: relative;
+  padding: 10px 12px 12px;
+  background: #E8E4CF;
+  color: var(--al-ink);
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  border-top: 14px solid #C9C3A2;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+/* the unread edge, and the ONE warm pixel this room allows besides a sticky */
+.al-tab.is-new { border-top-color: var(--al-amber); }
+.al-tab-lab {
+  position: absolute;
+  top: -14px;
+  left: 12px;
+  font-size: 10px;
+  line-height: 14px;
+  letter-spacing: 0.14em;
+  color: #4A4A3C;
+}
+.al-tab-new {
+  position: absolute;
+  top: -14px;
+  right: 10px;
+  font-size: 9px;
+  line-height: 14px;
+  letter-spacing: 0.1em;
+  color: #4A4A3C;
+}
+.al-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  width: 100%;
+  padding: 4px 0;
+  border: none;
+  border-bottom: 1px dotted var(--al-rule);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.al-row:last-child { border-bottom: none; }
+.al-row.is-mute { cursor: default; color: #7B7863; }
+.al-row-t { flex: 1 0 auto; white-space: nowrap; }
+.al-row-n { flex: none; font-style: normal; font-size: 10.5px; color: var(--al-ink2); }
+.al-row-at {
+  flex: none;
+  font-style: normal;
+  font-family: var(--al-hand);
+  font-size: 11px;
+  color: var(--al-pen);
+  opacity: 0.75;
+}
+button.al-row:hover, button.al-row:focus-visible {
+  outline: none;
+  background: rgba(43, 76, 140, 0.09);
+}
+.al-bar-black {
+  display: inline-block;
+  flex: 1 1 auto;
+  height: 12px;
+  background: #141410;
 }
 
 /* dossier pager */
@@ -250,3 +596,127 @@
 }
 .al-osframe.is-zooming { opacity: 0.4; }
 .arc-reduced .al-osframe, .al-lite .al-osframe { transition: none; }
+
+/* ============================== THE PHONE ==============================
+ * Wave 3. `.al-narrow` is the ROOT under 700 real px (lab.js fitStage). The
+ * painted room keeps scaling - it is a painting. Everything that is READ
+ * stops scaling and grows instead:
+ * - THE SHEET FILLS THE WIDTH at ~15px, and the sheet becomes a COLUMN, so
+ *   the mounts that hung off its edges (photo, sticky, margin note) reflow
+ *   INTO it. They stay physical - still clipped, still stapled, still in the
+ *   hand somebody wrote them in - they are just in the column now, because a
+ *   note pinned 18px outside a full-width sheet is a note off the screen.
+ * - THE MARGIN NOTE becomes an inline pen note after the prose, which is what
+ *   a margin is when there is no margin.
+ * - THE DRAWER'S TABS STACK. Three manila columns at 120px each is three
+ *   columns of one word.
+ * - A THUMB IS 40px: every row, tab, pager, pill and corner clears it.
+ * ==================================================================== */
+
+/* the terminal keeps a strip of painted room around it, because the backdrop
+   IS a way out (lab.js's downOnBackdrop) - and room under it for the pill */
+.al-narrow .al-osframe {
+  inset: 6px 6px 60px;
+  border-width: 5px;
+  border-radius: 3px;
+}
+
+/* a sheet taller than the phone scrolls UNDER the pill, so at this width the
+   pill stops being a tint over the paper and becomes a solid control */
+.al-narrow .al-back {
+  left: 12px;
+  bottom: 10px;
+  min-height: 44px;
+  padding: 10px 16px;
+  font-size: 14px;
+  background: #050A09;
+}
+
+/* ------------------------------ the sheet ------------------------------- */
+
+/* the pill is z 9 over every layer, so at this width the layers hand it the
+   bottom strip rather than letting it sit on the last row of the sheet */
+.al-narrow .al-paperlayer { padding: 10px 8px 66px; }
+.al-narrow .al-paper,
+.al-narrow .al-paper.has-margin,
+.al-narrow .al-paper.is-back.has-margin {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  font-size: 15px;
+  padding: 20px 14px 26px;
+  transform: none;
+}
+.al-narrow .al-paper.is-turning { transform: scaleX(0.84); }
+.al-narrow .al-paper.has-back { padding-bottom: 20px; }
+.al-narrow .al-face { min-width: 0; }
+/* the pager and the dog-ear are the last two things in the column, whatever
+   order the page pinned its mounts in */
+.al-narrow .al-flip {
+  position: static;   /* a corner pinned bottom-right lands ON the pager here */
+  order: 8;
+  align-self: flex-end;
+  min-height: 40px;
+  padding: 6px 8px;
+}
+.al-narrow .al-pager { order: 9; }
+
+/* the page mark and the close cross share the top right corner, and at this
+   width the cross is a 40px tap: the letterhead pays it the room */
+.al-narrow .al-lh, .al-narrow .al-paper.has-photo .al-lh {
+  font-size: 12px;
+  padding-right: 38px;
+}
+.al-narrow .al-paper.has-photo .al-paper-body > .al-p:first-child { max-width: none; }
+.al-narrow .al-paper-x {
+  top: 4px;
+  right: 6px;
+  min-width: 40px;
+  min-height: 40px;
+  font-size: 20px;
+}
+
+/* the mounts, reflowed into the column and still on the page */
+.al-narrow .al-photo {
+  position: static;
+  width: 150px;
+  margin: 14px auto 4px;
+  transform: rotate(-1.6deg);
+}
+.al-narrow .al-paper.has-margin .al-photo { right: auto; }
+.al-narrow .al-sticky, .al-narrow .al-sticky.is-slip {
+  position: static;
+  width: auto;
+  max-width: 240px;
+  margin: 14px 0 4px;
+  transform: rotate(-1.4deg);
+}
+.al-narrow .al-margin {
+  position: static;
+  width: auto;
+  margin: 12px 0 4px;
+  font-size: 15px;
+  line-height: 1.3;
+  transform: none;
+}
+.al-narrow .al-strip { width: 100%; margin: 14px 0 6px; }
+.al-narrow .al-backside { min-height: 120px; }
+
+.al-narrow .al-sheet-row { flex-wrap: wrap; gap: 0 12px; padding: 6px 0; }
+.al-narrow .al-sheet-row dt { flex: 1 0 100%; width: auto; font-size: 13px; }
+
+.al-narrow .al-page-btn { min-height: 44px; padding: 6px 14px; }
+
+/* ------------------------------ the drawer ------------------------------ */
+
+.al-narrow .al-drawerlayer { padding: 12px 8px 66px; }
+.al-narrow .al-drawer { width: 100%; padding: 28px 12px 14px; }
+.al-narrow .al-tabs { grid-template-columns: minmax(0, 1fr); gap: 26px; }
+.al-narrow .al-tab { font-size: 13px; padding: 10px 12px 6px; }
+.al-narrow .al-row {
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 0;
+}
+.al-narrow .al-row-t { white-space: normal; }
+.al-narrow .al-row-n, .al-narrow .al-row-at { font-size: 12px; }

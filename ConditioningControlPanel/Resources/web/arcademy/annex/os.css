@@ -168,6 +168,27 @@
   inset: 5px auto 5px 5px;
   width: 0;
 }
+/* the bin: an open-topped box, drawn the same way as the rest */
+.aos-icon[data-app='bin'] .aos-icon-glyph::after {
+  background: none;
+  inset: 6px 10px 4px;
+  border: 2px solid #6E7F7A;
+  border-top: 0;
+}
+.aos-icon { position: relative; }
+.aos-icon-badge {
+  position: absolute;
+  top: 0;
+  right: 12px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 2px;
+  background: #D9A66A;
+  color: #1A1A0E;
+  font-size: 9px;
+  font-weight: bold;
+  line-height: 14px;
+}
 
 /* ------------------------------ windows ---------------------------------- */
 
@@ -220,11 +241,15 @@
   cursor: auto;
 }
 
-/* small containers: windows go full-desk */
+/* small containers: windows go full-frame (the phone block at the foot of
+   this sheet owns the rest of that rung) */
 .aos-cramped .aos-win {
-  inset: 4px 4px 34px 4px !important;
+  inset: 0 0 38px 0 !important;
   width: auto !important;
+  height: auto !important;   /* an over-constrained box drops `bottom`, not `height` */
   min-width: 0;
+  border-width: 0;
+  box-shadow: none;
 }
 
 /* ------------------------------ taskbar ---------------------------------- */
@@ -258,54 +283,434 @@
   white-space: nowrap;
 }
 .aos-bar-btn.is-open { border-color: #10201C #56645F #56645F #10201C; background: #1C2624; }
-.aos-clock { margin-left: auto; color: #8FA39D; padding: 0 6px; font-variant-numeric: tabular-nums; }
+/* the right cluster: what the player has read, what was kept from them, the
+   time. addBarBtn inserts window buttons BEFORE this, so it stays right. */
+.aos-bar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 10px;
+}
+.aos-count { color: #8FA39D; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.aos-count.is-full { color: #E9FFF7; }  /* 26/26: the whole reward, no toast */
+.aos-clock { color: #8FA39D; padding: 0 4px; font-variant-numeric: tabular-nums; }
 
 /* ------------------------------ FILES ------------------------------------ */
+/* The explorer. Three panes and nothing ever replaces anything: the tree
+   keeps the shape of the archive, the list keeps the folder, the preview
+   holds one document and its figures side by side. */
 
-.aos-files { display: flex; gap: 0; height: 100%; min-height: 0; }
-.aos-tree {
-  width: 148px;
-  flex: none;
-  border-right: 1px solid #24312E;
-  padding-right: 8px;
-  margin-right: 10px;
-  overflow: auto;
+.aos-body.aos-flush {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+  cursor: default;
 }
-.aos-folder {
-  display: block;
+
+/* breadcrumb: where you are, and the two things that measure the reading */
+.aos-crumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 4px 8px;
+  background: #1C2624;
+  border-bottom: 1px solid #10201C;
+  font-size: 11.5px;
+  color: #8FA39D;
+}
+/* the stacked explorer's back button. It does not exist on the desktop: the
+   three panes are all on screen there and there is nothing to walk back to. */
+.aos-crumb-back {
+  display: none;
+  align-items: center;
+  flex: none;
+  max-width: 42%;
+  min-height: 40px;
+  margin: -3px 2px -3px -4px;
+  padding: 0 10px 0 6px;
+  background: none;
+  border: none;
+  color: var(--annex-cold, #8FE0CE);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.aos-crumb-back:hover, .aos-crumb-back:focus-visible { color: #DFF3EC; outline: none; }
+.aos-crumb-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aos-crumb-t b { color: var(--annex-cold, #8FE0CE); font-weight: normal; }
+.aos-crumb-sp { margin-left: auto; display: flex; gap: 8px; flex: none; }
+.aos-chip {
+  padding: 1px 7px;
+  border: 1px solid #24312E;
+  background: #0F1918;
+  color: #8FA39D;
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.aos-chip.is-full { color: #E9FFF7; border-color: var(--annex-cold, #8FE0CE); }
+button.aos-chip { cursor: pointer; }
+button.aos-chip:hover, button.aos-chip:focus-visible {
+  border-color: var(--annex-cold, #8FE0CE);
+  color: #DFF3EC;
+  outline: none;
+}
+
+/* Column widths are ARITHMETIC, not taste. The window is 730 wide, so every
+   pixel spent on the two index panes comes straight out of the reading
+   column: 150 + 176 leaves ~410 for the preview, which after its padding,
+   its gutter and a 152px sidecar is ~225px of prose. The pitch's plate says
+   170/250/200, but that plate rendered at 860 (the mockup's .w9 carried a
+   min-width the inline 730 could not beat); at 730 those numbers leave 60px
+   of text, which is not a reading room. */
+.aos-explorer {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 150px 176px minmax(0, 1fr);
+  background: #0F1918;
+}
+
+/* ------------------------------ icons ------------------------------------ */
+/* Drawn, like the desktop glyphs: six shapes, no image assets (trap 2). */
+
+.aos-ico {
+  width: 14px;
+  height: 12px;
+  flex: none;
+  border: 1.5px solid #6E7F7A;
+  background: #16211F;
+  display: inline-block;
+  position: relative;
+}
+.aos-ico.is-txt::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  background: repeating-linear-gradient(180deg, #3E4E4A 0 1px, transparent 1px 3px);
+}
+.aos-ico.is-chart::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  bottom: 2px;
+  height: 5px;
+  background: linear-gradient(90deg,
+    var(--annex-cold, #8FE0CE) 0 2px, transparent 2px 4px,
+    var(--annex-cold, #8FE0CE) 4px 6px, transparent 6px 8px,
+    var(--annex-cold, #8FE0CE) 8px);
+}
+.aos-ico.is-img { background: #2A3A37; border-color: var(--annex-cold, #8FE0CE); }
+.aos-ico.is-aud::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 2px;
+  bottom: 2px;
+  width: 0;
+  border-left: 5px solid var(--annex-cold, #8FE0CE);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+}
+.aos-ico.is-fold { border-color: #D9A66A; background: #2A2418; }
+.aos-ico.is-lock::after {
+  content: '';
+  position: absolute;
+  inset: 3px 4px;
+  border: 1.5px solid #D9A66A;
+}
+
+/* ------------------------------ the tree ---------------------------------- */
+
+.aos-tree { border-right: 1px solid #24312E; padding: 8px 4px; overflow: auto; }
+.aos-frow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   width: 100%;
   text-align: left;
   background: none;
   border: none;
   color: #C8D6D2;
   font: inherit;
-  font-size: 12px;
-  padding: 3px 4px;
+  font-size: 11.5px;
+  padding: 3px 5px;
   cursor: pointer;
   white-space: nowrap;
 }
-.aos-folder:hover, .aos-folder:focus-visible { background: #1A2624; outline: none; }
-.aos-folder.is-sel { background: #1E4A44; color: #DFF3EC; }
-.aos-doclist { flex: 1; min-width: 0; overflow: auto; }
-.aos-docrow {
-  display: block;
+.aos-frow:hover, .aos-frow:focus-visible { background: #1A2624; outline: none; }
+.aos-frow.is-sel { background: #1E4A44; color: #DFF3EC; }
+.aos-frow-t { overflow: hidden; text-overflow: ellipsis; }
+.aos-fcount { margin-left: auto; font-size: 10.5px; color: #8FA39D; }
+.aos-fcount.is-new { color: #D9A66A; }
+
+/* 05. The slot that is never filled: no hover, no press, nothing to open. */
+.aos-frow.is-locked { color: #8FA39D; cursor: default; }
+.aos-frow.is-locked:hover { background: none; }
+.aos-bar-black {
+  display: inline-block;
+  width: 26px;
+  height: 9px;
+  margin-left: 2px;
+  background: #050A09;
+  vertical-align: middle;
+}
+
+/* ------------------------------ the list ---------------------------------- */
+
+.aos-flist { border-right: 1px solid #24312E; padding: 6px 0; overflow: auto; }
+.aos-fitem {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
   width: 100%;
   text-align: left;
   background: none;
   border: none;
   color: var(--annex-cold, #8FE0CE);
   font: inherit;
-  font-size: 12px;
-  padding: 3px 4px;
+  font-size: 11.5px;
+  padding: 3px 6px;
   cursor: pointer;
   white-space: nowrap;
 }
-.aos-docrow:hover, .aos-docrow:focus-visible { background: #1A2624; outline: none; }
-.aos-docrow.is-read { color: #7E948E; }
+.aos-fitem:hover, .aos-fitem:focus-visible { background: #1A2624; outline: none; }
+.aos-fitem.is-sel { background: #1A2624; }
+.aos-fitem.is-read { color: #7E948E; }
+.aos-fitem-t { overflow: hidden; text-overflow: ellipsis; }
+.aos-fmeta { font-size: 10.5px; color: #8FA39D; }
+.aos-newtag {
+  font-style: normal;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: #D9A66A;
+  border: 1px solid #D9A66A;
+  padding: 0 3px;
+  margin-left: 6px;
+}
+.aos-fitem.is-bin { grid-template-columns: 16px 1fr auto; }
 
-/* the missing number is a gap, not a row: nothing renders it, on purpose */
+/* ------------------------------ the preview -------------------------------- */
 
-/* ------------------------------ viewer ------------------------------------ */
+.aos-pv {
+  position: relative;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 152px;
+  gap: 10px;
+  align-content: start;
+  overflow: auto;
+}
+.aos-pv.is-solo { grid-template-columns: minmax(0, 1fr); }
+.aos-pv-empty { grid-column: 1 / -1; color: #8FA39D; }
+/* the pager sits ABOVE the header block, right aligned: laid out beside it
+   the two of them split a column that is already the whole point */
+.aos-pv-head { grid-column: 1 / -1; }
+.aos-pv-head .aos-doc-head { margin-bottom: 0; }
+/* a direct child of the pane now (os.js paintPreview), so it claims the whole
+   row the way the header block above it does - stacked, CSS orders the same
+   node to the bottom as the footer bar */
+.aos-pv-nav {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.aos-pv-pos { font-size: 10.5px; color: #8FA39D; white-space: nowrap; }
+.aos-navbtn {
+  background: #35423F;
+  color: #C8D6D2;
+  border: 2px solid;
+  border-color: #56645F #10201C #10201C #56645F;
+  font: inherit;
+  font-size: 11px;
+  padding: 1px 8px;
+  cursor: pointer;
+}
+.aos-navbtn:disabled { opacity: 0.4; cursor: default; }
+.aos-navbtn:not(:disabled):active { border-color: #10201C #56645F #56645F #10201C; }
+
+/* the skeleton of the document, in body order */
+.aos-tldr {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+  margin-top: -4px;
+}
+.aos-tldr-lab { font-size: 10.5px; letter-spacing: 0.06em; color: #8FA39D; }
+.aos-tldr-chip {
+  font: inherit;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  padding: 1px 6px;
+  border: 1px solid #1E4A44;
+  background: #0C1A18;
+  color: var(--annex-cold, #8FE0CE);
+  cursor: pointer;
+}
+.aos-tldr-chip:hover, .aos-tldr-chip:focus-visible {
+  border-color: var(--annex-cold, #8FE0CE);
+  color: #DFF3EC;
+  outline: none;
+}
+.aos-pv.is-plain .aos-tldr { display: none; }
+
+.aos-pv-body {
+  min-width: 0;
+  color: #C8D6D2;
+  font-size: 12px;
+  line-height: 1.6;
+  user-select: text;
+}
+.aos-pv-body .aos-p { margin: 0 0 9px; white-space: pre-line; }
+.aos-kw {
+  color: #DFF3EC;
+  font-weight: bold;
+  background: rgba(143, 224, 206, 0.10);
+  padding: 0 2px;
+}
+.aos-pen { text-decoration: none; border-bottom: 1px solid #8FA39D; }
+/* skim off: the runs are still there, they just stop shouting. The body is
+   never re-parsed - this is one class on the pane above it. */
+.aos-pv.is-plain .aos-kw { color: inherit; font-weight: normal; background: none; padding: 0; }
+.aos-kw.is-flash { background: #D9A66A; color: #1A1A0E; animation: aos-kwflash 900ms steps(6) 1; }
+@keyframes aos-kwflash { from { background: #D9A66A; } to { background: rgba(143, 224, 206, 0.10); } }
+.arc-reduced .aos-kw.is-flash, .aos-lite .aos-kw.is-flash { animation: none; }
+
+/* ------------------------------ attachments -------------------------------- */
+
+.aos-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.aos-att {
+  border: 1px solid #24312E;
+  background: #0B1514;
+  padding: 6px;
+  cursor: pointer;
+}
+.aos-att:hover { border-color: #1E4A44; }
+.aos-att-t {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 5px;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  color: #8FA39D;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  overflow: hidden;
+}
+.aos-att-tag {
+  margin-left: auto;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 9px;
+  white-space: nowrap;
+}
+.aos-att-cap { font-size: 10.5px; color: #8FA39D; margin-top: 4px; line-height: 1.35; }
+.aos-att .aoc-chart { display: block; width: 100%; height: auto; }
+
+/* expanded: the figure comes forward OVER the sidecar, and the words the
+   figure belongs to do not move a pixel */
+.aos-att.is-open {
+  position: absolute;
+  top: 44px;
+  right: 12px;
+  width: min(420px, 78%);
+  z-index: 3;
+  background: #0A1416;
+  border-color: var(--annex-cold, #8FE0CE);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.7);
+  padding: 8px 10px 10px;
+  cursor: zoom-out;
+}
+.aos-att.is-open .aos-att-cap { font-size: 11.5px; }
+
+.aos-aud { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+.aos-play {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  background: #35423F;
+  border: 2px solid;
+  border-color: #56645F #10201C #10201C #56645F;
+  cursor: pointer;
+  position: relative;
+}
+.aos-play::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  bottom: 2px;
+  width: 0;
+  border-left: 6px solid var(--annex-cold, #8FE0CE);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+}
+.aos-play:active { border-color: #10201C #56645F #56645F #10201C; }
+.aos-aud-bar {
+  flex: 1;
+  height: 8px;
+  background: repeating-linear-gradient(90deg, var(--annex-cold, #8FE0CE) 0 2px, transparent 2px 4px);
+  opacity: 0.5;
+}
+
+.aos-reg-fig { max-width: 260px; margin: 10px 0 4px; cursor: default; }
+
+/* ------------------------------ the scan ---------------------------------- */
+/* A notice photographed off the board: paper, pins, a caption under it. */
+
+.aos-scan {
+  position: relative;
+  background: #E4E2D2;
+  color: #34342A;
+  padding: 18px 18px 16px;
+  margin: 2px 6px 0 2px;
+  transform: rotate(-0.7deg);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.55);
+}
+.aos-scan-txt { font-size: 12px; line-height: 1.5; }
+.aos-scan-txt .aos-p { margin: 0 0 8px; white-space: pre-line; }
+.aos-scan-txt .aos-kw {
+  color: #34342A;
+  background: #F4E36A;
+  font-weight: bold;
+}
+.aos-pv.is-plain .aos-scan-txt .aos-kw { background: none; color: inherit; font-weight: normal; }
+.aos-scan-txt .aos-pen { border-bottom-color: #2B4C8C; }
+.aos-pin {
+  position: absolute;
+  top: 5px;
+  left: 12px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6E6C58;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.aos-pin.is-right { left: auto; right: 12px; }
+.aos-scan-cap {
+  font-size: 10.5px;
+  color: #8FA39D;
+  margin: 8px 2px 0;
+  line-height: 1.35;
+}
+
+/* ------------------------------ headers ----------------------------------- */
+/* Shared by the preview, the bin, the live file and the closed one. */
 
 .aos-doc-head {
   color: #93A6A0;
@@ -315,7 +720,6 @@
   white-space: pre-wrap;
   letter-spacing: 0.03em;
 }
-.aos-doc-body { white-space: pre-wrap; color: #C8D6D2; max-width: 62ch; }
 
 /* ------------------------------ REGISTRY ---------------------------------- */
 
@@ -366,8 +770,181 @@
   letter-spacing: 0.2em;
   transform: rotate(-2deg);
 }
+/* a closed file is not an ongoing one, and it must not look like one: the
+   amber says "live and running", so this stamp is the room's own cold grey */
+.aos-file-stamp.is-closed {
+  border-color: #56645F;
+  color: #93A6A0;
+  transform: rotate(1.5deg);
+}
+.aos-file-foot {
+  margin-top: 14px;
+  padding-top: 8px;
+  border-top: 1px solid #24312E;
+  color: #8FA39D;
+  font-size: 11.5px;
+  white-space: pre-wrap;
+}
 
 /* ------------------------------ TERMINAL ---------------------------------- */
 
 .aos-term { color: var(--annex-cold, #8FE0CE); white-space: pre-wrap; font-size: 12px; }
 .aos-term .aos-term-final { color: #DFF3EC; }
+
+/* ============================== THE PHONE ==============================
+ * Wave 3, Plate 4. `aos-cramped` is os.js's own fit() below 700 REAL px, and
+ * it only became reachable when lab.js took this layer off the 1376x768
+ * stage: inside the stage the width was ~1180 unscaled layout px on every
+ * device, so this whole rung was dead code and 13px type rendered near 4px.
+ *
+ * Three rules the block is built on:
+ * - ONE PANE AT A TIME. The three panes are the same three nodes; `data-pane`
+ *   on the window body says which of them is the one on screen, and the crumb
+ *   back button plus the Esc ladder walk the same three rungs.
+ * - THE PICTURE COMES FIRST. The sidecar becomes a horizontal RAIL above the
+ *   body, so the figure is the first thing on screen rather than the last.
+ * - A THUMB IS 40px. Every row, chip, pager and title button clears it, and
+ *   nothing here is hover-only (the TL;DR chips were always click handlers).
+ * ==================================================================== */
+
+.aos-cramped { font-size: 14px; }
+
+.aos-cramped .aos-title {
+  min-height: 40px;
+  padding: 4px 4px 4px 10px;
+  font-size: 13px;
+  cursor: default;            /* drag is refused when cramped (os.js wireDrag) */
+}
+.aos-cramped .aos-title-x { width: 40px; height: 32px; font-size: 15px; }
+.aos-cramped .aos-body { padding: 12px; }
+
+/* the desk: a large-tap list, not an icon column */
+.aos-cramped .aos-icons { top: 0; left: 0; right: 0; padding: 10px; gap: 8px; }
+.aos-cramped .aos-icon {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: auto;
+  min-height: 52px;
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 14px;
+  background: #0F1918;
+  border-color: #24312E;
+}
+.aos-cramped .aos-icon-glyph { margin: 0; flex: none; width: 30px; height: 26px; }
+.aos-cramped .aos-icon-badge { top: 50%; right: 12px; margin-top: -7px; }
+
+/* the taskbar keeps the two counters; the clock is the pixel it gives up */
+.aos-cramped .aos-bar { height: 38px; gap: 6px; padding: 0 8px; }
+.aos-cramped .aos-bar-btn { max-width: 96px; min-height: 28px; padding: 4px 10px; }
+.aos-cramped .aos-bar-right { gap: 12px; }
+.aos-cramped .aos-count { font-size: 11.5px; }
+.aos-cramped .aos-clock { display: none; }
+
+/* ---- the crumb: back on the first row, the two chips on the second ---- */
+.aos-cramped .aos-crumb { flex-wrap: wrap; row-gap: 6px; padding: 5px 8px; font-size: 12.5px; }
+.aos-cramped .aos-crumb-t { flex: 1 1 auto; min-width: 0; }
+.aos-cramped .aos-crumb-sp { flex: 1 1 100%; margin-left: 0; justify-content: flex-end; }
+.aos-cramped .aos-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+.aos-cramped .aos-flush[data-pane='list'] .aos-crumb-back,
+.aos-cramped .aos-flush[data-pane='doc'] .aos-crumb-back { display: inline-flex; }
+
+/* ---- one pane at a time ---- */
+.aos-cramped .aos-explorer { grid-template-columns: minmax(0, 1fr); }
+.aos-cramped .aos-tree, .aos-cramped .aos-flist { border-right: 0; }
+.aos-cramped .aos-tree { padding: 6px 2px; }
+.aos-cramped .aos-flush[data-pane='tree'] .aos-flist,
+.aos-cramped .aos-flush[data-pane='tree'] .aos-pv,
+.aos-cramped .aos-flush[data-pane='list'] .aos-tree,
+.aos-cramped .aos-flush[data-pane='list'] .aos-pv,
+.aos-cramped .aos-flush[data-pane='doc'] .aos-tree,
+.aos-cramped .aos-flush[data-pane='doc'] .aos-flist { display: none; }
+
+.aos-cramped .aos-frow, .aos-cramped .aos-fitem {
+  min-height: 44px;
+  padding: 6px 10px;
+  gap: 10px;
+  font-size: 14px;
+}
+.aos-cramped .aos-fitem { grid-template-columns: 18px minmax(0, 1fr) auto; }
+.aos-cramped .aos-fcount, .aos-cramped .aos-fmeta { font-size: 12px; }
+.aos-cramped .aos-ico { width: 16px; height: 14px; }
+
+/* ---- the doc pane: head, TL;DR, RAIL, body, and the pager underfoot ---- */
+.aos-cramped .aos-pv {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px 0;
+}
+/* a column that scrolls may not SQUEEZE: the default flex-shrink collapsed
+   the rail to a 14px sliver of empty card borders on a tall document */
+.aos-cramped .aos-pv > * { flex: none; }
+.aos-cramped .aos-pv-head { order: 1; }
+.aos-cramped .aos-tldr { order: 2; margin-top: 0; margin-bottom: 2px; }
+.aos-cramped .aos-side { order: 3; }
+.aos-cramped .aos-pv-body { order: 4; font-size: 14px; padding-bottom: 14px; }
+.aos-cramped .aos-scan-txt { font-size: 14px; }
+.aos-cramped .aos-att-cap, .aos-cramped .aos-scan-cap { font-size: 12px; }
+.aos-cramped .aos-tldr-lab { font-size: 12px; }
+.aos-cramped .aos-tldr-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+/* THE RAIL. A row that scrolls sideways, bled to the pane's own edges so the
+   next card peeks in and says there is more of it. */
+.aos-cramped .aos-side {
+  flex-direction: row;
+  gap: 10px;
+  margin: 2px -12px 10px;
+  padding: 0 12px 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.aos-cramped .aos-att { flex: none; width: 168px; }
+.aos-cramped .aos-att.is-open {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 8px;
+  width: auto;
+  max-height: 76%;
+  overflow: auto;
+}
+
+/* the pager is the footer bar, and it stays underfoot however long the
+   document is: sticky to the bottom of the pane's own scrollport */
+.aos-cramped .aos-pv-nav {
+  order: 5;
+  position: sticky;
+  bottom: 0;
+  margin: auto -12px 0;
+  padding: 6px 12px;
+  min-height: 44px;
+  justify-content: space-between;
+  background: #1C2624;
+  border-top: 1px solid #24312E;
+}
+.aos-cramped .aos-navbtn { min-height: 40px; padding: 4px 14px; font-size: 13px; }
+.aos-cramped .aos-pv-pos { font-size: 12px; }
+
+/* the other four apps: the same thumb floor on everything that is pressed */
+.aos-cramped .aos-btn { min-height: 44px; padding: 6px 18px; }
+.aos-cramped .aos-input { padding: 10px 8px; }
+.aos-cramped .aos-search-form { max-width: none; }
+.aos-cramped .aos-file-row { flex-wrap: wrap; gap: 2px 12px; }
+.aos-cramped .aos-file-row dt { width: auto; flex: 1 0 100%; }
+.aos-cramped .aos-reg-note { max-width: none; }
+.aos-cramped .aos-reg-fig { max-width: none; }
+.aos-cramped .aos-term { font-size: 13px; }
+.aos-cramped .aos-play { width: 26px; height: 26px; }
