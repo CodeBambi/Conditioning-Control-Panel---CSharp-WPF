@@ -68,6 +68,7 @@ namespace ConditioningControlPanel.Features
                 ChkOutline.IsChecked = s.BouncingTextOutline;
                 ChkSecondText.IsChecked = s.BouncingTextSecondText;
                 ChkAlwaysOnTop.IsChecked = s.BouncingTextAlwaysOnTop;
+                Helpers.FontPickerHelper.Populate(CmbFont, s.BouncingTextFont, "Segoe UI");
                 UpdateSwatch();
                 UpdateFixedColorPanel();
             }
@@ -82,6 +83,7 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.BouncingTextOpacity) ||
                 e.PropertyName == nameof(Models.AppSettings.BouncingTextColorMode) ||
                 e.PropertyName == nameof(Models.AppSettings.BouncingTextFixedColor) ||
+                e.PropertyName == nameof(Models.AppSettings.BouncingTextFont) ||
                 e.PropertyName == nameof(Models.AppSettings.BouncingTextFxBreathing) ||
                 e.PropertyName == nameof(Models.AppSettings.BouncingTextFxWobble) ||
                 e.PropertyName == nameof(Models.AppSettings.BouncingTextFxSpin) ||
@@ -161,6 +163,21 @@ namespace ConditioningControlPanel.Features
             s.BouncingTextColorMode = mode;
             App.Settings?.Save();
             UpdateFixedColorPanel();
+            SafeRefresh();
+        }
+
+        // The service re-measures and pushes the family into the live windows on Refresh, so the
+        // pick applies mid-run without a restart (unlike the outline toggle, which swaps element
+        // types).
+        private void CmbFont_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var name = Helpers.FontPickerHelper.SelectedName(CmbFont);
+            if (string.IsNullOrWhiteSpace(name) || s.BouncingTextFont == name) return;
+            s.BouncingTextFont = name;
+            App.Settings?.Save();
             SafeRefresh();
         }
 

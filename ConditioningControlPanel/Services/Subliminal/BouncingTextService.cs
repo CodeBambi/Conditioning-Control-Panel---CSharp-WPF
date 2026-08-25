@@ -53,6 +53,12 @@ public class BouncingTextService : IDisposable
     private const int BASE_FONT_SIZE = 72;
     private int _currentFontSize = BASE_FONT_SIZE;
 
+    /// <summary>
+    /// The font family name the running logos were built/measured with, so Refresh() can spot a
+    /// mid-run change the same way it spots a size change. Empty until Start().
+    /// </summary>
+    private string _currentFont = "";
+
     // Corner hit detection - tolerance in pixels (corners are hard to hit exactly)
     private const double CORNER_TOLERANCE = 15.0;
 
@@ -137,6 +143,7 @@ public class BouncingTextService : IDisposable
 
         // Calculate font size based on settings (50-300% of base)
         _currentFontSize = (int)(BASE_FONT_SIZE * settings.BouncingTextSize / 100.0);
+        _currentFont = settings.BouncingTextFont ?? "Segoe UI";
 
         // Calculate screen bounds
         CalculateScreenBounds(settings.DualMonitorEnabled);
@@ -279,7 +286,9 @@ public class BouncingTextService : IDisposable
     {
         try
         {
-            var typeface = new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
+            var typeface = new Typeface(
+                Helpers.FontPickerHelper.Resolve(App.Settings?.Current?.BouncingTextFont, "Segoe UI"),
+                FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
             // MainWindow can be null during startup/shutdown; GetDpi(null) throws an
             // NRE that the catch below swallows into a noisy [WRN] (#305). Resolve a
             // DPI source that may be null and fall back to 1.0 PixelsPerDip.
@@ -768,6 +777,20 @@ public class BouncingTextService : IDisposable
             }
         }
 
+        // Same shape for the font family: re-measure (the glyph widths change) then push the new
+        // family into every window's visuals. No restart needed - the element type is unchanged.
+        var newFont = settings.BouncingTextFont ?? "Segoe UI";
+        if (!string.Equals(newFont, _currentFont, StringComparison.OrdinalIgnoreCase))
+        {
+            _currentFont = newFont;
+            foreach (var l in _logos)
+                MeasureTextSize(l);
+
+            var family = Helpers.FontPickerHelper.Resolve(newFont, "Segoe UI");
+            foreach (var window in _windows)
+                window.UpdateFontFamily(family);
+        }
+
         // Live opacity
         foreach (var window in _windows)
             window.UpdateOpacity(settings.BouncingTextOpacity);
@@ -860,6 +883,9 @@ internal class BouncingTextWindow : Window
 
     private LogoVisual CreateLogoVisual(int fontSize, int opacity)
     {
+        // The user's pick (any installed family, or the bundled Fredoka sentinel). Resolved per
+        // visual rather than cached on the window so a mid-run Refresh sees the current setting.
+        var family = Helpers.FontPickerHelper.Resolve(App.Settings?.Current?.BouncingTextFont, "Segoe UI");
         var v = new LogoVisual
         {
             Scale = new ScaleTransform(1, 1),
@@ -873,6 +899,7 @@ internal class BouncingTextWindow : Window
         {
             v.Ot = new OutlinedText
             {
+                Family = family,
                 FontSize = fontSize,
                 FontWeight = FontWeights.Bold,
                 Fill = Brushes.HotPink,
@@ -889,6 +916,7 @@ internal class BouncingTextWindow : Window
         {
             v.Tb = new TextBlock
             {
+                FontFamily = family,
                 FontSize = fontSize,
                 FontWeight = FontWeights.Bold,
                 Foreground = Brushes.HotPink,
@@ -940,6 +968,28 @@ internal class BouncingTextWindow : Window
             {
                 v.Ot.FontSize = fontSize;
                 v.Ot.StrokeThickness = Math.Max(2.0, fontSize / 22.0);
+                v.Ot.Build();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Live font-family swap, mirroring <see cref="UpdateFontSize"/>. OutlinedText caches its
+    /// geometry on a key that includes the family, so it needs an explicit rebuild; a TextBlock
+    /// re-measures itself.
+    /// </summary>
+    public void UpdateFontFamily(FontFamily family)
+    {
+        if (family == null) return;
+        foreach (var v in _visuals)
+        {
+            if (v.Tb != null)
+            {
+                v.Tb.FontFamily = family;
+            }
+            else if (v.Ot != null)
+            {
+                v.Ot.Family = family;
                 v.Ot.Build();
             }
         }

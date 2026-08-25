@@ -1289,8 +1289,15 @@
                                         BorderBrush="{DynamicResource TransparentPink20Brush}"
                                         BorderThickness="1" SnapsToDevicePixels="True"
                                         MinWidth="{TemplateBinding ActualWidth}">
+                                    <!-- CanContentScroll is what the STOCK ComboBox template sets and
+                                         this one had dropped; without it a ScrollViewer pixel-scrolls,
+                                         which silently disables item virtualization no matter what the
+                                         ItemsPanel says. The font picker (Helpers/FontPickerHelper.cs)
+                                         lists every installed family, so it needs the realized rows
+                                         capped. Cost elsewhere: rows scroll by item, not by pixel. -->
                                     <ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto"
-                                                  HorizontalScrollBarVisibility="Disabled">
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  CanContentScroll="True">
                                         <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
                                     </ScrollViewer>
                                 </Border>

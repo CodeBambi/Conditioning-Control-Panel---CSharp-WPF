@@ -170,6 +170,20 @@
                                     </StackPanel>
                                 </Grid>
 
+                                <!-- Font: any family installed on Windows, plus the bundled Fredoka. -->
+                                <Grid Height="36" ToolTip="Any font installed on Windows. Applies live - no restart.">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str label_font}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <ComboBox Grid.Column="1" x:Name="CmbFont" Height="26" MaxWidth="220"
+                                              HorizontalAlignment="Right" VerticalAlignment="Center"
+                                              Style="{DynamicResource DarkComboBoxStyle}"
+                                              SelectionChanged="CmbFont_Changed"/>
+                                </Grid>
+
                                 <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
 
                                 <!-- Second text -->

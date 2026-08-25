@@ -1241,7 +1241,10 @@ namespace ConditioningControlPanel.Services
                 Text = text,
                 FontSize = fontSize,
                 FontWeight = FontWeights.Bold,
-                FontFamily = new FontFamily("Arial"),
+                // The user's pick, read per card (they are built per flash, so a change lands on
+                // the next subliminal with no plumbing). Arial stays the fallback - it is the face
+                // this feature always used.
+                FontFamily = Helpers.FontPickerHelper.Resolve(App.Settings.Current.SubliminalFont, "Arial"),
                 Foreground = new SolidColorBrush(color),
                 TextAlignment = TextAlignment.Center,
                 IsHitTestVisible = false
