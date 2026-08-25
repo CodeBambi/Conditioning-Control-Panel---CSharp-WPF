@@ -570,7 +570,8 @@ the voice's `labSeen` on first entry. Progress is ONE page-owned meta blob under
 metric, subject, experiment, data) are legal DOWNSTAIRS ONLY - `annex/docs.js` and the
 `annex_*` lexicon rows - and nowhere else in the school. The REGISTRY's live counts arrive
 through the host verb `annex-stats` (C# fetches the public aggregate; a null body is LINK
-DOWN, and the page never invents a number).
+DOWN, and the page never invents a number). **The web build has a third key to that door
+and it is not a third gate** - see trap 99, `init.devAnnex`.
 
 ## 3. Cross-agent seams — change these only with the other side
 
@@ -2003,6 +2004,35 @@ DOWN, and the page never invents a number).
     cannot express this failure at all; `proof-asks.mjs` (port 8753) caught it on
     the first run. Any future affordance placed inside `.emi` needs the same
     early return, and a browser assertion to prove it.
+
+99. **`init.devAnnex` IS A PEEK, NOT A REVEAL - AND THE DESKTOP CANNOT SEE IT.**
+    The owner needs to walk the Records Annex on `app.cclabs.app/arcademy` without
+    burning the once-ever reveal, so the WEB host projects one extra init boolean,
+    `devAnnex`, beside `devDoor`. `shell.js` reads it once as `annexPeek` and ORs
+    it into exactly TWO places - the campus hatch's bag (`annex:`) and the Records
+    Office's `ajar` - which is the whole feature: the lab becomes REACHABLE.
+    **It must never widen past that.** In particular:
+    - `maybeAnnexReveal` and the morning-after catch-up probe that schedules it
+      are UNTOUCHED. OR-ing `annexPeek` into the `if (!store.get('annexRevealSeen'))`
+      guard would *suppress* the real beat for good, which is the exact opposite
+      of a peek.
+    - `store.set('annexRevealSeen', ...)` still happens in ONE place and a peek is
+      not it. Nothing about a peek is persisted.
+    - `seenFlags.annex` (the postman's ctx) deliberately keeps reading the real
+      store flag. That flag gates letters, and a delivered letter *is* persisted
+      state; a peek that minted mail would be a reveal wearing a hat.
+    - `shell/seep.js`'s `postReveal()` keeps reading the real flag too, for the
+      same reason - the Seep's escalation is a story beat, not a door.
+
+    **`ArcademyHostService.cs` has never sent this field and must not start.**
+    Absent is false, so the desktop build cannot reach the branch at all; the
+    C# side of this feature is that there isn't one. The web end is
+    `cclabs-web`: `ARCADEMY_ANNEX_PEEK_EMAILS` (server allow-list) + `?annex=1`
+    on the lobby -> `arc-web:annexpeek` in localStorage -> `host/init.js`. The
+    query string alone is never enough, and the lobby REMOVES the key on any
+    visit that is not a peek. None of it is a security boundary - the web meta
+    store is localStorage, so devtools could always reach the annex - it keeps
+    the lab off the *supported* path, which is all it was ever asked to do.
 
 ## 5. The game module contract (short version)
 
