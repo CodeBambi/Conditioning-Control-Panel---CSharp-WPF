@@ -56,19 +56,36 @@ public class DpiAwarenessTests
     /// (<c>ConditioningControlPanel/app.manifest:6-7</c>): Windows 10 1607 and later read
     /// <c>dpiAwareness</c>, and older releases only understand <c>dpiAware</c>. Declaring one is a
     /// process whose awareness depends on which Windows it lands on.</para>
+    ///
+    /// <para>The SOURCE half is checked on every platform — it is a file in this repository and its
+    /// content does not depend on where the suite runs — and only the EMBEDDED half is Windows-only,
+    /// because that is the only platform where an apphost carries a manifest at all. Neither arm is
+    /// silent.</para>
     /// </summary>
     [Fact]
     public void TheShippedApphostCarriesTheProductsOwnPerMonitorV2Declaration()
     {
+        string[] declarations = [">PerMonitorV2<", ">true/pm<"];
+
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "client", "src", "CcpClient.Desktop", "app.manifest"));
+        foreach (var declaration in declarations)
+        {
+            Assert.True(
+                source.Contains(declaration, StringComparison.Ordinal),
+                $"client/src/CcpClient.Desktop/app.manifest no longer declares '{declaration}', so the "
+                + "product is back to inheriting Avalonia's runtime default and every rectangle "
+                + "Overlay/OverlayDisplays.cs documents as physical is virtualized until phase 4");
+        }
+
         if (!OperatingSystem.IsWindows())
         {
-            // A property of the OS: there is no application manifest and no DPI virtualization off
-            // Windows, so there is nothing here to be right or wrong about.
+            // A property of the OS: only a Windows apphost embeds an application manifest, so the
+            // second half of the wiring cannot be read here. The source half above already ran.
             return;
         }
 
-        var apphost = Path.Combine(
-            DesktopOutputDirectory(), "CcpClient.Desktop.exe");
+        var apphost = Path.Combine(DesktopOutputDirectory(), "CcpClient.Desktop.exe");
         Assert.True(
             File.Exists(apphost),
             $"no built apphost at {apphost} — this fact reads the shipped binary, and the floor "
@@ -77,15 +94,13 @@ public class DpiAwarenessTests
         // Asserted through a message rather than Assert.Contains: the haystack is a 165 KB binary,
         // and a failure that dumps the front of a PE header names nothing a reader can act on.
         var embedded = File.ReadAllText(apphost, System.Text.Encoding.UTF8);
-        foreach (var declaration in new[] { ">PerMonitorV2<", ">true/pm<" })
+        foreach (var declaration in declarations)
         {
             Assert.True(
                 embedded.Contains(declaration, StringComparison.Ordinal),
-                $"the built apphost {apphost} carries no '{declaration}' — either "
-                + "client/src/CcpClient.Desktop/app.manifest stopped declaring DPI awareness, or the "
-                + "csproj stopped embedding the manifest. Either way the product is back to "
-                + "inheriting Avalonia's runtime default, and every rectangle Overlay/"
-                + "OverlayDisplays.cs documents as physical is virtualized until phase 4");
+                $"the built apphost {apphost} carries no '{declaration}' while the manifest source "
+                + "does — the csproj stopped embedding it (<ApplicationManifest>), so the "
+                + "declaration exists in the repository and not in the product");
         }
     }
 
@@ -116,13 +131,17 @@ public class DpiAwarenessTests
     [Fact]
     public void UnderTheProductsOwnDpiAwareness_TheDisplayEnumerationIsTheOperatingSystemsPhysicalMode()
     {
-        // A property of the OS: per-thread DPI awareness landed in Windows 10 1607, and off Windows
-        // the enumeration is empty by design (OverlayDisplays.Enumerate).
-        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 14393))
+        if (!OperatingSystem.IsWindows())
         {
+            // A property of the OS, and an ASSERTED one rather than a silent exit: off Windows the
+            // product enumerates nothing at all, by its own design and its own doc comment.
+            Assert.Empty(OverlayDisplays.Enumerate());
             return;
         }
 
+        // No version predicate: .NET 10 itself requires Windows 10 1607 or later, which is the same
+        // release that introduced SetThreadDpiAwarenessContext — so on any Windows this assembly can
+        // run on, the call exists. Enumerate() asserts that it was honoured rather than assuming it.
         var aware = Enumerate(PerMonitorAwareV2);
         var unaware = Enumerate(Unaware);
         if (aware.Count == 0)
@@ -217,15 +236,20 @@ public class DpiAwarenessTests
         var configuration = here.Parent?.Name
             ?? throw new InvalidOperationException($"cannot read a configuration from {here.FullName}");
 
+        return Path.Combine(
+            RepoRoot(), "client", "src", "CcpClient.Desktop", "bin", configuration, here.Name);
+    }
+
+    private static string RepoRoot()
+    {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "CLAUDE.md")))
         {
             root = root.Parent;
         }
 
-        return Path.Combine(
-            root?.FullName ?? throw new InvalidOperationException("repository root not found from the test binary"),
-            "client", "src", "CcpClient.Desktop", "bin", configuration, here.Name);
+        return root?.FullName
+            ?? throw new InvalidOperationException("repository root not found from the test binary");
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
