@@ -2897,7 +2897,7 @@ namespace ConditioningControlPanel.Services
                 // child sees the press - and it swallows every one of them. The attention plane
                 // therefore has to be offered the click here, by hand, or an in-window target could
                 // never be clicked at all.
-                if (attentionLayer != null && e.ChangedButton == MouseButton.Left &&
+                if (attentionLayer != null && (e.ChangedButton == MouseButton.Left || e.ChangedButton == MouseButton.Right) &&
                     attentionLayer.TryHit(e.GetPosition(attentionLayer)))
                 {
                     e.Handled = true;
