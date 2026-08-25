@@ -58,6 +58,7 @@ namespace ConditioningControlPanel.Features
                 ChkLinkPink.IsChecked = s.RampLinkPinkFilterOpacity;
                 ChkLinkMaster.IsChecked = s.RampLinkMasterAudio;
                 ChkLinkSub.IsChecked = s.RampLinkSubliminalAudio;
+                ChkLinkBrainDrain.IsChecked = s.RampLinkBrainDrain;
             }
             finally { _isLoading = false; }
         }
@@ -73,7 +74,8 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.RampLinkSpiralOpacity) ||
                 e.PropertyName == nameof(Models.AppSettings.RampLinkPinkFilterOpacity) ||
                 e.PropertyName == nameof(Models.AppSettings.RampLinkMasterAudio) ||
-                e.PropertyName == nameof(Models.AppSettings.RampLinkSubliminalAudio))
+                e.PropertyName == nameof(Models.AppSettings.RampLinkSubliminalAudio) ||
+                e.PropertyName == nameof(Models.AppSettings.RampLinkBrainDrain))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
@@ -145,6 +147,7 @@ namespace ConditioningControlPanel.Features
             s.RampLinkPinkFilterOpacity = ChkLinkPink.IsChecked ?? false;
             s.RampLinkMasterAudio = ChkLinkMaster.IsChecked ?? false;
             s.RampLinkSubliminalAudio = ChkLinkSub.IsChecked ?? false;
+            s.RampLinkBrainDrain = ChkLinkBrainDrain.IsChecked ?? false;
             App.Settings?.Save();
         }
     }

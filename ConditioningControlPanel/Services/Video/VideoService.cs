@@ -7429,11 +7429,14 @@ namespace ConditioningControlPanel.Services
 
                 // Click = hit — routes through Hit() so the gaze-click path
                 // shares the same idempotency + sound + callback + fade.
-                _win.MouseLeftButtonDown += (s, e) =>
+                // Right-click hits too (suggestion): MOBA reflex — same handler on both buttons.
+                System.Windows.Input.MouseButtonEventHandler onPress = (s, e) =>
                 {
                     e.Handled = true;  // Prevent click from propagating to windows behind
                     Hit();
                 };
+                _win.MouseLeftButtonDown += onPress;
+                _win.MouseRightButtonDown += onPress;
 
                 // Movement
                 _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };

@@ -425,6 +425,7 @@ namespace ConditioningControlPanel
             _rampBaseValues["PinkFilterOpacity"] = settings.PinkFilterOpacity;
             _rampBaseValues["MasterVolume"] = settings.MasterVolume;
             _rampBaseValues["SubAudioVolume"] = settings.SubAudioVolume;
+            _rampBaseValues["BrainDrainBlurStrength"] = settings.BrainDrainBlurStrength;
             
             _rampStartTime = DateTime.Now;
             
@@ -476,6 +477,10 @@ namespace ConditioningControlPanel
                 if (_rampBaseValues.TryGetValue("SubAudioVolume", out var subVol))
                 {
                     settings.SubAudioVolume = (int)subVol;
+                }
+                if (_rampBaseValues.TryGetValue("BrainDrainBlurStrength", out var bdBlur))
+                {
+                    settings.BrainDrainBlurStrength = (int)bdBlur;
                 }
                 
                 _rampBaseValues.Clear();
@@ -541,6 +546,17 @@ namespace ConditioningControlPanel
                 {
                     var newVal = (int)Math.Min(subBase * currentMult, 100);
                     settings.SubAudioVolume = newVal;
+                }
+
+                // Brain Drain blur rides the ramp the same way the spiral does. Visual, so it is
+                // gated on !sessionActive with the rest of them - a preset session runs its own
+                // ramp and the two must not fight. BrainDrainBlurStrength (the screen haze), never
+                // BrainDrainIntensity (the audio trigger rate); OverlayService is listening on
+                // PropertyChanged and re-presses the live overlay for us.
+                if (!sessionActive && settings.RampLinkBrainDrain && _rampBaseValues.TryGetValue("BrainDrainBlurStrength", out var bdBase))
+                {
+                    var newVal = (int)Math.Min(bdBase * currentMult, 100);
+                    settings.BrainDrainBlurStrength = newVal;
                 }
             });
             

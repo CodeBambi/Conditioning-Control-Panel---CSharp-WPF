@@ -543,8 +543,9 @@ public class BubbleService : IDisposable
         }
     }
 
-    /// <summary>HOOK THREAD: a left-click landed at this physical-px point. If it's inside a live
-    /// clickable bubble's hit disc, swallow it (so the click-through host doesn't also pass the click
+    /// <summary>HOOK THREAD: a press landed at this physical-px point (either button — the ambient
+    /// field routes its right-button message here too; chaos keeps right for the Ripple). If it's
+    /// inside a live clickable bubble's hit disc, swallow it (so the click-through host doesn't also pass the click
     /// to whatever sits behind it) and marshal the real pop to the UI thread. A miss passes through.
     /// Touches only the immutable disc snapshot — never a WPF dependency property. Mirrors the Ripple's
     /// OnRippleRightDown contract.</summary>
@@ -763,9 +764,12 @@ public class BubbleService : IDisposable
             // Ambient pops ride a global left-click hook exactly like the chaos field. It self-suppresses
             // while a chaos run is active (chaos owns its own _rippleHook there), so a single click never
             // pops twice; during a chaos run the ambient field is paused + cleared anyway.
+            // Right-click pops too (suggestion): the ambient field owns no right-button verb, so the
+            // right message routes into the very same hit-test/pop path (miss still passes through).
             _ambientHook = new Services.GlobalMouseHook
             {
-                LeftDown = px => !_chaosActive && OnSharedHostLeftDown(px)
+                LeftDown = px => !_chaosActive && OnSharedHostLeftDown(px),
+                RightDown = px => !_chaosActive && OnSharedHostLeftDown(px)
             };
             _ambientHook.Start();
         }
@@ -2967,11 +2971,15 @@ internal class Bubble
 
         if (_isClickable)
         {
-            hitArea.MouseLeftButtonDown += (s, e) =>
+            // Right-click pops too (suggestion): MOBA reflex — same handler on both buttons,
+            // marked handled so the right press never bubbles into a context menu.
+            System.Windows.Input.MouseButtonEventHandler hitPress = (s, e) =>
             {
                 OnPlayerPress();
                 e.Handled = true;
             };
+            hitArea.MouseLeftButtonDown += hitPress;
+            hitArea.MouseRightButtonDown += hitPress;
         }
 
         // Sparkle particle canvas (overlays the bubble, non-interactive)
@@ -3019,11 +3027,13 @@ internal class Bubble
         // Grid click as backup (only if clickable)
         if (_isClickable)
         {
-            _grid.MouseLeftButtonDown += (s, e) =>
+            System.Windows.Input.MouseButtonEventHandler gridPress = (s, e) =>
             {
                 OnPlayerPress();
                 e.Handled = true;
             };
+            _grid.MouseLeftButtonDown += gridPress;
+            _grid.MouseRightButtonDown += gridPress;
         }
 
         // Single window - clickable or click-through based on setting. Rented from the pool
@@ -3113,8 +3123,15 @@ internal class Bubble
             // a recycled pooled window must not keep a handler that roots this dead bubble.
             if (_isClickable)
             {
-                _winClickHandler = (s, e) => OnPlayerPress();
+                _winClickHandler = (s, e) =>
+                {
+                    OnPlayerPress();
+                    // Right-click pops too: mark only that path handled so no context menu, while the
+                    // left path keeps bubbling exactly as it always has (this is the last-resort backup).
+                    if (e.ChangedButton == MouseButton.Right) e.Handled = true;
+                };
                 _window.MouseLeftButtonDown += _winClickHandler;
+                _window.MouseRightButtonDown += _winClickHandler;
             }
         }
 
@@ -4744,6 +4761,7 @@ internal class Bubble
             if (_winClickHandler != null)
             {
                 try { _window.MouseLeftButtonDown -= _winClickHandler; } catch { }
+                try { _window.MouseRightButtonDown -= _winClickHandler; } catch { }
                 _winClickHandler = null;
             }
             _grid.Children.Clear();

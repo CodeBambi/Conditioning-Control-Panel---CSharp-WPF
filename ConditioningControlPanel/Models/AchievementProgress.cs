@@ -191,6 +191,12 @@ public class AchievementProgress
     /// <summary>Consecutive quizzes failed; resets to 0 on a pass (Phase 2)</summary>
     public int QuizFailStreak { get; set; }
 
+    /// <summary>Consecutive intakes quit before they reported a result; resets to 0 on any
+    /// finished graded run. The intake has no fail state, so this is what feeds "Held Back"
+    /// now that the classic quiz is retired (the fail streak above still counts for anyone
+    /// still playing it).</summary>
+    public int IntakeQuitStreak { get; set; }
+
     /// <summary>Blinks logged while the Blink Trainer is running</summary>
     public int BlinkTrainerBlinks { get; set; }
 

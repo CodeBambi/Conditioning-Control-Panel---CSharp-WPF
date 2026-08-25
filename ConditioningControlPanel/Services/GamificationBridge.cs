@@ -37,8 +37,11 @@ public class GamificationBridge : IDisposable
     private const int OnRailsTriggerTypes = 5;            // "5+ distinct trigger types"
     private const int HandsFreeGazePops = 50;             // "pop 50 bubbles by gaze"
     private const int HonorRollCategories = 3;            // "top marks in 3 different categories"
-    private const int TeachersPetPasses = 25;             // "pass 25 graded runs"
+    // 25 -> 10 with the quiz retired: an intake is a 20+ minute banded descent, not a 10-question
+    // quiz, so 25 of them was a different order of ask than the requirement text implied.
+    private const int TeachersPetPasses = 10;             // "pass 10 graded runs"
     private const int HeldBackFailStreak = 3;             // "fail 3 in a row" (classic quiz only)
+    private const int HeldBackQuitStreak = 3;             // "quit 3 intakes early" (the live path)
 
     /// <summary>
     /// Wire up all subscriptions. Safe to call once; idempotent. Must run after the
@@ -88,6 +91,7 @@ public class GamificationBridge : IDisposable
             // Raised by IntakeHostService on a completed Graded Intake, and still by QuizWindow
             // for the classic quiz (whose launcher is hidden but whose handler is intact).
             QuizService.QuizCompleted += OnQuizCompleted;
+            QuizService.QuizAbandoned += OnQuizAbandoned;
 
             // ----- Local AI persistent memory (patron: she_remembers) -----
             LocalAiService.PersistentMemoryRecalled += OnPersistentMemoryRecalled;
@@ -190,6 +194,7 @@ public class GamificationBridge : IDisposable
                 App.Catalogue.SubmissionSucceeded -= OnCatalogueSubmitted;
 
             QuizService.QuizCompleted -= OnQuizCompleted;
+            QuizService.QuizAbandoned -= OnQuizAbandoned;
 
             LocalAiService.PersistentMemoryRecalled -= OnPersistentMemoryRecalled;
 
@@ -570,8 +575,10 @@ public class GamificationBridge : IDisposable
     /// <item><c>top_of_the_class</c> — one run graded at or above the top-marks bar (90%).</item>
     /// <item><c>honor_roll</c> — top marks in <see cref="HonorRollCategories"/> distinct
     /// categories; from the intake that is distinct niches, which follow the active mod.</item>
-    /// <item><c>held_back</c> — still fail-streak only. An intake has no fail state, so this can
-    /// only ever come from the classic quiz. Left as-is deliberately (product decision).</item>
+    /// <item><c>held_back</c> — fail streak OR walk-out streak. An intake has no fail state, so the
+    /// live path is <see cref="OnQuizAbandoned"/>: <see cref="HeldBackQuitStreak"/> intakes quit
+    /// before they reported a result. The classic quiz's fail streak still counts for anyone
+    /// playing it.</item>
     /// </list>
     /// </summary>
     private void OnQuizCompleted(object? sender, QuizCompletedEventArgs e)
@@ -579,6 +586,9 @@ public class GamificationBridge : IDisposable
         try
         {
             var p = Prog; if (p == null) return;
+
+            // Finishing ANY graded run breaks a walk-out streak, pass or fail.
+            p.IntakeQuitStreak = 0;
 
             if (e.Passed)
             {
@@ -608,6 +618,28 @@ public class GamificationBridge : IDisposable
             Ach?.MarkDirty();
         }
         catch (Exception ex) { App.Logger?.Warning(ex, "GamificationBridge: quiz handler failed"); }
+    }
+
+    /// <summary>
+    /// A graded run was walked out of rather than finished — today only the web intake reports
+    /// this (<c>IntakeHostService.ReportWalkOutIfUnfinished</c>). This is what makes "Held Back"
+    /// obtainable again: the intake grades a banded descent and has no fail state, so the shape
+    /// that matches "held back" is refusing to sit through it, three times running. Any finished
+    /// run clears the streak (see <see cref="OnQuizCompleted"/>).
+    /// </summary>
+    private void OnQuizAbandoned(object? sender, EventArgs e)
+    {
+        try
+        {
+            var p = Prog; if (p == null) return;
+
+            p.IntakeQuitStreak++;
+            if (p.IntakeQuitStreak >= HeldBackQuitStreak)
+                Ach?.TryUnlockExclusive("held_back");
+
+            Ach?.MarkDirty();
+        }
+        catch (Exception ex) { App.Logger?.Warning(ex, "GamificationBridge: quiz-abandoned handler failed"); }
     }
 
     private void OnPersistentMemoryRecalled(object? sender, EventArgs e)
