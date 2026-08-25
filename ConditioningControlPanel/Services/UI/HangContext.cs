@@ -235,6 +235,12 @@ public static class HangContext
 
         lines.Add("lockCardRunning=" + Safe(() => App.LockCard?.IsRunning.ToString() ?? "(null)"));
         lines.Add("cornerGifWindows=" + Safe(() => App.CornerGif?.ActiveWindowCount ?? "(null)"));
+        // The standalone service above knows nothing about the SESSION's corner GIF, and the
+        // session-scoped one is the only kind the 28-day programs raise (Presentation day 14,
+        // Takeover day 28, Kept days 19-28, Firmware days 12-14) — so every program-day corner-GIF
+        // hang report read "cornerGifWindows=0+0pending" while one was on screen. Two rounds of
+        // fixes were aimed at the wrong window because of this line's blind spot.
+        lines.Add("sessionCornerGif=" + Safe(SessionEngine.DescribeSessionCornerGif));
         lines.Add("compositor=" + Safe(() => App.Compositor == null ? "(off)" : "on"));
 
         return lines.ToArray();

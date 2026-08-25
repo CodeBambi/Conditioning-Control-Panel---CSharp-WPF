@@ -2822,6 +2822,24 @@ public class OverlayService : IDisposable
             }
         }
 
+        // Corner GIFs are topmost layered windows too, and neither kind was ever in this sweep: a
+        // mandatory video (or any other topmost raise) buried them for the rest of the session with
+        // no way back, since neither window re-raises itself. Both kinds go through ReassertOne, so
+        // they also inherit the #497 below-video pin instead of covering the clip.
+        try
+        {
+            foreach (var hwnd in App.CornerGif?.GetOverlayHandles() ?? new List<IntPtr>())
+                ReassertOne(hwnd, videoHwnd, aboveVideo, force, ref anyRecovered);
+
+            var sessionCornerGif = SessionEngine.Active?.GetCornerGifHandle() ?? IntPtr.Zero;
+            if (sessionCornerGif != IntPtr.Zero)
+                ReassertOne(sessionCornerGif, videoHwnd, aboveVideo, force, ref anyRecovered);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ReassertZOrder (corner GIFs) failed: {Error}", ex.Message);
+        }
+
         // Compositor hosts carry the SAME fullscreen effects when the unified renderer is on,
         // but only assert HWND_TOPMOST on their show/topology edges — reconcile them exactly
         // like the legacy windows or a later topmost raise (chaos chrome ~1/s, a mandatory
