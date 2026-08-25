@@ -49,15 +49,30 @@ public sealed class MandatoryVideoPresetDocument
     /// <summary>
     /// The module's own on/off dial — WPF's <c>MandatoryVideosEnabled</c>, the flag its rack row
     /// binds its dot to (<c>Views/Tabs/StudioTabView.xaml.cs:486-487</c>) and the one its scheduler
-    /// re-reads on every tick (<c>Services/Video/VideoService.cs:2218</c>). Ships OFF.
+    /// re-reads on every tick (<c>Services/Video/VideoService.cs:2218</c>).
+    ///
+    /// <para><b>Upstream ships this ON</b> — <c>private bool _mandatoryVideosEnabled = true;</c>
+    /// (<c>Models/AppSettings.cs:985</c>) — so a fresh upstream install has the row armed. <b>This
+    /// port deliberately ships it OFF, and that divergence is a recorded owner decision rather than
+    /// an oversight</b>: a firing puts an opaque full-monitor surface on screen, and arming that for
+    /// every fresh install is sequenced behind an open full-screen white-screen defect. Both values
+    /// are pinned by <c>PresetDefaultParityTests</c>, so the gap cannot be quietly widened, narrowed
+    /// or "repaired" without a red.</para>
+    ///
+    /// <para>An earlier version of this remark said only "Ships OFF", which read as a claim about
+    /// upstream that upstream contradicts. The value is unchanged; the sentence is now honest about
+    /// which side each number belongs to.</para>
     /// </summary>
     public bool Enabled { get; set; }
 
     /// <summary>
-    /// How many clips an hour — WPF's <c>VideosPerHour</c>, its slider bounded 1..20 with a default
-    /// of 2 (<c>Features/VideoFeatureControl.xaml:79</c>) and its own named ceiling
-    /// <c>MaxVideosPerHour = 20</c> (<c>Models/Program/ProgramDefinition.cs:442</c>). It sets the
-    /// base INTERVAL, which is then jittered ±20 % and floored at sixty seconds
+    /// How many clips an hour — WPF's <c>VideosPerHour</c>, its slider bounded 1..20
+    /// (<c>Features/VideoFeatureControl.xaml:79</c>) with its own named ceiling
+    /// <c>MaxVideosPerHour = 20</c> (<c>Models/Program/ProgramDefinition.cs:442</c>) and a default of
+    /// <b>6</b> taken from the settings model (<c>Models/AppSettings.cs:992</c>) rather than from
+    /// that slider's <c>Value="2"</c>, which upstream overwrites on load
+    /// (<c>Features/VideoFeatureControl.xaml.cs:54</c>). See <see cref="MandatoryVideoSchedule.DefaultPerHour"/>.
+    /// It sets the base INTERVAL, which is then jittered ±20 % and floored at sixty seconds
     /// (<see cref="MandatoryVideoSchedule"/>).
     /// </summary>
     public int PerHour
