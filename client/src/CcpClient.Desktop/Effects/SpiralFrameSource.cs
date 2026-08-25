@@ -187,14 +187,14 @@ public sealed class GdiPlusSpiralFrameSource : ISpiralFrameSource
         /// <c>Bilinear</c> (3) was also measured and is <b>worse</b>, not better — 1.8 Hz — which
         /// is why the choice is upstream's named filter rather than the cheapest one.</para>
         ///
-        /// <para><b>Why the quality question is smaller than it looks.</b> Upstream does not
-        /// resample to the screen at all: it decodes each frame ONCE into a cache capped at 1280
-        /// on the long side and lets the compositor stretch that to the monitor
-        /// (<c>OverlayService.cs:1601-1640</c>), and its own comment for the cap says the spiral is
-        /// drawn over the whole screen at low opacity, so
-        /// "capping the long side loses nothing" (<c>:1604</c>). A filter change is a smaller delta than
-        /// the resolution cap upstream already accepts. <b>NOT PROVED:</b> no side-by-side headed
-        /// capture of the two filters was taken.</para>
+        /// <para><b>How different the PICTURE is, measured rather than hoped.</b> Two real spiral
+        /// GIFs put through both filters at a real session's 2880x1800: a 480x854 source gives a
+        /// mean absolute difference of 0.45 of 255 per channel (max 33; 0.09 % of channels off by
+        /// more than 8) and a 311x450 source gives 0.84 (max 33; 0.45 % over 8) — while the draw
+        /// falls 142 ms to 74 ms and 120 ms to 70 ms. Upstream accepts a far larger delta at the
+        /// same place: it caps its cached frames at 1280 on the long side because
+        /// "capping the long side loses nothing" at this opacity (<c>OverlayService.cs:1601-1606</c>).
+        /// <b>NOT PROVED:</b> no headed side-by-side capture of the two filters on a screen.</para>
         /// </summary>
         private const int HighQualityBilinear = 6;
 
