@@ -85,14 +85,31 @@ shell/enrollment.js the once-ever intro (ENROLL_LEX: 3 flavour cards per class)
                    the tenth = the unlock beat)
 shell/room.js      THE ROOM SCENE (VN antechamber): the painted set between the
                    campus door and a class, REPLACING the door card for rooms
-                   listed in its SCENES table. FIVE ROOMS LIVE: daily_trigger
-                   (Homeroom 101, vn-04, chalkboard + painted corridor door),
+                   listed in its SCENES table. ALL TEN ROOMS LIVE, so the door
+                   card is now the exception: daily_trigger (Homeroom 101,
+                   vn-04, chalkboard + painted corridor door),
                    deja_vu (Memory Lab 102, vn-05, the card racks),
                    impulse_control (Discipline Hall 103, vn-06, THE red button
                    under glass + the panelled door), lost_and_found (L&F 104,
                    vn-07, the central shelf bay - NOT the whole 850px wall, a
-                   highlight that big reads as a bug) and the_deep_end (The
-                   Pool 105, vn-08, open lane water + the ladder). campus.js
+                   highlight that big reads as a bug), the_deep_end (The
+                   Pool 105, vn-08, open lane water + the ladder), and the
+                   Semester II + III five: sort (The Sorting Room 201, vn-12,
+                   the card conveyor - the belt, not the three bins),
+                   echo (Music Room 202, vn-13, the four lit drum heads on the
+                   stage), instant_recall (Lecture Hall 203, vn-14, the blank
+                   projection screen - NOT the lectern), anomaly (Darkroom 301,
+                   vn-15, the drying lines framed on the ONE crooked print +
+                   the black light-trap curtain as the painted exit) and
+                   composure (The Studio 302, vn-16, the sliding-tile canvas on
+                   the easel). Three of the ten have a painted exit (101, 103,
+                   301); the other seven are doorless and that is legal.
+                   TWO PLATES ARE COMPOSITED, never regenerated: vn-16's wall
+                   sign was painted "COMPOSUE", so the sign rect was cloned out
+                   and logo-composure-keyed.png pasted back in (the homeroom
+                   "DAILeR" recipe), and vn-12's far-left window pane carried a
+                   stray second neon fragment, cloned out from the next pane
+                   along. campus.js
                    OFFERS every enterable door via handlers.roomScene(key,
                    {plate}) before popping the card; shell.js takes keys the
                    table has (walkThen first - door, THEN room), declines the
