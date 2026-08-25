@@ -2382,6 +2382,31 @@
                     ToolTip.Tip="Change the selected session's name, length and description"
                     Content="Edit session" />
 
+            <!-- IMPORT SESSION — a .session.json file from anywhere on the user's disk becoming
+                 one of their own sessions. Upstream's OUTCOME is its drag-and-drop import
+                 (MainWindow/MainWindow.SessionIO.cs:2054-2102 -> Services/Session/SessionManager.cs:99-142,
+                 which validates, copies into the custom-sessions folder and adds the row); upstream's
+                 GESTURE for the same file is the Import button on its session editor
+                 (Windows/SessionEditorWindow.xaml:215 -> SessionEditorWindow.xaml.cs:1060-1066, an
+                 OpenFileDialog filtered to *.session.json). This port has no external-file drop
+                 surface, and it does have the picker seam — so the gesture is the dialog and the
+                 outcome is the drop's. See Session/SessionImport.cs.
+
+                 IT SITS ON THE STRIP rather than in the toolbar above for the reason the fifth
+                 button on this WrapPanel makes obvious: it acts on the RACK, not on a filter, and
+                 the strip is the row of things that act. The WrapPanel is what makes a fifth button
+                 safe at all — a StackPanel here arranged the FOURTH one off the visible edge, which
+                 is the defect recorded above it. -->
+            <Button x:Name="ScriptedSessionImportButton"
+                    Classes="module-action"
+                    HorizontalAlignment="Left"
+                    Margin="0,0,10,6"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="ScriptedSessionImportButton"
+                    AutomationProperties.Name="Import session"
+                    ToolTip.Tip="Add a .session.json file from your computer — it is copied into your own sessions"
+                    Content="Import session" />
+
             <!-- RECENT SESSIONS — upstream's own door button, on this door because the rack is
                  (MainWindow/MainWindow.Presets.cs:1440 -> SessionLogHistoryWindow;
                  Views/Tabs/PresetsTabView.xaml:646-651, where it sits in the same header strip as

@@ -233,9 +233,14 @@ public sealed class CustomSessionStore
     /// Windows and a Linux install keeps working (<see cref="PortablePath.InvalidFileNameChars"/> —
     /// the same reason <see cref="ScriptedSessionLogStore"/> sanitises the same way).
     ///
-    /// <para>Every id this really sees is a GUID (<see cref="SessionEditorRules.Apply"/>), so the
-    /// name cannot collide with another session's; upstream's duplicate-name counter
-    /// (<c>:259-266</c>) belongs to its IMPORT path, which this build does not have.</para>
+    /// <para><b>Every id this really sees is a GUID, and that is now load-bearing rather than
+    /// incidental.</b> Both writers mint one — <see cref="SessionEditorRules.Apply"/> on the
+    /// built-in branch, and <see cref="SessionImport"/> on every import — so the name cannot
+    /// collide with a session already in the folder. Upstream needs a duplicate-filename counter
+    /// (<c>Services/Session/SessionFileService.cs:259-266</c>) precisely because its import keeps
+    /// the AUTHORED id; the premise recorded here at the editor's land — "which this build does not
+    /// have" — died the day import landed, and the reason the counter is still unported is now the
+    /// mint rather than the missing path.</para>
     /// </summary>
     private static string SanitizeId(string? id)
     {

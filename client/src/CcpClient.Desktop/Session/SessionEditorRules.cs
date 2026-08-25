@@ -62,9 +62,11 @@ public static class SessionEditorRules
     /// but whitespace is refused and NOTHING is written. Null when the edit may proceed.
     ///
     /// <para>Upstream's <c>ValidateSessionFile</c> is stricter — it also demands an id and a
-    /// positive duration (<c>Services/Session/SessionFileService.cs:145-161</c>) — but that guard
-    /// is on the IMPORT path, which this build does not have. The two things it checks cannot fail
-    /// here: <see cref="Apply"/> gives every session an id, and the duration is clamped into
+    /// positive duration (<c>Services/Session/SessionFileService.cs:145-161</c>). This build DOES
+    /// now have the import path that guard belongs to — <see cref="SessionImport.Validate"/> is all
+    /// three of upstream's content checks — and it is still not owed HERE: the two extra things it
+    /// checks cannot fail on this path, because <see cref="Apply"/> gives every session an id and
+    /// the duration is clamped into
     /// <see cref="MinDurationMinutes"/>..<see cref="MaxDurationMinutes"/> before it is stored.</para>
     /// </summary>
     public static string? Validate(string? name) =>

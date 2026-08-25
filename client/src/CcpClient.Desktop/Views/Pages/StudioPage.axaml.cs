@@ -11,6 +11,7 @@ using CcpClient.Desktop.Navigation;
 using CcpClient.Desktop.Persistence;
 using CcpClient.Desktop.Scheduling;
 using CcpClient.Desktop.Session;
+using CcpClient.Desktop.Storage;
 
 namespace CcpClient.Desktop.Views.Pages;
 
@@ -522,6 +523,8 @@ public partial class StudioPage : UserControl
         session.MediaLog.LogReady += log => _recap.ShowRecap(log);
         ScriptedSessionHistoryButton.Click += (_, _) => _recap.ShowHistory();
         ScriptedSessionEditButton.Click += (_, _) => OnScriptedEditClicked();
+        ScriptedSessionImportButton.Click += (_, _) => _ = OnScriptedImportClickedAsync();
+        Picker = AvaloniaUserFilePicker.For(this);
 
         LoadDialsFromPreset();
         Refresh();
@@ -1858,6 +1861,108 @@ public partial class StudioPage : UserControl
         {
             editor.Show();
         }
+        RenderScriptedSession();
+    }
+
+    /// <summary>
+    /// The open-or-save seam this page uses, and the ONE way bytes from outside the application
+    /// reach the rack. The product default is the real Avalonia picker on this page's own top
+    /// level, resolved per operation (<see cref="AvaloniaUserFilePicker.For"/>).
+    ///
+    /// <para>Settable for <see cref="SystemPage.Picker"/>'s reason and no other: Avalonia marks
+    /// <c>IStorageProvider</c> <c>[NotClientImplementable]</c>, so there is no fake provider and a
+    /// headless fact that drives the REAL button through the REAL page has to replace the seam one
+    /// level up.</para>
+    /// </summary>
+    public IUserFilePicker Picker { get; set; }
+
+    /// <summary>
+    /// IMPORT — a session file from anywhere on the user's disk becoming one of their own.
+    /// Upstream's outcome is its drag-and-drop import
+    /// (<c>MainWindow/MainWindow.SessionIO.cs:2054-2102</c> into
+    /// <c>Services/Session/SessionManager.cs:99-142</c>); the gesture is upstream's editor Import
+    /// button (<c>Windows/SessionEditorWindow.xaml.cs:1060-1066</c>). The whole decision, including
+    /// what an imported file is NOT allowed to choose, is on <see cref="SessionImport"/>.
+    ///
+    /// <para><b>The button is shut while a dialog is up.</b> Upstream cannot reach this state — its
+    /// <c>OpenFileDialog.ShowDialog()</c> is modal (<c>:1068</c>) — and Avalonia's pickers are
+    /// awaited rather than blocking, so without the latch the same button opens a second dialog
+    /// over the first. It is <see cref="PhraseBackupNotices.Busy"/>'s divergence, kept here as a
+    /// disable rather than a caption swap because this caption is a UIA needle.</para>
+    ///
+    /// <para><b>The catch is the reason this is not a bare fire-and-forget.</b> An exception out of
+    /// an unobserved <see cref="Task"/> is swallowed at collection, which would make a broken
+    /// picker a button that silently does nothing forever. The TYPE is shown and never the message,
+    /// because the message of the classes this path raises carries the full path of the file that
+    /// failed (<see cref="UserFileRefusal"/>) — <see cref="SystemPage"/>'s own rule for the same
+    /// seam.</para>
+    /// </summary>
+    private async Task OnScriptedImportClickedAsync()
+    {
+        ScriptedSessionImportButton.IsEnabled = false;
+        try
+        {
+            ReportScriptedImport(
+                await new SessionImport(Picker, _session.CustomSessions).RunAsync());
+        }
+        catch (Exception ex)
+        {
+            _scriptedRefusal = SessionRackNotices.ImportFaulted(ex.GetType().Name);
+            RenderScriptedSession();
+        }
+        finally
+        {
+            ScriptedSessionImportButton.IsEnabled = true;
+        }
+    }
+
+    /// <summary>
+    /// Say what the import did, and move the rack only for the one outcome that changed the disk —
+    /// upstream's <c>if (result.success)</c> / <c>else</c> at the end of its drop handler
+    /// (<c>MainWindow/MainWindow.SessionIO.cs:2094-2102</c>), which reports both ways and reloads
+    /// on neither because its manager has already spliced the session in
+    /// (<c>Services/Session/SessionManager.cs:135-139</c>).
+    ///
+    /// <para><b>The re-read is <see cref="CommitEditedSession"/>'s and for its reason:</b> the file
+    /// on disk is now the authority, so the row the user sees is built from the bytes that landed
+    /// rather than from the instance in memory that produced them.</para>
+    ///
+    /// <para><b>The user's own pick is left exactly where it was</b>, including when it is null. An
+    /// import must not re-aim the Start button at a file that has just arrived from outside the
+    /// application; upstream does not move its selection either (its <c>SessionAdded</c> path
+    /// adds a row and nothing more, <c>Services/Session/SessionManager.cs:135-139</c>).</para>
+    ///
+    /// <para>A CANCELLED picker says nothing at all: nothing was read, nothing changed, and a
+    /// sentence about a dialog the user closed on purpose is noise.</para>
+    /// </summary>
+    private void ReportScriptedImport(SessionImportOutcome outcome)
+    {
+        switch (outcome)
+        {
+            case SessionImportOutcome.Imported imported:
+                ReloadScriptedCatalogue();
+                RepaintScriptedSessionRack();
+                _scriptedRefusal = SessionRackNotices.Imported(imported.Session);
+                break;
+
+            case SessionImportOutcome.RefusedFile refused:
+                _scriptedRefusal = SessionRackNotices.ImportRefusedFile(refused.Reason);
+                break;
+
+            case SessionImportOutcome.RefusedPicker refused:
+                _scriptedRefusal = SessionRackNotices.ImportRefusedPicker(refused.Reason);
+                break;
+
+            case SessionImportOutcome.SaveFailed:
+                // The file was good and the copy could not be written. The same two causes a user
+                // can act on that a refused Save has, so it is the same sentence.
+                _scriptedRefusal = SessionRackNotices.EditorSaveFailed;
+                break;
+
+            default:
+                break;
+        }
+
         RenderScriptedSession();
     }
 

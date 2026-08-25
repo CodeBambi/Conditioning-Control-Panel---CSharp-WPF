@@ -1,5 +1,6 @@
 using System.Globalization;
 using CcpClient.Desktop.Session;
+using CcpClient.Desktop.Storage;
 
 namespace CcpClient.Desktop.Views.Pages;
 
@@ -77,16 +78,17 @@ public static class SessionRackNotices
     /// <summary>What this surface does NOT do, said where the user is
     /// (§9 D7's rule: absent rather than greyed, and named rather than silently missing).
     ///
-    /// <para>The session EDITOR and CUSTOM sessions left this list because they stopped being
-    /// absent (<see cref="SessionEditorRules"/>, <see cref="CustomSessionStore"/>). IMPORTING a
-    /// session file is still not here — upstream's is drag-and-drop onto the rack plus a
-    /// validate-and-copy path (<c>Services/Session/SessionManager.cs:101-142</c>), and this build
-    /// has no file-drop surface to hang it on — and neither is AUTHORING A TIMELINE, which is the
-    /// half of upstream's editor this port models nothing for
-    /// (<see cref="SessionEditorRules"/>).</para></summary>
+    /// <para>The session EDITOR, CUSTOM sessions and now IMPORTING one left this list because they
+    /// stopped being absent (<see cref="SessionEditorRules"/>, <see cref="CustomSessionStore"/>,
+    /// <see cref="SessionImport"/>). What is left is AUTHORING A TIMELINE, which is the half of
+    /// upstream's editor this port models nothing for (<see cref="SessionEditorRules"/>); the
+    /// CORNER-GIF overlay one shipped session offers, which is named here for the first time
+    /// (<see cref="ScriptedSession.HasCornerGifOption"/> carries the argued refusal); and the XP
+    /// award.</para></summary>
     public const string Absences =
-        "Not here yet: importing a session file, authoring a session's timeline, and the XP award "
-        + "— so a pause is counted and its penalty recorded, but nothing is charged for it.";
+        "Not here yet: authoring a session's timeline, the corner-GIF overlay one session offers, "
+        + "and the XP award — so a pause is counted and its penalty recorded, but nothing is "
+        + "charged for it.";
 
     /// <summary>The rack's edit action (<c>MainWindow/MainWindow.SessionIO.cs:538</c>,
     /// <c>tooltip_edit_session</c>). Upstream offers it on EVERY row including a built-in, which is
@@ -167,6 +169,95 @@ public static class SessionRackNotices
     public const string EditorDeleteFailed =
         "That could not be deleted — the file may be gone already or in use. Nothing was changed.";
 
+    /// <summary>The rack's import action. Upstream's caption for the same gesture is the bare word
+    /// "Import" on its editor's toolbar (<c>Windows/SessionEditorWindow.xaml:215</c>, <c>btn_import</c>,
+    /// <c>Localization/Languages/en.json:910</c>); the object is
+    /// named here for <see cref="EditButton"/>'s reason — this strip sits beside other things a
+    /// user can import in this build, and a bare "Import" would not say what.</summary>
+    public const string ImportButton = "Import session";
+
+    /// <summary>The hint under it. It names the extension because that is what the OS dialog will
+    /// be filtering on (<see cref="SessionImport.FileKind"/>), and it names the OUTCOME — the file
+    /// becomes one of yours — because that is upstream's outcome
+    /// (<c>Services/Session/SessionManager.cs:129-137</c>) and it is the part a user cannot
+    /// guess.</summary>
+    public const string ImportTooltip =
+        "Add a .session.json file from your computer — it is copied into your own sessions";
+
+    /// <summary>
+    /// What a completed import says — upstream's <c>msg_imported_session</c>
+    /// (<c>Localization/Languages/en.json:3301</c>, "Imported: {0}", shown at
+    /// <c>MainWindow/MainWindow.SessionIO.cs:2096</c>), with <see cref="EditorSaved"/>'s second
+    /// clause: it names the FOLDER and never the file, because the folder is the actionable half
+    /// and no path may leave the picker seam (<see cref="IUserFilePicker"/>).
+    /// </summary>
+    public static string Imported(ScriptedSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return $"Imported “{session.Name}” into your sessions folder ({CustomSessionStore.FolderName}).";
+    }
+
+    /// <summary>
+    /// What a refused FILE says. Upstream's is "Invalid session file: {0}"
+    /// (<c>en.json:3300</c>, <c>Windows/SessionEditorWindow.xaml.cs:1072</c>) with the validator's
+    /// own message substituted; the port substitutes the typed reason, because upstream's
+    /// <c>{0}</c> can be the JSON reader's exception text
+    /// (<c>Services/Session/SessionFileService.cs:167</c>) and that is a sentence the FILE gets to
+    /// author.
+    ///
+    /// <para>Nothing was written and the rack did not move, which is upstream's order
+    /// (<c>Services/Session/SessionManager.cs:103-107</c>) and the reason each sentence can end by
+    /// saying so.</para>
+    /// </summary>
+    public static string ImportRefusedFile(SessionFileRefusal reason) =>
+        "That file isn't a session this build can import: " + reason switch
+        {
+            // Upstream's "Failed to parse session file" (:141) and its JsonException arm (:165-169).
+            SessionFileRefusal.NotJson =>
+                "the bytes are not a session document. Nothing was added.",
+            // Upstream's "Session must have an ID" (:147).
+            SessionFileRefusal.NoId => "it has no id. Nothing was added.",
+            // Upstream's "Session must have a name" (:153).
+            SessionFileRefusal.NoName => "it has no name. Nothing was added.",
+            // Upstream's "Session duration must be greater than 0" (:159).
+            SessionFileRefusal.NoDuration =>
+                "its duration is not a positive number of minutes. Nothing was added.",
+            _ => "it cannot be imported by this build. Nothing was added.",
+        };
+
+    /// <summary>
+    /// What a refused READ says — the picker's own reason, before any file was parsed
+    /// (<see cref="SessionImportOutcome.RefusedPicker"/>). Never an exception's message: an
+    /// <see cref="IOException"/>'s text carries the full path of the file that failed, which is the
+    /// shortest route to defeating the seam (<see cref="UserFileRefusal"/>).
+    /// </summary>
+    public static string ImportRefusedPicker(UserFileRefusal reason) =>
+        "Could not read that file: " + reason switch
+        {
+            // TopLevel.StorageProvider is never null — it degrades to a NoopStorageProvider — so
+            // without the probe this would be a dead button rather than a sentence.
+            UserFileRefusal.NoPicker =>
+                "this desktop has no file picker, so nothing was asked for and nothing was added.",
+            UserFileRefusal.ReadFailed => "it could not be read. Nothing was added.",
+            UserFileRefusal.WriteFailed => "the place you chose could not be written.",
+            UserFileRefusal.TooLarge =>
+                "it is larger than "
+                + (UserFilePicker.MaxTextBytes / (1024 * 1024)).ToString(CultureInfo.InvariantCulture)
+                + " MB, which is far more than a session file can be. Nothing was added.",
+            _ => "it could not be used. Nothing was added.",
+        };
+
+    /// <summary>
+    /// What an unexpected fault says. Upstream catches nothing at all around its import — an
+    /// exception out of <c>ImportSession</c> reaches the click handler
+    /// (<c>MainWindow/MainWindow.SessionIO.cs:2093</c>) — and this port shows the exception TYPE
+    /// and nothing else, because the message of the classes this path can raise carries the full
+    /// path of the file that failed (<see cref="UserFileRefusal"/>). It is
+    /// <see cref="PhraseBackupNotices.Faulted"/>'s rule on the other consumer of the same seam.
+    /// </summary>
+    public static string ImportFaulted(string exceptionTypeName) =>
+        "That import could not finish (" + exceptionTypeName + "). Nothing was added.";
+
     /// <summary>
     /// The rack row's provenance badge — upstream's, in upstream's own words
     /// (<c>MainWindow/MainWindow.SessionIO.cs:588-597</c>: <c>rack_src_yours</c> "YOURS" and
@@ -178,9 +269,12 @@ public static class SessionRackNotices
     /// beside it, so the badge is the only thing on the row that tells the two apart — it went from
     /// carrying no information to carrying the row's most important bit.</para>
     ///
-    /// <para>Upstream's third source, <c>CAT</c> for an imported session (<c>:593-594</c>), has no
-    /// member here for the reason <see cref="ScriptedSessionOrigin"/> gives: nothing in this build
-    /// imports one.</para>
+    /// <para>Upstream's third source, <c>CAT</c> (<c>:593-594</c>), has no member here — and its
+    /// reason was restated when <see cref="SessionImport"/> landed rather than left to rot. It is
+    /// NOT "nothing in this build imports one" any more; it is that upstream's own file import does
+    /// not produce that source either, because every caller overwrites it with <c>Custom</c>
+    /// (<see cref="ScriptedSessionOrigin"/> for the three, measured). An imported session reads
+    /// <c>YOURS</c> here exactly as it does upstream.</para>
     /// </summary>
     public static string RowProvenance(ScriptedSessionOrigin origin) =>
         origin == ScriptedSessionOrigin.BuiltIn ? "BUILT-IN" : "YOURS";

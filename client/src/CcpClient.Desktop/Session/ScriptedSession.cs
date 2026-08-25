@@ -100,8 +100,40 @@ public sealed class ScriptedSession
     /// is not available (<c>MainWindow/MainWindow.Presets.cs:1463</c>).</summary>
     public bool IsAvailable { get; set; } = true;
 
-    /// <summary>Whether the rack shows the corner-GIF opt-in (<c>:50</c>). The window it opts into
-    /// is not in this slice.</summary>
+    /// <summary>
+    /// Whether the rack shows the corner-GIF opt-in (<c>:50</c>). One shipped session sets it
+    /// (<c>gamer_girl</c>, pinned by <c>ScriptedSessionTests</c>).
+    ///
+    /// <para><b>THE CORNER-GIF WINDOW IS AN ARGUED REFUSAL, not an unstarted slice</b>, and the
+    /// argument is about what it actually is rather than about how big it is. Established from
+    /// source: <c>Windows/CornerGifWindow.xaml.cs:13-15</c> describes itself as the "Config window
+    /// for the standalone corner-GIF overlays (opened from the Spiral card)", and that is exactly
+    /// what it is — two persisted slots, each a toggle, a GIF picker, a corner, a size and an
+    /// opacity, live-applied through <c>App.CornerGif</c>. It is not a session surface at all: its
+    /// one entry point is the Spiral feature card
+    /// (<c>Features/SpiralFeatureControl.xaml:136-141</c> -> <c>SpiralFeatureControl.xaml.cs:458-462</c>),
+    /// and it says on its own face that the overlays are "on all the time, not just during a
+    /// session" (<c>Windows/CornerGifWindow.xaml:26</c>).</para>
+    ///
+    /// <para><b>The window is a control panel for a service this port does not have.</b> The
+    /// behaviour is all in <c>Services/CornerGifService.cs</c> (733 lines): a transparent,
+    /// click-through, always-on-top overlay per slot, made click-through by Win32
+    /// <c>WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOOLWINDOW</c> through <c>SetWindowLong</c>
+    /// (<c>:714-725</c>), animating a GIF through the <c>XamlAnimatedGif</c> package (<c>:7</c>),
+    /// with a crash sentinel that force-disables every slot when the previous run ended with an
+    /// overlay on screen (<c>:162-190</c>). None of that exists here: this port has no animated-GIF
+    /// decoder, no layered click-through window, and no per-monitor corner geometry. Shipping the
+    /// CONFIG WINDOW without the SERVICE would put a dialog on screen whose every control changes
+    /// nothing — the fake-available shape the capability contract bans, and the same refusal the
+    /// rack already made about the source chips and the <c>+N XP</c> cell
+    /// (<see cref="Views.Pages.SessionRackNotices.RowMeta"/>).</para>
+    ///
+    /// <para><b>So this flag stays PERSISTED AND UNREAD, and the absence is named on screen</b>
+    /// (<see cref="Views.Pages.SessionRackNotices.Absences"/>) rather than left to be discovered by
+    /// a user who starts <c>gamer_girl</c> and wonders where the opt-in went. It is the same
+    /// treatment <see cref="ScriptedSessionSettings.FlashSmallSize"/> gets for a different reason:
+    /// carried through a read and a write unchanged, applied by nothing.</para>
+    /// </summary>
     public bool HasCornerGifOption { get; set; }
 
     /// <summary>The sentence beside that opt-in (<c>:51</c>).</summary>
@@ -172,7 +204,7 @@ public sealed class ScriptedSession
 
     /// <summary>
     /// Parse one file's text. Returns null on malformed JSON, which is upstream's own answer —
-    /// <c>catch (JsonException) { return null; }</c> (<c>SessionFileService.cs:105-108</c>) — so a
+    /// <c>catch (JsonException) { return null; }</c> (<c>Services/Session/SessionFileService.cs:109-112</c>) — so a
     /// hand-edited or truncated file is a row that does not appear, never a crash.
     /// </summary>
     public static ScriptedSession? Parse(string json)
@@ -261,12 +293,20 @@ public sealed class ScriptedSession
 /// Where a session came from — upstream's <c>SessionSource</c>
 /// (<c>Models/SessionDefinition.cs:10-15</c>) minus its third member.
 ///
-/// <para><b>Upstream's <c>Imported</c> is not here</b>, and leaving it out is the same call the rack
-/// made about upstream's source chips: this build has no gesture that imports a session file from
-/// anywhere, so a member no path can produce would be a provenance the badge promised and nothing
-/// could deliver. It costs nothing to add the day an import lands, because
-/// <see cref="ScriptedSession.Origin"/> is stamped by the reader rather than parsed out of a
-/// file.</para>
+/// <para><b>Upstream's <c>Imported</c> is still not here, and the reason it is not has CHANGED —
+/// restated rather than left to rot.</b> The reason at slice 3 was that "this build has no gesture
+/// that imports a session file from anywhere". <see cref="SessionImport"/> ended that, so the
+/// premise was re-measured against upstream instead of being patched over, and the answer is that
+/// upstream's own import does not produce an <c>Imported</c> session either. Its file service
+/// stamps <c>SessionSource.Imported</c> (<c>Services/Session/SessionFileService.cs:92</c>) and
+/// every one of the three callers overwrites it before anyone can see it — the import path with
+/// <c>Custom</c> (<c>Services/Session/SessionManager.cs:132</c>, and again inside
+/// <c>CopyToCustomSessions</c>, <c>Services/Session/SessionFileService.cs:269</c>), the custom
+/// folder read with <c>Custom</c> (<c>:190</c>) and the built-in folder read with <c>BuiltIn</c>
+/// (<c>:214</c>). A grep of the shipping tree finds exactly one assignment of that member, the one
+/// at <c>:92</c>. So an imported session is a CUSTOM session upstream too, its <c>CAT</c> chip
+/// (<c>MainWindow/MainWindow.SessionIO.cs:593-594</c>) belongs to the community catalogue rather
+/// than to file import, and the two members here are the two an import can really produce.</para>
 /// </summary>
 public enum ScriptedSessionOrigin
 {
