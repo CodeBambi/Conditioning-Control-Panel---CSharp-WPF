@@ -45,6 +45,7 @@ import { isMobile, onDeviceChange } from '../core/device.js';
 import { genericPortrait, portraitSrc, portraitLabel, chipRung, paintChip, runPhotoDay,
   studentNumber } from './idcard.js';
 import { thud as punchThud } from './punchcard.js';
+import { createAccountChip } from './accountchip.js';
 import { mountMailChip } from './mailbox.js';
 import { mountBoardProp } from './corkboard.js';
 import { mountBugleProp } from './bugle.js';
@@ -744,9 +745,29 @@ function idCrestGlyph() {
  * @returns {{root, boardMount, footMount, update, closeCard, destroy}}
  */
 export function createCampus({ state, gameName, banner, stats, reducedMotion, on, log,
-  dateSeed, attractIdleMs, boardPulse, idCardMode, holdAttract, post, seep, annex } = {}) {
+  dateSeed, attractIdleMs, boardPulse, idCardMode, holdAttract, post, seep, annex,
+  account } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const handlers = on || {};
+  /* THE ACCOUNT CHIP (shell/accountchip.js): a host slot in the top-right
+   * cluster. `account` = {get, isMobile, onOpenCard, onAction}; `get()` is
+   * null on every host that never sent `init.account` (the desktop), and then
+   * nothing is mounted. Minted lazily so a late `profile` frame can still
+   * bring the chip in through setAccount(). */
+  const acctBag = account && typeof account.get === 'function' ? account : null;
+  let acctChip = null;
+  let topClusterEl = null;
+  let gearEl = null;
+  function mountAccountChip(a) {
+    if (!acctBag || !topClusterEl || acctChip) return;
+    try {
+      acctChip = createAccountChip({
+        t, account: a, isMobile: acctBag.isMobile,
+        onOpenCard: acctBag.onOpenCard, onAction: acctBag.onAction, log: say,
+      });
+      if (acctChip) topClusterEl.insertBefore(acctChip.el, gearEl ? gearEl.nextSibling : null);
+    } catch (e) { say('account chip unavailable (' + ((e && e.message) || e) + ')'); acctChip = null; }
+  }
   const name = typeof gameName === 'function' ? gameName : (k) => String(k);
   let st = state || campusState({ classes: [], records: {} });
   let cardOpen = false;
@@ -1626,6 +1647,11 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       try { topCluster.insertBefore(mailChip.el, gear); } catch (e) { /* order is cosmetic */ }
     }
   }
+  /* THE ACCOUNT CHIP, after the gear - the far right, the way the topbar and
+   * the main web app both place it. Web host only. */
+  topClusterEl = topCluster;
+  gearEl = gear;
+  try { mountAccountChip(acctBag ? acctBag.get() : null); } catch (e) { /* noop */ }
   root.appendChild(topCluster);
 
   /* THE HINT HAS TO BE TRUE. There is no hover on a phone, so the desktop line
@@ -2551,6 +2577,13 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
      * the stand-in portrait and the unlinked chip it was built with.
      */
     setProfile: setIdProfile,
+    /** THE ACCOUNT CHIP's seam: a later `account` repaints the chip, or mints
+     *  it when init shipped without one. Nothing on a host that sent none. */
+    setAccount(a) {
+      if (!a) return;
+      if (acctChip) { try { acctChip.setAccount(a); } catch (e) { /* noop */ } }
+      else mountAccountChip(a);
+    },
     /** The chip's in-flight looks, which only the shell knows about:
      *  'wait' (a link is in the air) and 'pending' (a set-setting is waiting on
      *  its echo). Every resting rung comes from `setProfile`. */
@@ -2634,6 +2667,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       destroyed = true;
       chalkClear();          // the title goes back and the claim is freed (trap 30)
     if (mailChip) { try { mailChip.destroy(); } catch (e) { /* noop */ } mailChip = null; }
+      if (acctChip) { try { acctChip.destroy(); } catch (e) { /* noop */ } acctChip = null; }
       if (boardProp) { try { boardProp.destroy(); } catch (e) { /* noop */ } boardProp = null; }
       if (bugleProp) { try { bugleProp.destroy(); } catch (e) { /* noop */ } bugleProp = null; }
       cancelAttract(false);

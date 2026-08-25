@@ -56,6 +56,7 @@ import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
 import { createFirstBell } from '../vn/index.js';
 import { createRecordsRoom } from './recordsroom.js';
 import { createIdSpotlight, idReducedMotion } from './idcard.js';
+import { createAccountChip, readAccount } from './accountchip.js';
 import { createAnnexReveal } from './annexreveal.js';
 /* THE SEEP - the foreshadowing layer. ONE director, and the shell's whole
  * relationship with it is: build it, hand it read-only seams and three gate
@@ -685,6 +686,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       presenceShare: idRung(src.profile.presenceShare, profile.presenceShare),
     };
   }
+  /* ---------------------- THE ACCOUNT CHIP (shell/accountchip.js) ----------
+   * A HOST SLOT. `init.account` (and `account` on a `profile` frame) is the
+   * web host's word that there is a login to control from this bar: name,
+   * a same-origin photo path and the ACTIONS it will honour. The desktop
+   * never sends it, so `account` stays null and no chip is ever mounted.
+   * ONE state, TWO chips (the topbar's and the campus cluster's) - both paint
+   * from `account` and both post the verb through `postAccountAction`. */
+  let account = readAccount(src.account);
+  let topAccountChip = null;
+  function postAccountAction(action) {
+    try { bridge.send({ type: 'account-action', action: String(action) }); }
+    catch (e) { say('account-action ' + action + ' refused: ' + ((e && e.message) || e)); }
+  }
   /** THE LAB (ANNEX-OS.md). Built fresh per visit and destroyed on every path
    *  out - it runs a cam-wall rAF and holds EMI's bracket, neither of which
    *  may survive the screen. `annexEmiPrev` remembers whether EMI was enabled
@@ -1189,6 +1203,22 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     gear.type = 'button';
     gear.addEventListener('click', () => showSettings());
     bar.appendChild(gear);
+    /* THE ACCOUNT CHIP, far right, beside SETTINGS. Web host only: the slot
+     * stays empty on a desktop that never sent `init.account`. The bar is
+     * rebuilt on every render, so the chip is too - one mint per render, the
+     * old one destroyed so its document listeners go with it. */
+    if (topAccountChip) { try { topAccountChip.destroy(); } catch (e) { /* noop */ } topAccountChip = null; }
+    if (account) {
+      try {
+        topAccountChip = createAccountChip({
+          t, account, isMobile,
+          onOpenCard: () => showIdCard(),
+          onAction: postAccountAction,
+          log: say,
+        });
+        if (topAccountChip) bar.appendChild(topAccountChip.el);
+      } catch (e) { say('account chip unavailable (' + ((e && e.message) || e) + ')'); topAccountChip = null; }
+    }
   }
 
   /* ============================ SCREEN: BOARD =========================== */
@@ -1565,6 +1595,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           /* The photo consent, leaving for the host. ONE function, because
            * there is ONE switch (owner ruling 1). */
           idChip: () => onIdChip(),
+        },
+        /* THE ACCOUNT CHIP in the campus's top-right cluster (web host only -
+         * null on the desktop, and the cluster is what it always was). Same
+         * state and the same two verbs as the topbar's chip. */
+        account: {
+          get: () => account,
+          isMobile,
+          onOpenCard: () => showIdCard(),
+          onAction: postAccountAction,
         },
         log: say,
       });
@@ -4196,6 +4235,24 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       clearIdLinkTimer();
       idChipWait = null;
       paintIdProfile();
+      /* THE ACCOUNT CHIP rides the same frame (a late fetch, a name that
+       * landed after init). Additive: a frame without `account` changes
+       * nothing, and a desktop host never sends one. */
+      const acct = readAccount(m && m.account);
+      if (acct) {
+        const first = !account;
+        account = acct;
+        // A chip that never existed (init shipped without `account`) is minted
+        // now; one that did repaints in place.
+        // Only a bar that is UP is re-rendered here: a hidden one (campus, class)
+        // is the next renderTopbar's job, and un-hiding it mid-class would be a
+        // regression of its own.
+        try {
+          if (topAccountChip) topAccountChip.setAccount(acct);
+          else if (first && dom && dom.topbar && !dom.topbar.hidden) renderTopbar();
+        } catch (e) { /* noop */ }
+        try { if (campus && campus.setAccount) campus.setAccount(acct); } catch (e) { /* noop */ }
+      }
       const result = m && typeof m.result === 'string' ? m.result : null;
       if (result === 'linked') {
         runIdPhotoDay();

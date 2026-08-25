@@ -1933,18 +1933,19 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
    height. On a desktop window too, which is how it reached the owner.
 
    THE BREAKPOINT IS THE CARD'S BREAKPOINT, VERBATIM. The step-aside exists to
-   clear `.campus-idcard`, so it has to end on exactly the query that hides the
+   clear `.campus-idcard`, so it has to use exactly the query that FOLDS the
    card ("small stages", further down this file). A row that dodged at 740px
-   while the card left at 760px/600px landed the props back on the architecture
-   of every landscape phone. Once the card is gone the corner is free, so the
-   row takes it: the old `bottom:172px` was headroom for a card that is
-   `display:none` at that size. */
+   while the card folded at 760px/600px landed the props back on the
+   architecture of every landscape phone. The card no longer leaves at that
+   size (2026-08-25: it folds into a ~185px tag, because `display:none` here
+   was the owner's "I cannot see my profile card on the web"), so the row
+   steps RIGHT of the tag instead of taking the corner. */
 .campus-postrow {
   position:absolute; left:calc(clamp(12px, 2.5vw, 44px) + 256px); bottom:22px;
   z-index:24; display:flex; align-items:flex-end; gap:12px;
 }
 @media (max-width:760px), (max-height:600px) {
-  .campus-postrow { left:clamp(12px, 2.5vw, 44px); bottom:22px; }
+  .campus-postrow { left:calc(clamp(12px, 2.5vw, 44px) + 212px); bottom:16px; }
 }
 
 /* ---- tooltip ---- */
@@ -2283,9 +2284,32 @@ html.arc-reduced .campus-trace.fading { transition:none; opacity:.22; }
   .campus-trace.fading { transition:none; opacity:.22; }
 }
 
-/* small stages: hide the flourishes before they collide with the board */
+/* small stages: the flourishes step down before they collide with the board.
+   THE STUDENT ID DOES NOT LEAVE (owner bug, 2026-08-25: "I cannot see my
+   profile card on the web"). Every phone lands in this query in BOTH
+   orientations (an iPhone is <=430px on its short side, so landscape trips
+   max-height:600 and portrait trips max-width:760), and the old
+   `display:none` here - written when the card was decoration - took the whole
+   ID with it. The SAME node now folds into a tag: photo, name and number in
+   one strip, band / stats / tier / chip / clip hidden, still a `role=button`
+   that opens the spotlight, still the one node orientation.js and
+   emi/fieldtrips.js measure. The crest still goes: it is only a title. */
 @media (max-width:760px), (max-height:600px) {
-  .campus-idcard { display:none; }
+  .campus-idcard {
+    width:auto; max-width:200px; min-width:150px; bottom:14px;
+    padding:6px 12px 6px 7px; border-radius:10px; transform:none;
+  }
+  .campus-idcard:hover,
+  .campus-idcard:focus-visible { transform:translateY(-2px); }
+  .campus-idcard:active { transform:translateY(0) scale(.985); }
+  .campus-idcard .id-clip, .campus-idcard .id-band, .campus-idcard .id-foil,
+  .campus-idcard .id-stats, .campus-idcard .id-tier, .campus-idcard .id-no,
+  .campus-idcard > .id-chip, .campus-idcard::after { display:none; }
+  .campus-idcard .id-top { align-items:center; gap:8px; }
+  .campus-idcard .id-well { width:34px; }
+  .campus-idcard .id-photo { width:34px; height:38px; border-radius:6px; }
+  .campus-idcard .id-name { font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .campus-idcard .id-num { margin-top:2px; white-space:nowrap; }
   .campus-crest { display:none; }
 }
 
@@ -4661,3 +4685,78 @@ html.arc-reduced .emi.arc-seep-frame::after { content:none; }
   .campus-seepscan, .campus-seeprec { animation:none; }
   .arc-seep-draft.is-on { animation:none; opacity:0; }
 }
+
+/* ============================ ACCOUNT CHIP ===============================
+   shell/accountchip.js. A HOST SLOT: the round photo miniature at the far
+   right of the topbar and of the campus's top-right cluster, and the small
+   front-desk menu under it. The desktop never sends `init.account`, so on the
+   app nothing below is ever on the page. Photo or a drawn monogram, never
+   both (`.has-photo` flips on a successful <img> load and off on error). */
+.arc-acct { position:relative; flex:none; }
+.arc-acct-btn {
+  width:36px; height:36px; padding:0; border-radius:50%; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; overflow:hidden;
+  background:color-mix(in srgb, var(--navy), transparent 13%);
+  border:2px solid var(--pink-deep); color:var(--ink);
+  box-shadow:0 2px 10px rgba(0,0,0,.45);
+  transition:border-color .15s, box-shadow .15s, transform .15s;
+  backdrop-filter:blur(4px);
+}
+.arc-acct-btn:hover { border-color:var(--pink); transform:translateY(-1px); }
+.arc-acct-btn:focus-visible { outline:2px solid var(--pink); outline-offset:2px; }
+.arc-acct.is-open .arc-acct-btn {
+  border-color:var(--pink);
+  box-shadow:0 0 14px color-mix(in srgb, var(--pink), transparent 45%);
+}
+.arc-acct-img { display:none; width:100%; height:100%; object-fit:cover; }
+.arc-acct-mono {
+  font-family:var(--disp); font-size:15px; letter-spacing:.04em; line-height:1;
+  color:var(--pink);
+}
+.arc-acct.has-photo .arc-acct-img { display:block; }
+.arc-acct.has-photo .arc-acct-mono { display:none; }
+
+.arc-acct-menu {
+  position:absolute; right:0; top:calc(100% + 8px); z-index:120;
+  min-width:200px; max-width:min(262px, calc(100vw - 24px));
+  background:color-mix(in srgb, var(--navy), transparent 4%);
+  border:1px solid var(--pink-deep); border-radius:12px; padding:8px;
+  box-shadow:0 16px 44px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.06);
+  text-align:left;
+}
+.arc-acct-who { padding:6px 10px 8px; border-bottom:1px solid var(--line); margin-bottom:6px; }
+.arc-acct-cap {
+  display:block; font-family:var(--mono); font-size:8.5px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--ink-faint);
+}
+.arc-acct-name {
+  display:block; font-family:var(--disp); font-size:13px; letter-spacing:.06em;
+  color:var(--ink); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.arc-acct-item {
+  display:block; width:100%; min-height:36px; padding:8px 10px; text-align:left;
+  background:transparent; border:0; border-radius:8px; cursor:pointer;
+  font-size:12px; letter-spacing:.06em; color:var(--ink-dim);
+  transition:background .12s, color .12s;
+}
+.arc-acct-item:hover, .arc-acct-item:focus-visible { background:var(--panel); color:var(--ink); outline:none; }
+.arc-acct-item.is-signout { color:var(--ink-faint); }
+.arc-acct-item.is-card { color:var(--pink); }
+
+/* On a phone: a thumb-sized chip and a SHEET under the bar. Fixed and edge to
+   edge so it never runs off the screen and never lands over the campus's own
+   controls; the top is measured by the chip at open (under whichever bar it
+   is in). 44px rows are the floor for anything a thumb has to hit. */
+html.arc-mobile .arc-acct-btn { width:44px; height:44px; }
+html.arc-mobile .arc-acct-mono { font-size:18px; }
+html.arc-mobile .arc-acct-menu {
+  position:fixed; left:12px; right:12px; top:64px; max-width:none; min-width:0;
+  padding:10px;
+}
+html.arc-mobile .arc-acct-item { min-height:44px; padding:12px 12px; font-size:13px; }
+
+/* The account chip made the campus top-right cluster 54px wider, and on a
+   landscape phone the bell chip was already brushing the hanging TIMETABLE
+   plaque. The bell keeps its icon and its time; the NEXT BELL caption is the
+   part a thumb never needed. */
+html.arc-mobile .campus-bellchip .cap { display:none; }

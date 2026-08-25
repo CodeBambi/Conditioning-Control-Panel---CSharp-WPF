@@ -340,6 +340,15 @@ export const DEFAULT_LEXICON = Object.freeze({
   id_open_records: 'Open Records',
   id_spot_close: 'Close',
 
+  /* THE ACCOUNT CHIP (shell/accountchip.js). A host slot: the web host fills it
+     with a login to control from the top bar, the desktop never sends it. Front
+     desk voice, no em-dashes, every row under the 96-char cap. */
+  account_menu: 'Account',
+  account_signed_in_as: 'Signed in as',
+  account_open_card: 'Open my card',
+  account_profile: 'Profile',
+  account_sign_out: 'Sign out',
+
   /* Semester II ghost labels behind the tape (unregistered games get their
    * game_<key> row here, same convention the registry uses once they ship). */
   game_misdirection: 'Misdirection',

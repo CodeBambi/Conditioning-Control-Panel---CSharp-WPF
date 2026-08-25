@@ -2501,6 +2501,13 @@ internal static class ArcademyHostService
         ["id_records_line"] = "Records: {n} of {m} cards mastered",
         ["id_open_records"] = "Open Records",
         ["id_spot_close"] = "Close",
+        // ---- THE ACCOUNT CHIP (2026-08-25): a host slot the web build fills (init.account); the desktop
+        // never sends it, so these rows are here for the mirror law and mod skins only.
+        ["account_menu"] = "Account",
+        ["account_signed_in_as"] = "Signed in as",
+        ["account_open_card"] = "Open my card",
+        ["account_profile"] = "Profile",
+        ["account_sign_out"] = "Sign out",
     };
 
     /// <summary>The mockup's owner-approved tokens (BUILD-CONTRACT §10). A mod overrides them via
