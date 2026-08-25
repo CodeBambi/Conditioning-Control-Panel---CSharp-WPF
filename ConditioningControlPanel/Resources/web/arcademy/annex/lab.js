@@ -177,7 +177,7 @@ export function createAnnexLab(caps) {
 
     if (name !== 'wide') {
       const back = el('button', 'al-back', '‹ ' + t('annex_back', 'step back'));
-      back.addEventListener('click', () => { sfx('door', 0.3); showView('wide'); });
+      back.addEventListener('click', () => stepBack());
       stage.appendChild(back);
     }
     if (entering) sfx(name === 'wide' ? 'door' : 'paper', name === 'wide' ? 0.3 : 0.2);
@@ -206,6 +206,17 @@ export function createAnnexLab(caps) {
     if (action === 'laptop') { openOs(); return; }
     sfx('blip', 0.16, { pitch: 1.05 });
     showView(action);
+  }
+
+  /** The pill's verb, and the backdrop's. ONE step, and it never folds an OS
+   *  window: escapeStep() walks inward-out (a window at a time), but a player
+   *  who reaches for "step back" is leaving the terminal, not tidying it. So
+   *  the ladder here is paper -> the whole OS -> the close-up itself. */
+  function stepBack() {
+    if (dead) return;
+    if (paperLayer) { closePaper(); return; }
+    if (os) { closeOs(); return; }
+    if (view && view !== 'wide') { sfx('door', 0.3); showView('wide'); }
   }
 
   function requestExit() {
@@ -309,6 +320,18 @@ export function createAnnexLab(caps) {
     osLayer = el('div', 'al-oslayer');
     const frame = el('div', 'al-osframe');
     osLayer.appendChild(frame);
+    /* the painted room around the laptop is a way out (paperShell's pattern),
+     * but ONLY when the press and the release both landed on the backdrop -
+     * a window dragged out of the frame reports the layer as the click target
+     * (the common ancestor of down and up) and must not read as "leave" */
+    let downOnBackdrop = false;
+    osLayer.addEventListener('pointerdown', (e) => { downOnBackdrop = e.target === osLayer; });
+    osLayer.addEventListener('click', (e) => {
+      const clean = downOnBackdrop;
+      downOnBackdrop = false;
+      if (e.target !== osLayer || !clean) return;
+      stepBack();
+    });
     stage.appendChild(osLayer);
 
     /* zoom out of the laptop glass: origin at its center, scale up */

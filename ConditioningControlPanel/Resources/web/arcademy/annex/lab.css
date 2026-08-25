@@ -90,9 +90,13 @@
 
 /* ------------------------------ back pill ------------------------------- */
 
+/* z 9 is above EVERY overlay this stage mints (paper 6, the OS 7, descent 8):
+   the way out of a close-up may never be painted over by what the close-up
+   opened - the OS layer's own backdrop used to swallow both the pixels and
+   the click. */
 .al-back {
   position: absolute;
-  z-index: 4;
+  z-index: 9;
   left: 16px;
   bottom: 14px;
   padding: 6px 14px;
@@ -233,6 +237,7 @@
   inset: 0;
   z-index: 7;
   background: rgba(4, 7, 8, 0.6);
+  cursor: zoom-out;   /* the painted room around the laptop steps back */
 }
 .al-osframe {
   position: absolute;

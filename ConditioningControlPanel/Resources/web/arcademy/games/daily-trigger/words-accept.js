@@ -20,7 +20,7 @@
  * ==========================================================================*/
 
 /** Curated real words, acceptance only. */
-export const ACCEPT = `
+const ACCEPT_BASE = `
 abbey abide abled abort about above abuse abyss acorn acrid acted actor acute adage adapt added
 adept admit adobe adopt adore adult affix afire afoot afoul after again agate agent agile aging
 agony agree ahead aider aimed aired aisle alarm album alder alert algae alias alibi alien align
@@ -274,5 +274,20 @@ wryly xenon xerox xylem yacht yanks yards yarns yawls yawns yeahs yearn yeast ye
 yield yodel yogas yogis yoked yokel yokes yolks young yours youth yowls yucca yucky yummy zebra
 zeros zesty zilch zincs zings zippy zonal zoned zones zooms
 `;
+
+
+/**
+ * NICHE EXTRAS (2026-08-25, with the answers-are-niche-only ruling): on-theme
+ * words a player will actually try - kink / bimbo / school / arcade vocabulary
+ * that the ordinary-English list above never carried. Acceptance only.
+ */
+export const ACCEPT_NICHE = `
+  booty butts boobs busty twerk dildo femme domme roped caged cages melty dopey dazes dozes dulls
+  rerun aches ached burns rides kissy licks bling gaudy girly ditsy lacey panty bangs cuter circe
+  bambi popup lotto dings bytes stuck desks books years tasks dorms dotty kooky emoji chasm
+`;
+
+/** The list the bank reads: the curated base plus the niche extras. */
+export const ACCEPT = ACCEPT_BASE + ' ' + ACCEPT_NICHE;
 
 export default ACCEPT;
