@@ -60,20 +60,30 @@ public class StudioDialPresentationTests
     /// Neither half accepts the other's colour, nor the ground they are both drawn on.
     ///
     /// <para>The measurement behind the numbers: the sampled band is 936 px and holds exactly three
-    /// colours across the two captures — the module panel's ground <c>#1C1C35</c> at 728 px in
-    /// both, Fluent's slider accent <c>#0078D4</c> at 208 px when the dial is the user's, and its
-    /// disabled track <c>#333333</c> at 208 px when the session owns it. Widen either tolerance
-    /// past the separation and the pair stops proving anything; this names both colours when that
-    /// happens.</para>
+    /// colours across the two captures — the module panel's ground at 728 px in both, Fluent's
+    /// slider accent at 208 px when the dial is the user's, and its disabled track <c>#333333</c>
+    /// at 208 px when the session owns it. Widen either tolerance past the separation and the pair
+    /// stops proving anything; this names both colours when that happens.</para>
+    ///
+    /// <para><b>THE ENABLED TRACK WAS <c>#0078D4</c> IN THIS TABLE AND IN THE MANIFEST, AND IT HAD
+    /// STOPPED BEING TRUE.</b> That is the Windows personalisation blue Fluent used to resolve
+    /// <c>SystemAccentColor</c> from; the token layer shadowed all seven of Fluent's accent keys
+    /// with the product's own pink and neither this table nor <c>checks.json</c> moved with it. The
+    /// floor stayed green the whole time, because everything here asserts that the manifest is
+    /// CONSISTENT and a manifest can be perfectly consistent about a colour nothing paints. Only a
+    /// headed capture could catch that, and one did: re-measured 2026-08-25 on a real
+    /// <c>studio-dial/live</c> capture at scale 1.75, the band is exactly 728 x <c>#11111A</c> plus
+    /// 208 x <c>#E84393</c> — the theme's panel colour and the theme's accent, at the geometry this
+    /// pair always had.</para>
     /// </summary>
     [Fact]
     public void NeitherLockCheckAcceptsTheOtherLiveryOrTheGroundBehindIt()
     {
         (string Name, byte R, byte G, byte B)[] neighbours =
         [
-            ("the enabled slider track (Fluent SliderTrackValueFill)", 0x00, 0x78, 0xD4),
+            ("the enabled slider track (Fluent's accent, the theme's #FFE84393)", 0xE8, 0x43, 0x93),
             ("the disabled slider track (Fluent SliderTrackValueFillDisabled)", 0x33, 0x33, 0x33),
-            ("the module panel ground (Border.module, MainWindow.axaml:122)", 0x1C, 0x1C, 0x35),
+            ("the module panel ground (Border.module, MainWindow.axaml:122, PanelBg)", 0x11, 0x11, 0x1A),
         ];
 
         var checks = DialChecks();

@@ -63,9 +63,10 @@
     <Style Selector="RadioButton.door:pointerover">
       <Setter Property="BorderBrush" Value="{DynamicResource TextDimBrush}" />
     </Style>
-    <!-- The selected door. ShellAccentBright is the harness anchor and it is DECLARED IN
-         Themes/Ccp.axaml, not here: self-test.ps1 seeds its regression by replacing the token's
-         value there, and checks.json's rail-door-selected-border reads this band off real pixels. -->
+    <!-- The selected door. ShellAccentBright is the harness anchor and it is not written here:
+         Themes/Ccp.axaml declares its SEED and Themes/CcpTheme.cs carries the value a user really
+         sees, which is where self-test.ps1 seeds its regression. checks.json's
+         rail-door-selected-border reads this band off real pixels. -->
     <Style Selector="RadioButton.door:checked">
       <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}" />
       <Setter Property="BorderBrush" Value="{DynamicResource ShellAccentBrightBrush}" />

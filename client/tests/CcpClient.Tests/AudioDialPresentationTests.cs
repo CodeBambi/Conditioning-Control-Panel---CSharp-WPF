@@ -75,11 +75,18 @@ public class AudioDialPresentationTests
         {
             Assert.Equal(CheckManifest.EvidencePresentation, check.EvidenceClass);
 
-            // Fluent's SliderTrackValueFill — the ENABLED track. The `running` half expecting this
-            // is the whole packet: a session is under way in that capture and the dial is still the
-            // user's.
+            // Fluent's enabled slider track. The `running` half expecting this is the whole packet:
+            // a session is under way in that capture and the dial is still the user's.
+            //
+            // THE COLOUR IS THE PRODUCT'S ACCENT, NOT THE MACHINE'S. It was 0x0078D4 here until
+            // 2026-08-25 — the Windows personalisation blue Fluent used to resolve
+            // SystemAccentColor from — and it went stale the day the token layer shadowed Fluent's
+            // accent family, silently, because this file only ever checked the manifest against
+            // itself. Under the CCP Default theme it is the mod's own AccentColor
+            // (WPF Models/BuiltInMods.cs:920), and that is confirmed on a real capture rather than
+            // read off a dictionary: the studio dial's live band measured 208 px of #E84393.
             var (r, g, b) = CheckManifest.ParseColor(check.ExpectedColor, $"check '{check.Name}':");
-            Assert.Equal((0x00, 0x78, 0xD4), (r, g, b));
+            Assert.Equal((0xE8, 0x43, 0x93), (r, g, b));
         }
     }
 
@@ -95,7 +102,7 @@ public class AudioDialPresentationTests
         (string Name, byte R, byte G, byte B)[] neighbours =
         [
             ("the disabled slider track (Fluent SliderTrackValueFillDisabled)", 0x33, 0x33, 0x33),
-            ("the module panel ground (Border.module, MainWindow.axaml:122)", 0x1C, 0x1C, 0x35),
+            ("the module panel ground (Border.module, MainWindow.axaml:122, PanelBg)", 0x11, 0x11, 0x1A),
         ];
 
         var checks = AudioChecks();

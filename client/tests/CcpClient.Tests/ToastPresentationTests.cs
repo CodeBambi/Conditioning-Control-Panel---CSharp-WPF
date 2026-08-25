@@ -85,9 +85,12 @@ public class ToastPresentationTests
             ("the Success accent (NotificationService.cs:122)", 0x4C, 0xAF, 0x50),
             ("the Warning accent (NotificationService.cs:123)", 0xFF, 0xB3, 0x47),
             ("the Error accent (NotificationService.cs:124)", 0xFF, 0x6B, 0x6B),
-            ("the Info accent (NotificationService.cs:125)", 0xFF, 0x69, 0xB4),
-            ("the toast plate (Border.notice, MainWindow.axaml:128)", 0x22, 0x22, 0x40),
-            ("the shell ground (MainWindow.axaml:6)", 0x12, 0x12, 0x20),
+            // The Info accent binds PinkBrush (ToastHost.axaml:43), so it follows the theme: under
+            // CCP Default that is the mod's own AccentColor. The other three are SEMANTICS and are
+            // not themed, exactly as upstream keeps its Danger and SuccessGreen static across mods.
+            ("the Info accent (NotificationService.cs:125, PinkColor)", 0xE8, 0x43, 0x93),
+            ("the toast plate (Border.notice, MainWindow.axaml:128, ElevatedSurface)", 0x22, 0x22, 0x40),
+            ("the shell ground (MainWindow.axaml:6, DarkerBg)", 0x08, 0x08, 0x0C),
         ];
 
         var checks = ToastChecks();

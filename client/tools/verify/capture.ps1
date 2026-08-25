@@ -1558,7 +1558,7 @@ elseif ($Surface -eq 'trainer-card-level') {
     # spine landed and nothing rendered it; this photographs the bar that ended that.
     #
     # THE CLAIM IS A GEOMETRY, NOT A COLOUR. Both states paint the same two colours in the same
-    # place: a #2E2E4A track with a #FF1493 fill in front of part of it. What separates them is HOW
+    # place: a #34343C track with a #B83078 fill in front of part of it. What separates them is HOW
     # MUCH of the track the fill covers, and the sampled band is positioned so that the answer flips
     # between the two — fill in `earned`, bare track in `fresh`. A bar that ignored the ledger would
     # paint identically in both and neither check could fail.
@@ -1694,7 +1694,7 @@ elseif ($Surface -eq 'trainer-card-record') {
     # the difference between the three captures is entirely what is in graded_run_awards.json.
     #
     # THE CLAIM IS AN EXTENT, NOT A COLOUR, which is the level bar's shape applied to text. Every
-    # line on this card is painted the same two ways - card ground #1C1C35 behind, one of the
+    # line on this card is painted the same two ways - card ground #11111A behind, one of the
     # shell's inks in front - so what separates the states is WHERE THE INK STOPS:
     #
     #   * `unreadable` is the only state that has a record note at all, and its sentence runs far
@@ -2085,7 +2085,7 @@ elseif ($Surface -eq 'toast') {
     # NEITHER REGION TOUCHES THE OUTERMOST COLUMN, AND THAT IS MEASURED RATHER THAN CAUTIOUS. This
     # left edge is the DIFFERENCE of two independently layout-rounded rects, so it carries +/-1 px:
     # the first run of this surface derived 1724 for an accent bar that really began at 1725, and
-    # column 0 came back as the window ground #121220 - 70/84 on a check that had every other pixel
+    # column 0 came back as the window ground #08080C - 70/84 on a check that had every other pixel
     # right. So both regions are inset by a column and the arithmetic below proves they survive the
     # error in EITHER direction.
     $accentPx = [int][math]::Round(4 * $scale)
@@ -2764,7 +2764,7 @@ elseif ($Surface -eq 'session-row' -or $Surface -eq 'session-start' -or $Surface
         # of ONE colour and the capture step's non-vacuity gate refused it, correctly - a picture of
         # a flat plate cannot be told from a picture of nothing. So the cell is captured 16 DIP
         # lower down a 23 DIP crop that starts 3 DIP ABOVE the plate: window ground, the plate's own
-        # 1 DIP #FF3A3A5C border, its 12 DIP padding, then the cell. That boundary is present in
+        # 1 DIP #FF4C4C53 border, its 12 DIP padding, then the cell. That boundary is present in
         # BOTH states - it is the plate's, not the row's - and it is what makes the picture say the
         # cell is where the plate's arithmetic puts it rather than only what colour it is.
         $headerRect = Get-Rect (Get-Element $history 'SessionHistoryHeader')
@@ -3327,7 +3327,7 @@ elseif ($Surface -eq 'companion-privacy') {
     # fill. Cropped to the fill alone both states were one flat colour and the capture step's
     # non-vacuity gate refused them - correctly, because a picture of a flat fill cannot be told
     # from a picture of nothing. The border is a boundary in BOTH states and it moves with them
-    # (#FF3A3A5C unselected, #FFFF8FAF selected), so the picture now says the seat is a seat.
+    # (#FF4C4C53 unselected, #FFFF6FB5 selected), so the picture now says the seat is a seat.
     $titlesRect = Get-Rect (Get-Element $companion 'DialTitles')
     $capX = $titlesRect.X
     $capY = $titlesRect.Y - [int][math]::Round(8 * $scale)
@@ -3405,7 +3405,7 @@ elseif ($Surface -eq 'companion-transcript') {
     #
     # WHAT IT USED TO BE: 300x3 DIP of the settings Border's own top padding, at the same screen
     # coordinates in both states. In `closed` those pixels are the companion window's ground
-    # #FF121220; in `open` the transcript is over them and they are its ground #FF1F1F3A. Both
+    # #FF08080C; in `open` the transcript is over them and they are its ground #FF1F1F3A. Both
     # captures were therefore ONE FLAT COLOUR, and the capture step's non-vacuity gate refused both
     # - correctly. A picture of a flat fill cannot be told from a picture of nothing.
     #
@@ -3416,7 +3416,7 @@ elseif ($Surface -eq 'companion-transcript') {
     # left one, 24 px away). Anything the companion window paints is, by construction, covered.
     #
     # SO THE HONEST BOUNDARY IS THE TRANSCRIPT'S OWN EDGE, and the band now crosses it. It also
-    # reaches up to the settings panel's own 1 DIP top rule (#FF3A3A5C, CompanionWindow.axaml:146,
+    # reaches up to the settings panel's own 1 DIP top rule (#FF4C4C53, CompanionWindow.axaml:146,
     # BorderThickness 0,1,0,0), which is what the LEFT of the band still shows in `open` because the
     # transcript does not reach it. That gives:
     #   closed - rule + ground, two colours, the whole width;
@@ -3528,7 +3528,7 @@ else {
 # Park the mouse off every interactive surface so :pointerover never leaks into a capture. The
 # diagnostic footer's bottom-right corner has no control on it, and for the rack this matters
 # twice over: RadioButton.rack-row:pointerover is #FF222240, only 10/10/16 away from the rack's
-# own #FF181830 ground, so a hovering cursor is exactly the thing a ground check must not see.
+# own #FF0C0C13 ground, so a hovering cursor is exactly the thing a ground check must not see.
 [VerifyNative]::SetCursorPos($windowRect.X + $windowRect.W - 40, $windowRect.Y + $windowRect.H - 40) | Out-Null
 Start-Sleep -Milliseconds 400
 

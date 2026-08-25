@@ -60,7 +60,7 @@ public sealed record CcpTheme(
     /// own order.
     ///
     /// <para><b>THIS IS THE HEADED HARNESS'S SEEDED-REGRESSION ANCHOR.</b>
-    /// <c>client/tools/verify/self-test.ps1</c> replaces <c>#FF6FB5</c> on the
+    /// <c>client/tools/verify/self-test.ps1</c> replaces the hex on the
     /// <c>AccentLight</c> line below with a wrong colour, rebuilds, and requires BOTH
     /// <c>rail-door-selected-border</c> and <c>rack-row-selected-marker</c> to trip on real pixels.
     /// The anchor lives here rather than in <c>Themes/Ccp.axaml</c> because this is where the

@@ -96,7 +96,11 @@ public class ToastHostHeadlessTests : HeadlessTest
             Assert.Equal(
                 new[]
                 {
-                    Color.FromRgb(0xFF, 0x69, 0xB4),   // Info    — NotificationService.cs:125
+                    // Info binds PinkBrush, so it FOLLOWS THE THEME: this is CCP Default's own
+                    // AccentColor, not upstream's seed pink. The other three are severities and
+                    // are static across mods, exactly as upstream keeps Danger and SuccessGreen
+                    // out of its own re-theme.
+                    Color.FromRgb(0xE8, 0x43, 0x93),   // Info    — NotificationService.cs:125
                     Color.FromRgb(0x4C, 0xAF, 0x50),   // Success — :122
                     Color.FromRgb(0xFF, 0xB3, 0x47),   // Warning — :123
                     Color.FromRgb(0xFF, 0x6B, 0x6B),   // Error   — :124
