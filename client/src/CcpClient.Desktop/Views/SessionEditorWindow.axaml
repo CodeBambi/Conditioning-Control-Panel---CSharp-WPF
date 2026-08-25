@@ -154,22 +154,32 @@
         <StackPanel>
           <TextBlock Classes="field-label" Text="Description" />
           <!-- MULTI-LINE AND DELIBERATELY NOT WRAPPED, and the reason is measured rather than
-               aesthetic. Upstream's box wraps (SessionEditorWindow.xaml:235). An Avalonia TextBox
-               with TextWrapping="Wrap" holding text long enough to need a second line does not
-               terminate under the headless platform's stub text metrics: Show() never returns and
-               the process climbs past 19 GB. Reproduced from first principles and narrowed to the
-               one property — the same box with NoWrap and the same text shows in 1.5 s, and the
-               same box with Wrap and the word "short" shows in 1.3 s, so it is the WRAPPING of
-               real text and neither the height, the AcceptsReturn nor the scrollbar policy.
-               (Each of those four was run as its own probe; MinHeight and an always-visible bar
-               were tried and neither helps.)
+               aesthetic. Upstream's box wraps (SessionEditorWindow.xaml:235).
 
-               So the choice was between a description field this port's evidence base cannot open
-               at all and one that scrolls sideways. Horizontal scrolling is the smaller loss and
-               it is honest: the box still accepts newlines, so authored paragraphs are still
-               authored, and the rack row shows the first line either way. Recorded as a
-               divergence; the day the harness can measure wrapped editable text this is one
-               attribute. -->
+               THE TRIGGER IS A BLANK LINE, NOT LENGTH — and the first record of this said length,
+               which was wrong. Settled 2026-08-25 by reproducing it outside the suite. Under the
+               HEADLESS TEST HARNESS ONLY, a wrapped Avalonia TextLayout over text containing an
+               EMPTY LINE never terminates: the formatter returns a zero-length line at the blank
+               line's position with no end-of-paragraph break, TextLayout's own loop advances by
+               that length, and it appends a line per iteration until the process is past 19 GB.
+               Every shipped session description contains "\n\n", which is why opening this editor
+               was the thing that hung. Wrapping 160 characters with no newline is fine (14 lines,
+               0.42 s); a LEADING newline is enough to hang it; a TRAILING one is not;
+               WrapWithOverflow hangs too; NoWrap never reaches that code path at all.
+
+               AND IT IS THE HARNESS, NOT THIS PRODUCT. The same text and the same wrap width
+               formats in 0.42 s against Skia's real system fonts and in 0.40 s under headless stub
+               DRAWING with a real embedded font. Only Avalonia.Headless.BareMinimum.ttf — the font
+               the headless platform serves, which nothing shipped ever uses — reaches the loop. So
+               a real user on a real desktop would get correct wrapping here.
+
+               NoWrap ships anyway, and this is the honest trade rather than a defect: the port's
+               evidence base is the headless suite, and a field it cannot open is worth less than a
+               field that scrolls sideways. The box still accepts newlines, so authored paragraphs
+               are still authored, and the rack row shows the first line either way. Recorded as a
+               divergence, and it is now a divergence with an EXIT: the artefact is pinned by
+               CcpClient.HeadlessTests/HeadlessWrappedTextArtefactTests.cs, which reds the moment it
+               stops being true and says to restore this attribute when it does. -->
           <TextBox x:Name="DescriptionBox"
                    Classes="field"
                    Height="110"
