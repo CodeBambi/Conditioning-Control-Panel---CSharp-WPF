@@ -3029,6 +3029,13 @@ namespace ConditioningControlPanel.Services
         /// <param name="haveLocal">True when a disk or pack image is available as an alternative.</param>
         private bool ShouldDrawRemote(bool haveLocal)
         {
+            // Bug #1037. This used to read the ratio without ever re-reading the source setting,
+            // so a user who switched to "my library only" mid-run kept drawing remote stills at
+            // RemoteMediaRatio% until the warm pool drained - which is why restarting the app
+            // "fixed" it. The source setting is the gate, and it is a live one: turning remote
+            // media off has to mean the very next flash is local.
+            if (!RemoteFlashesEnabled()) return false;
+
             // Nothing local to fall back to: the remote pool is the whole library. This is the
             // onboarding case the feature exists for - a user with an empty assets folder.
             if (!haveLocal) return true;
