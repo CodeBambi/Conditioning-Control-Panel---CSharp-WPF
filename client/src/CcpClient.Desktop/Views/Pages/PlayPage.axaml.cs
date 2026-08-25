@@ -34,12 +34,24 @@ public partial class PlayPage : UserControl
     /// caption for a refusal and must never be reused as one.</summary>
     public const string FaultBandTitleText = LaunchFaultText.DtrhHeadline;
 
-    public PlayPage(DtrhLaunch dtrh, GoonLaunch goon, ArcademyLaunch arcademy, MantraLaunch mantra)
+    /// <summary>
+    /// How long the tier refusal stays on the toast surface, and it is WPF's own number:
+    /// <c>ShowDenied</c> passes <c>NotificationType.Warning, TimeSpan.FromSeconds(8)</c>
+    /// (<c>Services/TierGate.cs:133</c>). Not the host's 5-second default, because a refusal is
+    /// longer than an acknowledgement and upstream already decided by how much.
+    /// </summary>
+    public static readonly TimeSpan TierRefusalToastDuration = TimeSpan.FromSeconds(8);
+
+    private readonly ToastHost _toasts;
+
+    public PlayPage(DtrhLaunch dtrh, GoonLaunch goon, ArcademyLaunch arcademy, MantraLaunch mantra, ToastHost toasts)
     {
         ArgumentNullException.ThrowIfNull(dtrh);
         ArgumentNullException.ThrowIfNull(goon);
         ArgumentNullException.ThrowIfNull(arcademy);
         ArgumentNullException.ThrowIfNull(mantra);
+        ArgumentNullException.ThrowIfNull(toasts);
+        _toasts = toasts;
         InitializeComponent();
 
         // THE ARCADEMY STRIP IS DARK AND IS RE-ASSERTED DARK. Upstream ships the card
@@ -140,6 +152,19 @@ public partial class PlayPage : UserControl
 
             case DtrhGateDecision.RefusedNotEntitled refused:
                 Show(NotEntitledBandTitle, refused.Message);
+
+                // AND IT IS SAID OUT LOUD, which is upstream's own lesson rather than a flourish:
+                // a bare refusal with "no dialog, no toast and nothing tying the jump to the card
+                // they clicked" is the defect ShowDenied was written to fix
+                // (MainWindow/MainWindow.Lab.cs:282-288, Services/TierGate.cs:126-134). Upstream's
+                // severity and duration, verbatim; upstream's "See tiers" ACTION is still absent,
+                // because it opens App Info & Data and this port has no such page — the route is
+                // named in words inside the message instead (DtrhGate.UpgradeRoute).
+                //
+                // This is ONLY the not-entitled branch, exactly as upstream: ShowDenied is reached
+                // from DemandLab's refusal and nothing else. The port's third answer is not a
+                // refusal of the person and does not borrow a refusal's announcement.
+                _toasts.Show(refused.Message, ToastKind.Warning, TierRefusalToastDuration);
                 break;
 
             case DtrhGateDecision.RefusedUnverified unverified:

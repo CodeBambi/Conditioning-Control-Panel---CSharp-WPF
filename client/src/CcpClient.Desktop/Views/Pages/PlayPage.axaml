@@ -99,38 +99,38 @@
              click, and the band reads "Lab only". The port cannot know a tier without an async
              read, and a band painted from a cached read would advertise a state nobody
              re-checked — so this band appears when a press is refused and carries the refusal
-             itself. §10 D17: WPF's refusal is additionally an 8-second Warning toast with a
-             "See tiers" action (Services/TierGate.cs:133). THIS PORT NOW HAS A TOAST SYSTEM
-             (Views/ToastHost, census #54) AND STILL DOES NOT USE IT HERE, which is a decision
-             with a measurement behind it rather than the old "we have no toast".
+             itself. §10 D17, HALF-CLOSED: WPF's refusal is additionally an 8-second Warning toast
+             with a "See tiers" action (Services/TierGate.cs:133). THIS PORT NOW RAISES THAT TOAST
+             (PlayPage.axaml.cs, Render's RefusedNotEntitled arm) at upstream's own severity and
+             duration; the ACTION is still absent.
 
              (1) The ACTION cannot be built: it opens App Info &amp; Data and this port has no
              such page. A "See tiers" button with nowhere to go is a dead control, so the route
              is named in WORDS inside the message instead (DtrhGate.UpgradeRoute) and the gap is
              admitted there.
 
-             (2) The ANNOUNCEMENT was built, measured and taken back out. The shell's toast
-             surface is docked top-right (MainWindow.axaml, ToastLayer) and a refusal toast lands
-             at 724,40 360x153 in the shell's own 1100x760 window — which fully covers FALL IN at
-             883,131 172x46 and clips the top of Quick Drop at 905,185 150x28. A press at FALL
-             IN's centre then hit-tests to the toast's own Border (a toast body carries a
-             background and captures its own clicks, exactly as upstream's do:
-             MainWindow.xaml:3212-3216) and the button's Click never fires. That takes away the
-             one thing this card guarantees — "a gated press must ARRIVE"
-             (PlayTabView.xaml:503-506) — in order to say a sentence the plate below is already
-             saying, durably and without covering anything. The measurement is pinned by
-             TierRefusalRouteHeadlessTests.
-
-             So the row stays open, and its close condition is now specific: an App Info page
-             gives the refusal a real destination, OR a toast placed clear of this card's buttons
-             makes the announcement free. Neither is this packet's.
+             (2) THE ANNOUNCEMENT COST A RELAYOUT OF THE TOAST SURFACE, AND THAT IS WHY IT WORKS
+             NOW. Docked top-right, as upstream's is, a refusal toast (360x153 for this sentence)
+             CONTAINED FALL IN whole at every window size measured — 1183,131 at 800x560 through
+             1703,131 at 1920x1080 — because the toast and this card's buttons are both
+             right-aligned inside the same page area and track each other as the window resizes. A
+             toast body carries a background and captures its own clicks (upstream's do too,
+             MainWindow.xaml:3212-3216), so a press at FALL IN's centre returned pressed=0 and the
+             refusal took away the one thing this card guarantees in every branch — "a gated press
+             must ARRIVE" (PlayTabView.xaml:503-506). The surface is now docked BOTTOM-right
+             (MainWindow.axaml, ToastLayer), where the page area is empty on all five pages at the
+             shell's own size, and TierRefusalRouteHeadlessTests holds it by PRESSING FALL IN
+             through a live refusal toast at five window sizes rather than by hit-testing it —
+             InputHitTest answers wrongly between a toast's layout pass and the first pointer
+             event, so a query would have called the covered button reachable.
 
              TWO LAYERS, AND THE SECOND ONE IS LOAD-BEARING (§10 D23, found by a headed
              capture). WPF's scrim carries only a glyph and ONE short no-wrap line, and its own
              comment says why: "The pitch is the toast the click raises, which carries the
              'See tiers' button - not this" (PlayTabView.xaml:270-273). The prose lives on the
-             toast, which is an opaque surface with its own ground. The port has no toast, so
-             the prose lands here — and prose on a 66%-alpha scrim composites straight through
+             toast, which is an opaque surface with its own ground. The port's toast EXPIRES after
+             upstream's eight seconds while this band does not, so the prose lands here as well —
+             and prose on a 66%-alpha scrim composites straight through
              onto the card's own title and blurb, which is illegible however correct the words
              are. So the message gets a PLATE: its own opaque panel inside the band. The scrim
              stays at WPF's ~66% ("so the card art still reads through it. Seeing what you are

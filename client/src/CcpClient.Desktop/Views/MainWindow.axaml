@@ -488,11 +488,42 @@
 
          WPF attaches its notification host to the top-right of MainWindow's RootGrid
          (MainWindow/MainWindow.xaml:3217-3219, MainWindow.xaml.cs:2745) with the same 380 width
-         and the same 40/16 offsets. Here it is declared AFTER the page host and inside the same
+         and the same 16 side offset. Here it is declared AFTER the page host and inside the same
          Panel, so a toast reads on top of whatever page is mounted; it is inside the DockPanel's
          fill slot rather than over the whole window, which keeps it off the rail and off the
          session action bar - the two pieces of shell chrome a user is most likely to be reaching
          for when a toast appears.
+
+         BOTTOM-RIGHT, NOT UPSTREAM'S TOP-RIGHT, AND THE DIVERGENCE WAS MEASURED RATHER THAN
+         PREFERRED. Upstream's shell has nothing in the top-right of its content area; this port's
+         pages put their PRIMARY ACTIONS there. At the top-right the refusal toast (360x153 for the
+         real tier-refusal sentence) contained FALL IN whole at every window size measured -
+         1183,131 at 800x560 through 1703,131 at 1920x1080 - because the toast and the Play hero's
+         buttons are both right-aligned inside the same page area and therefore track each other as
+         the window resizes. A toast body carries a background and captures its own clicks (exactly
+         as upstream's do, MainWindow.xaml:3212-3216), so the refusal took away the one thing that
+         card guarantees in every branch: a gated press must ARRIVE
+         (Views/Tabs/PlayTabView.xaml:503-506). At 800x560 it covered the Companion page's only
+         button as well.
+
+         At the bottom right, the page area is empty on ALL FIVE PAGES at the shell's own
+         1100x760 - scrolled to the top and scrolled to the end - so the announcement is free.
+         TierRefusalRouteHeadlessTests holds it by PRESSING the gated buttons through a live toast
+         at five sizes, not by hit-testing them: InputHitTest answers wrongly between a toast's
+         layout pass and the first pointer event, so a query would have called the covered button
+         reachable.
+
+         WHAT IS NOT CLAIMED, because it was measured and is not true: total clearance at EVERY
+         size. The shell declares no minimum, and at 800x560 the page area is 600x410 - a 360x153
+         overlay cannot miss everything in it. There the Studio rack's right edge, the Mantra reps
+         picker and Quick Drop's bottom 10 DIP fall under the toast; no button's CENTRE does, and
+         every press still arrives. The top-right dock was not clear there either and took FALL
+         IN's centre instead.
+
+         No bottom margin: the toast body's own 10 DIP bottom margin (ToastHost.axaml, upstream's
+         :135) is the gap above the action bar, and anything more pushes the toast back up into the
+         page at the sizes where the page has least room - at 800x560 a 16 DIP one would put its
+         top edge through Quick Drop's centre.
 
          The host has NO Background, which is why the empty area around a toast does not eat
          clicks on the page underneath (Services/Notifications/NotificationService.cs:16-18). -->
@@ -500,8 +531,8 @@
       <ContentControl x:Name="PageHost" />
       <views:ToastHost x:Name="ToastLayer"
                        HorizontalAlignment="Right"
-                       VerticalAlignment="Top"
-                       Margin="0,40,16,0"
+                       VerticalAlignment="Bottom"
+                       Margin="0,0,16,0"
                        Width="380" />
     </Panel>
   </DockPanel>

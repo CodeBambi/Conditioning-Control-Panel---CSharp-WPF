@@ -224,8 +224,10 @@ public class ToastHostHeadlessTests : HeadlessTest
     /// <c>MainWindow/MainWindow.xaml:3210-3213</c>).
     ///
     /// <para>It matters more here than upstream, because this host floats over the whole page
-    /// area: a 380-DIP invisible rectangle that ate every press would disable the top-right corner
-    /// of every page in the app for as long as a message was up, and nothing would look wrong.</para>
+    /// area: a 380-DIP invisible rectangle that ate every press would disable a 380x163 block of
+    /// every page in the app for as long as a message was up, and nothing would look wrong. Where
+    /// that block sits is <c>Views/MainWindow.axaml</c>'s decision - bottom-right, measured against
+    /// the pages' own controls - and this fact is about the empty space wherever it is put.</para>
     /// </summary>
     [AvaloniaFact]
     public async Task TheEmptySpaceInTheToastHostPassesClicksToThePageUnderneath()
@@ -263,6 +265,62 @@ public class ToastHostHeadlessTests : HeadlessTest
             window.UpdateLayout();
             Assert.True(toast.IsPointerOver, "the toast body did not receive its own pointer");
             Assert.True(window.Toasts.IsPointerOver);
+        }
+        finally
+        {
+            await host.ShutdownAsync();
+        }
+    }
+
+    /// <summary>
+    /// <b>The same sentence twice is one toast, and it is the placement's other half.</b> This host
+    /// is docked over the page rather than over empty chrome (<c>Views/MainWindow.axaml</c>), so an
+    /// unbounded stack walks up into the page's own controls: three copies of the tier refusal grew
+    /// the surface to 489 DIP and covered the FALL IN button that raised them, which is the exact
+    /// defect the dock was moved to prevent. Upstream states the rule for the toasts that outlive
+    /// their call — already showing is a no-op (<c>NotificationService.cs:110</c>) — and this port
+    /// needs it for the timed ones too.
+    ///
+    /// <para>The TIMER is refreshed rather than left alone, and that half matters on its own: a
+    /// refusal that expired one second after the user asked again would announce less than upstream
+    /// does. The old handle is cancelled, so the toast cannot be removed by the press before last.</para>
+    /// </summary>
+    [AvaloniaFact]
+    public async Task RepeatingAMessageThatIsAlreadyUpRefreshesItsTimerInsteadOfStackingACopy()
+    {
+        var (host, window) = await BootAsync();
+        try
+        {
+            var schedule = new RecordingSchedule();
+            window.Toasts.Schedule = schedule.Take;
+
+            window.Toasts.Show("the door did not open", ToastKind.Warning, TimeSpan.FromSeconds(8));
+            window.Toasts.Show("the door did not open", ToastKind.Warning, TimeSpan.FromSeconds(8));
+            window.Toasts.Show("the door did not open", ToastKind.Warning, TimeSpan.FromSeconds(8));
+            window.UpdateLayout();
+
+            // One toast, three full durations asked for, and the two superseded timers retired
+            // rather than left to remove a toast the newest press has just re-armed.
+            Assert.Equal(["the door did not open"], window.Toasts.Messages);
+            Assert.Equal(
+                [TimeSpan.FromSeconds(8), TimeSpan.FromSeconds(8), TimeSpan.FromSeconds(8)],
+                schedule.Requested);
+            Assert.Equal(2, schedule.Cancelled);
+
+            // A toast the user must acknowledge does not duplicate either, and asks for no timer:
+            // there is nothing to refresh and a second copy of the same sentence says nothing new.
+            window.Toasts.ShowUntilDismissed("saved 36 phrases", ToastKind.Success);
+            window.Toasts.ShowUntilDismissed("saved 36 phrases", ToastKind.Success);
+            window.UpdateLayout();
+            Assert.Equal(["the door did not open", "saved 36 phrases"], window.Toasts.Messages);
+            Assert.Equal(3, schedule.Requested.Count);
+
+            // And a DIFFERENT sentence still stacks: this is de-duplication, not a one-toast host.
+            window.Toasts.ShowUntilDismissed("and 4 pools were skipped", ToastKind.Info);
+            window.UpdateLayout();
+            Assert.Equal(
+                ["the door did not open", "saved 36 phrases", "and 4 pools were skipped"],
+                window.Toasts.Messages);
         }
         finally
         {

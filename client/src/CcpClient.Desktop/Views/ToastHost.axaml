@@ -5,7 +5,9 @@
   <!--
     THE IN-APP TOAST SURFACE (census #54, merged with #83). Upstream:
     Services/Notifications/NotificationService.cs, hosted at the top-right of the shell's root
-    (MainWindow/MainWindow.xaml:3217-3219).
+    (MainWindow/MainWindow.xaml:3217-3219). This port docks it BOTTOM-right instead, and where it
+    sits is the placement decision MainWindow.axaml carries and TierRefusalRouteHeadlessTests
+    presses - not this file's, which owns only what a toast looks like.
 
     BACKGROUND IS EXPLICITLY NULL, ON BOTH THE CONTROL AND THE STACK, AND IT IS BEHAVIOUR RATHER
     THAN STYLE. Upstream states the rule in its own words: "The host panel has no Background, so
