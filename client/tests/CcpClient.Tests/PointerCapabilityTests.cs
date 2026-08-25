@@ -604,6 +604,32 @@ public class PointerCapabilityTests : RealDesktopFacts
         Assert.Equal(run.MachineHasInteractiveDesktop,
             run.ProofAfterHealthyObserve.Contains($"sweep phase 1 of {PointerInkSweep.Phases}"));
         Assert.Equal(run.MachineHasInteractiveDesktop, run.ProofAfterBlankedObserve.Contains("the whole disc"));
+        Assert.False(run.ProofAfterBlankedObserve.Contains("sweep phase"),
+            "the placement after a read that found the target blank swept an eighth of it. The failure was "
+            + $"latched: \"{run.ProofAfterBlankedObserve}\"");
+    }
+
+    [Fact]
+    public void ANOSDRIVENREPAINTAlsoRestartsTheWholeDiscRead_BecauseThePlacementDidNotDoThatPaint()
+    {
+        // The other content event a placement may assume nothing after, and the only one the product
+        // did not perform itself: the OS made the window redraw. The harness creates an invalid
+        // region rather than posting a message, so what the window procedure handles is a REAL
+        // WM_PAINT, and the arm that drops the sweep's latch is the arm under test.
+        var run = PointerSurfaceObservations.Delivery;
+
+        Assert.Equal(run.MachineHasInteractiveDesktop, run.Invalidated);
+        Assert.True(run.PaintsDispatched > 0 == run.MachineHasInteractiveDesktop,
+            $"the pump dispatched {run.PaintsDispatched} messages after the window was invalidated, so no WM_PAINT "
+            + "reached the window procedure and nothing below is about the arm it is supposed to be about");
+        Assert.Equal(run.MachineHasInteractiveDesktop, run.ProofAfterOsRepaint.Contains("the whole disc"));
+        Assert.False(run.ProofAfterOsRepaint.Contains("sweep phase"),
+            $"the placement after an OS-driven repaint swept an eighth of the disc: \"{run.ProofAfterOsRepaint}\"");
+
+        // And the drop is ONE-SHOT. A latch that stayed down would turn every later placement back
+        // into the 7.6 ms whole-disc read this change exists to remove, silently.
+        Assert.Equal(run.MachineHasInteractiveDesktop,
+            run.ProofAfterThat.Contains($"sweep phase 1 of {PointerInkSweep.Phases}"));
     }
 
     [Fact]

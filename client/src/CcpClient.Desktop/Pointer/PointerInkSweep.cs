@@ -105,9 +105,10 @@ public static class PointerInkSweep
     ///
     /// <para><b>The diagonal is load-bearing and a plain <c>index % Phases</c> is not.</b> Flattening
     /// the grid row-major and taking every eighth point makes a row's phase depend only on its
-    /// column whenever the column count is a multiple of eight — measured over every legal
-    /// rectangle, 10 002 of them left some phase with no point anywhere near the disc's centre.
-    /// Shifting by the row removes that: the same sweep over the same domain leaves none.</para>
+    /// column whenever the column count is a multiple of eight — over the legal rectangles
+    /// <c>PointerInkSweepTests</c> walks, 4718 (width, height, phase) triples then have no point
+    /// anywhere near the disc's centre, and every one of those would call a perfectly drawn bubble
+    /// blank. Shifting by the row removes it: the same sweep over the same domain leaves none.</para>
     ///
     /// <para>A <paramref name="stride"/> of 1 is the whole-disc read and answers 0 for every row and
     /// any phase, so the swept and unswept walks are ONE loop and the whole read visits exactly the

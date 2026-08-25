@@ -215,7 +215,11 @@ internal static class PointerSurfaceObservations
         bool BlankedObservationBackgroundHeld,
         int BlankedObservationInkedPixels,
         int BlankedObservationSampled,
-        string ProofAfterBlankedObserve);
+        string ProofAfterBlankedObserve,
+        bool Invalidated,
+        int PaintsDispatched,
+        string ProofAfterOsRepaint,
+        string ProofAfterThat);
 
     /// <summary>
     /// What a placement SAID it read back, taken out of the capability's own detail text rather
@@ -294,6 +298,16 @@ internal static class PointerSurfaceObservations
         var discBlanked = PointerWindowProbe.FillClient(window, TargetSide, TargetSide, Fill);
         var blankedObservation = surface.Observe(target);
         var proofAfterBlankedObserve = Proof(surface.Move(target, askedBounds));
+
+        // THE OTHER EVENT THE SWEEP MAY ASSUME NOTHING AFTER: the operating system made the window
+        // repaint ITSELF. Not posted — an invalid region, which the OS turns into a real WM_PAINT on
+        // the next drain, so this is the event and not an imitation of it. The Move after it must
+        // read the whole disc; the Move after THAT must be back to sweeping, or the drop is sticky
+        // and the sweep never engages again.
+        var invalidated = PointerWindowProbe.Invalidate(window);
+        var paintsDispatched = surface.Pump(16);
+        var proofAfterOsRepaint = Proof(surface.Move(target, askedBounds));
+        var proofAfterThat = Proof(surface.Move(target, askedBounds));
 
         // Read WHILE THE TARGET IS UP. Every one of these is a question about a live window, and
         // the run closes and disposes the surface further down: taking them at the end would be
@@ -448,7 +462,11 @@ internal static class PointerSurfaceObservations
             BlankedObservationBackgroundHeld: blankedObservation.BackgroundHeld,
             BlankedObservationInkedPixels: blankedObservation.InkedPixels,
             BlankedObservationSampled: blankedObservation.SampledPixels,
-            ProofAfterBlankedObserve: proofAfterBlankedObserve);
+            ProofAfterBlankedObserve: proofAfterBlankedObserve,
+            Invalidated: invalidated,
+            PaintsDispatched: paintsDispatched,
+            ProofAfterOsRepaint: proofAfterOsRepaint,
+            ProofAfterThat: proofAfterThat);
     }
 
     // ---------------------------------------------------------------------------------------

@@ -73,8 +73,13 @@ public class PointerInkSweepTests
         // A stride of 1 is the unswept read, and it must be EXACTLY the nested loop this class
         // replaced — same points, same order — or the change silently altered what "the whole disc"
         // means. The expectation is built here, independently, from the grid's own extents.
+        //
+        // Accumulated and asserted at depth 0, and the sides COUNTED, so an empty loop cannot pass.
+        var checkedSides = 0;
+        var disagreed = new List<string>();
         foreach (var side in new[] { 60, 97, 160, 313, 500 })
         {
+            checkedSides++;
             var grid = PointerInkSweep.GridFor(side, side);
             var expected = new List<(int, int)>();
             for (var row = 0; row < grid.Rows; row++)
@@ -85,8 +90,15 @@ public class PointerInkSweepTests
                 }
             }
 
-            Assert.Equal(expected, Walk(grid, phase: PointerInkSweep.WholeDisc, stride: 1));
+            var walked = Walk(grid, phase: PointerInkSweep.WholeDisc, stride: 1);
+            if (!expected.SequenceEqual(walked.Select(p => ((int)p.X, (int)p.Y))))
+            {
+                disagreed.Add($"{side}x{side}: expected {expected.Count} points, walked {walked.Count}");
+            }
         }
+
+        Assert.Equal(5, checkedSides);
+        Assert.Empty(disagreed);
     }
 
     [Fact]
@@ -95,21 +107,28 @@ public class PointerInkSweepTests
         // The bounded re-proof cadence, stated as a set identity rather than a hope: eight
         // consecutive placements read the whole disc between them, and no placement re-reads a
         // point another one already had. At the 30 ms step that is 240 ms end to end.
+        var checkedSides = 0;
+        var broken = new List<string>();
         foreach (var side in new[] { 60, 97, 160, 313, 500 })
         {
+            checkedSides++;
             var grid = PointerInkSweep.GridFor(side, side);
-            var seen = new List<(int, int)>();
+            var seen = new List<(int X, int Y)>();
             for (var phase = 0; phase < PointerInkSweep.Phases; phase++)
             {
                 seen.AddRange(Walk(grid, phase, PointerInkSweep.Phases));
             }
 
-            Assert.Equal(grid.Points, seen.Count);
-            Assert.Equal(grid.Points, seen.Distinct().Count());
-            Assert.Equal(
-                Walk(grid, PointerInkSweep.WholeDisc, 1).ToHashSet(),
-                seen.ToHashSet());
+            if (seen.Count != grid.Points || seen.Distinct().Count() != grid.Points
+                || !seen.ToHashSet().SetEquals(Walk(grid, PointerInkSweep.WholeDisc, 1)))
+            {
+                broken.Add($"{side}x{side}: {PointerInkSweep.Phases} phases read {seen.Count} points "
+                    + $"({seen.Distinct().Count()} distinct) of a {grid.Points}-point grid");
+            }
         }
+
+        Assert.Equal(5, checkedSides);
+        Assert.Empty(broken);
     }
 
     [Fact]
@@ -122,17 +141,26 @@ public class PointerInkSweepTests
         // 0.22 < 1, so the whole of it is inside the disc at every size.
         Assert.True((1 / 3.0 * (1 / 3.0)) + (1 / 3.0 * (1 / 3.0)) < 1.0);
 
+        var checkedPhases = 0;
+        var blind = new List<string>();
         foreach (var side in LegalSides)
         {
             var grid = PointerInkSweep.GridFor(side, side);
             for (var phase = 0; phase < PointerInkSweep.Phases; phase++)
             {
-                Assert.True(CentralPoints(grid, phase) > 0,
-                    $"phase {phase} of a {side}x{side} target reads no point in the central third of its disc, so "
-                    + "it would count zero ink on a bubble that is drawn perfectly and the capability would call "
-                    + "a good target blank");
+                checkedPhases++;
+                if (CentralPoints(grid, phase) == 0)
+                {
+                    blind.Add($"phase {phase} of a {side}x{side} target reads no point in the central third of its "
+                        + "disc, so it would count zero ink on a bubble that is drawn perfectly and the capability "
+                        + "would call a good target blank");
+                }
             }
         }
+
+        // COUNTED at depth 0: an empty legal-size band would otherwise pass this without checking one.
+        Assert.Equal(441 * PointerInkSweep.Phases, checkedPhases);
+        Assert.Empty(blind);
     }
 
     [Fact]
@@ -186,21 +214,31 @@ public class PointerInkSweepTests
     [Fact]
     public void ASweptReadIsAnEIGHTHOfTheWholeOne_WhichIsTheWholePointOfIt()
     {
+        var checkedPhases = 0;
+        var offShare = new List<string>();
+        var worstFraction = 0.0;
         foreach (var side in LegalSides)
         {
             var grid = PointerInkSweep.GridFor(side, side);
             for (var phase = 0; phase < PointerInkSweep.Phases; phase++)
             {
+                checkedPhases++;
                 var swept = Walk(grid, phase, PointerInkSweep.Phases).Count;
                 var whole = grid.Points;
-                Assert.True(swept <= (whole / PointerInkSweep.Phases) + grid.Rows,
-                    $"phase {phase} of a {side}x{side} target reads {swept} of {whole} points, which is not the "
-                    + "eighth the 7.6 ms measurement says this had to become");
-                Assert.True(swept * PointerInkSweep.Phases >= whole - (grid.Rows * PointerInkSweep.Phases),
-                    $"phase {phase} of a {side}x{side} target reads only {swept} of {whole} points, far below its "
-                    + "even share; the phases are supposed to divide the disc, not to hollow one of them out");
+                worstFraction = Math.Max(worstFraction, swept / (double)whole);
+                if (swept > (whole / PointerInkSweep.Phases) + grid.Rows
+                    || swept * PointerInkSweep.Phases < whole - (grid.Rows * PointerInkSweep.Phases))
+                {
+                    offShare.Add($"phase {phase} of {side}x{side} reads {swept} of {whole}");
+                }
             }
         }
+
+        Assert.Equal(441 * PointerInkSweep.Phases, checkedPhases);
+        Assert.Empty(offShare);
+        Assert.True(worstFraction < 0.2,
+            $"the greediest phase over every legal size still reads {worstFraction:P1} of the disc, which is not "
+            + "the eighth the 7.6 ms measurement says this had to become");
     }
 
     [Fact]

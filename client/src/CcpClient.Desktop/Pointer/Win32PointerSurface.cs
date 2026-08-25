@@ -1037,9 +1037,13 @@ public sealed class Win32PointerSurface : IPointerSurface
         /// <summary>What the last read actually covered, in words, for the placement's own detail
         /// string. A capability that says the OS was asked for its content back and read an eighth of
         /// it has to SAY an eighth — the same bar <c>Win32OverlayPresence.LastContentProof</c> sets.</summary>
+        /// <remarks>The two arms share NO phrase, deliberately: a caller — or a fact — that tells
+        /// them apart by substring must not be satisfied by both, and the first draft's sweep arm
+        /// said "the whole disc having been re-read within..." which contained the other arm's
+        /// entire text. A mutation that latched a failed read went green against it.</remarks>
         internal string InkProof => InkPhaseRead == PointerInkSweep.WholeDisc
             ? "the whole disc"
-            : $"sweep phase {InkPhaseRead + 1} of {PointerInkSweep.Phases}, the whole disc having been "
-                + $"re-read within the last {PointerInkSweep.Phases} placements";
+            : $"sweep phase {InkPhaseRead + 1} of {PointerInkSweep.Phases}, every point re-read within "
+                + "that many placements";
     }
 }

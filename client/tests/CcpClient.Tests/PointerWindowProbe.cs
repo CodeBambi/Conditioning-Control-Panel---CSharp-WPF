@@ -175,6 +175,16 @@ internal static class PointerWindowProbe
     }
 
     /// <summary>
+    /// Ask the operating system to make a window repaint ITSELF — the one content event a placement
+    /// never performs and can never vouch for, and the reason <c>Win32PointerSurface</c>'s
+    /// <c>WM_PAINT</c> arm drops the ink sweep's latch. The message is not posted: an invalid region
+    /// is created and the OS synthesises <c>WM_PAINT</c> for it when the queue is next drained, so
+    /// this is the real event rather than an imitation of it.
+    /// </summary>
+    internal static bool Invalidate(nint window) =>
+        WindowsHost && window != 0 && InvalidateRect(window, 0, false);
+
+    /// <summary>
     /// Fill a window's WHOLE client area with one colour from OUTSIDE the capability — the same
     /// licence <see cref="DirtyPixel"/> takes, at the scale that matters for the ink read.
     ///
@@ -1504,4 +1514,5 @@ internal static class PointerWindowProbe
     [DllImport("gdi32.dll")] private static extern nint CreateSolidBrush(uint colour);
     [DllImport("gdi32.dll")] private static extern bool DeleteObject(nint handle);
     [DllImport("user32.dll")] private static extern int FillRect(nint dc, ref RectNative rect, nint brush);
+    [DllImport("user32.dll")] private static extern bool InvalidateRect(nint window, nint rect, bool erase);
 }
