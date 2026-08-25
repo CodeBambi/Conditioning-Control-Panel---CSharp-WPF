@@ -121,6 +121,19 @@ function armBootDeadline() {
  * beat later. FAILURE PATHS NEVER WAIT - failBoot below still snaps
  * `hidden = true` directly, so an error card is never delayed by a celebration.
  *
+ * THE FLOOR IS NOT THE ONLY GATE. Since 2026-08-25 there are THREE things the
+ * exit waits on, in this order, and each one is a "come back to me" rather than
+ * a sleep - `dismissLoader` is re-entrant and every gate re-calls it:
+ *     1. the KNOCK, on a gesture-gated host: no door, no campus.
+ *     2. the INTRO BED, on both hosts: the splash may not leave in the middle
+ *        of the jingle (see THE SPLASH WAITS FOR THE JINGLE below).
+ *     3. INTRO_MIN_MS from t0, the CSS beat's own floor, which by then has
+ *        almost always already passed.
+ * Measured from t0 on the autoplay host: the wordmark thuds at .64s, the bed
+ * runs about .3s to 4.3s, `.is-done` is added at ~4.3s and `hidden` lands at
+ * ~4.6s. On a knock host everything after the strike is the same, measured
+ * from the strike rather than from boot.
+ *
  * THE SPLASH-COMPLETE EDGE (FIRST BELL, 2026-08-24) hangs off the HAPPY PATH of
  * this function and nowhere else: once `hidden` has actually landed, the shell
  * is told, and it decides whether the opening has anything to play. failBoot
@@ -206,8 +219,15 @@ function onKnock() {
   try { if (knockHint) knockHint.classList.add('is-heard'); } catch (e) { /* noop */ }
   if (!splashIsUp()) return;         // failBoot got there first: nothing to score
   cancelIntroCues();                 // the stitched beats yield to the real bed
-  sfx('intro_bed', 0.6, { maxMs: INTRO_BED_MAX_MS });
-  if (knockDismissQueued) setTimeout(dismissLoader, KNOCK_EXIT_MS);
+  strikeBed();
+  /* KNOCK_EXIT_MS is now a FLOOR, not the whole wait: a bed that is still
+   * playing sends this call straight back to the queue and settleBed re-issues
+   * it. It governs on its own only for a knock whose bed never sounds (a muted
+   * mixer, an absent file), which is the timing that host has always had. */
+  if (knockDismissQueued) {
+    const id = setTimeout(() => { exitTimers.delete(id); dismissLoader(); }, KNOCK_EXIT_MS);
+    exitTimers.add(id);
+  }
 }
 
 function armKnockGate() {
@@ -245,6 +265,78 @@ function sfx(name, level, extra) {
       ),
     }));
   } catch (e) { /* never fatal */ }
+}
+
+/* ----------------------------------------------------------------------------
+ * THE SPLASH WAITS FOR THE JINGLE (owner report, 2026-08-25).
+ *
+ * `assets/sfx/intro_bed.mp3` is a 4.000s piece and the splash used to walk out
+ * on it: the autoplay host dismissed at INTRO_MIN_MS + the exit (hidden ~3.27s
+ * from t0, cutting the bed's last ~1.1s) and the knock host at KNOCK_EXIT_MS +
+ * the exit (hidden ~1.02s after the strike, cutting ~3.0s). The campus revealed
+ * mid-phrase on both. So THE STRIKE NOW OWNS THE EXIT: `dismissLoader` defers
+ * while a bed is in the air and is re-called the moment it settles - which for
+ * the knock path means the wait is measured FROM THE STRIKE, not from boot.
+ *
+ * THE HOLD IS ALWAYS RELEASED, and there are four ways out on purpose:
+ *   - the consumer answers `onEnded` (shell/audio.js's one-shot hook): 'ended'
+ *     when the element played the file out, 'cap' when its own maxMs governor
+ *     cut it, 'stopped'/'error' when the clip was taken away from it.
+ *   - 'dropped' comes back SYNCHRONOUSLY, inside the dispatch, whenever the cue
+ *     never sounded at all: a muted mixer, a zero master or fx bus, no audio
+ *     context, or no file behind the name. No sound means NO HOLD, so all of
+ *     those dismiss on precisely the timing they had before this wave.
+ *   - our own cap timer, for a consumer that answers nothing whatever (an older
+ *     shell/audio.js, a dropped event, an element that never fires anything):
+ *     BED_HOLD_CAP_MS after the strike the hold is over, whatever the audio is
+ *     doing. A stalled or blocked element can NEVER hold the splash hostage.
+ *   - failBoot and shutdown, which clear the hold with everything else.
+ *
+ * WHAT DID NOT MOVE: reduced motion gets no cues, so it strikes no bed, so it
+ * holds for nothing and dismisses exactly as before (trap 66). The campus and
+ * the first frame are still built underneath while the bed plays - only the
+ * EXIT waits; `start()` is not delayed by so much as a frame.
+ * -------------------------------------------------------------------------- */
+/** The hold's own deadline, measured from the strike. INTRO_BED_MAX_MS is
+ *  already the 4.0s piece plus air, and the consumer's governor answers us from
+ *  inside it; the slack on top is for the answer that never comes at all. */
+const BED_HOLD_CAP_MS = INTRO_BED_MAX_MS + 200;
+let bedStruck = false;        // the bed is the one cue that may never be re-fired
+let bedHolding = false;       // a bed is in the air and the exit is waiting on it
+let bedDismissQueued = false; // ...and a ready boot has already asked to leave
+let bedCapTimer = 0;
+
+function strikeBed() {
+  if (bedStruck) return;
+  bedStruck = true;
+  bedHolding = true;
+  sfx('intro_bed', 0.6, {
+    maxMs: INTRO_BED_MAX_MS,
+    onEnded: (reason) => settleBed(reason || 'ended'),
+  });
+  // A cue that was never going to sound has already answered by now, inside the
+  // dispatch above - so there is no hold to cap and no timer to mint.
+  if (!bedHolding) return;
+  bedCapTimer = setTimeout(() => {
+    bedCapTimer = 0;
+    settleBed('cap-local');
+  }, BED_HOLD_CAP_MS);
+}
+
+function settleBed(reason) {
+  if (!bedHolding) return;              // already settled, or never struck
+  bedHolding = false;
+  if (bedCapTimer) { clearTimeout(bedCapTimer); bedCapTimer = 0; }
+  log('intro bed settled (' + reason + ') at ' + (Date.now() - introT0) + 'ms');
+  if (!bedDismissQueued) return;
+  bedDismissQueued = false;
+  dismissLoader();
+}
+
+function cancelBedHold() {
+  bedHolding = false;
+  bedDismissQueued = false;
+  if (bedCapTimer) { clearTimeout(bedCapTimer); bedCapTimer = 0; }
 }
 
 /* ----------------------------------------------------------------------------
@@ -315,7 +407,7 @@ function scheduleIntroCues() {
     // hasSample is feature-detected: an older consumer simply stitches.
     const hasBed = !!(audio && typeof audio.hasSample === 'function' && audio.hasSample('intro_bed'));
     if (hasBed && src.autoplayOk === true && elapsed < INTRO_BED_WINDOW_MS) {
-      sfx('intro_bed', 0.6, { maxMs: INTRO_BED_MAX_MS });
+      strikeBed();
       return;
     }
     for (const beat of INTRO_BEATS) {
@@ -331,24 +423,40 @@ function scheduleIntroCues() {
   } catch (e) { /* the opening may never cost us the boot */ }
 }
 
+/** The two timers of the exit itself, OWNED so failBoot and shutdown can take
+ *  them back: a page that is tearing down owes nobody a fade. */
+const exitTimers = new Set();
+
+function cancelExitTimers() {
+  for (const id of Array.from(exitTimers)) { try { clearTimeout(id); } catch (e) { /* noop */ } }
+  exitTimers.clear();
+}
+
 function dismissLoader() {
   const el = dom.loader;
   if (!el || el.hidden) return;
   /* The knock outranks readiness: a booted school still waits for the door.
    * onKnock re-calls us KNOCK_EXIT_MS after the tap that struck the bed. */
   if (knockWanted && !knockDone) { knockDismissQueued = true; return; }
+  /* And the jingle outranks both: settleBed() re-calls us the moment the bed is
+   * over, or the moment the cap says it is (THE SPLASH WAITS FOR THE JINGLE). */
+  if (bedHolding) { bedDismissQueued = true; return; }
   const wait = Math.max(0, INTRO_MIN_MS - (Date.now() - introT0));
-  setTimeout(() => {
+  const id = setTimeout(() => {
+    exitTimers.delete(id);
     try {
       if (el.hidden) return;             // a failBoot got there first
       el.classList.add('is-done');
-      setTimeout(() => {
+      const done = setTimeout(() => {
+        exitTimers.delete(done);
         try { el.hidden = true; } catch (e) { /* noop */ }
         try { if (shell && shell.onSplashDone) shell.onSplashDone(); }
         catch (e) { warn('onSplashDone threw: ' + ((e && e.message) || e)); }
       }, INTRO_EXIT_MS);
+      exitTimers.add(done);
     } catch (e) { try { el.hidden = true; } catch (e2) { /* noop */ } }
   }, wait);
+  exitTimers.add(id);
 }
 
 function failBoot(msg) {
@@ -362,6 +470,8 @@ function failBoot(msg) {
   disarmKnock();
   try { if (knockHint) knockHint.remove(); } catch (e) { /* noop */ }
   cancelIntroCues();      // a clearTimeout, so the error card waits for nothing
+  cancelBedHold();        // ...and the jingle holds up an error card least of all
+  cancelExitTimers();     // a fade already in flight is abandoned, not finished
   try { if (cancelSlate) cancelSlate(); } catch (e) { /* noop */ }
   cancelSlate = null;
   if (dom.nopeMsg) dom.nopeMsg.textContent = String(msg).slice(0, 200);
@@ -514,6 +624,8 @@ bridge.on('end-run', guard('end-run', () => shutdown('host asked')));
  * -------------------------------------------------------------------------- */
 function shutdown(reason) {
   cancelIntroCues();
+  cancelBedHold();
+  cancelExitTimers();
   try { if (cancelSlate) cancelSlate(); } catch (e) { /* best effort */ }
   cancelSlate = null;
   try { if (shell) shell.destroy(); } catch (e) { /* best effort */ }

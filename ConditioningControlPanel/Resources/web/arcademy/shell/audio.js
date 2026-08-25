@@ -72,6 +72,22 @@
  *     same headroom the SOUNDS table's `gain` gives an oscillator.
  * A url the browser will not decode is silently dropped, exactly like a name
  * that is not in SOUNDS - a cue must never be the thing that throws.
+ *
+ * THE ENDED HOOK (2026-08-25). A caller may pass `detail.onEnded` and be told,
+ * EXACTLY ONCE and never fatally, what became of its cue:
+ *     'ended'   the element played the file out
+ *     'cap'     the maxMs governor cut it
+ *     'stopped' something took the slot (a re-fire, the voice cap, teardown)
+ *     'error'   the file will not load and the name has been struck off
+ *     'recipe'  the name fell back to its oscillator impression
+ *     'dropped' the cue never sounded at all - muted, zero master, zero bus,
+ *               no context, or a SAMPLE_ONLY name with no file behind it
+ * THE 'dropped' ANSWER IS SYNCHRONOUS, inside the dispatch, and that is the
+ * point of it: boot.js holds the intro splash until the 4s bed is over, so it
+ * has to learn INSTANTLY when there is no bed rather than sit out a timeout.
+ * The hook is a courtesy, not a contract - a caller that waits on it must still
+ * carry its own cap (boot.js does), because a host with no consumer at all on
+ * the `arcademy-sfx` bus will never answer anything.
  * ==========================================================================*/
 
 const BUSES = ['fx', 'voice', 'tutorial', 'drops', 'music'];
@@ -239,6 +255,18 @@ const PITCH_MAX = 2;
 const clampPitch = (v) => (
   Number.isFinite(+v) && +v > 0 ? Math.max(PITCH_MIN, Math.min(PITCH_MAX, +v)) : 1
 );
+
+/** A `detail.onEnded` callback, wrapped so it fires at most once and so a
+ *  listener that throws can never break the cue bus (header: THE ENDED HOOK). */
+function onceCb(fn) {
+  let f = (typeof fn === 'function') ? fn : null;
+  return (reason) => {
+    if (!f) return;
+    const g = f;
+    f = null;
+    try { g(String(reason || 'ended')); } catch { /* a listener may never break the bus */ }
+  };
+}
 
 /**
  * @param {Object} o
@@ -422,6 +450,10 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
 
   function killClip(rec, fadeMs) {
     if (!rec) return;
+    // Every teardown road passes through here, so this is the one place that can
+    // promise a waiting caller it will always be told (header: THE ENDED HOOK).
+    // It is a no-op for whichever path already named a more specific reason.
+    if (rec.settle) rec.settle('stopped');
     try { if (rec.timer) clearTimeout(rec.timer); } catch { /* ignore */ }
     rec.timer = 0;
     const fade = Math.max(0, Number(fadeMs) || 0);
@@ -452,8 +484,10 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
 
   /** @param {string=} sampleName  set when the url came from SAMPLES, so a file
    *   that turns out not to be playable can strike itself off `available`.
+   *  @param {Function=} settle  the one-shot `detail.onEnded` reporter. Only the
+   *   paths that TAKE the clip pay it; a `false` return leaves it to the caller.
    *  @returns {boolean} true if the clip was taken (played or scheduled). */
-  function playClip(d, bus, amp, sampleName) {
+  function playClip(d, bus, amp, sampleName, settle) {
     if (typeof Audio !== 'function') return false;
     const url = String(d.url == null ? '' : d.url);
     if (!url) return false;
@@ -486,7 +520,7 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
     const askedMs = Number(d.maxMs) || 0;
     const maxMs = Math.max(80, askedMs > 0 ? Math.min(askedMs, CLIP_REQ_MAX_MS) : CLIP_MAX_MS);
     const fadeMs = Math.max(0, Math.min(maxMs / 2, Number(d.fadeMs) || CLIP_FADE_MS));
-    const rec = { el, gain: null, node: null, timer: 0 };
+    const rec = { el, gain: null, node: null, timer: 0, settle: settle || null };
 
     let routed = false;
     try {
@@ -513,9 +547,17 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
     rec.timer = setTimeout(() => {
       rec.timer = 0;
       if (clips.get(key) === rec) clips.delete(key);
+      if (rec.settle) rec.settle('cap');
       killClip(rec, fadeMs);
     }, maxMs);
-    try { el.addEventListener('ended', () => { if (clips.get(key) === rec) { clips.delete(key); killClip(rec, 0); } }); } catch { /* ignore */ }
+    try {
+      el.addEventListener('ended', () => {
+        if (clips.get(key) !== rec) return;
+        clips.delete(key);
+        if (rec.settle) rec.settle('ended');
+        killClip(rec, 0);
+      });
+    } catch { /* ignore */ }
     try {
       el.addEventListener('error', () => {
         // STILL IN THE MAP IS WHAT MAKES THIS A VERDICT ON THE FILE. Every
@@ -529,6 +571,7 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
         // is not ours and the rest of this handler reads as it always did.
         if (clips.get(key) !== rec) return;
         clips.delete(key);
+        if (rec.settle) rec.settle('error');
         killClip(rec, 0);
         // The file the host promised is not playable. Take the name back rather
         // than spending a decoder on it once a beat for the rest of the night;
@@ -574,36 +617,41 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
   function onSfx(e) {
     const d = (e && e.detail) || {};
     stats.handled += 1;
+    /* THE ENDED HOOK (header). Wrapped once here, paid exactly once on every
+     * road out of this function - including the four early returns below, which
+     * answer 'dropped' inside the dispatch so a caller waiting on the cue is
+     * never left holding a timeout for a sound that was never going to happen. */
+    const settle = onceCb(d.onEnded);
     // The one CONTROL message on the sfx bus: the shell sends it when a class is
     // torn down so a trigger clip (<=1.2s) never leaks into the lobby. No audio
     // handle crosses into shell.js for this; the bus was already the seam.
-    if (d.name === 'stop_clips') { stopAllClips(); return; }
+    if (d.name === 'stop_clips') { stopAllClips(); settle('dropped'); return; }
     const pitch = clampPitch(d.pitch);
     stats.last = {
       name: d.name || null, level: d.level, bus: d.bus || 'fx', duck: d.duck || null, pitch,
       url: d.url || null,
     };
-    if (mute || master <= 0) { stats.dropped += 1; return; }
-    if (!ensureContext()) { stats.dropped += 1; return; }
+    if (mute || master <= 0) { stats.dropped += 1; settle('dropped'); return; }
+    if (!ensureContext()) { stats.dropped += 1; settle('dropped'); return; }
     const bus = BUSES.indexOf(d.bus) >= 0 ? d.bus : 'fx';
     // PERCEPTUAL CURVE (2026-08-24): engine levels are fractions of fractions - a 0.25
     // cue under the bus and master gains landed near -29 dB and the whole campus read
     // as silent. sqrt lifts the quiet floor (0.25 -> 0.5) while 1.0 stays 1.0, so the
     // relative loudness ladder the games ratchet is preserved, just audible.
     const amp = Math.sqrt(clamp01(d.level == null ? 0.5 : d.level));
-    if (amp <= 0 || levels[bus] <= 0) { stats.dropped += 1; return; }
+    if (amp <= 0 || levels[bus] <= 0) { stats.dropped += 1; settle('dropped'); return; }
     const name = String(d.name || '');
     try {
       // A url is a CLIP, whatever the name says. If the host cannot play one we
       // fall through to the recipe rather than going silent.
-      let took = d.url ? playClip(d, bus, amp) : false;
+      let took = d.url ? playClip(d, bus, amp, undefined, settle) : false;
       // ...and a SAMPLED name is a url the caller did not have to know about.
       // The slot is the name, so a cue that re-fires cuts its own tail instead
       // of stacking (twelve flaps in half a second is the case that matters).
       if (!took && available.has(name)) {
         took = playClip(
           Object.assign({}, d, { url: SAMPLES[name], key: d.key == null ? name : d.key }),
-          bus, amp, name
+          bus, amp, name, settle
         );
         if (took) stats.samples += 1;
       }
@@ -612,11 +660,19 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
         // No file, no imitation. The cue is spent, not queued (trap 70: a beat
         // played late is worse than a beat missed).
         stats.dropped += 1;
+        settle('dropped');
       } else {
         playRecipe(SOUNDS[name] || SOUNDS.blip, bus, amp, pitch);
         stats.played += 1;
+        // A recipe has no element and no `ended`: the impression is not the
+        // recording, so a caller waiting for the FILE is told so and moves on.
+        settle('recipe');
       }
-    } catch (err) { stats.dropped += 1; say('[audio] ' + (name || '?') + ' failed: ' + ((err && err.message) || err)); }
+    } catch (err) {
+      stats.dropped += 1;
+      settle('dropped');
+      say('[audio] ' + (name || '?') + ' failed: ' + ((err && err.message) || err));
+    }
     if (d.duck) duck(d.duck);
   }
 
