@@ -1537,6 +1537,30 @@
       "reason": "not-vacuous: exhaustive platform arms over a TYPED REFUSAL CODE, with no skip and no early return. Every backend checks the MECHANISM before it checks whether anything is presented, so the same call answers nothing-presented on Windows and mechanism-absent off it; both are refusals, both are true of their platform, and NEITHER arm is a success. The platform predicate selects the EXPECTED CODE and guards no assertion - the fact executes end to end on every platform, which is why it is NOT in allowedSkips."
     },
     {
+      "key": "CcpClient.Tests/OverlayTaskSwitcherTests.cs::OverlayTaskSwitcherTests.TheShellsRuleOffersAnOrdinaryWindow_AndAllThreeSurfacesReallyReachedTheDesktop",
+      "path": "CcpClient.Tests/OverlayTaskSwitcherTests.cs",
+      "line": 98,
+      "method": "OverlayTaskSwitcherTests.TheShellsRuleOffersAnOrdinaryWindow_AndAllThreeSurfacesReallyReachedTheDesktop",
+      "shapes": [
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "MACHINE GATE, not a silenced assertion, and the conversion this entry exists to record: the fact drives a REAL Win32 rig (four top-level windows placed on the interactive desktop, then USER32 and DWM asked for WS_EX_TOOLWINDOW, WS_EX_APPWINDOW, window ownership and DWM cloaking about each of them), and off that rig every handle is 0, PointerWindowProbe.ReadTaskSwitcherState answers all-false for all of them, and every reading becomes 0 == 0 about a window that was never created. This class previously KEYED those readings to MachineHasInteractiveDesktop instead, which disabled its own anti-vacuity control - the control asserted that the shell's rule says NO to an ordinary window, which is exactly what a rule answering NO to everything does, so both facts passed off Windows with nothing measured (reproduced: a faithful off-Windows simulation left the old shape 2 Passed / 0 Skipped). The gate is Assert.SkipUnless, so the refusal REPORTS as NotExecuted carrying its reason, and it must be pinned by NAME in floor.json allowedSkips under the admission rule (a machine/OS property, never satisfiable by configuration) before any run on a machine without an interactive desktop. Every assertion below the gate is now UNCONDITIONAL - strictly stronger than what it replaced - and runs in full wherever the rig exists. The X11/Wayland half of the invariant is measured by nothing in this port, and the refusal is where that shows rather than being absorbed into a green."
+    },
+    {
+      "key": "CcpClient.Tests/OverlayTaskSwitcherTests.cs::OverlayTaskSwitcherTests.NoNativeSurfaceOfThisPort_IsAnOrdinaryTaskSwitchingWindow_ByTheShellsOwnRule",
+      "path": "CcpClient.Tests/OverlayTaskSwitcherTests.cs",
+      "line": 153,
+      "method": "OverlayTaskSwitcherTests.NoNativeSurfaceOfThisPort_IsAnOrdinaryTaskSwitchingWindow_ByTheShellsOwnRule",
+      "shapes": [
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "MACHINE GATE, not a silenced assertion, and the conversion this entry exists to record: the fact drives a REAL Win32 rig (four top-level windows placed on the interactive desktop, then USER32 and DWM asked for WS_EX_TOOLWINDOW, WS_EX_APPWINDOW, window ownership and DWM cloaking about each of them), and off that rig every handle is 0, PointerWindowProbe.ReadTaskSwitcherState answers all-false for all of them, and every reading becomes 0 == 0 about a window that was never created. This class previously KEYED those readings to MachineHasInteractiveDesktop instead, which disabled its own anti-vacuity control - the control asserted that the shell's rule says NO to an ordinary window, which is exactly what a rule answering NO to everything does, so both facts passed off Windows with nothing measured (reproduced: a faithful off-Windows simulation left the old shape 2 Passed / 0 Skipped). The gate is Assert.SkipUnless, so the refusal REPORTS as NotExecuted carrying its reason, and it must be pinned by NAME in floor.json allowedSkips under the admission rule (a machine/OS property, never satisfiable by configuration) before any run on a machine without an interactive desktop. Every assertion below the gate is now UNCONDITIONAL - strictly stronger than what it replaced - and runs in full wherever the rig exists. The X11/Wayland half of the invariant is measured by nothing in this port, and the refusal is where that shows rather than being absorbed into a green."
+    },
+    {
       "key": "CcpClient.Tests/PointerCapabilityTests.cs::PointerCapabilityTests.TheDeliveryOracle_CanSeeAClickArriveAtAWindowItBuiltItself_OrNoFactBelowMeansAnything",
       "path": "CcpClient.Tests/PointerCapabilityTests.cs",
       "line": 42,

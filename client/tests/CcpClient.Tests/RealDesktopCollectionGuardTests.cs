@@ -1,4 +1,6 @@
-﻿using Xunit;
+﻿using System.Text;
+using System.Text.RegularExpressions;
+using Xunit;
 
 namespace CcpClient.Tests;
 
@@ -50,6 +52,17 @@ namespace CcpClient.Tests;
 /// property, so a per-fact rule would have to resolve that alias and a per-file rule does not —
 /// and a per-fact rule would additionally red the platform-independent facts (record-clause,
 /// arithmetic and factory-selection facts) that correctly run on both.</para>
+///
+/// <para><b>FACT 7 — THE PER-FACT RULE FACT 5 SAID IT WAS NOT.</b> Fact 5's paragraph above names
+/// the two things a per-fact rule must do before it is worth having, and fact 7 does both: it reads
+/// the class level FIRST and turns any member declared from a real-desktop helper into an alias
+/// token, so the six classes whose fact bodies say only <c>var run = Run;</c> are visible rather
+/// than silently clean; and it looks at a fact only once that fact has been seen to name a machine
+/// property, so the platform-independent facts — typed refusals, factory branches, arithmetic —
+/// are never dragged in. What it then demands is that the machine question be a GATE
+/// (<c>Assert.Skip*</c>) rather than a KEY, because a key disables the anti-vacuity control using
+/// the very property the control exists to detect. Classes not yet converted are named in
+/// <see cref="KeyedOnlyClasses"/>, which reds in both directions.</para>
 /// </summary>
 public class RealDesktopCollectionGuardTests
 {
@@ -210,6 +223,64 @@ public class RealDesktopCollectionGuardTests
     /// cannot quietly take the exemption, and a file that LATER gains a key reds as stale.
     /// </summary>
     private static readonly string[] UnkeyedExemptFiles = ["PopQuizCardPresentationTests.cs"];
+
+    /// <summary>
+    /// <b>FACT 7's census: every class that still holds at least one KEYED-ONLY fact.</b>
+    ///
+    /// <para>A keyed-only fact reads a real-desktop run, compares its readings against a machine
+    /// property (<see cref="MachineKeys"/>), and does NOT gate on one. Off Windows — and in a
+    /// Windows session with no display — the probes answer all-zero, the comparisons become
+    /// <c>0 == 0</c>, and the fact passes having measured NOTHING. That is the hazard fact 5's own
+    /// remarks admit it does not close, at the finer grain it survives at.</para>
+    ///
+    /// <para><b>This list is a census, not an exemption.</b> Its job is to stop the shape RECURRING:
+    /// a new real-desktop class arriving keyed-only reds until somebody either converts it or writes
+    /// its name here, and a class whose last keyed-only fact is converted reds as STALE until its
+    /// name comes off. Both directions, same as <see cref="UnkeyedExemptFiles"/>. It deliberately
+    /// pins no per-class COUNT: a count would make every one of these files a shared chokepoint for
+    /// unrelated edits, and the ratchet that matters is a class LEAVING the list.</para>
+    ///
+    /// <para><b>What a converted class looks like</b> is <c>OverlayTaskSwitcherTests</c>, which is
+    /// absent below and is fact 7's positive control: it asks the machine question ONCE, as
+    /// <c>Assert.SkipUnless</c>, and every reading after that gate is unconditional. Off the desktop
+    /// it produces a NotExecuted result carrying its reason — a refusal the floor must be told about
+    /// by name — instead of a green.</para>
+    /// </summary>
+    private static readonly string[] KeyedOnlyClasses =
+    [
+        "BubbleCountCapabilityTests.cs",
+        "FlashDrawTests.cs",
+        "GlyphAlphaDifferentialTests.cs",
+        "GlyphCapabilityTests.cs",
+        "GlyphCoexistenceTests.cs",
+        "InputCapabilityTests.cs",
+        "InputOverlayCoexistenceTests.cs",
+        "OverlayCapabilityTests.cs",
+        "OverlayDesktopInputTests.cs",
+        "OverlayTopmostRebuildObservations.cs",
+        "PointerCapabilityTests.cs",
+        "PointerCoexistenceTests.cs",
+        "SurfaceExitTests.cs",
+        "SurfaceTeardownTests.cs",
+        "TrayCapabilityTests.cs",
+        "VideoCapabilityTests.cs",
+        "VideoInputRoutingTests.cs",
+        "VideoOverlayCoexistenceTests.cs",
+    ];
+
+    /// <summary>
+    /// The class fact 7 must see ONLY through an alias, and the alias it must resolve. Every fact in
+    /// <c>BubbleCountCapabilityTests</c> reaches its run through <c>Run</c> and no fact body there
+    /// names a real-desktop helper at all, so a scan that does not resolve class-level aliases finds
+    /// ZERO real-desktop facts in it — and then reports it clean. That is the exact way a per-fact
+    /// rule over this collection goes vacuous, so it is asserted rather than trusted.
+    /// </summary>
+    private const string AliasOnlyControlFile = "BubbleCountCapabilityTests.cs";
+
+    private const string AliasOnlyControlAlias = "Run";
+
+    /// <summary>The converted class: seen, and holding no keyed-only fact. Fact 7's other control.</summary>
+    private const string ConvertedControlFile = "OverlayTaskSwitcherTests.cs";
 
     /// <summary>Broken-detector controls: these must always come out bound.</summary>
     private static readonly string[] BoundControls =
@@ -497,6 +568,290 @@ public class RealDesktopCollectionGuardTests
         Assert.True(strays.Count == 0, string.Join(Environment.NewLine, strays));
         Assert.NotEmpty(files); // an empty walk is a broken detector, not a clean tree
     }
+
+    /// <summary>
+    /// <b>FACT 7.</b> A class in this collection either GATES its real-desktop facts on the machine,
+    /// or its name is in the census of classes that still key them instead.
+    ///
+    /// <para><b>Why keying is not a gate.</b> Fact 5 asks whether a class names the machine at all,
+    /// and its own remarks say what it cannot then ask: a class that keys ONE control fact and leaves
+    /// the rest unconditional passes it while every reading goes to zero off Windows. The finer case
+    /// is worse than that, because the KEY ITSELF disables the control —
+    /// <c>Assert.True(run.Control.Visible == run.MachineHasInteractiveDesktop)</c> is satisfied by a
+    /// window that was never created, and the invariant it exists to protect then reads
+    /// <c>0 == 0</c> about three more of them. An anti-vacuity control that can be switched off by
+    /// the same property it is controlling for is not a control.</para>
+    ///
+    /// <para><b>Refusal versus a blocked suite, which is the whole reason this admits a skip.</b> The
+    /// remedy this fact demands is <c>Assert.Skip*</c> on a machine property: a NotExecuted result
+    /// carrying its reason, which <c>check-floor.mjs:240-251</c> then REFUSES unless the name is
+    /// pinned in <c>allowedSkips</c> under the machine/OS admission rule. So the off-platform column
+    /// stops being a pass and becomes something a human had to admit in writing. What this fact
+    /// deliberately does NOT demand is an off-platform assertion FAILURE. That would red the whole
+    /// class on Linux, which is the bring-up fact 5 describes — roughly 66 facts red at once — and a
+    /// suite that cannot go green on a platform stops being read on that platform.</para>
+    ///
+    /// <para><b>Two blind spots, named.</b> (1) It is LEXICAL and per-FILE, like every other fact
+    /// here. (2) A fact that skips on <c>OperatingSystem.IsWindows()</c> and then keys on
+    /// <c>MachineHasInteractiveDesktop</c> counts as gated, though a Windows session with no display
+    /// still reads it vacuously; that is strictly narrower than the hazard this closes, and closing
+    /// it would need the two predicates compared rather than counted.</para>
+    /// </summary>
+    [Fact]
+    public void EveryRealDesktopFact_GatesOnTheMachine_OrItsClassIsInTheKeyedOnlyCensus()
+    {
+        var files = UnitProjectSources();
+        var keyedOnly = new List<string>();
+        var seen = new List<string>();
+        var violations = new List<string>();
+        var stale = new List<string>();
+        var aliasControlFacts = 0;
+        var aliasControlFactsNamingAHelperDirectly = 0;
+        var convertedControlFacts = 0;
+
+        foreach (var (name, raw) in files)
+        {
+            if (ExemptFileNames.Contains(name, StringComparer.Ordinal))
+            {
+                continue;
+            }
+
+            var code = StripComments(raw);
+            if (!code.Contains(MembershipAttribute, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var facts = FactBodies(code);
+            var aliases = RunAliases(code, facts);
+            var isAliasControl = string.Equals(name, AliasOnlyControlFile, StringComparison.Ordinal);
+            var offenders = new List<string>();
+            var reachesTheDesktop = false;
+
+            foreach (var fact in facts)
+            {
+                var namesHelper = RealDesktopHelpers.Any(h => fact.Body.Contains(h, StringComparison.Ordinal));
+                var namesAlias = aliases.Any(a => NamesToken(fact.Body, a));
+                if (!namesHelper && !namesAlias)
+                {
+                    continue;
+                }
+
+                reachesTheDesktop = true;
+                if (isAliasControl)
+                {
+                    aliasControlFacts++;
+                    if (namesHelper)
+                    {
+                        aliasControlFactsNamingAHelperDirectly++;
+                    }
+                }
+
+                if (string.Equals(name, ConvertedControlFile, StringComparison.Ordinal))
+                {
+                    convertedControlFacts++;
+                }
+
+                // A fact with no machine reading at all is PLATFORM-INDEPENDENT — a typed refusal,
+                // a factory's platform branch, a constant. Those must never be dragged into this
+                // rule: a guard that fires on correct code is worse than no guard.
+                if (!MachineKeys.Any(k => fact.Body.Contains(k, StringComparison.Ordinal)))
+                {
+                    continue;
+                }
+
+                if (fact.Body.Contains("Assert.Skip", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                offenders.Add(fact.Name);
+            }
+
+            if (!reachesTheDesktop)
+            {
+                continue;
+            }
+
+            seen.Add(name);
+            var censused = KeyedOnlyClasses.Contains(name, StringComparer.Ordinal);
+            if (offenders.Count > 0 && !censused)
+            {
+                keyedOnly.Add(name);
+                violations.Add($"CcpClient.Tests/{name}: {offenders.Count} fact(s) compare a real-desktop reading "
+                    + $"against a machine property and gate on none — {string.Join(", ", offenders)}. Off Windows, "
+                    + "and in a Windows session with no display, every probe in this project answers all-zero, so "
+                    + "each of those comparisons becomes 0 == 0 and the fact PASSES having measured nothing. Ask "
+                    + "the machine question ONCE as Assert.SkipUnless and make every reading after it "
+                    + "unconditional (OverlayTaskSwitcherTests is the worked example), pinning the skipped names in "
+                    + "floor.json's allowedSkips in the same commit. Or, if that conversion is not this packet's "
+                    + "work, add this file to KeyedOnlyClasses — which is an admission in writing that the class's "
+                    + "off-Windows column proves nothing, never a fix.");
+            }
+            else if (offenders.Count > 0)
+            {
+                keyedOnly.Add(name);
+            }
+            else if (censused)
+            {
+                stale.Add($"CcpClient.Tests/{name}: is in KeyedOnlyClasses but now gates every real-desktop fact it "
+                    + "has. The census is a list of work outstanding, and a name left on it after the work is done "
+                    + "is how the next reader concludes there is more of this shape than there is. Take it off.");
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+        Assert.True(stale.Count == 0, string.Join(Environment.NewLine, stale));
+
+        // ------------------------------------------------------------------ the detector's controls
+        //
+        // CONTROL A — ALIAS RESOLUTION. Every fact in the alias-control class reaches its run through
+        // a class-level property and NONE of them names a helper directly, so a scan that skipped
+        // alias resolution would find zero real-desktop facts here and call the class clean. Both
+        // halves are asserted: that the facts were seen, and that they could ONLY have been seen
+        // through the alias.
+        Assert.True(aliasControlFacts > 0,
+            $"fact 7 found NO real-desktop fact in {AliasOnlyControlFile}, which reaches its entire run through the "
+            + $"class-level alias '{AliasOnlyControlAlias}'. The alias resolution is broken, so every class shaped "
+            + "like that one is being reported clean without being read — which is this guard going vacuous about "
+            + "vacuity.");
+        Assert.True(aliasControlFactsNamingAHelperDirectly == 0,
+            $"{aliasControlFactsNamingAHelperDirectly} fact(s) in {AliasOnlyControlFile} now name a real-desktop "
+            + "helper directly, so that file no longer proves the alias resolution runs. Point "
+            + "AliasOnlyControlFile at a class that still reaches its run only through a class-level member.");
+
+        // CONTROL B — THE CONVERTED CLASS. It must be SEEN (so the scan really reads it) and must be
+        // absent from the census (so 'no violations' is not merely 'everything is exempt').
+        Assert.True(convertedControlFacts > 0,
+            $"fact 7 found no real-desktop fact in {ConvertedControlFile}, the converted worked example. With that "
+            + "class invisible, an empty violation list says nothing about whether the converted shape is even "
+            + "detectable.");
+        Assert.DoesNotContain(ConvertedControlFile, KeyedOnlyClasses);
+        Assert.DoesNotContain(ConvertedControlFile, keyedOnly);
+
+        // CONTROL C — the census is neither empty nor the whole world. Empty would mean the scan
+        // classifies nothing; equal to `seen` would mean nothing in the collection is gated at all
+        // and the rule has no worked example left in the tree.
+        Assert.Equal(KeyedOnlyClasses.OrderBy(n => n, StringComparer.Ordinal), keyedOnly.OrderBy(n => n, StringComparer.Ordinal));
+        Assert.True(seen.Count > keyedOnly.Count,
+            $"every one of the {seen.Count} real-desktop class(es) fact 7 can see is keyed-only. There is no gated "
+            + "class left for the rule to be measured against.");
+    }
+
+    /// <summary>One <c>[Fact]</c>/<c>[Theory]</c> method: its name and its body text.</summary>
+    private readonly record struct FactMethod(string Name, string Body, int Start, int End);
+
+    /// <summary>
+    /// Every fact body in a comment-stripped file. Fails closed: an attribute this cannot resolve to
+    /// a body throws rather than being skipped, because a fact the scanner cannot parse is exactly
+    /// the one somebody would hide a keyed control in (same discipline as
+    /// <c>VacuousShapeDetector.cs:88-94</c>).
+    /// </summary>
+    private static IReadOnlyList<FactMethod> FactBodies(string code)
+    {
+        var facts = new List<FactMethod>();
+        foreach (Match attribute in Regex.Matches(code, @"\[(?:Fact|Theory)\b"))
+        {
+            var declaration = Regex.Match(
+                code[attribute.Index..],
+                @"(?:public|internal|private|protected)\s+(?:static\s+)?(?:async\s+)?(?:void|Task|ValueTask)\b[\w<>\[\]\?,\. ]*?(\w+)\s*\(");
+            Assert.True(declaration.Success,
+                $"a [Fact]/[Theory] at offset {attribute.Index} resolves to no method declaration — the real-desktop "
+                + "gating guard refuses to go blind on a fact it cannot parse");
+
+            var i = attribute.Index + declaration.Index + declaration.Length;
+            for (var depth = 1; i < code.Length && depth > 0; i++)
+            {
+                if (code[i] == '(')
+                {
+                    depth++;
+                }
+                else if (code[i] == ')')
+                {
+                    depth--;
+                }
+            }
+
+            while (i < code.Length && char.IsWhiteSpace(code[i]))
+            {
+                i++;
+            }
+
+            Assert.True(i < code.Length,
+                $"a [Fact]/[Theory] at offset {attribute.Index} has no body — the real-desktop gating guard refuses "
+                + "to go blind on a fact it cannot parse");
+
+            var start = i;
+            if (code[i] == '{')
+            {
+                for (var depth = 0; i < code.Length; i++)
+                {
+                    if (code[i] == '{')
+                    {
+                        depth++;
+                    }
+                    else if (code[i] == '}' && --depth == 0)
+                    {
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                while (i < code.Length && code[i] != ';')
+                {
+                    i++;
+                }
+            }
+
+            facts.Add(new FactMethod(declaration.Groups[1].Value, code[start..Math.Min(i, code.Length)], start, i));
+        }
+
+        return facts;
+    }
+
+    /// <summary>
+    /// <b>The class-level alias, which is how a per-fact rule over this collection goes vacuous.</b>
+    /// Six classes here reach their whole run through one static member —
+    /// <c>private static BubbleCountObservations.PaintedRun Run => BubbleCountObservations.Painted;</c>
+    /// — and their fact bodies then say only <c>var run = Run;</c>. A scan that looks for helper
+    /// names inside fact bodies finds NOTHING in those files and reports them clean. So the class
+    /// level (everything outside a fact body) is read first, and any member declared from a
+    /// real-desktop helper becomes a token that means "this fact reads the run".
+    /// </summary>
+    private static IReadOnlyList<string> RunAliases(string code, IReadOnlyList<FactMethod> facts)
+    {
+        var classLevel = new StringBuilder();
+        var cursor = 0;
+        foreach (var fact in facts.OrderBy(f => f.Start))
+        {
+            classLevel.Append(code[cursor..fact.Start]);
+            cursor = Math.Min(fact.End, code.Length);
+        }
+
+        classLevel.Append(code[cursor..]);
+
+        var aliases = new List<string>();
+        foreach (var line in classLevel.ToString().Split('\n'))
+        {
+            if (!RealDesktopHelpers.Any(h => line.Contains(h, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            var declared = Regex.Match(line, @"\b(\w+)\s*(?:=>|=)");
+            if (declared.Success && !aliases.Contains(declared.Groups[1].Value, StringComparer.Ordinal))
+            {
+                aliases.Add(declared.Groups[1].Value);
+            }
+        }
+
+        return aliases;
+    }
+
+    /// <summary>Whole-token containment, so the alias <c>Run</c> never matches <c>RunTaskSwitcher</c>.</summary>
+    private static bool NamesToken(string body, string token) =>
+        Regex.IsMatch(body, $@"\b{Regex.Escape(token)}\b");
 
     private static IReadOnlyList<(string Name, string Text)> UnitProjectSources() =>
         ProjectSources(UnitProjectParts);
