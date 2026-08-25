@@ -2387,6 +2387,7 @@
   "msg_plus_pause_penalty_0": "\n(Plus {0} XP Pause-Strafe)",
   "btn_yes_stop_session": "Ja, Sitzung beenden",
   "btn_keep_going": "Weitermachen",
+  "chk_dont_ask_again": "Nicht mehr fragen",
   "title_pause_session_confirm": "\u23f8 Sitzung pausieren?",
   "msg_pause_session_body": "Pausieren kostet dich 100 XP von deiner Sitzungsbelohnung.\n\nAktuelle Strafe: -{0} XP\nNach dieser Pause: -{1} XP\n\nBist du sicher?",
   "btn_yes_pause": "Ja, pausieren",

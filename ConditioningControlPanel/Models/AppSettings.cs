@@ -214,6 +214,16 @@ namespace ConditioningControlPanel.Models
             }
         }
 
+        // "Don't ask me again" for the pause-costs-XP confirmation on a running session.
+        // Only ever set from the dialog itself, and only when the user actually confirmed the
+        // pause - ticking the box and then cancelling must not silently arm the skip.
+        private bool _skipPauseXpWarning = false;
+        public bool SkipPauseXpWarning
+        {
+            get => _skipPauseXpWarning;
+            set { _skipPauseXpWarning = value; OnPropertyChanged(); }
+        }
+
         // Remote-control emote slots (5 fixed, user-editable). OnDeserialized
         // pads or truncates to exactly 5 so the UI never has to defend against
         // odd counts. Default set lives in DefaultRemoteEmotePresets() below.

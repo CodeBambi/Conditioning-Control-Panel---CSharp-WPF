@@ -3108,6 +3108,7 @@
   "msg_plus_pause_penalty_0": "\n（加上 {0} XP 暂停惩罚）",
   "btn_yes_stop_session": "是，停止疗程",
   "btn_keep_going": "继续",
+  "chk_dont_ask_again": "不再询问",
   "title_pause_session_confirm": "⏸ 暂停疗程？",
   "msg_pause_session_body": "暂停将花费你疗程奖励中的 100 XP。\n\n当前惩罚：-{0} XP\n本次暂停后：-{1} XP\n\n你确定吗？",
   "btn_yes_pause": "是，暂停",

@@ -2386,6 +2386,7 @@
   "msg_plus_pause_penalty_0": "\n(추가로 {0} XP 일시정지 패널티)",
   "btn_yes_stop_session": "네, 세션 정지",
   "btn_keep_going": "계속하기",
+  "chk_dont_ask_again": "다시 묻지 않기",
   "title_pause_session_confirm": "\u23f8 세션을 일시정지할까요?",
   "msg_pause_session_body": "일시정지하면 세션 보상에서 100 XP가 차감돼요.\n\n현재 패널티: -{0} XP\n이번 일시정지 후: -{1} XP\n\n확실한가요?",
   "btn_yes_pause": "네, 일시정지",

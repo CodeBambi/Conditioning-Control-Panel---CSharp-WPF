@@ -2387,6 +2387,7 @@
   "msg_plus_pause_penalty_0": "\n(Plus {0} XP de pénalité de pause)",
   "btn_yes_stop_session": "Oui, arrêter la session",
   "btn_keep_going": "Continuer",
+  "chk_dont_ask_again": "Ne plus me demander",
   "title_pause_session_confirm": "\u23f8 Mettre en Pause la Session ?",
   "msg_pause_session_body": "Mettre en pause te coûtera 100 XP de ta récompense de session.\n\nPénalité actuelle : -{0} XP\nAprès cette pause : -{1} XP\n\nEs-tu sûr ?",
   "btn_yes_pause": "Oui, pause",

@@ -688,7 +688,18 @@ namespace ConditioningControlPanel
         }
         
         private bool ShowStyledDialog(string title, string message, string yesText, string noText)
+            => ShowStyledDialog(title, message, yesText, noText, null, out _);
+
+        /// <summary>
+        /// Same dialog with an optional "Don't ask me again"-style checkbox between the message
+        /// and the buttons. <paramref name="checkboxChecked"/> is false when no checkbox is shown.
+        /// Callers must only act on it when this returns true - the box's state is meaningless
+        /// if the user cancelled.
+        /// </summary>
+        private bool ShowStyledDialog(string title, string message, string yesText, string noText,
+            string? checkboxText, out bool checkboxChecked)
         {
+            checkboxChecked = false;
             var dialog = new Window
             {
                 Title = title,
@@ -746,6 +757,22 @@ namespace ConditioningControlPanel
                 Margin = new Thickness(0, 0, 0, 20)
             });
             
+            // Optional "don't ask me again" checkbox
+            CheckBox? optOutBox = null;
+            if (!string.IsNullOrEmpty(checkboxText))
+            {
+                optOutBox = new CheckBox
+                {
+                    Content = checkboxText,
+                    Foreground = Brushes.White,
+                    FontSize = 12,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Margin = new Thickness(0, 0, 0, 15),
+                    Cursor = Cursors.Hand
+                };
+                mainStack.Children.Add(optOutBox);
+            }
+
             // Buttons
             var buttonPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
             
@@ -789,6 +816,7 @@ namespace ConditioningControlPanel
             dialog.Content = border;
             dialog.ShowDialog();
 
+            checkboxChecked = optOutBox?.IsChecked == true;
             return result;
         }
 
@@ -1968,14 +1996,32 @@ namespace ConditioningControlPanel
             }
             else
             {
-                // Confirm pause (costs XP)
-                var confirmed = ShowStyledDialog(
-                    Loc.Get("title_pause_session_confirm"),
-                    Loc.GetF("msg_pause_session_body", _sessionEngine.XPPenalty, _sessionEngine.XPPenalty + 100),
-                    Loc.Get("btn_yes_pause"), Loc.Get("btn_keep_going"));
+                // Confirm pause (costs XP) - unless the user ticked "don't ask me again" on a
+                // previous pause, in which case we go straight through.
+                bool confirmed;
+                bool dontAskAgain = false;
+                if (App.Settings.Current.SkipPauseXpWarning)
+                {
+                    confirmed = true;
+                }
+                else
+                {
+                    confirmed = ShowStyledDialog(
+                        Loc.Get("title_pause_session_confirm"),
+                        Loc.GetF("msg_pause_session_body", _sessionEngine.XPPenalty, _sessionEngine.XPPenalty + 100),
+                        Loc.Get("btn_yes_pause"), Loc.Get("btn_keep_going"),
+                        Loc.Get("chk_dont_ask_again"), out dontAskAgain);
+                }
 
                 if (confirmed)
                 {
+                    // Only remember the opt-out when the pause actually happened.
+                    if (dontAskAgain)
+                    {
+                        App.Settings.Current.SkipPauseXpWarning = true;
+                        App.Settings.Save();
+                    }
+
                     _sessionEngine.PauseSession();
                     if (TxtPauseIcon != null) TxtPauseIcon.Text = "▶";
                     BtnPauseSession.ToolTip = Loc.Get("tooltip_resume_session");
