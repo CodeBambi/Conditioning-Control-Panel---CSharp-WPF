@@ -42,10 +42,31 @@ namespace CcpClient.Desktop.Input;
 /// NOT rebindable here and upstream's is; a rebind needs a settings surface, and shipping the escape
 /// hatch was worth more than shipping the dial that renames it.</para>
 ///
-/// <para><b>Thread affinity.</b> The owner window belongs to the thread that called
-/// <see cref="Arm"/> — in the app, the UI thread, whose Win32 message loop Avalonia already pumps.
-/// <see cref="Pressed"/> is raised on that thread, which is what lets a handler touch windows
-/// directly. <see cref="Dispose"/> must run on the same thread.</para>
+/// <para><b>Thread affinity, and the measurement that moved it.</b> The owner window used to be
+/// created on the thread that called <see cref="Arm"/> — the UI thread, whose Win32 message loop
+/// Avalonia already pumps — and <see cref="Pressed"/> was raised there. That put the emergency stop
+/// behind the one thread this application is known to lose: a measurement on this product at maximum
+/// settings recorded the UI thread failing to answer its message loop for <b>607–1734 ms at a
+/// stretch, peaking past a 2000 ms probe ceiling</b>, with one core pegged and fifteen idle. A
+/// posted <c>WM_HOTKEY</c> sits in the queue of the thread that registered the hotkey, so on the old
+/// shape the press was not merely late — for as long as the stall lasted it could not be OBSERVED at
+/// all, and the state the user was actually in is the state in which the escape hatch is asleep.
+///
+/// This class now runs its <b>own</b> thread with its <b>own</b> message loop, and the window and
+/// the hotkey belong to it. Nothing the UI thread does can stop that loop from running, so the press
+/// is always seen; what it cannot do by itself is ACT, because a window belongs to the thread that
+/// created it and every surface on the user's screen belongs to the UI thread. Handing the press
+/// across that gap, and deciding what to do when the gap does not close, is
+/// <see cref="PanicWatchdog"/>'s job — and this is where upstream's claim is repaid rather than
+/// inverted: upstream's own watchdog can only ARM while the UI thread is still pumping, because its
+/// <c>WH_KEYBOARD_LL</c> callback is delivered on that thread
+/// (<c>ConditioningControlPanel/MainWindow/MainWindow.xaml.cs:886-894</c>, which says so).
+/// This one has no such bound.</para>
+///
+/// <para><b>What that costs.</b> <see cref="Pressed"/> is raised on the panic thread and NOT on the
+/// UI thread, so a handler may not touch a window from it. <see cref="Dispose"/> is now callable
+/// from any thread — it asks the panic thread to take its own window down and waits for it — where
+/// before it was thread-affine.</para>
 /// </summary>
 public sealed class Win32PanicKey : IDisposable
 {
@@ -62,20 +83,42 @@ public sealed class Win32PanicKey : IDisposable
     /// <summary>What the user presses. Shown to them; never inferred from the flags at a call site.</summary>
     public const string Gesture = "Ctrl+Alt+Esc";
 
+    /// <summary>How long <see cref="Arm"/> waits for its own thread to say whether the OS granted
+    /// the chord, and how long <see cref="Dispose"/> waits for that thread to give it back. Both are
+    /// a handshake with a thread that does nothing but call four USER32 functions, so exceeding this
+    /// means something is wrong rather than slow — and both are BOUNDED, because a panic key that
+    /// hung its caller would be the wedge it exists to answer.</summary>
+    private static readonly TimeSpan ThreadHandshake = TimeSpan.FromSeconds(5);
+
     private readonly string _windowClassName = "CcpClientPanicKey." + Guid.NewGuid().ToString("N");
     private readonly Win32PanicInterop.WndProc _windowProc;
+    private readonly Action<string>? _log;
+    /// <summary>The arm handshake. Deliberately never disposed: the ONE thread that can still set
+    /// it is the one <see cref="Dispose"/> may fail to join, and disposing it there would turn a
+    /// panic thread that came back late into an unhandled ObjectDisposedException — the emergency
+    /// stop killing the process on its way out. One event per panic key, one panic key per
+    /// process.</summary>
+    private readonly ManualResetEventSlim _armed = new(false);
 
+    private Thread? _thread;
+    private CapabilityState? _armOutcome;
     private nint _ownerWindow;
     private nint _moduleHandle;
     private ushort _classAtom;
     private bool _registered;
     private bool _disposed;
 
-    public Win32PanicKey()
+    /// <param name="log">Where a handler's own failure is said. Optional, and the reason it exists
+    /// at all is that this class used to swallow one in silence with the comment "this class holds
+    /// no log sink": the press arrives inside a native window procedure, an exception crossing that
+    /// frame ends the process, so it MUST be caught here — and a catch nobody can hear made the
+    /// emergency path the quietest one in the application.</param>
+    public Win32PanicKey(Action<string>? log = null)
     {
         // Rooted for this instance's lifetime: the OS calls this pointer back from native code,
         // and a collected delegate is an access violation rather than an exception.
         _windowProc = WindowProc;
+        _log = log;
     }
 
     /// <summary>Raised on the arming thread when the chord is pressed, from any application.</summary>
@@ -91,6 +134,11 @@ public sealed class Win32PanicKey : IDisposable
     /// <summary>
     /// Claim the chord. <see cref="CapabilityState.Available"/> only when the OS granted it; a
     /// refusal is typed and carries the Win32 last-error, never a silent false.
+    ///
+    /// <para>The window and the registration are made on this key's OWN thread, because a hotkey is
+    /// delivered to the queue of the thread that registered it and that queue must belong to a
+    /// thread nothing else can stall. This call blocks until that thread has an answer, which is one
+    /// window creation and one <c>RegisterHotKey</c> away.</para>
     /// </summary>
     public CapabilityState Arm()
     {
@@ -111,6 +159,118 @@ public sealed class Win32PanicKey : IDisposable
                 + "The session can only be stopped from the shell window on this platform");
         }
 
+        if (_thread is not null)
+        {
+            return _armOutcome ?? Unavailable(HotkeyRefused, "this panic key's thread has already answered once and refused");
+        }
+
+        _thread = new Thread(PumpUntilClosed)
+        {
+            IsBackground = true,
+            Name = "CCP panic key",
+        };
+
+        // STA for the same reason every message pump takes it: this thread owns a top-level window
+        // and dispatches messages to it, and STA is the apartment that contract is written for.
+        _thread.SetApartmentState(ApartmentState.STA);
+        _thread.Start();
+
+        if (!_armed.Wait(ThreadHandshake))
+        {
+            return Unavailable(HotkeyRefused,
+                $"the panic key's own message thread did not answer within {ThreadHandshake.TotalSeconds:0.#}s, so "
+                + "nothing is known to hold the chord; there is NO system-wide emergency stop in this process");
+        }
+
+        // Published by the panic thread before it set _armed; the Wait above is the barrier.
+        return _armOutcome ?? Unavailable(HotkeyRefused, "the panic key's thread answered with nothing");
+    }
+
+    /// <summary>
+    /// Give the chord back and take the window down. Callable from any thread: the window belongs to
+    /// the panic thread, so this ASKS that thread to destroy it (the only legal way) and waits for
+    /// the thread to end, which is what makes <c>IsWindow</c> false by the time this returns.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        Pressed = null;
+
+        var thread = _thread;
+        if (thread is null || !OperatingSystem.IsWindows())
+        {
+            _registered = false;
+            _ownerWindow = 0;
+            _classAtom = 0;
+            return;
+        }
+
+        if (_ownerWindow != 0)
+        {
+            Win32PanicInterop.PostMessageW(_ownerWindow, Win32PanicInterop.WmClose, 0, 0);
+        }
+
+        if (!thread.Join(ThreadHandshake))
+        {
+            // Bounded rather than absent: this is the emergency stop's own teardown, and a Join that
+            // could hang would park whatever thread is closing the app. The thread is a background
+            // one, so the process can still exit and the OS still reclaims the window and the chord.
+            _log?.Invoke(
+                $"panic: the panic key's thread did not end within {ThreadHandshake.TotalSeconds:0.#}s; "
+                + $"{Gesture} stays claimed until this process exits");
+            return;
+        }
+
+        _thread = null;
+    }
+
+    /// <summary>
+    /// The panic key's own thread: create the window, claim the chord, publish the answer, then
+    /// pump until somebody posts WM_CLOSE. Everything USER32 here — the class, the window, the
+    /// registration and their teardown — happens on this one thread, which is the affinity rule
+    /// windows and hotkeys both carry.
+    /// </summary>
+    private void PumpUntilClosed()
+    {
+        try
+        {
+            _armOutcome = ClaimChord();
+        }
+        catch (Exception ex)
+        {
+            _armOutcome = Unavailable(HotkeyRefused,
+                $"the panic key's thread threw while claiming {Gesture} ({ex.GetType().Name}: {ex.Message}); "
+                + "there is NO system-wide emergency stop in this process");
+        }
+        finally
+        {
+            _armed.Set();
+        }
+
+        if (_armOutcome is not CapabilityState.Available)
+        {
+            return;
+        }
+
+        while (Win32PanicInterop.GetMessageW(out var message, 0, 0, 0) > 0)
+        {
+            Win32PanicInterop.TranslateMessage(ref message);
+            Win32PanicInterop.DispatchMessageW(ref message);
+        }
+
+        // WM_CLOSE released the chord and destroyed the window above; this is the class, which can
+        // only be unregistered once no window of it survives.
+        _registered = false;
+        DestroyOwnerWindow();
+    }
+
+    private CapabilityState ClaimChord()
+    {
         var window = EnsureOwnerWindow(out var failure);
         if (window == 0)
         {
@@ -129,25 +289,6 @@ public sealed class Win32PanicKey : IDisposable
 
         _registered = true;
         return Available($"{Gesture} is held system-wide and stops the session from any application");
-    }
-
-    public void Dispose()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _disposed = true;
-        Pressed = null;
-
-        if (_registered && OperatingSystem.IsWindows() && _ownerWindow != 0)
-        {
-            Win32PanicInterop.UnregisterHotKey(_ownerWindow, HotkeyId);
-        }
-
-        _registered = false;
-        DestroyOwnerWindow();
     }
 
     private nint EnsureOwnerWindow(out string failure)
@@ -225,12 +366,41 @@ public sealed class Win32PanicKey : IDisposable
             {
                 Pressed?.Invoke();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Deliberately swallowed and deliberately silent: this class holds no log sink, and
-                // the handler is the party that knows what its own failure means.
+                // Caught, and no longer SILENT. This catch used to say "this class holds no log
+                // sink" and swallow — which made a failure on the emergency path the one failure in
+                // the application nobody could ever hear, while the same failure on the STOP button
+                // would at least reach a handler. The sink is optional and the catch is unchanged;
+                // only the silence is gone.
+                _log?.Invoke($"panic: the {Gesture} handler threw and the press did nothing "
+                    + $"({ex.GetType().Name}: {ex.Message})");
             }
 
+            return 0;
+        }
+
+        // Dispose's request, arriving on the one thread allowed to answer it. The chord is given
+        // back BEFORE the window goes, so the release is this code's act rather than a side effect
+        // of the window dying — a hotkey nobody released is Ctrl+Alt+Esc taken away from every
+        // other application on the machine.
+        if (message == Win32PanicInterop.WmClose)
+        {
+            if (_registered)
+            {
+                Win32PanicInterop.UnregisterHotKey(window, HotkeyId);
+                _registered = false;
+            }
+
+            Win32PanicInterop.DestroyWindow(window);
+            _ownerWindow = 0;
+            return 0;
+        }
+
+        // The panic thread's own loop ends here and nowhere else.
+        if (message == Win32PanicInterop.WmDestroy)
+        {
+            Win32PanicInterop.PostQuitMessage(0);
             return 0;
         }
 

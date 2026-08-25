@@ -37,6 +37,14 @@ internal static class Win32PanicInterop
     /// <summary>The message the OS posts to the owner window when the chord is pressed.</summary>
     public const uint WmHotkey = 0x0312;
 
+    /// <summary>WM_CLOSE — how <c>Dispose</c> asks the panic key's OWN thread to take its window
+    /// down. A window belongs to the thread that created it, so no other thread may destroy it;
+    /// posting is the only legal way to ask.</summary>
+    public const uint WmClose = 0x0010;
+
+    /// <summary>WM_DESTROY — the panic thread's cue to end its own message loop.</summary>
+    public const uint WmDestroy = 0x0002;
+
     /// <summary>A real top-level popup, never shown. Deliberately not <c>HWND_MESSAGE</c>: a
     /// message-only window is outside the window manager, and this one is a hotkey target.</summary>
     public const uint WsPopup = 0x80000000;
@@ -97,4 +105,41 @@ internal static class Win32PanicInterop
 
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     public static extern nint GetModuleHandleW(string? moduleName);
+
+    // ---------------------------------------------------------------------------------------
+    //  The panic key's OWN message loop. Everything below exists so the chord is delivered on a
+    //  thread of the panic key's own rather than on the UI thread, which is the thread a stalled
+    //  app stops pumping — see Win32PanicKey's class documentation for the measurement.
+    // ---------------------------------------------------------------------------------------
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Msg
+    {
+        public nint hwnd;
+        public uint message;
+        public nint wParam;
+        public nint lParam;
+        public uint time;
+        public int ptX;
+        public int ptY;
+    }
+
+    /// <summary>Blocks until a message arrives. Returns 0 on WM_QUIT and -1 on error, which is why
+    /// the loop tests <c>&gt; 0</c> rather than truthiness.</summary>
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetMessageW(out Msg message, nint window, uint filterMin, uint filterMax);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool TranslateMessage(ref Msg message);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern nint DispatchMessageW(ref Msg message);
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool PostMessageW(nint window, uint message, nint wParam, nint lParam);
+
+    [DllImport("user32.dll")]
+    public static extern void PostQuitMessage(int exitCode);
 }

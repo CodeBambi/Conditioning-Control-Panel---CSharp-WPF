@@ -202,6 +202,7 @@ public partial class MainWindow : Window
             // again until that window closes.
             Scheduler.NoteManualToggle(Session.Engine.Running);
             Session.Engine.Toggle();
+            ReportStopFailures("STOP");
             RenderSessionState();
         };
         Session.Engine.Changed += OnSessionEngineChanged;
@@ -403,6 +404,21 @@ public partial class MainWindow : Window
     /// <c>ArcademySession.PanicPress</c> — the Arcademy's door is shut in this build, and wiring a
     /// hand-off to a surface nobody can open would be a branch no test could reach through the
     /// product. Both are named rather than silently absent.</para>
+    ///
+    /// <para><b>THE EXIT RUNG IS EVALUATED FIRST, and it is no longer gated on the engine's flag.</b>
+    /// It used to sit BELOW the stop rung and behind <c>!Running</c>, which made the app's last way
+    /// out depend on a boolean that the failure it exists for corrupts: a module that threw on the
+    /// way down left <c>Running</c> true, so every later press re-entered the stop rung, threw
+    /// again, and the double-press exit could never be reached at all. Two presses of the emergency
+    /// chord inside <see cref="PanicDoublePressWindow"/> now mean OUT, whatever the engine believes
+    /// about itself, and the exit runs before anything on this path that can throw.</para>
+    ///
+    /// <para>The user-visible ladder is unchanged, because the flag was never what carried it:
+    /// press one with a session up stops it (leaving <c>Running</c> false), so press two exits — the
+    /// same pair upstream produces from the other order (its exit rung re-reads <c>_isRunning</c>
+    /// AFTER <c>StopEngine()</c> has already cleared it,
+    /// <c>ConditioningControlPanel/MainWindow/MainWindow.xaml.cs:1163,1227</c>). What changes is the
+    /// case upstream gets wrong too: when the stop does not complete, this exits and upstream cannot.</para>
     /// </summary>
     public void PanicPress()
     {
@@ -410,25 +426,68 @@ public partial class MainWindow : Window
         var doubleTap = now - _lastPanicPress <= PanicDoublePressWindow;
         _lastPanicPress = now;
 
+        if (doubleTap)
+        {
+            _host.LogDiagnostic("panic: second press inside the double-press window — exiting");
+            RequestApplicationExit();
+            return;
+        }
+
         if (Session.Engine.Running)
         {
             _host.LogDiagnostic("panic: session running — stopping every module");
             Scheduler.NoteManualToggle(true);
             Session.Engine.Stop();
+            ReportStopFailures("the emergency stop");
             RenderSessionState();
             SurfaceTheShell();
             return;
         }
 
-        if (doubleTap)
+        _host.LogDiagnostic("panic: nothing running — shell raised; press again to exit");
+        SurfaceTheShell();
+    }
+
+    /// <summary>
+    /// Put a module that threw on the way down in front of the user, on BOTH stop paths.
+    ///
+    /// <para>The engine no longer lets one module's failure strand the rest of the rack
+    /// (<see cref="Session.SessionEngine.Stop"/>), which leaves the second half of that hazard: the
+    /// failure has to be SAYABLE. Silence would be worst on the panic path, where the press arrives
+    /// through a native window procedure that catches everything and cannot report
+    /// (<c>Input/Win32PanicKey.cs</c>) — so the quietest path in the app would be the emergency one,
+    /// which is backwards for an emergency control. Both callers route through here, so neither can
+    /// be quieter than the other by accident.</para>
+    ///
+    /// <para>The toast is <see cref="ToastKind.Warning"/> and stays until dismissed, the treatment
+    /// the shell already gives a panic key the OS refused (<c>App.axaml.cs:148</c>): a surface that
+    /// may still be on the user's screen after they asked for everything to stop is not something to
+    /// tell them for three seconds.</para>
+    /// </summary>
+    private void ReportStopFailures(string gesture)
+    {
+        var failures = Session.Engine.StopFailures;
+        if (failures.Count == 0)
         {
-            _host.LogDiagnostic("panic: second press with nothing running — exiting");
-            RequestApplicationExit();
             return;
         }
 
-        _host.LogDiagnostic("panic: nothing running — shell raised; press again to exit");
-        SurfaceTheShell();
+        foreach (var (id, reason) in failures)
+        {
+            _host.LogDiagnostic($"stop: module '{id}' failed to disarm [{reason.Code}] {reason.Detail}");
+        }
+
+        // The way out named here is the one this process really holds: the chord only when the OS
+        // granted it (PanicGesture is set from App's own Arm result and nothing else sets it), and
+        // otherwise the window, which is always there.
+        var wayOut = PanicGesture is null
+            ? "Closing this window exits the application."
+            : $"Pressing {PanicGesture} twice exits the application.";
+
+        Toasts.ShowUntilDismissed(
+            $"{gesture} could not fully stop {string.Join(", ", failures.Select(f => f.Id))}. "
+            + $"Nothing more is scheduled, but anything those modules had on screen may still be up. {wayOut}",
+            ToastKind.Warning);
     }
 
     /// <summary>

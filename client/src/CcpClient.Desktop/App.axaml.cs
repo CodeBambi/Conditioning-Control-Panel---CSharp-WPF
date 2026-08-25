@@ -127,8 +127,23 @@ public partial class App : Application
             // second and later ones would each raise the "no emergency stop" warning below, which
             // is a false alarm about a process that HAS one. The wiring is proved by the headed run
             // recorded with this change rather than by a headless fact, for the same reason.
-            var panicKey = new Input.Win32PanicKey();
-            panicKey.Pressed += dashboard.PanicPress;
+            //
+            // THE PRESS DOES NOT REACH THE SHELL DIRECTLY, and that is the second half of the same
+            // safety fix. The chord is now delivered on the panic key's OWN thread (see that class),
+            // so the handler — which touches windows and may therefore only run on the UI thread —
+            // is handed across by PanicWatchdog, which is also what happens when the UI thread does
+            // not take it. At the highest dispatcher priority, because upstream's own reporters hit
+            // a queue starved by higher-priority work (MainWindow/MainWindow.xaml.cs:886-894).
+            var panicKey = new Input.Win32PanicKey(_host.LogDiagnostic);
+            var panicWatchdog = new Input.PanicWatchdog(
+                post: action => Avalonia.Threading.Dispatcher.UIThread.Post(
+                    action, Avalonia.Threading.DispatcherPriority.Send),
+                handler: dashboard.PanicPress,
+                log: _host.LogDiagnostic,
+                teardownStarted: () => _host.IsShutdown,
+                teardown: _host.ShutdownAsync,
+                terminate: Input.PanicWatchdog.TerminateThisProcess);
+            panicKey.Pressed += panicWatchdog.Press;
             dashboard.Closed += (_, _) => panicKey.Dispose();
             var panicState = panicKey.Arm();
             _host.LogDiagnostic($"panic: {Input.Win32PanicKey.Gesture} -> {panicState}");

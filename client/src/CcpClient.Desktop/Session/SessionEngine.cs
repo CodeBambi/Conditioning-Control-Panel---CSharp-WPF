@@ -46,6 +46,7 @@ public sealed class SessionEngine
     private readonly IReadOnlyList<ISessionEffect> _effects;
     private readonly PersistenceStore<SessionPresetDocument> _preset;
     private readonly Dictionary<string, CapabilityState> _armOutcomes = [];
+    private readonly List<(string Id, CapabilityReason Reason)> _stopFailures = [];
     private readonly EffectSignal? _signal;
     private bool _stopInProgress;
 
@@ -106,6 +107,19 @@ public sealed class SessionEngine
             .Where(e => _armOutcomes.TryGetValue(e.Id, out var state) && state is CapabilityState.Unavailable)
             .Select(e => (e.Id, ((CapabilityState.Unavailable)_armOutcomes[e.Id]).Reason))];
 
+    /// <summary>
+    /// The modules that THREW on the way down during the last <see cref="Stop"/>, in rack order.
+    /// Empty after a clean stop, and cleared at the start of every stop, so it always describes the
+    /// most recent one.
+    ///
+    /// <para><b>It exists because the alternative was silence.</b> A disarm that throws leaves the
+    /// module's schedule dead but may leave its surface on screen, and the port's standard is a typed
+    /// outcome carrying a reason rather than a swallowed exception. The panic key's window procedure
+    /// catches everything it is handed and cannot report — so if the failure is not readable HERE it
+    /// is readable nowhere, which is exactly the state the emergency stop was in.</para>
+    /// </summary>
+    public IReadOnlyList<(string Id, CapabilityReason Reason)> StopFailures => _stopFailures;
+
     /// <summary>WPF's <c>_isRunning</c>/<c>App.IsEngineRunning</c> (<c>MainWindow.StartStop.cs:268-269</c>).</summary>
     public bool Running { get; private set; }
 
@@ -158,7 +172,24 @@ public sealed class SessionEngine
             // The outcome is RECORDED rather than discarded: a module that armed nothing is a fact
             // about this session, and dropping it here would put the typed refusal back where it
             // was before — expressible and unobserved.
-            _armOutcomes[effect.Id] = effect.Arm();
+            //
+            // ONE MODULE MAY NOT TAKE THE RACK DOWN WITH IT. Arm() is not bookkeeping — it creates
+            // native windows, opens decoders and claims audio devices — so it can throw, and an
+            // unguarded throw here meant every module after it in rack order was never armed while
+            // the exception left through whatever pressed START (a click handler, or a scheduler
+            // tick on a pool thread with nobody watching). The failure is typed instead, into the
+            // same channel every other refusal uses, so the rack can SAY which module broke.
+            try
+            {
+                _armOutcomes[effect.Id] = effect.Arm();
+            }
+            catch (Exception ex)
+            {
+                _armOutcomes[effect.Id] = new CapabilityState.Unavailable(new CapabilityReason(
+                    EffectReasonCodes.EffectArmFailed,
+                    $"the '{effect.Id}' module threw while the session was starting it "
+                    + $"({ex.GetType().Name}: {ex.Message}); the session started without it"));
+            }
         }
 
         Running = true;
@@ -170,8 +201,32 @@ public sealed class SessionEngine
     /// WPF <c>StopEngine</c>/<c>StopEngineCore</c> (<c>MainWindow.StartStop.cs:292-410</c>):
     /// the re-entrancy guard first (<c>:292-296</c>), the work stopped before the flag
     /// (<c>:305</c>, <c>:385-387</c>).
+    ///
+    /// <para><b>Every module gets its disarm attempted, whatever the module before it did.</b>
+    /// This loop used to be bare, and the emergency stop's own review is what found what that
+    /// costs: <see cref="ISessionEffect.Disarm"/> runs native window teardown, decoders and audio,
+    /// so one module throwing meant every module AFTER it in rack order was never disarmed and kept
+    /// its surfaces on screen — while the throw travelled up into
+    /// <c>Input/Win32PanicKey.cs</c>'s window procedure, which catches and is deliberately silent.
+    /// The user was left under the surfaces with no log line and no toast, and pressing the panic
+    /// chord again re-entered the same throwing branch for as long as he cared to press it.</para>
+    ///
+    /// <para><b><see cref="Running"/> goes false even when a module threw, deliberately.</b> The
+    /// alternative — keep the flag true while a module is "still live" — reads as the honest one and
+    /// is not: it re-arms nothing, it keeps the shell's ONE control captioned <c>STOP</c>, and it
+    /// keeps the panic ladder's stop rung in front of the exit rung, so the flag a failed stop
+    /// corrupts becomes the reason the user can never leave. What the flag means here is that this
+    /// engine owns a session, and after this loop it owns none: every module was asked, and every
+    /// module's generation is cancelled whatever its release did
+    /// (<see cref="OwnedSessionEffect.Disarm"/> cancels in a <c>finally</c>), so nothing any module
+    /// scheduled can still fire. What may survive is a SURFACE whose withdrawal threw halfway — and
+    /// a boolean cannot say that, which is why <see cref="StopFailures"/> exists and why the shell
+    /// puts it in front of the user instead of leaving it in a dictionary.</para>
     /// </summary>
-    /// <returns>False when nothing was running, or when a stop was already in progress.</returns>
+    /// <returns>False when nothing was running, or when a stop was already in progress. True when a
+    /// stop really ran — including one where a module threw, because "nothing was running" and "a
+    /// module broke on the way down" are different facts and <see cref="StopFailures"/> is where the
+    /// second one is told.</returns>
     public bool Stop()
     {
         // WPF's guard exists because its stop body pumps the dispatcher, so a second panic
@@ -192,9 +247,26 @@ public sealed class SessionEngine
                 return false;
             }
 
+            _stopFailures.Clear();
             foreach (var effect in _effects)
             {
-                effect.Disarm();
+                try
+                {
+                    effect.Disarm();
+                }
+                catch (Exception ex)
+                {
+                    var reason = new CapabilityReason(
+                        EffectReasonCodes.EffectDisarmFailed,
+                        $"the '{effect.Id}' module threw while the session was stopping it "
+                        + $"({ex.GetType().Name}: {ex.Message}); its schedule was cancelled anyway, but "
+                        + "anything it had on screen may still be up");
+                    _stopFailures.Add((effect.Id, reason));
+
+                    // Into the SAME channel every other module refusal uses, so the rack row that
+                    // showed "armed" a moment ago now shows why it is not.
+                    _armOutcomes[effect.Id] = new CapabilityState.Unavailable(reason);
+                }
             }
 
             Running = false;
@@ -231,16 +303,30 @@ public sealed class SessionEngine
         effect.SetEnabled(on);
         if (Running)
         {
-            if (on)
+            // Guarded for the reason Start and Stop are: this is a mouse gesture on a rack row, and
+            // a module that throws here would take the exception out through the row's click
+            // handler with the persisted dial already written. The typed outcome is the row's own
+            // channel, so the dot and the refusal text say what happened instead.
+            try
             {
-                _armOutcomes[effect.Id] = effect.Arm();
+                if (on)
+                {
+                    _armOutcomes[effect.Id] = effect.Arm();
+                }
+                else
+                {
+                    effect.Disarm();
+                    _armOutcomes[effect.Id] = new CapabilityState.Unavailable(new CapabilityReason(
+                        EffectReasonCodes.EffectDialOff,
+                        $"the '{effect.Id}' module was switched off mid-session by the rack's quick-toggle"));
+                }
             }
-            else
+            catch (Exception ex)
             {
-                effect.Disarm();
                 _armOutcomes[effect.Id] = new CapabilityState.Unavailable(new CapabilityReason(
-                    EffectReasonCodes.EffectDialOff,
-                    $"the '{effect.Id}' module was switched off mid-session by the rack's quick-toggle"));
+                    on ? EffectReasonCodes.EffectArmFailed : EffectReasonCodes.EffectDisarmFailed,
+                    $"the '{effect.Id}' module threw when the rack's quick-toggle switched it "
+                    + $"{(on ? "on" : "off")} mid-session ({ex.GetType().Name}: {ex.Message})"));
             }
         }
 

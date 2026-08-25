@@ -216,6 +216,24 @@ public abstract class OwnedSessionEffect : ISessionEffect
     /// <para>The work is released HERE, synchronously, rather than being left to the cancellation
     /// callback: after this returns, nothing this module scheduled may fire and nothing it put on
     /// screen may still be claimed, and "the callback will get there" is not that guarantee.</para>
+    ///
+    /// <para><b>The cancel is in a <c>finally</c>, and that is the whole difference between a module
+    /// that failed to stop and a module that is still running.</b> <see cref="ReleaseWork"/> and
+    /// <see cref="OnDisarmed"/> are the subclass's — native window teardown, decoders, audio devices
+    /// — and any of them can throw. Before this guard existed, a throw there skipped
+    /// <c>_owner.Cancel()</c>, so the module's generation stayed LIVE: its schedule kept firing after
+    /// the user pressed STOP, on a session the engine had already given up on. That is the one
+    /// promise in the paragraph above that a subclass must not be able to break, so it is taken out
+    /// of the subclass's hands. The exception still propagates — <see cref="SessionEngine.Stop"/>
+    /// catches it per module, records
+    /// <see cref="EffectReasonCodes.EffectDisarmFailed"/> and keeps disarming the rest of the rack —
+    /// because a failure that reached this far is a fact about the session and swallowing it here
+    /// would put it back beyond anyone's reach.</para>
+    ///
+    /// <para><see cref="RaiseChanged"/> is deliberately OUTSIDE the finally: it invokes subscribers,
+    /// so raising it while an exception is in flight could replace that exception with a subscriber's
+    /// own and lose the original entirely. The dot still repaints on the throwing path, because the
+    /// engine raises its own <c>Changed</c> at the end of every stop.</para>
     /// </summary>
     public void Disarm()
     {
@@ -226,15 +244,23 @@ public abstract class OwnedSessionEffect : ISessionEffect
             _armed = false;
         }
 
-        ReleaseWork();
-        OnDisarmed();
-        if (!wasArmed)
+        try
         {
-            return;
+            ReleaseWork();
+            OnDisarmed();
+        }
+        finally
+        {
+            if (wasArmed)
+            {
+                _owner.Cancel();
+            }
         }
 
-        _owner.Cancel();
-        RaiseChanged();
+        if (wasArmed)
+        {
+            RaiseChanged();
+        }
     }
 
     /// <summary>

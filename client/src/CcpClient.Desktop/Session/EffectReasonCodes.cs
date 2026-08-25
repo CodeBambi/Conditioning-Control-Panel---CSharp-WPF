@@ -25,6 +25,41 @@ public static class EffectReasonCodes
     public const string EffectDialOff = "effect-dial-off";
 
     /// <summary>
+    /// <b>A module THREW while the session was arming it.</b> The session recorded this and carried
+    /// on to the next module rather than abandoning the rest of the rack.
+    ///
+    /// <para>Arming is not a bookkeeping flag: a module's <c>Engage</c> creates native windows,
+    /// opens decoders and claims audio devices, and any of those can fail hard rather than
+    /// politely. Before this code existed the first module that threw took START down with it — the
+    /// modules after it in rack order were never armed, and the exception surfaced wherever the
+    /// press came from (a click handler, or a scheduler tick on a pool thread with nobody
+    /// watching).</para>
+    /// </summary>
+    public const string EffectArmFailed = "effect-arm-failed";
+
+    /// <summary>
+    /// <b>A module THREW while the session was stopping it.</b> The session cancelled that module's
+    /// generation anyway, recorded this, and carried on disarming the rest of the rack.
+    ///
+    /// <para><b>This is the emergency stop's own hazard, in one code.</b> Disarm runs
+    /// <c>ReleaseWork</c> and <c>OnDisarmed</c> — native window teardown, decoders, audio — and
+    /// nothing used to be wrapped anywhere on that path. One module throwing meant every module
+    /// after it in rack order kept its surfaces on screen, the engine's own running flag stayed
+    /// TRUE, and the panic key's handler re-entered the same throwing branch on every press: the
+    /// user was left with no way out, and the throw was swallowed silently by the native window
+    /// procedure the press arrived through (<c>Input/Win32PanicKey.cs</c>).</para>
+    ///
+    /// <para><b>What this code does and does not claim.</b> It says the module's schedule is dead —
+    /// <see cref="OwnedSessionEffect.Disarm"/> cancels the generation in a <c>finally</c>, so
+    /// nothing that module scheduled can still fire. It does NOT claim the module's surface is off
+    /// the screen: whatever <c>ReleaseWork</c> was in the middle of when it threw may still be up,
+    /// which is exactly why this is <see cref="Capabilities.CapabilityState.Unavailable"/> and why
+    /// <see cref="SessionEngine.StopFailures"/> is surfaced to the user rather than logged and
+    /// forgotten.</para>
+    /// </summary>
+    public const string EffectDisarmFailed = "effect-disarm-failed";
+
+    /// <summary>
     /// The generation behind the schedule was already cancelled when the arm reached the clock, so
     /// nothing was scheduled. This is the teardown-races-arm window, and it is an outcome rather
     /// than a fault (async-lifecycle-fault-contract §5.5).
