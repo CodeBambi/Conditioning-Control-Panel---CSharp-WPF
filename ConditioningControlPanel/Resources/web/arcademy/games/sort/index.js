@@ -936,27 +936,52 @@ export default {
       try { const p = S && S.pool; if (p && typeof p.markBroken === 'function' && url) p.markBroken(url); }
       catch (e) { /* noop */ }
     }
+    /** The pool's spare rows for a tag (tagged pools hold up to TAG_CAP rows
+     *  the frozen deck never dealt), guarded like the verbs above: a pool
+     *  without the accessor - quick sort, an old double - answers none. */
+    function poolSpare(tag) {
+      try {
+        const p = S && S.pool;
+        const rows = p && typeof p.spare === 'function' ? p.spare(tag) : null;
+        return Array.isArray(rows) ? rows : [];
+      } catch (e) { return []; }
+    }
     /**
      * THE SUBSTITUTE for a card whose url is dead - decided at MINT time, and
      * the stored deck (the retake cache) is NEVER touched: game state and the
      * judge keep reading the deck record, the FACE is presentation. Same-tag
      * by law (the player judges the pixels, the ledger judges card.tag - and
      * in QUICK SORT same tag IS same kind, so the kind-truth holds too), and
-     * deterministic by construction: candidates walk S.deckRows (the deal
-     * order, identical on a retake) and the pick is pure hashing of
-     * (seed, deck index) - the same blacklist state shows the same substitute
-     * on a retake, and no seeded stream is consumed (determinism law).
+     * deterministic by construction: the pick is pure hashing of (seed, deck
+     * index) over an order-stable candidate list - the same pool and blacklist
+     * state show the same substitute on a retake, and no seeded stream is
+     * consumed (determinism law). FRESH BLOOD FIRST (0825): the pool's spare
+     * rows - same-tag media it kept absorbing after the deck froze - stand in
+     * before any deck survivor, because a substitute drawn from the deck itself
+     * is by construction a repeat, and a modest blacklist was reading as "the
+     * variety collapsed" in playtest. The deck's own survivors stay the floor.
      */
     function substituteFor(card) {
       if (!S || !card) return null;
       const rows = S.deckRows || [];
+      const inDeck = new Set();
+      for (const c of rows) if (c && c.url) inDeck.add(c.url);
       const seen = new Set();
-      const list = [];
-      for (const c of rows) {
+      const spares = [];
+      for (const c of poolSpare(card.tag)) {
         if (!c || !c.url || c.tag !== card.tag) continue;
-        if (c.url === card.url || seen.has(c.url) || poolIsBroken(c.url)) continue;
+        if (c.url === card.url || inDeck.has(c.url) || seen.has(c.url) || poolIsBroken(c.url)) continue;
         seen.add(c.url);
-        list.push(c);
+        spares.push(c);
+      }
+      const list = spares;
+      if (!list.length) {
+        for (const c of rows) {
+          if (!c || !c.url || c.tag !== card.tag) continue;
+          if (c.url === card.url || seen.has(c.url) || poolIsBroken(c.url)) continue;
+          seen.add(c.url);
+          list.push(c);
+        }
       }
       if (!list.length) return null;
       const pick = list[Math.floor(hash01(String(S.seed) + '|sub|' + (card.i | 0)) * list.length)];
@@ -998,6 +1023,10 @@ export default {
       const face = live.face;
       if (live.video) {
         freeSlot(live);
+        /* the dying flag FIRST: removeAttribute('src') + load() can surface as
+         * an 'error' on some WebKit paths, and a teardown that condemned the
+         * url the player just watched would feed the blacklist a healthy card */
+        try { face._aeDying = true; } catch (e) { /* noop */ }
         try { if (face.pause) face.pause(); face.removeAttribute('src'); if (face.load) face.load(); }
         catch (e) { /* noop */ }
       }
@@ -1005,13 +1034,30 @@ export default {
       live.face = null;
       live.video = false;
     }
-    /** BUG B's fix, shared by both element kinds: a face that ERRORED is a url
-     *  the whole page should stop dealing. Blacklist it, clear the face so the
-     *  re-mint branch refires, and reseat now - the re-mint swaps in the
-     *  substitute without waiting for the stack to move. */
+    /** Which face errors CONVICT the url, and which are the element's own
+     *  weather. iOS fires <video> 'error' on benign decoder-pool exhaustion
+     *  and aborted loads, so a video only condemns on the codes that name the
+     *  URL as the problem: MEDIA_ERR_NETWORK (2) and MEDIA_ERR_SRC_NOT_SUPPORTED
+     *  (4) - ABORTED (1) and DECODE (3) re-mint without a verdict. An <img> is
+     *  guilty only "loaded and has no pixels" (the provider's own image law). */
+    function faceErrorCondemns(face) {
+      if (!face) return false;
+      if (face.tagName === 'VIDEO') {
+        const code = face.error && face.error.code;
+        return code === 2 || code === 4;
+      }
+      return !!(face.complete && !(Number(face.naturalWidth) > 0));
+    }
+    /** BUG B's fix, shared by both element kinds: a face whose error CONVICTS
+     *  its url (faceErrorCondemns) is a url the whole page should stop dealing.
+     *  Blacklist it, clear the face so the re-mint branch refires, and reseat
+     *  now - the re-mint swaps in the substitute without waiting for the stack
+     *  to move. A benign error still kills and re-mints the face, it just
+     *  never condemns the url; our own teardown (the dying flag) is inert. */
     function faceDied(face) {
+      if (face && face._aeDying) return;    // killFace/dropCard letting go, not a death
       const url = face && face._aeUrl ? String(face._aeUrl) : '';
-      if (url) poolMarkBroken(url);
+      if (url && faceErrorCondemns(face)) poolMarkBroken(url);
       const live = liveHolding(face);
       if (live) {
         killFace(live);
@@ -1092,6 +1138,8 @@ export default {
       if (!live) return;
       freeSlot(live);
       if (live.video) {
+        /* dying flag first, same law as killFace: teardown never self-condemns */
+        try { if (live.face) live.face._aeDying = true; } catch (e) { /* noop */ }
         try { const v = live.face; if (v) { if (v.pause) v.pause(); v.removeAttribute('src'); if (v.load) v.load(); } }
         catch (e) { /* noop */ }
       }
@@ -1147,6 +1195,12 @@ export default {
           emiNote('sort.deckRecycle', { kind: 'curiosity', n: S.recycles, left: S.cards.length });
         }
         S.cursor = 0;
+        /* the deck ORDER just changed (passes returned or a reshuffle), so the
+         * manifest the warmer holds is a lie from here on - it would warm the
+         * OLD order for the rest of the class. Re-hand it the new sequence;
+         * warmManifest resets the warm cursor with it, and warmFollow re-walks
+         * it from reseat() exactly as it did on the first pass. */
+        warmDeck();
       }
       const card = S.cards[S.cursor++];
       if (!card) return null;
