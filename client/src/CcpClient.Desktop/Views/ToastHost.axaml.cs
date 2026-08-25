@@ -29,7 +29,7 @@ public enum ToastKind
 /// ported: nothing here can fire before the host exists.
 ///
 /// <para><b>This is not the tray balloon.</b> <c>Tray/TrayNotification.cs</c> is the OS shell's
-/// surface and is owned by the desktop; this one lives inside the window, stacks, and is dismissed
+/// surface and is owned by the desktop; this one lives inside the window, queues, and is dismissed
 /// by the user rather than by the shell.</para>
 ///
 /// <para><b>What is deliberately NOT ported, and why.</b> Upstream's <c>ShowSticky</c> and its
@@ -157,9 +157,9 @@ public partial class ToastHost : UserControl
 
         // Still owed and not yet acknowledged: a second copy of the same sentence says nothing new,
         // so it is the SAME toast, brought back to the front. Upstream's own rule for a toast that
-        // outlives its own call is that an existing one is a no-op
-        // (<c>NotificationService.cs:110</c>); here "existing" splits into on-screen and waiting,
-        // and only the waiting case has anything left to do.
+        // outlives its own call is that an existing one is a no-op (NotificationService.cs:110);
+        // here "existing" splits into on-screen and waiting, and only the waiting case has anything
+        // left to do.
         Bring(Existing(message) ?? Add(message, kind));
     }
 
