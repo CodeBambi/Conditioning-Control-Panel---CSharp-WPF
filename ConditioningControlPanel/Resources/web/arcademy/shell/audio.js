@@ -408,7 +408,7 @@ const SAMPLE_ONLY = new Set([
  *     room. So a bed without its mp3 is honest silence, same as intro_bed.
  *   - a held slot is not evicted by the voice cap while a one-shot slot exists.
  * EVERY HOLD HAS AN OWNER: the code that starts a bed stops it in its own
- * teardown (trap 109). The mixer will not guess when a room has been left. */
+ * teardown (trap 114). The mixer will not guess when a room has been left. */
 
 const clamp01 = (v) => (Number.isFinite(+v) ? Math.max(0, Math.min(1, +v)) : 0);
 
@@ -481,7 +481,7 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
     handled: 0, played: 0, dropped: 0, ducks: 0, clips: 0, samples: 0,
     buffered: 0, decoded: 0, last: null,
   };
-  /** Names that fell through to `blip`, logged once each (trap 110). */
+  /** Names that fell through to `blip`, logged once each (trap 115). */
   const unknownNames = new Set();
 
   /* WHICH SAMPLES ARE ACTUALLY THERE, and why the page is not the one to guess.

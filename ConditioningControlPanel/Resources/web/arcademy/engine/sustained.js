@@ -41,7 +41,7 @@
 
 import { clamp01 } from '../core/caps.js';
 import { NODE_CAPS, washSpec, gifRainSpec, ambientSpec, driftSpec, bubbleSpec } from './curves.js';
-import { rand, hasDom, mediaEl, budgetedKind } from './util.js';
+import { rand, hasDom, mediaEl, budgetedKind, isVideoUrl } from './util.js';
 import { createEscapeGuard } from './escape.js';
 import { createLoomWash } from './loomWash.js';
 
@@ -65,7 +65,7 @@ export function createSustained(ctx) {
   const active = new Map();
   const washHolds = new Map();   // washKind -> { el, hideTimer } — the one-element law
   const live = { rain: 0, bubbles: 0 };
-  /* W3 (trap 111): a sustain is cued PER WAVE, never per node, so the three
+  /* W3 (trap 117): a sustain is cued PER WAVE, never per node, so the three
    * things a re-entrant starter has to remember live up here.
    *   lastWashKind  the wash that last took the air, so a refresh of the SAME
    *                 wash is silent and a change of kind is not (P0-25);
@@ -324,7 +324,7 @@ export function createSustained(ctx) {
       });
       guard.arm();
     }
-    /* W3 P1-17: the field's own air, ONE cue for the wave (trap 111). The
+    /* W3 P1-17: the field's own air, ONE cue for the wave (trap 117). The
      * clickSafe field - decoration, nobody pops it - was silent from entrance
      * to exit, which is the whole reason the row exists. The exit is the
      * teardown's coalesced wash, not a second cue here. */
@@ -412,7 +412,21 @@ export function createSustained(ctx) {
       if (live.rain >= rainCap) return;
       /* THE DECODER BUDGET (util.js): past it a 'loop' request is served a
        * still, so the rain keeps its node count and drops its decode cost. */
-      const url = ctx.assetUrlSync(budgetedKind(opts.assetKind || 'loop'));
+      const drawn = ctx.assetUrlSync(budgetedKind(opts.assetKind || 'loop'));
+      /* WARM-MEDIA SEAM (opt-in, 2026-08-25): `opts.pick()` may answer a url
+       * the game KNOWS is warm (already decoded on its own board). The original
+       * draw above still happens either way - the provider pool consumes its
+       * own shared rng on next(), so the draw may never be skipped (the
+       * shared-rng law); a null/absent pick falls back to it byte-identically.
+       * A picked VIDEO may only ride a slot the decoder budget already granted
+       * (drawn itself a video), so a pick can never upgrade a still draw into
+       * an uncounted decoder session. */
+      let url = drawn;
+      if (typeof opts.pick === 'function') {
+        let picked = null;
+        try { picked = opts.pick() || null; } catch { picked = null; }
+        if (picked && (!isVideoUrl(picked) || isVideoUrl(drawn))) url = picked;
+      }
       const node = (url && mediaEl(url)) || document.createElement('div');   // <video> for a webm/mp4 loop
       node.className = 'ae-rain';
       node.style.setProperty('--ae-x', Math.round(rand(ctx.rng, 2, 88)) + '%');
@@ -558,7 +572,7 @@ export function createSustained(ctx) {
   /**
    * stopAll(immediate, quiet)
    * W3 P1-17: the teardown tears six things down on one frame, so it gets ONE
-   * cue and not six (trap 111) - the wash recipe pitched down, quiet, the exit
+   * cue and not six (trap 117) - the wash recipe pitched down, quiet, the exit
    * half of every entrance above. Two guards on it. It only speaks when
    * something was actually up (a stopAll over an empty stage is not a beat),
    * and `quiet` silences it for the SUSPEND path: a panic, a mandatory video

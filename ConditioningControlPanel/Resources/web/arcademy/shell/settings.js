@@ -243,7 +243,7 @@ function mult(v) { return (Math.round((Number(v) || 0) * 100) / 100).toFixed(2) 
  *                              `init.words`, which is what any caller that
  *                              predates the floor already meant.
  */
-export function createSettingsPage({ init, bridge, games, keybinds, assets, store, onClose, log, gameKey, vocab } = {}) {
+export function createSettingsPage({ init, bridge, games, keybinds, assets, store, onClose, log, gameKey, vocab, emi } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const src = init || {};
   const root = el('div', 'arc-settings');
@@ -750,6 +750,75 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
       value: !!src.hideTutorial,
     }));
 
+    /* THE MASCOT (owner, 2026-08-25: "make the bark bubble permanence time an
+     * option in the options"). This is the page's ONE local group: the value
+     * lives on the emi blob in the meta store and the mounted controller is
+     * the writer, so there is no protocol key, no host bag and no echo to
+     * wait for - the row applies on the spot and never wears `pending`.
+     * `emi` is a GETTER (shell hands over `getEmi`): the controller mounts
+     * async, and a page opened before the mascot resolves still renders the
+     * row - it reads the stored blob and banks the choice there for the next
+     * boot. The "Show EMI" switch stays deliberately unbuilt (see the note on
+     * the Lessons group). */
+    const BUBBLE_HOLDS = [
+      { v: 0.7, key: 'quick', label: 'Quick' },
+      { v: 1, key: 'normal', label: 'Normal' },
+      { v: 1.5, key: 'long', label: 'Long' },
+      { v: 2, key: 'extra', label: 'Extra long' },
+    ];
+    function mascotCtl() {
+      try { return typeof emi === 'function' ? emi() : (emi || null); }
+      catch (e) { return null; }
+    }
+    function bubbleHoldNow() {
+      const ctl = mascotCtl();
+      let v = ctl && typeof ctl.bubbleHold === 'number' ? ctl.bubbleHold : null;
+      if (v == null) {
+        try {
+          const blob = store && typeof store.get === 'function' ? store.get('emi') : null;
+          if (blob && typeof blob.holdScale === 'number' && isFinite(blob.holdScale)) v = blob.holdScale;
+        } catch (e) { /* an unreadable blob is the default */ }
+      }
+      if (v == null || !isFinite(v)) v = 1;
+      let best = BUBBLE_HOLDS[1];
+      for (const o of BUBBLE_HOLDS) { if (Math.abs(o.v - v) < Math.abs(best.v - v)) best = o; }
+      return best;
+    }
+    const gm = group(t('settings_mascot_head', 'Mascot'), 'mascot',
+      () => t('emi_bubble_hold_' + bubbleHoldNow().key, bubbleHoldNow().label));
+    {
+      const row = el('div', 'arc-row');
+      const lab = el('label', null, t('emi_bubble_hold_label', 'Speech bubble time'));
+      lab.appendChild(el('span', 'arc-hint', t('emi_bubble_hold_hint',
+        'How long her lines stay up before she lets them go. Questions always wait for an answer.')));
+      const sel = el('select');
+      for (const o of BUBBLE_HOLDS) {
+        const opt = el('option', null, t('emi_bubble_hold_' + o.key, o.label));
+        opt.value = String(o.v);
+        if (o.v === bubbleHoldNow().v) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      lab.htmlFor = sel.id = 'arc-emi-bubble-hold';
+      sel.addEventListener('change', () => {
+        const n = Number(sel.value);
+        if (!isFinite(n) || n <= 0) return;
+        const ctl = mascotCtl();
+        let applied = false;
+        try { if (ctl && typeof ctl.setBubbleHold === 'function') { ctl.setBubbleHold(n); applied = true; } }
+        catch (e) { /* the store write below still lands */ }
+        if (!applied) {
+          /* No controller on this page (a class screen, a mount that failed):
+           * bank it straight on the blob, the same field the widget reads at
+           * boot. `merge` keeps the rest of the blob honest. */
+          try { if (store && typeof store.merge === 'function') store.merge('emi', { holdScale: n }); }
+          catch (e) { /* nothing to do; the row simply did not take */ }
+        }
+        refreshSummaries();
+      });
+      row.appendChild(lab); row.appendChild(sel);
+      gm.body.appendChild(row);
+    }
+
     /* CAMPUS PRESENCE - the consent row (PRESENCE.md §3). It sits in the GLOBAL
      * tier and not in the read-only ceilings above, because it is the one thing
      * on this page the player grants rather than inherits: the app has no
@@ -783,6 +852,7 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
 
     const frag = document.createDocumentFragment();
     frag.appendChild(g); frag.appendChild(gc); frag.appendChild(ga); frag.appendChild(gt);
+    frag.appendChild(gm);
     frag.appendChild(gp);
     return frag;
   }

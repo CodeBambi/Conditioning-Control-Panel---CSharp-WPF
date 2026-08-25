@@ -62,7 +62,7 @@ import {
   NODE_CAPS, DUCK, subFlashSpec, glitchSpec, gifBurstSpec,
   burstCountForHeat, burstOpacityForHeat,
 } from './curves.js';
-import { rand, pickFrom, hasDom, mediaEl, budgetedKind } from './util.js';
+import { rand, pickFrom, hasDom, mediaEl, budgetedKind, isVideoUrl } from './util.js';
 import { createEscapeGuard } from './escape.js';
 
 /** The ceiling on a lengthened sub_flash. A word that outlives this stops being
@@ -296,7 +296,22 @@ export function createOneshots(ctx) {
        * same size, the same count and the same hold, it just stops minting a
        * 854x480 decoder per node. An explicit opts.url is the caller's own
        * choice and is never second-guessed. */
-      const url = opts.url || ctx.assetUrlSync(budgetedKind(opts.assetKind || (kind === 'gif_burst' ? 'loop' : 'still')));
+      let url = opts.url || null;
+      if (!url) {
+        const drawn = ctx.assetUrlSync(budgetedKind(opts.assetKind || (kind === 'gif_burst' ? 'loop' : 'still')));
+        /* WARM-MEDIA SEAM (opt-in, 2026-08-25; twin of gif_rain's): pick() may
+         * substitute a url the game knows is warm, but the original pool draw
+         * above always happens (shared-rng law - pool.next consumes the
+         * provider's own rng) and stands in when pick answers nothing. A picked
+         * VIDEO only rides a slot budgetedKind already granted. An explicit
+         * opts.url still short-circuits everything, exactly as before. */
+        url = drawn;
+        if (typeof opts.pick === 'function') {
+          let picked = null;
+          try { picked = opts.pick() || null; } catch { picked = null; }
+          if (picked && (!isVideoUrl(picked) || isVideoUrl(drawn))) url = picked;
+        }
+      }
       // mediaEl: <img>, or a muted looping <video> when the pool handed us a
       // webm/mp4 loop (the only animated shape a remote provider has)
       const node = (url && mediaEl(url)) || document.createElement('div');
@@ -338,7 +353,7 @@ export function createOneshots(ctx) {
 
     /* W3 P1-17: ONE cue used to fire for the whole burst, before any node was
      * on screen, so a four-node stagger sounded exactly like a single flash.
-     * The cue now rides the nodes: one each, capped at three (trap 111 - bursts
+     * The cue now rides the nodes: one each, capped at three (trap 117 - bursts
      * are the per-instance exception, and the cap is what keeps them from being
      * a machine gun), each quieter than the last so the burst reads as one
      * gesture arriving rather than as three separate events. */

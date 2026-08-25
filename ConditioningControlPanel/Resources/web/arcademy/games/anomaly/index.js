@@ -89,12 +89,32 @@ const GAME_KEY = 'anomaly';
 const VIDEO_URL_RE = /\.(mp4|webm|m4v)(\?|#|$)/i;
 const isVideoUrl = (url) => VIDEO_URL_RE.test(String(url || ''));
 
+/** The provider's bundled glyph-floor svg (the L&F redress law, ported). */
+const PLACEHOLDER_RE = /\/ae-ph-\d+\.svg(\?|#|$)/i;
+const wearsPlaceholder = (url) => !url || PLACEHOLDER_RE.test(String(url));
+
+/** A cross-origin http(s) url - the only kind worth waiting on the provider's
+ *  warm rail for; local/same-origin urls paint instantly and gate on nothing
+ *  (pool.ready answers those true at once anyway). */
+function isRemoteUrl(url) {
+  const s = String(url || '');
+  if (!/^https?:\/\//i.test(s)) return false;
+  try {
+    if (typeof location !== 'undefined' && location.origin
+      && s.indexOf(location.origin + '/') === 0) return false;
+  } catch (e) { /* ignore */ }
+  return true;
+}
+
 /** How many draws to spend looking for a tile-able url before giving up on
  *  media entirely (a video-only pool on a 5x5 grid = plain faces, not 25
  *  <video> elements - the L&F 30Hz lock). */
 const MEDIA_TRIES = 5;
 /** A round shorter than this cannot be offered before the bell. */
 const MIN_ROUND_MS = 2600;
+/** The longest a round's deal may hold the verdict beat waiting for the
+ *  provider's warm rail to land the dealt url (0825 media-warming). */
+const READY_GATE_MS = 900;
 /** W3 P0-2: the widest a round countdown may be heard, in ms. */
 const COUNTDOWN_MS = 3000;
 /** The shared ticker. */
@@ -552,8 +572,16 @@ export default {
       const videoOk = n <= PLAYTEST.VIDEO_GRID_MAX && !reduced && !coarse && motionLevelOf(ctx) > 1;
       let firstVideo = null;
       for (let k = 0; k < MEDIA_TRIES; k++) {
+        const kind = reduced || k >= 3 ? 'still' : 'loop';
+        /* TOUCH (0825, orchestrator-ruled): the coarse class claims no loops
+         * (see claimAssets) and can never paint one - videoOk is false for the
+         * whole class - so a loop draw here would burn provider rng forecasting
+         * mp4s the grid cannot wear. Skipped WITHOUT drawing. This moves which
+         * emissions a TOUCH device consumes vs old builds; desktop paths
+         * (reduced, big grid, motion-capped) draw exactly as before. */
+        if (coarse && kind === 'loop') continue;
         let a = null;
-        try { a = pool.next(reduced || k >= 3 ? 'still' : 'loop'); } catch (e) { a = null; }
+        try { a = pool.next(kind); } catch (e) { a = null; }
         const url = a && a.url ? String(a.url) : '';
         if (!url) continue;
         if (isVideoUrl(url)) {
@@ -663,7 +691,34 @@ export default {
         note('an.breather', { kind: 'curiosity', n: breathers });
       }
 
+      /* WARM AHEAD (0825): the provider's look-ahead consumes no rng, and the
+       * verdict beat between rounds is warm time. */
+      warmAhead();
       const url = dealUrl();
+      /* THE READY GATE (0825): a remote url holds the verdict/briefing beat
+       * until the warm rail reports it landed - never longer than
+       * READY_GATE_MS, so a broken network cannot stall the class. `busy` is
+       * still true and `cur` does not exist yet, so the shared ticker credits
+       * this round NOTHING: the round clock never runs against an unpainted
+       * board. Local urls and a poolless class start at once, as before. */
+      if (url && isRemoteUrl(url) && pool && typeof pool.ready === 'function') {
+        const myIdx = roundIdx;
+        let launched = false;
+        const go = () => {
+          if (launched) return;
+          launched = true;
+          run(() => { if (roundIdx === myIdx) beginRound(r, url); });
+        };
+        try { Promise.resolve(pool.ready(url, { timeoutMs: READY_GATE_MS })).then(go, go); }
+        catch (e) { go(); }
+        return;
+      }
+      beginRound(r, url);
+    }
+
+    /** The dealt round proper - everything below the (possibly gated) deal. */
+    function beginRound(r, url) {
+      if (ended || dead || bellOn) return;
       paintGrid(url);
 
       /* THE VIDEO KINDS: the plan always deals an img-safe kind AND, on a small
@@ -1317,19 +1372,64 @@ export default {
        * until GO is pressed. */
       cue('paper', 0.3);
       howtoEl = node;
+      /* sheet-reading time = warm time (0825). Usually a no-op here - the
+       * claim lands async and warms on arrival - but a pool that beat the
+       * sheet up starts filling its rail now. */
+      warmAhead();
     }
 
     /* ==================================================================== *
      * ASSETS
      * ==================================================================== */
+    /** The provider's bounded look-ahead; consumes NO rng (recon-verified),
+     *  so it is free to call anywhere. Null-safe: the claim lands async. */
+    function warmAhead() {
+      try { if (pool && typeof pool.prewarm === 'function') pool.prewarm(6); }
+      catch (e) { /* a warm-up never breaks a class */ }
+    }
+
+    /** UPGRADE-ON-ARRIVAL (0825). A round dealt before media landed is a full
+     *  placeholder board and used to wear it to round end; when the pool now
+     *  serves the needed kind, re-draw and repaint mid-round. Honest here
+     *  because the media is NOISE - the answer lives in the CSS delta on
+     *  .g-an-face, so a mid-round upgrade lies about nothing. DEGRADED PATH
+     *  ONLY: a round wearing real media returns before any draw, so the clean
+     *  path's rng sequence never moves (house law). */
+    function redress() {
+      if (dead || ended || !pool || !cur || cur.done) return;
+      if (!wearsPlaceholder(lastUrl)) return;
+      const u = dealUrl();
+      if (!u || u === lastUrl || wearsPlaceholder(u)) return;
+      paintGrid(u);
+      applyFace(cur.oddIndex);
+    }
+
     function claimAssets() {
+      /* TOUCH-AWARE SPEC (0825, orchestrator-ruled): on a coarse device
+       * dealUrl() can never paint a loop (videoOk is false for the whole
+       * class), so asking for 10 loops wasted the warm budget forecasting
+       * mp4s while the still lane - the one the device lives on - stopped
+       * refilling at 4 rows (provider askRemote = max(4, spec)). Desktop
+       * keeps the manifest spec exactly as-is. */
+      const claimSpec = coarse
+        ? { loops: 0, targets: 0, stills: 12, canvasSafe: false }
+        : { loops: 10, targets: 0, stills: 4, canvasSafe: false };
       Promise.resolve()
-        .then(() => ctx.assets.claim({ loops: 10, targets: 0, stills: 4, canvasSafe: false }))
+        .then(() => ctx.assets.claim(claimSpec))
         .then((p) => {
           if (dead || !p || typeof p.next !== 'function') return;
           pool = p;
-          /* a round already on screen with plain faces gets its media now */
-          if (cur && mediaMode === 'plain') run(() => { const u = dealUrl(); if (u) { paintGrid(u); applyFace(cur.oddIndex); } });
+          /* the rules sheet is usually still up here: reading time = warm time */
+          warmAhead();
+          /* remote batches stream in AFTER the claim resolves (the provider's
+           * ask-again loop): re-dress a placeholder round as each one lands.
+           * The subscription dies with pool.release(). */
+          if (typeof p.onUpdate === 'function') {
+            try { p.onUpdate(() => run(redress)); } catch (e) { /* optional seam */ }
+          }
+          /* a round already on screen with plain/placeholder faces gets its
+           * media now (redress gates itself to that degraded state) */
+          if (cur) run(redress);
         })
         .catch((e) => say('asset claim failed - plain faces: ' + ((e && e.message) || e)));
     }

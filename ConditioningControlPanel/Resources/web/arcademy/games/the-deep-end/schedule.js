@@ -118,8 +118,21 @@ export const PLAYTEST = Object.freeze({
   /** PASS 8 - THE BELT: a face <video> with no frame (no loadeddata) this long
    *  after its url landed is treated as failed - the tier falls back to a
    *  still via faceVideoFailed instead of holding a decoder session hostage on
-   *  a stream iOS is thrashing on. */
-  FACE_VIDEO_STALL_MS: 4000,
+   *  a stream iOS is thrashing on. R3 (owner iPhone playtest): 4000 was too
+   *  tight for a cellular cold fetch + the slide-window pause churn - videos
+   *  are always cold at src time (the byte-warm resolves on headers only), so
+   *  the belt gets mercy; a tier demoted by it is also retryable ONCE now
+   *  (see faceVideoFailed / healDegradedFaces in index.js). */
+  FACE_VIDEO_STALL_MS: 9000,
+  /** R3 - THE ELEMENT-TRUE FACE BUDGET. FACE_CAP_* counts TIERS, but every
+   *  live tile of an animated tier is its OWN decoder session (three tier-5
+   *  tiles = three 854x480 decodes), so a phone could hold ~11 concurrent
+   *  sessions against a real iOS ceiling of ~4. This is the ceiling on face
+   *  <video> ELEMENTS: past it the excess tiles of a tier wear the tier's
+   *  still fallback (the deepest/newest tile keeps the video). Composes ON TOP
+   *  of the FACE_CAP_* tier semantics, which are unchanged. */
+  FACE_VIDEO_EL_CEIL: 8,
+  FACE_VIDEO_EL_CEIL_TOUCH: 3,
 
   /** PASS 5 - THE AUTO PROBE. After the board is dealt we sample rAF deltas
    *  for PERF_SAMPLE_MS, skipping PERF_WARMUP_MS of first-frame cost (style

@@ -80,6 +80,11 @@ const REMOTE_CAP = 80;        // mirrors intake's REMOTE_CAP: a page never hoard
 export const DECK_AHEAD = 6;      // draws forecast (and byte-warmed) ahead, per kind
 export const WARM_INFLIGHT = 3;   // warms in flight at once - a third lane lets small
                                   // stills slip past one slow multi-megabyte download
+const WARM_VIDEO_INFLIGHT = 2;    // of those, at most TWO may be video fetches - a
+                                  // third stalled mp4 would eat into Safari's
+                                  // 6-connections-per-host budget the game plays on
+const WARM_VIDEO_TIMEOUT_MS = 12000;  // a video warm that outlives this is aborted
+                                      // (an abort is a shrug, never a blacklist)
 const WARM_HELD_MAX = 24;         // decoded detached Images held against GC
 const VIDEO_URL_RE = /\.(mp4|webm|m4v)(\?|#|$)/i;
 
@@ -98,27 +103,45 @@ export const MANIFEST_AHEAD_IDLE = 24;
 export const MANIFEST_AHEAD_PLAY = 10;
 
 /* THE URL BLACKLIST (0825), module-level so a dead CDN url stays dead across
- * every pool and every class this page runs (it empties with the page, so a
- * transient outage is forgiven on the next load). Fed by warm failures - an
- * Image error, or a no-cors video fetch REJECTING, which is the one video
- * verdict no-cors can see (an HTTP 404 behind an opaque response never lands
- * here) - and by games reporting a face that errored via pool.markBroken().
- * Draws skip it and serve the next eligible row instead; the placeholder floor
- * stays the final answer. Bounded: the oldest entry is forgotten first. */
+ * every pool and every class this page runs (it empties with the page). Fed by
+ * PROOF only: an image warm that completed with zero pixels, and games
+ * reporting a face whose error actually convicts the url via pool.markBroken().
+ * A no-cors video fetch REJECTING is NOT proof and never lands here - CSP
+ * refusal (production's connect-src excludes the media CDNs), a content
+ * blocker, a dropped cellular link and a page-backgrounding abort all reject
+ * exactly the way a dead host does, and treating them as verdicts once
+ * blacklisted the entire loop pool in seconds. Entries FORGIVE: the first
+ * strike heals after BROKEN_TTL_MS (a transient stumble is not a sentence),
+ * a second strike is permanent for the page. Draws skip a broken url and
+ * serve the next eligible row instead; the placeholder floor stays the final
+ * answer. Bounded: the least recently struck entry is forgotten first. */
 const BROKEN_URL_CAP = 400;
-const brokenUrls = new Set();
+const BROKEN_TTL_MS = 45000;      // one strike heals after this; two never do
+const brokenUrls = new Map();     // url -> { at, strikes }
 export function markBrokenUrl(url) {
   const s = String(url || '');
-  if (!s || brokenUrls.has(s)) return false;
-  brokenUrls.add(s);
+  if (!s) return false;
+  const prior = brokenUrls.get(s);
+  if (prior) {
+    /* a repeat offender: bump the strike and re-stamp. delete + set keeps the
+     * Map's insertion order meaning "least recently struck evicts first". */
+    brokenUrls.delete(s);
+    brokenUrls.set(s, { at: Date.now(), strikes: prior.strikes + 1 });
+    return false;
+  }
+  brokenUrls.set(s, { at: Date.now(), strikes: 1 });
   while (brokenUrls.size > BROKEN_URL_CAP) {
-    const oldest = brokenUrls.values().next().value;
+    const oldest = brokenUrls.keys().next().value;
     if (oldest == null) break;
     brokenUrls.delete(oldest);
   }
   return true;
 }
-export function isBrokenUrl(url) { return brokenUrls.has(String(url || '')); }
+export function isBrokenUrl(url) {
+  const rec = brokenUrls.get(String(url || ''));
+  if (!rec) return false;
+  return rec.strikes >= 2 || (Date.now() - rec.at) < BROKEN_TTL_MS;
+}
 
 /** Keys the shell/host might carry the local inventory under. A page cannot
  *  enumerate a virtual host, so SOMETHING has to hand us the list; we accept
@@ -247,6 +270,7 @@ export function createAssets(options = {}) {
   const warmQueue = [];
   const warmHeld = new Map();       // url -> the detached Image holding it open
   let warmFlight = 0;
+  let warmVideoFlight = 0;          // the video lanes within warmFlight (capped)
 
   /** Only bytes that actually travel: remote http(s), not our own origin. */
   function warmable(url) {
@@ -294,25 +318,54 @@ export function createAssets(options = {}) {
     flushReady(s, false);
   }
 
-  function warmDone() { warmFlight = Math.max(0, warmFlight - 1); if (!disposed) warmPump(); }
-  function warmOk(url) { warmDoneUrls.add(url); flushReady(url, true); warmDone(); }
+  function warmDone(video) {
+    warmFlight = Math.max(0, warmFlight - 1);
+    if (video) warmVideoFlight = Math.max(0, warmVideoFlight - 1);
+    if (!disposed) warmPump();
+  }
+  function warmOk(url, video) { warmDoneUrls.add(url); flushReady(url, true); warmDone(video); }
   function warmPump() {
     while (!disposed && warmFlight < WARM_INFLIGHT && warmQueue.length) {
-      const job = warmQueue.shift();
+      /* the video lanes are capped BELOW the rail's: with both spoken for, a
+       * queued image may still overtake, but a third mp4 waits its turn */
+      let at = 0;
+      if (warmVideoFlight >= WARM_VIDEO_INFLIGHT) {
+        at = warmQueue.findIndex((j) => !j.video);
+        if (at < 0) break;                  // only videos queued and both lanes busy
+      }
+      const job = warmQueue.splice(at, 1)[0];
       warmFlight += 1;
       if (job.video) {
-        /* fire and forget: the opaque reply is thrown away unread. A REJECTED
-         * warm is a NETWORK-level failure (DNS, refused connection) - the only
-         * video verdict no-cors can see - and it feeds the blacklist; an HTTP
-         * error rides an opaque 'ok' we cannot read and resolves as done. */
+        /* the opaque reply's body is CANCELLED the moment the headers land:
+         * warmOk was always a headers-level verdict, and an unread multi-MB
+         * mp4 body parked on the socket starves Safari's 6-per-host budget
+         * until later requests time out. A REJECTED warm proves NOTHING about
+         * the url - CSP refusal, content blockers, a dropped link and our own
+         * deadline abort all reject identically - so it NEVER feeds the
+         * blacklist; the waiters just hear "no" and the draw moves on. */
+        warmVideoFlight += 1;
         try {
-          if (typeof fetch !== 'function') { warmDone(); continue; }
+          if (typeof fetch !== 'function') { warmDone(true); continue; }
           const init = { mode: 'no-cors', credentials: 'omit' };
           if (job.high) init.priority = 'high';       // Fetch Priority API; unknown keys are ignored
+          let deadline = 0;
+          try {
+            if (typeof AbortController === 'function') {
+              const ctl = new AbortController();
+              init.signal = ctl.signal;
+              deadline = setTimeout(() => { try { ctl.abort(); } catch { /* noop */ } }, WARM_VIDEO_TIMEOUT_MS);
+            }
+          } catch { /* engines without AbortController warm undeadlined */ }
+          const settle = () => { if (deadline) { try { clearTimeout(deadline); } catch { /* noop */ } } };
           const pr = fetch(job.url, init);
-          if (pr && pr.then) pr.then(() => warmOk(job.url), () => { markBroken(job.url); warmDone(); });
-          else warmDone();
-        } catch { warmDone(); }
+          if (pr && pr.then) pr.then((res) => {
+            settle();
+            /* opaque responses may carry a null body - the cancel is guarded */
+            try { if (res && res.body && typeof res.body.cancel === 'function') res.body.cancel(); } catch { /* noop */ }
+            warmOk(job.url, true);
+          }, () => { settle(); flushReady(job.url, false); warmDone(true); });
+          else { settle(); warmDone(true); }
+        } catch { warmDone(true); }
       } else {
         let img = null;
         try { img = new Image(); } catch { img = null; }
@@ -1009,6 +1062,7 @@ export function createAssets(options = {}) {
       }
       warmHeld.clear();
       warmFlight = 0;
+      warmVideoFlight = 0;
       prewarmed = new Set();
     },
   };

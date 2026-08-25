@@ -104,6 +104,20 @@ const BUMP_MIN_MS = 250;
  *  (WebView2, fine pointer) never enters any of these paths. */
 const TOUCH_PLAY_CAP = 2;
 const TOUCH_PREVIEW_STEP_MS = 1000;
+/** The rotation's floor when a beat sizes its own step off its window (0825):
+ *  below this the cap-of-2 windows churn decoders faster than iOS spins them
+ *  up, and nothing is seen animating at all. */
+const TOUCH_PREVIEW_STEP_MIN_MS = 400;
+
+/** THE PREVIEW MEDIA GATE (0825 media-warming): before the memorize clock
+ *  arms, each of the board's distinct remote faces gets up to
+ *  PREVIEW_GATE_URL_MS on pool.ready(), and the WHOLE gate is capped at
+ *  PREVIEW_GATE_CAP_MS so a broken network can never hang the class. */
+const PREVIEW_GATE_URL_MS = 1200;
+const PREVIEW_GATE_CAP_MS = 1500;
+
+/** The provider's bundled glyph-floor svg (the L&F redress law, ported). */
+const PLACEHOLDER_RE = /\/ae-ph-\d+\.svg(\?|#|$)/i;
 
 /** Diagnostics seam (the engine has one too): the live class, for the scratch
  *  harness and any future "what is the board doing" debug overlay. The shell
@@ -592,16 +606,29 @@ export default {
     let previewTicks = false;    // W3 P0-2: the memorize countdown is armed
     let previewList = null;      // the cells the window rotates over
     let previewCursor = 0;
+    let previewStepMs = TOUCH_PREVIEW_STEP_MS;   // this beat's rotation step
 
     function videoFaces(list) {
       const out = [];
       for (const c of list) if (c && c.face && c.face.tagName === 'VIDEO') out.push(c);
       return out;
     }
-    function playWindowStart(list) {
+    function playWindowStart(list, windowMs) {
       previewList = list;
       previewCursor = 0;
       previewing = true;
+      /* THE ROTATION ARITHMETIC (0825): a fixed 1000ms step never reached
+       * every face inside a shrinking previewMs (tier 3: 10 of 16 faces were
+       * NEVER played during the memorize beat). When the caller knows its
+       * window, the step is sized so ceil(faces / TOUCH_PLAY_CAP) rotations
+       * fit inside it, floored at TOUCH_PREVIEW_STEP_MIN_MS. The cap of 2
+       * PLAYING videos (the iOS decode ceiling) is untouched - the window
+       * just rotates faster. Callers without a window keep the old step. */
+      const vids = videoFaces(list || []);
+      const rotations = Math.max(1, Math.ceil(vids.length / TOUCH_PLAY_CAP));
+      previewStepMs = Number(windowMs) > 0
+        ? Math.max(TOUCH_PREVIEW_STEP_MIN_MS, Math.floor(Number(windowMs) / rotations))
+        : TOUCH_PREVIEW_STEP_MS;
       playWindowStep();
     }
     function playWindowStep() {
@@ -615,7 +642,7 @@ export default {
       }
       previewCursor = (previewCursor + TOUCH_PLAY_CAP) % n;
       // a board with no more videos than the cap has nothing to rotate
-      if (n > TOUCH_PLAY_CAP) after(TOUCH_PREVIEW_STEP_MS, playWindowStep);
+      if (n > TOUCH_PLAY_CAP) after(previewStepMs, playWindowStep);
     }
     function playWindowStop() {
       previewing = false;
@@ -695,6 +722,24 @@ export default {
       pairUrls = [];
       for (let pid = 0; pid < want; pid++) pairUrls[pid] = draw[pid] || null;
       facesDirty = false;
+      /* THE IMMINENT BOARD HEADS THE WARM WINDOW (0825). warmManifest /
+       * warmCursor consume NO rng (recon-verified) - free on every path. */
+      warmBoardFaces();
+    }
+
+    /** Hand THIS board's faces to the provider's manifest warmer, cursor at
+     *  the top, so the deal/preview about to run is what the rail fetches
+     *  first. Replaces the class-wide facePool manifest for the board's
+     *  lifetime (one manifest per provider, by design). */
+    function warmBoardFaces() {
+      if (!pool || typeof pool.warmManifest !== 'function') return;
+      try {
+        const need = [];
+        for (const u of pairUrls) if (u && need.indexOf(u) < 0) need.push(u);
+        if (!need.length) return;
+        pool.warmManifest(need.map((u) => ({ url: u })));
+        if (typeof pool.warmCursor === 'function') pool.warmCursor(0);
+      } catch (e) { /* a warm-up never breaks a deal */ }
     }
 
     /** Mint this board's cells into the (emptied) grid. */
@@ -800,6 +845,41 @@ export default {
     }
 
     function preview() {
+      /* THE MEDIA GATE (0825): the memorize clock must not run against faces
+       * still fetching (<video preload="metadata"> moves no frame bytes until
+       * play(), so a cold preview was a board of black cards). Hold the deal
+       * beat - `busy` is up since startBoard and the "Dealing the board." hint
+       * stays - until every distinct remote face reports pool.ready(), capped
+       * at PREVIEW_GATE_CAP_MS total so a broken network cannot hang the
+       * class. Glyph and placeholder boards gate on nothing and open at once. */
+      const gate = previewGate();
+      if (!gate) { previewShow(); return; }
+      const myBoard = boardNo;
+      gate.then(() => run(() => {
+        if (dead || ended || belled || boardNo !== myBoard) return;
+        previewShow();
+      }));
+    }
+
+    /** The board's distinct real urls -> one settled-fast promise, or null
+     *  when there is nothing to wait on. Never rejects (pool.ready never
+     *  does; the race cap resolves regardless). */
+    function previewGate() {
+      if (!pool || typeof pool.ready !== 'function') return null;
+      const need = [];
+      for (const u of pairUrls) {
+        if (u && !PLACEHOLDER_RE.test(String(u)) && need.indexOf(u) < 0) need.push(u);
+      }
+      if (!need.length) return null;
+      const waits = need.map((u) => {
+        try { return pool.ready(u, { timeoutMs: PREVIEW_GATE_URL_MS }); }
+        catch (e) { return Promise.resolve(false); }
+      });
+      const cap = new Promise((res) => { setTimeout(res, scaled(PREVIEW_GATE_CAP_MS)); });
+      return Promise.race([Promise.all(waits), cap]);
+    }
+
+    function previewShow() {
       /* THE MEMORIZE BEAT IS PER BOARD and it is kept deliberately: it is the
        * whole encoding moment, and it is tier- (and ladder-) dialled, shrinking
        * a notch per cleared board toward tier 4's own floor. It spends bell
@@ -817,8 +897,10 @@ export default {
         if (!touch) playFace(c, true);
       }
       /* On touch the memorize beat plays TOUCH_PLAY_CAP faces at a time and
-       * rotates; on desktop every face plays at once, exactly as before. */
-      if (touch) playWindowStart(cells.slice());
+       * rotates; on desktop every face plays at once, exactly as before. The
+       * window is sized to previewMs so EVERY face gets its animated moment
+       * before the cards go down (0825). */
+      if (touch) playWindowStart(cells.slice(), dials.previewMs);
       /* W3 P1-10: the board coming up is air moving, not a generic sting. */
       tick('whoosh', 0.35);
       /* W3 P0-2: the memorize window is a countdown, so it ticks - one per
@@ -1727,6 +1809,58 @@ export default {
      * plays the leftovers on their glyph faces (always distinct) rather than
      * repeating someone else's clip.
      */
+    /** Draw distinct loop urls into facePool. `clean` additionally refuses the
+     *  provider's bundled placeholder svgs - the RE-draw path must not refill
+     *  with the very floor it is replacing. The first fill keeps the original
+     *  accept-anything semantics (a placeholder pool still deals a board). */
+    function fillFacePool(clean) {
+      if (!pool || typeof pool.next !== 'function') return;
+      for (let n = 0; n < FACE_POOL_WANT * 3 && facePool.length < FACE_POOL_WANT; n++) {
+        const got = pool.next('loop');
+        const u = got && got.url;
+        if (!u) continue;
+        if (clean && PLACEHOLDER_RE.test(String(u))) continue;
+        if (facePool.indexOf(u) < 0) facePool.push(u);
+      }
+    }
+
+    /** The face pool was built cold: short, or wearing the placeholder floor. */
+    function poolDegraded() {
+      if (facePool.length < FACE_POOL_WANT) return true;
+      for (const u of facePool) if (!u || PLACEHOLDER_RE.test(String(u))) return true;
+      return false;
+    }
+
+    /** pool.onUpdate landed: a fresh media batch exists (0825). DEGRADED PATH
+     *  ONLY - a clean, full facePool returns before ANY rng is consumed, so
+     *  the clean path's draw sequence never moves (house law: extra next()
+     *  calls are permitted only where the state already serves degraded
+     *  results). Contents of facePool are unseeded; the board's seeded shuffle
+     *  in dealFaces is untouched, so determinism is safe. */
+    function refaceFromUpdate() {
+      if (dead || ended || belled || !pool) return;
+      if (!poolDegraded()) return;
+      facePool = facePool.filter((u) => u && !PLACEHOLDER_RE.test(String(u)));
+      const before = facePool.length;
+      fillFacePool(true);
+      if (facePool.length === before) return;         // the batch had nothing new
+      say('media batch landed - face pool now ' + facePool.length + ' distinct');
+      /* re-issue the class warm list; dealFaces below narrows it again */
+      try {
+        if (typeof pool.warmManifest === 'function' && facePool.length) {
+          pool.warmManifest(facePool.map((u) => ({ url: u })));
+        }
+      } catch (e) { /* noop */ }
+      /* the same landing law as the first claim: a board the player has
+       * memorised or started is never re-faced - the NEXT board gets it. */
+      if (facesLocked || faceUp.length || matched > 0) {
+        facesDirty = true;
+        return;
+      }
+      dealFaces(boardNo || 1);
+      for (const c of cells) applyMedia(c);
+    }
+
     function claimAssets() {
       // NEVER block a draw: the board is already dealing on glyph faces and the
       // urls drop in when the pool resolves (empty remote -> local, silently).
@@ -1737,13 +1871,21 @@ export default {
         .then((p) => {
           if (dead || !p || typeof p.next !== 'function') return;
           pool = p;
-          for (let n = 0; n < FACE_POOL_WANT * 3 && facePool.length < FACE_POOL_WANT; n++) {
-            const got = p.next('loop');
-            const u = got && got.url;
-            if (u && facePool.indexOf(u) < 0) facePool.push(u);
-          }
+          fillFacePool();
           say('asset pool ready (' + facePool.length + ' distinct loops; a board wears '
             + (dials ? dials.pairs : '?') + ')');
+          /* THE CLASS WARM LIST (0825): facePool is the class's whole media
+           * need, so the how-to sheet becomes the idle warm window. Each
+           * board's dealFaces re-heads the manifest with its own subset. */
+          if (typeof p.warmManifest === 'function' && facePool.length) {
+            try { p.warmManifest(facePool.map((u) => ({ url: u }))); } catch (e) { /* noop */ }
+          }
+          /* THE REVIVED RE-FACE PATH (0825): remote media streams in after the
+           * claim resolves; the old guard below ran once inside this .then()
+           * and never re-fired. The subscription dies with pool.release(). */
+          if (typeof p.onUpdate === 'function') {
+            try { p.onUpdate(() => run(refaceFromUpdate)); } catch (e) { /* optional seam */ }
+          }
           /* THE LATE POOL. If the player is already reading a preview or a live
            * board, re-facing it would be a lie the tell system never promised -
            * so the draw is banked and the NEXT board is the first with media.

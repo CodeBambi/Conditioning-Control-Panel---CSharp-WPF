@@ -1936,6 +1936,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       bridge,
       games: games.list,
       keybinds,
+      /* The Mascot group's writer - a getter, because the controller mounts
+       * async and the page must render either way. */
+      emi: () => { try { return getEmi(); } catch (e) { return null; } },
       // The folds bank their open state here (`optionsOpen.<section>`).
       store,
       /* THE DOOR'S TWO WRITE VERBS, lent to the web Media group so its add

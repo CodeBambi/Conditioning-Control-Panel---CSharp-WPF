@@ -247,6 +247,11 @@ export const FIRE_KINDS = Object.freeze(['glitch_swap', 'sub_flash', 'flash_burs
 export const SUSTAIN_KINDS = Object.freeze(['row_drift', 'bubble_field', 'wash', 'gif_rain', 'ambient_field', 'crt']);
 export const CEREMONY_KINDS = Object.freeze(['stamp', 'streak_meter', 'jackpot', 'near_miss']);
 
+/** warm('media') asks the pool to byte-warm this many upcoming draws - the
+ *  provider's own DECK_AHEAD (its prewarm clamps to it anyway); kept local so
+ *  the engine never imports the provider. */
+const WARM_MEDIA_AHEAD = 6;
+
 /** Bundled mono-pink placeholder tiles — the floor under every asset draw. */
 const PLACEHOLDERS = ['ae-ph-1.svg', 'ae-ph-2.svg', 'ae-ph-3.svg', 'ae-ph-4.svg', 'ae-ph-5.svg', 'ae-ph-6.svg']
   .map((f) => {
@@ -711,13 +716,22 @@ export function createEngine(options = {}) {
     isPlainBeat: (i01, floor, early) => isPlainBeat(i01, rng(), floor, early),
     cadenceMs,
     rewardRoll: (o = {}) => schedule.roll(Object.assign({ heat }, o)),
-    /** Pre-warm a heavy path in idle time (2026-08-26). 'spiral' (the default
-     *  and only kind) mounts the loom wash canvas + compiles its shader while
-     *  the element sits at opacity 0, so the first jackpot garnish / spiral
-     *  sustain reuses it instead of paying WebGL setup on a reward frame.
+    /** Pre-warm a heavy path in idle time (2026-08-26). 'spiral' (the default)
+     *  mounts the loom wash canvas + compiles its shader while the element sits
+     *  at opacity 0, so the first jackpot garnish / spiral sustain reuses it
+     *  instead of paying WebGL setup on a reward frame.
+     *  'media' (2026-08-25) asks the asset pool to byte-warm the urls its next
+     *  few draws WILL serve (pool.prewarm forecasts over CLONED cursors +
+     *  peekRand, so it consumes NO rng and moves NO draw) - a game calls it a
+     *  beat before a media shower so cold phone fetches land in time.
      *  No rng, no fx, nothing visible; safe to skip, safe to repeat. */
     warm(what) {
       if (disposed || suspended) return false;
+      if (what === 'media') {
+        if (!pool || typeof pool.prewarm !== 'function') return false;
+        try { pool.prewarm(WARM_MEDIA_AHEAD); return true; }
+        catch (e) { log('warm refused: ' + ((e && e.message) || e)); return false; }
+      }
       if (what != null && what !== 'spiral') return false;
       ensureLayer();
       try { return sustained.warmSpiral(); } catch (e) { log('warm refused: ' + ((e && e.message) || e)); return false; }

@@ -375,8 +375,8 @@ shell/peek.js      the shared hold-to-reveal verb (caps the class at A)
 shell/keybinds.js  manifest-declared verb slots, one blob, PanicKey conflict check
 shell/audio.js     THE consumer of engine 'arcademy-sfx' (WebAudio, procedural)
                    + SAMPLES door (assets/sfx, host-listed), ALIASES (verdict names
-                   and sample floors), HOLD/STOP for room-tone beds (trap 109),
-                   unknown-name blip logged once (trap 110)
+                   and sample floors), HOLD/STOP for room-tone beds (trap 114),
+                   unknown-name blip logged once (trap 115)
 games/registry.js  guarded allSettled registry + tier math + class_suspended stub
                    + GAME_SEMESTER / OPEN_SEMESTERS (the release gate: a CLOSED semester's
                    games are ABSENT from the pool, never stubs; isOpenSemester())
@@ -2111,8 +2111,9 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     the whole layer now, and `test-asks.mjs` counts them. The rest of trap 59
     survives untouched and is asserted the same way: `widget.js` still makes
     exactly ONE `preventDefault()` call (the `pointerdown` on `.emi`), the ask
-    engine's two document listeners are `{passive:true}` in the bubble phase and
-    call neither `preventDefault` nor `stopPropagation` (trap 80's shape), and
+    engine's one document listener (keydown; its pointerdown left with the
+    any-press cancel, trap 118) is `{passive:true}` in the bubble phase and
+    calls neither `preventDefault` nor `stopPropagation` (trap 80's shape), and
     EMI still adds no rung to the Esc ladder - Esc dismisses an ask on its way
     past and the ladder never notices it happened.
 93. **AN ASK MAY NEVER LAND ON TOP OF A LINE, AND THAT IS TWO SEPARATE RULES.**
@@ -2178,9 +2179,11 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     beat before the class chrome is built and long before a board takes input),
     but it does not keep it there: a strip nobody answers would still be up when
     the board goes live. Hence `DARE_GIVE_UP_MS` (12s, against the ordinary 40s)
-    on every `classStart` ask, plus the universal any-press cancel. If a future
-    ask wants to ride a moment that fires ON a live board, it does not - move the
-    offer to the class-rules sheet (trap 85) instead.
+    on every `classStart` ask, plus the `classStart` latch in `note()` closing
+    any OTHER ask still standing (it had to move there when presses stopped
+    cancelling, trap 118). If a future ask wants to ride a moment that fires ON
+    a live board, it does not - move the offer to the class-rules sheet
+    (trap 85) instead.
 
 98. **THE STRIP LIVES INSIDE `.emi`, SO EVERY CHIP PRESS HAS TO BE HANDED BACK -
     AND ONLY A BROWSER CAN SEE THAT IT WAS NOT.** `.emi`'s `pointerdown` is the
@@ -2353,8 +2356,9 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
       "expire immediately" but "she waits": the hold handed to the say is an hour
       (`DIALS.ASK_HOLD_MS`, a large FINITE number because `chains.js makeSay` does
       `holdMs | 0` and `Infinity | 0` is a 400ms flash), and `releaseAskLine()` is the
-      only thing that ever ends it. The player cannot be trapped by that - any press
-      anywhere is a free dismiss - and there is exactly ONE carve-out: the dares still
+      only thing that ever ends it. The player cannot be trapped by that - Esc is a
+      free dismiss and an answer is two chips away (presses stopped cancelling on
+      2026-08-25, trap 118) - and there is exactly ONE carve-out: the dares still
       leave after `DARE_GIVE_UP_MS`, because trap 97 says a strip may not be sitting over
       a board that is about to take input.
     - **THE 220ms LEAVE ANIMATION CANNOT RIDE `later()`.** Every resolution an ask has is
@@ -2657,7 +2661,7 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     nothing but token lines is simply silent on a payload that carried none, so
     always write plain siblings beside a token line.
 
-109. **A HOLD HAS AN OWNER, AND ONLY A FILE CAN HOLD** (W3 sfx, 2026-08-25,
+114. **A HOLD HAS AN OWNER, AND ONLY A FILE CAN HOLD** (W3 sfx, 2026-08-25,
     `shell/audio.js`). The mixer's one sustain: `detail.hold:true` on a SAMPLED name
     (or a `detail.url`) loops the element in slot `detail.key || name`, fades in over
     `CLIP_FADE_MS`, ignores `maxMs`; `detail.stop:true` fades that slot out, and is
@@ -2671,7 +2675,7 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     `applyPlate` int/ext swap, annex cams). The mixer will never guess that a room has
     been left, and a bed that outlives its room plays under the next class.
 
-110. **AN UNKNOWN CUE NAME IS A BLIP, NOT AN ERROR - SO ADD THE NAME IN THE SAME PR
+115. **AN UNKNOWN CUE NAME IS A BLIP, NOT AN ERROR - SO ADD THE NAME IN THE SAME PR
     AS ITS FIRST CALL SITE** (W3). Misdirection fired `hit` `miss` `ride` `bank`
     `reveal` for a whole semester and every one of them degraded to the 660Hz tick;
     nobody noticed because nothing was thrown. The mixer now logs
@@ -2683,7 +2687,7 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     may carry a `pitch` multiplier (`tape_stop` = glitch at .7 when its file is
     absent); the sample lookup always uses the name AS FIRED.
 
-111. **COUNTDOWNS TICK ON THE SECOND BOUNDARY, NEVER ON THE TICKER** (W3). Every
+116. **COUNTDOWNS TICK ON THE SECOND BOUNDARY, NEVER ON THE TICKER** (W3). Every
     visible timer drained in silence before this wave, and the wrong fix is one
     `clock_tick` per rAF / per 60ms poll (a Geiger counter). The convention every
     game now follows: fire only when `Math.ceil(remaining/1000)` CHANGES, only in the
@@ -2692,13 +2696,46 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     disarm so a resolved round never ticks once more over its stamp. Rate limits are
     the caller's job: the mixer will happily play sixty a second.
 
-112. **ENGINE SUSTAINS CUE PER WAVE, NOT PER NODE** (W3, `engine/sustained.js`,
+117. **ENGINE SUSTAINS CUE PER WAVE, NOT PER NODE** (W3, `engine/sustained.js`,
     `engine/loomWash.js`). Bubble beds, bursts, gif rain and the Loom's spiral are
     streams of DOM nodes; a cue per node is the fastest way to turn the fx bus into
     noise and the clip table into a queue. Bursts cap at 3-4 cues per burst, `gif_rain`
     is never per drop, `spiral_hum` strikes on mount and on each re-trigger only, wash
     air fires per wash CHANGE (not per re-entrant `startWash`), and teardown coalesces
     into ONE wash. `sub_flash`'s synth whisper stays suppressed on a voiced tick (108).
+
+118. **AN ASK OUTLIVES EVERY PRESS, AND EXACTLY FOUR THINGS END IT** (owner,
+    2026-08-25: "keep the prompt there till we respond - if we click elsewhere
+    or on emi we trigger a new bark and we lose it"). The EMI ASKS wave shipped
+    an any-press/any-key free dismiss (a document pointerdown listener plus a
+    keydown fallthrough, and pet/drag/fling in the gesture handler); in play it
+    meant the question was gone before it was ever read, because the FIRST tap
+    after a bubble lands is muscle memory. All of that is deleted. A standing
+    ask now survives clicks anywhere, petting, dragging, stray keys and the
+    heartbeat (its `askReady`/`askOpen` gates already refuse every act), and
+    the glass hold keeps barks parked under it. The ONLY closers: a chip (the
+    answer), Esc (the deliberate "not now"), `hide`/`gone` (the screen killed
+    her), and the `classStart` latch in `asks.js note()` - which is NEW there,
+    because "the player pressed Begin" used to close the strip as a side
+    effect and trap 59/97 still forbid a chip strip over a live board. Every
+    non-chip closer spends no cadence and banks the question (`rememberReask`).
+    If you find yourself adding a new dismiss path, it is almost certainly the
+    old bug coming back with better manners.
+
+119. **THE BUBBLE-HOLD SCALE IS MODULE-LEVEL, MULTIPLIES THE CURVE, AND NEVER
+    AN EXPLICIT HOLD** (`widget.js sayHoldMs`, owner option 2026-08-25: "make
+    the bark bubble permanence time an option in the options"). `holdScale`
+    (0.6..3, default 1) lives beside `sayHoldMs` because the helper is a pure
+    module export with no instance to ask; the widget seeds it from
+    `saved.holdScale` on boot, `setBubbleHold` on the handle (and the emi
+    controller) is the one writer after that, and the blob persists it ONLY
+    when it is not 1. It scales `max(floor, grown)` and NOT the explicit-ms
+    argument - `ASK_HOLD_MS` is an hour because a question waits (trap 118),
+    and a player who chose "Quick" did not choose quick questions. The options
+    page's Mascot group is the UI: the page's one LOCAL row, no protocol key,
+    no echo, never `pending` - `shell/settings.js` reaches the controller
+    through a getter because the mascot mounts async, and falls back to
+    `store.merge('emi', ...)` so the choice lands even when she never did.
 
 ## 5. The game module contract (short version)
 
