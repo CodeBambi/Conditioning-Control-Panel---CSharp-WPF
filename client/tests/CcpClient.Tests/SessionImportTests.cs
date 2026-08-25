@@ -190,6 +190,17 @@ public class SessionImportTests
         Assert.Single(Directory.GetFiles(folder));
         Assert.Empty(Directory.GetDirectories(folder));
 
+        // AND THE PROVENANCE IS NOT IN THE BYTES, which is the first of the three independent
+        // reasons a file cannot claim to be built-in. It was added because a mutation found this
+        // fact passing without it: with [JsonIgnore] removed from both members, the STORE's
+        // containment guard still refuses the file's chosen path and ReadFolder still stamps the
+        // origin off the folder, so the outcome above is unchanged and the defence that actually
+        // moved was invisible. Reading the bytes makes all three visible instead of two.
+        var bytes = File.ReadAllText(landed.SourceFilePath);
+        Assert.DoesNotContain("origin", bytes, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("sourceFilePath", bytes, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Windows", bytes, StringComparison.Ordinal);
+
         Directory.Delete(root, recursive: true);
     }
 

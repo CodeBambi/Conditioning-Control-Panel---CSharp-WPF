@@ -137,7 +137,7 @@ public static class ScriptedSessionRack
     ///
     /// <para>Upstream's unfiltered form is <c>"{0} sessions"</c> and would read "1 sessions" on an
     /// install carrying one file. Pluralised here, in the idiom this rack already uses for its
-    /// phase count (<c>Views/Pages/SessionRackNotices.cs:332-335</c>).</para>
+    /// phase count (<c>Views/Pages/SessionRackNotices.cs:539-542</c>).</para>
     /// </summary>
     public static string CountLine(int shown, int total) => shown == total
         ? total == 1 ? "1 session" : $"{total} sessions"
@@ -168,7 +168,9 @@ public static class ScriptedSessionRack
 ///
 /// <para><b>THAT PREMISE DIED WITH THE EDITOR AND THE REFUSAL IS RESTATED RATHER THAN LEFT TO
 /// ROT.</b> <see cref="CustomSessionStore.Save"/> writes a session file on an explicit user
-/// gesture, so a CUSTOM session's stamp is now real recency. It is still not ported, and the reason
+/// gesture — from the editor, and now from <see cref="SessionImport"/> as well, so two of
+/// upstream's three stamping gestures are here — so a CUSTOM session's stamp is now real
+/// recency. It is still not ported, and the reason
 /// is a different and smaller one: the four shipped files are still stamped at install, so
 /// <c>recent</c> would sort the user's half meaningfully and the built-in half arbitrarily — and as
 /// upstream's DEFAULT it would re-order the whole rack on every save, moving the row the user just
@@ -183,7 +185,7 @@ public static class ScriptedSessionRack
 /// (<c>MainWindow/MainWindow.SessionIO.cs:333-334</c>, ordering by
 /// <see cref="ScriptedSession.BonusXP"/>). The rack row deliberately does not show upstream's
 /// <c>+{0} XP</c> cell, because nothing in this build awards it
-/// (<c>Views/Pages/SessionRackNotices.cs:127-130</c>) — and an order over a number the row refuses
+/// (<c>Views/Pages/SessionRackNotices.cs:334-337</c>) — and an order over a number the row refuses
 /// to print is an order the user cannot see the reason for.</para>
 /// </summary>
 public enum ScriptedSessionSort

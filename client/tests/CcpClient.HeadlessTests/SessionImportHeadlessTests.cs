@@ -292,9 +292,16 @@ public class SessionImportHeadlessTests : HeadlessTest
 
     /// <summary>
     /// An import does not re-aim the START button. The user's pick survives the repaint the import
-    /// causes, and the readout goes on naming it — which is the rack's own rule for every other
-    /// repaint and matters more here, because the row that arrived came from outside the
-    /// application.
+    /// causes — which is the rack's own rule for every other repaint and matters more here, because
+    /// the row that arrived came from outside the application.
+    ///
+    /// <para><b>The last two lines are the fact, and they were added because a mutation caught this
+    /// one being weaker than its own name.</b> Re-pointing <c>_scriptedSelection</c> at the
+    /// imported session AFTER the repaint leaves the rack looking exactly right — Morning Drift is
+    /// still the checked row — while the START button is aimed at the file that just arrived. The
+    /// checked radio is a claim; the confirmation names the session the button will really run
+    /// (<c>StudioPage.RenderScriptedSession</c> builds it from <c>_scriptedSelection</c>), so the
+    /// gesture is carried one press further and the sentence is read.</para>
     /// </summary>
     [AvaloniaFact]
     public async Task AnImportDoesNotStealTheUsersPick()
@@ -311,6 +318,12 @@ public class SessionImportHeadlessTests : HeadlessTest
         Assert.Equal(5, Rows(window).Count);
         var picked = Assert.Single(Rows(window), r => r.IsChecked == true);
         Assert.Equal("SessionRowMorningDrift", picked.Name);
+
+        // What the button is really aimed at, asked by pressing it.
+        Click(window, Descendant<Button>(window, "ScriptedSessionStartButton"));
+        Assert.Equal(
+            "Start Morning Drift?",
+            Descendant<TextBlock>(window, "ScriptedSessionConfirmTitle").Text);
 
         await boot.Host.ShutdownAsync();
     }
