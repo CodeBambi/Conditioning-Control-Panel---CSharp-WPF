@@ -2097,6 +2097,8 @@
   "quest_streak_keeper_w_desc": "7일 연속 기록 유지",
   "quest_total_submission_w_name": "완전한 복종",
   "quest_total_submission_w_desc": "버블 카운트 게임 15회 완료",
+  "quest_take_the_reins_d_name": "고샐를 쥐다",
+  "quest_take_the_reins_d_desc": "다른 피험자에게 원격 명령을 10회 보내기",
   "label_enhancement_tree_title": "빔보 스킬 트리",
   "label_enhancement_tree_subtitle": "레벨업과 버블 100개 터뜨릴 때마다 스파클 포인트를 벌어요~",
   "label_enhancement_tree_warning": "한번 길을 정하면 되돌릴 수 없어요~",

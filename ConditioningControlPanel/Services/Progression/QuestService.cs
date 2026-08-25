@@ -435,12 +435,8 @@ public class QuestService : IDisposable
 
         // Use remote quests from QuestDefinitionService if available, fall back to embedded
         var questPool = App.QuestDefinitions?.GetDailyQuests() ?? QuestDefinition.DailyQuests.ToList();
-        var availableQuests = questPool
-            .Where(q => q.Id != excludeId)
-            .Where(q => IsQuestAvailableForLevel(q.Category))
-            .Where(IsQuestAvailableForTier)
-            .Where(IsQuestInDateWindow)
-            .ToList();
+        var hasPremium = App.Patreon?.HasPremiumAccess == true;
+        var availableQuests = FilterDailyRollPool(questPool, excludeId, hasPremium, DateTime.Today, applyDateWindow: true);
 
         // THE WINDOW MUST NEVER STARVE THE PLAYER. If a date window emptied the pool,
         // fall back to the undated pool rather than leaving the day questless: an event
@@ -448,11 +444,7 @@ public class QuestService : IDisposable
         // with it. See IsQuestInDateWindow.
         if (availableQuests.Count == 0)
         {
-            availableQuests = questPool
-                .Where(q => q.Id != excludeId)
-                .Where(q => IsQuestAvailableForLevel(q.Category))
-                .Where(IsQuestAvailableForTier)
-                .ToList();
+            availableQuests = FilterDailyRollPool(questPool, excludeId, hasPremium, DateTime.Today, applyDateWindow: false);
         }
 
         if (availableQuests.Count == 0) return;
@@ -567,8 +559,52 @@ public class QuestService : IDisposable
     /// can't complete. Premium users get the blended pool (free + premium).
     /// </summary>
     private static bool IsQuestAvailableForTier(QuestDefinition quest)
+        => IsQuestAvailableForTier(quest, App.Patreon?.HasPremiumAccess == true);
+
+    /// <summary>Pure form of the tier test, split out so it is testable without a live App.</summary>
+    internal static bool IsQuestAvailableForTier(QuestDefinition quest, bool hasPremium)
+        => !quest.RequiresPremium || hasPremium;
+
+    /// <summary>
+    /// THE SOLO-USER GATE. A quest in <see cref="QuestCategory.Remote"/> only moves when
+    /// SOMEONE ELSE issues commands to this user, so a player with nobody controlling them
+    /// could roll "Take 25 remote commands" and spend the whole day unable to touch it - two
+    /// community threads reported exactly that. Remote-RECEIVING quests are therefore no
+    /// longer offered in the DAILY roll (today: handed_over_d, remote_hands_d, plus anything
+    /// the definitions channel publishes in that category).
+    ///
+    /// THE DEFINITIONS ARE NOT DELETED and no counter is touched: QuestCategory.Remote,
+    /// TrackRemoteCommand and both quest entries all still exist, so a quest already rolled
+    /// today still completes normally, a persisted quests.json naming one still resolves
+    /// through GetCurrentDailyDefinition, and the weekly slot (puppet_strings_w,
+    /// fully_remote_w) is untouched - a week is long enough to find a Controller.
+    ///
+    /// Filtering by CATEGORY rather than by id is deliberate: it also covers a daily
+    /// remote-receive quest published later by the server-side definitions channel.
+    /// </summary>
+    internal static bool IsRollableAsDaily(QuestDefinition quest)
+        // RemoteIssue is held out too until the web controller reports issued commands back
+        // (see REMOTE_CONTROL_PRIMER §4a-bis) - the desktop app never issues commands itself,
+        // so rolling it today would hand out a quest that can never move past 0.
+        => quest.Category != QuestCategory.Remote && quest.Category != QuestCategory.RemoteIssue;
+
+    /// <summary>
+    /// Pure form of the daily roll pool filter, split out so it is testable without a live App.
+    /// The two call sites in GenerateNewDailyQuest differ only in whether the date window applies
+    /// (the starvation fallback drops it) - every other predicate MUST stay identical between
+    /// them, which is exactly what this shared helper guarantees.
+    /// </summary>
+    internal static List<QuestDefinition> FilterDailyRollPool(
+        IEnumerable<QuestDefinition> pool, string? excludeId, bool hasPremium,
+        DateTime today, bool applyDateWindow)
     {
-        return !quest.RequiresPremium || App.Patreon?.HasPremiumAccess == true;
+        return pool
+            .Where(q => q.Id != excludeId)
+            .Where(q => IsQuestAvailableForLevel(q.Category))
+            .Where(q => IsQuestAvailableForTier(q, hasPremium))
+            .Where(IsRollableAsDaily)
+            .Where(q => !applyDateWindow || IsQuestInDateWindow(q.ActiveFrom, q.ActiveUntil, today))
+            .ToList();
     }
 
     /// <summary>
@@ -949,6 +985,37 @@ public class QuestService : IDisposable
     public void TrackRemoteCommand()
     {
         UpdateQuestProgress(QuestCategory.Remote, 1);
+    }
+
+    /// <summary>
+    /// Track a remote-control command this user ISSUED to another subject as a Controller
+    /// (take_the_reins_d). Open to every tier - see QuestCategory.RemoteIssue.
+    ///
+    /// SELF-CONTROL NEVER COUNTS. A user can pair their own phone or browser to their own
+    /// session, so the target's unified id is compared against this install's own
+    /// (App.UnifiedUserId) and a match is dropped. When the caller cannot supply a target id
+    /// the command is dropped too: crediting an unattributable command would reopen the
+    /// self-control loophole, and a silent under-count is the safer failure.
+    ///
+    /// INTENSITY-BLIND BY DESIGN: one command is one tick whatever the session tier is. The
+    /// quest must never be a reason to talk a subject into a heavier level.
+    /// </summary>
+    public void TrackRemoteCommandIssued(string? targetUnifiedId)
+    {
+        if (!CountsAsForeignSubject(targetUnifiedId, App.UnifiedUserId)) return;
+        UpdateQuestProgress(QuestCategory.RemoteIssue, 1);
+    }
+
+    /// <summary>
+    /// Pure form of the self-control guard, split out so it is testable without a live App.
+    /// True only when the target is a known id that is NOT this install's own id.
+    /// </summary>
+    internal static bool CountsAsForeignSubject(string? targetUnifiedId, string? selfUnifiedId)
+    {
+        if (string.IsNullOrWhiteSpace(targetUnifiedId)) return false;
+        if (string.IsNullOrWhiteSpace(selfUnifiedId)) return true;
+        return !string.Equals(targetUnifiedId.Trim(), selfUnifiedId.Trim(),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

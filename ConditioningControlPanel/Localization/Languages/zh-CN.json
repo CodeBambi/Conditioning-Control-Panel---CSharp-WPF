@@ -2838,6 +2838,8 @@
   "quest_streak_keeper_w_desc": "保持7天连续签到",
   "quest_total_submission_w_name": "完全服从",
   "quest_total_submission_w_desc": "完成15次泡泡计数游戏",
+  "quest_take_the_reins_d_name": "掌控缰绳",
+  "quest_take_the_reins_d_desc": "向其他对象发送 10 条远程指令",
   "label_enhancement_tree_title": "宝贝技能树",
   "label_enhancement_tree_subtitle": "你通过升级和每戳100个泡泡获得闪耀点数~",
   "label_enhancement_tree_warning": "一旦选择了路线，就无法回头~",

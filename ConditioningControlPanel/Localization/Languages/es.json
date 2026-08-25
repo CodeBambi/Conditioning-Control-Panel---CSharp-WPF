@@ -2097,6 +2097,8 @@
   "quest_streak_keeper_w_desc": "Mantén una racha de 7 días",
   "quest_total_submission_w_name": "Sumisión Total",
   "quest_total_submission_w_desc": "Completa 15 juegos de contar burbujas",
+  "quest_take_the_reins_d_name": "Toma las riendas",
+  "quest_take_the_reins_d_desc": "Envía 10 órdenes de control remoto a otros sujetos",
   "label_enhancement_tree_title": "Árbol de Habilidades Bimbo",
   "label_enhancement_tree_subtitle": "ganas puntos de brillo al subir de nivel + cada 100 burbujas reventadas~",
   "label_enhancement_tree_warning": "una vez que eliges un camino, no hay vuelta atrás~",

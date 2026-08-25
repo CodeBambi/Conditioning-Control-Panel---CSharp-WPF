@@ -2097,6 +2097,8 @@
   "quest_streak_keeper_w_desc": "7日間のストリークを維持する",
   "quest_total_submission_w_name": "完全服従",
   "quest_total_submission_w_desc": "バブルカウントゲームを15回完了する",
+  "quest_take_the_reins_d_name": "手綼を握る",
+  "quest_take_the_reins_d_desc": "他の被験者に遠隔コマンドを10回送る",
   "label_enhancement_tree_title": "ビンボスキルツリー",
   "label_enhancement_tree_subtitle": "レベルアップ + バブル100個割るごとにスパークルポイントがもらえるよ～",
   "label_enhancement_tree_warning": "一度道を選んだら、もう戻れないよ～",
