@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Globalization;
+using System.Runtime.CompilerServices;
 using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Input;
 using CcpClient.Desktop.Overlay;
@@ -73,6 +76,10 @@ internal static class OverlayDesktopInputObservations
 
     private const int DragSteps = 8;
 
+    /// <summary>How many points a drag path has: the press point plus one per step. The pre-flight
+    /// walks all of them, and its control asserts that it walked all of them.</summary>
+    internal const int DragPathPointCount = DragSteps + 1;
+
     /// <summary>How many wheel notches one pass sends. Never asserted against — every wheel
     /// expectation compares one pass's cumulative count with the previous pass's, so no constant
     /// both drives the input and stands as the expectation.</summary>
@@ -146,6 +153,10 @@ internal static class OverlayDesktopInputObservations
     /// diagnoses.</b> "The drag channel delivered nothing" is true of a broken injection, of a
     /// desktop that refuses synthetic input, and of a foreign window sitting on part of the
     /// rectangle — and only the third was ever happening.</param>
+    /// <param name="Path">Who owned every point of the drag path BEFORE anything was injected. The
+    /// reading above says who took a step after the fact; this one is the pre-flight that refuses
+    /// the leg outright when the window holding a point belongs to another process — see
+    /// <see cref="PointerWindowProbe.HoldWholeDragPath"/>.</param>
     internal sealed record ChannelPass(
         string Label,
         bool ClickAccepted,
@@ -161,7 +172,8 @@ internal static class OverlayDesktopInputObservations
         int KeeperKeyDowns,
         int Activations,
         nint Foreground,
-        PointerWindowProbe.DragReading Drag)
+        PointerWindowProbe.DragReading Drag,
+        PointerWindowProbe.PathHold Path)
     {
         internal bool EveryInjectionAccepted => ClickAccepted && DragAccepted && WheelAccepted && KeyAccepted;
 
@@ -171,7 +183,32 @@ internal static class OverlayDesktopInputObservations
             + $"routedTo={PointerWindowProbe.DescribeWindow(Routed)} "
             + $"foreground={PointerWindowProbe.DescribeWindow(Foreground)} "
             + $"accepted(click/drag/wheel/key)={ClickAccepted}/{DragAccepted}/{WheelAccepted}/{KeyAccepted} "
-            + Drag.Describe;
+            + Drag.Describe + " | " + Path.Describe;
+    }
+
+    /// <summary>
+    /// <b>The refusal the four drag facts consult before they read anything.</b> The first leg among
+    /// <paramref name="legs"/> whose path a foreign window held, or a clear answer.
+    ///
+    /// <para>Each fact passes exactly the legs it compares — a foreign window during the teardown
+    /// leg has nothing to do with the baseline fact, and refusing more widely than the evidence
+    /// requires is how a precondition turns into an escape hatch. The counts are cumulative on one
+    /// window, so a leg whose drag never ran contaminates every later comparison against it and both
+    /// sides of a comparison must therefore be offered here.</para>
+    /// </summary>
+    internal static PointerWindowProbe.PathHold ForeignHoldOnTheDragPath(params ChannelPass[] legs)
+    {
+        ArgumentNullException.ThrowIfNull(legs);
+
+        foreach (var leg in legs)
+        {
+            if (leg.Path.Contended)
+            {
+                return leg.Path;
+            }
+        }
+
+        return PointerWindowProbe.PathHold.Clear("no leg of this run", DragSteps + 1);
     }
 
     /// <param name="MachineHasInteractiveDesktop">The machine fact every expectation flips on.</param>
@@ -481,6 +518,16 @@ internal static class OverlayDesktopInputObservations
     /// own points through <paramref name="hold"/>, which is this leg's own settle rather than a bare
     /// raise: on the pass-through leg it re-asserts the OVERLAY on top afterwards, so holding the
     /// path can never put the window underneath above the surface the leg measures through.</para>
+    ///
+    /// <para><b>And holding the path is not a complete defence, which is why the leg is now
+    /// PRE-FLIGHTED.</b> The hold re-asserts this run's own stack, and a system-owned surface can
+    /// keep a point regardless: measured on this machine as
+    /// <c>drag path 0/8 steps delivered — the first that did not arrive was aimed at (1453,814),
+    /// which the window manager gives to 0x10420 (class "Windows.UI.Core.CoreWindow") even with
+    /// this run's own stack re-asserted over it</c>. That is a property of the machine's desktop,
+    /// not of this port, so the whole path is walked before anything is injected and a leg whose
+    /// path a FOREIGN process holds is refused by name rather than driven into somebody else's
+    /// window and reported as a broken drag channel.</para>
     /// </summary>
     private static ChannelPass DriveFourChannels(
         string label,
@@ -496,6 +543,14 @@ internal static class OverlayDesktopInputObservations
         var dragBefore = underneath?.DragMoves ?? 0;
         var wheelBefore = underneath?.WheelNotches ?? 0;
         var keysBefore = underneath?.KeyDowns ?? 0;
+
+        // THE PRE-FLIGHT, AND IT RUNS BEFORE THE FIRST INJECTION OF THE LEG. It asks this leg's own
+        // hold about every point the drag below will travel over, and it is the only thing in this
+        // file that can tell "the drag channel is broken" apart from "somebody else's window owns
+        // the path" BEFORE the drag has already been driven into the wrong window. The facts refuse
+        // on it; nothing here changes what is injected or measured when it comes back clear.
+        var path = PointerWindowProbe.HoldWholeDragPath(
+            label, centreX, centreY, DragDeltaX, DragDeltaY, DragSteps, hold);
 
         var click = pointIsOurs && PointerWindowProbe.InjectClickAt(centreX, centreY);
         PointerWindowProbe.PumpUntil(() => (underneath?.Downs ?? 0) > downsBefore);
@@ -528,7 +583,8 @@ internal static class OverlayDesktopInputObservations
             KeeperKeyDowns: keeper.KeyDowns,
             Activations: underneath?.Activations ?? 0,
             Foreground: PointerWindowProbe.Foreground(),
-            Drag: dragReading);
+            Drag: dragReading,
+            Path: path);
     }
 
     /// <summary>
@@ -544,8 +600,9 @@ internal static class OverlayDesktopInputObservations
     /// no surface that has to stay above anything.</para>
     ///
     /// <para>It never grants an answer: the counters the facts read are still the operating
-    /// system's, and the handle returned here is only used to NAME whoever took a step that did not
-    /// arrive.</para>
+    /// system's, and the handle returned here is only used to NAME whoever holds a point — before
+    /// the drag, by <see cref="PointerWindowProbe.HoldWholeDragPath"/>, and after it, by the drag's
+    /// own reading of a step that did not arrive.</para>
     /// </summary>
     private static Func<int, int, nint> HoldingThePath(Win32OverlayPresence? overlay, nint underneathWindow) =>
         (x, y) =>
@@ -747,6 +804,157 @@ internal static class OverlayDesktopInputObservations
     }
 
     // -------------------------------------------------------------------------------------------
+    //  the PRE-FLIGHT's own control: a real foreign window, in a real second process
+    // -------------------------------------------------------------------------------------------
+
+    private static readonly Lazy<ForeignHoldRun> LazyForeignHold =
+        new(RunForeignHold, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    /// <summary>The foreign-hold run. Cached: it puts a window on the user's screen and starts a
+    /// second process that puts another one there.</summary>
+    internal static ForeignHoldRun ForeignHold => LazyForeignHold.Value;
+
+    /// <summary>Where the pre-flight's control puts OUR window: the same bottom-right column as
+    /// every other rig in this file, above <see cref="ContendedBounds"/> and clear of it.</summary>
+    internal static OverlayBounds PreflightBounds
+    {
+        get
+        {
+            var (width, height) = PointerWindowProbe.PrimarySize;
+            return new OverlayBounds(Math.Max(0, width - 320), Math.Max(0, height - 940), 240, 160);
+        }
+    }
+
+    /// <summary>
+    /// And where the CHILD PROCESS puts its topmost window: immediately to the left of
+    /// <see cref="PreflightBounds"/>, sharing its edge and never overlapping it.
+    ///
+    /// <para><b>Disjoint on purpose, and this is the one thing about the construction worth
+    /// arguing.</b> Two overlapping topmost windows are a RACE — whichever process re-asserted last
+    /// owns the point — and a control that flips with a race measures nothing. Not overlapping makes
+    /// the reading exact: our raise cannot take a point our window does not cover, so the window
+    /// manager gives it to the child every time. What that costs is stated rather than hidden: this
+    /// reproduces "a foreign window owns a point of the path", which is what the pre-flight's rule
+    /// is written on, and NOT "a foreign window occludes our own window despite the re-assert",
+    /// which is the shape the real <c>CoreWindow</c> recurrence had. No user-mode process can
+    /// construct that second shape deterministically — a topmost window raised after ours wins, and
+    /// ours raised after it wins back, which is precisely why the drag-hold fix recovers 8/8 against
+    /// an interloper re-asserting in a tight loop and still loses to a system shell surface.</para>
+    /// </summary>
+    internal static OverlayBounds InterloperBounds
+    {
+        get
+        {
+            var (width, height) = PointerWindowProbe.PrimarySize;
+            return new OverlayBounds(Math.Max(0, width - 560), Math.Max(0, height - 940), 240, 160);
+        }
+    }
+
+    /// <summary>Total travel of the crossing path: far enough left to leave our own 240-wide window
+    /// and enter the child's, straight along one row so every point stays inside both rectangles'
+    /// vertical span.</summary>
+    private const int CrossingDeltaX = -280;
+
+    /// <summary>
+    /// Which point of the crossing path is the first the child owns, derived here rather than
+    /// discovered: the press point sits 120 into our own 240-wide window, each of the eight steps
+    /// travels 35 further left, so steps 1 to 3 are still ours and step 4 is 20 past our left edge.
+    /// <b>The fact asserts this exact index</b>, which is how "the press point was ours and the PATH
+    /// was not" is a reading rather than a hope.
+    /// </summary>
+    internal const int FirstCrossedPoint = 4;
+
+    /// <param name="MachineHasInteractiveDesktop">The machine fact every expectation flips on.</param>
+    /// <param name="Ours">The window this process placed, which the press point belongs to.</param>
+    /// <param name="OursIsUp">The OS reports it visible.</param>
+    /// <param name="Interloper">The topmost window the CHILD PROCESS placed.</param>
+    /// <param name="InterloperIsUp">The OS reports it visible.</param>
+    /// <param name="InterloperProcess">And the pid that owns it, so "foreign" is a reading and not
+    /// an assumption — the whole rule turns on this being some other process.</param>
+    /// <param name="OwnerOfPressPoint">Who the window manager gives the press point to. It must be
+    /// OURS, or the crossing path below would be refused for its very first point and the fact would
+    /// prove nothing about the path.</param>
+    /// <param name="OwnerOfInterloperCentre">And who it gives the child's own centre to. It must be
+    /// the CHILD, or the interloper never reached the desktop and the refusal below would be about
+    /// some third window.</param>
+    /// <param name="AcrossTheInterloper">The pre-flight over a path that starts on our window and
+    /// crosses onto the child's. <b>It must refuse, and name the child.</b></param>
+    /// <param name="InsideOurOwnWindow">The pre-flight over the ordinary path, wholly inside our own
+    /// window, on the same desktop moments later. <b>It must NOT refuse</b> — and it must have
+    /// walked every point to say so.</param>
+    internal sealed record ForeignHoldRun(
+        bool MachineHasInteractiveDesktop,
+        nint Ours,
+        bool OursIsUp,
+        nint Interloper,
+        bool InterloperIsUp,
+        int InterloperProcess,
+        nint OwnerOfPressPoint,
+        nint OwnerOfInterloperCentre,
+        PointerWindowProbe.PathHold AcrossTheInterloper,
+        PointerWindowProbe.PathHold InsideOurOwnWindow)
+    {
+        internal string Trace =>
+            $"ours={PointerWindowProbe.DescribeWindow(Ours)} up={OursIsUp} | "
+            + $"interloper={PointerWindowProbe.DescribeWindow(Interloper)} up={InterloperIsUp} "
+            + $"pid={InterloperProcess} (this process is {Environment.ProcessId}) | "
+            + $"pressPoint->{PointerWindowProbe.DescribeWindow(OwnerOfPressPoint)} "
+            + $"interloperCentre->{PointerWindowProbe.DescribeWindow(OwnerOfInterloperCentre)} | "
+            + $"across: {AcrossTheInterloper.Describe} | inside: {InsideOurOwnWindow.Describe}";
+    }
+
+    private static ForeignHoldRun RunForeignHold()
+    {
+        var clear = PointerWindowProbe.PathHold.Clear("no desktop to walk a path on", 0);
+        if (!PointerWindowProbe.MachineHasInteractiveDesktop)
+        {
+            return new ForeignHoldRun(false, 0, false, 0, false, 0, 0, 0, clear, clear);
+        }
+
+        var ours = PreflightBounds;
+        var (pressX, pressY) = ours.Centre;
+        var (foreignX, foreignY) = InterloperBounds.Centre;
+
+        using var target = PointerWindowProbe.ScratchTarget.Create(
+            ours.X, ours.Y, ours.Width, ours.Height, activatable: true);
+        var targetWindow = target?.Window ?? 0;
+
+        using var interloper = ForeignTopmostChild.Launch(InterloperBounds);
+
+        // The BASELINE leg's own hold, not a weaker one: raise our window, ask the window manager.
+        // Anything less here would make this control easier to satisfy than the thing it controls.
+        var hold = HoldingThePath(overlay: null, targetWindow);
+
+        var ownerOfPressPoint = PointerWindowProbe.HitTestAfterRaising(targetWindow, pressX, pressY);
+        var ownerOfInterloperCentre = PointerWindowProbe.HitTest(foreignX, foreignY);
+
+        var across = PointerWindowProbe.HoldWholeDragPath(
+            "a path that crosses a foreign window", pressX, pressY, CrossingDeltaX, 0, DragSteps, hold);
+
+        // The SAME rig, the same hold, the same press point, moments later — only the travel
+        // differs. A pre-flight that refused here would refuse on a desktop that is fine, which is
+        // strictly worse than the intermittent it was built to replace.
+        var inside = PointerWindowProbe.HoldWholeDragPath(
+            "a path wholly inside our own window", pressX, pressY, DragDeltaX, DragDeltaY, DragSteps, hold);
+
+        var run = new ForeignHoldRun(
+            MachineHasInteractiveDesktop: true,
+            Ours: targetWindow,
+            OursIsUp: PointerWindowProbe.WindowIsVisible(targetWindow),
+            Interloper: interloper.Window,
+            InterloperIsUp: PointerWindowProbe.WindowIsVisible(interloper.Window),
+            InterloperProcess: interloper.Pid,
+            OwnerOfPressPoint: ownerOfPressPoint,
+            OwnerOfInterloperCentre: ownerOfInterloperCentre,
+            AcrossTheInterloper: across,
+            InsideOurOwnWindow: inside);
+
+        // No cursor is restored here because none was borrowed: this run asks the window manager
+        // routing questions and injects nothing at all.
+        return run;
+    }
+
+    // -------------------------------------------------------------------------------------------
     //  (c): does the shell's own task-window rule offer any surface of ours?
     // -------------------------------------------------------------------------------------------
 
@@ -904,4 +1112,186 @@ internal static class OverlayDesktopInputObservations
         window,
         PointerWindowProbe.WindowIsVisible(window),
         PointerWindowProbe.ReadTaskSwitcherState(window));
+}
+
+/// <summary>
+/// <b>A REAL foreign window: this same test executable, re-entered as a second process, holding one
+/// top-most window over a rectangle the parent names.</b>
+///
+/// <para><b>Why a second process and not another window of our own.</b> The pre-flight this exists
+/// to control refuses on exactly one thing — the window manager gives a point of the drag path to a
+/// window owned by ANOTHER PROCESS — and a window of ours can never satisfy it. That narrowness is
+/// what keeps the refusal from becoming an escape hatch, so its control has to be genuinely foreign
+/// or it would be exercising a different rule from the one that ships. The parent asserts the
+/// child's exact handle and its pid, so a refusal naming some third window fails rather than
+/// passes.</para>
+///
+/// <para><b>Why a module initializer, and why it never contends for the lease.</b> A module
+/// initializer runs before the entry point of its own module, so the child takes over ahead of the
+/// xunit runner: it discovers no test, writes no TRX, and — decisively — never asks for
+/// <see cref="RealDesktopLease"/>, which the PARENT holds for the whole of this run. A child that
+/// reached the runner would block on that lease while the parent blocked on the child. Same shape,
+/// same reason, as <see cref="SurfaceExitChild"/>.</para>
+///
+/// <para><b>Why the rectangle travels in the child's own environment block.</b> The xunit v3 runner
+/// owns this executable's command line and rejects what it does not recognise, so the mode is a
+/// variable — set on <see cref="ProcessStartInfo.Environment"/> and never through
+/// <c>Environment.SetEnvironmentVariable</c>, which would be visible to every other fact in this
+/// assembly. Carrying the RECTANGLE in it rather than recomputing it child-side is deliberate: two
+/// processes agreeing on <c>GetSystemMetrics</c> is an assumption, and the parent asserts against
+/// the geometry it sent.</para>
+/// </summary>
+internal sealed class ForeignTopmostChild : IDisposable
+{
+    /// <summary>Set on the child's own environment block only. Its value is the rectangle,
+    /// <c>x,y,width,height</c>.</summary>
+    internal const string ModeVariable = "CCP_FOREIGN_TOPMOST_CHILD";
+
+    /// <summary>The handshake the parent parses: <c>READY pid hwnd</c>.</summary>
+    internal const string Ready = "READY";
+
+    private readonly Process _process;
+
+    private ForeignTopmostChild(Process process) => _process = process;
+
+    /// <summary>The child's process id, read from its own announcement.</summary>
+    internal int Pid { get; private set; }
+
+    /// <summary>The top-most window it placed.</summary>
+    internal nint Window { get; private set; }
+
+    /// <summary>
+    /// Starts the child and returns once it has told us about the window the OS gave it. Every
+    /// failure path disposes, so a handshake that throws cannot leave a foreign top-most window
+    /// parked on the owner's desktop for the rest of the run.
+    /// </summary>
+    internal static ForeignTopmostChild Launch(OverlayBounds bounds)
+    {
+        var start = new ProcessStartInfo(Environment.ProcessPath!)
+        {
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        start.Environment[ModeVariable] = string.Join(
+            ',',
+            bounds.X.ToString(CultureInfo.InvariantCulture),
+            bounds.Y.ToString(CultureInfo.InvariantCulture),
+            bounds.Width.ToString(CultureInfo.InvariantCulture),
+            bounds.Height.ToString(CultureInfo.InvariantCulture));
+
+        var process = Process.Start(start)
+            ?? throw new Xunit.Sdk.XunitException(
+                $"could not start a child of {Environment.ProcessPath} — this control needs a window owned by "
+                + "another process, and there is no such window without one");
+
+        var child = new ForeignTopmostChild(process); // owns the process BEFORE the handshake can throw
+        try
+        {
+            var announcement = process.StandardOutput.ReadLineAsync();
+            TestWait.UntilSync(
+                () => announcement.IsCompleted,
+                "the foreign-window child to announce the top-most window it placed",
+                () => $"child pid {process.Id}, exited={process.HasExited}");
+
+            if (announcement.Result is not { } line)
+            {
+                throw new Xunit.Sdk.XunitException(
+                    "the foreign-window child closed its output without announcing anything (exit code "
+                    + $"{process.ExitCode.ToString(CultureInfo.InvariantCulture)}). "
+                    + $"Its standard error: {process.StandardError.ReadToEnd()}");
+            }
+
+            var fields = line.Split(' ');
+            if (fields.Length != 3 || fields[0] != Ready)
+            {
+                throw new Xunit.Sdk.XunitException(
+                    $"the foreign-window child's announcement was not the agreed handshake: '{line}'");
+            }
+
+            child.Pid = int.Parse(fields[1], CultureInfo.InvariantCulture);
+            child.Window = (nint)long.Parse(fields[2], CultureInfo.InvariantCulture);
+            return child;
+        }
+        catch
+        {
+            child.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Ends the child, and waits for the OPERATING SYSTEM to agree it is gone rather than for the
+    /// child to say so — the window goes with the process, which is the property
+    /// <see cref="SurfaceExitTests"/> measures directly. Bounded through the approved helper.
+    /// </summary>
+    public void Dispose()
+    {
+        if (!_process.HasExited)
+        {
+            try
+            {
+                _process.Kill(entireProcessTree: false);
+            }
+            catch (InvalidOperationException)
+            {
+                // It exited between the question and the kill. Nothing left to end.
+            }
+        }
+
+        TestWait.UntilSync(
+            () => _process.HasExited,
+            $"the foreign-window child (pid {Pid}) to leave the process table, taking its top-most window with it");
+        _process.Dispose();
+    }
+
+    [ModuleInitializer]
+    internal static void TakeOverWhenLaunchedAsAChild()
+    {
+        if (Environment.GetEnvironmentVariable(ModeVariable) is not { Length: > 0 } rectangle)
+        {
+            return;
+        }
+
+        Environment.Exit(Play(rectangle));
+    }
+
+    private static int Play(string rectangle)
+    {
+        var fields = rectangle.Split(',');
+        if (fields.Length != 4)
+        {
+            Console.Error.WriteLine($"{ModeVariable} must be x,y,width,height; it was '{rectangle}'");
+            return 2;
+        }
+
+        var x = int.Parse(fields[0], CultureInfo.InvariantCulture);
+        var y = int.Parse(fields[1], CultureInfo.InvariantCulture);
+        var width = int.Parse(fields[2], CultureInfo.InvariantCulture);
+        var height = int.Parse(fields[3], CultureInfo.InvariantCulture);
+
+        // EVERYTHING HERE IS ON THE CALLING THREAD, and that is not tidiness — it was measured, twice
+        // now. A module initializer holds its module's initialization lock while it runs, so a
+        // SECOND thread whose body touches any type of this module blocks on that lock while the
+        // main thread waits for the thread: the parked variant of this window deadlocked exactly
+        // that way and the parent timed out at 20 s with the child alive and silent
+        // (SurfaceExitObservations.cs:486-492 records the same finding for the same reason).
+        using var window = PointerWindowProbe.ScratchTarget.Create(x, y, width, height);
+
+        // So this window's thread will not pump, and THAT is what this call is for: the shell
+        // replaces a visible top-level window whose thread stops answering with a ghost of its own,
+        // and the parent would then be hit-testing a handle the system substituted for this one.
+        PointerWindowProbe.DisableWindowGhosting();
+
+        Console.Out.WriteLine($"{Ready} {Environment.ProcessId} {(long)(window?.Window ?? 0)}");
+        Console.Out.Flush();
+
+        // Parked on a pipe the parent holds open — waiting for the parent to speak, or to die, and
+        // never for time to pass. A parent that is killed outright closes this pipe, so the read
+        // returns null and the window goes with this process rather than being left on the owner's
+        // desktop.
+        Console.ReadLine();
+        return 0;
+    }
 }

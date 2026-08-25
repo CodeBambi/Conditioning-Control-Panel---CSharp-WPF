@@ -504,11 +504,11 @@ internal static class PointerWindowProbe
         var contendedX = 0;
         var contendedY = 0;
 
-        for (var step = 1; step <= steps; step++)
+        // Skip(1) because index 0 of the path is the PRESS point, injected above. The enumerator is
+        // shared with HoldWholeDragPath so the pre-flight and the injection can never disagree about
+        // where this drag goes.
+        foreach (var (stepX, stepY) in DragPathPoints(x, y, deltaX, deltaY, steps).Skip(1))
         {
-            var stepX = x + (deltaX * step / steps);
-            var stepY = y + (deltaY * step / steps);
-
             // Held, then DRAINED, then the counter is read: a z-order change can itself make the
             // system re-synthesise a move, and counting that as this step's delivery would be the
             // instrument answering its own question.
@@ -555,6 +555,192 @@ internal static class PointerWindowProbe
             : $"drag path {Delivered}/{Steps} steps delivered — the first that did not arrive was aimed at "
                 + $"({ContendedX},{ContendedY}), which the window manager gives to {DescribeWindow(Contender)} "
                 + "even with this run's own stack re-asserted over it";
+    }
+
+    /// <summary>
+    /// Every point <see cref="InjectDragAt"/> will put the cursor on, in the order it will: the
+    /// PRESS point first, then one per step.
+    ///
+    /// <para><b>One enumerator, used by the injection and by the pre-flight that clears it.</b> A
+    /// pre-flight over a path the drag does not actually take is a check of nothing, and the step
+    /// arithmetic is the one place the two could silently diverge — so there is only one copy of
+    /// it.</para>
+    /// </summary>
+    internal static IEnumerable<(int X, int Y)> DragPathPoints(int x, int y, int deltaX, int deltaY, int steps)
+    {
+        yield return (x, y);
+        for (var step = 1; step <= steps; step++)
+        {
+            yield return (x + (deltaX * step / steps), y + (deltaY * step / steps));
+        }
+    }
+
+    /// <summary>
+    /// Stop the shell substituting a GHOST window for this process's windows.
+    ///
+    /// <para>Windows replaces a visible top-level window whose thread has stopped answering with a
+    /// window of its own, and anything hit-testing the original point then gets the SHELL's handle
+    /// back instead. A harness process whose only job is to hold a window at a rectangle does not
+    /// pump, so a fact asserting on that window's exact handle would be racing the ghost timer. Only
+    /// the process that calls it is affected, and no window this file creates is ever a real
+    /// application window.</para>
+    /// </summary>
+    internal static void DisableWindowGhosting()
+    {
+        if (WindowsHost)
+        {
+            DisableProcessWindowsGhosting();
+        }
+    }
+
+    /// <summary>The process that owns a window, or 0 when there is no window to ask about.</summary>
+    internal static uint OwningProcessOf(nint window)
+    {
+        if (!WindowsHost || window == 0)
+        {
+            return 0;
+        }
+
+        GetWindowThreadProcessId(window, out var process);
+        return process;
+    }
+
+    /// <summary>
+    /// A window belonging to ANOTHER PROCESS — the only shape of contention this instrument is
+    /// willing to call a machine fact.
+    ///
+    /// <para><b>Deliberately narrow, because a wide answer here would be an escape hatch.</b> Every
+    /// window the real-desktop rigs place — the window underneath, the keeper, the overlay, the
+    /// held-path contender — belongs to THIS process, so a point that answers to one of ours is
+    /// either the leg working or a defect of this port, and both must be measured rather than
+    /// excused. A handle of 0 is not foreign either: off Windows every read-back is 0, and a
+    /// refusal keyed on that would fire on every Linux run and quietly delete the facts.</para>
+    /// </summary>
+    internal static bool ForeignWindow(nint window) =>
+        WindowsHost && window != 0 && OwningProcessOf(window) != GetCurrentProcessId();
+
+    /// <summary>
+    /// What the window manager says about every point a drag is about to travel over, asked BEFORE
+    /// anything is injected.
+    /// </summary>
+    /// <param name="Label">Which leg was about to be driven, for the refusal text.</param>
+    /// <param name="Contended">A window of another process holds a point of the path and kept it
+    /// through every re-assertion of this run's own stack.</param>
+    /// <param name="Owner">That window. 0 when the path is clear.</param>
+    /// <param name="OwnerProcess">And the process that owns it, which is what "foreign" means
+    /// here.</param>
+    /// <param name="X">Where the contended point was.</param>
+    /// <param name="Y">Ditto.</param>
+    /// <param name="Index">Its position along the path — 0 is the press point and 1..n are the
+    /// steps, so an index above 0 says in one number that the PRESS point was ours and the PATH was
+    /// not. -1 when the path is clear.</param>
+    /// <param name="Points">How many points the path has.</param>
+    /// <param name="Walked">How many were actually asked about. Equal to <paramref name="Points"/>
+    /// on a clear path; a walk that degenerated to nothing reports 0 and cannot be mistaken for a
+    /// clean answer.</param>
+    /// <param name="Attempts">How many times this run re-asserted its own stack over the contended
+    /// point before giving up on it.</param>
+    internal readonly record struct PathHold(
+        string Label,
+        bool Contended,
+        nint Owner,
+        uint OwnerProcess,
+        int X,
+        int Y,
+        int Index,
+        int Points,
+        int Walked,
+        int Attempts)
+    {
+        /// <summary>The answer of a walk that never happened — no desktop to walk on, or no leg to
+        /// ask about. <b>It reports zero points walked</b>, so it can never be read as a path that
+        /// was checked and found clear.</summary>
+        internal static PathHold Clear(string label, int points) =>
+            new(label, false, 0, 0, 0, 0, -1, points, 0, 0);
+
+        internal string Describe => Contended
+            ? $"drag path pre-flight: point {Index + 1} of {Points} ({X},{Y}) held by "
+                + $"{DescribeWindow(Owner)} of pid {OwnerProcess} after {Attempts} re-assertions"
+            : $"drag path pre-flight: {Walked}/{Points} points answer to this process";
+
+        /// <summary>
+        /// The machine-class refusal, written once so all four facts refuse in identical words.
+        ///
+        /// <para>It is only ever reported when <see cref="Contended"/> is true; the other branch
+        /// exists so the text is a value rather than a nullable a caller could forget to check.</para>
+        /// </summary>
+        internal string Refusal => !Contended
+            ? $"no foreign window holds the drag path ({Describe})"
+            : "A FOREIGN TOPMOST WINDOW OWNS A POINT OF THE DRAG PATH THIS FACT IS ABOUT TO INJECT OVER, so the "
+                + "drag was never driven and no reading is offered. On the "
+                + $"\"{Label}\" leg, point {Index + 1} of {Points} — aimed at ({X},{Y}) — is given by the window "
+                + $"manager to {DescribeWindow(Owner)}, owned by pid {OwnerProcess} and NOT by this process, and it "
+                + $"still is after this run re-asserted its own window stack over that exact point {Attempts} times. "
+                + "Injected anyway, every WM_MOUSEMOVE would be synthesised at peek time for THAT window while the "
+                + "button messages still reached ours, which reads as downs>0 with dragMoves=0 and is "
+                + "indistinguishable from a machine that cannot inject at all — the reading that cost this board "
+                + "three wrong diagnoses. THIS IS A PROPERTY OF THE MACHINE'S DESKTOP, NOT OF THE PORT: a system "
+                + "shell surface (Windows.UI.Core.CoreWindow has done it here) can hold a point that no in-process "
+                + "mechanism is able to take back, which RealDesktopCollection.cs:45-49 names in advance as a "
+                + "residue this suite admits rather than hides, and which the machine-wide lease cannot exclude "
+                + "because the window is not this port's harness. It is not satisfiable by configuration during a "
+                + "contract run. The refusal is by NAME and never by count: a path held by a window of OURS is not "
+                + "this condition and still fails.";
+    }
+
+    /// <summary>
+    /// Hold every point of a drag's path and ask the window manager who owns each, BEFORE the drag
+    /// is injected.
+    ///
+    /// <para><b>Why the whole path and not the press point.</b> The press point is the only point
+    /// the callers ever asked about, and the drag then travels over <c>steps</c> more that nobody
+    /// had claimed. A window over part of the rectangle takes every MOVE and leaves every CLICK,
+    /// because a button message is posted to the queue of the window under the cursor when the event
+    /// is injected while a <c>WM_MOUSEMOVE</c> is synthesised at peek time for whatever owns the
+    /// cursor's point then. That asymmetry is the whole finding this pre-flight exists for.</para>
+    ///
+    /// <para><b>Why it cannot become an escape hatch.</b> It reports a point only when the owner
+    /// belongs to ANOTHER PROCESS (<see cref="ForeignWindow"/>) and only after
+    /// <see cref="MaxRaiseAttempts"/> applications of the caller's own <paramref name="hold"/> —
+    /// the same re-assertion the drag itself performs per step — have failed to take the point back.
+    /// A transient occluder loses to the first re-assertion and is never reported; a window of this
+    /// process's own is never reported at all; and off Windows nothing is.</para>
+    ///
+    /// <para>Bounded iteration, no wall-clock wait, and it never grants an answer: the handles are
+    /// the operating system's.</para>
+    /// </summary>
+    internal static PathHold HoldWholeDragPath(
+        string label, int x, int y, int deltaX, int deltaY, int steps, Func<int, int, nint> hold)
+    {
+        ArgumentNullException.ThrowIfNull(hold);
+
+        var points = steps + 1;
+        var index = 0;
+        foreach (var (pointX, pointY) in DragPathPoints(x, y, deltaX, deltaY, steps))
+        {
+            var owner = (nint)0;
+            var attempts = 0;
+            do
+            {
+                owner = hold(pointX, pointY);
+                attempts++;
+            }
+            while (ForeignWindow(owner) && attempts < MaxRaiseAttempts);
+
+            if (ForeignWindow(owner))
+            {
+                return new PathHold(
+                    label, true, owner, OwningProcessOf(owner), pointX, pointY, index, points, index + 1, attempts);
+            }
+
+            index++;
+        }
+
+        // The COUNT WALKED, not the count intended: a walk that visited one point and stopped must
+        // not be able to report the same clean answer as one that visited all of them. That hole was
+        // real — a mutation reducing this loop to the press point alone read back as 9/9 until the
+        // clear answer started carrying what it actually did.
+        return new PathHold(label, false, 0, 0, 0, 0, -1, points, index, 0);
     }
 
     /// <summary>One absolute mouse event at a point on the virtual desktop.</summary>
@@ -1213,6 +1399,7 @@ internal static class PointerWindowProbe
     private static extern nint SetWindowLongPtrW(nint window, int index, nint value);
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool GetWindowRect(nint window, out RectNative rect);
+    [DllImport("user32.dll")] private static extern void DisableProcessWindowsGhosting();
     [DllImport("user32.dll")] private static extern nint WindowFromPoint(Point point);
     [DllImport("user32.dll")] private static extern nint GetTopWindow(nint parent);
     [DllImport("user32.dll")] private static extern nint GetWindow(nint window, uint command);

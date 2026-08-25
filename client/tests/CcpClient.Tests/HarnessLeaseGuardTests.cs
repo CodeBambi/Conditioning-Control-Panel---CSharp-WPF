@@ -21,7 +21,7 @@ namespace CcpClient.Tests;
 /// harness measured waiting 4.08 s to 6.41 s for the run to let the lease go, so it was excluded rather
 /// than merely lucky. The names that came out of the unleased runs are the board's own three-times-misdiagnosed
 /// signature — <c>the drag did not hold its path</c> in
-/// <c>OverlayDesktopInputTests.cs:149</c>, a synthesised keystroke that never became a character in
+/// <c>OverlayDesktopInputTests.cs:173</c>, a synthesised keystroke that never became a character in
 /// <c>InputCapabilityTests.cs:221</c>, and a foreground stolen by a foreign
 /// <c>WindowsForms10.Window</c> class in <c>PointerCoexistenceTests.cs:133</c>.</para>
 ///
