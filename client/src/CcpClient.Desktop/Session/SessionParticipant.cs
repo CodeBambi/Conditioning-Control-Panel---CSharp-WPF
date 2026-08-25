@@ -884,6 +884,17 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// an answer to "where do I put one", exactly as the flash panel names its images folder.</summary>
     public string SpiralsFolder => SpiralLibrary.Folder(AssetsRootFor(_dataDirectory));
 
+    /// <summary>
+    /// Where THIS app keeps every document above — the composition root's real data directory, not
+    /// a recomputed <c>DefaultSettingsPath()</c>, so a build running under a harness data root
+    /// names the root it is actually using.
+    ///
+    /// <para>The System door shows it beside the shipping app's folder
+    /// (<see cref="Views.Pages.SettingsHandoverNotices"/>), because the two products keep separate
+    /// settings and nothing said so.</para>
+    /// </summary>
+    public string DataFolder => _dataDirectory;
+
     /// <summary>Where the flash pool reads the user's images from. The module panel shows this
     /// so an empty pool has an answer to "where do I put them", which WPF's own comment calls
     /// its most common first-run dead end (<c>FlashService.cs:589-597</c>).</summary>

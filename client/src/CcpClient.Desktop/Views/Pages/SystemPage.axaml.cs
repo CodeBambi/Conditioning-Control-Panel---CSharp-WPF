@@ -61,6 +61,13 @@ public partial class SystemPage : UserControl
         MotionLevelPicker.SelectionChanged += (_, _) => OnMotionLevelPicked();
         DescribeMotion();
 
+        // The settings handover sentence. It is set once and never moves: neither folder can
+        // change while the app is up, and there is no I/O behind it — the shipping app's folder is
+        // NAMED, never opened (SettingsHandoverNotices records why the answer is not a migration).
+        SettingsHandoverTitle.Text = SettingsHandoverNotices.Title;
+        SettingsHandoverState.Text = SettingsHandoverNotices.Describe(
+            session.DataFolder, Entitlement.ShippingAppDataLocation.Resolve());
+
         var lines = host.Trace.Entries.Concat(
             host.Participants.Select(p => $"{p.Name}: {(p.Running ? "running" : "stopped")}"));
         if (host.Capabilities is { } capabilities)
