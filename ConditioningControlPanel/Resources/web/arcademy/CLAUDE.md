@@ -2132,6 +2132,33 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     harder; never hide. The web host's account chip (`shell/accountchip.js`) also offers "Open my
     card" from the bar, so the full ID is one tap away on a phone either way.
 
+103. **THE SPLASH EXIT IS A CHAIN OF GATES NOW, AND SILENCE HAS TO ANSWER INSTANTLY
+    (owner report 2026-08-25, "wait for the jingle to end before opening the Arcademy").**
+    `intro_bed.mp3` is 4.000s and the splash used to walk out on it on BOTH host paths - the
+    autoplay host at INTRO_MIN_MS + the fade (hidden ~3.27s from t0) and the knock host at
+    KNOCK_EXIT_MS + the fade (hidden ~1.02s after the strike). `dismissLoader()` is now
+    RE-ENTRANT and each gate is a "come back to me", never a sleep: the knock, then the bed,
+    then the INTRO_MIN_MS floor. Three things about it are load-bearing.
+    - **A CUE THAT WILL NOT SOUND MUST SAY SO INSIDE THE DISPATCH.** `shell/audio.js` answers
+      the new `detail.onEnded` hook with `'dropped'` SYNCHRONOUSLY on every road that never
+      reaches an element (mute, master 0, a zero fx bus, no AudioContext, a SAMPLE_ONLY name
+      with no file). Move one of those answers onto a timer and every muted player sits
+      through the cap staring at a loading screen for a sound they were never going to hear.
+      A muted mixer, a zero bus and a host with no `intro_bed.mp3` all dismiss on the OLD
+      timing, and that is the test that proves the hook is wired the right way round.
+    - **THE CAP IS NOT OPTIONAL AND IT IS BOOT'S OWN.** `onEnded` is a courtesy: a host with
+      no consumer on the `arcademy-sfx` bus, an older audio.js, or an element that stalls
+      forever answers NOTHING. `BED_HOLD_CAP_MS` (INTRO_BED_MAX_MS + 200) is measured from the
+      strike and ends the hold whatever the audio is doing. Never make the splash's exit
+      depend on a promise only the mixer can keep.
+    - **REDUCED MOTION MAY NEVER ACQUIRE A HOLD** (trap 66 again): it takes no cues, so it
+      strikes no bed, so there is nothing to wait for and it still dismisses at ~3.27s.
+    What makes the extra ~1.4s of cover safe is that the loader's CSS timeline ALREADY loops
+    when the beat is over (`arc-intro-breath` from 3.1s, `arc-intro-rail-chase` from 2.3s,
+    both `infinite`). Shorten those to one-shots and the splash freezes on its last frame for
+    over a second while the jingle finishes. Measured after: hidden at ~4.6s from t0 on the
+    autoplay host, and knock + ~4.4s on the browser (headless, real mp3 decode).
+
 ## 5. The game module contract (short version)
 
 ```js
