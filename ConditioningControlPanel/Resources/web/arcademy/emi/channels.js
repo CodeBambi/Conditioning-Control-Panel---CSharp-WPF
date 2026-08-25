@@ -43,10 +43,14 @@ import { makeRng } from '../core/rng.js';
  * Every number the wave has, in one frozen object, the way voice.js and vox.js
  * keep theirs - so the owner can retune the cadence without reading the paint. */
 export const SL_DIALS = Object.freeze({
-  THEATRE_IDLE_MS: 90000,     // the floor: no channel before this much player silence
-  ROLL_MS: 20000,             // wheel cadence while eligible
-  GLOBAL_COOLDOWN_MS: 180000, // no two takeovers closer than this (deep idle exempt)
-  PER_SESSION_CAP: 6,         // rolled channels per sitting (deep idle exempt)
+  /* RETUNED 2026-08-25 (owner: "the screen animations are entertaining, they
+   * should be frequent and used to distance the barks"). Was 90s / 20s / 180s
+   * / 6 - the lab-experiment cadence. Now a channel can roll after half a
+   * minute of silence and about once a minute after that. */
+  THEATRE_IDLE_MS: 30000,     // the floor: no channel before this much player silence
+  ROLL_MS: 10000,             // wheel cadence while eligible
+  GLOBAL_COOLDOWN_MS: 60000,  // no two takeovers closer than this (deep idle exempt)
+  PER_SESSION_CAP: 14,        // rolled channels per sitting (deep idle exempt)
   TAKEOVER_MAX_MS: 10000,     // the hard cap (the screensaver alone is exempt)
   BLIP_MS: 180,               // collapse-to-line + line-to-dot, total
   OFFER_MS: 5000,             // the "wanna see?" window
@@ -58,9 +62,9 @@ export const SL_DIALS = Object.freeze({
   WRONG_ODDS: 1 / 40,         // per rolled-channel exit, labSeen, 1/session
   WRONG_MAX_MS: 400,
   WEIGHTS: Object.freeze({ pong: 30, browsing: 30, watching: 18, reruns: 12, shop: 7 }),
-  COOLDOWN_MS: Object.freeze({
-    pong: 480000, browsing: 480000, watching: 900000,
-    reruns: 1200000, shop: 1800000,
+  COOLDOWN_MS: Object.freeze({           // per channel, halved 2026-08-25 with the cadence above
+    pong: 240000, browsing: 240000, watching: 480000,
+    reruns: 600000, shop: 900000,
   }),
 });
 

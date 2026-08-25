@@ -19,8 +19,11 @@
  * MOMENTS. A bark REPLACES that reaction, and only sometimes:
  *
  *   1. odds        - per pool, default 0.25. One time in four, roughly.
- *   2. floor       - >= 90s between any two barks, globally (BARK_FLOOR_MS in
- *                    voice.js). Pools marked `ceremony:true` are exempt: an S,
+ *   2. floor       - >= 40s between any two barks, globally (BARK_FLOOR_MS in
+ *                    voice.js; 90s until 2026-08-25). Off-class moments also
+ *                    get CAMPUS_ODDS_MULT (x1.5) on the odds below - in class
+ *                    the player is looking at the game, not at her.
+ *                    Pools marked `ceremony:true` are exempt: an S,
  *                    a mastered card, a streak milestone is rare by nature.
  *   3. no-repeat   - never the same line twice in a row from one pool. Pools of
  *                    one line carry `noRepeat:false` so they are not self-muting.
