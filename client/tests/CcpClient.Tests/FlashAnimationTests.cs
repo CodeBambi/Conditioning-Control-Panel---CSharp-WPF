@@ -242,9 +242,10 @@ public class FlashAnimationTests
         Assert.Equal(0, rig.Presenter.ClipsOpened);
         Assert.Equal(0, rig.Presenter.LiveClips);
 
-        // The only timers on the clock are the surface's LIFETIME and the topmost cadence. A frame
-        // advance for a picture would be a tick that changes nothing until the flash expires.
-        Assert.Equal(2, rig.Clock.PendingCount);
+        // The only timers on the clock are the fade's DEADLINE, the fade's RAMP and the topmost
+        // cadence. A frame advance for a picture would be a tick that changes nothing until the
+        // flash expires — and the ramp is not one of those: it is carrying the flash's onset.
+        Assert.Equal(3, rig.Clock.PendingCount);
     }
 
     [Fact]
@@ -289,10 +290,12 @@ public class FlashAnimationTests
         rig.Presenter.Show(["clip.gif"]);
         var animation = rig.Animations.Single();
 
-        // The surface retires itself on the SET's own lifetime timer and tells nobody, so the clip
-        // notices at its next advance. A GDI+ image handle and a pinned buffer per stranded clip is
-        // a leak with a session's worth of flashes behind it.
+        // The lifetime is when the surface starts LEAVING — the fade-out ramps it off over about
+        // 417 ms beyond that (FlashService.cs:2105-2123) — and the fade takes the clip down with the
+        // surface. A GDI+ image handle and a pinned buffer per stranded clip is a leak with a
+        // session's worth of flashes behind it.
         rig.Clock.Advance(FlashSurfacePresenter.SurfaceLifetime);
+        rig.Ramp(TimeSpan.FromSeconds(1.0 / 2.4) + FlashFade.Cadence);
         rig.Clock.Advance(TimeSpan.FromMilliseconds(600));
 
         Assert.Equal(0, rig.Presenter.LiveClips);
@@ -374,6 +377,17 @@ public class FlashAnimationTests
         public List<StubAnimation> Animations { get; } = [];
 
         public FlashSurfacePresenter Presenter => _presenter.Value;
+
+        /// <summary>Steps the FADE's ramp on the injected clock, one <see cref="FlashFade.Cadence"/>
+        /// at a time, for <paramref name="span"/> of clock time. Zero wall-clock: a re-arming timer
+        /// re-arms from the clock's CURRENT time, so one jump is one tick.</summary>
+        public void Ramp(TimeSpan span)
+        {
+            for (var stepped = TimeSpan.Zero; stepped < span; stepped += FlashFade.Cadence)
+            {
+                Clock.Advance(FlashFade.Cadence);
+            }
+        }
     }
 
     /// <summary>A still decoder: every path renders one flat frame at the size the geometry asks
@@ -454,6 +468,13 @@ public class FlashAnimationTests
         public void Reassert()
         {
         }
+
+        /// <summary>The FADE's seam. It is implemented here because the presenter ramps every
+        /// surface it places, and a double that refused would have its flash taken down at the
+        /// first ramp tick — which is the presenter's correct behaviour and would make every clip
+        /// fact in this file a fact about a surface that is no longer there.</summary>
+        public CapabilityState SetOpacity(double opacity) =>
+            new CapabilityState.Available("recording presence: composited");
 
         public CapabilityState SetClickThrough(bool clickThrough) =>
             new CapabilityState.Available("recording presence: flipped");

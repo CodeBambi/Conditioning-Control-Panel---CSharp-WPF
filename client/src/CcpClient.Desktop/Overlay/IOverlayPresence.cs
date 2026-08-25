@@ -154,4 +154,44 @@ public interface IOverlayPresence : IDisposable
 
     /// <summary>True only while a surface this presence put on screen is confirmed present.</summary>
     bool IsPresenting { get; }
+
+    /// <summary>
+    /// Changes the alpha the compositor draws an already-presented surface at, and changes NOTHING
+    /// else. This is the fade path.
+    ///
+    /// <para><b>Why it is not <see cref="Present"/> with a different opacity.</b> Upstream ramps a
+    /// flash's opacity in and out on its render heartbeat — <c>FADE_PER_SEC = 2.4</c>
+    /// (<c>Services/Flash/FlashService.cs:2018</c>), applied per tick at <c>:2073</c> and
+    /// <c>:2108-2118</c> — so alpha moves tens of times a second for as long as a surface is
+    /// ramping. <see cref="Present"/> walks the OS's whole top-level z-order and asks the window
+    /// manager's hit test in both polarities; at that cadence it would be a full-screen window
+    /// catching the user's clicks sixty times a second. This touches the layered alpha and reads it
+    /// back, and that is all: no style write, no z-order walk, no hit test.</para>
+    ///
+    /// <para><b>And it must not cost a content re-proof.</b> A geometry or style change invalidates
+    /// what the surface holds, so the next <see cref="Paint"/> re-reads the WHOLE surface. An alpha
+    /// change does not touch the window's buffer at all — <c>LWA_ALPHA</c> is the compositor's
+    /// blend, not the pixels — so a ramp leaves the band sweep exactly where it was. A fade that
+    /// forced a full re-read per tick would turn a 0.42 s ramp into tens of full-surface read-backs
+    /// on the UI thread.</para>
+    ///
+    /// <para><see cref="CapabilityState.Available"/> means the OS was asked for the alpha BACK and
+    /// holds the new one. It never means the write returned.</para>
+    ///
+    /// <para><b>The default REFUSES, and that is the honest default.</b> A backend with no
+    /// per-surface alpha of its own has nothing to ramp; saying so is a refusal a caller can read,
+    /// where a silent success would be a fade that never happened. A caller that fades treats the
+    /// refusal exactly as it treats a failed <see cref="Paint"/>: the surface comes down rather
+    /// than being left at whatever alpha it last held
+    /// (<c>Effects/FlashSurfacePresenter.cs</c>, <c>StepFade</c>).</para>
+    /// </summary>
+    /// <param name="opacity">The new uniform opacity, in (0, 1]. Zero is not expressible — see
+    /// <see cref="OverlaySurfaceRequest"/> — so a ramp that has reached the floor withdraws the
+    /// surface instead, which is also what upstream does when its fade reaches zero
+    /// (<c>FlashService.cs:2117-2123</c>).</param>
+    CapabilityState SetOpacity(double opacity) =>
+        new CapabilityState.Unavailable(new CapabilityReason(
+            OverlayReasonCodes.OverlayMechanismAbsent,
+            $"this overlay presence holds no per-surface alpha it could ramp to {opacity:0.###}; nothing was "
+            + "attempted and nothing on screen changed"));
 }

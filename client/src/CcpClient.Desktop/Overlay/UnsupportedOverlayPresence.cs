@@ -67,6 +67,11 @@ public sealed class UnsupportedOverlayPresence : IOverlayPresence
 
     public CapabilityState Withdraw() => new CapabilityState.Unavailable(_reason);
 
+    /// <summary>Refused with this presence's OWN reason rather than the interface's generic one:
+    /// a build with no overlay has no surface to fade, and the reason that names the missing
+    /// mechanism and its manual gate is the more useful of the two.</summary>
+    public CapabilityState SetOpacity(double opacity) => new CapabilityState.Unavailable(_reason);
+
     public void Dispose()
     {
         // Nothing was ever acquired. Deliberately empty, and deliberately not reporting success

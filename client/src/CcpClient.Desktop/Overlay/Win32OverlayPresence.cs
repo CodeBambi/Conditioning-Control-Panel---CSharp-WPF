@@ -1219,4 +1219,83 @@ public sealed class Win32OverlayPresence : IOverlayPresence
             + "of a sweep that re-reads every row of an unchanged surface within that many frames, the whole "
             + "surface having been read back and matched when this one was last presented, re-styled or re-raised";
     }
+
+    /// <summary>
+    /// THE FADE PATH: one <c>SetLayeredWindowAttributes(LWA_ALPHA)</c> and one read-back, on a
+    /// surface that is already up.
+    ///
+    /// <para><b>Deliberately the cheapest round-trip in this class, because a ramp runs it tens of
+    /// times a second.</b> It writes no style, moves no window, walks no z-order, asks no hit test
+    /// and blits nothing. What it does do is ask the OS for the alpha BACK, because
+    /// <see cref="CapabilityState.Available"/> on this interface has only ever meant the operating
+    /// system was asked and agreed — and a layered window whose alpha write was quietly declined is
+    /// exactly the ghost <see cref="OverlayReasonCodes.OverlayNotComposited"/> exists for.</para>
+    ///
+    /// <para><b>It does NOT go through <see cref="SetCurrent"/>, and that is the load-bearing
+    /// line.</b> <see cref="SetCurrent"/> drops <c>_contentConfirmedFully</c>, so the next
+    /// <see cref="Paint"/> re-reads the WHOLE surface instead of one band of it — right after a
+    /// geometry or style change, which can genuinely have moved the pixels out from under the
+    /// frame. An alpha change cannot: <c>LWA_ALPHA</c> is the compositor's blend of a buffer this
+    /// call never touches, and the read-back compares that buffer. Routing a 60 Hz ramp through
+    /// <see cref="SetCurrent"/> would put a full-surface read-back (4.6 ms of the UI thread at
+    /// 2880x1800, measured — see <see cref="ContentBands"/>) on every frame of every fading flash,
+    /// which is a content re-proof storm bought for nothing.</para>
+    /// </summary>
+    public CapabilityState SetOpacity(double opacity)
+    {
+        if (_disposed)
+        {
+            return Unavailable(OverlayReasonCodes.OverlayPresenceDisposed,
+                "this overlay presence was disposed; there is no surface whose alpha could change");
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return Unavailable(OverlayReasonCodes.OverlayMechanismAbsent,
+                "Win32OverlayPresence holds its alpha through SetLayeredWindowAttributes, which is a Windows "
+                + "mechanism; nothing was ever presented and nothing changed");
+        }
+
+        if (!_presenting || _current is null)
+        {
+            return Unavailable(OverlayReasonCodes.OverlayNothingPresented,
+                "no surface is presented by this presence, so there is no alpha on screen to ramp and nothing "
+                + "succeeded");
+        }
+
+        // Validated at the boundary, exactly as Present's is: opacity zero is not a capability
+        // state, it is a caller bug, and a ramp that has reached the floor withdraws instead.
+        var request = new OverlaySurfaceRequest(_current.Bounds, opacity, _current.ClickThrough);
+
+        if (!Win32OverlayInterop.SetLayeredWindowAttributes(
+                _window, 0, request.Alpha, Win32OverlayInterop.LwaAlpha))
+        {
+            var error = Marshal.GetLastWin32Error();
+            return Unavailable(OverlayReasonCodes.OverlayNotComposited,
+                $"SetLayeredWindowAttributes(LWA_ALPHA, {request.Alpha}) returned FALSE for window 0x{_window:X} "
+                + $"(last-error {error}); the surface still composites at the alpha it held and the fade did not "
+                + "move");
+        }
+
+        if (!Win32OverlayInterop.GetLayeredWindowAttributes(_window, out _, out var held, out var flags)
+            || (flags & Win32OverlayInterop.LwaAlpha) == 0
+            || held != request.Alpha)
+        {
+            return Unavailable(OverlayReasonCodes.OverlayNotComposited,
+                $"the OS holds alpha {held} with flags 0x{flags:X} for window 0x{_window:X} after "
+                + $"{request.Alpha} was written (opacity {request.Opacity:0.###}); the surface is not composited "
+                + "at the strength the fade asked for");
+        }
+
+        // Straight to the field, NOT through SetCurrent: see the remarks. The alpha the class
+        // reports is now the new one; the content proof the class holds is untouched, because the
+        // window's buffer is untouched.
+        _current = request;
+
+        return new CapabilityState.Available(
+            $"window 0x{_window:X} now composites at LWA_ALPHA {request.Alpha} (opacity {request.Opacity:0.###}), "
+            + "read back out of the OS rather than assumed from the write. Changes the COMPOSITING STRENGTH only "
+            + "— no style, no geometry, no z-order and no pixels were touched, and that a human sees the "
+            + "difference is a headed claim");
+    }
 }

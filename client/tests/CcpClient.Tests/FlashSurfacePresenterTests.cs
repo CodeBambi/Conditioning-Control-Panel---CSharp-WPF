@@ -24,6 +24,22 @@ public class FlashSurfacePresenterTests
 {
     private static readonly OverlayBounds Display = new(0, 0, 1920, 1080);
 
+    /// <summary>
+    /// Upstream's <c>FADE_PER_SEC</c> WRITTEN OUT (<c>Services/Flash/FlashService.cs:2018</c>),
+    /// never read from <see cref="FlashFade.RatePerSecond"/>.
+    ///
+    /// <para>Every expectation below is computed from THIS number, because an expectation computed
+    /// from the constant under test moves with the mutation and proves nothing: the reproducing
+    /// lane caught exactly that shape in its own first draft of the flash-geometry fact. Halving
+    /// the port's rate must red these facts, and it only can if the number they check against is
+    /// upstream's.</para>
+    /// </summary>
+    private const double UpstreamFadePerSecond = 2.4;
+
+    /// <summary>How long a ramp to FULL opacity takes at upstream's rate: 1.0 / 2.4, about
+    /// 417 ms — the fade-in, and the fade-out, at the top of the opacity dial.</summary>
+    private static readonly TimeSpan FullRamp = TimeSpan.FromSeconds(1.0 / UpstreamFadePerSecond);
+
     // ---------------------------------------------------------------------------------
     //  one surface per image, WPF's stagger, WPF's lifetime
     // ---------------------------------------------------------------------------------
@@ -49,7 +65,7 @@ public class FlashSurfacePresenterTests
     }
 
     [Fact]
-    public void EachSurfaceLeavesTheScreenWhenWpfsLifetimeExpires_AndNotBefore()
+    public void EachSurfaceHoldsUntilWpfsLifetimeExpires_AndThenFADESOff_RatherThanVanishing()
     {
         var rig = new Rig();
         rig.Presenter.Show(["a.png"]);
@@ -62,9 +78,17 @@ public class FlashSurfacePresenterTests
         Assert.Equal(1, rig.Presenter.LiveSurfaces);
         Assert.Equal(0, rig.Presences[0].WithdrawCalls);
 
+        // THE LIFETIME IS THE DEADLINE, NOT THE END. Upstream's downward ramp only STARTS at
+        // ExpiresAt (FlashService.cs:2105-2106), so a flash is on screen for its lifetime plus one
+        // ramp — and it is still up, still composited, one tick after the deadline.
         rig.Clock.Advance(TimeSpan.FromMilliseconds(1));
+        Assert.Equal(1, rig.Presenter.LiveSurfaces);
+        Assert.Equal(0, rig.Presences[0].WithdrawCalls);
+
+        rig.Ramp(FullRamp + FlashFade.Cadence);
         Assert.Equal(0, rig.Presenter.LiveSurfaces);
         Assert.Equal(1, rig.Presences[0].WithdrawCalls);
+        Assert.Equal(1, rig.Presenter.SurfacesFadedOut);
     }
 
     [Fact]
@@ -73,9 +97,9 @@ public class FlashSurfacePresenterTests
         var rig = new Rig();
 
         rig.Presenter.Show(["a.png"]);
-        rig.Clock.Advance(FlashSurfacePresenter.SurfaceLifetime);
+        rig.RunOutOneSurface();
         rig.Presenter.Show(["b.png"]);
-        rig.Clock.Advance(FlashSurfacePresenter.SurfaceLifetime);
+        rig.RunOutOneSurface();
         rig.Presenter.Show(["c.png"]);
 
         // One presence, three flashes: each carries a registered window class and a top-level
@@ -126,7 +150,7 @@ public class FlashSurfacePresenterTests
         };
 
         rig.Presenter.Show(["a.png"]);
-        rig.Clock.Advance(FlashSurfacePresenter.SurfaceLifetime);
+        rig.RunOutOneSurface();
         rig.Presenter.Show(["b.png"]);
 
         Assert.Equal(2, rig.Presences[0].PresentCalls);
@@ -149,6 +173,8 @@ public class FlashSurfacePresenterTests
         Assert.Equal(2, rig.Presences[0].ReassertCalls);
 
         rig.Clock.Advance(FlashSurfacePresenter.SurfaceLifetime);
+        rig.Ramp(FullRamp + FlashFade.Cadence);
+        Assert.Equal(0, rig.Presenter.LiveSurfaces);
         var afterRetirement = rig.Presences[0].ReassertCalls;
 
         rig.Clock.Advance(TimeSpan.FromSeconds(30));
@@ -528,6 +554,182 @@ public class FlashSurfacePresenterTests
     }
 
     // ---------------------------------------------------------------------------------
+    //  the fade: the envelope, both ends of it, and what stops it
+    // ---------------------------------------------------------------------------------
+
+    [Fact]
+    public void TheFadeRunsAtUPSTREAMSOwnRate_AndAStallCannotMakeItJump()
+    {
+        // The port's constant IS upstream's literal. Written this way round on purpose: the
+        // expectations in every fade fact below are computed from UpstreamFadePerSecond, so this
+        // one line is what ties them to the shipping product rather than to the port's own choice.
+        Assert.Equal(UpstreamFadePerSecond, FlashFade.RatePerSecond);
+
+        // A step is the rate times the time that really elapsed — upstream's fadeStep
+        // (FlashService.cs:2073) over its true render delta (:2050-2063), which is why the ramp is
+        // 0.42 s of WALL time whether the ticks are 16 ms or 40 ms.
+        Assert.Equal(0.24, FlashFade.StepFor(TimeSpan.FromMilliseconds(100)), 12);
+        Assert.Equal(0.024, FlashFade.StepFor(TimeSpan.FromMilliseconds(10)), 12);
+
+        // And upstream's stall clamp (:2060, "clamp after a stall so fades can't jump"): a machine
+        // that was away for thirty seconds resumes its ramp rather than completing it in one tick.
+        Assert.Equal(FlashFade.MaximumStepSeconds * UpstreamFadePerSecond,
+            FlashFade.StepFor(TimeSpan.FromSeconds(30)), 12);
+        Assert.Equal(FlashFade.StepFor(TimeSpan.FromMilliseconds(100)),
+            FlashFade.StepFor(TimeSpan.FromSeconds(5)), 12);
+    }
+
+    [Fact]
+    public void AFlashARRIVESOverUpstreamsRamp_RatherThanInASingleFrame()
+    {
+        // THE DEFECT THIS FACT EXISTS FOR. At the top of the size dial a flash is exactly the
+        // monitor (FlashGeometry.BaseFraction 0.4 x MaxImageScalePercent 250 = 1), so a surface
+        // that snaps to full alpha in the frame it appears IS "the screen turns white" — measured
+        // headed at 80.65 % of the desktop in near-white. Upstream never did that: a flash window
+        // is shown at opacity ZERO (FlashService.cs:1505) and ramped up by the heartbeat (:2108-2112).
+        var rig = new Rig();
+        rig.Presenter.Show(["a.png"]);
+        var presence = rig.Presences[0];
+
+        // The surface is PLACED at the onset, which is the smallest alpha the OS will hold — one
+        // 255th, because a layered window at alpha zero is the ghost OverlaySurfaceRequest refuses.
+        Assert.Equal(1.0 / 255.0, FlashFade.OnsetOpacity);
+        var request = Assert.Single(presence.Requests);
+        Assert.Equal(FlashFade.OnsetOpacity, request.Opacity);
+        Assert.Equal((byte)1, request.Alpha);
+        Assert.Empty(presence.Opacities);
+
+        // The SHAPE, sampled tick by tick on the injected clock: opacity is the onset plus the
+        // elapsed time times UPSTREAM'S rate, every step, with nothing eased and nothing skipped.
+        var elapsed = TimeSpan.Zero;
+        for (var tick = 1; tick <= 10; tick++)
+        {
+            rig.Clock.Advance(FlashFade.Cadence);
+            elapsed += FlashFade.Cadence;
+            Assert.Equal(tick, presence.Opacities.Count);
+            Assert.Equal(
+                FlashFade.OnsetOpacity + (elapsed.TotalSeconds * UpstreamFadePerSecond),
+                presence.Opacities[^1], 9);
+        }
+
+        // Ten ticks in it is nowhere near full — which is the whole point: the brightness arrives
+        // over time rather than in the placement frame.
+        Assert.InRange(presence.Opacities[^1], 0.3, 0.45);
+
+        // It reaches the dial and STOPS there: no overshoot, and no further alpha writes at all
+        // once it has settled, so a flash holding steady costs the OS nothing.
+        rig.Ramp(FullRamp);
+        Assert.Equal(1.0, presence.Opacities[^1]);
+        var settled = presence.Opacities.Count;
+        rig.Ramp(FullRamp);
+        Assert.Equal(settled, presence.Opacities.Count);
+        Assert.All(presence.Opacities, o => Assert.InRange(o, FlashFade.OnsetOpacity, 1.0));
+
+        // And not one of those writes was a re-placement. Present walks the OS's whole top-level
+        // z-order and asks the window manager's hit test twice; at ramp cadence that would be a
+        // full-screen window catching the user's clicks sixty times a second.
+        Assert.Equal(1, presence.PresentCalls);
+        Assert.Equal(1, presence.PaintCalls);
+    }
+
+    [Fact]
+    public void AFlashLEAVESOverTheSameRamp_AndIsWITHDRAWNAtTheFloorRatherThanLeftAtZero()
+    {
+        var rig = new Rig();
+        rig.Presenter.Show(["a.png"]);
+        var presence = rig.Presences[0];
+
+        // Up to the dial, then hold to the deadline. Upstream's target is the dial while the window
+        // is alive and zero once it is not (FlashService.cs:2105-2106), so nothing moves in between.
+        rig.Ramp(FullRamp + FlashFade.Cadence);
+        Assert.Equal(1.0, presence.Opacities[^1]);
+        var held = presence.Opacities.Count;
+
+        rig.Clock.Advance(FlashSurfacePresenter.SurfaceLifetime);
+        Assert.Equal(held, presence.Opacities.Count);
+        Assert.Equal(1, rig.Presenter.LiveSurfaces);
+
+        // The way DOWN is the same rate, in the same steps — one constant, both arms.
+        var elapsed = TimeSpan.Zero;
+        for (var tick = 1; tick <= 10; tick++)
+        {
+            rig.Clock.Advance(FlashFade.Cadence);
+            elapsed += FlashFade.Cadence;
+            Assert.Equal(held + tick, presence.Opacities.Count);
+            Assert.Equal(1.0 - (elapsed.TotalSeconds * UpstreamFadePerSecond), presence.Opacities[^1], 9);
+        }
+
+        Assert.Equal(1, rig.Presenter.LiveSurfaces);
+        Assert.Equal(0, presence.WithdrawCalls);
+
+        // At the floor the surface is TAKEN OFF, not held at an invisible alpha: upstream removes
+        // and closes a window whose ramp reached zero (:2117-2123), and a surface left composited
+        // at nothing is the present-and-invisible state this whole capability refuses.
+        rig.Ramp(FullRamp);
+        Assert.Equal(0, rig.Presenter.LiveSurfaces);
+        Assert.Equal(1, presence.WithdrawCalls);
+        Assert.Equal(1, rig.Presenter.SurfacesFadedOut);
+        Assert.All(presence.Opacities, o => Assert.True(o >= FlashFade.OnsetOpacity,
+            $"the fade wrote {o}, which is below the floor the OS will hold"));
+    }
+
+    [Fact]
+    public void AStopMidFadeTakesTheSurfaceDownATONCE_AndLeavesNoRampBehind()
+    {
+        // Upstream's Stop() unsubscribes the heartbeat and closes every live window outright
+        // (FlashService.cs:372-376, CloseAllWindows at :3879-3897) — a session stopped mid-ramp
+        // does not leave a half-faded rectangle finishing its fade over the user's desktop, and no
+        // failure path may leave a surface on screen.
+        var rig = new Rig();
+        rig.Presenter.Show(["a.png"]);
+        rig.Clock.Advance(FlashFade.Cadence);
+        rig.Clock.Advance(FlashFade.Cadence);
+        var presence = rig.Presences[0];
+        Assert.InRange(presence.Opacities[^1], FlashFade.OnsetOpacity, 0.5);
+
+        rig.Presenter.HideAll();
+
+        Assert.Equal(0, rig.Presenter.LiveSurfaces);
+        Assert.Equal(1, presence.WithdrawCalls);
+        Assert.Equal(0, rig.Clock.PendingCount);
+
+        var written = presence.Opacities.Count;
+        rig.Ramp(FullRamp * 2);
+        Assert.Equal(written, presence.Opacities.Count);
+        Assert.Equal(1, presence.WithdrawCalls);
+    }
+
+    [Fact]
+    public void AnAlphaTheOSREFUSESTakesTheSurfaceDown_RatherThanLeavingARectangleThisProcessCannotDim()
+    {
+        // The same rule a failed repaint already has (OverlaySurfaceSet.Repaint) and the same one
+        // upstream's heartbeat has for a window that throws (FlashService.cs:2142-2146). A surface
+        // the OS confirms is on screen and will not composite at the strength asked for is not a
+        // fade that missed a frame.
+        var rig = new Rig();
+        rig.PresenceFactory = () =>
+        {
+            var presence = new RecordingPresence { OpacityRefusal = OverlayReasonCodes.OverlayNotComposited };
+            rig.Presences.Add(presence);
+            return presence;
+        };
+
+        rig.Presenter.Show(["a.png"]);
+        Assert.Equal(1, rig.Presenter.LiveSurfaces);
+
+        rig.Clock.Advance(FlashFade.Cadence);
+
+        Assert.Equal(0, rig.Presenter.LiveSurfaces);
+        Assert.Equal(1, rig.Presences[0].WithdrawCalls);
+        var refusal = Assert.IsType<CapabilityState.Unavailable>(rig.Presenter.LastFade);
+        Assert.Equal(OverlayReasonCodes.OverlayNotComposited, refusal.Reason.Code);
+
+        // And it is NOT counted as a fade that completed: a surface taken down by a refusal and one
+        // that reached the floor are different outcomes and the diagnostics keep them apart.
+        Assert.Equal(0, rig.Presenter.SurfacesFadedOut);
+    }
+
+    // ---------------------------------------------------------------------------------
     //  rigs and doubles
     // ---------------------------------------------------------------------------------
 
@@ -560,6 +762,36 @@ public class FlashSurfacePresenterTests
         public Func<OverlayBounds?> Display { get; set; }
 
         public FlashSurfacePresenter Presenter => _presenter.Value;
+
+        /// <summary>
+        /// Steps the FADE's ramp on the injected clock, for <paramref name="span"/> of clock time,
+        /// one <see cref="FlashFade.Cadence"/> at a time. Zero wall-clock.
+        ///
+        /// <para>One step at a time because a re-arming timer re-arms from the clock's CURRENT
+        /// time: advancing a whole ramp in one jump is ONE tick, not twenty-six, on a real clock as
+        /// much as on this one — and one tick is credited at most
+        /// <see cref="FlashFade.MaximumStepSeconds"/>, which is upstream's own stall clamp.</para>
+        /// </summary>
+        public void Ramp(TimeSpan span)
+        {
+            for (var stepped = TimeSpan.Zero; stepped < span; stepped += FlashFade.Cadence)
+            {
+                Clock.Advance(FlashFade.Cadence);
+            }
+        }
+
+        /// <summary>
+        /// Advances past ONE surface's whole life: the lifetime, and then the fade-out ramp
+        /// upstream runs BEYOND it (<c>FlashService.cs:2105-2123</c>).
+        ///
+        /// <para>A flash is not gone at its lifetime — that is the instant it starts leaving — so a
+        /// fact that wants the pool free again has to wait out the ramp as well.</para>
+        /// </summary>
+        public void RunOutOneSurface()
+        {
+            Clock.Advance(FlashSurfacePresenter.SurfaceLifetime);
+            Ramp(FullRamp + FlashFade.Cadence);
+        }
     }
 
     /// <summary>An overlay that records what it was asked to do and never touches a screen.</summary>
@@ -583,9 +815,15 @@ public class FlashSurfacePresenterTests
 
         public bool IsPresenting => AlwaysReportsPresenting || _current is not null;
 
+        /// <summary>Every placement this surface was asked for, in order — where it went, how
+        /// opaque it was PLACED (which the fade makes a different number from the dial), and which
+        /// way its clicks were routed.</summary>
+        public List<OverlaySurfaceRequest> Requests { get; } = [];
+
         public CapabilityState Present(OverlaySurfaceRequest request)
         {
             PresentCalls++;
+            Requests.Add(request);
             _current = request;
             return new CapabilityState.Available("recording presence: placed");
         }
@@ -599,6 +837,23 @@ public class FlashSurfacePresenterTests
         }
 
         public void Reassert() => ReassertCalls++;
+
+        /// <summary>Every opacity the fade has ramped this surface to, in order — the envelope as
+        /// the OS seam saw it, which is the only place a test can watch it.</summary>
+        public List<double> Opacities { get; } = [];
+
+        /// <summary>When set, the alpha write refuses with this code — a layered window the OS
+        /// declines to composite at the strength asked for.</summary>
+        public string? OpacityRefusal { get; init; }
+
+        public CapabilityState SetOpacity(double opacity)
+        {
+            Opacities.Add(opacity);
+            return OpacityRefusal is null
+                ? new CapabilityState.Available("recording presence: composited")
+                : new CapabilityState.Unavailable(
+                    new CapabilityReason(OpacityRefusal, "recording presence: refused the alpha"));
+        }
 
         /// <summary>Never called by the presenter: click-through polarity is decided once, in the
         /// request handed to <see cref="Present"/>. A recorded call here would be a finding.</summary>

@@ -298,7 +298,7 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
         }
 
         _pending.Clear();
-        CloseAllClips();
+        CloseAllClipsAndFades();
         _surfaces.HideAll();
     }
 
@@ -370,8 +370,8 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
         // serve pop / hydra / XP mechanics this port does not have, and a surface that catches
         // clicks it does nothing with would swallow the user's input — the exact desktop-breaking
         // failure OverlayInputNotPassingThrough exists to refuse (a recorded divergence).
-        var request = new OverlaySurfaceRequest(placement, draw.Opacity, ClickThrough: true);
-        var placed = _surfaces.Place(slot, request, frame, draw.Lifetime);
+        var request = new OverlaySurfaceRequest(placement, FlashFade.OnsetOpacity, ClickThrough: true);
+        var placed = _surfaces.Place(slot, request, frame, lifetime: null);
 
         // AFTER the placement, and only for a surface that really went up: an animated file is a
         // flash first and a clip second. WPF spawns the window with frame 0 already on it and lets
@@ -379,6 +379,11 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
         // cannot produce a clip costs the user nothing — the picture is already there.
         if (placed)
         {
+            // THE FADE, and the two lines above are half of it: the surface went up at
+            // FlashFade.OnsetOpacity rather than at the dial, and with no lifetime of the SET's own,
+            // because this owns the whole envelope — the ramp up to draw.Opacity, the hold until
+            // draw.Lifetime, the ramp back down, and the withdrawal at the floor.
+            BeginFade(slot, draw);
             OpenClip(slot, path, frame.Width, frame.Height);
         }
 
@@ -533,5 +538,272 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
         public IDisposable? Handle { get; set; }
 
         public void Dispose() => Handle?.Dispose();
+    }
+
+    // ---------------------------------------------------------------------------------
+    //  THE FADE
+    //
+    //  Upstream ramps a flash's opacity in and out on its render heartbeat and this port did not:
+    //  it snapped the layered window straight to full alpha, which at the top of the size dial is
+    //  a monitor-sized rectangle appearing in one frame — the owner's "the screen turns white".
+    //  The law (the rate, the cadence, the stall clamp, the floor) is FlashFade; the mechanics are
+    //  here, because this class already owns the clock, the dispatch boundary and the slots.
+    //
+    //  WHY IT IS HERE AND NOT IN OverlaySurfaceSet. That set is shared by flash, the pink filter,
+    //  the spiral and subliminals, and a fade must be opt-in per MODULE: upstream fades flashes
+    //  (FlashService.cs:2108-2118) and pointedly does not fade the pink filter or the spiral —
+    //  Services/Notifications/OverlayService.cs creates both at their final opacity
+    //  (CreatePinkFilterForScreen at :1213-1231 sets Opacity = 1.0 on a pre-blended brush,
+    //  CreateSpiralGifWindow the same) and closes both outright (:1279-1293, :1874-1905), with not
+    //  one animation in the whole file. Subliminals DOES fade upstream, on a different envelope
+    //  again (a 50 ms storyboard, Services/Subliminal/SubliminalService.cs:1251-1281) and is not
+    //  ported here. Putting the ramp in the shared set would have made it a property of the set;
+    //  putting it here is the same shape upstream has, where the fade lives in the flash service.
+    // ---------------------------------------------------------------------------------
+
+    private readonly Dictionary<OverlaySurfaceSet.Slot, Fade> _fades = [];
+
+    private IDisposable? _ramp;
+
+    private DateTimeOffset _rampedAt;
+
+    /// <summary>The last thing the OS said when a ramped alpha was written and read back, verbatim,
+    /// or null before any flash has faded. Diagnostics and facts; never a claim about a screen.</summary>
+    public CapabilityState? LastFade { get; private set; }
+
+    /// <summary>Surfaces the fade itself took off the screen — ramps that reached the floor, as
+    /// against surfaces taken down by a stop or by a refusal. Diagnostics and facts; never a claim
+    /// about a screen.</summary>
+    public int SurfacesFadedOut { get; private set; }
+
+    /// <summary>
+    /// Arm one surface's whole envelope: it is on screen at <see cref="FlashFade.OnsetOpacity"/>
+    /// and it now ramps up to this flash's opacity dial, holds until the lifetime, and ramps back
+    /// down.
+    ///
+    /// <para>The lifetime is the SURFACE's deadline, not its end: upstream's ramp down only starts
+    /// at <c>ExpiresAt</c> (<c>Services/Flash/FlashService.cs:2105</c>, armed at <c>:1250</c>), so a
+    /// flash is up for its lifetime PLUS one ramp. This is also why the placement passes no
+    /// lifetime to <see cref="OverlaySurfaceSet"/>: two owners of one deadline would race to
+    /// withdraw the same surface, and only one of them knows about the ramp.</para>
+    /// </summary>
+    private void BeginFade(OverlaySurfaceSet.Slot slot, FlashDraw draw)
+    {
+        // A recycled slot may still carry the previous flash's envelope; its timer must go.
+        CloseFade(slot);
+        var fade = new Fade(draw.Opacity);
+        _fades[slot] = fade;
+        fade.Expiry = _clock.Schedule(draw.Lifetime, () => _dispatch(() => StartFadeOut(slot)));
+        EnsureRamp();
+    }
+
+    /// <summary>
+    /// The deadline came: the target becomes zero and the ramp takes it there — upstream's
+    /// <c>targetAlpha = showThisWindow ? maxAlpha : 0.0</c> (<c>FlashService.cs:2105-2106</c>).
+    /// </summary>
+    private void StartFadeOut(OverlaySurfaceSet.Slot slot)
+    {
+        if (!_fades.TryGetValue(slot, out var fade))
+        {
+            return;
+        }
+
+        fade.Expiry?.Dispose();
+        fade.Expiry = null;
+
+        // The surface may already be gone — a repaint that did not hold takes it down through the
+        // set (OverlaySurfaceSet.Repaint), which tells nobody. Then there is nothing to fade.
+        if (!slot.Live)
+        {
+            CloseFade(slot);
+            return;
+        }
+
+        fade.Out = true;
+        EnsureRamp();
+    }
+
+    /// <summary>
+    /// One ramp timer for ALL fading surfaces, armed only while at least one is moving — upstream's
+    /// shape exactly: one heartbeat walks every live window (<c>FlashService.cs:2076-2100</c>) and
+    /// it is unsubscribed the moment nothing needs it, because "a live Rendering subscription forces
+    /// WPF to render continuously" (<c>:2035-2037</c>). A flash holding steady at its dial costs no
+    /// timer here either, and a stopped session leaves none behind.
+    /// </summary>
+    private void EnsureRamp()
+    {
+        if (_ramp is not null || _surfaces.Disposed)
+        {
+            return;
+        }
+
+        _rampedAt = _clock.UtcNow;
+        _ramp = _clock.Schedule(FlashFade.Cadence, () => _dispatch(OnRamp));
+    }
+
+    /// <summary>
+    /// One tick: step every fading surface by the time that really elapsed, then re-arm if anything
+    /// is still moving.
+    ///
+    /// <para><b>The step is derived from the CLOCK, not from the cadence</b>, which is upstream's
+    /// own true-delta heartbeat (<c>FlashService.cs:2050-2063</c>) and is what makes the envelope a
+    /// property of TIME rather than of timer accuracy: a tick that arrives late moves the ramp
+    /// further, so the fade still takes about 0.42 s at the top of the dial on a machine whose
+    /// timers are coarse. A non-positive delta does nothing at all (<c>:2057</c>).</para>
+    /// </summary>
+    private void OnRamp()
+    {
+        _ramp = null;
+        if (_surfaces.Disposed)
+        {
+            return;
+        }
+
+        var now = _clock.UtcNow;
+        var step = FlashFade.StepFor(now - _rampedAt);
+        _rampedAt = now;
+
+        if (step > 0)
+        {
+            // Over a COPY of the keys: a step can retire its surface, which mutates the dictionary.
+            foreach (var slot in _fades.Keys.ToArray())
+            {
+                if (_fades.TryGetValue(slot, out var fade))
+                {
+                    StepFade(slot, fade, step);
+                }
+            }
+        }
+
+        if (AnyRamping())
+        {
+            EnsureRamp();
+        }
+    }
+
+    /// <summary>
+    /// One surface, one step — upstream's two-armed ramp verbatim (<c>FlashService.cs:2108-2123</c>):
+    /// up toward the target but never past it, down but never below the floor, and a downward ramp
+    /// that reaches the floor takes the surface off the screen.
+    ///
+    /// <para><b>A refused alpha takes the surface down too</b>, which is the same rule a failed
+    /// repaint already has (<see cref="OverlaySurfaceSet.Repaint"/>) and the same one upstream's
+    /// heartbeat has for a window that throws (<c>:2142-2146</c>). A surface the OS confirms is on
+    /// screen and will not composite at the strength asked for is not a fade that missed a frame;
+    /// it is a rectangle whose brightness this process no longer controls.</para>
+    /// </summary>
+    private void StepFade(OverlaySurfaceSet.Slot slot, Fade fade, double step)
+    {
+        if (!slot.Live)
+        {
+            CloseFade(slot);
+            return;
+        }
+
+        var target = fade.Out ? 0.0 : fade.Target;
+        if (target > fade.Opacity)
+        {
+            fade.Opacity = Math.Min(target, fade.Opacity + step);
+        }
+        else if (target < fade.Opacity)
+        {
+            var next = fade.Opacity - step;
+            if (next <= FlashFade.OnsetOpacity)
+            {
+                SurfacesFadedOut++;
+                TakeDown(slot);
+                return;
+            }
+
+            fade.Opacity = next;
+        }
+        else
+        {
+            return;
+        }
+
+        LastFade = slot.Presence.SetOpacity(fade.Opacity);
+        if (LastFade is not CapabilityState.Available)
+        {
+            TakeDown(slot);
+        }
+    }
+
+    /// <summary>True while any surface still has somewhere to ramp to.</summary>
+    private bool AnyRamping()
+    {
+        foreach (var fade in _fades.Values)
+        {
+            if (fade.Out || fade.Opacity < fade.Target)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Everything one surface carries, off, and then the surface: its envelope, its clip,
+    /// and the withdrawal itself.</summary>
+    private void TakeDown(OverlaySurfaceSet.Slot slot)
+    {
+        CloseFade(slot);
+        CloseClip(slot);
+        _surfaces.Retire(slot);
+    }
+
+    private void CloseFade(OverlaySurfaceSet.Slot slot)
+    {
+        if (_fades.Remove(slot, out var fade))
+        {
+            fade.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The stop path, and it does NOT fade: every envelope and the ramp itself go, and the caller
+    /// withdraws every surface immediately afterwards. Upstream's <c>Stop()</c> is the same two
+    /// steps in the same order — <c>StopHeartbeat()</c> then <c>CloseAllWindows()</c>
+    /// (<c>FlashService.cs:375-376</c>, <c>:3879-3897</c>) — so a session stopped mid-fade leaves
+    /// nothing on screen and no timer behind, which is the property the stop facts rest on.
+    /// </summary>
+    private void CloseAllClipsAndFades()
+    {
+        CloseAllClips();
+        foreach (var fade in _fades.Values)
+        {
+            fade.Dispose();
+        }
+
+        _fades.Clear();
+        _ramp?.Dispose();
+        _ramp = null;
+    }
+
+    /// <summary>One surface's envelope: where the ramp is going, where it is, whether the deadline
+    /// has passed, and the timer that says when it has.</summary>
+    private sealed class Fade(double target) : IDisposable
+    {
+        /// <summary>This flash's opacity dial — WPF's <c>FlashOpacity / 100.0</c>
+        /// (<c>FlashService.cs:2072</c>), which is the ramp's ceiling and is never reached from
+        /// above.</summary>
+        public double Target { get; } = target;
+
+        /// <summary>Where the ramp is now. Starts at the onset, because that is what the surface
+        /// was PRESENTED at.</summary>
+        public double Opacity { get; set; } = FlashFade.OnsetOpacity;
+
+        /// <summary>True once the deadline has passed and the target is zero — upstream's
+        /// <c>IsFadingOut</c> (<c>FlashService.cs:4019</c>, set by the lifetime token's callback at
+        /// <c>:1259-1268</c>).</summary>
+        public bool Out { get; set; }
+
+        public IDisposable? Expiry { get; set; }
+
+        public void Dispose()
+        {
+            Expiry?.Dispose();
+            Expiry = null;
+        }
     }
 }

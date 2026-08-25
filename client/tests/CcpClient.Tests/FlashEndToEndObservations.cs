@@ -41,7 +41,13 @@ internal static class FlashEndToEndObservations
     /// <param name="ExpectedFrameHeight">Ditto.</param>
     /// <param name="SurfacesShown">How many surfaces the presenter placed.</param>
     /// <param name="DesktopPixelsBefore">Pixels of the image's colour on the desktop before the flash.</param>
-    /// <param name="DesktopPixelsDuring">…while it is up.</param>
+    /// <param name="DesktopPixelsMidFade">
+    /// …a few ticks into the flash's FADE-IN, before the ramp has finished. The image's own colour
+    /// is what is counted, and a surface composited at a fraction of full alpha does not put that
+    /// colour on the desktop — it puts a blend of it and whatever is underneath. So this reading is
+    /// the fade, measured on a real composited desktop: the pixels are not there yet.
+    /// </param>
+    /// <param name="DesktopPixelsDuring">…once the ramp has reached the opacity dial.</param>
     /// <param name="DesktopPixelsAfterHide">…after the presenter is told to hide everything.</param>
     /// <param name="DesktopPixelsSampledDuring">
     /// How many pixels the screen read actually RETURNED for the measurement above.
@@ -94,6 +100,7 @@ internal static class FlashEndToEndObservations
         int ExpectedFrameHeight,
         int SurfacesShown,
         int DesktopPixelsBefore,
+        int DesktopPixelsMidFade,
         int DesktopPixelsDuring,
         int DesktopPixelsAfterHide,
         int DesktopPixelsSampledDuring,
@@ -162,6 +169,26 @@ internal static class FlashEndToEndObservations
 
             var before = CountDesktop(display);
             presenter.Show([imagePath]);
+
+            // THE FADE, ON A REAL SCREEN. A flash is now PLACED at FlashFade.OnsetOpacity and ramped
+            // up to the dial at upstream's 2.4 per second (FlashService.cs:2018, :2108-2112), so the
+            // desktop is read TWICE: a few ticks in, where the surface composites at a fraction of
+            // full alpha and the image's own colour is therefore NOT on the screen, and again once
+            // the ramp has landed. Every step is driven on the injected clock — no wall-clock wait.
+            for (var tick = 0; tick < 4; tick++)
+            {
+                clock.Advance(FlashFade.Cadence);
+            }
+
+            var midFade = CountDesktop(display, evidence: "desktop-mid-flash-fade.bmp", display);
+
+            for (var stepped = TimeSpan.Zero;
+                 stepped < TimeSpan.FromSeconds(1.0 / 2.4) + FlashFade.Cadence;
+                 stepped += FlashFade.Cadence)
+            {
+                clock.Advance(FlashFade.Cadence);
+            }
+
             var (during, sampledDuring, uniformDuring, firstDuring, captureHorizontal, captureVertical,
                 fenceDuring) =
                 CountDesktopWithSampleSize(display, evidence: "desktop-with-a-real-flash.bmp", display);
@@ -178,6 +205,7 @@ internal static class FlashEndToEndObservations
                 ExpectedFrameHeight: expected.Height,
                 SurfacesShown: shown,
                 DesktopPixelsBefore: before,
+                DesktopPixelsMidFade: midFade,
                 DesktopPixelsDuring: during,
                 DesktopPixelsAfterHide: after,
                 DesktopPixelsSampledDuring: sampledDuring,
@@ -272,16 +300,66 @@ internal static class FlashEndToEndObservations
     /// <summary>The smallest clock that satisfies the presenter: this run shows one image, so
     /// nothing here ever needs to fire. Handles are real and disposable so HideAll's teardown is
     /// the real one.</summary>
+    /// <summary>
+    /// The manual clock, in the shape every module test shares. It used to fire NOTHING at all,
+    /// which was enough while a flash was placed at its final opacity; the fade rides this clock, so
+    /// a clock that never moves now leaves the surface at its onset alpha forever — a real defect
+    /// this observation would have reported as "the flash never reached the desktop". Zero
+    /// wall-clock either way.
+    /// </summary>
     private sealed class EndToEndClock : ISessionClock
     {
-        public DateTimeOffset UtcNow { get; } = new(2026, 8, 18, 0, 0, 0, TimeSpan.Zero);
+        private readonly List<Entry> _timers = [];
 
-        public IDisposable Schedule(TimeSpan due, Action fire) => new Handle();
+        public DateTimeOffset UtcNow { get; private set; } = new(2026, 8, 18, 0, 0, 0, TimeSpan.Zero);
 
-        private sealed class Handle : IDisposable
+        public IDisposable Schedule(TimeSpan due, Action fire)
+        {
+            var entry = new Entry { Due = UtcNow + due, Fire = fire };
+            lock (_timers)
+            {
+                _timers.Add(entry);
+            }
+
+            return new Handle(this, entry);
+        }
+
+        public void Advance(TimeSpan by)
+        {
+            UtcNow += by;
+            while (true)
+            {
+                Entry? next;
+                lock (_timers)
+                {
+                    next = _timers.Where(t => t.Due <= UtcNow).OrderBy(t => t.Due).FirstOrDefault();
+                    if (next is null)
+                    {
+                        return;
+                    }
+
+                    _timers.Remove(next);
+                }
+
+                next.Fire();
+            }
+        }
+
+        private sealed class Entry
+        {
+            public DateTimeOffset Due { get; init; }
+
+            public required Action Fire { get; init; }
+        }
+
+        private sealed class Handle(EndToEndClock clock, Entry entry) : IDisposable
         {
             public void Dispose()
             {
+                lock (clock._timers)
+                {
+                    clock._timers.Remove(entry);
+                }
             }
         }
     }
