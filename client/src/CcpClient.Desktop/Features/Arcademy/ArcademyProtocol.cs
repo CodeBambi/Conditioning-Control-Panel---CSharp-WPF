@@ -6,11 +6,11 @@ using CcpClient.Desktop.Motion;
 namespace CcpClient.Desktop.Features.Arcademy;
 
 /// <summary>
-/// Protocol v1 of the Arcademy page↔host bridge — the frames slices 1 to 4 and 6 of the board row own
-/// (the boot handshake, the settings projection, the meta store, the class payout and the panic
-/// ladder's <c>suspend</c>/<c>end-run</c> pair), authored to the
-/// <see cref="Goon.GoonProtocol"/> discipline: every type is either EMITTED here, or classified
-/// as belonging to a later slice, or refused as not-vocabulary. Nothing arriving from the page is
+/// Protocol v1 of the Arcademy page↔host bridge — the frames slices 1 to 7 of the board row own
+/// (the boot handshake, the settings projection, the meta store, the class payout, the panic
+/// ladder's <c>suspend</c>/<c>end-run</c> pair and the closed-gate <c>assets</c> reply), authored
+/// to the <see cref="Goon.GoonProtocol"/> discipline: every page→host type is either HANDLED here
+/// or refused as not-vocabulary, and every refusal is logged. Nothing arriving from the page is
 /// dropped silently.
 ///
 /// <para><b>C# stays the settings owner</b> (<c>ArcademyHostService.cs:24-27</c>): the page gets ONE
@@ -317,17 +317,44 @@ public static class ArcademyProtocol
         retake = p.Retake,
     };
 
+    /// <summary>
+    /// The <c>assets</c> reply to an <c>assets-request</c>, in its CLOSED-GATE shape
+    /// (<c>ArcademyHostService.cs:1502-1504</c>): the same <c>reqId</c> back, an EMPTY <c>urls</c>
+    /// array, and <c>done: true</c>. Upstream's own reason, at <c>:1479-1481</c>: <i>"A closed gate
+    /// answers with an empty array rather than silence, because silence is what leaves a page
+    /// spinning."</i> The page's channel holds a <c>pending</c> entry per <c>reqId</c> until a
+    /// <c>done</c> arrives (<c>arcademy/provider/remote.js:48-55</c>), so an unanswered ask is a
+    /// latch that never clears.
+    ///
+    /// <para><b>This is the ONLY <c>assets</c> shape this build can produce, and that is a
+    /// decision rather than an omission.</b> Upstream's open-gate branch (<c>:1517-1602</c>) fetches
+    /// through <c>FypOnlineCoordinator</c> into <c>ScrolllerSource.cs:48</c> —
+    /// <c>POST https://api.scrolller.com/admin</c>, an unofficial third-party GraphQL API, shaped
+    /// by the user's own niche selection and dwell profile (<c>FypOnlineCoordinator.cs:19-22</c>,
+    /// <c>:44-62</c>) — under a consent union of two one-time cards
+    /// (<c>Models/AppSettings.cs:3354</c>). The port has neither that dependency nor either card,
+    /// and <c>client/docs/fyp-census.md</c> §5.1 records the dependency as an OWNER decision that
+    /// has not been made. So there is no fetch path here to gate: this reply is unconditional, and
+    /// deliberately reads NO consent flag. A flag consulted by code that could not fetch either way
+    /// would look like protection while providing none.</para>
+    ///
+    /// <para><b>Not ported, and named rather than skipped.</b> Upstream reads <c>count</c> and
+    /// clamps it to 1..24, normalises <c>kind</c> to <c>loop</c>/<c>still</c> (<c>:1488-1490</c>),
+    /// and logs once that a page-supplied <c>niches</c> list was ignored because the app-wide
+    /// selection wins (<c>:1494-1499</c>). All three describe a batch that is about to be sized,
+    /// filtered and fetched. Nothing here is fetched under any input, so none of them has an
+    /// effect to have; porting them would describe a broker that does not exist.</para>
+    /// </summary>
+    public static object BuildAssetsClosed(string reqId) =>
+        new { type = "assets", reqId, urls = Array.Empty<object>(), done = true };
+
     // ============================ page → host ============================
 
     /// <summary>How this host treats a page→host type.</summary>
     public enum ArcademyHandling
     {
-        /// <summary>Handled here, in slices 1-2.</summary>
+        /// <summary>Handled here.</summary>
         HandledHere,
-
-        /// <summary>Real Arcademy vocabulary owned by a LATER slice of the board row. Typed,
-        /// logged and NOT acted on — a class message must never half-work.</summary>
-        LaterSlice,
 
         /// <summary>Not Arcademy page→host vocabulary at all.</summary>
         NotVocabulary,
@@ -336,26 +363,29 @@ public static class ArcademyProtocol
     /// <summary>
     /// Every type upstream's <c>OnPageMessage</c> switch handles (<c>:444-497</c>), classified. A
     /// test pins this table, so widening the bridge fails a fact instead of happening quietly.
-    /// <c>meta-command</c> (<c>:463</c>) moved to <b>handled</b> with slice 3,
-    /// <c>class-started</c>/<c>class-ended</c>/<c>class-left</c> (<c>:466-480</c>) with slice 4,
-    /// and <c>resume-request</c> (<c>:481</c>) with slice 6.
+    ///
+    /// <para><b>The table has only two states now, and the third one was removed rather than left
+    /// empty.</b> It used to carry a <c>LaterSlice</c> verdict — real vocabulary a later slice of
+    /// the board row owned, typed and logged but never acted on. <c>meta-command</c> (<c>:463</c>)
+    /// left it with slice 3, the three class frames (<c>:466-480</c>) with slice 4,
+    /// <c>resume-request</c> (<c>:481</c>) with slice 6, and <c>assets-request</c> (<c>:484</c>)
+    /// with slice 7 — the last row it named. A verdict no type can reach is a branch nobody can
+    /// test, so it is gone; an unrecognised type still lands on <see cref="NotVocabulary"/> and is
+    /// logged, which is what upstream does with one (<c>:495-497</c>).</para>
     ///
     /// <para><b><c>resume-request</c> is the PANIC ladder's frame, not slice 5's</b>, and the
     /// source says so: <c>OnResumeRequest</c> refuses every reason but <c>"panic"</c> —
     /// "only panic resumes on request" (<c>:349-352</c>) — because a video suspend lifts when the
-    /// video ends (<c>:1720-1726</c>) and an audio-only one when the session does (<c>:1846</c>).
-    /// The row was classified to 5 while the ladder was unported; slice 6 is where it actually
-    /// belongs, so the one row still named for a later slice is
-    /// <c>assets-request</c> → 7 (<c>:484</c>).</para>
+    /// video ends (<c>:1720-1726</c>) and an audio-only one when the session does
+    /// (<c>:1846</c>).</para>
     /// </summary>
     public static ArcademyHandling Classify(string type) => type switch
     {
         "ready" or "log" or "heartbeat" or "pong" or "boot-error" or "fullscreen-request"
             or "set-setting" or "exit" or "exit-done"
             or "meta-command" or "class-started" or "class-ended" or "class-left"
-            or "resume-request"
+            or "resume-request" or "assets-request"
             => ArcademyHandling.HandledHere,
-        "assets-request" => ArcademyHandling.LaterSlice,
         _ => ArcademyHandling.NotVocabulary,
     };
 
@@ -420,6 +450,19 @@ public static class ArcademyProtocol
 
         /// <summary>The page is finished; the window may go (<c>:492</c>).</summary>
         public sealed record ExitDone : ArcademyPageMessage;
+
+        /// <summary>The page asking the host for remote media (<c>:484</c> →
+        /// <c>OnAssetsRequest</c>, <c>:1485-1516</c>). <c>ReqId</c> is the exchange's only
+        /// identity and is never null here: upstream substitutes the empty string for a missing
+        /// one (<c>:1487</c>, <c>(string?)o["reqId"] ?? ""</c>) and still answers, because an
+        /// unanswered ask is a page-side latch that never clears.
+        ///
+        /// <para><b>The request's other three fields are deliberately not carried</b> —
+        /// <c>count</c>, <c>kind</c> and <c>niches</c> all describe a batch about to be fetched,
+        /// and this build fetches nothing under any input. See
+        /// <see cref="BuildAssetsClosed"/> for why that is a decision rather than an
+        /// omission.</para></summary>
+        public sealed record AssetsRequest(string ReqId) : ArcademyPageMessage;
     }
 
     /// <summary>Parse outcome: every frame lands here — typed, never thrown, never dropped.</summary>
@@ -429,10 +472,6 @@ public static class ArcademyProtocol
 
         /// <summary>A known v1 type with a well-shaped envelope.</summary>
         public sealed record Parsed(ArcademyPageMessage Message) : ArcademyPageParseResult;
-
-        /// <summary>Real vocabulary this build does not own yet (see <see cref="Classify"/>).
-        /// Tolerated and named — never acted on, never silently dropped.</summary>
-        public sealed record LaterSlice(string Type) : ArcademyPageParseResult;
 
         /// <summary>Well-formed frame, outside the Arcademy's page→host vocabulary. Upstream logs
         /// exactly this as "unhandled message" (<c>:495-497</c>).</summary>
@@ -467,6 +506,8 @@ public static class ArcademyProtocol
         ["resume-request"] = r => new ArcademyPageMessage.ResumeRequest(GetString(r, "reason")),
         ["exit"] = r => new ArcademyPageMessage.Exit(GetString(r, "reason")),
         ["exit-done"] = _ => new ArcademyPageMessage.ExitDone(),
+        // :1487 — a missing reqId is the empty string, and the exchange is still answered.
+        ["assets-request"] = r => new ArcademyPageMessage.AssetsRequest(GetString(r, "reqId") ?? ""),
     };
 
     /// <summary>Parse one page→host frame. NEVER throws: bad frames are typed outcomes.</summary>
@@ -504,9 +545,7 @@ public static class ArcademyProtocol
             return new ArcademyPageParseResult.Parsed(parser(root));
         }
 
-        return Classify(type) == ArcademyHandling.LaterSlice
-            ? new ArcademyPageParseResult.LaterSlice(type)
-            : new ArcademyPageParseResult.UnknownType(type);
+        return new ArcademyPageParseResult.UnknownType(type);
     }
 
     private static string? GetString(JsonElement root, string name) =>
