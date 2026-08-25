@@ -430,3 +430,34 @@ html.arc-reduced .arc-boardprop-new { transition:none; }
 }
 .arc-corknote.look-pencil { background-image: none; }
 .arc-corknote.look-askew { transform: rotate(6.5deg) translateY(3px); }
+
+/* ---- THE PAPER MOVES (the Records Office's cork only) ---------------------
+ * Pinned paper in a draught. Scoped to `.rr-cork`, the office's host, because
+ * the HALL's board is a page you scroll and the office's is a close-up you are
+ * standing in front of - only one of them is a place where paper hangs.
+ *
+ * IT ANIMATES `rotate`, NOT `transform`, and that is the whole trick: the slot
+ * deals each sheet a rotation and `.look-askew` adds its own, both through
+ * `transform`. A keyframe on `transform` would wipe both and snap every sheet
+ * straight the moment a mouse crossed it. The individual `rotate` property
+ * composes with the transform instead of replacing it, so a flutter is a
+ * flutter ON TOP of whatever lean the sheet was pinned at.
+ *
+ * Hover OR focus-within, so a keyboard reader gets the same room. */
+@keyframes rr-paper-flutter {
+  0%, 100% { rotate: 0deg; }
+  30%      { rotate: 0.5deg; }
+  65%      { rotate: -0.4deg; }
+}
+.rr-cork .arc-corknote:hover,
+.rr-cork .arc-corknote:focus-within {
+  animation: rr-paper-flutter 2.4s ease-in-out infinite;
+}
+/* The decoration law, both doors (the app class and the media query), the way
+   the rest of this sheet writes it. */
+html.arc-reduced .rr-cork .arc-corknote:hover,
+html.arc-reduced .rr-cork .arc-corknote:focus-within { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .rr-cork .arc-corknote:hover,
+  .rr-cork .arc-corknote:focus-within { animation: none; }
+}

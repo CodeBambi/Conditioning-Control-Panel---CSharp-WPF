@@ -35,6 +35,20 @@
  * It touches no store, no bridge and no EMI - the shell hands it narrow caps,
  * the annex's law (`showAnnex`'s), and it calls back.
  *
+ * THE ROOM IS ALIVE (W2). scene.js grew a declarative FX layer; this file
+ * grew the office's TABLE for it, below `RECTS`. Six rows on the wide shot -
+ * the sign, the lamp, the dust in its cone, the window, the clock and (only
+ * when the storeroom is open) the seam - plus two pixels of parallax on the
+ * painting. None of it is a verb: every rect down there is decoration, and the
+ * four things you can press are exactly the four things you could press
+ * before. The seventh piece, the corkboard's paper flutter, is pure CSS in
+ * corkboard.css, because a hover state does not need a runtime.
+ *
+ * THE CLOCK IS THE ONE PIECE THAT IS NOT DECORATION. It reads the player's own
+ * wall clock, and it is the only diegetic real-time element in the school
+ * (owner ruling 2026-08-25). The plate painted a face stopped at eleven; a
+ * cream disc buries the painted hands and two DOM hands tell the truth over it.
+ *
  * THE APRON OWNS THE FLOOR OF THE WIDE SHOT, and only of the wide shot. All
  * four measured rects up there clear y=640 on their own. The two CLOSE-UP hosts
  * (the cork, the book's pages) are measured from the PLATE and run under that
@@ -67,6 +81,70 @@ export const RECTS = Object.freeze({
 
 /** The ajar panel, laid over the wide plate while `ajar` is on. */
 export const DOOR_PATCH = Object.freeze([1050, 100, 326, 476]);
+
+/* ----------------------------------------------------------------------------
+ * THE ALIVE LAYER'S TABLE
+ *
+ * scene.js's `fx` contract, in the same stage pixels as everything else, and
+ * every rect below was crop-verified against `art/vn/vn-09-records-office.png`
+ * rather than trusted from the spec sheet. Where a number here differs from
+ * `records-room-spec.json` the difference is written down beside it.
+ *
+ * NOTHING IN THIS TABLE IS A VERB. The layer takes no pointer events and no
+ * row of it appears in the Esc fold, the tab order or the audit; a row that
+ * fails to build costs a breath and never a rect. The apron-line warning does
+ * not apply either - it audits HOTSPOTS, and the floor pool under the storeroom
+ * door is light on a floor, which is exactly where light on a floor goes.
+ * -------------------------------------------------------------------------- */
+
+/** The RECORDS sign over the counter. */
+export const FX_SIGN = Object.freeze([577, 169, 346, 91]);
+/** The banker's lamp's pool on the counter (the rect is centred on the base). */
+export const FX_LAMP = Object.freeze([383, 433, 282, 42]);
+/** The cone above it - the lamp head down to the counter, where the dust is. */
+export const FX_MOTES = Object.freeze([420, 300, 200, 180]);
+/** The window, and the route lamp burning outside it. */
+export const FX_WINDOW = Object.freeze([52, 120, 64, 291]);
+/** The wall clock. `r` is the BEZEL; `faceR` is the disc that buries the
+ *  painted hands, measured off the plate (hands reach r16, numerals start at
+ *  r21) so the numerals stay painted and the hands do not. */
+export const FX_CLOCK = Object.freeze({ cx: 1009, cy: 187, r: 44 });
+export const FX_CLOCK_FACE_R = 19;
+/** The open door's leading edge - the bright side of the gap in the ajar
+ *  plate, measured off the composite at x=1180 (the door rect's own left edge,
+ *  1175, is the JAMB, and a breath on the jamb is a breath on the wall). */
+export const FX_SEAM_EDGE = Object.freeze([1180, 132, 6, 444]);
+/** ...and what it throws on the floor. Below the apron line on purpose: the
+ *  patch is cut at y=575 and the light has to land somewhere. */
+export const FX_SEAM_POOL = Object.freeze([1107, 552, 180, 148]);
+
+/**
+ * THE TABLE ITSELF. Seeds are literal so a "random" stutter is the same
+ * stutter every night - a rare event nobody can reproduce is a bug report.
+ * `now` is left off the clock row, so it reads the real Date; a suite hands
+ * its own in through `caps.now`.
+ */
+export function recordsFx(now) {
+  return [
+    { kind: 'neon', view: 'wide', rect: FX_SIGN, seed: 0x5EC0DE },
+    { kind: 'lamp', view: 'wide', rect: FX_LAMP },
+    { kind: 'motes', view: 'wide', rect: FX_MOTES, seed: 0x11FADE },
+    { kind: 'window', view: 'wide', rect: FX_WINDOW, seed: 0x0FF1CE },
+    {
+      kind: 'clock', view: 'wide', circle: FX_CLOCK,
+      faceR: FX_CLOCK_FACE_R,
+      hourLen: 12, minLen: 17,
+      now: typeof now === 'function' ? now : undefined,
+    },
+    /* THE SEAM IS THE DOOR'S OWN GATE, read the way the rect reads it: no
+     * reveal, no flag, no nodes. */
+    {
+      kind: 'seam', view: 'wide', when: 'ajar',
+      rect: RECTS.door, edge: FX_SEAM_EDGE, pool: FX_SEAM_POOL,
+    },
+    { kind: 'tilt', view: 'wide', amp: 2 },
+  ];
+}
 
 /** The bare cork inside the board close-up - where the paper goes. */
 export const CORK_INNER = Object.freeze([43, 37, 1285, 692]);
@@ -183,6 +261,8 @@ function findCls(node, cls) {
  *  daySeed      - the UTC day string the notices are dealt from.
  *  onCorkRead   - optional (noticeId) per sheet the visit marked read.
  *  ajar         - is the storeroom open at all (the reveal has fired)?
+ *  now          - optional () -> Date for the wall clock (a suite's seam; the
+ *                 shipping room leaves it off and reads the real one).
  *  onBack / onAnnex / onReport - the three ways out.
  *  reportLabel  - the report card's own label, the shell's word for it.
  */
@@ -255,6 +335,8 @@ export function createRecordsRoom(caps) {
     patches: [
       { view: 'wide', art: 'vn-09-records-door-ajar.png', rect: DOOR_PATCH, when: 'ajar' },
     ],
+    /* THE ROOM BREATHES. Decoration only - see the table's own header. */
+    fx: recordsFx(typeof c.now === 'function' ? c.now : undefined),
     apron: { back: () => { try { if (c.onBack) c.onBack(); } catch (e) { log('records room back threw'); } } },
     onAction: onAction,
   });
@@ -262,6 +344,25 @@ export function createRecordsRoom(caps) {
 
   try { scene.root.classList.add('rr-room'); } catch (e) { /* noop */ }
   scene.setFlag('ajar', ajar);
+
+  /* THE ROOM TONE IS NOT WIRED, AND THAT IS A DELIBERATE ABSENCE.
+   *
+   * The design asked for an ambient bed under this room - one
+   * `arcademy-sfx {name:'records_bed', level:.12, bus:'fx', loop:true}` on
+   * entry and a `{name:'records_bed', stop:true}` on the way out. THE SFX
+   * CONTRACT CANNOT CARRY IT. `shell/audio.js`'s `onSfx` reads exactly
+   * `{name, level, bus, duck, pitch, url, key, maxMs}` and one control message
+   * (`name:'stop_clips'`); `detail.loop` is read nowhere, and there is no
+   * per-name stop. Every cue it plays is a ONE-SHOT that schedules its own
+   * `stop()` on the audio clock.
+   *
+   * So the bed is not here. Wiring it would mean either a looping node in this
+   * file - which is trap 18, the law that says a room owns no audio node - or
+   * a private timer re-firing a one-shot forever, which is worse. What is
+   * MISSING is a contract: `detail.loop` plus a keyed stop on the
+   * `arcademy-sfx` bus, owned by audio.js. When that lands, the two calls go
+   * here and in destroy(), and nothing else in this file has to move.
+   * TODO(audio.js): `arcademy-sfx` has no loop/stop contract - see above. */
 
   /* ------------------------------------------------------- THE FRESH TAB */
   /* A pink tab on the tray whenever the school has stamped a card since the

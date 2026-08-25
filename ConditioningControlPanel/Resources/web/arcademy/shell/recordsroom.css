@@ -158,19 +158,34 @@
    bar is the last thing in flow, so at the end of the scroll the final row sits
    above it naturally, and mid-scroll the cards pass underneath an opaque band
    instead of behind two floating buttons. */
-.rr-cards { --rr-barh: 62px; }
+.rr-cards { --rr-barh: 62px; --rr-panel-x: 24px; }
+html.arc-mobile .rr-cards { --rr-panel-x: 16px; }
 .rr-cards .arc-exitbar {
   min-height: var(--rr-barh);
-  margin: 16px -24px -24px;        /* out to the panel's edges, down to its floor */
-  padding-left: 24px;
-  padding-right: 24px;
+  /* out to the panel's edges, and NOTHING below: with no bottom padding the
+     content box bottom IS the floor, so a negative bottom margin here would
+     only push the band past the box it belongs to. */
+  margin: 16px calc(var(--rr-panel-x) * -1) 0;
+  padding-left: var(--rr-panel-x);
+  padding-right: var(--rr-panel-x);
   border-top: 1px solid color-mix(in srgb, var(--pink), transparent 62%);
   background: linear-gradient(180deg,
     color-mix(in srgb, var(--navy), black 6%) 0%,
     color-mix(in srgb, var(--navy), black 26%) 100%);
   box-shadow: 0 -10px 22px rgba(6, 4, 14, 0.55);
 }
-.asc-panel.rr-cards { padding-bottom: 0; }
+/* ...AND THE PHONE HAS TO BE TOLD TWICE. `html.arc-mobile .asc-panel` in
+   scene.css is a shorthand `padding: 14px 16px 16px` at (0,2,1), which outranks
+   a bare `.asc-panel.rr-cards` at (0,2,0) whatever the sheet order - so the
+   16px came straight back on a phone and the band floated a card-row up over
+   the wall (owner screenshot, iPhone landscape 844x390, 2026-08-25). Both
+   selectors, one declaration: the floor is the floor on every viewport.
+
+   The bar's own bleed follows the PANEL's padding rather than a hard 24, for
+   the same reason - the phone's panel is padded 16 and a -24 bleed hung the
+   band two pixels off each edge of the box it is supposed to be the floor of. */
+.asc-panel.rr-cards,
+html.arc-mobile .asc-panel.rr-cards { padding-bottom: 0; }
 
 /* THE STRIP ON A FINISHED CARD FITS THE STRIP. The complete card's MASTERED
    line came out as "IASTERE" - the text zone is an authored rect on the face
@@ -271,6 +286,13 @@
    somebody forgot to finish. Deep navy-black at 19/1.5 reads as writing. */
 .rdb-body { margin: 0 0 14px; color: #241C2E; }
 .rdb-blank { margin: 0; min-height: 1em; }
+/* THE HOUSE RULES, and they are a real list because they are a real list. Every
+   <li> carries its own `value` (deskbook.js), so THE REST opens at six and the
+   numbers in the book are the numbers in the draft. The marker takes the
+   heading's brown so it reads as the same hand that wrote the headings. */
+.rdb-list { margin: 0 0 12px; padding-left: 25px; }
+.rdb-rule { margin: 0 0 9px; }
+.rdb-rule::marker { font-weight: 700; color: #6B4A2E; }
 .rdb-folio {
   position: absolute;
   left: 0; right: 0; bottom: 16px;

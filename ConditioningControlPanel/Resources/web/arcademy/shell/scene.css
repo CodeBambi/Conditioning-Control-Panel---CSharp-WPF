@@ -10,8 +10,9 @@
  *              class names verbatim, so a facility room and a class room can
  *              never drift apart.
  *   scene.css  owns everything only a SCENE has: the slide stack, the zoom
- *              between plates, the flag patches, the step-back pill and the
- *              overlay that rises out of the apron line. Every one of those is
+ *              between plates, the flag patches, the step-back pill, the
+ *              overlay that rises out of the apron line, and THE ALIVE LAYER
+ *              (`.asc-fx` and its seven kinds). Every one of those is
  *              prefixed `.asc-`.
  *
  * The stage is a fixed 1376x768 plane scaled by transform (lab.css's fitStage,
@@ -222,6 +223,185 @@
   opacity: 1;
   transform: none;
 }
+
+
+/* ======================== THE ALIVE LAYER ================================
+ * scene.js's `fx` table, skinned. Seven kinds, all of them generic: this sheet
+ * knows "a sign", "a lamp", "a window", never "the Records Office". Anything
+ * that is true of ONE room lives in that room's own sheet.
+ *
+ * THREE RULES THE WHOLE SECTION OBEYS:
+ *  - the layer takes no pointer events, ever. A decoration that eats a click is
+ *    a bug report about a hotspot;
+ *  - `.arc-reduced` never gets here at all (scene.js builds no layer), and the
+ *    `display:none` at the bottom is a BELT, not the braces;
+ *  - `.asc-fx-hold` (the tab is hidden, or the window blurred) pauses every
+ *    keyframe in one rule, while the JS side clears every timer and rAF.
+ * ==========================================================================*/
+
+/* Between the plate and the rects. Same z as a patch and later in DOM order,
+   so an fx row paints OVER the flag patch it decorates (the seam over the ajar
+   door) and UNDER every hotspot, tag and prop. */
+.asc-fx {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+/* Everything a factory mints is placed in stage px by scene.js. */
+.asc-fx > * { position: absolute; display: block; }
+
+/* THE TILT rides the PAINTING, not the slide - the slide's transform belongs
+   to the zoom (scene.js's fxTilt says why). The var is unset until a mouse
+   moves, so this is `translate(0,0)` on every touch device and in every shot. */
+.asc-art,
+.asc-patch,
+.asc-fx {
+  transform: translate(var(--asc-tilt-x, 0px), var(--asc-tilt-y, 0px));
+}
+
+/* ---- neon: the sign breathes, and once in a long while it stutters ------ */
+/* The dip is `animation:none` plus a low opacity rather than an !important
+   override: killing the animation is what lets the declared value land, and it
+   keeps the whole kind at one specificity. */
+.asc-fx-neon {
+  border-radius: 12px;
+  background: radial-gradient(ellipse at 50% 50%,
+    rgba(255, 105, 180, 0.26) 0%,
+    rgba(255, 105, 180, 0.12) 46%,
+    rgba(255, 105, 180, 0) 74%);
+  box-shadow: 0 0 30px 12px rgba(255, 105, 180, 0.15);
+  animation: asc-neon-breathe 4s ease-in-out infinite;
+}
+@keyframes asc-neon-breathe {
+  0%, 100% { opacity: 0.62; }
+  50%      { opacity: 1; }
+}
+.asc-fx-neon.is-dip { animation: none; opacity: 0.16; }
+
+/* ---- lamp: the banker's pool on the counter ---------------------------- */
+/* A NARROW BREATH ON PURPOSE (.96 to 1, owner dial). A lamp that pulses is a
+   lamp with a loose bulb; this one is only ever not quite still. */
+.asc-fx-lamp {
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 46%,
+    rgba(255, 228, 156, 0.30) 0%,
+    rgba(255, 214, 128, 0.14) 44%,
+    rgba(255, 200, 110, 0) 76%);
+  mix-blend-mode: screen;
+  animation: asc-lamp-breathe 4s ease-in-out infinite;
+}
+@keyframes asc-lamp-breathe {
+  0%, 100% { opacity: 0.96; }
+  50%      { opacity: 1; }
+}
+
+/* ---- motes: the dust in the light -------------------------------------- */
+/* The canvas IS the rect, so there is no box to hide - the mask is in the
+   paint (scene.js's frame()). `.arm-lite` never builds one; this is the belt. */
+.asc-fx-motes { mix-blend-mode: screen; }
+.arm-lite .asc-fx-motes { display: none; }
+
+/* ---- window: a route lamp outside, and a car now and then --------------- */
+.asc-fx-window { overflow: hidden; }
+.asc-fx-win-halo {
+  position: absolute;
+  inset: -20%;
+  background: radial-gradient(ellipse at 50% 42%,
+    rgba(255, 120, 190, 0.32) 0%,
+    rgba(255, 120, 190, 0) 68%);
+  animation: asc-win-pulse 6s ease-in-out infinite;
+}
+@keyframes asc-win-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+/* The headlight. Parked ABOVE the glass at zero opacity and only ever visible
+   inside the one 1.5s pass, so a window with nobody driving past is a window. */
+.asc-fx-win-beam {
+  position: absolute;
+  left: -20%;
+  right: -20%;
+  top: -40%;
+  height: 34%;
+  opacity: 0;
+  background: linear-gradient(180deg,
+    rgba(255, 246, 214, 0) 0%,
+    rgba(255, 246, 214, 0.44) 50%,
+    rgba(255, 246, 214, 0) 100%);
+}
+.asc-fx-win-beam.is-pass { animation: asc-win-sweep 1.5s linear 1; }
+@keyframes asc-win-sweep {
+  0%   { transform: translateY(0);     opacity: 0; }
+  16%  { opacity: 0.9; }
+  84%  { opacity: 0.9; }
+  100% { transform: translateY(440%);  opacity: 0; }
+}
+
+/* ---- clock: the one thing in the school that knows the time ------------- */
+/* The disc, the two hands and the hub are all SIZED BY scene.js in stage px
+   (they are measured off the plate, and a measurement is not a style). This
+   sheet owns the ink and the glide, nothing else. */
+.asc-fx-clock-face {
+  position: absolute;
+  border-radius: 50%;
+  background: #E8C895;              /* the plate's own cream, sampled */
+}
+.asc-fx-clock-hand {
+  position: absolute;
+  border-radius: 1px;
+  background: #260D05;              /* the plate's own ink, sampled */
+  transform-origin: 50% 100%;
+}
+/* The minute hand carries the seconds, so a twenty-second read is a small step
+   - and the step glides rather than jumping. Reduced motion never gets here. */
+.asc-fx-min { transition: transform 800ms cubic-bezier(0.4, 0, 0.2, 1); }
+.asc-fx-clock-hub {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #260D05;
+}
+
+/* ---- seam: a door that is open, and the light coming through it --------- */
+.asc-fx-seam { position: absolute; inset: 0; }
+.asc-fx-seam-edge {
+  position: absolute;
+  background: linear-gradient(90deg,
+    rgba(150, 255, 235, 0) 0%,
+    rgba(150, 255, 235, 0.85) 42%,
+    rgba(150, 255, 235, 0.12) 100%);
+  filter: blur(1.5px);
+  animation: asc-seam-breathe 3s ease-in-out infinite;
+}
+/* The pool on the floor. It is a GLOW and not a rect: it runs below the apron
+   line on purpose, because light does, and it is not a hotspot so the
+   wide-shot audit has nothing to say about it. */
+.asc-fx-seam-pool {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 28%,
+    rgba(140, 250, 230, 0.28) 0%,
+    rgba(120, 230, 215, 0.10) 46%,
+    rgba(120, 230, 215, 0) 76%);
+  animation: asc-seam-breathe 3s ease-in-out infinite;
+}
+@keyframes asc-seam-breathe {
+  0%, 100% { opacity: 0.42; }
+  50%      { opacity: 0.95; }
+}
+
+/* ---- law 3, and law 1's belt ------------------------------------------- */
+/* One rule pauses the whole layer while the player is somewhere else. The
+   TIMERS are the JS side's half; this is only the keyframes. */
+.asc-root.asc-fx-hold .asc-fx,
+.asc-root.asc-fx-hold .asc-fx * { animation-play-state: paused; }
+
+/* scene.js builds NO layer under reduced motion. This is the belt for a room
+   that somehow gets one anyway - and it is `display:none` rather than a freeze,
+   because a still glow over a painting is a smear, not a decoration. */
+.arc-reduced .asc-fx { display: none; }
 
 /* ======================== THE SCENE ON A PHONE ===========================
  * The apron's own phone rules are rooms.css's - this chassis wears the same

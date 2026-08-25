@@ -18,10 +18,11 @@
  *    through `t()`, because trap 26 caps a mod-skinnable row at 96 characters
  *    and a paragraph is not a label. Only the chrome is keyed - the three
  *    chapter tabs and the two page arrows - and those are short by nature.
- *  - it is not WRITTEN YET. `BOOK` below is a PLACEHOLDER table on purpose: the
- *    shape the owner's prose lands in, with rows that say out loud that they
- *    are rows. Nobody but the owner writes the school's story; a filled-in
- *    placeholder is worse than an obvious one, because it ships.
+ *  - it is not THIS FILE'S WRITING. `BOOK` below is the owner's approved draft
+ *    transcribed verbatim (W2, 2026-08-25): ten spreads, three chapters, two
+ *    blank cream pages and one numbered list. Nobody but the owner writes the
+ *    school's story, so nothing in that table gets tightened, re-punctuated or
+ *    "improved" by anybody editing this file for another reason.
  *
  * THE TURN. A page turn is one half-page rotating on the spine (CSS, ~500ms),
  * and the spread underneath repaints at the MIDPOINT so the new pages are
@@ -42,28 +43,104 @@ import { t as lexT } from '../core/lexicon.js';
 /* ----------------------------------------------------------------------------
  * THE TABLE
  *
- * `{chapters:[{key, titleKey, title, pages:[{head, body}]}]}`. The owner's prose
- * replaces every `body` below and nothing else has to move: the spread maths,
- * the tabs and the arrows are all derived from this shape.
+ * `{chapters:[{key, titleKey, title, pages:[{head, body, list?, blank?}]}]}` -
+ * and this is the OWNER'S PROSE, transcribed verbatim from the approved draft
+ * (`arcademy-vn-set/records/BOOK-DRAFT.md`, 2026-08-25). Nobody but the owner
+ * writes the school's story; nothing below is paraphrased, re-punctuated or
+ * tightened, and there is not an em-dash in it, which is not an accident.
  *
- * TWO PROPERTIES WORTH KEEPING when the real chapters land. A chapter with an
- * EVEN page count starts the next chapter on a left-hand page, which is what
- * lets a tab jump to a spread rather than to the middle of one; and a `title`
- * is a TAB LABEL (three or four words), not a heading - the long form belongs
- * on the page.
+ * WHAT A PAGE IS.
+ *   head   the page's own heading, exactly as the draft headed it. Uppercased
+ *          by the sheet, so the case here is the draft's.
+ *   body   PARAGRAPHS, separated by a blank line. The draft's hard wrapping is
+ *          not content; its paragraph breaks are.
+ *   list   an ordered list, for the numbered house rules only. `n` carries the
+ *          rule's own number so THE REST can open at six instead of restarting
+ *          at one, which is what a book does and what an `<ol>` will not do on
+ *          its own.
+ *   blank  a cream page with nothing on it. The inside cover's verso and the
+ *          book's back page are BLANK in the draft, and a blank page in a real
+ *          book is blank - not a note about being blank. It keeps its folio.
+ *
+ * THE SHAPE, and both halves of it are load-bearing.
+ *   - Every chapter starts on an EVEN page index, so a tab lands the reader on
+ *     a whole spread rather than in the middle of one (`paginate` derives the
+ *     spread by floor(at/2), and an odd start would hide the chapter's first
+ *     page behind a backwards turn).
+ *   - THREE chapters, three tabs, three lexicon rows that already exist and are
+ *     already mirrored in the C# NeutralLexicon. The maintenance page is the
+ *     back of the book and rides at the end of `tips` rather than minting a
+ *     fourth tab: "Maintenance" is not a chapter of anything, and a key minted
+ *     here would render as a de-snaked stub on the desktop host.
+ *
+ *   0-1   the inside cover        story   spread 0
+ *   2-9   THE ARCADEMY                    spreads 1-4
+ *   10-13 HOUSE RULES             rules   spreads 5-6
+ *   14-23 TIPS, ten rooms         tips    spreads 7-11
+ *   24-25 the back page                   spread 12
+ *
+ * SIX PAGES ARE CONTINUATIONS, and they are the whole difference between this
+ * table and the draft's ten spreads. The draft budgeted 90-140 words a page;
+ * at the shipped 19px on a 436x492 rect the real ceiling is nearer 95 with a
+ * heading, and four of the draft's pages ran 31 to 167 pixels past the
+ * fore-edge - measured headless, every spread, not eyeballed. Each of those
+ * four TURNS at a paragraph or a rule boundary rather than dropping the hand
+ * the book is written in, which is the owner's own instruction. A continuation
+ * page carries no head, because a continuation page in a real book carries
+ * none; the numbered rules carry their own numbers across the break.
  * -------------------------------------------------------------------------- */
 
 export const BOOK = Object.freeze({
   chapters: Object.freeze([
     Object.freeze({
-      key: 'school',
+      key: 'story',
       titleKey: 'records_book_ch_school',
       title: 'The Arcademy',
       pages: Object.freeze([
-        Object.freeze({ head: 'section one', body: 'page 1 of the story goes here' }),
-        Object.freeze({ head: '', body: 'page 2 of the story goes here' }),
-        Object.freeze({ head: 'section two', body: 'page 3 of the story goes here' }),
-        Object.freeze({ head: '', body: 'page 4 of the story goes here' }),
+        /* -------------------------------------------- the inside cover */
+        Object.freeze({ head: '', body: '', blank: true }),
+        Object.freeze({
+          head: 'A note on the first page',
+          body: "Hi. This is the desk book. Whoever's on the desk writes in it, and since nobody's on the desk after dark that's mostly been us, the front desk, in a few different handwritings over the years. The first part is the story of the place as far as anyone remembers it, the middle is the house rules, and the back is tips for every room, which get updated whenever somebody finds a better way and leaves a note in the tray.",
+        }),
+        /* CONTINUATION. The draft wrote this as one page; at the shipped 19px
+         * on a 436x492 rect it ran 76px past the fore-edge (measured headless,
+         * not guessed), so it turns at the paragraph break rather than
+         * shrinking the hand the book is written in. No head: a continuation
+         * page in a real book has none. */
+        Object.freeze({
+          head: '',
+          body: "You're welcome to read it here as long as you like. Please don't take it out of the office, the last copy that left came back with pool water in it.\n\n- the front desk",
+        }),
+        /* -------------------------------------------- THE ARCADEMY */
+        Object.freeze({
+          head: 'How it started',
+          body: "The building was a bowling alley first, then a roller rink for about a year, and then it sat empty long enough that the pigeons got the mail. The cabinets came later, one at a time, from an arcade across town that was closing and didn't want to pay to haul them. The Main Hall got the first five, room 101 to 105, and somebody with a label maker decided that if the machines were going to be in rooms then the rooms should have numbers, and once you've got numbered rooms you've basically got a school.",
+        }),
+        Object.freeze({
+          head: '',
+          body: 'The name was a joke on the sign order form. It stuck because the sign was already paid for.',
+        }),
+        Object.freeze({
+          head: 'The midway',
+          body: 'The long corridor with the checkered tape is the midway. It was supposed to be a hallway. The tape went down for one open night and never came back up, and the route lamps came with the cabinets so they got hung too, and now if you take the tape up the place looks wrong.',
+        }),
+        Object.freeze({
+          head: '',
+          body: "Classes run in the evening because that's when the power's cheap. The board over the front desk deals four rooms at first bell, homeroom first, then the other three in whatever order you like. The board is old, it clatters, and it is right far more often than it has any business being, so we stopped arguing with it.",
+        }),
+        Object.freeze({
+          head: 'The wings',
+          body: "The west spur got its own rooms the second term, 201 to 203, after the hall ran out of wall. The 300s are up the stairs by the bell tower and they're the coldest rooms we've got, bring a jumper. The pool is the pool. It came with the building and nobody has ever found the drain, so it stays full, and room 105 was built around it rather than the other way round.",
+        }),
+        Object.freeze({
+          head: '',
+          body: "One room in the west spur went dark in term three. The cabinet is fine, the plaque is still on the door. It's just not on the board anymore, and the tape across the doorway is there so nobody trips over the cable.",
+        }),
+        Object.freeze({
+          head: 'The office',
+          body: "This room is where the cards live. Every student gets one card per class, ten stamps on it, and the wall behind the counter is where they hang between nights. The board deals classes but the office keeps score, which is the only reason the office exists, that and the phone, which has rung twice in living memory, both times a wrong number.\n\nThe door on the right is the storeroom. It sticks. If it's open, that's the draught, not us.",
+        }),
       ]),
     }),
     Object.freeze({
@@ -71,10 +148,42 @@ export const BOOK = Object.freeze({
       titleKey: 'records_book_ch_rules',
       title: 'House rules',
       pages: Object.freeze([
-        Object.freeze({ head: 'section one', body: 'page 5 of the story goes here' }),
-        Object.freeze({ head: '', body: 'page 6 of the story goes here' }),
-        Object.freeze({ head: 'section two', body: 'page 7 of the story goes here' }),
-        Object.freeze({ head: '', body: 'page 8 of the story goes here' }),
+        Object.freeze({
+          head: 'The board and the stamps',
+          body: '',
+          list: Object.freeze([
+            Object.freeze({ n: 1, text: "The board deals at dusk. Four rooms, homeroom first, the rest in any order. What's lit is what's on tonight, and it changes tomorrow." }),
+            Object.freeze({ n: 2, text: "Finish a class and your card gets one stamp for that room. One a night per class, no matter how many times you replay it, and replaying is fine, we just don't stamp twice." }),
+            Object.freeze({ n: 3, text: "Leaving a class early doesn't stamp. Neither does a free swim. They're for practice, and practice is free." }),
+          ]),
+        }),
+        /* CONTINUATION, and the `n` on every rule is exactly why the list is
+         * data: four is still four on the second page of the section. */
+        Object.freeze({
+          head: '',
+          body: '',
+          list: Object.freeze([
+            Object.freeze({ n: 4, text: "Ten stamps and the card's full. A full card means that room stays lit for you on the board every night after, whether the board dealt it or not." }),
+            Object.freeze({ n: 5, text: 'Grades are S, A, B and C. A C still stamps. We are not that kind of school.' }),
+          ]),
+        }),
+        Object.freeze({
+          head: 'The rest',
+          body: '',
+          list: Object.freeze([
+            Object.freeze({ n: 6, text: "Tokens you don't use can go in the fountain in the quad. There's no rule that it's lucky, it's just what everybody does, and the yearbook has three pages of people saying it worked." }),
+            Object.freeze({ n: 7, text: 'The notice board in the hall is for notices. The one in this office is the same board, we just post here first because the pins are here.' }),
+          ]),
+        }),
+        Object.freeze({
+          head: '',
+          body: '',
+          list: Object.freeze([
+            Object.freeze({ n: 8, text: 'Cabinets act up. Give it one gentle kick, then leave us a note in the tray. Two kicks is a maintenance ticket and those take a week.' }),
+            Object.freeze({ n: 9, text: "Don't go in the pool after the bell. The lights go off on a timer and it's a long way to the ladder in the dark." }),
+            Object.freeze({ n: 10, text: 'The storeroom is not a classroom. (Added term three.)' }),
+          ]),
+        }),
       ]),
     }),
     Object.freeze({
@@ -82,8 +191,52 @@ export const BOOK = Object.freeze({
       titleKey: 'records_book_ch_tips',
       title: 'Tips',
       pages: Object.freeze([
-        Object.freeze({ head: 'section one', body: 'page 9 of the story goes here' }),
-        Object.freeze({ head: '', body: 'page 10 of the story goes here' }),
+        Object.freeze({
+          head: '101 Homeroom, Daily Trigger',
+          body: "It's one word a day and it's the same word for everybody, so if you've already heard it in the corridor, that's on you. Six rows is your whole budget. The best opening word uses five different common letters, and the second row should spend what the first one told you rather than guessing fresh. Every wrong row turns the room up a notch, so a slow careful row three beats a fast wrong one. The stars mean right letter right place, the half marks mean right letter wrong seat, and a cross means it's not in there at all, stop trying it.",
+        }),
+        Object.freeze({
+          head: '102 Memory Lab, Deja Vu',
+          body: "Turn two slides, a pair stays lit, anything else flips back. The board only moves while nothing's face up and it always shudders first, so when you feel the shudder, look at the whole board and not at the slide you were about to turn. Clear a board and a fresh one deals until the bell, and the bell is the only thing that ends the class, so there's no prize for rushing the last pair. If the whole board re-deals, the pairs are the same, only the seats changed, which is annoying but not the same as starting over.",
+        }),
+        Object.freeze({
+          head: '103 Discipline Hall, Impulse Control',
+          body: "A bubble lands in the dish, you pop it, and the faster you are the more it pays. A bubble wearing an X is a trap, and the trick is that the room wants your hand on the button already, so keep your hand off the button and on the table until you've read the bubble. Misses just drift off the dish, nothing's taken from you, so the only real way to lose is to pop something you shouldn't. Ninety seconds. It's short because your hands get tired, not because we're being kind.",
+        }),
+        Object.freeze({
+          head: '104 Lost & Found, Lost & Found',
+          body: "You're given a list and the wall keeps moving. Pick one thing from the list and hunt only that, then the next, because scanning for all of them at once is how the wall wins. The wall drifts in rows, so when a row slides, the thing you were tracking is still in that row, just further along. When the picture glitches and swaps, don't chase the swap, wait one beat and it settles. If you finish the list before the bell, the class is done, and yes you can go and get a drink.",
+        }),
+        Object.freeze({
+          head: '105 The Pool, The Deep End',
+          body: "Swipe, or use the arrows, and every tile on the board slides that way at once. Two matching tiles meet and sink one depth. Keep your heaviest tile in a corner and never swipe away from that corner unless there's nothing else, and there is almost always something else. A locked board isn't a loss, the depth you reached is banked and the water turns fresh. The ladder ends at the eleventh depth and the class holds you there if you make it. Free swim starts at the ladder and never stamps, so that's the place to practise the corner thing.",
+        }),
+        Object.freeze({
+          head: '201 Sort',
+          body: "Cards come and you send them where they go. The label on each card is the rule, and the rule changes without a sign, so read the card and not the pile you sent the last one to. There's a somebody in that room who deals a card wrong on purpose now and then. Don't take it personally, just send it back where it belongs. Three minutes. The pace picks up in the last minute and that's when the mistakes happen, so slow down a hair exactly when it feels like you should speed up.",
+        }),
+        Object.freeze({
+          head: '202 Echo',
+          body: "The pads play a sequence, you watch it and listen to it, then you repeat it back in order by tap or by key. Listening is the half people skip, and the notes are different enough that your ears can carry a sequence your eyes lose. A pad may light out of turn. Leave that one alone, it's not part of the sequence, it's the room being the room. Two minutes, quick class, good for a night when you've only got one more in you.",
+        }),
+        Object.freeze({
+          head: '203 Instant Recall',
+          body: "A wall of your own media keeps changing and effects fire over it, and then without warning everything freezes and you're asked what just happened. A word, an effect, a spiral, a face from the wall. Early on a bell warns you before the stop. Later there's no bell, it just stops. The only tip that works is to actually watch, which sounds like nothing and isn't. Three minutes, and it stops about fifteen times, so budget your attention like it's tokens.",
+        }),
+        Object.freeze({
+          head: '301 Anomaly',
+          body: "Every tile on the wall is the same loop, playing in step, and one isn't. Tap it. The first tap is the one that counts, so a wrong first tap costs you the round. The room tints, drifts and glitches every tile at once, and all of that is noise, because noise hits every tile the same way and the odd one out is odd in a way the noise can't fake. Look for the tile that's a half-beat behind the rest. That's usually it.",
+        }),
+        Object.freeze({
+          head: '302 Composure',
+          body: "Tap a piece beside the gap and it slides in. Arrows, WASD and swipes do the same. A piece that reaches its own place locks with a snap, and it can still be slid, so don't panic when a locked piece moves. The room will bury the board in wash and you keep sliding anyway, because the picture underneath never moved. Finish a picture and the next one deals. The bell ends the class, not the solve, so a half-finished picture at the bell is fine, the solves you banked are what count.",
+        }),
+        /* ------------------------------------------------ the back page */
+        Object.freeze({
+          head: 'Maintenance',
+          body: 'Storeroom door, right wall. Sticks in damp weather. Plane the top edge or replace the latch. Been on this list since term three. Low priority, nobody uses it.\n\nRoute lamp, midway, third from the hall end. Flickers. Bulb is fine. Left as is.',
+        }),
+        Object.freeze({ head: '', body: '', blank: true }),
       ]),
     }),
   ]),
@@ -155,9 +308,15 @@ export function paginate(book) {
     const rows = Array.isArray(ch.pages) ? ch.pages : [];
     const at = pages.length;
     for (let p = 0; p < rows.length; p += 1) {
+      const row = rows[p] || {};
       pages.push({
-        head: String((rows[p] && rows[p].head) || ''),
-        body: String((rows[p] && rows[p].body) || ''),
+        head: String(row.head || ''),
+        body: String(row.body || ''),
+        /* THE NUMBERED RULES keep their own numbers across the page break, so
+         * the list rides through as data rather than as a paragraph that says
+         * "6." in it. Absent on every other page, which is most of them. */
+        list: Array.isArray(row.list) ? row.list.slice() : null,
+        blank: !!row.blank,
         chapter: c,
         n: pages.length + 1,
       });
@@ -311,17 +470,43 @@ export function createDeskBook(opts) {
 
   /* ---------------------------------------------------------------- paint */
 
+  /** The draft's hard wrapping is not content; its blank lines are. */
+  function paragraphs(body) {
+    return String(body || '').split(/\n\s*\n/).map(function (s2) {
+      return s2.replace(/\s*\n\s*/g, ' ').trim();
+    }).filter(function (s2) { return s2.length > 0; });
+  }
+
   function paintSide(host, page) {
     host.textContent = '';
-    if (!page) {
-      /* THE BLANK VERSO. An odd page count leaves the last right-hand side
-       * empty, and an empty side of a real book is empty - not a note about
-       * being empty. It keeps its folio so the spread still reads as a book. */
+    if (!page || page.blank) {
+      /* THE BLANK PAGE. The verso of the inside cover, the back of the book,
+       * and the odd side left over by an odd page count are all the same
+       * thing: an empty side of a real book is EMPTY, not a note about being
+       * empty. It keeps its folio so the spread still reads as a book. */
       host.appendChild(el('p', 'rdb-blank', ''));
+      if (page) host.appendChild(el('span', 'rdb-folio', String(page.n)));
       return;
     }
     if (page.head) host.appendChild(el('h3', 'rdb-head', page.head));
-    host.appendChild(el('p', 'rdb-body', page.body));
+    /* ONE <p> PER PARAGRAPH. A page of prose that arrives as a single node is
+     * a wall; the draft's paragraph breaks are the author's and they survive. */
+    const paras = paragraphs(page.body);
+    for (let i = 0; i < paras.length; i += 1) host.appendChild(el('p', 'rdb-body', paras[i]));
+    if (page.list && page.list.length) {
+      /* THE HOUSE RULES. A real <ol>, and every item carries its own `value`
+       * so THE REST opens at six instead of starting again at one. */
+      const ol = doc.createElement('ol');
+      ol.className = 'rdb-list';
+      for (let i = 0; i < page.list.length; i += 1) {
+        const row = page.list[i] || {};
+        const li = el('li', 'rdb-rule', String(row.text || ''));
+        const n = Number(row.n);
+        if (isFinite(n) && n > 0) attr(li, 'value', String(n));
+        ol.appendChild(li);
+      }
+      host.appendChild(ol);
+    }
     host.appendChild(el('span', 'rdb-folio', String(page.n)));
   }
 
