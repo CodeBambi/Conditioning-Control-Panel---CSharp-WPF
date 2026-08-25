@@ -157,7 +157,7 @@ namespace ConditioningControlPanel.Services.UI
                     if (now < _nextLogTick) return;
                     _nextLogTick = now + LogIntervalMs;
                 }
-                App.Logger?.Debug("[DND] {What} suppressed — do-not-disturb app in foreground ({Process})",
+                App.Logger?.Information("[DND] {What} suppressed - do-not-disturb app in foreground ({Process})",
                     what, ForegroundProcessName());
             }
             catch { /* logging must never be the thing that breaks a spawn path */ }
