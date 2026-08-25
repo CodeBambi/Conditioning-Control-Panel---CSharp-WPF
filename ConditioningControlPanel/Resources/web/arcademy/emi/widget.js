@@ -668,8 +668,16 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     if (fx0 == null || fy0 == null) {
       /* First run: park her bottom-right, clear of the dock's corner. A phone has
        * no room for the desktop's 24/56 standoff, so she docks tight into the
-       * corner there and leaves the middle of the glass to the board. */
-      const padX = isMobile() ? 6 : 24;
+       * bottom edge there and leaves the middle of the glass to the board.
+       * THE 72 IS THE POSTBOX. 2026-08-25 moved the campus mail chip out of the
+       * top-right cluster and into the bottom-right corner (shell/mail.css), and
+       * a 6px standoff parked her flat on top of a 44px control she would then
+       * eat every tap on - her body is the one `pointer-events:auto` thing on
+       * that layer. 6 + 44 + 14 (the chip's own bottom inset) + 8 of daylight
+       * steps her left of it and leaves the bottom edge she is meant to dock to.
+       * FIRST RUN ONLY: a stored spot never comes through here, so nobody who
+       * has ever moved her sees this number. */
+      const padX = isMobile() ? 72 : 24;
       const padY = isMobile() ? 10 : 56;
       fx0 = (vp.w - s.w - padX) / vp.w;
       fy0 = (vp.h - s.h - padY) / vp.h;

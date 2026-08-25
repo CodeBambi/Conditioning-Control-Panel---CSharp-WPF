@@ -2128,9 +2128,39 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     decoration. PR #299 then built the post row around "once the card is gone the corner is
     free". The SAME node now folds into a ~185x52 tag (photo, name, number; band / stats / tier
     / chip / clip hidden by class, never by replacing the node - trap 93 still holds) and the
-    post row steps right of it (`+ 212px`). If a future small-stage rule needs the corner, fold
+    post row stepped right of it (`+ 212px`) - which parked both props across the front of The
+    Pool, so on the owner's second pass the same day the row left the bottom edge altogether
+    and took the TOP-LEFT corner instead (`.campus-crest` is already hidden up there). If a
+    future small-stage rule needs the bottom-left corner, fold
     harder; never hide. The web host's account chip (`shell/accountchip.js`) also offers "Open my
     card" from the bar, so the full ID is one tap away on a phone either way.
+102. **THE ID CARD FACE HAS EXACTLY ONE DRAWN WIDTH, AND THE PORTRAIT GATE IS WHY (owner bug
+    2026-08-25, "the card is cut off at the top and the page will not scroll to it").** Three
+    lessons, and only the first is the obvious one.
+    (a) A CENTRED FLEX CHILD TALLER THAN ITS CONTAINER OVERFLOWS THE **START** EDGE. `.arc-id`
+    centres `.arc-id-stage` with `align-items:center`; the stage measured 656px in a 390px
+    window, so the top of the card sat at y=-133 with `overflow:visible` all the way up and
+    nothing anywhere to scroll. The cure is the STAGE owning `overflow-y:auto` - never
+    `.arc-id`, because the veil, the key light and the close button live outside it and must
+    not scroll away - plus `overflow-x:hidden`, since `overflow-y:auto` alone computes the
+    OTHER axis to auto as well and the 150%-wide `.arc-id-lamp` then grows a horizontal
+    scrollbar.
+    (b) THE OBVIOUS SECOND HALF - a smaller `width` on `.arc-id-big` - IS WRONG. The face is
+    absolute percentages over fixed 22px insets and fixed 9-24px type, so at ~330px the meta
+    column overruns the body and the homeroom row falls off the bottom of the card. Nothing had
+    ever caught that because **a phone cannot reach this card at any width but 560px**: portrait
+    is refused outright by the orientation gate, so landscape is the only live phone view and
+    92vw never binds there. Scale it with `zoom` on `.arc-id-cardwrap` instead. `zoom` scales
+    the LAYOUT BOX as well as the paint, so the row and the scroller measure the card at its
+    drawn size; a `transform:scale()` would leave a 346px hole in the flow AND fight
+    `arc-id-cardin`, which animates that same transform. `zoom` takes a number and there is no
+    dividing a `dvh` by a `px` to get one, so the steps are a ladder of media queries.
+    (c) A CUSTOM PROPERTY IS HOW YOU BEAT `html.arc-mobile` WITHOUT AN `!important`.
+    `html.arc-mobile .arc-id-sheet` is (0,2,1); a bare `.arc-id-sheet` in a LATER media query
+    is (0,1,0) and loses, source order be damned. Anything that has to retune a value the
+    mobile block already sets gets published as a `--var` on a shared ancestor and READ by the
+    mobile rule (`width:var(--id-w, min(560px, 92vw))`) - only one rule ever sets the property,
+    so there is no contest to lose. Same shape as `--arc-mobile-chrome-h`.
 
 ## 5. The game module contract (short version)
 
