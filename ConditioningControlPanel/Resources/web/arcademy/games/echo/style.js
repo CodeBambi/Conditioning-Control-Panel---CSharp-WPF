@@ -461,8 +461,8 @@ html:not(.ae-touch) .g-ec-pad:hover .g-ec-word,
    transform/opacity only (never a filter over live media - trap 36), and the
    translate is repeated because a keyframe transform REPLACES the centring one.
    Neutralised under .arc-reduced / prefers-reduced-motion by the blanket
-   `.g-ec-stage *{animation:none}` rules below - the word still unveils, it
-   just does not move. */
+   .g-ec-stage animation:none rules below (trap 37: never a backtick inside
+   this template) - the word still unveils, it just does not move. */
 .g-ec-pad[data-veil="off"] .g-ec-word{animation:g-ec-wordpop .2s ease-out 1}
 @keyframes g-ec-wordpop{from{transform:translate(-50%,-50%) scale(1.06);opacity:.82}
   to{transform:translate(-50%,-50%) scale(1);opacity:1}}

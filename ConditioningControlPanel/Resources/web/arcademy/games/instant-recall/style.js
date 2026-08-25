@@ -475,7 +475,8 @@ html.ae-touch .g-ir-opt-face{max-height:18vh}
    no backdrop-filter - a composited opacity keyframe is the entire cost, so
    it is legal over a wall of live decodes. z 3: over the screen, under the
    flashwell (6) and the slip (7), so it can never obscure a quiz card or be
-   read as one. `.is-big` is the jackpot stop (stronger gradient, same law). */
+   read as one. .is-big is the jackpot stop - stronger gradient, same law
+   (trap 37: never a backtick inside this template). */
 .g-ir-payout{position:absolute;inset:0;pointer-events:none;z-index:3;opacity:0;
   background:radial-gradient(circle at 50% 40%, rgba(240,194,75,.34), transparent 70%)}
 .g-ir-payout.is-big{background:radial-gradient(circle at 50% 40%, rgba(240,194,75,.5), transparent 72%)}
