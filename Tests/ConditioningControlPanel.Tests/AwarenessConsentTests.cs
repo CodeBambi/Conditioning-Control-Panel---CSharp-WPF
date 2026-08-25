@@ -95,16 +95,102 @@ public class AwarenessConsentTests
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        // AppSettings declares them; MainWindow.CompanionRoom.cs is the one place that flips them, and
-        // it calls EnsureConsent first. Anything else on this list is a second door.
+        // AppSettings declares them; MainWindow.CompanionRoom.cs is the one place that flips them ON,
+        // and it calls EnsureConsent first. MainWindow.Patreon.cs is the entitlement-lapse shutoff
+        // (#267's EnforceEntitlementLapse, extended for awareness in #1047) and is only allowed here
+        // because it can only ever write FALSE — asserted below, so it cannot quietly become a second
+        // door. Anything else on this list IS a second door.
         var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "AppSettings.cs", "MainWindow.CompanionRoom.cs"
+            "AppSettings.cs", "MainWindow.CompanionRoom.cs", "MainWindow.Patreon.cs"
         };
 
         var strays = writers.Where(f => !allowed.Contains(f!)).ToList();
         Assert.True(strays.Count == 0,
             "awareness is switched on outside the consent gate in: " + string.Join(", ", strays));
+    }
+
+    [Fact]
+    public void TheLapseShutoffOnlyEverClosesHerEyes()
+    {
+        // The shutoff shares the allow list above with the consent gate, so its one privilege has
+        // to be pinned: it may write the enable false, and it may never write it true.
+        var source = File.ReadAllText(Path.Combine(SourceRoot(), "MainWindow", "MainWindow.Patreon.cs"));
+
+        // (char)10 is the line feed, spelled without an escape so the split survives however this
+        // file's own line endings land.
+        var writes = source.Split((char)10)
+            .Select(l => l.Trim())
+            .Where(l => l.Contains("AwarenessModeEnabled =", StringComparison.Ordinal)
+                        && !l.Contains("AwarenessModeEnabled ==", StringComparison.Ordinal)
+                        && !l.StartsWith("//", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.NotEmpty(writes);
+        Assert.All(writes, w => Assert.Contains("= false", w, StringComparison.Ordinal));
+    }
+
+    // ===================== the entitlement term (#1047) =====================
+
+    [Fact]
+    public void TheObserverPredicateAsksAboutEntitlementAndNotOnlySettings()
+    {
+        // Awareness is sold at tier 1, its page wears the premium veil, and until #1047 the engine's
+        // own predicate read four settings flags and nothing else — so a lapsed account was still
+        // observed, behind a padlock that covered the only toggle on that page. A source scan rather
+        // than a call, because App.Patreon cannot be stood up headlessly and the regression this
+        // guards is a term going MISSING from an expression.
+        var source = File.ReadAllText(Path.Combine(SourceRoot(), "Services", "Awareness", "AwarenessObserver.cs"));
+
+        Assert.Contains("HasEntitlement && s.UseAwarenessV2", source, StringComparison.Ordinal);
+        Assert.Contains("App.Patreon?.HasPremiumAccess == true", source, StringComparison.Ordinal);
+        // The free day has to be OR'd in or the ? box would advertise a door it cannot open.
+        Assert.Contains("IsFreeToday(\"awareness\")", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NoEntitlementServiceMeansNoWatching()
+    {
+        // Fail closed: headless, App.Patreon and App.DailyFree are both null, and a missing gate must
+        // read as a shut door rather than an open one.
+        Assert.False(AwarenessObserver.HasEntitlement);
+        Assert.False(AwarenessObserver.IsEnabled);
+    }
+
+    [Fact]
+    public void BothAwarenessPollsReCheckEntitlementOnEveryTick()
+    {
+        // Start()-time checks are not enough: entitlement lapses mid-run (midnight rotation, an
+        // expiring subscription, a logout) and both of these timers outlive the check that armed them.
+        var observer = File.ReadAllText(Path.Combine(SourceRoot(), "Services", "Awareness", "AwarenessObserver.cs"));
+        var legacy = File.ReadAllText(Path.Combine(SourceRoot(), "Services", "UI", "WindowAwarenessService.cs"));
+
+        var observerTick = observer[observer.IndexOf("private void OnPollTick", StringComparison.Ordinal)..];
+        Assert.Contains("if (!IsEnabled) return;", observerTick[..1400], StringComparison.Ordinal);
+
+        var legacyTick = legacy[legacy.IndexOf("private void OnPollTick", StringComparison.Ordinal)..];
+        Assert.Contains("AwarenessObserver.HasEntitlement", legacyTick[..1400], StringComparison.Ordinal);
+
+        // …and it has to be ahead of the title read, or a lapsed account is observed and then discarded.
+        var guard = legacyTick.IndexOf("AwarenessObserver.HasEntitlement", StringComparison.Ordinal);
+        var read = legacyTick.IndexOf("GetActiveWindowTitle()", StringComparison.Ordinal);
+        Assert.True(guard >= 0 && read > guard, "the entitlement guard must precede the window-title read");
+    }
+
+    [Fact]
+    public void TheLapseShutoffStopsTheEngineAndNotJustTheFlag()
+    {
+        // Flipping the setting without stopping the service would leave the poll running until the
+        // next relaunch — the half-fix that would make #1047 look repaired while the eyes stayed open.
+        // Stop() on the legacy service is what chains through to the observer's Stop() and the ledger.
+        var source = File.ReadAllText(Path.Combine(SourceRoot(), "MainWindow", "MainWindow.Patreon.cs"));
+
+        var write = source.IndexOf("settings.AwarenessModeEnabled = false;", StringComparison.Ordinal);
+        Assert.True(write > 0, "the lapse shutoff no longer switches Awareness Mode off");
+
+        var block = source.Substring(write, Math.Min(400, source.Length - write));
+        Assert.Contains("App.WindowAwareness?.Stop()", block, StringComparison.Ordinal);
+        Assert.Contains("Entitlement lapsed: Awareness Mode", block, StringComparison.Ordinal);
     }
 
     [Fact]
