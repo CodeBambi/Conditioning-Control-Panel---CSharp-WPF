@@ -149,6 +149,21 @@ shell/records.js   THE RECORDS OFFICE screen: the wall of ten cards, the per-car
                    (recordsPage.dismissSpotlight(), trap 48's shape); reduced
                    motion (html.arc-reduced / the media query) = one plain fade,
                    no cues
+shell/idcard.js    THE STUDENT ID: the laminated card in the corner of the
+                   campus, and the spotlight it opens (records.js's shape, z 46,
+                   veil + key light + placard + Tab trap + one Esc rung above
+                   the Records one). Two halves in one file: PURE PARTS that
+                   campus.js imports (the drawn PHOTO PENDING / anon portraits
+                   as `data:` URIs, `chipRung`, `paintChip`, `studentNumber`,
+                   `runPhotoDay`) so the furniture card and the big card can
+                   never disagree, and `createIdSpotlight()` itself. The card
+                   shows name / number / term / enrolled / homeroom, a YEAR
+                   stamp that lands on punchcard.js's own thud, a six-tile stat
+                   sheet on a chime ladder, and a FLIP side (barcode, small
+                   print, the Records line, the signature). The chip under the
+                   photo IS the `presenceShare` discord rung (owner ruling, see
+                   §3) and paints only from the echo. NOT SHAREABLE by ruling -
+                   reportcard.js stays the one share pipeline (trap 13)
 shell/annexreveal.js THE NIGHT THE WALL MOVED: the once-ever reveal cinematic
                      (cut to black -> a thud from below -> EMI startled -> one
                      second of the records office at night with a wall panel
@@ -839,6 +854,33 @@ DOWN, and the page never invents a number).
   `startSwapTo` "for consistency", the blueprint becomes quiz material and a stop can ask about
   a frame the player was never meant to be tested on. `freeze(true)`, `reshuffle()` and
   `destroy()` all take it down.
+
+- **THE STUDENT ID's `profile` IS ADDITIVE, AND THE PHOTO CHIP IS THE
+  `presenceShare` DISCORD RUNG.** `init.profile` = `{name, avatarUrl,
+  discordLinked, presenceShare}`; the host pushes `{type:'profile', profile,
+  result?:'linked'|'cancelled'|'failed'}` after an OAuth completes, fails or is
+  cancelled AND after any `presenceShare` change it applies itself. The page
+  posts exactly two things: `{type:'link-discord', thenShare:'discord'}` (ONLY
+  while `discordLinked` is false) and the ordinary
+  `set-setting {key:'presenceShare'}` once it is true. A host that predates the
+  frame is a supported host: the card draws "Student", the drawn stand-in
+  portrait and the unlinked chip, nothing throws, and the page asks the network
+  for nothing (the rig asserts zero off-origin requests).
+  - **ONE SWITCH** (owner ruling): the photo toggle IS the public `discord`
+    rung, so photo on means the campus ghost wears it too, and turning it off
+    drops to `username` (the name stays). There is no second private flag.
+  - **THE SNOWFLAKE RULE HOLDS** (PRESENCE.md §10): the Discord CDN url and the
+    Discord user id NEVER reach the page. Desktop caches a 128px PNG and ships
+    it as a `data:` URI inside init; the web build sends the first-party proxy
+    url. Anything else is a leak, and `<img>` onerror falls back to the drawn
+    portrait rather than retrying.
+  - **ONE CLICK IS THE CONSENT** (owner ruling): when a link-up started from the
+    chip succeeds, the HOST applies `presenceShare:'discord'` itself and pushes
+    `profile {result:'linked'}`. The page never asks twice, and the chip's
+    label is what promised it.
+  - **THE STUDENT NUMBER IS DERIVED ON THE PAGE**, `core`-free: the presence
+    `self` opaque id hashed to `XXXX-XXXX`, or a seed off the enrolment date and
+    the name with a tiny `temp` mark until the real one lands.
 
 ## 4. Traps (each one cost real time)
 
@@ -1752,6 +1794,32 @@ DOWN, and the page never invents a number).
     changes. Idle events also budget legibility - the name is dark/displaced <=20% of
     any cycle - and the wall whisper (`arc-rw-*`) is hover/focus-gated per card so the
     grid never runs ten ambient loops at once.
+92. **A REDUCED-MOTION "ONE FADE" CANNOT BE A TRANSITION, AND IT CANNOT LIVE INSIDE THE
+    OVERLAY EITHER (the ID spotlight, 2026-08-25).** The global freeze at the bottom of
+    `styles.css` is `html.arc-reduced *, ::before, ::after { animation-duration:.001s
+    !important; animation-iteration-count:1 !important; animation-delay:0s !important;
+    transition:none !important; }` - so the obvious way to write "reduced motion is one
+    120ms fade" (a `transition:opacity` plus a class flipped on the next rAF) is dead on
+    arrival: the transition is forbidden and the overlay simply pops. It has to be an
+    ANIMATION. But the decoration law's own test is "no `animation-name` other than none
+    INSIDE the reduced overlay", which an animated veil would fail. Both hold at once only
+    because the fade sits on the OVERLAY ROOT (`.arc-id.arc-id-reduced`) while
+    `.arc-id-reduced *` is `animation:none !important` - a root is not "inside" itself.
+    Watch the specificity too: `html.arc-reduced *` is (0,1,1) and outranks
+    `.arc-id-reduced *` at (0,1,0) on `animation-duration`, but they are different
+    longhands, so `animation-name:none` still lands and the freeze still owns the duration.
+    Read `.arc-rs-reduced` the same way, and do not "simplify" either one into a transition.
+93. **THE STUDENT ID IS ONE NODE WITH THREE OWNERS, AND `data-inflight` IS THE FENCE.**
+    `campus.idCardEl()` is built once and never replaced - orientation.js animates that exact
+    element (ORIENTATION.md §3.2), `emi/fieldtrips.js` measures it by the `.campus-idcard`
+    selector, and the card is a `role=button` that opens the spotlight. Three things follow.
+    Adding children is fine; REPLACING the node is not, so `setProfile()` repaints in place
+    and never re-renders the card. Withheld is still the `hidden` PROPERTY only (trap 27), and
+    the click is refused while it is set. And the handover is refused too: orientation.js
+    stamps `data-inflight="1"` where the flight starts and `landCard()` clears it - which is
+    the ONE place every path out of the beat already funnels through, so there is exactly one
+    place it comes off. A press mid-flight would open a spotlight over a card that is still
+    travelling and hand focus back to a node the beat is about to restyle.
 
 ## 5. The game module contract (short version)
 

@@ -281,6 +281,49 @@ export const DEFAULT_LEXICON = Object.freeze({
   records_empty_wall: 'Nothing on the wall yet. Attend a class and the first card gets pinned.',
   records_spot_close: 'Close',
 
+  /* THE STUDENT ID (shell/campus.js's furniture card + shell/idcard.js's
+     spotlight). The card is a document, not a share: nothing here names a
+     Discord handle, an id or a url - the photo consent IS the `presenceShare`
+     discord rung the settings page owns, said in the card's own words.
+     `{n}` / `{m}` are substituted by the page. Every value is under the
+     96-char MergeModTable cap, so a mod re-voices the whole card. */
+  student_id_title: 'Student ID',
+  id_photo_pending: 'Photo pending',
+  id_photo_on: 'Discord photo on',
+  id_photo_use: 'Use my Discord photo',
+  id_photo_link: 'Link Discord for my photo',
+  id_photo_waiting: 'Waiting on Discord...',
+  id_chip_on: 'Photo on',
+  id_chip_use: 'Use Discord photo',
+  id_chip_link: 'Link Discord',
+  id_chip_wait: 'Waiting...',
+  id_photo_hint_app: 'Opens the Discord link-up in the app, then your photo goes on the card and on campus.',
+  id_photo_hint_web: 'Sends you to Connections to link Discord, then straight back here with the photo on.',
+  id_photo_hint_off: 'Your ghost on campus wears this photo too. Tap to take it down (your name stays).',
+  id_photo_failed: 'Discord did not pick up. Try again in a minute.',
+  id_photo_day: 'Photo day',
+  id_no: 'Student no.',
+  id_no_temp: 'temp',
+  id_enrolled: 'Enrolled',
+  id_homeroom: 'Homeroom',
+  id_issued_at: 'Issued at',
+  id_front_desk: 'Front desk',
+  id_stat_semester: 'Term',
+  id_stat_streak: 'Attendance streak',
+  id_stat_perfect: 'Perfect days',
+  id_stat_stamps: 'Stamps of 100',
+  id_stat_best: 'S days',
+  id_year: 'Year',
+  id_grade_tier: 'Grade tier',
+  id_to_go: '{n} to go',
+  id_reinked: 'Re-inked',
+  id_flip: 'Tap the card to turn it over. Esc to put it back.',
+  id_back_lost: 'Lost it? Ask at the front desk. The second one costs you a stamp.',
+  id_back_valid: 'Good for as long as the lights are on.',
+  id_records_line: 'Records: {n} of {m} cards mastered',
+  id_open_records: 'Open Records',
+  id_spot_close: 'Close',
+
   /* Semester II ghost labels behind the tape (unregistered games get their
    * game_<key> row here, same convention the registry uses once they ship). */
   game_misdirection: 'Misdirection',

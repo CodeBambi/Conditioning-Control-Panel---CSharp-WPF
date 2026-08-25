@@ -488,6 +488,17 @@ bridge.on('suspend', guard('suspend', (m) => {
   log('suspend ' + (m.on ? 'ON' : 'off') + ' (' + (m.reason || '?') + ')'
     + (shell ? '' : ' [buffered until the shell exists]'));
 }));
+/* THE STUDENT ID's profile (the STUDENT ID contract). Additive and OPTIONAL on
+ * both sides: a host that never pushes one leaves the card drawing "Student"
+ * and the drawn stand-in portrait, and a shell built before this frame existed
+ * simply has no `onProfile` - hence the same `shell &&` guard `annex-stats`
+ * carries. Like `punchcard-result` it needs no buffer of its own: `bridge.on`
+ * REPLAYS anything that landed before this subscription existed (trap 11). */
+bridge.on('profile', guard('profile', (m) => {
+  if (shell && shell.onProfile) shell.onProfile(m);
+  log('profile' + (m && m.result ? ' (' + m.result + ')' : '')
+    + (m && m.profile ? (m.profile.discordLinked ? ' linked' : ' not linked') : ' [no body]'));
+}));
 bridge.on('meta', guard('meta', (m) => { if (shell) shell.onMeta(m); }));
 bridge.on('annex-stats', guard('annex-stats', (m) => { if (shell && shell.onAnnexStats) shell.onAnnexStats(m); }));
 bridge.on('fullscreen', guard('fullscreen', (m) => { fullscreen = !!m.on; }));

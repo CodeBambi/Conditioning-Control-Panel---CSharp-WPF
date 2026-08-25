@@ -35,17 +35,17 @@ import {
   loadGames, descriptors, tierFor, tierForPromotions, advance, suspendedStub, MAX_TIER,
 } from '../games/registry.js';
 import { createBoard } from './splitflap.js';
-import { createCampus, campusState } from './campus.js';
+import { createCampus, campusState, currentSemester } from './campus.js';
 import { createGhosts, presenceOptions } from './ghosts.js';
 import { createWalker, roomStop } from './walk.js';
 import { createOrientation, needsOrientation, orientationOptions } from './orientation.js';
 import { createReportCard } from './reportcard.js';
-import { createSettingsPage, boardSizeKey, SETTING_KEYS, isGlobalSettingKey } from './settings.js';
+import { createSettingsPage, boardSizeKey, SETTING_KEYS, isGlobalSettingKey, PRESENCE_RUNGS } from './settings.js';
 import { createCeremonies } from './ceremonies.js';
 import { createPeek } from './peek.js';
 import { createKeybinds } from './keybinds.js';
 import { campusPill, createConfirm, exitBar, sign as signExit } from './exits.js';
-import { installDeviceClass } from '../core/device.js';
+import { installDeviceClass, isMobile } from '../core/device.js';
 import { requireOrientation, clearOrientation } from './orientgate.js';
 import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
 /* FIRST BELL - the once-ever opening (vn/). It mints its own layer, owns its own
@@ -55,6 +55,7 @@ import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
  * player's whole experience of this import is one controller that stands down. */
 import { createFirstBell } from '../vn/index.js';
 import { createRecords } from './records.js';
+import { createIdSpotlight, idReducedMotion } from './idcard.js';
 import { createAnnexReveal } from './annexreveal.js';
 /* THE SEEP - the foreshadowing layer. ONE director, and the shell's whole
  * relationship with it is: build it, hand it read-only seams and three gate
@@ -651,6 +652,35 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   let endCard = null;
   /** The Records Office screen (PUNCHCARD §6) - built lazily, kept for reuse. */
   let recordsPage = null;
+  /* ---------------------- THE STUDENT ID (shell/idcard.js) ----------------
+   * The card in the corner of the campus is a document you can pick up now.
+   * The shell owns three things about it and the card owns none of them: the
+   * PROFILE (init.profile plus every `profile` frame the host pushes), the
+   * SPOTLIGHT (minted on the first open, like the Records one) and the CHIP's
+   * one verb - which posts a frame and then waits, because only the echo moves
+   * a setting (trap 1).
+   * `idChipWait` is the ONE optimistic paint: 'wait' while a Discord link-up is
+   * in the air, 'pending' while a set-setting is waiting on its echo. Both are
+   * cleared by the frame that answers, or by the 90s timeout below. */
+  let idSpotlight = null;
+  let idEmiPrev = false;
+  let idChipWait = null;
+  let idLinkTimer = 0;
+  let profile = {
+    name: null,
+    avatarUrl: null,
+    discordLinked: false,
+    presenceShare: idRung(src.presenceShare, 'off'),
+  };
+  if (src.profile && typeof src.profile === 'object') {
+    profile = {
+      name: typeof src.profile.name === 'string' && src.profile.name ? src.profile.name : null,
+      avatarUrl: typeof src.profile.avatarUrl === 'string' && src.profile.avatarUrl
+        ? src.profile.avatarUrl : null,
+      discordLinked: !!src.profile.discordLinked,
+      presenceShare: idRung(src.profile.presenceShare, profile.presenceShare),
+    };
+  }
   /** THE LAB (ANNEX-OS.md). Built fresh per visit and destroyed on every path
    *  out - it runs a cam-wall rAF and holds EMI's bracket, neither of which
    *  may survive the screen. `annexEmiPrev` remembers whether EMI was enabled
@@ -1009,6 +1039,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       orientation = null;
       try { ob.destroy(); } catch (e) { /* noop */ }
     }
+    /* THE ID SPOTLIGHT DIES WITH ITS CAMPUS. It was lifted off a node that is
+     * about to be destroyed, so a card left up would be holding a dead `from`
+     * to hand focus back to - and EMI comes back on the same wipe (the annex
+     * bracket's discipline). */
+    dismissIdCard(true);
     if (ghosts) { try { ghosts.destroy(); } catch (e) { /* noop */ } ghosts = null; }
     if (campus) {
       try { campus.destroy(); } catch (e) { /* noop */ }
@@ -1508,10 +1543,25 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
            * topbar gear, so these two lines are the whole split. */
           registrarRoom: () => walkThen('registrar', () => showSettings()),
           registrar: () => showSettings(),
+          /* THE STUDENT ID. The card OFFERS its press here and the shell owns
+           * the spotlight, exactly the way it owns the Records one - the campus
+           * never mints an overlay. No walk: the card is in your hand, not
+           * across the quad. */
+          idCard: () => showIdCard(),
+          /* The photo consent, leaving for the host. ONE function, because
+           * there is ONE switch (owner ruling 1). */
+          idChip: () => onIdChip(),
         },
         log: say,
       });
       campus.noteDescriptors(campusDescriptors());
+      /* THE CARD KNOWS WHO YOU ARE BEFORE IT IS EVER SEEN. The campus is torn
+       * down and rebuilt on every visit, so the profile is handed over here
+       * rather than held by the card - and an in-flight chip keeps its look
+       * across the rebuild. */
+      try { if (campus.setProfile) campus.setProfile(idProfile()); }
+      catch (e) { say('id card profile seed threw: ' + ((e && e.message) || e)); }
+      if (idChipWait) setIdChipState(idChipWait);
       campus.boardMount.appendChild(board.root);
       renderBoardExtras(campus.footMount);
       dom.screen.appendChild(campus.root);
@@ -1710,6 +1760,272 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (lastGraded && lastGraded.fresh) lastGraded.fresh = false;
       else fireMoment('reportCard', lastGraded || { grade: null, perfect: allDone() });
     }
+  }
+
+  /* ======================= THE STUDENT ID ===============================
+   * PUNCHCARD's neighbour: the one document the school hands YOU. Three seams
+   * live here and nowhere else.
+   *
+   *   THE PROFILE   `init.profile` (additive - a host that predates it simply
+   *                 never sends one, and the card draws "Student", the drawn
+   *                 stand-in portrait and the unlinked chip) plus every
+   *                 `profile` frame. The page derives NOTHING about your
+   *                 account: no Discord handle, no snowflake and no CDN url
+   *                 ever reaches this document (PRESENCE.md §10).
+   *   THE STATS     read off the store the way every other screen reads it -
+   *                 host-owned attendance, host-owned punch cards, the page's
+   *                 own graded `days`. Nothing here counts anything twice.
+   *   THE CHIP      ONE verb. Unlinked, it asks the host to run the link-up;
+   *                 linked, it moves the `presenceShare` rung. Either way it
+   *                 paints a waiting look and then waits for the answer.
+   * ==================================================================== */
+
+  /** Roman numerals for the term line. The campus names the same one. */
+  const ID_ROMAN = ['', 'I', 'II', 'III', 'IV'];
+
+  /** Coerce anything at all to one of the four presence rungs. */
+  function idRung(value, fallback) {
+    const v = String(value == null ? '' : value);
+    return PRESENCE_RUNGS.indexOf(v) >= 0 ? v : (fallback || 'off');
+  }
+
+  /** ONE cue request on `document` - shell/audio.js owns the only audio node on
+   *  the page (trap 18). A dropped cue is not an error. */
+  function idSfx(name, level, extra) {
+    try {
+      if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+      const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+      if (!Ctor) return;
+      document.dispatchEvent(new Ctor('arcademy-sfx', {
+        detail: Object.assign(
+          { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+          extra || {}
+        ),
+      }));
+    } catch (e) { /* noop */ }
+  }
+
+  /** The presence layer's own opaque `self` id, when the host has pushed one.
+   *  READ, never held: the ghost layer is rebuilt with the campus under it. */
+  function idSelfId() {
+    try {
+      const d = ghosts && typeof ghosts.diagnostics === 'function' ? ghosts.diagnostics() : null;
+      return (d && d.self) ? String(d.self) : null;
+    } catch (e) { return null; }
+  }
+
+  /** The earliest date the school has on you: the first enrolment across the
+   *  ten cards, and failing that the oldest day it wrote down. */
+  function idEnrolled() {
+    let best = null;
+    for (const entry of games.list) {
+      try {
+        const at = store.punchCard(entry.key).enrolledAt;
+        if (typeof at === 'string' && at && (!best || at < best)) best = at;
+      } catch (e) { /* a card that cannot be read is not a date */ }
+    }
+    if (best) return best;
+    try {
+      const days = store.get('days') || {};
+      const keys = Object.keys(days).sort();
+      if (keys.length) return keys[0];
+    } catch (e) { /* noop */ }
+    return null;
+  }
+
+  /** Distinct local dates on which ANY class graded S. Counted off the page's
+   *  own graded view, which is the only place a grade is written down. */
+  function idSDays() {
+    let n = 0;
+    try {
+      const days = store.get('days') || {};
+      for (const key of Object.keys(days)) {
+        const classes = (days[key] && days[key].classes) || {};
+        for (const g of Object.keys(classes)) {
+          if (String((classes[g] || {}).grade).toUpperCase() === 'S') { n++; break; }
+        }
+      }
+    } catch (e) { /* noop */ }
+    return n;
+  }
+
+  /** What the card says about YOU. One object, read fresh on every paint. */
+  function idProfile() {
+    return {
+      name: profile.name,
+      avatarUrl: profile.avatarUrl,
+      discordLinked: !!profile.discordLinked,
+      presenceShare: profile.presenceShare,
+      selfId: idSelfId(),
+      enrolled: idEnrolled(),
+      // The web build sends you to Connections; the app opens the link-up in
+      // place. The chip's hint has to say which, so it has to know.
+      web: src.mediaControls === true,
+    };
+  }
+
+  /** What the card says about your ATTENDANCE. Every number is somebody else's
+   *  truth: the host's streak, the host's cards, the page's graded days. */
+  function idStats() {
+    const s = store.streak();
+    const cards = games.list.length;
+    let stamps = 0;
+    for (const entry of games.list) {
+      try { stamps += store.punchCard(entry.key).punches | 0; } catch (e) { /* noop */ }
+    }
+    let mastered = 0;
+    try { mastered = Object.keys(unlockedMap()).length; } catch (e) { mastered = 0; }
+    return {
+      streak: s.count | 0,
+      perfect: s.perfectDays | 0,
+      stamps,
+      stampCap: cards * (store.holes || 10),
+      sDays: idSDays(),
+      termRoman: ID_ROMAN[currentSemester()] || 'I',
+      tier: maxTier(),
+      enrolled: idEnrolled(),
+      mastered,
+      cards,
+    };
+  }
+
+  /** THE OPEN COUNTER, page-owned (`idOpens`). The full cue sheet plays for the
+   *  first three opens and the compact cut every time after - repetition
+   *  shrinks the party, and the sheet lands on the same numbers either way. */
+  function idOpenCount() {
+    let n = 0;
+    try { n = Math.max(0, Math.round(Number(store.get('idOpens')) || 0)); } catch (e) { n = 0; }
+    n += 1;
+    try { store.set('idOpens', n); } catch (e) { /* a counter may never hold a door */ }
+    return n;
+  }
+
+  /** Repaint both surfaces from the ONE profile. Every echo lands here. */
+  function paintIdProfile() {
+    const p = idProfile();
+    try { if (campus && campus.setProfile) campus.setProfile(p); }
+    catch (e) { say('id card repaint threw: ' + ((e && e.message) || e)); }
+    try { if (idSpotlight) idSpotlight.setProfile(); } catch (e) { /* noop */ }
+    if (idChipWait) setIdChipState(idChipWait);
+  }
+
+  /** The chip's in-flight look, on whichever surfaces exist. */
+  function setIdChipState(state) {
+    try { if (campus && campus.setChipState) campus.setChipState(state); } catch (e) { /* noop */ }
+    try { if (idSpotlight) idSpotlight.setChipState(state); } catch (e) { /* noop */ }
+  }
+
+  function clearIdLinkTimer() {
+    if (!idLinkTimer) return;
+    try { clearTimeout(idLinkTimer); } catch (e) { /* noop */ }
+    idLinkTimer = 0;
+  }
+
+  /** PHOTO DAY, on whichever surface the player is actually looking at. */
+  function runIdPhotoDay() {
+    try {
+      if (idSpotlight && idSpotlight.isOpen()) idSpotlight.photoDay();
+      else if (campus && campus.photoDay) campus.photoDay();
+    } catch (e) { say('photo day threw: ' + ((e && e.message) || e)); }
+    /* EMI's beat. There is no `photoDay` row in emi/moments.js, so this asks
+     * her for the face directly - null-safe both ways (an unmounted or a
+     * dismissed mascot is a silent no-op, moments.js's own rule). */
+    try { const emi = getEmi(); if (emi && emi.emote) emi.emote('glee'); } catch (e) { /* noop */ }
+  }
+
+  /**
+   * THE CHIP'S ONE VERB, and the ONLY place either frame is posted.
+   *   not linked  -> ask the host to run the link-up, and say we are waiting.
+   *                  90 seconds later, with no answer at all, the chip goes
+   *                  back to its rung: an OAuth flow can be abandoned in a
+   *                  browser tab the page will never hear about again.
+   *   linked      -> move the `presenceShare` rung, and paint `pending` until
+   *                  the host's `setting` echo says what actually stuck.
+   * A second press while either is in flight is refused - one frame per state.
+   */
+  function onIdChip() {
+    if (idChipWait) return;
+    if (!profile.discordLinked) {
+      idChipWait = 'wait';
+      setIdChipState('wait');
+      try { bridge.send({ type: 'link-discord', thenShare: 'discord' }); }
+      catch (e) { say('link-discord send failed: ' + ((e && e.message) || e)); }
+      try {
+        idLinkTimer = setTimeout(() => {
+          idLinkTimer = 0;
+          if (idChipWait !== 'wait') return;
+          idChipWait = null;
+          paintIdProfile();
+          say('id chip: no profile frame in 90s - the chip goes back to its rung');
+        }, 90000);
+      } catch (e) { idLinkTimer = 0; }
+      return;
+    }
+    const next = profile.presenceShare === 'discord' ? 'username' : 'discord';
+    idChipWait = 'pending';
+    setIdChipState('pending');
+    try { bridge.send({ type: 'set-setting', key: SETTING_KEYS.presenceShare, value: next }); }
+    catch (e) { say('presenceShare send failed: ' + ((e && e.message) || e)); }
+  }
+
+  /**
+   * OPEN THE ID SPOTLIGHT. Minted on the first press and kept after that, the
+   * Records page's own shape. EMI is bracketed off while it is up and restored
+   * on EVERY path out through `onClose` - the annex bracket's discipline.
+   */
+  function showIdCard() {
+    if (!idSpotlight) {
+      try {
+        idSpotlight = createIdSpotlight({
+          t,
+          reducedMotion: () => reducedMotion || idReducedMotion(),
+          lite: !!src.performanceMode,
+          isMobile,
+          profile: idProfile,
+          stats: idStats,
+          onChip: onIdChip,
+          onRecords: () => showRecords(),
+          onClose: releaseIdCard,
+          onOpenCount: idOpenCount,
+          sfx: idSfx,
+          log: say,
+        });
+      } catch (e) {
+        say('the ID spotlight is unavailable (' + ((e && e.message) || e) + ')');
+        idSpotlight = null;
+        return;
+      }
+    }
+    let from = null;
+    try { from = campus && campus.idCardEl ? campus.idCardEl() : null; } catch (e) { from = null; }
+    try {
+      const emi = getEmi();
+      if (emi && emi.setEnabled) { idEmiPrev = !!emi.enabled; emi.setEnabled(false); }
+    } catch (e) { /* noop */ }
+    try { idSpotlight.open(from); } catch (e) {
+      say('the ID spotlight refused to open (' + ((e && e.message) || e) + ')');
+      releaseIdCard();
+      return;
+    }
+    if (idChipWait) setIdChipState(idChipWait);
+  }
+
+  /** The bracket's other half. Safe to call twice, and it only ever gives EMI
+   *  back the state she held BEFORE the card came up (a player who keeps her
+   *  off in settings never sees her flicker on). */
+  function releaseIdCard() {
+    if (!idEmiPrev) return;
+    idEmiPrev = false;
+    try { const emi = getEmi(); if (emi && emi.setEnabled) emi.setEnabled(true); } catch (e) { /* noop */ }
+  }
+
+  /** Put the card back, wherever the ask came from. True when one was up. */
+  function dismissIdCard(silent) {
+    if (!idSpotlight) return false;
+    let was = false;
+    try { was = !!idSpotlight.dismiss(silent); } catch (e) { was = false; }
+    releaseIdCard();
+    return was;
   }
 
   /* ============================ SCREEN: RECORDS =========================
@@ -3697,6 +4013,61 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       }
       if (settingsPage) { settingsPage.noteEcho(m.key, m.value); settingsPage.applyEcho(m.key, m.value); }
       if (m.key === SETTING_KEYS.keybinds) keybinds.applyEcho(m.value);
+      /* THE PHOTO CHIP IS THE `presenceShare` DISCORD RUNG (owner ruling 1), so
+       * the settings page and the student ID move together whichever one was
+       * pressed - and BOTH of them paint from this echo and never from a click
+       * (trap 1). The avatar shows only at `discord`, which is the whole
+       * consent matrix in one line. */
+      if (m.key === SETTING_KEYS.presenceShare) {
+        const before = profile.presenceShare;
+        profile.presenceShare = idRung(m.value, profile.presenceShare);
+        clearIdLinkTimer();
+        idChipWait = null;
+        paintIdProfile();
+        if (profile.presenceShare === 'discord' && before !== 'discord'
+          && profile.discordLinked && profile.avatarUrl) runIdPhotoDay();
+      }
+    },
+
+    /**
+     * {type:'profile'} - the host's word on who you are (STUDENT-ID contract).
+     * ADDITIVE: a host that predates it never sends one and the card keeps the
+     * stand-in portrait it was built with. This frame is the ONLY thing that
+     * moves the name, the photo or the linked flag - the page derives none of
+     * them, and no Discord id or CDN url is ever on it (PRESENCE.md §10).
+     *
+     * `result` is what the chip was waiting for:
+     *   'linked'    the link-up succeeded and the host applied the rung itself
+     *               (owner ruling 2 - one click was the consent). PHOTO DAY.
+     *   'failed'    one toast, and the chip goes back to the rung it was on.
+     *   'cancelled' the chip goes back, silently. Nothing was promised.
+     */
+    onProfile(m) {
+      const p = (m && m.profile && typeof m.profile === 'object') ? m.profile : null;
+      if (p) {
+        profile = {
+          name: (typeof p.name === 'string' && p.name) ? p.name : null,
+          avatarUrl: (typeof p.avatarUrl === 'string' && p.avatarUrl) ? p.avatarUrl : null,
+          discordLinked: !!p.discordLinked,
+          presenceShare: idRung(p.presenceShare, profile.presenceShare),
+        };
+      }
+      clearIdLinkTimer();
+      idChipWait = null;
+      paintIdProfile();
+      const result = m && typeof m.result === 'string' ? m.result : null;
+      if (result === 'linked') {
+        runIdPhotoDay();
+        /* ONE line, once per link. The beat is on the card; the toast is what
+         * says it happened when the card is only 236px of furniture. */
+        try { shout(t('id_photo_day', 'Photo day')); } catch (e) { /* noop */ }
+      }
+      else if (result === 'failed') {
+        try { shout(t('id_photo_failed', 'Discord did not pick up. Try again in a minute.')); }
+        catch (e) { /* a toast may never hold a door */ }
+      }
+      say('profile frame' + (result ? ' (' + result + ')' : '')
+        + ': ' + (profile.discordLinked ? 'linked' : 'not linked') + ', ' + profile.presenceShare);
     },
 
     /** {type:'payout-result'} - the ONLY source of an XP number on this page. */
@@ -3882,6 +4253,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         else showBoard();
         return true;
       }
+      // THE ID SPOTLIGHT is the same shape as the Records one and sits one rung
+      // ABOVE it: the card is a modal the player opened one press ago, and it
+      // is not tied to a screen (it lifts off the campus). Trap 48's shape -
+      // one rung, and everything below it is the ladder it always was.
+      if (dismissIdCard(false)) return true;
       // THE RECORDS SPOTLIGHT is a modal the player opened one press ago (a
       // card lifted off the wall) - Esc puts the card back first and the
       // office stays put. Trap 48's shape: one rung, above the screen's own.
@@ -3950,6 +4326,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       dismissEndCard();
       dismissPunchStage();
       dismissAnnexStage();
+      dismissIdCard(true);
+      clearIdLinkTimer();
+      idSpotlight = null;
       disarmPunch();
       teardownClass();
       /* the lab (and EMI's bracket) cannot outlive the shell */
