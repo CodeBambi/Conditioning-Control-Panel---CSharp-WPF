@@ -2105,6 +2105,8 @@
   "quest_streak_keeper_w_desc": "Удерживай серию 7 дней",
   "quest_total_submission_w_name": "Полная покорность",
   "quest_total_submission_w_desc": "Заверши 15 игр «Подсчёт пузырьков»",
+  "quest_take_the_reins_d_name": "Взять поводья",
+  "quest_take_the_reins_d_desc": "Отправь 10 команд удалённого управления другим субъектам",
   "label_enhancement_tree_title": "Дерево навыков бимбо",
   "label_enhancement_tree_subtitle": "ты получаешь очки искр за повышение уровня + каждые 100 лопнувших пузырьков~",
   "label_enhancement_tree_warning": "раз ты выберешь путь, назад не вернёшься~",

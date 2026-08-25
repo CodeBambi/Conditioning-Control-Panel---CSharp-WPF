@@ -2106,6 +2106,8 @@
   "quest_streak_keeper_w_desc": "Maintiens une série de 7 jours",
   "quest_total_submission_w_name": "Soumission Totale",
   "quest_total_submission_w_desc": "Termine 15 jeux de comptage de bulles",
+  "quest_take_the_reins_d_name": "Prends les rênes",
+  "quest_take_the_reins_d_desc": "Envoie 10 commandes à distance à d’autres sujets",
   "label_enhancement_tree_title": "Arbre de Talents Bimbo",
   "label_enhancement_tree_subtitle": "tu gagnes des points étincelle en montant de niveau + toutes les 100 bulles éclatées~",
   "label_enhancement_tree_warning": "une fois que tu choisis un chemin, pas de retour en arrière~",

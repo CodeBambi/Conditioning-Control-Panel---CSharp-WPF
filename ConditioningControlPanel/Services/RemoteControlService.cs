@@ -27,6 +27,24 @@ namespace ConditioningControlPanel.Services
         public string CurrentPhase { get; set; } = "";
     }
 
+    /// <summary>
+    /// One remote-control command this user ISSUED to another subject, as a Controller.
+    /// Raised by <see cref="RemoteControlService.ReportCommandIssued"/>.
+    /// </summary>
+    public class IssuedCommandEventArgs : EventArgs
+    {
+        /// <summary>Unified id of the subject the command was aimed at (never this install's own).</summary>
+        public string TargetUnifiedId { get; }
+        /// <summary>Wire action name, e.g. "flash_now". Carried for logging only.</summary>
+        public string Action { get; }
+
+        public IssuedCommandEventArgs(string targetUnifiedId, string action)
+        {
+            TargetUnifiedId = targetUnifiedId;
+            Action = action;
+        }
+    }
+
     public class RemoteControlService : IDisposable
     {
         private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
@@ -55,6 +73,13 @@ namespace ConditioningControlPanel.Services
         public event EventHandler? ControllerConnectedChanged;
         public event EventHandler? ControllerIdleChanged;
         public event EventHandler<string>? CommandReceived;
+
+        /// <summary>
+        /// Mirror of <see cref="CommandReceived"/> for the GIVING side: raised once per command
+        /// this user issues to ANOTHER subject as a Controller. Feeds the take_the_reins_d quest.
+        /// See <see cref="ReportCommandIssued"/> for who is expected to raise it.
+        /// </summary>
+        public event EventHandler<IssuedCommandEventArgs>? CommandIssued;
         public event EventHandler? SessionStarted;
         public event EventHandler? SessionEnded;
 
@@ -685,6 +710,45 @@ namespace ConditioningControlPanel.Services
         {
             if (!IsActive) return Task.CompletedTask;
             return SendStatusAsync();
+        }
+
+        /// <summary>
+        /// THE GIVING-SIDE INGESTION POINT. Call once per remote-control command this user
+        /// issues to another subject; it raises <see cref="CommandIssued"/>, which App.OnStartup
+        /// forwards to QuestService.TrackRemoteCommandIssued (take_the_reins_d).
+        ///
+        /// WHY THIS IS A REPORTING HOOK AND NOT A SEND CALL: this app is only ever the SUBJECT
+        /// in the remote-control triangle. The Controller surface is the web page at
+        /// cclabs.app/remote/ (served from the cclabs-site project) and the CCP-Mobile app -
+        /// neither lives in this repo, and commands are enqueued straight onto the proxy, never
+        /// through this client. See docs/primers/REMOTE_CONTROL_PRIMER.md §1. So there is no
+        /// local dispatch to increment from: the count has to be reported back to the desktop
+        /// client, and this is the single seam that does it.
+        ///
+        /// Self-control never counts: a blank target, or one equal to this install's own unified
+        /// id, is dropped here before the event is raised (QuestService re-checks independently).
+        /// Intensity-blind: every command is one tick regardless of the session's tier.
+        /// </summary>
+        public void ReportCommandIssued(string? targetUnifiedId, string? action)
+        {
+            if (string.IsNullOrWhiteSpace(targetUnifiedId)) return;
+            var self = App.UnifiedUserId;
+            if (!string.IsNullOrWhiteSpace(self)
+                && string.Equals(targetUnifiedId.Trim(), self.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                // Controlling your own session is legal, it just never earns quest credit.
+                return;
+            }
+
+            try
+            {
+                CommandIssued?.Invoke(this, new IssuedCommandEventArgs(
+                    targetUnifiedId.Trim(), action ?? ""));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[RemoteControl] CommandIssued subscriber threw");
+            }
         }
 
         /// <summary>

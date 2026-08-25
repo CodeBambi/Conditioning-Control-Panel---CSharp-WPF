@@ -2162,6 +2162,11 @@ namespace ConditioningControlPanel
             RemoteControl = new RemoteControlService();
             // Quest credit: each remote-control command received (Patreon-exclusive quest category).
             RemoteControl.CommandReceived += (_, _) => { try { Quests?.TrackRemoteCommand(); } catch { } };
+            // Quest credit for the GIVING side: each command this user issues to ANOTHER subject
+            // as a Controller (take_the_reins_d, free for every tier). Raised by
+            // RemoteControlService.ReportCommandIssued - read its remarks for why the giving side
+            // is reported in rather than dispatched here.
+            RemoteControl.CommandIssued += (_, e) => { try { Quests?.TrackRemoteCommandIssued(e.TargetUnifiedId); } catch { } };
             // (No app-level GoonGameService singleton: the Goon Game's clients build their own
             // facade — the browser client via GoonHostService, the dev cockpit via GoonTestPanel —
             // so an always-constructed idle singleton owned nothing and was never read.)
