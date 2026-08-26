@@ -1665,7 +1665,26 @@ const IX_OUTRO_CSS = `
 }
 @media (prefers-reduced-motion: reduce) {
   .intake-cert-handoff.is-pending { animation: none; }
-}`;
+}
+/* Share, the activity-only sibling of the exit. .intake-begin is authored for the
+   briefing screen, where the parent .is-ready turns it on, so the certificate's
+   buttons have to switch themselves on the same way .intake-cert-exit does. Quieter
+   than the exit on purpose: leaving with the session is the real action, this is a
+   flourish. Disabled styling is inherited from .intake-begin:disabled, which outranks
+   the opacity below, so it still greys out while filing. */
+.intake-cert-share {
+  margin-top: 10px; opacity: 1; pointer-events: auto;
+  font-size: 17px; padding: 11px 26px;
+  color: var(--intake-accent); background: transparent;
+  border: 1px solid color-mix(in srgb, var(--intake-accent) 55%, transparent);
+  box-shadow: none;
+}
+.intake-cert-share:not(:disabled):hover {
+  filter: none;
+  background: color-mix(in srgb, var(--intake-accent) 14%, transparent);
+}
+.intake-cert-share.is-done { color: var(--intake-dim); border-color: rgba(176,108,255,.3); }
+.intake-cert-share.is-bad { color: #ff8ba0; border-color: rgba(255,139,160,.5); }`;
 
 /** Inject the scoped outro CSS once. No-op headlessly (guarded on `doc`). */
 function ensureOutroCss() {
@@ -1855,10 +1874,86 @@ async function runOutro(result, ack, ctx) {
     cert.appendChild(exit);
     if (hosted) armSessionHandoff(handoffEl, exit);
   }
+  mountShareAction(cert, {
+    config,
+    grade: letter,
+    score: (result.maxScore > 0)
+      ? Math.round(clamp01(result.totalScore / result.maxScore) * 100)
+      : 0,
+    headline: lines.length ? String(lines[lines.length - 1]) : null,
+  });
   slotRecord.appendChild(cert);
   await sleep(30);
   cert.classList.add('is-shown');
   syncScrollHint();
+}
+
+/* ----------------------------------------------------------------------------
+ * SHARE - the record, handed to the room. DISCORD ACTIVITY ONLY.
+ *
+ * DOUBLE-GATED, and both gates have to hold or nothing is drawn: the boot config
+ * must carry an `activity` block (only the activity shell seeds one - see
+ * BootConfig.activity in core/contracts.js), and `window.__intakeShare` must be a
+ * function (the activity's own web layer installs it). In the desktop host and in
+ * a plain browser neither is ever true, so this returns before it touches the DOM
+ * and those builds are byte-for-byte what they were.
+ *
+ * THE CORE MAKES NO NETWORK CALL. It hands a flat, stable payload to the hook and
+ * waits on the promise it gets back; posting is entirely the activity's business.
+ * A hook that throws synchronously is treated exactly like a rejection.
+ * -------------------------------------------------------------------------- */
+const SHARE_IDLE_LABEL = 'Share the results';
+const SHARE_RETRY_MS = 2600;
+
+function mountShareAction(cert, info) {
+  const { config, grade, score, headline } = info || {};
+  if (!cert || !config || !config.activity) return;
+  if (typeof window === 'undefined' || typeof window.__intakeShare !== 'function') return;
+
+  const btn = el('button', 'intake-begin intake-cert-share', SHARE_IDLE_LABEL);
+  let busy = false;
+  let retryTimer = 0;
+
+  btn.addEventListener('click', () => {
+    if (busy || btn.disabled) return;
+    busy = true;
+    if (retryTimer) { clearTimeout(retryTimer); retryTimer = 0; }
+    btn.classList.remove('is-bad');
+    btn.disabled = true;
+    btn.textContent = 'Filing your record…';
+
+    let p;
+    try {
+      p = window.__intakeShare({
+        grade: String(grade || ''),
+        score: Number(score) || 0,
+        niche: String(config.niche || ''),
+        headline: headline ? String(headline) : null,
+      });
+    } catch (e) { p = Promise.reject(e); }
+
+    Promise.resolve(p).then(() => {
+      // Done and STAYS done: the record is filed once, so the button retires.
+      busy = false;
+      btn.classList.add('is-done');
+      btn.textContent = 'Record filed.';
+    }, (e) => {
+      // Never a dead end. Say so plainly, then hand the label back so they can retry.
+      busy = false;
+      shim.log('share failed: ' + (e && e.message || e));
+      btn.disabled = false;
+      btn.classList.add('is-bad');
+      btn.textContent = 'Filing failed. Try again.';
+      retryTimer = setTimeout(() => {
+        retryTimer = 0;
+        if (busy) return;
+        btn.classList.remove('is-bad');
+        btn.textContent = SHARE_IDLE_LABEL;
+      }, SHARE_RETRY_MS);
+    });
+  });
+
+  cert.appendChild(btn);
 }
 
 /* ----------------------------------------------------------------------------

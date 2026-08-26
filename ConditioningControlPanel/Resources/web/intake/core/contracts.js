@@ -691,6 +691,14 @@ export function emptyResult(niche = Niche.Bambi) {
  *                                    (`need-remote`/`assets-append`); see web-shim.js
  * @property {string=} subjectId     stable per-install fiction id ("Subject #0007"); host supplies
  *                                    it hosted, shim persists one standalone. Used by intro/outro.
+ * @property {Object=} activity      DISCORD ACTIVITY ONLY. Present (with a `channelId`) when the
+ *                                    activity shell seeded `localStorage['intake.bootConfig']`
+ *                                    before boot; null/absent everywhere else. The WPF host and
+ *                                    the plain web build NEVER set it, so anything gated on it is
+ *                                    invisible outside the activity. The core reads it as a
+ *                                    presence flag only and makes no call of its own - the
+ *                                    activity's own layer owns the transport
+ *                                    (`window.__intakeShare`). Shape: { channelId?: string }.
  */
 
 /**
@@ -721,6 +729,7 @@ export function defaultBootConfig(overrides = {}) {
     media: null,
     remoteMedia: false,
     subjectId: null,
+    activity: null,
   }, overrides);
 }
 

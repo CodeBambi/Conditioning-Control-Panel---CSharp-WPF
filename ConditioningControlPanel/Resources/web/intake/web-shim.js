@@ -166,6 +166,12 @@ function standaloneConfig() {
     remoteMedia: false,
     subjectId: q.get('subject') || saved.subjectId || null,
     subliminals: Array.isArray(saved.subliminals) ? saved.subliminals : null,
+    // DISCORD ACTIVITY ONLY. The activity shell seeds `intake.bootConfig.activity`
+    // (a `{ channelId }` block) into localStorage before it loads the page; nothing
+    // else ever writes it, so it stays null in a normal browser. There is no hosted
+    // twin on purpose: the WPF host does not and will not send it, so `fromHostInit`
+    // leaves it at the defaultBootConfig null and the desktop path is unchanged.
+    activity: (saved.activity && typeof saved.activity === 'object') ? saved.activity : null,
   });
 }
 
