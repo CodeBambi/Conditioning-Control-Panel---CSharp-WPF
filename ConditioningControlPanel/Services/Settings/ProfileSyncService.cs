@@ -1327,7 +1327,7 @@ namespace ConditioningControlPanel.Services
                             // the honest PRE-GAP date (UpdateDailyStreak did not stamp today), so
                             // this push can never teach the server a streak that may be breaking.
                             ["last_streak_date"] = achievementProgress != null && achievementProgress.LastLaunchDate.Date != default
-                                ? achievementProgress.LastLaunchDate.ToString("yyyy-MM-dd") : "",
+                                ? achievementProgress.LastLaunchDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) : "",
                             ["total_bubbles_popped"] = achievementProgress?.TotalBubblesPopped ?? 0,
                             ["total_video_minutes"] = Math.Round(achievementProgress?.TotalVideoMinutes ?? 0, 1),
                             ["total_lock_cards_completed"] = achievementProgress?.TotalLockCardsCompleted ?? 0,
@@ -1338,14 +1338,14 @@ namespace ConditioningControlPanel.Services
                             // Day key, NOT round-trip "o" format: the server's string-stat merge
                             // caps values at 20 chars and silently dropped the 33-char ISO stamp,
                             // so this field never actually reached the cloud until v6.8.5.
-                            ["last_daily_quest_date"] = settings.LastDailyQuestDate?.ToString("yyyy-MM-dd") ?? "",
+                            ["last_daily_quest_date"] = settings.LastDailyQuestDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? "",
                             ["quest_completion_dates"] = questProgress?.DailyQuestCompletionDates?
-                                .Select(d => d.ToString("yyyy-MM-dd")).ToList() ?? new List<string>(),
+                                .Select(d => d.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)).ToList() ?? new List<string>(),
                             ["total_daily_quests_completed"] = questProgress?.TotalDailyQuestsCompleted ?? 0,
                             ["total_weekly_quests_completed"] = questProgress?.TotalWeeklyQuestsCompleted ?? 0,
                             ["total_xp_from_quests"] = questProgress?.TotalXPFromQuests ?? 0,
                             ["daily_quests_completed_today"] = questProgress?.GetDailyQuestsCompletedToday() ?? 0,
-                            ["daily_completion_reset_date"] = questProgress?.DailyCompletionResetDate?.ToString("yyyy-MM-dd") ?? ""
+                            ["daily_completion_reset_date"] = questProgress?.DailyCompletionResetDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? ""
                         },
                         unlocked_skills = settings.UnlockedSkills?.ToList() ?? new List<string>(),
                         skill_points = settings.SkillPoints,
@@ -1442,12 +1442,16 @@ namespace ConditioningControlPanel.Services
                             // whole failed-sync chain below it, and at the default Information
                             // min-level it was invisible in every log a user ever sent in (#920).
                             App.Logger?.Warning("V2 Profile sync rate-limited by server (429), will retry later");
+                            // A deferred streak break must not hang on this exit: no cloud
+                            // answer arrived, so settle it the way the timeout would.
+                            App.Achievements?.Progress?.ResolveDeferredStreakBreak("V2 sync rate-limited (429)");
                             return false;
                         }
                         await HandleUnauthorizedAsync(v2Response);
                         var error = await v2Response.Content.ReadAsStringAsync();
                         App.Logger?.Warning("V2 Profile sync failed: {Status} - {Error}", v2Response.StatusCode, error);
                         LastSyncError = $"Sync failed: {v2Response.StatusCode}";
+                        App.Achievements?.Progress?.ResolveDeferredStreakBreak("V2 sync rejected");
                         return false;
                     }
 
@@ -2026,6 +2030,11 @@ namespace ConditioningControlPanel.Services
                         App.Logger?.Debug("V2 Sync: Could not parse server flags: {Error}", parseEx.Message);
                     }
 
+                    // Belt for the resolve inside the try above: if the response parse threw
+                    // before reaching it, the deferred streak break would have hung until the
+                    // 120s timeout. Idempotent — a no-op when the merge-site call already ran.
+                    App.Achievements?.Progress?.ResolveDeferredStreakBreak("V2 sync response (parse fallback)");
+
                     // THE VAT'S ONE UNAVOIDABLE SECOND REQUEST. An accepted sync is the
                     // moment today's XP lands in the server vat, and the sync RESPONSE
                     // does not carry the `descent` block (attachDescentBlocks is wired
@@ -2065,7 +2074,7 @@ namespace ConditioningControlPanel.Services
                         ["consecutive_days"] = achievementProgress?.ConsecutiveDays ?? 0,
                         // Mobile streak parity twin of the V2 dict above: day key or empty.
                         ["last_streak_date"] = achievementProgress != null && achievementProgress.LastLaunchDate.Date != default
-                            ? achievementProgress.LastLaunchDate.ToString("yyyy-MM-dd") : "",
+                            ? achievementProgress.LastLaunchDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) : "",
                         ["total_bubbles_popped"] = achievementProgress?.TotalBubblesPopped ?? 0,
                         ["total_video_minutes"] = Math.Round(achievementProgress?.TotalVideoMinutes ?? 0, 1),
                         ["total_lock_cards_completed"] = achievementProgress?.TotalLockCardsCompleted ?? 0,
@@ -2092,9 +2101,9 @@ namespace ConditioningControlPanel.Services
                         // Quest streak data
                         ["daily_quest_streak"] = settings.DailyQuestStreak,
                         // Day key, not "o" — same 20-char server cap as the V2 dict above.
-                        ["last_daily_quest_date"] = settings.LastDailyQuestDate?.ToString("yyyy-MM-dd") ?? "",
+                        ["last_daily_quest_date"] = settings.LastDailyQuestDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? "",
                         ["quest_completion_dates"] = legacyQuestProgress?.DailyQuestCompletionDates?
-                            .Select(d => d.ToString("yyyy-MM-dd")).ToList() ?? new List<string>(),
+                            .Select(d => d.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)).ToList() ?? new List<string>(),
                         ["total_daily_quests_completed"] = legacyQuestProgress?.TotalDailyQuestsCompleted ?? 0,
                         ["total_weekly_quests_completed"] = legacyQuestProgress?.TotalWeeklyQuestsCompleted ?? 0,
                         ["total_xp_from_quests"] = legacyQuestProgress?.TotalXPFromQuests ?? 0
@@ -2619,7 +2628,7 @@ namespace ConditioningControlPanel.Services
                 if (cloudProfile.Stats.TryGetValue("last_daily_quest_date", out var cloudLastDate))
                 {
                     var dateStr = cloudLastDate?.ToString();
-                    if (!string.IsNullOrEmpty(dateStr) && DateTime.TryParse(dateStr, out var cloudDate))
+                    if (!string.IsNullOrEmpty(dateStr) && TryParseDayKey(dateStr, out var cloudDate))
                     {
                         if (!settings.LastDailyQuestDate.HasValue || cloudDate.Date > settings.LastDailyQuestDate.Value.Date)
                         {
@@ -2643,7 +2652,7 @@ namespace ConditioningControlPanel.Services
                             bool datesChanged = false;
                             foreach (var ds in cloudDates)
                             {
-                                if (DateTime.TryParse(ds, out var d) && !localDates.Contains(d.Date))
+                                if (TryParseDayKey(ds, out var d) && !localDates.Contains(d.Date))
                                 {
                                     questProgress.DailyQuestCompletionDates.Add(d.Date);
                                     datesChanged = true;
@@ -2720,7 +2729,7 @@ namespace ConditioningControlPanel.Services
                         bool cloudDateIsToday = false;
                         if (cloudProfile.Stats.TryGetValue("daily_completion_reset_date", out var cloudResetDate))
                         {
-                            if (DateTime.TryParse(cloudResetDate?.ToString(), out var resetDate))
+                            if (TryParseDayKey(cloudResetDate?.ToString(), out var resetDate))
                                 cloudDateIsToday = resetDate.Date == DateTime.Today;
                         }
                         if (cloudDateIsToday && cloudCount > questProgress.GetDailyQuestsCompletedToday())
@@ -2910,6 +2919,20 @@ namespace ConditioningControlPanel.Services
         /// only synced stats UP and never pulled cloud values DOWN.
         /// Returns true if any local data was modified.
         /// </summary>
+        /// <summary>
+        /// Strict wire day-key parse ("yyyy-MM-dd", invariant Gregorian). Cloud dates must never
+        /// go through culture-sensitive DateTime.TryParse: under a Buddhist or Umm al-Qura system
+        /// calendar the same digits mean a different year entirely (th-TH reads "2026-08-26" as
+        /// 1483 CE), and the take-newer merges would latch the misread. Junk that fails the exact
+        /// shape is refused rather than guessed at — the server sanitizes the same way. Same
+        /// reason every push-side day key formats with InvariantCulture.
+        /// </summary>
+        private static bool TryParseDayKey(string? s, out DateTime date)
+        {
+            return DateTime.TryParseExact(s, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out date);
+        }
+
         private bool MergeV2CloudStatsIntoLocalProgress(Dictionary<string, object>? cloudStats, bool forceStreakOverride)
         {
             if (cloudStats == null) return false;
@@ -2934,7 +2957,10 @@ namespace ConditioningControlPanel.Services
                     var f = Convert.ToInt32(flashes);
                     if (f > progress.TotalFlashImages) { progress.TotalFlashImages = f; needsSave = true; }
                 }
-                if (cloudStats.TryGetValue("consecutive_days", out var streak))
+                // Gated on !forceStreakOverride like the quest block below: the override means
+                // "adopt the server's values even if LOWER", and this adoption only ever raises
+                // — running it in the same pass would fight the very correction the admin sent.
+                if (!forceStreakOverride && cloudStats.TryGetValue("consecutive_days", out var streak))
                 {
                     // Mobile streak parity: not a bare take-higher any more. The cloud pair
                     // (consecutive_days + last_streak_date) may describe a run the PHONE kept
@@ -2948,7 +2974,7 @@ namespace ConditioningControlPanel.Services
                     if (cloudStats.TryGetValue("last_streak_date", out var lsdObj))
                     {
                         var lsdStr = lsdObj?.ToString();
-                        if (!string.IsNullOrEmpty(lsdStr) && DateTime.TryParse(lsdStr, out var lsdParsed))
+                        if (!string.IsNullOrEmpty(lsdStr) && TryParseDayKey(lsdStr, out var lsdParsed))
                             cloudStreakDate = lsdParsed.Date;
                     }
                     var adopt = Models.AchievementProgress.DecideLoginStreakAdopt(
@@ -3076,7 +3102,7 @@ namespace ConditioningControlPanel.Services
                 if (cloudStats.TryGetValue("last_daily_quest_date", out var cloudLastDate))
                 {
                     var dateStr = cloudLastDate?.ToString();
-                    if (!string.IsNullOrEmpty(dateStr) && DateTime.TryParse(dateStr, out var cloudDate))
+                    if (!string.IsNullOrEmpty(dateStr) && TryParseDayKey(dateStr, out var cloudDate))
                     {
                         if (!settings.LastDailyQuestDate.HasValue || cloudDate.Date > settings.LastDailyQuestDate.Value.Date)
                         {
@@ -3098,7 +3124,7 @@ namespace ConditioningControlPanel.Services
                             bool datesChanged = false;
                             foreach (var ds in cloudDates)
                             {
-                                if (DateTime.TryParse(ds, out var d) && !localDates.Contains(d.Date))
+                                if (TryParseDayKey(ds, out var d) && !localDates.Contains(d.Date))
                                 {
                                     questProgress.DailyQuestCompletionDates.Add(d.Date);
                                     datesChanged = true;
@@ -3152,7 +3178,7 @@ namespace ConditioningControlPanel.Services
                         bool cloudDateIsToday = false;
                         if (cloudStats.TryGetValue("daily_completion_reset_date", out var cloudResetDate))
                         {
-                            if (DateTime.TryParse(cloudResetDate?.ToString(), out var resetDate))
+                            if (TryParseDayKey(cloudResetDate?.ToString(), out var resetDate))
                                 cloudDateIsToday = resetDate.Date == DateTime.Today;
                         }
                         if (cloudDateIsToday && cloudCount > questProgress.GetDailyQuestsCompletedToday())
@@ -3198,7 +3224,7 @@ namespace ConditioningControlPanel.Services
             settings.DailyQuestStreak = streakStats.DailyQuestStreak;
 
             // Force-set last daily quest date
-            if (!string.IsNullOrEmpty(streakStats.LastDailyQuestDate) && DateTime.TryParse(streakStats.LastDailyQuestDate, out var parsedDate))
+            if (!string.IsNullOrEmpty(streakStats.LastDailyQuestDate) && TryParseDayKey(streakStats.LastDailyQuestDate, out var parsedDate))
             {
                 settings.LastDailyQuestDate = parsedDate.Date;
             }
@@ -3212,7 +3238,7 @@ namespace ConditioningControlPanel.Services
                     questProgress.DailyQuestCompletionDates.Clear();
                     foreach (var ds in streakStats.QuestCompletionDates)
                     {
-                        if (DateTime.TryParse(ds, out var d))
+                        if (TryParseDayKey(ds, out var d))
                             questProgress.DailyQuestCompletionDates.Add(d.Date);
                     }
                 }

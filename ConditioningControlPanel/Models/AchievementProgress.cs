@@ -408,8 +408,31 @@ public class AchievementProgress
     {
         if (!PendingStreakBreak) return;
 
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
-        if (dispatcher != null && !dispatcher.CheckAccess())
+        // A profile switch / achievements reload can replace App.Achievements.Progress while
+        // the 120s timeout closure still holds THIS instance. Resolving from a stale instance
+        // would spend the shield/Oopsie tokens of whoever is signed in NOW (App.SkillTree is
+        // global) for a gap that belongs to the OLD profile. A superseded instance only clears
+        // its own flag and steps aside — the live instance re-detects its own gap at launch.
+        if (!ReferenceEquals(App.Achievements?.Progress, this))
+        {
+            PendingStreakBreak = false;
+            App.Logger?.Information("Deferred streak break ({Reason}) dropped: progress instance superseded", reason);
+            return;
+        }
+
+        // Shutting down (or no WPF app at all): there is no dispatcher to marshal to and no
+        // point burning tokens into state that may not save. Clear the flag and do nothing —
+        // the next launch re-detects the same gap and defers again, which is the designed
+        // no-state-to-migrate property of this flag.
+        var app = System.Windows.Application.Current;
+        if (app?.Dispatcher == null || app.Dispatcher.HasShutdownStarted)
+        {
+            PendingStreakBreak = false;
+            return;
+        }
+
+        var dispatcher = app.Dispatcher;
+        if (!dispatcher.CheckAccess())
         {
             dispatcher.BeginInvoke(new Action(() => ResolveDeferredStreakBreak(reason)));
             return;
@@ -456,6 +479,8 @@ public class AchievementProgress
     /// Pure merge rule for adopting the cloud's login-streak pair (consecutive_days +
     /// last_streak_date) into the local one. Mirrors the mobile client's decideLoginStreakAdopt
     /// (CCPMobile src/lib/sync/contract.ts) so the two clients converge on the same answer:
+    ///  - a zero/negative server streak carries no run to merge — refuse it outright (both
+    ///    clients), or a degenerate record's DATE alone could move LastLaunchDate forward;
     ///  - never lowers the local streak (the server ratchet is preserved deliberately);
     ///  - a server date exactly one day AFTER the local one means the runs are contiguous — the
     ///    local run extends it (max(server, local+1)), not just max;
@@ -463,11 +488,17 @@ public class AchievementProgress
     ///  - a newer server date is adopted (clamped to today so a timezone-skewed phone can never
     ///    push LastLaunchDate into the future, which would read as a negative gap next launch);
     ///  - a wide gap in either direction falls back to plain max — the preserved ratchet.
+    /// One deliberate divergence from the mobile twin: with NO usable server date the desktop
+    /// still does a date-blind take-higher (the pre-parity behavior, kept for records written
+    /// by servers older than the parity deploy); mobile answers null there and leaves local
+    /// alone, because it has no pre-parity history to stay compatible with.
     /// Returns null when nothing changes. Static and clock-free for testability.
     /// </summary>
     public static (int Streak, DateTime LastDate)? DecideLoginStreakAdopt(
         int localStreak, DateTime localLastDate, int serverStreak, DateTime? serverLastDate, DateTime today)
     {
+        if (serverStreak <= 0) return null;
+
         var local = localLastDate.Date;
         int nextStreak;
         DateTime nextDate;
@@ -515,6 +546,8 @@ public class AchievementProgress
             }
         }
 
+        // Backstop only — every branch above max()es with localStreak, so this cannot fire
+        // today. It stays to keep the "never lowers" contract true against future edits.
         if (nextStreak < localStreak) return null;
         if (nextStreak == localStreak && nextDate == local) return null;
         return (nextStreak, nextDate);
