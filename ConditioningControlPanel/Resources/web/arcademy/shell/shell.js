@@ -3067,6 +3067,28 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     card.appendChild(el('p', 'arc-note arc-endcard-chip',
       t('rake_retake_chip', 'Free replay. It pays nothing, and today keeps your first grade.')));
 
+    /* --- THE CARD LINE (T2 tester report, 2026-08-26: "card not updating past
+     *     1st game"). A no-op mint still gets NO CEREMONY and never will - a
+     *     beat for a hole that was not punched is the one lie this screen must
+     *     not tell - but silence was being read as a broken stamp card. So the
+     *     card keeps a slot for one quiet sentence, filled only when
+     *     `punchcard-result` comes back having minted nothing, in the same
+     *     voice as the retake chip above. A LINE, NEVER A BEAT: no sound, no
+     *     stamp, no overlay, nothing that claims a hole was punched.
+     *     It sits above the buttons so the fixed exits row never re-flows. --- */
+    let punchNote = null;
+    function setPunchNote(text) {
+      const line = String(text == null ? '' : text);
+      if (!line || !mine()) return false;
+      if (!punchNote) {
+        punchNote = el('p', 'arc-note arc-endcard-chip arc-endcard-punchnote');
+        try { card.insertBefore(punchNote, actions); }
+        catch (e) { card.appendChild(punchNote); }
+      }
+      punchNote.textContent = line;
+      return true;
+    }
+
     /** Enter = one more. Esc is NOT touched: it walks boot.js's ladder exactly
      *  as it did before this card existed. */
     function onKey(e) {
@@ -3102,6 +3124,8 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     endCard = {
       root,
       gameKey,
+      /** The card's one quiet slot - see THE CARD LINE above. */
+      setPunchNote,
       destroy() {
         if (typeof window !== 'undefined' && window.removeEventListener) {
           window.removeEventListener('keydown', onKey);
@@ -4724,10 +4748,31 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (m.reason !== 'daily') return;
       disarmPunch();
       // A NO-OP MINT GETS NO CEREMONY. Same local day twice, a full card, a
-      // class the host declined to stamp: nothing was punched, so nothing is
-      // shown. A card beat for a hole that did not happen is the one lie this
+      // class the host declined to stamp: nothing was punched, so no beat is
+      // played. A card beat for a hole that did not happen is the one lie this
       // screen must never tell.
-      if (!m.minted || !norm) return;
+      //
+      // IT DOES GET A LINE, THOUGH (T2 tester report, 2026-08-26: "card not
+      // updating past 1st game"). No ceremony read to the tester as no card, so
+      // the end card says WHY in one quiet sentence - a full card gets the
+      // unlock line it earned, everything else the come-back-tomorrow one. The
+      // frame carries the post-mint card, so the shell is reading the host's
+      // own truth here and still counting nothing of its own.
+      if (!m.minted) {
+        if (endCard && endCard.gameKey === m.gameKey && endCard.setPunchNote) {
+          // The frame names its own cap; `store.holes` is the parachute.
+          const cap = Math.round(Number(m.holes) || Number(store.holes) || 10);
+          const full = !!(norm && (norm.complete || Number(norm.punches) >= cap));
+          try {
+            endCard.setPunchNote(full
+              ? t('punchcard_unlocked_line',
+                'This room is now open even when the course is not in session.')
+              : t('punchcard_next_hole', 'Come back tomorrow for the next stamp.'));
+          } catch (e) { say('punch note failed: ' + ((e && e.message) || e)); }
+        }
+        return;
+      }
+      if (!norm) return;
       try {
         runPunchCeremony({
           gameKey: m.gameKey,

@@ -641,12 +641,37 @@ export default {
      * the target (hue-rotate + mirror), which is the contract's ruling and
      * costs no canvas pass at all.
      * ==================================================================== */
+    /** THE DEAD URL (0826). A url that 404s paints the browser's broken-image
+     *  glyph on a shell face. The floor is already here - a round with no url at
+     *  all runs BARE (`dressFace`'s `!url` branch, and the claim-failed log says
+     *  so) - but it has to be taken by EVERY shell at once: one bare face while
+     *  the others wear pictures is a tell, and this game's whole contract is
+     *  that a tell is never accidental. So the url is dropped from the class's
+     *  media state, convicted with pool.markBroken, and the board goes bare for
+     *  the rest of the round; the next round's `dealMedia()` (the `!targetUrl ||
+     *  decoyUrls.length < 1` gate) re-dresses from what the pool has left. */
+    function mediaBroke(url) {
+      const u = String(url || '');
+      if (dead || !u) return;
+      let hit = false;
+      if (targetUrl === u) { targetUrl = ''; targetIsVideo = false; hit = true; }
+      const di = decoyUrls.indexOf(u);
+      if (di >= 0) { decoyUrls.splice(di, 1); hit = true; }
+      if (!hit) return;                  // a second shell reporting a url already dropped
+      try { if (pool && typeof pool.markBroken === 'function') pool.markBroken(u); }
+      catch (e) { /* an optional seam never breaks a class */ }
+      say('media failed, shells run bare this round: ' + u);
+      for (const shell of shellEls) clearFace(shell);
+    }
+
     function armMedia(node, video) {
       if (!node) return;
       try {
         node.setAttribute('alt', '');
         node.setAttribute('draggable', 'false');
         node.draggable = false;
+        /* reads the src OFF THE NODE, so one arming survives every re-dress */
+        node.onerror = () => { try { mediaBroke(node.getAttribute('src')); } catch (e) { /* noop */ } };
         if (video) {
           node.muted = true; node.loop = true; node.autoplay = true; node.playsInline = true;
           node.setAttribute('muted', ''); node.setAttribute('loop', '');

@@ -544,10 +544,37 @@ export default {
     /* ==================================================================== *
      * MEDIA - one url, every tile. mediaEl semantics, copied not imported.
      * ==================================================================== */
+    /** THE DEAD URL (0826). A url that 404s paints the browser's own broken-image
+     *  glyph into all n^2 tiles - a tester saw exactly that. This class already
+     *  has a floor for "no media": PLAIN faces, which every dealable kind still
+     *  works on (the delta is CSS on .g-an-face, never on the media node), so a
+     *  failure just walks back to it and asks the pool for another url. Convicted
+     *  ONCE per url: every tile wears the same src, so n^2 error events arrive for
+     *  one dead row. pool.markBroken keeps it out of the next draw. */
+    const brokeUrls = new Set();
+    function mediaBroke(url) {
+      const u = String(url || '');
+      if (dead || ended || !u || u !== lastUrl || brokeUrls.has(u)) return;
+      brokeUrls.add(u);
+      try { if (pool && typeof pool.markBroken === 'function') pool.markBroken(u); }
+      catch (e) { /* an optional seam never breaks a class */ }
+      say('media failed, back to plain faces: ' + u);
+      run(() => {
+        paintGrid('');
+        if (cur && !cur.done) applyFace(cur.oddIndex);
+        redress();                     /* the pool skips the url we just convicted */
+      });
+    }
+    /** Rebound on every repaint: a recycled node carries the OLD url's closure. */
+    function bindMediaError(node, url) {
+      try { node.onerror = () => mediaBroke(url); } catch (e) { /* ignore */ }
+    }
+
     function makeMedia(url) {
       const video = isVideoUrl(url);
       const node = document.createElement(video ? 'video' : 'img');
       node.className = 'g-an-media';
+      bindMediaError(node, url);
       if (video) {
         try {
           node.muted = true; node.loop = true; node.autoplay = true; node.playsInline = true;
@@ -617,6 +644,7 @@ export default {
         }
         if (existing && existing.tagName === (want === 'video' ? 'VIDEO' : 'IMG')) {
           try {
+            bindMediaError(existing, url);
             existing.src = url;
             if (want === 'video') {
               existing.playbackRate = 1;

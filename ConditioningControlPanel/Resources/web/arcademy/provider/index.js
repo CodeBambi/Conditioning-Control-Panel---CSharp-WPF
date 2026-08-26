@@ -57,6 +57,18 @@
  *     localManifest / manifest / assets / media
  * Entries may be ccp.assets-relative paths or absolute ccp.* urls. With NO
  * manifest at all the provider still works — on the bundled placeholder tiles.
+ *
+ * THE WEB HAS NO MANIFEST (2026-08-26; MEDIA-CONTRACT §7). A browser cannot
+ * enumerate a folder, so the shim host ships `localAssets` EMPTY and serves the
+ * player's ingested folder/zip/gallery — the SESSION PILE — as blob: rows over
+ * the same `assets` mailbox the remote pool answers on. Two consequences, both
+ * of them live only where `init.settings.localMedia` exists (never on desktop):
+ *   - `absorbLocal()` takes those rows into `localPools`, so a claim already
+ *     dealing re-syncs and re-dresses. They are LOCAL: never remotePools, never
+ *     remoteRatio, never the remote recency ring.
+ *   - `claim()` sends `local-sample-request {local:true}` whenever a pile is
+ *     present, INCLUDING with remote media off — the consent gate is about the
+ *     network, not the player's own disk (remote.js request(), trap 54).
  * ==========================================================================*/
 
 import { buildLocalPools, isLocalUrl, formatOk, kindOf, wantRemote } from './inventory.js';
@@ -75,6 +87,28 @@ function placeholderUrls() {
 }
 
 const REMOTE_CAP = 80;        // mirrors intake's REMOTE_CAP: a page never hoards media
+
+/* THE SESSION PILE (web only, 2026-08-26; MEDIA-CONTRACT §7 in the site repo's
+ * `scripts/arcademy-web-ext`). On the desktop the host hands the player's own
+ * media over as a MANIFEST (`init.settings.localAssets`, trap 16) of absolute
+ * ccp.assets urls, so the provider knows the whole inventory at create time. A
+ * BROWSER has no folder to enumerate: the shim ingests a folder/zip/gallery
+ * into a session pile of object URLs and serves it in FRAMES, the same `assets`
+ * mailbox the remote pool answers on. Those rows are `blob:` (or `data:`), they
+ * are local by origin, and they are the only local media a web player has.
+ *
+ * A pile row is recognised by its SCHEME, never by a marker: a `local-sample`
+ * reply carries `src` only when it was tagged (host provider.js `rows()`), so
+ * the scheme is the one fact always on the wire. Desktop local rows are
+ * `https://ccp.assets/...` and therefore never take this path - which is what
+ * keeps the desktop build byte-identical. */
+const PILE_URL_RE = /^(blob|data):/i;
+const LOCAL_CAP = 240;        // the pile is the player's own disk, so this is far looser
+                              // than REMOTE_CAP - but a 5000-file folder ingest still may
+                              // not grow the page's arrays without end. At the cap the
+                              // pool STOPS taking rows rather than shifting: a live claim
+                              // walks a cursor over its copy of these lists, and evicting
+                              // from under it would move draws for no gain.
 const RECENT_MAX = 24;        // recency-ring depth (0826): a draw step-skips the last
                               // min(L-1, RECENT_MAX) urls its kind SERVED - the skip
                               // consumes no rand (the blacklist skip's law), it only
@@ -216,6 +250,31 @@ export function createAssets(options = {}) {
   const remoteRatio = Number.isFinite(opts.remoteMediaRatio) ? Math.max(0, Math.min(1, opts.remoteMediaRatio)) : 0;
   const defaultNiches = Array.isArray(opts.niches) ? opts.niches.slice() : null;
 
+  /* ------------------------------------------------------------------------
+   * THE SESSION PILE's presence flag. `init.settings.localMedia` is the web
+   * shim's boot shape (always zeros at init - the pile is session-only) and the
+   * `local-media` push carries every later state. The C# host ships NEITHER, so
+   * on desktop `localPile` stays null, `pilePresent()` is false forever, and not
+   * one line below this changes what the desktop provider does.
+   * --------------------------------------------------------------------- */
+  function readPile(v) {
+    if (!v || typeof v !== 'object') return null;
+    if (!('active' in v) && !('images' in v) && !('videos' in v)) return null;
+    return {
+      images: Math.max(0, v.images | 0),
+      videos: Math.max(0, v.videos | 0),
+      active: !!v.active,
+    };
+  }
+  let localPile = readPile(
+    (opts.settings && typeof opts.settings === 'object' ? opts.settings.localMedia : null) || opts.localMedia,
+  );
+  /** "The player has media of their own on this device." `active` is the host's
+   *  own word for it; the counts are the belt to its braces (a host that pushes
+   *  counts without the flag still gets its pile served). */
+  const pilePresent = () => !!localPile && (localPile.active || (localPile.images + localPile.videos) > 0);
+  const pileCbs = new Set();        // live claims waiting for a pile to appear
+
   const placeholders = placeholderUrls();
   const localPools = buildLocalPools(resolveManifest(opts), platform);
   // the placeholder floor: only used when a kind has no real local entries
@@ -227,7 +286,16 @@ export function createAssets(options = {}) {
   // ArcademyHostService answers 'assets-request' with {type:'assets', reqId, urls,
   // done} and may also push an unsolicited batch; bridge.on is multi-subscriber
   // (bridge.js header) so this costs the shell nothing and cannot steal frames.
-  if (remoteEnabled && opts.bridge) { try { channel.listen(); } catch { /* ignore */ } }
+  // ...and the SAME mailbox answers `local-sample-request`, which is not gated on
+  // remote consent (a file on the player's device is not a network call), so a
+  // player with "Pull from online" OFF but a session pile ingested must have the
+  // channel armed too. Arming it twice is a no-op (`listening` latches).
+  const ensureListening = () => {
+    if (!opts.bridge) return;
+    if (!remoteEnabled && !pilePresent()) return;
+    try { channel.listen(); } catch { /* ignore */ }
+  };
+  ensureListening();
   const claims = new Set();
   let prewarmed = new Set();
   let disposed = false;
@@ -272,6 +340,129 @@ export function createAssets(options = {}) {
   }
 
   /* ------------------------------------------------------------------------
+   * THE SESSION PILE's absorb (web only). absorbRemote() drops every row whose
+   * url `isLocalUrl` on the DESKTOP's reasoning - "the host already gives us
+   * locals", i.e. the `localAssets` manifest is the whole local inventory. On
+   * the web there IS no manifest, the pile arrives as blob: rows in the very
+   * same `assets` replies, and that `continue` threw away the player's own
+   * media on every host that has one. This is where those rows land instead.
+   *
+   * A pile row is NEVER remote: it does not enter remotePools, does not count
+   * toward remoteRatio and never touches the remote recency ring. It is local
+   * inventory that arrived late, which is exactly what `localPools` holds.
+   * --------------------------------------------------------------------- */
+  const pileUrls = new Set();          // every url this provider took FROM the pile
+  const localRefreshers = new Set();   // live claims re-syncing their local lists
+
+  /** A pile row's kind, from the fact the host put on the wire. The url cannot
+   *  answer this: a blob: url has no extension for kindOf() to sniff, so every
+   *  pile video would otherwise land in the STILL pool. */
+  function pileKind(row, url) {
+    if (row && typeof row === 'object') {
+      if (row.kind === 'loop' || row.kind === 'still') return row.kind;
+      const mime = String(row.mime || '');
+      if (/^video\//i.test(mime)) return 'loop';
+      if (/^image\/gif$/i.test(mime)) return 'loop';
+      if (/^image\//i.test(mime)) return 'still';
+    }
+    return kindOf(url);
+  }
+
+  /** iOS is mp4-only, local files included (MEDIA-CONTRACT §0). The web shim
+   *  already refuses them at ingest; this is the page's own belt, run off the
+   *  mime for the same reason pileKind is. */
+  function pileFormatOk(row, url) {
+    const mime = (row && typeof row === 'object') ? String(row.mime || '') : '';
+    if (!/^video\//i.test(mime)) return formatOk(url, platform);
+    const sub = mime.slice(6).toLowerCase().split(';')[0].trim();
+    return formatOk('x.' + (sub === 'quicktime' ? 'mov' : sub), platform);
+  }
+
+  /* THE EXTENSION HINT, and it is load-bearing. Every consumer of a pool url -
+   * anomaly, composure, deja-vu, echo, impulse-control, instant-recall, and the
+   * provider's own warm rail - decides `<video>` vs `<img>` by testing the url
+   * against /\.(mp4|webm|m4v)(\?|#|$)/. A blob: url has no extension, so a pile
+   * VIDEO would be mounted in an <img> and show nothing at all. The URL Standard
+   * resolves a blob URL against the store with the fragment EXCLUDED, so a
+   * trailing `#.mp4` is ignored by the fetch and read by every one of those
+   * regexes. Stills and gifs are handed over untouched - an <img> is already
+   * what they want. */
+  function hintedPileUrl(row, url, kind) {
+    if (kind !== 'loop') return url;
+    if (VIDEO_URL_RE.test(url)) return url;
+    const mime = (row && typeof row === 'object') ? String(row.mime || '') : '';
+    if (!/^video\//i.test(mime)) return url;            // a gif wants an <img>
+    const sub = mime.slice(6).toLowerCase().split(';')[0].trim();
+    const ext = sub === 'webm' ? 'webm' : (sub === 'x-m4v' ? 'm4v' : 'mp4');
+    return url + (url.indexOf('#') >= 0 ? '' : '#.' + ext);
+  }
+
+  function absorbLocal(entries) {
+    let added = 0;
+    for (const e of (entries || [])) {
+      const raw = e && (e.url || e);
+      if (!raw || typeof raw !== 'string') continue;
+      if (!PILE_URL_RE.test(raw)) continue;              // desktop rows are ccp.assets urls
+      if (!pileFormatOk(e, raw)) continue;
+      const k = pileKind(e, raw);
+      const url = hintedPileUrl(e, raw, k);
+      const arr = localPools[k] || localPools.still;
+      if (arr.length >= LOCAL_CAP) continue;
+      if (pileUrls.has(url) || arr.includes(url)) continue;
+      pileUrls.add(url);
+      arr.push(url);
+      added += 1;
+    }
+    if (added) {
+      log('pile +' + added + ' (loop ' + localPools.loop.length + ' / still ' + localPools.still.length + ')');
+      /* every live claim re-reads its local lists and re-dresses: a class that
+       * started on the placeholder floor swaps to the player's own media */
+      for (const fn of [...localRefreshers]) { try { fn(); } catch { /* a bad claim never kills the absorb */ } }
+    }
+    return added;
+  }
+
+  /** The host revoked the pile's object URLs (media.clearLocal): every url we
+   *  took from it is dead now, so drop them and let the live claims re-sync. */
+  function dropPile() {
+    if (!pileUrls.size) return 0;
+    let gone = 0;
+    for (const k of ['loop', 'still']) {
+      const arr = localPools[k];
+      if (!arr) continue;
+      for (let i = arr.length - 1; i >= 0; i--) {
+        if (pileUrls.has(arr[i])) { arr.splice(i, 1); gone += 1; }
+      }
+    }
+    pileUrls.clear();
+    if (gone) {
+      log('pile cleared (-' + gone + ')');
+      for (const fn of [...localRefreshers]) { try { fn(); } catch { /* ignore */ } }
+    }
+    return gone;
+  }
+
+  /** The host's `local-media` push (MEDIA-CONTRACT §4). Desktop never sends it. */
+  function onLocalMediaFrame(msg) {
+    const m = (msg && msg.detail) || msg;
+    const next = readPile(m);
+    if (!next) return;
+    const was = pilePresent();
+    const held = localPile ? (localPile.images + localPile.videos) : 0;
+    localPile = next;
+    const now = pilePresent();
+    if (was && !now) { dropPile(); return; }             // a clear, or an ingest of nothing
+    /* A pile that appears (or GROWS - a second ingest on top of a first) MID-CLASS
+     * is still this class's media, so every live claim asks again rather than
+     * waiting for the next one. A push that changes nothing asks nothing: the
+     * host posts one after a CANCELLED picker too (MEDIA-CONTRACT §4). */
+    if (now && (!was || (next.images + next.videos) > held)) {
+      ensureListening();
+      for (const fn of [...pileCbs]) { try { fn(); } catch { /* ignore */ } }
+    }
+  }
+
+  /* ------------------------------------------------------------------------
    * THE BOOT ASK (0826). The provider used to send its FIRST 'assets-request'
    * from claim() - i.e. when the player claims a class - so the whole door /
    * menu / rules-sheet stretch was network dead air. On the owner's cellular
@@ -301,6 +492,10 @@ export function createAssets(options = {}) {
       kind, count, niches: defaultNiches,
       onBatch: (entries) => {
         if (disposed) return;
+        /* on the web an app-wide reply INTERLEAVES the session pile with the
+         * remote pool (MEDIA-CONTRACT §7); absorbRemote drops those blob: rows
+         * on origin, so they are taken here or they are lost */
+        absorbLocal(entries);
         absorbRemote(entries);       // zero rand: no deck to re-deal, no pool yet
         /* the host's contract is "ask again after every reply" (a cold buffer
          * answers empty and streams the real batch later) */
@@ -770,6 +965,10 @@ export function createAssets(options = {}) {
   if (opts.bridge) {
     try { channel.subscribe('library', onLibraryFrame); } catch { /* ignore */ }
     try { channel.subscribe('sub-probe', onSubProbeFrame); } catch { /* ignore */ }
+    /* The web shim's session-pile push. Same loose `bridge.on` seam, which is
+     * multi-subscriber by design (trap 11) - `shell/settings.js` listens for the
+     * very same frame to paint its counts and neither steals the other's. */
+    try { channel.subscribe('local-media', onLocalMediaFrame); } catch { /* ignore */ }
   }
 
   /**
@@ -814,6 +1013,41 @@ export function createAssets(options = {}) {
     //  slice of the local lists, which on the web build were placeholder SVGs
     //  and on desktop are the host's own disk. See refreshDeck().)
 
+    /* THE SESSION PILE's re-sync (web only). The three lists above are SNAPSHOTS
+     * taken at claim time - on the desktop that is the whole truth, because the
+     * `localAssets` manifest is complete before a class is ever claimed. A web
+     * pile arrives in frames AFTER the claim (and may be ingested mid-class), so
+     * its rows have to reach a claim that is already dealing. The lists are
+     * refilled IN PLACE: the cursors index them modulo length and the recency
+     * rings hold urls, so nothing that is serving has to be rebuilt - the pool
+     * simply gets wider, exactly the way an absorbed remote batch widens it.
+     * A claim whose local lists never move (every desktop claim) never runs the
+     * body of this. */
+    function syncLocal() {
+      if (released || disposed) return;
+      const nextLoops = localFor('loop');
+      const nextStills = localFor('still');
+      const same = (a, b) => a.length === b.length && a.every((u, i) => u === b[i]);
+      let moved = false;
+      if (!same(localLoops, nextLoops)) {
+        localLoops.length = 0;
+        for (const u of nextLoops) localLoops.push(u);
+        moved = true;
+      }
+      if (!same(localStills, nextStills)) {
+        localStills.length = 0;
+        for (const u of nextStills) localStills.push(u);
+        const rev = nextStills.slice().reverse();
+        localTargets.length = 0;
+        for (const u of rev) localTargets.push(u);
+        moved = true;
+      }
+      if (!moved) return;
+      refreshDeck();          // the forecast is stale: re-deal it and warm the new tail
+      notifyUpdate();         // and a class already on placeholders re-dresses
+    }
+    localRefreshers.add(syncLocal);
+
     // --- the remote side, if the gate is open ------------------------------
     // The host's contract is "whatever is buffered NOW, and ask again after
     // every reply" (ArcademyHostService assets-request header): a single ask on
@@ -844,6 +1078,14 @@ export function createAssets(options = {}) {
         kind, count, niches,
         onBatch: (entries) => {
           if (released || disposed) return;
+          /* THE INTERLEAVE (web, MEDIA-CONTRACT §7). With both a remote pool and
+           * a session pile alive the host fills a reply batch from BOTH, so an
+           * app-wide reply carries blob: rows beside the http ones. absorbRemote
+           * refuses them on origin - correctly, they are not remote and must
+           * never count toward remoteRatio or the remote ring - so they are
+           * taken as LOCAL first. absorbLocal fires the refreshers itself, which
+           * is what re-deals the deck and re-dresses the board. */
+          absorbLocal(entries);
           if (absorbRemote(entries)) {
             /* The pool just grew, so every forecast is stale: re-deal the deck
              * and warm ITS urls. (The old `slice(-4)` warmed the newest
@@ -867,6 +1109,51 @@ export function createAssets(options = {}) {
     } else if (canvasSafe && remoteEnabled) {
       log('canvasSafe claim: local-only pool (CORS two-pool law)');
     }
+
+    /* =======================================================================
+     * THE SESSION PILE's ask (web only, 2026-08-26).
+     *
+     * The bug two testers hit: with "Pull from online" OFF, `remoteEnabled` is
+     * false, so the block above sends NOTHING - and the player's own uploaded
+     * folder/zip/gallery was therefore never asked for at all. Every class dealt
+     * itself the six bundled placeholder tiles while the pile sat in the host.
+     *
+     * A LOCAL sample is NOT a network call, so it is not the consent gate's
+     * business (`provider/remote.js` request(): `local:true` rides straight past
+     * the enabled/offline check, which is the same door SORT's local piles have
+     * used since 0823). It is also legal for a `canvasSafe` claim: a blob: from
+     * our own origin passes `isLocalUrl`, which is what the two-pool law
+     * actually tests - the pile is the one media a web player can put on a
+     * canvas at all. On the desktop `pilePresent()` is false, so this whole
+     * block is dead code and not one frame leaves the page.
+     * ==================================================================== */
+    const LOCAL_MAX_ASKS = 4;
+    function askLocal(kind, count, attempt) {
+      if (released || disposed) return;
+      const id = channel.request({
+        type: 'local-sample-request', local: true, kind, count,
+        onBatch: (entries) => {
+          if (released || disposed) return;
+          absorbLocal(entries);          // fires the refreshers: re-deal + re-dress
+          /* the host's contract is the same one the remote ask keeps: ask again
+           * after every reply until the pool covers the spec or the budget is
+           * spent. An empty pile answers `{urls:[], done:true}` and this stops. */
+          if ((localPools[kind] || []).length < count && attempt < LOCAL_MAX_ASKS) {
+            const t = setTimeout(() => { retryTimers.delete(t); askLocal(kind, count, attempt + 1); }, RETRY_MS * Math.max(1, attempt));
+            retryTimers.add(t);
+          }
+        },
+      });
+      if (id) reqIds.push(id);
+    }
+    function askPile() {
+      if (released || disposed || !opts.bridge || !pilePresent()) return;
+      if (want.loop) askLocal('loop', Math.min(LOCAL_CAP, Math.max(4, want.loop)), 1);
+      if (want.still + want.target) askLocal('still', Math.min(LOCAL_CAP, Math.max(4, want.still + want.target)), 1);
+    }
+    askPile();
+    /* ...and again if the player ingests one WHILE this class is running. */
+    pileCbs.add(askPile);
 
     /* =======================================================================
      * THE DRAW, parameterized (THE ON-DECK RAIL, 0825).
@@ -1113,6 +1400,8 @@ export function createAssets(options = {}) {
         if (released) return;
         released = true;
         reqIds = [];
+        localRefreshers.delete(syncLocal);   // the pile seam dies with the claim too
+        pileCbs.delete(askPile);
         recent.loop.length = 0;        // the recency rings die with the claim
         recent.still.length = 0;
         updateCbs.clear();
@@ -1256,6 +1545,12 @@ export function createAssets(options = {}) {
         // tile. The shell surfaces this as its one asset-seam diagnostic.
         placeholderFloor: !localPools.loop.length && !localPools.still.length,
         claims: claims.size,
+        /* THE SESSION PILE, the web's only local inventory. `pileRows` counts
+         * what actually reached the pools, which is the one number that tells a
+         * "the pile never arrived" report apart from a "the pile is empty" one.
+         * Both are 0 / false on the desktop, always. */
+        pilePresent: pilePresent(),
+        pileRows: pileUrls.size,
         remoteEnabled, remoteRatio, offlineMode,
         /* the SORT seam, read-only: live tagged pools and the pickable world */
         taggedPools: taggedPools.size,
@@ -1281,6 +1576,9 @@ export function createAssets(options = {}) {
       }
       probes.clear();
       libraryCbs.clear();
+      localRefreshers.clear();
+      pileCbs.clear();
+      pileUrls.clear();
       channel.dispose();
       manifest = null;
       for (const url of [...readyWaiters.keys()]) flushReady(url, false);
