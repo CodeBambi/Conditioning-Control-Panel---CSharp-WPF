@@ -227,6 +227,9 @@ html.arc-reduced .g-dt-mq{opacity:.16}
   background:var(--panel2,#2E2E55);border:1px solid #3E3E70;color:var(--ink-dim,#B9B3CE);
   font:600 clamp(13px,1.9vh,17px)/1 var(--body,sans-serif);
   display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+  /* a keycap is TAPPED, fast: no double-tap zoom, no 300ms wait (styles.css's
+     html/body floor says the same, this is the belt to that pair of braces) */
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;
   box-shadow:0 3px 0 rgba(0,0,0,.4);position:relative;overflow:hidden;
   transition:transform .08s ease,background .25s ease,color .25s ease}
 .g-dt-key:active,.g-dt-key.down{transform:translateY(2px);box-shadow:none}
@@ -356,7 +359,7 @@ html.arc-reduced .g-dt-mq{opacity:.16}
 .g-dt-hw-key{flex:0 0 auto;min-width:52px;text-align:center;padding:7px 10px;border-radius:7px;
   font-family:var(--mono,monospace);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
   color:var(--ink,#F2EBDD);background:linear-gradient(180deg,var(--panel2,#2E2E55),#1A1A32);
-  border:1px solid var(--line,#3A3A5E);border-bottom-width:3px;
+  border:1px solid var(--line,#3A3A5E);border-bottom-width:3px;touch-action:manipulation;
   box-shadow:0 2px 0 rgba(0,0,0,.45);animation:g-dt-hw-press 3.4s ease-in-out infinite}
 .g-dt-hw-key.wide{min-width:74px}
 @keyframes g-dt-hw-press{0%,84%{transform:translateY(0)}

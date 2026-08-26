@@ -161,6 +161,15 @@
 
 html, body { height:100%; }
 
+/* NO DOUBLE-TAP ZOOM. iOS reserves ~300ms after every tap to see whether a
+   second one is coming, and on a fast board (Daily Trigger's keys, an EMI chip
+   strip) it decided the second tap was a zoom instead of a press. `manipulation`
+   drops double-tap-to-zoom and keeps PINCH zoom, so the accessibility gesture
+   survives. Element rules win over this one, so the drag surfaces that declare
+   their own `touch-action:none` (emi/widget.css, composure, sort, L&F,
+   the-deep-end, .arc-peekbtn) keep it - this is the floor, not a ceiling. */
+html, body { touch-action:manipulation; }
+
 body {
   margin:0;
   background:var(--ground);
@@ -770,9 +779,16 @@ html.arc-reduced .arc-disc-body, html.arc-reduced .arc-disc-chev { transition:no
   .arc-disc-body, .arc-disc-chev { transition:none; }
 }
 
-/* switch */
+/* switch
+   THE KNOB IS NOT THE TARGET: the invisible <input> comes FIRST in the DOM
+   (settings.js switchRow, and `input:checked + span` needs that order), so the
+   knob <span> - absolute, inset:0, later sibling - painted over it and ate every
+   press on the switch itself. Only the row label still toggled. z-index:1 lifts
+   the input back to the front WITHOUT reordering the DOM; :hover still reads on
+   the span (it propagates from the input's box) and the sibling selectors are
+   untouched. */
 .arc-switch { position:relative; width:42px; height:22px; flex:0 0 auto; }
-.arc-switch input { position:absolute; opacity:0; width:100%; height:100%; margin:0; cursor:pointer; }
+.arc-switch input { position:absolute; opacity:0; width:100%; height:100%; margin:0; cursor:pointer; z-index:1; }
 .arc-switch span {
   position:absolute; inset:0; border-radius:999px; background:var(--panel2);
   border:var(--hairline); transition:background .15s;
@@ -964,6 +980,37 @@ html.arc-reduced .arc-disc-body, html.arc-reduced .arc-disc-chev { transition:no
 @keyframes arc-knock-breathe { from { opacity:.35; } to { opacity:.9; } }
 @media (prefers-reduced-motion: reduce) {
   .arc-boot-knock { animation:none; opacity:.7; }
+}
+/* THE DOOR IS THE LAST THING WAITING (boot.js escalateKnock, T2 tester report
+   2026-08-26). `is-ready` says the school is BUILT and only the gesture is
+   outstanding, so the splash stops reading as a progress bar: the rail lands
+   full and holds, the Opening caption steps back, and the hint stops being a
+   caption and becomes the instruction. The `:not(.is-heard)` guard is load
+   bearing - is-heard is the fade-out on the tap, and it is the LESS specific
+   selector, so without it a knocked door would keep its sign up.
+   The scale pulse is the only thing added and the only thing reduced motion
+   takes away: the SIZE and the INK are the fix, the pulse is seasoning. */
+.arc-loader.is-ready .arc-intro-rail {
+  transform:scaleX(1) !important;    /* an !important beats a running animation */
+  animation-play-state:paused;       /* ...and the chase stops chasing */
+}
+.arc-loader.is-ready .arc-intro-caption { opacity:.4; transition:opacity .3s ease-out; }
+.arc-loader.is-ready .arc-boot-knock:not(.is-heard) {
+  font-size:16px; letter-spacing:.26em; color:var(--ink); opacity:1;
+  text-shadow:0 0 18px color-mix(in srgb, var(--pink) 55%, transparent);
+  animation:arc-knock-ready 1.6s ease-in-out infinite both;
+}
+@keyframes arc-knock-ready {
+  0%, 100% { opacity:.78; transform:scale(1); }
+  50%      { opacity:1;   transform:scale(1.045); }
+}
+html.arc-reduced .arc-loader.is-ready .arc-boot-knock:not(.is-heard) {
+  animation:none; opacity:1; transform:none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .arc-loader.is-ready .arc-boot-knock:not(.is-heard) {
+    animation:none; opacity:1; transform:none;
+  }
 }
 .arc-loader.is-done .arc-intro-stage {
   animation:none; transform:scale(1.07); transition:transform .3s ease-in;

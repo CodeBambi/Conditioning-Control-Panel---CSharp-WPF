@@ -555,6 +555,24 @@ export default {
       };
     }
 
+    /** THE DEAD URL (0826). A face whose url 404s paints the browser's own
+     *  broken-image glyph - a tester saw one on this board. The floor is already
+     *  here: a pair with NO url wears its GLYPH face, and a glyph pair plays
+     *  exactly like a media pair. So a broken url is dropped from `pairUrls` and
+     *  BOTH of the pair's cards are re-applied together - a pair whose two halves
+     *  wore different faces would be a worse bug than the one being fixed.
+     *  Convicted once (the twin fires its own error on the same url), and
+     *  pool.markBroken keeps the row out of the next board's draw. */
+    function faceBroke(pairId, url) {
+      const u = String(url || '');
+      if (dead || !u || pairUrls[pairId] !== u) return;    // already dropped, or stale
+      pairUrls[pairId] = null;
+      try { if (pool && typeof pool.markBroken === 'function') pool.markBroken(u); }
+      catch (e) { /* an optional seam never breaks a class */ }
+      say('face failed, glyph pair ' + pairId + ': ' + u);
+      for (const c of cells) if (c && c.pairId === pairId) applyMedia(c);
+    }
+
     /** One media node per card, created once and never re-created on a flip. */
     function applyMedia(cell) {
       const url = pairUrls[cell.pairId];
@@ -572,6 +590,7 @@ export default {
       } else if (url) {
         node = el('img', 'g-dv-face');
         node.setAttribute('alt', '');
+        node.onerror = () => faceBroke(cell.pairId, url);
         node.src = url;
       } else {
         node = el('div', 'g-dv-face g-dv-glyph', glyph);
@@ -1215,6 +1234,14 @@ export default {
       if (url && !isVideoUrl(url)) {
         const img = el('img');
         img.setAttribute('alt', '');
+        /* the same glyph floor the video branch below already takes: a lie that
+         * renders as a broken-image icon is a tell, and a very unfair one */
+        img.onerror = () => {
+          try { img.remove(); } catch (e) { /* noop */ }
+          node.textContent = glyph;
+          node.classList.add('glyph');
+          faceBroke(wearPairId, url);
+        };
         img.src = url;
         node.appendChild(img);
       } else {

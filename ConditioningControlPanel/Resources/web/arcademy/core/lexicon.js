@@ -198,6 +198,10 @@ export const DEFAULT_LEXICON = Object.freeze({
      it reads init.lexicon directly with the same English as its own fallback -
      keep the two strings identical when either moves. */
   intro_knock: 'Knock to enter',
+  /* THE SECOND ASKING (boot.js escalateKnock). Four seconds after the school is
+     ready and still nobody has touched anything, the line changes rather than
+     repeating - the first words did not land, so louder is not the answer. */
+  intro_knock_wait: 'Tap anywhere to knock',
   /* --- THE FRONT OFFICE SHEET (shell/settings.js) -----------------------
      Section titles, the two ceilings blurbs (one per host), the web's device
      rows, and the one-line summaries the folded headers wear. `{v}`, `{n}`,

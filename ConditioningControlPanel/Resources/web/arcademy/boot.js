@@ -253,6 +253,47 @@ function armKnockGate() {
   doc.addEventListener('keydown', onKnock, true);
 }
 
+/* THE SPLASH STOPS PRETENDING TO LOAD (T2 tester report, 2026-08-26: sat on the
+ * splash on a PC waiting for a rail that had already finished, because nothing
+ * on screen changed when the school was ready).
+ *
+ * `dismissLoader` queues on the knock, and until now that queue was INVISIBLE:
+ * the rail kept chasing, the caption kept saying Opening, and the one line that
+ * mattered stayed a 12.5px dim caption at the bottom of the frame. This is the
+ * escalation, and it runs exactly once - on the frame boot is done and the
+ * gesture is the ONLY thing outstanding.
+ *
+ * `is-ready` is the whole visual half (styles.css): the rail lands full and
+ * stops, the caption steps back, and the hint steps up to real size and full
+ * ink with a soft scale pulse - which reduced motion drops while keeping the
+ * size and the contrast, because the READING is the fix and the pulse is only
+ * the seasoning.
+ *
+ * After KNOCK_WAIT_MS with still no gesture the LINE changes rather than
+ * repeating: someone who has not understood "Knock to enter" needs different
+ * words, not the same ones louder. The timer rides `introTimers`, so failBoot
+ * and shutdown sweep it with everything else, and it re-checks the splash on
+ * the way in - a beat can never land on the error card (trap 66's discipline).
+ *
+ * NO SOUND, EVER. The knock IS the autoplay gate: there is no cue this side of
+ * it that any browser would let us play. */
+const KNOCK_WAIT_MS = 4000;
+
+function escalateKnock() {
+  try { if (dom.loader) dom.loader.classList.add('is-ready'); } catch (e) { /* noop */ }
+  if (!knockHint) return;
+  const id = setTimeout(() => {
+    introTimers.delete(id);
+    if (knockDone || !knockHint || !splashIsUp()) return;
+    try {
+      const src = initMsg || {};
+      knockHint.textContent =
+        (src.lexicon && src.lexicon.intro_knock_wait) || 'Tap anywhere to knock';
+    } catch (e) { /* a hint may never cost the boot */ }
+  }, KNOCK_WAIT_MS);
+  introTimers.add(id);
+}
+
 /* ONE AUDIO DOOR (GROUND-RULES §6, shell/ceremonies.js's exact pattern): a cue
  * is a REQUEST on `document`, never a node - shell/audio.js owns the only audio
  * graph on the page (trap 18). A cue path must never be the thing that throws,
@@ -543,8 +584,13 @@ function dismissLoader() {
   const el = dom.loader;
   if (!el || el.hidden) return;
   /* The knock outranks readiness: a booted school still waits for the door.
-   * onKnock re-calls us KNOCK_EXIT_MS after the tap that struck the bed. */
-  if (knockWanted && !knockDone) { knockDismissQueued = true; return; }
+   * onKnock re-calls us KNOCK_EXIT_MS after the tap that struck the bed.
+   * THE FIRST TIME WE QUEUE, THE SPLASH SAYS SO (escalateKnock): this is the
+   * one frame on which the wait stops being a boot and starts being a door. */
+  if (knockWanted && !knockDone) {
+    if (!knockDismissQueued) { knockDismissQueued = true; escalateKnock(); }
+    return;
+  }
   /* And the jingle outranks both: settleBed() re-calls us the moment the bed is
    * over, or the moment the cap says it is (THE SPLASH WAITS FOR THE JINGLE). */
   if (bedHolding) { bedDismissQueued = true; return; }
