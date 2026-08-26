@@ -229,6 +229,16 @@ html.arc-reduced .g-ec-cs-pool{animation:none !important;transition:opacity .4s 
 html.arc-reduced .g-ec-cs-pool.hum{animation:none !important;opacity:.8}
 html.arc-reduced .g-ec-cs-glint.on{animation:none;opacity:.7}
 html.arc-reduced .g-ec-cs-word.on{animation:none;opacity:1}
+/* THE PHONE DIET (html.ae-touch, core/device.js): the marquee keeps its chase
+   and the pools keep their blooms, but the blurred bulb shadows, the whole-halo
+   filter pass on a flash and the infinite filter keyframe on the pools stand
+   down - those are per-frame rasters a phone GPU pays for, 24-36 bulbs at a
+   time. Desktop (no ae-touch) is untouched. */
+html.ae-touch .g-ec-mq-bulb{box-shadow:0 0 5px hsl(var(--ec-mq-hue) 95% 70% / .8)}
+html.ae-touch .g-ec-mq.flash .g-ec-mq-bulb{filter:none;animation-duration:var(--ec-mq-t)}
+html.ae-touch .g-ec-cs-pool{animation:none}
+html.ae-touch .g-ec-cs-pool.hum{animation:none;opacity:.8}
+html.ae-touch .g-ec-cs-pool.cold,html.ae-touch .g-ec-cs-pool.warm{filter:none}
 .g-ec-stage.suspended .g-ec-mq-bulb,.g-ec-stage.suspended .g-ec-cs-pool,.g-ec-stage.suspended .g-ec-cs-word,
 .g-ec-stage.suspended .g-ec-cs-glint{animation-play-state:paused !important}
 `;
@@ -310,7 +320,8 @@ function qs(root, sel) {
  * @param {Object} o
  *   seed, tier (1..4), stage (.g-ec-stage), board (.g-ec-ring), hud (the
  *   .g-ec-hud element OR {len, clock, streak, best}), backdrop (.g-ec-backdrop),
- *   timers {after, every?, clear|cancel}, reduced, capsOk (bool or () => bool),
+ *   timers {after, every?, clear|cancel}, reduced, coarse (touch pointer -
+ *   the perf diet), capsOk (bool or () => bool),
  *   t (key, fallback) => string, engine {fire, ceremony?, channels?}, log,
  *   optional: pads () => Element[] (else read off the board), padCount
  */
@@ -320,6 +331,7 @@ export function createEcCasino(o) {
   const say = typeof opts.log === 'function' ? opts.log : () => {};
   const t = typeof opts.t === 'function' ? opts.t : ((k, f) => f);
   const reduced = !!opts.reduced;
+  const coarse = !!opts.coarse;
   const tier = Math.max(1, Math.min(4, Math.round(Number(opts.tier) || 1)));
   const audioCeil = C.AUDIO_CEIL[tier] || C.AUDIO_CEIL[1];
   const eng = opts.engine || {};
@@ -540,7 +552,11 @@ export function createEcCasino(o) {
   function flashHalo(strength, ms) {
     if (!halo || !armed() || reduced) return;
     setVar(halo, '--ec-mq-f', Math.max(1, Math.min(2.2, Number(strength) || 1)).toFixed(2));
-    restart(halo, 'flash');
+    /* On touch the diet keeps the chase running through a flash (same duration,
+     * no filter), so there is no animation to re-home - the restart()'s forced
+     * reflow would be a payout-priced layout for nothing. */
+    if (coarse) setCls(halo, 'flash', true);
+    else restart(halo, 'flash');
     cancel(flashTimer);
     flashTimer = after(ms || C.MQ_FLASH_MS, () => { flashTimer = 0; setCls(halo, 'flash', false); });
   }

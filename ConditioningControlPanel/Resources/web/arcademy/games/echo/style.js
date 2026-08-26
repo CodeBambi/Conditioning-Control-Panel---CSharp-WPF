@@ -353,7 +353,7 @@ ${padRules()}
     0 10px 28px rgba(0,0,0,.5),
     inset 0 -10px 22px rgba(0,0,0,.55),
     inset 0 2px 0 hsl(var(--ec-h) 80% 90% / calc(.25 + .5 * var(--ec-lamp))),
-    0 0 calc(10px + 34px * var(--ec-lamp)) hsl(var(--ec-h) 95% 70% / calc(.15 + .7 * var(--ec-lamp)));
+    0 0 var(--ec-glow-face, calc(10px + 34px * var(--ec-lamp))) hsl(var(--ec-h) 95% 70% / calc(.15 + .7 * var(--ec-lamp)));
   transform:scale(1);
   transition:transform .14s cubic-bezier(.2,1.4,.4,1), box-shadow .16s ease-out, border-color .16s ease-out, filter .3s ease}
 /* the glass highlight: a crescent that brightens with the lamp */
@@ -394,7 +394,7 @@ ${padRules()}
 .g-ec-glyph{position:absolute;left:50%;top:50%;transform:translate(-50%,-52%);pointer-events:none;
   font:400 clamp(20px, calc(var(--ec-pad) * .36), 52px)/1 var(--body,system-ui,sans-serif);
   color:hsl(var(--ec-h) 90% calc(84% + 10% * var(--ec-lamp)));
-  text-shadow:0 0 calc(4px + 14px * var(--ec-lamp)) hsl(var(--ec-h) 95% 70% / .9), 0 1px 0 rgba(0,0,0,.5);
+  text-shadow:0 0 var(--ec-glow-glyph, calc(4px + 14px * var(--ec-lamp))) hsl(var(--ec-h) 95% 70% / .9), 0 1px 0 rgba(0,0,0,.5);
   transition:transform .3s ease, font-size .3s ease}
 .g-ec-pad[data-face="word"] .g-ec-glyph{top:auto;bottom:9%;transform:translate(-50%,0);
   font-size:clamp(11px, calc(var(--ec-pad) * .12), 20px);opacity:.72}
@@ -416,7 +416,7 @@ ${padRules()}
   letter-spacing:.01em;text-transform:uppercase;text-align:center;
   overflow-wrap:anywhere;overflow:hidden;
   color:hsl(var(--ec-h) 92% calc(88% + 8% * var(--ec-lamp)));
-  text-shadow:0 0 calc(5px + 16px * var(--ec-lamp)) hsl(var(--ec-h) 95% 70% / .95),
+  text-shadow:0 0 var(--ec-glow-word, calc(5px + 16px * var(--ec-lamp))) hsl(var(--ec-h) 95% 70% / .95),
     0 2px 4px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,.9);
   transition:color var(--ec-veil,.2s) ease, text-shadow var(--ec-veil,.2s) ease, opacity .3s ease}
 .g-ec-word:empty{opacity:0}
@@ -455,7 +455,7 @@ html:not(.ae-touch) .g-ec-pad:hover .g-ec-word,
 .g-ec-pad:focus .g-ec-word,
 .g-ec-pad:active .g-ec-word,
 .g-ec-pad[data-veil="off"] .g-ec-word{color:hsl(var(--ec-h) 92% calc(88% + 8% * var(--ec-lamp)));
-  text-shadow:0 0 calc(5px + 16px * var(--ec-lamp)) hsl(var(--ec-h) 95% 70% / .95),
+  text-shadow:0 0 var(--ec-glow-word, calc(5px + 16px * var(--ec-lamp))) hsl(var(--ec-h) 95% 70% / .95),
     0 2px 4px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,.9)}
 /* THE POP (2026-08-25): a press-flashed word arrives with a small settle -
    transform/opacity only (never a filter over live media - trap 36), and the
@@ -765,6 +765,44 @@ html.arc-reduced .g-ec-howto-art::before,html.arc-reduced .g-ec-howto-art::after
   .g-ec-pad[data-state="reveal"]::before{animation:none !important;opacity:.9;transform:scale(1.16)}
   .g-ec-step[data-fill="on"],.g-ec-step[data-fill="bad"]{transform:none}
 }
+
+/* ---- THE PHONE DIET (html.ae-touch, armed page-wide by core/device.js) --
+   NOT reduced motion: the room still breathes and the lamps still ride
+   --ec-lamp. What stands down is every per-frame raster a phone GPU cannot
+   afford - the lamp-driven BLUR RADII are pinned to a fixed mid value (the
+   colour and alpha still ride the lamp, so the read survives), the decorative
+   filter passes go, the floor loses its perspective re-raster and the dust
+   crawl holds still. Desktop (no ae-touch) is pixel-identical: every pinned
+   radius above falls back to its original calc. */
+html.ae-touch .g-ec-stage{--ec-glow-glyph:12px;--ec-glow-word:13px;--ec-glow-face:30px}
+/* the glass highlight loses its six permanent blur(1px) render surfaces */
+html.ae-touch .g-ec-face::before{filter:none}
+/* the state brighteners: the lamp carries the read (incl. the silent-room tell) */
+html.ae-touch .g-ec-pad[data-state="lit"] .g-ec-face,
+html.ae-touch .g-ec-pad[data-state="pressed"] .g-ec-face{filter:none}
+html.ae-touch .g-ec-stage[data-audible="0"] .g-ec-pad[data-state="lit"] .g-ec-face,
+html.ae-touch .g-ec-stage[data-audible="0"] .g-ec-pad[data-state="pressed"] .g-ec-face{filter:none}
+/* the decoy: the arc-reduced look - cold hue and spill still tell the tale */
+html.ae-touch .g-ec-pad[data-state="decoy"] .g-ec-face{filter:none;animation:none;opacity:.85}
+/* the spill: a smaller falloff, same read */
+html.ae-touch .g-ec-pad::after{width:170%;height:170%}
+/* the media faces: OPT-IN already, so outside data-faces="media" the six
+   elements are six invisible composited layers wearing a blend, a filter and
+   an infinite ken-burns for nothing - they leave the tree entirely. Inside the
+   mode they stay, minus the per-frame passes (the pad already tints the lamp,
+   and index.js caps a touch deal to stills). */
+html.ae-touch .g-ec-stage:not([data-faces="media"]) .g-ec-media{display:none}
+html.ae-touch .g-ec-media{mix-blend-mode:normal;filter:none;animation:none}
+/* the floorboards go flat: no perspective-transformed double gradient */
+html.ae-touch .g-ec-stage::before{transform:none;top:52%;opacity:.16}
+/* the spotlight still breathes, opacity only - the scaleX re-raster goes */
+html.ae-touch .g-ec-backdrop::before{animation:g-ec-breathe-still var(--ec-breath) ease-in-out infinite alternate}
+@keyframes g-ec-breathe-still{from{opacity:calc(var(--ec-n-spot,.7) * .72)}to{opacity:var(--ec-n-spot,.7)}}
+/* the dust in the beam holds still (the engine kills the CRT the same way) */
+html.ae-touch .g-ec-backdrop::after{animation:none}
+/* the rules sheet: the arc-reduced kills, verbatim */
+html.ae-touch .g-ec-howto-go{animation:none !important}
+html.ae-touch .g-ec-howto-art::before,html.ae-touch .g-ec-howto-art::after{animation:none !important}
 
 /* ---- small screens: the ring shrinks, the HUD tightens ------------------ */
 @media (max-width: 560px){
