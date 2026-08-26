@@ -274,10 +274,13 @@ namespace ConditioningControlPanel
                 QuestsTab.BtnRerollWeekly.Content = Loc.Get("btn_completed");
             }
 
-            // Update statistics
-            QuestsTab.TxtTotalDailyCompleted.Text = questService.Progress.TotalDailyQuestsCompleted.ToString();
-            QuestsTab.TxtTotalWeeklyCompleted.Text = questService.Progress.TotalWeeklyQuestsCompleted.ToString();
-            QuestsTab.TxtTotalQuestXP.Text = questService.Progress.TotalXPFromQuests.ToString();
+            // Update statistics. Combined view: local/desktop totals + the server's mobile quest
+            // ledger (adopted read-only into AppSettings on sync). The two live in separate
+            // counters on purpose — only the desktop ones ride the sync push.
+            var mobileLedger = App.Settings?.Current;
+            QuestsTab.TxtTotalDailyCompleted.Text = (questService.Progress.TotalDailyQuestsCompleted + (mobileLedger?.MobileQuestDailyCompleted ?? 0)).ToString();
+            QuestsTab.TxtTotalWeeklyCompleted.Text = (questService.Progress.TotalWeeklyQuestsCompleted + (mobileLedger?.MobileQuestWeeklyCompleted ?? 0)).ToString();
+            QuestsTab.TxtTotalQuestXP.Text = (questService.Progress.TotalXPFromQuests + (mobileLedger?.MobileQuestXP ?? 0)).ToString();
             QuestsTab.TxtStreakFixCharges.Text = (App.Settings?.Current?.StreakFixCharges ?? 0).ToString();
 
             // Update header stats
@@ -779,8 +782,10 @@ namespace ConditioningControlPanel
 
                 if (result != MessageBoxResult.Yes) return;
 
-                // Server-side spend only — charges live on the account.
-                var fixDateStr = fixDate.ToString("yyyy-MM-dd");
+                // Server-side spend only — charges live on the account. Invariant: under a
+                // Buddhist/Umm al-Qura system calendar the default format writes year 2569
+                // onto the wire and the server records (or refuses) a garbage fixed day.
+                var fixDateStr = fixDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
                 if (App.ProfileSync == null || string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId))
                 {
                     // No cloud account

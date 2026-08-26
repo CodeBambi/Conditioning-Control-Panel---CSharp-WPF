@@ -490,7 +490,9 @@ public class SkillTreeService : IDisposable
             {
                 try
                 {
-                    var today = DateTime.Today.ToString("yyyy-MM-dd");
+                    // Invariant like every other wire day key — the default format writes the
+                    // Buddhist/Umm al-Qura year under those system calendars.
+                    var today = DateTime.Today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
                     var (ok, _, _, credits) = await App.ProfileSync.UseOopsieInsuranceAsync(today);
                     var current = App.Settings?.Current;
                     if (ok && credits.HasValue && current != null && current.StreakFixCharges != credits.Value)
