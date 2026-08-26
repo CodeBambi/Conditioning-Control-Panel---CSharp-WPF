@@ -4614,5 +4614,7 @@
   "lockdown_poss_safety_dose": "Rien ne tourne ? Le verrouillage choisit pour toi",
   "lockdown_poss_safety_dose_tip": "Un verrouillage refuse de tourner à vide. Moteur éteint au départ : il est lancé pour toi. Rien d'activé (ou tu coupes tout en cours de route) : la gardienne active des fonctions, une de plus à chaque fois, et rend tout à la fin du minuteur.",
   "st4_braindrain_audio_rate": "Fréquence audio",
-  "label_braindrain": "Drainage Cérébral"
+  "label_braindrain": "Drainage Cérébral",
+  "tube_midnight_setting": "Midnight Glass",
+  "tube_midnight_setting_hint": "A darker pane on her tube. The Prize Counter sells this one."
 }

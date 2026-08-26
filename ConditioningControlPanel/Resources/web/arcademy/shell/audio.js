@@ -327,6 +327,11 @@ const ALIASES = {
   mail_drop:      { name: 'flap' },
   water_drain:    { name: 'drain_bed' },
   tape_stop:      { name: 'glitch', pitch: 0.7 },
+  /* COUNTER STOCK: the brass bell's FLOOR is the ordinary bell. `cueFor` only
+   * swaps the name when the host says the mp3 is on disk, so this is the third
+   * rung under it - the host lied, the file will not decode, the element could
+   * not be minted - and on every one of them the school still rings. */
+  bell_brass:     { name: 'bell' },
 };
 
 /** THE SAMPLE DOOR (AV CLUB, 2026-08-24): cue name -> a file beside the page.
@@ -355,7 +360,34 @@ const SAMPLES = {
   vn_bed_ext:     './assets/sfx/vn_bed_ext.mp3',
   vn_bed_int:     './assets/sfx/vn_bed_int.mp3',
   cam_bed:        './assets/sfx/cam_bed.mp3',
+  /* COUNTER STOCK (2026-08-26). THE BRASS BELL: the old bell out of the
+   * storage room, and it is a SAMPLE STANDING BESIDE `bell` rather than a
+   * replacement for it. The swap is one line in `cueFor` below and it only
+   * happens when the file is actually here, so a player who owns the prize on
+   * a build with no mp3 in it hears the ordinary school bell - never a blip
+   * and never silence (trap 115: an unknown name is a tick, and a bell that
+   * ticks is the exact bug that table was written for). */
+  bell_brass:     './assets/sfx/bell_brass.mp3',
 };
+
+/** THE PA PACK (Counter Stock). Thirty-six spoken announcements, and they are
+ *  generated into the table rather than typed out because the only thing that
+ *  varies is a two-digit number - thirty-six literal rows is thirty-six
+ *  chances to fat-finger a path that then fails as SILENCE.
+ *
+ *  THEY SHIP FLAT. `BuildSfxSamples` on the host scans `assets/sfx`
+ *  TopDirectoryOnly, so a `pa/` subfolder would never reach `init.sfxSamples`
+ *  and every line would be a file the page has been told does not exist. The
+ *  files are `assets/sfx/pa_01.mp3` .. `pa_36.mp3`, flat, beside the bells. */
+export const PA_COUNT = 36;
+/** `pa_07` from 7. The zero pad is part of the name, not decoration. */
+export function paName(n) {
+  const i = Math.max(1, Math.min(PA_COUNT, Math.round(Number(n) || 0)));
+  return 'pa_' + String(i).padStart(2, '0');
+}
+for (let i = 1; i <= PA_COUNT; i += 1) {
+  SAMPLES[paName(i)] = './assets/sfx/' + paName(i) + '.mp3';
+}
 
 /** PER-NAME HEADROOM ON A SAMPLE (owner report, 2026-08-26: "too loud").
  *  A recorded one-shot at `amp * CLIP_GAIN` is not the same loudness as the
@@ -383,6 +415,14 @@ const NEVER_BUFFERED = new Set([
   'records_bed', 'campus_idle', 'vn_bed_ext', 'vn_bed_int', 'cam_bed',
   'intro_bed',
 ]);
+/* THE PA LINES ARE NEVER PRE-DECODED EITHER, and the reason is arithmetic:
+ * `prebufferSamples` decodes every available one-shot at context-up, and
+ * thirty-six seconds-long spoken lines decoded to float PCM is tens of
+ * megabytes of resident memory bought for a feature that plays at most two of
+ * them a night. Latency is the whole case for pre-decoding (a page turn half a
+ * beat late), and an announcement over a school PA has no beat to be late for.
+ * They keep the element path, like the beds. */
+for (let i = 1; i <= PA_COUNT; i += 1) NEVER_BUFFERED.add(paName(i));
 
 /** The names with NO recipe under them. A missing file is SILENCE here, not
  *  a fallback: an oscillator impression of a bed track or of a whole board
@@ -391,7 +431,49 @@ const NEVER_BUFFERED = new Set([
 const SAMPLE_ONLY = new Set([
   'intro_bed', 'flap_deal',
   'records_bed', 'campus_idle', 'vn_bed_ext', 'vn_bed_int', 'cam_bed',
+  /* COUNTER STOCK. A PA line is a person speaking: there is no oscillator
+   * impression of "the schedule has moved to the Music Room", so a missing
+   * file is silence and the announcement simply did not happen tonight.
+   *
+   * `bell_brass` is deliberately NOT in this set - it is an ALIAS onto `bell`
+   * instead (see ALIASES). Sample-only would make a brass bell with no file
+   * behind it SILENT, and a school bell that stops ringing the night you buy a
+   * nicer one is a worse bug than the blip the rule exists to prevent. The
+   * alias gives it the third floor the bells have always had: the file, then
+   * the school bell's own sample, then the school bell's recipe. */
 ]);
+for (let i = 1; i <= PA_COUNT; i += 1) SAMPLE_ONLY.add(paName(i));
+
+/* ----------------------------------------------------------------------------
+ * THE BELL COSMETIC (Counter Stock, `brass_bell`)
+ *
+ * MODULE LEVEL ON PURPOSE. boot.js builds the one consumer long before the
+ * shell exists, so the shell has no handle on the mixer and never should - but
+ * it CAN import a function. This is that function, and it is the road the shell
+ * takes: `setBellCosmetic(() => ownsSku('brass_bell'))`, once, at shell build.
+ *
+ * A GETTER, not a boolean, so a bell bought mid-session rings brass on the very
+ * next cue and a lapsed entitlement goes back to the school bell without a
+ * reload. audio.js still imports nothing and still asks nobody for a wallet
+ * (trap 18's discipline): it is handed an answer and it calls it when a bell
+ * rings. Passing `null` (or nothing) clears it, which is what a teardown wants.
+ * -------------------------------------------------------------------------- */
+
+/** @type {(boolean|Function|null)} */
+let bellCosmetic = null;
+
+/** @param {(boolean|Function|null)=} v */
+export function setBellCosmetic(v) {
+  bellCosmetic = (typeof v === 'function' || v === true) ? v : null;
+}
+
+/** The module-level answer, never a throw. */
+function bellCosmeticOwned() {
+  if (typeof bellCosmetic === 'function') {
+    try { return bellCosmetic() === true; } catch (e) { return false; }
+  }
+  return bellCosmetic === true;
+}
 
 /* HOLD (W3, 2026-08-25) - the mixer's first and only SUSTAIN. Until this wave
  * the mixer could not loop anything: every sound was a one-shot capped at 8s,
@@ -454,8 +536,13 @@ function onceCb(fn) {
  *   gesture is owed; the caller passes `init.autoplayOk === true` rather than
  *   this file reading the projection, because "may I make noise unasked" is a
  *   property of the HOST the page is in, not of the page.
+ * @param {(boolean|Function)=} o.brassBell  COUNTER STOCK: does the player own
+ *   `brass_bell`? A boolean or a getter, and a getter is the useful shape - it
+ *   is asked on every cue, so a bell bought mid-session rings brass on the next
+ *   one without a reload. This file learns ownership and NOTHING else: no sku
+ *   table, no wallet, no inventory, one question with a yes/no answer.
  */
-export function createAudio({ init, bridge, log, autoplayOk } = {}) {
+export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const src = init || {};
   const doc = (typeof document !== 'undefined') ? document : null;
@@ -498,6 +585,46 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
   const available = new Set();
   if (Array.isArray(src.sfxSamples)) {
     for (const n of src.sfxSamples) { if (SAMPLES[String(n)]) available.add(String(n)); }
+  }
+
+  /* ---------------------------------------------------------- THE ONE SWAP
+   * COUNTER STOCK's brass bell, and it is ONE function on purpose. Every road
+   * a cue can take below - the buffer, the element, SAMPLE_ONLY, the recipe
+   * floor - is keyed off `name`, so resolving the name ONCE at the top of the
+   * dispatch is the difference between a cosmetic and four of them.
+   *
+   * TWO CONDITIONS, AND THE SECOND ONE IS THE SAFETY. The player owns it, AND
+   * the host says the file is on disk. Without the second test a build that
+   * ships the sku ahead of the mp3 would resolve `bell` to a name with no
+   * sample and no recipe - which SAMPLE_ONLY turns into silence, and a school
+   * bell that goes quiet the day you buy a nicer one is the worst possible
+   * shape for this feature. With it, the fallback is the bell that was already
+   * ringing. `strikeSample` taking a bad file off `available` mid-session
+   * un-swaps it the same way, on the next cue.
+   */
+  /* OWNERSHIP ARRIVES LATE, WHICH IS WHY IT IS A `let`. boot.js builds this
+   * consumer BEFORE the shell exists (trap 18) - a cue fired during the shell's
+   * own boot has to be heard - so at construction there is nobody to ask what
+   * the player owns. Three roads in, all of them ending here: the constructor
+   * arg (a boolean or a getter, for a host that already knows), the MODULE-LEVEL
+   * `setBellCosmetic` above - which is the road the shell takes, because it can
+   * import a function without holding a mixer - and the `set_bell` control
+   * message on the sfx bus, for a caller that has neither. */
+  let brass = (typeof brassBell === 'function') ? brassBell : (brassBell === true);
+  function ownsBrass() {
+    if (typeof brass === 'function') {
+      try { return brass() === true; } catch (e) { return false; }
+    }
+    if (brass === true) return true;
+    /* The module-level answer is asked SECOND, so a host that handed this
+     * consumer its own answer keeps it. */
+    return bellCosmeticOwned();
+  }
+  function cueFor(raw) {
+    const name = String(raw == null ? '' : raw);
+    if (name !== 'bell') return name;
+    if (!available.has('bell_brass')) return name;
+    return ownsBrass() ? 'bell_brass' : name;
   }
 
   function ensureContext() {
@@ -983,6 +1110,12 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
       settle('stopped');
       return;
     }
+    /* THE THIRD CONTROL MESSAGE (Counter Stock). `stop_clips` and `stop` are
+     * the other two, and this one is the same idea: a fact about the mixer,
+     * carried on the bus that is already the seam, so nothing outside this file
+     * ever needs a handle to it. It sounds nothing and it is honoured while
+     * muted - what the player owns is not audible either way. */
+    if (d.name === 'set_bell') { setBellCosmetic(d.brass === true); settle('dropped'); return; }
     const alias = ALIASES[String(d.name || '')] || null;
     const pitch = clampPitch(d.pitch) * (alias && alias.pitch ? alias.pitch : 1);
     stats.last = {
@@ -998,7 +1131,12 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
     // relative loudness ladder the games ratchet is preserved, just audible.
     const amp = Math.sqrt(clamp01(d.level == null ? 0.5 : d.level));
     if (amp <= 0 || levels[bus] <= 0) { stats.dropped += 1; settle('dropped'); return; }
-    const name = String(d.name || '');
+    /* THE NAME AS RESOLVED, and every line under this one keys off it (see THE
+     * ONE SWAP). `stats.last.name` above is deliberately what was FIRED - a
+     * suite and a log both want to know what the page asked for, not what the
+     * cosmetic turned it into, and `cueFor` on the handle answers the other
+     * half of that question. */
+    const name = cueFor(d.name);
     try {
       // A url is a CLIP, whatever the name says. If the host cannot play one we
       // fall through to the recipe rather than going silent.
@@ -1037,7 +1175,14 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
         stats.dropped += 1;
         settle('dropped');
       } else {
-        const rName = alias ? alias.name : name;
+        /* THE SWAP'S LAST FLOOR. `alias` was keyed on what the page ASKED for;
+         * a cosmetic may have moved `name` since (THE ONE SWAP), and the moved
+         * name carries its own ALIASES row - `bell_brass -> bell` - so a brass
+         * bell whose file is present but will not decode still rings the school
+         * bell's recipe instead of the 660Hz unknown-cue blip (trap 115). For
+         * every cue the swap did not touch this is the line it always was. */
+        const swapped = (name !== String(d.name || '')) ? (ALIASES[name] || null) : null;
+        const rName = swapped ? swapped.name : (alias ? alias.name : name);
         const rec = SOUNDS[rName];
         if (!rec && !unknownNames.has(name)) {
           // Trap 110: an unknown name is a blip, not an error - which is how
@@ -1131,6 +1276,17 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
      *  intro asks before it decides whether to play a bed or to stitch the
      *  beats by hand, and a false here has to mean "stitch", never "be quiet". */
     hasSample: (name) => available.has(String(name || '')),
+    /** What a fired name actually resolves to right now (COUNTER STOCK's one
+     *  swap). The honest answer to "is the brass bell live" - it folds in the
+     *  ownership getter AND whether the file is really there. Test seam, and
+     *  the only way anything outside this file may ask. */
+    cueFor: (name) => cueFor(name),
+    /** Say the player owns (or has stopped owning) the brass bell. The same
+     *  fact `setBellCosmetic` carries, scoped to THIS consumer, for a caller
+     *  that has the handle in its hand (a suite, mostly). It is asked first, so
+     *  a consumer told `true` here ignores the module-level answer; told
+     *  `false`, it falls through to it. */
+    setBrassBell: (v) => { brass = (typeof v === 'function') ? v : (v === true); },
     stats: () => Object.assign(
       { mute, master, levels: Object.assign({}, levels), gestured, autoplayOk: autoplayOk === true, live: !!ac },
       stats

@@ -271,6 +271,32 @@
 .arc-cork-slot.kind-notice  { --pin-hue:var(--pink); }
 .arc-cork-slot.kind-flyer   { --pin-hue:var(--gold); }
 .arc-cork-slot.kind-minutes { --pin-hue:var(--lav); }
+.arc-cork-slot.kind-poster  { --pin-hue:var(--gold); }
+
+/* ---- THE POSTER DROP (Counter Stock) ------------------------------------
+   The fourth kind, and the only one that is a PICTURE. Everything above is
+   paper the school typed on; this is a print somebody bought and pinned up
+   beside it, so it keeps the hang, the pin and the lifted corner and gives up
+   the stock: no gradient, no type, and no padding holding copy that is not
+   there.
+
+   THE IMAGE IS THE SHEET. A block image at the column's own width with
+   `height:auto`, so a print of any aspect hangs at the wall's width and its row
+   grows to it, exactly the way a long notice does. A poster whose file never
+   arrives is taken down by corkboard.js's `onerror` - the SLOT, not the image -
+   so there is deliberately no broken-image styling to fall back on here: that
+   state does not exist on the wall.
+   ---------------------------------------------------------------------- */
+.arc-corknote.kind-poster {
+  padding:6px;
+  background-image:none;
+  background-color:color-mix(in srgb, var(--paper), var(--paper-lo) 55%);
+  line-height:0;                 /* no descender gap under an inline image */
+}
+.cb-poster {
+  display:block; width:100%; height:auto; max-width:100%;
+  border-radius:1px;
+}
 
 .arc-corknote.kind-notice  { --pin-hue:var(--pink); }
 .arc-corknote.kind-flyer {

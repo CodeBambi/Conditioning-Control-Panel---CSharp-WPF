@@ -108,7 +108,11 @@ export function ensureStyles(doc) {
  * eligible at all; a sheet without one is always eligible.
  * -------------------------------------------------------------------------- */
 
-export const NOTICE_KINDS = Object.freeze(['notice', 'flyer', 'minutes']);
+/** The paper treatments. `poster` is the odd one and the comment is the whole
+ *  warning: it is the ONLY kind with no row in NOTICES - a poster has no title,
+ *  no body, no `seenAt` and nothing to read, because it is a printed sheet and
+ *  not a notice somebody wrote. See THE POSTER DROP below. */
+export const NOTICE_KINDS = Object.freeze(['notice', 'flyer', 'minutes', 'poster']);
 
 export const NOTICES = Object.freeze([
   Object.freeze({
@@ -355,6 +359,59 @@ export const NOTICES = Object.freeze([
 export const BOARD_SLOTS = 4;
 
 /* ----------------------------------------------------------------------------
+ * THE POSTER DROP (Counter Stock, `poster_drop_1`)
+ *
+ * A print off the Prize Counter, pinned up with the paper. Three rules, and the
+ * first one is the reason this is fifteen lines rather than a second module:
+ *
+ *  1. A POSTER TAKES A SLOT, IT DOES NOT ADD ONE. The wall holds four sheets;
+ *     a fifth would re-flow a board that two players are looking at from
+ *     different rooms. So the notices are picked for `slots - 1` and the poster
+ *     stands in the seat that opened - the wall is still four things.
+ *  2. THE ART MAY LAG THE CODE, AND THE WALL MUST NOT NOTICE. The image's
+ *     `onerror` takes the WHOLE slot down (not the image - a pinned empty
+ *     rectangle is worse than a shorter wall), so a build that ships the sku
+ *     before the print reads as a board with three sheets on it and nothing
+ *     else. Nobody is ever shown a broken picture of a poster.
+ *  3. SAME NIGHT, SAME POSTER, EVERY WALL. It is seeded off the day exactly
+ *     like the rotation, so the hall's overlay, the Records Office close-up and
+ *     the office's own miniature all print the same one - which is what makes
+ *     it a poster that is UP rather than a picture that is drawn.
+ *
+ * The ids are the print run. They are final ahead of the art on purpose: a
+ * renamed file is a wall that goes blank on somebody's night.
+ * -------------------------------------------------------------------------- */
+
+/** The print run, in catalogue order. ONE list - never inline an id. */
+export const POSTERS = Object.freeze([
+  'poster_attend',
+  'poster_eyes_front',
+  'poster_stay_late',
+  'poster_dive_deep',
+  'poster_good_work',
+  'poster_listen_well',
+]);
+
+/** Where a print lives. Module-relative (the campus logo bug, campus.js:320). */
+export function posterUrl(id) {
+  const name = String(id == null ? '' : id);
+  try { return new URL('../art/posters/' + name + '.png', import.meta.url).href; }
+  catch (e) { return 'art/posters/' + name + '.png'; }
+}
+
+/**
+ * Tonight's print. PURE: same seed in, same poster out, for ever - and its own
+ * tag on the seed, so adding a poster can never re-deal the notices under it.
+ * @param {string} daySeed
+ * @returns {string} one of POSTERS
+ */
+export function pickPoster(daySeed) {
+  const roll = makeTaggedRoll(String(daySeed == null ? '' : daySeed) + '|board-poster');
+  const i = Math.floor(roll('which') * POSTERS.length);
+  return POSTERS[Math.max(0, Math.min(POSTERS.length - 1, i))];
+}
+
+/* ----------------------------------------------------------------------------
  * THE ROTATION
  * Deterministic by DAY, never by Math.random - the same law core/timetable.js
  * runs the night's four classes under. The seed is a UTC day string, because
@@ -580,6 +637,7 @@ export function fitSheets(hostEl, sheets, fit) {
 function kindLabel(kind) {
   if (kind === 'flyer') return t('board_kind_flyer', 'Flyer');
   if (kind === 'minutes') return t('board_kind_minutes', 'Minutes');
+  if (kind === 'poster') return t('board_kind_poster', 'Poster');
   return t('board_kind_notice', 'Notice');
 }
 
@@ -596,6 +654,14 @@ const deps = {
   mount: null,
   log: null,
   when: null,
+  /* OWNERSHIP ARRIVES HERE AND NOWHERE ELSE (Counter Stock). A boolean or a
+   * getter saying the player owns `poster_drop_1`. It lives on the module's
+   * injected deps rather than on each call for one reason: three different
+   * files mount this wall (the hall overlay, the Records Office close-up and
+   * the office's miniature) and a flag threaded through three call sites is
+   * three chances for one of them to print a different board. This file still
+   * imports no store, knows no sku and reads no wallet - the shell answers. */
+  posters: null,
 };
 
 /**
@@ -603,7 +669,10 @@ const deps = {
  * `when` is the season gate evaluator: `(trigger) => boolean`, the shell's one
  * bridge between this wall and the rest of the story (mail.js's triggerHolds
  * over the shared context).
- * @param {{state?:Object, save?:Function, daySeed?:string, mount?:Object, log?:Function, when?:Function}} opts
+ * `posters` is the Counter Stock flag (see deps.posters): true, or a getter, when
+ * the player owns `poster_drop_1`. Anything else - absent, false, a throw - is a
+ * board with no print on it, which is the board this file shipped with.
+ * @param {{state?:Object, save?:Function, daySeed?:string, mount?:Object, log?:Function, when?:Function, posters?:(boolean|Function)}} opts
  */
 export function initCorkboard(opts) {
   const o = opts || {};
@@ -613,7 +682,17 @@ export function initCorkboard(opts) {
   if (o.mount) deps.mount = o.mount;
   if (typeof o.log === 'function') deps.log = o.log;
   if (typeof o.when === 'function') deps.when = o.when;
+  if (o.posters !== undefined) deps.posters = o.posters;
   return deps.state;
+}
+
+/** Does the player own the poster drop? A getter that throws owns nothing. */
+export function postersOwned(override) {
+  const src = (override === undefined) ? deps.posters : override;
+  if (typeof src === 'function') {
+    try { return src() === true; } catch (e) { return false; }
+  }
+  return src === true;
 }
 
 /**
@@ -740,6 +819,11 @@ export function hasUnread(daySeed, override) {
  *                                      reads as a rendering fault from across
  *                                      the room, where a shorter wall reads as
  *                                      a wall. Needs `fit` (it runs after it).
+ * @param {(boolean|Function)=} opts.posters  does the player own `poster_drop_1`?
+ *                                      Per-call override of the injected
+ *                                      `deps.posters`; leave it out and every
+ *                                      wall in the school answers the same way,
+ *                                      which is the point.
  * @param {Object=} opts.fit          THE FIT (see above): {boxH, scale, floorPx}
  *                                      in STAGE pixels. Hand the same pair to
  *                                      a wall and to its miniature and the two
@@ -758,7 +842,22 @@ export function mountNotices(hostEl, opts) {
 
   const seed = String(o.daySeed != null ? o.daySeed : (deps.daySeed || utcDaySeed()));
   const s = stateOf(o.state);
-  const up = pickNotices(seed, o.slots, eligibleNotices());
+  /* THE PRINT TAKES A SEAT (see THE POSTER DROP). The notices are dealt for one
+   * slot fewer, so a wall with a poster on it is still a wall of four things -
+   * and a player who does not own the drop deals exactly the four they always
+   * did, off the same seed, in the same order.
+   *
+   * THE ONE NIGHT IT IS FIVE. `slots` is a TARGET, not a grid: pickNotices'
+   * always-up tier (pinned furniture + a live story beat) overruns it already,
+   * with or without a poster - a night with five windowed notices is a wall of
+   * five and always was. On such a night the seat the poster asked for does not
+   * exist, so it hangs beside the tier instead of eating a beat whose moment is
+   * NOW. The invariant that actually holds, and the one the suite asserts, is
+   * that owning the drop NEVER adds a notice: `up` with a poster is always <=
+   * `up` without one, off the same seed. THE FIT takes any overflow down. */
+  const poster = postersOwned(o.posters) ? pickPoster(seed) : null;
+  const askedSlots = Math.max(1, Math.round(Number(o.slots) || BOARD_SLOTS));
+  const up = pickNotices(seed, poster ? Math.max(1, askedSlots - 1) : askedSlots, eligibleNotices());
   const today = localDay();
   const say = (msg) => {
     const fn = (typeof o.log === 'function') ? o.log : deps.log;
@@ -776,9 +875,10 @@ export function mountNotices(hostEl, opts) {
   const preview = o.preview === true;
   if (preview) attr(hostEl, 'aria-hidden', 'true');
 
-  if (!up.length) {
+  if (!up.length && !poster) {
     // A wall with nothing on it is a real state (a table trimmed to nothing),
     // and saying so is cheaper than an empty frame reading as a broken screen.
+    // A poster on its own is NOT that state: it is a wall with a print on it.
     const empty = el('p', 'arc-note arc-cork-empty', t('board_empty', 'Nothing pinned up tonight.'));
     hostEl.appendChild(empty);
     mounted.push(empty);
@@ -859,6 +959,50 @@ export function mountNotices(hostEl, opts) {
       catch (e) { say('corkboard onRead: ' + ((e && e.message) || e)); }
     }
   }
+
+  function pinPoster(id) {
+    const geom = pinGeometry(seed, id);
+    const slot = el('div', 'arc-cork-slot kind-poster');
+    attr(slot, 'role', 'listitem');
+    styleVar(slot, '--rot', geom.rot.toFixed(2) + 'deg');
+    styleVar(slot, '--lift', geom.lift.toFixed(1) + 'px');
+    styleVar(slot, '--pin-x', geom.pinX.toFixed(1) + '%');
+
+    const sheet = el('article', 'arc-corknote kind-poster is-poster');
+    const img = el('img', 'cb-poster');
+    /* DECORATION, AND IT SAYS SO. An empty alt plus aria-hidden is the whole
+     * accessible story of a print: there is no text on this wall to lose. */
+    attr(img, 'alt', '');
+    attr(img, 'aria-hidden', 'true');
+    attr(img, 'decoding', 'async');
+    /* THE HANDLER GOES ON BEFORE THE SRC DOES. A cached 404 can fire `error`
+     * inside the assignment, and a listener added after it would never hear the
+     * one event it exists for. */
+    try {
+      img.addEventListener('error', function () {
+        try { slot.remove(); } catch (e) { /* noop */ }
+        const i = mounted.indexOf(slot);
+        if (i >= 0) mounted.splice(i, 1);
+        say('corkboard: no print behind ' + id + ' - the slot comes down');
+      });
+    } catch (e) { /* the double has listeners; a host that does not is no worse */ }
+    try { img.src = posterUrl(id); } catch (e) { /* noop */ }
+    sheet.appendChild(img);
+    slot.appendChild(sheet);
+
+    const pin = el('i', 'arc-cork-pin');
+    attr(pin, 'aria-hidden', 'true');
+    slot.appendChild(pin);
+    hostEl.appendChild(slot);
+    mounted.push(slot);
+    return slot;
+  }
+
+  /* THE PRINT, PINNED LAST. It hangs in the seat the rotation gave up above.
+   * It marks nothing read and banks no visit: there is nothing on it to read,
+   * so a poster can never clear the prop's fresh dot for a notice the player
+   * has not seen. */
+  if (poster) pinPoster(poster);
 
   /* THE VISIT, BANKED. One write per mount, at the end, never per sheet - and
    * a PREVIEW is not a visit. Looking at the board from across the room does
@@ -956,6 +1100,8 @@ export function mountNotices(hostEl, opts) {
   return {
     notices: up,
     daySeed: seed,
+    /** Tonight's print, or null when the player does not own the drop. */
+    poster: poster,
     first: first,
     /** The sheets, for a suite that wants to measure one. */
     sheets: sheets,
@@ -1144,6 +1290,7 @@ export function openCorkboard(opts) {
     save: o.save,
     slots: o.slots,
     onRead: o.onRead,
+    posters: o.posters,
     log: o.log,
   });
   const seed = paper ? paper.daySeed

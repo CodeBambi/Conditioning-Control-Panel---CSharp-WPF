@@ -779,6 +779,90 @@ internal static class ArcademyHostService
         }
     }
 
+    // ============================ the wallet, read from outside ============================
+
+    /// <summary>
+    /// DOES THE PLAYER HOLD THIS PRIZE? The one door out of the Arcademy's wallet for the rest of
+    /// the app, and it exists for exactly one row on the shelf: TUBE GLASS: MIDNIGHT is bought at
+    /// the Prize Counter and worn by <c>AvatarTubeWindow</c>, which is up and running long before
+    /// (and long after) anyone opens the school.
+    ///
+    /// <para>Two sources, in order. The LIVE store first — while a class is on, it is the only
+    /// copy that has tonight's purchase in it. When the Arcademy is closed <see cref="_meta"/> is
+    /// null (it is minted at launch and dropped at teardown, after a flush), so the answer comes
+    /// off the same <c>arcademy_meta.json</c> the store would have read, cached against the file's
+    /// stamp so a per-frame caller cannot turn a cosmetic into a disk read.</para>
+    ///
+    /// <para>NEVER THROWS, and a wallet it cannot read is answered "no". A cosmetic that fails
+    /// closed is a plain tube; one that failed open would be a promise the counter never sold.</para>
+    /// </summary>
+    public static bool WalletOwnsSku(string sku)
+    {
+        if (string.IsNullOrWhiteSpace(sku)) return false;
+        try
+        {
+            var live = _meta;
+            if (live != null) return live.WalletOwns(sku);
+            return WalletOwnsOnDisk(sku);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ArcademyHost.WalletOwnsSku({Sku}): {E}", sku, ex.Message);
+            return false;
+        }
+    }
+
+    private static readonly object _walletDiskLock = new();
+    private static HashSet<string>? _walletDiskInv;
+    private static long _walletDiskStamp;   // ticks ^ length; any write moves it
+
+    /// <summary>The owned-sku set out of the persisted blob, re-read only when the file's stamp
+    /// moves. A missing or unparseable file caches an EMPTY set rather than nothing, so a player
+    /// who has never opened the Arcademy costs one File.Exists per stamp, not one per call.</summary>
+    private static bool WalletOwnsOnDisk(string sku)
+    {
+        var path = Path.Combine(App.UserDataPath, "arcademy_meta.json");
+        long stamp;
+        try
+        {
+            var info = new FileInfo(path);
+            stamp = info.Exists ? (info.LastWriteTimeUtc.Ticks ^ info.Length) : 0L;
+        }
+        catch { stamp = 0L; }
+
+        lock (_walletDiskLock)
+        {
+            if (_walletDiskInv == null || _walletDiskStamp != stamp)
+            {
+                _walletDiskInv = ReadOwnedSkus(path);
+                _walletDiskStamp = stamp;
+            }
+            return _walletDiskInv.Contains(sku);
+        }
+    }
+
+    private static HashSet<string> ReadOwnedSkus(string path)
+    {
+        var owned = new HashSet<string>(StringComparer.Ordinal);
+        try
+        {
+            if (!File.Exists(path)) return owned;
+            var blob = JObject.Parse(File.ReadAllText(path));
+            if (blob[ArcademyMetaStore.WalletKey] is not JObject wallet) return owned;
+            if (wallet["inv"] is not JObject inv) return owned;
+            foreach (var p in inv.Properties())
+            {
+                // Same witness the counter uses: a row with a positive count is held.
+                if (p.Value is JObject row && (int?)row["n"] > 0) owned.Add(p.Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ArcademyHost.ReadOwnedSkus: {E}", ex.Message);
+        }
+        return owned;
+    }
+
     /// <summary>
     /// THE STUDENT ID's identity block. Four fields, and the whole body is wrapped for the same
     /// reason <see cref="BuildSubject"/> is: a throw here would kill <c>init</c>, and a page that
@@ -1531,6 +1615,33 @@ internal static class ArcademyHostService
         ["prize_de_5x5_blurb"] = "Adds the roomy 5x5 board to The Deep End, for a gentler soak.",
         ["prize_jukebox"] = "Jukebox",
         ["prize_jukebox_blurb"] = "The slot is dressed and the case is empty. It is on the truck.",
+        // THE RESTOCK (2026-08-26). Eleven more rows over three waves - the shelf projection
+        // hides anything above ArcademyEconomy.CurrentWave, but the LEXICON carries all eleven
+        // regardless: a lexicon row costs nothing until something asks for it, and shipping the
+        // next wave should be one const bump, not a second trip through nine language files.
+        // Copy is the contract's, verbatim, and every row is inside the 96-char bar.
+        ["prize_away_colors"] = "AWAY COLORS",
+        ["prize_away_colors_blurb"] = "Alternate kit for your little walker. Same you, sharper stripes.",
+        ["prize_sparkler_steps"] = "SPARKLER STEPS",
+        ["prize_sparkler_steps_blurb"] = "A trail of little sparks wherever you walk. The janitor has given up complaining.",
+        ["prize_brass_bell"] = "THE BRASS BELL",
+        ["prize_brass_bell_blurb"] = "The old bell from the storage room takes over. Rings a little warmer than the new one.",
+        ["prize_emi_desk_toy"] = "EMI'S DESK TOY",
+        ["prize_emi_desk_toy_blurb"] = "A little something for her desk. She'll fidget with it and pretend she doesn't love it.",
+        ["prize_poster_drop_1"] = "POSTER DROP NO 1",
+        ["prize_poster_drop_1_blurb"] = "Fresh prints for the corkboard, motivational in a way we can't quite explain.",
+        ["prize_pa_pack"] = "PA ANNOUNCER",
+        ["prize_pa_pack_blurb"] = "The morning announcements get a voice. She mostly reads the schedule, mostly.",
+        ["prize_theme_drone"] = "DRONE PROTOCOL",
+        ["prize_theme_drone_blurb"] = "Somebody left a strange cartridge in the AV room and now the campus runs green. We like it.",
+        ["prize_ghost_walk"] = "GHOST WALK",
+        ["prize_ghost_walk_blurb"] = "Your walker goes see-through with a soft afterimage. Spooky in a fun way, we checked.",
+        ["prize_theme_snowday"] = "SNOW DAY",
+        ["prize_theme_snowday_blurb"] = "Frost on the windows, snow in the courtyard, everything soft and blue. Classes run anyway.",
+        ["prize_emi_varsity"] = "EMI: VARSITY JACKET",
+        ["prize_emi_varsity_blurb"] = "She found it in lost and found and it fits perfectly. Every one of her poses, re-dressed.",
+        ["prize_tube_midnight"] = "TUBE GLASS: MIDNIGHT",
+        ["prize_tube_midnight_blurb"] = "A darker glass for the tube back home. It ships to the whole app, not just the school.",
         // ---- the Extra Credit lever ----------------------------------------------------
         // shell/lever.js owns the words on BOTH class-start surfaces (the door card and the
         // painted room's apron), so every rung is one key and one locked line, no more.
@@ -2586,6 +2697,15 @@ internal static class ArcademyHostService
         // through the lexicon. shell/shell.js resolves this one and hands the
         // answer to mountEmi. Her voice is lowercase, so this row is too.
         ["emi_ask_send"] = "send",
+        // EMI'S DESK TOY (COUNTER STOCK). The three lines she has about it, resolved by
+        // the shell (same road as emi_ask_send - she has never imported the lexicon).
+        ["emi_toy_1"] = "Don't wind it too far. It gets ideas.",
+        ["emi_toy_2"] = "It's not a toy, it's office equipment. Okay, it's a toy.",
+        ["emi_toy_3"] = "She spins when I do good work. We have a system.",
+        // CAMPUS LOOK (COUNTER STOCK). The settings row's own two words; the themes
+        // themselves are named by their prize rows (prize_theme_drone, prize_theme_snowday).
+        ["opt_theme_head"] = "Campus look",
+        ["opt_theme_standard"] = "The usual",
 
         // THE PHANTOM POST chrome (shell/mail.js, mailbox.js, corkboard.js,
         // bugle.js). Copy of core/lexicon.js's block - copy the values, do not
@@ -2610,6 +2730,7 @@ internal static class ArcademyHostService
         ["board_kind_notice"] = "Notice",
         ["board_kind_flyer"] = "Flyer",
         ["board_kind_minutes"] = "Minutes",
+        ["board_kind_poster"] = "Poster",
         ["board_note_open"] = "Take this one down and read it",
         ["board_note_close"] = "Put it back on the wall",
         ["bugle_issue"] = "Issue",

@@ -57,6 +57,22 @@ import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
 import { createFirstBell } from '../vn/index.js';
 import { createRecordsRoom } from './recordsroom.js';
 import { createPrizeCounter } from './prizecounter.js';
+/* CAMPUS LOOK (COUNTER STOCK). themes.js is a pure TABLE (no DOM, no store);
+ * themefx.js is the weather canvas and the school's newest render surface. The
+ * shell owns the meta key, the ownership question and the order of application
+ * - those three are exactly what neither module may reach. */
+import {
+  THEME_META_KEY, STANDARD_ID, themeById, ownedThemes, clampThemeId, themeFxFor,
+} from './themes.js';
+import { createThemeFx } from './themefx.js';
+/* THE BRASS BELL (COUNTER STOCK). audio.js is built in boot.js; this is its one
+ * module-level seam - the shell hands it an ownership GETTER, audio.js still
+ * imports nothing (trap 18's discipline). */
+import { setBellCosmetic } from './audio.js';
+/* THE PA PACK (COUNTER STOCK). pa.js owns two timers and a seeded plan; every
+ * cue leaves by the one audio door. It dispatches its own cue (bus 'voice',
+ * maxMs 8000, a duck) - the shell only builds it and feeds it moments. */
+import { createPa } from './pa.js';
 import { createIdSpotlight, idReducedMotion } from './idcard.js';
 import { createAccountChip, readAccount } from './accountchip.js';
 import { createAnnexReveal } from './annexreveal.js';
@@ -389,10 +405,20 @@ function nowMs() {
   return Date.now();
 }
 
-/** Palette keys we accept from init.palette, and the CSS token each one drives. */
+/** Palette keys we accept from init.palette, and the CSS token each one drives.
+ *
+ *  COUNTER STOCK grew this map by five (`panel2`, `inkDim`, `inkFaint`,
+ *  `slate`, `pinkDeep`) so a CAMPUS THEME can move the FULL set through the one
+ *  seam a mod skin already uses. Every hue in styles.css - the campus plan, the
+ *  counter's shelves, the report card - is a color-mix off these thirteen, so
+ *  thirteen is the whole surface. Append-only: a mod that writes the old seven
+ *  is unchanged, and an unknown key is still logged and ignored. */
 const PALETTE_TOKENS = Object.freeze({
   ground: '--ground', navy: '--navy', panel: '--panel', ink: '--ink',
   accent: '--pink', accent2: '--lav', gold: '--gold',
+  // COUNTER STOCK additions - the rest of the token plan
+  panel2: '--panel2', inkDim: '--ink-dim', inkFaint: '--ink-faint',
+  slate: '--slate', pinkDeep: '--pink-deep',
   // tolerated aliases so a mod skin authored against the mockup's names works
   pink: '--pink', lav: '--lav', lavender: '--lav', line: '--line',
 });
@@ -498,6 +524,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     reducedMotion = n === 0 || !!src.reducedMotion;
     const html = document.documentElement;
     if (html && html.classList) html.classList.toggle('arc-reduced', reducedMotion);
+    /* THE WEATHER LAYER IS A DECORATION, so Motion owns it outright: turning
+     * motion down takes the canvas away entirely (not a paused one - the nodes
+     * stop existing), and turning it back up rebuilds it with the new flags.
+     * This is the ONE echo that can move the layer without a screen change. */
+    try { syncThemeFx(); } catch (e) { /* the layer is never the thing that throws */ }
   }
   /* THE MOBILE SEAM (core/device.js). One decision, painted on <html> as
    * `arc-mobile` and kept there across a rotate, so the stylesheet's phone rules
@@ -654,7 +685,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * context plus the mailbox's own delivered/read ledger), so the season
    * cannot contradict itself between surfaces. */
   const postWhen = (trigger) => triggerHolds(trigger, mail.context(), say);
-  initCorkboard({ state: postState.board, save: (s) => store.set('board', s), daySeed: utcDateSeed, log: say, when: postWhen });
+  /* THE POSTER DROP (COUNTER STOCK). A GETTER, not a boolean: initCorkboard
+   * runs at boot, and a purchase settled mid-session has to light by the next
+   * board paint without a reload (trap 73's shape). Ownership arrives at this
+   * ONE place - overlay board, Records cork wall and the office miniature all
+   * read the same injected getter, so three walls can never disagree. */
+  initCorkboard({ state: postState.board, save: (s) => store.set('board', s), daySeed: utcDateSeed, log: say, when: postWhen,
+    posters: () => ownsSku('poster_drop_1') });
   initBugle({ state: postState.bugle, save: (s) => store.set('bugle', s), log: say, when: postWhen });
   /** Repaint the campus post furniture after an overlay closes (fresh dots,
    *  unread pip) - a no-op anywhere but the board. */
@@ -698,6 +735,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * onSplashDone idempotent: boot.js calls it once, but a second call must be
    * free rather than a second cold open. */
   let vn = null;
+  /* EMI's handle. She was mounted and forgotten until COUNTER STOCK: the desk
+   * toy and the varsity jacket are prizes, so a settled purchase has to be able
+   * to tell her to look again. Null on a platform with no layer, and every call
+   * against it is guarded - she is the one module whose absence must cost the
+   * shell nothing at all. */
+  let emi = null;
   let splashSpent = false;
   /* Has the first-night stage cleared? False until `onSplashDone` has run AND
    * FIRST BELL has finished (or was never armed). Orientation Day may not start
@@ -1240,6 +1283,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       /* A campus that has gone is a VISIT that has ended: the once-per-visit
        * tells (the Slow Second) re-arm for the next one. */
       try { if (seep) seep.note('campusUnmount'); } catch (e) { /* noop */ }
+      /* The PA falls silent with the campus - a line planned for a quad that
+       * has gone would speak into the void. */
+      try { if (pa) pa.notify('campusUnmount'); } catch (e) { /* noop */ }
     }
     /* THE WALKER GOES LAST AND ITS RESIDUE IS BANKED FIRST. `campus` is already
      * null by the time destroy() runs, which is what makes a pending onDone
@@ -1324,6 +1370,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     }
     stageMode = mode || null;
     if (dom && dom.topbar) dom.topbar.hidden = !!mode;
+    /* THE WEATHER LAYER'S FOURTH KILL SWITCH. Every screen change in the school
+     * funnels through here (clearScreen ends in setStage(null); the class and
+     * the report set their own), so this is the one line that keeps the campus
+     * theme's snow off a running class. Games own the screen. */
+    noteThemeFxScreen();
   }
 
   /* ---------------------- the way home ----------------------------------
@@ -1765,6 +1816,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
            * them; the post-VN start is paid by `onSplashDone`. */
           revealDone: () => {
             try { if (ghosts) ghosts.start(); } catch (e) { say('presence start threw: ' + ((e && e.message) || e)); }
+            /* THE PA PACK's arrival line - after the ghosts, so a line lands
+             * on a campus that has finished standing up. */
+            try { if (pa) pa.notify('campusReveal'); } catch (e) { /* noop */ }
             // FIRST BELL's second gate: the school has finished standing up.
             bellBoardRevealed = true;
             maybeFirstBell();
@@ -1883,6 +1937,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           // dealt from a stable constant. The day presence projects a self id,
           // this is the one line that changes.
           spriteId: 'self',
+          /* THE WALKER'S PRIZES (COUNTER STOCK). Read at BUILD, which is
+           * correct here and nowhere else: the campus (and with it the walker)
+           * is torn down and rebuilt on every visit, so a purchase settled at
+           * the counter is wearing by the time the player is back on the quad.
+           * `lite` gates the cosmetics ONLY (walk.js keeps walking under
+           * performance mode - it refuses to mint the spark pool and the
+           * afterimages, nothing more). */
+          lite: !!src.performanceMode,
+          cosmetics: {
+            awayColors: ownsSku('away_colors'),
+            sparklerSteps: ownsSku('sparkler_steps'),
+            ghostWalk: ownsSku('ghost_walk'),
+          },
           log: say,
         });
         walker.setResidue(residueTrail);
@@ -2007,6 +2074,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
        * the two can disagree, and the row that says "0 words" while the classes
        * flash twelve is a straight lie about a layer the player cannot audit. */
       vocab: { count: dayWords.length, source: wordSource },
+      /* CAMPUS LOOK (COUNTER STOCK). Narrow caps, the annex's law: the sheet
+       * lists what it is handed and calls `select`. It never reads a wallet,
+       * never touches the store and never learns that an unowned theme exists -
+       * `list()` simply does not contain one, which is what keeps a restock a
+       * surprise instead of a padlock. No `pending`, either: the pick is a
+       * page-owned meta key, so there is no host echo to wait for. */
+      themes: themeCaps(),
       log: say,
       gameKey: gameKey || null,
       onClose: () => {
@@ -2465,6 +2539,196 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     return false;
   }
 
+  /* ============================ THE CAMPUS LOOK =========================
+   * COUNTER STOCK. Two of the restock's rows are THEMES (`theme_drone`,
+   * `theme_snowday`): a palette over the whole school, plus a weather layer.
+   *
+   * THREE THINGS LIVE HERE AND NOWHERE ELSE, because all three are state:
+   *   1. THE KEY. `campusTheme` is PAGE-OWNED, like `leverPick` and the three
+   *      recordsRoom* keys - `ArcademyMetaStore.Set` takes any new top-level
+   *      key under its own caps, so this wave owes C# nothing for it.
+   *   2. THE CLAMP. A pick is only legal while the wallet still says the sku is
+   *      owned. Same shape as leverPick(): junk, an unknown id and a theme the
+   *      player does not own all answer `standard`, so a stale pick can never
+   *      paint. (It can only ever have been WON, never lost - re-clamping is
+   *      free and it is the line that makes that true rather than assumed.)
+   *   3. THE ORDER. At boot the MOD SKIN goes on first (`init.palette`, the
+   *      applyPalette call in the look block above), then the owned+selected
+   *      theme goes OVER it. So: A MOD SKIN AND A THEME MEANS THE THEME WINS,
+   *      for exactly as long as it is selected. Reverting is `removeProperty`
+   *      for every token the theme set - back to the stylesheet's own value -
+   *      and then the mod skin is re-laid, because removeProperty cannot tell
+   *      a token the theme wrote from a token the mod wrote. NEVER a cached hex:
+   *      a remembered colour is a second source of truth for the palette.
+   *
+   * The purchase lights the same second it settles: `wallet-result` runs
+   * onWalletResult, which re-clamps the pick the way it re-clamps the lever.
+   * ==================================================================== */
+
+  /** Tokens the ACTIVE theme has written on :root, so revert knows what to
+   *  take back. Rebuilt on every apply; empty means the house look is up. */
+  let themeTokensSet = [];
+  /** The weather canvas (shell/themefx.js). Built lazily - a player on the
+   *  house look never pays for the module's layer at all. */
+  let themeFx = null;
+
+  /** The PA announcer (shell/pa.js). Declared beside the weather canvas so the
+   *  campus callbacks above can guard on it; built once, further down, after
+   *  the wallet echo exists. */
+  let pa = null;
+
+  /** The pick, clamped to what is actually owned. Never returns junk. */
+  function themePick() {
+    let want = STANDARD_ID;
+    try { want = String(store.get(THEME_META_KEY) || STANDARD_ID); }
+    catch (e) { want = STANDARD_ID; }
+    return clampThemeId(want, ownsSku);
+  }
+
+  /** Take back every token the last theme wrote, then re-lay the mod skin. */
+  function revertThemePalette() {
+    const style = document.documentElement && document.documentElement.style;
+    if (style && typeof style.removeProperty === 'function') {
+      for (const token of themeTokensSet) {
+        try { style.removeProperty(token); } catch (e) { /* noop */ }
+      }
+    }
+    themeTokensSet = [];
+    // The mod skin was underneath and removeProperty does not know that.
+    applyPalette(src.palette, say);
+  }
+
+  /**
+   * Paint the pick. THE ONE WRITER of theme tokens and of the fx layer's kind.
+   * Idempotent: calling it with the same pick twice repaints the same thirteen
+   * values, which is what makes it safe to call from the wallet echo.
+   */
+  function applyTheme() {
+    const id = themePick();
+    revertThemePalette();
+    const th = themeById(id);
+    if (th) {
+      applyPalette(th.palette, say);
+      const style = document.documentElement && document.documentElement.style;
+      if (style) {
+        for (const key of Object.keys(th.palette)) {
+          const token = PALETTE_TOKENS[key];
+          if (token && themeTokensSet.indexOf(token) < 0) themeTokensSet.push(token);
+        }
+      }
+    }
+    /* A marker for anything that has to know WITHOUT reading the palette (the
+     * fx sheet's belt rules, a future room dressing). Never a styling hook for
+     * a colour - the colour is the palette's, and one source of truth is the
+     * whole design (shell/themes.css says so at the top). */
+    const html = document.documentElement;
+    if (html && html.setAttribute) {
+      try {
+        if (id === STANDARD_ID) html.removeAttribute('data-campus-theme');
+        else html.setAttribute('data-campus-theme', id);
+      } catch (e) { /* noop */ }
+    }
+    syncThemeFx(id);
+    return id;
+  }
+
+  /** Write the pick, clamped the same way, and answer what actually stuck. */
+  function setThemePick(id) {
+    const next = clampThemeId(id, ownsSku);
+    try { store.set(THEME_META_KEY, next); }
+    catch (e) { say('campus theme write failed'); }
+    return applyTheme();
+  }
+
+  /**
+   * THE WEATHER LAYER's one reconciler. Built on demand and torn down the
+   * moment there is nothing to paint, so the standard look, a reduced-motion
+   * player and a lite device all cost exactly zero.
+   */
+  function syncThemeFx(id) {
+    const kind = themeFxFor(id == null ? themePick() : id, ownsSku);
+    if (!kind || reducedMotion || src.performanceMode) {
+      if (themeFx) { try { themeFx.destroy(); } catch (e) { /* noop */ } themeFx = null; }
+      return;
+    }
+    if (!themeFx) {
+      try {
+        themeFx = createThemeFx({
+          reduced: reducedMotion,
+          lite: !!src.performanceMode,
+          mobile: isMobile(),
+          seed: utcDateSeed,
+          log: say,
+        });
+      } catch (e) { say('theme fx unavailable (' + ((e && e.message) || e) + ')'); themeFx = null; return; }
+    }
+    try {
+      themeFx.setInClass(!!active || screen === 'class');
+      themeFx.setKind(kind);
+    } catch (e) { say('theme fx sync threw: ' + ((e && e.message) || e)); }
+  }
+
+  /** Kill switch 4, wired to the ONE funnel every screen change already goes
+   *  through (setStage). A class owns the screen. */
+  function noteThemeFxScreen() {
+    if (!themeFx) return;
+    try { themeFx.setInClass(!!active || stageMode === 'arc-class-on'); }
+    catch (e) { /* noop */ }
+  }
+
+  /** The narrow caps the options row is handed. The settings page draws a list
+   *  and calls back; it never reads a wallet and never touches the store. */
+  function themeCaps() {
+    return {
+      list: () => ownedThemes(ownsSku),
+      current: () => themePick(),
+      select: (id) => setThemePick(id),
+      swatch: (id) => {
+        const th = themeById(id);
+        return th ? { accent: th.palette.accent, panel: th.palette.panel, ink: th.palette.ink } : null;
+      },
+    };
+  }
+
+  /* THE BOOT PAINT, and it runs HERE rather than beside the store because every
+   * `let` this reaches has to have been evaluated first (a function body's
+   * temporal dead zone is per-declaration, and `walletEcho` is right above).
+   * Still long before a screen exists - the first showBoard() is the last line
+   * of createShell - so there is no frame of the wrong palette. */
+  try { applyTheme(); }
+  catch (e) { say('campus theme apply threw: ' + ((e && e.message) || e)); }
+
+  /* ------------------------------ THE BRASS BELL -------------------------
+   * `bell` resolves to the sample `bell_brass` while the player owns
+   * `brass_bell`. shell/audio.js is built in boot.js, not here, so the shell
+   * has no handle on it - setBellCosmetic is audio.js's one module-level seam.
+   * A GETTER, so a bell bought mid-session rings brass on the very next cue,
+   * and so audio.js still imports nothing (trap 18's discipline: the shell
+   * hands it an answer, it never goes looking for a wallet). ONE road only -
+   * the `set_bell` bus message writes the same slot and must stay unused here.
+   * -------------------------------------------------------------------- */
+  try { setBellCosmetic(() => ownsSku('brass_bell')); }
+  catch (e) { say('bell cosmetic: ' + ((e && e.message) || e)); }
+
+  /* ------------------------------- THE PA PACK ---------------------------
+   * Built once, with narrow caps; pa.js dispatches its OWN cue (the line needs
+   * bus 'voice', maxMs 8000 and a duck - the tutorial-bus path would cap it at
+   * 1.2 s). Every gate is a getter and is re-asked at speak time, so a pack
+   * bought while a timer is in the air still speaks tonight, and a mid-session
+   * flip of performance mode or motion level is honoured. The "never during a
+   * class" gate is the shell's `active`, handed in rather than guessed. */
+  try {
+    pa = createPa({
+      owned: () => ownsSku('pa_pack'),
+      t,
+      log: say,
+      lite: () => !!src.performanceMode,
+      reduced: () => reducedMotion,
+      inClass: () => !!active,
+      daySeed: utcDateSeed,
+    });
+  } catch (e) { say('pa unavailable (' + ((e && e.message) || e) + ')'); pa = null; }
+
   /* ---------------------------- THE EXTRA CREDIT LEVER -------------------
    * ONE pick for the night, not one per door. A player who pulls Honors at the
    * Music Room has decided how they want to play tonight, and asking them again
@@ -2570,6 +2834,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * only ever have been WON here, never lost, but re-clamping is free and it
      * is the one line that stops a stale pick outliving a wallet reset). */
     setLeverPick(leverPick());
+    /* THE CAMPUS LOOK rides the same line for the same two reasons, plus one of
+     * its own: a theme BOUGHT this second must light no later than the next
+     * screen paint without a reload (the restock's activation law). applyTheme
+     * is idempotent, so an echo about a late slip repaints the same thirteen
+     * values and costs nothing. */
+    try { applyTheme(); }
+    catch (e) { say('campus theme re-apply threw: ' + ((e && e.message) || e)); }
+    /* EMI's prizes ride the same line for the same reason (the restock's
+     * activation law). setPrizes is idempotent - it re-reads two booleans. */
+    try { if (emi && typeof emi.setPrizes === 'function') emi.setPrizes(); }
+    catch (e) { say('EMI prize re-read threw: ' + ((e && e.message) || e)); }
     if (screen === 'board' && campus) {
       try { campus.update(buildCampusState(), campusStats()); } catch (e) { /* noop */ }
     }
@@ -3739,6 +4014,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     /* THE SEEP'S EAR. A new class resets the per-class scopes of the class-side
      * kit; nothing else about a start interests it. */
     try { if (seep) seep.note('classStart', { gameKey: cls && cls.gameKey }); } catch (e) { /* noop */ }
+    /* THE PA PACK's second belt on the same moment: retires a line caught in
+     * flight (spent, not deferred - a spoken line into a class would fight the
+     * class's own audio). */
+    try { if (pa) pa.notify('classStart'); } catch (e) { /* noop */ }
     /* FIRST BELL SEAM (s03, the walk to Homeroom). ADDITIVE AND ONCE-EVER: the
      * VN plays one caption on the midway and a beat on the Homeroom threshold,
      * then re-enters this function with the flag already spent, so the shipped
@@ -4878,6 +5157,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
   function teardownClass() {
     if (!active) return;
+    /* THE PA PACK's after-class line. THIS funnel and not `class-ended`:
+     * every leave path ends here, finished or abandoned, so an Esc out of a
+     * class cannot buy a second announcement. It sits after the `active`
+     * guard and before `active` is dropped below. */
+    try { if (pa) pa.notify('classEnded'); } catch (e) { /* noop */ }
+    //
     // The question dies with the class it was asked about - a dialog that
     // outlived its stage would be a second, invisible Esc rung.
     dismissConfirm();
@@ -5194,6 +5479,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     onMeta() {
       walletEcho = null;
       renderTopbar();
+      /* THE CAMPUS LOOK rides the snapshot too: `campusTheme` is a meta key, so
+       * a host that pushed a different one (another window, a fresh sync) has
+       * just moved the pick under us - and the wallet that decides whether it
+       * is legal moved in the same frame. Idempotent; standard costs nothing. */
+      try { applyTheme(); }
+      catch (e) { say('campus theme meta re-apply threw: ' + ((e && e.message) || e)); }
       if (screen === 'board') showBoard({ silent: true });
       if (prizeRoom && typeof prizeRoom.refresh === 'function') {
         try { prizeRoom.refresh(); } catch (e) { /* noop */ }
@@ -5355,6 +5646,20 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      *  shipped no `settings.localAssets` and every draw is a bundled tile. */
     assetStats() { try { return assets.stats(); } catch (e) { return null; } },
 
+    /** THE CAMPUS LOOK, for the play-test rig and the suites. Read-only: what
+     *  is picked, what is on offer, which tokens the theme currently holds and
+     *  what the weather layer is doing. Nothing shipped reads this. */
+    themeState() {
+      return {
+        pick: themePick(),
+        offered: ownedThemes(ownsSku).map((x) => x.id),
+        tokens: themeTokensSet.slice(),
+        fx: themeFx ? themeFx.stats() : null,
+      };
+    },
+    /** The same write the options row makes, for a rig. Clamped identically. */
+    setCampusTheme(id) { return setThemePick(id); },
+
     destroy() {
       if (destroyed) return;
       destroyed = true;
@@ -5397,6 +5702,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       lastRoomKey = null;
       if (vn) { try { vn.destroy(); } catch (e) { /* noop */ } vn = null; }
       if (seep) { try { seep.destroy(); } catch (e) { /* noop */ } seep = null; }
+      /* THE WEATHER LAYER hangs its canvas on <body>, outside anything
+       * `dom.screen.textContent = ''` can reach, and holds a rAF and two
+       * document listeners. destroy() is the only thing that takes all three
+       * off - the records room's reason, one layer up. */
+      if (themeFx) { try { themeFx.destroy(); } catch (e) { /* noop */ } themeFx = null; }
+      if (pa) { try { pa.destroy(); } catch (e) { /* noop */ } pa = null; }
       try { ceremonies.destroy(); } catch (e) { /* noop */ }
       if (settingsPage) { try { settingsPage.destroy(); } catch (e) { /* noop */ } }
     },
@@ -5423,9 +5734,27 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * never imported the lexicon - the same seam orientation.js uses for her
      * three opening lines. */
     if (emiLayer) {
-      mountEmi({
+      emi = mountEmi({
         layer: emiLayer, store, toast: shout, log: say, assets, settings: src.settings,
-        strings: { askSend: t('emi_ask_send', 'send') },
+        strings: {
+          askSend: t('emi_ask_send', 'send'),
+          /* COUNTER STOCK: the desk toy's three lines. Resolved HERE for the
+           * same reason askSend is: she has never imported the lexicon. */
+          toy: [
+            t('emi_toy_1', "Don't wind it too far. It gets ideas."),
+            t('emi_toy_2', "It's not a toy, it's office equipment. Okay, it's a toy."),
+            t('emi_toy_3', 'She spins when I do good work. We have a system.'),
+          ],
+        },
+        /* COUNTER STOCK: what the player owns. Row getters, re-read on every
+         * paint, so a prize bought mid-sitting lights without a reload. EMI
+         * keeps her half (the prop, the pose, the frame map) - the shell only
+         * answers "does the player own it", which is the one thing she cannot
+         * ask, because she has never seen a wallet. */
+        prizes: {
+          deskToy: () => ownsSku('emi_desk_toy'),
+          varsity: () => ownsSku('emi_varsity'),
+        },
       });
     }
   } catch (e) { say('EMI failed to mount (the shell is unaffected): ' + ((e && e.message) || e)); }

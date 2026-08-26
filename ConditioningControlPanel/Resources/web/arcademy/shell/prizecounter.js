@@ -72,6 +72,25 @@ export const GLYPHS = Object.freeze({
   free_swim_key: '⚿',
   de_5x5: '▦',
   jukebox: '♪',
+  /* THE RESTOCK (Counter Stock, 2026-08-26). Eleven more boxes on the shelf,
+   * and the register above is all any of them get: one character, no art, no
+   * second table. Two rules were followed picking them and both are cheap to
+   * break by accident - NOTHING may be the plain parcel `▤` (that is the
+   * fallback a sku the catalog grew first wears, so a glyph that IS the
+   * fallback reads as "this row has no glyph" for ever), and no two rows may
+   * wear the same character (the shelf is read at a glance and two identical
+   * boxes read as one thing listed twice). */
+  away_colors: '▥',
+  sparkler_steps: '✧',
+  brass_bell: '♩',
+  emi_desk_toy: '❀',
+  poster_drop_1: '◫',
+  pa_pack: '◍',
+  theme_drone: '▚',
+  ghost_walk: '░',
+  theme_snowday: '❄',
+  emi_varsity: '✦',
+  tube_midnight: '◗',
 });
 
 /** The token price glyph, straight out of the contract: ◉1 / ◉2 / ◉3. */

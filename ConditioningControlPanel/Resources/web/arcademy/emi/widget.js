@@ -168,6 +168,37 @@ export const BODY_FRAME_SRC = Object.freeze({
   sway4: './art/emi/body-sway4.png',
 });
 
+/* ============================================================================
+ * THE VARSITY JACKET (Counter Stock prize `emi_varsity`)
+ * ==========================================================================*/
+/* A prize RE-DRESSES her, and re-dressing is all ten frames or none. The jacket
+ * set is the same ten filenames one folder down, so the art is authored by
+ * copying the pose sheet and painting a coat onto it - a second map typed out
+ * by hand would drift the day an eleventh pose is added.
+ *
+ * A MIXED SET IS THE FAILURE THIS EXISTS TO PREVENT. Her idle sway walks five
+ * frames 200ms apart, so a jacket missing `body-sway3.png` would flick the coat
+ * off her back twice a second, which reads as a broken sprite and not as a
+ * cosmetic. The swap is therefore armed by ONE probe (`armVarsity` below) and
+ * the whole map moves at once or nothing does - and a probe that fails is
+ * permanent for the sitting, because art is allowed to lag code. */
+export const VARSITY_DIR = './art/emi/varsity/';
+/** `./art/emi/body-idle.png` -> `./art/emi/varsity/body-idle.png`. PURE. */
+export function varsitySrc(std) {
+  const s = typeof std === 'string' ? std : '';
+  const i = s.lastIndexOf('/');
+  return VARSITY_DIR + (i < 0 ? s : s.slice(i + 1));
+}
+export const VARSITY_FRAME_SRC = Object.freeze((() => {
+  const out = {};
+  for (const k of Object.keys(BODY_FRAME_SRC)) out[k] = varsitySrc(BODY_FRAME_SRC[k]);
+  return out;
+})());
+/** The map a set name resolves to. Junk answers the standard set, never throws. */
+export function frameSetFor(name) {
+  return name === 'varsity' ? VARSITY_FRAME_SRC : BODY_FRAME_SRC;
+}
+
 /* THE POSE WALK. Out to one side and back through the centre, then out to the
  * other - `sway1` and `sway4` are the two extremes. The centre is HELD (see
  * DIALS.SWAY_CENTER_*); every other step is one SWAY_STEP_MS. */
@@ -208,6 +239,66 @@ function frameKey(k) {
 export function frameForFace(text) {
   const t = typeof text === 'string' ? text : '';
   return Object.prototype.hasOwnProperty.call(FACE_BODY_FRAME, t) ? FACE_BODY_FRAME[t] : 'idle';
+}
+
+/* ============================================================================
+ * EMI'S DESK TOY (Counter Stock prize `emi_desk_toy`)
+ * ==========================================================================*/
+/** The prop, docked at her lower corner. Missing art hides the node and that is
+ *  the whole error path - art is allowed to arrive after the code does. */
+export const TOY_SRC = './art/emi/toy.png';
+/* THE THREE LINES, and the shipped English lives right here for the reason
+ * ASK_SEND_LABEL's does: no lexicon ever reaches EMI (emi/moments.js's law), so
+ * the SHELL resolves `emi_toy_1..3` and hands the ANSWERS down as
+ * `strings.toy`, and a host that hands nothing still gets her voice instead of
+ * a key. THE FACE IS THE LINE'S OWN and not a coin flip: two of them are her
+ * caught being fond of the thing (smug) and the third is her admitting it
+ * (pet), and FACE_BODY_FRAME above turns each into the pose it names. */
+export const TOY_LINES = Object.freeze([
+  Object.freeze({ key: 'emi_toy_1', line: "Don't wind it too far. It gets ideas.", face: '(¬‿¬)' }),
+  Object.freeze({ key: 'emi_toy_2', line: "It's not a toy, it's office equipment. Okay, it's a toy.", face: '(¬‿¬)' }),
+  Object.freeze({ key: 'emi_toy_3', line: 'She spins when I do good work. We have a system.', face: '(◠‿◠)' }),
+]);
+/** WHICH LINE TONIGHT. Seeded on the UTC day, never `Math.random` (contract §4,
+ *  the corkboard's rule): the toy says one thing all evening and something else
+ *  tomorrow, and two players on the same night hear the same sentence. PURE. */
+export function toyLineIndex(day) {
+  const s = typeof day === 'string' ? day : '';
+  let h = 5381;
+  for (let i = 0; i < s.length; i += 1) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return TOY_LINES.length ? h % TOY_LINES.length : 0;
+}
+
+/* ============================================================================
+ * THE PRIZE BAG (Counter Stock)
+ * ==========================================================================*/
+/**
+ * WHAT THE PLAYER OWNS, ARRIVING FROM THE SHELL. EMI owns no wallet, no store
+ * key and no sku list: the shell reads `wallet.inv` - the one ownership witness
+ * the whole restock uses - and hands down two booleans. Anything else (a bag
+ * that is null, a getter that throws, a field that is a string) is NOT OWNED,
+ * because a mascot may never guess at a purchase.
+ *
+ * A bag that is a FUNCTION is re-read on every ask, which is what lets a prize
+ * bought mid-sitting light up without a reload (contract §4). BOTH shapes of
+ * lateness are taken: a getter for the WHOLE bag
+ *   `prizes: () => ({ deskToy: ownsSku('emi_desk_toy'), varsity: ... })`
+ * and a getter PER ROW
+ *   `prizes: { deskToy: () => ownsSku('emi_desk_toy'), varsity: () => ... }`
+ * resolve identically, so the shell may write whichever reads better at the
+ * mount site. A row getter that throws is not owned, like every other kind of
+ * junk.
+ */
+function ownedRow(v) {
+  let x = v;
+  if (typeof x === 'function') { try { x = x(); } catch (e) { return false; } }
+  return x === true;
+}
+export function readPrizes(src) {
+  let v = src;
+  if (typeof v === 'function') { try { v = v(); } catch (e) { v = null; } }
+  const o = v && typeof v === 'object' ? v : {};
+  return { deskToy: ownedRow(o.deskToy), varsity: ownedRow(o.varsity) };
 }
 
 /**
@@ -389,9 +480,13 @@ function sfx(name, level, pitch) {
  * @param {Object=} o.fx              fx.js module | showFx fn
  * @param {Object=} o.store           core/store.js (get/set) - the persistence seam
  * @param {Function=} o.toast         the SHELL's toast (boot.js -> createShell's `shout`)
+ * @param {Object|Function=} o.prizes COUNTER STOCK: `{deskToy, varsity}` (or a
+ *                                    getter for it) off the shell's `wallet.inv`.
+ *                                    Absent = owns nothing, which is every
+ *                                    player before the restock.
  * @param {Function=} o.log
  */
-export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, log, assets, settings, strings } = {}) {
+export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, log, assets, settings, strings, prizes } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   /* THE ONE DISPLAY STRING EMI HAS EVER BEEN HANDED, AND IT ARRIVES RESOLVED.
    * No lexicon reaches EMI (emi/moments.js's law, and emi/channels.js says it
@@ -403,6 +498,14 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     send: (strings && typeof strings.askSend === 'string' && strings.askSend.trim())
       ? strings.askSend.trim() : ASK_SEND_LABEL,
   });
+  /* COUNTER STOCK: THE DESK TOY'S THREE LINES, resolved by the shell exactly
+   * the way the Send label above is (`strings.toy` = the three `emi_toy_*` rows
+   * in order). Resolved PER SLOT, so a host that hands two rows and a null
+   * still gets three lines and never an empty bubble. */
+  const TOY_TEXT = Object.freeze(TOY_LINES.map((row, i) => {
+    const got = (strings && Array.isArray(strings.toy)) ? strings.toy[i] : null;
+    return (typeof got === 'string' && got.trim()) ? got.trim() : row.line;
+  }));
   /* OFF CHANNELS (W3): the two things NOW WATCHING needs and nothing else in
    * this file does - the shell's provider handle (media through the HOST, the
    * only remote path this bundle has) and `init.settings` (the player's own
@@ -528,6 +631,25 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   body.draggable = false;
   if (body.setAttribute) body.setAttribute('draggable', 'false');
 
+  /* COUNTER STOCK: THE DESK TOY. One node, minted at birth and hidden at rest -
+   * the ask strip's arrangement, for the ask strip's reason: a player who does
+   * not own the prize carries one hidden img and no code path below ever runs.
+   * The `src` is deliberately NOT set here, so an unowned player never even
+   * fetches art they cannot see (and never logs a 404 for it). */
+  const toy = document.createElement('img');
+  toy.className = 'emi-toy';
+  toy.alt = '';
+  toy.draggable = false;
+  toy.hidden = true;
+  if (toy.setAttribute) {
+    toy.setAttribute('draggable', 'false');
+    /* IT IS A PROP, NOT A CONTROL. EMI's whole pointer vocabulary is
+     * pointer-only by design (petting has never been keyboard-reachable and
+     * LAW 2 forbids this file a key listener), so the toy says so out loud
+     * rather than offering a role no key can reach. */
+    toy.setAttribute('aria-hidden', 'true');
+  }
+
   const canvas = document.createElement('canvas');
   canvas.className = 'emi-screen';
 
@@ -565,6 +687,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   } catch (e) { /* noop */ }
 
   el.appendChild(body);
+  el.appendChild(toy);           // COUNTER STOCK (z1: over the body, under the fx)
   el.appendChild(canvas);
   el.appendChild(fxHost);
   el.appendChild(bubble);
@@ -589,9 +712,14 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
    * and once per key. */
   const frameFailed = Object.create(null);
   let bodyFrame = 'idle';
+  /* WHICH WARDROBE IS UP (Counter Stock). One of the two frozen maps at the top
+   * of this file, and it is swapped WHOLE or not at all - see THE VARSITY
+   * JACKET. Every url in this file is resolved through it, so a fallback lands
+   * in the SAME set she is wearing and the coat can never half come off. */
+  let frameSet = BODY_FRAME_SRC;
 
   function frameUrl(key) {
-    return frameFailed[key] ? BODY_FRAME_SRC.celebration : BODY_FRAME_SRC[key];
+    return frameFailed[key] ? frameSet.celebration : frameSet[key];
   }
 
   /** Swap the body png. A no-op when it is already up (this runs per sway step). */
@@ -610,30 +738,120 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       if (!k || k === 'celebration' || frameFailed[k]) return;
       frameFailed[k] = true;
       say('emi: body frame "' + k + '" failed to load - falling back to body.png');
-      try { body.src = BODY_FRAME_SRC.celebration; } catch (e) { /* noop */ }
+      try { body.src = frameSet.celebration; } catch (e) { /* noop */ }
     });
   }
 
-  /* PRELOAD, ONCE. The bundle is offline so every frame is a local file, but a
-   * first decode on the beat a stamp lands would still flash an empty body.
-   * `Image` does not exist in the node DOM double - no preload, no problem. */
+  /* PRELOAD, ONCE PER SET. The bundle is offline so every frame is a local file,
+   * but a first decode on the beat a stamp lands would still flash an empty
+   * body. `Image` does not exist in the node DOM double - no preload, no
+   * problem. It takes the map as an argument because the varsity jacket is a
+   * SECOND set that arrives later and wants the same warming (Counter Stock). */
   const preloaded = [];
-  (function preloadFrames() {
-    if (typeof Image !== 'function') return;
-    for (const k of Object.keys(BODY_FRAME_SRC)) {
+  function preloadFrames(map) {
+    if (typeof Image !== 'function' || !map) return;
+    for (const k of Object.keys(map)) {
       try {
         const im = new Image();
         im.onerror = () => {
-          if (frameFailed[k]) return;
+          /* A SET SHE IS NO LONGER WEARING MAY NOT MARK A FRAME BROKEN. The
+           * standard preload is still in flight when the jacket lands, and its
+           * 404s would otherwise pin `frameFailed` on frames the new set has. */
+          if (map !== frameSet || frameFailed[k]) return;
           frameFailed[k] = true;
           say('emi: body frame "' + k + '" is missing - body.png stands in');
-          if (bodyFrame === k) { try { body.src = BODY_FRAME_SRC.celebration; } catch (e) { /* noop */ } }
+          if (bodyFrame === k) { try { body.src = frameSet.celebration; } catch (e) { /* noop */ } }
         };
-        im.src = BODY_FRAME_SRC[k];
+        im.src = map[k];
         preloaded.push(im);
       } catch (e) { /* noop */ }
     }
-  }());
+  }
+  preloadFrames(BODY_FRAME_SRC);
+
+  /* ---------------------- the prizes (Counter Stock) --------------------- */
+  /* TWO PRIZES REACH EMI and neither of them is a setting: EMI'S DESK TOY puts
+   * a prop on her tube, EMI: VARSITY JACKET re-dresses every pose. Owned = on,
+   * v1, no toggle (the contract's ruling) - so the whole of this section is a
+   * READER of the shell's bag plus the two things it switches on.
+   *
+   * NOTHING HERE MOVES A BALANCE, ASKS FOR ONE, OR NAMES AN SKU. The echo law
+   * is the counter's; by the time a flag reaches this file the host has already
+   * banked the purchase and the shell has already read `wallet.inv`. */
+  let prizeSrc = prizes || null;
+  let prizeState = readPrizes(prizeSrc);
+  /* 'off' -> 'probing' -> 'on' | 'failed'. `failed` is STICKY for the sitting:
+   * art may lag code, and a jacket that half-loads is worse than the pose sheet
+   * that shipped. There is no path back to 'off'. */
+  let varsityState = 'off';
+  /** The toy art 404'd once; the prop stays down however often the bag is set. */
+  let toyBroken = false;
+
+  /** Move the whole wardrobe over, and repaint the pose she is wearing now. */
+  function useFrameSet(map) {
+    if (!map || map === frameSet) return false;
+    frameSet = map;
+    // A broken frame in the OLD set says nothing about the new one.
+    for (const k of Object.keys(frameFailed)) delete frameFailed[k];
+    try { body.src = frameUrl(bodyFrame); } catch (e) { /* noop */ }
+    return true;
+  }
+
+  /**
+   * ONE PROBE, AND THE ANSWER IS FINAL FOR THE SITTING. `body-idle.png` is the
+   * frame she wears at rest and the first one any player would see, so it is
+   * the honest witness for "is this folder in the bundle yet". A load swaps all
+   * ten; an error (or a platform with no `Image` at all, which is the node DOM
+   * double) leaves the standard set standing for ever and says so once.
+   */
+  function armVarsity() {
+    if (!prizeState.varsity || varsityState !== 'off') return;
+    if (typeof Image !== 'function') { varsityState = 'failed'; return; }
+    let im = null;
+    try { im = new Image(); } catch (e) { varsityState = 'failed'; return; }
+    varsityState = 'probing';
+    im.onload = () => {
+      if (varsityState !== 'probing') return;   // destroyed, or already answered
+      varsityState = 'on';
+      useFrameSet(VARSITY_FRAME_SRC);
+      preloadFrames(VARSITY_FRAME_SRC);
+      say('emi: varsity jacket on - the whole pose set moved');
+    };
+    im.onerror = () => {
+      if (varsityState !== 'probing') return;
+      varsityState = 'failed';
+      say('emi: varsity art is not in the bundle yet - the standard set stands');
+    };
+    try { im.src = VARSITY_FRAME_SRC.idle; }
+    catch (e) { varsityState = 'failed'; }
+    preloaded.push(im);
+  }
+
+  /** Re-read the bag and light (or unlight) what it says. Idempotent. */
+  function applyPrizes() {
+    prizeState = readPrizes(prizeSrc);
+    const wantToy = prizeState.deskToy && !toyBroken;
+    if (wantToy && !toy.src) { try { toy.src = TOY_SRC; } catch (e) { /* noop */ } }
+    toy.hidden = !wantToy;
+    armVarsity();
+    return prizeState;
+  }
+
+  /* A PROP THAT WILL NOT LOAD IS NOT AN ERROR EITHER: the node goes away, and
+   * it does not come back this sitting however often the bag is re-set. */
+  if (toy.addEventListener) {
+    toy.addEventListener('error', () => { toyBroken = true; toy.hidden = true; });
+    /* INSIDE `.emi`, so stopping this stream is legal and necessary - the x
+     * does exactly the same, and for the same reason: a poke at the toy is
+     * never also a head-pat and never the start of a drag. Nothing OUTSIDE the
+     * widget is touched, so law 1 (INPUT TRUST) is untouched. */
+    toy.addEventListener('pointerdown', (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); });
+    toy.addEventListener('click', (ev) => {
+      if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+      pokeToy();
+    });
+  }
+  applyPrizes();
 
   /* ---------------------- the renderer, injected ------------------------ */
   /* A CANVAS THE PLATFORM CANNOT PAINT IS NOT AN ERROR. The node DOM double has
@@ -1549,6 +1767,52 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     raw(SETTLE_FACE, { hold: 900, fx: 'hearts', body: reducedMotion() ? null : 'bounce', bodyFrame: 'pet' });
     save();
     emitGesture('pet');
+  }
+
+  /* ---------------------- the desk toy (Counter Stock) ------------------- */
+  /** Has tonight's line been spent? SESSION-LOCAL and deliberately unpersisted:
+   *  "once per session" is the contract, and a flag on the blob would make the
+   *  toy a thing you can only ever hear from once. */
+  let toySpent = false;
+
+  /**
+   * A POKE AT THE PROP. Answered every time - the W3 law is that an input which
+   * makes no sound reads as an input the page did not get - but answered with a
+   * LINE only once a sitting: a mascot who says the same sentence every time
+   * you tap her desk is a mascot you stop tapping.
+   *
+   * The three guards are pet()'s, for pet()'s reasons: LAW 3 (a say is never cut
+   * mid-line), trap 104 (an ask owns the glass until it is answered) and W2a (she
+   * is not at her desk to be poked while she is across the quad).
+   */
+  function pokeToy() {
+    if (!enabled || hidden || toy.hidden) return false;
+    if (saying() || askOwnsGlass() || tripping()) return false;
+    touchSeen();
+    /* Her own bus, over her blipese and under every game one-shot, exactly like
+     * the pat's pop. A little higher, because it is a wind-up and not a hand. */
+    sfx('pop', 0.08, 1.5);
+    emitGesture('toy', { spent: toySpent });
+    if (toySpent) {
+      // She has already told you about it tonight. A look is the whole answer.
+      if (CHAINS && CHAINS.wink) return play(CHAINS.wink, { bodyFrame: 'smug' });
+      return raw('^_~', { hold: 500, bodyFrame: 'smug' });
+    }
+    const i = toyLineIndex(isoDay() || '');
+    const row = TOY_LINES[i] || TOY_LINES[0];
+    const line = TOY_TEXT[i] || row.line;
+    toySpent = true;
+    /* THE POSE RIDES THE FACE, not an override: `makeSay` resolves frame by
+     * frame, so the typing dots stay at `idle` and (¬‿¬)/(◠‿◠) lands the smug
+     * or the pet pose WITH the line. That is the same road every bark takes. */
+    if (typeof makeSay === 'function' && painter) {
+      let chain = null;
+      try { chain = makeSay(line, row.face, sayHoldMs(line)); }
+      catch (e) { chain = null; say('emi: makeSay threw on the toy line'); }
+      if (chain && play(chain, { protect: true })) return true;
+    }
+    // No renderer, or the chain was refused: the POSE still lands, wordless.
+    return raw(row.face, { hold: DIALS.RAW_HOLD_MS });
   }
 
   /* ---------------------- hide / dock ----------------------------------- */
@@ -2661,6 +2925,30 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     setBodyFrame,
     /** Which pose is up right now. */
     get bodyFrame() { return bodyFrame; },
+    /* ---- COUNTER STOCK: the two EMI prizes ----------------------------- */
+    /**
+     * WHAT THE PLAYER OWNS. The shell hands this down at mount and hands it
+     * down AGAIN when a purchase settles (`wallet-result`), so a prize bought
+     * mid-sitting lights on the next paint without a reload (contract §4). A
+     * bag that is a FUNCTION is re-read on every apply, so a shell that hands
+     * a getter once never has to call this a second time.
+     * @param {{deskToy?:boolean, varsity?:boolean}|Function=} bag
+     */
+    setPrizes(bag) {
+      if (bag !== undefined) prizeSrc = bag || null;
+      const st = applyPrizes();
+      return { deskToy: st.deskToy, varsity: st.varsity, jacket: varsityState };
+    },
+    /** What she is wearing: 'off' | 'probing' | 'on' | 'failed'. Read-only. */
+    get varsity() { return varsityState; },
+    /** The url the CURRENT wardrobe resolves a frame key to. Test seam. */
+    frameSrc(key) { return frameUrl(frameKey(key) || 'idle'); },
+    /** The desk-toy prop node (hidden unless the prize is owned). Read-only. */
+    get toy() { return toy; },
+    /** True once tonight's toy line has been spent. Session-local. */
+    get toySpent() { return toySpent; },
+    /** Poke the toy without a pointer. The click handler's one call. */
+    pokeToy,
     /** True while EMI is walking the idle sway (reduced motion never is). */
     swaying() { return swayTimer !== null; },
     makeSayFn() { return makeSay; },
@@ -2775,6 +3063,9 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     },
     destroy() {
       accrueVisible();
+      /* COUNTER STOCK: a probe in flight answers into a widget that is gone.
+       * It owns no timer - closing its own gate is the whole cancellation. */
+      if (varsityState === 'probing') varsityState = 'failed';
       cancelTrip();                  // W2a: never leave a trip timer behind
       unmountAsk(false);             // ASKS: never leave a live chip behind
       dropHeldLine();                // ...nor a line waiting for one to end

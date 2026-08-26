@@ -285,6 +285,13 @@
     <!-- Avatar Tube images - MUST be Resource for pack:// URIs to work -->
     <Resource Include="Resources\tube.png" />
     <Resource Include="Resources\tube2.png" />
+    <!-- TUBE GLASS: MIDNIGHT (Prize Counter restock). Conditioned on Exists() because the art
+         lands separately from the wiring: without the condition a build made before the PNGs are
+         dropped in fails outright, and with it the same build simply falls back to the standard
+         pane (AvatarTubeWindow.SetTubeStyle resolves null -> standard). Drop the two files in and
+         the next build picks them up with no csproj edit. -->
+    <Resource Include="Resources\tube_midnight.png" Condition="Exists('Resources\tube_midnight.png')" />
+    <Resource Include="Resources\tube2_midnight.png" Condition="Exists('Resources\tube2_midnight.png')" />
     
     <!-- Avatar Set 1: Default (Level 1-19) -->
     <Resource Include="Resources\avatar_pose1.png" />

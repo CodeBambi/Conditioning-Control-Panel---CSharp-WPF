@@ -1677,7 +1677,44 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Switch between tube.png and tube2.png
+        /// TUBE GLASS: MIDNIGHT — is the darker pane on tonight?
+        ///
+        /// <para>Three things have to line up, in this order, and the order is the point:</para>
+        /// <list type="number">
+        /// <item>a MOD (or an event skin) that draws its own tube wins outright. Mod art is the
+        /// author's chamber and a prize we sold does not get to repaint it — same law
+        /// <see cref="ModOverridesAttachedTubeOnly"/> is written from.</item>
+        /// <item>the player asked for it (<c>AppSettings.TubeMidnightGlass</c>). Owning the glass
+        /// does not put it on; it is a wardrobe, not a promotion.</item>
+        /// <item>the Prize Counter actually sold it to them
+        /// (<c>ArcademyHostService.WalletOwnsSku</c>, which answers off the live wallet when the
+        /// Arcademy is open and off the persisted blob when it is not, and never throws).</item>
+        /// </list>
+        /// </summary>
+        private static bool MidnightGlassWanted()
+        {
+            try
+            {
+                // A mod that ships EITHER pane owns the whole chamber - checking both is what
+                // keeps a mod's tube.png from being paired with our midnight tube2.png.
+                if (Services.ModResourceResolver.HasModOverride("tube.png")
+                    || Services.ModResourceResolver.HasModOverride("tube2.png")) return false;
+                if (App.Settings?.Current?.TubeMidnightGlass != true) return false;
+                return Services.Arcademy.ArcademyHostService.WalletOwnsSku(
+                    Services.Arcademy.ArcademyEconomy.SkuTubeMidnight);
+            }
+            catch { return false; }   // a cosmetic never gets to break the tube
+        }
+
+        /// <summary>
+        /// Switch between tube.png and tube2.png — and, when the midnight glass is bought and
+        /// switched on, between their <c>*_midnight.png</c> siblings instead.
+        ///
+        /// <para>The midnight pair is resolved through the SAME chain as the standard one, and a
+        /// miss falls silently back to standard: the art may lag the code, and a player whose
+        /// build has the wiring but not the PNG should see the ordinary tube, never an empty one
+        /// (<see cref="Services.ModResourceResolver.ResolveImage"/> answers null, not a throw,
+        /// when nothing in the chain has the file).</para>
         /// </summary>
         public void SetTubeStyle(bool useAlternative)
         {
@@ -1689,12 +1726,45 @@ namespace ConditioningControlPanel
                     useAlternative = false;
 
                 var tubeName = useAlternative ? "tube2.png" : "tube.png";
-                ImgTubeFrame.Source = Services.ModResourceResolver.ResolveImage(tubeName);
+
+                System.Windows.Media.ImageSource? art = null;
+                if (MidnightGlassWanted())
+                {
+                    var midnightName = useAlternative ? "tube2_midnight.png" : "tube_midnight.png";
+                    art = Services.ModResourceResolver.ResolveImage(midnightName);
+                    if (art != null) tubeName = midnightName;
+                }
+
+                art ??= Services.ModResourceResolver.ResolveImage(tubeName);
+                ImgTubeFrame.Source = art;
                 App.Logger?.Information("Tube style changed to: {Style}", tubeName);
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to change tube style");
+            }
+        }
+
+        /// <summary>
+        /// Repaint the glass in place, without touching attach state. The settings checkbox calls
+        /// this so a flip lands on the next paint instead of on the next attach/detach, and it
+        /// marshals itself because the tube can live on its own dispatcher thread while the
+        /// checkbox is on the main one.
+        /// </summary>
+        public void RefreshTubeGlass()
+        {
+            try
+            {
+                if (!Dispatcher.CheckAccess())
+                {
+                    Dispatcher.BeginInvoke(new Action(RefreshTubeGlass));
+                    return;
+                }
+                SetTubeStyle(!_isAttached);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("RefreshTubeGlass: {E}", ex.Message);
             }
         }
 

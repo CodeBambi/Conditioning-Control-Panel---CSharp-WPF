@@ -2501,6 +2501,60 @@ g.campus-walker { pointer-events:none; }
   stroke:var(--gold); stroke-width:.8; opacity:.75;
 }
 
+/* ================= THE WALKER'S COSMETICS (Counter Stock) ================
+   Three things off the Prize Counter, and every one of them is CSS the moment
+   shell/walk.js has written its one attribute. The laws that shaped them are
+   the walk's own, restated because this is where they are easiest to break:
+
+     - NOT ONE HEX, still. Away Colors is the SAME two fills and the SAME ring,
+       pointed at different tokens - a palette swap (or a mod skin, or a Counter
+       Stock theme) moves the alternate kit with the standard one.
+     - NO NEW FILTER. The away kit RE-POINTS the miniature's existing
+       drop-shadow pair at --pink; it does not add a third shadow, and the
+       afterimages below cancel the filter outright.
+     - rects, transform and opacity. The spark is a 1x1 rect fading upward and
+       nothing else is animated anywhere in here.
+   ---------------------------------------------------------------------- */
+
+/* AWAY COLORS - navy kit, pink ring. Same body, sharper stripes. */
+.gh-you[data-cos-away] .gh-hair  { fill:color-mix(in srgb, var(--pink), var(--lav) 30%); }
+.gh-you[data-cos-away] .gh-shirt { fill:color-mix(in srgb, var(--navy), var(--lav) 34%); }
+.gh-you[data-cos-away] .gh-sprite {
+  filter:drop-shadow(0 0 2.5px var(--pink))
+         drop-shadow(0 0 7px color-mix(in srgb, var(--pink), transparent 55%));
+}
+.gh-you[data-cos-away] .gh-youring {
+  fill:color-mix(in srgb, var(--pink), transparent 78%);
+  stroke:var(--pink);
+}
+
+/* SPARKLER STEPS - one pixel per footfall, out of a pool of eight. The .4s
+   below IS walk.js's SPARK_MS: a fade longer than the pool's turnaround is a
+   spark recycled mid-fade, so the two numbers move together or not at all. */
+.campus-spark-i {
+  fill:var(--gold); shape-rendering:crispEdges;
+  transform-box:fill-box; transform-origin:center;
+}
+.campus-spark-i.is-a,
+.campus-spark-i.is-b { animation:campus-sparkfade .4s linear both; }
+@keyframes campus-sparkfade {
+  from { opacity:.95; transform:translateY(0) scale(1); }
+  to   { opacity:0;   transform:translateY(-3px) scale(.35); }
+}
+
+/* GHOST WALK - you go see-through, and two of you trail a beat behind. The
+   echoes wear `.gh-you` so they are dressed as you (away colours included);
+   these three rules are the whole difference between a wake and a crowd. */
+.gh-you[data-cos-ghost] { opacity:.55; }
+.campus-walkechoes { opacity:0; transition:opacity .2s ease; }
+.campus-walkechoes.is-walking { opacity:1; }
+/* AN AFTERIMAGE IS NEVER FILTERED. The miniature's glow on a body that is
+   already a ghost of itself is a smear, and a filter per echo per frame is the
+   surface-per-frame tax walk.js exists to avoid (trap 36's family). */
+.gh-you.gh-echo .gh-sprite { filter:none; }
+.gh-you.gh-echo1 { opacity:.30; }
+.gh-you.gh-echo2 { opacity:.16; }
+
 /* REDUCED MOTION / the lit-down rung: ghosts stand where they stand. ghosts.js
    already refuses to walk them - this is the belt on those braces, and it takes
    the bubble's entry and the S pop with it. */
@@ -2513,11 +2567,20 @@ html.arc-reduced .campus-student { transition:none; }
    static dashes, no march (ORIENTATION §2.3). */
 html.arc-reduced .campus-trace { animation:none; }
 html.arc-reduced .campus-trace.fading { transition:none; opacity:.22; }
+/* THE COSMETICS under the same rung, and the split is deliberate: walk.js does
+   not even BUILD the spark pool or the afterimages when motion is reduced (or
+   on a lite machine), so these two rules are the belt on those braces for a
+   layer that was mounted before the rung was pulled. The away kit and the
+   see-through body are colour, not motion, and colour stays. */
+html.arc-reduced .campus-spark-i { animation:none; opacity:0; }
+html.arc-reduced .campus-walkechoes { transition:none; opacity:0; }
 @media (prefers-reduced-motion: reduce) {
   .gh-bubble, .gh-spark line, .campus-student[data-scene="nod"] .gh-inner { animation:none; }
   .campus-student { transition:none; }
   .campus-trace { animation:none; }
   .campus-trace.fading { transition:none; opacity:.22; }
+  .campus-spark-i { animation:none; opacity:0; }
+  .campus-walkechoes { transition:none; opacity:0; }
 }
 
 /* small stages: the flourishes step down before they collide with the board.
