@@ -2943,23 +2943,33 @@ namespace ConditioningControlPanel.Services
         /// calendar the same digits mean a different year entirely (th-TH reads "2026-08-26" as
         /// 1483 CE), and the take-newer merges would latch the misread. Same reason every
         /// push-side day key formats with InvariantCulture. Two deliberate loosenings on top of
-        /// the exact shape: an invariant ISO round-trip fallback (pre-parity builds pushed
-        /// last_daily_quest_date as ToString("o"), and /admin/set-streak can echo ISO
-        /// timestamps — refusing those would silently drop an admin correction's date), and a
-        /// beyond-tomorrow refusal (a day key names a day that has happened; tomorrow is legal
-        /// for a device west of the account's furthest clock, but further out is junk, and a
-        /// record poisoned before the server sanitizer landed must not ratchet local dates 500
-        /// years forward — the login pair has DecideLoginStreakAdopt's today-clamp, the quest
-        /// dates had nothing).
+        /// the exact shape: an ISO-timestamp fallback limited to the "o" round-trip shapes
+        /// (pre-parity builds pushed last_daily_quest_date as ToString("o"), and
+        /// /admin/set-streak can echo ISO timestamps — refusing those would silently drop an
+        /// admin correction's date; parsed via DateTimeOffset so the calendar day is taken AS
+        /// WRITTEN, never converted to this machine's zone, and via exact formats so loose
+        /// invariant shapes like "Aug 26, 2026" stay refused), and a beyond-tomorrow refusal
+        /// (a day key names a day that has happened; tomorrow is legal for a device west of
+        /// the account's furthest clock, but further out is junk, and a record poisoned before
+        /// the server sanitizer landed must not ratchet local dates 500 years forward — the
+        /// login pair has DecideLoginStreakAdopt's today-clamp, the quest dates had nothing).
         /// </summary>
+        private static readonly string[] DayKeyIsoFallbackFormats =
+        {
+            "yyyy-MM-dd'T'HH:mm:ss.FFFFFFFK",
+            "yyyy-MM-dd'T'HH:mm:ssK"
+        };
+
         private static bool TryParseDayKey(string? s, out DateTime date)
         {
             var inv = System.Globalization.CultureInfo.InvariantCulture;
             if (!DateTime.TryParseExact(s, "yyyy-MM-dd", inv,
                 System.Globalization.DateTimeStyles.None, out date))
             {
-                if (!DateTime.TryParse(s, inv, System.Globalization.DateTimeStyles.RoundtripKind, out date))
+                if (!DateTimeOffset.TryParseExact(s, DayKeyIsoFallbackFormats, inv,
+                    System.Globalization.DateTimeStyles.AssumeUniversal, out var dto))
                     return false;
+                date = dto.Date;
             }
             date = date.Date;
             return date <= DateTime.Today.AddDays(1);
