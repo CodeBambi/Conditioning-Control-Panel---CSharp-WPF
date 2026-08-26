@@ -49,6 +49,7 @@ import { createAccountChip } from './accountchip.js';
 import { mountMailChip } from './mailbox.js';
 import { mountBoardProp } from './corkboard.js';
 import { mountBugleProp } from './bugle.js';
+import { paintLever } from './lever.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -532,6 +533,15 @@ export const FACILITIES = Object.freeze({
   annex: Object.freeze({
     rect: [1260, 300, 108, 72], side: 'w', door: 336, stop: [1250, 422], rm: '000',
   }),
+  /* THE PRIZE COUNTER (economy wave, 2026-08-26). Third counter down the same
+   * alley, under the Front Office: it belongs with the other two because it IS
+   * the other two - a window with somebody behind it. Same width, same west
+   * door, same three-step walk, and its stop simply continues down the alley
+   * the way the registrar's continues past Records. Nothing about the pathing
+   * is special-cased for it. */
+  prizes: Object.freeze({
+    rect: [1260, 572, 108, 84], side: 'w', door: 614, stop: [1250, 614], rm: '003',
+  }),
 });
 
 /** ROOMS first, the two counters second. Pure; undefined for anything else. */
@@ -770,12 +780,18 @@ function idCrestGlyph() {
  *   shell/seep.js - it asks `beat('door_card')` and paints what it is told,
  *   exactly the way the split-flap board takes `misprintFor`. Absent = a school
  *   that is simply quiet, and the card is what it always was.
+ * @param {Object=} o.economy   THE TWO CURRENCIES, handed down and never read:
+ *   {balance:() => ({t,k}), lever:{positions, get, set, unlocks}}. This file is
+ *   under the header law - it imports no store and no bridge - so the wallet
+ *   chip, the Prize Counter's window and the Extra Credit lever on the door
+ *   card all live entirely on these getters. Absent = none of the three is
+ *   mounted, and the campus is byte-for-byte the campus it was.
  * @param {Function=} o.log
  * @returns {{root, boardMount, footMount, update, closeCard, destroy}}
  */
 export function createCampus({ state, gameName, banner, stats, reducedMotion, on, log,
   dateSeed, attractIdleMs, boardPulse, idCardMode, holdAttract, post, seep, annex,
-  account } = {}) {
+  account, economy } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const handlers = on || {};
   /* THE ACCOUNT CHIP (shell/accountchip.js): a host slot in the top-right
@@ -815,6 +831,22 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   let mailChip = null;
   let boardProp = null;
   let bugleProp = null;
+  /* THE WALLET CHIP's three nodes - null when no `economy` bag arrived. */
+  let walletChip = null;
+  let walletTicketN = null;
+  let walletTokenN = null;
+
+  /** Repaint the wallet chip from the shell's own reader. Guarded end to end:
+   *  a chip is furniture, and furniture may never be the thing that throws. */
+  function paintWallet() {
+    if (!walletChip || !economy || typeof economy.balance !== 'function') return;
+    let b = null;
+    try { b = economy.balance(); } catch (e) { b = null; }
+    const tt = Math.max(0, Math.round(Number(b && b.t) || 0));
+    const kk = Math.max(0, Math.round(Number(b && b.k) || 0));
+    try { if (walletTicketN) walletTicketN.textContent = String(tt); } catch (e) { /* noop */ }
+    try { if (walletTokenN) walletTokenN.textContent = String(kk); } catch (e) { /* noop */ }
+  }
   const holdsAttract = typeof holdAttract === 'function' ? holdAttract : () => false;
   /* The seep director, always ASKED and never held (see the `seep` param). */
   const seepDir = typeof seep === 'function' ? seep : () => null;
@@ -1501,6 +1533,38 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     stag(annexG, 820);
   }
 
+  /* THE PRIZE COUNTER. The post bag's contract for the third time: the campus
+   * mounts the window only when the shell hands an `economy` bag, and the shell
+   * keeps the catalog, the wallet and every byte of it. A host with no economy
+   * projected in `init` gets the campus it always had, with no dark room and no
+   * gap in the alley where a room used to be. */
+  let prizesG = null;
+  if (economy) {
+    prizesG = facility({
+      rect: FACILITIES.prizes.rect, door: FACILITIES.prizes.door,
+      side: FACILITIES.prizes.side, compact: true,
+      neonY: 580, nameY: 618,
+      sign: t('wallet_tickets', 'Tickets'),
+      name: t('campus_room_prizes', 'Prize Counter'),
+      rm: FACILITIES.prizes.rm,
+      onClick: () => { if (handlers.prizes) handlers.prizes(); },
+      tip: () => ({
+        name: t('campus_room_prizes', 'Prize Counter'),
+        status: t('campus_prizes_status', 'Open late'),
+        desc: t('campus_desc_prizes',
+          'Tickets on the shelf, tokens in the case. Somebody is always restocking.'),
+      }),
+    });
+    /* THE LIT WINDOW. Records gets the trophy-case gold through this same one
+     * modifier; the counter takes its own so the stylesheet can warm it without
+     * either of them borrowing the other's rule. */
+    prizesG.setAttribute('class', 'campus-room facility prizes');
+    /* the shelf behind the glass - three parcels in a row on the back wall */
+    [1280, 1304, 1328].forEach((x) => prizesG.appendChild(
+      svg('rect', { x, y: 644, width: 18, height: 13 }, 'campus-furnf')));
+    stag(prizesG, 860);
+  }
+
   /* Entrance hall dressing (notice board, trophy case, admissions desk, crest) */
   const hall = svg('g', null, 'campus-halldress');
   hall.appendChild(svg('circle', { cx: 582, cy: 622, r: 46, 'stroke-dasharray': '4 6' }, 'campus-crestring'));
@@ -1696,6 +1760,35 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     if (mailChip && mailChip.el) {
       try { topCluster.insertBefore(mailChip.el, gear); } catch (e) { /* order is cosmetic */ }
     }
+  }
+  /* THE WALLET, between the envelope and the gear. It is a READING, not a
+   * control: two numbers and the two glyphs, and pressing it walks to the
+   * counter the same way the Records door walks to the office. It repaints on
+   * every campus update() because a payout can land while the board is up and
+   * a chip that lied about your tickets for a whole screen is worse than no
+   * chip at all. */
+  if (economy && typeof economy.balance === 'function') {
+    walletChip = el('button', 'campus-wallet');
+    walletChip.type = 'button';
+    walletChip.setAttribute('aria-label', t('campus_room_prizes', 'Prize Counter'));
+    walletChip.setAttribute('title', t('campus_room_prizes', 'Prize Counter'));
+    const tWrap = el('span');
+    const tIco = el('i', 'arc-tick');
+    tIco.setAttribute('aria-hidden', 'true');
+    tWrap.appendChild(tIco);
+    walletTicketN = el('b', null, '0');
+    tWrap.appendChild(walletTicketN);
+    walletChip.appendChild(tWrap);
+    const kWrap = el('span');
+    const kIco = el('i', 'arc-tok', '◉');
+    kIco.setAttribute('aria-hidden', 'true');
+    kWrap.appendChild(kIco);
+    walletTokenN = el('b', null, '0');
+    kWrap.appendChild(walletTokenN);
+    walletChip.appendChild(kWrap);
+    walletChip.addEventListener('click', () => { if (handlers.prizes) handlers.prizes(); });
+    try { topCluster.insertBefore(walletChip, gear); } catch (e) { topCluster.appendChild(walletChip); }
+    paintWallet();
   }
   /* THE ACCOUNT CHIP, after the gear - the far right, the way the topbar and
    * the main web app both place it. Web host only. */
@@ -2001,6 +2094,23 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   const ccAltHint = el('p', 'cc-althint', '');
   ccAltHint.hidden = true;
   card.appendChild(ccAltHint);
+  /* THE EXTRA CREDIT LEVER, under the two doors. It sits BELOW Begin on purpose:
+   * it is a choice about the run you are about to take, not a way to take it,
+   * and a control above the verb would read as a step you have to complete
+   * first. Three positions on one rail, and a position you have not unlocked is
+   * DIM AND STILL THERE - what you cannot pull yet is the whole reason to walk
+   * down to the counter, so hiding it would hide the feature. Mounted only when
+   * the shell handed an `economy` bag; the card is otherwise unchanged. */
+  const ccLever = el('div', 'arc-lever');
+  ccLever.hidden = true;
+  const ccLeverRail = el('div', 'arc-lever-rail');
+  const ccLeverHint = el('p', 'arc-lever-hint', '');
+  if (economy && economy.lever) {
+    ccLever.appendChild(el('p', 'arc-lever-title', t('lever_title', 'Extra Credit')));
+    ccLever.appendChild(ccLeverRail);
+    ccLever.appendChild(ccLeverHint);
+    card.appendChild(ccLever);
+  }
   scrim.appendChild(card);
   root.appendChild(scrim);
 
@@ -2048,6 +2158,18 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     ccAltHint.textContent = hint;
     ccAltHint.hidden = !hint;
     cardAltAction = () => { if (handlers.freeSwim) handlers.freeSwim(key); };
+  }
+
+  /**
+   * Paint (or retire) the Extra Credit rail. The words, the lock lines and the
+   * painting all live in shell/lever.js, because the room scene's apron shows
+   * the SAME rail and two copies of a three-way switch is two chances to drift.
+   * Rebuilt on every card pop rather than mutated - see paintLever's note.
+   */
+  function setLever(show) {
+    if (show === false || !economy || !economy.lever) { ccLever.hidden = true; return; }
+    ccLever.hidden = false;
+    paintLever({ rail: ccLeverRail, hint: ccLeverHint }, economy.lever, t, () => setLever(true));
   }
 
   function popCard() {
@@ -2215,6 +2337,11 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       try { fireMoment('lockedClick', { what: 'room', gameKey: key }); } catch (e) { /* noop */ }
     }
     setAltButton(key, r);
+    /* THE LEVER rides the class card and only the class card: it is a wager on
+     * a graded run, so a facility door has nothing to wager. Rebuilt here rather
+     * than once at boot so a token spent at the counter lights Honors on the
+     * very next door the player opens. */
+    setLever(true);
     /* THE CHALK GHOST, and it must be asked BEFORE the card pops - see above. */
     chalkGhost(key);
     popCard();
@@ -2242,6 +2369,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       cardAction = d.action || null;
     }
     setAltButton(null, null);        // facilities are never swum
+    setLever(false);                 // nor wagered on
     popCard();
   }
 
@@ -2275,6 +2403,10 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     if (mailChip) { try { mailChip.update(); } catch (e) { /* noop */ } }
     if (boardProp) { try { boardProp.refresh(post && post.daySeed); } catch (e) { /* noop */ } }
     if (bugleProp) { try { bugleProp.refresh(); } catch (e) { /* noop */ } }
+    /* ...and so does the wallet, off the same silent-repaint path: a payout
+     * lands while the board is up, and the chip has to have moved by the time
+     * the player looks at it. */
+    paintWallet();
 
     for (const key of Object.keys(roomRefs)) {
       const ref = roomRefs[key];

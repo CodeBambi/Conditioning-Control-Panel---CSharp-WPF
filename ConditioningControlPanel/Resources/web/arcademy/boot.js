@@ -686,6 +686,14 @@ bridge.on('payout-result', guard('payout-result', (m) => {
   if (shell) shell.onPayout(m);
   log('payout: ' + m.gameKey + ' +' + Math.round(Number(m.xp) || 0) + 'xp' + (m.levelUp ? ' (level up)' : ''));
 }));
+/* THE PRIZE COUNTER'S ECHO. The host answers every `prize-buy` with exactly one
+ * of these, ok or not, and the Prize Counter paints nothing until it arrives -
+ * so this subscription is not a nicety, it is the other half of the buy. Like
+ * every frame on this deck it REPLAYS if it beat the shell here. */
+bridge.on('wallet-result', guard('wallet-result', (m) => {
+  if (shell && shell.onWalletResult) shell.onWalletResult(m);
+  log('wallet: ' + (m.sku || '?') + ' ' + (m.ok ? 'bought' : 'refused (' + (m.reason || '?') + ')'));
+}));
 /* THE PUNCH CARD (PUNCHCARD.md §2/§4). It lands right behind the meta snapshot
  * on both mint paths, and `bridge.on` REPLAYS anything that arrived before this
  * subscription existed - which is what makes a frame that beats the shell's two

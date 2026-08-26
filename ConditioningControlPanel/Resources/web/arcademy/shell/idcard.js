@@ -392,6 +392,8 @@ const HOMEROOM_NO = '101';
  *                                            selfId, web}
  * @param {Function} o.stats          () -> {streak, perfect, stamps, stampCap, sDays,
  *                                            termRoman, tier, enrolled, mastered, cards}
+ * @param {Function=} o.frame         () -> 'gold' | 'navy' | '' - a frame bought at
+ *                                    the Prize Counter, worn as a class on the card
  * @param {Function=} o.onChip        the ONE chip verb (the shell posts the frame)
  * @param {Function=} o.onClose       fired on EVERY path out (Esc, the veil, the
  *                                    close button, Open Records, a teardown) -
@@ -407,7 +409,7 @@ const HOMEROOM_NO = '101';
  * @returns {{open, dismiss, isOpen, setProfile, setChipState, photoDay, root}}
  */
 export function createIdSpotlight({ t, reducedMotion, lite, isMobile, profile, stats,
-  onChip, onRecords, onClose, onOpenCount, sfx, log } = {}) {
+  frame, onChip, onRecords, onClose, onOpenCount, sfx, log } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const tr = typeof t === 'function' ? t : (k, fb) => fb;
   const still = typeof reducedMotion === 'function' ? reducedMotion : idReducedMotion;
@@ -469,6 +471,25 @@ export function createIdSpotlight({ t, reducedMotion, lite, isMobile, profile, s
 
   function nameFor(p) { return (p && p.name) ? String(p.name) : tr('student', 'Student'); }
 
+  /** The frames the counter stocks. An unknown word paints nothing rather than
+   *  a broken class, so a catalog that grows a third frame tomorrow cannot make
+   *  the card render as a mystery. */
+  const FRAMES = { gold: 'is-frame-gold', navy: 'is-frame-navy' };
+
+  /** Put the bought frame on the card, or take a sold-back one off. The node
+   *  arrives by hand at build time (`spot` does not exist yet) and is read off
+   *  the live refs on every repaint after that. */
+  function paintFrame(node) {
+    const big = node || (spot && spot.refs ? spot.refs.big : null);
+    if (!big || !big.classList) return;
+    let want = '';
+    try { want = String((typeof frame === 'function' ? frame() : '') || ''); }
+    catch (e) { want = ''; }
+    for (const key of Object.keys(FRAMES)) {
+      try { big.classList.toggle(FRAMES[key], key === want); } catch (e) { /* noop */ }
+    }
+  }
+
   /** Repaint the parts a `profile` frame or a `setting` echo can move. */
   function setProfile() {
     if (!spot) return;
@@ -490,6 +511,9 @@ export function createIdSpotlight({ t, reducedMotion, lite, isMobile, profile, s
     if (r.foilNo) r.foilNo.textContent = num.no;
     paintBarcode(r.barcode, num.no);
     if (r.barcodeNo) r.barcodeNo.textContent = num.no.replace('-', '') + '00';
+    /* A frame bought while the card is up lands on the SAME repaint a profile
+     * echo takes, so the shell never needs a second verb for it. */
+    paintFrame();
   }
 
   /** The shell hands the chip its in-flight looks (`wait` / `pending`). */
@@ -580,6 +604,13 @@ export function createIdSpotlight({ t, reducedMotion, lite, isMobile, profile, s
     big.appendChild(back);
 
     const refs = {};
+    /* THE FRAME the counter sells. A skin on the card the player already has,
+     * never a second card - trap 93's rule is that the `.campus-idcard` node is
+     * never replaced, and the same reasoning holds one rung in: the frame is a
+     * class on `.arc-id-big`, so every ref, every listener and the flip all
+     * survive a purchase that settles while the card is open. */
+    refs.big = big;
+    paintFrame(big);
 
     function band(host, kindText) {
       const b = el('div', 'arc-id-band');

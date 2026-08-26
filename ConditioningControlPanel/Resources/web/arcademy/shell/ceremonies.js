@@ -65,11 +65,23 @@ function sfx(name, level, extra) {
  * @param {Object=} o.engine        the Distraction Engine facade (may be null)
  * @param {HTMLElement=} o.layer    fixed-position ceremony layer (#arc-ceremony)
  * @param {boolean=} o.reducedMotion
+ * @param {Function=} o.confetti    () -> true when the player owns the Prize
+ *                                  Counter's confetti stamp. A GETTER, not a
+ *                                  flag: the thing can be bought mid-night and
+ *                                  the ceremonies live for the whole class.
  * @param {Function=} o.log
  */
-export function createCeremonies({ engine, layer, reducedMotion, log } = {}) {
+export function createCeremonies({ engine, layer, reducedMotion, confetti, log } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const reduced = !!reducedMotion;
+  /* THE GARNISH. One class on the stamp node, and prizecounter's CSS-free
+   * cousin in styles.css does the rest. It is deliberately not a new ceremony:
+   * a cosmetic that changed the BEAT would be a cosmetic that changed the
+   * game, and the three-tier law says the shop sells looks and nothing else. */
+  const hasConfetti = () => {
+    try { return typeof confetti === 'function' ? !!confetti() : false; }
+    catch (e) { return false; }
+  };
   const timers = new Set();
   let engineWarned = false;
 
@@ -120,7 +132,8 @@ export function createCeremonies({ engine, layer, reducedMotion, log } = {}) {
       const host = target || layer;
       if (!host) return null;
 
-      const node = el('div', 'arc-stamp' + (tone === 'pink' ? ' pink' : '') + (reduced ? '' : ' pop'),
+      const node = el('div', 'arc-stamp' + (tone === 'pink' ? ' pink' : '') + (reduced ? '' : ' pop')
+        + (hasConfetti() && !reduced ? ' arc-stamp-confetti' : ''),
         String(text == null ? '' : text));
       // The fixed layer is pointer-events:none; an in-flow target needs the same
       // promise or a stamp could eat a click on the button underneath it.
@@ -218,7 +231,11 @@ export function createCeremonies({ engine, layer, reducedMotion, log } = {}) {
       // THE GRADE IS RANK-PITCHED (W0): the House Book's reference beat is the
       // punch-card thud and this is its ladder verbatim (punchcard.js
       // 0.78/0.92/1/1.18) - a C lands low, an S rings. PASS sits at 1.
-      const GRADE_PITCH = { c: 0.78, b: 0.92, a: 1, s: 1.18 };
+      // S+ RINGS HIGHER THAN S and it has to be spelled out: the key here is
+      // the LOWERCASED grade, so 'S+' arrives as 's+' and would have fallen
+      // through to the flat 1 a PASS gets. One rung above the S, no further -
+      // the ladder is the punch card's and this is the top of it.
+      const GRADE_PITCH = { c: 0.78, b: 0.92, a: 1, s: 1.18, 's+': 1.28 };
       // 'a' and 'pass' wear the pink seal, everything else the gold one - the
       // stamp primitive's only two tones, unchanged.
       const node = api.stamp({
@@ -254,7 +271,10 @@ export function createCeremonies({ engine, layer, reducedMotion, log } = {}) {
       const capList = Array.isArray(capped) ? capped.map((c) => String(c)) : [];
       const failedGate = !!gated || capList.some((c) => c.indexOf('hard') >= 0);
       const opts = { target, scale: scale == null ? 1 : scale };
-      if (!failedGate && (g === 's' || g === 'a')) {
+      // 's+' is the lowercased honours letter and it is the BEST result the
+      // school hands out, so it takes the jackpot rung it would otherwise have
+      // missed entirely - `g === 's'` is a string compare and 's+' is not 's'.
+      if (!failedGate && (g === 's+' || g === 's' || g === 'a')) {
         api.reward('jackpot', Object.assign({ text: text || 'JACKPOT' }, opts));
         return 'jackpot';
       }

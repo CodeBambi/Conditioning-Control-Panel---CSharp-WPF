@@ -43,6 +43,8 @@ export const DEFAULT_LEXICON = Object.freeze({
   /* performance */
   grade: 'Grade',
   grade_s: 'S', grade_a: 'A', grade_b: 'B', grade_c: 'C', grade_pass: 'PASS',
+  /* the honors letter - spelled out because 'grade_s+' is not a legal key */
+  grade_splus: 'S+',
   grade_tier: 'Year',
   grade_tier_1: 'Year 1', grade_tier_2: 'Year 2', grade_tier_3: 'Year 3', grade_tier_4: 'Year 4',
   attendance: 'Attendance',
@@ -551,6 +553,58 @@ export const DEFAULT_LEXICON = Object.freeze({
   campus_annex: 'Records Annex',
   campus_annex_status: 'Stairs down',
   campus_desc_annex: 'Under the office. The lights are off down there. The screens are not.',
+
+  /* ------------------------------------------------------------------------
+   * THE PRIZE COUNTER and the two currencies (economy wave, 2026-08-26).
+   * Front-desk voice: warm, a bit scruffy, never a form. Every row here is a
+   * NeutralLexicon candidate and every one of them is under the 96-character
+   * cap a mod needs to be able to re-voice it (trap 26). The prize NAMES and
+   * blurbs are deliberately NOT here - they ride init.economy.catalog from the
+   * host, so the shelf is whatever the host says it is.
+   * ---------------------------------------------------------------------- */
+  campus_room_prizes: 'Prize Counter',
+  campus_prizes_status: 'Open late',
+  campus_desc_prizes: 'Tickets on the shelf, tokens in the case. Somebody is always restocking.',
+  wallet_tickets: 'Tickets',
+  wallet_tokens: 'Tokens',
+  prize_counter_title: 'Prize Counter',
+  prize_counter_sub: 'Tickets on the shelf, tokens in the case',
+  prize_shelf: 'Ticket Shelf',
+  prize_shelf_hint: 'Every graded class pays tickets. This is where they go.',
+  prize_case: 'Token Case',
+  prize_case_hint: 'Tokens only. Your first S of the day drops one in the tray.',
+  prize_you_have: 'On you',
+  prize_owned: 'Yours',
+  prize_held: 'Holding',
+  prize_buy: 'Trade',
+  prize_soon: 'Arriving soon',
+  prize_wait: 'Asking the counter',
+  prize_bought: 'Wrapped up and yours.',
+  prize_poor: 'Not quite enough on you for that one yet.',
+  prize_owned_msg: 'You have that one already.',
+  prize_full: 'Your pockets are full of those. Use one first.',
+  prize_locked_msg: 'That one stays in the case for now.',
+  prize_unknown: 'The counter does not know that one. Odd.',
+  prize_quiet: 'The counter went quiet on that one. Try again in a moment.',
+  prize_empty: 'Shelf is bare tonight. Come back when the truck has been.',
+  prize_payday_label: 'Hot room tonight',
+  prize_payday_2: 'is paying double',
+  prize_payday_5: 'is paying five times over',
+  /* the Extra Credit lever, on the door card and in the painted room */
+  lever_title: 'Extra Credit',
+  lever_standard: 'Standard',
+  lever_extra: 'Extra Credit',
+  lever_honors: 'Honors',
+  lever_standard_hint: 'Play it straight. Tickets pay the usual.',
+  lever_extra_hint: 'Half again the tickets, and it asks more of you.',
+  lever_honors_hint: 'Double tickets, and the only road to an S plus.',
+  lever_extra_locked: 'Earn an A on anything and this one wakes up.',
+  lever_honors_locked: 'The counter sells this one for a token.',
+  free_swim_key_hint: 'Your key opens this one for a practice run. Nothing counts, nothing costs.',
+  /* the payout beat on the report card */
+  payout_tickets: 'Tickets',
+  payout_token_minted: 'A token dropped in the tray. That is your one for today.',
+  late_slip_used: 'A late slip covered you. Your streak never noticed.',
 });
 
 let table = Object.create(null);
@@ -600,10 +654,15 @@ export function tierLabel(tier) {
   return t('grade_tier_' + n, 'Year ' + n);
 }
 
-/** Grade letter display ('S'|'A'|'B'|'C'|'pass'). */
+/** Grade letter display ('S+'|'S'|'A'|'B'|'C'|'pass').
+ *  S+ CANNOT USE THE DERIVED KEY: 'grade_s+' is not a key shape a NeutralLexicon
+ *  row (or a mod table) can carry, so the one letter with punctuation in it is
+ *  spelled out as `grade_splus` here and nowhere else. */
 export function gradeLabel(grade) {
-  const g = String(grade || '').toLowerCase();
-  return t('grade_' + g, g === 'pass' ? 'PASS' : String(grade || '').toUpperCase());
+  const raw = String(grade == null ? '' : grade).trim();
+  if (raw.toUpperCase() === 'S+') return t('grade_splus', 'S+');
+  const g = raw.toLowerCase();
+  return t('grade_' + g, g === 'pass' ? 'PASS' : raw.toUpperCase());
 }
 
 /** Family chip display. */

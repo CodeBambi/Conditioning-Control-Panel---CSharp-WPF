@@ -52,6 +52,12 @@ internal sealed class ArcademyMetaStore
     /// one. The math itself lives in <see cref="ArcademyPunchCards"/>.</summary>
     public const string PunchCardsKey = "punchCards";
 
+    /// <summary>Host-owned: the two-currency wallet — balances, the one-a-day token ledger, the
+    /// replay counters the decay ladder reads, what the player has bought and the two lever rungs.
+    /// Minted here for the plainest possible reason: it is MONEY, and a page that could write it
+    /// could print it. Shape and every rule about it live in <see cref="ArcademyEconomy"/>.</summary>
+    public const string WalletKey = "wallet";
+
     /// <summary>Classes in a day — the timetable's fixed size (GROUND-RULES §4).</summary>
     private const int ClassesPerDay = 4;
 
@@ -87,7 +93,7 @@ internal sealed class ArcademyMetaStore
     /// <c>class-ended</c>, so a set/merge naming one is dropped (and logged) rather than applied.</summary>
     private static readonly HashSet<string> HostOwnedKeys = new(StringComparer.Ordinal)
     {
-        AttendanceKey, StreakKey, PerfectKey, TodayClassesKey, XpPaidKey, PunchCardsKey,
+        AttendanceKey, StreakKey, PerfectKey, TodayClassesKey, XpPaidKey, PunchCardsKey, WalletKey,
     };
 
     private readonly object _lock = new();
@@ -208,18 +214,33 @@ internal sealed class ArcademyMetaStore
     /// toward perfect attendance. A gap of exactly one day continues the streak, a larger gap
     /// restarts it at 1, and a day already credited leaves the streak alone.</para>
     /// </summary>
-    /// <returns>(streak, perfectAttendance, classesToday) after the write.</returns>
-    public (int Streak, int Perfect, int ClassesToday) RecordAttendance(string localDate, string? gameKey)
+    /// <para>THE LATE SLIP (economy, 2026-08-26). A gap of exactly two days is one missed day, and
+    /// a slip on the shelf covers it: the slip is spent, the streak carries on as though the player
+    /// had been there, and the caller is told so the debrief can say so. Nothing wider than one day
+    /// is coverable, and a player with no slips is exactly where they were before.</para>
+    /// <returns>(streak, perfectAttendance, classesToday, lateSlipUsed) after the write.</returns>
+    public (int Streak, int Perfect, int ClassesToday, bool LateSlipUsed) RecordAttendance(
+        string localDate, string? gameKey)
     {
         lock (_lock)
         {
             var last = (string?)_state[AttendanceKey];
             int streak = (int?)_state[StreakKey] ?? 0;
             int perfect = (int?)_state[PerfectKey] ?? 0;
+            bool lateSlip = false;
 
             if (!string.Equals(last, localDate, StringComparison.Ordinal))
             {
-                streak = IsPreviousDay(last, localDate) ? streak + 1 : 1;
+                if (IsPreviousDay(last, localDate)) streak += 1;
+                else if (ArcademyEconomy.DayGap(last, localDate) == 2
+                         && ArcademyEconomy.ConsumeLateSlip(WalletUnlocked()))
+                {
+                    streak += 1;
+                    lateSlip = true;
+                    App.Logger?.Information(
+                        "ArcademyMetaStore: a late slip covered {Last} - streak carries on at {N}", last, streak);
+                }
+                else streak = 1;
                 _state[AttendanceKey] = localDate;
                 _state[StreakKey] = streak;
                 _state[TodayClassesKey] = new JArray();
@@ -244,7 +265,7 @@ internal sealed class ArcademyMetaStore
             }
 
             Touch();
-            return (streak, perfect, today.Count);
+            return (streak, perfect, today.Count, lateSlip);
         }
     }
 
@@ -406,6 +427,130 @@ internal sealed class ArcademyMetaStore
             }
             Touch();
             return true;
+        }
+    }
+
+    // ============================ the wallet ============================
+
+    /// <summary>The wallet bag, shape-ensured and created when absent. Called under the lock, and
+    /// deliberately NOT public: every mutation below goes through a named method so it can
+    /// <see cref="Touch"/>, exactly the way the punch cards do.</summary>
+    private JObject WalletUnlocked()
+    {
+        var wallet = ArcademyEconomy.EnsureShape(_state[WalletKey] as JObject);
+        if (!ReferenceEquals(_state[WalletKey], wallet)) _state[WalletKey] = wallet;
+        return wallet;
+    }
+
+    /// <summary>A CLONE of the wallet, for a projection or a reply. Never a live handle.</summary>
+    public JObject WalletSnapshot()
+    {
+        lock (_lock) return (JObject)WalletUnlocked().DeepClone();
+    }
+
+    /// <summary>Read one thing off the wallet without cloning the whole bag.</summary>
+    public bool WalletOwns(string sku)
+    {
+        lock (_lock) return ArcademyEconomy.Owns(WalletUnlocked(), sku);
+    }
+
+    /// <summary>(extraUnlocked, honorsUnlocked) — what the lever will actually accept tonight.</summary>
+    public (bool Extra, bool Honors) LeverUnlocks()
+    {
+        lock (_lock)
+        {
+            var w = WalletUnlocked();
+            return (ArcademyEconomy.ExtraUnlocked(w), ArcademyEconomy.HonorsUnlocked(w));
+        }
+    }
+
+    /// <summary>
+    /// Count one paid finish for (local day, game) and answer how many came BEFORE it — the index
+    /// the replay-decay ladder reads. The counters live here rather than page-side for the same
+    /// reason the XP ledger does: they are the only thing standing between a retake and a mint.
+    /// </summary>
+    public int NoteWalletPlay(string localDate, string? gameKey)
+    {
+        lock (_lock)
+        {
+            var prior = ArcademyEconomy.NotePlay(WalletUnlocked(), localDate, gameKey);
+            Touch();
+            return prior;
+        }
+    }
+
+    /// <summary>Credit tickets. Zero and negatives are no-ops and do not even bump the rev.</summary>
+    public void EarnTickets(int amount)
+    {
+        if (amount <= 0) return;
+        lock (_lock)
+        {
+            ArcademyEconomy.EarnTickets(WalletUnlocked(), amount);
+            Touch();
+        }
+    }
+
+    /// <summary>
+    /// Claim the one token <paramref name="localDate"/> is worth. True the first time that date is
+    /// seen and false forever after — the same shape as <see cref="TryClaimXpDay"/>, on its own
+    /// ledger inside the wallet rather than on the XP one, because the two roll on different clocks
+    /// (the token is LOCAL, #978; XP is seeded by the UTC day).
+    /// </summary>
+    public bool TryClaimTokenDay(string? localDate)
+    {
+        if (string.IsNullOrWhiteSpace(localDate)) return false;
+        lock (_lock)
+        {
+            if (!ArcademyEconomy.TryMintToken(WalletUnlocked(), localDate)) return false;
+            Touch();
+            App.Logger?.Information("ArcademyMetaStore: first S of {Date} - a token in the case", localDate);
+            return true;
+        }
+    }
+
+    /// <summary>Open the Extra Credit notch on a first A-or-better. Idempotent.</summary>
+    public bool TryUnlockExtraCredit(string? grade)
+    {
+        lock (_lock)
+        {
+            if (!ArcademyEconomy.TryUnlockExtraCredit(WalletUnlocked(), grade)) return false;
+            Touch();
+            App.Logger?.Information("ArcademyMetaStore: Extra Credit unlocked (first {Grade})", grade);
+            return true;
+        }
+    }
+
+    /// <summary>Spend at the Prize Counter. Every rule is <see cref="ArcademyEconomy.Buy"/>'s;
+    /// this only owns the lock, the rev bump and the log line.</summary>
+    public ArcademyEconomy.BuyResult Buy(string? sku, string localDate)
+    {
+        lock (_lock)
+        {
+            var result = ArcademyEconomy.Buy(WalletUnlocked(), sku, localDate);
+            if (result.Ok)
+            {
+                Touch();
+                App.Logger?.Information("ArcademyMetaStore: bought '{Sku}' for {Cost}{Cur}",
+                    result.Item?.Sku, result.Item?.Cost, result.Item?.Cur);
+            }
+            return result;
+        }
+    }
+
+    /// <summary>The rooms the player is enrolled in, ordinally sorted — the roster the nightly
+    /// payday draw runs over. Enrollment is the punch card's own <c>enrolledAt</c>, so there is no
+    /// second list here to keep in step with it.</summary>
+    public IReadOnlyList<string> EnrolledGameKeys()
+    {
+        lock (_lock)
+        {
+            if (_state[PunchCardsKey] is not JObject cards) return Array.Empty<string>();
+            return cards.Properties()
+                .Where(p => p.Value is JObject c
+                            && c[ArcademyPunchCards.EnrolledAtField] is JValue { Type: JTokenType.String })
+                .Select(p => p.Name)
+                .OrderBy(n => n, StringComparer.Ordinal)
+                .ToList();
         }
     }
 
