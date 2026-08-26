@@ -456,6 +456,32 @@ html.arc-reduced .g-md-stage{transition:none}
 .g-md-howto{pointer-events:auto}
 .g-md-hw-go{position:sticky;bottom:0;z-index:3;align-self:stretch;margin-top:14px}
 
+/* ---- THE PHONE CEILING (html.ae-touch) ------------------------------------
+   The shell arms .ae-touch on <html> for coarse-pointer devices at boot. The
+   lighting rig ran FIVE full-stage weave layers at mix-blend-mode:soft-light,
+   each one also crawling its background-position forever: every frame the
+   phone re-blended the whole table five times over. On touch the weaves stop
+   blending (normal, at half the layer opacity so the white threads read as
+   thread and not as chalk) and stop crawling - the pattern is still on the
+   felt, it just holds still. The felt's own breath and the smoke drift are
+   transform/opacity and stay. The two forever-glow chips freeze LIT, never
+   dark: the bell and the RIDE button are reads, not decoration.
+   -------------------------------------------------------------------------- */
+html.ae-touch .g-md-bd-diamond,html.ae-touch .g-md-bd-herringbone,
+html.ae-touch .g-md-bd-damask,html.ae-touch .g-md-bd-pinstripe,
+html.ae-touch .g-md-bd-lace{mix-blend-mode:normal;opacity:.5}
+html.ae-touch .g-md-bd-diamond::before,html.ae-touch .g-md-bd-herringbone::before,
+html.ae-touch .g-md-bd-damask::before,html.ae-touch .g-md-bd-pinstripe::before,
+html.ae-touch .g-md-bd-lace::before{animation:none}
+/* the bell chip: frozen at the bright end of its breath */
+html.ae-touch .g-md-chip.g-md-bell,html.ae-touch .g-md-stage.g-md-bell .g-md-clock{
+  animation:none;box-shadow:0 0 16px rgba(240,194,75,.7)}
+/* RIDE (and the sheet's GO): frozen lit instead of pumping a box-shadow */
+html.ae-touch .g-md-btn.g-md-ride{animation:none;
+  box-shadow:0 0 20px color-mix(in srgb, var(--pink), transparent 50%)}
+html.ae-touch .g-md-hw-go{animation:none;
+  box-shadow:0 0 20px color-mix(in srgb, var(--pink), transparent 50%)}
+
 `;
 
 /** Inject once per document. No-op headless (the DOM double has no head). */

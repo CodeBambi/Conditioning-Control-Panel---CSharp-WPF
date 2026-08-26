@@ -264,6 +264,25 @@ ${ringKeyframes()}
   .g-ic-tk-ghost{display:none}
   .g-ic-score.g-ic-tk-flick{animation:none}
 }
+/* ---- THE PHONE CEILING (html.ae-touch, same rung as style.js's block) -----
+   The tell is the biggest blurred node this deck owns - 130vw by 38vmin - and
+   it breathes its opacity the whole time it is up, so the phone was re-serving
+   a viewport-scale blur every frame of the loop. The gradient is already soft
+   (its stops fade at 17% and 76%); the blur only rounded the lamp bar, and the
+   bar is what makes pink-versus-gold readable, so it stays sharp instead. The
+   ghost and the stat pop keep their beats on opacity. Nothing is hidden here:
+   the tell, the lure and the flicker are all trickster READ.
+   -------------------------------------------------------------------------- */
+html.ae-touch .g-ic-tk-tell{filter:none}
+html.ae-touch .g-ic-tk-ghost{filter:none}
+html.ae-touch .g-ic-tk-ghost.lure{animation:g-ic-tk-ghostpulse-t 1.5s ease-in-out infinite}
+@keyframes g-ic-tk-ghostpulse-t{50%{opacity:.78}}
+html.ae-touch .g-ic-score.g-ic-tk-flick{animation:g-ic-tk-static-t .16s steps(3) 2}
+@keyframes g-ic-tk-static-t{0%{opacity:1}40%{opacity:.55}100%{opacity:1}}
+/* the twins carry new names, so the reduced gate has to say its kills again */
+@media (prefers-reduced-motion: reduce){
+  html.ae-touch .g-ic-tk-ghost.lure,html.ae-touch .g-ic-score.g-ic-tk-flick{animation:none}
+}
 `;
 
 /** Inject the deck's sheet once per document (style.js's pattern). */

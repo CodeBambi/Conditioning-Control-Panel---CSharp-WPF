@@ -403,6 +403,44 @@ html.arc-reduced .g-an-hw-wash,html.arc-reduced .g-an-hw-fig.lie::after{transfor
 .g-an-howto{pointer-events:auto}
 .g-an-hw-go{position:sticky;bottom:0;z-index:3;align-self:stretch;margin-top:14px}
 
+/* ---- THE PHONE CEILING (html.ae-touch) ------------------------------------
+   The shell arms .ae-touch on <html> for coarse-pointer devices at boot. Two
+   blended layers were the cost here: the film grain overlaid the whole room
+   and re-stepped four times a second, and the sheet's LIE wash was a node
+   three viewports wide screening itself across the figure forever. Both stop
+   blending and stop moving - the grain still speckles, and the wash parks
+   mid-sweep at the same 33% html.arc-reduced already uses, so THE LIE still
+   reads as a lie. Every forever-glow (the ignited frame, the bell clock, GO)
+   freezes at its LIT frame, and the cells breathe on opacity instead of a
+   brightness filter. Desktop is untouched.
+   -------------------------------------------------------------------------- */
+html.ae-touch .g-an-bd-grain{mix-blend-mode:normal;opacity:.1}
+html.ae-touch .g-an-bd-grain::before{animation:none}
+/* reduced motion still takes the grain all the way out (it says opacity:0
+   earlier in this sheet, and the rule above would otherwise outrank it) */
+html.arc-reduced.ae-touch .g-an-bd-grain{opacity:0}
+@media (prefers-reduced-motion: reduce){html.ae-touch .g-an-bd-grain{opacity:0}}
+html.ae-touch .g-an-hw-wash,html.ae-touch .g-an-hw-fig.lie::after{
+  mix-blend-mode:normal;animation:none;transform:translate3d(33%,0,0);opacity:.8}
+/* the safelight's one-shot sweep: the swing, without the brightness pass */
+html.ae-touch .g-an-bd-lamp.sweep::before{animation:g-an-sweep-t .9s ease-in-out 1}
+@keyframes g-an-sweep-t{0%{transform:rotate(-1.6deg)}50%{transform:rotate(4deg)}
+  100%{transform:rotate(1.6deg)}}
+/* the ignited frame: it stays ignited, it just stops pumping four shadows */
+html.ae-touch .g-an-stage.g-an-lit .g-an-grid,html.ae-touch .g-an-grid.is-lit{animation:none}
+/* the bell / warning clock: frozen at the bright end */
+html.ae-touch .g-an-stage.g-an-bell .g-an-clock,
+html.ae-touch .g-an-stage[data-phase="bell"] .g-an-clock,
+html.ae-touch .g-an-stage[data-warn="1"] .g-an-clock{animation:none;
+  box-shadow:0 0 16px rgba(240,194,75,.7)}
+/* the sheet: nine cells breathing on a brightness filter, in step */
+html.ae-touch .g-an-hw-cell{animation:g-an-hw-step-t 1.6s ease-in-out infinite alternate}
+@keyframes g-an-hw-step-t{from{opacity:.72}to{opacity:1}}
+/* the pointing hand: a drop-shadow re-rastered on every frame of its move */
+html.ae-touch .g-an-hw-tap{filter:none}
+html.ae-touch .g-an-hw-go{animation:none;
+  box-shadow:0 0 34px hsl(var(--an-hue) 90% 60% / .75), 0 4px 0 hsl(var(--an-hue) 70% 30%)}
+
 `;
 
 /** Inject once per document. No-op headless (the DOM double has no head). */

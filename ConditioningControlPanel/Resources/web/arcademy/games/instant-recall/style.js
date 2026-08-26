@@ -554,6 +554,20 @@ html.arc-reduced .g-ir-payout.is-on{animation:g-ir-payout 450ms ease-out 1 both 
 .g-ir-howto{pointer-events:auto}
 .g-ir-go{position:sticky;bottom:0;z-index:3;align-self:stretch;margin-top:14px}
 
+/* ---- THE PHONE CEILING (html.ae-touch, and see the rung at .g-ir-opt-face
+   above) --------------------------------------------------------------------
+   This sheet was already the cheapest of the ten - no blend mode, no filter,
+   no backdrop-filter anywhere, by the payout layer's own law - so the diet
+   finds only two forever-loops that repaint a shadow instead of composing
+   one. Both freeze at their LIT frame, never dark: the answer ring going low
+   is a read (and it still drains its conic face, which is the read that
+   matters), and GO is the only live thing on the rules sheet.
+   -------------------------------------------------------------------------- */
+html.ae-touch .g-ir-timer.is-low,html.ae-touch .g-ir-timer[data-low="1"]{
+  animation:none;box-shadow:0 0 22px rgba(255,105,180,.9)}
+html.ae-touch .g-ir-go{animation:none;
+  box-shadow:0 0 34px rgba(255,105,180,.85), 0 6px 16px rgba(0,0,0,.45)}
+
 `;
 
 /** Inject once per document. No-op headless (the DOM double has no head). */

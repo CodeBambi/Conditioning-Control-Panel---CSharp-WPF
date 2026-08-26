@@ -434,6 +434,59 @@ html.arc-reduced .g-dt-mq{opacity:.16}
 .g-dt-howto{pointer-events:auto}
 .g-dt-hw-go{position:sticky;bottom:0;z-index:3;align-self:stretch;margin-top:14px}
 
+/* ---- THE PHONE CEILING (html.ae-touch) ----------------------------------
+   The shell arms .ae-touch on <html> for coarse-pointer devices at boot. A
+   phone GPU pays for every blurred layer and for every keyframe that repaints
+   a filter, a box-shadow or a text-shadow; the room's two biggest nodes (the
+   lamp at 38vw x 34vh and the neon bleed) were both wearing large blurs. The
+   room keeps its colours - the gradients are the light, the blur only softened
+   the edge - and every animation that carries a read is frozen at its lit
+   state or given a transform/opacity twin, never hidden. Desktop is untouched.
+   ------------------------------------------------------------------------- */
+/* the lamps: the gradient IS the glow. Drop the 46px blur, widen the falloff
+   so the edge stays soft, keep the slow breath (opacity only = compositor). */
+html.ae-touch .g-dt-lamp{filter:none;
+  background:radial-gradient(closest-side,
+    var(--dt-n-lamp, rgba(240,194,75,.22)) 0%,
+    color-mix(in srgb, var(--dt-n-lamp, rgba(240,194,75,.22)), transparent 55%) 42%,
+    transparent 84%)}
+/* the door neon: cheap blur, and the 7s flicker freezes lit (as arc-reduced) */
+html.ae-touch .g-dt-neonbleed{filter:blur(12px);animation:none;opacity:1}
+/* the marquee's gold drop-shadow re-rasterised every frame of the crawl */
+html.ae-touch .g-dt-mq.g-dt-mq-gold{filter:none}
+html.ae-touch .g-dt-mq.g-dt-mq-flash{animation:g-dt-mqflash-t .6s ease-out 1}
+@keyframes g-dt-mqflash-t{0%{opacity:1}100%{opacity:var(--g-dt-mqa,.25)}}
+/* HUD chips: no live blur behind glass, so the glass turns solid instead */
+html.ae-touch .g-dt-hud .chip{backdrop-filter:none;-webkit-backdrop-filter:none;
+  background:color-mix(in srgb, var(--navy,#1A1A2E), transparent 6%)}
+/* the chalk whisper wrote itself in with a blur ramp: opacity-only twin */
+html.ae-touch .g-dt-whisper{animation:g-dt-whisperin-t 3.4s ease-in-out both}
+@keyframes g-dt-whisperin-t{0%{opacity:0}18%{opacity:.85}78%{opacity:.85}100%{opacity:0}}
+/* the certificate word pulsed a 110px text-shadow forever: scale-only twin */
+html.ae-touch .g-dt-cer .g-dt-word{animation:g-dt-pulse-t 1.5s ease-in-out infinite}
+/* the bad certificate keeps ITS loop (letter-spacing + opacity, no shadow) -
+   the touch rule above out-specifies .g-dt-cer.bad, so hand it back by name */
+html.ae-touch .g-dt-cer.bad .g-dt-word{animation:g-dt-invert 1.1s steps(2) infinite}
+@keyframes g-dt-pulse-t{50%{transform:scale(1.06)}}
+/* the rules sheet: two infinite box-shadow loops freeze at their lit frame,
+   and the keycap keeps its press on transform alone */
+html.ae-touch .g-dt-hw-cell.caret{animation:none;
+  box-shadow:inset 0 -3px 0 var(--pink,#FF69B4)}
+html.ae-touch .g-dt-hw-slab.next{animation:none;
+  box-shadow:0 0 10px rgba(255,105,180,.55)}
+html.ae-touch .g-dt-hw-key{animation:g-dt-hw-press-t 3.4s ease-in-out infinite}
+@keyframes g-dt-hw-press-t{0%,84%{transform:translateY(0)}
+  90%{transform:translateY(2px)}100%{transform:translateY(0)}}
+/* reduced motion still wins on touch (the sheet's kills carry !important),
+   but the twins above are new names, so say the freeze once more for them */
+html.arc-reduced.ae-touch .g-dt-cer .g-dt-word,
+html.arc-reduced.ae-touch .g-dt-whisper,
+html.arc-reduced.ae-touch .g-dt-hw-key{animation:none !important}
+@media (prefers-reduced-motion: reduce){
+  html.ae-touch .g-dt-cer .g-dt-word,html.ae-touch .g-dt-whisper,
+  html.ae-touch .g-dt-hw-key{animation:none !important}
+}
+
 `;
 
 /** Inject once per document. No-op headless (and never throws). */

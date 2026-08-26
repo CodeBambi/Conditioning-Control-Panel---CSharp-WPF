@@ -448,6 +448,49 @@ export const CSS = [
   'html.arc-mobile .g-lf-view {',
   '  --g-lf-th:calc((100vh - var(--arc-mobile-chrome-h, 0px) - var(--g-lf-top) - (var(--g-lf-rows,4) + 1) * var(--g-lf-gap)) / var(--g-lf-rows,4));',
   '  --g-lf-th:calc((100dvh - var(--arc-mobile-chrome-h, 0px) - var(--g-lf-top) - (var(--g-lf-rows,4) + 1) * var(--g-lf-gap)) / var(--g-lf-rows,4)); }',
+
+  /* --------------------- THE PHONE CEILING (html.ae-touch) ----------------- */
+  /* The shell arms .ae-touch on <html> for coarse-pointer devices at boot. This
+     wall is the heaviest surface in the school - dozens of live media seats -
+     and it was wearing a hue-rotate filter over every one of them plus four
+     live backdrop blurs and two keyframes that repaint a drop-shadow. The wall
+     itself is the content; the tint, the frosted glass and the glow were the
+     nicety. Nothing here hides a mark, a hint or a control: the dim still dims
+     (opaque paint instead of blur), the lure ghost still pulses (on opacity),
+     the sheet's two hint loops freeze at their LIT frame. Desktop untouched. */
+  /* The hue skin: one filtered render surface per seat, x2-3 wrap clones. */
+  'html.ae-touch .g-lf-skin { filter:none; }',
+  /* Frosted chrome turns solid - a live blur behind glass is the phone tax. */
+  'html.ae-touch .g-lf-hud .chip { backdrop-filter:none; -webkit-backdrop-filter:none;',
+  '  background:rgba(20,20,43,.94); }',
+  'html.ae-touch .g-lf-foot .arc-peekbtn { backdrop-filter:none; -webkit-backdrop-filter:none;',
+  '  background:rgba(37,37,66,.97); }',
+  'html.ae-touch .g-lf-foot .chip { backdrop-filter:none; -webkit-backdrop-filter:none;',
+  '  background:rgba(20,20,43,.94); }',
+  /* The ceremony dim blurred the WHOLE wall behind it; paint carries the dim. */
+  'html.ae-touch .g-lf-dim { backdrop-filter:none; -webkit-backdrop-filter:none;',
+  '  background:rgba(20,20,43,.78); }',
+  /* The ghost cursor: drop-shadow on a moving node, and the lure keyframed it. */
+  'html.ae-touch .g-lf-ghost { filter:none; }',
+  'html.ae-touch .g-lf-ghost.g-lf-ghost-lure { animation:g-lf-ghostpulse-t 1.6s ease-in-out infinite; }',
+  '@keyframes g-lf-ghostpulse-t { 50% { opacity:.72; } }',
+  /* The bell marquee wore a drop-shadow over four infinitely crawling bars,
+     so every frame of the chase re-rasterised the glow. Gold still reads. */
+  'html.ae-touch .g-lf-mq.g-lf-mq-bell { filter:none; }',
+  'html.ae-touch .g-lf-mq.g-lf-mq-flash { animation:g-lf-mqflash-t .6s ease-out 1; }',
+  '@keyframes g-lf-mqflash-t { 0% { opacity:1; } 100% { opacity:var(--g-lf-mqa,.3); } }',
+  /* The rules sheet: two infinite box-shadow loops freeze lit (as arc-reduced). */
+  'html.ae-touch .g-lf-hw-mark { animation:none;',
+  '  box-shadow:0 0 0 2px var(--pink), 0 0 15px rgba(255,105,180,.95); }',
+  'html.ae-touch .g-lf-hw-slot.next { animation:none; background:var(--pink);',
+  '  border-color:var(--pink); box-shadow:0 0 8px rgba(255,105,180,.8); }',
+  /* Reduced motion outranks by order on desktop; the twins are new names, so
+     say the freeze once more for the two that touch re-armed. */
+  'html.arc-reduced.ae-touch .g-lf-ghost.g-lf-ghost-lure,',
+  'html.arc-reduced.ae-touch .g-lf-mq.g-lf-mq-flash { animation:none !important; }',
+  '@media (prefers-reduced-motion: reduce) {',
+  '  html.ae-touch .g-lf-ghost.g-lf-ghost-lure,',
+  '  html.ae-touch .g-lf-mq.g-lf-mq-flash { animation:none !important; } }',
 ].join('\n');
 
 /** Inject once per document. Idempotent - re-entering the class is free. */
