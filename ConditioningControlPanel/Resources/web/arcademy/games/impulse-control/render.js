@@ -15,7 +15,7 @@
  *   .g-ic-basin     the reveal surface: THE bubble (the one interactive node)
  *   .g-ic-hud       THE LIT MACHINE, pinned to the bottom edge
  *   .g-ic-howto     the class rules SHEET · .g-ic-break intro card
- *   .g-ic-debrief   the machine TICKET
+ *   .g-ic-debrief   the machine RESULTS SLIP
  *
  * HOUSE RULES WAVE - what this file gained, and why it is here and not in a
  * deck:
@@ -37,7 +37,11 @@
  *     10-segment streak meter is a SHELL primitive (SYNTHESIS #10) that
  *     index.js mounts through ctx.ceremonies.streakMeter. The old private
  *     5-pip meter that used to live here is DELETED - it was a fork.
- *   THE TICKET (Deck V + VI). debrief() prints a receipt: perforated edges, a
+ *   THE RESULTS SLIP (Deck V + VI). "Ticket" is the school's word for MONEY as
+ *     of the economy wave, so this thing is a results slip and the `.g-ic-ticket*`
+ *     class names are the only place the old word survives (renaming them would
+ *     be a stylesheet rewrite for a word nobody reads). debrief() prints a slip:
+ *     perforated edges, a
  *     slow light sweep, the backdrop still breathing behind it, the grade
  *     arriving as an OBJECT in `nodes.ticketStamp` (index.js drops the shell's
  *     stamp ceremony there). Submit is lit, pulsing and pre-focused; recal is a
@@ -58,7 +62,7 @@
  * integrity).
  *
  * NEVER STILL (Law III): the lamps breathe, the thread head pulses, the topline
- * sweeps, the ticket's light crawls. Every one of those is a CSS animation, so
+ * sweeps, the slip's light crawls. Every one of those is a CSS animation, so
  * `.suspended` (animation-play-state:paused, pseudo-elements included) and
  * prefers-reduced-motion both freeze the whole room from the stylesheet, even
  * if a JS path forgets.
@@ -558,11 +562,11 @@ export function createRender(o = {}) {
     if (nodes.card) { try { nodes.card.remove(); } catch (e) { /* noop */ } nodes.card = null; }
   }
 
-  /* THE TICKET (Deck V + Deck VI). Same signature, same fields, plus the two
-     optional flags the casino decides: d.perfect (no X popped, nothing drifted)
-     and d.royal. The grade arrives as an OBJECT: index.js drops the shell's
-     stamp ceremony into nodes.ticketStamp. Nothing here grades anything - every
-     number on this receipt was handed to it. */
+  /* THE RESULTS SLIP (Deck V + Deck VI). Same signature, same fields, plus the
+     two optional flags the casino decides: d.perfect (no X popped, nothing
+     drifted) and d.royal. The grade arrives as an OBJECT: index.js drops the
+     shell's stamp ceremony into nodes.ticketStamp. Nothing here grades anything
+     - every number on this slip was handed to it. */
   function debrief(d, onSubmit, onRecal) {
     clearCard();
     hideHowto();

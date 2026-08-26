@@ -1,0 +1,288 @@
+/* ============================================================================
+   shell/prizecounter.css - THE PRIZE COUNTER, DRAWN.
+
+   No plate, no crop, no art prep. Every surface in this room is a gradient and
+   a border: the counter's laminate, the shelf timber, the glass over the case,
+   the little price flags stapled to the front rail. The campus draws its whole
+   school this way and it holds up, and it buys the one thing a painted room
+   could not: the shelf is whatever the HOST says it is tonight, and a catalog
+   that grows a row tomorrow needs nobody to repaint anything.
+
+   THE TWO SURFACES READ DIFFERENT ON PURPOSE. The ticket shelf is warm, open,
+   slightly scuffed - timber and a strip light. The token case is cold and
+   sealed - a pane, a rail, a specular sweep across the top of it, and prices in
+   the contract's own ◉N. A player should be able to tell which currency a thing
+   costs from six feet away without reading a word.
+
+   THE LIGHTS: `.is-lite` (performance mode) drops the strip light's breath, the
+   glass sweep and every shadow that costs a layer; `.is-reduced` drops motion
+   only and keeps the paint. Both are set on `.pc-root` by the module, and
+   `html.arc-reduced` is honoured through the module's own reduced() read, so
+   nothing here needs a media query it could get wrong.
+   ==========================================================================*/
+
+.pc-root {
+  position:fixed; inset:0; z-index:10;
+  display:flex; flex-direction:column;
+  gap:clamp(12px, 2.2vh, 22px);
+  padding:clamp(14px, 3vh, 30px) clamp(12px, 3vw, 30px) 0;
+  overflow:auto;
+  color:var(--ink);
+  font-family:var(--body);
+  background:
+    radial-gradient(ellipse at 50% -6%,
+      color-mix(in srgb, var(--panel), var(--gold) 7%), transparent 58%),
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--navy), black 8%),
+      var(--ground) 62%);
+}
+
+/* ---------------------------------------------------------------- the sign */
+
+.pc-marquee {
+  flex:none;
+  display:flex; flex-direction:column; align-items:center; gap:6px;
+  max-width:940px; width:100%; margin:0 auto;
+  padding:clamp(10px, 2vh, 18px) 16px clamp(12px, 2vh, 18px);
+  border:var(--hairline);
+  border-radius:var(--radius);
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--panel2), var(--gold) 6%),
+      color-mix(in srgb, var(--panel), black 10%));
+  box-shadow:inset 0 1px 0 color-mix(in srgb, var(--ink), transparent 84%),
+             0 10px 26px rgba(0,0,0,.42);
+}
+.pc-title {
+  margin:0;
+  font-family:var(--disp); font-size:clamp(21px, 3.4vw, 31px);
+  letter-spacing:.16em; text-transform:uppercase; line-height:1.05;
+  color:var(--gold);
+  text-shadow:0 0 14px color-mix(in srgb, var(--gold), transparent 62%),
+              0 2px 0 rgba(0,0,0,.5);
+}
+.pc-sub {
+  margin:0; font-size:13px; letter-spacing:.03em;
+  color:var(--ink-dim);
+}
+
+/* --------------------------------------------------------------- the purse */
+
+.pc-wallet {
+  display:flex; flex-wrap:wrap; align-items:center; justify-content:center;
+  gap:10px; margin-top:4px;
+}
+.pc-wallet-lbl {
+  font-family:var(--disp); font-size:11px; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--ink-faint);
+}
+.pc-chip {
+  display:inline-flex; align-items:center; gap:7px;
+  padding:6px 12px 6px 9px;
+  border:1px solid color-mix(in srgb, var(--line), var(--ink) 12%);
+  border-radius:999px;
+  background:color-mix(in srgb, var(--navy), black 16%);
+}
+.pc-chip-n { font-family:var(--mono); font-size:16px; line-height:1; }
+.pc-chip-lbl {
+  font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--ink-faint);
+}
+.pc-chip-t .pc-chip-n { color:var(--pink); }
+.pc-chip-k .pc-chip-n { color:var(--gold); }
+
+/* ------------------------------------------------------------- the payday */
+
+.pc-payday {
+  flex:none;
+  display:flex; flex-wrap:wrap; align-items:baseline; justify-content:center;
+  gap:8px; max-width:940px; width:100%; margin:0 auto;
+  padding:8px 14px;
+  border:1px dashed color-mix(in srgb, var(--gold), transparent 52%);
+  border-radius:var(--radius);
+  background:color-mix(in srgb, var(--gold), transparent 92%);
+  font-size:13px;
+}
+.pc-payday-lbl {
+  font-family:var(--disp); font-size:11px; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--gold);
+}
+.pc-payday-name { color:var(--ink); }
+.pc-payday-mult { color:var(--ink-dim); }
+
+/* ---------------------------------------------------------------- the note */
+
+.pc-note {
+  flex:none; max-width:940px; width:100%; margin:0 auto;
+  min-height:1.2em;
+  text-align:center; font-size:13px; color:var(--ink-dim);
+  opacity:0; transition:opacity .18s ease;
+}
+.pc-note.is-on { opacity:1; }
+.pc-root.is-reduced .pc-note { transition:none; }
+
+/* --------------------------------------------------------- the two shelves */
+
+/* `flex:none` like every other child of `.pc-root`, and for a reason a shelf
+   makes vivid: the root is a column flexbox, so a section left at the default
+   `flex-shrink:1` is SHRUNK to fit the viewport instead of overflowing it - and
+   because `.pc-sect-k` carries `overflow:hidden` (the glass sweep), the rows the
+   shrink squeezed out are CLIPPED AWAY rather than scrolled to. On a 1177px-tall
+   window that ate the whole fourth token row, which is the locked Jukebox. With
+   the shrink off, the sections keep their height, `.pc-root`'s `overflow:auto`
+   does its job, and the sticky exit bar rides the scroller as intended. */
+.pc-sect {
+  flex:none;
+  max-width:940px; width:100%; margin:0 auto;
+  padding:clamp(12px, 2vh, 18px) clamp(12px, 2vw, 20px);
+  border-radius:var(--radius);
+  border:var(--hairline);
+}
+.pc-sect-head { margin-bottom:12px; }
+.pc-sect-title {
+  margin:0;
+  font-family:var(--disp); font-size:15px; letter-spacing:.2em;
+  text-transform:uppercase;
+}
+.pc-sect-hint { margin:3px 0 0; font-size:12.5px; color:var(--ink-faint); }
+
+/* THE TICKET SHELF: timber, a strip light along the top rail, scuffs. */
+.pc-sect-t {
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--gold), transparent 90%) 0 3px,
+      transparent 3px),
+    repeating-linear-gradient(90deg,
+      color-mix(in srgb, var(--panel), black 6%) 0 38px,
+      color-mix(in srgb, var(--panel), black 11%) 38px 40px),
+    var(--panel);
+  border-color:color-mix(in srgb, var(--line), var(--gold) 16%);
+  box-shadow:inset 0 6px 18px -12px color-mix(in srgb, var(--gold), transparent 30%);
+}
+.pc-sect-t .pc-sect-title { color:var(--pink); }
+
+/* THE TOKEN CASE: a cold pane over a dark well, with a specular sweep that
+   sits on the glass rather than on the goods. */
+.pc-sect-k {
+  position:relative; overflow:hidden;
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--lav), transparent 88%),
+      transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--navy), black 22%), var(--navy));
+  border-color:color-mix(in srgb, var(--line), var(--lav) 26%);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--ink), transparent 92%),
+             inset 0 -14px 30px -20px rgba(0,0,0,.9);
+}
+.pc-sect-k .pc-sect-title { color:var(--gold); }
+.pc-sect-k::after {
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(104deg,
+    transparent 34%,
+    color-mix(in srgb, var(--ink), transparent 90%) 46%,
+    transparent 58%);
+}
+.pc-root.is-lite .pc-sect-k::after { display:none; }
+
+/* ------------------------------------------------------------- the goods */
+
+.pc-goods {
+  display:grid; gap:10px;
+  grid-template-columns:repeat(auto-fill, minmax(268px, 1fr));
+}
+
+.pc-item {
+  display:flex; align-items:flex-start; gap:11px;
+  padding:11px;
+  border:1px solid color-mix(in srgb, var(--line), var(--ink) 6%);
+  border-radius:10px;
+  background:color-mix(in srgb, var(--panel2), black 14%);
+  box-shadow:0 5px 14px rgba(0,0,0,.32);
+}
+.pc-item.is-owned {
+  border-color:color-mix(in srgb, var(--gold), transparent 52%);
+  background:color-mix(in srgb, var(--panel2), var(--gold) 6%);
+}
+.pc-item.is-locked { opacity:.62; }
+.pc-item.is-poor .pc-price { opacity:.55; }
+.pc-item.is-busy { border-color:color-mix(in srgb, var(--pink), transparent 40%); }
+
+/* The drawn parcel. A box, a lid seam, one glyph. */
+.pc-art {
+  flex:none; width:46px; height:46px;
+  display:flex; align-items:center; justify-content:center;
+  border-radius:7px;
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--panel2), var(--ink) 10%) 0 9px,
+      color-mix(in srgb, var(--panel2), black 8%) 9px);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.4);
+}
+.pc-glyph { font-size:20px; line-height:1; color:var(--lav); }
+.pc-item-k .pc-glyph { color:var(--gold); }
+
+.pc-body { flex:1 1 auto; min-width:0; }
+.pc-name {
+  margin:0;
+  font-family:var(--disp); font-size:13.5px; letter-spacing:.09em;
+  text-transform:uppercase; line-height:1.25;
+}
+.pc-blurb {
+  margin:4px 0 0; font-size:12.5px; line-height:1.4;
+  color:var(--ink-dim);
+}
+
+.pc-foot {
+  display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+  margin-top:9px;
+}
+.pc-price {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:3px 9px;
+  border-radius:4px;
+  background:color-mix(in srgb, var(--navy), black 22%);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--line), transparent 30%);
+}
+.pc-price-n { font-family:var(--mono); font-size:14px; line-height:1; }
+.pc-price-t .pc-price-n { color:var(--pink); }
+.pc-price-k .pc-price-n { color:var(--gold); }
+
+.pc-badge {
+  font-family:var(--disp); font-size:10.5px; letter-spacing:.16em;
+  text-transform:uppercase;
+  padding:3px 8px; border-radius:999px;
+}
+.pc-badge-owned {
+  color:var(--gold);
+  background:color-mix(in srgb, var(--gold), transparent 88%);
+}
+.pc-badge-held {
+  color:var(--lav);
+  background:color-mix(in srgb, var(--lav), transparent 88%);
+}
+.pc-badge-soon {
+  color:var(--ink-faint);
+  background:color-mix(in srgb, var(--ink-faint), transparent 90%);
+}
+
+.pc-buy { margin-left:auto; }
+.pc-item.is-busy .pc-buy { animation:pc-wait 1.1s ease-in-out infinite; }
+@keyframes pc-wait { 0%,100% { opacity:1; } 50% { opacity:.55; } }
+.pc-root.is-reduced .pc-item.is-busy .pc-buy,
+.pc-root.is-lite .pc-item.is-busy .pc-buy { animation:none; opacity:.7; }
+
+.pc-bare {
+  max-width:940px; width:100%; margin:0 auto; text-align:center;
+}
+
+/* The sticky way out sits inside the scroller, which is `.pc-root` itself. */
+.pc-root > .arc-exitbar { margin-top:auto; }
+
+/* Phones: the two surfaces stack, the parcel shrinks, the price flag keeps its
+   size because the price is the one thing that must stay legible. */
+@media (max-width:520px) {
+  .pc-goods { grid-template-columns:1fr; }
+  .pc-art { width:38px; height:38px; }
+  .pc-glyph { font-size:17px; }
+  .pc-title { letter-spacing:.1em; }
+}

@@ -26,11 +26,11 @@
  *   dates  -> UTC seeds content, LOCAL date rolls attendance (regression #978)
  * ==========================================================================*/
 
-import { t, setLexicon, tierLabel } from '../core/lexicon.js';
+import { t, setLexicon, tierLabel, gradeLabel } from '../core/lexicon.js';
 import { makeRng } from '../core/rng.js';
 import { dayVocabulary } from '../core/vocab.js';
 import { buildTimetable, dayAdd } from '../core/timetable.js';
-import { gradeClass, capsRaised } from '../core/grades.js';
+import { gradeClass, capsRaised, isSPlus, gradeKey } from '../core/grades.js';
 import { createStore } from '../core/store.js';
 import {
   loadGames, descriptors, tierFor, tierForPromotions, advance, suspendedStub, MAX_TIER,
@@ -56,6 +56,7 @@ import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
  * player's whole experience of this import is one controller that stands down. */
 import { createFirstBell } from '../vn/index.js';
 import { createRecordsRoom } from './recordsroom.js';
+import { createPrizeCounter } from './prizecounter.js';
 import { createIdSpotlight, idReducedMotion } from './idcard.js';
 import { createAccountChip, readAccount } from './accountchip.js';
 import { createAnnexReveal } from './annexreveal.js';
@@ -119,7 +120,7 @@ function sfx(name, level, extra) {
 
 /** Screen depth, so a swap knows which way it went. An ORDER, not a router -
  *  the router is `screen` and it stays exactly where it was. */
-const SCREEN_DEPTH = Object.freeze({ board: 0, room: 1, records: 1, annex: 2, report: 2, settings: 3, class: 4 });
+const SCREEN_DEPTH = Object.freeze({ board: 0, room: 1, records: 1, prizes: 1, annex: 2, report: 2, settings: 3, class: 4 });
 
 /** Walk targets EMI never remarks on arriving at. The three office doors are
  *  voice.js's geofence read from the other end: she is silent on the Records
@@ -767,6 +768,18 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    *  optional here - the scene chassis hangs its apron on <body>, so a cached
    *  handle would leave a band over the next screen. */
   let recordsRoom = null;
+  /** THE PRIZE COUNTER (shell/prizecounter.js). Same lifecycle as the office:
+   *  built fresh per visit, destroyed by clearScreen. The handle is kept while
+   *  it is up for exactly one reason - the `wallet-result` echo has to find the
+   *  live room to settle into, and a purchase settled into a room that is no
+   *  longer on screen is a purchase the player never sees land. */
+  let prizeRoom = null;
+  /** THE LEVER THIS CLASS WAS STARTED ON. Latched at the opening bracket rather
+   *  than read again at the end, so a player who buys the Honors lever DURING a
+   *  run does not retroactively promote the run they are already in - the host
+   *  clamps the same way from its own stored pending lever, and the two answers
+   *  have to agree or an S+ the page painted would be degraded to an S by C#. */
+  let activeLever = 'standard';
   /* ---------------------- THE STUDENT ID (shell/idcard.js) ----------------
    * The card in the corner of the campus is a document you can pick up now.
    * The shell owns three things about it and the card owns none of them: the
@@ -959,6 +972,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     engine: null,                  // rebound per class (the engine is per class)
     layer: dom && dom.ceremony,
     reducedMotion,
+    // The Prize Counter's one cosmetic that shows up mid-play. A getter, so a
+    // stamp bought tonight garnishes the very next one.
+    confetti: () => ownsSku('confetti_stamp'),
     log: say,
   });
 
@@ -1267,6 +1283,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       recordsRoom = null;
       try { rr.destroy(); } catch (e) { /* noop */ }
     }
+    /* THE PRIZE COUNTER hangs nothing on <body>, but it DOES hold a watchdog
+     * timer for the buy it is waiting on, and a timer that outlives its room is
+     * a timer that repaints a dead node. destroy() clears it, so the counter is
+     * torn down here for the same reason every other screen is: one funnel, no
+     * survivors. */
+    if (prizeRoom) {
+      const pr = prizeRoom;
+      prizeRoom = null;
+      try { pr.destroy(); } catch (e) { /* noop */ }
+    }
     extrasBox = null;
     /* THE ROTATE GATE BELONGS TO A SCREEN, NOT TO THE PAGE. Every screen change
      * funnels through here, so dropping it here is what stops a gate the campus
@@ -1496,10 +1522,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       strip.appendChild(el('span', 'rlabel', 'Yesterday'));
       for (const key of yClasses.slice(0, 4)) {
         const r = y.classes[key] || {};
-        const g = String(r.grade || '').toLowerCase();
+        const g = gradeKey(r.grade);
         const cell = el('span', 'rcell');
         cell.appendChild(el('span', 'grade ' + (g === 'pass' ? 'pass' : g || 'none'),
-          r.grade ? String(r.grade).toUpperCase() : '--'));
+          r.grade ? gradeLabel(r.grade) : '--'));
         cell.appendChild(el('span', null, gameName(key)));
         strip.appendChild(cell);
       }
@@ -1717,6 +1743,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         annex: (annexPeek || (store.get('annexRevealSeen') && (store.get('annex') || {}).visited))
           ? { open: () => walkThen('annex', () => showAnnex()) }
           : null,
+        /* THE ECONOMY, handed down rather than read. campus.js is under the
+         * header law (it imports no store and no bridge), so the wallet chip in
+         * its top-right cluster and the Extra Credit lever on its door card
+         * both live entirely on these two getters. Same bag contract as `post`
+         * and `annex`: the campus draws, the shell keeps every byte of state.
+         * A host with no economy in `init` hands null and the campus is exactly
+         * the campus it was - no chip, no lever, no gap where one used to be. */
+        economy: economyCatalog().length ? {
+          balance: () => walletBalance(),
+          lever: leverCaps(),
+        } : null,
         on: {
           /* THE STUDENT BODY STARTS HERE AND NOWHERE ELSE (PRESENCE §4): after
            * the entry reveal, never during it. The campus fires this once; a
@@ -1756,6 +1793,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           },
           freeSwim: (gameKey) => walkThen(gameKey, () => startFreeSwim(gameKey)),
           records: () => walkThen('records', () => showRecords()),
+          /* THE PRIZE COUNTER'S DOOR. A walk like the office's, because it is
+           * across the quad like the office is - the wallet chip in the chrome
+           * is the thing you can read without going anywhere. */
+          prizes: () => walkThen('prizes', () => showPrizes()),
           annex: () => walkThen('annex', () => showAnnex()),
           /* THE DOOR walks; THE GEAR does not. campus.js calls `registrarRoom`
            * for the Front Office room and falls back to `registrar` for the
@@ -2099,7 +2140,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       for (const key of Object.keys(days)) {
         const classes = (days[key] && days[key].classes) || {};
         for (const g of Object.keys(classes)) {
-          if (String((classes[g] || {}).grade).toUpperCase() === 'S') { n++; break; }
+          /* An S+ is an S with the lever pulled, and a day the card counts. */
+          const letter = String((classes[g] || {}).grade).toUpperCase();
+          if (letter === 'S' || letter === 'S+') { n++; break; }
         }
       }
     } catch (e) { /* noop */ }
@@ -2119,6 +2162,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // place. The chip's hint has to say which, so it has to know.
       web: src.mediaControls === true,
     };
+  }
+
+  /** The frame the card wears tonight, if one was bought. Gold wins when both
+   *  are owned, because gold is the dearer of the two and nobody buys the dear
+   *  one to be shown the cheap one. */
+  function idFrame() {
+    if (ownsSku('id_frame_gold')) return 'gold';
+    if (ownsSku('id_frame_navy')) return 'navy';
+    return '';
   }
 
   /** What the card says about your ATTENDANCE. Every number is somebody else's
@@ -2240,6 +2292,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           isMobile,
           profile: idProfile,
           stats: idStats,
+          frame: idFrame,
           onChip: onIdChip,
           onRecords: () => showRecords(),
           onClose: releaseIdCard,
@@ -2286,6 +2339,240 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     try { was = !!idSpotlight.dismiss(silent); } catch (e) { was = false; }
     releaseIdCard();
     return was;
+  }
+
+  /* ============================ THE ECONOMY =============================
+   * TWO CURRENCIES, AND THE PAGE MINTS NEITHER OF THEM. `wallet` is a
+   * HOST-OWNED meta key: the shell reads it and never writes it, the same
+   * arrangement `days`, `streak` and the punch cards have had since day one.
+   * Tickets land on a graded finish, the token lands on the first S-rank of a
+   * local day, and both of those sums are computed in C# where the page cannot
+   * reach them. Everything below is a READER.
+   *
+   * WHY THE SHELL HOLDS THESE AND NOT THE COUNTER. Two surfaces need the same
+   * numbers - the campus chip and the Prize Counter - and one of them (the
+   * campus) is under the header law and may not touch the store at all. One
+   * reader here, handed down as caps to both, is the only arrangement where the
+   * chip and the shelf can never disagree about what you are holding.
+   * ==================================================================== */
+
+  /** THE LAST THING THE HOST SAID ABOUT THE WALLET, laid over the meta snapshot
+   *  until the next `meta` frame replaces it. This is NOT an optimistic paint -
+   *  every byte of it arrived on a host frame (`payout-result`, `wallet-result`)
+   *  and the host had already banked it before it was posted. It exists because
+   *  the meta snapshot is pushed on its own schedule, and a player who watches
+   *  a token drop into the tray and then finds the campus chip still reading
+   *  yesterday's number has been told two different truths. */
+  let walletEcho = null;
+
+  /** Fold a host frame's wallet fields into the echo. Missing means unchanged. */
+  function noteWalletEcho(frame) {
+    const f = frame || {};
+    const next = walletEcho ? Object.assign({}, walletEcho) : {};
+    let moved = false;
+    if (f.wallet && typeof f.wallet === 'object') {
+      const tt = Number(f.wallet.t); const kk = Number(f.wallet.k);
+      if (Number.isFinite(tt)) { next.t = tt; moved = true; }
+      if (Number.isFinite(kk)) { next.k = kk; moved = true; }
+    }
+    if (f.inv && typeof f.inv === 'object') { next.inv = f.inv; moved = true; }
+    if (f.unlocks && typeof f.unlocks === 'object') { next.unlocks = f.unlocks; moved = true; }
+    if (moved) walletEcho = next;
+  }
+
+  /** The wallet blob, shaped. A wallet that has never been written is an empty
+   *  purse and never a throw - a player who has not finished a class yet is the
+   *  ordinary case on a first night. */
+  function walletBag() {
+    let base = {};
+    try {
+      const w = store.get('wallet');
+      if (w && typeof w === 'object') base = w;
+    } catch (e) { base = {}; }
+    return walletEcho ? Object.assign({}, base, walletEcho) : base;
+  }
+
+  /** {t, k}: what is on the player right now. */
+  function walletBalance() {
+    const w = walletBag();
+    const tt = Number(w.t); const kk = Number(w.k);
+    return { t: Number.isFinite(tt) && tt > 0 ? tt : 0, k: Number.isFinite(kk) && kk > 0 ? kk : 0 };
+  }
+
+  function walletInv() {
+    const v = walletBag().inv;
+    return (v && typeof v === 'object') ? v : {};
+  }
+
+  /** The lever's two permanent unlocks, plus anything else the host banked
+   *  there. init.economy.leverUnlocks is the projection at boot; the wallet's
+   *  own copy is what a purchase echo moves, so the wallet WINS where it says
+   *  something - a token spent on the Honors lever lights it that same second. */
+  function walletUnlocks() {
+    const boot = (src.economy && src.economy.leverUnlocks) || {};
+    const live = walletBag().unlocks;
+    const out = { extra: !!boot.extra, honors: !!boot.honors };
+    if (live && typeof live === 'object') {
+      for (const k of Object.keys(live)) out[k] = live[k] === true;
+    }
+    return out;
+  }
+
+  /** The host's catalog, exactly as init projected it. The page never prices a
+   *  row and never invents one: an empty catalog is a bare shelf, which the
+   *  counter has a sentence for. */
+  function economyCatalog() {
+    const rows = src.economy && src.economy.catalog;
+    return Array.isArray(rows) ? rows.filter((r) => r && r.sku) : [];
+  }
+
+  function catalogRow(sku) {
+    for (const r of economyCatalog()) if (r.sku === sku) return r;
+    return null;
+  }
+
+  /** How many of a consumable may be held at once. Display only - the host is
+   *  the one that refuses the third late slip, with reason "full". */
+  function stackMaxFor(sku) {
+    const row = catalogRow(sku);
+    if (!row || row.kind !== 'consumable') return 0;
+    const n = Number(row.max);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 3;
+  }
+
+  /** Tonight's hot room, or null. Seeded per UTC day in C#; the page displays. */
+  function economyPayday() {
+    const pd = src.economy && src.economy.payday;
+    if (!pd || !pd.gameKey) return null;
+    const mult = Number(pd.mult);
+    return Number.isFinite(mult) && mult > 1 ? { gameKey: String(pd.gameKey), mult } : null;
+  }
+
+  /** Does the player own a thing? Unlocks live in two places (see walletUnlocks)
+   *  and either witness counts. */
+  function ownsSku(sku) {
+    const inv = walletInv();
+    const row = inv[sku];
+    if (row === true) return true;
+    if (typeof row === 'number' && row > 0) return true;
+    if (row && typeof row === 'object') {
+      const n = Number(row.n);
+      return Number.isFinite(n) ? n > 0 : true;
+    }
+    const un = walletUnlocks();
+    if (sku === 'honors_lever') return un.honors === true;
+    if (sku === 'free_swim_key') return un.freeSwim === true;
+    return false;
+  }
+
+  /* ---------------------------- THE EXTRA CREDIT LEVER -------------------
+   * ONE pick for the night, not one per door. A player who pulls Honors at the
+   * Music Room has decided how they want to play tonight, and asking them again
+   * at the next door would be a form rather than a lever. It rides the
+   * page-owned meta key `leverPick`, so it survives a screen change and a
+   * reload; the HOST re-clamps it on every class-started anyway (an unlock the
+   * page thinks it has and the host does not simply grades as Standard).
+   * -------------------------------------------------------------------- */
+
+  /** Legal positions, worst to best. Order matters: the lever walks it. */
+  const LEVER_POSITIONS = ['standard', 'extra', 'honors'];
+
+  /** The pick, clamped to what is actually unlocked. Never returns junk. */
+  function leverPick() {
+    let want = 'standard';
+    try { want = String(store.get('leverPick') || 'standard'); } catch (e) { want = 'standard'; }
+    if (LEVER_POSITIONS.indexOf(want) < 0) return 'standard';
+    const un = walletUnlocks();
+    if (want === 'honors' && un.honors !== true) return 'standard';
+    if (want === 'extra' && un.extra !== true) return 'standard';
+    return want;
+  }
+
+  /** Set it, clamped the same way, and answer what actually stuck. */
+  function setLeverPick(pos) {
+    const want = LEVER_POSITIONS.indexOf(String(pos || '')) >= 0 ? String(pos) : 'standard';
+    const un = walletUnlocks();
+    const ok = want === 'standard'
+      || (want === 'extra' && un.extra === true)
+      || (want === 'honors' && un.honors === true);
+    const next = ok ? want : 'standard';
+    try { store.set('leverPick', next); } catch (e) { say('lever pick write failed'); }
+    return next;
+  }
+
+  /** The bag both class-start surfaces hand their lever control. Narrow caps:
+   *  the door card and the room scene draw a lever, they never read a wallet. */
+  function leverCaps() {
+    return {
+      positions: LEVER_POSITIONS.slice(),
+      get: () => leverPick(),
+      set: (pos) => setLeverPick(pos),
+      unlocks: () => walletUnlocks(),
+    };
+  }
+
+  /* ============================ SCREEN: PRIZES ==========================
+   * The counter is a page under the annex's law (shell/prizecounter.js): it
+   * takes readers and callbacks and it imports no store, no bridge and no EMI.
+   * The one thing worth reading twice is `onBuy`: it SENDS and returns. There
+   * is no optimistic paint anywhere in this screen, because the host owns every
+   * balance in it and a page that spent its own money is a page that can be
+   * lied to (trap 1, and the whole reason `wallet` is host-owned).
+   * ==================================================================== */
+
+  function showPrizes() {
+    screen = 'prizes';
+    dismissEndCard();
+    dismissPunchStage();
+    dismissAnnexStage();
+    clearScreen();
+    renderTopbar();
+    prizeRoom = createPrizeCounter({
+      mount: dom && dom.screen,
+      t,
+      log: say,
+      lite: !!src.performanceMode,
+      reduced: reducedMotion,
+      catalog: () => economyCatalog(),
+      balance: () => walletBalance(),
+      inv: () => walletInv(),
+      unlocks: () => walletUnlocks(),
+      stackMax: (sku) => stackMaxFor(sku),
+      payday: () => economyPayday(),
+      gameName,
+      /* THE PROPOSAL, and nothing else. The counter has already put the row to
+       * sleep; the host's `wallet-result` lands at onWalletResult below and
+       * settles it, or it never lands and the row wakes up unchanged. */
+      onBuy: (sku) => {
+        try { bridge.send({ type: 'prize-buy', sku: String(sku) }); }
+        catch (e) { say('prize-buy send failed: ' + ((e && e.message) || e)); }
+      },
+      onBack: () => showBoard(),
+    });
+    setStage('arc-report-on');
+  }
+
+  /**
+   * THE ECHO (host `wallet-result`). Everything a purchase changes is already
+   * in the host's meta by the time this arrives, so the counter is handed the
+   * frame and the rest of the page simply re-reads. When the counter is not up
+   * (a buy answered after the player walked out) the frame is still worth
+   * having: the lever's unlocks may have moved.
+   */
+  function onWalletResult(m) {
+    const frame = m || {};
+    noteWalletEcho(frame);
+    if (prizeRoom && typeof prizeRoom.settle === 'function') {
+      try { prizeRoom.settle(frame); }
+      catch (e) { say('wallet settle threw: ' + ((e && e.message) || e)); }
+    }
+    /* A lever position that was legal a second ago may not be any more (it can
+     * only ever have been WON here, never lost, but re-clamping is free and it
+     * is the one line that stops a stale pick outliving a wallet reset). */
+    setLeverPick(leverPick());
+    if (screen === 'board' && campus) {
+      try { campus.update(buildCampusState(), campusStats()); } catch (e) { /* noop */ }
+    }
   }
 
   /* ============================ SCREEN: RECORDS =========================
@@ -2456,6 +2743,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
        * than anywhere else, so the room lends them its own way back: settings
        * opened from here folds into the room it left, never past it. */
       onOptions: () => showSettings(gameKey, { onClose: () => showRoomScene(gameKey, info) }),
+      /* THE WAGER, on the second surface. The room replaces the door card for
+       * every painted room, and the card is where the Extra Credit rail lives -
+       * so a painted room without this would be a room where the lever does not
+       * exist, which is nine rooms out of ten. Null when the host sent no
+       * catalog: no economy, no rail, exactly like the card. */
+      lever: economyCatalog().length ? leverCaps() : null,
     });
     if (dom && dom.screen) dom.screen.appendChild(roomPage.root);
     setStage('arc-report-on');
@@ -3596,7 +3889,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     const keys = keybinds.runtime(cls.gameKey, window);
     const peek = createPeek({ log: say });
     const classCeremonies = createCeremonies({
-      engine, layer: (dom && dom.ceremony) || null, reducedMotion, log: say,
+      engine, layer: (dom && dom.ceremony) || null, reducedMotion,
+      confetti: () => ownsSku('confetti_stamp'),
+      log: say,
     });
 
     /* --- per-game settings view (never a global) --- */
@@ -3835,9 +4130,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // not know, so `endless` is free to carry: a free swim opens the same
     // bracket and closes it with `class-left` from teardownClass (never with
     // `class-ended`, which is what would credit attendance and pay XP).
+    /* THE LEVER RIDES THE OPENING BRACKET AND NOWHERE ELSE. It is a PROPOSAL:
+     * the host clamps it against the unlocks it holds, stores the clamped value
+     * as this game's pending lever, and applies the multiplier itself at
+     * class-ended. The page never echoes a multiplier back and never sees one -
+     * which is also why a free swim carries the lever and is paid nothing for
+     * it (an endless run ends with `class-left`, and no bracket closes). */
+    activeLever = leverPick();
     bridge.send(endless
-      ? { type: 'class-started', gameKey: cls.gameKey, gradeTier, endless: true }
-      : { type: 'class-started', gameKey: cls.gameKey, gradeTier });
+      ? { type: 'class-started', gameKey: cls.gameKey, gradeTier, endless: true, lever: activeLever }
+      : { type: 'class-started', gameKey: cls.gameKey, gradeTier, lever: activeLever });
 
     /* THE GAME STARTS HERE, AND NOT BEFORE. Everything above is the stage; this
      * is the class. Enrollment (below) delays it by a few cards on a first run
@@ -3954,11 +4256,33 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     if (!entry || !entry.ok) return null;
     const m = entry.mod && entry.mod.manifest;
     const e = m && m.endless;
-    if (!e || typeof e !== 'object') return null;
+    if (!e || typeof e !== 'object') {
+      /* THE FREE SWIM KEY (Prize Counter, 1 token). It does not unlock a room
+       * and it does not unlock a grade: it opens the UNGRADED door on a class
+       * you are enrolled in but whose game never declared one. Enrollment is
+       * the floor on purpose - the key is a way to practise a room you already
+       * go to, never a way to walk into one you have not been let into. Every
+       * downstream reader (the door card's second button, the room scene's
+       * furniture, startFreeSwim's own re-check) rides this one function, so
+       * the key lights all three surfaces at once and none of them had to hear
+       * about it. */
+      if (ownsSku('free_swim_key') && isEnrolled(gameKey)) {
+        return { labelKey: 'free_swim', hintKey: 'free_swim_key_hint' };
+      }
+      return null;
+    }
     return {
       labelKey: typeof e.label_key === 'string' ? e.label_key : '',
       hintKey: typeof e.hint_key === 'string' ? e.hint_key : '',
     };
+  }
+
+  /** Has this room's card ever been opened? The key's floor. */
+  function isEnrolled(gameKey) {
+    try {
+      const card = store.punchCard(gameKey) || {};
+      return typeof card.enrolledAt === 'string' && !!card.enrolledAt;
+    } catch (e) { return false; }
   }
 
   /** gameKey -> endless declaration, for every game that has one. */
@@ -4062,6 +4386,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       hardGates: r.hardGates,
       zen: !!r.zen,
       assists,
+      /* THE HONORS INPUT, and it is exactly one boolean. The rubric does the
+       * rest (core/grades.js): honors plus a composite at or above 0.97 is the
+       * only road to S+, and every cap still bites it the way it bites an S. */
+      honors: activeLever === 'honors',
     };
     const graded = gradeClass(input);
     // The A-caps the rubric RAISED, whether or not they moved the letter. The
@@ -4119,7 +4447,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     /* ASKS: `newBest` is impulse-control's, reported additively on its own
      * endClass frame (trap 54's spirit), and it is what a11's dare resolves
      * against. Every other class simply never carries it. */
-    const endMoment = /^[sab]$/i.test(String(graded.grade)) || graded.grade === 'pass' ? 'win' : 'fail';
+    /* S+ IS A WIN AND THE REGEX DID NOT KNOW IT. `/^[sab]$/` matched exactly one
+     * letter, so the best result in the school would have fired EMI's FAIL pool
+     * - the honours run gets the rage chain. `isSPlus` is the additive answer
+     * and every other branch here is byte-for-byte what it was. */
+    const endMoment = isSPlus(graded.grade) || /^[sab]$/i.test(String(graded.grade))
+      || graded.grade === 'pass' ? 'win' : 'fail';
     const endPayload = {
       grade: graded.grade, streak: store.streak().count,
       gameKey: cls.gameKey, perfect: allDone(),
@@ -4697,17 +5030,53 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         + ': ' + (profile.discordLinked ? 'linked' : 'not linked') + ', ' + profile.presenceShare);
     },
 
-    /** {type:'payout-result'} - the ONLY source of an XP number on this page. */
+    /** {type:'payout-result'} - the ONLY source of an XP number on this page,
+     *  and since the economy wave the only source of a TICKET number too. */
     onPayout(m) {
       if (!m || !m.gameKey) return;
       const r = results[m.gameKey];
       if (r) { r.xp = m.xp; r.levelUp = !!m.levelUp; }
       // The same frame carries the host's authoritative attendance figures.
       try { store.applyPayout(m); } catch (e) { say('applyPayout: ' + ((e && e.message) || e)); }
+      /* THE PAYDAY. Tickets and the token are minted in C# and simply reported
+       * here; the report card draws the beat. Stashing it on the result row is
+       * what lets showReport() repaint the same card without re-firing the
+       * ceremony (the card's own `arrived` gate does the rest). */
+      noteWalletEcho(m);
+      /* AND THE CHIP MOVES WITH IT. A payout normally lands while the report is
+       * up, but an end-run that dropped the player straight back on the board
+       * would otherwise leave the purse reading the number it had before the
+       * class - the same silent repaint `wallet-result` takes. */
+      if (screen === 'board' && campus) {
+        try { campus.update(buildCampusState(), campusStats()); } catch (e) { /* noop */ }
+      }
+      if (r) {
+        const tk = Math.max(0, Math.round(Number(m.tickets) || 0));
+        if (tk > 0 || m.tokenMinted === true) {
+          r.payout = {
+            tickets: tk,
+            base: Math.max(0, Math.round(Number(m.ticketBase) || 0)),
+            mult: Number(m.ticketMult) || 1,
+            token: m.tokenMinted === true,
+            balance: walletBalance(),
+          };
+        }
+      }
+      /* THE LATE SLIP. The host consumed one inside the attendance path, which
+       * is the one purchase a player never sees happen - so it is the one that
+       * has to be said out loud. */
+      if (m.lateSlipUsed === true) {
+        try { shout(t('late_slip_used', 'A late slip covered you. Your streak never noticed.')); }
+        catch (e) { /* a toast may never hold a door */ }
+      }
       if (m.levelUp) shout('Level up');
       renderTopbar();
       if (screen === 'report') showReport();
     },
+
+    /** {type:'wallet-result'} - the answer to a `prize-buy`, and the ONLY thing
+     *  on this page allowed to move a balance, a badge or a lever unlock. */
+    onWalletResult(m) { onWalletResult(m); },
 
     /**
      * {type:'punchcard-result'} - the host's same-frame truth about a card
@@ -4819,7 +5188,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     onSuspend(m) { applySuspend(!!(m && m.on), m && m.reason); },
 
     /** {type:'meta'} is consumed by the store; this just repaints the chrome. */
-    onMeta() { renderTopbar(); if (screen === 'board') showBoard({ silent: true }); },
+    /* A fresh meta snapshot IS the wallet now, so the frame-by-frame echo laid
+     * over it has done its job and is dropped - two truths about one purse is
+     * one truth too many. */
+    onMeta() {
+      walletEcho = null;
+      renderTopbar();
+      if (screen === 'board') showBoard({ silent: true });
+      if (prizeRoom && typeof prizeRoom.refresh === 'function') {
+        try { prizeRoom.refresh(); } catch (e) { /* noop */ }
+      }
+    },
 
     /**
      * One rung of the Esc ladder. Returns true when the shell consumed it, so
@@ -4920,6 +5299,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // A ROOM SCENE is a screen like records: Esc walks back to campus. Its
       // hotspots are buttons, not modals - the room owns no inner rungs.
       if (screen === 'room') { showBoard(); return true; }
+      // THE PRIZE COUNTER is a flat screen like settings: one rung, straight out
+      // to the quad. It owns no modal and no close-up, and a buy that is still
+      // in the air is not a rung either - the frame that answers it lands on a
+      // room that has gone, which is exactly what onWalletResult is written to
+      // survive (the counter is null by then and only the lever re-clamps).
+      if (screen === 'prizes') { showBoard(); return true; }
       // THE ANNEX folds inward-out (trap 48's shape, one ladder both sides of
       // the seam): the lab's own rungs first - paper down, OS window shut,
       // laptop closed, close-up stepped back - then the stairs walk home to

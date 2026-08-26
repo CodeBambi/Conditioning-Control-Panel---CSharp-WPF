@@ -285,7 +285,41 @@
   align-items: center;
   min-width: 0;
 }
-.arm-bar-right { justify-content: flex-end; }
+.arm-bar-right { justify-content: flex-end; gap: 14px; }
+
+/* THE EXTRA CREDIT RAIL on the apron. The block itself is styles.css's
+   `.arc-lever` (the door card wears the same one); all this does is sit it down
+   on a control plate that is only about 90px tall - no top margin, no title
+   line, and the hint clipped to one line so a long sentence cannot shove the
+   knobs off the plate. The rail keeps its full size because it is the thing
+   being pulled. */
+.arm-lever {
+  margin-top: 0;
+  gap: 4px;
+  align-items: flex-end;
+  max-width: 46%;
+}
+.arm-lever .arc-lever-title { display: none; }
+.arm-lever .arc-lever-hint {
+  margin: 0;
+  /* Wide enough for the longest line lever.js can produce (48 chars, the Extra
+     Credit hint). At 26ch EVERY line - all six hints and both lock lines - came
+     out as an ellipsis, so the one place that says WHY a rung is dim never once
+     said it. `nowrap` is what keeps the hint to a single line and the knobs on
+     the plate; the width cap was only ever a second belt, and this one still
+     fits inside the rail's own width, so the block does not grow. */
+  max-width: 50ch;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Phones stand the apron up on its short edge; the hint is the first thing to
+   go, because the rung labels already say what the three choices are. */
+@media (max-width: 720px), (max-height: 520px) {
+  .arm-lever .arc-lever-hint { display: none; }
+  .arm-lever .arc-lever-pos { padding: 5px 8px; font-size: 10px; }
+}
 
 /* ------------------------------ the hero -------------------------------- */
 

@@ -371,6 +371,39 @@ shell/annexreveal.js THE NIGHT THE WALL MOVED: the once-ever reveal cinematic
                      over the black for free. Fires on the tenth hole of the
                      LAST card and sets `annexRevealSeen` - the only gate the
                      ajar panel on the records wall reads
+shell/prizecounter.js THE PRIZE COUNTER (economy wave): the two-currency shop, a
+                   SCREEN at depth 1 beside records - tickets (`t`, the nightly
+                   wage) on a timber shelf, tokens (`k`, one a day at best) in a
+                   glass case, so a player can tell what a thing costs from six
+                   feet away without reading a word. Narrow caps, the annex's
+                   law taken to the letter: it imports NO store, NO bridge, NO
+                   lexicon and NO EMI - `catalog()`, `balance()`, `inv()`,
+                   `unlocks()`, `payday()` and `t` all arrive as functions, so
+                   the whole room is importable in bare Node. THE ECHO LAW IS
+                   THE WHOLE DESIGN (trap 1): a Buy press paints a WAITING state
+                   and sends `prize-buy`; nothing about the wallet, the
+                   inventory or the unlocks moves until `settle()` is handed a
+                   `wallet-result` frame by the shell. A 6s watchdog clears the
+                   waiting look and says "the counter has gone quiet" - it does
+                   NOT grant, refund or retry, because a page that guessed at a
+                   purchase is a page that can sell the same token twice. Refusal
+                   reasons (`poor`/`owned`/`full`/`locked`) each have their own
+                   line; an unknown one degrades to a generic. Node-double
+                   convention throughout (findCls by children index, never
+                   querySelector) + prizecounter.css
+shell/lever.js     THE EXTRA CREDIT LEVER, in ONE place: the words, the lock
+                   lines and the rail painting for the three-way wager
+                   (Standard / Extra Credit / Honors). It has TWO hosts - the
+                   campus door card (under Begin) and the room scene's apron
+                   (beside the knobs) - because the room REPLACES the card for
+                   every painted room, so a rail that lived only on the card
+                   would be invisible in nine rooms out of ten. Imports nothing
+                   at all (`t` and the caps arrive as arguments), and A LOCKED
+                   RUNG STAYS ON THE RAIL, DIMMED: what you cannot pull yet is
+                   the whole reason to walk to the counter, so hiding it would
+                   hide the feature. Rebuilt on every pop rather than mutated -
+                   a token spent between doors has to light Honors on the very
+                   next door
 shell/peek.js      the shared hold-to-reveal verb (caps the class at A)
 shell/keybinds.js  manifest-declared verb slots, one blob, PanicKey conflict check
 shell/audio.js     THE consumer of engine 'arcademy-sfx' (WebAudio, procedural)
@@ -2736,6 +2769,63 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     no echo, never `pending` - `shell/settings.js` reaches the controller
     through a getter because the mascot mounts async, and falls back to
     `store.merge('emi', ...)` so the choice lands even when she never did.
+
+120. **A PURCHASE IS AN ECHO, AND THE WATCHDOG NEVER GRANTS** (economy wave,
+    `shell/prizecounter.js`). The counter is trap 1 with money on it, which is
+    the one place the echo law actually has teeth. The press sends `prize-buy`
+    and paints a WAITING state; `settle(frame)` - fed only by the host's
+    `wallet-result` - is the ONLY thing in the page that may move the wallet,
+    the inventory or the lever unlocks. The 6s watchdog clears the waiting look
+    and says the counter has gone quiet; it does **not** grant, refund, retry or
+    re-send, because a page that guessed would sell one token twice. The same
+    rule reaches one rung up in `shell.js`: `walletEcho` is written ONLY by
+    `payout-result` / `wallet-result` and cleared by the next `meta` snapshot, so
+    it is an overlay ON the host's truth and never an optimistic paint. If a
+    balance ever moves without a frame arriving, the bug is a write that skipped
+    `settle()`, not a lost echo.
+
+121. **A GRADE LETTER IS STRING-COMPARED IN FIVE PLACES, AND `S+` BREAKS FOUR OF
+    THEM** (economy wave, `core/grades.js`). Adding the S+ letter is one line in
+    `gradeClass`; making it WORK is a sweep. `/^[sab]$/i` does not match `'S+'`
+    (shell.js's `endMoment` - an honours run would fire EMI's FAIL pool),
+    `g === 's'` does not either (ceremonies' `payoff()` - the jackpot silently
+    demoted to the stamp floor), `GRADE_PITCH['s+']` was undefined (the chime
+    rang at PASS pitch), `.grade.s+` is not a selector CSS honours unescaped
+    (every S+ badge painted bare), and `letter === 'S'` on the student ID did not
+    count the best day the player had ever had. Hence `gradeKey()`: `'S+'` ->
+    `'splus'`, and every class name goes through it. S+ is deliberately NOT in
+    `GRADE_ORDER` and `gradeRank()` answers -1 for it, so the cap ladder
+    (`capAt`, `capsRaised`) is untouched - it is a letter above S, not a new rung
+    in the ceiling.
+
+122. **THE ROOM SCENE REPLACES THE DOOR CARD, SO EVERY CARD CONTROL OWES A
+    SECOND HOME** (economy wave, `shell/lever.js`). Nine of ten rooms are
+    painted now, which means the door card is the EXCEPTION and anything mounted
+    only on the card is invisible to almost everybody. The Extra Credit lever
+    found this the hard way: card-only, it would have shipped as a feature the
+    Prize Counter sells a rung for and the player can never see. The fix is one
+    shared painter with two hosts (card + `room.js` apron), never two copies -
+    two implementations of a three-way switch is two chances for the labels, the
+    lock lines and the unlock rules to drift apart. When you add a control to
+    `popCard()`, ask what the ten painted rooms do with it before you finish.
+
+123. **A LEXICON KEY THE HOST DOES NOT SHIP FAILS SILENTLY, IN ENGLISH** (economy
+    wave integration). `t(key, fallback)` is total: a key with no
+    `NeutralLexicon` row behind it renders the fallback and the room reads
+    perfectly, so a whole screen can ship with nothing a mod or a translation can
+    ever re-voice and no play-test will notice. This wave built both halves at
+    once and they disagreed about eight spellings - `prize_trade` against
+    `prize_buy`, `prize_reason_poor` against `prize_poor`, one `lever_hint`
+    against the three per-rung `lever_*_hint` rows, `grade_s_plus` against
+    `grade_splus` - plus twelve host rows (`tickets`, `token`, `payday` and the
+    rest) that nothing on the page ever asked for. The rule: **the PAGE's call
+    sites are authoritative**, because they are the thing that runs;
+    `core/lexicon.js` mirrors them as the offline fallback, and the host's table
+    is exactly that set plus the per-sku `nameKey`/`blurbKey` rows the catalog
+    projects. Those per-sku rows are the ones no grep of the page can find, since
+    they arrive as `item.nameKey` off the wire and never appear as a literal
+    anywhere. `econtests/test-seam.mjs` reads both sides at once and fails on a
+    drift; run it whenever a key moves.
 
 ## 5. The game module contract (short version)
 

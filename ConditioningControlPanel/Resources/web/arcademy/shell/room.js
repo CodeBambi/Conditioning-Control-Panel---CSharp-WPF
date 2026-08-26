@@ -35,6 +35,7 @@
  * ==========================================================================*/
 
 import { isMobile, orientation } from '../core/device.js';
+import { buildLever, paintLever } from './lever.js';
 
 /** Stage plane the art was authored on (the annex's, promoted). */
 const STAGE_W = 1376;
@@ -285,6 +286,10 @@ function el(tag, cls, text) {
  *  onFreeSwim  - start the class untimed (Free Swim); absent = no second hero
  *                AND no painted freeSwim rect, however the SCENES row reads.
  *  freeSwimLabel - display label for both free-swim surfaces (t('free_swim')).
+ *  lever       - Extra Credit caps { positions, get, set, unlocks }; absent =
+ *                no rail, exactly like an absent onOptions means no cog. The
+ *                door card carries the same rail, so a room that painted over
+ *                the card would otherwise swallow the whole wager.
  *  lite        - performance mode; kills the pulse like reduced motion does.
  *  log         - shell's say.
  */
@@ -450,6 +455,17 @@ export function createRoomScene(opts) {
       try { o.onOptions(); } catch (e) { say('room options threw: ' + ((e && e.message) || e)); }
     });
     barRight.appendChild(cog);
+  }
+  /* THE EXTRA CREDIT RAIL, on the control plate beside the knobs. It is a
+   * choice about the run, not a way to take it, so it stays off the marquee and
+   * out of the hero group - same reasoning as the card, where it sits under
+   * Begin. Absent caps = absent rail; this module decides nothing about who may
+   * pull which rung, it only paints what the shell hands down. */
+  if (o.lever) {
+    const lv = buildLever(t, 'arm-lever');
+    const repaint = () => { if (!destroyed) paintLever(lv, o.lever, t, repaint); };
+    repaint();
+    barRight.appendChild(lv.root);
   }
   bar.appendChild(barRight);
   /* The apron mounts on <body>, NOT inside root: .arm-root is its own
