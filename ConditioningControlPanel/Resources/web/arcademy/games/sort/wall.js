@@ -130,6 +130,9 @@ function el(tag, cls) {
  *   reduced   reduced motion
  *   seed      the class seed (the card-back hue for a tile with no still)
  *   stageOf() -> {w, h}
+ *   resolve(card) -> {url, mime} | null   the game's substitute resolution, so
+ *             a tile paints the face the STACK showed and never a dead url
+ *             (optional: without it a tile paints the card's own url)
  *   log
  */
 export function createWall(o = {}) {
@@ -138,6 +141,13 @@ export function createWall(o = {}) {
   const reduced = !!o.reduced;
   const say = typeof o.log === 'function' ? o.log : () => {};
   const stageOf = typeof o.stageOf === 'function' ? o.stageOf : () => ({ w: 1280, h: 720 });
+  /* (card) -> {url, mime} | null, the game's substitute resolution (see paint).
+   * Guarded: a resolver that throws must never cost the wall a tile. */
+  const resolve = (card) => {
+    if (!card) return null;
+    if (typeof o.resolve !== 'function') return { url: card.url, mime: card.mime || '' };
+    try { return o.resolve(card) || null; } catch (e) { return { url: card.url, mime: card.mime || '' }; }
+  };
 
   const root = el('div', 'g-sort-wall');
   const grid = el('div', 'g-sort-wall-grid');
@@ -180,13 +190,22 @@ export function createWall(o = {}) {
 
   function paint(tile, card) {
     if (!tile) return;
+    /* THE SAME FACE THE STACK SHOWED (0826). `resolve` is the game's own
+     * substitute resolution (index.js displaySrcOf): a card whose url is on
+     * the blacklist was played as a same-tag substitute, and painting its raw
+     * url here put a dead url on the wall and made the wall disagree with the
+     * class. Null = no healthy media at all, which is the drawn back - the
+     * same answer the stack gives. A caller that passes no resolver (a suite,
+     * an old double) keeps the raw card. */
+    const src = resolve(card) || null;
+    if (!src || !src.url) return;
     /* A WALL TILE IS NEVER A LIVE DECODE (trap 36). A loop lands as its own
      * url in an <img> - a gif still animates cheaply. A VIDEO url gets no <img>
      * at all (owner 2026-08-24): an mp4 in an <img> paints nothing but still
      * downloads the whole file, so the drawn card back stands for it instead. */
-    const mime = card && card.mime;
+    const mime = src.mime;
     if ((mime && /^video\//i.test(String(mime)))
-      || /\.(mp4|webm|m4v|mov)(\?|#|$)/i.test(String((card && card.url) || ''))) return;
+      || /\.(mp4|webm|m4v|mov)(\?|#|$)/i.test(String(src.url))) return;
     const img = el('img', 'g-sort-wall-face');
     if (!img) return;
     img.alt = '';
@@ -196,7 +215,7 @@ export function createWall(o = {}) {
     if (typeof img.addEventListener === 'function') {
       img.addEventListener('error', () => { try { if (img.parentNode) img.remove(); } catch (e) { /* ignore */ } });
     }
-    img.src = card && card.url ? card.url : '';
+    img.src = src.url;
     tile.appendChild(img);
   }
 

@@ -167,11 +167,19 @@ export function createTaggedPool({ spec, channel, platform, prewarm, log, remote
   }
 
   /* ---------------------- the ask ---------------------------------------- */
-  /** How many distinct rows a tag is still worth asking for. */
+  /** How many distinct rows a tag is still worth asking for.
+   *
+   *  LET THE PILE GROW PAST THE SPEC (0826, the claim()-side twin). This is the
+   *  BACKGROUND top-up gate only - `perSourceMin` is still the settle gate the
+   *  door waits on, and raising THAT would just delay the door. What this
+   *  bounds is how long the ask-again loop keeps pulling rows in after the
+   *  class has already started, and stopping it at the deal spec is why a pile
+   *  settled at exactly its ask and every later hand re-served the same faces.
+   *  Both spec-shaped terms are doubled; TAG_CAP is still the ceiling. */
   function targetFor(tag) {
     const rows = sources.filter((x) => x.tag === tag.name).length || 1;
-    const share = Math.ceil((want.loop + want.still) / Math.max(1, tagNames.length));
-    return Math.max(perSourceMin, Math.min(TAGGED.TAG_CAP, share || perSourceMin * 2, rows * 40));
+    const share = Math.ceil((want.loop + want.still) / Math.max(1, tagNames.length)) * 2;
+    return Math.max(perSourceMin, Math.min(TAGGED.TAG_CAP, share || perSourceMin * 2, rows * 80));
   }
 
   function ask(src, kind, attempt) {

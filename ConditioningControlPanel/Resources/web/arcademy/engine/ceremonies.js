@@ -117,13 +117,17 @@ export function createCeremonies(ctx) {
      * sounded like a one-burst one. A chime per burst, rising, capped at four,
      * and reduced motion collapses to the single burst it already draws. */
     const BURST_PITCH = [1, 1.15, 1.3, 1.45];
-    const bursts = Math.min(4, ctx.reduced() ? 1 : spec.bursts);
+    /* The lite fork rides ctx.lite(), the same seam as every node cap - the
+     * rng divergence (5 draws per spark, 2 per burst) is the device class's
+     * own, exactly like flashBurstLite's. */
+    const lite = ctx.lite();
+    const bursts = Math.min(lite ? 2 : 4, ctx.reduced() ? 1 : spec.bursts);
     for (let b = 0; b < bursts; b++) {
       ctx.timers.after(b * 220, () => {
         ctx.sfx('chime', 0.3, { pitch: BURST_PITCH[b] || 1.45 });
         const cx = rand(ctx.rng, 25, 75);
         const cy = rand(ctx.rng, 30, 70);
-        const n = ctx.reduced() ? 4 : spec.particlesPerBurst;
+        const n = ctx.reduced() ? 4 : (lite ? Math.round(spec.particlesPerBurst / 2) : spec.particlesPerBurst);
         for (let p = 0; p < n; p++) {
           const s = document.createElement('div');
           s.className = 'ae-spark';

@@ -178,8 +178,17 @@ const CLIP_CHANCE = 0.25;
  *  faces, kept plumbed but no longer the look anyone gets by accident. */
 const FACE_MODES = Object.freeze(['words', 'glyphs', 'media']);
 
-/** How often the honest window ring repaints (the trickster polls it). */
+/** How often the honest window ring repaints (the trickster polls it). On a
+ *  touch device the ring repaints at 100ms - the countdown cue keys off the
+ *  SECOND boundary (windowTickSec), never the tick count, so the cue count is
+ *  identical at either cadence. */
 const WINDOW_TICK_MS = 60;
+const WINDOW_TICK_MS_COARSE = 100;
+
+/** The resize -> refit debounce (both platforms; the RESULT is identical, the
+ *  fit just waits for the trailing edge - iOS fires resize continuously while
+ *  the URL bar collapses). */
+const RESIZE_DEBOUNCE_MS = 150;
 
 /* Diagnostics seams (the DV / DE precedent): the live class, the last report,
  * the final snapshot. The shell never reads these; the harness does. */
@@ -311,6 +320,7 @@ export default {
     let seed = '';
     let tier = 1;
     let reduced = false;
+    let coarse = false;                 // touch pointer (the perf diet; set in start)
     let retake = false;
     let audible = true;
     let budgetMs = 120000;
@@ -391,7 +401,10 @@ export default {
     let rulerEl = null;                 // the hidden measuring span (see ruler())
     let tokenW100 = 0;                  // widest dealt word at 100px type
     let fitPending = 0;
+    let fitKey = '';                    // memo: pad width + the dealt hand (see fitWords)
+    let lastFitPadPx = 0;               // the pad width the last fit measured (resize early-out)
     let onResize = null;
+    let resizeDebounce = 0;             // the trailing-edge resize timer
     /* THE CLIP ROLL (CLIP_CHANCE). `clipUntil` is when the airwave frees up. */
     let clipRoll = null;
     let clipBeat = 0;
@@ -407,6 +420,9 @@ export default {
     let stage = null; let backdrop = null; let hud = null; let ring = null;
     let msgEl = null; let well = null; let endEl = null; let howtoEl = null;
     let lenChip = null; let clockChip = null; let streakChip = null; let bestChip = null;
+    /* The streak meter currently MOUNTED in the chip, and the pair that drew it
+     * (see paintStreak). -1 means "nothing mounted, rebuild". */
+    let streakMeterEl = null; let streakMeterLit = -1; let streakMeterGold = false;
     /* THE TURN, drawn twice over so neither the ear nor a still frame can miss
      * it: the BANNER says whose turn it is in words, the STRIP says how far
      * through the sequence we are in dots. Both are attribute+text only, so
@@ -1108,23 +1124,57 @@ export default {
           el.style.fontSize = '100px';
         }
       } catch (e) { /* the CSS floor already dressed it */ }
+      /* ONE LAYOUT, NOT ONE PER TOKEN. Every write lands first - a child span
+       * per token, wearing the ruler's type by inheritance - and every width is
+       * read in a second pass, so the whole hand costs a single forced layout
+       * where the old write/read interleave forced one per token (12-24 a fit).
+       * Same numbers on both platforms: each span is its own inline box and its
+       * rect is the token's advance, exactly what the single-node measure was. */
+      const spans = [];
+      try { el.textContent = ''; } catch (e) { /* noop */ }
       for (let i = 0; i < padWords.length; i++) {
         const parts = String(padWords[i] || '').split(/\s+/);
         for (let k = 0; k < parts.length; k++) {
           if (!parts[k]) continue;
           try {
-            el.textContent = parts[k];
-            const w = el.getBoundingClientRect().width || 0;
-            if (w > tokenW100) tokenW100 = w;
+            const s = document.createElement('span');
+            s.textContent = parts[k];
+            el.appendChild(s);
+            spans.push(s);
           } catch (e) { /* noop */ }
         }
       }
+      for (let i = 0; i < spans.length; i++) {
+        try {
+          const w = spans[i].getBoundingClientRect().width || 0;
+          if (w > tokenW100) tokenW100 = w;
+        } catch (e) { /* noop */ }
+      }
       try { el.textContent = ''; } catch (e) { /* noop */ }
+    }
+    /** The pads the fit actually has to read: pad 0 and the longest phrase.
+     *  Every pad wears the SAME box (one --ec-pad, one --ec-word-px) so the two
+     *  tests below are decided by the phrase alone - the wrap test by the
+     *  longest one, and the no-split test by tokenW100, which measureTokens
+     *  already takes across the WHOLE hand, not per pad. Reading all six was
+     *  six forced layouts per binary-search step for the same verdict. */
+    function fitProbeIdx() {
+      const out = [];
+      if (padWords[0]) out.push(0);
+      let longest = -1;
+      for (let i = 0; i < padEls.length; i++) {
+        if (!padWords[i]) continue;
+        if (longest < 0 || String(padWords[i]).length > String(padWords[longest]).length) longest = i;
+      }
+      if (longest >= 0 && longest !== 0) out.push(longest);
+      return out;
     }
     function ringFitsAt(px) {
       if (!stage) return true;
       try { stage.style.setProperty('--ec-word-px', px + 'px'); } catch (e) { return true; }
-      for (let i = 0; i < padEls.length; i++) {
+      const probes = fitProbeIdx();
+      for (let n = 0; n < probes.length; n++) {
+        const i = probes[n];
         if (!padWords[i]) continue;
         const w = wordNodeOf(padEls[i]);
         if (!w) continue;
@@ -1150,6 +1200,17 @@ export default {
           ? Math.round(padEls[0].getBoundingClientRect().width) : 0;
       } catch (e) { padPx = 0; }
       if (!padPx) return;               // not laid out yet; the next pass gets it
+      lastFitPadPx = padPx;
+      /* THE MEMO. The fitted px is a pure function of the pad's width and the
+       * dealt hand (the word's type never changes inside a class), so the same
+       * key skips the token measure and the whole binary search: the trickster's
+       * label lie and an iOS URL-bar resize both re-ask for a fit that cannot
+       * have changed. Both platforms - a hit repaints the SAME px it computed. */
+      const key = padPx + '|' + padWords.join('');
+      if (key === fitKey && fittedPx > 0) {
+        try { stage.style.setProperty('--ec-word-px', fittedPx + 'px'); } catch (e) { /* noop */ }
+        return;
+      }
       measureTokens();                    // the widest word, once, for every candidate
       const maxPx = Math.max(
         PLAYTEST.FIT_MIN_PX,
@@ -1157,6 +1218,7 @@ export default {
       );
       const px = fitFontPx({ maxPx, minPx: PLAYTEST.FIT_MIN_PX, fits: ringFitsAt });
       try { stage.style.setProperty('--ec-word-px', px + 'px'); } catch (e) { /* noop */ }
+      fitKey = key;
       if (px !== fittedPx) {
         fittedPx = px;
         say('fit: the ring wears ' + px + 'px (pad ' + padPx + 'px, longest "'
@@ -1245,22 +1307,48 @@ export default {
     }
     function paintStreak() {
       if (!streakChip) return;
+      const label = 'x ' + pressStreak;
       if (pressStreak < PLAYTEST.STREAK_VISIBLE) {
         streakChip.hidden = true;
-        streakChip.textContent = 'x ' + pressStreak;
+        streakChip.textContent = label;      // takes the meter with it
+        streakMeterEl = null; streakMeterLit = -1;
         return;
       }
       streakChip.hidden = false;
-      streakChip.textContent = 'x ' + pressStreak;
+      const filled = Math.min(PLAYTEST.STREAK_CAP, pressStreak);
+      const gold = ratchet >= PLAYTEST.RATCHET_CAP;
       /* The meter is the SHELL's primitive (10 segments, always); it rides
-       * inside the chip so the contract's DOM gains no extra node. */
-      try {
-        const meter = ctx.ceremonies.streakMeter({
-          filled: Math.min(PLAYTEST.STREAK_CAP, pressStreak),
-          gold: ratchet >= PLAYTEST.RATCHET_CAP,
-        });
-        if (meter) streakChip.appendChild(meter);
-      } catch (e) { /* a ceremony must never be the thing that fails */ }
+       * inside the chip so the contract's DOM gains no extra node.
+       *
+       * THE CEREMONY IS ASKED EVERY TIME, unconditionally: streakMeter() is
+       * also where the STREAK CHIME lives (ceremonies.js - the chime ladder
+       * rides the call, not the node), so skipping the call would silence a
+       * cue. What is skipped is the MOUNT. Eleven nodes were torn down and
+       * re-inserted on every press, and the meter can only look different on
+       * (filled, gold) - the count is capped, so a streak past the cap draws
+       * the same ten segments - so an unchanged pair keeps the mounted one and
+       * the label goes into the chip's own text node, which writing through
+       * textContent would take the meter with. The parentNode test is the
+       * honest one: anything that rewrote the chip behind our back re-mounts.
+       * TOUCH ONLY, and that is not timidity: a re-mount replays the segment
+       * shimmer (arc-seg, a per-mount animation), so skipping it is a visible
+       * delta. The phone trades that shimmer for eleven fewer nodes a press;
+       * desktop has the frames and keeps the shimmer. */
+      let meter = null;
+      try { meter = ctx.ceremonies.streakMeter({ filled, gold }); }
+      catch (e) { /* a ceremony must never be the thing that fails */ }
+      if (coarse && filled === streakMeterLit && gold === streakMeterGold
+        && streakMeterEl && streakMeterEl.parentNode === streakChip
+        && streakChip.firstChild && streakChip.firstChild.nodeType === 3) {
+        if (streakChip.firstChild.nodeValue !== label) streakChip.firstChild.nodeValue = label;
+        return;
+      }
+      streakChip.textContent = label;
+      streakMeterEl = null; streakMeterLit = -1;
+      if (meter) {
+        streakChip.appendChild(meter);
+        streakMeterEl = meter; streakMeterLit = filled; streakMeterGold = gold;
+      }
     }
 
     /* ==================================================================== *
@@ -1656,7 +1744,8 @@ export default {
     let windowUntil = 0;
     /* W3 P0-2 / P0-15. The countdown's own state: the last whole-seconds figure
      * we sounded, and how many ticks this window has spent. The ring repaints
-     * every 60ms, so the cue rides the SECOND BOUNDARY and nothing else. */
+     * on WINDOW_TICK_MS (100ms on touch), so the cue rides the SECOND BOUNDARY
+     * and nothing else - the cadence cannot move the cue count. */
     let windowTickSec = -1;
     let windowTickN = 0;
     function armInputWindow() {
@@ -1669,7 +1758,7 @@ export default {
         timerEl.hidden = false;
         try { timerEl.style.setProperty('--ec-k', '1'); } catch (e) { /* noop */ }
       }
-      if (!windowTick) windowTick = every(WINDOW_TICK_MS, paintWindow);
+      if (!windowTick) windowTick = every(coarse ? WINDOW_TICK_MS_COARSE : WINDOW_TICK_MS, paintWindow);
       windowTimer = after(round.windowMs, () => {
         windowTimer = 0;
         if (!inputOpen || dead || ended) return;
@@ -2225,6 +2314,10 @@ export default {
         budgetMs = Math.max(20000, (Number(spec.timeBudgetSec) || 120) * 1000);
         retake = !!spec.retake;
         reduced = probeReduced(ctx);
+        /* THE PHONE DIET's one signal. The host populates isTouch (desktop
+         * WebView2 answers false), and it gates the JS half of the diet the
+         * same way html.ae-touch gates the CSS half. It NEVER gates a roll. */
+        coarse = !!(ctx.platform && ctx.platform.isTouch);
         audible = ctx.audioAudible !== false;
         attempt = 0;
         encoreArmed = true;
@@ -2236,7 +2329,12 @@ export default {
         stallCued = false;
         faceUrls.clear();
         clipsFired = 0;
-        faceKind = (reduced || motionLevelOf() <= 1) ? 'still' : 'loop';
+        /* MEDIA FACES ARE STILLS ON A PHONE (../CLAUDE.md trap 42): six pads
+         * dealt a loop is six live decodes, and iOS caps hardware video decode
+         * sessions at ~3-4 - the ring would stall on whichever pads lost the
+         * race. Device-classed on purpose; desktop keeps the motionLevel test
+         * byte-identical. The pool draws the same asset either way. */
+        faceKind = (reduced || coarse || motionLevelOf() <= 1) ? 'still' : 'loop';
 
         try {
           lifetimeBefore = Math.max(0, Math.floor(Number((ctx.store.gameMeta(GAME_KEY) || {}).bestLen) || 0));
@@ -2253,6 +2351,8 @@ export default {
         clipsRolledOff = 0;
         clipsSkipped = 0;
         fittedPx = 0;
+        fitKey = '';                    // a new hand invalidates the memo
+        lastFitPadPx = 0;
         rollLocal = (() => {
           const roll = makeTaggedRoll(seed + '|ec-vr');
           return () => {
@@ -2273,7 +2373,7 @@ export default {
         try {
           casino = createEcCasino({
             seed, tier, stage, board: ring, ring, hud, backdrop,
-            timers: deckTimers, reduced, capsOk, t, engine: deckEngine, assets: deckAssets,
+            timers: deckTimers, reduced, coarse, capsOk, t, engine: deckEngine, assets: deckAssets,
             padEl: (i) => padEls[i] || null,
             pads: () => padEls.slice(),
             padCount: PLAYTEST.PADS,
@@ -2285,7 +2385,7 @@ export default {
             seed, tier, timers: deckTimers, reduced, capsOk,
             stage, board: ring, hud, backdrop, engine: deckEngine, assets: deckAssets,
             budgetSec: Math.round(budgetMs / 1000),
-            coarse: !!(ctx.platform && ctx.platform.isTouch),
+            coarse,
             isHalted: () => dead || paused || ended || busy,
             /* READ-ONLY views of the truth. A deck may READ the ledger (the
              * Ghost Cursor lures to a pad ADJACENT to the due one, which is
@@ -2335,6 +2435,7 @@ export default {
             tier,
             reduced,
             motionLevel: motionLevelOf(),
+            coarse,
             stage,
             ring,
             backdrop,
@@ -2358,7 +2459,27 @@ export default {
         after(220, () => scheduleFit());
         try {
           if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-            onResize = () => scheduleFit();
+            /* THE TRAILING EDGE. iOS fires resize continuously for the whole
+             * URL-bar collapse, and every one of those asked for a fit. One
+             * fit lands, RESIZE_DEBOUNCE_MS after the last event, and it is
+             * skipped outright when the pad has settled back to the width the
+             * last fit already measured - one rect read, against a fit that
+             * measures the hand and walks a binary search. Both platforms; the
+             * same final px, just once instead of per event. */
+            onResize = () => {
+              if (resizeDebounce) clearTimer(resizeDebounce);
+              resizeDebounce = after(RESIZE_DEBOUNCE_MS, () => {
+                resizeDebounce = 0;
+                if (dead) return;
+                let padPx = 0;
+                try {
+                  padPx = (padEls[0] && typeof padEls[0].getBoundingClientRect === 'function')
+                    ? Math.round(padEls[0].getBoundingClientRect().width) : 0;
+                } catch (e) { padPx = 0; }
+                if (padPx && padPx === lastFitPadPx) return;
+                scheduleFit();
+              });
+            };
             window.addEventListener('resize', onResize);
           }
         } catch (e) { onResize = null; }
@@ -2471,6 +2592,8 @@ export default {
         } catch (e) { /* noop */ }
         onResize = null;
         fitPending = 0;
+        resizeDebounce = 0;
+        streakMeterEl = null; streakMeterLit = -1;
         padTimers.clear();
         flashTimers.clear();
         flashOn.clear();

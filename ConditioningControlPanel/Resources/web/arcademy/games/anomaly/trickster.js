@@ -184,6 +184,23 @@ html.arc-reduced .g-an-tk-wax::before,html.arc-reduced .g-an-tk-wax::after{displ
 html.arc-reduced .g-an-tk-outline.on{animation:none;opacity:.9}
 html.arc-reduced .g-an-tk-refund.on{animation:none;opacity:1}
 .g-an-stage.suspended .g-an-tk *{animation-play-state:paused !important}
+/* ---- THE PHONE CEILING (html.ae-touch) ------------------------------------
+   Coarse pointer. The lure ghost pulsed a drop-shadow forever - a filter
+   re-rastered every frame on a node a transition is also moving - and the stat
+   flicker keyframed brightness+contrast. Both keep their beat on opacity
+   instead; the ghost keeps its shape and its colour, it just stops breathing
+   its glow. The chrome still's two static passes (saturate/contrast over a
+   decoded photo) come off too. Nothing here is hidden: it is all read.
+   -------------------------------------------------------------------------- */
+html.ae-touch .g-an-tk-ghost{filter:none}
+html.ae-touch .g-an-tk-ghost.lure{animation:g-an-tk-ghostpulse-t 1.5s ease-in-out infinite}
+@keyframes g-an-tk-ghostpulse-t{50%{opacity:.78}}
+html.ae-touch .g-an-tk-flick{animation:g-an-tk-static-t .16s steps(3) 2}
+@keyframes g-an-tk-static-t{0%{opacity:1}40%{opacity:.55}100%{opacity:1}}
+/* the twin is a new name, so the reduced gate has to say its kill again */
+html.arc-reduced.ae-touch .g-an-tk-flick{animation:none}
+@media (prefers-reduced-motion: reduce){html.ae-touch .g-an-tk-flick{animation:none}}
+html.ae-touch .g-an-tk-chrome img{filter:none}
 `;
 
 function ensureStyle() {

@@ -45,7 +45,7 @@
 
 import { createFieldRenderer, normalizeParams2, loopMs2 } from './loom/loomField.js';
 
-const TOUCH_FRAME_MS = 33;     // ~30fps cap under coarse-touch
+const TOUCH_FRAME_MS = 66;     // ~15fps cap under coarse-touch, timeout-paced
 const BACK_LONG = 512;         // desktop backing-store long side
 const BACK_LONG_TOUCH = 320;   // coarse-touch backing-store long side
 
@@ -86,6 +86,7 @@ export function createLoomWash(o = {}) {
   let still = false;          // reduced motion: one frame, no loop
   let touch = false;
   let rafId = 0;
+  let toId = 0;               // touch pacing timeout (skipped-frame re-arm)
   let active = false;         // the caller's on/off (wash opacity > 0)
   let disposed = false;
   let lost = false;           // context lost / WebGL refused - latched
@@ -140,16 +141,24 @@ export function createLoomWash(o = {}) {
   }
   function onResize() { if (!disposed && canvas) sizeBacking(); }
 
-  function halt() { if (rafId) { caf(rafId); rafId = 0; } }
+  function halt() {
+    if (rafId) { caf(rafId); rafId = 0; }
+    if (toId) { clearTimeout(toId); toId = 0; }
+  }
   function arm() {
-    if (disposed || lost || !active || still || hidden() || rafId || !field) return;
+    if (disposed || lost || !active || still || hidden() || rafId || toId || !field) return;
     rafId = raf(frame);
   }
   function frame(now) {
     rafId = 0;
     if (disposed || lost || !active || hidden() || !field) return;
     const t = Number.isFinite(now) ? now : Date.now();
-    if (touch && t - lastAt < TOUCH_FRAME_MS - 1) { rafId = raf(frame); return; }
+    if (touch && t - lastAt < TOUCH_FRAME_MS - 1) {
+      // pace skipped frames through a timeout so the compositor idles between
+      // paints; a bare raf re-arm keeps a display-rate heartbeat alive forever
+      toId = setTimeout(() => { toId = 0; rafId = raf(frame); }, TOUCH_FRAME_MS);
+      return;
+    }
     lastAt = t;
     try {
       field.render(q, (t % loop) / loop);

@@ -245,6 +245,22 @@ html.arc-reduced .g-md-cs-kb{animation:none !important}
 html.arc-reduced .g-md-cs-ghost.on{animation:none;opacity:.7}
 .g-md-stage.suspended .g-md-mq-bulb,.g-md-stage.suspended .g-md-cs-lamp,.g-md-stage.suspended .g-md-cs-word,
 .g-md-stage.suspended .g-md-cs-ghost,.g-md-stage.suspended .g-md-cs-coin,.g-md-stage.suspended .g-md-cs-kb{animation-play-state:paused !important}
+/* ---- THE PHONE CEILING (html.ae-touch) ------------------------------------
+   Coarse pointer: the house keeps its lights, it just stops making the phone
+   re-blend and re-lay-out the whole overlay for them. The static burst drops
+   the screen blend (its scanlines are white on near-black, so normal blend at
+   a lower alpha reads the same), the flash stops running a filter on every
+   bulb at once, and the lamp stops swaying - the sway animated MARGIN, which
+   is a layout pass per frame on a node 180% of the stage tall. It still hangs
+   where the round put it (left/width are transitions, not the animation).
+   -------------------------------------------------------------------------- */
+html.ae-touch .g-md-cs-static{mix-blend-mode:normal}
+html.ae-touch .g-md-cs-static.on{animation:g-md-cs-static-t .16s steps(3) 1}
+@keyframes g-md-cs-static-t{0%{opacity:.45;transform:translateY(0)}
+  50%{opacity:.26;transform:translateY(-2px)}100%{opacity:0;transform:translateY(1px)}}
+html.ae-touch .g-md-mq.flash .g-md-mq-bulb{filter:none}
+html.ae-touch .g-md-cs-ghost{filter:none}
+html.ae-touch .g-md-cs-lamp{animation:none}
 `;
 
 function ensureStyle() {

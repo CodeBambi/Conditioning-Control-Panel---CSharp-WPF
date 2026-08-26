@@ -549,6 +549,43 @@ html.arc-reduced .g-dv-hw-lock{opacity:1}
 .g-dv-howto{pointer-events:auto}
 .g-dv-hw-go{position:sticky;bottom:0;z-index:3;align-self:stretch;margin-top:14px}
 
+/* ---- THE PHONE CEILING (html.ae-touch) ------------------------------------
+   The shell arms .ae-touch on <html> for coarse-pointer devices at boot. The
+   worst thing in this sheet was the tell: a screen-blended scanline plate
+   re-blending itself five and a half times a SECOND for as long as the
+   telegraph runs, over a card that was shuddering a box-shadow at the same
+   time. The tell is a read the whole game rests on, so it keeps its shudder
+   (transform only) and keeps its scanlines - they just paint flat and hold
+   still, the way html.arc-reduced already leaves them, only lit instead of
+   blanked. The other win is invisible: a locked card is a FILTERED card, and
+   the ken-burns drift inside it made the phone re-run that filter every frame
+   for every archived plate on the board. Filed plates now hold still; lit
+   plates still drift. Desktop is untouched.
+   -------------------------------------------------------------------------- */
+html.ae-touch .g-dv-card.tell::before{mix-blend-mode:normal;animation:none;opacity:.5}
+html.ae-touch .g-dv-card.tell{animation:g-dv-shudder-t .6s linear infinite}
+@keyframes g-dv-shudder-t{0%,100%{transform:none}20%{transform:translateX(-2px)}
+  45%{transform:translateX(2px)}70%{transform:translateX(-1px)}}
+/* an archived plate is a filtered plate: it stops drifting under the filter */
+html.ae-touch .g-dv-kb .g-dv-card.locked .g-dv-face:not(.g-dv-glyph){animation:none}
+/* THE ALMOST haunted the card through a blur ramp: opacity-only twin */
+html.ae-touch .g-dv-almost{animation:g-dv-almost-t .62s ease-out both}
+@keyframes g-dv-almost-t{0%{opacity:0}30%{opacity:.55}70%{opacity:.5}100%{opacity:0}}
+/* the bell marquee's drop-shadow sat over four crawling bulb bars */
+html.ae-touch .g-dv-mq.g-dv-mq-bell{filter:none}
+html.ae-touch .g-dv-mq.g-dv-mq-flash{animation:g-dv-mqflash-t .6s ease-out 1}
+@keyframes g-dv-mqflash-t{0%{opacity:1}100%{opacity:var(--g-dv-mqa,.26)}}
+/* the twins carry new names, so the reduced gate has to say its kills again */
+html.arc-reduced.ae-touch .g-dv-card.tell{animation:none;border-color:var(--gold);
+  box-shadow:0 0 0 2px rgba(240,194,75,.55)}
+html.arc-reduced.ae-touch .g-dv-card.tell::before{animation:none;background:none}
+html.arc-reduced.ae-touch .g-dv-almost,
+html.arc-reduced.ae-touch .g-dv-mq.g-dv-mq-flash{animation:none}
+@media (prefers-reduced-motion: reduce){
+  html.ae-touch .g-dv-card.tell,html.ae-touch .g-dv-card.tell::before,
+  html.ae-touch .g-dv-almost,html.ae-touch .g-dv-mq.g-dv-mq-flash{animation:none}
+}
+
 `;
 
 /** Inject once per document. No-op headless (the DOM double has no head). */

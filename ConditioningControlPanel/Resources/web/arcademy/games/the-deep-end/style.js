@@ -1305,6 +1305,61 @@ html.arc-reduced .g-de-hw-ladder i{opacity:1}
 .g-de-howto{pointer-events:auto}
 .g-de-hw-go{position:sticky;bottom:0;z-index:3;align-self:stretch;margin-top:14px}
 
+/* ---- pass 6c: THE TOUCH GPU DIET, second sweep (html.ae-touch) ------------
+   Same rung and the same law as passes 5 and 6b above (the device is the
+   setting; desktop is untouched to the byte). 6b took the board's biggest
+   filter loop - g-de-deepbreath - and the seven backdrop layers. This pass
+   takes the ones that were left, all of the same shape: a keyframe that
+   repaints a filter, a box-shadow or a text glow every frame, on nodes there
+   can be sixteen of at once.
+     - the NAME ladder. Tiers 4-6 breathed brightness and tiers 10-11 pulsed
+       it. The neon IS the stacked text-shadow, and it is untouched: 4-6 simply
+       hold their light, and 10-11 keep the pulse on scale alone. The tier-7-9
+       flicker and the 10-11 scan bar were already opacity-only and still run.
+     - the STRAIN glow and the tier-11 ECLIPSE glyph: both froze at their base
+       frame, which is the LIT one - the strain rim and the glyph halo are
+       reads and they stay on the screen, they just stop pumping.
+     - the MELT keyframed border-radius under a filtered body, which is a
+       repaint of a filtered layer per frame. The sag is transform-only now;
+       the sagging ink and the drip were always transform/opacity and stay.
+     - the PRESSURE WHEEL span the board under mix-blend-mode:screen, so every
+       frame was a fresh read-back-and-blend of a board-sized node. Frozen: the
+       wheel still hangs there as light behind the square.
+     - the GLITCH SHUDDER keyframed hue-rotate + saturate on a FULL-STAGE layer
+       at steps(2), forever, on top of the backdrop-filter 6b already took off.
+       The slip stays (transform), the hue churn goes.
+   Reduced motion is unchanged: its animation:none !important kills outrank
+   every twin named here. --------------------------------------------------- */
+/* THE :not() GUARDS ARE LOAD BEARING. These selectors out-specify every rule
+   that hands a name or a glyph a DIFFERENT animation for a moment - the merge
+   pop, the melt's sliding ink, the trickster's lie shiver - and a plain tier
+   override would silently eat all three on touch only. Excluding those states
+   lets them fall through to the cascade they already win on desktop. */
+html.ae-touch .g-de-tile[data-tier="4"]:not(.g-de-melt):not(.is-merged) .g-de-name:not(.g-de-lielabel),
+html.ae-touch .g-de-tile[data-tier="5"]:not(.g-de-melt):not(.is-merged) .g-de-name:not(.g-de-lielabel),
+html.ae-touch .g-de-tile[data-tier="6"]:not(.g-de-melt):not(.is-merged) .g-de-name:not(.g-de-lielabel){animation:none}
+html.ae-touch .g-de-tile[data-tier="10"]:not(.g-de-melt):not(.is-merged) .g-de-name:not(.g-de-lielabel),
+html.ae-touch .g-de-tile[data-tier="11"]:not(.g-de-melt):not(.is-merged) .g-de-name:not(.g-de-lielabel){
+  animation:g-de-namepulse-t 1.6s ease-in-out infinite alternate}
+@keyframes g-de-namepulse-t{from{transform:scale(1)}to{transform:scale(1.05)}}
+html.ae-touch .g-de-tile[data-tier="11"]:not(.g-de-melt):not(.is-merged) .g-de-glyph{animation:none}
+html.ae-touch .g-de-tile.is-strain::before{animation:none}
+html.ae-touch .g-de-tile.g-de-melt::before{animation:g-de-meltbody-t 2.4s ease-in-out infinite alternate}
+@keyframes g-de-meltbody-t{from{transform:scaleY(1) skewX(0)}
+  to{transform:scaleY(1.09) skewX(-3deg) translateY(3%)}}
+/* the two forever-glow chips freeze at their bright frame, never dark */
+html.ae-touch .g-de-chip.g-de-surface{animation:none;
+  box-shadow:0 0 18px color-mix(in srgb, var(--pink), transparent 58%)}
+html.ae-touch .g-de-stage[data-phase="bell"] .g-de-clock{animation:none;
+  box-shadow:0 0 16px rgba(240,194,75,.7)}
+/* the pressure layer */
+html.ae-touch .g-de-p-pin{animation:none}
+html.ae-touch .g-de-p-glitch.is-shudder{animation:g-de-p-shudder-t .16s steps(2) infinite}
+@keyframes g-de-p-shudder-t{0%{transform:translate(0,0)}
+  50%{transform:translate(-1.2%,0)}100%{transform:translate(1.2%,0)}}
+/* the rules sheet: a drop-shadow on the one arrow that moves */
+html.ae-touch .g-de-hw-arrow.right{filter:none}
+
 `;
 
 /** Inject once per document. No-op headless (the DOM double has no head). */

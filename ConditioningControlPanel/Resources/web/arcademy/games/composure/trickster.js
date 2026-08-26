@@ -206,6 +206,23 @@ html.arc-reduced .g-cp-preview .g-cp-pv{animation:none !important;filter:none;bo
   .g-cp-tile.g-cp-melt::after{opacity:0}
   .g-cp-preview .g-cp-pv{animation:none !important;filter:none;box-shadow:none}
 }
+/* ---- THE PHONE CEILING (html.ae-touch) ------------------------------------
+   Coarse pointer. The lie layer is n*n ghost tiles at once, and DATAMOSH gave
+   every one of them a keyframed saturate + hue-rotate + blur - three filter
+   passes per tile per frame, the most expensive thing the trickster owns. On
+   touch that variant degrades to the same plain ghost the reduced-motion gate
+   already ships (the lie still shows; it just does not churn), RGBSPLIT keeps
+   its shudder and its chroma edges but drops its per-tile contrast pass, and
+   the melt keeps its sag on transform alone - the border-radius morph in the
+   loop was repainting a filtered face every frame. Desktop is untouched.
+   -------------------------------------------------------------------------- */
+html.ae-touch .g-cp-preview.is-on.g-cp-pv-mosh .g-cp-pv{animation:none;filter:none}
+html.ae-touch .g-cp-preview.is-on.g-cp-pv-rgb .g-cp-pv{filter:none}
+html.ae-touch .g-cp-tile.g-cp-melt .g-cp-face,
+html.ae-touch .g-cp-tile.g-cp-melt::before{animation:g-cp-meltbody-t 2.4s ease-in-out infinite alternate}
+@keyframes g-cp-meltbody-t{from{transform:scaleY(1) skewX(0)}
+  to{transform:scaleY(1.08) skewX(-3deg) translateY(3%)}}
+html.ae-touch .g-cp-tile.g-cp-melt .g-cp-face{filter:saturate(.85)}
 `;
 function ensureStyle() {
   try {

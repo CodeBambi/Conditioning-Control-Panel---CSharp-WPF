@@ -976,12 +976,27 @@ export default {
       }
       const list = spares;
       if (!list.length) {
+        /* THE HOLE THE FALLBACK LEFT (0826): the deck walk checked the card's
+         * own url and the blacklist, but nothing about the cards STANDING NEXT
+         * TO IT - so a substitute was free to mirror the face right beside it,
+         * which reads as the duplicate the spares branch exists to avoid. The
+         * standing urls are collected first and the deck survivors that mirror
+         * one are held BACK, not dropped: if they were all we had, a repeat
+         * beats a drawn back. (Deck rows only - the spares branch above is
+         * already whole-deck exclusive, so it cannot hit this.) */
+        const standing = new Set();
+        for (const live of S.live) {
+          if (live && live.card && live.card.url && live.card.url !== card.url) standing.add(live.card.url);
+        }
+        const mirrors = [];
         for (const c of rows) {
           if (!c || !c.url || c.tag !== card.tag) continue;
           if (c.url === card.url || seen.has(c.url) || poolIsBroken(c.url)) continue;
           seen.add(c.url);
-          list.push(c);
+          if (standing.has(c.url)) mirrors.push(c);
+          else list.push(c);
         }
+        if (!list.length) for (const c of mirrors) list.push(c);
       }
       if (!list.length) return null;
       const pick = list[Math.floor(hash01(String(S.seed) + '|sub|' + (card.i | 0)) * list.length)];
@@ -1190,7 +1205,21 @@ export default {
           const back = S.passQueue.splice(0, S.passQueue.length);
           S.cards = S.cards.concat(back);
         } else {
-          S.cards = shuffled(S.cards, S.rngDeal);
+          /* THE CARDS STILL IN YOUR HAND ARE NOT IN THE DECK (0826). The
+           * reshuffle used to include the two or three cards STANDING in the
+           * stack - they are the last ones the cursor dealt, so a reshuffle
+           * could drop one straight back at index 0 and the player watched the
+           * same face arrive behind itself. They are held out of the shuffle
+           * and appended AFTER it instead: still in the deck, still dealt, but
+           * a whole pass away, which is exactly what a recycle is for.
+           * The INPUT list is filtered rather than the output re-ordered, so
+           * this is the same single shuffled() call on S.rngDeal it always was
+           * (sort's own stream, not the provider's - no shared draw moves). */
+          const standing = new Set();
+          for (const live of S.live) if (live && live.card && live.card.url) standing.add(live.card.url);
+          const held = standing.size ? S.cards.filter((c) => c && standing.has(c.url)) : [];
+          const feed = held.length ? S.cards.filter((c) => !(c && standing.has(c.url))) : S.cards;
+          S.cards = feed.length ? shuffled(feed, S.rngDeal).concat(held) : shuffled(S.cards, S.rngDeal);
           S.recycles += 1;
           emiNote('sort.deckRecycle', { kind: 'curiosity', n: S.recycles, left: S.cards.length });
         }
@@ -1898,6 +1927,13 @@ export default {
       S.wall = createWall({
         mount: nodes.stage, tier: gradeTier, reduced, seed, log: say,
         stageOf: () => stageBox(),
+        /* THE WALL SEES WHAT THE STACK SAW (0826). A tile used to paint the
+         * card's RAW url, so a card whose url was blacklisted - the stack
+         * showed it as a same-tag substitute - landed on the wall as the dead
+         * url, and the wall disagreed with the class the player just played.
+         * One resolver, both surfaces; null means no healthy media at all and
+         * the drawn back stands, exactly as it does in the stack. */
+        resolve: (card) => displaySrcOf(card),
       });
       /* the wall lives BEHIND the playfield: it was appended last, so move it */
       try { if (S.wall.el && nodes.stage.insertBefore) nodes.stage.insertBefore(S.wall.el, nodes.playfield); }
