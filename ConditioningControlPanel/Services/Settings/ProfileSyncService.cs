@@ -1442,16 +1442,24 @@ namespace ConditioningControlPanel.Services
                             // whole failed-sync chain below it, and at the default Information
                             // min-level it was invisible in every log a user ever sent in (#920).
                             App.Logger?.Warning("V2 Profile sync rate-limited by server (429), will retry later");
-                            // A deferred streak break must not hang on this exit: no cloud
-                            // answer arrived, so settle it the way the timeout would.
-                            App.Achievements?.Progress?.ResolveDeferredStreakBreak("V2 sync rate-limited (429)");
+                            // A deferred streak break stays deferred here: a 429 means "try again
+                            // shortly", not "no cloud answer exists". Event-driven syncs retry
+                            // well inside the 120s deferral window (the client cooldown is 30s),
+                            // and resolving now would make the break decision with zero cloud
+                            // data — the exact loss the deferral exists to prevent.
                             return false;
                         }
                         await HandleUnauthorizedAsync(v2Response);
                         var error = await v2Response.Content.ReadAsStringAsync();
                         App.Logger?.Warning("V2 Profile sync failed: {Status} - {Error}", v2Response.StatusCode, error);
                         LastSyncError = $"Sync failed: {v2Response.StatusCode}";
-                        App.Achievements?.Progress?.ResolveDeferredStreakBreak("V2 sync rejected");
+                        // Settle a deferred streak break only on a DEFINITIVE rejection (4xx) —
+                        // retrying cannot change those answers. A 5xx is transient like the 429
+                        // above: leave it to the retry/timeout window rather than deciding the
+                        // break with zero cloud data. (On a 401, HandleUnauthorizedAsync may have
+                        // signed out and swapped Progress; the stale-instance guard absorbs it.)
+                        if ((int)v2Response.StatusCode is >= 400 and < 500)
+                            App.Achievements?.Progress?.ResolveDeferredStreakBreak("V2 sync rejected");
                         return false;
                     }
 
@@ -2033,7 +2041,17 @@ namespace ConditioningControlPanel.Services
                     // Belt for the resolve inside the try above: if the response parse threw
                     // before reaching it, the deferred streak break would have hung until the
                     // 120s timeout. Idempotent — a no-op when the merge-site call already ran.
-                    App.Achievements?.Progress?.ResolveDeferredStreakBreak("V2 sync response (parse fallback)");
+                    // Own try/catch: the resolve can run inline on the UI thread and its body
+                    // touches XP/level-up UI and disk saves — a throw there must not turn a
+                    // sync the server already ACCEPTED into a reported failure.
+                    try
+                    {
+                        App.Achievements?.Progress?.ResolveDeferredStreakBreak("V2 sync response (parse fallback)");
+                    }
+                    catch (Exception resolveEx)
+                    {
+                        App.Logger?.Warning("Deferred streak resolve threw after accepted sync: {Error}", resolveEx.Message);
+                    }
 
                     // THE VAT'S ONE UNAVOIDABLE SECOND REQUEST. An accepted sync is the
                     // moment today's XP lands in the server vat, and the sync RESPONSE
@@ -2923,14 +2941,28 @@ namespace ConditioningControlPanel.Services
         /// Strict wire day-key parse ("yyyy-MM-dd", invariant Gregorian). Cloud dates must never
         /// go through culture-sensitive DateTime.TryParse: under a Buddhist or Umm al-Qura system
         /// calendar the same digits mean a different year entirely (th-TH reads "2026-08-26" as
-        /// 1483 CE), and the take-newer merges would latch the misread. Junk that fails the exact
-        /// shape is refused rather than guessed at — the server sanitizes the same way. Same
-        /// reason every push-side day key formats with InvariantCulture.
+        /// 1483 CE), and the take-newer merges would latch the misread. Same reason every
+        /// push-side day key formats with InvariantCulture. Two deliberate loosenings on top of
+        /// the exact shape: an invariant ISO round-trip fallback (pre-parity builds pushed
+        /// last_daily_quest_date as ToString("o"), and /admin/set-streak can echo ISO
+        /// timestamps — refusing those would silently drop an admin correction's date), and a
+        /// beyond-tomorrow refusal (a day key names a day that has happened; tomorrow is legal
+        /// for a device west of the account's furthest clock, but further out is junk, and a
+        /// record poisoned before the server sanitizer landed must not ratchet local dates 500
+        /// years forward — the login pair has DecideLoginStreakAdopt's today-clamp, the quest
+        /// dates had nothing).
         /// </summary>
         private static bool TryParseDayKey(string? s, out DateTime date)
         {
-            return DateTime.TryParseExact(s, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.None, out date);
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            if (!DateTime.TryParseExact(s, "yyyy-MM-dd", inv,
+                System.Globalization.DateTimeStyles.None, out date))
+            {
+                if (!DateTime.TryParse(s, inv, System.Globalization.DateTimeStyles.RoundtripKind, out date))
+                    return false;
+            }
+            date = date.Date;
+            return date <= DateTime.Today.AddDays(1);
         }
 
         private bool MergeV2CloudStatsIntoLocalProgress(Dictionary<string, object>? cloudStats, bool forceStreakOverride)
@@ -2957,10 +2989,13 @@ namespace ConditioningControlPanel.Services
                     var f = Convert.ToInt32(flashes);
                     if (f > progress.TotalFlashImages) { progress.TotalFlashImages = f; needsSave = true; }
                 }
-                // Gated on !forceStreakOverride like the quest block below: the override means
-                // "adopt the server's values even if LOWER", and this adoption only ever raises
-                // — running it in the same pass would fight the very correction the admin sent.
-                if (!forceStreakOverride && cloudStats.TryGetValue("consecutive_days", out var streak))
+                // Deliberately NOT gated on forceStreakOverride, unlike the quest block below:
+                // the override payload (V2StreakStats -> ApplyForceStreakOverride) carries only
+                // the QUEST fields, so there is no login-streak correction here to fight — and
+                // skipping this adopt would leave LastLaunchDate pre-gap for the
+                // ResolveDeferredStreakBreak that runs right after the merge, spending a
+                // shield/Oopsie charge for days another device actually covered.
+                if (cloudStats.TryGetValue("consecutive_days", out var streak))
                 {
                     // Mobile streak parity: not a bare take-higher any more. The cloud pair
                     // (consecutive_days + last_streak_date) may describe a run the PHONE kept

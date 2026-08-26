@@ -782,8 +782,10 @@ namespace ConditioningControlPanel
 
                 if (result != MessageBoxResult.Yes) return;
 
-                // Server-side spend only — charges live on the account.
-                var fixDateStr = fixDate.ToString("yyyy-MM-dd");
+                // Server-side spend only — charges live on the account. Invariant: under a
+                // Buddhist/Umm al-Qura system calendar the default format writes year 2569
+                // onto the wire and the server records (or refuses) a garbage fixed day.
+                var fixDateStr = fixDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
                 if (App.ProfileSync == null || string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId))
                 {
                     // No cloud account
