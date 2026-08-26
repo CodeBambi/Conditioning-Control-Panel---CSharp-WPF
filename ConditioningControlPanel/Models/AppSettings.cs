@@ -630,6 +630,40 @@ namespace ConditioningControlPanel.Models
             set { _lastDailyQuestDate = value; OnPropertyChanged(); }
         }
 
+        private int _mobileQuestDailyCompleted = 0;
+        /// <summary>
+        /// Lifetime daily quests completed on the MOBILE app — a mirror of the server's
+        /// authoritative mobile_stats ledger (/v2/user/quest-complete), adopted verbatim on every
+        /// V2 sync. Display-only: summed with QuestProgress.TotalDailyQuestsCompleted for combined
+        /// totals, and NEVER added into the counters this client pushes (the server's max-merge
+        /// would double-count every mobile quest).
+        /// </summary>
+        public int MobileQuestDailyCompleted
+        {
+            get => _mobileQuestDailyCompleted;
+            set { _mobileQuestDailyCompleted = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private int _mobileQuestWeeklyCompleted = 0;
+        /// <summary>
+        /// Lifetime weekly quests completed on the mobile app. See <see cref="MobileQuestDailyCompleted"/>.
+        /// </summary>
+        public int MobileQuestWeeklyCompleted
+        {
+            get => _mobileQuestWeeklyCompleted;
+            set { _mobileQuestWeeklyCompleted = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private int _mobileQuestXP = 0;
+        /// <summary>
+        /// Lifetime XP from quests completed on the mobile app. See <see cref="MobileQuestDailyCompleted"/>.
+        /// </summary>
+        public int MobileQuestXP
+        {
+            get => _mobileQuestXP;
+            set { _mobileQuestXP = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
         private int _streakShieldsRemaining = 0;
         /// <summary>
         /// Weekly streak shields remaining.

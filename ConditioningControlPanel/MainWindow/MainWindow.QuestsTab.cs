@@ -274,10 +274,13 @@ namespace ConditioningControlPanel
                 QuestsTab.BtnRerollWeekly.Content = Loc.Get("btn_completed");
             }
 
-            // Update statistics
-            QuestsTab.TxtTotalDailyCompleted.Text = questService.Progress.TotalDailyQuestsCompleted.ToString();
-            QuestsTab.TxtTotalWeeklyCompleted.Text = questService.Progress.TotalWeeklyQuestsCompleted.ToString();
-            QuestsTab.TxtTotalQuestXP.Text = questService.Progress.TotalXPFromQuests.ToString();
+            // Update statistics. Combined view: local/desktop totals + the server's mobile quest
+            // ledger (adopted read-only into AppSettings on sync). The two live in separate
+            // counters on purpose — only the desktop ones ride the sync push.
+            var mobileLedger = App.Settings?.Current;
+            QuestsTab.TxtTotalDailyCompleted.Text = (questService.Progress.TotalDailyQuestsCompleted + (mobileLedger?.MobileQuestDailyCompleted ?? 0)).ToString();
+            QuestsTab.TxtTotalWeeklyCompleted.Text = (questService.Progress.TotalWeeklyQuestsCompleted + (mobileLedger?.MobileQuestWeeklyCompleted ?? 0)).ToString();
+            QuestsTab.TxtTotalQuestXP.Text = (questService.Progress.TotalXPFromQuests + (mobileLedger?.MobileQuestXP ?? 0)).ToString();
             QuestsTab.TxtStreakFixCharges.Text = (App.Settings?.Current?.StreakFixCharges ?? 0).ToString();
 
             // Update header stats

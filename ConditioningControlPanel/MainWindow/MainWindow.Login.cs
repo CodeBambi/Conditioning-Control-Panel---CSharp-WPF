@@ -207,6 +207,12 @@ namespace ConditioningControlPanel
                 s.LastDailyQuestDate = null;
                 s.LastPerfectWeekStreakAwarded = 0;
 
+                // Mobile quest ledger mirror — per-account, server-authoritative; the next
+                // account's sync re-adopts its own figures.
+                s.MobileQuestDailyCompleted = 0;
+                s.MobileQuestWeeklyCompleted = 0;
+                s.MobileQuestXP = 0;
+
                 // Streak shields
                 s.StreakShieldsRemaining = 0;
                 s.LastStreakShieldResetDate = null;

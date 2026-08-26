@@ -1320,6 +1320,14 @@ namespace ConditioningControlPanel.Services
                             ["highest_streak"] = settings.HighestStreak,
                             ["total_flashes"] = achievementProgress?.TotalFlashImages ?? 0,
                             ["consecutive_days"] = achievementProgress?.ConsecutiveDays ?? 0,
+                            // Mobile streak parity: the day the streak ran through, as a yyyy-MM-dd
+                            // day key — the server take-newers it (20-char cap, longer is silently
+                            // dropped) and the phone uses it to decide contiguity. Empty when no
+                            // launch was ever banked. While a break decision is deferred this is
+                            // the honest PRE-GAP date (UpdateDailyStreak did not stamp today), so
+                            // this push can never teach the server a streak that may be breaking.
+                            ["last_streak_date"] = achievementProgress != null && achievementProgress.LastLaunchDate.Date != default
+                                ? achievementProgress.LastLaunchDate.ToString("yyyy-MM-dd") : "",
                             ["total_bubbles_popped"] = achievementProgress?.TotalBubblesPopped ?? 0,
                             ["total_video_minutes"] = Math.Round(achievementProgress?.TotalVideoMinutes ?? 0, 1),
                             ["total_lock_cards_completed"] = achievementProgress?.TotalLockCardsCompleted ?? 0,
@@ -1327,7 +1335,10 @@ namespace ConditioningControlPanel.Services
                             ["lifetime_points_spent"] = achievementProgress?.LifetimeSkillPointsSpent ?? 0,
                             // Quest streak data
                             ["daily_quest_streak"] = settings.DailyQuestStreak,
-                            ["last_daily_quest_date"] = settings.LastDailyQuestDate?.ToString("o") ?? "",
+                            // Day key, NOT round-trip "o" format: the server's string-stat merge
+                            // caps values at 20 chars and silently dropped the 33-char ISO stamp,
+                            // so this field never actually reached the cloud until v6.8.5.
+                            ["last_daily_quest_date"] = settings.LastDailyQuestDate?.ToString("yyyy-MM-dd") ?? "",
                             ["quest_completion_dates"] = questProgress?.DailyQuestCompletionDates?
                                 .Select(d => d.ToString("yyyy-MM-dd")).ToList() ?? new List<string>(),
                             ["total_daily_quests_completed"] = questProgress?.TotalDailyQuestsCompleted ?? 0,
@@ -1716,6 +1727,33 @@ namespace ConditioningControlPanel.Services
                             }
                         }
 
+                        // Mobile streak parity: the server has answered — whatever it said (even
+                        // "no stats"), this is the cloud's word on whether the phone covered the
+                        // gap. Settle a deferred launch-time streak break now; no-op otherwise.
+                        App.Achievements?.Progress?.ResolveDeferredStreakBreak("V2 sync response merged");
+
+                        // Mobile quest ledger totals (server-authoritative, from the phone's
+                        // /v2/user/quest-complete calls). Stored SEPARATELY and only ever summed
+                        // for display: folding them into QuestProgress counters would push them
+                        // back up as desktop totals, and the server's max-merge would then count
+                        // every mobile quest twice.
+                        if (v2Result?.User?.MobileStats is { } mobileStats)
+                        {
+                            var msSettings = App.Settings?.Current;
+                            if (msSettings != null &&
+                                (msSettings.MobileQuestDailyCompleted != mobileStats.TotalDailyQuestsCompleted ||
+                                 msSettings.MobileQuestWeeklyCompleted != mobileStats.TotalWeeklyQuestsCompleted ||
+                                 msSettings.MobileQuestXP != mobileStats.TotalXPFromQuests))
+                            {
+                                msSettings.MobileQuestDailyCompleted = mobileStats.TotalDailyQuestsCompleted;
+                                msSettings.MobileQuestWeeklyCompleted = mobileStats.TotalWeeklyQuestsCompleted;
+                                msSettings.MobileQuestXP = mobileStats.TotalXPFromQuests;
+                                App.Settings?.Save();
+                                App.Logger?.Information("Mobile quest ledger adopted: {Daily} daily / {Weekly} weekly / {Xp} XP",
+                                    mobileStats.TotalDailyQuestsCompleted, mobileStats.TotalWeeklyQuestsCompleted, mobileStats.TotalXPFromQuests);
+                            }
+                        }
+
                         // Merge total conditioning minutes from server (take higher)
                         if (v2Result?.TotalConditioningMinutes.HasValue == true && v2Result.TotalConditioningMinutes.Value > settings.TotalConditioningMinutes)
                         {
@@ -2025,6 +2063,9 @@ namespace ConditioningControlPanel.Services
                         ["highest_streak"] = settings.HighestStreak,
                         ["total_flashes"] = achievementProgress?.TotalFlashImages ?? 0,
                         ["consecutive_days"] = achievementProgress?.ConsecutiveDays ?? 0,
+                        // Mobile streak parity twin of the V2 dict above: day key or empty.
+                        ["last_streak_date"] = achievementProgress != null && achievementProgress.LastLaunchDate.Date != default
+                            ? achievementProgress.LastLaunchDate.ToString("yyyy-MM-dd") : "",
                         ["total_bubbles_popped"] = achievementProgress?.TotalBubblesPopped ?? 0,
                         ["total_video_minutes"] = Math.Round(achievementProgress?.TotalVideoMinutes ?? 0, 1),
                         ["total_lock_cards_completed"] = achievementProgress?.TotalLockCardsCompleted ?? 0,
@@ -2050,7 +2091,8 @@ namespace ConditioningControlPanel.Services
                         ["total_spiral_minutes"] = Math.Round(achievementProgress?.TotalSpiralMinutes ?? 0, 1),
                         // Quest streak data
                         ["daily_quest_streak"] = settings.DailyQuestStreak,
-                        ["last_daily_quest_date"] = settings.LastDailyQuestDate?.ToString("o") ?? "",
+                        // Day key, not "o" — same 20-char server cap as the V2 dict above.
+                        ["last_daily_quest_date"] = settings.LastDailyQuestDate?.ToString("yyyy-MM-dd") ?? "",
                         ["quest_completion_dates"] = legacyQuestProgress?.DailyQuestCompletionDates?
                             .Select(d => d.ToString("yyyy-MM-dd")).ToList() ?? new List<string>(),
                         ["total_daily_quests_completed"] = legacyQuestProgress?.TotalDailyQuestsCompleted ?? 0,
@@ -2121,6 +2163,9 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Error(ex, "Failed to sync profile to cloud");
                 LastSyncError = ex.Message;
+                // Mobile streak parity: the cloud is unreachable, so a deferred streak break
+                // gets the pre-parity behavior now instead of waiting out the full timeout.
+                App.Achievements?.Progress?.ResolveDeferredStreakBreak("sync failed");
                 return false;
             }
             }
@@ -2891,8 +2936,31 @@ namespace ConditioningControlPanel.Services
                 }
                 if (cloudStats.TryGetValue("consecutive_days", out var streak))
                 {
+                    // Mobile streak parity: not a bare take-higher any more. The cloud pair
+                    // (consecutive_days + last_streak_date) may describe a run the PHONE kept
+                    // alive on days this machine never launched; DecideLoginStreakAdopt applies
+                    // the same contiguity rules as the mobile client (extend by one when the two
+                    // dates are adjacent, plain max otherwise, never lower) and moves
+                    // LastLaunchDate forward over mobile-covered days so a deferred break
+                    // resolution — and every later launch — no longer reads them as a gap.
                     var st = Convert.ToInt32(streak);
-                    if (st > progress.ConsecutiveDays) { progress.ConsecutiveDays = st; needsSave = true; }
+                    DateTime? cloudStreakDate = null;
+                    if (cloudStats.TryGetValue("last_streak_date", out var lsdObj))
+                    {
+                        var lsdStr = lsdObj?.ToString();
+                        if (!string.IsNullOrEmpty(lsdStr) && DateTime.TryParse(lsdStr, out var lsdParsed))
+                            cloudStreakDate = lsdParsed.Date;
+                    }
+                    var adopt = Models.AchievementProgress.DecideLoginStreakAdopt(
+                        progress.ConsecutiveDays, progress.LastLaunchDate, st, cloudStreakDate, DateTime.Today);
+                    if (adopt != null)
+                    {
+                        App.Logger?.Information("Login streak sync: adopting cloud streak {Streak} (local was {Local}), run through {Date}",
+                            adopt.Value.Streak, progress.ConsecutiveDays, adopt.Value.LastDate.ToString("yyyy-MM-dd"));
+                        progress.ConsecutiveDays = adopt.Value.Streak;
+                        if (adopt.Value.LastDate != default) progress.LastLaunchDate = adopt.Value.LastDate;
+                        needsSave = true;
+                    }
                 }
                 if (cloudStats.TryGetValue("total_bubbles_popped", out var bubbles))
                 {
@@ -4511,6 +4579,29 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("stats")]
             public Dictionary<string, object>? Stats { get; set; }
+
+            /// <summary>
+            /// Server-authoritative ledger of quests completed ON THE PHONE
+            /// (/v2/user/quest-complete). Combined totals for display are
+            /// stats.X + mobile_stats.X; these must NEVER be folded into the
+            /// QuestProgress counters this client pushes, or the server's
+            /// max-merge double-counts every mobile quest. Null on older servers.
+            /// </summary>
+            [JsonProperty("mobile_stats")]
+            public V2MobileStats? MobileStats { get; set; }
+        }
+
+        /// <summary>The slice of the server's mobile quest ledger the desktop displays.</summary>
+        private class V2MobileStats
+        {
+            [JsonProperty("total_daily_quests_completed")]
+            public int TotalDailyQuestsCompleted { get; set; }
+
+            [JsonProperty("total_weekly_quests_completed")]
+            public int TotalWeeklyQuestsCompleted { get; set; }
+
+            [JsonProperty("total_xp_from_quests")]
+            public int TotalXPFromQuests { get; set; }
         }
 
         private class OopsieSuccessResponse
