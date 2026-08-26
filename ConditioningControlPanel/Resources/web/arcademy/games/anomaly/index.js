@@ -251,6 +251,11 @@ export default {
     let plan = null;
     let reduced = false;
     let coarse = false;
+    /* Does this class have a LOOP LANE at all? Set once, in claimAssets(), from
+     * the same facts dealUrl's `videoOk` runs on (they cannot change mid-class)
+     * plus whether the library holds local loops. False = the class claims no
+     * loops and dealUrl never draws one; see claimAssets for the why. */
+    let loopLane = true;
     let retake = false;
     let budgetMs = 300000;
     let pool = null;
@@ -573,13 +578,14 @@ export default {
       let firstVideo = null;
       for (let k = 0; k < MEDIA_TRIES; k++) {
         const kind = reduced || k >= 3 ? 'still' : 'loop';
-        /* TOUCH (0825, orchestrator-ruled): the coarse class claims no loops
-         * (see claimAssets) and can never paint one - videoOk is false for the
-         * whole class - so a loop draw here would burn provider rng forecasting
-         * mp4s the grid cannot wear. Skipped WITHOUT drawing. This moves which
-         * emissions a TOUCH device consumes vs old builds; desktop paths
-         * (reduced, big grid, motion-capped) draw exactly as before. */
-        if (coarse && kind === 'loop') continue;
+        /* NO LOOP LANE (0825 touch, widened 0826): when the class claims no
+         * loops (see claimAssets) the loop pool is the placeholder floor, so a
+         * loop draw here would either burn provider rng forecasting mp4s the
+         * grid cannot wear or - worse - hand back a bundled SVG and paint the
+         * whole board with it. Skipped WITHOUT drawing. This moves which
+         * emissions such a class consumes vs old builds; a class that KEEPS
+         * its loop lane draws exactly as before. */
+        if (!loopLane && kind === 'loop') continue;
         let a = null;
         try { a = pool.next(kind); } catch (e) { a = null; }
         const url = a && a.url ? String(a.url) : '';
@@ -1404,16 +1410,41 @@ export default {
       applyFace(cur.oddIndex);
     }
 
+    /** Does the library hold LOCAL loop media (gifs on the player's own disk)?
+     *  Deterministic from the host's manifest - no rand, no network. */
+    function haveLocalLoops() {
+      try {
+        const s = ctx.assets && typeof ctx.assets.stats === 'function' ? ctx.assets.stats() : null;
+        return !!(s && s.local && (s.local.loop | 0) > 0);
+      } catch (e) { return false; }
+    }
+
     function claimAssets() {
-      /* TOUCH-AWARE SPEC (0825, orchestrator-ruled): on a coarse device
-       * dealUrl() can never paint a loop (videoOk is false for the whole
-       * class), so asking for 10 loops wasted the warm budget forecasting
-       * mp4s while the still lane - the one the device lives on - stopped
-       * refilling at 4 rows (provider askRemote = max(4, spec)). Desktop
-       * keeps the manifest spec exactly as-is. */
-      const claimSpec = coarse
-        ? { loops: 0, targets: 0, stills: 12, canvasSafe: false }
-        : { loops: 10, targets: 0, stills: 4, canvasSafe: false };
+      /* THE LOOP LANE (0825 touch, widened 0826 desktop). dealUrl() can only
+       * paint a VIDEO url when `videoOk` holds - grid <= VIDEO_GRID_MAX, full
+       * motion, not reduced, not coarse (rounds.js: N playing <video> elements
+       * pin the page to 30Hz) - and that predicate is constant for a whole
+       * class, because the grid size is dealt once with the plan. So from tier
+       * 2 up, where the grid is 4x4 or 5x5, the 10 loops this class used to
+       * claim were UNDRAWABLE: every loop draw returned an mp4 dealUrl threw
+       * away, the warm rail spent its bandwidth on those mp4s, and the still
+       * lane - the only lane that paints - stopped refilling at 4 rows
+       * (askRemote's goal was max(4, spec)). Four stills across ~129 rounds is
+       * the duplicate wall the owner reported.
+       *
+       * A loop draw is still worth making when the pool can answer it with a
+       * GIF, which is an <img> and needs no video at all - so on DESKTOP the
+       * lane closes only when videos are undrawable AND the library has no
+       * local loops. A COARSE device keeps the 0825 ruling unconditionally:
+       * no loop lane at all, gifs included. Deterministic from tier /
+       * settings / the host manifest; no rand. */
+      const videoClass = n <= PLAYTEST.VIDEO_GRID_MAX && !reduced && !coarse && motionLevelOf(ctx) > 1;
+      loopLane = !coarse && (videoClass || haveLocalLoops());
+      const claimSpec = loopLane
+        ? { loops: 10, targets: 0, stills: 4, canvasSafe: false }
+        : { loops: 0, targets: 0, stills: 12, canvasSafe: false };
+      say('media lane: ' + (loopLane ? 'loops + stills' : 'stills only')
+        + ' (grid ' + n + 'x' + n + ', video ' + (videoClass ? 'ok' : 'off') + ')');
       Promise.resolve()
         .then(() => ctx.assets.claim(claimSpec))
         .then((p) => {

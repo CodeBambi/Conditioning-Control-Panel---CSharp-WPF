@@ -464,6 +464,57 @@ export default {
       }
       return null;
     }
+    /* ------------------------------------------------------------------------
+     * THE SLEEPER LEDGER (0826). ~16 sleeping seats dress themselves off a
+     * still pool that can be six urls deep, and drawSleeper used to exclude
+     * exactly one thing - the target - so the same still landed on three seats
+     * of one wall. The provider's recency ring now spreads the DRAWS; this
+     * spreads what we do with them, and it does it WITHOUT a single extra
+     * pool.next(): the seats are dressed in one pass, so the draws a seat makes
+     * and discards (the target's own url, an animated row when a still was
+     * asked for) are BANKED instead of thrown away, and the next seat that
+     * would otherwise repeat spends a banked url instead. Draw-then-assign, on
+     * draws that already happened.
+     *   used  the urls this dressing pass has already given to sleeper seats
+     *   bank  drawn-but-unspent urls, oldest first
+     * ---------------------------------------------------------------------- */
+    const SLEEPER_BANK_MAX = 8;
+    let sleeperUsed = new Set();
+    const sleeperBank = [];
+    function sleeperReset() {
+      sleeperUsed = new Set();
+      sleeperBank.length = 0;
+    }
+    function sleeperBankPush(got) {
+      if (!got || !got.url || sleeperUsed.has(got.url)) return;
+      if (sleeperBank.some((e) => e.url === got.url)) return;
+      sleeperBank.push(got);
+      while (sleeperBank.length > SLEEPER_BANK_MAX) sleeperBank.shift();
+    }
+    /** A banked url no seat is wearing yet, preferring a real still. */
+    function sleeperBankTake(targetUrl) {
+      let at = -1;
+      for (let i = 0; i < sleeperBank.length; i++) {
+        const e = sleeperBank[i];
+        if (!e || !e.url || sleeperUsed.has(e.url)) continue;
+        if (targetUrl && e.url === targetUrl) continue;
+        if (!isAnimatedUrl(e.url)) { at = i; break; }
+        if (at < 0) at = i;
+      }
+      return at < 0 ? null : sleeperBank.splice(at, 1)[0];
+    }
+    function sleeperTake(got, targetUrl) {
+      if (!got || !got.url) return got;
+      if (!sleeperUsed.has(got.url)) { sleeperUsed.add(got.url); return got; }
+      /* this seat would repeat: spend a banked url if one is free, and bank the
+       * repeat in its place (it may still dress a later seat) */
+      const alt = sleeperBankTake(targetUrl);
+      if (!alt) return got;                       // nothing banked: the repeat stands
+      sleeperBankPush(got);
+      sleeperUsed.add(alt.url);
+      return alt;
+    }
+
     function drawSleeper(targetUrl) {
       if (!pool || typeof pool.next !== 'function') return null;
       // a gifs-only library HAS no stills; six bundled SVGs across 170 seats is
@@ -474,10 +525,14 @@ export default {
         const got = pool.next('still');
         if (!got || !got.url) break;
         if (targetUrl && got.url === targetUrl) continue;
-        if (!isAnimatedUrl(got.url)) return got;  // the still we actually asked for
+        // the still we actually asked for
+        if (!isAnimatedUrl(got.url)) { if (animated) sleeperBankPush(animated); return sleeperTake(got, targetUrl); }
         if (!animated) animated = got;            // a pool that ignores `kind`
+        else sleeperBankPush(got);
       }
-      return parkedUrl(targetUrl) || animated;
+      const parked = parkedUrl(targetUrl);
+      if (parked) { if (animated) sleeperBankPush(animated); return parked; }
+      return animated ? sleeperTake(animated, targetUrl) : null;
     }
 
     /** Redraw for a seat that already exists, keeping it on the same side of
@@ -676,6 +731,10 @@ export default {
     function dressBoard(o) {
       if (!board || !pool) return;
       const onlyBare = !!(o && o.onlyBare);
+      /* a full dressing is a fresh wall: the sleeper ledger starts empty. A
+       * LATE batch keeps it, because the seats it is upgrading around are
+       * exactly the ones the ledger already knows about. */
+      if (!onlyBare) sleeperReset();
       const target = board.targetTile();
       // A pool that lands LATE (slow disk, remote batch mid-class) may still
       // upgrade the decoys, but the target's look is frozen the moment the player

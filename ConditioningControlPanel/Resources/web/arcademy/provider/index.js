@@ -12,6 +12,9 @@
  *   pool.next('loop')   -> { url, remote }   NEVER blocks, NEVER null
  *   pool.next('target') -> { url, remote }   the hunt target (its own slot)
  *   pool.release()
+ *   assets.warmPool({loop, still})   the BOOT ASK: start filling the remote
+ *                                    pools at page boot instead of at the first
+ *                                    claim (no pool, no rand - see warmPool)
  *
  * SECOND SHAPE, ADDITIVE (SORT, 2026-08-23): `claimTagged({sources, want,
  * perSourceMin, seed, timeoutMs})` deals TWO PILES whose rows carry the `tag`
@@ -72,6 +75,17 @@ function placeholderUrls() {
 }
 
 const REMOTE_CAP = 80;        // mirrors intake's REMOTE_CAP: a page never hoards media
+const RECENT_MAX = 24;        // recency-ring depth (0826): a draw step-skips the last
+                              // min(L-1, RECENT_MAX) urls its kind SERVED - the skip
+                              // consumes no rand (the blacklist skip's law), it only
+                              // changes which url a given rand maps to.
+                              // 24 = the board that named the bug: a 24-tile board off
+                              // a 24-url pool. Simulated over 200 seeds, the old
+                              // re-rolled jump dressed it in 15.3 distinct urls (8.7
+                              // duplicate tiles); a ring of 20 leaves 1.2 and 24 leaves
+                              // none. Deeper buys nothing a page this size can see, and
+                              // the min(L-1, ...) bound is what keeps a SMALL pool
+                              // legal - it always leaves the walk a row to land on.
 
 /* THE ON-DECK RAIL's dials (0825). SORT's warm rail proved the shape and the
  * numbers' logic (games/sort/index.js WARM_AHEAD/WARM_INFLIGHT header): the
@@ -83,9 +97,24 @@ export const WARM_INFLIGHT = 3;   // warms in flight at once - a third lane lets
 const WARM_VIDEO_INFLIGHT = 2;    // of those, at most TWO may be video fetches - a
                                   // third stalled mp4 would eat into Safari's
                                   // 6-connections-per-host budget the game plays on
-const WARM_VIDEO_TIMEOUT_MS = 12000;  // a video warm that outlives this is aborted
-                                      // (an abort is a shrug, never a blacklist)
+const WARM_VIDEO_TIMEOUT_MS = 20000;  // a video warm that outlives this is aborted
+                                      // (an abort is a shrug, never a blacklist).
+                                      // 12s was a DESKTOP number: at a cellular
+                                      // 3-5s RTT the TLS handshake alone eats a
+                                      // third of it and a multi-megabyte body
+                                      // never lands, so every loop warm on the
+                                      // owner's phone aborted and (before the
+                                      // un-poison below) took the url with it.
+                                      // The video lanes are capped at
+                                      // WARM_VIDEO_INFLIGHT, so a longer
+                                      // deadline costs a fast link nothing.
 const WARM_HELD_MAX = 24;         // decoded detached Images held against GC
+/* A warm that FAILED is not a url that is dead (the blacklist owns that verdict,
+ * and only on proof). It may be re-queued - but never forever: in production
+ * connect-src excludes the media CDNs, so a video warm can reject INSTANTLY and
+ * a re-queue on every draw would be a fetch storm. Three attempts per url per
+ * page, then the url stays warmed-out and draws serve it cold. */
+const WARM_RETRY_MAX = 3;
 const VIDEO_URL_RE = /\.(mp4|webm|m4v)(\?|#|$)/i;
 
 /* THE MANIFEST WARMER's windows (0825, SORT). A game that knows its complete
@@ -243,6 +272,67 @@ export function createAssets(options = {}) {
   }
 
   /* ------------------------------------------------------------------------
+   * THE BOOT ASK (0826). The provider used to send its FIRST 'assets-request'
+   * from claim() - i.e. when the player claims a class - so the whole door /
+   * menu / rules-sheet stretch was network dead air. On the owner's cellular
+   * phone that is 10-30 seconds of a warm rail with nothing to warm, and the
+   * first board dresses itself in placeholders while the host is still doing
+   * its round trip. warmPool() runs the SAME ask machinery at boot, mints no
+   * pool, and hands its batches to absorbRemote() - which draws no rand, so
+   * the served sequence for every later claim is byte-identical.
+   *
+   * The web shim already preconnects the Scrolller API and the CDN origins on
+   * its side; this ask is what makes that preconnect pay off - the sockets it
+   * opened get used while the door is still on screen instead of going cold.
+   *
+   * Gated exactly like claim()'s ask: OfflineMode, remote media off, no bridge
+   * or a zero mix ratio all make it a silent no-op, and every reqId rides the
+   * channel's own mailbox, so a later claim()'s asks are untouched by it.
+   * --------------------------------------------------------------------- */
+  const BOOT_RETRY_MS = 1500;      // claim()'s RETRY_MS, backed off by attempt
+  const BOOT_MAX_ASKS = 4;         // half claim()'s budget: this is a head start,
+                                   // not the supply run the class itself makes
+  const bootTimers = new Set();
+  let bootAsked = false;
+
+  function bootAsk(kind, count, attempt) {
+    if (disposed) return;
+    channel.request({
+      kind, count, niches: defaultNiches,
+      onBatch: (entries) => {
+        if (disposed) return;
+        absorbRemote(entries);       // zero rand: no deck to re-deal, no pool yet
+        /* the host's contract is "ask again after every reply" (a cold buffer
+         * answers empty and streams the real batch later) */
+        if ((remotePools[kind] || []).length < count && attempt < BOOT_MAX_ASKS) {
+          const t = setTimeout(() => { bootTimers.delete(t); bootAsk(kind, count, attempt + 1); }, BOOT_RETRY_MS * Math.max(1, attempt));
+          bootTimers.add(t);
+        }
+      },
+    });
+  }
+
+  /**
+   * warmPool({loop, still}) -> boolean. Start filling the remote pools NOW,
+   * before any class is claimed. Once per provider; returns false when the
+   * gates are shut (and when there is nothing to ask over).
+   */
+  function warmPool(spec) {
+    if (disposed || bootAsked) return false;
+    if (!remoteEnabled || offlineMode || !opts.bridge) return false;
+    if (!(remoteRatio > 0)) return false;              // local-only mix: no ask
+    const s = spec || {};
+    const loop = Math.max(0, Math.min(REMOTE_CAP, s.loop | 0));
+    const still = Math.max(0, Math.min(REMOTE_CAP, s.still | 0));
+    if (!loop && !still) return false;
+    bootAsked = true;
+    if (loop) bootAsk('loop', Math.max(4, loop), 1);
+    if (still) bootAsk('still', Math.max(4, still), 1);
+    log('boot ask: loop ' + loop + ' / still ' + still);
+    return true;
+  }
+
+  /* ------------------------------------------------------------------------
    * THE WARM RAIL - bytes AND decode ahead of the deal, and nothing else.
    *
    * The old mechanism was a `link rel=preload` at fetchPriority low: a hint
@@ -271,6 +361,24 @@ export function createAssets(options = {}) {
   const warmHeld = new Map();       // url -> the detached Image holding it open
   let warmFlight = 0;
   let warmVideoFlight = 0;          // the video lanes within warmFlight (capped)
+  let warmFails = new Map();        // url -> attempts that ended in a failure
+
+  /* THE UN-POISON (0826). `prewarmed` is "this url has been asked for", and it
+   * used to be a LIFE SENTENCE: a video warm that hit the abort deadline or an
+   * image whose decode() rejected stayed marked warmed, warmable() refused to
+   * re-queue it, and ready() answered false for the rest of the page. On the
+   * owner's cellular phone that permanently killed every clip that missed once.
+   * A failure now RELEASES the url (bounded by WARM_RETRY_MAX) so the next
+   * forecast may try it again. It does NOT fight the blacklist: a url the
+   * blacklist has convicted is still refused by warmable() below for as long as
+   * the conviction stands, and only a healed one gets its second chance. */
+  function warmFailed(url) {
+    const s = String(url || '');
+    if (!s) return;
+    const n = (warmFails.get(s) | 0) + 1;
+    warmFails.set(s, n);
+    if (n < WARM_RETRY_MAX) prewarmed.delete(s);
+  }
 
   /** Only bytes that actually travel: remote http(s), not our own origin. */
   function warmable(url) {
@@ -363,7 +471,7 @@ export function createAssets(options = {}) {
             /* opaque responses may carry a null body - the cancel is guarded */
             try { if (res && res.body && typeof res.body.cancel === 'function') res.body.cancel(); } catch { /* noop */ }
             warmOk(job.url, true);
-          }, () => { settle(); flushReady(job.url, false); warmDone(true); });
+          }, () => { settle(); warmFailed(job.url); flushReady(job.url, false); warmDone(true); });
           else { settle(); warmDone(true); }
         } catch { warmDone(true); }
       } else {
@@ -388,14 +496,18 @@ export function createAssets(options = {}) {
             img.decode().then(() => warmOk(job.url), () => {
               warmHeld.delete(job.url);
               /* decode() also rejects when a HEALTHY url's decode is aborted
-               * mid-flight; only a url with no pixels at all is actually dead. */
+               * mid-flight; only a url with no pixels at all is actually dead.
+               * Either way the warm did not land, so the url is released for a
+               * later attempt - a conviction keeps warmable() off it until the
+               * blacklist's own TTL forgives, which is the blacklist's call. */
+              warmFailed(job.url);
               if (img.complete && !(Number(img.naturalWidth) > 0)) markBroken(job.url);
               else flushReady(job.url, false);
               warmDone();
             });
           } else {
             img.onload = () => warmOk(job.url);
-            img.onerror = () => { warmHeld.delete(job.url); markBroken(job.url); warmDone(); };
+            img.onerror = () => { warmHeld.delete(job.url); warmFailed(job.url); markBroken(job.url); warmDone(); };
           }
         } catch { warmHeld.delete(job.url); warmDone(); }
       }
@@ -681,6 +793,12 @@ export function createAssets(options = {}) {
      * the local side is the placeholder floor, so EVERY draw is a remote draw
      * and a whole board could dress itself in one clip. */
     const remoteCursors = { loop: 0, still: 0 };
+    /* THE RECENCY RING (0826) - see computeLocal's header. One ring per KIND
+     * BUCKET ('target' shares the still bucket: it draws the same urls out of
+     * the same two lists, and a hunt target that also dresses a decoy is the
+     * one repeat L&F cannot survive). It rides the draw STATE beside the
+     * cursors, so a forecast clones it and mutates nothing serving reads. */
+    const recent = { loop: [], still: [] };
     let released = false;
     let reqIds = [];
 
@@ -713,6 +831,15 @@ export function createAssets(options = {}) {
     }
     function askRemote(kind, count, attempt) {
       if (released || disposed) return;
+      /* KEEP ASKING PAST THE SPEC (0826). The top-up used to stop the moment
+       * the pool covered `count` - the claim spec - so a pool SETTLED at
+       * exactly the ask (Anomaly's desktop still lane: 4 rows for ~129 rounds)
+       * and REMOTE_CAP was never approached. The spec is what a board needs at
+       * once, not what a class needs all hour; doubling it is what turns the
+       * recency ring below from "spread the repeats" into "there are none".
+       * Pool GROWTH is free by law: batches already arrive on network timing,
+       * and absorbRemote draws no rand. */
+      const topUpTo = Math.min(REMOTE_CAP, Math.max(1, count) * 2);
       const id = channel.request({
         kind, count, niches,
         onBatch: (entries) => {
@@ -724,7 +851,7 @@ export function createAssets(options = {}) {
             refreshDeck();
             notifyUpdate();
           }
-          if ((remotePools[kind] || []).length < count && attempt < MAX_ASKS) {
+          if ((remotePools[kind] || []).length < topUpTo && attempt < MAX_ASKS) {
             const t = setTimeout(() => { retryTimers.delete(t); askRemote(kind, count, attempt + 1); }, RETRY_MS * Math.max(1, attempt));
             retryTimers.add(t);
           }
@@ -755,21 +882,74 @@ export function createAssets(options = {}) {
      * is exact until the pool grows; every draw and every absorbed batch
      * re-deals it, so the deck head is always the truth.
      * ==================================================================== */
+    /* THE RECENCY RING's two verbs. `bucket` is 'loop' or 'still' ('target'
+     * draws the still lists), and the ring holds the last urls that bucket
+     * actually SERVED, newest last, capped at RECENT_MAX.
+     *
+     * Only the last min(L-1, RECENT_MAX) entries are ever consulted against a
+     * list of length L, and that bound is load-bearing: it leaves at least one
+     * row of every list outside the ring, so the forward step-skip can never
+     * walk off the end and fall through to the placeholder floor. On a small
+     * list the skip degrades naturally into a plain cursor walk - which is the
+     * without-replacement behaviour the comment below used to claim. */
+    function recentlyServed(ring, url, L) {
+      const depth = Math.min(L - 1, RECENT_MAX);
+      if (!ring || !url || depth <= 0) return false;
+      for (let i = Math.max(0, ring.length - depth); i < ring.length; i++) {
+        if (ring[i] === url) return true;
+      }
+      return false;
+    }
+    function noteServed(ring, url) {
+      if (!ring || !url) return;
+      ring.push(url);
+      while (ring.length > RECENT_MAX) ring.shift();
+    }
+
+    /**
+     * THE FORWARD STEP-SKIP, both lists' one implementation. From the raw index
+     * the rand chose, walk forward to the first row that is neither blacklisted
+     * nor inside this bucket's recency window.
+     *
+     * The SECOND pass is the guarantee that keeps this legal: if the ring
+     * somehow covers every row - a manifest that lists a url twice, a list most
+     * of which the blacklist has taken - the walk falls back to "merely not
+     * blacklisted", i.e. exactly the row the pre-ring provider served. A draw
+     * can therefore never be pushed OFF its list by the ring, which is what
+     * would have moved a take() (the remote list falling through to the local
+     * one costs a second rand). Neither pass consumes rand.
+     */
+    function stepSkip(list, from, ring) {
+      for (let step = 0; step < list.length; step++) {
+        const cand = list[(from + step) % list.length];
+        if (cand && !isBrokenUrl(cand) && !recentlyServed(ring, cand, list.length)) return cand;
+      }
+      for (let step = 0; step < list.length; step++) {
+        const cand = list[(from + step) % list.length];
+        if (cand && !isBrokenUrl(cand)) return cand;
+      }
+      return null;
+    }
+
     function computeLocal(kind, st, take) {
       const list = kind === 'loop' ? localLoops : (kind === 'target' ? localTargets : localStills);
+      const bucket = kind === 'loop' ? 'loop' : 'still';
       if (!list.length) return placeholders[Math.floor(take() * placeholders.length)] || null;
       const i = st.cursors[kind] % list.length;
       st.cursors[kind] += 1;
-      // a deterministic walk with a seeded jump keeps repeats far apart without
-      // ever risking "the same tile twice in a row" on a tiny local pool
+      // a deterministic walk with a seeded jump, re-rolled every draw: on its
+      // own that samples WITH replacement (a 24-tile board over a 24-url pool
+      // shows ~9 duplicate tiles), which is what the skip below exists to fix
       const jump = list.length > 2 ? Math.floor(take() * (list.length - 1)) : 0;
-      /* THE BLACKLIST SKIP consumes no rand: the walk just steps forward to the
-       * next eligible row, so with a clean blacklist (the ordinary day) the
-       * served sequence is byte-identical to the pre-blacklist provider. */
-      for (let step = 0; step < list.length; step++) {
-        const cand = list[(i + jump + step) % list.length];
-        if (cand && !isBrokenUrl(cand)) return cand;
-      }
+      /* THE FORWARD STEP-SKIP consumes no rand: the walk steps to the next
+       * eligible row and the rand that chose the raw index is untouched, so the
+       * COUNT and ORDER of the draws on this path are what they always were.
+       * It skips two things now - a blacklisted url, and one this bucket served
+       * inside its recency window - which together guarantee the board is
+       * dressed WITHOUT replacement for as long as the list can cover it. */
+      const ring = st.recent[bucket];
+      const cand = stepSkip(list, i + jump, ring);
+      if (cand) { noteServed(ring, cand); return cand; }
       return placeholders[(i + jump) % placeholders.length] || null;   // every row dead: the floor
     }
 
@@ -784,24 +964,29 @@ export function createAssets(options = {}) {
         const i = st.remoteCursors[remoteKind] % list.length;
         st.remoteCursors[remoteKind] += 1;
         const jump = list.length > 2 ? Math.floor(take() * (list.length - 1)) : 0;
-        /* the blacklist skip: step to the next eligible row, no rand consumed;
-         * a fully dead remote list falls through to the local side */
-        let url = null;
-        for (let step = 0; step < list.length; step++) {
-          const cand = list[(i + jump + step) % list.length];
-          if (cand && !isBrokenUrl(cand)) { url = cand; break; }
-        }
-        if (url && (!canvasSafe || isLocalUrl(url))) return { url, remote: true };
+        /* the same forward step-skip, and for the same reason: the raw index is
+         * a WITH-REPLACEMENT pick, so on the remote lists - which under an
+         * online-only source dress EVERY tile - it was the whole duplicate bug.
+         * No rand consumed; a fully dead remote list falls through to local. */
+        const ring = st.recent[remoteKind];
+        const url = stepSkip(list, i + jump, ring);
+        if (url && (!canvasSafe || isLocalUrl(url))) { noteServed(ring, url); return { url, remote: true }; }
       }
       return { url: computeLocal(k, st, take), remote: false };
     }
 
-    const liveState = { cursors, remoteCursors };
+    const liveState = { cursors, remoteCursors, recent };
 
     /** The next `depth` draws of one kind, decided EARLY over cloned cursors
-     *  and peeked rand values. Mutates nothing that serving reads. */
+     *  and peeked rand values. Mutates nothing that serving reads - the rings
+     *  are COPIED, so a forecast avoids its own picks exactly the way the real
+     *  draws will and still leaves the live rings alone. */
     function forecast(k, depth) {
-      const st = { cursors: Object.assign({}, cursors), remoteCursors: Object.assign({}, remoteCursors) };
+      const st = {
+        cursors: Object.assign({}, cursors),
+        remoteCursors: Object.assign({}, remoteCursors),
+        recent: { loop: recent.loop.slice(), still: recent.still.slice() },
+      };
       let pi = 0;
       const take = () => peekRand(pi++);
       const out = [];
@@ -819,14 +1004,45 @@ export function createAssets(options = {}) {
     if (want.target) deckKinds.push('target');
     if (!deckKinds.length) deckKinds.push('still');
 
+    /* THE DOMINANT KIND (0826): the one the game asked for most of, and so the
+     * one most of the coming draws will be. Ties keep deckKinds' order. */
+    const dominantKind = deckKinds.reduce(
+      (best, k) => ((want[k] | 0) > (want[best] | 0) ? k : best), deckKinds[0],
+    );
+
+    /**
+     * How deep to forecast each kind for a `d`-slot warm budget.
+     *
+     * THE MIXED-KIND FORECAST (0826). Every kind's forecast restarts peekRand
+     * at 0 - it has to, or a kind's deck HEAD would stop being the url that
+     * kind's next draw serves - which means each kind's forecast assumes the
+     * coming draws are ALL its own. Warming `d` deep for every kind therefore
+     * spent 50-66% of a 2-3-kind claim's warm bandwidth on urls that will
+     * never be served, which on cellular is bandwidth the on-screen board
+     * needed. The real interleave is "a bit of each, mostly the dominant one",
+     * so: the first 2 of EACH kind (the heads are always honest), and every
+     * slot left over goes to the dominant kind's tail. forecast() only PEEKS,
+     * so no scheme here can move the served sequence - the only thing at stake
+     * is which bytes arrive early.
+     */
+    function deckPlan(d) {
+      const head = Math.min(2, d);
+      const plan = Object.create(null);
+      let spent = 0;
+      for (const k of deckKinds) { plan[k] = head; spent += head; }
+      if (spent < d) plan[dominantKind] = Math.min(DECK_AHEAD, plan[dominantKind] + (d - spent));
+      return plan;
+    }
+
     /** Re-deal the deck and warm its remote urls. Returns how many queued. */
     function refreshDeck(depth) {
       if (released || disposed || saveData) return 0;
       if (typeof document === 'undefined') return 0;
       const d = Math.max(1, Math.min(DECK_AHEAD, (depth | 0) || DECK_AHEAD));
+      const plan = deckPlan(d);
       let queued = 0;
       for (const k of deckKinds) {
-        const entries = forecast(k, d);
+        const entries = forecast(k, plan[k]);
         for (let i = 0; i < entries.length; i++) {
           const e = entries[i];
           if (e && e.url && e.remote && warmUrl(e.url, i === 0)) queued += 1;
@@ -897,6 +1113,8 @@ export function createAssets(options = {}) {
         if (released) return;
         released = true;
         reqIds = [];
+        recent.loop.length = 0;        // the recency rings die with the claim
+        recent.still.length = 0;
         updateCbs.clear();
         for (const t of retryTimers) clearTimeout(t);
         retryTimers.clear();
@@ -950,6 +1168,14 @@ export function createAssets(options = {}) {
   return {
     claim,
     claimTagged,
+    /**
+     * warmPool({loop, still}) - the BOOT ASK (see above). The shell calls it
+     * once, right after createAssets, so the door / menu / rules stretch is
+     * spent filling the remote pools instead of waiting on the first claim.
+     * Mints no pool, draws no rand, and is a silent no-op with remote media
+     * off, under OfflineMode, or with no bridge at all.
+     */
+    warmPool: (spec) => warmPool(spec),
     /** The pickable world, as projected on init.settings. Never null fields. */
     catalog() {
       return {
@@ -1043,6 +1269,9 @@ export function createAssets(options = {}) {
     },
     dispose() {
       disposed = true;
+      for (const t of bootTimers) { try { clearTimeout(t); } catch { /* noop */ } }
+      bootTimers.clear();
+      /* every claim's release() empties its own recency rings */
       for (const p of [...claims]) p.release();
       for (const p of [...taggedPools]) { try { p.dispose(); } catch { /* ignore */ } }
       taggedPools.clear();
@@ -1064,6 +1293,7 @@ export function createAssets(options = {}) {
       warmFlight = 0;
       warmVideoFlight = 0;
       prewarmed = new Set();
+      warmFails = new Map();
     },
   };
 }

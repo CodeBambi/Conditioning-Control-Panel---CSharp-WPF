@@ -940,6 +940,21 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     assets = NULL_ASSETS_FACTORY();
   }
 
+  /* THE BOOT ASK (0826). The provider's first 'assets-request' used to leave
+   * the page when a class was CLAIMED, which made the whole door / menu /
+   * rules-sheet stretch network dead air - 10-30 seconds of it on the owner's
+   * cellular phone, after which the first board still dressed itself in
+   * placeholders because the host was only then doing its round trip. This
+   * starts the remote pools filling NOW; the web shim has already preconnected
+   * the Scrolller API and the CDN origins by this point, and this is the ask
+   * that makes that preconnect pay off instead of letting the sockets go cold.
+   * Modest on purpose - a head start, not a supply run; the class's own claim
+   * still asks for what it needs. Mints no pool and draws no rand, so no
+   * class's served media moves, and it is a silent no-op with remote media
+   * off, under OfflineMode, or with no bridge at all. */
+  try { if (assets && typeof assets.warmPool === 'function') assets.warmPool({ loop: 8, still: 8 }); }
+  catch (e) { say('[assets] boot warm refused (' + ((e && e.message) || e) + ')'); }
+
   const ceremonies = createCeremonies({
     engine: null,                  // rebound per class (the engine is per class)
     layer: dom && dom.ceremony,
