@@ -86,7 +86,13 @@ async function loadOptional(path, factoryName, makeFallback) {
 // takes over) so a missing/malformed bank degrades gracefully instead of wedging.
 async function loadBank(niche) {
   try {
-    const res = await fetch(`./banks/${niche}.json`, { cache: 'no-cache' });
+    // Bounded: a fetch that never settles (a mobile WebView on a bad radio) must
+    // not wedge the loader - past the deadline the placeholder takes over.
+    const ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), BANK_FETCH_TIMEOUT_MS) : null;
+    let res;
+    try { res = await fetch(`./banks/${niche}.json`, { cache: 'no-cache', signal: ctl ? ctl.signal : undefined }); }
+    finally { if (timer) clearTimeout(timer); }
     if (!res.ok) { shim.log(`bank ${niche}: HTTP ${res.status} — using placeholder`); return null; }
     const bank = await res.json();
     if (!bank || !Array.isArray(bank.prompts) || !bank.prompts.length) {
@@ -104,6 +110,18 @@ shim.startHeartbeat();
 
 /** Chance, per card resolution, to sprinkle a Bambi-Sparkle giggle cue. */
 const GIGGLE_CHANCE = 0.03;
+
+/**
+ * BOOT WATCHDOG deadlines (ms). Every await between page load and the loader
+ * dropping is bounded, because one that never settles = a page stuck on
+ * "Opening Graded Intake..." with nothing to tell the player why. Seen for real
+ * 2026-08-26: Discord's Android activity WebView left indexedDB.open() pending
+ * forever, so feedForward() never returned (desktop, iPhone and the hosted
+ * mobile app - which skips feedForward - were all fine). core/stats.js now bounds
+ * the open itself; these are the belt to that brace, at the boot level.
+ */
+const BANK_FETCH_TIMEOUT_MS   = 15000;
+const FEED_FORWARD_TIMEOUT_MS = 5000;
 
 /**
  * Deliberate breather (ms) held on the normal answer -> next-card swap, so a
@@ -131,6 +149,7 @@ shim.onBoot(async (config) => {
     // --- build the stack (real module if present, else stub) --------------
     const ai = createAI(config.ai);
 
+    loaderStep('loading the room');
     const createReward = await loadOptional('./core/reward.js', 'createReward', stubReward);
     const createStats  = await loadOptional('./core/stats.js',  'createStats',  stubStats);
     const createBeats  = await loadOptional('./render/beats.js', 'createBeats',  null); // null -> inline stub render
@@ -147,6 +166,7 @@ shim.onBoot(async (config) => {
     const stats    = createStats();
 
     // Bank FIRST — the resolved theme feeds effects/beats and re-tints the page.
+    loaderStep('opening the bank');
     const bank  = config.bank || await loadBank(config.niche);
     const theme = themeOf(bank);
     applyTheme(theme);
@@ -199,9 +219,12 @@ shim.onBoot(async (config) => {
     const subjectId = resolveSubjectId(config);
     let priorRun = config.priorRun || null;
     if (!priorRun && !config.hosted && stats.feedForward) {
-      try { priorRun = await stats.feedForward(); } catch (_e) { /* best-effort */ }
+      loaderStep('consulting the archive');
+      try { priorRun = await bounded(stats.feedForward(), FEED_FORWARD_TIMEOUT_MS, 'feedForward'); }
+      catch (_e) { /* best-effort */ }
     }
 
+    loaderStep('');
     if (dom.loader) dom.loader.hidden = true;
 
     // --- REMOTE MEDIA: stock the pool while the menu is up ------------------
@@ -408,6 +431,37 @@ shim.log('boot: ready posted');
  * SMALL SHELL HELPERS — DOM sugar, pacing, guarded optional calls.
  * -------------------------------------------------------------------------- */
 function sleep(ms) { return new Promise((r) => setTimeout(r, Math.max(0, ms | 0))); }
+
+/**
+ * Await `promise` for at most `ms`; past that, reject (and log) so the boot moves
+ * on. The underlying work is NOT cancelled - it is simply no longer waited for.
+ */
+function bounded(promise, ms, label) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      shim.log(`boot: ${label} still pending after ${ms}ms — continuing without it`);
+      reject(new Error(`${label} timeout`));
+    }, Math.max(0, ms | 0));
+    Promise.resolve(promise).then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
+/**
+ * Small caption under the loader ring naming the boot step in flight, so a
+ * stuck loader at least says WHERE it stuck (there are no devtools on a phone
+ * inside Discord). Created on first use; cleared right before the loader drops.
+ */
+function loaderStep(text) {
+  if (!doc || !dom.loader) return;
+  try {
+    let el = dom.loader.querySelector('.intake-loader-step');
+    if (!el) { el = doc.createElement('small'); el.className = 'intake-loader-step'; dom.loader.appendChild(el); }
+    el.textContent = text || '';
+  } catch (_e) { /* cosmetic */ }
+}
 
 /**
  * Tear down the pause menu from a path that cannot see the beat loop's `pause`
