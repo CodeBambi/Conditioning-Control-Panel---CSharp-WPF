@@ -985,6 +985,10 @@ html.arc-reduced .arc-disc-body, html.arc-reduced .arc-disc-chev { transition:no
 }
 @keyframes arc-intro-burst-in { from { opacity:0; } to { opacity:.085; } }
 @keyframes arc-intro-burst-turn { to { transform:rotate(360deg); } }
+/* touch: keep the entrance, drop the infinite turn - an 18s rotate on a
+   150vmax masked conic is a permanent oversized composite a phone pays for
+   from boot onward */
+html.ae-touch .arc-intro-burst { animation:arc-intro-burst-in .6s ease-out .5s both; }
 
 /* ---- the stage: the wordmark + everything that hangs off it -------------- */
 .arc-intro-stage {

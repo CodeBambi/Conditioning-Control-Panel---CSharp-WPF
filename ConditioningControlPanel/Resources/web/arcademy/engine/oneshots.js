@@ -260,6 +260,13 @@ export function createOneshots(ctx) {
      * CCP's "fullscreen GIF", which a width-only burst node cannot be. Opt-in:
      * without the flag nothing about a burst changes, so no other class moves. */
     const fullBleed = opts.fullBleed === true;
+    /* Touch never bleeds a video over the whole stage - a fullscreen decode is
+     * the most expensive node the engine can mint. The kind is pinned BEFORE
+     * budgetedKind/assetUrlSync, so the single pool draw below stands either
+     * way (shared-rng law: the draw count never moves). */
+    const touchStill = fullBleed && (() => {
+      try { return hasDom() && document.documentElement.classList.contains('ae-touch'); } catch { return false; }
+    })();
 
     let count = Number.isFinite(opts.count) ? Math.max(1, opts.count | 0)
       : burstCountForHeat(heat, ctx.rng());
@@ -298,7 +305,8 @@ export function createOneshots(ctx) {
        * choice and is never second-guessed. */
       let url = opts.url || null;
       if (!url) {
-        const drawn = ctx.assetUrlSync(budgetedKind(opts.assetKind || (kind === 'gif_burst' ? 'loop' : 'still')));
+        const drawn = ctx.assetUrlSync(budgetedKind(touchStill ? 'still'
+          : (opts.assetKind || (kind === 'gif_burst' ? 'loop' : 'still'))));
         /* WARM-MEDIA SEAM (opt-in, 2026-08-25; twin of gif_rain's): pick() may
          * substitute a url the game knows is warm, but the original pool draw
          * above always happens (shared-rng law - pool.next consumes the

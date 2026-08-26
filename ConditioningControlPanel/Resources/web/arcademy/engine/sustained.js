@@ -60,6 +60,18 @@ const AMBIENT = {
 };
 export const AMBIENT_KINDS = Object.freeze(Object.keys(AMBIENT));
 
+/** The touch rung: html.ae-touch, the same read style.js's rules key off.
+ *  A hardware ceiling, not a quality level - it applies on FULL too. */
+function touchClass() {
+  try { return hasDom() && document.documentElement.classList.contains('ae-touch'); } catch { return false; }
+}
+
+/** Touch holds at most this many wash kinds' elements at once. */
+const WASH_HOLD_CAP_TOUCH = 2;
+/** Touch renewal deadline on a forever hold: the loom rAF stops until the next
+ *  re-trigger (pressure decks re-assert held washes on every repaintHeat). */
+const WASH_FOREVER_RENEW_MS = 20000;
+
 export function createSustained(ctx) {
   /** kind -> handle. sustain() on a live kind RETUNES it instead of stacking. */
   const active = new Map();
@@ -81,13 +93,29 @@ export function createSustained(ctx) {
     if (!hasDom()) return null;
     let h = washHolds.get(washKind);
     if (!h) {
+      /* Touch caps the held-element roster: each kind is a full-screen layer,
+       * and the least-recently-triggered one gives its element back. */
+      if (touchClass() && washHolds.size >= WASH_HOLD_CAP_TOUCH) {
+        let oldKind = null; let oldAt = Infinity;
+        for (const [k, o] of washHolds) {
+          if ((o.lastAt || 0) < oldAt) { oldAt = o.lastAt || 0; oldKind = k; }
+        }
+        if (oldKind != null) {
+          const o = washHolds.get(oldKind);
+          if (o.hideTimer) { ctx.timers.cancel(o.hideTimer); o.hideTimer = 0; }
+          loomDrop(o);
+          ctx.timers.release(o.el);
+          washHolds.delete(oldKind);
+        }
+      }
       const node = document.createElement('div');
       node.className = 'ae-wash ae-wash-' + washKind + (ctx.reduced() ? ' ae-wash-static' : '');
       ctx.layers.back.appendChild(node);
       ctx.timers.own(node);
-      h = { el: node, hideTimer: 0, forever: false, heldAlpha: 0 };
+      h = { el: node, hideTimer: 0, forever: false, heldAlpha: 0, lastAt: 0 };
       washHolds.set(washKind, h);
     }
+    h.lastAt = Date.now();
     return h;
   }
 
@@ -173,7 +201,18 @@ export function createSustained(ctx) {
     const h = ensureWash(washKind);
     if (!h) return null;
     const strength = ctx.ceiling('bgIntensity', opts.strength);
-    if (strength <= 0.001) return null;       // bgIntensity capped off -> no wash
+    if (strength <= 0.001) {
+      /* bgIntensity capped off -> no wash. A HELD wash must release here too:
+       * wash handles never sit in `active`, so nothing else ever ends a forever
+       * hold once its channel gates off - the alpha and loom rAF would outlive
+       * the cap and every later trigger would land on this early return. */
+      if (h.forever) {
+        if (h.hideTimer) { ctx.timers.cancel(h.hideTimer); h.hideTimer = 0; }
+        h.forever = false; h.heldAlpha = 0;
+        h.el.style.opacity = '0'; loomActive(h, false);
+      }
+      return null;
+    }
     const spec = washSpec(washKind === 'drain' || washKind === 'braindrain' ? 'braindrain' : washKind,
       ctx.magnitude(strength), opts.durationMult || 1);
     const alpha = Math.min(spec.alpha, clamp01(opts.alpha == null ? spec.alpha : ctx.pct(opts.alpha))) * (ctx.reduced() ? 0.7 : 1);
@@ -212,7 +251,18 @@ export function createSustained(ctx) {
        fell back to 0 and silently killed the class's wheel. */
     if (opts.sustainForever === true) {
       h.forever = true; h.heldAlpha = alpha;
-    } else if (h.forever && alpha > (h.heldAlpha || 0)) {
+      /* Touch renewal deadline: the pixels stay at heldAlpha, only the loom
+       * rAF stops - every trigger cancels hideTimer above, so the next
+       * re-trigger renews the deadline and wakes the loop. Desktop keeps the
+       * timerless hold. */
+      if (touchClass()) {
+        h.hideTimer = ctx.timers.after(WASH_FOREVER_RENEW_MS, () => { h.hideTimer = 0; loomActive(h, false); });
+      }
+    } else if (h.forever && (h.heldAlpha || 0) > 0.02 && alpha > (h.heldAlpha || 0)) {
+      /* A FLARE only over a held alpha above the whisper floor: heldAlpha can
+       * be scaled under the flat 0.02 whisper (live in sort), and a step-down
+       * mistaken for a flare leaves `forever` set with the loom running
+       * invisibly for the rest of the class. */
       const back = h.heldAlpha;
       h.hideTimer = ctx.timers.after(holdMs, () => { h.el.style.opacity = String(back); h.hideTimer = 0; });
     } else {
@@ -260,7 +310,11 @@ export function createSustained(ctx) {
     const variant = ctx.variant('row_drift', bg, opts.variant);
     const phase = targets.map((_, i) => (opts.stagger === false ? 0 : i * 0.7 + ctx.rng() * 0.3));
 
-    if (ctx.reduced() || ctx.motion() <= 0) {
+    /* Touch rides the breathe degrade too: a per-frame translate3d write on
+     * every row is main-thread layout traffic a phone does not owe. The rng is
+     * safe - phase[] drew per target ABOVE this branch, so both paths consume
+     * identical draws (shared-rng law). */
+    if (ctx.reduced() || ctx.motion() <= 0 || touchClass()) {
       // degrade: slow opacity breathing, no transforms at all
       for (const t of targets) { try { t.classList.add('ae-drift', 'ae-drift-breathe'); } catch { /* ignore */ } }
       ctx.fx('row_drift', 'breathe');

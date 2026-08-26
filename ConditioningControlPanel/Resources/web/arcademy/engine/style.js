@@ -255,6 +255,20 @@ img.ae-sub{width:min(38vw,38vh);aspect-ratio:1;object-fit:cover;border-radius:10
 .ae-touch .ae-crt-live{animation:none}
 .ae-touch .ae-burst-double{filter:none}
 .ae-touch .ae-glitch-datamosh{filter:none;animation:ae-shudder var(--ae-dur,600ms) steps(2,end) 1}
+/* the mobile graphics diet (2026-08-26), same ceiling:
+     - the spiral holds still exactly as on lite - a held spiral still reads as
+       a wash while parked;
+     - will-change on every wash pre-promotes a DPR-sized layer per held kind
+       even at opacity 0; the .45s opacity transition promotes on demand;
+     - rgbsplit keeps its text-shadow, drops the filter pass;
+     - vhsroll's clip-path is a per-step re-raster of the whole node - it gets
+       the transform-only shudder datamosh already gets;
+     - the burst box-shadow is a blur pass per node per frame of its fade. */
+.ae-touch .ae-wash-spiral{animation:none}
+.ae-touch .ae-wash{will-change:auto}
+.ae-touch .ae-glitch-rgbsplit{filter:none}
+.ae-touch .ae-glitch-vhsroll{animation:ae-shudder var(--ae-dur,600ms) steps(2,end) 1}
+.ae-touch .ae-burst{box-shadow:none}
 /* .ae-mote stays animated on touch ON PURPOSE: ae-float is transform-only
    (compositor-cheap, no re-raster), and the phone cost of the ambient field is
    its NODE COUNT, which the lite ladder now caps (curves.js ambientLite). */
