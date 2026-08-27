@@ -27,6 +27,14 @@ namespace ConditioningControlPanel.Services
         public const int ChatHotkeyId = 0xB1B1;   // avatar chat input
         public const int CameraHotkeyId = 0xB1B2; // webcam tracker start/stop
 
+        /// <summary>
+        /// Gaze Quick Recal (one-dot drift correction). Deliberately NOT the same thing as
+        /// <see cref="CameraHotkeyId"/>: that one STARTS/STOPS the tracker, this one corrects
+        /// drift and leaves tracking exactly as it found it. See
+        /// <c>MainWindow.ApplyGlobalQuickRecalHotkey</c>.
+        /// </summary>
+        public const int QuickRecalHotkeyId = 0xB1B3;
+
         private const int WM_HOTKEY = 0x0312;
 
         // Win32 modifier flags for RegisterHotKey

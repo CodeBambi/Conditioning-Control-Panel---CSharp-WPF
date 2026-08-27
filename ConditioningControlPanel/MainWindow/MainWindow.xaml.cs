@@ -251,6 +251,10 @@ namespace ConditioningControlPanel
                 ApplyCameraShortcutTo();
                 RefreshCameraShortcutLabel();
                 ApplyGlobalCameraHotkey();
+                // Gaze Quick Recal from anywhere (Ctrl+Alt+G). Sits next to the camera
+                // shortcut on purpose - they are neighbours in the same feature but they
+                // are NOT the same action, and the labels say so.
+                ApplyGlobalQuickRecalHotkey();
                 // Ctrl+K settings palette (Windows/SettingsPaletteWindow.xaml.cs). Registered
                 // AFTER the camera shortcut on purpose: WPF executes the FIRST matching
                 // InputBinding, so a user who rebound the camera hotkey to Ctrl+K keeps their
@@ -863,6 +867,10 @@ namespace ConditioningControlPanel
                     _isCapturingPanicKey = false;
                     UpdatePanicKeyButton();
                     App.Logger?.Information("Panic key changed to: {Key}", key);
+                    // Same precedent as ApplyGlobalCameraHotkey after a rebind: re-evaluate the
+                    // Quick Recal chord so binding panic to G disarms it immediately, and binding
+                    // panic away from G frees it without waiting for a restart.
+                    ApplyGlobalQuickRecalHotkey();
                 });
                 return;
             }
@@ -1043,6 +1051,311 @@ namespace ConditioningControlPanel
                 });
             }
             catch (Exception ex) { LogPanicFallbackStep("recovery queue", ex); }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Gaze Quick Recal global hotkey (Ctrl+Alt+G)
+        //
+        // Quick Recal is a ~3s one-dot nudge of an EXISTING calibration
+        // (Windows/WebcamQuickRecalWindow.xaml.cs). It always worked; it was just
+        // unreachable at the only moment anyone wants it, because all three of its
+        // entry points are buttons inside setup cards buried in tabs — so correcting
+        // mid-session drift meant abandoning whatever was on screen. This registers it
+        // system-wide through the existing GlobalHotkeyService lane (slot 0xB1B3)
+        // alongside the chat (0xB1B1) and camera (0xB1B2) hotkeys.
+        //
+        // NOT to be confused with the camera shortcut (Ctrl+Alt+K by default,
+        // MainWindow.SessionIO.cs ApplyGlobalCameraHotkey): that one STARTS AND STOPS
+        // the tracker. This one corrects drift and leaves tracking exactly as it found
+        // it. Every label that quotes one quotes the other, for exactly that reason.
+        //
+        // COLLISION TRAP — read before rebinding. There are two independent ways this
+        // chord can be taken, and only one of them reports anything:
+        //   (a) another process already holds Ctrl+Alt+G. RegisterHotKey returns false,
+        //       we log a Warning naming the chord, and the app carries on with the
+        //       in-app buttons intact.
+        //   (b) the user's PANIC key is bound to G. The panic key does NOT ride
+        //       RegisterHotKey at all — it rides the single WH_KEYBOARD_LL hook this
+        //       window owns (Services/Input/GlobalKeyboardHook.cs, contract note at
+        //       App.xaml.cs:571), which sees the keystroke BEFORE any WM_HOTKEY
+        //       delivery and matches on the bare key with the modifiers ignored. So
+        //       Ctrl+Alt+G would fire panic and Quick Recal both, and NOTHING fails to
+        //       register — case (a)'s Warning cannot catch it. The hook does not eat the
+        //       press either (it only returns handled inside SuppressSystemKeys), so this
+        //       is not a shadowing bug where Quick Recal quietly loses: both run, and the
+        //       panic teardown is the destructive half. That is why the check below runs
+        //       BEFORE Register and REFUSES the binding outright instead of arming it with
+        //       a warning, and why both the arm line and the refusal line are logged at
+        //       Information/Warning rather than Debug: "my Quick Recal stopped working"
+        //       is then a one-line diff against the user's own bindings in app.log.
+        //       Fix this class on the BINDING side only. Do not make the panic comparison
+        //       modifier-aware: a flustered user reaching for panic with a stray Ctrl held
+        //       must still get panic.
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>Key half of the Quick Recal chord. Named constant on purpose — the log
+        /// lines, the tooltip and the in-window hint all render from it.</summary>
+        internal const Key QuickRecalHotkeyKey = Key.G;
+
+        /// <summary>Modifier half of the Quick Recal chord. Must stay MODIFIED: bare keys and
+        /// bare function keys are exactly what users rebind panic/pause to, and those ride a
+        /// low-level hook that would shadow this silently (see the trap note above).</summary>
+        internal const ModifierKeys QuickRecalHotkeyModifiers = ModifierKeys.Control | ModifierKeys.Alt;
+
+        /// <summary>"Ctrl+Alt+G" — the single source of truth for every surface that quotes it.</summary>
+        internal static string QuickRecalHotkeyChord => FormatChord(QuickRecalHotkeyModifiers, QuickRecalHotkeyKey);
+
+        /// <summary>
+        /// The CAMERA start/stop chord ("Ctrl+Alt+K" by default), rendered from the user's own
+        /// setting. Exposed because every surface that quotes the Quick Recal chord has to quote
+        /// this one beside it: two webcam hotkeys that read as interchangeable is the defect.
+        /// Mirrors FormatCameraShortcut in MainWindow.SessionIO.cs, which is private to that file.
+        /// </summary>
+        internal static string CameraShortcutChord
+        {
+            get
+            {
+                var s = App.Settings?.Current?.CompanionPrompt;
+                var keyName = string.IsNullOrWhiteSpace(s?.CameraShortcutKey) ? "K" : s!.CameraShortcutKey;
+                if (!Enum.TryParse<Key>(keyName, ignoreCase: true, out var key)) key = Key.K;
+
+                var mods = ModifierKeys.None;
+                var modsName = string.IsNullOrWhiteSpace(s?.CameraShortcutModifiers) ? "Control,Alt" : s!.CameraShortcutModifiers;
+                foreach (var part in modsName.Split(new[] { ',', '+', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (Enum.TryParse<ModifierKeys>(part, ignoreCase: true, out var mk)) mods |= mk;
+                }
+                if (mods == ModifierKeys.None) mods = ModifierKeys.Control | ModifierKeys.Alt;
+
+                return FormatChord(mods, key);
+            }
+        }
+
+        /// <summary>
+        /// The one line every surface uses to teach the chord. Names BOTH webcam hotkeys and says
+        /// what separates them, so "Quick Recal" and "start/stop camera" can never read as the
+        /// same button with two names.
+        /// </summary>
+        internal static string QuickRecalHotkeyHint()
+            => Localization.Loc.GetF("webcam_quick_recal_hotkey_hint", QuickRecalHotkeyChord, CameraShortcutChord);
+
+        /// <summary>Re-entrancy guard: the handler is async void and opens a modal, so a second
+        /// press while the dot is up must not stack a second dialog.</summary>
+        private bool _quickRecalHotkeyBusy;
+
+        /// <summary>Shared "Ctrl+Alt+K" renderer for chord labels.</summary>
+        private static string FormatChord(ModifierKeys mods, Key key)
+        {
+            var parts = new List<string>();
+            if ((mods & ModifierKeys.Control) != 0) parts.Add("Ctrl");
+            if ((mods & ModifierKeys.Alt) != 0) parts.Add("Alt");
+            if ((mods & ModifierKeys.Shift) != 0) parts.Add("Shift");
+            if ((mods & ModifierKeys.Windows) != 0) parts.Add("Win");
+            parts.Add(key.ToString());
+            return string.Join("+", parts);
+        }
+
+        /// <summary>
+        /// Arms (or, when the setting is off or the panic key would clash, disarms) the
+        /// system-wide Quick Recal hotkey. Failure is never fatal: any refusal leaves the three
+        /// in-app entry points working and only costs a Warning line naming the reason.
+        /// </summary>
+        private void ApplyGlobalQuickRecalHotkey()
+        {
+            try
+            {
+                var chord = QuickRecalHotkeyChord;
+
+                if (App.Settings?.Current?.WebcamQuickRecalHotkeyEnabled == false)
+                {
+                    Services.GlobalHotkeyService.Unregister(Services.GlobalHotkeyService.QuickRecalHotkeyId);
+                    App.Logger?.Information("Quick Recal hotkey {Chord} not armed: disabled in settings (WebcamQuickRecalHotkeyEnabled=false).", chord);
+                    return;
+                }
+
+                // Case (b) from the trap note, checked BEFORE we register. The panic key rides the
+                // WH_KEYBOARD_LL hook (GlobalKeyboardHook), which compares the bare key and ignores
+                // modifiers — and it does NOT consume the keystroke: HookCallback only returns
+                // handled inside the SuppressSystemKeys lockdown branch, so the panic path invokes
+                // KeyPressed and still falls through to CallNextHookEx. RegisterHotKey therefore
+                // fires too. With a panic key of "G" the chord would run Quick Recal AND tear the
+                // whole session down. That is destructive, not merely noisy, so refuse the binding
+                // rather than arm it with a warning. Quick Recal stays reachable from its three
+                // buttons. Fix the class here, on the binding side: the hook's event is
+                // Action<Key> and carries no modifier state, and making panic modifier-aware would
+                // be wrong anyway — someone reaching for panic with a stray Ctrl held must get panic.
+                var s = App.Settings?.Current;
+                if (s?.PanicKeyEnabled == true &&
+                    string.Equals(s.PanicKey, QuickRecalHotkeyKey.ToString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    Services.GlobalHotkeyService.Unregister(Services.GlobalHotkeyService.QuickRecalHotkeyId);
+                    App.Logger?.Warning(
+                        "Quick Recal hotkey {Chord} NOT armed: it shares its base key with the panic key ({PanicKey}), and the " +
+                        "panic hook ignores modifiers without consuming the press — arming it would trip panic and tear down the " +
+                        "session on every Quick Recal. Rebind the panic key to free {Key}. The Quick Recal buttons in " +
+                        "Settings → Devices, the Blink Trainer setup card and the Deeper setup card are unaffected.",
+                        chord, s.PanicKey, QuickRecalHotkeyKey);
+                    return;
+                }
+
+                bool ok = Services.GlobalHotkeyService.Register(
+                    Services.GlobalHotkeyService.QuickRecalHotkeyId, this,
+                    QuickRecalHotkeyModifiers, QuickRecalHotkeyKey,
+                    // Win32 hotkeys arrive on the message-pump thread — marshal to the UI thread.
+                    () => Dispatcher.BeginInvoke(new Action(OpenQuickRecalFromHotkey)));
+
+                if (!ok)
+                {
+                    App.Logger?.Warning(
+                        "Quick Recal hotkey {Chord} could not be registered — another process already holds that combination. " +
+                        "Gaze drift correction is unaffected otherwise: the Quick Recal buttons in Settings → Devices, the Blink " +
+                        "Trainer setup card and the Deeper setup card all still work.", chord);
+                    return;
+                }
+
+                App.Logger?.Information(
+                    "Quick Recal hotkey armed: {Chord} (mods={Mods}, key={Key}, slot=0x{Id:X}) — opens one-dot gaze drift correction " +
+                    "and never starts or stops tracking.",
+                    chord, QuickRecalHotkeyModifiers, QuickRecalHotkeyKey, Services.GlobalHotkeyService.QuickRecalHotkeyId);
+
+            }
+            catch (Exception ex)
+            {
+                // Never let shortcut wiring take the window's Loaded handler down with it.
+                App.Logger?.Warning(ex, "ApplyGlobalQuickRecalHotkey failed");
+            }
+        }
+
+        /// <summary>
+        /// True while a full calibration or a Quick Recal is already on screen. Both are
+        /// borderless-maximized topmost windows that own the gaze pipeline for their duration,
+        /// so a second one must never be stacked on top.
+        /// </summary>
+        private static bool IsGazeCalibrationSurfaceOpen()
+        {
+            try
+            {
+                var windows = Application.Current?.Windows;
+                if (windows == null) return false;
+                foreach (System.Windows.Window w in windows)
+                {
+                    if (w is WebcamQuickRecalWindow || w is WebcamCalibrationWindow) return true;
+                }
+            }
+            catch { /* window collection is only enumerable on the UI thread; we are on it */ }
+            return false;
+        }
+
+        /// <summary>
+        /// The hotkey's action. Must be safe to press at ANY moment, from any app, so every
+        /// unmet precondition is a silent Debug no-op — no dialog, no exception. In particular
+        /// it never opens the consent dialog: a consent prompt erupting over a fullscreen game
+        /// because someone fat-fingered a chord is worse than doing nothing.
+        /// </summary>
+        private async void OpenQuickRecalFromHotkey()
+        {
+            if (_quickRecalHotkeyBusy)
+            {
+                App.Logger?.Debug("Quick Recal hotkey ignored: a Quick Recal is already in flight.");
+                return;
+            }
+
+            try
+            {
+                if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted)
+                {
+                    App.Logger?.Debug("Quick Recal hotkey ignored: the app is shutting down.");
+                    return;
+                }
+
+                // Re-check the panic clash HERE and not only at registration. PanicKeyEnabled is
+                // written by LockdownService (:148/:189), RemoteControlService and preset loads —
+                // any of which can turn a chord that was safe to arm at Loaded into a live clash
+                // without passing through ApplyGlobalQuickRecalHotkey. We cannot stop panic from
+                // firing (it rides its own hook), but we can refuse to stack a calibration window
+                // on top of the teardown, which is the genuinely bad outcome.
+                var cfg = App.Settings?.Current;
+                if (cfg?.PanicKeyEnabled == true &&
+                    string.Equals(cfg.PanicKey, QuickRecalHotkeyKey.ToString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    App.Logger?.Warning(
+                        "Quick Recal hotkey {Chord} suppressed at invocation: the panic key is now bound to {PanicKey}, so this " +
+                        "press is already tripping panic. Not opening Quick Recal on top of it.",
+                        QuickRecalHotkeyChord, cfg.PanicKey);
+                    Services.GlobalHotkeyService.Unregister(Services.GlobalHotkeyService.QuickRecalHotkeyId);
+                    return;
+                }
+
+                var svc = App.Webcam;
+                if (svc == null)
+                {
+                    App.Logger?.Debug("Quick Recal hotkey ignored: App.Webcam is null (service not initialized).");
+                    return;
+                }
+
+                if (!WebcamTrackingService.IsConsentCurrent())
+                {
+                    // Deliberately silent. The buttons prompt for consent because the user
+                    // just asked for the feature by name; a global chord has no such mandate.
+                    App.Logger?.Debug("Quick Recal hotkey ignored: webcam consent is not current.");
+                    return;
+                }
+
+                if (svc.Calibration == null)
+                {
+                    App.Logger?.Debug("Quick Recal hotkey ignored: no calibration loaded — Quick Recal only nudges an existing one.");
+                    return;
+                }
+
+                if (IsGazeCalibrationSurfaceOpen())
+                {
+                    App.Logger?.Debug("Quick Recal hotkey ignored: a calibration or Quick Recal window is already showing.");
+                    return;
+                }
+
+                _quickRecalHotkeyBusy = true;
+
+                // THE POINT OF THE WHOLE FEATURE: mid-session drift. If tracking is already
+                // running we must leave it running when the dialog closes — stopping it would
+                // kill the very session the user pressed the key to rescue. Only a tracker WE
+                // started gets stopped again, which is the same leave-it-as-you-found-it
+                // contract the setup-card buttons keep.
+                bool startedHere = false;
+                if (!svc.IsRunning)
+                {
+                    if (!await StartWebcamOffUiThreadAsync(svc))
+                    {
+                        App.Logger?.Debug("Quick Recal hotkey ignored: tracking would not start (state={State}).", svc.State);
+                        return;
+                    }
+                    startedHere = true;
+                }
+
+                var dlg = new WebcamQuickRecalWindow();
+                // An owner that is minimized (the app lives in the tray) can drag an owned
+                // window down with it, and the whole premise here is that MainWindow is NOT
+                // what the user is looking at. Only parent when this window is really on screen.
+                if (IsVisible && WindowState != WindowState.Minimized) dlg.Owner = this;
+                App.ApplyCalibrationScreenPlacement(dlg);
+                var result = dlg.ShowDialog();
+
+                App.Logger?.Information("Quick Recal via {Chord}: {Outcome} (startedTracking={Started}).",
+                    QuickRecalHotkeyChord, result == true ? "applied" : "cancelled", startedHere);
+
+                if (startedHere) svc.Stop();
+
+                // Cross-tab propagation, same as the button paths.
+                RefreshBlinkTrainerWebcamColumn();
+                RefreshBlinkTrainerStatusRow();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "OpenQuickRecalFromHotkey failed");
+            }
+            finally
+            {
+                _quickRecalHotkeyBusy = false;
+            }
         }
 
         private void HandlePanicKeyPress()
