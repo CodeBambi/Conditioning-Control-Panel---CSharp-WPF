@@ -207,9 +207,17 @@
 .pc-item.is-poor .pc-price { opacity:.55; }
 .pc-item.is-busy { border-color:color-mix(in srgb, var(--pink), transparent 40%); }
 
-/* The drawn parcel. A box, a lid seam, one glyph. */
+/* The drawn parcel. A box, a lid seam, one glyph - and, over the glyph, the
+   sku's sprite when one exists (prizecounter.js, THE SECOND REGISTER).
+
+   48px AND NOT 46. The sprites are 192px square, and 192/48 is exactly 4, so a
+   pixelated downscale drops whole pixels instead of sampling between them. The
+   phone rule below is 32px for the same reason (192/32 = 6). Any later retune
+   of these two numbers has to stay an integer divisor of 192 or the shelf goes
+   soft. */
 .pc-art {
-  flex:none; width:46px; height:46px;
+  position:relative;
+  flex:none; width:48px; height:48px;
   display:flex; align-items:center; justify-content:center;
   border-radius:7px;
   background:
@@ -220,6 +228,19 @@
 }
 .pc-glyph { font-size:20px; line-height:1; color:var(--lav); }
 .pc-item-k .pc-glyph { color:var(--gold); }
+/* THE SPRITE SITS ON THE GLYPH. Absolute, so the bed underneath keeps the box's
+   size whether or not the png ever arrives; `pixelated` both ways because the
+   art is pixel art and a smoothed sprite is a different drawing. */
+.pc-sprite {
+  position:absolute; inset:0;
+  width:100%; height:100%;
+  object-fit:contain;
+  image-rendering:pixelated;
+  image-rendering:crisp-edges;
+  -webkit-user-drag:none;
+  user-select:none; -webkit-user-select:none;
+  pointer-events:none;
+}
 
 .pc-body { flex:1 1 auto; min-width:0; }
 .pc-name {
@@ -282,7 +303,7 @@
    size because the price is the one thing that must stay legible. */
 @media (max-width:520px) {
   .pc-goods { grid-template-columns:1fr; }
-  .pc-art { width:38px; height:38px; }
+  .pc-art { width:32px; height:32px; }   /* 192/32 = 6, still on the grid */
   .pc-glyph { font-size:17px; }
   .pc-title { letter-spacing:.1em; }
 }

@@ -4618,6 +4618,8 @@
   "lockdown_poss_safety_dose_tip": "락다운은 비어 있는 채로 돌아가지 않습니다. 시작할 때 엔진이 꺼져 있으면 대신 켜 줍니다. 아무 기능도 켜져 있지 않으면(도중에 전부 끄더라도) 간수가 기능을 켜고, 매번 하나씩 더 켜며, 타이머가 끝나면 전부 원래대로 돌려놓습니다.",
   "st4_braindrain_audio_rate": "오디오 클립 빈도",
   "label_braindrain": "브레인 드레인",
+  "tube_midnight_setting": "Midnight Glass",
+  "tube_midnight_setting_hint": "A darker pane on her tube. The Prize Counter sells this one.",
 
   "_comment_arcademy_door": "The Arcademy (Play wall card, Ctrl+K row, failure dialogs)",
   "play_arcademy_title": "The Arcademy",

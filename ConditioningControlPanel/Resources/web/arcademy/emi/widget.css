@@ -280,6 +280,75 @@
 }
 :root.arc-mobile .arc-emi .emi .emi-chip-field { width: 88px; }
 
+/* =========================================================================
+ * EMI'S DESK TOY (COUNTER STOCK prize `emi_desk_toy`)
+ *
+ * A little something for her desk, docked at her lower LEFT - the one corner
+ * of her footprint nothing else has claimed. The x lives top-right, the dock
+ * button bottom-right, the bubble and the chip strip hang off an EAR, and the
+ * campus mail chip sits under her bottom-right on a phone (widget.js `place()`
+ * steps around it). Left is what is free.
+ *
+ * IT IS SIZED IN PER CENT OF HER, NOT IN PX. She is 150px on a desktop, 116 on
+ * a narrow window and 86 on a phone; 38% is the contract's ~56px beside the
+ * desktop default and it shrinks WITH her instead of swallowing a phone. One
+ * number, no JS, and the resize seam never has to hear about the toy.
+ *
+ * INPUT TRUST (law 1, trap 59): `.arc-emi` is `pointer-events:none` and the
+ * nodes that turn it back on are `.emi`, `.emi-dock` and the ask chips. This
+ * is the fourth and it is INSIDE `.emi`, i.e. inside a footprint that already
+ * took the pointer - it steals nothing from the board that EMI was not already
+ * standing on, and widget.js stops the stream so a poke is never also a pet.
+ *
+ * z1 puts it over the body png and under `.emi-fx` (2), the bubble (3) and the
+ * x (4).
+ *
+ * THE ONE INVARIANT: the prop's RIGHT EDGE stays left of the glass, which
+ * emi.css pins at 34.46%. `-6% + 38% = 32%` clears it by two per cent, and
+ * clearing it HORIZONTALLY is enough - the toy art's aspect ratio is then free
+ * to be whatever it is drawn as without ever landing on her face. Any later
+ * retune of `left`/`width` (this block or the phone one at the foot of the
+ * file) has to keep that sum under 34.46 or the prop covers the bottom-left
+ * corner of her screen.
+ * ======================================================================== */
+.arc-emi .emi .emi-toy {
+  position: absolute;
+  left: -6%;
+  bottom: 0;
+  width: 38%;
+  height: auto;
+  z-index: 1;
+  pointer-events: auto;
+  cursor: pointer;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transform-origin: 50% 100%;
+  /* THE BOB. Slow, tiny, and on `transform` only - it is a desk ornament, not
+     a second thing on the screen asking to be looked at. `.emi`'s own body
+     moves animate the ROOT, so the two never compete for one property. */
+  animation: emi-toy-bob 3.4s ease-in-out infinite;
+}
+/* Trap 27 again: `[hidden]` is a user-agent rule and the block above is not,
+   so the prop hides itself rather than leaning on styles.css's reset - EMI
+   also ships standalone (demo.html) and a skin must hide its own node. */
+.arc-emi .emi .emi-toy[hidden] { display: none !important; }
+
+@keyframes emi-toy-bob {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-5%) rotate(-2.5deg); }
+}
+
+/* REDUCED MOTION: the prop is still there, it simply stops fidgeting. Both
+   readings, because widget.js's `reducedMotion()` honours both and a skin that
+   only knew the media query would keep bobbing for a player who set the class. */
+@media (prefers-reduced-motion: reduce) {
+  .arc-emi .emi .emi-toy { animation: none; }
+}
+:root.arc-reduced .arc-emi .emi .emi-toy { animation: none; }
+
 /* ---- the dock -----------------------------------------------------------
  * Where a dismissed EMI lives. Semi-transparent so it never competes with the
  * board, full strength the moment it is aimed at. */
@@ -366,7 +435,6 @@
   max-width: 100%;
   overflow-wrap: anywhere;
 }
-=======
 /* ---- THE FIELD TRIP: the CRT power-off ---------------------------------
  * W2a (2026-08-24). EMI's one autonomous verb is a TRIP: she powers her tube
  * off, reappears beside a campus fixture, says one line about it, powers off
@@ -461,3 +529,17 @@
   max-height: 46vh;
 }
 :root.arc-mobile .arc-emi .emi-reveal-shot { max-height: 34vh; }
+/* THE 44px FLOOR, and the desk toy is the one thing on this layer that would
+   have missed it. 38% of an 86px EMI is 33px - a fine mouse target and short
+   of what a thumb needs - so the prop grows on a phone the way the ask chips
+   do. `min-width` and not a bigger per cent, because the floor is an absolute
+   number of real screen pixels and her width is not.
+   AND THE ANCHOR MOVES WITH IT, or the invariant breaks. She is 86px on a
+   phone and 96 at the stored ceiling, so the widest the prop can get is
+   44/86 = 51.2%; `-20% + 51.2% = 31.2%` still stops short of the glass at
+   34.46%. Change one of these three numbers and check that sum. */
+:root.arc-mobile .arc-emi .emi .emi-toy {
+  left: -20%;
+  width: 46%;
+  min-width: 44px;
+}

@@ -243,7 +243,7 @@ function mult(v) { return (Math.round((Number(v) || 0) * 100) / 100).toFixed(2) 
  *                              `init.words`, which is what any caller that
  *                              predates the floor already meant.
  */
-export function createSettingsPage({ init, bridge, games, keybinds, assets, store, onClose, log, gameKey, vocab, emi } = {}) {
+export function createSettingsPage({ init, bridge, games, keybinds, assets, store, onClose, log, gameKey, vocab, emi, themes } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const src = init || {};
   const root = el('div', 'arc-settings');
@@ -404,6 +404,107 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
       apply(v) { this.value = v; sel.value = String(v); row.classList.remove('pending'); refreshSummaries(); },
     });
     return row;
+  }
+
+  /* ---------------------- THE CAMPUS LOOK ROW ---------------------------
+   * COUNTER STOCK. The one row on this sheet that is NOT a host setting: the
+   * pick is a page-owned meta key (`campusTheme`), the shell owns it, and this
+   * page is handed four narrow functions and nothing else (shell.js themeCaps).
+   *
+   * THREE THINGS THAT MAKE IT DIFFERENT FROM selectRow, and each is deliberate:
+   *   - NO `pending`. There is no host echo to wait for; `select` returns what
+   *     stuck and the row repaints from that, so the look changes under your
+   *     thumb rather than a beat later.
+   *   - NO UNOWNED ROW. `list()` contains House Standard plus what the player
+   *     actually owns. A theme they have not bought is ABSENT - not dimmed, not
+   *     padlocked, not named. A restock should appear, not be spoiled.
+   *   - RADIO, NOT A <select>. Two or three options that each repaint the whole
+   *     school want to be visible at once, and the swatch is the point.
+   * -------------------------------------------------------------------- */
+  function themeRow(caps) {
+    const row = el('div', 'arc-row arc-themerow');
+    const picks = el('div', 'arc-themepicks');
+    picks.setAttribute('role', 'radiogroup');
+    picks.setAttribute('aria-label', t('opt_theme_head', 'Campus look'));
+
+    let list = [];
+    try { list = caps.list() || []; } catch (e) { list = []; }
+    const buttons = [];
+
+    function paint(current) {
+      for (const b of buttons) {
+        b.setAttribute('aria-checked', b.__themeId === current ? 'true' : 'false');
+      }
+    }
+
+    for (const entry of list) {
+      if (!entry || !entry.id) continue;
+      const b = el('button', 'arc-themepick');
+      b.type = 'button';
+      b.setAttribute('role', 'radio');
+      b.__themeId = entry.id;
+      /* THE SWATCH. Three dots off the theme's OWN palette, so a button shows
+       * what it does before it is pressed. This is the one place in the school
+       * a colour is allowed to travel as a value: it is DESCRIBING a palette,
+       * not using one, and the row would otherwise be three identical words. */
+      let sw = null;
+      try { sw = caps.swatch ? caps.swatch(entry.id) : null; } catch (e) { sw = null; }
+      if (sw) {
+        const dots = el('span', 'arc-themedots');
+        dots.setAttribute('aria-hidden', 'true');
+        for (const hue of [sw.panel, sw.accent, sw.ink]) {
+          const d = el('span', 'arc-themedot');
+          if (typeof hue === 'string') d.style.setProperty('--dot', hue);
+          dots.appendChild(d);
+        }
+        b.appendChild(dots);
+      }
+      b.appendChild(el('span', null, t(entry.nameKey || '', entry.nameEn || entry.id)));
+      b.addEventListener('click', () => {
+        let landed = entry.id;
+        try { landed = caps.select(entry.id); } catch (e) { /* the pick is the shell's */ }
+        paint(landed);
+        refreshSummaries();
+        // Same one-per-press answer every other control on this sheet gives.
+        sfx('tell', 0.22, { pitch: landed === 'standard' ? 0.92 : 1.08 });
+      });
+      buttons.push(b);
+      picks.appendChild(b);
+    }
+
+    let current = 'standard';
+    try { current = caps.current() || 'standard'; } catch (e) { current = 'standard'; }
+    paint(current);
+
+    row.appendChild(picks);
+    return row;
+  }
+
+  /** Is there a look worth offering? House Standard alone is not a choice, so
+   *  the whole group stays away until the player owns at least one theme. */
+  function hasThemeChoice() {
+    if (!themes || typeof themes.list !== 'function') return false;
+    try { return (themes.list() || []).length > 1; } catch (e) { return false; }
+  }
+
+  /** The name of the pick, for the fold's one-line summary. */
+  function themeSummary() {
+    try {
+      const current = themes.current();
+      for (const entry of themes.list() || []) {
+        if (entry && entry.id === current) return t(entry.nameKey || '', entry.nameEn || entry.id);
+      }
+    } catch (e) { /* a fold summary is never worth a throw */ }
+    return '';
+  }
+
+  /** THE GROUP. Its own fold, headed with the one key the contract mints
+   *  (`opt_theme_head`), so the row inside is nothing but the choices - a group
+   *  and a row both reading "Campus look" would be the same word twice. */
+  function buildLook() {
+    const g = group(t('opt_theme_head', 'Campus look'), 'look', themeSummary);
+    g.body.appendChild(themeRow(themes));
+    return g;
   }
 
   function readonlyRow(label, value, hint) {
@@ -1446,6 +1547,12 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
       root.appendChild(buildCeilings());
       if (mediaControls) root.appendChild(buildMedia());
     }
+    /* CAMPUS LOOK sits under the ceilings and above Distraction: it is the one
+     * group on this sheet the player BOUGHT, and burying a prize at the bottom
+     * of a ten-class page is the same as not shipping it. Absent entirely until
+     * a theme is owned, and absent on the scoped (mid-class) sheet, which is
+     * about one game and not about the school. */
+    if (!scopedEntry && hasThemeChoice()) root.appendChild(buildLook());
     root.appendChild(buildGlobal());
     for (const entry of shown) {
       if (!entry || !entry.key) continue;

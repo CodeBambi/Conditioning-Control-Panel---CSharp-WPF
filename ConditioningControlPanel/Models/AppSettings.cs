@@ -4644,6 +4644,26 @@ namespace ConditioningControlPanel.Models
             set { _useAlternativeTube = value; OnPropertyChanged(); }
         }
 
+        private bool _tubeMidnightGlass = false;
+        /// <summary>
+        /// TUBE GLASS: MIDNIGHT — wear the darker pane on the companion's tube.
+        ///
+        /// <para>A PREFERENCE, never the entitlement. The prize itself is
+        /// <c>tube_midnight</c> in the Arcademy wallet
+        /// (<c>ArcademyHostService.WalletOwnsSku</c>); this only says whether a player who owns it
+        /// wants it on tonight. Both have to be true, and mod art still outranks both — a skin
+        /// that ships its own tube.png is the author's chamber, not ours to repaint.</para>
+        ///
+        /// <para>Defaults OFF so the glass is something the player puts on rather than something
+        /// that changes under them the night they buy it.</para>
+        /// </summary>
+        [JsonProperty]
+        public bool TubeMidnightGlass
+        {
+            get => _tubeMidnightGlass;
+            set { _tubeMidnightGlass = value; OnPropertyChanged(); }
+        }
+
         private bool _aiChatEnabled = true;
         /// <summary>
         /// Whether AI chat is enabled (requires OPENAI_API_KEY environment variable)

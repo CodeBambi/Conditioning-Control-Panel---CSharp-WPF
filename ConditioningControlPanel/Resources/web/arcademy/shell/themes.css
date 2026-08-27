@@ -1,0 +1,95 @@
+/* ============================================================================
+ * shell/themes.css - the CAMPUS LOOK layer and its one options row.
+ *
+ * Lazily linked by shell/themefx.js (corkboard.css's recipe), so nothing about
+ * this wave grows a line in index.html.
+ *
+ * There is deliberately NO per-theme rule in this file. A theme is a PALETTE:
+ * shell.js writes the thirteen tokens on :root through the same applyPalette
+ * seam a mod skin uses, and every hue in styles.css is already a var() off one
+ * of them. A `html[data-theme="snowday"] .campus-hall { ... }` block here would
+ * be a second source of truth for the same colour and the first thing to rot.
+ * ==========================================================================*/
+
+/* ---- THE WEATHER LAYER ---------------------------------------------------
+   ONE fixed canvas on <body>. z-index 25 puts it OVER the campus stage (20,
+   which paints an opaque sky) and UNDER every piece of chrome: topbar 30, the
+   fixed exit bar 32, the confirm 36, #arc-fx 40, #arc-ceremony 45, #arc-emi 50,
+   #arc-toast 60. It never takes a pointer, so no door, rect or button under it
+   moves - input-trust law, the same one #arc-fx keeps.
+
+   No `filter`, no `mix-blend-mode`, no `will-change`: this layer sits between
+   the campus and the engine's own effects, and a compositing hint here is
+   exactly the class of change that hoisted a backdrop-filter over #arc-fx once
+   already (styles.css, THE STAGE IS A SEALED GROUP). Alpha is painted INTO the
+   canvas by the painter, never applied to the element. */
+.arc-themefx {
+  position:fixed; inset:0; z-index:25;
+  width:100%; height:100%;
+  pointer-events:none;
+  display:block;
+}
+
+/* The layer is never CREATED under reduced motion or lite (themefx.js kills it
+   at the source - a paused decoration is still a decoration). This rule is the
+   belt to that braces: a canvas that somehow survived a flag flip mid-session
+   is invisible rather than animating at somebody who asked it not to. `lite`
+   has no <html> marker in this school (it is `init.performanceMode`, read in
+   JS), so reduced motion is the only one CSS can see - and it is the one that
+   is a promise rather than a budget. */
+html.arc-reduced .arc-themefx { display:none; }
+
+/* A class owns the screen. themefx.js tears the layer down for the duration;
+   this is the same belt, for the frame between a class starting and the
+   reconciler running. */
+html.arc-class-on .arc-themefx { display:none; }
+
+/* ---- THE "CAMPUS LOOK" ROW (shell/settings.js) ---------------------------
+   Radio-style, one press each, applied live - there is no host echo to wait
+   for, because the pick is a PAGE-OWNED meta key (`campusTheme`) and the shell
+   is the only thing that writes it. The row reuses .arc-row's geometry so it
+   lines up with the sliders and switches above it. */
+.arc-themerow { align-items:flex-start; }
+
+.arc-themepicks {
+  display:flex; flex-wrap:wrap; gap:8px;
+  justify-content:flex-end;
+}
+
+.arc-themepick {
+  font:inherit; font-family:var(--disp); font-size:12px; letter-spacing:.10em;
+  text-transform:uppercase;
+  padding:7px 12px;
+  border-radius:9px;
+  border:1px solid var(--line);
+  background:var(--panel2);
+  color:var(--ink-dim);
+  cursor:pointer;
+  transition:border-color .14s ease, color .14s ease, background-color .14s ease;
+}
+.arc-themepick:hover { color:var(--ink); border-color:var(--slate); }
+.arc-themepick:focus-visible { outline:2px solid var(--pink); outline-offset:2px; }
+
+.arc-themepick[aria-checked="true"] {
+  background:color-mix(in srgb, var(--pink) 18%, var(--panel2));
+  border-color:var(--pink-deep);
+  color:var(--ink);
+}
+
+/* THE SWATCH. Three dots off the theme's own tokens, so the button shows what
+   it does before you press it. Painted from inline custom properties the row
+   writes (settings.js), which is the one place in this school a palette is
+   allowed to travel as a value - it is describing a palette, not using one. */
+.arc-themedots {
+  display:inline-flex; gap:3px; margin-right:8px; vertical-align:-1px;
+}
+.arc-themedot {
+  width:8px; height:8px; border-radius:50%;
+  border:1px solid rgba(0,0,0,.35);
+  background:var(--dot, var(--slate));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arc-themepick { transition:none; }
+  .arc-themefx { display:none; }
+}

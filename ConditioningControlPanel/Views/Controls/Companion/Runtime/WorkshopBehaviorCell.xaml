@@ -110,5 +110,21 @@
                       HorizontalAlignment="Right" VerticalAlignment="Center"
                       Checked="ChkVoiceLines_Changed" Unchecked="ChkVoiceLines_Changed"/>
         </Grid>
+
+        <!-- TUBE GLASS: MIDNIGHT (Prize Counter restock, 2026-08-26). Always VISIBLE and greyed
+             out until the counter has sold it - a prize you cannot see is a prize nobody knows
+             to want. Its row seeds and re-arms itself in the code-behind on every reveal rather
+             than once at startup, because the thing that unlocks it is a purchase made in
+             another window while this cell is sitting here. -->
+        <Grid Margin="0,6,0,0">
+            <StackPanel Margin="0,0,44,0">
+                <TextBlock Text="{loc:Str tube_midnight_setting}" Style="{StaticResource CmpCellLabelStyle}"/>
+                <TextBlock Text="{loc:Str tube_midnight_setting_hint}" Style="{StaticResource CmpCellHintStyle}"/>
+            </StackPanel>
+            <CheckBox x:Name="ChkTubeMidnightGlass" x:FieldModifier="internal" Style="{DynamicResource ToggleStyle}"
+                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                      ToolTip="{loc:Str tube_midnight_setting_hint}"
+                      Checked="ChkTubeMidnightGlass_Changed" Unchecked="ChkTubeMidnightGlass_Changed"/>
+        </Grid>
     </StackPanel>
 </UserControl>

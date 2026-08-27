@@ -4618,6 +4618,8 @@
   "lockdown_poss_safety_dose_tip": "Локдаун не работает вхолостую. Движок выключен при старте: его запустят за тебя. Ничего не включено (или ты выключишь всё посреди локдауна): надзирательница включит функции, каждый раз на одну больше, и вернёт всё обратно, когда таймер закончится.",
   "st4_braindrain_audio_rate": "Частота аудиоклипов",
   "label_braindrain": "Промывка мозгов",
+  "tube_midnight_setting": "Midnight Glass",
+  "tube_midnight_setting_hint": "A darker pane on her tube. The Prize Counter sells this one.",
 
   "_comment_arcademy_door": "The Arcademy (Play wall card, Ctrl+K row, failure dialogs)",
   "play_arcademy_title": "The Arcademy",

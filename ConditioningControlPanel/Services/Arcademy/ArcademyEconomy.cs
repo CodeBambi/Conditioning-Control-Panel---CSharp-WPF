@@ -211,10 +211,27 @@ internal static class ArcademyEconomy
     /// cosmetic / consumable / unlock / display.</summary>
     /// <param name="StackMax">Consumables only: how many the player may hold at once.</param>
     /// <param name="Locked">A case slot that is dressed but not for sale yet.</param>
+    /// <param name="Wave">Which RESTOCK this row rides in on. See <see cref="CurrentWave"/>.</param>
     public sealed record CatalogItem(
         string Sku, string Cur, int Cost, string Kind,
         string NameKey, string NameEn, string BlurbKey, string BlurbEn,
-        int StackMax = 0, bool Locked = false);
+        int StackMax = 0, bool Locked = false, int Wave = 1);
+
+    /// <summary>
+    /// THE TRUCK HAS BEEN THIS FAR. Rows above this number are not on the wire at all — not
+    /// "locked", not greyed out, simply absent, because a restock should APPEAR one night rather
+    /// than sit on the shelf for weeks with a padlock on it spoiling its own arrival. Bumping this
+    /// by one is the whole of shipping the next wave.
+    ///
+    /// <para>The host refuses an above-wave sku at <see cref="Buy"/> too, with reason
+    /// <c>unknown</c>: a page that never saw the row cannot name it, so the only caller who could
+    /// is a hand-edited one, and "the counter does not know that one" is the honest answer.</para>
+    /// </summary>
+    public const int CurrentWave = 2;
+
+    /// <summary>Is this row on the shelf tonight? The one place the wave gate is spelled out, so
+    /// the projection and the buy path can never drift apart.</summary>
+    public static bool InStock(CatalogItem c) => c.Wave <= CurrentWave;
 
     public const string CurTickets = "t";
     public const string CurTokens = "k";
@@ -223,6 +240,10 @@ internal static class ArcademyEconomy
     public const string SkuHonorsLever = "honors_lever";
     public const string SkuFreeSwimKey = "free_swim_key";
     public const string SkuDeepEndWideBoard = "de_5x5";
+
+    /// <summary>The one restock row C# itself has to know by name: the tube's darker glass is the
+    /// only prize that lights up OUTSIDE the Arcademy (AvatarTubeWindow.SetTubeStyle).</summary>
+    public const string SkuTubeMidnight = "tube_midnight";
 
     /// <summary>
     /// THE SHELF. C# is the single source: <c>init</c> projects this and the page only renders it,
@@ -268,6 +289,74 @@ internal static class ArcademyEconomy
             "prize_jukebox_blurb",
             "The slot is dressed and the case is empty. The desk says it is on the truck.",
             Locked: true),
+
+        // ============================ THE RESTOCK (2026-08-26) ============================
+        // Eleven rows over three waves. Everything below is dressing: a walker's kit, a bell,
+        // a poster tube, a voice on the PA, two campus looks, EMI's desk and her jacket, and
+        // one darker pane of glass for the tube back home. Nothing here touches safety, nothing
+        // charges to play (the pitched retake ticket is CUT FOREVER - replays stay free), and
+        // every one of them is witnessed by `wallet.inv` alone: no new unlock flags.
+        //
+        // WAVE 1 - ships with the restock.
+        new("away_colors", CurTickets, 100, "cosmetic",
+            "prize_away_colors", "AWAY COLORS",
+            "prize_away_colors_blurb",
+            "Alternate kit for your little walker. Same you, sharper stripes.",
+            Wave: 1),
+        new("sparkler_steps", CurTickets, 250, "cosmetic",
+            "prize_sparkler_steps", "SPARKLER STEPS",
+            "prize_sparkler_steps_blurb",
+            "A trail of little sparks wherever you walk. The janitor has given up complaining.",
+            Wave: 1),
+        new("brass_bell", CurTickets, 80, "cosmetic",
+            "prize_brass_bell", "THE BRASS BELL",
+            "prize_brass_bell_blurb",
+            "The old bell from the storage room takes over. Rings a little warmer than the new one.",
+            Wave: 1),
+        new("emi_desk_toy", CurTokens, 2, "unlock",
+            "prize_emi_desk_toy", "EMI'S DESK TOY",
+            "prize_emi_desk_toy_blurb",
+            "A little something for her desk. She'll fidget with it and pretend she doesn't love it.",
+            Wave: 1),
+
+        // WAVE 2 - ships with the restock as well (CurrentWave == 2).
+        new("poster_drop_1", CurTickets, 60, "cosmetic",
+            "prize_poster_drop_1", "POSTER DROP NO 1",
+            "prize_poster_drop_1_blurb",
+            "Fresh prints for the corkboard, motivational in a way we can't quite explain.",
+            Wave: 2),
+        new("pa_pack", CurTickets, 300, "cosmetic",
+            "prize_pa_pack", "PA ANNOUNCER",
+            "prize_pa_pack_blurb",
+            "The morning announcements get a voice. She mostly reads the schedule, mostly.",
+            Wave: 2),
+        new("theme_drone", CurTokens, 2, "unlock",
+            "prize_theme_drone", "DRONE PROTOCOL",
+            "prize_theme_drone_blurb",
+            "Somebody left a strange cartridge in the AV room and now the campus runs green. We like it.",
+            Wave: 2),
+
+        // WAVE 3 - built, tested, and NOT on the wire yet. One bump of CurrentWave ships it.
+        new("ghost_walk", CurTickets, 220, "cosmetic",
+            "prize_ghost_walk", "GHOST WALK",
+            "prize_ghost_walk_blurb",
+            "Your walker goes see-through with a soft afterimage. Spooky in a fun way, we checked.",
+            Wave: 3),
+        new("theme_snowday", CurTokens, 2, "unlock",
+            "prize_theme_snowday", "SNOW DAY",
+            "prize_theme_snowday_blurb",
+            "Frost on the windows, snow in the courtyard, everything soft and blue. Classes run anyway.",
+            Wave: 3),
+        new("emi_varsity", CurTokens, 2, "unlock",
+            "prize_emi_varsity", "EMI: VARSITY JACKET",
+            "prize_emi_varsity_blurb",
+            "She found it in lost and found and it fits perfectly. Every one of her poses, re-dressed.",
+            Wave: 3),
+        new(SkuTubeMidnight, CurTickets, 160, "cosmetic",
+            "prize_tube_midnight", "TUBE GLASS: MIDNIGHT",
+            "prize_tube_midnight_blurb",
+            "A darker glass for the tube back home. It ships to the whole app, not just the school.",
+            Wave: 3),
     };
 
     public static CatalogItem? Find(string? sku) =>
@@ -443,6 +532,10 @@ internal static class ArcademyEconomy
     {
         var item = Find(sku);
         if (item == null) return new BuyResult(false, "unknown", null);
+        // A row the truck has not brought yet is not on the wire, so no honest page can ask for
+        // it. Answered "unknown" rather than "locked" on purpose: "locked" is the dressed empty
+        // case the player can SEE, and naming a wave-3 prize in a refusal would spoil it.
+        if (!InStock(item)) return new BuyResult(false, "unknown", null);
         if (item.Locked) return new BuyResult(false, "locked", item);
 
         var wallet = EnsureShape(w);
@@ -489,6 +582,9 @@ internal static class ArcademyEconomy
         var arr = new JArray();
         foreach (var c in Catalog)
         {
+            // Above the current wave = ABSENT, not locked (see CurrentWave). The page renders
+            // what it is handed, so a row that is not here is a row that does not exist tonight.
+            if (!InStock(c)) continue;
             var row = new JObject
             {
                 ["sku"] = c.Sku,

@@ -43,6 +43,29 @@
  * with transform and opacity. No filters, no blend modes, no second canvas.
  * The styling lives in styles.css, not in a JS template - so there is no CSS
  * comment in this file for a backtick to break (trap 37).
+ *
+ * THE COSMETICS (Counter Stock, 2026-08-26) obey all five laws and the render
+ * rule above without exception, which is why they are three small things and
+ * not one big one:
+ *
+ *   away_colors    - CSS ONLY. One attribute on the group (`data-cos-away`),
+ *                    styles.css does the rest. No JS at all past the attribute.
+ *   sparkler_steps - 1x1 rects out of a FIXED pool (SPARK_MAX), spawned on the
+ *                    footfall the walk already counts - never on a timer of its
+ *                    own and never per frame - and faded by a CSS keyframe on
+ *                    transform + opacity. The pool is allocated once and
+ *                    recycled; nothing here can grow the node count of a walk.
+ *   ghost_walk     - `data-cos-ghost` (CSS opacity) plus at most ECHO_COUNT
+ *                    afterimages, which are the SAME sprite builder standing at
+ *                    positions this file already knows how to compute (walkAt
+ *                    at t - lag). No trail buffer, no filter, no blur: an
+ *                    afterimage is a body a beat behind you, dimmed by CSS.
+ *
+ * The two ANIMATED halves are dead under reduced motion and under lite; the two
+ * STATIC halves (a fill swap, a base opacity) are not animation and survive
+ * both, exactly as the rest of the page treats a colour. Ownership is a plain
+ * bag of booleans handed in at construction - this file never reads a store,
+ * a wallet or an inventory, and would not know what a sku was.
  * ==========================================================================*/
 
 import { CAMPUS_GATE, walkLegs, gateLegs, stopAnchor } from './campus.js';
@@ -87,6 +110,18 @@ const BOB_UNITS = 1;
 const BOB_MS = 220;
 /** The target key that means "walk out of the building". */
 export const GATE_KEY = 'gate';
+
+/* ---- COSMETIC DIALS (Counter Stock). Budget caps, and they are caps and not
+ * targets: every one of them is the number of NODES the effect may ever own. */
+/** Live sparks at once. The pool is minted once and recycled round robin. */
+export const SPARK_MAX = 8;
+/** How long one spark lives, ms. Must stay under SPARK_MAX x BOB_MS (the time
+ *  it takes the pool to come round again) or a spark is recycled mid-fade. */
+export const SPARK_MS = 400;
+/** Afterimages behind the ghost walk. Two, and the second is nearly gone. */
+export const ECHO_COUNT = 2;
+/** How far behind the body each afterimage stands, ms per step. */
+export const ECHO_LAG_MS = 90;
 
 /** The document events that snap a walk to its end (attract Law II's list). */
 const SNAP_EVENTS = ['pointerdown', 'pointerup', 'wheel', 'touchstart', 'keydown'];
@@ -240,6 +275,33 @@ export function walkAt(legs, t, total) {
   return { x: end[0], y: end[1], leg: n - 2, facing: 1, done: true };
 }
 
+/**
+ * THE COSMETIC BAG, shaped. Three booleans and nothing else: this module is
+ * handed what the player OWNS, never a sku, never an inventory row and never a
+ * function that reaches a store. Anything missing, misspelled or merely truthy
+ * is OFF - a cosmetic that switches itself on because the shell handed down a
+ * `1` instead of a `true` is a cosmetic nobody bought. Pure.
+ *
+ * A function is accepted as well as an object, so the shell may hand down a
+ * live getter and a purchase made mid-session lights on the next campus mount
+ * without a reload (contract §4). It is read ONCE per walker.
+ *
+ * @param {Object|Function=} bag {awayColors, sparklerSteps, ghostWalk}
+ * @returns {{awayColors:boolean, sparklerSteps:boolean, ghostWalk:boolean}}
+ */
+export function normaliseCosmetics(bag) {
+  let b = bag;
+  if (typeof b === 'function') {
+    try { b = b(); } catch (e) { b = null; }
+  }
+  const o = (b && typeof b === 'object') ? b : {};
+  return {
+    awayColors: o.awayColors === true,
+    sparklerSteps: o.sparklerSteps === true,
+    ghostWalk: o.ghostWalk === true,
+  };
+}
+
 /** The plaque a room key stands at - the miniature's resting place. Pure. */
 export function roomStop(key) {
   try {
@@ -273,12 +335,23 @@ function setAttr(node, k, v) {
   try { node.setAttribute(k, String(v)); } catch (e) { /* noop */ }
 }
 
+function dropAttr(node, k) {
+  if (!node) return;
+  try { if (typeof node.removeAttribute === 'function') node.removeAttribute(k); }
+  catch (e) { /* noop */ }
+}
+
 /**
  * @param {Object} o
  * @param {Element=} o.mount        campus.walkMount - the group above the ghosts
  * @param {boolean=} o.reducedMotion  no animation: the trace appears whole and
  *   the miniature snaps to the door (ORIENTATION §2.3)
  * @param {string=} o.spriteId      the seed the body is dealt from
+ * @param {Object|Function=} o.cosmetics  what the player OWNS off the Prize
+ *   Counter: {awayColors, sparklerSteps, ghostWalk}. See normaliseCosmetics -
+ *   absent is the whole school's ordinary miniature, which is the default.
+ * @param {boolean=} o.lite         performance mode. It gates the COSMETICS and
+ *   nothing else (see the note beside it below): a lite machine keeps its walk.
  * @param {Function=} o.log
  * @param {Object=} o.clock         test seam {now(), raf(fn), caf(id)}
  * @returns {{mountAt, at, walkTo, skip, setResidue, residue, walking, destroy}}
@@ -315,6 +388,17 @@ export function createWalker(o) {
   };
   /** Reduced motion (and a lit-down machine) take the snap path. */
   const still = !!(opts.reducedMotion || opts.lowPerf);
+  /** What the player bought (Counter Stock). Read once, per walker. */
+  const cos = normaliseCosmetics(opts.cosmetics);
+  /**
+   * MAY THE COSMETICS MOVE? `still` above is the reduced-motion rung and it
+   * already stops the walk itself animating; this one is narrower ON PURPOSE
+   * and is read by NOTHING but the two animated cosmetics, so a performance-mode
+   * player still crosses the campus exactly the way they always did. Never fold
+   * `opts.lite` into `still` - that would be a silent regression of the whole
+   * walk for a feature that is glitter.
+   */
+  const cosMoves = !still && opts.lite !== true;
   /**
    * IS THIS A BROWSER AT ALL? ghosts.js's law, and it earns its keep twice
    * here. With no `requestAnimationFrame` and no injected clock (node, the DOM
@@ -352,10 +436,81 @@ export function createWalker(o) {
     if (youRing) you.appendChild(youRing);
     if (youBody) you.appendChild(youBody);
   }
+
+  /* ---------------------------------------------------- the cosmetic layers
+   * MINTED ONLY FOR A PLAYER WHO BOUGHT THE THING. An ordinary miniature's node
+   * count is byte for byte what it was before this wave, which is the whole of
+   * why a restock may touch this file at all: the school that owns nothing pays
+   * nothing, and the pools below are FIXED so the school that owns everything
+   * pays a constant. */
+  const wantsSparks = cos.sparklerSteps && cosMoves;
+  const wantsEchoes = cos.ghostWalk && cosMoves;
+  const sparkLayer = wantsSparks ? svgNode('g', null, 'campus-sparks') : null;
+  const echoLayer = wantsEchoes ? svgNode('g', null, 'campus-walkechoes') : null;
+  /** The spark pool, allocated once and recycled round robin. */
+  const sparks = [];
+  let sparkAt = 0;
+  /** The afterimages, nearest first. Same sprite, same seed, same body. */
+  const echoes = [];
+
+  if (sparkLayer) {
+    for (let i = 0; i < SPARK_MAX; i += 1) {
+      const g = svgNode('g', { transform: 'translate(0,0)' }, 'campus-spark');
+      /* One pixel. `opacity` starts at 0 as a presentation ATTRIBUTE, which the
+       * keyframe below outranks the moment a spark is struck and which is what
+       * the pixel falls back to when it is not. */
+      const r = svgNode('rect',
+        { x: -0.5, y: -0.5, width: 1, height: 1, opacity: 0 }, 'campus-spark-i');
+      if (!g || !r) continue;
+      g.appendChild(r);
+      sparkLayer.appendChild(g);
+      sparks.push({ g, r, flip: false });
+    }
+  }
+
+  if (echoLayer) {
+    for (let i = 0; i < ECHO_COUNT; i += 1) {
+      const g = svgNode('g',
+        { transform: 'translate(' + pos[0] + ',' + pos[1] + ')' },
+        /* `gh-you` as well, so an afterimage wears YOUR palette (and your away
+         * colours) rather than a stranger's - one sprite, one wardrobe. The
+         * drop-shadow that class carries is cancelled in styles.css: an
+         * afterimage is never filtered (this file's render rule). */
+        'gh-you gh-echo gh-echo' + (i + 1));
+      const b = svgNode('g',
+        { transform: 'scale(' + YOU_SCALE + ',' + YOU_SCALE + ')' }, 'gh-youbody');
+      let s = null;
+      try { s = buildStudentSprite('self|' + spriteId); }
+      catch (e) { s = null; }
+      if (!g || !b || !s) continue;
+      b.appendChild(s);
+      g.appendChild(b);
+      echoLayer.appendChild(g);
+      echoes.push({ g, body: b });
+    }
+  }
+
+  /** The owned-state attributes. CSS does every visible thing they cause. */
+  function paintCosmetics() {
+    const marks = [[you, 'data-cos-away', cos.awayColors], [you, 'data-cos-ghost', cos.ghostWalk]];
+    for (const [node, key, on] of marks) {
+      if (on) setAttr(node, key, '1'); else dropAttr(node, key);
+    }
+    /* An afterimage is you, so it wears your kit too. */
+    for (const e of echoes) {
+      if (cos.awayColors) setAttr(e.g, 'data-cos-away', '1'); else dropAttr(e.g, 'data-cos-away');
+    }
+  }
+  paintCosmetics();
+
   if (mount) {
     try {
       if (residueLayer) mount.appendChild(residueLayer);
       if (trace) mount.appendChild(trace);
+      /* Under the miniature, over the wake: an afterimage is behind you and a
+       * spark is on the floor you left. */
+      if (echoLayer) mount.appendChild(echoLayer);
+      if (sparkLayer) mount.appendChild(sparkLayer);
       if (you) mount.appendChild(you);
     } catch (e) { say('walk: mount refused (' + ((e && e.message) || e) + ')'); }
   }
@@ -381,6 +536,60 @@ export function createWalker(o) {
   }
 
   function paintTrace(pts) { setAttr(trace, 'points', pointsAttr(pts)); }
+
+  /* -------------------------------------------------------- the cosmetics */
+
+  /**
+   * ONE SPARK, off the pool, at the feet. Struck from the FOOTFALL the walk
+   * already counts (frame() below) and never from a timer of its own: the
+   * sparkler is the step, so a machine that drops frames drops sparks with them
+   * rather than dumping a backlog on the floor.
+   *
+   * THE SCATTER IS THE STEP NUMBER, NOT A ROLL. Nothing on this page rolls live
+   * where two players could compare it, and a walk is the map everybody sees;
+   * `n` is the footfall index, which gives left / centre / right for free and
+   * makes the whole effect reproducible in a suite.
+   */
+  function strikeSpark(x, y, n) {
+    if (!sparks.length) return;
+    const s = sparks[sparkAt % sparks.length];
+    sparkAt += 1;
+    const jx = ((n % 3) - 1) * 1.1;
+    setAttr(s.g, 'transform', 'translate('
+      + (Math.round((x + jx) * 10) / 10) + ',' + (Math.round(y * 10) / 10) + ')');
+    /* TWO CLASSES, ALTERNATING, and they carry the same keyframe. Re-adding the
+     * class a spark already wears does not restart a finished animation without
+     * a forced reflow (which is a layout read per step); flipping between two
+     * identical names restarts it by definition and reads nothing. */
+    s.flip = !s.flip;
+    setAttr(s.r, 'class', 'campus-spark-i ' + (s.flip ? 'is-a' : 'is-b'));
+  }
+
+  /**
+   * The afterimages, at t minus their lag. `walkAt` is pure and clamps, so this
+   * needs no history buffer at all: an echo is simply where the walk WAS, asked
+   * for the same way the body asks where it is. Facing is the body's - a
+   * miniature that turned a corner turns its whole wake with it.
+   */
+  function drawEchoes(r, t) {
+    if (!echoes.length || !r) return;
+    const sx = facing < 0 ? -YOU_SCALE : YOU_SCALE;
+    for (let i = 0; i < echoes.length; i += 1) {
+      const at = walkAt(r.legs, t - ECHO_LAG_MS * (i + 1), r.total);
+      setAttr(echoes[i].g, 'transform', 'translate('
+        + (Math.round(at.x * 10) / 10) + ',' + (Math.round(at.y * 10) / 10) + ')');
+      setAttr(echoes[i].body, 'transform', 'scale(' + sx + ',' + YOU_SCALE + ')');
+    }
+  }
+
+  /** The wake is only there while there is a walk to be behind. */
+  function showEchoes(on) {
+    if (!echoLayer) return;
+    try {
+      if (on) echoLayer.setAttribute('class', 'campus-walkechoes is-walking');
+      else echoLayer.setAttribute('class', 'campus-walkechoes');
+    } catch (e) { /* noop */ }
+  }
 
   function renderResidue() {
     if (!residueLayer) return;
@@ -471,6 +680,11 @@ export function createWalker(o) {
       if (Math.abs(dx) >= 0.5) facing = dx > 0 ? 1 : -1;
     }
     draw(null);
+    /* THE WAKE CATCHES UP AND GOES OUT. An afterimage of a body that has
+     * stopped is a second student standing in the corridor, so the echoes are
+     * landed on the destination and then faded by their own class. */
+    drawEchoes(r, r.total);
+    showEchoes(false);
     paintTrace(r.legs);
     /* W3 P0-30: ARRIVAL. Two slowing footfalls and the room's air under them,
      * so the walk lands rather than stopping. A SKIP gets one clipped step -
@@ -524,8 +738,13 @@ export function createWalker(o) {
       if (feet > r.feet) {
         r.feet = feet;
         sfx('step', 0.06, { pitch: (feet % 2) ? 0.96 : 1.04 });
+        /* THE SPARKLER RIDES THE FOOTFALL. Same beat, same counter, no second
+         * clock - which is also the budget: one spark per step, never per
+         * frame, and the pool caps what a long walk can leave behind. */
+        strikeSpark(at.x, at.y, feet);
       }
     }
+    drawEchoes(r, t);
     paintTrace(r.legs.slice(0, at.leg + 1).concat([[at.x, at.y]]));
     r.rafId = clock.raf(frame);
     /* No frame clock answered mid-walk. Rather than freeze half way across the
@@ -599,6 +818,8 @@ export function createWalker(o) {
     }
 
     draw(0);
+    drawEchoes(run, 0);
+    showEchoes(true);
     paintTrace([legs[0], legs[0]]);
     armSnap();
     run.rafId = clock.raf(frame);
@@ -635,6 +856,12 @@ export function createWalker(o) {
     try { if (you) you.remove(); } catch (e) { /* noop */ }
     try { if (trace) trace.remove(); } catch (e) { /* noop */ }
     try { if (residueLayer) residueLayer.remove(); } catch (e) { /* noop */ }
+    /* The cosmetics leave with the walker - the pool is nodes, and a pool that
+     * outlived its layer would be glitter on a campus that is not there. */
+    try { if (sparkLayer) sparkLayer.remove(); } catch (e) { /* noop */ }
+    try { if (echoLayer) echoLayer.remove(); } catch (e) { /* noop */ }
+    sparks.length = 0;
+    echoes.length = 0;
   }
 
   draw(null);
@@ -651,10 +878,24 @@ export function createWalker(o) {
     /** Test seam: is a walk in the air? */
     walking() { return !!run; },
     destroy,
+    /** What the miniature is wearing, and what it actually built for it.
+     *  Test seam: `cosmetics` is what was asked for, the two counts are what
+     *  the budget allowed (both 0 under reduced motion and under lite). */
+    cosmetics() {
+      return {
+        awayColors: cos.awayColors,
+        sparklerSteps: cos.sparklerSteps,
+        ghostWalk: cos.ghostWalk,
+        moves: cosMoves,
+        sparks: sparks.length,
+        echoes: echoes.length,
+      };
+    },
     diagnostics() {
       return {
         still, mounted: !!mount, walking: !!run, bound,
         at: pos.slice(), facing, residue: residueList.length,
+        cos: { away: cos.awayColors, spark: sparks.length, echo: echoes.length },
       };
     },
   };

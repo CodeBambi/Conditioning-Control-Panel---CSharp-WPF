@@ -404,12 +404,97 @@ shell/lever.js     THE EXTRA CREDIT LEVER, in ONE place: the words, the lock
                    hide the feature. Rebuilt on every pop rather than mutated -
                    a token spent between doors has to light Honors on the very
                    next door
+shell/themes.js    CAMPUS LOOK (COUNTER STOCK): the pure theme TABLE. A theme is a
+                   palette and NOTHING ELSE - thirteen CSS custom properties on
+                   `:root`, then it walks away; every hue in styles.css is already
+                   a var() off those tokens, so moving the thirteen reskins the
+                   whole school with no per-theme CSS rule anywhere (that absence
+                   is deliberate - a second source of truth would rot first).
+                   Imports nothing (no DOM, no store, no lexicon) so it runs in
+                   bare Node. `campusTheme` is the PAGE-owned meta key; the clamp
+                   (`clampThemeId`) sends junk, unknown, unowned and a throwing
+                   wallet all to `standard`. The shell owns the meta key, the
+                   ownership question and the order of application - a mod skin
+                   and a theme means THE THEME WINS while selected, and the revert
+                   re-lays the mod's palette from `src.palette`, never a cache
+                   (removeProperty cannot tell a theme write from a mod write).
+                   Theme names reuse the prize rows (`prize_theme_drone`,
+                   `prize_theme_snowday`) so a prize is called ONE thing in the
+                   whole school. + themes.css (picker row, weather-canvas belts)
+shell/themefx.js   THE WEATHER LAYER (COUNTER STOCK) - the school's FOURTH render
+                   surface, after engine effects on `#arc-fx`, scene.js's motes
+                   canvas inside a room, and campus-walker's SVG. ONE fixed
+                   full-viewport <canvas> on <body>, pointer-events:none, painted
+                   by ONE rAF loop throttled to ~30fps, carrying at most
+                   THEME_FX_BUDGET (120 desktop / 48 phone) particles. Exists only
+                   while a campus theme WITH an `fx` key is the active look.
+                   WHERE IT SITS: the body-level stack is class/report stage 10,
+                   campus stage 20 and the end card 20, topbar 30, the fixed exit
+                   bar 32, the confirm 36, `#arc-fx` 40, `#arc-ceremony` 45,
+                   `#arc-emi` 50, `#arc-toast` 60. The canvas takes z-index 25:
+                   above the campus stage (which paints an opaque sky and would
+                   otherwise bury it) and below every piece of chrome a player has
+                   to read or press. Snow falls in front of the quad and behind
+                   the topbar, the exit sign, EMI and every toast; it takes no
+                   pointer, so no rect, door or button under it moves.
+                   IT DOES NOT BREAK THE walk.js LAWS: those laws (rects and
+                   polylines only, transform+opacity only, NO canvas, budget caps)
+                   bind the walker's own SVG - a layer that shares a stacking
+                   context with the plan and whose every node is hit-tested
+                   against the campus's doors. This canvas is outside
+                   `.campus-stage` entirely, hangs off <body>, hit-tests nothing,
+                   and is alone on its layer - the same arrangement scene.js's
+                   motes canvas already has inside a room, held to the same kill
+                   switches. FOUR KILL SWITCHES, any one enough: (1) reduced
+                   motion - NO layer at all, never a created-and-paused one, per
+                   scene.js's law; (2) lite (`init.performanceMode`) - same;
+                   (3) the active theme has no `fx` - same; (4) a class is
+                   running - torn down for the duration, because games own the
+                   screen. Plus the free one every timer owes: a hidden tab parks
+                   the loop, returning re-arms it. The annex's law: the module
+                   imports nothing - flags, seed and log arrive as caps, so it
+                   runs in bare Node against a fake 2d context. NO live
+                   Math.random: the rain is a function of `init.utcDateSeed`, so
+                   two clients on one night draw the same first frame
+shell/pa.js        THE PA ANNOUNCER (COUNTER STOCK, `pa_pack`): two timers and a
+                   seeded plan, nothing else - no store, no element, no Audio
+                   node, no document listener; every cue leaves by the one audio
+                   door (trap 18) with bus 'voice', maxMs 8000 and a duck (NOT
+                   the tutorial bus - that path caps a clip at 1.2s and would cut
+                   every spoken line). Categories partition pa_01..pa_36:
+                   ARRIVAL 01-08, SCHEDULE 09-20, ASIDE 21-30, CLOSING 31-36
+                   (closing NOT in rotation - the numbering is the contract with
+                   whoever records the lines). `planLines(daySeed, session)` is
+                   pure and seeded (`daySeed|pa|<session>`); every gate is
+                   re-asked at SPEAK time, so a pack bought while a timer is in
+                   the air still speaks tonight. Caps: never under lite, never
+                   during a class (the notify-fed flag OR the shell's `inClass` -
+                   either yes is a no), two lines a session, ONE under reduced
+                   motion. A line caught in flight by classStart is SPENT, not
+                   deferred. Fed moments by the shell: campusReveal (after the
+                   ghosts), classStart, classEnded (the teardownClass funnel, so
+                   an Esc cannot buy a second announcement), campusUnmount
 shell/peek.js      the shared hold-to-reveal verb (caps the class at A)
 shell/keybinds.js  manifest-declared verb slots, one blob, PanicKey conflict check
 shell/audio.js     THE consumer of engine 'arcademy-sfx' (WebAudio, procedural)
                    + SAMPLES door (assets/sfx, host-listed), ALIASES (verdict names
                    and sample floors), HOLD/STOP for room-tone beds (trap 114),
-                   unknown-name blip logged once (trap 115)
+                   unknown-name blip logged once (trap 115).
+                   COUNTER STOCK: cue `bell` resolves to sample `bell_brass` when
+                   the player owns `brass_bell` AND the file is in `available` -
+                   ONE resolution point (cueFor). bell_brass is an ALIAS onto
+                   bell, NOT SAMPLE_ONLY, giving three floors: the brass file,
+                   the school bell's own sample, the school bell's recipe (a
+                   present-but-undecodable file must not ring the 660 Hz blip).
+                   Ownership arrives via module-level `setBellCosmetic(getter)`
+                   (audio.js is built in boot.js before the shell exists, so the
+                   shell cannot hand it a constructor arg) - the `set_bell` bus
+                   message writes the SAME slot; use ONE road only (the shell
+                   uses the getter). The 36 PA rows (pa_01..pa_36) live FLAT in
+                   assets/sfx/ (BuildSfxSamples is TopDirectoryOnly), all in
+                   NEVER_BUFFERED (36 spoken lines as PCM = tens of MB for <=2
+                   plays a night) and SAMPLE_ONLY (missing = silence, never a
+                   blip); lines must sit under 8s (CLIP_REQ_MAX_MS truncates)
 games/registry.js  guarded allSettled registry + tier math + class_suspended stub
                    + GAME_SEMESTER / OPEN_SEMESTERS (the release gate: a CLOSED semester's
                    games are ABSENT from the pool, never stubs; isOpenSemester())
@@ -561,7 +646,18 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
              (~200ms steps, long randomised centre hold; OFF under
              prefers-reduced-motion / html.arc-reduced, stopped by every chain,
              say, drag, hide). New frames reproduce the body.png recipe: octree
-             quantize to 256 + optimized PNG (~40-46K each). The FACE IS TEXT -
+             quantize to 256 + optimized PNG (~40-46K each).
+             COUNTER STOCK prizes ride widget.js: the desk toy (`emi_desk_toy`,
+             art/emi/toy.png, onerror hides) and the VARSITY frame set
+             (`emi_varsity`, art/emi/varsity/ - the SAME TEN filenames at the
+             SAME 859x869 rect, and the swap is ALL-OR-NOTHING off one probe of
+             varsity/body-idle.png: a partial folder 404s odd poses to the
+             celebration frame, so never ship fewer than all ten). Varsity art
+             must NEVER cover the screen - the face canvas draws at the shared
+             fixed screen rect over whichever body img is up. Ownership arrives
+             as `prizes` row getters through mountEmi -> createWidget (the shell
+             resolves them, she never sees a wallet); `emi.setPrizes()` re-reads
+             on the wallet echo. The FACE IS TEXT -
              a kaomoji drawn on a 152px canvas and nearest-neighbour upscaled, so
              any font becomes pixel art. Owner-locked design; the spec is
              EMI-DESIGN-LOCK.md, not this file. Two halves, two owners:
@@ -786,6 +882,24 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
   numbers back from two places: `payout-result` (which carries `streak` /
   `perfectAttendance` / `classesToday` on the same frame) and the whole-blob snapshot.
   The page still owns `days` (the graded view) and `games` (tier + per-game state).
+  - **`campusTheme` is a PAGE-owned meta key** (COUNTER STOCK), beside `leverPick`,
+    `recordsRoomVisits`, `recordsRoomSeenStamps` and `recordsBookPage`. No C# change was
+    needed - `ArcademyMetaStore.Set` takes any new top-level key, and the host has no
+    opinion about what the campus looks like. The page CLAMPS on every read
+    (`clampThemeId` against the wallet), so a stale or forged pick degrades to `standard`.
+- **COUNTER STOCK ownership travels as GETTERS off `ownsSku`, one per consumer, wired in
+  `shell.js` only.** corkboard gets `posters:`, the walker gets a `cosmetics:` bag (read at
+  BUILD - the campus is rebuilt every visit; plus `lite:`, which gates the cosmetics ONLY,
+  never the walk itself), EMI gets `prizes:` row getters plus `strings.toy` (she never
+  imports the lexicon), audio gets `setBellCosmetic(getter)`, pa gets `owned:`. None of
+  those modules imports the store or the wallet - the shell hands each an answer. Purchases
+  settle ONLY on the `wallet-result` echo; the same echo handler re-runs `applyTheme()` and
+  `emi.setPrizes()`, so a prize bought mid-session lights without a reload.
+- **The catalog's WAVE projection is host-side** (`ArcademyEconomy`): `CatalogItem.Wave`,
+  `CurrentWave` const, `InStock()`. An above-wave row is ABSENT from the wire (never
+  "locked"), `Buy` refuses it as `unknown`, and shipping the next wave is ONE const bump -
+  the NeutralLexicon already carries all eleven rows regardless, so no second trip through
+  nine language files.
 - **`punchCards` is HOST-owned too** (PUNCHCARD.md §2). `ArcademyPunchCards` is the pure math,
   `ArcademyMetaStore.StampPunchCard` / `EnrollPunchCard` the mints; the key is refused to the page
   and every date is LOCAL. One card per game key:

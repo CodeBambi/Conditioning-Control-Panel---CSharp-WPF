@@ -4619,6 +4619,8 @@
   "lockdown_poss_safety_dose_tip": "Um lockdown se recusa a rodar vazio. Motor desligado no início: ele é ligado por você. Nada ativado (ou você desliga tudo no meio): a guardiã liga recursos, um a mais a cada vez, e devolve tudo quando o tempo acaba.",
   "st4_braindrain_audio_rate": "Frequência do áudio",
   "label_braindrain": "Drenagem Cerebral",
+  "tube_midnight_setting": "Midnight Glass",
+  "tube_midnight_setting_hint": "A darker pane on her tube. The Prize Counter sells this one.",
 
   "_comment_arcademy_door": "The Arcademy (Play wall card, Ctrl+K row, failure dialogs)",
   "play_arcademy_title": "The Arcademy",

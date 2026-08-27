@@ -9,11 +9,15 @@
  * week goes and the case is where a good NIGHT goes, and the room says that by
  * standing them side by side rather than by explaining it.
  *
- * THERE IS NO ART HERE AND THERE WAS NEVER GOING TO BE. The counter, the
- * shelf timber, the glass, the little price flags: all of it is drawn in
- * prizecounter.css out of borders and gradients, the way the campus draws its
- * buildings. That is a feature and not a shortfall - the room has to survive a
- * catalog the host can change without anybody repainting a plate.
+ * THE ROOM IS DRAWN, THE GOODS ARE PAINTED. The counter, the shelf timber, the
+ * glass and the little price flags are still borders and gradients out of
+ * prizecounter.css, the way the campus draws its buildings - the ROOM has to
+ * survive a catalog the host can change without anybody repainting a plate.
+ * What changed on 2026-08-27 is the GOODS: every sku in the catalog now has a
+ * sprite in `art/prizes/`, and a row wears it. The glyph did not go away and
+ * must not - it is the bed the sprite sits on, so a sku whose art has not been
+ * drawn yet, or whose png fails to load, still reads as a thing on a shelf
+ * instead of as a hole. See THE TWO REGISTERS below.
  *
  * THE ECHO LAW IS THE WHOLE FILE (trap 1). Pressing Trade does not buy
  * anything. It sends `prize-buy` up the seam, it puts the row to sleep with a
@@ -72,6 +76,66 @@ export const GLYPHS = Object.freeze({
   free_swim_key: '⚿',
   de_5x5: '▦',
   jukebox: '♪',
+  /* THE RESTOCK (Counter Stock, 2026-08-26). Eleven more boxes on the shelf,
+   * and the register above is all any of them get: one character, no art, no
+   * second table. Two rules were followed picking them and both are cheap to
+   * break by accident - NOTHING may be the plain parcel `▤` (that is the
+   * fallback a sku the catalog grew first wears, so a glyph that IS the
+   * fallback reads as "this row has no glyph" for ever), and no two rows may
+   * wear the same character (the shelf is read at a glance and two identical
+   * boxes read as one thing listed twice). */
+  away_colors: '▥',
+  sparkler_steps: '✧',
+  brass_bell: '♩',
+  emi_desk_toy: '❀',
+  poster_drop_1: '◫',
+  pa_pack: '◍',
+  theme_drone: '▚',
+  ghost_walk: '░',
+  theme_snowday: '❄',
+  emi_varsity: '✦',
+  tube_midnight: '◗',
+});
+
+/* ----------------------------------------------------------------------------
+ * THE SECOND REGISTER: THE SPRITES (art install, 2026-08-27).
+ *
+ * GLYPHS above is UNTOUCHED and stays that way - it is the fallback, and its
+ * two rules (nothing may be the parcel `▤`, no two rows may wear the same
+ * character) still hold for exactly the same reasons. This table is the layer
+ * over it: sku -> a 192x192 pixel sprite, drawn one object on a clear field.
+ *
+ * THREE RULES OF ITS OWN, all cheap to break by accident:
+ *  1. THE GLYPH IS ALWAYS PAINTED FIRST and the sprite covers it. An `onerror`
+ *     takes the IMAGE off and leaves the glyph standing, so a missing png is a
+ *     row that looks like it did last week, never a broken picture.
+ *  2. NO SKU MAY BE INVENTED HERE. The catalog is the host's; a name in this
+ *     table that the catalog does not carry paints nothing, and a sku the
+ *     catalog grows before the artist does falls to its glyph.
+ *  3. `image-rendering: pixelated` OR IT IS NOT PIXEL ART. prizecounter.css
+ *     sizes the box at an exact integer divisor of 192 (48px, 32px on a phone)
+ *     so the browser drops whole pixels rather than smearing them.
+ * -------------------------------------------------------------------------- */
+export const ART = Object.freeze({
+  id_frame_gold: 'id_frame_gold.png',
+  id_frame_navy: 'id_frame_navy.png',
+  confetti_stamp: 'confetti_stamp.png',
+  late_slip: 'late_slip.png',
+  honors_lever: 'honors_lever.png',
+  free_swim_key: 'free_swim_key.png',
+  de_5x5: 'de_5x5.png',
+  jukebox: 'jukebox.png',
+  away_colors: 'away_colors.png',
+  sparkler_steps: 'sparkler_steps.png',
+  brass_bell: 'brass_bell.png',
+  emi_desk_toy: 'emi_desk_toy.png',
+  poster_drop_1: 'poster_drop_1.png',
+  pa_pack: 'pa_pack.png',
+  theme_drone: 'theme_drone.png',
+  ghost_walk: 'ghost_walk.png',
+  theme_snowday: 'theme_snowday.png',
+  emi_varsity: 'emi_varsity.png',
+  tube_midnight: 'tube_midnight.png',
 });
 
 /** The token price glyph, straight out of the contract: ◉1 / ◉2 / ◉3. */
@@ -125,6 +189,16 @@ function dropCls(node, cls) {
 function urlFor(rel, fallback) {
   try { return new URL(rel, import.meta.url).href; }
   catch (e) { return fallback; }
+}
+
+/** Where a sku's sprite lives. Module-relative through `urlFor`, exactly like
+ *  the sheet below and corkboard.js's `posterUrl` - a page-relative path breaks
+ *  the moment the room is mounted from anywhere but the shell (campus.js:320).
+ *  Answers null for a sku with no art, which is the glyph's cue. */
+export function spriteUrl(sku) {
+  const file = Object.prototype.hasOwnProperty.call(ART, sku) ? ART[sku] : null;
+  if (!file) return null;
+  return urlFor('../art/prizes/' + file, 'art/prizes/' + file);
 }
 
 /** prizecounter.css, linked once and lazily - recordsroom.js's pattern. */
@@ -395,10 +469,30 @@ export function createPrizeCounter(caps) {
     const box = el('article', cls);
     attr(box, 'data-sku', item.sku);
 
-    /* The drawn box on the shelf. Decoration, no pointer events, one glyph. */
+    /* The drawn box on the shelf. Decoration, no pointer events, and TWO
+     * layers: the glyph is laid down first as the bed, and the sprite - when
+     * there is one - is laid over it. An image that will not load takes ITSELF
+     * off and the bed is what is left, so this row can never be a hole. */
     const art = el('div', 'pc-art');
     attr(art, 'aria-hidden', 'true');
     art.appendChild(el('span', 'pc-glyph', GLYPHS[item.sku] || '▤'));
+    const spr = spriteUrl(item.sku);
+    if (spr) {
+      const img = el('img', 'pc-sprite');
+      attr(img, 'alt', '');
+      attr(img, 'draggable', 'false');
+      attr(img, 'loading', 'lazy');
+      attr(img, 'decoding', 'async');
+      try {
+        if (typeof img.addEventListener === 'function') {
+          img.addEventListener('error', () => {
+            try { img.remove(); } catch (e) { /* the bed is already under it */ }
+          });
+        }
+      } catch (e) { /* the DOM double carries no listeners - never fatal */ }
+      try { img.src = spr; } catch (e) { /* noop */ }
+      art.appendChild(img);
+    }
     box.appendChild(art);
 
     const body = el('div', 'pc-body');

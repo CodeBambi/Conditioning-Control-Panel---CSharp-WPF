@@ -4611,6 +4611,8 @@
   "lockdown_poss_safety_dose_tip": "ロックダウンは空のままでは動きません。開始時にエンジンが止まっていれば代わりに起動します。何もオンでなければ（途中で全部オフにしても）、看守が機能をオンにし、毎回ひとつずつ増やし、タイマーが終わると全部元に戻します。",
   "st4_braindrain_audio_rate": "音声クリップの頻度",
   "label_braindrain": "ブレインドレイン",
+  "tube_midnight_setting": "Midnight Glass",
+  "tube_midnight_setting_hint": "A darker pane on her tube. The Prize Counter sells this one.",
 
   "_comment_arcademy_door": "The Arcademy (Play wall card, Ctrl+K row, failure dialogs)",
   "play_arcademy_title": "The Arcademy",

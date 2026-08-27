@@ -168,7 +168,7 @@ export function voiceMoment(name, payload) {
  * @param {Function=} o.log
  * @returns {Object|null} the controller, or null when there is nothing to mount
  */
-export function mountEmi({ layer, store, toast, enabled = true, log, assets, settings, strings } = {}) {
+export function mountEmi({ layer, store, toast, enabled = true, log, assets, settings, strings, prizes } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   if (!layer) return null;
   if (singleton) return singleton;
@@ -182,7 +182,7 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
    * that: the side of the page that has `t` does the resolving and hands the
    * ANSWER down, the way shell/orientation.js already hands her three lines
    * over as `payload.line`. */
-  const widget = createWidget({ root: layer, store, toast, log: say, assets, settings, strings });
+  const widget = createWidget({ root: layer, store, toast, log: say, assets, settings, strings, prizes });
   if (!widget) return null;
 
   /* THE OPENING BEAT LANDS LATE OR NOT AT ALL. The renderer is one dynamic
@@ -226,6 +226,14 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
   }).catch(() => {});
 
   const api = {
+    /** COUNTER STOCK: re-read what the player owns (the shell calls this on a
+     *  settled purchase). Returns {deskToy, varsity, jacket}. */
+    setPrizes(bag) { return widget.setPrizes(bag); },
+    /** COUNTER STOCK (art install): wear one of `OUTFITS` - 'varsity' (bought),
+     *  or 'labcoat' / 'cheer' / 'swim', which cost nothing and unlock nothing.
+     *  Null or junk puts her back in the standard set. Returns the probe state.
+     *  TODO: no surface in the school calls this yet - see widget.js at OUTFITS. */
+    setOutfit(name) { return widget.setOutfit(name); },
     /** The `.emi` node. Read-only to callers; the widget owns its geometry. */
     get el() { return widget.el; },
     /** The dock button (bottom-right edge, up only while EMI is dismissed). */
