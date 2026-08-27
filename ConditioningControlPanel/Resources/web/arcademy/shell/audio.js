@@ -398,7 +398,7 @@ for (let i = 1; i <= PA_COUNT; i += 1) {
 const OST_SAMPLES = Object.freeze([
   'ost_campus', 'ost_deep_end', 'ost_sort', 'ost_records', 'ost_lost_found',
   'ost_instant_recall', 'ost_anomaly', 'ost_daily_trigger', 'ost_impulse_control',
-  'ost_prizes', 'ost_misdirection', 'ost_deja_vu',
+  'ost_prizes', 'ost_misdirection', 'ost_deja_vu', 'ost_annex',
 ]);
 for (const n of OST_SAMPLES) SAMPLES[n] = './assets/sfx/' + n + '.mp3';
 

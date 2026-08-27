@@ -3183,6 +3183,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     dismissPunchStage();
     dismissAnnexStage();
     clearScreen();
+    try { if (ost) ost.enter('annex'); } catch (e) { /* noop */ }
     renderTopbar();
     try { const v = getVoice(); if (v && v.setLabSeen) v.setLabSeen(true); } catch (e) { /* noop */ }
     try {

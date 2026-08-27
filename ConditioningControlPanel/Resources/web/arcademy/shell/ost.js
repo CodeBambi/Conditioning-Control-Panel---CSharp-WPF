@@ -86,8 +86,9 @@ export const OST_LEVEL = 0.2;
  *   ost_prizes          Neon Jackpot 3      the Prize Counter, active
  *   ost_misdirection    Neon Jackpot        the parlour, active
  *   ost_deja_vu         Neon Jackpot 2      the card racks, active
- * Still silent: echo, composure, the lab (next batch; the lab wants its own
- * uncanny cut, see the owner's brief).
+ *   ost_annex           Corroded Pulse      the lab, slow and wrong
+ * Still silent: echo, composure. The annex cams app holds its own `cam_bed`
+ * room tone on the music bus in its own slot; the two layer, by design.
  */
 export const TRACKS = Object.freeze({
   campus:          Object.freeze({ name: 'ost_campus' }),
@@ -102,6 +103,7 @@ export const TRACKS = Object.freeze({
   impulse_control: Object.freeze({ name: 'ost_impulse_control' }),
   misdirection:    Object.freeze({ name: 'ost_misdirection' }),
   deja_vu:         Object.freeze({ name: 'ost_deja_vu' }),
+  annex:           Object.freeze({ name: 'ost_annex' }),
 });
 
 /** Every track name the table knows, for audio.js to register in one loop. */
