@@ -29,6 +29,11 @@
 import { t } from '../core/lexicon.js';
 import { keyLabel, keyGlyph, keyGlyphWide } from './keybinds.js';
 import { exitBar, sign as signExit } from './exits.js';
+/* THE LANDSCAPE RAIL (owner brief 2026-08-27). The page reads the device's two
+ * marks off <html> (`arc-mobile` + `data-arc-orient`, core/device.js's one
+ * decision) and re-reads them when the phone turns. It never decides mobile-
+ * ness itself; it only subscribes. */
+import { onDeviceChange } from '../core/device.js';
 
 /* ----------------------------------------------------------------------------
  * THE KEY MAP (cross-agent contract - keep in sync with ArcademyHostService's
@@ -604,6 +609,99 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
   const sections = [];
   const OPEN_KEY = 'optionsOpen';
 
+  /* ----------------------------------------------------------------------
+   * THE RAIL (phone, landscape). A landscape phone is ~390px tall: the folded
+   * list showed two rows per screen and the sheet was an endless scroll. In
+   * landscape the SAME sections become a left rail of tabs and the active
+   * section's rows fill the right pane; the classes share one rail entry
+   * ("Classes") with a chip strip across the top of the pane, so the rail
+   * stays nine names long however many classes the school runs. Portrait and
+   * desktop keep the folds exactly - the rail and the strip are in the DOM
+   * always and styles.css shows them only under
+   * `html.arc-mobile[data-arc-orient="landscape"]`, so a rotate is a class
+   * flip and a repaint, never a rebuild. Fold state is not touched by the
+   * rail: it is banked in portrait and honoured again on the way back.
+   * -------------------------------------------------------------------- */
+  let railMode = false;
+  let activeId = null;
+  let activeClassId = null;
+  let rail = null;
+  let strip = null;
+  let pane = null;
+  let classesTab = null;
+  const CLASS_PREFIX = 'game.';
+  const isClassId = (id) => String(id || '').indexOf(CLASS_PREFIX) === 0;
+
+  function isRailViewport() {
+    try {
+      const html = document.documentElement;
+      return !!(html && html.classList && html.classList.contains('arc-mobile')
+        && html.getAttribute('data-arc-orient') === 'landscape');
+    } catch (e) { return false; }
+  }
+
+  /** One section lit, in the rail and in the pane. Never banks anything. */
+  function selectSection(id) {
+    const sid = String(id || '');
+    if (!sections.some((s) => s.id === sid)) return;
+    activeId = sid;
+    if (isClassId(sid)) activeClassId = sid;
+    const cls = isClassId(sid);
+    for (const s of sections) {
+      const on = s.id === sid;
+      s.node.classList.toggle('arc-set-active', on);
+      s.tab.setAttribute('aria-selected', on ? 'true' : 'false');
+      s.tab.tabIndex = on ? 0 : -1;
+    }
+    if (classesTab) {
+      classesTab.setAttribute('aria-selected', cls ? 'true' : 'false');
+      classesTab.tabIndex = cls ? 0 : -1;
+    }
+    if (strip) strip.hidden = !cls;
+    if (railMode && pane) { try { pane.scrollTop = 0; } catch (e) { /* noop */ } }
+  }
+
+  /** Arrow keys walk a tablist; the walked-to tab is selected as it is focused. */
+  function arrowNav(list, prevKeys, nextKeys) {
+    list.addEventListener('keydown', (e) => {
+      const dir = nextKeys.indexOf(e.key) >= 0 ? 1 : prevKeys.indexOf(e.key) >= 0 ? -1 : 0;
+      if (!dir) return;
+      const tabs = Array.from(list.querySelectorAll('[role="tab"]')).filter((n) => !n.hidden && n.offsetParent !== null);
+      if (!tabs.length) return;
+      const at = Math.max(0, tabs.indexOf(document.activeElement));
+      const next = tabs[(at + dir + tabs.length) % tabs.length];
+      e.preventDefault();
+      try { next.focus(); next.click(); } catch (err) { /* noop */ }
+    });
+  }
+
+  /** Read the viewport, flip the mode, repaint the folds. Idempotent. */
+  function layout() {
+    const want = isRailViewport();
+    if (want) {
+      /* The rail box is the viewport minus the topbar, which is sticky and
+       * its own height (it wraps on a narrow phone). Measured, never guessed;
+       * styles.css falls back to 52px if this never ran. */
+      let top = 0;
+      try {
+        const tb = document.getElementById('arc-topbar');
+        if (tb && !tb.hidden) top = Math.round(tb.getBoundingClientRect().height);
+      } catch (e) { /* noop */ }
+      root.style.setProperty('--arc-set-top', top + 'px');
+    }
+    if (want === railMode) return;
+    railMode = want;
+    root.classList.toggle('arc-set-rail', want);
+    for (const s of sections) s.paint();
+    if (want && !activeId) selectSection(defaultSection());
+  }
+
+  /** The scoped page opens on its class; the front office on its first sheet. */
+  function defaultSection() {
+    const scoped = sections.find((s) => isClassId(s.id) && s.scoped);
+    return scoped ? scoped.id : (sections[0] ? sections[0].id : null);
+  }
+
   function storedOpen(id) {
     try {
       const all = store && typeof store.get === 'function' ? store.get(OPEN_KEY, null) : null;
@@ -640,7 +738,26 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
     const stored = storedOpen(sid);
     let open = stored == null ? fallback : stored;
 
+    /* THE RAIL TAB. Built with the section, placed by build(): tier sections
+     * go in the rail, class sections in the strip. Hidden outside landscape. */
+    const tab = el('button', 'arc-set-tab');
+    tab.type = 'button';
+    tab.setAttribute('role', 'tab');
+    tab.setAttribute('aria-selected', 'false');
+    tab.setAttribute('aria-controls', bodyId);
+    tab.tabIndex = -1;
+    tab.appendChild(el('span', 'arc-set-tab-t', title));
+    tab.addEventListener('click', () => selectSection(sid));
+
     function paint() {
+      if (railMode) {
+        /* The rail owns visibility: every body is unfolded (the pane shows one
+         * section, styles.css hides the rest) and the head is a title line. */
+        sec.classList.add('open');
+        head.setAttribute('aria-expanded', 'true');
+        body.hidden = false;
+        return;
+      }
       sec.classList.toggle('open', open);
       head.setAttribute('aria-expanded', open ? 'true' : 'false');
       // hidden is what keeps a folded section out of the tab order; the height
@@ -648,7 +765,8 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
       if (open) { body.hidden = false; }
       else if (reducedMotion()) { body.hidden = true; }
       else {
-        setTimeout(() => { if (!open) body.hidden = true; }, 240);
+        // ...unless the phone turned meanwhile and the rail now owns the body.
+        setTimeout(() => { if (!open && !railMode) body.hidden = true; }, 240);
       }
     }
     function refresh() {
@@ -658,12 +776,13 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
       sum.textContent = text;
     }
     head.addEventListener('click', () => {
+      if (railMode) return;           // a title line, not a fold, in the rail
       open = !open;
       paint();
       bankOpen(sid, open);
     });
     paint();
-    sections.push({ id: sid, node: sec, refresh, isOpen: () => open });
+    sections.push({ id: sid, title, node: sec, tab, refresh, paint, isOpen: () => open, scoped: false });
     sec.body = inner;
     sec.refresh = refresh;
     return sec;
@@ -1536,24 +1655,57 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
     head.appendChild(el('span', 'arc-title', title));
     root.appendChild(head);
 
+    /* THE RAIL AND THE PANE. Every section lives in `pane`; in portrait and on
+     * a desktop the pane is `display:contents` and the rail is not drawn, so
+     * the grid of folds is the one that has always been here. */
+    rail = el('nav', 'arc-set-railnav');
+    rail.setAttribute('role', 'tablist');
+    rail.setAttribute('aria-orientation', 'vertical');
+    rail.setAttribute('aria-label', t('settings', 'Settings'));
+    rail.appendChild(el('span', 'arc-set-railtitle', title));
+    arrowNav(rail, ['ArrowUp', 'ArrowLeft'], ['ArrowDown', 'ArrowRight']);
+    root.appendChild(rail);
+    pane = el('div', 'arc-set-pane');
+    /* THE WHISPER, WHOLE. In the rail the hint under a label is one ellipsised
+     * line; a tap on the hint itself unclamps it for that row. The tap is
+     * swallowed here because the hint lives inside the <label>, and a label's
+     * click is the control's click - a switch would flip, a slider would
+     * focus. Outside the rail the hint is already whole and the tap is the
+     * label's as before. */
+    pane.addEventListener('click', (e) => {
+      if (!railMode) return;
+      const hint = e.target && e.target.closest ? e.target.closest('.arc-hint') : null;
+      if (!hint || !pane.contains(hint)) return;
+      e.preventDefault();
+      const row = hint.closest('.arc-row');
+      if (row) row.classList.toggle('arc-hint-on');
+    });
+    root.appendChild(pane);
+    strip = el('div', 'arc-set-classes');
+    strip.setAttribute('role', 'tablist');
+    strip.setAttribute('aria-label', t('settings_classes_head', 'Classes'));
+    strip.hidden = true;
+    arrowNav(strip, ['ArrowLeft', 'ArrowUp'], ['ArrowRight', 'ArrowDown']);
+    pane.appendChild(strip);
+
     /* ORDER. The app keeps ceilings first, exactly as before. On the web the
      * Media counter goes first - it is the thing a player opens this page for,
      * and on a phone it is the one section that starts open - with the device
      * sheet under it. Strict flag on Media either way. */
     if (host === 'web' && mediaControls) {
-      root.appendChild(buildMedia());
-      root.appendChild(buildCeilings());
+      pane.appendChild(buildMedia());
+      pane.appendChild(buildCeilings());
     } else {
-      root.appendChild(buildCeilings());
-      if (mediaControls) root.appendChild(buildMedia());
+      pane.appendChild(buildCeilings());
+      if (mediaControls) pane.appendChild(buildMedia());
     }
     /* CAMPUS LOOK sits under the ceilings and above Distraction: it is the one
      * group on this sheet the player BOUGHT, and burying a prize at the bottom
      * of a ten-class page is the same as not shipping it. Absent entirely until
      * a theme is owned, and absent on the scoped (mid-class) sheet, which is
      * about one game and not about the school. */
-    if (!scopedEntry && hasThemeChoice()) root.appendChild(buildLook());
-    root.appendChild(buildGlobal());
+    if (!scopedEntry && hasThemeChoice()) pane.appendChild(buildLook());
+    pane.appendChild(buildGlobal());
     for (const entry of shown) {
       if (!entry || !entry.key) continue;
       // Declare the game's slots so the keybind rows (and conflict checks) exist
@@ -1561,14 +1713,40 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
       if (keybinds && entry.mod && entry.mod.manifest) {
         keybinds.declare(entry.key, entry.mod.manifest.keybinds);
       }
-      root.appendChild(buildGame(entry));
+      pane.appendChild(buildGame(entry));
     }
     /* The scoped page is only reachable mid-class, and ctx.settings is a
      * snapshot taken at startClass - so a knob moved here lands NEXT run.
      * One honest line beats a silent surprise (owner ruling 2026-08-24). */
     if (scopedEntry) {
-      root.appendChild(el('p', 'arc-note',
+      pane.appendChild(el('p', 'arc-note',
         t('applies_next_class', 'Class option changes take effect next class.')));
+    }
+
+    /* PLACING THE TABS. Tier sections go in the rail in page order. The
+     * classes share ONE rail entry and a chip strip in the pane - unless the
+     * page is scoped to a single class, which then gets its own rail entry
+     * (it is the reason the player is here) and no strip. */
+    const classSections = sections.filter((s) => isClassId(s.id));
+    if (scopedEntry && classSections.length === 1) classSections[0].scoped = true;
+    const useStrip = !scopedEntry && classSections.length > 0;
+    if (useStrip) {
+      classesTab = el('button', 'arc-set-tab');
+      classesTab.type = 'button';
+      classesTab.setAttribute('role', 'tab');
+      classesTab.setAttribute('aria-selected', 'false');
+      classesTab.tabIndex = -1;
+      classesTab.appendChild(el('span', 'arc-set-tab-t', t('settings_classes_head', 'Classes')));
+      classesTab.addEventListener('click', () => selectSection(activeClassId || classSections[0].id));
+    }
+    for (const s of sections) {
+      if (isClassId(s.id) && useStrip) {
+        s.tab.classList.add('arc-set-chip');
+        strip.appendChild(s.tab);
+        if (classesTab && !classesTab.parentNode) rail.appendChild(classesTab);
+      } else {
+        rail.appendChild(s.tab);
+      }
     }
 
     /* THE STICKY WAY OUT. This page is ten classes long - three ceiling rows,
@@ -1585,6 +1763,17 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
     bar.className += ' arc-settings-exit';
     root.appendChild(bar);
     refreshSummaries();
+
+    /* ARM THE RAIL. Now, for the page as mounted; again on every real device
+     * change (a rotate flips the class on <html> before the seam fires) and on
+     * a plain resize, which is what a topbar wrapping onto two lines is. */
+    layout();
+    try { offs.push(onDeviceChange(() => layout())); } catch (e) { /* noop */ }
+    try {
+      const onResize = () => layout();
+      window.addEventListener('resize', onResize);
+      offs.push(() => window.removeEventListener('resize', onResize));
+    } catch (e) { /* noop */ }
     return root;
   }
 
@@ -1637,6 +1826,8 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
     },
     /** The folds, for a test rig: [{id, isOpen(), node}]. */
     sections: () => sections.map((x) => ({ id: x.id, isOpen: x.isOpen, node: x.node })),
+    /** The landscape rail, for a test rig: mode, the lit section, select(id). */
+    rail: () => ({ on: railMode, active: activeId, select: selectSection }),
     host,
     destroy() {
       for (const off of offs.splice(0)) { try { off(); } catch (e) { /* noop */ } }

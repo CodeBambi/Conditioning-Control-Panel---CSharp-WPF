@@ -834,6 +834,12 @@ html.arc-reduced .arc-timebar-fill::before { content:none; }
 
 /* ============================ SETTINGS =================================== */
 .arc-settings { display:grid; gap:14px; }
+/* THE RAIL'S PARTS (shell/settings.js). The rail, the class strip and the pane
+   wrapper are in the DOM on every host; outside a landscape phone the rail and
+   the strip are not drawn and the pane is `contents`, so the grid of folds
+   below is exactly the one that was here before 2026-08-27. */
+.arc-set-railnav, .arc-set-classes { display:none; }
+.arc-set-pane { display:contents; }
 .arc-group {
   background:var(--navy); border:var(--hairline); border-radius:var(--radius); padding:14px;
 }
@@ -4766,6 +4772,142 @@ html.arc-mobile .arc-settings-exit {
 /* EMI stands on the title on a phone; this page has no beat for her. */
 html.arc-mobile.arc-settings-on .arc-emi { display:none; }
 html.arc-mobile .arc-settings > .arc-classbar { padding-right:0; }
+
+/* ---- the front office, LANDSCAPE (owner brief 2026-08-27) ----------------
+   A landscape phone is ~390px tall. The folded list put two rows on a screen
+   and the sheet was an endless scroll, so in landscape the page becomes a
+   RAIL AND A PANE: the sections down the left as tabs (the Back sign above
+   them), the lit section's rows on the right in compact one-line rows with a
+   one-line hint under the label. One section at a time; most fit the pane
+   whole, the long ones scroll INSIDE the pane and nothing else moves. The
+   classes share one rail entry and a chip strip across the top of the pane.
+   Gated on the device's two marks together, so portrait and the desktop are
+   untouched; settings.js's `arc-set-rail` class on the sheet says the script
+   agrees (it flips on the same seam). Every number is a SCREEN pixel. */
+html.arc-mobile[data-arc-orient="landscape"].arc-settings-on { overflow:hidden; }
+html.arc-mobile[data-arc-orient="landscape"].arc-settings-on .arc-screen {
+  padding:6px calc(10px + env(safe-area-inset-right, 0px)) 0 calc(10px + env(safe-area-inset-left, 0px));
+  max-width:none;
+}
+html.arc-mobile[data-arc-orient="landscape"] .arc-settings.arc-set-rail {
+  display:grid; gap:0 10px;
+  grid-template-columns:164px minmax(0, 1fr);
+  grid-template-rows:auto minmax(0, 1fr);
+  grid-template-areas:"exit pane" "rail pane";
+  /* The viewport minus the topbar (measured by settings.js; 52px if it never
+     ran) and the screen's 6px of top padding. dvh where the browser has it. */
+  height:calc(100vh - var(--arc-set-top, 52px) - 6px);
+  height:calc(100dvh - var(--arc-set-top, 52px) - 6px);
+  overflow:hidden;
+}
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-rail > .arc-classbar { display:none; }
+/* The sign, at the top of the rail column: static, no gradient, no shadow. */
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-rail > .arc-settings-exit {
+  grid-area:exit; position:static; margin:0; padding:2px 0 6px;
+  justify-content:flex-start; background:transparent; border:0; box-shadow:none;
+}
+/* The lit sign is cut to the column: no 210px floor, a tighter glow, one line. */
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-rail > .arc-settings-exit .arc-exitsign {
+  min-width:0; width:100%; min-height:38px; padding:7px 12px; font-size:11px; letter-spacing:.16em;
+  box-shadow:0 0 12px color-mix(in srgb, var(--gold), transparent 78%),
+    inset 0 0 16px color-mix(in srgb, var(--gold), transparent 88%);
+}
+/* The rail. Scrolls on its own if the list ever outgrows the column. */
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-rail > .arc-set-railnav {
+  grid-area:rail; display:flex; flex-direction:column; gap:0;
+  min-height:0; overflow-y:auto; overscroll-behavior:contain;
+  padding-bottom:calc(6px + env(safe-area-inset-bottom, 0px));
+  scrollbar-width:thin;
+}
+/* The rail's title stays out of the column: the sign above and the lit tab
+   name the page, and the ~290px the tabs have is spoken for (nine names). It
+   is still the tablist's accessible name via aria-label. */
+.arc-set-railtitle { display:none; }
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-tab {
+  display:flex; align-items:center; width:100%; min-height:30px; padding:4px 10px 4px 9px;
+  margin:0; border:0; border-left:3px solid transparent; border-radius:0 8px 8px 0;
+  background:transparent; color:var(--ink-dim); font:inherit; text-align:left; cursor:pointer;
+  transition:background-color .15s ease, color .15s ease;
+}
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-tab-t {
+  font-family:var(--disp); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;
+}
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-tab:hover { color:var(--ink); }
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-tab[aria-selected="true"] {
+  color:var(--ink); border-left-color:var(--pink);
+  background:color-mix(in srgb, var(--panel), transparent 35%);
+}
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-tab:focus-visible {
+  outline:2px solid var(--pink); outline-offset:-2px;
+}
+/* The pane. The one scroller for rows; the sections not lit are not drawn. */
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-rail > .arc-set-pane {
+  grid-area:pane; display:block; min-height:0; overflow-y:auto; overscroll-behavior:contain;
+  padding:0 2px calc(8px + env(safe-area-inset-bottom, 0px)) 0; scrollbar-width:thin;
+}
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-pane > .arc-group { display:none; padding:0; }
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-pane > .arc-group.arc-set-active { display:block; }
+/* The fold's head is a TITLE LINE here: the name and the live summary, no
+   chevron, nothing to press (settings.js ignores the click in rail mode). */
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-active > .arc-disc-head {
+  min-height:30px; padding:6px 12px 4px; cursor:default; pointer-events:none;
+}
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-active > .arc-disc-head:hover { background:transparent; }
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-active > .arc-disc-head > h3 { max-width:50%; font-size:12px; }
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-active .arc-disc-chev { display:none; }
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-active > .arc-disc-body { grid-template-rows:1fr; }
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-active > .arc-disc-body[hidden] { display:grid; }
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-active .arc-disc-inner { padding:0 12px 8px; }
+/* COMPACT ROWS. Label and control on one line; the hint is a one-line whisper
+   under the label (ellipsised, the full text on a hover where hovers exist).
+   A slider takes the middle of the line and the value keeps its column. */
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-active .arc-row {
+  flex-wrap:nowrap; gap:4px 10px; padding:4px 0; min-height:34px;
+}
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-active .arc-row > label,
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-active .arc-row > .arc-rowlabel {
+  flex:1 1 38%; min-width:0; font-size:13px; line-height:1.2;
+}
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-active .arc-row .arc-hint {
+  font-size:10.5px; line-height:1.3; margin-top:1px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+/* The whole whisper: on a hover where hovers exist, or on a TAP on the hint
+   itself (settings.js swallows that tap so the label does not flip a switch). */
+@media (hover:hover) {
+  html.arc-mobile[data-arc-orient="landscape"] .arc-set-active .arc-row:hover .arc-hint { white-space:normal; }
+}
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-active .arc-row.arc-hint-on .arc-hint { white-space:normal; }
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-active .arc-row input[type=range] {
+  flex:1 1 42%; order:0; min-width:120px; min-height:32px;
+}
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-active .arc-row .arc-val { min-width:54px; font-size:12px; }
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-active .arc-row select {
+  flex:0 1 auto; max-width:48%; min-height:38px;
+}
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-active .arc-row .arc-conflict { display:block; }
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-active .arc-note { margin:6px 0 0; font-size:11.5px; }
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-pane > .arc-note { margin:8px 4px 0; font-size:11.5px; }
+/* THE CLASS STRIP. Chips across the top of the pane, one line, scrolls
+   sideways; sticky so the class you are on stays named while its rows scroll. */
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-rail .arc-set-classes {
+  display:flex; gap:6px; align-items:center; overflow-x:auto; overscroll-behavior-x:contain;
+  padding:2px 2px 8px; position:sticky; top:0; z-index:2; background:var(--ground);
+  scrollbar-width:none;
+}
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-rail .arc-set-classes[hidden] { display:none; }
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-rail .arc-set-classes::-webkit-scrollbar { display:none; }
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-chip {
+  flex:0 0 auto; width:auto; min-height:34px; padding:4px 12px; border:var(--hairline);
+  border-left-width:1px; border-radius:999px; background:var(--panel); color:var(--ink-dim);
+}
+html.arc-mobile[data-arc-orient="landscape"] .arc-set-chip[aria-selected="true"] {
+  border-color:var(--pink); background:color-mix(in srgb, var(--pink), transparent 82%); color:var(--ink);
+}
+/* Reduced motion: the tab's colour change lands at once. */
+html.arc-reduced .arc-set-tab { transition:none; }
+@media (prefers-reduced-motion: reduce) { .arc-set-tab { transition:none; } }
 
 /* ---- the campus, whole (owner bugs A and B) ------------------------------
    The plan is `xMidYMid slice` on a desktop and that is right there: the window
