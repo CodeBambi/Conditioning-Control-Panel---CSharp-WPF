@@ -218,6 +218,28 @@ const DECODER_CEILING = 2;
  *  supply figure - six rows in front of a cursor is six rows whether the deck
  *  is 60 long or 120. Stays 6. */
 const PREWARM = 6;
+/**
+ * THE VET GATE (owner 2026-08-27: "pre-fetch the images and only start the
+ * game when we got enough"). Scrolller's index serves posts whose CDN file is
+ * gone (a live probe found a quarter of r/aww's rows answering 404), the host
+ * validates format and never liveness, and the class dealt them - a card
+ * whose face errors is the striped back the owner was sick of. So the door
+ * now PROBES every remote row the claim brought in (provider/vet.js: a
+ * detached Image for a still/gif, a metadata-only <video> for a clip - the
+ * media CDN sends no CORS headers, so an element is the only status a page
+ * can read) and deals only once ENOUGH alive rows stand per tag, or every
+ * row has a verdict, or MAX_MS has passed. A dead verdict is a PERMANENT
+ * blacklist strike, so buildDeck (pool.next skips the blacklist) never deals
+ * it and substituteFor never picks it. A tag left with fewer than
+ * DECK.PER_SOURCE_MIN alive rows asks the host for more (pool.refill) and
+ * vets those too, REFILL_ROUNDS at most. Rows still unjudged when the gate
+ * opens keep the ordinary road: faceDied -> blacklist -> substitute.
+ */
+const VET_GATE = Object.freeze({
+  ENOUGH: 24,             // alive rows per tag that open the gate early
+  MAX_MS: 20000,          // the ceiling a slow CDN may hold the door for
+  REFILL_ROUNDS: 2,       // top-up asks when a tag is short (= TAGGED.REFILL_MAX)
+});
 /* (The game-local WARM_AHEAD/WARM_INFLIGHT byte rail moved INTO the provider
  * as the manifest warmer, 0825: buildDeck knows the whole ordered deck before
  * the first card shows, so warmDeck() below hands it to pool.warmManifest()
@@ -644,10 +666,97 @@ export default {
            Each press is a generation; an older claim or ghost that lands late
            is disposed, never dealt. */
         let playGen = 0;
+        let pendingVet = null;
+        const cancelVet = () => {
+          try { if (pendingVet && typeof pendingVet.cancel === 'function') pendingVet.cancel(); }
+          catch (e) { /* noop */ }
+          pendingVet = null;
+        };
         const disposePending = () => {
+          cancelVet();
           try { if (pending && pending.pool && typeof pending.pool.dispose === 'function') pending.pool.dispose(); }
           catch (e) { /* noop */ }
           pending = { pool: null, quick: false, hot: false, thin: false, sources: null };
+        };
+        /**
+         * THE VET, between the claim and the deal (VET_GATE above). Never
+         * rejects and never holds a stale generation: `live()` is asked after
+         * every await and a press that lost its turn just stops. A pool
+         * without the seam (a quick sort, an old double) passes straight through.
+         */
+        const busy = (key, detail) => {
+          try { if (door && typeof door.setBusy === 'function') door.setBusy(true, key, detail); }
+          catch (e) { /* noop */ }
+        };
+        const vetPending = (live) => {
+          const pool = pending.pool;
+          if (pending.quick || !pool || typeof pool.vet !== 'function' || typeof pool.dealt !== 'function') {
+            return Promise.resolve();
+          }
+          const alive = { target: 0, noise: 0 };
+          const vetted = new Set();
+          let base = { ok: 0, total: 0 };
+          const startedAt = now();
+          /* ONE ceiling for the whole gate, however many rounds it takes */
+          const msLeft = () => Math.max(1000, VET_GATE.MAX_MS - (now() - startedAt));
+          const unvetted = () => {
+            try { return (pool.dealt() || []).filter((r) => r && r.url && !vetted.has(r.url)); }
+            catch (e) { return []; }
+          };
+          const okOf = (st, tg) => (st && st.byTag && st.byTag[tg] ? (st.byTag[tg].ok | 0) : 0);
+          const enough = (st) => ['target', 'noise'].every((tg) => alive[tg] + okOf(st, tg) >= VET_GATE.ENOUGH);
+          const run = (rows) => {
+            busy('sort_vetting', base.ok + '/' + (base.total + rows.length));
+            let pr = null;
+            try {
+              pr = pool.vet(rows, {
+                maxMs: msLeft(),
+                enough,
+                onProgress: (st) => { if (live()) busy('sort_vetting', (base.ok + st.ok) + '/' + (base.total + st.total)); },
+              });
+            } catch (e) { pr = null; }
+            if (!pr || typeof pr.then !== 'function') return Promise.resolve(null);
+            pendingVet = pr;
+            return pr;
+          };
+          const round = (n, rows) => {
+            if (!live() || !rows.length) return Promise.resolve();
+            for (const r of rows) if (r && r.url) vetted.add(r.url);
+            return run(rows).then((st) => {
+              pendingVet = null;
+              if (!live()) return undefined;
+              if (st) {
+                for (const tg of ['target', 'noise']) alive[tg] += okOf(st, tg);
+                base = { ok: base.ok + (st.ok | 0), total: base.total + (st.total | 0) };
+              }
+              const short = ['target', 'noise'].filter((tg) => alive[tg] < DECK.PER_SOURCE_MIN);
+              if (n >= VET_GATE.REFILL_ROUNDS) return undefined;
+              if (!short.length || typeof pool.refill !== 'function') {
+                /* THE LATE ROWS. The pool keeps absorbing the host's background
+                   batches while the vet runs, and a row that landed after the
+                   round began would reach the deal unjudged - the one hole the
+                   gate must not leave. Sweep them (same rounds bound, same
+                   ceiling); a pool that stood still ends here. */
+                const late = unvetted();
+                return late.length ? round(n + 1, late) : undefined;
+              }
+              busy('sort_vet_more');
+              return Promise.all(short.map((tg) => {
+                try { return Promise.resolve(pool.refill(tg)).catch(() => 0); } catch (e) { return Promise.resolve(0); }
+              })).then((got) => {
+                if (!live()) return undefined;
+                const added = got.reduce((a, b) => a + (Number(b) || 0), 0);
+                say('vet: ' + short.join(' and ') + ' short (' + alive.target + '/' + alive.noise + ' alive), refill +' + added);
+                if (!added) return undefined;
+                return round(n + 1, unvetted());
+              });
+            });
+          };
+          let rows = [];
+          try { rows = pool.dealt() || []; } catch (e) { rows = []; }
+          return round(0, rows)
+            .then(() => { if (live()) say('vet: alive target ' + alive.target + ' / noise ' + alive.noise); })
+            .catch((e) => { say('vet threw: ' + ((e && e.message) || e)); });
         };
         const onPlay = (blob, resolved) => {
           if (settled) return;
@@ -678,6 +787,11 @@ export default {
               thin: false,
               sources: res.sources || [],
             };
+            /* THE VET GATE sits between the claim and everything below it:
+               the thin strip, the ghost round and the deal all wait on it. */
+            const live = () => !settled && gen === playGen;
+            vetPending(live).then(() => {
+            if (!live()) return;
             try { if (door && typeof door.setBusy === 'function') door.setBusy(false, ''); }
             catch (e) { /* noop */ }
             /* THIN is only knowable now: the door raises its strip (non-blocking,
@@ -705,6 +819,7 @@ export default {
             } catch (e) { say('ghost round threw: ' + ((e && e.message) || e)); go(); }
             /* a door whose ghost never resolves may not hold the class hostage */
             timers.after(12000, go);
+            });
           }, (e) => {
             if (settled || gen !== playGen) return;
             say('the deal failed: ' + ((e && e.message) || e));

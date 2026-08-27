@@ -22,6 +22,7 @@
  *   pool.next('target', { prefer:'loop' })  -> row | null
  *   pool.counts() / pool.thin(tag) / pool.empty(tag) / pool.prewarm(n)
  *   pool.spare(tag) / pool.dealt() / pool.dispose()
+ *   pool.refill(tag) -> Promise<added>   (the vet's top-up, see below)
  *
  * FIVE LAWS
  *  1. THE TAG IS THE TRUTH. A row keeps the tag of the SOURCE that served it
@@ -57,6 +58,8 @@ export const TAGGED = Object.freeze({
   BATCH_MAX: 24,          // the host's own per-reply cap
   PREWARM_CAP: 12,        // per tag, per prewarm() call (see provider PREWARM_MAX)
   TAG_CAP: 120,           // a page never hoards media (REMOTE_CAP's law, per tag)
+  REFILL_MAX: 2,          // refill(tag) rounds a pool grants, each a fresh MAX_ASKS
+  REFILL_MS: 6000,        // a refill that hears nothing by then answers 0
 });
 
 /** The two tags every caller may read unconditionally, even with no sources. */
@@ -140,6 +143,7 @@ export function createTaggedPool({ spec, channel, platform, prewarm, log, remote
       served: 0,
       cycle: 0,                 // 0 = the first pass; 1+ = a seeded re-serve
       asks: 0,
+      refills: 0,               // refill() rounds spent (each widens the ask budget)
       inFlight: 0,
       thin: false,              // frozen at resolve (law 4)
       /* Each tag owns its own mulberry32 stream, so adding a tag never shifts
@@ -166,6 +170,8 @@ export function createTaggedPool({ spec, channel, platform, prewarm, log, remote
     timers.clear();
   }
 
+  const isDead = (url) => { try { return typeof broken === 'function' && !!broken(url); } catch (e) { return false; } };
+
   /* ---------------------- the ask ---------------------------------------- */
   /** How many distinct rows a tag is still worth asking for.
    *
@@ -182,11 +188,21 @@ export function createTaggedPool({ spec, channel, platform, prewarm, log, remote
     return Math.max(perSourceMin, Math.min(TAGGED.TAG_CAP, share || perSourceMin * 2, rows * 80));
   }
 
+  /** The ask budget, widened by every refill() round the vet spent. */
+  function askCap(tag) { return TAGGED.MAX_ASKS * (1 + (tag.refills | 0)); }
+  /** Rows the blacklist has NOT convicted - the only rows worth counting when
+   *  deciding whether to keep asking (a pile of 40 dead urls is an empty pile). */
+  function liveRows(tag) {
+    let n = 0;
+    for (const r of tag.rows) if (!isDead(r.url)) n += 1;
+    return n;
+  }
+
   function ask(src, kind, attempt) {
     if (disposed) return;
     const tag = tags[src.tag];
     if (!tag) return;
-    if (tag.asks >= TAGGED.MAX_ASKS) return;
+    if (tag.asks >= askCap(tag)) return;
     if (src.kind === 'remote' && !remoteAllowed) return;
     const count = Math.max(4, Math.min(TAGGED.BATCH_MAX, Math.ceil(want[kind] / Math.max(1, sources.length)) || 8));
     const payload = { count, kind, tag: src.tag };
@@ -209,7 +225,7 @@ export function createTaggedPool({ spec, channel, platform, prewarm, log, remote
         /* THE HOST CONTRACT IS "ASK AGAIN AFTER EVERY REPLY" - a cold buffer
          * answers empty and streams the real batch later, so one ask per source
          * would deal a class off nothing. Bounded by the tag's ask budget. */
-        if (tag.rows.length < targetFor(tag) && tag.asks < TAGGED.MAX_ASKS) {
+        if (liveRows(tag) < targetFor(tag) && tag.asks < askCap(tag)) {
           later(() => ask(src, kind, attempt + 1), TAGGED.RETRY_MS * Math.max(1, attempt));
         }
         settleCheck();
@@ -268,7 +284,7 @@ export function createTaggedPool({ spec, channel, platform, prewarm, log, remote
   function budgetSpent() {
     const used = tagNames.filter((n) => sources.some((x) => x.tag === n));
     if (!used.length) return true;
-    return used.every((n) => tags[n].asks >= TAGGED.MAX_ASKS && tags[n].inFlight === 0);
+    return used.every((n) => tags[n].asks >= askCap(tags[n]) && tags[n].inFlight === 0);
   }
 
   function settleCheck() {
@@ -292,8 +308,6 @@ export function createTaggedPool({ spec, channel, platform, prewarm, log, remote
     tag.order = shuffled(tag.rows, tag.rng);
     tag.cursor = 0;
   }
-
-  const isDead = (url) => { try { return typeof broken === 'function' && !!broken(url); } catch (e) { return false; } };
 
   function nextRow(tagName, opts) {
     const tag = tags[tagName];
@@ -383,6 +397,45 @@ export function createTaggedPool({ spec, channel, platform, prewarm, log, remote
       return x ? x.rows.slice() : [];
     },
 
+    /**
+     * THE TOP-UP (0827, the vet's road back to the host). When the vet has
+     * convicted enough of a tag's rows that fewer than perSourceMin are alive,
+     * the door asks for MORE before it deals: one fresh MAX_ASKS budget for
+     * every source of the tag, the same ask() chain the claim ran (so RANDOM
+     * sort on the host's side hands back posts it has not served yet), and a
+     * promise that answers with how many distinct rows landed - on the first
+     * batch that grows the tag (plus a short settle so a second reply in the
+     * same breath is counted too), or 0 at REFILL_MS. Bounded by REFILL_MAX
+     * rounds per tag for the life of the pool. `thin` stays frozen (law 4).
+     */
+    refill(tagName) {
+      const tag = tags[String(tagName || '')];
+      if (!tag || disposed || !resolved) return Promise.resolve(0);
+      if (tag.refills >= TAGGED.REFILL_MAX) return Promise.resolve(0);
+      const srcs = sources.filter((x) => x.tag === tag.name && (x.kind === 'local' || remoteAllowed));
+      if (!srcs.length) return Promise.resolve(0);
+      tag.refills += 1;
+      const before = tag.rows.length;
+      for (const src of srcs) {
+        if (want.loop || (!want.loop && !want.still)) ask(src, 'loop', 1);
+        if (want.still) ask(src, 'still', 1);
+      }
+      if (!tag.inFlight) return Promise.resolve(0);          // nothing could be asked
+      say('refill ' + tag.name + ' (round ' + tag.refills + ')');
+      return new Promise((res) => {
+        let done = false;
+        let off = () => {};
+        const fin = () => {
+          if (done) return;
+          done = true;
+          try { off(); } catch { /* noop */ }
+          res(Math.max(0, tag.rows.length - before));
+        };
+        off = pool.onUpdate(() => { if (tag.rows.length > before) later(fin, 400); });
+        later(fin, TAGGED.REFILL_MS);
+      });
+    },
+
     /** Every DISTINCT row, for the retake cache (a superset of {url,tag,src}). */
     dealt() {
       const out = [];
@@ -406,7 +459,7 @@ export function createTaggedPool({ spec, channel, platform, prewarm, log, remote
         sources: sources.map((x) => ({ tag: x.tag, kind: x.kind, label: sourceLabel(x) })),
         tags: tagNames.map((n) => ({
           tag: n, distinct: tags[n].rows.length, served: tags[n].served,
-          cycle: tags[n].cycle, asks: tags[n].asks, thin: tags[n].thin,
+          cycle: tags[n].cycle, asks: tags[n].asks, refills: tags[n].refills, thin: tags[n].thin,
         })),
       };
     },

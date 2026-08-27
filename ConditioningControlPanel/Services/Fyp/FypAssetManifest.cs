@@ -45,6 +45,12 @@ internal static class FypAssetManifest
         /// files and for entries that are already stills.</summary>
         [Newtonsoft.Json.JsonProperty("posterUrl", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string? PosterUrl { get; init; }
+        /// <summary>A SMALLER rendition of the same media (clip &lt;= 640px, still &lt;= 1280px),
+        /// for consumers that paint at card size rather than feed size - the Arcademy's SORT
+        /// deals off it. Null when the post has no smaller rendition (the main url is it) and
+        /// for library files. Remote only; the page never reads it (the host substitutes).</summary>
+        [Newtonsoft.Json.JsonProperty("smallUrl", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string? SmallUrl { get; init; }
     }
 
     /// <summary>Build the asset list for the current EffectiveAssetsPath. Never throws.</summary>

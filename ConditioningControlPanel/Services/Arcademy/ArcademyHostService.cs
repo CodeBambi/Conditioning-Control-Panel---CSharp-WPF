@@ -2565,6 +2565,8 @@ internal static class ArcademyHostService
         ["sort_target_head"] = "What do you want?",
         ["sort_target_hint"] = "These go RIGHT. Pick one or more.",
         ["sort_thin"] = "Thin pile: expect repeats.",
+        ["sort_vet_more"] = "Fetching more cards",
+        ["sort_vetting"] = "Checking your cards",
         ["sort_thin_add"] = "Add another pick",
         ["sort_ticket_chain"] = "Longest chain",
         ["sort_ticket_passed"] = "Passed",
@@ -4098,7 +4100,11 @@ internal static class ArcademyHostService
                     App.Logger?.Debug("ArcademyHost: rejected remote entry {Id}: {Reason}", e.Id, reason);
                     continue;
                 }
-                fresh.Add(new AssetUrl(e.Url, kind, MimeFor(e.Url, kind)));
+                // A card is not a feed tile: the page paints it at a few hundred px, so the
+                // smaller rendition (ScrolllerSource.SmallUrl, <= 640 clip / <= 1280 still,
+                // the web port's numbers) loads in a fraction of the time the 1920px one did.
+                var url = e.SmallUrl ?? e.Url;
+                fresh.Add(new AssetUrl(url, kind, MimeFor(url, kind)));
                 if (fresh.Count >= RemoteBatchCap) break;
             }
 
@@ -4357,7 +4363,10 @@ internal static class ArcademyHostService
                 var folder = (e.Folder ?? "").Trim();
                 var bare = folder.StartsWith("r/", StringComparison.OrdinalIgnoreCase) ? folder[2..] : folder;
                 if (bare.Length == 0 || !allowed.Contains(bare)) continue;
-                fresh.Add(new AssetUrl(e.Url, kind, MimeFor(e.Url, kind), tag, "r/" + bare));
+                // The card rendition, not the feed one (see ServeRemoteBatch): SORT's ring is
+                // 0.75-2.4s and a 1920px 15MB mp4 was the striped back the owner kept seeing.
+                var url = e.SmallUrl ?? e.Url;
+                fresh.Add(new AssetUrl(url, kind, MimeFor(url, kind), tag, "r/" + bare));
                 if (fresh.Count >= RemoteBatchCap) break;
             }
 

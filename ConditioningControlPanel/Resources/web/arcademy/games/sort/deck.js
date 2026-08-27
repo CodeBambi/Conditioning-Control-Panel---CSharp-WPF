@@ -205,6 +205,15 @@ export function wrapQuickPool(claimPool) {
     isBroken(url) {
       try { return !!(p && typeof p.isBroken === 'function' && p.isBroken(url)); } catch (e) { return false; }
     },
+    /* THE VET SEAM (0827) rides through too. A quick pool is the host's own
+     * disk, which the vet answers "alive" for without a probe - so the door's
+     * gate over a quick sort opens on the next tick, exactly as it did. */
+    vet(rows, opts) {
+      try { if (p && typeof p.vet === 'function') return p.vet(rows, opts); } catch (e) { /* fall through */ }
+      return Promise.resolve(null);
+    },
+    /** A quick pool has no tag to top up - the ordinary claim keeps itself fed. */
+    refill() { return Promise.resolve(0); },
     dealt() {
       const rows = [];
       for (const tg of DECK.TAGS) for (const url of seen[tg]) rows.push({ url, tag: tg, src: 'local' });

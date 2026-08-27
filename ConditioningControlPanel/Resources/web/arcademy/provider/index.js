@@ -74,6 +74,7 @@
 import { buildLocalPools, isLocalUrl, formatOk, kindOf, wantRemote } from './inventory.js';
 import { createRemoteChannel } from './remote.js';
 import { createTaggedPool, TAGGED } from './tagged.js';
+import { createVetter } from './vet.js';
 
 /** Bundled placeholder tiles (geometric mono-pink, no text). The floor. */
 export const PLACEHOLDER_FILES = Object.freeze([
@@ -181,10 +182,17 @@ export const MANIFEST_AHEAD_PLAY = 10;
 const BROKEN_URL_CAP = 400;
 const BROKEN_TTL_MS = 45000;      // one strike heals after this; two never do
 const brokenUrls = new Map();     // url -> { at, strikes }
-export function markBrokenUrl(url) {
+export function markBrokenUrl(url, permanent) {
   const s = String(url || '');
   if (!s) return false;
   const prior = brokenUrls.get(s);
+  if (permanent) {
+    /* PROOF, not a guess (the vet's 404): two strikes at once, so the TTL
+     * never forgives it - a dead CDN file does not come back in 45 seconds */
+    brokenUrls.delete(s);
+    brokenUrls.set(s, { at: Date.now(), strikes: 2 });
+    return !prior;
+  }
   if (prior) {
     /* a repeat offender: bump the strike and re-stamp. delete + set keeps the
      * Map's insertion order meaning "least recently struck evicts first". */
@@ -614,10 +622,10 @@ export function createAssets(options = {}) {
   }
   /** The instance's blacklist verb: the module Set, plus this instance's
    *  waiters answered "no" so a gate consulting ready() moves on at once. */
-  function markBroken(url) {
+  function markBroken(url, permanent) {
     const s = String(url || '');
     if (!s) return;
-    markBrokenUrl(s);
+    markBrokenUrl(s, !!permanent);
     flushReady(s, false);
   }
 
@@ -829,12 +837,17 @@ export function createAssets(options = {}) {
 
   /** The media seam every pool shape exposes (claim() below, claimTagged's
    *  wrapper, and deck-side adapters forward these five verbs verbatim). */
+  /* THE VET (0827, see ./vet.js): liveness proof for a list of rows before a
+   * game deals off them. Its dead verdicts land in the blacklist above as
+   * PERMANENT strikes, so a tagged serve / a substitute pick skips them. */
+  const vetter = createVetter({ markBroken, isBroken: isBrokenUrl, isLocal: isLocalUrl, log });
   const mediaSeam = {
     warmManifest: (entries, opts) => { void opts; return warmManifest(entries); },
     warmCursor: (i) => warmCursor(i),
     ready: (url, opts) => readyFor(url, opts),
-    markBroken: (url) => markBroken(url),
+    markBroken: (url, permanent) => markBroken(url, permanent),
     isBroken: (url) => isBrokenUrl(url),
+    vet: (rows, opts) => (disposed ? Promise.resolve(null) : vetter.vet(rows, opts)),
   };
 
   /* ==========================================================================
@@ -1374,12 +1387,14 @@ export function createAssets(options = {}) {
        *   warmCursor(i)                  the game's play position in it
        *   ready(url, {timeoutMs})       -> Promise<boolean> (see readyFor)
        *   markBroken(url) / isBroken(url) the shared url blacklist
+       *   vet(rows, opts)               -> Promise<stats> (see ./vet.js)
        */
       warmManifest: mediaSeam.warmManifest,
       warmCursor: mediaSeam.warmCursor,
       ready: mediaSeam.ready,
       markBroken: mediaSeam.markBroken,
       isBroken: mediaSeam.isBroken,
+      vet: mediaSeam.vet,
       /** How many candidates the pool can actually serve right now. */
       stats() {
         return {
@@ -1449,6 +1464,7 @@ export function createAssets(options = {}) {
         pool.ready = mediaSeam.ready;
         pool.markBroken = mediaSeam.markBroken;
         pool.isBroken = mediaSeam.isBroken;
+        pool.vet = mediaSeam.vet;
       }
       return pool;
     });

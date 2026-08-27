@@ -1729,6 +1729,26 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     right. `prefer:'loop'|'still'` is a SWAP, not a skip - the wanted kind is pulled forward
     into the cursor's slot and the row it displaced keeps its place, so a preference can never
     starve a kind out of the pass.
+124. **A SORT DEALS ONLY OFF VETTED URLS, AND THE VET IS THE ONE DETACHED `<video>` IN THE
+    SCHOOL.** Scrolller's index serves posts whose CDN file is GONE (0827 probe: 7/30 r/aww
+    loops and 8/30 stills answered 404), the host validates format and never liveness, and a
+    dealt dead row is the striped card back the owner was "sick of". `provider/vet.js` probes
+    every remote row between the claim and the deal (`pool.vet(rows, {enough, maxMs})`): a
+    detached `Image` for a still/gif, a `preload=metadata` `<video>` for a clip - the media
+    CDN sends NO CORS headers, so an element is the only status a page can read; `fetch()`
+    sees an opaque reply and learns nothing. A dead verdict is a PERMANENT blacklist strike
+    (`markBrokenUrl(url, true)` - the 45s TTL is for guesses, a 404 is proof); `unsure`
+    (timeout, ABORTED/DECODE codes) is never a conviction and never counts as alive. The door
+    (`games/sort/index.js` VET_GATE) opens on ENOUGH alive rows per tag, or every row judged,
+    or MAX_MS, and a tag short of `DECK.PER_SOURCE_MIN` alive rows asks the host for more
+    first (`pool.refill(tag)`, TAGGED.REFILL_MAX rounds, a fresh MAX_ASKS each). Trap 36 still
+    holds: the vet runs ONLY while the door is up (nothing minted), holds at most VIDEO_LANES
+    (= DECODER_CEILING) probes, tears each src down on its verdict, and `open()` aborts every
+    video probe the instant the gate opens - a class never shares a decoder with the vet. Do
+    NOT "optimise" the vet into the warm rail's no-cors fetch (no verdict) or into the class
+    (a demuxer the ceiling cannot see). The desktop host now serves SORT the card rendition
+    (`Entry.SmallUrl`, clip <= 640 / still <= 1280, the web port's caps) instead of the 1920px
+    feed one; the page never reads `smallUrl` - the host substitutes.
 54. **THE NEW MEDIA FRAMES ARE ADDITIVE OR THEY ARE A REGRESSION IN NINE OTHER CLASSES.**
     `assets-request` WITHOUT `subs` must stay byte-for-byte the ask it always was (the host's
     app-wide pull), and `local-sample-request` is a SEPARATE type answered by the SAME `assets`

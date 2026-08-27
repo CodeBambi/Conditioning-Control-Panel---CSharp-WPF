@@ -1145,9 +1145,15 @@ export function createSetupDoor(o) {
 
   /* ----------------------------------------------------------- the handle -- */
 
-  function setBusy(onFlag, msgKey) {
+  /**
+   * setBusy(on, msgKey[, detail]). `detail` (0827) is the vet's live count
+   * ("14/48") - a number, never a sentence, so the lexicon stays the only
+   * source of words: the row is `t(msgKey)` and the detail rides after it.
+   */
+  function setBusy(onFlag, msgKey, detail) {
     if (destroyed) return;
     busyKey = onFlag ? String(msgKey || 'sort_dealing') : '';
+    const line = () => t(busyKey) + (detail == null || detail === '' ? '' : ' ' + String(detail));
     if (!onFlag) {
       if (busyEl && busyEl.parentNode) busyEl.parentNode.removeChild(busyEl);
       busyEl = null;
@@ -1157,11 +1163,11 @@ export function createSetupDoor(o) {
       busyEl = el('div', 'g-sort-busy');
       attr(busyEl, 'role', 'status');
       busyEl.appendChild(el('i', 'g-sort-spin'));
-      busyEl._sdText = el('span', 'g-sort-busy-t', t(busyKey));
+      busyEl._sdText = el('span', 'g-sort-busy-t', line());
       busyEl.appendChild(busyEl._sdText);
       root.appendChild(busyEl);
     } else {
-      busyEl._sdText.textContent = t(busyKey);
+      busyEl._sdText.textContent = line();
     }
   }
 

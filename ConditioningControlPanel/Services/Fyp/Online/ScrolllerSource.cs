@@ -49,6 +49,8 @@ internal sealed class ScrolllerSource : IFeedSource
     private const int PageLimit = 30;
     private const int MaxSourceWidth = 1920;          // don't stream 4K into a feed tile
     private const int MaxPosterWidth = 960;           // a poster is a placeholder, not the media
+    private const int MaxSmallClipWidth = 640;        // Entry.SmallUrl: a card-sized clip (the web port's cap)
+    private const int MaxSmallStillWidth = 1280;      // Entry.SmallUrl: a card-sized still (idem)
     private static readonly TimeSpan MinRequestGap = TimeSpan.FromSeconds(1.1);
 
     // Field subset of the reference SubredditQuery — GraphQL lets us ask for less.
@@ -244,10 +246,21 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
         var title = ((string?)item["title"] ?? "").Trim();
         if (title.Length > 90) title = title[..87] + "...";
 
+        var bestUrl = (string?)best["url"] ?? "";
+        // The card-sized sibling: same shape, same accept filter, a lower width cap. Only
+        // stamped when it is a DIFFERENT file - a post whose best rendition already fits
+        // the cap has no smaller one to offer.
+        var small = stills
+            ? PickSource(sources, RemoteMediaFormats.IsRemoteImage, MaxSmallStillWidth)
+            : PickSource(sources, RemoteMediaFormats.IsRemoteVideo, MaxSmallClipWidth);
+        var smallUrl = (string?)small?["url"];
+        if (string.IsNullOrEmpty(smallUrl) || string.Equals(smallUrl, bestUrl, StringComparison.Ordinal)) smallUrl = null;
+
         var entry = new FypAssetManifest.Entry
         {
             Id = $"scrolller/{sub}/{postId}",
-            Url = (string?)best["url"] ?? "",
+            Url = bestUrl,
+            SmallUrl = smallUrl,
             // scrolller "GIFs" arrive as silent webm/mp4, so the only two shapes an entry
             // can take are a clip and a static still.
             Type = stills ? RemoteMediaFormats.TypeImage : RemoteMediaFormats.TypeVideo,
