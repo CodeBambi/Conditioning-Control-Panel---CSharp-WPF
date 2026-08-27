@@ -30,6 +30,8 @@ export const SETUP_LEX = Object.freeze({
   sort_next: 'Next',
   sort_play: 'Deal me in',
   sort_dealing: 'Dealing your deck',
+  sort_vetting: 'Checking your cards',
+  sort_vet_more: 'Fetching more cards',
   sort_vs: 'vs',
 
   /* ---- first night hand holding (hidden by Skip class tutorials) --------- */
