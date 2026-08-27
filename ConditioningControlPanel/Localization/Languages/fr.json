@@ -4624,5 +4624,5 @@
   "play_arcademy_tooltip": "l'emploi du temps du jour t'attend.",
   "arcademy_boot_error_body": "{0} n'a pas pu démarrer sur cette machine.\n\n{1}",
   "arcademy_open_failed_body": "Impossible d'ouvrir The Arcademy :\n\n{0}",
-  "arcademy_boot_failed_this_session": "The Arcademy n'a déjà pas réussi à démarrer pendant cette session. Redémarre l'application et réessaie."
+  "arcademy_boot_failed_this_session": "The Arcademy n'a pas réussi à démarrer lors de ton dernier essai sur cette machine.\n\nRéessayer ?"
 }

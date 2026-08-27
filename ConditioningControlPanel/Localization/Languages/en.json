@@ -5174,5 +5174,5 @@
   "play_arcademy_tooltip": "today's timetable is waiting.",
   "arcademy_boot_error_body": "{0} could not start on this machine.\n\n{1}",
   "arcademy_open_failed_body": "Couldn't open the Arcademy:\n\n{0}",
-  "arcademy_boot_failed_this_session": "The Arcademy already failed to start on this machine this session. Restart the app to try again."
+  "arcademy_boot_failed_this_session": "The Arcademy failed to start the last time you tried on this machine.\n\nTry opening it again?"
 }

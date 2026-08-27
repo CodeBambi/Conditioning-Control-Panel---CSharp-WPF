@@ -4622,5 +4622,5 @@
   "play_arcademy_tooltip": "오늘의 시간표가 기다리고 있습니다.",
   "arcademy_boot_error_body": "{0}을(를) 이 컴퓨터에서 시작할 수 없습니다.\n\n{1}",
   "arcademy_open_failed_body": "The Arcademy를 열 수 없습니다:\n\n{0}",
-  "arcademy_boot_failed_this_session": "The Arcademy가 이번 세션에서 이미 시작에 실패했습니다. 앱을 다시 시작한 뒤 다시 시도하세요."
+  "arcademy_boot_failed_this_session": "The Arcademy가 이 컴퓨터에서 지난번 시도에 시작하지 못했습니다.\n\n다시 열어 볼까요?"
 }

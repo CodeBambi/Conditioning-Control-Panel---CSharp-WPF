@@ -95,9 +95,15 @@ internal static class ArcademyHostService
 
     public static bool IsActive => _host != null;
 
-    /// <summary>The page reported <c>boot-error</c> this app session (or the host's own deadline
-    /// fired). Entry points can read this to stop sending someone back through a door that has
-    /// already failed on this machine.</summary>
+    /// <summary>The page's LAST boot attempt failed: it reported <c>boot-error</c>, or the host's
+    /// own progress deadline fired. Entry points read this to warn before sending someone back
+    /// through a door that just failed on this machine.
+    ///
+    /// <para>It is a LAST-attempt flag, not a session tombstone. <see cref="OnPageReady"/> clears
+    /// it, because most of what sets it is transient - a cold WebView2 runtime, a machine under
+    /// load, a stalled GPU driver, all of which the 45s <c>BootDeadline</c> reads as failure. The
+    /// entry point offers a retry rather than refusing outright; only a session where the campus
+    /// has never once come up stays latched.</para></summary>
     public static bool BootFailedThisSession { get; private set; }
 
     // ============================== the gate ==============================
@@ -458,6 +464,11 @@ internal static class ArcademyHostService
         {
             _lastHeartbeatUtc = DateTime.UtcNow;
             CancelBootDeadline();
+            // The campus is up, so whatever failed last time did not stick. Clearing here (and only
+            // here) is what keeps BootFailedThisSession a statement about the LAST attempt: a cold
+            // runtime start that blew the 45s deadline must not cost the user the feature for the
+            // rest of the app's life.
+            BootFailedThisSession = false;
             // Keyboard focus does not land in the WebView2 child until a click on a fresh launch -
             // claim it now so the Esc ladder works from the first frame.
             _host?.FocusWeb();

@@ -62,7 +62,11 @@ let pendingSuspend = null;    // a suspend frame that arrived before the shell e
 /* ----------------------------------------------------------------------------
  * DIAGNOSTICS - the only channel without devtools.
  * -------------------------------------------------------------------------- */
-function log(msg) { bridge.log('info', msg); }
+// `log` is the funnel EVERY room reaches through `caps.log`/`say`, so its default level sets the
+// volume of the whole campus. Quiet by default ('debug' is below the host's Information floor and
+// is therefore dropped, not filed); pass a level as the second argument for anything a triage
+// reader needs to see - `log(msg, 'warn')` for a degraded room, `'error'` for a broken one.
+function log(msg, level) { bridge.log(level || 'debug', msg); }
 function warn(msg) { bridge.log('warning', msg); }
 
 if (win) {

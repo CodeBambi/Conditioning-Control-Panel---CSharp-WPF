@@ -130,9 +130,16 @@ export function markInitialized() {
 
 export function isInitialized() { return initialized; }
 
-/** Serilog passthrough. `level` is optional and defaults to 'info'. */
+/**
+ * Serilog passthrough. `level` is optional and defaults to 'debug'.
+ *
+ * The default is deliberately the QUIET one. The host's logger floor is Information, so 'debug'
+ * frames are dropped rather than filed, and a campus with this many call sites would otherwise
+ * bury every real report in class chatter. Anything worth a triage read has to say so: 'warn' for
+ * a degraded room, 'error' for a broken one.
+ */
 export function log(level, msg) {
-  if (msg === undefined) { msg = level; level = 'info'; }
+  if (msg === undefined) { msg = level; level = 'debug'; }
   send({ type: 'log', level: String(level), msg: String(msg).slice(0, 400) });
 }
 

@@ -4624,5 +4624,5 @@
   "play_arcademy_tooltip": "der Stundenplan von heute wartet.",
   "arcademy_boot_error_body": "{0} konnte auf diesem Rechner nicht gestartet werden.\n\n{1}",
   "arcademy_open_failed_body": "The Arcademy konnte nicht geöffnet werden:\n\n{0}",
-  "arcademy_boot_failed_this_session": "The Arcademy konnte in dieser Sitzung schon einmal nicht starten. Starte die App neu und versuche es noch einmal."
+  "arcademy_boot_failed_this_session": "The Arcademy konnte beim letzten Versuch auf diesem Rechner nicht starten.\n\nNoch einmal versuchen?"
 }

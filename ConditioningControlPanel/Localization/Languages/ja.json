@@ -4615,5 +4615,5 @@
   "play_arcademy_tooltip": "今日の時間割が待っています。",
   "arcademy_boot_error_body": "{0} はこのパソコンで起動できませんでした。\n\n{1}",
   "arcademy_open_failed_body": "The Arcademy を開けませんでした:\n\n{0}",
-  "arcademy_boot_failed_this_session": "The Arcademy はこのセッションで一度起動に失敗しています。アプリを再起動してからもう一度お試しください。"
+  "arcademy_boot_failed_this_session": "The Arcademy はこのパソコンで前回の起動に失敗しました。\n\nもう一度開いてみますか？"
 }

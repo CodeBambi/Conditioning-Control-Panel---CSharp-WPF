@@ -352,18 +352,24 @@ namespace ConditioningControlPanel
         {
             try
             {
-                // The page already reported boot-error once this app session (WebView2 runtime
-                // missing, WebGL refused, the shell never answered its deadline). DtRH consumes its
-                // own BootFailedThisSession the same way at BtnStartChaos_Click - there it picks the
-                // native fallback, and here, where there is no fallback to pick, it stops us walking
-                // the user back into the identical black window. Relaunching the app clears the
-                // flag, which is exactly the advice the message gives.
+                // The page's LAST attempt failed (WebView2 runtime missing, WebGL refused, or the
+                // shell never answered its 45s progress deadline). DtRH consumes its own
+                // BootFailedThisSession at BtnStartChaos_Click, but there the flag DEGRADES to the
+                // native game, so the user still gets a feature. Here there is nothing to degrade
+                // to, and half of what sets the flag is transient (a cold WebView2 start, a machine
+                // under load, a stalled driver), so refusing outright would cost a paying user the
+                // headline feature over a stall that a second click would very likely clear.
+                // So: warn, and let them choose. Saying yes is the old behaviour, saying no spares
+                // them a second black window. A boot that succeeds clears the flag in OnPageReady.
                 if (Services.Arcademy.ArcademyHostService.BootFailedThisSession
                     && !Services.Arcademy.ArcademyHostService.IsActive)
                 {
-                    MessageBox.Show(Loc.Get("arcademy_boot_failed_this_session"),
-                        Services.Arcademy.ArcademyHostService.ProductName, MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
+                    var again = MessageBox.Show(Loc.Get("arcademy_boot_failed_this_session"),
+                        Services.Arcademy.ArcademyHostService.ProductName,
+                        MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                    App.Logger?.Information("Arcademy: previous boot failed; user chose {Choice}",
+                        again == MessageBoxResult.Yes ? "retry" : "not now");
+                    if (again != MessageBoxResult.Yes) return;
                 }
 
                 Services.Arcademy.ArcademyHostService.Launch();
