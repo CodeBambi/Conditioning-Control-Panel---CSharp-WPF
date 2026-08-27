@@ -116,7 +116,7 @@ export function normalizeSources(list) {
  *                               blacklist; a dead row is skipped at serve time
  * @returns {Promise<Object>} the pool (resolves per law 3, never rejects)
  */
-export function createTaggedPool({ spec, channel, platform, prewarm, log, remoteAllowed, broken } = {}) {
+export function createTaggedPool({ spec, channel, platform, prewarm, log, remoteAllowed, broken, verdict } = {}) {
   const s = spec || {};
   const say = typeof log === 'function' ? log : () => {};
   const sources = normalizeSources(s.sources);
@@ -171,6 +171,8 @@ export function createTaggedPool({ spec, channel, platform, prewarm, log, remote
   }
 
   const isDead = (url) => { try { return typeof broken === 'function' && !!broken(url); } catch (e) { return false; } };
+  /** The vet's word (provider/vet.js verdict()): 'ok' is a row PROVED alive this page. */
+  const isOk = (url) => { try { return typeof verdict === 'function' && verdict(url) === 'ok'; } catch (e) { return false; } };
 
   /* ---------------------- the ask ---------------------------------------- */
   /** How many distinct rows a tag is still worth asking for.
@@ -253,6 +255,9 @@ export function createTaggedPool({ spec, channel, platform, prewarm, log, remote
         remote: !isLocalUrl(url),
         kind: rowKind(e),
         mime: String((e && e.mime) || ''),
+        /* THE CLIP'S OWN STILL (0827): the host sends a remote loop's poster so a
+         * card can paint it while the clip buffers, or over the decoder ceiling. */
+        poster: (e && typeof e.poster === 'string' && e.poster && !isLocalUrl(url)) ? e.poster : '',
         tag: rowTag,
         src: (e && typeof e.src === 'string' && e.src) ? e.src : sourceLabel(src),
       });
@@ -326,17 +331,27 @@ export function createTaggedPool({ spec, channel, platform, prewarm, log, remote
     for (let attempt = 0; attempt <= cap; attempt++) {
       if (tag.cursor >= tag.order.length) reserve(tag);
       if (!tag.order.length) return null;
-      if (prefer && attempt === 0) {
-        /* PREFERENCE IS A SWAP, NOT A SKIP: the wanted kind is pulled forward
+      if (attempt === 0) {
+        /* PREFERENCE IS A SWAP, NOT A SKIP: the wanted row is pulled forward
          * into the cursor's slot and the row it displaced keeps its place in
-         * the pass, so a preference can never starve a kind out of the deck. */
+         * the pass, so a preference can never starve a kind out of the deck.
+         * Two preferences, in order: A JUDGED-ALIVE ROW FIRST (0827 - the
+         * vet's 'ok'; a row the vet never reached is dealt only once the
+         * judged ones left in this pass are spent, a dead one never), then
+         * the wanted kind. With no verdicts in hand this is the old kind-only
+         * swap, and with a clean blacklist and no vet the sequence is the one
+         * this pool always served. */
+        let best = -1;
+        let bestScore = 9;
         for (let i = tag.cursor; i < tag.order.length; i++) {
-          if (tag.order[i].kind === prefer) {
-            if (i !== tag.cursor) {
-              const t = tag.order[i]; tag.order[i] = tag.order[tag.cursor]; tag.order[tag.cursor] = t;
-            }
-            break;
-          }
+          const r = tag.order[i];
+          if (!r || isDead(r.url)) continue;
+          const score = (isOk(r.url) ? 0 : 2) + ((prefer && r.kind !== prefer) ? 1 : 0);
+          if (score < bestScore) { best = i; bestScore = score; }
+          if (score === 0) break;
+        }
+        if (best > tag.cursor) {
+          const t = tag.order[best]; tag.order[best] = tag.order[tag.cursor]; tag.order[tag.cursor] = t;
         }
       }
       const cand = tag.order[tag.cursor];
@@ -354,6 +369,17 @@ export function createTaggedPool({ spec, channel, platform, prewarm, log, remote
   const pool = {
     /** row | null - null ONLY when this tag has zero rows (law 2). */
     next(tag, opts) { return disposed ? null : nextRow(String(tag || ''), opts); },
+    /** The poster this pool holds for a url ('' when none): a retake re-deals
+     *  a cached row list that carries no poster (deck.js rowsFromCards keeps
+     *  the meta blob small), and asks the live pool for it instead. */
+    posterOf(url) {
+      const u = String(url || '');
+      if (!u) return '';
+      for (const n of tagNames) {
+        for (const r of tags[n].rows) if (r.url === u) return r.poster || '';
+      }
+      return '';
+    },
 
     counts() {
       const out = Object.create(null);

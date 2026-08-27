@@ -4015,7 +4015,13 @@ internal static class ArcademyHostService
     /// <summary>One servable row. <c>Tag</c> and <c>Src</c> are null on the app-wide path (the
     /// reply there is byte-for-byte what it always was) and set on the tagged path, where the tag
     /// IS the answer key the class grades on.</summary>
-    private sealed record AssetUrl(string Url, string Kind, string Mime, string? Tag = null, string? Src = null);
+    private sealed record AssetUrl(string Url, string Kind, string Mime, string? Tag = null, string? Src = null, string? Poster = null);
+
+    /// <summary>A remote loop's own still (<see cref="FypAssetManifest.Entry.PosterUrl"/>): the
+    /// page paints it while the clip buffers and over its decoder ceiling, instead of the striped
+    /// back the owner kept seeing (0827). Stills and library files carry none.</summary>
+    private static string? PosterFor(Fyp.FypAssetManifest.Entry e, string kind)
+        => kind == "loop" && !string.IsNullOrEmpty(e.PosterUrl) ? e.PosterUrl : null;
 
     private static void OnAssetsRequest(JObject o)
     {
@@ -4051,7 +4057,7 @@ internal static class ArcademyHostService
         {
             type = "assets",
             reqId,
-            urls = served.Select(u => new { url = u.Url, kind = u.Kind, mime = u.Mime }).ToArray(),
+            urls = served.Select(u => new { url = u.Url, kind = u.Kind, mime = u.Mime, poster = u.Poster }).ToArray(),
             done = satisfied,
         });
         if (!satisfied) ServeRemoteBatch(reqId, kind, count - served.Count);
@@ -4115,7 +4121,7 @@ internal static class ArcademyHostService
                 // smaller rendition (ScrolllerSource.SmallUrl, <= 640 clip / <= 1280 still,
                 // the web port's numbers) loads in a fraction of the time the 1920px one did.
                 var url = e.SmallUrl ?? e.Url;
-                fresh.Add(new AssetUrl(url, kind, MimeFor(url, kind)));
+                fresh.Add(new AssetUrl(url, kind, MimeFor(url, kind), Poster: PosterFor(e, kind)));
                 if (fresh.Count >= RemoteBatchCap) break;
             }
 
@@ -4136,7 +4142,7 @@ internal static class ArcademyHostService
                 {
                     type = "assets",
                     reqId,
-                    urls = send.Select(u => new { url = u.Url, kind = u.Kind, mime = u.Mime }).ToArray(),
+                    urls = send.Select(u => new { url = u.Url, kind = u.Kind, mime = u.Mime, poster = u.Poster }).ToArray(),
                     // Done either way: an empty pool must end the exchange, not restart it.
                     done = true,
                     error,
@@ -4195,6 +4201,31 @@ internal static class ArcademyHostService
     /// <see cref="_remoteFetchInFlight"/> latch the app-wide path uses: target and noise are two
     /// different asks, and one must not end the other's exchange with an empty reply.</summary>
     private static readonly HashSet<string> TaggedFetchesInFlight = new(StringComparer.Ordinal);
+
+    /// <summary>Asks that arrived while <see cref="TaggedFetchesInFlight"/> held their pile's key.
+    /// They used to be answered EMPTY on the spot - and the page, which asks again after every
+    /// reply, burned its whole ask budget on empties in under four seconds and fell back to a
+    /// QUICK SORT (a different game) while the fetch was still on its way (0827, a Retake). Now
+    /// they queue behind that fetch and are served off its buffer the moment it lands. Guarded
+    /// by <see cref="TaggedFetchesInFlight"/>'s lock; a waiter from a closed Arcademy (epoch
+    /// moved on) is dropped, never posted.</summary>
+    private static readonly Dictionary<string, List<(string ReqId, string Tag, int Want, int Epoch)>> TaggedWaiters
+        = new(StringComparer.Ordinal);
+
+    private static void DrainTaggedWaiters(string key)
+    {
+        List<(string ReqId, string Tag, int Want, int Epoch)>? list;
+        lock (TaggedFetchesInFlight)
+        {
+            if (!TaggedWaiters.Remove(key, out list) || list == null) return;
+        }
+        int epoch = Volatile.Read(ref _generation);
+        foreach (var w in list)
+        {
+            if (w.Epoch != epoch) continue;
+            try { PostTaggedAssets(w.ReqId, w.Tag, TakeBuffered(key, w.Want), true); } catch { }
+        }
+    }
 
     private static bool _taggedSubsEmptyLogged;
 
@@ -4323,6 +4354,7 @@ internal static class ArcademyHostService
                 mime = u.Mime,
                 tag = u.Tag ?? tag,
                 src = u.Src ?? "",
+                poster = u.Poster,
             }).ToArray(),
             done,
         });
@@ -4340,9 +4372,11 @@ internal static class ArcademyHostService
         {
             if (!TaggedFetchesInFlight.Add(key))
             {
-                // End THIS exchange rather than leaving the page's latch open; the pool it wanted
-                // is one ask away (the page asks again after every reply).
-                PostTaggedAssets(reqId, tag, Array.Empty<AssetUrl>(), true);
+                // The fetch this ask wants is already on its way: queue behind it and let the
+                // landing serve it (see TaggedWaiters) - an empty reply here was the Retake's
+                // road to a QUICK SORT.
+                if (!TaggedWaiters.TryGetValue(key, out var waiters)) TaggedWaiters[key] = waiters = new();
+                waiters.Add((reqId, tag, want, epoch));
                 return;
             }
         }
@@ -4352,6 +4386,7 @@ internal static class ArcademyHostService
             if (allowed.Count == 0)
             {
                 PostTaggedAssets(reqId, tag, Array.Empty<AssetUrl>(), true);
+                DrainTaggedWaiters(key);
                 return;
             }
 
@@ -4377,7 +4412,7 @@ internal static class ArcademyHostService
                 // The card rendition, not the feed one (see ServeRemoteBatch): SORT's ring is
                 // 0.75-2.4s and a 1920px 15MB mp4 was the striped back the owner kept seeing.
                 var url = e.SmallUrl ?? e.Url;
-                fresh.Add(new AssetUrl(url, kind, MimeFor(url, kind), tag, "r/" + bare));
+                fresh.Add(new AssetUrl(url, kind, MimeFor(url, kind), tag, "r/" + bare, PosterFor(e, kind)));
                 if (fresh.Count >= RemoteBatchCap) break;
             }
 
@@ -4396,6 +4431,7 @@ internal static class ArcademyHostService
                 }
                 if (error != null) App.Logger?.Debug("ArcademyHost: tagged batch '{Tag}' error {E}", tag, error);
                 PostTaggedAssets(reqId, tag, send, true);
+                DrainTaggedWaiters(key);
             });
         }
         catch (Exception ex)
@@ -4405,6 +4441,7 @@ internal static class ArcademyHostService
             {
                 try { PostTaggedAssets(reqId, tag, Array.Empty<AssetUrl>(), true); } catch { }
             }
+            DrainTaggedWaiters(key);
         }
         finally { lock (TaggedFetchesInFlight) TaggedFetchesInFlight.Remove(key); }
     }

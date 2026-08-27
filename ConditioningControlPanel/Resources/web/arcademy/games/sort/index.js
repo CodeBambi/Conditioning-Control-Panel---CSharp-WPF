@@ -239,7 +239,12 @@ const VET_GATE = Object.freeze({
   ENOUGH: 24,             // alive rows per tag that open the gate early
   MAX_MS: 20000,          // the ceiling a slow CDN may hold the door for
   REFILL_ROUNDS: 2,       // top-up asks when a tag is short (= TAGGED.REFILL_MAX)
+  CLIP_HOLD_MS: 10000,    // how long ENOUGH stills wait for the clips to be judged
 });
+/** An EMPTY tagged claim is asked again before the door gives up on it (see
+ *  claimPool): CLAIM_TRIES claims, CLAIM_RETRY_MS apart, then the QUICK SORT floor. */
+const CLAIM_TRIES = 3;
+const CLAIM_RETRY_MS = 4000;
 /* (The game-local WARM_AHEAD/WARM_INFLIGHT byte rail moved INTO the provider
  * as the manifest warmer, 0825: buildDeck knows the whole ordered deck before
  * the first card shows, so warmDeck() below hands it to pool.warmManifest()
@@ -610,23 +615,36 @@ export default {
       };
     }
     /** The tagged claim, with the QUICK SORT floor under it. Never throws. */
-    async function claimPool(resolved) {
+    async function claimPool(resolved, wait) {
       const wantQuick = !!(resolved && resolved.quick);
       const tagged = ctx.assets && typeof ctx.assets.claimTagged === 'function';
       if (!wantQuick && tagged && resolved && resolved.sources && resolved.sources.length) {
-        try {
-          const pool = await ctx.assets.claimTagged(claimOpts(resolved));
-          if (pool && typeof pool.next === 'function') {
-            try { if (typeof pool.prewarm === 'function') pool.prewarm(PREWARM); } catch (e) { /* noop */ }
-            const dead = ['target', 'noise'].filter((tg) => {
-              try { return typeof pool.empty === 'function' ? pool.empty(tg) : false; }
-              catch (e) { return false; }
-            });
-            if (!dead.length) return { pool, quick: false };
-            say('claimTagged answered with an EMPTY ' + dead.join(' and ') + ' pile - falling back to QUICK SORT');
-            try { if (typeof pool.dispose === 'function') pool.dispose(); } catch (e) { /* noop */ }
+        /* AN EMPTY PILE IS ASKED AGAIN BEFORE IT IS GIVEN UP ON (0827). The desktop
+         * host answers a cold or rate-limited pile with empty replies, and one such
+         * moment used to turn the player's own sort into a QUICK SORT - a different
+         * game - without a word. CLAIM_TRIES claims, `wait(attempt)` apart (the door
+         * says "Fetching more cards" meanwhile), then the floor. */
+        const tries = typeof wait === 'function' ? CLAIM_TRIES : 1;
+        for (let attempt = 0; attempt < tries; attempt++) {
+          if (attempt) {
+            try { await wait(attempt); } catch (e) { break; }
           }
-        } catch (e) { say('claimTagged failed (' + ((e && e.message) || e) + ') - QUICK SORT'); }
+          const last = attempt + 1 >= tries;
+          try {
+            const pool = await ctx.assets.claimTagged(claimOpts(resolved));
+            if (pool && typeof pool.next === 'function') {
+              try { if (typeof pool.prewarm === 'function') pool.prewarm(PREWARM); } catch (e) { /* noop */ }
+              const dead = ['target', 'noise'].filter((tg) => {
+                try { return typeof pool.empty === 'function' ? pool.empty(tg) : false; }
+                catch (e) { return false; }
+              });
+              if (!dead.length) return { pool, quick: false };
+              say('claimTagged answered with an EMPTY ' + dead.join(' and ') + ' pile'
+                + (last ? ' - falling back to QUICK SORT' : ' - asking again'));
+              try { if (typeof pool.dispose === 'function') pool.dispose(); } catch (e) { /* noop */ }
+            }
+          } catch (e) { say('claimTagged failed (' + ((e && e.message) || e) + ')' + (last ? ' - QUICK SORT' : ' - asking again')); }
+        }
       }
       /* QUICK SORT: the ordinary claim, wrapped so the deck speaks one API. */
       try {
@@ -704,7 +722,17 @@ export default {
             catch (e) { return []; }
           };
           const okOf = (st, tg) => (st && st.byTag && st.byTag[tg] ? (st.byTag[tg].ok | 0) : 0);
-          const enough = (st) => ['target', 'noise'].every((tg) => alive[tg] + okOf(st, tg) >= VET_GATE.ENOUGH);
+          /* ENOUGH alive per tag, AND THE CLIPS JUDGED - or CLIP_HOLD_MS spent on
+           * them (owner 0827: "even now we got some placeholders" after the check
+           * said done - the gate opened on the stills alone while the video lanes
+           * had barely started, and every dead loop walked into the deck
+           * unjudged). A phone's two lanes cannot judge a hundred clips, so the
+           * hold is bounded and the deal takes it from there: a judged-alive row
+           * deals first (tagged.js nextRow) and an unjudged clip wears its poster
+           * while it buffers (mintFace). The ceiling still bounds the whole gate. */
+          const clipsPending = (st) => !!(st && st.pending && (st.pending.video | 0) > 0);
+          const enough = (st) => ['target', 'noise'].every((tg) => alive[tg] + okOf(st, tg) >= VET_GATE.ENOUGH)
+            && (!clipsPending(st) || (now() - startedAt) >= VET_GATE.CLIP_HOLD_MS);
           const run = (rows) => {
             busy('sort_vetting', base.ok + '/' + (base.total + rows.length));
             let pr = null;
@@ -774,7 +802,14 @@ export default {
           }
           try { if (door && typeof door.setBusy === 'function') door.setBusy(true, 'sort_dealing'); }
           catch (e) { /* noop */ }
-          claimPool(res).then((got) => {
+          claimPool(res, (attempt) => new Promise((resolve) => {
+            /* the door says why the deal waits, then a breath before the re-ask;
+               a press that lost its turn is caught by the stale check below */
+            try { if (door && typeof door.setBusy === 'function') door.setBusy(true, 'sort_vet_more'); }
+            catch (e) { /* noop */ }
+            say('claim: empty pile, re-asking (' + attempt + '/' + (CLAIM_TRIES - 1) + ')');
+            timers.after(CLAIM_RETRY_MS, resolve);
+          })).then((got) => {
             if (settled || gen !== playGen) {
               try { if (got && got.pool && typeof got.pool.dispose === 'function') got.pool.dispose(); }
               catch (e) { /* noop */ }
@@ -1122,7 +1157,7 @@ export default {
      *  the drawn back stands, which is the fair round it always was. */
     function displaySrcOf(card) {
       if (!card || !card.url) return null;
-      if (!poolIsBroken(card.url)) return { url: card.url, mime: card.mime || '' };
+      if (!poolIsBroken(card.url)) return { url: card.url, mime: card.mime || '', poster: card.poster || '' };
       const sub = substituteFor(card);
       return sub || null;
     }
@@ -1200,6 +1235,49 @@ export default {
       }
     }
 
+    /** The post's own still for a clip, when the row carries one and it is not condemned. */
+    function posterOf(src) {
+      const p = src && typeof src.poster === 'string' ? src.poster : '';
+      if (!p || p === src.url) return '';
+      return poolIsBroken(p) ? '' : p;
+    }
+    /**
+     * OVER THE DECODER CEILING THE POSTER IS THE FACE (0827). An <img> of the
+     * clip's own still: it holds no decoder slot, and it is flagged so reseat()
+     * upgrades it to the real <video> the moment a slot frees. A dead poster
+     * convicts the POSTER url only (faceDied reads _aeUrl) - the clip is not on
+     * trial here. A row with no poster keeps the old answer: the back.
+     */
+    function mintPosterFace(src) {
+      const poster = posterOf(src);
+      if (!poster) return null;
+      const img = el('img', 'g-sort-face g-sort-face-poster');
+      if (!img) return null;
+      img.alt = '';
+      try { img.setAttribute('draggable', 'false'); img.setAttribute('decoding', 'async'); }
+      catch (e) { /* DOM double */ }
+      try { img._aeUrl = poster; img._aePosterOnly = true; } catch (e) { /* noop */ }
+      if (typeof img.addEventListener === 'function') {
+        img.addEventListener('error', () => faceDied(img));
+      }
+      img.src = poster;
+      return img;
+    }
+    /** A top clip whose play() was refused (iOS Low Power Mode, an autoplay
+     *  policy) plays on the player's next gesture - a swipe or a key IS one.
+     *  Until then the poster holds the face, never the back. */
+    function retryBlockedPlay() {
+      if (!S || destroyed) return;
+      const top = S.live[0];
+      const v = top && top.video ? top.face : null;
+      if (!v || !v._aePlayBlocked || typeof v.play !== 'function') return;
+      try {
+        v._aePlayBlocked = false;
+        const p = v.play();
+        if (p && p.catch) p.catch(() => { try { v._aePlayBlocked = true; } catch (e) { /* noop */ } });
+      } catch (e) { /* noop */ }
+    }
+
     function mintFace(card, depth) {
       if (!card || !card.url) return null;
       if (depth > 1) return null;                       // the third card is a back
@@ -1236,16 +1314,25 @@ export default {
         } catch (e) { /* DOM double */ }
         try { v.disableRemotePlayback = true; } catch (e) { /* not everywhere */ }
         try { v._aeUrl = src.url; } catch (e) { /* noop */ }
+        /* THE POSTER STANDS IN while the clip buffers (0827): the striped back
+         * never shows through a <video> that has one - a slow link, a phone
+         * holding preload to metadata, Low Power Mode refusing autoplay all
+         * paint the post's own still instead. */
+        const poster = posterOf(src);
+        if (poster) { try { v.setAttribute('poster', poster); } catch (e) { /* noop */ } }
         if (typeof v.addEventListener === 'function') {
           v.addEventListener('error', () => faceDied(v));
         }
         v.src = src.url;
         if (isTop && typeof v.play === 'function') {
-          try { const p = v.play(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* autoplay policy */ }
+          try {
+            const p = v.play();
+            if (p && p.catch) p.catch(() => { try { v._aePlayBlocked = true; } catch (e2) { /* noop */ } });
+          } catch (e) { /* autoplay policy */ }
         }
         return v;
       }
-      if (wantVideo) return null;                       // budget spent: the back stands
+      if (wantVideo) return mintPosterFace(src);        // budget spent: the poster stands, or the back
       /* owner 2026-08-24 (blank-card fix): a video url NEVER goes into an <img>.
        * The old dud face downloaded the whole mp4, painted nothing, and - being
        * a face - blocked reseat()'s grow branch, so every promoted video card
@@ -1375,9 +1462,17 @@ export default {
         setVar(live.node, '--sort-scale', String(scaleForDepth(i)));
         /* THE SECOND CARD GROWS A FACE when it becomes the top one; a card that
          * was minted at depth 2 never had one. */
-        if (i <= 1 && !live.face) {
+        /* ...or it STOOD IN AS A POSTER over the ceiling and a slot has freed since */
+        const posterOnly = !!(live.face && live.face._aePosterOnly);
+        if (i <= 1 && (!live.face || (posterOnly && videoCount < DECODER_CEILING))) {
+          /* the poster is torn out only once the clip was actually minted: a
+           * mint that answers with nothing (or another poster) keeps the still */
           const face = mintFace(live.card, i);
-          if (face) {
+          const upgrade = !!(face && face.tagName === 'VIDEO');
+          if (posterOnly && !upgrade) {
+            if (face) { try { face.remove(); } catch (e) { /* noop */ } }
+          } else if (face) {
+            if (posterOnly) killFace(live);
             live.face = face;
             live.video = face.tagName === 'VIDEO';
             /* a fresh face is a fresh slot claim: the free that matters is the
@@ -1402,7 +1497,10 @@ export default {
             const v = live.face;
             if (v.paused !== false) {
               v.autoplay = true;
-              if (typeof v.play === 'function') { const p = v.play(); if (p && p.catch) p.catch(() => {}); }
+              if (typeof v.play === 'function') {
+                const p = v.play();
+                if (p && p.catch) p.catch(() => { try { v._aePlayBlocked = true; } catch (e2) { /* noop */ } });
+              }
             }
           } catch (e) { /* autoplay policy */ }
         }
@@ -2061,6 +2159,7 @@ export default {
         widthOf: () => cardWidth(),
         viewportOf: () => stageBox().w,
         onGrab: () => {
+          retryBlockedPlay();
           if (!S || !S.armed) return;
           const top = S.live[0];
           if (top) addCls(top.node, 'is-held');
@@ -2125,6 +2224,14 @@ export default {
       const meta = metaOf();
       if (retake && cacheUsable(meta.deck, S.day, seed)) {
         const built = deckFromRows(meta.deck.rows, !!meta.deck.quick);
+        /* the cache keeps no poster (its blob is capped): a loop the live pool
+         * absorbed again this claim gets the pool's (0827) */
+        if (S.pool && typeof S.pool.posterOf === 'function') {
+          for (const c of built.cards) {
+            if (c.poster || c.kind !== 'loop') continue;
+            try { c.poster = S.pool.posterOf(c.url) || ''; } catch (e) { /* noop */ }
+          }
+        }
         S.cards = built.cards;
         S.deckRows = built.cards.slice();     // same rows, same order, same substitutes
         warmDeck();
@@ -2239,8 +2346,8 @@ export default {
       const offs = [];
       try {
         if (ctx.keys && typeof ctx.keys.on === 'function') {
-          offs.push(ctx.keys.on('left', () => { if (S && S.swipe) S.swipe.key('left'); }));
-          offs.push(ctx.keys.on('right', () => { if (S && S.swipe) S.swipe.key('right'); }));
+          offs.push(ctx.keys.on('left', () => { retryBlockedPlay(); if (S && S.swipe) S.swipe.key('left'); }));
+          offs.push(ctx.keys.on('right', () => { retryBlockedPlay(); if (S && S.swipe) S.swipe.key('right'); }));
         }
       } catch (e) { say('keybind wiring failed: ' + ((e && e.message) || e)); }
       unbindKeys = () => { for (const off of offs) { try { off(); } catch (e) { /* noop */ } } };

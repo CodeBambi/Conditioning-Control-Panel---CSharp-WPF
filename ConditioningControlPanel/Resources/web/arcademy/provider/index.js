@@ -1448,6 +1448,9 @@ export function createAssets(options = {}) {
       /* the shared url blacklist: a tagged serve skips a dead row and the
        * seeded re-serve is its substitute source (see tagged.js nextRow) */
       broken: isBrokenUrl,
+      /* the vet's verdicts (./vet.js): a tagged serve deals a row PROVED alive
+       * ahead of one it never reached (tagged.js nextRow, 0827) */
+      verdict: (u) => vetter.verdict(u),
       /* The remote gate is the app's, not the door's: with remote media off (or
        * OfflineMode on) a remote source row simply never asks, the tag lands
        * empty, and the door refuses to start on pool.empty(). A LOCAL row is
