@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -463,14 +463,20 @@ public class GazeDebugCursorService : IDisposable
     /// folded in before painting. <see cref="Fyp.FypHostService"/> does the same conversion on
     /// the same event; this is that math, ending in the WPF units Window.Left/Top speak.
     ///
-    /// Painting <c>_pos - _overlay.Left</c> raw (the pre-2026-08-27 code) is invisibly correct
-    /// on a single primary monitor at (0,0) @100% — origin 0, scale 1 — and wrong on every
-    /// other layout. A monitor placed above or left of the primary makes VirtualScreenTop/Left
-    /// negative, which painted the dot a whole monitor low: the "gaze dot pinned to the bottom
-    /// of the screen" reports (tier-2, 2026-08-27). The calibration Accuracy test renders
-    /// through this same service (WebcamCalibrationWindow BubbleTestCursorKey /
-    /// "calibration-verify"), so the bad mapping also made calibration itself look broken for
-    /// multi-monitor users — the dot they were judging was not where the tracker said to look.
+    /// Painting <c>_pos - _overlay.Left</c> raw (the pre-2026-08-27 code) is correct whenever
+    /// calibration ran on the PRIMARY monitor at the overlay's scale, and only then. The
+    /// primary's origin is always (0,0) on the virtual desktop, so at scale 1 the two
+    /// expressions are identical at any monitor layout — which is why this survived. It breaks
+    /// when <see cref="MonitorBoundsRecord.X"/>/<c>Y</c> are non-zero, i.e. calibration
+    /// ran on a non-primary monitor (they are written from that screen's Bounds in
+    /// WebcamCalibrationWindow) — the dot then lands a whole monitor offset away, usually on the
+    /// primary instead of the screen being looked at — or when the calibrated monitor's DpiScale
+    /// differs from the overlay's, which multiplies positions by the wrong factor.
+    ///
+    /// The calibration Accuracy test renders through this same service (WebcamCalibrationWindow
+    /// BubbleTestCursorKey / "calibration-verify"), so this was never only a debug dot: a user
+    /// who calibrated on their second monitor was judging — and re-running — calibration against
+    /// a dot drawn somewhere the tracker never claimed (tier-2 reports, 2026-08-27).
     /// </summary>
     /// <returns>false when the overlay is gone, in which case nothing should be drawn.</returns>
     private bool TryOverlayLocal(out float lx, out float ly)
