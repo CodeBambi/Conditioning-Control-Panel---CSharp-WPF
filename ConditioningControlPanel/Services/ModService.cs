@@ -2516,6 +2516,22 @@ namespace ConditioningControlPanel.Services
                     ? new List<string>(settings.CustomTriggers)
                     : new List<string>(GetDefaultCustomTriggers());
 
+            // Same cross-mod cleanup the subliminal and lock-card pools get. The Sissy mod's
+            // trigger list shipped as BambiSleep's corpus with the brand filed off (#general
+            // 08-22), so a user who ran Sissy before this build has that corpus saved in their
+            // per-mod backup and would keep meeting it. Only entries that are some OTHER
+            // built-in mod's default and not the active mod's are dropped, and this mod's own
+            // defaults are topped up only when something was actually pruned - a user who never
+            // had the contamination keeps their list exactly as they left it.
+            var prunedTriggers = PruneCrossModCustomTriggers(
+                settings.CustomTriggers, GetDefaultCustomTriggers(), out var removedTriggers);
+            if (removedTriggers.Count > 0)
+            {
+                settings.CustomTriggers = prunedTriggers;
+                _log?.Information("Pruned {Count} cross-mod custom trigger(s) for mod {ModId}: {Keys}",
+                    removedTriggers.Count, modId, string.Join(", ", removedTriggers));
+            }
+
             if (settings.BouncingTextPoolByMod?.TryGetValue(modId, out var savedBounce) == true)
                 settings.BouncingTextPool = new Dictionary<string, bool>(savedBounce);
             else
@@ -2572,6 +2588,53 @@ namespace ConditioningControlPanel.Services
             if (toRemove.Count > 0)
                 _log?.Information("Pruned {Count} cross-mod subliminal entries from the active pool: {Keys}",
                     toRemove.Count, string.Join(", ", toRemove));
+        }
+
+        /// <summary>
+        /// Removes custom triggers that belong to a DIFFERENT built-in mod's default list and are
+        /// not part of the active mod's defaults, then - only when something was removed - tops the
+        /// list up with the active mod's own defaults. Triggers matching no built-in default are
+        /// user-typed and are always kept. Pure so it can be unit tested without app state.
+        /// </summary>
+        internal static List<string> PruneCrossModCustomTriggers(
+            IEnumerable<string>? current, IEnumerable<string>? activeDefaults, out List<string> removed)
+        {
+            removed = new List<string>();
+            var list = current?.ToList() ?? new List<string>();
+            var active = activeDefaults?.ToList() ?? new List<string>();
+            if (list.Count == 0) return list;
+
+            var activeKeys = new HashSet<string>(active, StringComparer.OrdinalIgnoreCase);
+
+            var foreignDefaults = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var allBuiltIn = new[]
+            {
+                Models.BuiltInMods.CCPDefault, Models.BuiltInMods.BambiSleep,
+                Models.BuiltInMods.SissyHypno, Models.BuiltInMods.Dronification,
+                Models.BuiltInMods.Locked
+            };
+            foreach (var m in allBuiltIn)
+                if (m.CustomTriggers != null)
+                    foreach (var t in m.CustomTriggers)
+                        foreignDefaults.Add(t);
+
+            var kept = new List<string>();
+            foreach (var t in list)
+            {
+                if (!string.IsNullOrWhiteSpace(t) && foreignDefaults.Contains(t) && !activeKeys.Contains(t))
+                    removed.Add(t);
+                else
+                    kept.Add(t);
+            }
+
+            if (removed.Count == 0) return list;
+
+            var present = new HashSet<string>(kept, StringComparer.OrdinalIgnoreCase);
+            foreach (var d in active)
+                if (present.Add(d))
+                    kept.Add(d);
+
+            return kept;
         }
 
         /// <summary>
