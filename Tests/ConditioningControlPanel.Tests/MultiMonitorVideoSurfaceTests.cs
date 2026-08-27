@@ -55,14 +55,67 @@ public class MultiMonitorVideoSurfaceTests
     }
 
     [Fact]
-    public void FrameWatchdog_TheAudioBearingSurfaceGetsNoRetryRung()
+    public void FrameWatchdog_ASurfaceWithNoRetryRung_IsCondemnedOnItsFirstMissedWindow()
     {
-        // The primary ends the clip either way, so a retry rung there would only double the time the
-        // user stares at a black, silent main screen (16s vs the released build's 8s) - and on the
-        // single-monitor majority rig the primary is the ONLY surface, so it would be pure latency
-        // for everyone with one screen.
         Assert.Equal(FrameWatchdogAction.GiveUp,
             DecideFrameWatchdog(tornDown: false, gracePaused: false, hasRendered: false, retryUsed: false, retryAllowed: false));
+    }
+
+    [Fact]
+    public void FrameWatchdog_AMultiMonitorPrimary_GetsTheSameOneRetry()
+    {
+        // The exact hole round 2 caught: the audio-bearing surface used to be condemned on its FIRST
+        // missed window on EVERY rig, so a dual-monitor user whose primary stalled got the released
+        // build's behaviour verbatim (skip, no re-Play, no recovery rung of any kind) - i.e. the
+        // headline trace "blurred-background video produced no frame within 8000ms on primary
+        // \\.\DISPLAY1 - skipping to next" was unchanged by the whole branch.
+        Assert.Equal(FrameWatchdogAction.Retry,
+            DecideFrameWatchdog(tornDown: false, gracePaused: false, hasRendered: false, retryUsed: false, retryAllowed: true));
+        Assert.Equal(FrameWatchdogAction.GiveUp,
+            DecideFrameWatchdog(tornDown: false, gracePaused: false, hasRendered: false, retryUsed: true, retryAllowed: true));
+    }
+
+    // ---- who is allowed a retry rung: the RIG decides, not the role ----
+
+    [Fact]
+    public void RetryRung_AMirrorAlwaysGetsOne()
+    {
+        // The clip keeps playing while a mirror retries, so the second window costs the user nothing.
+        Assert.True(AllowsFrameRetry(primarySurface: false, armedSurfaces: 1));
+        Assert.True(AllowsFrameRetry(primarySurface: false, armedSurfaces: 2));
+        Assert.True(AllowsFrameRetry(primarySurface: false, armedSurfaces: 4));
+    }
+
+    [Fact]
+    public void RetryRung_APrimaryWithSiblingsGetsOne()
+    {
+        // Multi-monitor: one re-Play() is the only thing between "the decoder hiccuped while three
+        // screens spun up at once" and "the video was skipped".
+        Assert.True(AllowsFrameRetry(primarySurface: true, armedSurfaces: 2));
+        Assert.True(AllowsFrameRetry(primarySurface: true, armedSurfaces: 3));
+    }
+
+    [Fact]
+    public void RetryRung_ALonePrimaryGetsNone()
+    {
+        // The single-monitor majority: nothing else is competing for the decoder, the clip ends
+        // either way, and the rung would be 8 extra seconds of black screen for everyone.
+        Assert.False(AllowsFrameRetry(primarySurface: true, armedSurfaces: 1));
+        // Defensive: a watch judged before it was registered must not read softer than "lone".
+        Assert.False(AllowsFrameRetry(primarySurface: true, armedSurfaces: 0));
+    }
+
+    [Fact]
+    public void DualMonitorPrimary_StillEndsTheClip_JustOneGraceWindowLater()
+    {
+        // Round 1's blocker holds: a dead primary must end the clip. The retry rung only moves that
+        // from ~8s to ~16s, and only on a rig where something else could have starved it.
+        bool allowed = AllowsFrameRetry(primarySurface: true, armedSurfaces: 2);
+        Assert.Equal(FrameWatchdogAction.Retry,
+            DecideFrameWatchdog(tornDown: false, gracePaused: false, hasRendered: false, retryUsed: false, retryAllowed: allowed));
+        Assert.Equal(FrameWatchdogAction.GiveUp,
+            DecideFrameWatchdog(tornDown: false, gracePaused: false, hasRendered: false, retryUsed: true, retryAllowed: allowed));
+        Assert.True(ShouldAbortClip(totalSurfaces: 2, deadSurfaces: 1, primarySurfaceDead: true));
     }
 
     // ---- liveness aggregation (deliverable 2) ----
@@ -100,10 +153,13 @@ public class MultiMonitorVideoSurfaceTests
     [Fact]
     public void SingleMonitorRig_BehavesExactlyLikeTheReleasedBuild()
     {
-        // One screen means one surface and it IS the primary: first missed window -> GiveUp (no
-        // retry rung) -> abort. Same ~8s skip the released build does, no added latency.
+        // One screen means one surface and it IS the primary: no retry rung, first missed window ->
+        // GiveUp -> abort. Same ~8s skip the released build does, no added latency. Driven through
+        // AllowsFrameRetry so the rig rule and the ladder cannot drift apart.
+        bool allowed = AllowsFrameRetry(primarySurface: true, armedSurfaces: 1);
+        Assert.False(allowed);
         Assert.Equal(FrameWatchdogAction.GiveUp,
-            DecideFrameWatchdog(tornDown: false, gracePaused: false, hasRendered: false, retryUsed: false, retryAllowed: false));
+            DecideFrameWatchdog(tornDown: false, gracePaused: false, hasRendered: false, retryUsed: false, retryAllowed: allowed));
         Assert.True(ShouldAbortClip(totalSurfaces: 1, deadSurfaces: 1, primarySurfaceDead: true));
     }
 
@@ -149,6 +205,60 @@ public class MultiMonitorVideoSurfaceTests
             DecideBrowserFailure(isPrimarySurface: true, alreadyFellBack: true, playbackStartedFired: false));
         Assert.Equal(BrowserFailureAction.Ignore,
             DecideBrowserFailure(isPrimarySurface: true, alreadyFellBack: true, playbackStartedFired: true));
+    }
+
+    // ---- browser per-surface first-frame sweep (deliverables 2 + 6, DEFAULT engine) ----
+    //
+    // BrowserVideoEngineEnabled defaults true and the browser engine drives EVERY screen, so for most
+    // users an mp4 mandatory video is a WebView2 session on all monitors. The engine used to watch the
+    // PRIMARY only, and to disarm the moment the primary posted `playing` - so a mirror that came up,
+    // handshook and then never decoded was never noticed, never dropped and never logged.
+
+    [Fact]
+    public void BrowserSweep_ASurfaceThatRendered_IsLeftAlone()
+    {
+        Assert.Equal(BrowserFrameSweepAction.Ignore,
+            DecideBrowserFrameSweep(firstFrameSeen: true, deadlinePassed: true, isPrimarySurface: true));
+        Assert.Equal(BrowserFrameSweepAction.Ignore,
+            DecideBrowserFrameSweep(firstFrameSeen: true, deadlinePassed: true, isPrimarySurface: false));
+    }
+
+    [Fact]
+    public void BrowserSweep_BeforeItsOwnDeadline_ASurfaceIsJustWaiting()
+    {
+        // Each window carries its own deadline (pre-handshake budget, restarted shorter at `ready`),
+        // so a slow mirror is never judged on the primary's clock.
+        Assert.Equal(BrowserFrameSweepAction.Wait,
+            DecideBrowserFrameSweep(firstFrameSeen: false, deadlinePassed: false, isPrimarySurface: false));
+        Assert.Equal(BrowserFrameSweepAction.Wait,
+            DecideBrowserFrameSweep(firstFrameSeen: false, deadlinePassed: false, isPrimarySurface: true));
+    }
+
+    [Fact]
+    public void BrowserSweep_ABlackMirrorIsReportedAndDropped_NotLeftOnScreen()
+    {
+        // "Monitor 2 is permanently black": an opaque fullscreen window with a page that never
+        // decoded. It gets its own surface line and then goes away; the clip is untouched.
+        Assert.Equal(BrowserFrameSweepAction.DropMirror,
+            DecideBrowserFrameSweep(firstFrameSeen: false, deadlinePassed: true, isPrimarySurface: false));
+    }
+
+    [Fact]
+    public void BrowserSweep_ABlackPrimaryFailsTheSession_SoLibVlcCanReplayTheClip()
+    {
+        Assert.Equal(BrowserFrameSweepAction.FailSession,
+            DecideBrowserFrameSweep(firstFrameSeen: false, deadlinePassed: true, isPrimarySurface: true));
+    }
+
+    [Fact]
+    public void BrowserSweep_AHealthyPrimaryDoesNotExcuseABlackMirror()
+    {
+        // The regression in one pair of asserts: the primary reporting `playing` used to disarm the
+        // whole watch, which is precisely why the mirror below was never judged.
+        Assert.Equal(BrowserFrameSweepAction.Ignore,
+            DecideBrowserFrameSweep(firstFrameSeen: true, deadlinePassed: true, isPrimarySurface: true));
+        Assert.Equal(BrowserFrameSweepAction.DropMirror,
+            DecideBrowserFrameSweep(firstFrameSeen: false, deadlinePassed: true, isPrimarySurface: false));
     }
 
     // ---- retire deferral (deliverable 4) ----

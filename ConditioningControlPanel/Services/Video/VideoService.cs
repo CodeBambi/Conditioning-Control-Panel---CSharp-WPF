@@ -3414,14 +3414,19 @@ namespace ConditioningControlPanel.Services
         ///   * a MIRROR (secondary) that misses its grace window gets one re-Play() on its own player
         ///     and one more full grace window; if it still shows nothing it is marked dead and the
         ///     clip carries on wherever it IS rendering. That is the actual regression fix.
-        ///   * the AUDIO-BEARING surface gets NO retry rung and ends the clip the moment it misses,
-        ///     exactly as the released build does. It is the only player wired to EndReached /
+        ///   * the AUDIO-BEARING surface gets that same single re-Play() — but only on a MULTI-surface
+        ///     rig. That arm IS the headline report: a primary that missed its window on a dual-monitor
+        ///     rig used to skip the clip on the spot with no recovery rung of any kind, which is the
+        ///     "primary black, secondaries fine, and then it just skipped" trace verbatim. It still
+        ///     ends the clip when the retry fails — it is the only player wired to EndReached /
         ///     EncounteredError / LengthChanged, and the blurred path never arms StartVoutWatchdog, so
-        ///     if a live mirror were allowed to carry a dead primary the run's only remaining end
-        ///     condition would be the 10-minute fallback safety timer — the reported black-and-silent
-        ///     main screen would last minutes instead of 8s, un-closable in strict mode. On a
-        ///     single-monitor rig (the majority) the primary is the only surface, so this also keeps
-        ///     that path's timing exactly where it is today.
+        ///     a clip carried by mirrors alone would have no end condition short of the 10-minute
+        ///     fallback safety timer (black and silent for minutes, un-closable in strict mode). The
+        ///     retry only moves that skip from ~8s to ~16s, and buys back the runs where the decoder
+        ///     was merely slow to come up while three screens spun up at once.
+        ///   * on a SINGLE-surface rig (the majority) the primary is the only surface and gets NO retry
+        ///     rung at all, so that path skips at exactly the ~8s the released build does. The rung is
+        ///     decided by the RIG, not by the role: a lone primary has no siblings to be starved by.
         ///
         /// See VideoSurfaceHealth.DecideFrameWatchdog / ShouldAbortClip for both rules in pure form.
         /// </summary>
@@ -3440,9 +3445,15 @@ namespace ConditioningControlPanel.Services
                 try
                 {
                     bool tornDown = !_videoPlaying || _isCleaningUp || gen != _teardownGeneration;
-                    // retryAllowed: !primary — the audio-bearing surface is condemned on its first
-                    // missed window (see the ladder note above); only mirrors get a second chance.
-                    switch (VideoSurfaceHealth.DecideFrameWatchdog(tornDown, _gracePaused, surface.HasRendered, watch.RetryUsed, retryAllowed: !primary))
+                    // How many surfaces this clip armed. The retry rung is decided by the RIG, not by
+                    // the role (see the ladder note above): a mirror always gets its second chance, and
+                    // so does the audio-bearing surface as soon as it has siblings. A lone primary —
+                    // the single-monitor majority — gets none, which keeps that path's ~8s skip exactly
+                    // where the released build has it.
+                    int armed;
+                    lock (_blurFrameWatchLock) { armed = _blurWatches.Count; }
+                    switch (VideoSurfaceHealth.DecideFrameWatchdog(tornDown, _gracePaused, surface.HasRendered, watch.RetryUsed,
+                                retryAllowed: VideoSurfaceHealth.AllowsFrameRetry(primary, armed)))
                     {
                         case VideoSurfaceHealth.FrameWatchdogAction.Ignore:
                             if (!tornDown && surface.HasRendered && !watch.Reported)
@@ -3485,9 +3496,9 @@ namespace ConditioningControlPanel.Services
                                 primaryDead = primary || _blurWatches.Any(w => w.Primary && w.Dead);
                             }
                             VideoSurfaceHealth.Report("libvlc", monitor, primary, -1,
-                                primary
-                                    ? $"no frame within {VoutGraceMs}ms on the audio-bearing surface"
-                                    : $"no frame within {VoutGraceMs}ms, and none after one retry");
+                                watch.RetryUsed
+                                    ? $"no frame within {VoutGraceMs}ms, and none after one retry"
+                                    : $"no frame within {VoutGraceMs}ms, no retry rung on a single-surface rig");
                             if (!VideoSurfaceHealth.ShouldAbortClip(total, dead, primaryDead))
                             {
                                 App.Logger?.Warning("VideoService: giving up on the blurred surface {Surface} ({Dead}/{Total} dead) - the clip keeps playing on the live screen(s)",
@@ -3534,8 +3545,9 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// One MIRROR's decoder gets a second chance, WITHOUT touching its siblings (the audio-bearing
-        /// surface never reaches here — see the ladder note on StartBlurFrameWatchdog). Re-issuing
+        /// ONE surface's decoder gets a second chance, WITHOUT touching its siblings — any mirror, and
+        /// the audio-bearing surface too once the rig has more than one surface (on a lone primary
+        /// nothing reaches here; see the ladder note on StartBlurFrameWatchdog). Re-issuing
         /// Play() only helps when the player has actually fallen out of playback (Error/Stopped/Ended);
         /// a player still in Opening/Buffering is simply slow, and poking native state under it is the
         /// exact class of move that wedges LibVLC — so that case just spends the extra grace window

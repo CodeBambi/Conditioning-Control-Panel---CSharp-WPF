@@ -34,8 +34,8 @@ namespace ConditioningControlPanel.Services
             /// <summary>First strike: give THIS surface another go before condemning anything.</summary>
             Retry,
             /// <summary>Last strike: this surface is dead. The caller then asks
-            /// <see cref="ShouldAbortClip"/> whether the clip can go on without it. The audio-bearing
-            /// surface reaches this on its FIRST missed window - see the retryAllowed parameter.</summary>
+            /// <see cref="ShouldAbortClip"/> whether the clip can go on without it. A surface with no
+            /// retry rung reaches this on its FIRST missed window - see the retryAllowed parameter.</summary>
             GiveUp,
         }
 
@@ -60,13 +60,21 @@ namespace ConditioningControlPanel.Services
         /// then does "no frame" become a strike.
         /// </summary>
         /// <param name="retryAllowed">
-        /// Whether this surface gets a SECOND grace window before it is condemned. False for the
-        /// audio-bearing surface, deliberately: a dead primary ends the clip either way (see
-        /// <see cref="ShouldAbortClip"/>), so granting it a retry would only double the time the user
-        /// spends staring at a black, silent main screen - 16s where the released build takes 8s, and
-        /// on the single-monitor majority rig the primary is the ONLY surface, so the retry rung would
-        /// be pure added latency there. Mirrors do get the retry: the clip keeps playing while they
-        /// take it, so it costs the user nothing.
+        /// Whether this surface gets a SECOND grace window before it is condemned. The caller decides
+        /// this from the RIG, not from the role:
+        ///
+        ///   * a MIRROR always gets it - the clip keeps playing while it takes its retry, so a second
+        ///     window costs the user nothing;
+        ///   * the AUDIO-BEARING surface gets it too as soon as MORE THAN ONE surface is armed. That
+        ///     arm is the headline multi-monitor report (#533 #1015 #1024 #1035 #1039): a primary that
+        ///     missed its window on a dual-monitor rig used to skip the clip outright with no recovery
+        ///     rung of any kind, so one re-Play() is the only thing standing between "the decoder
+        ///     hiccuped while three screens spun up" and "the video was skipped". A dead primary still
+        ///     ends the clip (see <see cref="ShouldAbortClip"/>) - it just ends it one grace window
+        ///     later, after the retry demonstrably failed;
+        ///   * it is withheld on a SINGLE-surface rig, which is the majority. There the primary is the
+        ///     only surface, nothing else can be spinning up alongside it, and the retry would be pure
+        ///     added latency - 16s of black where the released build takes 8s.
         /// </param>
         internal static FrameWatchdogAction DecideFrameWatchdog(bool tornDown, bool gracePaused, bool hasRendered, bool retryUsed, bool retryAllowed)
         {
@@ -75,6 +83,20 @@ namespace ConditioningControlPanel.Services
             if (hasRendered) return FrameWatchdogAction.Ignore;
             return (retryUsed || !retryAllowed) ? FrameWatchdogAction.GiveUp : FrameWatchdogAction.Retry;
         }
+
+        /// <summary>
+        /// Whether this surface may spend a retry rung, decided by the RIG rather than by the role -
+        /// the <c>retryAllowed</c> argument of <see cref="DecideFrameWatchdog"/> in one line.
+        ///
+        /// A mirror always may: the clip keeps playing while it retries, so a second grace window
+        /// costs the user nothing. The audio-bearing surface may too, as soon as it has siblings -
+        /// that is the multi-monitor headline report, where a primary that missed its window used to
+        /// skip the clip on the spot with no recovery rung at all. A LONE primary may not: it is the
+        /// only surface on the rig, a dead primary ends the clip either way, and the rung would be
+        /// nothing but 8 extra seconds of black for the single-monitor majority.
+        /// </summary>
+        internal static bool AllowsFrameRetry(bool primarySurface, int armedSurfaces)
+            => !primarySurface || armedSurfaces > 1;
 
         /// <summary>
         /// Whether a dead surface should take the whole clip with it. This is the #1015/#1035 fix in
@@ -104,6 +126,43 @@ namespace ConditioningControlPanel.Services
             if (!isPrimarySurface) return BrowserFailureAction.DropSecondary;
             if (alreadyFellBack) return BrowserFailureAction.Ignore;
             return playbackStartedFired ? BrowserFailureAction.EndClip : BrowserFailureAction.FallbackWholeClip;
+        }
+
+        /// <summary>What one tick of the browser engine's per-surface first-frame sweep should do
+        /// with ONE window.</summary>
+        internal enum BrowserFrameSweepAction
+        {
+            /// <summary>This surface already presented a frame - there is nothing left to watch.</summary>
+            Ignore,
+            /// <summary>Its own deadline has not passed yet.</summary>
+            Wait,
+            /// <summary>The audio-bearing surface never rendered: fail the session so the host's
+            /// LibVLC fallback replays the clip.</summary>
+            FailSession,
+            /// <summary>A mirror never rendered: report it and drop THAT window. The clip is
+            /// untouched and keeps playing wherever it is rendering.</summary>
+            DropMirror,
+        }
+
+        /// <summary>
+        /// One window's verdict in the browser engine's first-frame sweep. The browser engine is the
+        /// DEFAULT for mp4/webm and it drives EVERY screen, so this is the multi-monitor liveness net
+        /// for most rigs, not a corner case.
+        ///
+        /// Before this rule existed the engine watched the PRIMARY alone, and it stopped watching the
+        /// instant the primary posted `playing` - so a mirror whose WebView2 came up, completed the
+        /// handshake and then never decoded a frame (a GPU stall, a swallowed fetch, a decode failure
+        /// the page never turned into an `error`) was never noticed, never dropped and never even
+        /// logged. It stayed an opaque black fullscreen window for the whole clip, and video-diag.log
+        /// carried no line at all for that monitor - indistinguishable, in a bug report, from a window
+        /// that was never created or a truncated log. Every screen now carries its own deadline and
+        /// gets its own verdict.
+        /// </summary>
+        internal static BrowserFrameSweepAction DecideBrowserFrameSweep(bool firstFrameSeen, bool deadlinePassed, bool isPrimarySurface)
+        {
+            if (firstFrameSeen) return BrowserFrameSweepAction.Ignore;
+            if (!deadlinePassed) return BrowserFrameSweepAction.Wait;
+            return isPrimarySurface ? BrowserFrameSweepAction.FailSession : BrowserFrameSweepAction.DropMirror;
         }
 
         /// <summary>

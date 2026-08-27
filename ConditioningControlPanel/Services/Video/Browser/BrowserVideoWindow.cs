@@ -61,8 +61,20 @@ namespace ConditioningControlPanel.Services.Video.Browser
         public long SessionStartTick { get; set; } = Environment.TickCount64;
 
         /// <summary>One surface report per window per session (the page posts <c>playing</c> again
-        /// after a seek, and a mirror must not spam the log).</summary>
+        /// after a seek, and a mirror must not spam the log). Also the "stop watching me" flag for the
+        /// engine's first-frame sweep, which is why the sweep sets it when it condemns a window.</summary>
         public bool FirstFrameReported { get; set; }
+
+        /// <summary>When THIS window's first frame is overdue. Every screen carries its own deadline:
+        /// a session-wide one could only ever judge the primary, which is how a mirror that came up,
+        /// handshook and then never decoded stayed black and unlogged for a whole clip. Starts at the
+        /// generous pre-handshake budget and is restarted, shorter, when the page posts <c>ready</c>
+        /// (everything before that is WebView2 start-up cost, not the clip's).</summary>
+        public DateTime FirstFrameDeadlineUtc { get; set; } = DateTime.MaxValue;
+
+        /// <summary>The budget <see cref="FirstFrameDeadlineUtc"/> was last set from, in ms, so the
+        /// diagnostics line can say which window the surface actually missed.</summary>
+        public int FirstFrameBudgetMs { get; set; }
 
         public BrowserVideoWindow(Screen screen, bool primary)
         {

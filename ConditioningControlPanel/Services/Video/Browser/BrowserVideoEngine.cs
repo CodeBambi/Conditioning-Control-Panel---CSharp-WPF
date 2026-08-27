@@ -147,10 +147,11 @@ namespace ConditioningControlPanel.Services.Video.Browser
         // point the veto is down.
         private readonly List<BrowserVideoWindow> _dropped = new();
         private BrowserVideoWindow? _primary;
+        // ONE timer sweeps EVERY window; the deadline itself lives per window
+        // (BrowserVideoWindow.FirstFrameDeadlineUtc). A session-wide deadline could only judge the
+        // primary, which is exactly how a black mirror stayed invisible - see ArmFirstFrameWatch.
         private DispatcherTimer? _firstFrameWatch;
-        private DateTime _firstFrameDeadlineUtc;
         private Func<bool>? _isHostPaused;
-        private bool _playingSeen;
         private bool _failedRaised;
         private int _sessionId;
 
@@ -398,7 +399,6 @@ namespace ConditioningControlPanel.Services.Video.Browser
             StopSession();   // a previous session must never outlive its video
 
             var session = ++_sessionId;
-            _playingSeen = false;
             _failedRaised = false;
             _isHostPaused = req.IsHostPaused;
 
@@ -441,6 +441,8 @@ namespace ConditioningControlPanel.Services.Video.Browser
             {
                 win = new BrowserVideoWindow(screen, primary);
                 win.SessionStartTick = Environment.TickCount64;
+                win.FirstFrameBudgetMs = PreReadyTimeoutMs;
+                win.FirstFrameDeadlineUtc = DateTime.UtcNow.AddMilliseconds(PreReadyTimeoutMs);
                 win.Message += OnWindowMessage;
                 win.ProcessFailed += OnWindowProcessFailed;
                 win.Ready += OnWindowReady;
@@ -598,9 +600,12 @@ namespace ConditioningControlPanel.Services.Video.Browser
                 }
 
                 // Per-SURFACE bookkeeping, ahead of the primary-only gate below: every window posts its
-                // own `playing`, and until now only the primary's was looked at - so a mirror that
-                // silently never reached a frame left nothing in the trace at all. One line per surface
-                // is what tells "monitor 2 is black" apart from "the clip failed" in a bug report.
+                // own `playing`, and until now only the primary's was looked at. This is the HEALTHY
+                // half of the per-surface diagnostics; the half that matters for a black mirror - the
+                // window that never posts `playing` at all - is ArmFirstFrameWatch's sweep, which
+                // reports and drops it on its own deadline. Together they guarantee one line per
+                // surface either way, which is what tells "monitor 2 is black" apart from "the clip
+                // failed" in a bug report.
                 if (type == "playing" && !win.FirstFrameReported)
                 {
                     win.FirstFrameReported = true;
@@ -636,8 +641,10 @@ namespace ConditioningControlPanel.Services.Video.Browser
                         break;
                     }
                     case "playing":
-                        _playingSeen = true;
-                        StopFirstFrameWatch();
+                        // Deliberately does NOT stop the sweep: the primary rendering says nothing
+                        // about the mirrors, and disarming here is how a black secondary used to go
+                        // unnoticed for the whole clip. The sweep stops itself once every window has
+                        // reported (or been dropped).
                         Playing?.Invoke();
                         break;
                     case "time":
@@ -680,13 +687,19 @@ namespace ConditioningControlPanel.Services.Video.Browser
         /// <summary>
         /// The page handshake landed, so the queued <c>load</c> only reaches the element NOW - which
         /// means everything before this point was environment start-up, not the clip failing to
-        /// decode. Restart the first-frame clock from here UNCONDITIONALLY (the pre-ready budget is
-        /// generous precisely so this always gets to run) and give the file its own full window.
+        /// decode. Restart THIS window's first-frame clock from here UNCONDITIONALLY (the pre-ready
+        /// budget is generous precisely so this always gets to run) and give the file its own full
+        /// window.
+        ///
+        /// Every screen gets this, not just the primary: a mirror's WebView2 comes up on its own
+        /// schedule, and the mirror that handshakes and THEN never decodes is exactly the surface the
+        /// sweep has to be able to time out (see ArmFirstFrameWatch).
         /// </summary>
         private void OnWindowReady(BrowserVideoWindow win)
         {
-            if (!win.IsPrimary || _playingSeen || _firstFrameWatch == null) return;
-            _firstFrameDeadlineUtc = DateTime.UtcNow.AddMilliseconds(NoPlayingTimeoutMs);
+            if (win.FirstFrameReported || _firstFrameWatch == null) return;
+            win.FirstFrameBudgetMs = NoPlayingTimeoutMs;
+            win.FirstFrameDeadlineUtc = DateTime.UtcNow.AddMilliseconds(NoPlayingTimeoutMs);
         }
 
         /// <summary>
@@ -766,33 +779,87 @@ namespace ConditioningControlPanel.Services.Video.Browser
 
         // ---- first-frame watchdog ----
 
+        /// <summary>
+        /// PER-SURFACE first-frame liveness for the browser engine. One timer, but the verdict is
+        /// taken per window against that window's own deadline.
+        ///
+        /// This used to watch the PRIMARY alone and disarm itself the instant the primary posted
+        /// <c>playing</c>. The browser engine is the DEFAULT for mp4/webm and it drives EVERY screen,
+        /// so that left the reported failure completely unguarded: a mirror whose WebView2 started,
+        /// completed the handshake and then never decoded a frame (GPU stall, a fetch the page
+        /// swallowed, a decode failure that never became an <c>error</c>) raised nothing, was dropped
+        /// by nothing, and sat as an opaque black fullscreen window for the whole clip - with no line
+        /// in video-diag.log to tell it apart from a window that was never created.
+        ///
+        /// Now: a mirror that misses its deadline is reported and dropped, the clip untouched; the
+        /// audio-bearing surface that misses its deadline still fails the session so the host replays
+        /// the clip through LibVLC. Verdict rule is pure - VideoSurfaceHealth.DecideBrowserFrameSweep.
+        /// </summary>
         private void ArmFirstFrameWatch()
         {
             StopFirstFrameWatch();
-            // Pre-ready budget: everything up to the page handshake is environment cost, not the
-            // clip's. OnWindowReady restarts the clock with the real (shorter) first-frame budget.
-            _firstFrameDeadlineUtc = DateTime.UtcNow.AddMilliseconds(PreReadyTimeoutMs);
             _firstFrameWatch = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(WatchTickMs) };
             _firstFrameWatch.Tick += (_, _) =>
             {
                 try
                 {
-                    if (_playingSeen || _windows.Count == 0) { StopFirstFrameWatch(); return; }
+                    var wins = _windows.ToArray();
+                    if (wins.Length == 0) { StopFirstFrameWatch(); return; }
+
                     // A grace pause holds playback on purpose, and the page suspends its own clock
-                    // for the same reason - slide the deadline instead of failing a healthy clip.
+                    // for the same reason - slide EVERY pending deadline instead of condemning
+                    // healthy surfaces for obeying the host.
                     if (_isHostPaused?.Invoke() == true)
                     {
-                        _firstFrameDeadlineUtc = _firstFrameDeadlineUtc.AddMilliseconds(WatchTickMs);
+                        foreach (var w in wins)
+                        {
+                            if (!w.FirstFrameReported)
+                                w.FirstFrameDeadlineUtc = w.FirstFrameDeadlineUtc.AddMilliseconds(WatchTickMs);
+                        }
                         return;
                     }
-                    if (DateTime.UtcNow < _firstFrameDeadlineUtc) return;
-                    StopFirstFrameWatch();
-                    // blameFile is ALWAYS false here. This timer cannot tell "undecodable clip" from
-                    // "the page never ran / the browser is still starting", and condemning a file to
-                    // LibVLC forever on that guess is the worse error. The page's OWN error 101 -
-                    // which is raised by a page that demonstrably loaded and then got no frame - is
-                    // the legitimate file-blame path (BlamesFile), and it still is.
-                    RaiseFailed("no playback before the first-frame deadline", blameFile: false);
+
+                    var now = DateTime.UtcNow;
+                    bool anyPending = false;
+                    foreach (var w in wins)
+                    {
+                        switch (VideoSurfaceHealth.DecideBrowserFrameSweep(w.FirstFrameReported, now >= w.FirstFrameDeadlineUtc, w.IsPrimary))
+                        {
+                            case VideoSurfaceHealth.BrowserFrameSweepAction.Ignore:
+                                continue;
+
+                            case VideoSurfaceHealth.BrowserFrameSweepAction.Wait:
+                                anyPending = true;
+                                continue;
+
+                            case VideoSurfaceHealth.BrowserFrameSweepAction.DropMirror:
+                                // Marked BEFORE the drop so a late `playing` from this window cannot
+                                // double-report it, and so a re-entrant tick cannot judge it twice.
+                                w.FirstFrameReported = true;
+                                App.Logger?.Warning("BrowserVideo[secondary]: no first frame within {Ms}ms on {Screen} - dropping that mirror, the primary keeps playing",
+                                    w.FirstFrameBudgetMs, w.Screen.DeviceName);
+                                VideoSurfaceHealth.Report("browser", w.Screen.DeviceName, false, -1,
+                                    "no first frame within " + w.FirstFrameBudgetMs + "ms");
+                                DropSecondaryWindow(w, "no first frame");
+                                continue;
+
+                            case VideoSurfaceHealth.BrowserFrameSweepAction.FailSession:
+                                w.FirstFrameReported = true;
+                                StopFirstFrameWatch();
+                                // blameFile is ALWAYS false here. This timer cannot tell "undecodable
+                                // clip" from "the page never ran / the browser is still starting", and
+                                // condemning a file to LibVLC forever on that guess is the worse
+                                // error. The page's OWN error 101 - raised by a page that demonstrably
+                                // loaded and then got no frame - is the legitimate file-blame path
+                                // (BlamesFile), and it still is.
+                                RaiseFailed("no playback before the first-frame deadline", blameFile: false);
+                                return;
+                        }
+                    }
+
+                    // Every surface has either presented a frame or been condemned - nothing left to
+                    // watch, and leaving the timer running would keep a dead session ticking.
+                    if (!anyPending) StopFirstFrameWatch();
                 }
                 catch (Exception ex) { App.Logger?.Debug("BrowserVideo: first-frame watch tick failed: {E}", ex.Message); }
             };
