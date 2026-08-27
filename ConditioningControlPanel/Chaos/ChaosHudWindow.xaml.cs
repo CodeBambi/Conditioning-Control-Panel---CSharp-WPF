@@ -80,7 +80,16 @@ public partial class ChaosHudWindow : Window
         OnComboChanged(state.Combo);                       // seed the tier visuals
         OnMultiplierChanged();                             // seed the multiplier size/heat
         StartLustShimmer();                                // sweeping sheen on the heat bar
-        Closed += (_, _) => _streakJitterTimer?.Stop();    // never outlive the window
+        // Never outlive the window. The collapse re-check RE-ARMS itself while the cursor sits in
+        // the grace halo (see Hud_MouseLeave), and ChaosModeService closes the HUD without ever
+        // calling Collapse() - so without this, a run that ends with the cursor near the sidebar
+        // leaves a 220ms timer (and the whole visual tree it roots) alive forever, once per run.
+        Closed += (_, _) =>
+        {
+            _streakJitterTimer?.Stop();
+            _collapseRecheck?.Stop();
+            _openDwell?.Stop();
+        };
 
         // Top-anchored and ~60% of the work-area height, so it doesn't span the whole
         // screen (shrinks from the bottom up). Left/right edge is chosen by ApplySide.
@@ -264,6 +273,11 @@ public partial class ChaosHudWindow : Window
                 try
                 {
                     _collapseRecheck!.Stop();
+                    // Belt-and-braces against a stale tick that slipped past Closed: with no
+                    // PresentationSource, Mouse.GetPosition(this) answers (0,0), which the
+                    // expanded panel's own bounds contain - so CursorInHudGrace would say "still
+                    // on the HUD" and re-arm us forever against a dead window.
+                    if (PresentationSource.FromVisual(this) == null) { _expanded = false; return; }
                     if (_pinnedOpen || !_expanded) return;
                     // #1050 field diagnostics: one Debug line per re-check so a repro log says which
                     // of the two questions disagreed (hit-test vs geometry) and where the panel was.
