@@ -4624,7 +4624,7 @@
   "_comment_arcademy_door": "The Arcademy (Play wall card, Ctrl+K row, failure dialogs)",
   "play_arcademy_title": "The Arcademy",
   "play_arcademy_new": "НОВОЕ",
-  "play_arcademy_blurb": "три занятия в день. простые маленькие игры, которые всё остальное на экране делает сложными. приходи, получай оценку, держи серию.",
+  "play_arcademy_blurb": "четыре занятия в день. простые маленькие игры, которые всё остальное на экране делает сложными. приходи, получай оценку, держи серию.",
   "play_arcademy_cta": "Прийти",
   "play_arcademy_tooltip": "сегодняшнее расписание ждёт.",
   "arcademy_boot_error_body": "Не удалось запустить {0} на этом компьютере.\n\n{1}",

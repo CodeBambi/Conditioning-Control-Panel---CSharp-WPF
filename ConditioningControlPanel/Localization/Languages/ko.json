@@ -4624,7 +4624,7 @@
   "_comment_arcademy_door": "The Arcademy (Play wall card, Ctrl+K row, failure dialogs)",
   "play_arcademy_title": "The Arcademy",
   "play_arcademy_new": "신규",
-  "play_arcademy_blurb": "하루에 세 과목. 화면 위의 다른 모든 것이 단순한 게임을 어렵게 만듭니다. 출석하고, 성적을 받고, 연속 기록을 지키세요.",
+  "play_arcademy_blurb": "하루에 네 과목. 화면 위의 다른 모든 것이 단순한 게임을 어렵게 만듭니다. 출석하고, 성적을 받고, 연속 기록을 지키세요.",
   "play_arcademy_cta": "출석하기",
   "play_arcademy_tooltip": "오늘의 시간표가 기다리고 있습니다.",
   "arcademy_boot_error_body": "{0}을(를) 이 컴퓨터에서 시작할 수 없습니다.\n\n{1}",

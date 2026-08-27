@@ -5176,7 +5176,7 @@
   "_comment_arcademy_door": "The Arcademy (Play wall card, Ctrl+K row, failure dialogs)",
   "play_arcademy_title": "The Arcademy",
   "play_arcademy_new": "NEW",
-  "play_arcademy_blurb": "three classes a day. simple little games made hard by everything else on your screen. show up, get graded, keep the streak.",
+  "play_arcademy_blurb": "four classes a day. simple little games made hard by everything else on your screen. show up, get graded, keep the streak.",
   "play_arcademy_cta": "Attend",
   "play_arcademy_tooltip": "today's timetable is waiting.",
   "arcademy_boot_error_body": "{0} could not start on this machine.\n\n{1}",

@@ -4617,7 +4617,7 @@
   "_comment_arcademy_door": "The Arcademy (Play wall card, Ctrl+K row, failure dialogs)",
   "play_arcademy_title": "The Arcademy",
   "play_arcademy_new": "NUEVO",
-  "play_arcademy_blurb": "tres clases al día. juegos sencillos que todo lo demás en tu pantalla vuelve difíciles. preséntate, deja que te califiquen, mantén la racha.",
+  "play_arcademy_blurb": "cuatro clases al día. juegos sencillos que todo lo demás en tu pantalla vuelve difíciles. preséntate, deja que te califiquen, mantén la racha.",
   "play_arcademy_cta": "Asistir",
   "play_arcademy_tooltip": "el horario de hoy te espera.",
   "arcademy_boot_error_body": "{0} no pudo iniciarse en este equipo.\n\n{1}",
