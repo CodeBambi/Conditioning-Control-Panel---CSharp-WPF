@@ -31,15 +31,22 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Converts the active mod's ModManifest.Personalities into PersonalityPresets, or
-        /// returns null when the active mod defines none. The prompt text is carried in each
-        /// personality's PromptSettings dictionary (key "Personality", plus any optional
-        /// CompanionPromptSettings sections the mod chooses to set).
+        /// Converts the active mod's AI personalities into PersonalityPresets, or returns null when
+        /// the active mod defines none anywhere. The prompt text is carried in each personality's
+        /// PromptSettings dictionary (key "Personality", plus any optional CompanionPromptSettings
+        /// sections the mod chooses to set).
+        ///
+        /// Source ladder (see <see cref="Companion.CompanionContentResolver"/>): a per-mod
+        /// <c>personalities.json</c> from the extracted .ccpmod, the install dir, or a downloaded
+        /// content pack, and only then the in-code <c>ModManifest.Personalities</c>. Built-in mods
+        /// that ship no .ccpmod at all (BambiSleep, SissyHypno) could previously reach NEITHER, so
+        /// they always landed on the stock preset list - i.e. the default mod's companion voice.
         /// </summary>
         private static List<PersonalityPreset>? GetActiveModPersonalities()
         {
-            var manifest = App.Mods?.ActiveMod?.Manifest;
-            var defs = manifest?.Personalities;
+            var mod = App.Mods?.ActiveMod;
+            var defs = Companion.ModCompanionContent.GetPersonalities(
+                mod?.Id, mod?.InstalledPath, mod?.Manifest?.Personalities, out _);
             if (defs == null || defs.Count == 0) return null;
 
             var result = new List<PersonalityPreset>();

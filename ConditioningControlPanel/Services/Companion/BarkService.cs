@@ -6,6 +6,7 @@ using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.AIService;
 using ConditioningControlPanel.Services.Bark;
+using ConditioningControlPanel.Services.Companion;
 
 namespace ConditioningControlPanel.Services
 {
@@ -1500,24 +1501,11 @@ namespace ConditioningControlPanel.Services
         {
             if (string.IsNullOrWhiteSpace(file)) return null;
 
-            // 1) packaged mod (InstalledPath)
-            var modPath = App.Mods?.ActiveMod?.InstalledPath;
-            if (!string.IsNullOrEmpty(modPath))
-            {
-                var p = System.IO.Path.Combine(modPath, "resources", "sounds", "companion_audio", file);
-                if (System.IO.File.Exists(p)) return p;
-            }
-            // 2) embedded per-mod folder (Bambi/Sissy and, uniformly, the others) — bundled in the
-            //    install dir on full installs, or under the content root once it ships as a pack.
-            var modId = App.Mods?.ActiveModId;
-            if (!string.IsNullOrEmpty(modId))
-            {
-                var pm = CompanionPhraseService.ResolveCompanionAudioFile("mods", modId, file);
-                if (System.IO.File.Exists(pm)) return pm;
-            }
-            // 3) embedded shared fallback
-            var embedded = CompanionPhraseService.ResolveCompanionAudioFile(file);
-            return System.IO.File.Exists(embedded) ? embedded : null;
+            // The ladder (packaged .ccpmod -> per-mod folder in the install dir -> per-mod folder in
+            // a downloaded content pack -> shared companion_audio) lives in CompanionContentResolver
+            // so bark audio, bark rules and personalities cannot drift apart.
+            var pick = ModCompanionContent.ResolveActive(CompanionChannel.BarkAudio, file);
+            return pick.Found ? pick.Path : null;
         }
 
         private readonly struct GateDecision
