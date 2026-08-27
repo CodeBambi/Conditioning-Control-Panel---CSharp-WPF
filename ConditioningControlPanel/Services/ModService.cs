@@ -1240,14 +1240,21 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public string MakeModAware(string text)
         {
-            if (string.IsNullOrEmpty(text)) return text;
+            return ApplyTextReplacements(_activeMod.Manifest.TextReplacements, text);
+        }
 
-            // No replacements registered → nothing to do (mod-agnostic check)
-            var replacements = _activeMod.Manifest.TextReplacements;
+        /// <summary>
+        /// The pure half of <see cref="MakeModAware"/>: applies a manifest's TextReplacements to a
+        /// string, longest key first so a longer phrase always wins over a shorter one it contains
+        /// (this is what keeps "BAMBI UNIFORM LOCK" from being half-rewritten by the "UNIFORM LOCK"
+        /// and "BAMBI" rules in turn). Split out so the mapping can be tested without an App.
+        /// </summary>
+        internal static string ApplyTextReplacements(IDictionary<string, string>? replacements, string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
             if (replacements == null || replacements.Count == 0) return text;
 
             var result = text;
-            // Apply replacements in order — longer strings first to avoid partial matches
             foreach (var kvp in replacements.OrderByDescending(r => r.Key.Length))
             {
                 result = result.Replace(kvp.Key, kvp.Value);
@@ -2555,6 +2562,20 @@ namespace ConditioningControlPanel.Services
                     ? new List<string>(settings.CustomTriggers)
                     : new List<string>(GetDefaultCustomTriggers());
 
+            // One-shot cleanup for the actual defect reported in #general 08-22: the Sissy mod's
+            // trigger list shipped as BambiSleep's corpus with the brand filed off, so a user who
+            // ran Sissy before this build has that corpus saved in their per-mod backup and would
+            // keep meeting it. Deliberately NARROW - it only runs under Sissy, only removes
+            // BambiSleep-specific phrases, never touches phrases the user typed, and never adds
+            // anything back (deliberate deletions stay deleted, see MainWindow.Patreon.cs). The
+            // generic vocabulary other mods share (OBEY, DROP, KNEEL...) is left alone, and the
+            // one-shot flag means a Bambi phrase re-added afterwards is kept.
+            if (ApplySissyBambiTriggerMigration(settings, modId, out var removedTriggers))
+            {
+                _log?.Information("Pruned {Count} inherited BambiSleep trigger(s) from the Sissy list: {Keys}",
+                    removedTriggers.Count, string.Join(", ", removedTriggers));
+            }
+
             if (settings.BouncingTextPoolByMod?.TryGetValue(modId, out var savedBounce) == true)
                 settings.BouncingTextPool = new Dictionary<string, bool>(savedBounce);
             else
@@ -2611,6 +2632,74 @@ namespace ConditioningControlPanel.Services
             if (toRemove.Count > 0)
                 _log?.Information("Pruned {Count} cross-mod subliminal entries from the active pool: {Keys}",
                     toRemove.Count, string.Join(", ", toRemove));
+        }
+
+        /// <summary>
+        /// Removes BambiSleep-specific trigger phrases that were inherited by the SissyHypno
+        /// trigger list before the de-Bambi'd defaults shipped (#general 08-22). Only phrases that
+        /// are a BambiSleep default AND not a SissyHypno default are candidates; phrases the user
+        /// typed themselves (<paramref name="userAdded"/>) are always kept, and nothing is ever
+        /// added back. Pure so it can be unit tested without app state.
+        /// </summary>
+        /// <summary>
+        /// Runs the one-shot Sissy trigger migration over a settings object and reports whether it
+        /// actually removed anything. Kept static and App-free so the persistence half is testable:
+        /// the pruned list is written to the ACTIVE list AND back over the per-mod backup, because
+        /// the backup is what the next launch restores from. Writing only the active list left
+        /// CustomTriggersByMod holding the old corpus, and since the one-shot flag then blocked a
+        /// second prune, the Bambi triggers came back permanently on the very next start (the
+        /// trailing self-heal is TryAdd, so it never overwrites an existing backup).
+        /// </summary>
+        internal static bool ApplySissyBambiTriggerMigration(
+            Models.AppSettings settings, string modId, out List<string> removed)
+        {
+            removed = new List<string>();
+            if (settings == null) return false;
+            if (settings.SissyBambiTriggerMigrationDone) return false;
+            if (!string.Equals(modId, Models.BuiltInMods.SissyHypnoId, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            var pruned = PruneInheritedBambiTriggers(
+                settings.CustomTriggers, settings.UserAddedCustomTriggers, out removed);
+
+            if (removed.Count > 0)
+            {
+                settings.CustomTriggers = pruned;
+                (settings.CustomTriggersByMod ??= new Dictionary<string, List<string>>())[modId] =
+                    new List<string>(pruned);
+            }
+
+            settings.SissyBambiTriggerMigrationDone = true;
+            return removed.Count > 0;
+        }
+
+        internal static List<string> PruneInheritedBambiTriggers(
+            IEnumerable<string>? current, IEnumerable<string>? userAdded, out List<string> removed)
+        {
+            removed = new List<string>();
+            var list = current?.ToList() ?? new List<string>();
+            if (list.Count == 0) return list;
+
+            var sissyDefaults = new HashSet<string>(
+                Models.BuiltInMods.SissyHypno.CustomTriggers ?? new List<string>(),
+                StringComparer.OrdinalIgnoreCase);
+            var bambiOnly = new HashSet<string>(
+                (Models.BuiltInMods.BambiSleep.CustomTriggers ?? new List<string>())
+                    .Where(t => !sissyDefaults.Contains(t)),
+                StringComparer.OrdinalIgnoreCase);
+            var userTyped = new HashSet<string>(
+                userAdded ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+
+            var kept = new List<string>();
+            foreach (var t in list)
+            {
+                if (!string.IsNullOrWhiteSpace(t) && bambiOnly.Contains(t) && !userTyped.Contains(t))
+                    removed.Add(t);
+                else
+                    kept.Add(t);
+            }
+
+            return removed.Count == 0 ? list : kept;
         }
 
         /// <summary>

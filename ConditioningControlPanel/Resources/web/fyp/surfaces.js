@@ -58,8 +58,15 @@ function dragVelocity(samples, k) {
   return (last[k] - first[k]) / dt;
 }
 
+/** Media elements throw on an out-of-range volume, so every path funnels through this. */
+function clampVolume(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(1, Math.max(0, n));
+}
+
 /**
- * One media surface for a cut. Returns { el, stop(), setMuted(), setAutoAdvance(),
+ * One media surface for a cut. Returns { el, stop(), setMuted(), setVolume(), setAutoAdvance(),
  * setPreview(), failed }. ctx: { onEnded, onError, onAssetMeta,
  * report(segId, dwellMs, clipLenMs), advances, preview }. Born with ctx.preview
  * it loads + seeks but never plays: a paused element showing its window's first
@@ -74,6 +81,9 @@ function createVideoSurface(cut, ctx) {
   video.playsInline = true;
   video.disablePictureInPicture = true;
   video.muted = true; // page audio routing unmutes the one audible tile
+  // Loudness is a page-wide setting, not a per-clip one. Seed it here as well as in
+  // applyAudio so a surface is never briefly full-volume between mount and routing.
+  video.volume = clampVolume(ctx.volume?.());
   // Loop only matters at a natural end (whole-video cuts; windowed cuts are
   // steered by timeupdate before they ever get there).
   video.loop = !(ctx.autoAdvance && ctx.advances);
@@ -186,6 +196,7 @@ function createVideoSurface(cut, ctx) {
     /** A slot promoting a preview checks this to self-heal a dead file (#562). */
     get failed() { return video.error != null; },
     setMuted(m) { video.muted = m; },
+    setVolume(v) { video.volume = clampVolume(v); },
     setAutoAdvance(on) {
       autoAdvance = on;
       video.loop = !(on && ctx.advances);
@@ -277,6 +288,7 @@ function createGifSurface(cut, ctx) {
     cut,
     get failed() { return failed; },
     setMuted() { /* GIFs are silent */ },
+    setVolume() { /* GIFs are silent */ },
     setAutoAdvance(on) { autoAdvance = on; arm(on); },
     setPreview(on) {
       if (on === previewing) return;
@@ -383,6 +395,7 @@ function createTileSlot(page, tileIndex, ctx) {
       },
       onAssetMeta: ctx.onAssetMeta,
       report: ctx.report,
+      volume: ctx.volume,
     };
   }
 
@@ -703,6 +716,7 @@ function createTileSlot(page, tileIndex, ctx) {
  * ctx:
  *   { onAdvance(compKey), onSwap(compKey, i, dir), onPeek(compKey, i, dir),
  *     onTapAudio(compKey, i), onAssetMeta, report, isAutoAdvance(), isMuted(),
+ *     volume() -> 0..1,
  *     audioGlow() -> bool, audioFocus() -> index|null, isPagerBusy() -> bool,
  *     onPageDragMove(compKey, dy), onPageDragEnd(compKey, dy, vy) }
  */
@@ -732,8 +746,10 @@ export function createPage(comp, ctx) {
     // Nothing is audible while muted (or when no tile carries audio at all) —
     // in that case no tile glows either.
     const glow = !muted && ai >= 0 && ctx.audioGlow?.() !== false;
+    const vol = clampVolume(ctx.volume?.() ?? 1);
     slots.forEach((s, i) => {
       s.surface?.setMuted(muted || i !== ai);
+      s.surface?.setVolume?.(vol);
       s.setAudioGlow(glow && i === ai);
     });
   }
@@ -752,6 +768,7 @@ export function createPage(comp, ctx) {
       onAssetMeta: ctx.onAssetMeta,
       onMediaError: ctx.onMediaError,
       report: ctx.report,
+      volume: ctx.volume,
       applyAudio,
     };
   }

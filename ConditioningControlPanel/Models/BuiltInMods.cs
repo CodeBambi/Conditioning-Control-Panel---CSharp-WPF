@@ -491,6 +491,15 @@ namespace ConditioningControlPanel.Models
                     RankSubject = "Babe"
                 },
 
+                // NO BAMBISLEEP TRIGGERS IN HERE. This pool started life as the BambiSleep pool
+                // with the word "BAMBI" find-replaced out, which left nine of that file's named
+                // trigger phrases standing verbatim inside a mod that is not it (reported in
+                // #general 08-22). The replacements are NOT new writing: every one is a line this
+                // same mod already speaks (LockCardPhrases below, or its BubbleCountMercy pool),
+                // so the Sissy mod now conditions on its own vocabulary only. Existing users
+                // migrate for free - a key that is another built-in mod's default and not this
+                // one's is stripped by ModService.PruneCrossModSubliminals on the next mod
+                // restore, and the new keys arrive through that same pass's defaults top-up.
                 SubliminalPool = new Dictionary<string, bool>
                 {
                     { "FREEZE", true },
@@ -498,21 +507,21 @@ namespace ConditioningControlPanel.Models
                     { "DEEP SLEEP", true },
                     { "BIMBO DOLL", true },
                     { "GOOD GIRL", true },
-                    { "DROP FOR COCK", true },
-                    { "SNAP AND FORGET", true },
-                    { "PRIMPED AND PAMPERED", true },
+                    { "GOOD GIRLS OBEY", true },
+                    { "EMPTY AND OBEDIENT", true },
+                    { "SISSY IS LEARNING", true },
                     { "OBEY", true },
                     { "CUM AND COLLAPSE", true },
-                    { "ZAP COCK DRAIN OBEY", true },
-                    { "GIGGLETIME", true },
-                    { "UNIFORM LOCK", true },
-                    { "COCK ZOMBIE NOW", true },
+                    { "I LOVE BEING PROGRAMMED", true },
+                    { "SISSY LOVES BUBBLES", true },
+                    { "SISSY WILL TRY HARDER", true },
+                    { "DUMB DOLLS COUNT SLOWLY", true },
                     { "JUST OBEY", true },
                     { "TURN YOUR BRAIN OFF", true },
                     { "GOOD GIRLS DONT THINK", true },
                     { "DONT THINK SILLY", true },
-                    { "COCK TURNS MY BRAIN OFF", true },
-                    { "I CANT RESIST MY TRIGGERS", true },
+                    { "GOOD GIRLS PAY ATTENTION", true },
+                    { "SISSY NEEDS TO FOCUS", true },
                     { "THERES NO NEED TO THINK", true }
                 },
 
@@ -525,6 +534,13 @@ namespace ConditioningControlPanel.Models
                     { "EMPTY AND OBEDIENT", true }
                 },
 
+                // Same story as SubliminalPool above, and the same fix. This list is what the
+                // companion offers as trigger words (AvatarTubeWindow.Speech / .ChatInput), what
+                // the Patreon trigger surface shows, and what KeywordTriggerService imports, so
+                // leaving BambiSleep's corpus here would have kept the reported phrases in front
+                // of a Sissy user through four other surfaces. Twelve inherited entries are gone;
+                // nine slots are refilled with lines this mod already speaks (no new writing) and
+                // the rest are simply dropped.
                 CustomTriggers = new List<string>
                 {
                     "GOOD GIRL",
@@ -532,19 +548,16 @@ namespace ConditioningControlPanel.Models
                     "BIMBO DOLL",
                     "FREEZE",
                     "RESET",
-                    "DROP FOR COCK",
-                    "GIGGLETIME",
-                    "BLONDE MOMENT",
-                    "ZAP COCK DRAIN OBEY",
-                    "SNAP AND FORGET",
-                    "PRIMPED AND PAMPERED",
-                    "SAFE AND SECURE",
-                    "COCK ZOMBIE NOW",
-                    "UNIFORM LOCK",
-                    "AIRHEAD BARBIE",
-                    "BRAINDEAD BOBBLEHEAD",
-                    "COCKBLANK LOVEDOLL",
-                    "CUM AND COLLAPSE"
+                    "CUM AND COLLAPSE",
+                    "GOOD GIRLS OBEY",
+                    "EMPTY AND OBEDIENT",
+                    "SISSY IS LEARNING",
+                    "I LOVE BEING PROGRAMMED",
+                    "SISSY LOVES BUBBLES",
+                    "SISSY WILL TRY HARDER",
+                    "DUMB DOLLS COUNT SLOWLY",
+                    "GOOD GIRLS PAY ATTENTION",
+                    "SISSY NEEDS TO FOCUS"
                 },
 
                 Triggers = new ModTriggers
@@ -900,7 +913,29 @@ namespace ConditioningControlPanel.Models
                     { "Bambi", "babe" },
                     { "BAMBI", "SISSY" },
                     { "BambiCloud", "HypnoTube" },
-                    { "BambiSprite", "BimboDoll" }
+                    { "BambiSprite", "BimboDoll" },
+
+                    // The named BambiSleep triggers that carry no "Bambi" in them, so the rules
+                    // above never caught them. The shipped built-in sessions still prescribe these
+                    // as subliminal phrases, and SessionEngine pipes every session phrase through
+                    // MakeModAware (Services/Session/SessionEngine.cs) before it enters the pool -
+                    // so without these rows a Sissy user still met DROP FOR COCK / GIGGLETIME via
+                    // the Sessions tab even after the pool itself was cleaned. Each right-hand side
+                    // is the exact line that replaced it in SubliminalPool above: reused Sissy
+                    // vocabulary, no new writing. "BAMBI UNIFORM LOCK" is listed explicitly because
+                    // replacements run longest-key-first, so the bare "UNIFORM LOCK" rule would
+                    // otherwise fire first and leave a stray "BAMBI" behind for the "BAMBI" rule.
+                    { "I CANT RESIST MY TRIGGERS", "SISSY NEEDS TO FOCUS" },
+                    { "COCK TURNS MY BRAIN OFF", "GOOD GIRLS PAY ATTENTION" },
+                    { "PRIMPED AND PAMPERED", "SISSY IS LEARNING" },
+                    { "ZAP COCK DRAIN OBEY", "I LOVE BEING PROGRAMMED" },
+                    { "BAMBI UNIFORM LOCK", "SISSY WILL TRY HARDER" },
+                    { "COCK ZOMBIE NOW", "DUMB DOLLS COUNT SLOWLY" },
+                    { "SNAP AND FORGET", "EMPTY AND OBEDIENT" },
+                    { "DROP FOR COCK", "GOOD GIRLS OBEY" },
+                    { "UNIFORM LOCK", "SISSY WILL TRY HARDER" },
+                    { "GIGGLETIME", "SISSY LOVES BUBBLES" },
+                    { "Giggletime", "Sissy Loves Bubbles" }
                 }
             };
         }

@@ -447,9 +447,9 @@ html, body {
   transition: background 150ms ease;
 }
 .mini-btn:hover { background: rgba(255, 105, 180, 0.35); color: #fff; }
-#mosaic-sec, #window-opacity { flex: 1; accent-color: #ff69b4; }
-#mosaic-sec-label, #window-opacity-label { font-size: 12px; color: #b0b0c8; width: 34px; text-align: right; }
-#window-opacity-label { width: 40px; }
+#mosaic-sec, #window-opacity, #feed-volume { flex: 1; accent-color: #ff69b4; }
+#mosaic-sec-label, #window-opacity-label, #feed-volume-label { font-size: 12px; color: #b0b0c8; width: 34px; text-align: right; }
+#window-opacity-label, #feed-volume-label { width: 40px; }
 
 .options-footer { font-size: 11px; color: #6a6a88; margin-top: 12px; }
 
