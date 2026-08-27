@@ -51,12 +51,25 @@
 
 export const VET = Object.freeze({
   IMAGE_LANES: 4,       // detached <img> probes in flight (a cache warm each)
-  VIDEO_LANES: 2,       // detached <video> probes in flight = DECODER_CEILING
+  VIDEO_LANES: 4,       // detached <video> probes in flight AT THE DOOR (see videoLanes)
+  VIDEO_LANES_IOS: 2,   // a phone's WebKit: the class's own DECODER_CEILING, no more
   PROBE_MS: 8000,       // a probe with no answer by then is UNSURE, not dead
   MAX_MS: 20000,        // the gate's hard ceiling, whatever is still pending
 });
 
 const VIDEO_URL_RE = /\.(mp4|webm|m4v|mov)(\?|#|$)/i;
+
+/** Metadata probes in flight. The vet only ever runs AT THE DOOR - open() aborts
+ *  every video lane before the class mints its first face - so on a desktop it
+ *  may hold more demuxers than the class's ceiling; a phone keeps its number
+ *  (0827: two lanes judged a handful of clips before the stills opened the
+ *  gate, and every dead loop walked into the deck unjudged). */
+function videoLanes() {
+  try {
+    if (typeof navigator !== 'undefined' && /iP(hone|ad|od)/.test(String(navigator.userAgent || ''))) return VET.VIDEO_LANES_IOS;
+  } catch (e) { /* noop */ }
+  return VET.VIDEO_LANES;
+}
 
 /** One verdict per url per PAGE: 'ok' | 'dead' | 'unsure'. A second press of
  *  PLAY, a retake, another class - none of them re-probe a url this page has
@@ -206,6 +219,9 @@ export function createVetter(o = {}) {
       total: jobs.length, done: 0, ok: 0, dead: 0, unsure: 0,
       byTag: Object.create(null), complete: jobs.length === 0, elapsed: 0,
       urls: { ok: [], dead: [], unsure: [] },
+      /* rows still queued or in flight, by lane - a gate rule can refuse to
+       * open while a clip is unjudged (games/sort VET_GATE, 0827) */
+      pending: { video: 0, image: 0 },
     };
     const tagBox = (tag) => {
       const k = tag || '';
@@ -254,7 +270,16 @@ export function createVetter(o = {}) {
       resolveFn(stats);
     }
 
+    function refreshPending() {
+      let v = 0, im = 0;
+      for (const j of queue) { if (j.video) v += 1; else im += 1; }
+      for (const f of inflight) { if (f.job.video) v += 1; else im += 1; }
+      stats.pending.video = v;
+      stats.pending.image = im;
+    }
+
     function progress() {
+      refreshPending();
       if (onProgress) { try { onProgress(stats); } catch (e) { /* a bad listener never stops the vet */ } }
       if (opened) return;
       if (stats.complete) { open('complete'); return; }
@@ -274,7 +299,7 @@ export function createVetter(o = {}) {
       for (let i = 0; i < queue.length;) {
         const job = queue[i];
         if (job.video) {
-          if (opened || vidFlight >= VET.VIDEO_LANES) { i += 1; continue; }
+          if (opened || vidFlight >= videoLanes()) { i += 1; continue; }
           vidFlight += 1;
         } else {
           if (imgFlight >= VET.IMAGE_LANES) { i += 1; continue; }

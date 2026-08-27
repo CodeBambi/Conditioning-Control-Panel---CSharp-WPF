@@ -167,6 +167,7 @@ export function wrapQuickPool(claimPool) {
         remote: !!row.remote,
         kind,
         mime: '',
+        poster: (row && typeof row.poster === 'string') ? row.poster : '',
         tag: tg,
         src: row.remote ? 'remote' : 'local',
       };
@@ -236,6 +237,9 @@ function cardFrom(row, i, quick) {
     mime: String(row.mime || ''),
     tag,
     src: String(row.src || ''),
+    /** The clip's own still, when the host sent one (a remote loop): the face
+     *  while the clip buffers, the face over the decoder ceiling. */
+    poster: String(row.poster || ''),
     remote: !!row.remote,
     /** A url this deck has already dealt. Repeats are fine in a sort - and a
      *  deck that knows about them hands LOT D's SEEN card for free. */
