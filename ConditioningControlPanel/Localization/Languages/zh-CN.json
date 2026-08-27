@@ -5072,5 +5072,12 @@
   "lockdown_poss_safety_dose": "什么都没开？封锁替你选",
   "lockdown_poss_safety_dose_tip": "封锁不会空转。开始时引擎没开：替你启动。什么功能都没开（或你中途全部关掉）：看守会替你打开功能，每次多一个，计时结束时全部还原。",
   "st4_braindrain_audio_rate": "音频片段频率",
-  "label_braindrain": "脑力流失"
+  "label_braindrain": "脑力流失",
+  "setting_session_corner_gif_allowed": "允许会话角落 GIF",
+  "tooltip_session_corner_gif_allowed": "允许会话和课程把自己的 GIF 固定在屏幕角落。关闭后即使在会话进行中也不会出现。你自己设置的角落 GIF 叠加层不受影响。",
+  "setting_panic_overrides_all": "紧急键停止一切",
+  "tooltip_panic_overrides_all": "按一次紧急键即可同时停止所有特效、窗口和声音。关闭后，紧急键会像以前一样先交给屏幕上的内容（游戏、信息流、视频暂停）。",
+  "setting_pause_key": "暂停键（可选）",
+  "tooltip_pause_key": "一个单独的按键，只把强制视频停在继续卡片后面，其他都不会停止。默认未设置。点击后按下一个键。按 Esc 可清除。",
+  "btn_pause_key_unbound": "未设置"
 }

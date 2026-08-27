@@ -196,8 +196,10 @@ namespace ConditioningControlPanel.Services
             _currentPinkOpacity = session.Settings.PinkFilterStartOpacity;
             _currentSpiralOpacity = session.Settings.SpiralOpacity;
             
-            // Setup corner GIF if enabled (respects start/end minute timers)
-            if (session.Settings.CornerGifEnabled && session.Settings.CornerGifStartMinute == 0)
+            // Setup corner GIF if enabled (respects start/end minute timers).
+            // The template's own CornerGifEnabled used to be the ONLY gate here - see
+            // CanRaiseCornerGif for the user master + the standalone-overlay dedupe.
+            if (CanRaiseCornerGif(session.Settings))
             {
                 ShowCornerGif(session.Settings);
             }
@@ -316,6 +318,10 @@ namespace ConditioningControlPanel.Services
 
             // Close corner GIF
             CloseCornerGif();
+            // ...and hand the corner back. A standalone slot the user had enabled yielded to this
+            // session's overlay (CornerGifMedia.AllowStandaloneCornerGif); now that the session's
+            // is gone, re-realize it. No-ops when no slot is enabled.
+            try { App.CornerGif?.RefreshOverlays(); } catch { /* corner handback is best-effort */ }
             
             // Stop Mind Wipe
             App.MindWipe?.Stop();
@@ -736,8 +742,19 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
+            // Corner GIF: the user master is honoured LIVE, so unticking "Allow session corner
+            // GIFs" mid-session takes the overlay off the screen instead of waiting for the next
+            // session. Same for a standalone corner overlay the user switches on mid-session: the
+            // session yields rather than stacking a second spiral behind it.
+            if (_cornerGifWindow != null && !CornerGifMedia.AllowSessionCornerGif(
+                    settings.CornerGifEnabled, SessionCornerGifAllowedByUser, StandaloneCornerGifActive))
+            {
+                CloseCornerGif();
+                App.Logger?.Information("Corner GIF hidden mid-session (user master or a standalone corner overlay now owns the corner)");
+            }
+
             // Corner GIF delayed start
-            if (settings.CornerGifEnabled && _cornerGifWindow == null && settings.CornerGifStartMinute > 0)
+            if (_cornerGifWindow == null && settings.CornerGifStartMinute > 0 && CanRaiseCornerGif(settings))
             {
                 if (elapsedMinutes >= settings.CornerGifStartMinute)
                 {
@@ -1562,12 +1579,79 @@ namespace ConditioningControlPanel.Services
         private const int CornerGifSpawnDeferMaxAttempts = 8;
         private const int CornerGifSpawnRetryMs = 250;
 
+        /// <summary>
+        /// The user's master for session-scoped corner GIFs. Defaults to TRUE when settings are
+        /// unavailable, so a missing settings object cannot silently disable a program day's art.
+        /// </summary>
+        private static bool SessionCornerGifAllowedByUser
+            => App.Settings?.Current?.SessionCornerGifAllowed != false;
+
+        /// <summary>A standalone corner overlay (Spiral card - "Corner GIFs") is already up or queued.</summary>
+        private static bool StandaloneCornerGifActive
+        {
+            get
+            {
+                try { return App.CornerGif?.HasActiveOverlays == true; }
+                catch { return false; }
+            }
+        }
+
+        /// <summary>
+        /// Full admission check for the session-scoped corner GIF: the template asked for it, the
+        /// USER still allows it, and the corner is not already occupied by a standalone overlay.
+        /// The template flag alone used to be the whole gate - ticket 1539282547484139682, where
+        /// the documented "turn the Corner GIF off" workaround did nothing for program days and
+        /// two spirals could end up on screen at once.
+        /// </summary>
+        private static bool CanRaiseCornerGif(SessionSettings settings)
+            => settings != null && CornerGifMedia.AllowSessionCornerGif(
+                   settings.CornerGifEnabled, SessionCornerGifAllowedByUser, StandaloneCornerGifActive);
+
+        /// <summary>
+        /// TRUE while a session-scoped corner GIF is on screen. Read by CornerGifService so a
+        /// standalone slot never realizes behind the session's overlay. Plain volatile bool: it is
+        /// read from RefreshOverlays on the UI thread and must stay cheap and lock-free.
+        /// </summary>
+        internal static bool IsSessionCornerGifActive => _sessionCornerGifActive;
+        private static volatile bool _sessionCornerGifActive;
+
+        /// <summary>
+        /// Re-applies the corner-GIF admission rules right now, for the settings toggle: a user who
+        /// unticks "Allow session corner GIFs" should see the overlay go, not wait for the next
+        /// tick (and the tick does not run at all while a session is paused).
+        /// </summary>
+        public void RefreshCornerGifPolicy()
+        {
+            try
+            {
+                var settings = _currentSession?.Settings;
+                if (settings == null) return;
+                if (_cornerGifWindow != null && !CanRaiseCornerGif(settings)) { CloseCornerGif(); return; }
+                if (_cornerGifWindow == null && IsRunning && CanRaiseCornerGif(settings)
+                    && settings.CornerGifStartMinute == 0)
+                    ShowCornerGif(settings);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "RefreshCornerGifPolicy failed");
+            }
+        }
+
         private void ShowCornerGif(SessionSettings settings) => ShowCornerGif(settings, 0);
 
         private void ShowCornerGif(SessionSettings settings, int deferAttempts)
         {
             try
             {
+                // Last line of defence: every caller is expected to have asked CanRaiseCornerGif
+                // first, but the retry timer, the size/path live-updaters and any future caller all
+                // land here, and a corner overlay that ignores the user's master is the ticket.
+                if (!CanRaiseCornerGif(settings))
+                {
+                    App.Logger?.Debug("Corner GIF not shown: the user master is off or a standalone corner overlay owns the corner");
+                    return;
+                }
+
                 // Show() on a WS_EX_LAYERED (AllowsTransparency) window runs a synchronous
                 // HwndTarget.OnResize -> MediaContext.CompleteRender on first realization, and doing
                 // that while a monitor/DPI change is still settling is precisely the hazard
@@ -1775,6 +1859,8 @@ namespace ConditioningControlPanel.Services
                     throw;
                 }
 
+                _sessionCornerGifActive = true;
+
                 App.Logger?.Information("Corner GIF shown at {Position}: {Path} (pos: {Left},{Top}, size: {Width}x{Height}px, opacity: {Opacity}%)",
                     settings.CornerGifPosition, gifUri.ToString(), left, top, (int)windowWidth, (int)windowHeight, settings.CornerGifOpacity);
             }
@@ -1805,7 +1891,7 @@ namespace ConditioningControlPanel.Services
                 timer.Stop();
                 // The session may have ended, or the end-minute may have closed the overlay, while
                 // this sat in the queue.
-                if (!IsRunning || _cornerGifWindow != null || !settings.CornerGifEnabled) return;
+                if (!IsRunning || _cornerGifWindow != null || !CanRaiseCornerGif(settings)) return;
                 ShowCornerGif(settings, deferAttempts);
             };
             timer.Start();
@@ -1874,6 +1960,7 @@ namespace ConditioningControlPanel.Services
                 _cornerGifWindow = null;
             }
             HangContext.Leave("session.cornerGif");
+            _sessionCornerGifActive = false;
             _cornerGifDiag = null;
             _cornerGifImage = null;
             _cornerGifWidth = 0;

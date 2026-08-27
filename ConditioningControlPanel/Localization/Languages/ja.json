@@ -4605,5 +4605,12 @@
   "lockdown_poss_safety_dose": "何も動いていない？ロックダウンが代わりに選ぶ",
   "lockdown_poss_safety_dose_tip": "ロックダウンは空のままでは動きません。開始時にエンジンが止まっていれば代わりに起動します。何もオンでなければ（途中で全部オフにしても）、看守が機能をオンにし、毎回ひとつずつ増やし、タイマーが終わると全部元に戻します。",
   "st4_braindrain_audio_rate": "音声クリップの頻度",
-  "label_braindrain": "ブレインドレイン"
+  "label_braindrain": "ブレインドレイン",
+  "setting_session_corner_gif_allowed": "セッションのコーナーGIFを許可",
+  "tooltip_session_corner_gif_allowed": "セッションやプログラムが独自のGIFを画面の隅に固定できるようにします。オフにすると、セッション中でも表示されません。自分で設定したコーナーGIFオーバーレイには影響しません。",
+  "setting_panic_overrides_all": "パニックですべて停止",
+  "tooltip_panic_overrides_all": "パニックキーを1回押すと、すべてのエフェクト、ウィンドウ、音が一度に停止します。オフにすると、以前と同じように画面に表示中のもの（ゲーム、フィード、動画の一時停止）にキーが先に渡されます。",
+  "setting_pause_key": "一時停止キー（任意）",
+  "tooltip_pause_key": "必須動画を再開カードの後ろに停めるだけの別のキーです。ほかは何も止まりません。既定では未設定です。クリックしてからキーを押してください。Escキーで解除できます。",
+  "btn_pause_key_unbound": "未設定"
 }

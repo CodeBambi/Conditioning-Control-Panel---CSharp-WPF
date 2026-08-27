@@ -4605,5 +4605,12 @@
   "lockdown_poss_safety_dose": "¿Nada en marcha? El bloqueo elige por ti",
   "lockdown_poss_safety_dose_tip": "Un bloqueo se niega a correr vacío. Motor apagado al empezar: se enciende por ti. Nada activado (o lo apagas todo a mitad): la guardiana activa funciones, una más cada vez, y lo devuelve todo cuando acaba el temporizador.",
   "st4_braindrain_audio_rate": "Frecuencia de audio",
-  "label_braindrain": "Drenaje Cerebral"
+  "label_braindrain": "Drenaje Cerebral",
+  "setting_session_corner_gif_allowed": "Permitir GIF de esquina en sesiones",
+  "tooltip_session_corner_gif_allowed": "Permite que las sesiones y los programas fijen su propio GIF en una esquina de la pantalla. Si lo desactivas nunca lo harán, ni siquiera a mitad de una sesión. Tus propias superposiciones de GIF de esquina no se ven afectadas.",
+  "setting_panic_overrides_all": "El pánico lo detiene todo",
+  "tooltip_panic_overrides_all": "Una pulsación de la tecla de pánico detiene todos los efectos, ventanas y sonidos a la vez. Desactívalo para que la tecla pase primero a lo que esté en pantalla (juegos, feed, pausa de vídeo), como antes.",
+  "setting_pause_key": "Tecla de pausa (opcional)",
+  "tooltip_pause_key": "Una tecla aparte que solo aparca un vídeo obligatorio tras una tarjeta de Reanudar. No detiene nada más. Sin asignar por defecto. Haz clic y pulsa una tecla. Pulsa Escape para borrarla.",
+  "btn_pause_key_unbound": "Sin asignar"
 }

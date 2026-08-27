@@ -1588,6 +1588,41 @@ namespace ConditioningControlPanel
             PlaySpokenAudio(filePath, volume);
         }
 
+        /// <summary>
+        /// Panic (v6.8.5 "panic stops everything"): silence the tube in one pass - cut the spoken
+        /// line, drop the typewriter, empty the queue and take the bubble off the screen. Unlike
+        /// the normal hide path this does NOT call ProcessNextSpeech: the queue is being thrown
+        /// away, not drained, so nothing may speak after a panic.
+        /// </summary>
+        public void PanicSilence()
+        {
+            if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(PanicSilence)); return; }
+
+            try { StopSpokenAudio(); } catch { }
+            try { StopThinkingAnimation(); } catch { }
+            try { _typewriterTimer?.Stop(); _typewriterTimer = null; } catch { }
+            try { _speechTimer?.Stop(); } catch { }
+            try { _speechDelayTimer?.Stop(); } catch { }
+            try { _speechQueue.Clear(); } catch { }
+            try
+            {
+                _isWaitingForAi = false;
+                _isGiggling = false;
+                _isShowingAiBubble = false;
+                _isListeningBubble = false;
+                _listeningDotsTimer?.Stop();
+                _listeningDotsTimer = null;
+                _listeningDotsRun = null;
+            }
+            catch { }
+            try
+            {
+                SpeechBubble.Visibility = Visibility.Collapsed;
+                _lastSpeechEndTime = DateTime.Now;
+            }
+            catch { }
+        }
+
         /// <summary>Stops any currently playing spoken line (kept for external callers).</summary>
         public void StopVoiceLineAudio()
         {

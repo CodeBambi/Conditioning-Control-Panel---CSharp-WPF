@@ -4614,5 +4614,12 @@
   "lockdown_poss_safety_dose": "Nichts läuft? Lockdown wählt für dich",
   "lockdown_poss_safety_dose_tip": "Ein Lockdown läuft nie leer. Engine aus beim Start: sie wird für dich gestartet. Nichts eingeschaltet (oder du schaltest mittendrin alles aus): die Wärterin schaltet Features ein, jedes Mal eins mehr, und gibt am Ende alles zurück.",
   "st4_braindrain_audio_rate": "Audio-Häufigkeit",
-  "label_braindrain": "Brain Drain"
+  "label_braindrain": "Brain Drain",
+  "setting_session_corner_gif_allowed": "Ecken-GIFs in Sitzungen erlauben",
+  "tooltip_session_corner_gif_allowed": "Erlaubt Sitzungen und Programmen, ein eigenes GIF in eine Bildschirmecke zu heften. Deaktiviert geschieht das nie, auch nicht mitten in einer Sitzung. Deine eigenen Ecken-GIF-Overlays bleiben unberührt.",
+  "setting_panic_overrides_all": "Panik stoppt alles",
+  "tooltip_panic_overrides_all": "Ein Druck auf die Panik-Taste stoppt sofort alle Effekte, Fenster und Töne. Deaktiviert wird die Taste zuerst an das weitergereicht, was gerade auf dem Bildschirm ist (Spiele, Feed, Video-Pause), so wie bisher.",
+  "setting_pause_key": "Pause-Taste (optional)",
+  "tooltip_pause_key": "Eine eigene Taste, die nur ein Pflichtvideo hinter einer Fortsetzen-Karte parkt. Sonst wird nichts gestoppt. Standardmäßig nicht belegt. Klicken, dann eine Taste drücken. Escape löscht die Belegung.",
+  "btn_pause_key_unbound": "Nicht belegt"
 }

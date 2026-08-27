@@ -2387,6 +2387,33 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// v6.8.5 master: ON (default) = one panic press stops every surface at once; OFF = the
+        /// pre-6.8.5 hand-off ladder, byte for byte. No confirmation dialog either way - both
+        /// settings are safe, they only differ in how many presses an emergency stop costs.
+        /// </summary>
+        internal void ChkPanicOverridesAll_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            s.PanicOverridesAll = AppSettingsTab.ChkPanicOverridesAll.IsChecked ?? true;
+            SaveSettings();
+            App.Logger?.Information("Panic override mode: {State}", s.PanicOverridesAll ? "stop everything" : "legacy ladder");
+        }
+
+        /// <summary>
+        /// Begins capture for the optional Pause key. Same reasoning as
+        /// <see cref="BtnPanicKey_Click"/>: no blocking MessageBox, because the global hook fires
+        /// straight through one. The next key the hook sees becomes the binding; Escape clears it.
+        /// </summary>
+        internal void BtnPauseKey_Click(object sender, RoutedEventArgs e)
+        {
+            _isCapturingPauseKey = true;
+            UpdatePauseKeyButton();
+        }
+
         internal void BtnPanicKey_Click(object sender, RoutedEventArgs e)
         {
             // Don't show a blocking MessageBox: the global keyboard hook fires through

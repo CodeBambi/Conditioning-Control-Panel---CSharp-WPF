@@ -103,6 +103,10 @@ namespace ConditioningControlPanel
         private GlobalKeyboardHook? _keyboardHook;
         private bool _isCapturingPanicKey = false;
         internal bool IsCapturingPanicKey => _isCapturingPanicKey;
+
+        // Capture mode for the optional Pause key (v6.8.5). Same one-shot dance as the panic key:
+        // the next key the global hook sees becomes the binding (Escape clears it instead).
+        private bool _isCapturingPauseKey = false;
         private bool _exitRequested = false;
         private int _panicPressCount = 0;
         private string _leaderboardMode = "monthly";
@@ -866,6 +870,24 @@ namespace ConditioningControlPanel
                 });
                 return;
             }
+
+            // Same capture dance for the optional Pause key (v6.8.5). Escape CLEARS the binding
+            // instead of setting it: with the panic key on Escape by default, binding pause to
+            // Escape too would be a dead setting, and "press Escape to unbind" is the only way out
+            // of capture mode that does not require picking some key you did not want.
+            if (_isCapturingPauseKey)
+            {
+                Dispatcher.BeginInvoke(() =>
+                {
+                    App.Settings.Current.PauseKey = key == Key.Escape ? "" : key.ToString();
+                    _isCapturingPauseKey = false;
+                    UpdatePauseKeyButton();
+                    App.Settings?.Save();
+                    App.Logger?.Information("Pause key changed to: {Key}",
+                        string.IsNullOrEmpty(App.Settings.Current.PauseKey) ? "(unbound)" : App.Settings.Current.PauseKey);
+                });
+                return;
+            }
             
             // Check if panic key is enabled and pressed
             var settings = App.Settings.Current;
@@ -889,7 +911,25 @@ namespace ConditioningControlPanel
                     var panicOp = Dispatcher.BeginInvoke(() => HandlePanicKeyPress());
                     VideoDiag.Log("PANIC", "handler queued on the dispatcher");
                     ArmPanicWatchdog(panicOp);
+                    return;
                 }
+            }
+
+            // Optional Pause key (v6.8.5). PanicOverridesAll took the #735 "someone walked in"
+            // grace pause off the panic key; this is where it lives now, for the people who liked
+            // it. Unbound by default, so this whole branch is dead on a fresh install. Checked
+            // AFTER the panic key and skipped outright when the two collide, so a shared binding
+            // can only ever panic. No watchdog: parking one video is not an emergency stop.
+            if (!Services.Safety.PanicPolicy.PauseKeyIsShadowedByPanicKey(
+                    settings.PanicKey, settings.PanicKeyEnabled, settings.PauseKey)
+                && Services.Safety.PanicPolicy.IsPauseKeyPress(settings.PauseKey, key.ToString()))
+            {
+                VideoDiag.Log("PANIC", $"pause key '{key}' received - queueing the video grace pause");
+                Dispatcher.BeginInvoke(() =>
+                {
+                    try { App.Video?.TryGracePauseFromPanic(fromPanicKey: false); }
+                    catch (Exception ex) { App.Logger?.Warning("Pause key: grace pause failed: {Error}", ex.Message); }
+                });
             }
         }
 
@@ -1059,10 +1099,27 @@ namespace ConditioningControlPanel
             // press ladder, so it can never be the tap that exits the app.
             // IsAnyOpen also covers a deferred show still pending; cancelling that is the right answer
             // to panic too, and DismissAll clears both, so the next press falls through normally.
-            if (LockCardWindow.IsAnyOpen())
+            var rung = Services.Safety.PanicPolicy.Decide(
+                lockCardOpen: LockCardWindow.IsAnyOpen(),
+                overrideAll: Services.Safety.PanicPolicy.OverrideEnabled(App.Settings?.Current));
+
+            if (rung == Services.Safety.PanicPolicy.Rung.DismissLockCard)
             {
                 VideoDiag.Log("PANIC", "dismissing the open lock card (it outranks every hand-off)");
                 App.LockCard?.Stop(dismissOpenCards: true);
+                return;
+            }
+
+            // v6.8.5 (#1054/#1066, suggestion thread 1541736938703167550 - "panic button is panic
+            // button"). With PanicOverridesAll on (the default) the press is NOT handed to whatever
+            // owns the screen and is NOT spent as the #735 grace pause: every surface goes down in
+            // ONE dispatcher pass, then the normal stop tail runs. Reporters were spamming the key
+            // through a six-rung ladder while the screen flickered between owners.
+            if (rung == Services.Safety.PanicPolicy.Rung.StopEverything)
+            {
+                VideoDiag.Log("PANIC", "override mode - stopping every surface in one pass");
+                PanicStopEverySurface();
+                RunPanicStopTail(advanceExitLadder: Services.Safety.PanicPolicy.AdvancesExitLadder(rung));
                 return;
             }
 
@@ -1160,6 +1217,20 @@ namespace ConditioningControlPanel
             // the main engine, so the rest of the panic flow won't touch them.
             App.BlinkTrainer?.Stop();
 
+            RunPanicStopTail(advanceExitLadder: true);
+        }
+
+        /// <summary>
+        /// The shared end of every panic press that is NOT consumed by a hand-off: the 2 second
+        /// press counter, the running/not-running stop, and the double-press exit. Extracted in
+        /// v6.8.5 so the new "panic stops everything" mode and the legacy hand-off ladder finish
+        /// through exactly the same code instead of growing a second copy of it.
+        /// </summary>
+        /// <param name="advanceExitLadder">FALSE for a press that was spent on a surface which must
+        /// never be the tap that quits the app (today: an open Lock Card). The stop still runs; only
+        /// the exit counter is left alone.</param>
+        private void RunPanicStopTail(bool advanceExitLadder)
+        {
             var now = DateTime.Now;
             var timeSinceLastPress = (now - _lastPanicTime).TotalMilliseconds;
             
@@ -1169,8 +1240,11 @@ namespace ConditioningControlPanel
                 _panicPressCount = 0;
             }
             
-            _panicPressCount++;
-            _lastPanicTime = now;
+            if (advanceExitLadder)
+            {
+                _panicPressCount++;
+                _lastPanicTime = now;
+            }
             
             if (_isRunning)
             {
@@ -1272,6 +1346,100 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// v6.8.5 override mode: take EVERY live surface down in one dispatcher pass, then let
+        /// <see cref="RunPanicStopTail"/> stop the engine. This is the whole point of the fix - the
+        /// old ladder handed the press to whichever mini-game or video owned the screen and the
+        /// engine only stopped two or three presses later.
+        ///
+        /// <para>Rules this body must keep:</para>
+        /// <list type="bullet">
+        /// <item>EVERY step gets its own try/catch. One dead service must never eat the panic.</item>
+        /// <item>No grace pause. <see cref="VideoService.TryGracePauseFromPanic"/> refuses in this
+        /// mode anyway (see PanicPolicy.AllowGracePauseFromPanicKey); the video is force-cleaned.</item>
+        /// <item>No companion bark. The legacy ladder says a calm safety line here; in override
+        /// mode the tube is one of the surfaces being silenced, so speaking and then clearing the
+        /// bubble in the same pass would just be noise.</item>
+        /// <item>An open Lock Card never reaches this method - it is answered one rung above and
+        /// keeps its own contract untouched.</item>
+        /// </list>
+        ///
+        /// <para>UI thread only: the panic handler is already queued on the dispatcher, and the
+        /// off-thread last resort is <see cref="RunEmergencyPanicTeardown"/>, not this.</para>
+        /// </summary>
+        private void PanicStopEverySurface()
+        {
+            static void Step(string name, Action action)
+            {
+                try { action(); }
+                catch (Exception ex)
+                {
+                    try { App.Logger?.Warning("PANIC stop-all: {Step} failed: {Error}", name, ex.Message); } catch { }
+                    VideoDiag.Log("PANIC", $"stop-all step '{name}' failed: {ex.Message}");
+                }
+            }
+
+            // --- media ---
+            // ForceCleanup, not Stop: ends the run outright instead of scheduling a replacement,
+            // and closes the LibVLC window. Asynchronous - a synchronous cleanup pumps the
+            // dispatcher, and this pass must stay one pass.
+            Step("video", () => App.Video?.ForceCleanup(synchronous: false));
+            Step("video enhance bridge", () => App.VideoEnhanceBridge?.ForceUnbind());
+            Step("flashes", () => App.Flash?.Stop());
+            Step("bubbles", () => App.Bubbles?.Stop());
+            Step("bubble count", () => App.BubbleCount?.Stop());
+            Step("subliminals", () => App.Subliminal?.Stop());
+            Step("bouncing text", () => App.BouncingText?.Stop());
+            Step("mind wipe", () => App.MindWipe?.Stop());
+            Step("brain drain", () => App.BrainDrain?.Stop());
+
+            // --- overlays: clear the flags first, or a reconcile tick paints them straight back ---
+            Step("pink filter flag", () => EnablePinkFilter(false));
+            Step("spiral flag", () => EnableSpiral(false));
+            Step("overlays", () => App.Overlay?.Stop());
+            Step("overlay refresh", () => App.Overlay?.RefreshOverlays());
+            Step("corner GIFs", () => App.CornerGif?.StopAll());
+
+            // --- companion tube ---
+            Step("tube speech", () => _avatarTubeWindow?.PanicSilence());
+            Step("avatar voice", () => App.AvatarWindow?.StopVoiceLineAudio());
+
+            // --- game / feed windows ---
+            Step("chaos", () => App.Chaos?.ForceShutdown());
+            Step("DtRH", () => Services.Chaos.DtrhHostService.CloseActive());
+            Step("Arcademy", () => Services.Arcademy.ArcademyHostService.CloseActive());
+            Step("For You feed", () => Services.Fyp.FypHostService.Close());
+            Step("Just Drop", () => Services.JustDrop.JustDropHostService.CloseActive());
+            Step("Lab minigames", () => App.BlinkTrainer?.Stop());
+
+            // --- modal / topmost cards ---
+            Step("pop quiz", () => App.PopQuiz?.Stop());
+            Step("quiz windows", () => QuizWindow.ForceCloseAll());
+            Step("pop quiz windows", () => PopQuizWindow.ForceCloseAll());
+            Step("bubble count windows", () => { BubbleCountWindow.ForceCloseAll(); BubbleCountResultWindow.ForceCloseAll(); });
+            Step("help popover", () => Controls.HelpPopover.CloseActive());
+            // Closes the Ctrl+K palette if it is open; the return value is the legacy ladder's
+            // business, not ours - here it is simply one more surface going down.
+            Step("settings palette", () => SettingsPaletteWindow.TryConsumeEscape());
+
+            // --- audio + hardware ---
+            Step("haptics", () => App.Haptics?.PanicStop());
+            Step("autonomy pulses", () => App.Autonomy?.CancelActivePulses());
+            Step("audio layers", () =>
+            {
+                // #668: a standalone Audio Layers master means the bed is the user's, not a session's.
+                if (App.Settings?.Current?.AudioLayersEnabled != true) App.LayeredAudio?.Stop();
+            });
+            Step("audio unduck", () => App.Audio?.ForceUnduck());
+            // Belt and braces LAST: KillAllAudio is a single try/catch, so anything it would have
+            // skipped after an early throw has already been done individually above.
+            Step("kill all audio", App.KillAllAudio);
+
+            Step("interaction queue", () => App.InteractionQueue?.ForceReset());
+
+            VideoDiag.Log("PANIC", "stop-all pass complete");
+        }
+
+        /// <summary>
         /// Stops every "ad-hoc" effect that can be live without the engine running — i.e. effects
         /// fired by voice commands ("She's Listening"), dashboard one-shots, or Deeper. The normal
         /// stop paths assume a running session/overlay reconcile loop; these surfaces don't, so the
@@ -1315,6 +1483,17 @@ namespace ConditioningControlPanel
                 var currentKey = App.Settings.Current.PanicKey;
                 AppSettingsTab.BtnPanicKey.Content = _isCapturingPanicKey ? "Press any key..." : $"🔑 {currentKey}";
             }
+        }
+
+        /// <summary>Mirrors <see cref="UpdatePanicKeyButton"/> for the optional Pause key. An empty
+        /// binding reads as the localized "not set" rather than an empty button.</summary>
+        internal void UpdatePauseKeyButton()
+        {
+            if (AppSettingsTab?.BtnPauseKey == null) return;
+            var currentKey = App.Settings?.Current?.PauseKey ?? "";
+            AppSettingsTab.BtnPauseKey.Content = _isCapturingPauseKey
+                ? "Press any key..."
+                : (string.IsNullOrEmpty(currentKey) ? Loc.Get("btn_pause_key_unbound") : $"⏸ {currentKey}");
         }
 
         // ---- velvet-mosaic: internal wrappers called by popup feature UserControls ----

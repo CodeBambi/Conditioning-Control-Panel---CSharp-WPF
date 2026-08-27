@@ -4613,5 +4613,12 @@
   "lockdown_poss_safety_dose": "Nada rodando? O Lockdown escolhe por você",
   "lockdown_poss_safety_dose_tip": "Um lockdown se recusa a rodar vazio. Motor desligado no início: ele é ligado por você. Nada ativado (ou você desliga tudo no meio): a guardiã liga recursos, um a mais a cada vez, e devolve tudo quando o tempo acaba.",
   "st4_braindrain_audio_rate": "Frequência do áudio",
-  "label_braindrain": "Drenagem Cerebral"
+  "label_braindrain": "Drenagem Cerebral",
+  "setting_session_corner_gif_allowed": "Permitir GIF de canto nas sessões",
+  "tooltip_session_corner_gif_allowed": "Permite que sessões e programas fixem o próprio GIF em um canto da tela. Desligado, isso nunca acontece, nem no meio de uma sessão. Suas próprias sobreposições de GIF de canto não são afetadas.",
+  "setting_panic_overrides_all": "Pânico para tudo",
+  "tooltip_panic_overrides_all": "Um toque na tecla de pânico para todos os efeitos, janelas e sons de uma vez. Desligue para que a tecla vá primeiro para o que estiver na tela (jogos, feed, pausa de vídeo), como era antes.",
+  "setting_pause_key": "Tecla de pausa (opcional)",
+  "tooltip_pause_key": "Uma tecla separada que apenas estaciona um vídeo obrigatório atrás de um cartão Retomar. Nada mais para. Sem atribuição por padrão. Clique e pressione uma tecla. Pressione Esc para limpar.",
+  "btn_pause_key_unbound": "Sem atribuição"
 }

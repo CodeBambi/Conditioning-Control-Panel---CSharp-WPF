@@ -5164,5 +5164,12 @@
   "lockdown_poss_safety_dose": "Nothing running? Lockdown picks for you",
   "lockdown_poss_safety_dose_tip": "A lockdown refuses to run empty. Engine off when it starts: the engine is started for you. Nothing switched on (or you switch everything off mid-lockdown): the warden turns features on, one more each time, and gives them all back when the timer ends.",
   "st4_braindrain_audio_rate": "Audio clip rate",
-  "label_braindrain": "Brain Drain"
+  "label_braindrain": "Brain Drain",
+  "setting_session_corner_gif_allowed": "Allow session corner GIFs",
+  "tooltip_session_corner_gif_allowed": "Let sessions and programs pin their own GIF to a screen corner. Turn it off and they never will, even mid session. Your own Corner GIF overlays are not affected.",
+  "setting_panic_overrides_all": "Panic stops everything",
+  "tooltip_panic_overrides_all": "One press of the panic key stops every effect, window and sound at once. Turn it off to hand the key to whatever is on screen first (games, feed, video pause), the way it worked before.",
+  "setting_pause_key": "Pause key (optional)",
+  "tooltip_pause_key": "A separate key that only parks a mandatory video behind a Resume card. Nothing else stops. Not set by default. Click, then press a key. Press Escape to clear it.",
+  "btn_pause_key_unbound": "Not set"
 }

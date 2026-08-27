@@ -75,6 +75,8 @@ namespace ConditioningControlPanel
             AppSettingsTab.ChkAutoRun.IsChecked = s.AutoStartEngine;
             AppSettingsTab.ChkStartHidden.IsChecked = s.StartMinimized;
             AppSettingsTab.ChkNoPanic.IsChecked = !s.PanicKeyEnabled;
+            if (AppSettingsTab.ChkPanicOverridesAll != null) AppSettingsTab.ChkPanicOverridesAll.IsChecked = s.PanicOverridesAll;
+            UpdatePauseKeyButton();
             // Offline mode lives on Settings · Data now (its System-popup twin is read-only).
             AppSettingsTab.ChkOfflineMode.IsChecked = s.OfflineMode;
             // PHASE 8: the five LegacyDashboardHost performance twins are gone. Settings · Performance

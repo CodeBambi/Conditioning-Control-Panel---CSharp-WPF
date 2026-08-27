@@ -2373,6 +2373,66 @@ namespace ConditioningControlPanel.Models
             set { _panicKey = value ?? "Escape"; OnPropertyChanged(); }
         }
 
+        // ---- v6.8.5 panic rework (suggestion thread "panic button is panic button", #1054/#1066) ----
+
+        /// <summary>
+        /// Master switch for what ONE panic press means.
+        ///
+        /// <para>TRUE (the default): the press stops every live surface at once - video, flashes,
+        /// bubbles, subliminals, overlays, corner GIFs, tube speech, the Chaos / DtRH / Arcademy /
+        /// For You / Just Drop windows and all audio - and then the engine. It is NOT handed to
+        /// whatever game happens to be on screen, and it is NOT spent as the #735 video grace pause
+        /// (that moved to <see cref="PauseKey"/>). Reporters had to spam the key while the screen
+        /// flickered from one owner to the next.</para>
+        ///
+        /// <para>FALSE: the pre-6.8.5 hand-off ladder, unchanged - LockCard, Ctrl+K palette, Chaos,
+        /// DtRH, Arcademy, For You feed, then the video grace pause, then the engine stop.</para>
+        ///
+        /// <para>An open Lock Card outranks BOTH modes and keeps its own contract either way: the
+        /// press dismisses the card, is consumed there, and never advances the double-press exit.</para>
+        /// </summary>
+        private bool _panicOverridesAll = true;
+        public bool PanicOverridesAll
+        {
+            get => _panicOverridesAll;
+            set { _panicOverridesAll = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Optional second binding that ONLY does the #735 "grace pause": while a mandatory video is
+        /// really on screen it parks it behind a Paused/Resume card and touches nothing else. Empty
+        /// (the default) means unbound. Bound with the same capture UI as <see cref="PanicKey"/>.
+        ///
+        /// <para>This exists because <see cref="PanicOverridesAll"/> takes the grace pause off the
+        /// panic key: the people who liked "someone walked in, park the video" keep it, on a key of
+        /// their own, and the panic key goes back to meaning panic.</para>
+        /// </summary>
+        private string _pauseKey = "";
+        public string PauseKey
+        {
+            get => _pauseKey;
+            set { _pauseKey = value ?? ""; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// User-level master for the SESSION-scoped corner GIF (ticket 1539282547484139682).
+        /// Sessions and 28-day program days raised their corner spiral off the program template's
+        /// own <c>CornerGifEnabled</c> alone, with nothing the user could switch off - so the
+        /// support workaround "turn the Corner GIF off" did not apply to the surface people were
+        /// actually seeing, and it could stack a second spiral on top of a standalone corner
+        /// overlay. Default TRUE = the behaviour every existing install already has.
+        ///
+        /// <para>Honoured live: turning it off mid-session hides the running corner GIF. It does
+        /// NOT touch the standalone corner overlays on the Spiral card - those are the user's own
+        /// app-wide choice.</para>
+        /// </summary>
+        private bool _sessionCornerGifAllowed = true;
+        public bool SessionCornerGifAllowed
+        {
+            get => _sessionCornerGifAllowed;
+            set { _sessionCornerGifAllowed = value; OnPropertyChanged(); }
+        }
+
         private bool _mercySystemEnabled = true;
         public bool MercySystemEnabled
         {

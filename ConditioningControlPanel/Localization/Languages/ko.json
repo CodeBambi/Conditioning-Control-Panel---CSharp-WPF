@@ -4612,5 +4612,12 @@
   "lockdown_poss_safety_dose": "아무것도 안 켜져 있나요? 락다운이 대신 고릅니다",
   "lockdown_poss_safety_dose_tip": "락다운은 비어 있는 채로 돌아가지 않습니다. 시작할 때 엔진이 꺼져 있으면 대신 켜 줍니다. 아무 기능도 켜져 있지 않으면(도중에 전부 끄더라도) 간수가 기능을 켜고, 매번 하나씩 더 켜며, 타이머가 끝나면 전부 원래대로 돌려놓습니다.",
   "st4_braindrain_audio_rate": "오디오 클립 빈도",
-  "label_braindrain": "브레인 드레인"
+  "label_braindrain": "브레인 드레인",
+  "setting_session_corner_gif_allowed": "세션 코너 GIF 허용",
+  "tooltip_session_corner_gif_allowed": "세션과 프로그램이 자체 GIF를 화면 모서리에 고정할 수 있게 합니다. 끄면 세션 도중에도 표시되지 않습니다. 직접 설정한 코너 GIF 오버레이에는 영향이 없습니다.",
+  "setting_panic_overrides_all": "패닉이 모든 것을 정지",
+  "tooltip_panic_overrides_all": "패닉 키를 한 번 누르면 모든 효과와 창, 소리가 한 번에 멈춥니다. 끄면 예전처럼 화면에 있는 대상(게임, 피드, 영상 일시정지)에 키가 먼저 넘어갑니다.",
+  "setting_pause_key": "일시정지 키(선택)",
+  "tooltip_pause_key": "필수 영상을 재개 카드 뒤에 세워두기만 하는 별도의 키입니다. 다른 것은 멈추지 않습니다. 기본값은 지정 안 함입니다. 클릭한 뒤 키를 누르세요. Esc를 누르면 해제됩니다.",
+  "btn_pause_key_unbound": "지정 안 함"
 }

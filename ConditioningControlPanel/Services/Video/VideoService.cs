@@ -5070,10 +5070,23 @@ namespace ConditioningControlPanel.Services
         /// Must be called on the UI thread (both callers — MainWindow.HandlePanicKeyPress on the
         /// dispatcher, and the video window's PreviewKeyDown — already are).
         /// </summary>
-        public bool TryGracePauseFromPanic()
+        /// <param name="fromPanicKey">
+        /// TRUE for the panic key / Escape (the original callers). v6.8.5: with
+        /// <c>AppSettings.PanicOverridesAll</c> on (the default) the panic key does NOT park a
+        /// video any more; it stops everything, and the grace pause lives on the optional Pause key
+        /// instead. Pass FALSE from that binding, which is never subject to the override.
+        /// </param>
+        public bool TryGracePauseFromPanic(bool fromPanicKey = true)
         {
             try
             {
+                if (fromPanicKey && !Services.Safety.PanicPolicy.AllowGracePauseFromPanicKey(
+                        Services.Safety.PanicPolicy.OverrideEnabled(App.Settings?.Current)))
+                {
+                    VideoDiag.Log("PANIC", "grace pause skipped - panic overrides everything (the grace pause is on the Pause key now)");
+                    return false;
+                }
+
                 var nowUtc = DateTime.UtcNow;
                 var sinceMs = _lastGracePauseActionUtc == DateTime.MinValue
                     ? double.MaxValue
