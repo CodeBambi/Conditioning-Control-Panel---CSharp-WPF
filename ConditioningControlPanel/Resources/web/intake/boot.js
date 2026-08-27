@@ -69,7 +69,12 @@ if (typeof window !== 'undefined') {
 // Optional-module loader: import a module + factory, or fall back to a stub.
 async function loadOptional(path, factoryName, makeFallback) {
   try {
-    const mod = await import(path);
+    // Bounded: nine of these run back-to-back on the loader-blocking path, and an
+    // import whose fetch never settles is NOT catchable by this try/catch - the
+    // await simply never returns, so the loader sits on "Opening Graded Intake..."
+    // forever with no error to log. Past the deadline we take the fallback, which
+    // is the same degraded-but-alive outcome a 404 has always produced.
+    const mod = await bounded(import(path), MODULE_IMPORT_TIMEOUT_MS, `import ${path}`);
     const f = mod && mod[factoryName];
     if (typeof f === 'function') return f;
     shim.log(`module ${path}: no '${factoryName}' export — using fallback`);
@@ -88,13 +93,21 @@ async function loadBank(niche) {
   try {
     // Bounded: a fetch that never settles (a mobile WebView on a bad radio) must
     // not wedge the loader - past the deadline the placeholder takes over.
+    // The deadline must cover the BODY READ, not just the headers. Headers can
+    // arrive promptly and the body stream then stall forever, and res.json() on a
+    // stalled stream never settles - so clearing the timer before it left the
+    // loader wedged on exactly the bad radio this guard exists for. The banks are
+    // ~245KB, which is a real body to stall in the middle of. Aborting mid-body
+    // rejects res.json(), which the catch below turns into the placeholder.
     const ctl = (typeof AbortController === 'function') ? new AbortController() : null;
     const timer = ctl ? setTimeout(() => ctl.abort(), BANK_FETCH_TIMEOUT_MS) : null;
-    let res;
-    try { res = await fetch(`./banks/${niche}.json`, { cache: 'no-cache', signal: ctl ? ctl.signal : undefined }); }
-    finally { if (timer) clearTimeout(timer); }
-    if (!res.ok) { shim.log(`bank ${niche}: HTTP ${res.status} — using placeholder`); return null; }
-    const bank = await res.json();
+    let bank;
+    try {
+      const res = await fetch(`./banks/${niche}.json`, { cache: 'no-cache', signal: ctl ? ctl.signal : undefined });
+      if (!res.ok) { shim.log(`bank ${niche}: HTTP ${res.status} — using placeholder`); return null; }
+      // Belt to the abort brace: a browser with no AbortController is bounded anyway.
+      bank = await bounded(res.json(), BANK_FETCH_TIMEOUT_MS, `bank ${niche} body`);
+    } finally { if (timer) clearTimeout(timer); }
     if (!bank || !Array.isArray(bank.prompts) || !bank.prompts.length) {
       shim.log(`bank ${niche}: empty/invalid — using placeholder`); return null;
     }
@@ -122,6 +135,14 @@ const GIGGLE_CHANCE = 0.03;
  */
 const BANK_FETCH_TIMEOUT_MS   = 15000;
 const FEED_FORWARD_TIMEOUT_MS = 5000;
+/**
+ * Per-module deadline for the optional-module imports. Generous on purpose: the
+ * biggest of them (render/beats.js) is ~256KB and they are served with a 4h
+ * cache header, so 12s only ever fires on a stalled radio - never on a
+ * slow-but-working one, where tripping this would needlessly downgrade a player
+ * to the stub renderer.
+ */
+const MODULE_IMPORT_TIMEOUT_MS = 12000;
 
 /**
  * Deliberate breather (ms) held on the normal answer -> next-card swap, so a

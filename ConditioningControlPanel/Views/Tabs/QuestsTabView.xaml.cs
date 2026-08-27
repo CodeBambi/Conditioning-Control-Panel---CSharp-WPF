@@ -13,6 +13,18 @@ namespace ConditioningControlPanel.Views.Tabs
             // FX lifecycle (PR-3a): the quest bars are filled from the tab's own show, because
             // RefreshQuestUI runs before the tracks have ever been measured.
             IsVisibleChanged += QuestsTabView_IsVisibleChanged;
+
+            // The three daily seats each own a reroll button; the tab just forwards which seat was
+            // pressed. MainWindow spends the reroll - no quest state is touched down here.
+            DailyCard0.RerollRequested += OnDailyCardRerollRequested;
+            DailyCard1.RerollRequested += OnDailyCardRerollRequested;
+            DailyCard2.RerollRequested += OnDailyCardRerollRequested;
+        }
+
+        private void OnDailyCardRerollRequested(object? sender, EventArgs e)
+        {
+            if (sender is Controls.DailyQuestCard card && Window.GetWindow(this) is MainWindow mw)
+                mw.RerollDailySlot(card.Slot);
         }
 
         private void QuestsTabView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -35,11 +47,6 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnQuestSubRoadmap_Click(sender, e);
-        }
-        private void BtnRerollDaily_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnRerollDaily_Click(sender, e);
         }
         private void BtnRerollWeekly_Click(object sender, RoutedEventArgs e)
         {
