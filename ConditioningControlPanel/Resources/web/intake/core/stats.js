@@ -210,6 +210,14 @@ function localStorageUsable() {
  */
 const IDB_OPEN_TIMEOUT_MS = 3000;
 
+/**
+ * How long a single IndexedDB transaction request (add/getAll/put/clear) may sit
+ * with no callback before we give up on it. Larger than the open budget because a
+ * real write of a full run record is genuine work on a slow phone, but still small
+ * enough that a player never sits looking at a finished run with no certificate.
+ */
+const IDB_REQUEST_TIMEOUT_MS = 8000;
+
 /** Open (or create) the IndexedDB database. Rejects on any failure OR on timeout. */
 function openIDB() {
   return new Promise((resolve, reject) => {
@@ -245,9 +253,25 @@ function openIDB() {
 
 function idbBackend(db) {
   const tx = (mode) => db.transaction(IDB_STORE, mode).objectStore(IDB_STORE);
+  // Bounded for the same reason openIDB() is. A WebView that can leave an open()
+  // pending forever can leave a transaction request pending forever too, and the
+  // consequence is worse here because it lands at the END of a run: record() is
+  // awaited by the boot before the outro renders, and record()'s own try/catch
+  // cannot save it - a promise that never settles is not an error to catch. The
+  // player finishes every card and then watches nothing happen, with no
+  // certificate and therefore no share button. Past the deadline we reject, which
+  // record() already swallows as "this run loses its archive row" - the correct
+  // degraded outcome, and one the player never has to see.
   const wrap = (request) => new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error('idb request error'));
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error('idb request timeout'));
+    }, IDB_REQUEST_TIMEOUT_MS);
+    const finish = (fn) => { if (settled) return; settled = true; clearTimeout(timer); fn(); };
+    request.onsuccess = () => finish(() => resolve(request.result));
+    request.onerror = () => finish(() => reject(request.error || new Error('idb request error')));
   });
   return {
     kind: 'idb',
