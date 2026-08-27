@@ -261,10 +261,28 @@ public partial class ChaosHudWindow : Window
             _collapseRecheck = new System.Windows.Threading.DispatcherTimer();
             _collapseRecheck.Tick += (_, _) =>
             {
-                _collapseRecheck!.Stop();
-                if (_pinnedOpen || !_expanded) return;
-                if (CursorInHudGrace()) return;   // never really left — stay open
-                Collapse();
+                try
+                {
+                    _collapseRecheck!.Stop();
+                    if (_pinnedOpen || !_expanded) return;
+                    // #1050 field diagnostics: one Debug line per re-check so a repro log says which
+                    // of the two questions disagreed (hit-test vs geometry) and where the panel was.
+                    bool over = Panel.IsMouseOver, grace = CursorInHudGrace();
+                    App.Logger?.Debug("ChaosHud collapse re-check: expanded={E} slideX={X:F0} cursor={C} panelOver={O} inGrace={G}",
+                        _expanded, PanelSlide?.X ?? double.NaN, Mouse.GetPosition(this), over, grace);
+                    if (grace)
+                    {
+                        // Still on (or within the hysteresis halo of) the HUD. Keep POLLING rather than
+                        // returning: the halo extends past the window, so no further MouseLeave will
+                        // ever arrive to re-arm us, and a cursor parked just outside the edge would
+                        // otherwise pin the sidebar open forever.
+                        _collapseRecheck.Interval = TimeSpan.FromMilliseconds(LEAVE_RECHECK_MS);
+                        _collapseRecheck.Start();
+                        return;
+                    }
+                    Collapse();
+                }
+                catch (Exception ex) { App.Logger?.Debug("ChaosHud collapse re-check failed: {E}", ex.Message); }
             };
         }
         _collapseRecheck.Stop();
@@ -279,12 +297,25 @@ public partial class ChaosHudWindow : Window
     private const double LEAVE_GRACE_MARGIN_DIP = 26;
 
     /// <summary>
-    /// #1050: the grace re-check used to ask <c>Panel.IsMouseOver || Strip.IsMouseOver</c>. Those
-    /// are HIT-TEST questions, and the Locked mod (Circe) re-themes the strip narrower
-    /// (AvatarTubeWindow.Avatar.cs), so an ordinary drift along the edge clears BOTH hit-test
-    /// surfaces while the pointer is still visually on the HUD - and the sidebar snapped shut.
-    /// Asking a GEOMETRY question instead (cursor inside the union of the two elements' bounds,
-    /// grown by a margin) is independent of how a mod sizes the strip.
+    /// #1050 (sidebar folds itself away while the cursor is still on it). The exact trigger has NOT
+    /// been reproduced in-house - it is reported against the Locked mod (Circe), but nothing in the
+    /// tree themes this window per mod, so treat the mod as incidental until a repro log says
+    /// otherwise (the re-check now logs one Debug line per tick for exactly that).
+    ///
+    /// <para>What IS wrong with the old test is structural: it asked
+    /// <c>Panel.IsMouseOver || Strip.IsMouseOver</c>, and both are HIT-TEST questions, which answer
+    /// "is this element the mouse's current target" - not "is the pointer on the HUD". They go
+    /// false while the pointer has not moved at all whenever something else takes the hit: a
+    /// ToolTip popping its own HWND under the cursor (every boon tile carries one, and the
+    /// flap-guard comment above already calls that out), or the panel's own slide transform still
+    /// being mid-flight so its hit region is partly off-edge. <see cref="Strip"/> is worse than
+    /// useless there: <see cref="Expand"/> sets it Hidden, and a Hidden element is never
+    /// hit-tested, so that half of the condition was dead the whole time it was expanded.</para>
+    ///
+    /// <para>So ask GEOMETRY instead - is the cursor inside the union of the two elements' laid-out
+    /// bounds, grown by a hysteresis margin - which no popup, transform or visibility flip can
+    /// answer wrongly. <see cref="Mouse.GetPosition(IInputElement)"/> reports the device position
+    /// regardless of which HWND owns the hit.</para>
     /// </summary>
     private bool CursorInHudGrace()
     {

@@ -4,16 +4,17 @@ using Xunit;
 namespace ConditioningControlPanel.Tests;
 
 /// <summary>
-/// #1050 - the Circe (Locked mod) sidebar auto-hid the moment the cursor left. The collapse grace
-/// re-check asked <c>Panel.IsMouseOver || Strip.IsMouseOver</c>, two HIT-TEST questions, and the
-/// Locked mod re-themes the strip narrower, so an ordinary drift cleared both surfaces while the
-/// pointer was still visually on the HUD. The re-check is geometric now:
+/// #1050 - the chaos sidebar folds itself away while the cursor is still on it. The collapse grace
+/// re-check asked <c>Panel.IsMouseOver || Strip.IsMouseOver</c>, two HIT-TEST questions, which go
+/// false with the pointer stationary whenever another HWND takes the hit (a tile ToolTip) or the
+/// panel's slide transform is still mid-flight - and <c>Strip</c> is Hidden while expanded, so that
+/// half never answered true at all. The re-check is geometric now:
 /// <see cref="ChaosHudWindow.CursorInGrace"/>, the pure half of it, is what these cover.
 /// </summary>
 public class ChaosHudGraceGeometryTests
 {
     private static readonly Rect Panel = new Rect(0, 100, 300, 400);   // expanded panel
-    private static readonly Rect Strip = new Rect(0, 140, 40, 320);    // the (mod-resizable) strip
+    private static readonly Rect Strip = new Rect(0, 140, 40, 320);    // the collapsed strip slot
     private const double Margin = 26;
 
     [Fact]

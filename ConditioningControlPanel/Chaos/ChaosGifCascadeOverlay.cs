@@ -88,14 +88,18 @@ public sealed class ChaosGifCascadeOverlay : Window
             if (_active == null) { _active = new ChaosGifCascadeOverlay(); ((Window)_active).Show(); }
             else if (!_active.IsVisible) { try { ((Window)_active).Show(); } catch { } }   // idles hidden between cascades
 
-            // Confine the rain: dashboard triggers (no chaos run) always rain across ALL monitors so the
-            // user sees them wherever they are (#493); a chaos run keeps its per-config coverage (all
-            // screens when DualMonitor is on, primary-only when off).
             bool chaosRun = App.Chaos?.IsRunning == true;
-            // #1057: resolve through the SHARED screen path every other overlay uses instead of
-            // reading DualMonitorEnabled raw, and confine to the resolved screens' real bounds
-            // rather than assuming the primary is the target.
-            var screens = App.ResolveScreens(chaosRun ? App.MonitorTargetFollowGlobal : App.MonitorTargetAll);
+            // #1057 vs #493 — decided in favour of #1057. #493 made the dashboard trigger-bubble
+            // cascade rain across ALL monitors unconditionally ("so the user sees it wherever they
+            // are"), which overrode DualMonitorEnabled=false: popping a cascade bubble on a
+            // single-screen config still rained on every attached monitor. The global
+            // single-screen restriction is an explicit user choice and now wins on BOTH paths, so
+            // every cascade resolves through the same shared screen path the other overlays use.
+            // Net effect of this change: DualMonitorEnabled=off now confines the trigger-bubble
+            // rain to the primary. DualMonitorEnabled=on is unchanged (all screens, as before).
+            // If a per-effect override is ever wanted, ResolveScreens already takes a 0..N index
+            // the way SpiralTargetMonitor does — swap the constant below for that setting.
+            var screens = App.ResolveScreens(App.MonitorTargetFollowGlobal);
             _active.SetSpawnSpread(screens);
 
             ChaosWindowZ.RaiseAboveVideo(_active);   // un-hiding doesn't re-stack — kick over a playing video
