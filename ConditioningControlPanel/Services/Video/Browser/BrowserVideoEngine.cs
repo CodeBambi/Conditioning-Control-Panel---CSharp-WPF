@@ -399,7 +399,12 @@ namespace ConditioningControlPanel.Services.Video.Browser
             try
             {
                 _primary = CreateWindow(req, req.PrimaryScreen, primary: true, url);
-                if (_primary == null) return false;
+                if (_primary == null)
+                {
+                    App.Logger?.Warning("BrowserVideo: the audio-bearing window on {Screen} could not be created - handing the whole clip to LibVLC",
+                        req.PrimaryScreen.DeviceName);
+                    return false;
+                }
                 _windows.Add(_primary);
 
                 foreach (var scr in req.SecondaryScreens)
@@ -429,9 +434,11 @@ namespace ConditioningControlPanel.Services.Video.Browser
             try
             {
                 win = new BrowserVideoWindow(screen, primary);
+                win.SessionStartTick = Environment.TickCount64;
                 win.Message += OnWindowMessage;
                 win.ProcessFailed += OnWindowProcessFailed;
                 win.Ready += OnWindowReady;
+                win.InitFailed += OnWindowInitFailed;
 
                 // Queued until the page's ready handshake, so it is safe to post before the
                 // CoreWebView2 even exists.
@@ -462,6 +469,7 @@ namespace ConditioningControlPanel.Services.Video.Browser
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "BrowserVideo: failed to create window on {Screen}", screen.DeviceName);
+                VideoSurfaceHealth.Report("browser", screen.DeviceName, primary, -1, "window creation threw: " + ex.Message);
                 try { win?.Close(); } catch { }
                 return null;
             }
@@ -507,6 +515,7 @@ namespace ConditioningControlPanel.Services.Video.Browser
                     w.Message -= OnWindowMessage;
                     w.ProcessFailed -= OnWindowProcessFailed;
                     w.Ready -= OnWindowReady;
+                    w.InitFailed -= OnWindowInitFailed;
                     // Decoder hygiene: pause -> drop src -> load(). Queued messages are dropped with
                     // the window, so this is best-effort and the Close below is what really frees it.
                     if (w.IsReady) w.Post(new { type = "stop" });
@@ -570,13 +579,31 @@ namespace ConditioningControlPanel.Services.Video.Browser
                         return;
                 }
 
+                // Per-SURFACE bookkeeping, ahead of the primary-only gate below: every window posts its
+                // own `playing`, and until now only the primary's was looked at - so a mirror that
+                // silently never reached a frame left nothing in the trace at all. One line per surface
+                // is what tells "monitor 2 is black" apart from "the clip failed" in a bug report.
+                if (type == "playing" && !win.FirstFrameReported)
+                {
+                    win.FirstFrameReported = true;
+                    VideoSurfaceHealth.Report("browser", win.Screen.DeviceName, win.IsPrimary,
+                        Math.Max(0, Environment.TickCount64 - win.SessionStartTick), null);
+                }
+
                 // Only the audio-bearing window drives the session, exactly like the LibVLC primary
-                // player - a secondary's events would double every callback.
+                // player - a secondary's events would double every callback. A secondary's ERROR is
+                // still reported (Warning + a surface line): it is never allowed to end the run, but
+                // "swallowed entirely" is how a permanently black mirror stayed invisible to triage.
                 if (!win.IsPrimary)
                 {
                     if (type == "error")
-                        App.Logger?.Warning("BrowserVideo[secondary]: page error {Code} {Msg} (ignored - primary owns the session)",
-                            (int?)o["code"], (string?)o["message"]);
+                    {
+                        int scode = (int?)o["code"] ?? 0;
+                        var smsg = (string?)o["message"] ?? "";
+                        App.Logger?.Warning("BrowserVideo[secondary]: page error {Code} {Msg} on {Screen} - that mirror stays black, the primary keeps the session",
+                            scode, smsg, win.Screen.DeviceName);
+                        VideoSurfaceHealth.Report("browser", win.Screen.DeviceName, false, -1, $"page error {scode}: {smsg}");
+                    }
                     return;
                 }
 
@@ -644,6 +671,48 @@ namespace ConditioningControlPanel.Services.Video.Browser
             _firstFrameDeadlineUtc = DateTime.UtcNow.AddMilliseconds(NoPlayingTimeoutMs);
         }
 
+        /// <summary>
+        /// A surface's WebView2 never came up (<see cref="BrowserVideoSurface.InitFailed"/>). Before
+        /// this handler existed the failure was a Warning and nothing else, which left an OPAQUE BLACK
+        /// fullscreen window on that monitor: on the PRIMARY - the only window carrying audio, and the
+        /// one <see cref="InitWindowsAsync"/> initialises first - that is exactly the reported "black
+        /// primary, no sound, secondaries fine", and the only thing that ever rescued it was the
+        /// <see cref="PreReadyTimeoutMs"/> budget expiring. Fail the session NOW instead so the host's
+        /// LibVLC fallback runs at once.
+        /// </summary>
+        private void OnWindowInitFailed(BrowserVideoWindow win, string reason)
+        {
+            VideoSurfaceHealth.Report("browser", win.Screen.DeviceName, win.IsPrimary, -1, "surface init failed: " + reason);
+            if (!win.IsPrimary)
+            {
+                App.Logger?.Warning("BrowserVideo[secondary]: surface init failed on {Screen} ({Reason}) - dropping that mirror, the primary keeps playing",
+                    win.Screen.DeviceName, reason);
+                DropSecondaryWindow(win, "init failed");
+                return;
+            }
+
+            App.Logger?.Warning("BrowserVideo: the PRIMARY surface never came up ({Reason}) - failing the session now instead of sitting black for the {Ms}ms first-frame budget",
+                reason, PreReadyTimeoutMs);
+            // Never blames the file: a WebView2 that would not start says nothing about the clip.
+            RaiseFailed("primary surface init failed: " + reason, blameFile: false);
+        }
+
+        /// <summary>Unhook and close ONE mirror without touching the session. Shared by the two
+        /// secondary-only failure paths so they cannot drift apart.</summary>
+        private void DropSecondaryWindow(BrowserVideoWindow win, string why)
+        {
+            try
+            {
+                win.Message -= OnWindowMessage;
+                win.ProcessFailed -= OnWindowProcessFailed;
+                win.Ready -= OnWindowReady;
+                win.InitFailed -= OnWindowInitFailed;
+                _windows.Remove(win);
+                win.Close();
+            }
+            catch (Exception ex) { App.Logger?.Debug("BrowserVideo: secondary close after {Why} failed: {E}", why, ex.Message); }
+        }
+
         private void OnWindowProcessFailed(BrowserVideoWindow win, CoreWebView2ProcessFailedKind kind)
         {
             // ONE dead browser process fires this on EVERY window sharing it, so a dual-monitor
@@ -652,15 +721,8 @@ namespace ConditioningControlPanel.Services.Video.Browser
             if (!win.IsPrimary)
             {
                 App.Logger?.Warning("BrowserVideo[secondary]: WebView2 process failed ({Kind}) - dropping that mirror, the primary keeps playing", kind);
-                try
-                {
-                    win.Message -= OnWindowMessage;
-                    win.ProcessFailed -= OnWindowProcessFailed;
-                    win.Ready -= OnWindowReady;
-                    _windows.Remove(win);
-                    win.Close();
-                }
-                catch (Exception ex) { App.Logger?.Debug("BrowserVideo: secondary close after ProcessFailed failed: {E}", ex.Message); }
+                VideoSurfaceHealth.Report("browser", win.Screen.DeviceName, false, -1, "WebView2 process failed: " + kind);
+                DropSecondaryWindow(win, "ProcessFailed");
                 return;
             }
 
@@ -720,6 +782,9 @@ namespace ConditioningControlPanel.Services.Video.Browser
             if (_failedRaised) return;
             _failedRaised = true;
             StopFirstFrameWatch();
+            // The session-level verdict, said in the same per-surface shape as every other line so a
+            // report shows the primary's fate next to each mirror's.
+            VideoSurfaceHealth.Report("browser", _primary?.Screen.DeviceName, primary: true, firstFrameMs: -1, failureReason: reason);
             try { Failed?.Invoke(reason, blameFile); }
             catch (Exception ex) { App.Logger?.Warning("BrowserVideo: Failed handler threw: {E}", ex.Message); }
         }

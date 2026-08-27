@@ -51,6 +51,19 @@ namespace ConditioningControlPanel.Services.Video.Browser
         /// <summary>Raised on the UI thread once the page posts <c>ready</c>.</summary>
         public event Action<BrowserVideoWindow>? Ready;
 
+        /// <summary>This surface's WebView2 never came up - see
+        /// <see cref="BrowserVideoSurface.InitFailed"/>. The window is still on screen and still
+        /// OPAQUE BLACK, so the engine must act on it rather than wait for a frame that cannot come.</summary>
+        public event Action<BrowserVideoWindow, string>? InitFailed;
+
+        /// <summary><see cref="Environment.TickCount64"/> when the session created this window. The
+        /// per-surface diagnostics line measures first-frame latency from here.</summary>
+        public long SessionStartTick { get; set; } = Environment.TickCount64;
+
+        /// <summary>One surface report per window per session (the page posts <c>playing</c> again
+        /// after a seek, and a mirror must not spam the log).</summary>
+        public bool FirstFrameReported { get; set; }
+
         public BrowserVideoWindow(Screen screen, bool primary)
         {
             _screen = screen;
@@ -83,6 +96,7 @@ namespace ConditioningControlPanel.Services.Video.Browser
             _surface.Message += (_, o) => Message?.Invoke(this, o);
             _surface.ProcessFailed += (_, kind) => ProcessFailed?.Invoke(this, kind);
             _surface.Ready += _ => Ready?.Invoke(this);
+            _surface.InitFailed += (_, reason) => InitFailed?.Invoke(this, reason);
             Content = _surface;
 
             PinToScreen();

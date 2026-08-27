@@ -273,7 +273,13 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void FallbackToLibVlc(string reason)
         {
-            if (_browserFallbackDone) return;
+            // The two branches below are the pure policy in VideoSurfaceHealth.DecideBrowserFailure;
+            // this call site is the ONLY one that acts on it for the primary surface. (Secondary
+            // failures never reach here at all - the engine drops the mirror and keeps the session,
+            // which is DecideBrowserFailure's DropSecondary arm.)
+            var action = VideoSurfaceHealth.DecideBrowserFailure(
+                isPrimarySurface: true, alreadyFellBack: _browserFallbackDone, playbackStartedFired: _browserStartedFired);
+            if (action == VideoSurfaceHealth.BrowserFailureAction.Ignore) return;
             _browserFallbackDone = true;
 
             var path = _browserPath;
@@ -286,7 +292,7 @@ namespace ConditioningControlPanel.Services
             // NEXT play of it routes to LibVLC anyway. Mirrors BubbleCountWindow's startedOnce
             // branch: end through the same funnel a natural end uses, so it is one VideoEnded and
             // EndCurrentVideo's normal attention pass/fail handling.
-            if (_browserStartedFired)
+            if (action == VideoSurfaceHealth.BrowserFailureAction.EndClip)
             {
                 App.Logger?.Warning("VideoService: browser playback failed MID-CLIP for {File} ({Reason}) - ending the video instead of replaying it",
                     Path.GetFileName(path ?? "(none)"), reason);

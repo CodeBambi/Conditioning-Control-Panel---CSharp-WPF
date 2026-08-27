@@ -51,6 +51,17 @@ namespace ConditioningControlPanel.Services.Video.Browser
         /// <summary>Raised on the UI thread once the page posts <c>ready</c>.</summary>
         public event Action<BrowserVideoSurface>? Ready;
 
+        /// <summary>
+        /// The WebView2 for THIS surface could not be brought up: <c>EnsureCoreWebView2Async</c> threw,
+        /// or it completed and left the core null. Both used to be a Warning and nothing else - and
+        /// because the surface stays on screen as an OPAQUE BLACK window, that is precisely the
+        /// reported "the primary monitor is black with no sound while the other screens play fine"
+        /// (the engine inits the primary FIRST, so a swallowed failure there let every secondary go on
+        /// to play normally). The host now hears about it and can fall this surface back to LibVLC
+        /// instead of waiting out the whole pre-ready budget on a black screen.
+        /// </summary>
+        public event Action<BrowserVideoSurface, string>? InitFailed;
+
         public BrowserVideoSurface(string tag)
         {
             _tag = tag;
@@ -81,7 +92,11 @@ namespace ConditioningControlPanel.Services.Video.Browser
                 await _web.EnsureCoreWebView2Async(env).ConfigureAwait(true);
                 if (_disposed || _web?.CoreWebView2 == null)
                 {
-                    if (!_disposed) App.Logger?.Warning("BrowserVideo[{Tag}]: WebView2 core null after Ensure", _tag);
+                    if (!_disposed)
+                    {
+                        App.Logger?.Warning("BrowserVideo[{Tag}]: WebView2 core null after Ensure", _tag);
+                        RaiseInitFailed("WebView2 core null after EnsureCoreWebView2Async");
+                    }
                     return;
                 }
 
@@ -119,7 +134,16 @@ namespace ConditioningControlPanel.Services.Video.Browser
             catch (Exception ex)
             {
                 App.Logger?.Warning("BrowserVideo[{Tag}]: InitAsync failed: {E}", _tag, ex.Message);
+                RaiseInitFailed(ex.Message);
             }
+        }
+
+        /// <summary>Tell the host this surface will never post <c>ready</c> or <c>playing</c>. Never
+        /// throws: a broken handler must not turn a recoverable surface failure into an unhandled one.</summary>
+        private void RaiseInitFailed(string reason)
+        {
+            try { InitFailed?.Invoke(this, reason); }
+            catch (Exception ex) { App.Logger?.Debug("BrowserVideo[{Tag}]: InitFailed handler threw: {E}", _tag, ex.Message); }
         }
 
         /// <summary>Give the page keyboard focus so its keydown handler (and therefore the
