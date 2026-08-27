@@ -103,10 +103,14 @@ namespace ConditioningControlPanel
                 SetLockband(tab.PlayLockArcademy,
                     TierGate.RequiresLab(Services.Arcademy.ArcademyHostService.ProductName));
 
-                // --- The Arcademy: present or absent, never locked ---------------------------
-                // Same posture as Just Drop below, for the same reason: Semester 1 is merged but
-                // unannounced, and a lockband would advertise a feature nobody can buy yet.
-                // Flipping ArcademyHostService.DoorAvailable is the whole reveal.
+                // --- The Arcademy: present, and locked when the account is not T2 ------------
+                // NOT the Just Drop posture below any more. Until v6.8.5 the door was shut and a
+                // lockband would have advertised a feature nobody could buy, so the card was
+                // hidden outright; the door is open now, so the card is PRESENT on every account
+                // and the band above is what tells a free one why Attend refuses. The hide is
+                // still what closing the door again would do - flipping
+                // ArcademyHostService.DoorAvailable back to false is a one-line retreat, and the
+                // band stays computed above so it is already right when it reopens.
                 if (tab.SlotArcademy != null)
                     tab.SlotArcademy.Visibility = Services.Arcademy.ArcademyHostService.DoorAvailable
                         ? Visibility.Visible

@@ -5084,7 +5084,7 @@
   "_comment_arcademy_door": "The Arcademy (Play wall card, Ctrl+K row, failure dialogs)",
   "play_arcademy_title": "The Arcademy",
   "play_arcademy_new": "新",
-  "play_arcademy_blurb": "每天三节课。简单的小游戏，被屏幕上的其他一切变得不简单。来上课，接受评分，保持连续出勤。",
+  "play_arcademy_blurb": "每天四节课。简单的小游戏，被屏幕上的其他一切变得不简单。来上课，接受评分，保持连续出勤。",
   "play_arcademy_cta": "上课",
   "play_arcademy_tooltip": "今天的课表已经排好了。",
   "arcademy_boot_error_body": "{0} 无法在这台电脑上启动。\n\n{1}",

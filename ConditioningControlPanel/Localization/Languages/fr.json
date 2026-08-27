@@ -4626,7 +4626,7 @@
   "_comment_arcademy_door": "The Arcademy (Play wall card, Ctrl+K row, failure dialogs)",
   "play_arcademy_title": "The Arcademy",
   "play_arcademy_new": "NOUVEAU",
-  "play_arcademy_blurb": "trois cours par jour. de petits jeux simples que tout le reste de ton écran rend difficiles. présente-toi, fais-toi noter, garde la série.",
+  "play_arcademy_blurb": "quatre cours par jour. de petits jeux simples que tout le reste de ton écran rend difficiles. présente-toi, fais-toi noter, garde la série.",
   "play_arcademy_cta": "Assister",
   "play_arcademy_tooltip": "l'emploi du temps du jour t'attend.",
   "arcademy_boot_error_body": "{0} n'a pas pu démarrer sur cette machine.\n\n{1}",

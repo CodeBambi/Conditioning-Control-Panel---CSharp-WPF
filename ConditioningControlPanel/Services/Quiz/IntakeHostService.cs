@@ -94,9 +94,9 @@ namespace ConditioningControlPanel.Services.Quiz
             try
             {
                 // The intake's vo/sfx/music (plus the dtrh bubble sfx it borrows) ship as the lazy
-                // audio-web pack. Fire-and-forget: no-op once installed, on a full install, or offline.
-                try { _ = App.ReleaseContent?.RequestPackAsync(ReleaseContentService.PackAudioWeb); }
-                catch (Exception ex) { App.Logger?.Debug("IntakeHost: audio-web request failed: {E}", ex.Message); }
+                // audio-web pack. Kicked here and still never awaited (see RequestAudioPack), but
+                // the OUTCOME is observed now - dropping it on the floor is bug #1032.
+                RequestAudioPack();
 
                 _exiting = false;
                 _resultReceived = false;
@@ -176,6 +176,65 @@ namespace ConditioningControlPanel.Services.Quiz
                 }
             }
             catch (Exception ex) { App.Logger?.Debug("IntakeHostService.CloseActive: {E}", ex.Message); DisposeAll(); }
+        }
+
+        /// <summary>
+        /// Kick the lazy <c>audio-web</c> pack every recorded clip in the intake lives in (vo, sfx,
+        /// music, plus the dtrh bubble sfx the page borrows) and OBSERVE the result.
+        ///
+        /// Deliberately still not awaited by <see cref="Launch"/>: a first-run download must never
+        /// hold the window back, and the page degrades on its own - core/audioSrc.js retries the
+        /// other virtual host once per file and render/audio.js falls back to its synth voices for
+        /// anything that never decodes. What was missing (bug #1032, "no sound in Graded Intake")
+        /// was the DIAGNOSIS: the task was discarded, so a pack that never arrived - offline mode,
+        /// a dead manifest, a failed download - was indistinguishable from a working one. The run
+        /// just came up quiet and the log said nothing at all.
+        ///
+        /// A failure with the pack already on disk is NOT silence: the installed clips are still
+        /// there and only an update was missed, so that case stays at Information.
+        /// </summary>
+        private static void RequestAudioPack()
+        {
+            try
+            {
+                var svc = App.ReleaseContent;
+                if (svc == null) return;
+
+                var task = svc.RequestPackAsync(ReleaseContentService.PackAudioWeb);
+                // The overwhelmingly common path (already installed, or a full install) completes
+                // synchronously with true - stay quiet rather than log a line on every launch.
+                if (task.IsCompleted && !task.IsFaulted && !task.IsCanceled && task.Result) return;
+
+                _ = task.ContinueWith(t =>
+                {
+                    try
+                    {
+                        if (!t.IsFaulted && !t.IsCanceled && t.Result)
+                        {
+                            App.Logger?.Information("IntakeHost: audio-web pack ready");
+                            return;
+                        }
+
+                        var reason = t.IsFaulted ? (t.Exception?.GetBaseException().Message ?? "faulted")
+                            : t.IsCanceled ? "cancelled"
+                            : App.Settings?.Current?.OfflineMode == true ? "offline mode is on"
+                            : "download or manifest fetch failed (see the ReleaseContentService lines above)";
+
+                        if (svc.IsInstalled(ReleaseContentService.PackAudioWeb))
+                        {
+                            App.Logger?.Information(
+                                "IntakeHost: audio-web refresh failed ({Reason}) - the installed clips still play", reason);
+                            return;
+                        }
+
+                        App.Logger?.Warning(
+                            "IntakeHost: audio-web pack unavailable ({Reason}) - this run has no recorded VO or music and "
+                            + "falls back to the in-page synth sfx", reason);
+                    }
+                    catch { /* diagnosis must never take the app down */ }
+                }, TaskScheduler.Default);
+            }
+            catch (Exception ex) { App.Logger?.Debug("IntakeHost: audio-web request failed: {E}", ex.Message); }
         }
 
         // ============================ ducking the control panel ============================
