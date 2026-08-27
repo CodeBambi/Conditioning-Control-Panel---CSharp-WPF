@@ -10,7 +10,23 @@ namespace ConditioningControlPanel.Models;
 public class QuestProgress
 {
     // Active quests
+    //
+    // THREE DAILY SLOTS, ALL AT ONCE. Until 2026-08-27 a day handed out its three daily quests
+    // one after another: <see cref="DailyQuest"/> held the single live one and finishing it rolled
+    // the next. Now all three are dealt up front and live side by side in <see cref="DailyQuests"/>,
+    // each one independently progressable and independently rerollable, and the day is over when
+    // all three slots are stamped.
+    //
+    // <see cref="DailyQuest"/> survives as a LEGACY MIRROR, not as state: QuestService seeds the
+    // slots from it once (a player mid-day through an update keeps the quest they were working on)
+    // and thereafter keeps it pointing at the first unfinished slot purely so a downgrade to an
+    // older build finds a quest where it expects one. Nothing in the app should read it - use
+    // QuestService.GetDailySlots().
     public ActiveQuest? DailyQuest { get; set; }
+
+    /// <summary>Today's three daily quests. Owned by QuestService (see EnsureDailySlots).</summary>
+    public List<ActiveQuest> DailyQuests { get; set; } = new();
+
     public ActiveQuest? WeeklyQuest { get; set; }
 
     // Reroll tracking - counts how many rerolls used in current period
@@ -115,6 +131,17 @@ public class QuestProgress
             DailyQuestsCompletedToday = 0;
             DailyCompletionResetDate = DateTime.Today;
         }
+
+        // Once the slots exist they ARE the count - a stamped card on screen and a counter that
+        // disagrees with it is the one bug a three-up board can't hide. The stored field is kept
+        // in step (and still written out) so an older build reading quests.json sees a sane
+        // number, and it remains the answer on the one pass before migration has run.
+        if (DailyQuests.Count > 0)
+        {
+            int done = 0;
+            foreach (var q in DailyQuests) if (q?.IsCompleted == true) done++;
+            DailyQuestsCompletedToday = done;
+        }
         return DailyQuestsCompletedToday;
     }
 
@@ -123,8 +150,13 @@ public class QuestProgress
     /// </summary>
     public bool AreAllDailyQuestsCompleted()
     {
-        return GetDailyQuestsCompletedToday() >= 3;
+        return GetDailyQuestsCompletedToday() >= MaxDailySlots;
     }
+
+    /// <summary>How many daily quests a day deals. Mirrored by QuestService.MaxDailyQuestsPerDay,
+    /// which is the constant the UI reads; this copy exists so the model can answer
+    /// <see cref="AreAllDailyQuestsCompleted"/> without reaching into a service.</summary>
+    public const int MaxDailySlots = 3;
 
     /// <summary>
     /// Check if daily quest has expired (new day)

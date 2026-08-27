@@ -32,21 +32,31 @@ namespace ConditioningControlPanel
     {
         #region Quests Tab
 
-        internal void BtnRerollDaily_Click(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// Spend a reroll on ONE seat of the daily board. Raised by that card's own reroll button
+        /// (QuestsTabView forwards the seat index). The rerolls remain a single shared daily pool -
+        /// three cards do not mean three times the rerolls, they mean the player picks which card
+        /// is worth spending one on.
+        /// </summary>
+        internal void RerollDailySlot(int slot)
         {
             try { App.Bark?.NotifyUiAction("reroll_daily"); } catch { }
-            if (App.Quests?.RerollDailyQuest() == true)
+            if (App.Quests?.RerollDailyQuest(slot) == true)
             {
                 RefreshQuestUI();
+                RefreshQuestStamps();
+                return;
             }
-            else
-            {
-                var hasPatreon = App.Patreon?.HasPremiumAccess == true;
-                var msg = hasPatreon
-                    ? "You've used all 3 daily rerolls! Rerolls reset at midnight."
-                    : "You've used your daily reroll! Patreon supporters get 2 extra rerolls.";
-                MessageBox.Show(msg, "Reroll Limit", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
+
+            // Refused. Out of rerolls is the overwhelmingly common reason and the only one worth
+            // a dialog; an empty pool or a finished seat just leaves the card as it was.
+            if (App.Quests?.GetRemainingDailyRerolls() > 0) return;
+
+            var hasPatreon = App.Patreon?.HasPremiumAccess == true;
+            var msg = hasPatreon
+                ? "You've used all your daily rerolls! Rerolls reset at midnight."
+                : "You've used your daily reroll! Patreon supporters get 2 extra rerolls.";
+            MessageBox.Show(msg, "Reroll Limit", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         internal void BtnRerollWeekly_Click(object sender, RoutedEventArgs e)
@@ -66,6 +76,114 @@ namespace ConditioningControlPanel
             }
         }
 
+
+        /// <summary>The definition id each daily seat is currently showing, so a completion can
+        /// burst on the card that actually filled (MainWindow.EventFx).</summary>
+        private readonly string?[] _dailyCardQuestIds = new string?[3];
+
+        /// <summary>
+        /// Decoded quest art, keyed by the resolved image path. RefreshQuestUI runs on every
+        /// progress tick while the tab is open and the header stamps repaint on every tick
+        /// regardless, so decoding three (soon four) images per tick is not something to do twice
+        /// a second. Cleared on a mod switch, because GetModeAwareQuestImagePath can resolve the
+        /// same quest to a different file.
+        /// </summary>
+        private readonly Dictionary<string, BitmapImage> _questArtCache = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Mode-aware, cached quest art. Null when the quest has no usable image.</summary>
+        internal BitmapImage? GetQuestArt(Models.QuestDefinition def)
+        {
+            try
+            {
+                var path = GetModeAwareQuestImagePath(def);
+                if (string.IsNullOrEmpty(path)) return null;
+                if (_questArtCache.TryGetValue(path, out var cached)) return cached;
+
+                var loaded = LoadQuestImage(path);
+                if (loaded == null) return null;
+                // Frozen so the same instance is safe to hand to several Images at once (three
+                // cards plus a header stamp can all be showing the same art).
+                if (loaded.CanFreeze) loaded.Freeze();
+                _questArtCache[path] = loaded;
+                return loaded;
+            }
+            catch { return null; }
+        }
+
+        /// <summary>Drop the decoded art. Called when the active mod changes.</summary>
+        internal void ClearQuestArtCache() => _questArtCache.Clear();
+
+        /// <summary>
+        /// The XP a quest is actually worth right now, plus the little "(+N%)" bonus string that
+        /// explains why it is not the definition's base number.
+        ///
+        /// <para>ONE formula, three surfaces: the daily cards, the weekly card and the header
+        /// stamps' hover card all call this, and it multiplies exactly what
+        /// QuestService.CompleteQuest multiplies - ProgressionService.QuestLevelScale for the level
+        /// curve, the Better Quests reroll multiplier and the quest-streak bonus. The tab used to
+        /// carry its own hardcoded "+4% per level", which stopped being the curve when the Descent
+        /// epochs landed: the cards were quoting a number the payout had no intention of paying.</para>
+        /// </summary>
+        internal (int Xp, string? Bonus) ComputeQuestXpDisplay(Models.QuestDefinition def)
+        {
+            var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
+            var rerollMult = App.SkillTree?.GetRerollBonusMultiplier() ?? 1.0;
+            var questStreak = App.Settings?.Current?.DailyQuestStreak ?? 0;
+            var streakMult = 1.0 + (questStreak * 0.03);
+
+            var xp = (int)Math.Round(
+                def.XPReward * ProgressionService.QuestLevelScale(playerLevel) * rerollMult * streakMult);
+
+            string? bonus = null;
+            if (questStreak > 0) bonus = $"+{questStreak * 3}%\U0001f525";
+            if (rerollMult > 1.0)
+            {
+                var rerollBonus = $"+{(int)((rerollMult - 1.0) * 100)}%\U0001f503";
+                bonus = bonus == null ? rerollBonus : $"{bonus} {rerollBonus}";
+            }
+
+            return (xp, bonus);
+        }
+
+        /// <summary>
+        /// Everything one daily seat needs to paint itself. The XP shown is the SCALED award (see
+        /// ComputeQuestXpDisplay), so the number on the card is the number that lands.
+        /// </summary>
+        private Views.Controls.DailyQuestCardModel BuildDailyCardModel(
+            int slot, Models.ActiveQuest quest, Models.QuestDefinition def, int rerollsLeft)
+        {
+            var (scaledXP, bonus) = ComputeQuestXpDisplay(def);
+
+            // Server-rolled quests have no loc key, so the localized lookup returns the raw key -
+            // the same guard the header stamps use. Mod-aware either way.
+            var name = def.LocalizedName;
+            if (string.IsNullOrWhiteSpace(name) || name.StartsWith("quest_", StringComparison.Ordinal))
+                name = def.Name;
+            var desc = def.LocalizedDescription;
+            if (string.IsNullOrWhiteSpace(desc) || desc.StartsWith("quest_", StringComparison.Ordinal))
+                desc = def.Description;
+
+            bool canReroll = !quest.IsCompleted && rerollsLeft > 0;
+
+            return new Views.Controls.DailyQuestCardModel
+            {
+                Slot = slot,
+                Icon = def.Icon,
+                Name = App.Mods?.MakeModAware(name) ?? name,
+                Description = App.Mods?.MakeModAware(desc) ?? desc,
+                Current = quest.CurrentProgress,
+                Target = def.TargetValue,
+                IsCompleted = quest.IsCompleted,
+                XpText = $"\U0001f381 {scaledXP} XP",
+                BonusText = bonus,
+                Art = GetQuestArt(def),
+                CanReroll = canReroll,
+                RerollText = canReroll ? $"\U0001f504 Reroll ({rerollsLeft})" : "\U0001f504 No rerolls left",
+                RerollTooltip = canReroll
+                    ? "Swap this quest for a different one. Costs one of today's shared rerolls."
+                    : "You've used all of today's rerolls. They come back at midnight.",
+            };
+        }
 
         /// <summary>
         /// Repaints the whole Quests tab: quest cards, stats, the streak calendar and the punch card.
@@ -90,7 +208,13 @@ namespace ConditioningControlPanel
                 QuestsTab.TxtSeasonTitle.Text = seasonTitle;
             }
 
-            // Update daily quest counter badge
+            // ---- THE DAILY BOARD: all three seats, every refresh -------------------------
+            //
+            // Painted from the service's board rather than from "the current daily quest": there
+            // is no current one any more. Every seat is recomputed from live state on every pass
+            // (progress ticks, rerolls, midnight) - three cards is far cheaper to re-apply than
+            // to diff, and it means no arrival order can leave a stale card on screen.
+
             int dailyCompleted = questService.GetDailyQuestsCompletedToday();
             QuestsTab.TxtDailyQuestCounter.Text = $"{dailyCompleted}/{QuestService.MaxDailyQuestsPerDay}";
             bool allDailyDone = questService.AreAllDailyQuestsCompleted();
@@ -102,88 +226,35 @@ namespace ConditioningControlPanel
             QuestsTab.DailySegment2.Background = dailyCompleted >= 2 ? goldBrush : greyBrush;
             QuestsTab.DailySegment3.Background = dailyCompleted >= 3 ? goldBrush : greyBrush;
 
-            // Refresh daily quest display
-            var dailyDef = questService.GetCurrentDailyDefinition();
-            var dailyProgress = questService.Progress.DailyQuest;
-            if (allDailyDone)
+            QuestsTab.DailyAllCompletedMessage.Visibility = allDailyDone ? Visibility.Visible : Visibility.Collapsed;
+
+            var board = questService.GetDailySlots();
+            int dailyRerollsLeft = questService.GetRemainingDailyRerolls();
+            var dailyCards = new[] { QuestsTab.DailyCard0, QuestsTab.DailyCard1, QuestsTab.DailyCard2 };
+
+            for (int i = 0; i < dailyCards.Length; i++)
             {
-                // All 3 daily quests completed - show the "all done" message
-                QuestsTab.DailyQuestCard.Visibility = Visibility.Collapsed;
-                QuestsTab.DailyAllCompletedMessage.Visibility = Visibility.Visible;
-                QuestsTab.BtnRerollDaily.Visibility = Visibility.Collapsed;
+                var card = dailyCards[i];
+                var quest = i < board.Count ? board[i].Quest : null;
+                var def = i < board.Count ? board[i].Definition : null;
+
+                if (quest == null || def == null)
+                {
+                    _dailyCardQuestIds[i] = null;
+                    card.ShowEmpty(i, "No quest here yet",
+                                   "Nothing in today's pool fits this slot. Level up or check back after midnight.");
+                    continue;
+                }
+
+                _dailyCardQuestIds[i] = def.Id;
+                card.Apply(BuildDailyCardModel(i, quest, def, dailyRerollsLeft));
             }
-            else if (dailyDef != null && dailyProgress != null)
-            {
-                QuestsTab.DailyQuestCard.Visibility = Visibility.Visible;
-                QuestsTab.DailyAllCompletedMessage.Visibility = Visibility.Collapsed;
-                QuestsTab.BtnRerollDaily.Visibility = Visibility.Visible;
 
-                QuestsTab.TxtDailyQuestIcon.Text = dailyDef.Icon;
-                QuestsTab.TxtDailyQuestName.Text = App.Mods?.MakeModAware(dailyDef.Name) ?? dailyDef.Name;
-                QuestsTab.TxtDailyQuestDesc.Text = App.Mods?.MakeModAware(dailyDef.Description) ?? dailyDef.Description;
-                QuestsTab.TxtDailyProgress.Text = $"{dailyProgress.CurrentProgress} / {dailyDef.TargetValue}";
-                // Show scaled XP based on level (+4% per level), reroll bonus, and streak bonus
-                var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
-                var rerollMult = App.SkillTree?.GetRerollBonusMultiplier() ?? 1.0;
-                var questStreak = App.Settings?.Current?.DailyQuestStreak ?? 0;
-                var streakMult = 1.0 + (questStreak * 0.03);
-                var scaledDailyXP = (int)Math.Round(dailyDef.XPReward * (1 + playerLevel * 0.04) * rerollMult * streakMult);
-                QuestsTab.TxtDailyXP.Text = $"🎁 {scaledDailyXP} XP";
-                if (questStreak > 0)
-                {
-                    QuestsTab.TxtDailyStreakBonus.Text = $"(+{questStreak * 3}%\U0001f525)";
-                    QuestsTab.TxtDailyStreakBonus.Visibility = Visibility.Visible;
-                }
-                else
-                {
-                    QuestsTab.TxtDailyStreakBonus.Visibility = Visibility.Collapsed;
-                }
-                if (rerollMult > 1.0)
-                {
-                    QuestsTab.TxtDailyRerollBonus.Text = $"(+{(int)((rerollMult - 1.0) * 100)}%\U0001f503)";
-                    QuestsTab.TxtDailyRerollBonus.Visibility = Visibility.Visible;
-                }
-                else
-                {
-                    QuestsTab.TxtDailyRerollBonus.Visibility = Visibility.Collapsed;
-                }
-
-                // Load quest image (supports remote cached images)
-                try
-                {
-                    var dailyImagePath = GetModeAwareQuestImagePath(dailyDef);
-                    var dailyImage = LoadQuestImage(dailyImagePath);
-                    if (dailyImage != null)
-                    {
-                        QuestsTab.ImgDailyQuest.Source = dailyImage;
-                    }
-                }
-                catch { /* Image load failed, leave blank */ }
-
-                // Update progress bar
-                double progressPercent = dailyDef.TargetValue > 0
-                    ? Math.Min(1.0, (double)dailyProgress.CurrentProgress / dailyDef.TargetValue)
-                    : 0;
-                // Tweened rather than assigned (MainWindow.TabFxPresetsQuestsAchievements.cs): the
-                // fraction is remembered so the bar can also be re-applied once the track has a
-                // width - this method runs before the tab has ever been measured.
-                SetQuestProgress(dailyFraction: progressPercent, weeklyFraction: null);
-
-                // Show completed overlay if done (briefly visible before next quest loads)
-                if (dailyProgress.IsCompleted)
-                {
-                    QuestsTab.DailyCompletedOverlay.Visibility = Visibility.Visible;
-                    QuestsTab.BtnRerollDaily.IsEnabled = false;
-                    QuestsTab.BtnRerollDaily.Content = Loc.Get("btn_completed");
-                }
-                else
-                {
-                    QuestsTab.DailyCompletedOverlay.Visibility = Visibility.Collapsed;
-                    int remainingRerolls = questService.GetRemainingDailyRerolls();
-                    QuestsTab.BtnRerollDaily.IsEnabled = remainingRerolls > 0;
-                    QuestsTab.BtnRerollDaily.Content = remainingRerolls > 0 ? $"🔄 Reroll ({remainingRerolls} left)" : "🔄 No rerolls left";
-                }
-            }
+            QuestsTab.TxtDailyRerollPool.Text = allDailyDone
+                ? ""
+                : dailyRerollsLeft > 0
+                    ? $"\U0001f504 {dailyRerollsLeft} reroll{(dailyRerollsLeft == 1 ? "" : "s")} left today - spend one on whichever card you like"
+                    : "\U0001f504 No rerolls left today - they come back at midnight";
 
             // Refresh weekly quest display
             var weeklyDef = questService.GetCurrentWeeklyDefinition();
@@ -194,13 +265,13 @@ namespace ConditioningControlPanel
                 QuestsTab.TxtWeeklyQuestName.Text = App.Mods?.MakeModAware(weeklyDef.Name) ?? weeklyDef.Name;
                 QuestsTab.TxtWeeklyQuestDesc.Text = App.Mods?.MakeModAware(weeklyDef.Description) ?? weeklyDef.Description;
                 QuestsTab.TxtWeeklyProgress.Text = $"{weeklyProgress.CurrentProgress} / {weeklyDef.TargetValue}";
-                // Show scaled XP based on level (+4% per level), reroll bonus, and streak bonus
-                var wPlayerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
+                // Scaled XP through the same helper the daily cards and the header stamps use,
+                // which is the same maths CompleteQuest pays out with. This line used to carry its
+                // own "+4% per level" - a curve the app stopped using.
                 var wRerollMult = App.SkillTree?.GetRerollBonusMultiplier() ?? 1.0;
                 var wQuestStreak = App.Settings?.Current?.DailyQuestStreak ?? 0;
-                var wStreakMult = 1.0 + (wQuestStreak * 0.03);
-                var scaledWeeklyXP = (int)Math.Round(weeklyDef.XPReward * (1 + wPlayerLevel * 0.04) * wRerollMult * wStreakMult);
-                QuestsTab.TxtWeeklyXP.Text = $"🎁 {scaledWeeklyXP} XP";
+                var (scaledWeeklyXP, _) = ComputeQuestXpDisplay(weeklyDef);
+                QuestsTab.TxtWeeklyXP.Text = $"\U0001f381 {scaledWeeklyXP} XP";
                 if (wQuestStreak > 0)
                 {
                     QuestsTab.TxtWeeklyStreakBonus.Text = $"(+{wQuestStreak * 3}%\U0001f525)";
