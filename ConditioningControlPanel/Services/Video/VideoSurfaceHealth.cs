@@ -17,8 +17,10 @@ namespace ConditioningControlPanel.Services
     ///   * one dead LibVLC memory-render surface aborted the clip on ALL screens, even when N-1
     ///     surfaces were decoding happily.
     ///
-    /// The rules below are what replaced that: per-surface verdicts, with the clip only ending when
-    /// every surface is dead.
+    /// The rules below are what replaced that: per-surface verdicts. A dead MIRROR no longer touches
+    /// the clip - it ends only when every surface is dead, or when the audio-bearing one is (a black
+    /// and silent primary is not a playable clip, and it is the only surface wired to the end/error
+    /// events that could otherwise stop the run).
     /// </summary>
     internal static class VideoSurfaceHealth
     {
@@ -31,8 +33,9 @@ namespace ConditioningControlPanel.Services
             Defer,
             /// <summary>First strike: give THIS surface another go before condemning anything.</summary>
             Retry,
-            /// <summary>Second strike: this surface is dead. The caller then asks
-            /// <see cref="ShouldAbortClip"/> whether any sibling is still alive.</summary>
+            /// <summary>Last strike: this surface is dead. The caller then asks
+            /// <see cref="ShouldAbortClip"/> whether the clip can go on without it. The audio-bearing
+            /// surface reaches this on its FIRST missed window - see the retryAllowed parameter.</summary>
             GiveUp,
         }
 
@@ -56,12 +59,21 @@ namespace ConditioningControlPanel.Services
         /// the liveness verdict (#735 - a paused vmem surface produces no frames BY DESIGN), and only
         /// then does "no frame" become a strike.
         /// </summary>
-        internal static FrameWatchdogAction DecideFrameWatchdog(bool tornDown, bool gracePaused, bool hasRendered, bool retryUsed)
+        /// <param name="retryAllowed">
+        /// Whether this surface gets a SECOND grace window before it is condemned. False for the
+        /// audio-bearing surface, deliberately: a dead primary ends the clip either way (see
+        /// <see cref="ShouldAbortClip"/>), so granting it a retry would only double the time the user
+        /// spends staring at a black, silent main screen - 16s where the released build takes 8s, and
+        /// on the single-monitor majority rig the primary is the ONLY surface, so the retry rung would
+        /// be pure added latency there. Mirrors do get the retry: the clip keeps playing while they
+        /// take it, so it costs the user nothing.
+        /// </param>
+        internal static FrameWatchdogAction DecideFrameWatchdog(bool tornDown, bool gracePaused, bool hasRendered, bool retryUsed, bool retryAllowed)
         {
             if (tornDown) return FrameWatchdogAction.Ignore;
             if (gracePaused) return FrameWatchdogAction.Defer;
             if (hasRendered) return FrameWatchdogAction.Ignore;
-            return retryUsed ? FrameWatchdogAction.GiveUp : FrameWatchdogAction.Retry;
+            return (retryUsed || !retryAllowed) ? FrameWatchdogAction.GiveUp : FrameWatchdogAction.Retry;
         }
 
         /// <summary>
@@ -69,9 +81,18 @@ namespace ConditioningControlPanel.Services
         /// one line: it used to be "any dead surface ends the clip", which is how a stalled decoder on
         /// monitor 2 blacked out a video that monitor 1 was playing perfectly.
         /// <paramref name="deadSurfaces"/> INCLUDES the surface that just gave up.
+        ///
+        /// <paramref name="primarySurfaceDead"/> is not a nicety, it is the whole safety net. Only the
+        /// AUDIO-BEARING surface is wired to EndReached / EncounteredError / LengthChanged, and the
+        /// blurred path (the default) never arms the vout watchdog either - so a primary that decoded
+        /// nothing raises NOTHING. If a live mirror were allowed to carry that clip, the only remaining
+        /// backstop would be the 10-minute fallback safety timer, i.e. the reported "primary black and
+        /// silent" would last minutes instead of the 8 seconds the released build takes. A dead primary
+        /// therefore always ends the clip; a dead MIRROR only does when every surface is gone, which is
+        /// the actual #1015/#1035 win.
         /// </summary>
-        internal static bool ShouldAbortClip(int totalSurfaces, int deadSurfaces)
-            => totalSurfaces > 0 && deadSurfaces >= totalSurfaces;
+        internal static bool ShouldAbortClip(int totalSurfaces, int deadSurfaces, bool primarySurfaceDead)
+            => primarySurfaceDead || (totalSurfaces > 0 && deadSurfaces >= totalSurfaces);
 
         /// <summary>
         /// Policy for a browser-engine surface failure. A secondary is a mirror and is never allowed
@@ -87,11 +108,18 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Whether a retire request that did NOT come from the currently playing clip must wait.
-        /// A leased player (bubble count, mini player, previews) whose Stop() wedged used to retire
-        /// the shared LibVLC instance immediately - the same instance the mandatory video's per-monitor
-        /// players were mid-decode on. That spends one of the four per-session retires, arms the 60s
-        /// poison cooldown and drops the metadata cache while the user is still watching, which is the
-        /// "and then there was no bubble-pop sound for the rest of the session" tail on these reports.
+        /// A leased player (bubble count, mini player, previews) whose Stop() wedged used to retire the
+        /// shared LibVLC instance immediately - the same instance the mandatory video's per-monitor
+        /// players were mid-decode on. That drops the metadata cache under a live clip and makes the
+        /// next EnsureLibVLCInitialized block the UI thread on the rebuild's lock, mid-video. Parking
+        /// it until teardown keeps a foreign wedge from reaching under the screens that are playing.
+        ///
+        /// SCOPE, stated precisely so nobody reads more into it: this does NOT suppress the 60s native
+        /// poison cooldown (QuarantineNative arms that before any retire decision is reached), it does
+        /// not save a retire from the per-session budget (the parked retire still runs at teardown),
+        /// and it does not touch the two retire sites inside the mandatory pipeline's own CloseAll,
+        /// which are that clip's self-heal and must stay immediate. The "no bubble-pop audio for the
+        /// rest of the session" tail on these reports is separate, still-open work.
         /// </summary>
         internal static bool ShouldDeferRetire(bool fromCurrentPlayback, bool playbackLive)
             => !fromCurrentPlayback && playbackLive;

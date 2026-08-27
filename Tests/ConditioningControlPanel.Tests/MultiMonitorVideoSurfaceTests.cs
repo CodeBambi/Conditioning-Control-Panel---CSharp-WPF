@@ -20,9 +20,9 @@ public class MultiMonitorVideoSurfaceTests
     public void FrameWatchdog_SurfaceThatRendered_IsLeftAlone()
     {
         Assert.Equal(FrameWatchdogAction.Ignore,
-            DecideFrameWatchdog(tornDown: false, gracePaused: false, hasRendered: true, retryUsed: false));
+            DecideFrameWatchdog(tornDown: false, gracePaused: false, hasRendered: true, retryUsed: false, retryAllowed: true));
         Assert.Equal(FrameWatchdogAction.Ignore,
-            DecideFrameWatchdog(tornDown: false, gracePaused: false, hasRendered: true, retryUsed: true));
+            DecideFrameWatchdog(tornDown: false, gracePaused: false, hasRendered: true, retryUsed: true, retryAllowed: false));
     }
 
     [Fact]
@@ -30,9 +30,9 @@ public class MultiMonitorVideoSurfaceTests
     {
         // A late timer tick must never act on a clip that already ended - not even to retry.
         Assert.Equal(FrameWatchdogAction.Ignore,
-            DecideFrameWatchdog(tornDown: true, gracePaused: false, hasRendered: false, retryUsed: true));
+            DecideFrameWatchdog(tornDown: true, gracePaused: false, hasRendered: false, retryUsed: true, retryAllowed: true));
         Assert.Equal(FrameWatchdogAction.Ignore,
-            DecideFrameWatchdog(tornDown: true, gracePaused: true, hasRendered: false, retryUsed: false));
+            DecideFrameWatchdog(tornDown: true, gracePaused: true, hasRendered: false, retryUsed: false, retryAllowed: false));
     }
 
     [Fact]
@@ -40,38 +40,71 @@ public class MultiMonitorVideoSurfaceTests
     {
         // #735: a deliberately paused vmem surface produces no frames BY DESIGN.
         Assert.Equal(FrameWatchdogAction.Defer,
-            DecideFrameWatchdog(tornDown: false, gracePaused: true, hasRendered: false, retryUsed: false));
+            DecideFrameWatchdog(tornDown: false, gracePaused: true, hasRendered: false, retryUsed: false, retryAllowed: true));
         Assert.Equal(FrameWatchdogAction.Defer,
-            DecideFrameWatchdog(tornDown: false, gracePaused: true, hasRendered: false, retryUsed: true));
+            DecideFrameWatchdog(tornDown: false, gracePaused: true, hasRendered: false, retryUsed: true, retryAllowed: false));
     }
 
     [Fact]
-    public void FrameWatchdog_FirstStrikeRetries_SecondStrikeGivesUp()
+    public void FrameWatchdog_AMirrorGetsOneRetry_ThenGivesUp()
     {
         Assert.Equal(FrameWatchdogAction.Retry,
-            DecideFrameWatchdog(tornDown: false, gracePaused: false, hasRendered: false, retryUsed: false));
+            DecideFrameWatchdog(tornDown: false, gracePaused: false, hasRendered: false, retryUsed: false, retryAllowed: true));
         Assert.Equal(FrameWatchdogAction.GiveUp,
-            DecideFrameWatchdog(tornDown: false, gracePaused: false, hasRendered: false, retryUsed: true));
+            DecideFrameWatchdog(tornDown: false, gracePaused: false, hasRendered: false, retryUsed: true, retryAllowed: true));
+    }
+
+    [Fact]
+    public void FrameWatchdog_TheAudioBearingSurfaceGetsNoRetryRung()
+    {
+        // The primary ends the clip either way, so a retry rung there would only double the time the
+        // user stares at a black, silent main screen (16s vs the released build's 8s) - and on the
+        // single-monitor majority rig the primary is the ONLY surface, so it would be pure latency
+        // for everyone with one screen.
+        Assert.Equal(FrameWatchdogAction.GiveUp,
+            DecideFrameWatchdog(tornDown: false, gracePaused: false, hasRendered: false, retryUsed: false, retryAllowed: false));
     }
 
     // ---- liveness aggregation (deliverable 2) ----
 
     [Fact]
-    public void OneDeadSurfaceOfTwo_DoesNotAbortTheClip()
+    public void OneDeadMIRROR_DoesNotAbortTheClip()
     {
         // THE regression this whole branch exists for: the old code ended the clip on every screen
-        // the moment one surface missed its frame budget.
-        Assert.False(ShouldAbortClip(totalSurfaces: 2, deadSurfaces: 1));
-        Assert.False(ShouldAbortClip(totalSurfaces: 3, deadSurfaces: 2));
+        // the moment one surface missed its frame budget. A dead mirror is now survivable...
+        Assert.False(ShouldAbortClip(totalSurfaces: 2, deadSurfaces: 1, primarySurfaceDead: false));
+        Assert.False(ShouldAbortClip(totalSurfaces: 3, deadSurfaces: 2, primarySurfaceDead: false));
+    }
+
+    [Fact]
+    public void ADeadPRIMARY_AbortsTheClip_EvenWhileMirrorsStillRender()
+    {
+        // ...but a dead AUDIO-BEARING surface is not. It is the only player wired to EndReached /
+        // EncounteredError / LengthChanged, and the blurred path arms no vout watchdog, so a clip
+        // carried by mirrors alone would have no end condition short of the 10-minute fallback
+        // timer: black and silent on the main screen for minutes, un-closable in strict mode. That
+        // is the headline report (#533 #1015 #1024 #1035 #1039), so it must skip immediately.
+        Assert.True(ShouldAbortClip(totalSurfaces: 2, deadSurfaces: 1, primarySurfaceDead: true));
+        Assert.True(ShouldAbortClip(totalSurfaces: 4, deadSurfaces: 1, primarySurfaceDead: true));
     }
 
     [Fact]
     public void EverySurfaceDead_AbortsTheClip()
     {
-        Assert.True(ShouldAbortClip(totalSurfaces: 1, deadSurfaces: 1));
-        Assert.True(ShouldAbortClip(totalSurfaces: 2, deadSurfaces: 2));
+        Assert.True(ShouldAbortClip(totalSurfaces: 1, deadSurfaces: 1, primarySurfaceDead: true));
+        Assert.True(ShouldAbortClip(totalSurfaces: 2, deadSurfaces: 2, primarySurfaceDead: false));
         // Defensive: a double-report must not read as "still alive".
-        Assert.True(ShouldAbortClip(totalSurfaces: 2, deadSurfaces: 3));
+        Assert.True(ShouldAbortClip(totalSurfaces: 2, deadSurfaces: 3, primarySurfaceDead: false));
+    }
+
+    [Fact]
+    public void SingleMonitorRig_BehavesExactlyLikeTheReleasedBuild()
+    {
+        // One screen means one surface and it IS the primary: first missed window -> GiveUp (no
+        // retry rung) -> abort. Same ~8s skip the released build does, no added latency.
+        Assert.Equal(FrameWatchdogAction.GiveUp,
+            DecideFrameWatchdog(tornDown: false, gracePaused: false, hasRendered: false, retryUsed: false, retryAllowed: false));
+        Assert.True(ShouldAbortClip(totalSurfaces: 1, deadSurfaces: 1, primarySurfaceDead: true));
     }
 
     [Fact]
@@ -79,8 +112,8 @@ public class MultiMonitorVideoSurfaceTests
     {
         // Nothing was ever built, so there is nothing for this watchdog to end; the pre-roll
         // watchdogs own that case.
-        Assert.False(ShouldAbortClip(totalSurfaces: 0, deadSurfaces: 0));
-        Assert.False(ShouldAbortClip(totalSurfaces: 0, deadSurfaces: 5));
+        Assert.False(ShouldAbortClip(totalSurfaces: 0, deadSurfaces: 0, primarySurfaceDead: false));
+        Assert.False(ShouldAbortClip(totalSurfaces: 0, deadSurfaces: 5, primarySurfaceDead: false));
     }
 
     // ---- browser failure policy (deliverable 1) ----
@@ -137,8 +170,10 @@ public class MultiMonitorVideoSurfaceTests
     [Fact]
     public void TheClipsOwnWedge_IsNeverDeferred()
     {
-        // The vout heal and the wedge ladder ARE the current playback; deferring them would disarm
-        // the self-heal entirely.
+        // The vout heal, the wedge ladder and CloseAll's own quarantine ARE the current playback;
+        // deferring them would disarm the self-heal entirely. Those are also the retire sites the
+        // bug traces actually show, so this rule deliberately does NOT cover them - the deferral is
+        // only about a FOREIGN lease reaching under a live clip.
         Assert.False(ShouldDeferRetire(fromCurrentPlayback: true, playbackLive: true));
         Assert.False(ShouldDeferRetire(fromCurrentPlayback: true, playbackLive: false));
     }

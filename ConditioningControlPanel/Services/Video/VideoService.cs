@@ -3409,11 +3409,21 @@ namespace ConditioningControlPanel.Services
         /// whole-clip VERDICT: the first screen to miss its grace window called
         /// <c>EndCurrentVideo(noFrameRendered: true)</c>, killing the video on every OTHER monitor
         /// that was decoding perfectly ("black on one screen, and then it just skipped"). The ladder
-        /// is now per surface:
-        ///   1. no frame within the grace window ⇒ re-issue Play() on THIS monitor's player only,
-        ///      and give it one more full grace window;
-        ///   2. still nothing ⇒ this surface is dead. The clip ends ONLY when every surface is
-        ///      (VideoSurfaceHealth.ShouldAbortClip), otherwise the run continues on the live ones.
+        /// is now per surface, and it is deliberately ASYMMETRIC:
+        ///
+        ///   * a MIRROR (secondary) that misses its grace window gets one re-Play() on its own player
+        ///     and one more full grace window; if it still shows nothing it is marked dead and the
+        ///     clip carries on wherever it IS rendering. That is the actual regression fix.
+        ///   * the AUDIO-BEARING surface gets NO retry rung and ends the clip the moment it misses,
+        ///     exactly as the released build does. It is the only player wired to EndReached /
+        ///     EncounteredError / LengthChanged, and the blurred path never arms StartVoutWatchdog, so
+        ///     if a live mirror were allowed to carry a dead primary the run's only remaining end
+        ///     condition would be the 10-minute fallback safety timer — the reported black-and-silent
+        ///     main screen would last minutes instead of 8s, un-closable in strict mode. On a
+        ///     single-monitor rig (the majority) the primary is the only surface, so this also keeps
+        ///     that path's timing exactly where it is today.
+        ///
+        /// See VideoSurfaceHealth.DecideFrameWatchdog / ShouldAbortClip for both rules in pure form.
         /// </summary>
         private void StartBlurFrameWatchdog(BlurVmemSurface surface, string surfaceTag, bool primary, string monitor)
         {
@@ -3430,7 +3440,9 @@ namespace ConditioningControlPanel.Services
                 try
                 {
                     bool tornDown = !_videoPlaying || _isCleaningUp || gen != _teardownGeneration;
-                    switch (VideoSurfaceHealth.DecideFrameWatchdog(tornDown, _gracePaused, surface.HasRendered, watch.RetryUsed))
+                    // retryAllowed: !primary — the audio-bearing surface is condemned on its first
+                    // missed window (see the ladder note above); only mirrors get a second chance.
+                    switch (VideoSurfaceHealth.DecideFrameWatchdog(tornDown, _gracePaused, surface.HasRendered, watch.RetryUsed, retryAllowed: !primary))
                     {
                         case VideoSurfaceHealth.FrameWatchdogAction.Ignore:
                             if (!tornDown && surface.HasRendered && !watch.Reported)
@@ -3454,7 +3466,7 @@ namespace ConditioningControlPanel.Services
                             App.Logger?.Warning("VideoService: blurred-background video produced no frame within {Ms}ms on {Surface} - retrying THAT surface only, the other screens keep playing",
                                 VoutGraceMs, surfaceTag);
                             VideoDiag.Log("BLUR", $"[{surfaceTag}] NO FRAME within {VoutGraceMs}ms - per-surface retry, clip untouched");
-                            RetryBlurSurface(watch);
+                            RetryBlurSurface(watch, gen);
                             try { watch.Timer?.Change(VoutGraceMs, System.Threading.Timeout.Infinite); } catch { }
                             return;
 
@@ -3462,23 +3474,44 @@ namespace ConditioningControlPanel.Services
                             watch.Dead = true;
                             watch.Reported = true;
                             int total, dead;
+                            bool primaryDead;
                             lock (_blurFrameWatchLock)
                             {
                                 total = _blurWatches.Count;
                                 dead = _blurWatches.Count(w => w.Dead);
+                                // `primary ||` guards the case of this watch not being in the list
+                                // yet: the verdict must never come out softer than "the surface I am
+                                // judging right this second is the audio-bearing one".
+                                primaryDead = primary || _blurWatches.Any(w => w.Primary && w.Dead);
                             }
                             VideoSurfaceHealth.Report("libvlc", monitor, primary, -1,
-                                $"no frame within {VoutGraceMs}ms, and none after one retry");
-                            if (!VideoSurfaceHealth.ShouldAbortClip(total, dead))
+                                primary
+                                    ? $"no frame within {VoutGraceMs}ms on the audio-bearing surface"
+                                    : $"no frame within {VoutGraceMs}ms, and none after one retry");
+                            if (!VideoSurfaceHealth.ShouldAbortClip(total, dead, primaryDead))
                             {
                                 App.Logger?.Warning("VideoService: giving up on the blurred surface {Surface} ({Dead}/{Total} dead) - the clip keeps playing on the live screen(s)",
                                     surfaceTag, dead, total);
                                 VideoDiag.Log("BLUR", $"[{surfaceTag}] surface DEAD ({dead}/{total}) - clip continues on the rest");
                                 return;
                             }
-                            App.Logger?.Warning("VideoService: every blurred surface ({Total}) produced no frame - skipping to next",
-                                total);
-                            VideoDiag.Log("BLUR", $"[{surfaceTag}] LAST surface dead ({dead}/{total}) - black-screen state confirmed, skipping to next video");
+                            if (primaryDead && dead < total)
+                            {
+                                // A live mirror cannot carry this clip: the audio is on the dead
+                                // surface and so are the ONLY EndReached/EncounteredError handlers.
+                                // Skipping now is what the released build does; letting the mirrors
+                                // run on would strand the user on a black, silent main screen until
+                                // the 10-minute fallback timer, unable to close it in strict mode.
+                                App.Logger?.Warning("VideoService: the audio-bearing blurred surface {Surface} produced no frame - skipping to next even though {Live} mirror screen(s) still render (black and silent is not a playable clip)",
+                                    surfaceTag, total - dead);
+                                VideoDiag.Log("BLUR", $"[{surfaceTag}] PRIMARY surface dead ({dead}/{total}) - no audio and no end events left on this clip, skipping to next video");
+                            }
+                            else
+                            {
+                                App.Logger?.Warning("VideoService: every blurred surface ({Total}) produced no frame - skipping to next",
+                                    total);
+                                VideoDiag.Log("BLUR", $"[{surfaceTag}] LAST surface dead ({dead}/{total}) - black-screen state confirmed, skipping to next video");
+                            }
 
                             var dispatcher = Application.Current?.Dispatcher;
                             if (dispatcher == null || dispatcher.HasShutdownStarted) return;
@@ -3501,25 +3534,51 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// One monitor's decoder gets a second chance, WITHOUT touching its siblings. Re-issuing
+        /// One MIRROR's decoder gets a second chance, WITHOUT touching its siblings (the audio-bearing
+        /// surface never reaches here — see the ladder note on StartBlurFrameWatchdog). Re-issuing
         /// Play() only helps when the player has actually fallen out of playback (Error/Stopped/Ended);
         /// a player still in Opening/Buffering is simply slow, and poking native state under it is the
         /// exact class of move that wedges LibVLC — so that case just spends the extra grace window
         /// the caller has already armed. Off the timer thread: a native call must never be able to
         /// hold up the other surfaces' watchdogs.
+        ///
+        /// <paramref name="gen"/> is the teardown generation the watchdog tick was judged against, and
+        /// it is re-checked INSIDE the task on purpose. The tick's own tornDown test runs before this
+        /// task is even queued, so without the re-check a CloseAll starting in that gap could let
+        /// Play() land on a player that is being stopped and disposed while its vmem frame buffer is
+        /// being freed — the native AV this file documents at ReleaseBufferAfter ("freeing the buffer
+        /// and nulling the plane pointer under a live decoder"), which no try/catch can catch.
         /// </summary>
-        private void RetryBlurSurface(BlurSurfaceWatch watch)
+        private void RetryBlurSurface(BlurSurfaceWatch watch, int gen)
         {
-            var player = watch.Surface.Player;
-            if (player == null)
-            {
-                VideoDiag.Log("BLUR", $"[{watch.Tag}] retry skipped - no player attached to this surface");
-                return;
-            }
             Task.Run(() =>
             {
                 try
                 {
+                    if (!_videoPlaying || _isCleaningUp || gen != _teardownGeneration)
+                    {
+                        VideoDiag.Log("BLUR", $"[{watch.Tag}] retry cancelled - teardown started between the watchdog tick and this callback");
+                        return;
+                    }
+
+                    // Read inside the guard, not captured on the timer thread, so the null check
+                    // and the native call below sit on the same side of the teardown re-check.
+                    var player = watch.Surface.Player;
+                    if (player == null)
+                    {
+                        VideoDiag.Log("BLUR", $"[{watch.Tag}] retry skipped - no player attached to this surface");
+                        return;
+                    }
+                    // CloseAll copies and CLEARS _mediaPlayers before it stops or disposes anything, so
+                    // "still in that list" is the tightest ownership proof available from off-thread.
+                    bool stillOurs;
+                    lock (_mediaPlayersLock) { stillOurs = _mediaPlayers.Contains(player); }
+                    if (!stillOurs)
+                    {
+                        VideoDiag.Log("BLUR", $"[{watch.Tag}] retry skipped - this surface's player is no longer owned by the current playback");
+                        return;
+                    }
+
                     var state = player.State;
                     if (state is VLCState.Error or VLCState.Stopped or VLCState.Ended or VLCState.NothingSpecial)
                     {

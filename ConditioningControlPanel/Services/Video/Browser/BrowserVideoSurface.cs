@@ -138,12 +138,38 @@ namespace ConditioningControlPanel.Services.Video.Browser
             }
         }
 
-        /// <summary>Tell the host this surface will never post <c>ready</c> or <c>playing</c>. Never
-        /// throws: a broken handler must not turn a recoverable surface failure into an unhandled one.</summary>
+        /// <summary>
+        /// Tell the host this surface will never post <c>ready</c> or <c>playing</c>. Never throws: a
+        /// broken handler must not turn a recoverable surface failure into an unhandled one.
+        ///
+        /// Posted to a LATER dispatcher turn, not raised inline, and that is not cosmetic. The engine's
+        /// WebView2 environment task is cached and warmed at startup, so <c>InitWindowsAsync</c>'s await
+        /// completes synchronously and <c>InitAsync</c> runs INSIDE
+        /// <c>BrowserVideoEngine.StartSession</c> - before the host has set <c>_browserActive</c>,
+        /// adopted the windows or recorded the primary. A synchronous raise from there reaches
+        /// <c>VideoService.OnBrowserFailed</c> while <c>_browserActive</c> is still false, where its
+        /// first line drops it on the floor: the black primary this event exists to end would survive
+        /// the very report meant to fix it, and any handler that DID run would be re-entering a host
+        /// mid-bookkeeping. One dispatcher hop puts the raise strictly after StartSession returns.
+        /// </summary>
         private void RaiseInitFailed(string reason)
         {
-            try { InitFailed?.Invoke(this, reason); }
-            catch (Exception ex) { App.Logger?.Debug("BrowserVideo[{Tag}]: InitFailed handler threw: {E}", _tag, ex.Message); }
+            var dispatcher = Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted)
+            {
+                App.Logger?.Debug("BrowserVideo[{Tag}]: InitFailed dropped - the dispatcher is shutting down", _tag);
+                return;
+            }
+            try
+            {
+                dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() =>
+                {
+                    if (_disposed) return;   // the session ended while the hop was in flight
+                    try { InitFailed?.Invoke(this, reason); }
+                    catch (Exception ex) { App.Logger?.Debug("BrowserVideo[{Tag}]: InitFailed handler threw: {E}", _tag, ex.Message); }
+                }));
+            }
+            catch (Exception ex) { App.Logger?.Debug("BrowserVideo[{Tag}]: InitFailed dispatch failed: {E}", _tag, ex.Message); }
         }
 
         /// <summary>Give the page keyboard focus so its keydown handler (and therefore the

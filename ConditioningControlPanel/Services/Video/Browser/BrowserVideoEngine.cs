@@ -140,6 +140,12 @@ namespace ConditioningControlPanel.Services.Video.Browser
         }
 
         private readonly List<BrowserVideoWindow> _windows = new();
+
+        // Mirrors dropped mid-session (DropSecondaryWindow). They are out of _windows so nothing
+        // broadcasts to them, but the host's strict Closing veto can CANCEL their Close(), which
+        // would otherwise strand a hidden window nobody owns. StopSession closes these too, by which
+        // point the veto is down.
+        private readonly List<BrowserVideoWindow> _dropped = new();
         private BrowserVideoWindow? _primary;
         private DispatcherTimer? _firstFrameWatch;
         private DateTime _firstFrameDeadlineUtc;
@@ -508,6 +514,18 @@ namespace ConditioningControlPanel.Services.Video.Browser
             var windows = _windows.ToArray();
             _windows.Clear();
             _primary = null;
+
+            // Mirrors dropped mid-clip: their Close() may have been vetoed by the host's strict
+            // Closing handler while the video was still playing. The veto is down by the time any
+            // teardown reaches here, so this is where they actually go.
+            var dropped = _dropped.ToArray();
+            _dropped.Clear();
+            foreach (var w in dropped)
+            {
+                try { w.Close(); }
+                catch (Exception ex) { App.Logger?.Debug("BrowserVideo: dropped-mirror close failed: {E}", ex.Message); }
+            }
+
             foreach (var w in windows)
             {
                 try
@@ -697,8 +715,17 @@ namespace ConditioningControlPanel.Services.Video.Browser
             RaiseFailed("primary surface init failed: " + reason, blameFile: false);
         }
 
-        /// <summary>Unhook and close ONE mirror without touching the session. Shared by the two
-        /// secondary-only failure paths so they cannot drift apart.</summary>
+        /// <summary>Unhook and drop ONE mirror without touching the session. Shared by the two
+        /// secondary-only failure paths so they cannot drift apart.
+        ///
+        /// Hide() comes FIRST and is the load-bearing call. Every window the host builds carries the
+        /// strict Closing veto (VideoService.SetupStrictHandlers), which cancels Close() outright
+        /// while <c>_videoPlaying</c> is set - and it is already set by the time any surface can fail,
+        /// because PlayVideo sets it before the browser session starts. A vetoed Close would leave the
+        /// dead mirror on that monitor as an OPAQUE BLACK fullscreen window for the whole clip, with
+        /// every handler unhooked so nothing could act on it again: exactly the symptom this method
+        /// exists to remove. Hide() is not vetoable, so the screen is freed either way, and the real
+        /// Close lands here or at StopSession once the veto is down.</summary>
         private void DropSecondaryWindow(BrowserVideoWindow win, string why)
         {
             try
@@ -708,6 +735,9 @@ namespace ConditioningControlPanel.Services.Video.Browser
                 win.Ready -= OnWindowReady;
                 win.InitFailed -= OnWindowInitFailed;
                 _windows.Remove(win);
+                if (!_dropped.Contains(win)) _dropped.Add(win);
+                try { win.Hide(); }
+                catch (Exception ex) { App.Logger?.Debug("BrowserVideo: secondary hide after {Why} failed: {E}", why, ex.Message); }
                 win.Close();
             }
             catch (Exception ex) { App.Logger?.Debug("BrowserVideo: secondary close after {Why} failed: {E}", why, ex.Message); }
