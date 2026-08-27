@@ -57,6 +57,7 @@ import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
 import { createFirstBell } from '../vn/index.js';
 import { createRecordsRoom } from './recordsroom.js';
 import { createPrizeCounter } from './prizecounter.js';
+import { createPrizeBooth } from './prizebooth.js';
 /* CAMPUS LOOK (COUNTER STOCK). themes.js is a pure TABLE (no DOM, no store);
  * themefx.js is the weather canvas and the school's newest render surface. The
  * shell owns the meta key, the ownership question and the order of application
@@ -140,7 +141,11 @@ function sfx(name, level, extra) {
 
 /** Screen depth, so a swap knows which way it went. An ORDER, not a router -
  *  the router is `screen` and it stays exactly where it was. */
-const SCREEN_DEPTH = Object.freeze({ board: 0, room: 1, records: 1, prizes: 1, annex: 2, report: 2, settings: 3, class: 4 });
+/* `prizebooth` sits at the counter's own depth and the SHELF sits one deeper,
+ * which is the annex's arrangement exactly: the office is a room off the quad
+ * and the lab is a room off the office. The booth is the room you walk to and
+ * the shop is what you opened while standing in it. */
+const SCREEN_DEPTH = Object.freeze({ board: 0, room: 1, records: 1, prizebooth: 1, prizes: 2, annex: 2, report: 2, settings: 3, class: 4 });
 
 /** Walk targets EMI never remarks on arriving at. The three office doors are
  *  voice.js's geofence read from the other end: she is silent on the Records
@@ -821,6 +826,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    *  live room to settle into, and a purchase settled into a room that is no
    *  longer on screen is a purchase the player never sees land. */
   let prizeRoom = null;
+  /* THE ANTECHAMBER. The painted booth the walk actually arrives at; the
+   * shelf above is what its window opens. Held separately because they are
+   * two screens now, and because the booth hangs an apron band on <body>
+   * that only its own destroy() can take off. */
+  let prizeBooth = null;
   /** THE LEVER THIS CLASS WAS STARTED ON. Latched at the opening bracket rather
    *  than read again at the end, so a player who buys the Honors lever DURING a
    *  run does not retroactively promote the run they are already in - the host
@@ -1348,6 +1358,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       prizeRoom = null;
       try { pr.destroy(); } catch (e) { /* noop */ }
     }
+    /* AND THE BOOTH, which is the records case again rather than the counter's:
+     * the scene chassis hangs its midway apron on <body>, where
+     * `dom.screen.textContent = ''` cannot reach it. destroy() is the only thing
+     * that takes that band off, so a booth left standing here would lay a slab
+     * across the bottom of the shelf it just opened. */
+    if (prizeBooth) {
+      const pb = prizeBooth;
+      prizeBooth = null;
+      try { pb.destroy(); } catch (e) { /* noop */ }
+    }
     extrasBox = null;
     /* THE ROTATE GATE BELONGS TO A SCREEN, NOT TO THE PAGE. Every screen change
      * funnels through here, so dropping it here is what stops a gate the campus
@@ -1858,8 +1878,21 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           records: () => walkThen('records', () => showRecords()),
           /* THE PRIZE COUNTER'S DOOR. A walk like the office's, because it is
            * across the quad like the office is - the wallet chip in the chrome
-           * is the thing you can read without going anywhere. */
-          prizes: () => walkThen('prizes', () => showPrizes()),
+           * is the thing you can read without going anywhere.
+           * THE WALK NOW ENDS AT THE BOOTH rather than at the shelf. A door on a
+           * plan should open onto a place, and the place is the alley window;
+           * the shelf is a thing you ask for once you are standing at it. The
+           * campus only ever offers this when the counter is LIT (it draws
+           * itself shuttered and raises the sealed card otherwise), so nothing
+           * here has to second-guess the plan. */
+          prizes: () => walkThen('prizes', () => showPrizeBooth()),
+          /* THE PURSE IN THE CHROME. The wallet chip is the shortcut half of
+           * the same split the gear and the Front Office door already run: no
+           * walk, no antechamber, straight to the shelf - because the chip is a
+           * reading of your wallet and the thing you want after reading it is
+           * the shelf. campus.js falls back to `prizes` when this is absent, so
+           * a caller that predates the booth is unchanged. */
+          prizesShelf: () => showPrizes(),
           annex: () => walkThen('annex', () => showAnnex()),
           /* THE DOOR walks; THE GEAR does not. campus.js calls `registrarRoom`
            * for the Front Office room and falls back to `registrar` for the
@@ -2804,13 +2837,25 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * lied to (trap 1, and the whole reason `wallet` is host-owned).
    * ==================================================================== */
 
-  function showPrizes() {
+  /* WHICH SIDE THE SHELF WAS OPENED FROM, and therefore where Back goes. Two
+   * ways in, and they are the gear and the door again: the purse in the chrome
+   * (straight in, straight out to the quad) and the booth's lit window (in from
+   * the alley, and back out to the alley). Held on the shell rather than passed
+   * to the counter because it is the SHELL's question - the shop has one Back
+   * button and has never known what is behind it. */
+  let prizeShelfFrom = 'board';
+
+  function showPrizes(from) {
+    prizeShelfFrom = (from === 'booth') ? 'booth' : 'board';
     screen = 'prizes';
     dismissEndCard();
     dismissPunchStage();
     dismissAnnexStage();
     clearScreen();
     renderTopbar();
+    /* THE COUNTER'S TUNE rides from the booth window into the shop without a
+     * restart: same track name, ost.js defers the leave by one tick (law 5). */
+    try { if (ost) ost.enter('prizes'); } catch (e) { /* noop */ }
     prizeRoom = createPrizeCounter({
       mount: dom && dom.screen,
       t,
@@ -2831,9 +2876,70 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         try { bridge.send({ type: 'prize-buy', sku: String(sku) }); }
         catch (e) { say('prize-buy send failed: ' + ((e && e.message) || e)); }
       },
+      /* YOU LEAVE THE WAY YOU CAME IN (the annex's rule, one alley over). A
+       * shelf opened at the booth's window closes back onto the window, not out
+       * onto the quad two rooms away with no account of how you got there; a
+       * shelf opened from the purse in the chrome never went anywhere, so it
+       * comes back to the campus it was standing on. */
+      onBack: () => leavePrizeShelf(),
+    });
+    setStage('arc-report-on');
+  }
+
+  /* ========================= SCREEN: THE BOOTH =========================
+   * THE PRIZE COUNTER'S ANTECHAMBER. The walk brought the student down the
+   * office alley; this is standing at the third window. A screen like records
+   * in every mechanical way (same funnel, same teardown, same apron), and the
+   * shell keeps everything it always kept - the wallet is read through the
+   * same getters the shelf reads, and the booth proposes nothing.
+   *
+   * THE SHUTTER IS THE SHELL'S ANSWER, NOT THE ROOM'S. `counterClosed()` below
+   * is the one predicate, and it is the same pair of facts every other dark
+   * thing on this campus is drawn from: no catalog projected in `init` (no
+   * economy at all, which is also an entitlement that has lapsed - the host
+   * simply stops projecting one) or a global suspend in force. The room draws
+   * the answer and re-draws it on `setClosed`; it never works it out.
+   * ==================================================================== */
+
+  /** Is the counter shut right now? One predicate, read at build and again on
+   *  every suspend edge. */
+  function counterClosed() {
+    if (suspendedGlobally) return true;
+    try { return !economyCatalog().length; } catch (e) { return true; }
+  }
+
+  function showPrizeBooth() {
+    screen = 'prizebooth';
+    dismissEndCard();
+    dismissPunchStage();
+    dismissAnnexStage();
+    clearScreen();
+    renderTopbar();
+    try { if (ost) ost.enter('prizes'); } catch (e) { /* noop */ }
+    prizeBooth = createPrizeBooth({
+      mount: dom && dom.screen,
+      t,
+      log: say,
+      lite: !!src.performanceMode,
+      reduced: reducedMotion,
+      closed: counterClosed(),
+      /* The same two getters the shelf takes, and for the same reason: the tray
+       * on the sill reads a wallet, it never moves one. */
+      balance: () => walletBalance(),
+      payday: () => economyPayday(),
+      gameName,
+      onShop: () => showPrizes('booth'),
       onBack: () => showBoard(),
     });
     setStage('arc-report-on');
+    if (prizeBooth && typeof prizeBooth.fit === 'function') prizeBooth.fit();
+  }
+
+  /** The shelf's one way out, so the Back button and the Esc rung can never
+   *  disagree about where it goes. */
+  function leavePrizeShelf() {
+    if (prizeShelfFrom === 'booth') { showPrizeBooth(); return; }
+    showBoard();
   }
 
   /**
@@ -3077,6 +3183,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     dismissPunchStage();
     dismissAnnexStage();
     clearScreen();
+    try { if (ost) ost.enter('annex'); } catch (e) { /* noop */ }
     renderTopbar();
     try { const v = getVoice(); if (v && v.setLabSeen) v.setLabSeen(true); } catch (e) { /* noop */ }
     try {
@@ -5125,6 +5232,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // NO GHOSTS UNDER A MANDATORY VIDEO. The layer rides the same one funnel the
     // pause card does, and it is a LEVEL (trap 28), so both edges are written.
     if (ghosts) { try { ghosts.setPaused(!!on); } catch (e) { /* noop */ } }
+    /* AND THE SHUTTER COMES DOWN WHILE YOU ARE STANDING THERE. A LEVEL like
+     * every other line in this function (trap 28), so both edges are written:
+     * the counter shuts under a mandatory video and opens again after it. The
+     * room folds its own tray panel away on the way down. */
+    if (prizeBooth) { try { prizeBooth.setClosed(counterClosed()); } catch (e) { /* noop */ } }
     /* AND NO BEAT UNDER ONE EITHER. A RUNNING beat is ENDED rather than paused:
      * the card lands, `seenAt` is banked, and it never replays after the video
      * (trap 28's spirit - a beat that came back afterwards would be a beat the
@@ -5614,12 +5726,21 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // A ROOM SCENE is a screen like records: Esc walks back to campus. Its
       // hotspots are buttons, not modals - the room owns no inner rungs.
       if (screen === 'room') { showBoard(); return true; }
-      // THE PRIZE COUNTER is a flat screen like settings: one rung, straight out
-      // to the quad. It owns no modal and no close-up, and a buy that is still
-      // in the air is not a rung either - the frame that answers it lands on a
-      // room that has gone, which is exactly what onWalletResult is written to
-      // survive (the counter is null by then and only the lever re-clamps).
-      if (screen === 'prizes') { showBoard(); return true; }
+      // THE PRIZE COUNTER is a flat screen: one rung, and that rung is back to
+      // the window it was opened from - the annex's rule, you leave the way you
+      // came in. It owns no modal and no close-up, and a buy still in the air is
+      // not a rung either: the frame that answers it lands on a room that has
+      // gone, which is exactly what onWalletResult is written to survive (the
+      // counter is null by then and only the lever re-clamps).
+      if (screen === 'prizes') { leavePrizeShelf(); return true; }
+      // THE BOOTH FOLDS INWARD-OUT, the office's shape one alley over: the tray
+      // panel first (the thing opened one press ago), then FALSE at the wide
+      // shot, and the rung under it walks out to the quad. No key is bound down
+      // there; this asks.
+      if (screen === 'prizebooth' && prizeBooth) {
+        try { if (prizeBooth.escapeStep()) return true; } catch (e) { /* noop */ }
+      }
+      if (screen === 'prizebooth') { showBoard(); return true; }
       // THE ANNEX folds inward-out (trap 48's shape, one ladder both sides of
       // the seam): the lab's own rungs first - paper down, OS window shut,
       // laptop closed, close-up stepped back - then the stairs walk home to

@@ -1,0 +1,154 @@
+/* ============================================================================
+ * THE PRIZE COUNTER'S ANTECHAMBER. Skin for shell/prizebooth.js, linked lazily
+ * by that module AFTER styles.css (so the campus tokens are on :root) and
+ * BESIDE shell/scene.css + shell/rooms.css, which between them already own the
+ * stage, the fit, the hotspot skins, the apron band and the overlay box.
+ *
+ * So, like recordsroom.css, this sheet is SHORT on purpose. Two things live
+ * here and nothing generic could know about either:
+ *   .pb-shut   the word over a shutter that has come down, and the one hall
+ *              line under it
+ *   .pb-till   the ticket tray's little panel: what is on you, and which room
+ *              is paying over the odds tonight
+ *
+ * NO RULE BELOW MAY PAINT A HOTSPOT. When the counter is shut, prizebooth.js
+ * does not build the rects at all (scene.js's `when` gate), which is the only
+ * honest way to make a thing unpressable: a rect that is still there and
+ * refuses is a rect a keyboard still lands on. Nothing here dims or disables
+ * one, because by the time this sheet matters there is nothing to dim.
+ *
+ * DECORATION LAW. `.arc-reduced` gets the shutter word with no fade and the
+ * panel with no slide (scene.css already does the second half of that for
+ * every panel in the school). `.arm-lite` keeps both: they are one node each.
+ * ==========================================================================*/
+
+/* -------------------------------------------------------------- THE SHUTTER */
+
+/* ONE LINE on the lower band of the shutter, under the painted BACK SOON card
+   the plate already carries. A prop (scene.js's `mountInView`), so scene.css
+   has already placed it at the stage rect the module measured; everything here
+   is what it looks like once it is placed.
+
+   It takes no pointer at any depth. There is nothing under it to swallow - the
+   rects are not built while the shutter is down - but a text node that can be
+   selected and dragged out of a painting reads as a bug, and this is lettering
+   on a shutter, not a caption. */
+.pb-room .pb-shut {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 4%;
+  text-align: center;
+  pointer-events: none;
+  user-select: none;
+  animation: pb-shut-in 420ms ease-out both;
+}
+
+/* The one line the hall gets. Narrow measure so it sets in two lines across the
+   slats rather than running the shutter's full width like a banner, and dropped
+   into the metal with a shadow under it so it reads over the ridges. */
+.pb-room .pb-shut-line {
+  margin: 0;
+  max-width: 26em;
+  font-family: var(--body);
+  font-size: clamp(11px, 1.7vh, 15px);
+  line-height: 1.5;
+  color: color-mix(in srgb, #EADFF2 74%, transparent);
+  text-shadow: 0 2px 7px rgba(0, 0, 0, .92), 0 0 2px rgba(0, 0, 0, .8);
+}
+
+@keyframes pb-shut-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* The cut: a player who asked for less motion still gets the sign, standing
+   still. It is a sign. Signs do not need to arrive. */
+.arc-reduced .pb-room .pb-shut { animation: none; }
+
+/* ------------------------------------------------------------- THE TRAY */
+
+/* scene.css owns the panel box, the scrim and the slide. This is the inside of
+   it, and it is three lines of reading with no controls at all: the tray
+   answers questions, it does not take money. The way out is the scrim, the
+   panel's own dismiss and Esc, all three of which scene.js already wired. */
+.pb-till { text-align: center; }
+
+.pb-till-head {
+  margin: 0 0 14px;
+  font-family: var(--disp);
+  font-size: clamp(15px, 2.4vh, 20px);
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+/* WHAT IS ON YOU. The same reading the counter puts under its own marquee, in
+   the same order for the same reason: the number first, then the mark, because
+   the number is the thing somebody came to the tray to read. */
+.pb-purse {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-bottom: 16px;
+}
+
+.pb-purse-lbl {
+  font-size: 12px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  opacity: .72;
+}
+
+.pb-coin {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 4px 12px;
+  border: var(--hairline);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .22);
+}
+
+.pb-coin-n {
+  font-family: var(--mono);
+  font-size: clamp(17px, 2.8vh, 24px);
+  font-variant-numeric: tabular-nums;
+}
+
+.pb-coin-t .pb-coin-n { color: var(--pink); }
+.pb-coin-k .pb-coin-n { color: var(--gold); }
+
+/* TONIGHT'S HOT ROOM, in the shop's own words (prizecounter.js `paydayParts`).
+   One sentence, wrapped as a sentence, never a stack of chips. */
+.pb-payday {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: clamp(12px, 2vh, 15px);
+  line-height: 1.5;
+}
+
+.pb-payday-lbl {
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  opacity: .7;
+}
+
+.pb-payday-name { color: var(--gold); }
+
+/* No payday tonight is still an answer, and it is a whole sentence rather than
+   an empty slot, so the tray never looks like it failed to load. */
+.pb-payday-none {
+  max-width: 34em;
+  opacity: .78;
+}

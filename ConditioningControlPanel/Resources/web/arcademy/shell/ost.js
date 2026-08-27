@@ -34,6 +34,11 @@
  *  5. ENTERING THE PLACE YOU ARE IN IS A NO-OP. The campus is rebuilt on every
  *     visit and a rebuild must not restart the tune from the top when nothing
  *     else changed; `enter()` compares the resolved track name, not the place.
+ *     And because the shell's clearScreen() calls leave() BEFORE the next
+ *     screen can enter(), leave() is deferred by one macrotask: a screen change
+ *     that lands on the same track (the booth window into the counter, both on
+ *     ost_prizes) keeps the tune running instead of restarting it from the top.
+ *     A leave() nobody follows up still stops the track, one tick later.
  *  6. NEVER UNDER LITE. The lite rung is a performance cap and a 140s mp3
  *     decoding on a phone is exactly what it exists to refuse. Read at call
  *     time, like the PA.
@@ -68,18 +73,37 @@ export const OST_LEVEL = 0.2;
  * the bells (the host scans TopDirectoryOnly). Places are the shell's own
  * words: 'campus', 'records', and a class's `gameKey` as the registry spells it.
  *
- *   ost_campus      Star Byte Loop     the hub, heard most, sits back
- *   ost_deep_end    Pixel Rush         The Deep End
- *   ost_sort        Pixel Rush 2       the Sorting Room
- *   ost_records     Midnight Static    the Records Office
- *   ost_lost_found  Neon Skyline       Lost & Found
+ *   ost_campus          Star Byte Loop      the hub, heard most, sits back
+ *   ost_deep_end        Pixel Rush          The Deep End
+ *   ost_sort            Pixel Rush 2        the Sorting Room
+ *   ost_records         Midnight Static     the Records Office
+ *   ost_lost_found      Neon Skyline        Lost & Found
+ *   -- batch two (owner: "softer tunes: the two Midnight Statics, active: the rest")
+ *   ost_instant_recall  Midnight Static 2   the vigil, soft
+ *   ost_anomaly         Midnight Static 3   the long search, soft
+ *   ost_daily_trigger   Neon Pixel Rain     homeroom, active
+ *   ost_impulse_control Neon Pixel Rain 2   the red button, active
+ *   ost_prizes          Neon Jackpot 3      the Prize Counter, active
+ *   ost_misdirection    Neon Jackpot        the parlour, active
+ *   ost_deja_vu         Neon Jackpot 2      the card racks, active
+ *   ost_annex           Corroded Pulse      the lab, slow and wrong
+ * Still silent: echo, composure. The annex cams app holds its own `cam_bed`
+ * room tone on the music bus in its own slot; the two layer, by design.
  */
 export const TRACKS = Object.freeze({
-  campus:         Object.freeze({ name: 'ost_campus' }),
-  records:        Object.freeze({ name: 'ost_records' }),
-  the_deep_end:   Object.freeze({ name: 'ost_deep_end' }),
-  sort:           Object.freeze({ name: 'ost_sort' }),
-  lost_and_found: Object.freeze({ name: 'ost_lost_found' }),
+  campus:          Object.freeze({ name: 'ost_campus' }),
+  records:         Object.freeze({ name: 'ost_records' }),
+  prizes:          Object.freeze({ name: 'ost_prizes' }),
+  the_deep_end:    Object.freeze({ name: 'ost_deep_end' }),
+  sort:            Object.freeze({ name: 'ost_sort' }),
+  lost_and_found:  Object.freeze({ name: 'ost_lost_found' }),
+  instant_recall:  Object.freeze({ name: 'ost_instant_recall' }),
+  anomaly:         Object.freeze({ name: 'ost_anomaly' }),
+  daily_trigger:   Object.freeze({ name: 'ost_daily_trigger' }),
+  impulse_control: Object.freeze({ name: 'ost_impulse_control' }),
+  misdirection:    Object.freeze({ name: 'ost_misdirection' }),
+  deja_vu:         Object.freeze({ name: 'ost_deja_vu' }),
+  annex:           Object.freeze({ name: 'ost_annex' }),
 });
 
 /** Every track name the table knows, for audio.js to register in one loop. */
@@ -112,13 +136,21 @@ export function createOst(opts) {
   const say = (typeof o.log === 'function') ? o.log : () => {};
   const cue = (typeof o.sfx === 'function') ? o.sfx : dispatchCue;
   let held = null;   // the track NAME in the slot, or null
+  let pendingStop = null;   // the deferred leave (law 5), or null
 
   function trackFor(place) {
     const row = TRACKS[String(place == null ? '' : place)];
     return row ? row : null;
   }
 
-  function leave() {
+  function cancelPending() {
+    if (pendingStop === null) return;
+    try { clearTimeout(pendingStop); } catch (e) { /* noop */ }
+    pendingStop = null;
+  }
+
+  function stopNow() {
+    cancelPending();
     if (!held) return;
     const was = held;
     held = null;
@@ -127,16 +159,22 @@ export function createOst(opts) {
     say('ost: ' + was + ' out');
   }
 
+  function leave() {
+    if (!held || pendingStop !== null) return;
+    if (typeof setTimeout !== 'function') { stopNow(); return; }
+    pendingStop = setTimeout(() => { pendingStop = null; stopNow(); }, 0);
+  }
+
   function enter(place) {
     const row = trackFor(place);
     if (!row) { leave(); return; }
     if (readFlag(o.lite)) { leave(); return; }             // law 6
-    if (held === row.name) return;                          // law 5
+    if (held === row.name) { cancelPending(); return; }     // law 5
     /* The slot is keyed, so a new hold on `OST_KEY` REPLACES the old one in the
-     * mixer - but the old element would be dropped without its fade. Leave
+     * mixer - but the old element would be dropped without its fade. Stop
      * first: two 180ms ramps, out then in, is the gesture every room already
      * makes. */
-    leave();
+    stopNow();
     held = row.name;
     const level = Number.isFinite(row.level) ? row.level : OST_LEVEL;
     try { cue(row.name, level, { bus: 'music', key: OST_KEY, hold: true }); }
