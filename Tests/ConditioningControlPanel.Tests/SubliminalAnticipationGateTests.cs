@@ -85,4 +85,59 @@ public class SubliminalAnticipationGateTests
                             Assert.Equal(0, ms);
                     }
     }
+
+    // ---------------------------------------------------------------------------------------
+    // The subliminal gate must NOT leak into the transport-latency figure. AudioSyncService uses
+    // the provider round-trip as the look-ahead for the audio/funscript-synced haptic track; that
+    // has nothing to do with whether the user routes SUBLIMINALS to their toy. Conflating the two
+    // would put audio-synced haptics ~1.3s behind the video for anyone who simply turned the
+    // Subliminals haptic row off.
+    // ---------------------------------------------------------------------------------------
+
+    [Fact]
+    public void ProviderLatency_IgnoresTheSubliminalRoutingRow()
+    {
+        // Same connected Buttplug device, subliminal row off: the transport figure does not move.
+        Assert.Equal(Buttplug, HapticService.ResolveProviderLatencyMs(
+            hapticsEnabled: true, deviceConnected: true, isButtplugProvider: true));
+        Assert.Equal(0, HapticService.ResolveSubliminalAnticipationMs(
+            hapticsEnabled: true, deviceConnected: true, subliminalRuleEnabled: false, isButtplugProvider: true));
+    }
+
+    [Fact]
+    public void ProviderLatency_MatchesTheDeviceRoundTrip()
+    {
+        Assert.Equal(Buttplug, HapticService.ResolveProviderLatencyMs(
+            hapticsEnabled: true, deviceConnected: true, isButtplugProvider: true));
+        Assert.Equal(Direct, HapticService.ResolveProviderLatencyMs(
+            hapticsEnabled: true, deviceConnected: true, isButtplugProvider: false));
+    }
+
+    [Fact]
+    public void ProviderLatency_IsZeroWithNothingToTalkTo()
+    {
+        foreach (var buttplug in new[] { false, true })
+        {
+            Assert.Equal(0, HapticService.ResolveProviderLatencyMs(
+                hapticsEnabled: true, deviceConnected: false, isButtplugProvider: buttplug));
+            Assert.Equal(0, HapticService.ResolveProviderLatencyMs(
+                hapticsEnabled: false, deviceConnected: true, isButtplugProvider: buttplug));
+        }
+    }
+
+    [Fact]
+    public void SubliminalAnticipation_IsTheProviderLatencyPlusTheRoutingGate()
+    {
+        // The two stay in lockstep except for the row gate - the only difference there may ever be.
+        foreach (var enabled in new[] { false, true })
+            foreach (var connected in new[] { false, true })
+                foreach (var buttplug in new[] { false, true })
+                {
+                    var transport = HapticService.ResolveProviderLatencyMs(enabled, connected, buttplug);
+                    Assert.Equal(transport, HapticService.ResolveSubliminalAnticipationMs(
+                        enabled, connected, subliminalRuleEnabled: true, isButtplugProvider: buttplug));
+                    Assert.Equal(0, HapticService.ResolveSubliminalAnticipationMs(
+                        enabled, connected, subliminalRuleEnabled: false, isButtplugProvider: buttplug));
+                }
+    }
 }

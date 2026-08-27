@@ -216,4 +216,46 @@ public class OverlayZOrderTests
             ResolveZOrderAction(hasVideo: true, isVideoWindow: false, aboveVideo: true,
                 needsPin: false, force: force));
     }
+
+    // ---------------------------------------------------------------------------------------
+    // The ATTENTION LAYER (flash / legacy per-window subliminal / bubble) is swept too, but it is
+    // NOT an ambient overlay: FlashService force-topmosts every flash on its show edge and
+    // ChaosModeService.RaiseAllToFront re-raises the live set ~1/s, deliberately over a playing
+    // mandatory video, because flashes are the top attention layer by design. If the sweep handed
+    // these windows the #497 below-video pin, a point-fired Deeper flash over an enhanced
+    // mandatory video (no overlay band -> aboveVideo false) would be shoved under that video
+    // within 500ms for the rest of its authored duration, and the two re-raisers would ping-pong.
+    // ---------------------------------------------------------------------------------------
+
+    [Fact]
+    public void AttentionLayer_IsNeverPinnedBelowAPlayingVideo()
+    {
+        // Every input combination: the below-video pin is simply not reachable for these windows.
+        foreach (var needsPin in new[] { false, true })
+            foreach (var force in new[] { false, true })
+                Assert.NotEqual(ZOrderAction.PinBelowVideo, ResolveAttentionLayerAction(needsPin, force));
+    }
+
+    [Fact]
+    public void AttentionLayer_HealsALostTopmostBit()
+    {
+        Assert.Equal(ZOrderAction.PinTopmost, ResolveAttentionLayerAction(needsPin: true, force: false));
+    }
+
+    [Fact]
+    public void AttentionLayer_IsRaisedOnAForcedTick_TheFullscreenBrowserRescue()
+    {
+        // #1041: the window kept its topmost bit while the fullscreen browser sat above it, so only
+        // the forced tick can rescue it.
+        var force = ShouldForceZOrderTick(explicitForce: false, fullscreenBrowserActive: true);
+        Assert.Equal(ZOrderAction.PinTopmost, ResolveAttentionLayerAction(needsPin: false, force: force));
+    }
+
+    [Fact]
+    public void AttentionLayer_HealthyAndUnforced_IsALeaveItAlone()
+    {
+        // No SetWindowPos at all on an ordinary tick - that is what keeps this sweep from fighting
+        // FlashService.RaiseAllToFront's ~1/s raise at 2Hz.
+        Assert.Equal(ZOrderAction.None, ResolveAttentionLayerAction(needsPin: false, force: false));
+    }
 }

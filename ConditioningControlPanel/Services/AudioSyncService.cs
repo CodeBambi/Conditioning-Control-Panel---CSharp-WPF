@@ -211,7 +211,10 @@ namespace ConditioningControlPanel.Services
             {
                 // Normal operation: calculate look-ahead time with latency compensation
                 // Base 300ms for device response + network + processing latency
-                var latencyMs = 300 + _hapticService.SubliminalAnticipationMs + _settings.ManualLatencyOffsetMs;
+                // Transport latency to the toy, NOT the subliminal routing row: ProviderLatencyMs
+                // is the device-only figure (SubliminalAnticipationMs additionally gates on the
+                // Subliminals haptic row, which must not move this track - #1052 review).
+                var latencyMs = 300 + _hapticService.ProviderLatencyMs + _settings.ManualLatencyOffsetMs;
                 lookAheadTime = currentTime + TimeSpan.FromMilliseconds(latencyMs);
             }
 

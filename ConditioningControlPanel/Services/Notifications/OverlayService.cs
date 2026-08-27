@@ -2941,8 +2941,17 @@ public class OverlayService : IDisposable
         // The ATTENTION LAYER: flash, subliminal and bubble windows. Each of these asserts
         // HWND_TOPMOST once, on its own show edge, and nothing ever re-raises it - so a topmost
         // fullscreen browser window buried every one of them with no recovery path at all (#1041).
-        // They ride the same rules as the corner GIFs: still topmost, but pinned BELOW a playing
-        // mandatory video (#497) and above it while a Deeper band owns the screen.
+        //
+        // They do NOT ride the corner-GIF rules: the #497 below-video pin must never be applied
+        // here. Flashes (and the legacy per-window subliminals, and the bubble minigames) are the
+        // top attention layer BY DESIGN - FlashService force-topmosts each one on its show edge and
+        // ChaosModeService re-raises the whole set ~1/s through RaiseAllToFront, deliberately over
+        // a playing mandatory video. Handing them the below-video pin would bury a point-fired
+        // Deeper/chaos flash under the very video it was authored for (VideoEnhancementBridge runs
+        // an EnhancementEngine on a mandatory video, and a point-fired flash opens no overlay band,
+        // so aboveVideo is false there) within 500ms, and it would ping-pong at 2Hz against
+        // RaiseAllToFront's ~1Hz raise. ReassertAttentionOne therefore only ever heals a LOST
+        // topmost bit or bumps on a forced tick - which is all #1041 ever needed.
         //
         // Their recoveries deliberately do NOT feed anyRecovered: these windows come and go by the
         // second (and pooled bubble shells idle hidden), so counting them as "topmost loss" would
@@ -2951,11 +2960,11 @@ public class OverlayService : IDisposable
         try
         {
             foreach (var hwnd in App.Flash?.GetFlashWindowHandles() ?? EmptyHandleList)
-                ReassertOne(hwnd, videoHwnd, aboveVideo, force, ref attentionRecovered);
+                ReassertAttentionOne(hwnd, force, ref attentionRecovered);
             foreach (var hwnd in App.Subliminal?.GetSubliminalWindowHandles() ?? EmptyHandleList)
-                ReassertOne(hwnd, videoHwnd, aboveVideo, force, ref attentionRecovered);
+                ReassertAttentionOne(hwnd, force, ref attentionRecovered);
             foreach (var hwnd in App.Bubbles?.GetBubbleWindowHandles() ?? EmptyHandleList)
-                ReassertOne(hwnd, videoHwnd, aboveVideo, force, ref attentionRecovered);
+                ReassertAttentionOne(hwnd, force, ref attentionRecovered);
         }
         catch (Exception ex)
         {
@@ -2998,6 +3007,33 @@ public class OverlayService : IDisposable
         if (needsPin || force || aboveVideo)
             return ZOrderAction.PinTopmost;
         return ZOrderAction.None;
+    }
+
+    /// <summary>
+    /// Pure z-order decision for one ATTENTION-LAYER window (flash / legacy subliminal / bubble).
+    /// Deliberately never sees the video handle: these windows are the top attention layer and are
+    /// force-topmosted over a playing mandatory video by FlashService on show and by
+    /// ChaosModeService.RaiseAllToFront ~1/s. So this sweep limits itself to healing a lost
+    /// WS_EX_TOPMOST bit or bumping on a forced tick (a live topmost fullscreen browser, #1041) -
+    /// applying the #497 below-video pin here would bury point-fired Deeper visuals under the
+    /// enhanced video and fight RaiseAllToFront at 2Hz.
+    /// </summary>
+    internal static ZOrderAction ResolveAttentionLayerAction(bool needsPin, bool force) =>
+        ResolveZOrderAction(hasVideo: false, isVideoWindow: false, aboveVideo: false,
+            needsPin: needsPin, force: force);
+
+    /// <summary>One attention-layer window's worth of ReassertZOrder. See
+    /// <see cref="ResolveAttentionLayerAction"/> for why it has no below-video branch.</summary>
+    private static void ReassertAttentionOne(IntPtr hwnd, bool force, ref bool anyRecovered)
+    {
+        int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+        bool needsPin = (exStyle & WS_EX_TOPMOST) == 0;
+
+        if (ResolveAttentionLayerAction(needsPin, force) != ZOrderAction.PinTopmost) return;
+
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        if (needsPin) anyRecovered = true;
     }
 
     private static void ReassertOne(IntPtr hwnd, IntPtr videoHwnd, bool aboveVideo, bool force, ref bool anyRecovered)
