@@ -191,6 +191,21 @@ namespace ConditioningControlPanel
                     App.Logger?.Information("Entitlement lapsed: Haptics switched off");
                 }
 
+                // The Arcademy. Not a setting at all - a live T2 window with its own WebView2, its
+                // own XP payouts and its own progression writes, which the veil pass cannot cover
+                // because it is not on a tab. So this rung closes the WINDOW instead of clearing a
+                // flag, and does not touch `changed`: nothing was persisted. HasLabAccess is the
+                // one truth for the T2 bar (tier >= 2, whitelist, and the 14-day offline grace),
+                // exactly as the launch gate reads it, so a subscriber whose validation is still
+                // in flight is never thrown out of a class. CloseActive is idempotent and asks the
+                // page to wind down first, so an in-progress class saves its meta on the way out.
+                if (App.Patreon?.HasLabAccess != true
+                    && Services.Arcademy.ArcademyHostService.IsActive)
+                {
+                    Services.Arcademy.ArcademyHostService.CloseActive();
+                    App.Logger?.Information("Entitlement lapsed: the Arcademy was closed");
+                }
+
                 if (changed)
                 {
                     App.Settings?.Save();
@@ -1250,6 +1265,26 @@ namespace ConditioningControlPanel
                         .Where(kvp => kvp.Value)
                         .Select(kvp => kvp.Key)
                         .ToList();
+
+                    // Remember phrases the user typed themselves so ModService's cross-mod trigger
+                    // prune never deletes them - a hand-typed trigger can legitimately collide with
+                    // another built-in mod's default (OBEY, KNEEL, DROP...). Mirrors the subliminal
+                    // editor's UserAddedSubliminals bookkeeping in MainWindow.UiUpdates.cs.
+                    var modDefaults = new HashSet<string>(
+                        App.Mods?.GetDefaultCustomTriggers() ?? new List<string>(),
+                        StringComparer.OrdinalIgnoreCase);
+                    var oldTriggers = new HashSet<string>(triggerDict.Keys, StringComparer.OrdinalIgnoreCase);
+                    var newSet = new HashSet<string>(newTriggers, StringComparer.OrdinalIgnoreCase);
+                    foreach (var t in newTriggers)
+                    {
+                        if (!oldTriggers.Contains(t) && !modDefaults.Contains(t))
+                            App.Settings.Current.UserAddedCustomTriggers.Add(t);
+                    }
+                    foreach (var t in oldTriggers)
+                    {
+                        if (!newSet.Contains(t))
+                            App.Settings.Current.UserAddedCustomTriggers.Remove(t);
+                    }
 
                     App.Settings.Current.CustomTriggers = newTriggers;
                     App.Settings.Save();

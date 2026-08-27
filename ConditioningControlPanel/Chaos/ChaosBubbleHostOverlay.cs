@@ -124,6 +124,27 @@ public sealed class ChaosBubbleHostOverlay : Window
     /// <summary>Re-stack the live host above a mandatory video (see ChaosWindowZ). UI thread only.</summary>
     public static void RaiseActive() => ChaosWindowZ.RaiseTopmost(_active);
 
+    /// <summary>
+    /// HWND of the live host when it is on screen and pinned, for OverlayService's attention-layer
+    /// z-order reconciler (#1041). This one window carries solid-mode flashes, hosted subliminal
+    /// cards and shared-host bubbles, none of which own an hwnd - without it those users had no
+    /// recovery at all from a topmost fullscreen browser burying the layer, only the accidental
+    /// self-heal of the next spawn's <see cref="RaiseActive"/>.
+    /// Returns Zero during a Free Desktop run, where the chaos layer is deliberately NOT topmost
+    /// (ChaosWindowZ.PinTopmost) - mirrors Bubble.GetTopmostWindowHandle so the reconciler can never
+    /// drag a deliberately-demoted window back to the front. UI thread only; never throws.
+    /// </summary>
+    public static IntPtr GetActiveHandle()
+    {
+        try
+        {
+            var w = _active;
+            if (w == null || !w.IsVisible || !w.Topmost) return IntPtr.Zero;
+            return new WindowInteropHelper(w).Handle;
+        }
+        catch { return IntPtr.Zero; }
+    }
+
     /// <summary>Release one reference. The hwnd is torn down (run end / shutdown) only when the LAST
     /// owner releases — a chaos run ending must not close a host the ambient game still holds.</summary>
     public static void CloseActive()

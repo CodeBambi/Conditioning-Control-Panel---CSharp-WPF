@@ -67,6 +67,25 @@ namespace ConditioningControlPanel.Services.Deeper
         // mixer's own clock and are invisible to the band flush.
         private bool _hapticDispatched;
 
+        /// <summary>
+        /// #1045 - true once this run dispatched a POINT-FIRED visual. Those are not bands, so
+        /// FlushActiveBands cannot reach them: they run out their own authored duration on the
+        /// flash/subliminal services' clocks, which is routinely longer than what is left of the
+        /// media, and their loaders are <c>async void</c> so one dispatched on the last tick
+        /// materialises AFTER Stop. Mirrors <see cref="_hapticDispatched"/>: if this run put any
+        /// up, Stop() cancels that service's one-shot layer.
+        ///
+        /// Tracked per SERVICE, not as one flag: the services' one-shot retirement is service-wide
+        /// (see FlashService.StopOneShotFlashes), so an enhancement that only ever showed subliminal
+        /// or Speak cue cards must not also retire whatever point-fired FLASH some other feature
+        /// (keyword trigger, Autonomy, chaos) happens to have on screen.
+        /// </summary>
+        private bool _flashDispatched;
+
+        /// <summary><see cref="_flashDispatched"/>'s subliminal half. Speak counts here: its cue and
+        /// feedback cards go out through SubliminalService.FlashSubliminalCustom.</summary>
+        private bool _subliminalDispatched;
+
         // -- Per-play gamification stats (read by the host on PlaybackCompleted) --
         // Webcam trigger type strings, used to flag "webcam-trigger-used".
         private static readonly HashSet<string> WebcamTriggerTypes = new()
@@ -391,6 +410,8 @@ namespace ConditioningControlPanel.Services.Deeper
             _completedFired = false;
             _maxPlaybackTime = 0;
             _hapticDispatched = false;
+            _flashDispatched = false;
+            _subliminalDispatched = false;
             _runCts = new CancellationTokenSource();
 
             // Prime the cursor to the current playback position so events that
@@ -494,6 +515,30 @@ namespace ConditioningControlPanel.Services.Deeper
             // Flip _running first so any in-flight tick / dispatch short-circuits
             // before we start tearing down subscriptions.
             _running = false;
+
+            // Same story for point-fired VISUALS (#1045): a flash or subliminal fired near the end
+            // carries the timeline segment's own duration and keeps rendering long after the video
+            // is gone, and the services' loaders are async void, so one dispatched on the last
+            // tick can materialise after this Stop returns. Both calls RETIRE the service's
+            // one-shot generation: a loader that arrives with a stale generation drops its work,
+            // and anything a retired generation already put on screen is taken down. The ambient
+            // schedulers are untouched, so a user running flashes or subliminals for real keeps
+            // their own rhythm either way.
+            //
+            // This runs AFTER the flag drops, unlike FlushActiveBands: neither call needs the engine
+            // to still be running, and going first left a window in which a PlaybackTimeChanged tick
+            // still passed the _running check and dispatched a flash under the NEW (post-bump)
+            // generation, so it survived the cancel and outlived the media.
+            if (_flashDispatched)
+            {
+                try { App.Flash?.StopOneShotFlashes(); }
+                catch (Exception ex) { App.Logger?.Debug("EnhancementEngine stop-flash: {Error}", ex.Message); }
+            }
+            if (_subliminalDispatched)
+            {
+                try { App.Subliminal?.StopOneShotSubliminals(); }
+                catch (Exception ex) { App.Logger?.Debug("EnhancementEngine stop-subliminal: {Error}", ex.Message); }
+            }
 
             try { _source.PlaybackTimeChanged -= OnPlaybackTime; } catch { }
 
@@ -1006,6 +1051,18 @@ namespace ConditioningControlPanel.Services.Deeper
 
             if (action is TriggerHapticAction || action is TriggerEffectAction { EffectType: EffectTypes.Haptic })
                 _hapticDispatched = true;
+
+            // Flash and subliminal effects are always POINT-fired: unlike overlay/haptic effects the
+            // dispatcher ignores Phase for them and just shows one, so there is no band for
+            // FlushActiveBands to close on Stop. Latch either kind, whatever the authored phase.
+            // Speak lands on the subliminal side: it IS a band, but its cue and feedback cards go
+            // out through SubliminalService.FlashSubliminalCustom (SpeakPromptSession.FlashCue /
+            // FlashFeedback), so a cue fired on the last tick outlives the media exactly like a
+            // point-fired card unless the subliminal cancel is armed.
+            if (action is TriggerEffectAction { EffectType: EffectTypes.Flash })
+                _flashDispatched = true;
+            else if (action is TriggerEffectAction { EffectType: EffectTypes.Subliminal or EffectTypes.Speak })
+                _subliminalDispatched = true;
 
             try
             {

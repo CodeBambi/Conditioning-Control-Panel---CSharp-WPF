@@ -353,18 +353,24 @@ namespace ConditioningControlPanel
         /// Quest complete: burst at the cap of the bar that just filled (daily or weekly). When the
         /// Quests tab is not the one on screen the completion is announced by QuestCompletePopup,
         /// its own window - so the fallback is the Quests nav button.
+        ///
+        /// <para>With three daily seats up at once, "the daily bar" is no longer a single element:
+        /// <paramref name="definitionId"/> says WHICH quest finished, and the burst goes on that
+        /// card. Without it (or if that card cannot be found) the whole daily row is the anchor,
+        /// which is still the right strip of screen.</para>
         /// </summary>
-        internal void CelebrateQuestComplete(QuestType type)
+        internal void CelebrateQuestComplete(QuestType type, string? definitionId = null)
         {
             try
             {
                 bool onTab = QuestsTab?.IsVisible == true;
+                var dailyCard = type == QuestType.Daily ? FindDailyCard(definitionId) : null;
                 FrameworkElement? fill = !onTab ? null
                     : type == QuestType.Weekly ? QuestsTab?.WeeklyProgressFill
-                                               : QuestsTab?.DailyProgressFill;
+                                               : dailyCard?.ProgressFill;
                 FrameworkElement? track = !onTab ? null
                     : type == QuestType.Weekly ? QuestsTab?.WeeklyProgressTrack
-                                               : QuestsTab?.DailyProgressTrack;
+                                               : (FrameworkElement?)dailyCard?.ProgressTrack ?? QuestsTab?.DailyCardsGrid;
 
                 // The fill is the honest anchor when it has a width; a completed-but-unmeasured
                 // bar falls back to its track, which occupies the same strip of screen.
@@ -373,6 +379,26 @@ namespace ConditioningControlPanel
                                         NavAnchorForTab("quests"));
             }
             catch (Exception ex) { App.Logger?.Debug("CelebrateQuestComplete: {E}", ex.Message); }
+        }
+
+        /// <summary>The daily seat currently showing <paramref name="definitionId"/>, or null.
+        /// The ids are recorded by RefreshQuestUI, which has already repainted by the time a
+        /// completion reaches us.</summary>
+        private Views.Controls.DailyQuestCard? FindDailyCard(string? definitionId)
+        {
+            if (string.IsNullOrEmpty(definitionId) || QuestsTab == null) return null;
+            for (int i = 0; i < _dailyCardQuestIds.Length; i++)
+            {
+                if (!string.Equals(_dailyCardQuestIds[i], definitionId, StringComparison.Ordinal)) continue;
+                return i switch
+                {
+                    0 => QuestsTab.DailyCard0,
+                    1 => QuestsTab.DailyCard1,
+                    2 => QuestsTab.DailyCard2,
+                    _ => null,
+                };
+            }
+            return null;
         }
 
         // ============================== 4. program day complete ==============================

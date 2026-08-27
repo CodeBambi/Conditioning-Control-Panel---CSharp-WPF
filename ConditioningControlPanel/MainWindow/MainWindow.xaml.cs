@@ -103,6 +103,10 @@ namespace ConditioningControlPanel
         private GlobalKeyboardHook? _keyboardHook;
         private bool _isCapturingPanicKey = false;
         internal bool IsCapturingPanicKey => _isCapturingPanicKey;
+
+        // Capture mode for the optional Pause key (v6.8.5). Same one-shot dance as the panic key:
+        // the next key the global hook sees becomes the binding (Escape clears it instead).
+        private bool _isCapturingPauseKey = false;
         private bool _exitRequested = false;
         private int _panicPressCount = 0;
         private string _leaderboardMode = "monthly";
@@ -251,6 +255,10 @@ namespace ConditioningControlPanel
                 ApplyCameraShortcutTo();
                 RefreshCameraShortcutLabel();
                 ApplyGlobalCameraHotkey();
+                // Gaze Quick Recal from anywhere (Ctrl+Alt+G). Sits next to the camera
+                // shortcut on purpose - they are neighbours in the same feature but they
+                // are NOT the same action, and the labels say so.
+                ApplyGlobalQuickRecalHotkey();
                 // Ctrl+K settings palette (Windows/SettingsPaletteWindow.xaml.cs). Registered
                 // AFTER the camera shortcut on purpose: WPF executes the FIRST matching
                 // InputBinding, so a user who rebound the camera hotkey to Ctrl+K keeps their
@@ -863,6 +871,28 @@ namespace ConditioningControlPanel
                     _isCapturingPanicKey = false;
                     UpdatePanicKeyButton();
                     App.Logger?.Information("Panic key changed to: {Key}", key);
+                    // Same precedent as ApplyGlobalCameraHotkey after a rebind: re-evaluate the
+                    // Quick Recal chord so binding panic to G disarms it immediately, and binding
+                    // panic away from G frees it without waiting for a restart.
+                    ApplyGlobalQuickRecalHotkey();
+                });
+                return;
+            }
+
+            // Same capture dance for the optional Pause key (v6.8.5). Escape CLEARS the binding
+            // instead of setting it: with the panic key on Escape by default, binding pause to
+            // Escape too would be a dead setting, and "press Escape to unbind" is the only way out
+            // of capture mode that does not require picking some key you did not want.
+            if (_isCapturingPauseKey)
+            {
+                Dispatcher.BeginInvoke(() =>
+                {
+                    App.Settings.Current.PauseKey = key == Key.Escape ? "" : key.ToString();
+                    _isCapturingPauseKey = false;
+                    UpdatePauseKeyButton();
+                    App.Settings?.Save();
+                    App.Logger?.Information("Pause key changed to: {Key}",
+                        string.IsNullOrEmpty(App.Settings.Current.PauseKey) ? "(unbound)" : App.Settings.Current.PauseKey);
                 });
                 return;
             }
@@ -889,7 +919,25 @@ namespace ConditioningControlPanel
                     var panicOp = Dispatcher.BeginInvoke(() => HandlePanicKeyPress());
                     VideoDiag.Log("PANIC", "handler queued on the dispatcher");
                     ArmPanicWatchdog(panicOp);
+                    return;
                 }
+            }
+
+            // Optional Pause key (v6.8.5). PanicOverridesAll took the #735 "someone walked in"
+            // grace pause off the panic key; this is where it lives now, for the people who liked
+            // it. Unbound by default, so this whole branch is dead on a fresh install. Checked
+            // AFTER the panic key and skipped outright when the two collide, so a shared binding
+            // can only ever panic. No watchdog: parking one video is not an emergency stop.
+            if (!Services.Safety.PanicPolicy.PauseKeyIsShadowedByPanicKey(
+                    settings.PanicKey, settings.PanicKeyEnabled, settings.PauseKey)
+                && Services.Safety.PanicPolicy.IsPauseKeyPress(settings.PauseKey, key.ToString()))
+            {
+                VideoDiag.Log("PANIC", $"pause key '{key}' received - queueing the video grace pause");
+                Dispatcher.BeginInvoke(() =>
+                {
+                    try { App.Video?.TryGracePauseFromPanic(fromPanicKey: false); }
+                    catch (Exception ex) { App.Logger?.Warning("Pause key: grace pause failed: {Error}", ex.Message); }
+                });
             }
         }
 
@@ -1045,6 +1093,311 @@ namespace ConditioningControlPanel
             catch (Exception ex) { LogPanicFallbackStep("recovery queue", ex); }
         }
 
+        // ─────────────────────────────────────────────────────────────────────
+        // Gaze Quick Recal global hotkey (Ctrl+Alt+G)
+        //
+        // Quick Recal is a ~3s one-dot nudge of an EXISTING calibration
+        // (Windows/WebcamQuickRecalWindow.xaml.cs). It always worked; it was just
+        // unreachable at the only moment anyone wants it, because all three of its
+        // entry points are buttons inside setup cards buried in tabs — so correcting
+        // mid-session drift meant abandoning whatever was on screen. This registers it
+        // system-wide through the existing GlobalHotkeyService lane (slot 0xB1B3)
+        // alongside the chat (0xB1B1) and camera (0xB1B2) hotkeys.
+        //
+        // NOT to be confused with the camera shortcut (Ctrl+Alt+K by default,
+        // MainWindow.SessionIO.cs ApplyGlobalCameraHotkey): that one STARTS AND STOPS
+        // the tracker. This one corrects drift and leaves tracking exactly as it found
+        // it. Every label that quotes one quotes the other, for exactly that reason.
+        //
+        // COLLISION TRAP — read before rebinding. There are two independent ways this
+        // chord can be taken, and only one of them reports anything:
+        //   (a) another process already holds Ctrl+Alt+G. RegisterHotKey returns false,
+        //       we log a Warning naming the chord, and the app carries on with the
+        //       in-app buttons intact.
+        //   (b) the user's PANIC key is bound to G. The panic key does NOT ride
+        //       RegisterHotKey at all — it rides the single WH_KEYBOARD_LL hook this
+        //       window owns (Services/Input/GlobalKeyboardHook.cs, contract note at
+        //       App.xaml.cs:571), which sees the keystroke BEFORE any WM_HOTKEY
+        //       delivery and matches on the bare key with the modifiers ignored. So
+        //       Ctrl+Alt+G would fire panic and Quick Recal both, and NOTHING fails to
+        //       register — case (a)'s Warning cannot catch it. The hook does not eat the
+        //       press either (it only returns handled inside SuppressSystemKeys), so this
+        //       is not a shadowing bug where Quick Recal quietly loses: both run, and the
+        //       panic teardown is the destructive half. That is why the check below runs
+        //       BEFORE Register and REFUSES the binding outright instead of arming it with
+        //       a warning, and why both the arm line and the refusal line are logged at
+        //       Information/Warning rather than Debug: "my Quick Recal stopped working"
+        //       is then a one-line diff against the user's own bindings in app.log.
+        //       Fix this class on the BINDING side only. Do not make the panic comparison
+        //       modifier-aware: a flustered user reaching for panic with a stray Ctrl held
+        //       must still get panic.
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>Key half of the Quick Recal chord. Named constant on purpose — the log
+        /// lines, the tooltip and the in-window hint all render from it.</summary>
+        internal const Key QuickRecalHotkeyKey = Key.G;
+
+        /// <summary>Modifier half of the Quick Recal chord. Must stay MODIFIED: bare keys and
+        /// bare function keys are exactly what users rebind panic/pause to, and those ride a
+        /// low-level hook that would shadow this silently (see the trap note above).</summary>
+        internal const ModifierKeys QuickRecalHotkeyModifiers = ModifierKeys.Control | ModifierKeys.Alt;
+
+        /// <summary>"Ctrl+Alt+G" — the single source of truth for every surface that quotes it.</summary>
+        internal static string QuickRecalHotkeyChord => FormatChord(QuickRecalHotkeyModifiers, QuickRecalHotkeyKey);
+
+        /// <summary>
+        /// The CAMERA start/stop chord ("Ctrl+Alt+K" by default), rendered from the user's own
+        /// setting. Exposed because every surface that quotes the Quick Recal chord has to quote
+        /// this one beside it: two webcam hotkeys that read as interchangeable is the defect.
+        /// Mirrors FormatCameraShortcut in MainWindow.SessionIO.cs, which is private to that file.
+        /// </summary>
+        internal static string CameraShortcutChord
+        {
+            get
+            {
+                var s = App.Settings?.Current?.CompanionPrompt;
+                var keyName = string.IsNullOrWhiteSpace(s?.CameraShortcutKey) ? "K" : s!.CameraShortcutKey;
+                if (!Enum.TryParse<Key>(keyName, ignoreCase: true, out var key)) key = Key.K;
+
+                var mods = ModifierKeys.None;
+                var modsName = string.IsNullOrWhiteSpace(s?.CameraShortcutModifiers) ? "Control,Alt" : s!.CameraShortcutModifiers;
+                foreach (var part in modsName.Split(new[] { ',', '+', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (Enum.TryParse<ModifierKeys>(part, ignoreCase: true, out var mk)) mods |= mk;
+                }
+                if (mods == ModifierKeys.None) mods = ModifierKeys.Control | ModifierKeys.Alt;
+
+                return FormatChord(mods, key);
+            }
+        }
+
+        /// <summary>
+        /// The one line every surface uses to teach the chord. Names BOTH webcam hotkeys and says
+        /// what separates them, so "Quick Recal" and "start/stop camera" can never read as the
+        /// same button with two names.
+        /// </summary>
+        internal static string QuickRecalHotkeyHint()
+            => Localization.Loc.GetF("webcam_quick_recal_hotkey_hint", QuickRecalHotkeyChord, CameraShortcutChord);
+
+        /// <summary>Re-entrancy guard: the handler is async void and opens a modal, so a second
+        /// press while the dot is up must not stack a second dialog.</summary>
+        private bool _quickRecalHotkeyBusy;
+
+        /// <summary>Shared "Ctrl+Alt+K" renderer for chord labels.</summary>
+        private static string FormatChord(ModifierKeys mods, Key key)
+        {
+            var parts = new List<string>();
+            if ((mods & ModifierKeys.Control) != 0) parts.Add("Ctrl");
+            if ((mods & ModifierKeys.Alt) != 0) parts.Add("Alt");
+            if ((mods & ModifierKeys.Shift) != 0) parts.Add("Shift");
+            if ((mods & ModifierKeys.Windows) != 0) parts.Add("Win");
+            parts.Add(key.ToString());
+            return string.Join("+", parts);
+        }
+
+        /// <summary>
+        /// Arms (or, when the setting is off or the panic key would clash, disarms) the
+        /// system-wide Quick Recal hotkey. Failure is never fatal: any refusal leaves the three
+        /// in-app entry points working and only costs a Warning line naming the reason.
+        /// </summary>
+        private void ApplyGlobalQuickRecalHotkey()
+        {
+            try
+            {
+                var chord = QuickRecalHotkeyChord;
+
+                if (App.Settings?.Current?.WebcamQuickRecalHotkeyEnabled == false)
+                {
+                    Services.GlobalHotkeyService.Unregister(Services.GlobalHotkeyService.QuickRecalHotkeyId);
+                    App.Logger?.Information("Quick Recal hotkey {Chord} not armed: disabled in settings (WebcamQuickRecalHotkeyEnabled=false).", chord);
+                    return;
+                }
+
+                // Case (b) from the trap note, checked BEFORE we register. The panic key rides the
+                // WH_KEYBOARD_LL hook (GlobalKeyboardHook), which compares the bare key and ignores
+                // modifiers — and it does NOT consume the keystroke: HookCallback only returns
+                // handled inside the SuppressSystemKeys lockdown branch, so the panic path invokes
+                // KeyPressed and still falls through to CallNextHookEx. RegisterHotKey therefore
+                // fires too. With a panic key of "G" the chord would run Quick Recal AND tear the
+                // whole session down. That is destructive, not merely noisy, so refuse the binding
+                // rather than arm it with a warning. Quick Recal stays reachable from its three
+                // buttons. Fix the class here, on the binding side: the hook's event is
+                // Action<Key> and carries no modifier state, and making panic modifier-aware would
+                // be wrong anyway — someone reaching for panic with a stray Ctrl held must get panic.
+                var s = App.Settings?.Current;
+                if (s?.PanicKeyEnabled == true &&
+                    string.Equals(s.PanicKey, QuickRecalHotkeyKey.ToString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    Services.GlobalHotkeyService.Unregister(Services.GlobalHotkeyService.QuickRecalHotkeyId);
+                    App.Logger?.Warning(
+                        "Quick Recal hotkey {Chord} NOT armed: it shares its base key with the panic key ({PanicKey}), and the " +
+                        "panic hook ignores modifiers without consuming the press — arming it would trip panic and tear down the " +
+                        "session on every Quick Recal. Rebind the panic key to free {Key}. The Quick Recal buttons in " +
+                        "Settings → Devices, the Blink Trainer setup card and the Deeper setup card are unaffected.",
+                        chord, s.PanicKey, QuickRecalHotkeyKey);
+                    return;
+                }
+
+                bool ok = Services.GlobalHotkeyService.Register(
+                    Services.GlobalHotkeyService.QuickRecalHotkeyId, this,
+                    QuickRecalHotkeyModifiers, QuickRecalHotkeyKey,
+                    // Win32 hotkeys arrive on the message-pump thread — marshal to the UI thread.
+                    () => Dispatcher.BeginInvoke(new Action(OpenQuickRecalFromHotkey)));
+
+                if (!ok)
+                {
+                    App.Logger?.Warning(
+                        "Quick Recal hotkey {Chord} could not be registered — another process already holds that combination. " +
+                        "Gaze drift correction is unaffected otherwise: the Quick Recal buttons in Settings → Devices, the Blink " +
+                        "Trainer setup card and the Deeper setup card all still work.", chord);
+                    return;
+                }
+
+                App.Logger?.Information(
+                    "Quick Recal hotkey armed: {Chord} (mods={Mods}, key={Key}, slot=0x{Id:X}) — opens one-dot gaze drift correction " +
+                    "and never starts or stops tracking.",
+                    chord, QuickRecalHotkeyModifiers, QuickRecalHotkeyKey, Services.GlobalHotkeyService.QuickRecalHotkeyId);
+
+            }
+            catch (Exception ex)
+            {
+                // Never let shortcut wiring take the window's Loaded handler down with it.
+                App.Logger?.Warning(ex, "ApplyGlobalQuickRecalHotkey failed");
+            }
+        }
+
+        /// <summary>
+        /// True while a full calibration or a Quick Recal is already on screen. Both are
+        /// borderless-maximized topmost windows that own the gaze pipeline for their duration,
+        /// so a second one must never be stacked on top.
+        /// </summary>
+        private static bool IsGazeCalibrationSurfaceOpen()
+        {
+            try
+            {
+                var windows = Application.Current?.Windows;
+                if (windows == null) return false;
+                foreach (System.Windows.Window w in windows)
+                {
+                    if (w is WebcamQuickRecalWindow || w is WebcamCalibrationWindow) return true;
+                }
+            }
+            catch { /* window collection is only enumerable on the UI thread; we are on it */ }
+            return false;
+        }
+
+        /// <summary>
+        /// The hotkey's action. Must be safe to press at ANY moment, from any app, so every
+        /// unmet precondition is a silent Debug no-op — no dialog, no exception. In particular
+        /// it never opens the consent dialog: a consent prompt erupting over a fullscreen game
+        /// because someone fat-fingered a chord is worse than doing nothing.
+        /// </summary>
+        private async void OpenQuickRecalFromHotkey()
+        {
+            if (_quickRecalHotkeyBusy)
+            {
+                App.Logger?.Debug("Quick Recal hotkey ignored: a Quick Recal is already in flight.");
+                return;
+            }
+
+            try
+            {
+                if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted)
+                {
+                    App.Logger?.Debug("Quick Recal hotkey ignored: the app is shutting down.");
+                    return;
+                }
+
+                // Re-check the panic clash HERE and not only at registration. PanicKeyEnabled is
+                // written by LockdownService (:148/:189), RemoteControlService and preset loads —
+                // any of which can turn a chord that was safe to arm at Loaded into a live clash
+                // without passing through ApplyGlobalQuickRecalHotkey. We cannot stop panic from
+                // firing (it rides its own hook), but we can refuse to stack a calibration window
+                // on top of the teardown, which is the genuinely bad outcome.
+                var cfg = App.Settings?.Current;
+                if (cfg?.PanicKeyEnabled == true &&
+                    string.Equals(cfg.PanicKey, QuickRecalHotkeyKey.ToString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    App.Logger?.Warning(
+                        "Quick Recal hotkey {Chord} suppressed at invocation: the panic key is now bound to {PanicKey}, so this " +
+                        "press is already tripping panic. Not opening Quick Recal on top of it.",
+                        QuickRecalHotkeyChord, cfg.PanicKey);
+                    Services.GlobalHotkeyService.Unregister(Services.GlobalHotkeyService.QuickRecalHotkeyId);
+                    return;
+                }
+
+                var svc = App.Webcam;
+                if (svc == null)
+                {
+                    App.Logger?.Debug("Quick Recal hotkey ignored: App.Webcam is null (service not initialized).");
+                    return;
+                }
+
+                if (!WebcamTrackingService.IsConsentCurrent())
+                {
+                    // Deliberately silent. The buttons prompt for consent because the user
+                    // just asked for the feature by name; a global chord has no such mandate.
+                    App.Logger?.Debug("Quick Recal hotkey ignored: webcam consent is not current.");
+                    return;
+                }
+
+                if (svc.Calibration == null)
+                {
+                    App.Logger?.Debug("Quick Recal hotkey ignored: no calibration loaded — Quick Recal only nudges an existing one.");
+                    return;
+                }
+
+                if (IsGazeCalibrationSurfaceOpen())
+                {
+                    App.Logger?.Debug("Quick Recal hotkey ignored: a calibration or Quick Recal window is already showing.");
+                    return;
+                }
+
+                _quickRecalHotkeyBusy = true;
+
+                // THE POINT OF THE WHOLE FEATURE: mid-session drift. If tracking is already
+                // running we must leave it running when the dialog closes — stopping it would
+                // kill the very session the user pressed the key to rescue. Only a tracker WE
+                // started gets stopped again, which is the same leave-it-as-you-found-it
+                // contract the setup-card buttons keep.
+                bool startedHere = false;
+                if (!svc.IsRunning)
+                {
+                    if (!await StartWebcamOffUiThreadAsync(svc))
+                    {
+                        App.Logger?.Debug("Quick Recal hotkey ignored: tracking would not start (state={State}).", svc.State);
+                        return;
+                    }
+                    startedHere = true;
+                }
+
+                var dlg = new WebcamQuickRecalWindow();
+                // An owner that is minimized (the app lives in the tray) can drag an owned
+                // window down with it, and the whole premise here is that MainWindow is NOT
+                // what the user is looking at. Only parent when this window is really on screen.
+                if (IsVisible && WindowState != WindowState.Minimized) dlg.Owner = this;
+                App.ApplyCalibrationScreenPlacement(dlg);
+                var result = dlg.ShowDialog();
+
+                App.Logger?.Information("Quick Recal via {Chord}: {Outcome} (startedTracking={Started}).",
+                    QuickRecalHotkeyChord, result == true ? "applied" : "cancelled", startedHere);
+
+                if (startedHere) svc.Stop();
+
+                // Cross-tab propagation, same as the button paths.
+                RefreshBlinkTrainerWebcamColumn();
+                RefreshBlinkTrainerStatusRow();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "OpenQuickRecalFromHotkey failed");
+            }
+            finally
+            {
+                _quickRecalHotkeyBusy = false;
+            }
+        }
+
         private void HandlePanicKeyPress()
         {
             VideoDiag.Log("PANIC", $"handling panic press (engineRunning={_isRunning}, uiStall={VideoDiag.UiStallMs}ms)");
@@ -1059,26 +1412,64 @@ namespace ConditioningControlPanel
             // press ladder, so it can never be the tap that exits the app.
             // IsAnyOpen also covers a deferred show still pending; cancelling that is the right answer
             // to panic too, and DismissAll clears both, so the next press falls through normally.
-            if (LockCardWindow.IsAnyOpen())
-            {
-                VideoDiag.Log("PANIC", "dismissing the open lock card (it outranks every hand-off)");
-                App.LockCard?.Stop(dismissOpenCards: true);
-                return;
-            }
+            bool lockCardOpen = LockCardWindow.IsAnyOpen();
 
-            // Ctrl+K palette. Escape is the DEFAULT panic key and the LL hook delivers it whatever
-            // has focus, so an Esc aimed at "close the palette" also arrives here — and the ladder
-            // below EXITS THE APP on press 2. Consume it (which closes the palette) without
-            // advancing _panicPressCount, exactly like the lock-card hand-off above.
+            // Rung 2, settled here for BOTH modes. Escape is the DEFAULT panic key and the LL hook
+            // delivers it whatever has focus, so an Escape aimed at "close the Ctrl+K palette"
+            // arrives here too. It closes the palette and NOTHING else: a user who opens the
+            // quick-settings palette mid-session to nudge a slider and dismisses it the normal way
+            // must not lose the session's effects, get a Relapse panic tracked and be docked 100 XP
+            // for it. That is exactly what the pre-6.8.5 ladder did with this press.
             // Gated on the panic key really being Escape, so a user who rebound panic to F8 still
             // gets a real panic from F8 while the palette is open; the palette then closes itself
             // through its own Esc handler and never sees this path. TryConsumeEscape carries a
             // short grace window, so the press is claimed exactly once whichever of the two
-            // deliveries (WPF KeyDown vs the hook's queued handler) lands first.
-            if (string.Equals(App.Settings?.Current?.PanicKey, "Escape", StringComparison.OrdinalIgnoreCase)
-                && SettingsPaletteWindow.TryConsumeEscape())
+            // deliveries (WPF KeyDown vs the hook's queued handler) lands first - and it is only
+            // ASKED when no lock card is open, because asking closes the palette as a side effect.
+            bool paletteClaimed = !lockCardOpen
+                && string.Equals(App.Settings?.Current?.PanicKey, "Escape", StringComparison.OrdinalIgnoreCase)
+                && SettingsPaletteWindow.TryConsumeEscape();
+
+            var rung = Services.Safety.PanicPolicy.Decide(
+                lockCardOpen: lockCardOpen,
+                paletteClaimedPress: paletteClaimed,
+                overrideAll: Services.Safety.PanicPolicy.OverrideEnabled(App.Settings?.Current));
+
+            if (rung == Services.Safety.PanicPolicy.Rung.DismissLockCard)
             {
-                VideoDiag.Log("PANIC", "press consumed by the Ctrl+K palette (palette closed)");
+                VideoDiag.Log("PANIC", "dismissing the open lock card (it outranks every hand-off)");
+                App.LockCard?.Stop(dismissOpenCards: true);
+            }
+            else if (rung == Services.Safety.PanicPolicy.Rung.DismissSettingsPalette)
+            {
+                VideoDiag.Log("PANIC", "press consumed by the Ctrl+K palette (palette closed, nothing stopped)");
+            }
+
+            // Both dismiss rungs answer the surface that owns the press and stop THERE: no stop
+            // pass, no engine stop, no session pause and its 100 XP, no Relapse panic tracked, no
+            // exit-ladder advance. That is the pre-6.8.5 behaviour for both of them, and for the
+            // palette it is the whole point - Escape is the default panic key AND the universal
+            // "close this popup" key.
+            if (!Services.Safety.PanicPolicy.StopsSurfaces(rung)) return;
+
+            // v6.8.5 (#1054/#1066, suggestion thread 1541736938703167550 - "panic button is panic
+            // button"). With PanicOverridesAll on (the default) the press is NOT handed to whatever
+            // owns the screen and is NOT spent as the #735 grace pause: every surface goes down in
+            // ONE dispatcher pass, then the normal stop tail runs. Reporters were spamming the key
+            // through a six-rung ladder while the screen flickered between owners.
+            if (rung == Services.Safety.PanicPolicy.Rung.StopEverything)
+            {
+                // Sampled BEFORE the stop pass closes them. A press that takes a mini-game or the
+                // feed down must not also arm the double-press "quit the app" tap: the legacy
+                // ladder handed that press to the game and returned, so the counter never moved,
+                // and a reflexive Esc-Esc inside the Arcademy would otherwise now exit the whole
+                // app (see PanicPolicy.AdvancesExitLadder(Rung, bool)).
+                bool gameOwnedTheScreen = AnyGameSurfaceOwnsTheScreen();
+
+                VideoDiag.Log("PANIC", $"override mode - stopping every surface in one pass (gameOnScreen={gameOwnedTheScreen})");
+                PanicStopEverySurface();
+                RunPanicStopTail(advanceExitLadder:
+                    Services.Safety.PanicPolicy.AdvancesExitLadder(rung, gameOwnedTheScreen));
                 return;
             }
 
@@ -1160,6 +1551,44 @@ namespace ConditioningControlPanel
             // the main engine, so the rest of the panic flow won't touch them.
             App.BlinkTrainer?.Stop();
 
+            RunPanicStopTail(advanceExitLadder: true);
+        }
+
+        /// <summary>
+        /// TRUE while one of the surfaces that used to CONSUME a panic press on its own rung owns
+        /// the screen: a live Rabbit Hole descent, the DtRH window, the Arcademy, the For You feed
+        /// or Just Drop. Read once, before the stop pass closes them. Never throws - a dead host
+        /// service must not be able to eat a panic press.
+        /// </summary>
+        private static bool AnyGameSurfaceOwnsTheScreen()
+        {
+            try
+            {
+                return App.Chaos?.IsDescending == true
+                    || Services.Chaos.DtrhHostService.IsActive
+                    || Services.Arcademy.ArcademyHostService.IsActive
+                    || Services.Fyp.FypHostService.IsActive
+                    || Services.JustDrop.JustDropHostService.IsActive;
+            }
+            catch (Exception ex)
+            {
+                try { App.Logger?.Warning("PANIC: game-surface probe failed: {Error}", ex.Message); } catch { }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// The shared end of every panic press that is NOT consumed by a hand-off: the 2 second
+        /// press counter, the running/not-running stop, and the double-press exit. Extracted in
+        /// v6.8.5 so the new "panic stops everything" mode and the legacy hand-off ladder finish
+        /// through exactly the same code instead of growing a second copy of it.
+        /// </summary>
+        /// <param name="advanceExitLadder">FALSE for a press that was spent on a surface which must
+        /// never be the tap that quits the app: an open Lock Card, or (when Escape is the panic key)
+        /// an Escape the Ctrl+K palette claimed. The stop still runs; only the exit counter is left
+        /// alone. See <see cref="Services.Safety.PanicPolicy.AdvancesExitLadder"/>.</param>
+        private void RunPanicStopTail(bool advanceExitLadder)
+        {
             var now = DateTime.Now;
             var timeSinceLastPress = (now - _lastPanicTime).TotalMilliseconds;
             
@@ -1169,8 +1598,11 @@ namespace ConditioningControlPanel
                 _panicPressCount = 0;
             }
             
-            _panicPressCount++;
-            _lastPanicTime = now;
+            if (advanceExitLadder)
+            {
+                _panicPressCount++;
+                _lastPanicTime = now;
+            }
             
             if (_isRunning)
             {
@@ -1272,6 +1704,115 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// v6.8.5 override mode: take EVERY live surface down in one dispatcher pass, then let
+        /// <see cref="RunPanicStopTail"/> stop the engine. This is the whole point of the fix - the
+        /// old ladder handed the press to whichever mini-game or video owned the screen and the
+        /// engine only stopped two or three presses later.
+        ///
+        /// <para>Rules this body must keep:</para>
+        /// <list type="bullet">
+        /// <item>EVERY step gets its own try/catch. One dead service must never eat the panic.</item>
+        /// <item>No grace pause. <see cref="VideoService.TryGracePauseFromPanic"/> refuses in this
+        /// mode anyway (see PanicPolicy.AllowGracePauseFromPanicKey); the video is force-cleaned.</item>
+        /// <item>No companion bark. The legacy ladder says a calm safety line here; in override
+        /// mode the tube is one of the surfaces being silenced, so speaking and then clearing the
+        /// bubble in the same pass would just be noise.</item>
+        /// <item>An open Lock Card never reaches this method - it is answered one rung above and
+        /// keeps its own contract untouched.</item>
+        /// </list>
+        ///
+        /// <para>UI thread only: the panic handler is already queued on the dispatcher, and the
+        /// off-thread last resort is <see cref="RunEmergencyPanicTeardown"/>, not this.</para>
+        /// </summary>
+        private void PanicStopEverySurface()
+        {
+            static void Step(string name, Action action)
+            {
+                try { action(); }
+                catch (Exception ex)
+                {
+                    try { App.Logger?.Warning("PANIC stop-all: {Step} failed: {Error}", name, ex.Message); } catch { }
+                    VideoDiag.Log("PANIC", $"stop-all step '{name}' failed: {ex.Message}");
+                }
+            }
+
+            // --- media ---
+            // ForceCleanup, not Stop: ends the run outright instead of scheduling a replacement,
+            // and closes the LibVLC window. Asynchronous - a synchronous cleanup pumps the
+            // dispatcher, and this pass must stay one pass.
+            Step("video", () => App.Video?.ForceCleanup(synchronous: false));
+            Step("video enhance bridge", () => App.VideoEnhanceBridge?.ForceUnbind());
+            Step("flashes", () => App.Flash?.Stop());
+            Step("bubbles", () => App.Bubbles?.Stop());
+            Step("bubble count", () => App.BubbleCount?.Stop());
+            Step("subliminals", () => App.Subliminal?.Stop());
+            Step("bouncing text", () => App.BouncingText?.Stop());
+            Step("mind wipe", () => App.MindWipe?.Stop());
+            Step("brain drain", () => App.BrainDrain?.Stop());
+
+            // --- overlays ---
+            // Stop() already clears _isRunning and calls StopPinkFilter/StopSpiral/StopBrainDrainBlur,
+            // and RefreshOverlays early-returns while !_isRunning, so no reconcile tick can repaint
+            // them. Deliberately NOT EnablePinkFilter(false)/EnableSpiral(false): those write the
+            // user's PERSISTENT feature switches, so every panic would leave Spiral and Pink Filter
+            // switched off for all their later manual runs. A panic stops what is on screen; it does
+            // not reconfigure the app.
+            Step("spiral", () => App.Overlay?.StopSpiral());
+            Step("pink filter", () => App.Overlay?.StopPinkFilter());
+            Step("overlays", () => App.Overlay?.Stop());
+            // The SESSION-scoped corner overlay first, because CornerGifService does not own it:
+            // it is SessionEngine's own window (ticket 1539282547484139682). Without this step one
+            // panic press stopped everything else on a program day and left the session spiral
+            // spinning. It closes hide-only (no handback), so it cannot re-queue a standalone slot.
+            Step("session corner GIF", () => SessionEngine.Active?.PanicCloseCornerGif());
+            // ...and the standalone Spiral-card slots LAST, so this is the final word on the corner
+            // whatever the step above did. StopAll also cancels queued realizations, so a slot that
+            // was mid-stagger cannot land after the pass.
+            Step("corner GIFs", () => App.CornerGif?.StopAll());
+
+            // --- companion tube ---
+            Step("tube speech", () => _avatarTubeWindow?.PanicSilence());
+            Step("avatar voice", () => App.AvatarWindow?.StopVoiceLineAudio());
+
+            // --- game / feed windows ---
+            Step("chaos", () => App.Chaos?.ForceShutdown());
+            Step("DtRH", () => Services.Chaos.DtrhHostService.CloseActive());
+            Step("Arcademy", () => Services.Arcademy.ArcademyHostService.CloseActive());
+            Step("For You feed", () => Services.Fyp.FypHostService.Close());
+            Step("Just Drop", () => Services.JustDrop.JustDropHostService.CloseActive());
+            Step("Lab minigames", () => App.BlinkTrainer?.Stop());
+
+            // --- modal / topmost cards ---
+            Step("pop quiz", () => App.PopQuiz?.Stop());
+            Step("quiz windows", () => QuizWindow.ForceCloseAll());
+            Step("pop quiz windows", () => PopQuizWindow.ForceCloseAll());
+            Step("bubble count windows", () => { BubbleCountWindow.ForceCloseAll(); BubbleCountResultWindow.ForceCloseAll(); });
+            Step("help popover", () => Controls.HelpPopover.CloseActive());
+            // CloseIfOpen, NOT TryConsumeEscape: a press the palette claimed never reaches this
+            // pass (it is its own rung and returns), so anything still open here is a palette that
+            // did NOT claim the press - e.g. panic rebound to F8. Calling TryConsumeEscape here
+            // would burn the Escape grace window the caller's decision depends on.
+            Step("settings palette", SettingsPaletteWindow.CloseIfOpen);
+
+            // --- audio + hardware ---
+            Step("haptics", () => App.Haptics?.PanicStop());
+            Step("autonomy pulses", () => App.Autonomy?.CancelActivePulses());
+            Step("audio layers", () =>
+            {
+                // #668: a standalone Audio Layers master means the bed is the user's, not a session's.
+                if (App.Settings?.Current?.AudioLayersEnabled != true) App.LayeredAudio?.Stop();
+            });
+            Step("audio unduck", () => App.Audio?.ForceUnduck());
+            // Belt and braces LAST: KillAllAudio is a single try/catch, so anything it would have
+            // skipped after an early throw has already been done individually above.
+            Step("kill all audio", App.KillAllAudio);
+
+            Step("interaction queue", () => App.InteractionQueue?.ForceReset());
+
+            VideoDiag.Log("PANIC", "stop-all pass complete");
+        }
+
+        /// <summary>
         /// Stops every "ad-hoc" effect that can be live without the engine running — i.e. effects
         /// fired by voice commands ("She's Listening"), dashboard one-shots, or Deeper. The normal
         /// stop paths assume a running session/overlay reconcile loop; these surfaces don't, so the
@@ -1315,6 +1856,17 @@ namespace ConditioningControlPanel
                 var currentKey = App.Settings.Current.PanicKey;
                 AppSettingsTab.BtnPanicKey.Content = _isCapturingPanicKey ? "Press any key..." : $"🔑 {currentKey}";
             }
+        }
+
+        /// <summary>Mirrors <see cref="UpdatePanicKeyButton"/> for the optional Pause key. An empty
+        /// binding reads as the localized "not set" rather than an empty button.</summary>
+        internal void UpdatePauseKeyButton()
+        {
+            if (AppSettingsTab?.BtnPauseKey == null) return;
+            var currentKey = App.Settings?.Current?.PauseKey ?? "";
+            AppSettingsTab.BtnPauseKey.Content = _isCapturingPauseKey
+                ? "Press any key..."
+                : (string.IsNullOrEmpty(currentKey) ? Loc.Get("btn_pause_key_unbound") : $"⏸ {currentKey}");
         }
 
         // ---- velvet-mosaic: internal wrappers called by popup feature UserControls ----

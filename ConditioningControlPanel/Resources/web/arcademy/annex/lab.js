@@ -171,7 +171,7 @@ export function createAnnexLab(caps) {
   function save(patch) {
     Object.assign(st, patch);
     try { if (typeof c.saveAnnex === 'function') c.saveAnnex(patch); }
-    catch (e) { log('annex save failed'); }
+    catch (e) { log('annex save failed', 'warn'); }
   }
 
   /* THE READ SET IS SHARED, THE COUNTER IS NOT. `read` carries the OS's 26
@@ -230,7 +230,7 @@ export function createAnnexLab(caps) {
       link.rel = 'stylesheet';
       link.href = new URL(rel, import.meta.url).href;
       doc.head.appendChild(link);
-    } catch (e) { log('annex sheet failed: ' + rel); }
+    } catch (e) { log('annex sheet failed: ' + rel, 'warn'); }
   }
   ensureSheet('arc-annex-lab-css', './lab.css');
   ensureSheet('arc-annex-os-css', './os.css');
@@ -361,7 +361,7 @@ export function createAnnexLab(caps) {
         quads = j && j[FEED_KEY] ? j[FEED_KEY] : null;
         if (view === 'monitors') { mountFeeds(); mountLaptopHotspot(); }
       })
-      .catch(() => { quads = null; log('annex quads failed'); });
+      .catch(() => { quads = null; log('annex quads failed', 'warn'); });
   }
 
   function mountFeeds() {
@@ -416,11 +416,11 @@ export function createAnnexLab(caps) {
         feeds.style.webkitMaskImage = 'url(' + url + ')';
         feeds.style.maskSize = '100% 100%';
         feeds.style.webkitMaskSize = '100% 100%';
-      } catch (e) { log('annex mask failed'); }
+      } catch (e) { log('annex mask failed', 'warn'); }
       feeds.classList.remove('is-waiting');
       if (wall) wall.start();
     };
-    mask.onerror = () => { if (!dead) { feeds.remove(); log('annex mask missing'); } };
+    mask.onerror = () => { if (!dead) { feeds.remove(); log('annex mask missing', 'warn'); } };
     mask.src = ART_BASE + MASK_FILE;
   }
 
@@ -613,7 +613,7 @@ export function createAnnexLab(caps) {
       try { sil = fallback(); } catch (e) { sil = null; }
       if (sil) host.insertBefore(sil, img);
       img.remove();
-      log('annex case photo missing: ' + file);
+      log('annex case photo missing: ' + file, 'warn');
     });
     img.src = ART_BASE + file;
     return img;
@@ -718,7 +718,7 @@ export function createAnnexLab(caps) {
   function liveStrip(att) {
     let rows = null;
     try { rows = typeof c.attendance === 'function' ? c.attendance() : null; }
-    catch (e) { rows = null; log('annex attendance threw'); }
+    catch (e) { rows = null; log('annex attendance threw', 'warn'); }
     if (!Array.isArray(rows) || !rows.length) return null;
     const x = [];
     const y = [];

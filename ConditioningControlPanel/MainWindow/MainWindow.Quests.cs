@@ -74,34 +74,18 @@ namespace ConditioningControlPanel
 
                 // Event FX (PR-5): burst at the cap of the bar that just filled, or on the Quests
                 // nav button when the completion landed off-tab. See MainWindow.EventFx.cs.
-                CelebrateQuestComplete(e.QuestType);
+                CelebrateQuestComplete(e.QuestType, e.QuestDefinition.Id);
 
-                // Auto-advance the daily card (suggestion thread: Wobberjockey/Rosalyn/Nardda).
-                // QuestService generates the NEXT daily *after* it raises QuestCompleted, so the
-                // RefreshQuestUI above necessarily paints the quest that just finished - the card
-                // then sat on "COMPLETED" until the tab was left and re-entered. A short beat lets
-                // the completed overlay be seen, then we repaint onto the freshly rolled quest.
-                // CheckAndGenerateQuests is the same idempotent pass the refresh timer already runs;
-                // it respects MaxDailyQuestsPerDay (so the 3/3 "all done" card still wins) and touches
-                // no reroll counter, so a completion never spends one of the 1+2 rerolls.
-                if (e.QuestType == Models.QuestType.Daily)
-                {
-                    Task.Delay(1800).ContinueWith(_ =>
-                    {
-                        DispatcherHelper.RunOnUISync(() =>
-                        {
-                            try
-                            {
-                                App.Quests?.CheckAndGenerateQuests();
-                                RefreshQuestUI();
-                            }
-                            catch (Exception ex)
-                            {
-                                App.Logger?.Warning(ex, "Quest auto-advance repaint failed");
-                            }
-                        });
-                    });
-                }
+                // NO AUTO-ADVANCE. Under the one-at-a-time board a completion had to be followed by
+                // a delayed repaint, because QuestService rolled the NEXT daily quest after raising
+                // this event and the card would otherwise sit on "COMPLETED" until the tab was left
+                // and re-entered (suggestion thread: Wobberjockey/Rosalyn/Nardda). All three seats
+                // are dealt at midnight now: a finished card is SUPPOSED to stay finished, and the
+                // other two were already on screen and already correct.
+                //
+                // The header stamps are not on this tab and do not listen to the same refresh, so
+                // they are nudged directly.
+                RefreshQuestStamps();
 
                 // Hide inline banner after 5 seconds
                 Task.Delay(5000).ContinueWith(_ =>

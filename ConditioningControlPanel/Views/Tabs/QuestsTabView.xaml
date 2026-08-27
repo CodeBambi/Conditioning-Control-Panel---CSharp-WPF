@@ -5,6 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              xmlns:hover="clr-namespace:ConditioningControlPanel.Behaviors"
+             xmlns:ctrl="clr-namespace:ConditioningControlPanel.Views.Controls"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
@@ -62,23 +63,42 @@
                                        VerticalAlignment="Center"/>
                         </Grid>
     
-                        <!-- Two-column layout for Daily and Weekly -->
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="20"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-    
-                        <!-- DAILY QUEST CARD -->
+                        <!-- THE DAILY BOARD.
+
+                             Until 2026-08-27 this row was two columns - one daily card, one weekly
+                             card - and the day's three daily quests arrived one after another in
+                             that single seat. All three are dealt at once now, so the daily panel
+                             takes the full width and holds three cards side by side, and the
+                             weekly gets its own full-width panel underneath instead of competing
+                             with them for half the row. -->
+                        <!-- THE BOARD ROW: three dailies and the weekly, side by side.
+
+                             They were stacked before, and stacked did not survive the dailies going
+                             three-up: the daily panel got tall enough that the weekly panel started
+                             below the fold, so the tab opened on a screen with no weekly quest on
+                             it at all. Nothing was broken and nothing said so - it was simply out of
+                             sight, which is the same thing as missing.
+
+                             Side by side, the whole board - 3 + 1, the same 3 + 1 the header stamps
+                             show - is on screen at once with no scrolling. The weekly keeps its own
+                             panel, its own purple, and its own header; it just stands up vertically
+                             now instead of lying down, because a card in a 300px column cannot put
+                             its art beside its text. -->
+                        <Grid Margin="0,0,0,20">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="16"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
                         <ContentControl Grid.Column="0" Style="{StaticResource AnimatedGradientPanel}"
-                                BorderThickness="2" BorderBrush="#FFD700">
+                                        BorderThickness="2" BorderBrush="#FFD700">
                             <StackPanel>
                                 <!-- Card Header -->
-                                <Grid Margin="0,0,0,15">
+                                <Grid Margin="0,0,0,12">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="22" Height="22"
-                                               Source="{Binding Source='☀️', Converter={StaticResource EmojiToImageSource}}"/>
+                                               Source="{Binding Source='&#x2600;&#xFE0F;', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock Text="{loc:Str label_daily_quest}" Foreground="#FFD700"
                                                    FontSize="16" FontWeight="Bold" Margin="8,0,0,0"
                                                    VerticalAlignment="Center"/>
@@ -93,14 +113,23 @@
                                                FontSize="11" HorizontalAlignment="Right"
                                                VerticalAlignment="Center"/>
                                 </Grid>
-    
-                                <!-- Daily Progress Segments -->
-                                <Grid Margin="0,8,0,4">
+
+                                <!-- Daily Progress Segments. Kept even though three cards now show
+                                     their own state each: the segments are the one place that says
+                                     "the DAY is 2 of 3 done" rather than "this card is done".
+
+                                     The 14px gutters are NOT a spacing choice - they are the same
+                                     gutters DailyCardsGrid uses, so each segment sits exactly over
+                                     the seat it is counting. Three equal bars floating across a
+                                     panel this wide would read as a stray rule; three bars capping
+                                     three columns read as a scoreboard. Same MaxWidth for the same
+                                     reason. -->
+                                <Grid Margin="0,0,0,4" MaxWidth="800" HorizontalAlignment="Center">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="4"/>
+                                        <ColumnDefinition Width="14"/>
                                         <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="4"/>
+                                        <ColumnDefinition Width="14"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <Border x:Name="DailySegment1" x:FieldModifier="internal" Grid.Column="0" Background="#3D3D60"
@@ -112,97 +141,44 @@
                                 </Grid>
                                 <TextBlock Text="{loc:Str label_complete_3_daily_quests_1_weekly_quest}"
                                            Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                                           HorizontalAlignment="Center" Margin="0,0,0,8"/>
-    
-                                <!-- Quest Content -->
-                                <Border x:Name="DailyQuestCard" x:FieldModifier="internal" Background="{DynamicResource PanelBgBrush}"
-                                        CornerRadius="10" Padding="15" MinHeight="180">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                            <helpers:EmojiTextBlock x:Name="TxtDailyQuestIcon" x:FieldModifier="internal" Text=""
-                                                                    FontSize="24" HorizontalAlignment="Left" Visibility="Collapsed"/>
-                                            <TextBlock x:Name="TxtDailyQuestName" x:FieldModifier="internal" Text="{loc:Str label_loading_2}"
-                                                       Foreground="White" FontSize="16" FontWeight="Bold"
-                                                       HorizontalAlignment="Left" Margin="0,0,0,5"/>
-                                            <TextBlock x:Name="TxtDailyQuestDesc" x:FieldModifier="internal" Text=""
-                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
-                                                       HorizontalAlignment="Left" TextWrapping="Wrap"
-                                                       MaxWidth="180"/>
-    
-                                            <!-- Progress Bar -->
-                                            <Grid Margin="0,12,0,0">
-                                                <Border x:Name="DailyProgressTrack" x:FieldModifier="internal" Background="{DynamicResource DarkerBgBrush}" CornerRadius="4" Height="10">
-                                                    <Border x:Name="DailyProgressFill" x:FieldModifier="internal" Background="#FFD700"
-                                                            CornerRadius="4" HorizontalAlignment="Left" Width="0"/>
-                                                </Border>
-                                            </Grid>
-                                            <TextBlock x:Name="TxtDailyProgress" x:FieldModifier="internal" Text="0 / 0"
-                                                       Foreground="#FFD700" FontSize="12" FontWeight="Bold"
-                                                       HorizontalAlignment="Left" Margin="0,5,0,0"/>
-    
-                                            <!-- XP Reward -->
-                                            <Border Background="#3D3D60" CornerRadius="5"
-                                                    Padding="10,5" Margin="0,10,0,0"
-                                                    HorizontalAlignment="Left">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock x:Name="TxtDailyXP" x:FieldModifier="internal" Text="{loc:Str label_0_xp}"
-                                                               Foreground="{DynamicResource PinkBrush}" FontSize="14"
-                                                               FontWeight="Bold"/>
-                                                    <TextBlock x:Name="TxtDailyStreakBonus" x:FieldModifier="internal" Text=""
-                                                               Foreground="#FFB347" FontSize="12"
-                                                               FontWeight="Bold" Margin="6,1,0,0"
-                                                               VerticalAlignment="Center"
-                                                               FontFamily="Segoe UI Emoji"
-                                                               Visibility="Collapsed"/>
-                                                    <TextBlock x:Name="TxtDailyRerollBonus" x:FieldModifier="internal" Text=""
-                                                               Foreground="#7BC8F6" FontSize="12"
-                                                               FontWeight="Bold" Margin="6,1,0,0"
-                                                               VerticalAlignment="Center"
-                                                               Visibility="Collapsed"/>
-                                                </StackPanel>
-                                            </Border>
-                                        </StackPanel>
-                                        <!-- Quest Image -->
-                                        <Border Grid.Column="1" CornerRadius="12" Margin="10,0,0,0"
-                                                Width="150" Height="150" Background="{DynamicResource DarkerBgBrush}">
-                                            <Border.Clip>
-                                                <RectangleGeometry RadiusX="12" RadiusY="12" Rect="0,0,150,150"/>
-                                            </Border.Clip>
-                                            <Grid>
-                                                <!-- The parent's rounded Border.Clip is applied before
-                                                     this RenderTransform, so the pop zooms INSIDE the
-                                                     150x150 rounded frame. Once the quest is done the
-                                                     completed overlay covers the art and takes the
-                                                     hover, which is the right answer - a finished
-                                                     quest has nothing left to invite. -->
-                                                <Image x:Name="ImgDailyQuest" x:FieldModifier="internal" Stretch="UniformToFill"
-                                                       hover:HoverPop.IsEnabled="True"/>
-                                                <!-- Checkmark overlay for completed state -->
-                                                <Border x:Name="DailyCompletedOverlay" x:FieldModifier="internal" Background="#802D4A2D"
-                                                        Visibility="Collapsed">
-                                                    <TextBlock Text="✓" Foreground="#00E676" FontSize="64"
-                                                               FontWeight="Bold" HorizontalAlignment="Center"
-                                                               VerticalAlignment="Center">
-                                                        <TextBlock.Effect>
-                                                            <DropShadowEffect Color="Black" BlurRadius="8" ShadowDepth="2"/>
-                                                        </TextBlock.Effect>
-                                                    </TextBlock>
-                                                </Border>
-                                            </Grid>
-                                        </Border>
-                                    </Grid>
-                                </Border>
-    
-                                <!-- All Daily Quests Completed Message -->
+                                           HorizontalAlignment="Center" Margin="0,0,0,12"/>
+
+                                <!-- The three seats. Painted by MainWindow.RefreshQuestUI; each
+                                     card owns its own art, bar, hover FX and reroll button.
+
+                                     CAPPED AT 800 (3 x ~257 + 2 gutters). The panel is as wide as
+                                     the tab, and letting three cards stretch into it turns each
+                                     quest's square 256x256 art into a letterbox slot that shows a
+                                     third of the picture. At the cap each card is ~257 wide against
+                                     a 240-tall frame, so the art is very nearly uncropped AND the
+                                     whole card - reroll button included - still clears the tab's
+                                     viewport without scrolling. A wider cap means a taller square
+                                     means a button below the fold; 1020 was tried and did exactly
+                                     that. It still shrinks below the cap on a narrow window, where
+                                     the columns are what is scarce and the crop is the lesser
+                                     problem. -->
+                                <Grid x:Name="DailyCardsGrid" x:FieldModifier="internal"
+                                      MaxWidth="800" HorizontalAlignment="Center">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="14"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="14"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ctrl:DailyQuestCard x:Name="DailyCard0" x:FieldModifier="internal" Grid.Column="0"/>
+                                    <ctrl:DailyQuestCard x:Name="DailyCard1" x:FieldModifier="internal" Grid.Column="2"/>
+                                    <ctrl:DailyQuestCard x:Name="DailyCard2" x:FieldModifier="internal" Grid.Column="4"/>
+                                </Grid>
+
+                                <!-- All Daily Quests Completed Message. A ribbon under the finished
+                                     board now, not a card that replaces it - three stamped cards
+                                     are worth looking at. -->
                                 <Border x:Name="DailyAllCompletedMessage" x:FieldModifier="internal" Background="#2D4A2D" CornerRadius="10"
-                                        Padding="15" MinHeight="180" Visibility="Collapsed">
+                                        Padding="15,12" Margin="0,14,0,0" Visibility="Collapsed">
                                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                        <Image Width="44" Height="44" HorizontalAlignment="Center" Margin="0,0,0,10"
-                                               Source="{Binding Source='✅', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <Image Width="34" Height="34" HorizontalAlignment="Center" Margin="0,0,0,6"
+                                               Source="{Binding Source='&#x2705;', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock Text="{loc:Str label_all_daily_quests_completed}" Foreground="#00E676"
                                                    FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"
                                                    Margin="0,0,0,5"/>
@@ -210,122 +186,166 @@
                                                    FontSize="12" HorizontalAlignment="Center"/>
                                     </StackPanel>
                                 </Border>
-    
-                                <!-- Reroll Button -->
-                                <Button x:Name="BtnRerollDaily" x:FieldModifier="internal" Content="{loc:Str btn_reroll}"
-                                        Style="{StaticResource OutlineButton}"
-                                        Margin="0,15,0,0" Click="BtnRerollDaily_Click"
-                                        ToolTip="{loc:Str tooltip_reroll_for_a_different_quest_once_per_day}"/>
+
+                                <!-- One shared reroll pool across all three seats, said once here
+                                     rather than three times on the buttons. -->
+                                <TextBlock x:Name="TxtDailyRerollPool" x:FieldModifier="internal" Text=""
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                           HorizontalAlignment="Center" Margin="0,12,0,0"/>
                             </StackPanel>
                         </ContentControl>
-    
-                        <!-- WEEKLY QUEST CARD -->
-                        <ContentControl Grid.Column="2" Style="{StaticResource AnimatedGradientPanel}"
-                                BorderThickness="2" BorderBrush="#9370DB">
+
+                        <!-- THE WEEKLY, STOOD UP.
+
+                             Same content as before, same x:Names - the paint code in
+                             MainWindow.QuestsTab.cs and the bar hook in
+                             MainWindow.TabFxPresetsQuestsAchievements.cs both address this by name
+                             and neither knows the layout changed. What changed is the axis: art on
+                             top with the name and the ask printed on it, then the bar, then the
+                             reroll. That is deliberately the same shape as a DailyQuestCard, so the
+                             row reads as four quests rather than as three quests and a widget.
+
+                             Fixed 300 wide. It is the sidebar of this row; letting it stretch would
+                             take the width back off the dailies, which are the ones that need it. -->
+                        <ContentControl Grid.Column="2" Width="300"
+                                        Style="{StaticResource AnimatedGradientPanel}"
+                                        BorderThickness="2" BorderBrush="#9370DB"
+                                        VerticalAlignment="Top">
                             <StackPanel>
-                                <!-- Card Header -->
-                                <Grid Margin="0,0,0,15">
+                                <!-- Panel header. Stacked, not a two-column Grid: at 300 wide the
+                                     title and the reset note will not share a line. -->
+                                <StackPanel Margin="0,0,0,10">
                                     <StackPanel Orientation="Horizontal">
-                                        <Image Width="22" Height="22"
-                                               Source="{Binding Source='🌙', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <Image Width="20" Height="20"
+                                               Source="{Binding Source='&#x1F319;', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock Text="{loc:Str label_weekly_quest}" Foreground="#9370DB"
-                                                   FontSize="16" FontWeight="Bold" Margin="8,0,0,0"
+                                                   FontSize="15" FontWeight="Bold" Margin="8,0,0,0"
                                                    VerticalAlignment="Center"/>
                                     </StackPanel>
                                     <TextBlock Text="{loc:Str label_resets_sunday}" Foreground="{DynamicResource TextMutedBrush}"
-                                               FontSize="11" HorizontalAlignment="Right"
-                                               VerticalAlignment="Center"/>
-                                </Grid>
-                                <TextBlock Text="{loc:Str label_1_weekly_quest_to_complete}"
-                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                                           HorizontalAlignment="Center" Margin="0,0,0,8"/>
-    
+                                               FontSize="11" Margin="0,3,0,0"/>
+                                </StackPanel>
+
                                 <!-- Quest Content -->
                                 <Border x:Name="WeeklyQuestCard" Background="{DynamicResource PanelBgBrush}"
-                                        CornerRadius="10" Padding="15" MinHeight="180">
+                                        CornerRadius="10" ClipToBounds="True">
                                     <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                            <helpers:EmojiTextBlock x:Name="TxtWeeklyQuestIcon" x:FieldModifier="internal" Text=""
-                                                                    FontSize="24" HorizontalAlignment="Left" Visibility="Collapsed"/>
-                                            <TextBlock x:Name="TxtWeeklyQuestName" x:FieldModifier="internal" Text="{loc:Str label_loading_2}"
-                                                       Foreground="White" FontSize="16" FontWeight="Bold"
-                                                       HorizontalAlignment="Left" Margin="0,0,0,5"/>
-                                            <TextBlock x:Name="TxtWeeklyQuestDesc" x:FieldModifier="internal" Text=""
-                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
-                                                       HorizontalAlignment="Left" TextWrapping="Wrap"
-                                                       MaxWidth="180"/>
-    
-                                            <!-- Progress Bar -->
-                                            <Grid Margin="0,12,0,0">
-                                                <Border x:Name="WeeklyProgressTrack" x:FieldModifier="internal" Background="{DynamicResource DarkerBgBrush}" CornerRadius="4" Height="10">
-                                                    <Border x:Name="WeeklyProgressFill" x:FieldModifier="internal" Background="#9370DB"
-                                                            CornerRadius="4" HorizontalAlignment="Left" Width="0"/>
-                                                </Border>
-                                            </Grid>
-                                            <TextBlock x:Name="TxtWeeklyProgress" x:FieldModifier="internal" Text="0 / 0"
-                                                       Foreground="#9370DB" FontSize="12" FontWeight="Bold"
-                                                       HorizontalAlignment="Left" Margin="0,5,0,0"/>
-    
-                                            <!-- XP Reward -->
-                                            <Border Background="#3D3D60" CornerRadius="5"
-                                                    Padding="10,5" Margin="0,10,0,0"
-                                                    HorizontalAlignment="Left">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock x:Name="TxtWeeklyXP" x:FieldModifier="internal" Text="{loc:Str label_0_xp}"
-                                                               Foreground="{DynamicResource PinkBrush}" FontSize="14"
-                                                               FontWeight="Bold"/>
-                                                    <TextBlock x:Name="TxtWeeklyStreakBonus" x:FieldModifier="internal" Text=""
-                                                               Foreground="#FFB347" FontSize="12"
-                                                               FontWeight="Bold" Margin="6,1,0,0"
-                                                               VerticalAlignment="Center"
-                                                               FontFamily="Segoe UI Emoji"
-                                                               Visibility="Collapsed"/>
-                                                    <TextBlock x:Name="TxtWeeklyRerollBonus" x:FieldModifier="internal" Text=""
-                                                               Foreground="#7BC8F6" FontSize="12"
-                                                               FontWeight="Bold" Margin="6,1,0,0"
-                                                               VerticalAlignment="Center"
-                                                               Visibility="Collapsed"/>
-                                                </StackPanel>
-                                            </Border>
-                                        </StackPanel>
-                                        <!-- Quest Image -->
-                                        <Border Grid.Column="1" CornerRadius="12" Margin="10,0,0,0"
-                                                Width="150" Height="150" Background="{DynamicResource DarkerBgBrush}">
-                                            <Border.Clip>
-                                                <RectangleGeometry RadiusX="12" RadiusY="12" Rect="0,0,150,150"/>
-                                            </Border.Clip>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <!-- ART. Square, like the daily frames and for the same
+                                             reason: every file in Resources/quests is 256x256, and
+                                             the old 150x150 thumbnail beside the text was the one
+                                             part of this card that was already showing the picture
+                                             properly. It just showed it small. -->
+                                        <Border Grid.Row="0" Height="256" Background="{DynamicResource DarkerBgBrush}"
+                                                CornerRadius="9,9,0,0" ClipToBounds="True">
                                             <Grid>
                                                 <Image x:Name="ImgWeeklyQuest" x:FieldModifier="internal" Stretch="UniformToFill"
                                                        hover:HoverPop.IsEnabled="True"/>
-                                                <!-- Checkmark overlay for completed state -->
-                                                <Border x:Name="WeeklyCompletedOverlay" x:FieldModifier="internal" Background="#802D4A2D"
+
+                                                <!-- Scrim, ramped to near-opaque at the bottom for
+                                                     the same reason as the daily cards: the shipped
+                                                     art has the quest's name set into that band, and
+                                                     it would print underneath this caption. -->
+                                                <Border Height="112" VerticalAlignment="Bottom" IsHitTestVisible="False">
+                                                    <Border.Background>
+                                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                            <GradientStop Color="#00000000" Offset="0"/>
+                                                            <GradientStop Color="#8A000000" Offset="0.28"/>
+                                                            <GradientStop Color="#FC000000" Offset="0.52"/>
+                                                            <GradientStop Color="#FF000000" Offset="1"/>
+                                                        </LinearGradientBrush>
+                                                    </Border.Background>
+                                                </Border>
+
+                                                <!-- Completed. Under the caption, so a finished
+                                                     weekly still says which weekly it was. -->
+                                                <Border x:Name="WeeklyCompletedOverlay" x:FieldModifier="internal" Background="#992D4A2D"
                                                         Visibility="Collapsed">
-                                                    <TextBlock Text="✓" Foreground="#00E676" FontSize="64"
+                                                    <TextBlock Text="&#x2713;" Foreground="#00E676" FontSize="72"
                                                                FontWeight="Bold" HorizontalAlignment="Center"
-                                                               VerticalAlignment="Center">
+                                                               VerticalAlignment="Center" Margin="0,0,0,38">
                                                         <TextBlock.Effect>
                                                             <DropShadowEffect Color="Black" BlurRadius="8" ShadowDepth="2"/>
                                                         </TextBlock.Effect>
                                                     </TextBlock>
                                                 </Border>
+
+                                                <!-- XP, on the art. The daily cards put the price
+                                                     tag in the same corner. -->
+                                                <Border Background="#B01A1A2E" CornerRadius="9"
+                                                        Padding="7,2" Margin="8" HorizontalAlignment="Right"
+                                                        VerticalAlignment="Top" IsHitTestVisible="False">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock x:Name="TxtWeeklyXP" x:FieldModifier="internal" Text="{loc:Str label_0_xp}"
+                                                                   Foreground="{DynamicResource PinkBrush}" FontSize="11"
+                                                                   FontWeight="Bold" VerticalAlignment="Center"/>
+                                                        <TextBlock x:Name="TxtWeeklyStreakBonus" x:FieldModifier="internal" Text=""
+                                                                   Foreground="#FFB347" FontSize="10"
+                                                                   FontWeight="Bold" Margin="4,0,0,0"
+                                                                   VerticalAlignment="Center"
+                                                                   FontFamily="Segoe UI Emoji"
+                                                                   Visibility="Collapsed"/>
+                                                        <TextBlock x:Name="TxtWeeklyRerollBonus" x:FieldModifier="internal" Text=""
+                                                                   Foreground="#7BC8F6" FontSize="10"
+                                                                   FontWeight="Bold" Margin="4,0,0,0"
+                                                                   VerticalAlignment="Center"
+                                                                   Visibility="Collapsed"/>
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <!-- CAPTION -->
+                                                <StackPanel VerticalAlignment="Bottom" Margin="11,0,11,9" IsHitTestVisible="False">
+                                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                        <helpers:EmojiTextBlock x:Name="TxtWeeklyQuestIcon" x:FieldModifier="internal" Text=""
+                                                                                FontSize="15" VerticalAlignment="Center"
+                                                                                Margin="0,0,6,0" Visibility="Collapsed"/>
+                                                        <TextBlock x:Name="TxtWeeklyQuestName" x:FieldModifier="internal" Text="{loc:Str label_loading_2}"
+                                                                   Foreground="White" FontSize="14" FontWeight="Bold"
+                                                                   TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                    <TextBlock x:Name="TxtWeeklyQuestDesc" x:FieldModifier="internal" Text=""
+                                                               Foreground="#D6D6E8" FontSize="11"
+                                                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                                               MaxHeight="31"/>
+                                                </StackPanel>
                                             </Grid>
                                         </Border>
+
+                                        <!-- BODY: the bar and its count on one line, same as a
+                                             daily card. -->
+                                        <Grid Grid.Row="1" Margin="11,9,11,11">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border x:Name="WeeklyProgressTrack" x:FieldModifier="internal" Grid.Column="0"
+                                                    Background="{DynamicResource DarkerBgBrush}" CornerRadius="4"
+                                                    Height="10" VerticalAlignment="Center" Margin="0,0,10,0">
+                                                <Border x:Name="WeeklyProgressFill" x:FieldModifier="internal" Background="#9370DB"
+                                                        CornerRadius="4" HorizontalAlignment="Left" Width="0"/>
+                                            </Border>
+                                            <TextBlock x:Name="TxtWeeklyProgress" x:FieldModifier="internal" Grid.Column="1" Text="0 / 0"
+                                                       Foreground="#9370DB" FontSize="12" FontWeight="Bold"
+                                                       VerticalAlignment="Center"/>
+                                        </Grid>
                                     </Grid>
                                 </Border>
-    
-                                <!-- Reroll Button -->
+
+                                <!-- Reroll Button. Stretched, because at 300 wide a left-aligned
+                                     button leaves a lopsided gap the dailies do not have. -->
                                 <Button x:Name="BtnRerollWeekly" x:FieldModifier="internal" Content="{loc:Str btn_reroll}"
-                                        Style="{StaticResource OutlineButton}"
-                                        Margin="0,15,0,0" Click="BtnRerollWeekly_Click"
+                                        Style="{StaticResource OutlineButton}" FontSize="11" Padding="8,4"
+                                        Margin="0,10,0,0" HorizontalAlignment="Stretch" Click="BtnRerollWeekly_Click"
+                                        ToolTipService.ShowOnDisabled="True"
                                         ToolTip="{loc:Str tooltip_reroll_for_a_different_quest_once_per_week}"/>
                             </StackPanel>
                         </ContentControl>
-                    </Grid>
-    
+                        </Grid>
+
                         <!-- Quest Complete Banner (shown briefly when quest completes) -->
                         <Border x:Name="QuestCompleteBanner" x:FieldModifier="internal" Background="#2D4A2D" CornerRadius="10"
                                 Padding="15" Margin="0,20,0,0" Visibility="Collapsed">

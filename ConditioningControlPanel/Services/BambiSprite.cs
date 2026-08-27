@@ -21,6 +21,15 @@ namespace ConditioningControlPanel.Services
         /// passes so pool titles reach the model un-rewritten (see the call site).</summary>
         private const string MediaLinksToken = "{{MEDIA_LINKS}}";
 
+        /// <summary>
+        /// How many pool titles the Bambi media block lists. Deliberately LARGER than
+        /// <see cref="Companion.Brain.RecentRecommendations.MaxTracked"/>: that many recent picks
+        /// are banned for 24h by the exclusion line in the dynamic tail, so a sample of MaxTracked
+        /// or fewer would end a long session listing N videos and forbidding every one of them.
+        /// Expressed as a reference rather than a literal so the two cannot drift apart.
+        /// </summary>
+        internal const int BambiTitleSample = Companion.Brain.RecentRecommendations.MaxTracked + 4;
+
         // Core video/audio links that should ALWAYS be included in prompts
         // These exact names match AvatarTubeWindow.KnownVideoLinks for clickable links
         private string GetCoreMediaLinks()
@@ -29,32 +38,54 @@ namespace ConditioningControlPanel.Services
 
             if (isBambiMode)
             {
-                // The video line is dynamic: suggest the Bambi mod's pool (its shipped
-                // DefaultVideoLinks, or the user's own curated override from Settings → Hypnotube
-                // Links). Falls back to the legacy hand-tuned list only if the pool is empty.
-                // Audio/playlist guidance below is unchanged either way.
-                string bambiVideoTitles =
-                    "Naughty Bambi, Bambi Bae, Bambi Slay, Overload, TikTok Loop, Bambi TikTok - In Beat, Bambi TikTok - In Beat - Longer Version, Bambi TikTok - Good Girls Dont Cum, Bambi Chastity Overload, Dumb Bimbo Brainwash, Bambi TikTok Eager Slut, Yes Brain Loop, Day 1, Day 2, Day 4, Day 5, Toms Dangerous Tik Tok, Bambi TikTok 7, Bambi's Naughty TikTok Collection";
-                var bambiPool = GetVideoPool();
-                if (bambiPool != null && bambiPool.Count > 0)
-                    bambiVideoTitles = string.Join(", ", PoolTitles());
+                // CHAR BUDGET (2026-08-27). This branch used to cost ~3,250 chars, enough on its
+                // own to push the Bambi stable prefix past the client's 9,000-char soft ceiling and,
+                // with a taken quiz or one extra knowledge-base link, past the proxy's 10,000-char
+                // hard reject. Over that line EVERY cloud call 400s as input_too_large, the retry
+                // keeps the same oversized system message, and the companion falls back to canned
+                // Idle phrases forever. That is the whole of the "the Bambi mod's AI doesn't work,
+                // she just repeats herself" report. Three things paid for the cut:
+                //   1. the obsolete-audio ban PARAGRAPH is gone, replaced by the one line below
+                //      carrying the only behaviour it had: an ask for old audio by name maps to
+                //      the matching Programming playlist. (LinkFloorRule does NOT cover this - it
+                //      says the opposite, "NAME it in words only" - and the verbatim rule below
+                //      governs titles only. The cover for audio is the explicit "never name audio
+                //      that is not a playlist below" sentence in HOW TO LINK.)
+                //   2. the video list is a SAMPLE of the pool, not all of it (the same helper the
+                //      example title already used, so it stays byte-stable within an app session);
+                //   3. the prose around the lists is stated once instead of three times.
+                // Anything added back here comes out of the tail: memory, time of day and the
+                // anti-repeat set are what get dropped first when this block grows.
+                //
+                // The sample MUST stay LARGER than the anti-repeat window. RecentRecommendations
+                // bans its last MaxTracked picks for 24h through the exclusion line in the tail,
+                // so a sample of MaxTracked or fewer ends the session listing N videos and
+                // forbidding all N - a strictly worse prompt than the 3,250-char one this
+                // replaced. Referencing the constant (not copying the number) is what stops the
+                // two drifting apart. See <see cref="BambiTitleSample"/>.
 
-                // Draw the example title from the live pool (varies every build) instead of
-                // hardcoding "Naughty Bambi" — a fixed example here made the companion fixate on
-                // that one video no matter how many were available.
-                var exampleTitle = SampleVideoTitles(1).FirstOrDefault() ?? "Bambi Bae";
+                // The pool: the Bambi mod's shipped DefaultVideoLinks, or the user's own curated
+                // override from Settings → Hypnotube Links. Falls back to the legacy hand-tuned
+                // list only when the pool is empty.
+                var sampled = SampleVideoTitles(BambiTitleSample);
+                string bambiVideoTitles = sampled.Count > 0
+                    ? string.Join(", ", sampled)
+                    : "Naughty Bambi, Bambi Bae, Bambi Slay, Overload, Dumb Bimbo Brainwash, Yes Brain Loop, Day 1, Day 2";
+
+                // Draw the example title from the same sample, so the example is always a title the
+                // model can actually see in the list below it.
+                var exampleTitle = sampled.FirstOrDefault() ?? "Bambi Bae";
 
                 return $@"
-CLICKABLE MEDIA — Suggest these FREQUENTLY. They become clickable links in the chat.
+CLICKABLE MEDIA - name these often; the app turns them into real links.
 
 ==== HOW TO LINK ====
-For PLAYLISTS, ALWAYS wrap the title in markdown link syntax with its URL copied EXACTLY from the list below:
-  Example: ""Listen to [IQ Programming](https://bambicloud.com/playlist/ff15f538-6e6b-433c-b68b-b4af5ee5d14d)"" - phrased in your persona's own voice
-For VIDEOS, just say the EXACT title (the app auto-links it):
-  Example: ""Try {exampleTitle}"" - phrased in your persona's own voice
-NEVER invent URLs. NEVER suggest audio by any name that isn't on this page — there's no other way to link audio.
+PLAYLIST: copy its whole markdown line from the list below, brackets AND URL, exactly as printed.
+  Example: ""Listen to [IQ Programming](https://bambicloud.com/playlist/ff15f538-6e6b-433c-b68b-b4af5ee5d14d)""
+VIDEO: say the exact title and nothing else, e.g. ""Try {exampleTitle}"", in your own voice.
+Never write a URL of your own, and never name audio that is not a playlist below. Asked for old audio by name (""Bambi IQ Lock"", ""Bambi Cockslut""), give the matching Programming playlist instead.
 
-==== BAMBICLOUD PLAYLISTS (the ONLY audio you can recommend) ====
+==== BAMBICLOUD PLAYLISTS (the ONLY audio you can name) ====
 [IQ Programming](https://bambicloud.com/playlist/ff15f538-6e6b-433c-b68b-b4af5ee5d14d)
 [Attitude Programming](https://bambicloud.com/playlist/c0effdad-6002-4269-a982-479d676c8d46)
 [Takeover Programming](https://bambicloud.com/playlist/726403c2-567c-4c30-9f74-8fd750a82ef9)
@@ -64,14 +95,10 @@ NEVER invent URLs. NEVER suggest audio by any name that isn't on this page — t
 [Deep Trance Programming](https://bambicloud.com/playlist/648f16c8-865b-44e2-bba5-881fc499e0f7)
 [Personality Programming](https://bambicloud.com/playlist/ba1cf73a-5f3e-4ef8-bbc6-67ce2dcae774)
 
-==== VIDEOS (the ONLY videos you can recommend — say the EXACT title, the app auto-links) ====
+==== VIDEOS (the ONLY videos you can name) ====
 " + bambiVideoTitles + @"
 
-CRITICAL: Recommend ONLY titles copied VERBATIM from the list directly above. NEVER invent, rename, extend, shorten, or guess a title — do NOT turn the user's words into a title. A title that isn't on the list word-for-word will NOT become a link and frustrates the user. If you're unsure, pick any one title from the list and copy it character-for-character. When the user asks for ""another one,"" choose a DIFFERENT exact title from the list. Never attribute a video to an uploader, channel or creator (never say a video is ""from"" someone) — say the title alone.
-
-DO NOT name old Bambi Sleep audio files (Bambi IQ Lock, Bambi Body Lock, Rapid Induction, Bubble Induction, Bambi Cockslut, Bambi Takeover, Bambi Awakens, Bambi Named and Drained, Bambi Uniformed, etc.) — those are obsolete here, they have no link, and recommending them frustrates the user. When the user wants audio, use a Programming playlist instead. ""Bambi IQ Lock"" → say [IQ Programming]. ""Bambi Cockslut"" → say [Cockslut Programming]. Etc.
-
-If asked who makes this content, credit the creator PlatinumPuppets — but still only ever name the exact titles and playlists listed above; never invent a title ""by"" them or anyone else.";
+CRITICAL: copy a title character-for-character. Never invent, rename, shorten or extend one, never turn the user's own words into a title, and never say a video is ""from"" anyone. Asked for another, pick a DIFFERENT one. Asked who makes this, credit PlatinumPuppets.";
             }
 
             // Mod-aware video knowledge: a themed mod (e.g. Locked) that ships its own
@@ -210,6 +237,29 @@ CRITICAL: Do NOT mention any specific video names. Only give generic ""go browse
             return _deterministicSampling
                 ? titles.OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
                 : titles;
+        }
+
+        /// <summary>
+        /// Inverts a name -> url map into url -> name, tolerating duplicate urls (FIRST name wins).
+        ///
+        /// <para><c>ToDictionary(kvp =&gt; kvp.Value, ...)</c> throws <see cref="ArgumentException"/>
+        /// the moment two titles share a url, and a throw here takes down the whole system-prompt
+        /// build: the companion goes down, not just one line of the prompt. Duplicate urls are not
+        /// hypothetical: aliases, a mod shipping one clip under two names, and hand-pasted user link
+        /// lists all produce them, and nothing validates against it on the way in.</para>
+        /// </summary>
+        internal static Dictionary<string, string> ReverseByUrlFirstWins(
+            IReadOnlyDictionary<string, string>? nameToUrl)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (nameToUrl == null) return result;
+
+            foreach (var kvp in nameToUrl)
+            {
+                if (string.IsNullOrWhiteSpace(kvp.Value)) continue;
+                if (!result.ContainsKey(kvp.Value)) result[kvp.Value] = kvp.Key;
+            }
+            return result;
         }
 
         /// <summary>
@@ -955,9 +1005,14 @@ Example responses with REAL video names:
             {
                 sb.AppendLine("--- HYPNOTUBE VIDEO LINKS ---");
                 sb.AppendLine("When suggesting videos, say the EXACT video name from this list. Do NOT output URLs — just say the video name naturally.");
-                // Build a reverse lookup from URL -> name using KnownVideoLinks
-                var urlToName = AvatarTubeWindow.KnownVideoLinks.ToDictionary(
-                    kvp => kvp.Value, kvp => kvp.Key, StringComparer.OrdinalIgnoreCase);
+                // Build a reverse lookup from URL -> name using KnownVideoLinks.
+                // NOT ToDictionary: the forward map is name -> url, so two names pointing at the
+                // same url (an alias, a mod shipping the same clip twice, a user pasting a
+                // duplicate) made ToDictionary throw ArgumentException and take the whole prompt
+                // build down, reachable today by a Bambi user who clears the video pool while
+                // HypnotubeLinksBambiSleep is set, which is exactly the branch that reaches here.
+                // First name wins, matching ToDictionary's insertion order for the non-dup case.
+                var urlToName = ReverseByUrlFirstWins(AvatarTubeWindow.KnownVideoLinks);
                 foreach (var rawUrl in hypnotubeLinks.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                 {
                     if (urlToName.TryGetValue(rawUrl, out var name))

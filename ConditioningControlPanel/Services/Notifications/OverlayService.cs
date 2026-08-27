@@ -83,6 +83,74 @@ public class OverlayService : IDisposable
     /// abnormally-ended band (no matching exit) can't leave overlays pinned above later videos.</summary>
     internal void ResetDeeperOverlayBands() => System.Threading.Interlocked.Exchange(ref _deeperOverlayBandDepth, 0);
 
+    // #1041/#1045/#1051/#1052 - HTML5 fullscreen buries every effect.
+    //
+    // Both fullscreen browser paths (the Deeper enhancement player, and the Settings-tab browser
+    // plus its popout) answer an HTML5 fullscreen request by Show()ing a NEW borderless Topmost
+    // window. A freshly shown topmost window lands at the FRONT of the topmost band, above every
+    // effect window - and the #952/#905 "rented Topmost" handlers re-assert the claim on every
+    // activation, so it returns to the front each time the user clicks the video. Nothing on our
+    // side ever re-raised: ReassertOne only acts when a window LOST WS_EX_TOPMOST, which an overlay
+    // buried by a topmost sibling never does, so ResolveZOrderAction returned None forever and the
+    // pink tint / spiral / flashes stayed invisible for the rest of the run.
+    //
+    // While any such window is live, every reconcile tick is treated as a FORCED tick (see
+    // ShouldForceZOrderTick), which re-issues HWND_TOPMOST and puts the effects back on top within
+    // ~500ms of any re-raise. Tracked as a SET of owners rather than a counter so a double enter or
+    // a partially-unwound exit cannot strand the flag on (both exit paths are retryable by design).
+    private readonly HashSet<object> _fullscreenBrowserOwners = new();
+    private readonly object _fullscreenBrowserGate = new();
+    private volatile bool _fullscreenBrowserActive;
+
+    /// <summary>True while at least one topmost fullscreen browser window is on screen.</summary>
+    internal bool TopmostFullscreenBrowserActive => _fullscreenBrowserActive;
+
+    /// <summary>
+    /// Pure tick policy: a reconcile pass must re-issue HWND_TOPMOST unconditionally (rather than
+    /// only healing windows that lost the flag) whenever the caller asked for it OR a topmost
+    /// fullscreen browser window is live. Extracted so the #1041 rule is unit-testable.
+    /// </summary>
+    internal static bool ShouldForceZOrderTick(bool explicitForce, bool fullscreenBrowserActive)
+        => explicitForce || fullscreenBrowserActive;
+
+    /// <summary>
+    /// Register/unregister a live topmost fullscreen browser window and kick an immediate forced
+    /// z-order pass. Idempotent per <paramref name="owner"/> (pass the window, or the service that
+    /// owns it), so a caller may notify twice, or unwind twice, without unbalancing anything.
+    /// </summary>
+    public void SetFullscreenBrowserActive(object? owner, bool active)
+    {
+        if (owner == null) return;
+        lock (_fullscreenBrowserGate)
+        {
+            if (active) _fullscreenBrowserOwners.Add(owner);
+            else _fullscreenBrowserOwners.Remove(owner);
+            _fullscreenBrowserActive = _fullscreenBrowserOwners.Count > 0;
+        }
+        RequestForcedZOrderReassert();
+    }
+
+    /// <summary>
+    /// Queue a forced z-order pass on the UI thread. Public so the fullscreen enter/exit paths (and
+    /// the rented-Topmost activation handlers) can put the effects back on top the moment they move
+    /// a topmost window, instead of waiting out the next reconcile tick.
+    /// </summary>
+    public void RequestForcedZOrderReassert()
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher == null) return;
+        try
+        {
+            dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (Application.Current?.Dispatcher == null) return;
+                try { if (!_isDisposed) ReassertZOrder(force: true); }
+                catch (Exception ex) { App.Logger?.Debug("RequestForcedZOrderReassert failed: {Error}", ex.Message); }
+            }));
+        }
+        catch { }
+    }
+
     /// <summary>The AppSettings instance our PropertyChanged hook is currently attached to. Tracked
     /// rather than re-read from <c>App.Settings.Current</c>, so the unsubscribe always detaches from
     /// the object we actually attached to. Same pattern as <c>ModService</c>.</summary>
@@ -811,32 +879,58 @@ public class OverlayService : IDisposable
                 if (kind == "pink_filter")
                 {
                     _timedPinkHolds++;
+                    // Take opacity ownership for the life of the hold, capturing whoever had it
+                    // first so the hide timer can hand it straight back (#573). Parking the hold is
+                    // also what keeps the 500ms settings-sync off this effect's opacity.
+                    if (!_bumpPinkActive) { _bumpPinkActive = true; _bumpPrevRampPink = _rampPinkOpacity; }
                     if (PinkShowing)
                     {
                         // #573: show() would early-return on an already-showing overlay, silently
                         // swallowing the boost. Bump the live opacity instead (never downward) and
                         // park it in the ramp hold so the settings-sync can't stomp it; the hide
                         // timer restores the previous owner.
-                        if (!_bumpPinkActive) { _bumpPinkActive = true; _bumpPrevRampPink = _rampPinkOpacity; }
-                        double current = _rampPinkOpacity ?? (App.Settings?.Current?.PinkFilterOpacity ?? 0) / 100.0;
-                        double target = Math.Max(current, opacityPercent / 100.0);
+                        double target = ResolveAdHocOverlayOpacity(true, _rampPinkOpacity,
+                            (App.Settings?.Current?.PinkFilterOpacity ?? 0) / 100.0, opacityPercent / 100.0);
                         _rampPinkOpacity = target;
                         ApplyPinkOpacityDirect(target);
                     }
-                    else show();
+                    else
+                    {
+                        show();
+                        // #1051: a FRESH ad-hoc overlay takes the effect's own opacity exactly. Without
+                        // the hold the settings-sync handed it straight back to the user's saved
+                        // setting, within half a second of the effect starting.
+                        if (PinkShowing)
+                        {
+                            double fresh = ResolveAdHocOverlayOpacity(false, null, 0, opacityPercent / 100.0);
+                            _rampPinkOpacity = fresh;
+                            ApplyPinkOpacityDirect(fresh);
+                        }
+                    }
                 }
                 else if (kind == "spiral")
                 {
                     _timedSpiralHolds++;
+                    if (!_bumpSpiralActive) { _bumpSpiralActive = true; _bumpPrevRampSpiral = _rampSpiralOpacity; }
                     if (SpiralShowing)
                     {
-                        if (!_bumpSpiralActive) { _bumpSpiralActive = true; _bumpPrevRampSpiral = _rampSpiralOpacity; }
-                        double current = _rampSpiralOpacity ?? (App.Settings?.Current?.SpiralOpacity ?? 0) / 100.0;
-                        double target = Math.Max(current, opacityPercent / 100.0);
+                        double target = ResolveAdHocOverlayOpacity(true, _rampSpiralOpacity,
+                            (App.Settings?.Current?.SpiralOpacity ?? 0) / 100.0, opacityPercent / 100.0);
                         _rampSpiralOpacity = target;
                         ApplySpiralOpacityDirect(target);
                     }
-                    else show();
+                    else
+                    {
+                        show();
+                        // #1051: ShowSpiralAdHoc -> StartSpiral paints the user's saved SpiralOpacity,
+                        // so a point-fired spiral effect ignored its authored opacity entirely.
+                        if (SpiralShowing)
+                        {
+                            double fresh = ResolveAdHocOverlayOpacity(false, null, 0, opacityPercent / 100.0);
+                            _rampSpiralOpacity = fresh;
+                            ApplySpiralOpacityDirect(fresh);
+                        }
+                    }
                 }
                 else
                 {
@@ -878,7 +972,10 @@ public class OverlayService : IDisposable
                         if (_bumpPinkActive)
                         {
                             _bumpPinkActive = false;
-                            if (PinkShowing)
+                            // A sustained Deeper band that started while this timed effect was up now
+                            // owns the opacity; restoring the value captured before the band existed
+                            // would hand its tint back to the settings-sync mid-band.
+                            if (PinkShowing && !_sustainedPinkHeld)
                             {
                                 _rampPinkOpacity = _bumpPrevRampPink;
                                 if (_rampPinkOpacity is double prevPink) ApplyPinkOpacityDirect(prevPink);
@@ -888,8 +985,11 @@ public class OverlayService : IDisposable
                         }
                         // Feature ownership requires the engine to be running (see
                         // HideOverlaySustained) — a ticked checkbox with the engine stopped
-                        // has no reconciler to ever tear this down.
-                        if (!(_isRunning && settings.PinkFilterEnabled)) hide();
+                        // has no reconciler to ever tear this down. A live sustained band counts as
+                        // an owner too: without that check a timed effect expiring over a Deeper
+                        // band tore the band's own overlay off screen (braindrain already guarded
+                        // this via ShouldStopHeldOverlay; pink and spiral did not).
+                        if (ShouldStopHeldOverlay(_isRunning && settings.PinkFilterEnabled, _timedPinkHolds, _sustainedPinkHeld)) hide();
                     }
                 }
                 else if (kind == "spiral")
@@ -900,7 +1000,7 @@ public class OverlayService : IDisposable
                         if (_bumpSpiralActive)
                         {
                             _bumpSpiralActive = false;
-                            if (SpiralShowing)
+                            if (SpiralShowing && !_sustainedSpiralHeld)
                             {
                                 _rampSpiralOpacity = _bumpPrevRampSpiral;
                                 if (_rampSpiralOpacity is double prevSpiral) ApplySpiralOpacityDirect(prevSpiral);
@@ -908,7 +1008,7 @@ public class OverlayService : IDisposable
                             }
                             _bumpPrevRampSpiral = null;
                         }
-                        if (!(_isRunning && settings.SpiralEnabled)) hide();
+                        if (ShouldStopHeldOverlay(_isRunning && settings.SpiralEnabled, _timedSpiralHolds, _sustainedSpiralHeld)) hide();
                     }
                 }
                 else // braindrain / braindrain_melt
@@ -973,8 +1073,14 @@ public class OverlayService : IDisposable
                 // constant-opacity Deeper band back to the user's saved opacity within half a second
                 // (#563 symptom-1). Ramp bands overwrite this each Update tick; HideOverlaySustained
                 // clears it on band exit, so the lifecycle stays symmetric.
-                if (kind == "pink_filter") { _sustainedPinkHeld = PinkShowing; if (PinkShowing) _rampPinkOpacity = opacity; }
-                else if (kind == "spiral") { _sustainedSpiralHeld = SpiralShowing; if (SpiralShowing) _rampSpiralOpacity = opacity; }
+                // #1051: parking the hold only stops the settings-sync from stomping the band - it
+                // never APPLIED the band's opacity. ShowSpiralAdHoc -> StartSpiral paints the user's
+                // saved SpiralOpacity, so a constant-opacity spiral band rendered at the engine
+                // setting, and only a RAMP looked right (every ramp tick reaches ApplySpiralOpacityDirect).
+                // Pink had the same hole whenever the tint was already up, since ShowPinkFilterAdHoc
+                // early-returns then. Apply the band's own opacity here, for both.
+                if (kind == "pink_filter") { _sustainedPinkHeld = PinkShowing; if (PinkShowing) { _rampPinkOpacity = opacity; ApplyPinkOpacityDirect(opacity); } }
+                else if (kind == "spiral") { _sustainedSpiralHeld = SpiralShowing; if (SpiralShowing) { _rampSpiralOpacity = opacity; ApplySpiralOpacityDirect(opacity); } }
                 // braindrain / braindrain_melt share the one hold + ramp (never co-active). Gated on
                 // BrainDrainShowing for the same reason: a show() that no-oped (compositor host gone,
                 // GDI failure) must not leave a stale hold blocking a later legitimate teardown.
@@ -1100,6 +1206,23 @@ public class OverlayService : IDisposable
         _rampBrainDrainOpacity = null;
         _lastAppliedPinkOpacity = -1;
         _lastAppliedSpiralOpacity = -1;
+    }
+
+    /// <summary>
+    /// Opacity (0..1 fraction) a Deeper ad-hoc overlay effect should take.
+    /// A FRESH overlay takes the effect's own opacity exactly - #1051: the spiral show path paints
+    /// the user's saved SpiralOpacity, so an effect's authored opacity was dropped unless a RAMP
+    /// happened to overwrite it every tick. An overlay that is ALREADY up is only ever bumped UP
+    /// (#573), never dimmed, so a timed effect cannot quietly weaken a live band or the user's own
+    /// tint. Pure so the rule can be unit-tested without a window.
+    /// </summary>
+    internal static double ResolveAdHocOverlayOpacity(bool alreadyShowing, double? rampHold,
+        double settingsFraction, double requested)
+    {
+        requested = Math.Clamp(requested, 0, 1);
+        if (!alreadyShowing) return requested;
+        double current = Math.Clamp(rampHold ?? settingsFraction, 0, 1);
+        return Math.Max(current, requested);
     }
 
     private void ApplyPinkOpacityDirect(double opacity)
@@ -1392,8 +1515,12 @@ public class OverlayService : IDisposable
                         && (s.SpiralEnabled || _timedSpiralHolds > 0 || _sustainedSpiralHeld);
                     if (stillWanted && UseCompositor)
                     {
-                        GetSpiralLayer().ShowFrames(frames, delay, (s.SpiralOpacity / 100.0) * 0.1);
-                        _lastAppliedSpiralOpacity = (s.SpiralOpacity / 100.0) * 0.1;
+                        // #1051: a Deeper band/effect that parked the ramp hold owns this overlay's
+                        // opacity. The decode finishes after the show call returned, so read the hold
+                        // here rather than the user's saved setting.
+                        double baseOpacity = _rampSpiralOpacity ?? (s.SpiralOpacity / 100.0);
+                        GetSpiralLayer().ShowFrames(frames, delay, baseOpacity * 0.1);
+                        _lastAppliedSpiralOpacity = baseOpacity * 0.1;
                         App.Logger?.Debug("Spiral started on compositor layer ({Path}, decoded off-thread)", path);
                     }
                 });
@@ -2799,11 +2926,31 @@ public class OverlayService : IDisposable
         // reconciler (and NotifyTopWindowClosed after each clip) buries the video behind the
         // spiral/pink filter; the video window is deliberately non-re-raising, so it never
         // recovers, and with autonomy chaining clips the next one shows "only by flashes" (#497).
+        //
+        // MULTI-MONITOR (#1016): "below the video" has to mean "below the video window on the SAME
+        // monitor". PrimaryVideoWindow is one window on one screen; ordering an overlay that lives on
+        // monitor 2 underneath monitor 1's video window leaves it ABOVE monitor 2's own video window
+        // (they are separate windows in one global z-order), which is the reported pink/spiral filter
+        // sitting on top of the second screen's clip. Collect every live video window with the monitor
+        // it covers and let each overlay pick its own anchor.
         IntPtr videoHwnd = IntPtr.Zero;
+        var videoAnchors = new List<(IntPtr Hwnd, IntPtr Monitor)>();
         try
         {
-            if (App.Video?.IsPlaying == true && App.Video.PrimaryVideoWindow is Window vw)
-                videoHwnd = new System.Windows.Interop.WindowInteropHelper(vw).Handle;
+            if (App.Video?.IsPlaying == true)
+            {
+                if (App.Video.PrimaryVideoWindow is Window vw)
+                    videoHwnd = new System.Windows.Interop.WindowInteropHelper(vw).Handle;
+
+                foreach (var vh in App.Video.GetVideoWindowHandles())
+                {
+                    // Handles are cached at window creation and cleared at teardown, so a dead one
+                    // here means a window went away mid-sweep. Ordering against a destroyed HWND makes
+                    // SetWindowPos fail outright, which would silently skip the pin for that overlay.
+                    if (vh == IntPtr.Zero || !IsWindow(vh)) continue;
+                    videoAnchors.Add((vh, MonitorFromWindow(vh, MONITOR_DEFAULTTONEAREST)));
+                }
+            }
         }
         catch { }
 
@@ -2812,13 +2959,19 @@ public class OverlayService : IDisposable
         // correct for ambient/session overlays that happen to co-exist with a mandatory video).
         bool aboveVideo = DeeperOverlayBandActive;
 
+        // A live topmost fullscreen browser window (Deeper's enhancement player, the Settings
+        // browser or its popout) re-raises itself to the front of the topmost band on every
+        // activation and never clears OUR WS_EX_TOPMOST bit - so the flag-only heal below can never
+        // notice. Treat every tick as forced while one is up (#1041/#1051/#1052).
+        force = ShouldForceZOrderTick(force, TopmostFullscreenBrowserActive);
+
         foreach (var list in new[] { _pinkFilterWindows, _spiralWindows, _brainDrainBlurWindows })
         {
             foreach (var window in list)
             {
                 var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
                 if (hwnd == IntPtr.Zero) continue;
-                ReassertOne(hwnd, videoHwnd, aboveVideo, force, ref anyRecovered);
+                ReassertOne(hwnd, videoAnchors, videoHwnd, aboveVideo, force, ref anyRecovered);
             }
         }
 
@@ -2829,11 +2982,11 @@ public class OverlayService : IDisposable
         try
         {
             foreach (var hwnd in App.CornerGif?.GetOverlayHandles() ?? new List<IntPtr>())
-                ReassertOne(hwnd, videoHwnd, aboveVideo, force, ref anyRecovered);
+                ReassertOne(hwnd, videoAnchors, videoHwnd, aboveVideo, force, ref anyRecovered);
 
             var sessionCornerGif = SessionEngine.Active?.GetCornerGifHandle() ?? IntPtr.Zero;
             if (sessionCornerGif != IntPtr.Zero)
-                ReassertOne(sessionCornerGif, videoHwnd, aboveVideo, force, ref anyRecovered);
+                ReassertOne(sessionCornerGif, videoAnchors, videoHwnd, aboveVideo, force, ref anyRecovered);
         }
         catch (Exception ex)
         {
@@ -2850,7 +3003,7 @@ public class OverlayService : IDisposable
             if (App.Compositor is { } engine)
             {
                 foreach (var hostHwnd in engine.GetVisibleHostHandles())
-                    ReassertOne(hostHwnd, videoHwnd, aboveVideo, force, ref anyRecovered);
+                    ReassertOne(hostHwnd, videoAnchors, videoHwnd, aboveVideo, force, ref anyRecovered);
                 // The detached avatar tube parks itself directly BELOW the host covering its monitor
                 // so the pink tint stops flickering on and off the companion (#776). It does that on
                 // its OWN thread (AvatarOwnThread => cross-thread SetWindowPos is a deadlock source
@@ -2863,8 +3016,54 @@ public class OverlayService : IDisposable
         {
             App.Logger?.Debug("ReassertZOrder (compositor hosts) failed: {Error}", ex.Message);
         }
+
+        // The ATTENTION LAYER: flash, subliminal and bubble windows. Each of these asserts
+        // HWND_TOPMOST once, on its own show edge, and nothing ever re-raises it - so a topmost
+        // fullscreen browser window buried every one of them with no recovery path at all (#1041).
+        //
+        // They do NOT ride the corner-GIF rules: the #497 below-video pin must never be applied
+        // here. Flashes (and the legacy per-window subliminals, and the bubble minigames) are the
+        // top attention layer BY DESIGN - FlashService force-topmosts each one on its show edge and
+        // ChaosModeService re-raises the whole set ~1/s through RaiseAllToFront, deliberately over
+        // a playing mandatory video. Handing them the below-video pin would bury a point-fired
+        // Deeper/chaos flash under the very video it was authored for (VideoEnhancementBridge runs
+        // an EnhancementEngine on a mandatory video, and a point-fired flash opens no overlay band,
+        // so aboveVideo is false there) within 500ms, and it would ping-pong at 2Hz against
+        // RaiseAllToFront's ~1Hz raise. ReassertAttentionOne therefore only ever heals a LOST
+        // topmost bit or bumps on a forced tick - which is all #1041 ever needed.
+        //
+        // Their recoveries deliberately do NOT feed anyRecovered: these windows come and go by the
+        // second (and pooled bubble shells idle hidden), so counting them as "topmost loss" would
+        // drive the 3s RecreateOverlays escalation on perfectly healthy overlays.
+        bool attentionRecovered = false;
+        try
+        {
+            foreach (var hwnd in App.Flash?.GetFlashWindowHandles() ?? EmptyHandleList)
+                ReassertAttentionOne(hwnd, force, ref attentionRecovered);
+            foreach (var hwnd in App.Subliminal?.GetSubliminalWindowHandles() ?? EmptyHandleList)
+                ReassertAttentionOne(hwnd, force, ref attentionRecovered);
+            foreach (var hwnd in App.Bubbles?.GetBubbleWindowHandles() ?? EmptyHandleList)
+                ReassertAttentionOne(hwnd, force, ref attentionRecovered);
+            // The shared chaos host carries the window-LESS members of this layer: solid-mode
+            // flashes (AppSettings.FlashSolidMode), hosted subliminal cards and ChaosBubbleSharedHost
+            // bubbles. It is a plain WPF window, NOT a CompositorEngine host, so the host sweep above
+            // never saw it and those users had no reconciler recovery at all. It returns Zero while
+            // the chaos layer is deliberately un-pinned (Free Desktop).
+            var bubbleHost = ChaosBubbleHostOverlay.GetActiveHandle();
+            if (bubbleHost != IntPtr.Zero)
+                ReassertAttentionOne(bubbleHost, force, ref attentionRecovered);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ReassertZOrder (attention layer) failed: {Error}", ex.Message);
+        }
+
         return anyRecovered;
     }
+
+    /// <summary>Shared empty result for the attention-layer accessors (no per-tick allocation when
+    /// a service is null). Immutable on purpose - it is handed to a foreach, never appended to.</summary>
+    private static readonly IReadOnlyList<IntPtr> EmptyHandleList = Array.Empty<IntPtr>();
 
     /// <summary>One window's worth of ReassertZOrder. Normally: below the active video (#497), else
     /// topmost. When <paramref name="aboveVideo"/> (a live Deeper overlay band), the overlay is the
@@ -2897,17 +3096,92 @@ public class OverlayService : IDisposable
         return ZOrderAction.None;
     }
 
-    private static void ReassertOne(IntPtr hwnd, IntPtr videoHwnd, bool aboveVideo, bool force, ref bool anyRecovered)
+    /// <summary>
+    /// Which video window a given topmost window must be pinned directly below, or
+    /// <see cref="IntPtr.Zero"/> for "there is nothing to sit under" (no video playing, or the window
+    /// being ordered IS a video window).
+    ///
+    /// Multi-monitor (#1016): a mandatory video is one fullscreen window PER SCREEN, all sharing one
+    /// global z-order. Anchoring every overlay to the primary window put overlays on the other screens
+    /// ABOVE the video windows there, which is the "pink filter / spiral covers the video on my second
+    /// monitor" report. So: prefer the video window on the same monitor as the target; fall back to
+    /// <paramref name="fallbackHwnd"/> (the primary) only when this monitor has no video window of its
+    /// own, where nothing overlaps and the choice is cosmetic.
+    ///
+    /// Pure and side-effect free so the set logic is unit-testable without any windows.
+    /// </summary>
+    internal static IntPtr ResolveVideoAnchor(
+        IReadOnlyList<(IntPtr Hwnd, IntPtr Monitor)> videoWindows,
+        IntPtr targetHwnd,
+        IntPtr targetMonitor,
+        IntPtr fallbackHwnd)
+    {
+        // Never anchor a window to itself: SetWindowPos(h, h, ...) is meaningless and would drop the
+        // window's pin entirely.
+        if (targetHwnd != IntPtr.Zero && targetHwnd == fallbackHwnd) return IntPtr.Zero;
+        if (videoWindows != null)
+        {
+            for (int i = 0; i < videoWindows.Count; i++)
+                if (videoWindows[i].Hwnd == targetHwnd) return IntPtr.Zero;
+        }
+
+        if (videoWindows == null || videoWindows.Count == 0) return fallbackHwnd;
+
+        if (targetMonitor != IntPtr.Zero)
+        {
+            for (int i = 0; i < videoWindows.Count; i++)
+                if (videoWindows[i].Monitor == targetMonitor) return videoWindows[i].Hwnd;
+        }
+        return fallbackHwnd;
+    }
+
+    /// <summary>
+    /// Pure z-order decision for one ATTENTION-LAYER window (flash / legacy subliminal / bubble).
+    /// Deliberately never sees the video handle: these windows are the top attention layer and are
+    /// force-topmosted over a playing mandatory video by FlashService on show and by
+    /// ChaosModeService.RaiseAllToFront ~1/s. So this sweep limits itself to healing a lost
+    /// WS_EX_TOPMOST bit or bumping on a forced tick (a live topmost fullscreen browser, #1041) -
+    /// applying the #497 below-video pin here would bury point-fired Deeper visuals under the
+    /// enhanced video and fight RaiseAllToFront at 2Hz.
+    /// </summary>
+    internal static ZOrderAction ResolveAttentionLayerAction(bool needsPin, bool force) =>
+        ResolveZOrderAction(hasVideo: false, isVideoWindow: false, aboveVideo: false,
+            needsPin: needsPin, force: force);
+
+    /// <summary>One attention-layer window's worth of ReassertZOrder. See
+    /// <see cref="ResolveAttentionLayerAction"/> for why it has no below-video branch.</summary>
+    private static void ReassertAttentionOne(IntPtr hwnd, bool force, ref bool anyRecovered)
     {
         int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
         bool needsPin = (exStyle & WS_EX_TOPMOST) == 0;
 
-        switch (ResolveZOrderAction(videoHwnd != IntPtr.Zero, hwnd == videoHwnd, aboveVideo, needsPin, force))
+        if (ResolveAttentionLayerAction(needsPin, force) != ZOrderAction.PinTopmost) return;
+
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        if (needsPin) anyRecovered = true;
+    }
+
+    private static void ReassertOne(IntPtr hwnd, IReadOnlyList<(IntPtr Hwnd, IntPtr Monitor)> videoAnchors,
+        IntPtr videoHwnd, bool aboveVideo, bool force, ref bool anyRecovered)
+    {
+        int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+        bool needsPin = (exStyle & WS_EX_TOPMOST) == 0;
+
+        // Resolve THIS window's anchor: the video window covering the same monitor, if there is one.
+        IntPtr anchor = ResolveVideoAnchor(videoAnchors, hwnd,
+            hwnd != IntPtr.Zero ? MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) : IntPtr.Zero,
+            videoHwnd);
+        // ResolveVideoAnchor already returns Zero when the target is itself a video window, so the
+        // isVideoWindow arm below is only reached through the anchor being absent.
+        bool isVideoWindow = anchor == IntPtr.Zero && videoHwnd != IntPtr.Zero;
+
+        switch (ResolveZOrderAction(anchor != IntPtr.Zero, isVideoWindow, aboveVideo, needsPin, force))
         {
             case ZOrderAction.PinBelowVideo:
-                // Insert directly below the active video window: stays topmost (above the
-                // desktop and other apps) but under the video the user is meant to watch.
-                SetWindowPos(hwnd, videoHwnd, 0, 0, 0, 0,
+                // Insert directly below the video window on THIS window's monitor: stays topmost
+                // (above the desktop and other apps) but under the video the user is meant to watch.
+                SetWindowPos(hwnd, anchor, 0, 0, 0, 0,
                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 if (needsPin) anyRecovered = true;
                 break;
@@ -3122,6 +3396,14 @@ public class OverlayService : IDisposable
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool IsWindow(IntPtr hwnd);
+
+    private const uint MONITOR_DEFAULTTONEAREST = 2;
 
     [System.Runtime.InteropServices.DllImport("shcore.dll")]
     private static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);

@@ -173,8 +173,8 @@ public class QuestService : IDisposable
         };
         _refreshTimer.Start();
 
-        App.Logger?.Information("QuestService initialized. Daily: {Daily}, Weekly: {Weekly}",
-            Progress.DailyQuest?.DefinitionId ?? "none",
+        App.Logger?.Information("QuestService initialized. Daily board: [{Daily}], Weekly: {Weekly}",
+            string.Join(", ", Progress.DailyQuests.Select(q => q?.DefinitionId ?? "empty")),
             Progress.WeeklyQuest?.DefinitionId ?? "none");
     }
 
@@ -262,56 +262,10 @@ public class QuestService : IDisposable
         // re-arms it, so a decision can never be lost between the arming and the retry.
         _premiumRecheckPending = false;
 
-        // Check daily quest - reset counter on new day
-        if (Progress.IsDailyExpired() || Progress.DailyQuest == null)
-        {
-            // Before replacing: if the expired quest was completed today (ran past midnight),
-            // preserve the completion count so it isn't lost when the counter resets
-            bool wasCompletedToday = Progress.DailyQuest?.IsCompleted == true
-                && Progress.DailyQuest.CompletedAt?.Date == DateTime.Today;
-
-            // New day resets the daily completion counter
-            Progress.GetDailyQuestsCompletedToday(); // triggers reset if new day
-
-            // Restore the count if the quest was completed after midnight on the "old" quest
-            if (wasCompletedToday && Progress.DailyQuestsCompletedToday == 0)
-            {
-                Progress.DailyQuestsCompletedToday = 1;
-                App.Logger?.Information("Quest day rollover: preserved completion count (quest completed today on expired quest)");
-            }
-
-            GenerateNewDailyQuest();
-            changed = true;
-        }
-
-        // Reconcile: if daily quest is completed today but counter doesn't reflect it
-        if (Progress.DailyQuest?.IsCompleted == true
-            && Progress.DailyQuest.CompletedAt?.Date == DateTime.Today
-            && Progress.GetDailyQuestsCompletedToday() == 0)
-        {
-            Progress.DailyQuestsCompletedToday = 1;
-            changed = true;
-        }
-
-        // If daily quest is already completed and we still have slots, generate next one
-        if (Progress.DailyQuest?.IsCompleted == true
-            && Progress.GetDailyQuestsCompletedToday() < MaxDailyQuestsPerDay)
-        {
-            var completedId = Progress.DailyQuest.DefinitionId;
-            GenerateNewDailyQuest(excludeId: completedId);
-            changed = true;
-            App.Logger?.Information("Startup: generated next daily quest ({Completed}/{Max})",
-                Progress.GetDailyQuestsCompletedToday(), MaxDailyQuestsPerDay);
-        }
-
-        // If daily quest definition is missing (removed from server), regenerate
-        if (Progress.DailyQuest != null && !Progress.DailyQuest.IsCompleted && GetCurrentDailyDefinition() == null)
-        {
-            App.Logger?.Information("Daily quest definition '{QuestId}' no longer available, regenerating",
-                Progress.DailyQuest.DefinitionId);
-            GenerateNewDailyQuest();
-            changed = true;
-        }
+        // THE DAILY BOARD. All three of today's quests are dealt at once and reconciled as a
+        // set - rollover, migration from the old one-at-a-time file, top-up, and the per-slot
+        // "this quest is no longer legal for you" rerolls all live in ReconcileDailySlots.
+        if (ReconcileDailySlots()) changed = true;
 
         // Check weekly quest
         if (Progress.IsWeeklyExpired() || Progress.WeeklyQuest == null)
@@ -329,32 +283,7 @@ public class QuestService : IDisposable
             changed = true;
         }
 
-        // If daily quest requires premium but access was lost, regenerate a free one
-        if (Progress.DailyQuest != null && !Progress.DailyQuest.IsCompleted)
-        {
-            var dailyDef = GetCurrentDailyDefinition();
-            if (dailyDef != null && !IsQuestAvailableForTier(dailyDef)
-                && CanDropPremiumQuest(Progress.DailyQuest, "daily"))
-            {
-                App.Logger?.Information("Daily quest '{QuestId}' requires premium (access lost), regenerating",
-                    Progress.DailyQuest.DefinitionId);
-                GenerateNewDailyQuest();
-                changed = true;
-            }
-        }
-
-        // If daily quest's feature is locked at current level, regenerate
-        if (Progress.DailyQuest != null && !Progress.DailyQuest.IsCompleted)
-        {
-            var dailyDef = GetCurrentDailyDefinition();
-            if (dailyDef != null && !IsQuestAvailableForLevel(dailyDef.Category))
-            {
-                App.Logger?.Information("Daily quest '{QuestId}' requires locked feature ({Category}), regenerating",
-                    Progress.DailyQuest.DefinitionId, dailyDef.Category);
-                GenerateNewDailyQuest();
-                changed = true;
-            }
-        }
+        // (The daily equivalents of the two guards below are per-slot, inside ReconcileDailySlots.)
 
         // If weekly quest requires premium but access was lost, regenerate a free one
         if (Progress.WeeklyQuest != null && !Progress.WeeklyQuest.IsCompleted)
@@ -388,18 +317,7 @@ public class QuestService : IDisposable
         // from the free pool with nothing to defend, and no recheck was ever armed. Now that the
         // answer has landed as premium, re-roll the slot against the blended pool — but only
         // while it is untouched, so a quest the player has already worked on is never taken away.
-        if (DailyRolledUnresolved && IsEntitlementResolved())
-        {
-            DailyRolledUnresolved = false;
-            if (App.Patreon?.HasPremiumAccess == true && Progress.DailyQuest != null
-                && !Progress.DailyQuest.IsCompleted && Progress.DailyQuest.CurrentProgress == 0)
-            {
-                App.Logger?.Information("Daily quest '{QuestId}' was rolled before the entitlement resolved — re-rolling with premium access",
-                    Progress.DailyQuest.DefinitionId);
-                GenerateNewDailyQuest();
-                changed = true;
-            }
-        }
+        // (The daily half of this is per-slot, inside ReconcileDailySlots.)
 
         if (WeeklyRolledUnresolved && IsEntitlementResolved())
         {
@@ -426,17 +344,189 @@ public class QuestService : IDisposable
         }
     }
 
-    private void GenerateNewDailyQuest(string? excludeId = null)
+    // ============================ THE DAILY BOARD ============================
+    //
+    // A day deals THREE daily quests at once (Progress.DailyQuests) instead of handing them out
+    // one after another. Everything a slot can need - dealing, rolling over at midnight, migrating
+    // a pre-three-up save, topping the board back up to three, and dropping a quest that has
+    // stopped being legal for this player - is reconciled here, as a set, from live state. The old
+    // one-slot code path did the same work in four scattered ifs against Progress.DailyQuest; that
+    // field is now only a legacy mirror (see SyncLegacyDailyMirror).
+
+    /// <summary>
+    /// Bring today's three daily slots into a legal state. Idempotent: safe to call on every
+    /// startup, every refresh tick and after any completion.
+    /// </summary>
+    /// <returns>True if anything about the board changed (caller saves).</returns>
+    private bool ReconcileDailySlots()
+    {
+        bool changed = false;
+        var slots = Progress.DailyQuests;
+
+        // ---- 1. MIDNIGHT. A new day throws the board away, but a quest FINISHED today is
+        // carried onto the new board rather than dropped: a session that runs past midnight
+        // used to lose the completion count that proved it happened (the old code patched the
+        // counter by hand for exactly this case). Carrying the stamped card forward keeps the
+        // count honest now that the count is derived from the board.
+        if (Progress.IsDailyExpired())
+        {
+            var carried = new List<ActiveQuest>();
+            foreach (var q in EnumerateDailySlotsIncludingLegacy())
+            {
+                if (q.IsCompleted && q.CompletedAt?.Date == DateTime.Today) carried.Add(q);
+            }
+
+            slots.Clear();
+            foreach (var q in carried.Take(MaxDailyQuestsPerDay)) slots.Add(q);
+            Progress.DailyQuest = null;
+
+            // Stamped BEFORE the pool is consulted: an empty pool must not leave the board
+            // looking permanently expired, or every tick would re-clear it.
+            Progress.DailyQuestGeneratedAt = DateTime.Now;
+            Progress.GetDailyQuestsCompletedToday();   // resets/derives the counter for the new day
+            changed = true;
+
+            if (carried.Count > 0)
+                App.Logger?.Information("Quest day rollover: carried {Count} quest(s) completed after midnight onto today's board", carried.Count);
+        }
+
+        // ---- 2. MIGRATION. A quests.json written by a pre-three-up build has one quest and a
+        // completion counter. The quest the player was actually working on keeps its progress and
+        // its place; the counter is honoured by stamping that many further slots as already-earned,
+        // so an update landing mid-afternoon cannot hand the day's XP out twice.
+        if (slots.Count == 0 && Progress.DailyQuest != null)
+        {
+            int alreadyEarned = Math.Max(0, Math.Min(MaxDailyQuestsPerDay, Progress.DailyQuestsCompletedToday));
+
+            var legacy = Progress.DailyQuest;
+            slots.Add(legacy);
+            if (legacy.IsCompleted) alreadyEarned = Math.Max(0, alreadyEarned - 1);
+
+            for (int i = 0; i < alreadyEarned && slots.Count < MaxDailyQuestsPerDay; i++)
+            {
+                var filler = RollDailyQuest(DailyBoardIds());
+                if (filler == null) break;
+                filler.IsCompleted = true;
+                filler.CompletedAt = DateTime.Now;
+                slots.Add(filler);
+            }
+
+            changed = true;
+            App.Logger?.Information("Migrated single-slot daily quest to the three-up board (kept '{QuestId}', {Earned} slot(s) already earned today)",
+                legacy.DefinitionId, alreadyEarned);
+        }
+
+        // ---- 3. TOP UP to three. Also the first-ever deal.
+        while (slots.Count < MaxDailyQuestsPerDay)
+        {
+            var rolled = RollDailyQuest(DailyBoardIds());
+            if (rolled == null) break;          // pool is empty - never spin
+            slots.Add(rolled);
+            changed = true;
+        }
+
+        // ---- 4. PER-SLOT LEGALITY. A finished slot is a record and is never touched; an
+        // unfinished one is replaced if its definition vanished from the server, if it needs a
+        // tier the player no longer has, or if it needs a feature their level has not unlocked.
+        for (int i = 0; i < slots.Count; i++)
+        {
+            var slot = slots[i];
+            if (slot == null || slot.IsCompleted) continue;
+
+            var def = GetDailyDefinition(slot);
+            string? reason = null;
+
+            if (def == null)
+            {
+                reason = "definition no longer available";
+            }
+            else if (!IsQuestAvailableForTier(def) && CanDropPremiumQuest(slot, "daily slot " + (i + 1)))
+            {
+                reason = "requires premium (access lost)";
+            }
+            else if (!IsQuestAvailableForLevel(def.Category))
+            {
+                reason = "requires locked feature (" + def.Category + ")";
+            }
+
+            if (reason == null) continue;
+
+            var replacement = RollDailyQuest(DailyBoardIds(skipIndex: i));
+            if (replacement == null) continue;
+
+            App.Logger?.Information("Daily slot {Slot}: '{QuestId}' {Reason}, regenerating as '{NewId}'",
+                i + 1, slot.DefinitionId, reason, replacement.DefinitionId);
+            slots[i] = replacement;
+            changed = true;
+        }
+
+        // ---- 5. THE DEFERRED-ENTITLEMENT RE-ROLL (#889). A slot rolled before the Patreon answer
+        // landed drew from the free-only pool. Now that the answer is in and it is "premium",
+        // re-roll every slot that is still untouched - a quest already worked on is never taken
+        // away, and a finished one certainly is not.
+        if (DailyRolledUnresolved && IsEntitlementResolved())
+        {
+            DailyRolledUnresolved = false;
+            if (App.Patreon?.HasPremiumAccess == true)
+            {
+                for (int i = 0; i < slots.Count; i++)
+                {
+                    var slot = slots[i];
+                    if (slot == null || slot.IsCompleted || slot.CurrentProgress > 0) continue;
+
+                    var replacement = RollDailyQuest(DailyBoardIds(skipIndex: i));
+                    if (replacement == null) continue;
+
+                    App.Logger?.Information("Daily slot {Slot} ('{QuestId}') was rolled before the entitlement resolved - re-rolling with premium access",
+                        i + 1, slot.DefinitionId);
+                    slots[i] = replacement;
+                    changed = true;
+                }
+            }
+        }
+
+        SyncLegacyDailyMirror();
+        return changed;
+    }
+
+    /// <summary>Today's slots plus the legacy single quest, for the rollover carry-forward.</summary>
+    private IEnumerable<ActiveQuest> EnumerateDailySlotsIncludingLegacy()
+    {
+        foreach (var q in Progress.DailyQuests) if (q != null) yield return q;
+        if (Progress.DailyQuest != null && !Progress.DailyQuests.Contains(Progress.DailyQuest))
+            yield return Progress.DailyQuest;
+    }
+
+    /// <summary>The definition ids currently on the board - what a fresh roll must avoid so the
+    /// player never sees the same quest twice in one day.</summary>
+    private HashSet<string> DailyBoardIds(int? skipIndex = null)
+    {
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < Progress.DailyQuests.Count; i++)
+        {
+            if (skipIndex.HasValue && i == skipIndex.Value) continue;
+            var id = Progress.DailyQuests[i]?.DefinitionId;
+            if (!string.IsNullOrEmpty(id)) ids.Add(id);
+        }
+        return ids;
+    }
+
+    /// <summary>
+    /// Roll one daily quest, avoiding <paramref name="excludeIds"/>. Returns null only when the
+    /// pool is genuinely empty - the caller must treat that as "leave the slot alone", never as a
+    /// reason to retry in a loop.
+    /// </summary>
+    private ActiveQuest? RollDailyQuest(ICollection<string>? excludeIds)
     {
         // Rolling before the entitlement answer lands means rolling from the free-only pool.
-        // Flag the slot (and arm the refresh tick) so it is re-rolled if the answer is premium.
+        // Flag the board (and arm the refresh tick) so it is re-rolled if the answer is premium.
         DailyRolledUnresolved = !IsEntitlementResolved();
         if (DailyRolledUnresolved) _premiumRecheckPending = true;
 
         // Use remote quests from QuestDefinitionService if available, fall back to embedded
         var questPool = App.QuestDefinitions?.GetDailyQuests() ?? QuestDefinition.DailyQuests.ToList();
         var hasPremium = App.Patreon?.HasPremiumAccess == true;
-        var availableQuests = FilterDailyRollPool(questPool, excludeId, hasPremium, DateTime.Today, applyDateWindow: true);
+        var availableQuests = FilterDailyRollPool(questPool, excludeIds, hasPremium, DateTime.Today, applyDateWindow: true);
 
         // THE WINDOW MUST NEVER STARVE THE PLAYER. If a date window emptied the pool,
         // fall back to the undated pool rather than leaving the day questless: an event
@@ -444,18 +534,44 @@ public class QuestService : IDisposable
         // with it. See IsQuestInDateWindow.
         if (availableQuests.Count == 0)
         {
-            availableQuests = FilterDailyRollPool(questPool, excludeId, hasPremium, DateTime.Today, applyDateWindow: false);
+            availableQuests = FilterDailyRollPool(questPool, excludeIds, hasPremium, DateTime.Today, applyDateWindow: false);
         }
 
-        if (availableQuests.Count == 0) return;
+        // LAST RESORT: three slots can drain a pool that one slot never could (a low-level
+        // account with most categories still locked is the realistic case). A repeated quest is
+        // a worse board than three distinct ones and a much better board than an empty seat, so
+        // the no-duplicates rule is the first thing dropped, not the day itself.
+        if (availableQuests.Count == 0)
+        {
+            // Through the same helper, with the exclusions dropped rather than the predicates.
+            // Hand-rolling this filter is how a Remote quest gets onto the board: it is the one
+            // path that never sees IsRollableAsDaily unless it goes through here.
+            availableQuests = FilterDailyRollPool(questPool, (ICollection<string>?)null, hasPremium, DateTime.Today, applyDateWindow: false);
+        }
+
+        if (availableQuests.Count == 0) return null;
 
         var selectedQuest = availableQuests[_random.Next(availableQuests.Count)];
-
-        Progress.DailyQuest = new ActiveQuest(selectedQuest.Id);
-        Progress.DailyQuestGeneratedAt = DateTime.Now;
-
-        App.Logger?.Information("Generated new daily quest: {QuestId} (from {Source})",
+        App.Logger?.Information("Rolled daily quest: {QuestId} (from {Source})",
             selectedQuest.Id, App.QuestDefinitions != null ? "server" : "embedded");
+        return new ActiveQuest(selectedQuest.Id);
+    }
+
+    /// <summary>
+    /// Keep <see cref="QuestProgress.DailyQuest"/> pointing at the first unfinished slot. Nothing
+    /// in this build reads it; it exists so a downgrade to a pre-three-up build finds a live quest
+    /// where it expects one instead of rolling the player a fresh day.
+    /// </summary>
+    private void SyncLegacyDailyMirror()
+    {
+        ActiveQuest? mirror = null;
+        foreach (var q in Progress.DailyQuests)
+        {
+            if (q == null) continue;
+            if (!q.IsCompleted) { mirror = q; break; }
+            mirror ??= q;
+        }
+        Progress.DailyQuest = mirror;
     }
 
     private void GenerateNewWeeklyQuest(string? excludeId = null)
@@ -533,6 +649,19 @@ public class QuestService : IDisposable
     /// </summary>
     private bool IsEntitlementResolved()
     {
+        // THE SIGNED-OUT WINDOW IS NOT AN ANSWER. quests.json deliberately survives a logout
+        // (BUG-BN8X9B9SZ5 / #1027), stamped with the account that owns it — but the entitlement
+        // providers do not: a logout tears them down, so between the sign-out and the next
+        // sign-in the premium gate reads a flat "no access" that belongs to nobody. Believing it
+        // let the premium-loss rerolls below discard the departed account's untouched quest
+        // purely because the user signed out, which is the same "log out and back in and your
+        // quests are different" complaint the ledger fix was meant to end. Treat the whole window
+        // as unresolved: the decision is deferred (never lost), the refresh tick stays quiet
+        // while nobody is signed in, and the first post-login sync settles it for real.
+        if (IsSignedOutWithOwnedQuests(
+                App.UnifiedUserId ?? App.Settings?.Current?.UnifiedId, Progress?.OwnerUnifiedId))
+            return false;
+
         var patreon = App.Patreon;
         if (patreon == null) return false;
         if (patreon.IsVerifying) return false;
@@ -544,6 +673,14 @@ public class QuestService : IDisposable
         if (App.SubscribeStar?.IsVerifying == true) return false;
         return DateTime.UtcNow - _startedUtc >= EntitlementSettleWindow;
     }
+
+    /// <summary>
+    /// True when nobody is signed in but the local quest ledger belongs to an account that was.
+    /// That is the logout window: the quests are being held for a returning owner whose
+    /// entitlement is currently unknowable. Pure, so it is testable without a live App.
+    /// </summary>
+    internal static bool IsSignedOutWithOwnedQuests(string? currentUnifiedId, string? questOwnerUnifiedId)
+        => string.IsNullOrEmpty(currentUnifiedId) && !string.IsNullOrEmpty(questOwnerUnifiedId);
 
     /// <summary>
     /// Feature level gating has been removed — every quest category is available from level 1.
@@ -597,9 +734,25 @@ public class QuestService : IDisposable
     internal static List<QuestDefinition> FilterDailyRollPool(
         IEnumerable<QuestDefinition> pool, string? excludeId, bool hasPremium,
         DateTime today, bool applyDateWindow)
+        => FilterDailyRollPool(
+            pool,
+            string.IsNullOrEmpty(excludeId) ? null : new[] { excludeId },
+            hasPremium, today, applyDateWindow);
+
+    /// <summary>
+    /// Set-excluding form, for the three-up daily board. Each seat has to roll against every id
+    /// ALREADY on the board rather than against one, or the day can deal the same quest twice.
+    ///
+    /// The single-id overload above is kept, and kept first, because it is what the tests call
+    /// by name (excludeId:) - the parameter names are what pick the overload apart at a null
+    /// argument, so do not rename either one.
+    /// </summary>
+    internal static List<QuestDefinition> FilterDailyRollPool(
+        IEnumerable<QuestDefinition> pool, ICollection<string>? excludeIds, bool hasPremium,
+        DateTime today, bool applyDateWindow)
     {
         return pool
-            .Where(q => q.Id != excludeId)
+            .Where(q => excludeIds == null || !excludeIds.Contains(q.Id))
             .Where(q => IsQuestAvailableForLevel(q.Category))
             .Where(q => IsQuestAvailableForTier(q, hasPremium))
             .Where(IsRollableAsDaily)
@@ -678,12 +831,24 @@ public class QuestService : IDisposable
     /// </summary>
     public void ForceRegenerateDailyQuest()
     {
-        var oldId = Progress.DailyQuest?.DefinitionId;
-        GenerateNewDailyQuest(excludeId: oldId);
+        // Every UNFINISHED slot is re-dealt. A finished one is left alone: the server's reset flag
+        // means "give them a fresh board", not "take back what they already earned today".
+        int rerolled = 0;
+        for (int i = 0; i < Progress.DailyQuests.Count; i++)
+        {
+            var slot = Progress.DailyQuests[i];
+            if (slot == null || slot.IsCompleted) continue;
+
+            var replacement = RollDailyQuest(DailyBoardIds(skipIndex: i));
+            if (replacement == null) continue;
+            Progress.DailyQuests[i] = replacement;
+            rerolled++;
+        }
+
+        SyncLegacyDailyMirror();
         _isDirty = true;
         Save();
-        App.Logger?.Information("Force-regenerated daily quest (old: {OldId}, new: {NewId})",
-            oldId, Progress.DailyQuest?.DefinitionId);
+        App.Logger?.Information("Force-regenerated {Count} daily quest slot(s)", rerolled);
     }
 
     private static DateTime GetStartOfWeek(DateTime date)
@@ -699,19 +864,52 @@ public class QuestService : IDisposable
     /// <summary>
     /// Get the definition for the current daily quest
     /// </summary>
-    public QuestDefinition? GetCurrentDailyDefinition()
+    public QuestDefinition? GetCurrentDailyDefinition() => GetDailyDefinition(FirstUnfinishedDailySlot());
+
+    /// <summary>
+    /// The definition behind one daily slot. Remote pool first, embedded as the fallback - a
+    /// server that has rotated its pool since the slot was rolled resolves to null, which
+    /// ReconcileDailySlots reads as "replace this slot".
+    /// </summary>
+    public QuestDefinition? GetDailyDefinition(ActiveQuest? quest)
     {
-        if (Progress.DailyQuest == null) return null;
+        if (quest == null || string.IsNullOrEmpty(quest.DefinitionId)) return null;
 
         // Try remote quests first, fall back to embedded
         var remoteQuests = App.QuestDefinitions?.GetDailyQuests();
         if (remoteQuests != null)
         {
-            var remoteQuest = remoteQuests.FirstOrDefault(q => q.Id == Progress.DailyQuest.DefinitionId);
+            var remoteQuest = remoteQuests.FirstOrDefault(q => q.Id == quest.DefinitionId);
             if (remoteQuest != null) return remoteQuest;
         }
 
-        return QuestDefinition.DailyQuests.FirstOrDefault(q => q.Id == Progress.DailyQuest.DefinitionId);
+        return QuestDefinition.DailyQuests.FirstOrDefault(q => q.Id == quest.DefinitionId);
+    }
+
+    /// <summary>
+    /// Today's board, in slot order, paired with the definition behind each seat. ALWAYS
+    /// <see cref="MaxDailyQuestsPerDay"/> entries long, so the UI can index it without guarding:
+    /// a seat the pool could not fill comes back as (null, null) and paints as an empty slot.
+    /// </summary>
+    public IReadOnlyList<(ActiveQuest? Quest, QuestDefinition? Definition)> GetDailySlots()
+    {
+        var board = new List<(ActiveQuest?, QuestDefinition?)>(MaxDailyQuestsPerDay);
+        for (int i = 0; i < MaxDailyQuestsPerDay; i++)
+        {
+            var quest = i < Progress.DailyQuests.Count ? Progress.DailyQuests[i] : null;
+            board.Add((quest, GetDailyDefinition(quest)));
+        }
+        return board;
+    }
+
+    /// <summary>The first seat still in play, or null once the board is finished.</summary>
+    private ActiveQuest? FirstUnfinishedDailySlot()
+    {
+        foreach (var q in Progress.DailyQuests)
+        {
+            if (q != null && !q.IsCompleted) return q;
+        }
+        return null;
     }
 
     /// <summary>
@@ -757,26 +955,68 @@ public class QuestService : IDisposable
     /// <returns>True if reroll succeeded, false if no rerolls remaining</returns>
     public bool RerollDailyQuest()
     {
+        for (int i = 0; i < Progress.DailyQuests.Count; i++)
+        {
+            if (Progress.DailyQuests[i]?.IsCompleted == false) return RerollDailyQuest(i);
+        }
+        App.Logger?.Debug("Cannot reroll: no unfinished daily slot");
+        return false;
+    }
+
+    /// <summary>
+    /// Reroll ONE seat of today's board. The rerolls themselves are a shared daily pool (1 base
+    /// + 2 for Patreon + skill-tree bonuses) - three seats do not mean three times the rerolls,
+    /// they mean the player chooses which seat is worth spending one on.
+    /// </summary>
+    /// <param name="slot">Zero-based seat index.</param>
+    /// <returns>True if the seat was rerolled, false if it could not be (no rerolls left, seat
+    /// already finished, empty pool, or an index that is not on the board).</returns>
+    public bool RerollDailyQuest(int slot)
+    {
+        if (slot < 0 || slot >= Progress.DailyQuests.Count)
+        {
+            App.Logger?.Debug("Cannot reroll daily slot {Slot}: not on the board", slot);
+            return false;
+        }
+
+        var quest = Progress.DailyQuests[slot];
+        if (quest == null)
+        {
+            App.Logger?.Debug("Cannot reroll empty daily slot {Slot}", slot);
+            return false;
+        }
+
+        if (quest.IsCompleted)
+        {
+            App.Logger?.Debug("Cannot reroll completed daily quest");
+            return false;
+        }
+
         if (!Progress.CanRerollDaily(HasPatreonAccess))
         {
             App.Logger?.Debug("No daily rerolls remaining");
             return false;
         }
 
-        if (Progress.DailyQuest?.IsCompleted == true)
+        // The whole board is excluded, not just this seat: spending a reroll to be handed a
+        // duplicate of the card next to it would be the worst possible outcome of pressing it.
+        var replacement = RollDailyQuest(DailyBoardIds(skipIndex: slot));
+        if (replacement == null)
         {
-            App.Logger?.Debug("Cannot reroll completed daily quest");
+            App.Logger?.Warning("Daily reroll found no replacement quest - the pool is empty, keeping '{QuestId}' and NOT spending the reroll",
+                quest.DefinitionId);
             return false;
         }
 
-        var oldId = Progress.DailyQuest?.DefinitionId;
-        GenerateNewDailyQuest(excludeId: oldId);
+        var oldId = quest.DefinitionId;
+        Progress.DailyQuests[slot] = replacement;
         Progress.DailyRerollsUsed++;
+        SyncLegacyDailyMirror();
         _isDirty = true;
         Save();
 
-        App.Logger?.Information("Daily quest rerolled from {OldId} to {NewId} (rerolls used: {Used})",
-            oldId, Progress.DailyQuest?.DefinitionId, Progress.DailyRerollsUsed);
+        App.Logger?.Information("Daily slot {Slot} rerolled from {OldId} to {NewId} (rerolls used: {Used})",
+            slot + 1, oldId, replacement.DefinitionId, Progress.DailyRerollsUsed);
         return true;
     }
 
@@ -1097,21 +1337,29 @@ public class QuestService : IDisposable
         // can never disagree about what the user actually did. One tracking pass, not two.
         try { App.Programs?.TrackVerifier(category, amount); } catch { /* a program must never break quests */ }
 
-        // Check daily quest
-        var dailyDef = GetCurrentDailyDefinition();
-        if (dailyDef != null && dailyDef.Category == category && Progress.DailyQuest?.IsCompleted == false)
+        // Check EVERY unfinished daily seat. All three of today's quests are live at once, so one
+        // spiral minute legitimately advances every seat that is asking for spiral minutes - the
+        // board is three parallel asks, not a queue. Iterated over a snapshot because CompleteQuest
+        // raises events that reach back into this service.
+        var dailyBoard = Progress.DailyQuests.ToList();
+        foreach (var dailyQuest in dailyBoard)
         {
-            Progress.DailyQuest.CurrentProgress += amount;
+            if (dailyQuest == null || dailyQuest.IsCompleted) continue;
+
+            var dailyDef = GetDailyDefinition(dailyQuest);
+            if (dailyDef == null || dailyDef.Category != category) continue;
+
+            dailyQuest.CurrentProgress += amount;
             _isDirty = true;
 
-            if (Progress.DailyQuest.CurrentProgress >= dailyDef.TargetValue)
+            if (dailyQuest.CurrentProgress >= dailyDef.TargetValue)
             {
-                CompleteQuest(Progress.DailyQuest, dailyDef, QuestType.Daily);
+                CompleteQuest(dailyQuest, dailyDef, QuestType.Daily);
             }
             else
             {
                 QuestProgressChanged?.Invoke(this, new QuestProgressEventArgs(
-                    QuestType.Daily, Progress.DailyQuest.CurrentProgress, dailyDef.TargetValue));
+                    QuestType.Daily, dailyQuest.CurrentProgress, dailyDef.TargetValue));
             }
         }
 
@@ -1162,8 +1410,10 @@ public class QuestService : IDisposable
         if (type == QuestType.Daily)
         {
             Progress.TotalDailyQuestsCompleted++;
-            Progress.GetDailyQuestsCompletedToday(); // ensure reset if new day
-            Progress.DailyQuestsCompletedToday++;
+            // Derived, not incremented: GetDailyQuestsCompletedToday counts the stamped seats on
+            // the board (and resets the date first), and the seat above has just been stamped.
+            Progress.GetDailyQuestsCompletedToday();
+            SyncLegacyDailyMirror();
 
             // Record completion date for streak calendar (only once per day)
             var today = DateTime.Today;
@@ -1253,16 +1503,10 @@ public class QuestService : IDisposable
         // Fire event
         QuestCompleted?.Invoke(this, new QuestCompletedEventArgs(def, scaledXP, type));
 
-        // Auto-generate next daily quest if under the daily limit (3 per day)
-        if (type == QuestType.Daily && Progress.DailyQuestsCompletedToday < MaxDailyQuestsPerDay)
-        {
-            GenerateNewDailyQuest(excludeId: def.Id);
-            _isDirty = true;
-            Save();
-
-            App.Logger?.Information("Auto-generated next daily quest ({Completed}/{Max})",
-                Progress.DailyQuestsCompletedToday, MaxDailyQuestsPerDay);
-        }
+        // NOTHING IS GENERATED HERE ANY MORE. Under the old one-at-a-time board, finishing the
+        // daily quest had to roll the next one or the player was left with an empty card. All
+        // three are dealt at midnight now, so a completion just stamps its own seat and leaves the
+        // other two exactly as they were.
     }
 
     /// <summary>

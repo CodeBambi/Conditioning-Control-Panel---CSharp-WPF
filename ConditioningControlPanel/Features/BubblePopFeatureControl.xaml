@@ -34,6 +34,11 @@
                                             Foreground="{StaticResource TextLightBrush}"/>
                     <TextBlock Text="{loc:Str tooltip_pop_bubbles_to_earn_xp}" FontSize="11.5"
                                Foreground="{StaticResource TextMutedBrush}" Margin="0,1,0,0"/>
+                    <!-- #1019/#1026: ambient-pop XP has a 300/day ceiling. It used to be entirely
+                         invisible, so a dry bucket read as "XP is broken". Text is set in code
+                         (LoadFromSettings + the service's budget event). -->
+                    <TextBlock x:Name="TxtAmbientXpBudget" FontSize="11"
+                               Foreground="{StaticResource TextMutedBrush}" Opacity="0.85" Margin="0,2,0,0"/>
                 </StackPanel>
                 <Border HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0" CornerRadius="99"
                         Background="#8C131320" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" Padding="12,5,8,5">

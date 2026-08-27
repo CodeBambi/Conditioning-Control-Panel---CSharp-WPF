@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -328,10 +328,8 @@ public class GazeDebugCursorService : IDisposable
             }
 
             // Feed the trail from the latest cursor position (overlay-local).
-            if (_hasPos && !_faceLost)
+            if (_hasPos && !_faceLost && TryOverlayLocal(out float lx, out float ly))
             {
-                float lx = (float)(_pos.X - _overlay.Left);
-                float ly = (float)(_pos.Y - _overlay.Top);
                 bool add = _trail.Count == 0;
                 if (!add)
                 {
@@ -435,8 +433,7 @@ public class GazeDebugCursorService : IDisposable
         // white rim so it stays readable over busy/light content (the rim
         // is normal alpha blending, not additive — additive vanishes on
         // white backgrounds).
-        float cx = (float)(_pos.X - _overlay.Left);
-        float cy = (float)(_pos.Y - _overlay.Top);
+        if (!TryOverlayLocal(out float cx, out float cy)) { canvas.Restore(); return; }
         var sprite = DotSprite();
         var bodyCF = _locked ? _lockedCF : _idleCF;
         if (sprite != null)
@@ -458,6 +455,53 @@ public class GazeDebugCursorService : IDisposable
         _spritePaint.Color = new SKColor(255, 255, 255, alpha);
         var dest = new SKRect(cx - radius, cy - radius, cx + radius, cy + radius);
         canvas.DrawImage(img, dest, _spritePaint);
+    }
+
+    /// <summary>
+    /// Gaze events arrive in DIPs local to the monitor calibration ran on, but this overlay
+    /// spans the whole virtual desktop — so the calibrated monitor's origin and DPI have to be
+    /// folded in before painting. <see cref="Fyp.FypHostService"/> does the same conversion on
+    /// the same event; this is that math, ending in the WPF units Window.Left/Top speak.
+    ///
+    /// Painting <c>_pos - _overlay.Left</c> raw (the pre-2026-08-27 code) is correct whenever
+    /// calibration ran on the PRIMARY monitor at the overlay's scale, and only then. The
+    /// primary's origin is always (0,0) on the virtual desktop, so at scale 1 the two
+    /// expressions are identical at any monitor layout — which is why this survived. It breaks
+    /// when <see cref="MonitorBoundsRecord.X"/>/<c>Y</c> are non-zero, i.e. calibration
+    /// ran on a non-primary monitor (they are written from that screen's Bounds in
+    /// WebcamCalibrationWindow) — the dot then lands a whole monitor offset away, usually on the
+    /// primary instead of the screen being looked at — or when the calibrated monitor's DpiScale
+    /// differs from the overlay's, which multiplies positions by the wrong factor.
+    ///
+    /// The calibration Accuracy test renders through this same service (WebcamCalibrationWindow
+    /// BubbleTestCursorKey / "calibration-verify"), so this was never only a debug dot: a user
+    /// who calibrated on their second monitor was judging — and re-running — calibration against
+    /// a dot drawn somewhere the tracker never claimed (tier-2 reports, 2026-08-27).
+    /// </summary>
+    /// <returns>false when the overlay is gone, in which case nothing should be drawn.</returns>
+    private bool TryOverlayLocal(out float lx, out float ly)
+    {
+        lx = 0f;
+        ly = 0f;
+        if (_overlay == null) return false;
+
+        var bounds = App.Webcam?.Calibration?.MonitorBounds;
+        // A pre-hotfix save carries no DeviceName: the monitor is unknown, so fall back to
+        // "primary, at the origin" rather than trusting a stale X/Y. Same rule as FypHostService.
+        bool known = bounds?.DeviceName != null;
+        double scale = bounds is { DpiScale: > 0.25 and < 8.0 } ? bounds.DpiScale : 1.0;
+        double originX = known ? bounds!.X : 0;
+        double originY = known ? bounds!.Y : 0;
+
+        // monitor-local DIPs -> physical desktop px -> WPF units.
+        double physX = _pos.X * scale + originX;
+        double physY = _pos.Y * scale + originY;
+        double sx = _dpiX > 0 ? _dpiX : 1.0;
+        double sy = _dpiY > 0 ? _dpiY : 1.0;
+
+        lx = (float)(physX / sx - _overlay.Left);
+        ly = (float)(physY / sy - _overlay.Top);
+        return true;
     }
 
     private void CacheDpi()

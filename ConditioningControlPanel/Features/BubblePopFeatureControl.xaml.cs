@@ -29,12 +29,48 @@ namespace ConditioningControlPanel.Features
             // instance never lived long enough to care).
             ApplyFeatureArt();
             if (App.Mods != null) App.Mods.ModChanged += OnModChanged;
+            Services.BubbleService.AmbientXpBudgetChanged += OnAmbientXpBudgetChanged;
+            UpdateAmbientXpBudgetLine();
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
             _settingsHook?.Unhook();
             if (App.Mods != null) App.Mods.ModChanged -= OnModChanged;
+            Services.BubbleService.AmbientXpBudgetChanged -= OnAmbientXpBudgetChanged;
+        }
+
+        /// <summary>
+        /// The service raises this from the pop path, which can be off this control's thread once the
+        /// pop is queued, so the repaint is marshalled and swallowed on a shutting-down dispatcher
+        /// (CLAUDE.md async/threading known issues #6/#8).
+        /// </summary>
+        private void OnAmbientXpBudgetChanged()
+        {
+            try
+            {
+                var disp = Dispatcher;
+                if (disp == null || disp.HasShutdownStarted) return;
+                disp.BeginInvoke(new Action(UpdateAmbientXpBudgetLine));
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// "Ambient bubble XP: N/300 today" (#1019/#1026). Ambient pops stop paying once the daily
+        /// bucket is spent; before this line the ceiling was completely invisible and two users
+        /// reported the XP system itself as broken.
+        /// </summary>
+        private void UpdateAmbientXpBudgetLine()
+        {
+            try
+            {
+                if (TxtAmbientXpBudget == null) return;
+                TxtAmbientXpBudget.Text = Localization.Loc.GetF("label_ambient_bubble_xp_budget",
+                    Services.BubbleService.AmbientBubbleXpPaidToday(),
+                    Services.BubbleService.AmbientBubbleDailyXpCap);
+            }
+            catch { }
         }
 
         /// <inheritdoc/>
@@ -95,6 +131,7 @@ namespace ConditioningControlPanel.Features
                 ChkTypeGlitch.IsChecked = ids.Contains("glitch");
                 ChkTypeCascade.IsChecked = ids.Contains("htlink");
                 ChkTypeVideo.IsChecked = ids.Contains("video");
+                UpdateAmbientXpBudgetLine();
             }
             finally { _isLoading = false; }
         }

@@ -99,7 +99,6 @@ namespace ConditioningControlPanel
 
         /// <summary>Last known quest fill fractions, so the bars can be re-applied once the track
         /// actually has a width (RefreshQuestUI runs before the tab has ever been laid out).</summary>
-        private double _dailyQuestFraction = -1;
         private double _weeklyQuestFraction = -1;
         private bool _questTracksHooked;
 
@@ -628,8 +627,9 @@ namespace ConditioningControlPanel
                 if (!_questTracksHooked)
                 {
                     _questTracksHooked = true;
-                    if (QuestsTab?.DailyProgressTrack != null)
-                        QuestsTab.DailyProgressTrack.SizeChanged += QuestTrack_SizeChanged;
+                    // Only the weekly bar is hooked here. The three daily bars live inside
+                    // DailyQuestCard, which watches its own track's SizeChanged for exactly this
+                    // reason - see the class comment there.
                     if (QuestsTab?.WeeklyProgressTrack != null)
                         QuestsTab.WeeklyProgressTrack.SizeChanged += QuestTrack_SizeChanged;
                 }
@@ -642,16 +642,19 @@ namespace ConditioningControlPanel
             => ApplyQuestProgressBars(animate: false);
 
         /// <summary>
-        /// Records how full each quest bar should be. Called from RefreshQuestUI instead of it
-        /// assigning Width directly, so the fill can be tweened (and re-applied once the track has
-        /// a width). No cap bloom: neither bar has a cap/end-glow element, and the plan is explicit
-        /// that we do not invent one just to have something to bloom.
+        /// Records how full the WEEKLY quest bar should be. Called from RefreshQuestUI instead of
+        /// it assigning Width directly, so the fill can be tweened (and re-applied once the track
+        /// has a width). No cap bloom: the bar has no cap/end-glow element, and the plan is
+        /// explicit that we do not invent one just to have something to bloom.
+        ///
+        /// <para>The daily half of this used to live here too, back when there was one daily bar.
+        /// The three-up board has three, and parking three fractions on the window to tween bars
+        /// that belong to a card is the wrong owner - each DailyQuestCard now keeps its own.</para>
         /// </summary>
         private void SetQuestProgress(double? dailyFraction, double? weeklyFraction)
         {
             try
             {
-                if (dailyFraction.HasValue) _dailyQuestFraction = Clamp01(dailyFraction.Value);
                 if (weeklyFraction.HasValue) _weeklyQuestFraction = Clamp01(weeklyFraction.Value);
                 ApplyQuestProgressBars(animate: true);
             }
@@ -664,7 +667,6 @@ namespace ConditioningControlPanel
         {
             try
             {
-                Apply(QuestsTab?.DailyProgressTrack, QuestsTab?.DailyProgressFill, _dailyQuestFraction);
                 Apply(QuestsTab?.WeeklyProgressTrack, QuestsTab?.WeeklyProgressFill, _weeklyQuestFraction);
             }
             catch (Exception ex) { App.Logger?.Debug("ApplyQuestProgressBars: {E}", ex.Message); }

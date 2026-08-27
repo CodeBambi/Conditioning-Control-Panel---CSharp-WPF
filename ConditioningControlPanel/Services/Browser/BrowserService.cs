@@ -552,6 +552,13 @@ namespace ConditioningControlPanel.Services
             {
                 IsFullscreen = _webView.CoreWebView2.ContainsFullScreenElement;
                 App.Logger?.Information("Browser fullscreen changed: {IsFullscreen}", IsFullscreen);
+                // The subscriber answers this by Show()ing a borderless Topmost window (MainWindow
+                // .EnterBrowserFullscreen, and the same in the popout), which lands at the FRONT of
+                // the topmost band and buries every effect with no way back - the flag-only heal in
+                // OverlayService can't see it because our overlays keep WS_EX_TOPMOST. Tell the
+                // reconciler to force every tick while it is up (#1041/#1051/#1052).
+                try { App.Overlay?.SetFullscreenBrowserActive(this, IsFullscreen); }
+                catch (Exception ex) { App.Logger?.Debug("Browser fullscreen z-order notify failed: {Error}", ex.Message); }
                 FullscreenChanged?.Invoke(this, IsFullscreen);
             };
         }
@@ -1456,6 +1463,12 @@ namespace ConditioningControlPanel.Services
         {
             if (_disposed) return;
             _disposed = true;
+
+            // A WebView torn down while the page still holds HTML5 fullscreen never raises the
+            // "exited" event, which would leave the z-order reconciler forcing every tick for the
+            // rest of the run. Release the registration unconditionally (idempotent per owner).
+            try { App.Overlay?.SetFullscreenBrowserActive(this, false); }
+            catch { }
 
             try
             {

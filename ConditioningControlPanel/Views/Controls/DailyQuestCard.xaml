@@ -1,0 +1,176 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.DailyQuestCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:hover="clr-namespace:ConditioningControlPanel.Behaviors"
+             mc:Ignorable="d"
+             d:DesignWidth="257" d:DesignHeight="320">
+
+    <!-- ONE SEAT OF THE DAILY BOARD.
+
+         Three of these sit side by side on the Quests tab (QuestsTabView.DailyCard0..2). The card
+         is deliberately VERTICAL - art on top, then the ask, then the bar, then its own reroll -
+         because at a third of the panel's width a horizontal card would give the art about 60px
+         and the description about 90, and both would be unreadable.
+
+         THE ART FRAME IS SIZED FOR THE ART. Every file in Resources/quests is 256x256 - all 40 of
+         them - so a wide, short frame on UniformToFill was discarding two thirds of each picture
+         and cropping captions in half. The frame is near-square now (about 257 wide by 240 tall at
+         the board's cap), which costs ~5% off the top and bottom instead of 60%. The board is
+         width-capped in QuestsTabView for the same reason: let the cards stretch to a 1400px panel
+         and the frame goes back to being a letterbox slot.
+
+         THE CAP IS SET BY HEIGHT, NOT BY TASTE. The whole card has to clear the tab's viewport
+         without scrolling, which leaves about 320px; the body needs ~78 of them; and the frame has
+         to stay square, so the frame's height decides the card's width and the width decides the
+         board's cap. A bigger square would be a better picture and a worse board - the reroll
+         button would sit below the fold, which is exactly what 300 did.
+
+         That extra height is paid for by the BODY, which is down to two rows. The quest's name and
+         its ask moved onto the art itself, over the scrim that was already there for the chips -
+         a poster caption. What is left underneath is the bar with its counts, and the reroll.
+
+         Everything visual is set from code (Apply / ShowEmpty in the .xaml.cs). There is no
+         ViewModel on this tab, and the two existing painted surfaces next to it (the punch card
+         and the streak calendar) are both painted from code on the same refresh pass - matching
+         them is the smaller change than inventing a binding layer for three cards.
+
+         Only Application-level resources are referenced (Brushes.xaml / Controls.xaml, merged in
+         App.xaml), so nothing here depends on being parented under MainWindow before it loads. -->
+
+    <Border x:Name="Root" CornerRadius="12" Background="{DynamicResource PanelBgBrush}"
+            BorderThickness="1.5" BorderBrush="#3D3D60"
+            RenderTransformOrigin="0.5,0.5">
+        <!-- NO Effect at rest, on purpose. A DropShadowEffect forces a pixel-shader pass over the
+             whole card subtree every frame it exists, and three of them would be paying that on a
+             tab that is mostly static. The hover glow is attached in code on MouseEnter and
+             cleared on MouseLeave (DailyQuestCard.xaml.cs). -->
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- ============================ ART ============================
+                 Star-height rather than fixed: the three cards share a row, so this lets a card
+                 whose caption wraps to two lines borrow the height from its own art instead of
+                 growing taller than the seat beside it. MinHeight keeps it near-square at the
+                 board's cap. -->
+            <Border Grid.Row="0" MinHeight="240" Background="{DynamicResource DarkerBgBrush}"
+                    CornerRadius="11,11,0,0" ClipToBounds="True">
+                <Grid>
+                    <!-- HoverPop wraps its own transform group around the Image, so the zoom
+                         happens INSIDE the clipped frame instead of pushing the card around. -->
+                    <Image x:Name="Art" Stretch="UniformToFill" hover:HoverPop.IsEnabled="True"/>
+
+                    <!-- Bottom scrim. It carried the chips before; it carries the whole caption
+                         now, so it reaches higher and lands nearly opaque.
+
+                         That last pair of stops is not styling. Most of the shipped quest art has
+                         the quest's own NAME set into the bottom of the picture, and now that the
+                         frame no longer crops that band away, the baked-in title lands exactly
+                         where this caption goes - two renderings of "Surrender" on top of each
+                         other. The ramp buries the baked-in one. The caption still has to be here
+                         for art that carries no title, which includes anything a mod supplies. -->
+                    <Border Height="112" VerticalAlignment="Bottom" IsHitTestVisible="False">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Color="#00000000" Offset="0"/>
+                                <GradientStop Color="#8A000000" Offset="0.28"/>
+                                <GradientStop Color="#FC000000" Offset="0.52"/>
+                                <GradientStop Color="#FF000000" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+
+                    <!-- Stamped. Sits UNDER the caption on purpose: a finished quest should still
+                         say which quest it was. -->
+                    <Border x:Name="CompletedOverlay" Background="#992D4A2D" Visibility="Collapsed">
+                        <TextBlock Text="&#x2713;" Foreground="#00E676" FontSize="72" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Margin="0,0,0,38">
+                            <TextBlock.Effect>
+                                <DropShadowEffect Color="Black" BlurRadius="8" ShadowDepth="2"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+                    </Border>
+
+                    <!-- Seat number. Not decoration: with three cards up, "which one is this"
+                         has to be answerable without reading the quest name. -->
+                    <Border x:Name="SlotChip" Background="#B01A1A2E" CornerRadius="9"
+                            Padding="7,2" Margin="8" HorizontalAlignment="Left" VerticalAlignment="Top"
+                            IsHitTestVisible="False">
+                        <TextBlock x:Name="TxtSlot" Text="1" Foreground="#FFD700"
+                                   FontSize="11" FontWeight="Bold"/>
+                    </Border>
+
+                    <!-- XP on the art, not in the body: it is the price tag, and it should be
+                         readable while the eye is still on the picture. -->
+                    <Border x:Name="XpChip" Background="#B01A1A2E" CornerRadius="9"
+                            Padding="7,2" Margin="8" HorizontalAlignment="Right" VerticalAlignment="Top"
+                            IsHitTestVisible="False">
+                        <StackPanel Orientation="Horizontal">
+                            <helpers:EmojiTextBlock x:Name="TxtXp" Text="" Foreground="{DynamicResource PinkBrush}"
+                                                    FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtXpBonus" Text="" Foreground="#FFB347"
+                                       FontSize="10" FontWeight="Bold" Margin="4,0,0,0"
+                                       VerticalAlignment="Center" FontFamily="Segoe UI Emoji"
+                                       Visibility="Collapsed"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- CAPTION. Name and ask, on the picture, over the scrim. -->
+                    <StackPanel VerticalAlignment="Bottom" Margin="11,0,11,9" IsHitTestVisible="False">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                            <helpers:EmojiTextBlock x:Name="TxtIcon" Text="" FontSize="15"
+                                                    VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock x:Name="TxtName" Text="" Foreground="White" FontSize="14" FontWeight="Bold"
+                                       TextWrapping="Wrap" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBlock x:Name="TxtDesc" Text="" Foreground="#D6D6E8"
+                                   FontSize="11" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                   MaxHeight="31"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ============================ BODY: TWO ROWS ============================ -->
+            <Grid Grid.Row="1" Margin="11,9,11,11">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- ROW 1: the bar and, beside it, what is left of the quest. A bar alone never
+                     says how much is missing, and that is the whole question a daily board is
+                     asked - so the counts sit ON the bar's line, not under it. -->
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Border x:Name="Track" Grid.Column="0" Background="{DynamicResource DarkerBgBrush}"
+                            CornerRadius="4" Height="10" VerticalAlignment="Center" Margin="0,0,10,0">
+                        <Border x:Name="Fill" Background="#FFD700" CornerRadius="4"
+                                HorizontalAlignment="Left" Width="0"/>
+                    </Border>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtProgress" Text="" Foreground="#FFD700"
+                                   FontSize="12" FontWeight="Bold" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtRemaining" Text="" Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- ROW 2: per-seat reroll. The rerolls themselves are still one shared daily
+                     pool; this button only chooses WHICH seat a reroll is spent on. -->
+                <Button x:Name="BtnReroll" Grid.Row="1" Style="{StaticResource OutlineButton}"
+                        Content="" FontSize="11" Padding="8,4" Margin="0,8,0,0" Click="BtnReroll_Click"
+                        ToolTipService.ShowOnDisabled="True"/>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

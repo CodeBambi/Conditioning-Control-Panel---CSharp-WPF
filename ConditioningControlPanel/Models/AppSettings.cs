@@ -1449,6 +1449,37 @@ namespace ConditioningControlPanel.Models
                 : new(value, StringComparer.OrdinalIgnoreCase);
         }
 
+        /// <summary>
+        /// Trigger phrases the user added by hand in the trigger editor. Mirrors
+        /// <see cref="UserAddedSubliminals"/>: protected from ModService's cross-mod trigger
+        /// prune so a typed phrase that happens to match another built-in mod's default
+        /// (OBEY, KNEEL, DROP...) is never silently deleted on startup or a mod switch.
+        /// Case-insensitive to match the prune's comparison.
+        /// </summary>
+        private HashSet<string> _userAddedCustomTriggers = new(StringComparer.OrdinalIgnoreCase);
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public HashSet<string> UserAddedCustomTriggers
+        {
+            get => _userAddedCustomTriggers;
+            set => _userAddedCustomTriggers = value == null
+                ? new(StringComparer.OrdinalIgnoreCase)
+                : new(value, StringComparer.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// One-shot marker for the v6.8.5 migration that strips inherited BambiSleep trigger
+        /// phrases out of a saved SissyHypno trigger list (#general 08-22). Set the first time
+        /// the migration actually runs under the Sissy mod, so a user who later re-adds one of
+        /// those phrases keeps it.
+        /// </summary>
+        private bool _sissyBambiTriggerMigrationDone;
+        [JsonProperty("sissy_bambi_trigger_migration_done")]
+        public bool SissyBambiTriggerMigrationDone
+        {
+            get => _sissyBambiTriggerMigrationDone;
+            set { _sissyBambiTriggerMigrationDone = value; OnPropertyChanged(); }
+        }
+
         private string _subBackgroundColor = "#000000";
         public string SubBackgroundColor
         {
@@ -2371,6 +2402,66 @@ namespace ConditioningControlPanel.Models
         {
             get => _panicKey;
             set { _panicKey = value ?? "Escape"; OnPropertyChanged(); }
+        }
+
+        // ---- v6.8.5 panic rework (suggestion thread "panic button is panic button", #1054/#1066) ----
+
+        /// <summary>
+        /// Master switch for what ONE panic press means.
+        ///
+        /// <para>TRUE (the default): the press stops every live surface at once - video, flashes,
+        /// bubbles, subliminals, overlays, corner GIFs, tube speech, the Chaos / DtRH / Arcademy /
+        /// For You / Just Drop windows and all audio - and then the engine. It is NOT handed to
+        /// whatever game happens to be on screen, and it is NOT spent as the #735 video grace pause
+        /// (that moved to <see cref="PauseKey"/>). Reporters had to spam the key while the screen
+        /// flickered from one owner to the next.</para>
+        ///
+        /// <para>FALSE: the pre-6.8.5 hand-off ladder, unchanged - LockCard, Ctrl+K palette, Chaos,
+        /// DtRH, Arcademy, For You feed, then the video grace pause, then the engine stop.</para>
+        ///
+        /// <para>An open Lock Card outranks BOTH modes and keeps its own contract either way: the
+        /// press dismisses the card, is consumed there, and never advances the double-press exit.</para>
+        /// </summary>
+        private bool _panicOverridesAll = true;
+        public bool PanicOverridesAll
+        {
+            get => _panicOverridesAll;
+            set { _panicOverridesAll = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Optional second binding that ONLY does the #735 "grace pause": while a mandatory video is
+        /// really on screen it parks it behind a Paused/Resume card and touches nothing else. Empty
+        /// (the default) means unbound. Bound with the same capture UI as <see cref="PanicKey"/>.
+        ///
+        /// <para>This exists because <see cref="PanicOverridesAll"/> takes the grace pause off the
+        /// panic key: the people who liked "someone walked in, park the video" keep it, on a key of
+        /// their own, and the panic key goes back to meaning panic.</para>
+        /// </summary>
+        private string _pauseKey = "";
+        public string PauseKey
+        {
+            get => _pauseKey;
+            set { _pauseKey = value ?? ""; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// User-level master for the SESSION-scoped corner GIF (ticket 1539282547484139682).
+        /// Sessions and 28-day program days raised their corner spiral off the program template's
+        /// own <c>CornerGifEnabled</c> alone, with nothing the user could switch off - so the
+        /// support workaround "turn the Corner GIF off" did not apply to the surface people were
+        /// actually seeing, and it could stack a second spiral on top of a standalone corner
+        /// overlay. Default TRUE = the behaviour every existing install already has.
+        ///
+        /// <para>Honoured live: turning it off mid-session hides the running corner GIF. It does
+        /// NOT touch the standalone corner overlays on the Spiral card - those are the user's own
+        /// app-wide choice.</para>
+        /// </summary>
+        private bool _sessionCornerGifAllowed = true;
+        public bool SessionCornerGifAllowed
+        {
+            get => _sessionCornerGifAllowed;
+            set { _sessionCornerGifAllowed = value; OnPropertyChanged(); }
         }
 
         private bool _mercySystemEnabled = true;
@@ -3476,6 +3567,17 @@ namespace ConditioningControlPanel.Models
         {
             get => _fypMuted;
             set { _fypMuted = value; OnPropertyChanged(); }
+        }
+
+        private int _fypVolume = 100;
+        /// <summary>Feed playback volume, 0-100. Independent of <see cref="FypMuted"/>: mute is the
+        /// one-key panic switch (M / the speaker button) and must return you to the volume you had,
+        /// so unmuting never rewrites this. 0 is a legal setting and is silence with the speaker
+        /// button still reading "on" - the page's slider label says 0% so it is not a mystery.</summary>
+        public int FypVolume
+        {
+            get => _fypVolume;
+            set { _fypVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
         }
 
         private double _fypWindowOpacity = 1.0;
@@ -7533,6 +7635,75 @@ namespace ConditioningControlPanel.Models
         {
             get => _webcamAutoDriftCorrection;
             set { _webcamAutoDriftCorrection = value; OnPropertyChanged(); }
+        }
+
+        // System-wide Ctrl+Alt+G that opens Quick Recal from anywhere, so mid-session
+        // drift can be corrected without leaving whatever the user is doing to go dig
+        // the button out of a setup card. Default on; off means MainWindow simply never
+        // takes the GlobalHotkeyService slot (the three in-app buttons are unaffected).
+        // NOT the camera start/stop shortcut — that is CompanionPrompt.CameraShortcut*
+        // and it stops the tracker; this one never does.
+        private bool _webcamQuickRecalHotkeyEnabled = true;
+        public bool WebcamQuickRecalHotkeyEnabled
+        {
+            get => _webcamQuickRecalHotkeyEnabled;
+            set { _webcamQuickRecalHotkeyEnabled = value; OnPropertyChanged(); }
+        }
+
+        // ---- Gaze cursor settle tuning (no UI — JSON-only dev knobs) -------
+        // The three numbers that dominate how long the gaze cursor takes to
+        // settle after a small corrective eye movement. They live in settings
+        // ONLY so they can be swept on a real face during a play-test without
+        // a rebuild; there is deliberately no UI for them. The defaults here
+        // are the tuned values, so a missing settings file behaves identically
+        // to the hardcoded constants in WebcamTrackingService.
+        //
+        // Edit these in %LOCALAPPDATA%/ConditioningControlPanel/settings.json
+        // with the app CLOSED (a running app rewrites the file from memory on
+        // save), then relaunch.
+        //
+        // Direction of travel, if you are sweeping:
+        //   GazeCursorFollowMin      ↑ = settles faster, more shimmer at rest
+        //   GazeCursorRampDist       ↓ = mid-size corrections speed up sooner
+        //   GazeScreenOneEuroBeta    ↑ = filter gets out of the way while moving
+        // See the tuning-history comments in WebcamTrackingService for the
+        // arithmetic behind each default and the units trap on Beta.
+
+        /// <summary>
+        /// Per-frame follow fraction floor for the gaze cursor follower
+        /// (WebcamTrackingService.ShapeCursorMotion). 0.22 ≈ a 134ms time
+        /// constant at 30fps. Clamped to 0.01-0.9 by the consumer — it must
+        /// stay below 1.0 or the follower degenerates into a snap.
+        /// </summary>
+        private double _gazeCursorFollowMin = 0.22;
+        public double GazeCursorFollowMin
+        {
+            get => _gazeCursorFollowMin;
+            set { _gazeCursorFollowMin = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Distance in DIPs at which the gaze cursor follower reaches full
+        /// catch-up speed. The ramp is quadratic, so this mostly governs the
+        /// mid-size (150-400 DIP) correction band.
+        /// </summary>
+        private double _gazeCursorRampDist = 360.0;
+        public double GazeCursorRampDist
+        {
+            get => _gazeCursorRampDist;
+            set { _gazeCursorRampDist = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Beta for the SCREEN-space One-Euro filter, in DIP/s velocity units.
+        /// NOT comparable to the iris-space One-Euro beta (0.007) — different
+        /// unit space; making the two match is a bug, not a cleanup.
+        /// </summary>
+        private double _gazeScreenOneEuroBeta = 0.06;
+        public double GazeScreenOneEuroBeta
+        {
+            get => _gazeScreenOneEuroBeta;
+            set { _gazeScreenOneEuroBeta = value; OnPropertyChanged(); }
         }
 
         // Box 2 — Focus Training

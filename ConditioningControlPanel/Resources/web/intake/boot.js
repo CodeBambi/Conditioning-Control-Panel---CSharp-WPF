@@ -69,7 +69,12 @@ if (typeof window !== 'undefined') {
 // Optional-module loader: import a module + factory, or fall back to a stub.
 async function loadOptional(path, factoryName, makeFallback) {
   try {
-    const mod = await import(path);
+    // Bounded: nine of these run back-to-back on the loader-blocking path, and an
+    // import whose fetch never settles is NOT catchable by this try/catch - the
+    // await simply never returns, so the loader sits on "Opening Graded Intake..."
+    // forever with no error to log. Past the deadline we take the fallback, which
+    // is the same degraded-but-alive outcome a 404 has always produced.
+    const mod = await bounded(import(path), MODULE_IMPORT_TIMEOUT_MS, `import ${path}`);
     const f = mod && mod[factoryName];
     if (typeof f === 'function') return f;
     shim.log(`module ${path}: no '${factoryName}' export — using fallback`);
@@ -86,9 +91,23 @@ async function loadOptional(path, factoryName, makeFallback) {
 // takes over) so a missing/malformed bank degrades gracefully instead of wedging.
 async function loadBank(niche) {
   try {
-    const res = await fetch(`./banks/${niche}.json`, { cache: 'no-cache' });
-    if (!res.ok) { shim.log(`bank ${niche}: HTTP ${res.status} — using placeholder`); return null; }
-    const bank = await res.json();
+    // Bounded: a fetch that never settles (a mobile WebView on a bad radio) must
+    // not wedge the loader - past the deadline the placeholder takes over.
+    // The deadline must cover the BODY READ, not just the headers. Headers can
+    // arrive promptly and the body stream then stall forever, and res.json() on a
+    // stalled stream never settles - so clearing the timer before it left the
+    // loader wedged on exactly the bad radio this guard exists for. The banks are
+    // ~245KB, which is a real body to stall in the middle of. Aborting mid-body
+    // rejects res.json(), which the catch below turns into the placeholder.
+    const ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), BANK_FETCH_TIMEOUT_MS) : null;
+    let bank;
+    try {
+      const res = await fetch(`./banks/${niche}.json`, { cache: 'no-cache', signal: ctl ? ctl.signal : undefined });
+      if (!res.ok) { shim.log(`bank ${niche}: HTTP ${res.status} — using placeholder`); return null; }
+      // Belt to the abort brace: a browser with no AbortController is bounded anyway.
+      bank = await bounded(res.json(), BANK_FETCH_TIMEOUT_MS, `bank ${niche} body`);
+    } finally { if (timer) clearTimeout(timer); }
     if (!bank || !Array.isArray(bank.prompts) || !bank.prompts.length) {
       shim.log(`bank ${niche}: empty/invalid — using placeholder`); return null;
     }
@@ -104,6 +123,26 @@ shim.startHeartbeat();
 
 /** Chance, per card resolution, to sprinkle a Bambi-Sparkle giggle cue. */
 const GIGGLE_CHANCE = 0.03;
+
+/**
+ * BOOT WATCHDOG deadlines (ms). Every await between page load and the loader
+ * dropping is bounded, because one that never settles = a page stuck on
+ * "Opening Graded Intake..." with nothing to tell the player why. Seen for real
+ * 2026-08-26: Discord's Android activity WebView left indexedDB.open() pending
+ * forever, so feedForward() never returned (desktop, iPhone and the hosted
+ * mobile app - which skips feedForward - were all fine). core/stats.js now bounds
+ * the open itself; these are the belt to that brace, at the boot level.
+ */
+const BANK_FETCH_TIMEOUT_MS   = 15000;
+const FEED_FORWARD_TIMEOUT_MS = 5000;
+/**
+ * Per-module deadline for the optional-module imports. Generous on purpose: the
+ * biggest of them (render/beats.js) is ~256KB and they are served with a 4h
+ * cache header, so 12s only ever fires on a stalled radio - never on a
+ * slow-but-working one, where tripping this would needlessly downgrade a player
+ * to the stub renderer.
+ */
+const MODULE_IMPORT_TIMEOUT_MS = 12000;
 
 /**
  * Deliberate breather (ms) held on the normal answer -> next-card swap, so a
@@ -131,6 +170,7 @@ shim.onBoot(async (config) => {
     // --- build the stack (real module if present, else stub) --------------
     const ai = createAI(config.ai);
 
+    loaderStep('loading the room');
     const createReward = await loadOptional('./core/reward.js', 'createReward', stubReward);
     const createStats  = await loadOptional('./core/stats.js',  'createStats',  stubStats);
     const createBeats  = await loadOptional('./render/beats.js', 'createBeats',  null); // null -> inline stub render
@@ -147,6 +187,7 @@ shim.onBoot(async (config) => {
     const stats    = createStats();
 
     // Bank FIRST — the resolved theme feeds effects/beats and re-tints the page.
+    loaderStep('opening the bank');
     const bank  = config.bank || await loadBank(config.niche);
     const theme = themeOf(bank);
     applyTheme(theme);
@@ -199,9 +240,12 @@ shim.onBoot(async (config) => {
     const subjectId = resolveSubjectId(config);
     let priorRun = config.priorRun || null;
     if (!priorRun && !config.hosted && stats.feedForward) {
-      try { priorRun = await stats.feedForward(); } catch (_e) { /* best-effort */ }
+      loaderStep('consulting the archive');
+      try { priorRun = await bounded(stats.feedForward(), FEED_FORWARD_TIMEOUT_MS, 'feedForward'); }
+      catch (_e) { /* best-effort */ }
     }
 
+    loaderStep('');
     if (dom.loader) dom.loader.hidden = true;
 
     // --- REMOTE MEDIA: stock the pool while the menu is up ------------------
@@ -408,6 +452,37 @@ shim.log('boot: ready posted');
  * SMALL SHELL HELPERS — DOM sugar, pacing, guarded optional calls.
  * -------------------------------------------------------------------------- */
 function sleep(ms) { return new Promise((r) => setTimeout(r, Math.max(0, ms | 0))); }
+
+/**
+ * Await `promise` for at most `ms`; past that, reject (and log) so the boot moves
+ * on. The underlying work is NOT cancelled - it is simply no longer waited for.
+ */
+function bounded(promise, ms, label) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      shim.log(`boot: ${label} still pending after ${ms}ms — continuing without it`);
+      reject(new Error(`${label} timeout`));
+    }, Math.max(0, ms | 0));
+    Promise.resolve(promise).then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
+/**
+ * Small caption under the loader ring naming the boot step in flight, so a
+ * stuck loader at least says WHERE it stuck (there are no devtools on a phone
+ * inside Discord). Created on first use; cleared right before the loader drops.
+ */
+function loaderStep(text) {
+  if (!doc || !dom.loader) return;
+  try {
+    let el = dom.loader.querySelector('.intake-loader-step');
+    if (!el) { el = doc.createElement('small'); el.className = 'intake-loader-step'; dom.loader.appendChild(el); }
+    el.textContent = text || '';
+  } catch (_e) { /* cosmetic */ }
+}
 
 /**
  * Tear down the pause menu from a path that cannot see the beat loop's `pause`
@@ -1665,7 +1740,26 @@ const IX_OUTRO_CSS = `
 }
 @media (prefers-reduced-motion: reduce) {
   .intake-cert-handoff.is-pending { animation: none; }
-}`;
+}
+/* Share, the activity-only sibling of the exit. .intake-begin is authored for the
+   briefing screen, where the parent .is-ready turns it on, so the certificate's
+   buttons have to switch themselves on the same way .intake-cert-exit does. Quieter
+   than the exit on purpose: leaving with the session is the real action, this is a
+   flourish. Disabled styling is inherited from .intake-begin:disabled, which outranks
+   the opacity below, so it still greys out while filing. */
+.intake-cert-share {
+  margin-top: 10px; opacity: 1; pointer-events: auto;
+  font-size: 17px; padding: 11px 26px;
+  color: var(--intake-accent); background: transparent;
+  border: 1px solid color-mix(in srgb, var(--intake-accent) 55%, transparent);
+  box-shadow: none;
+}
+.intake-cert-share:not(:disabled):hover {
+  filter: none;
+  background: color-mix(in srgb, var(--intake-accent) 14%, transparent);
+}
+.intake-cert-share.is-done { color: var(--intake-dim); border-color: rgba(176,108,255,.3); }
+.intake-cert-share.is-bad { color: #ff8ba0; border-color: rgba(255,139,160,.5); }`;
 
 /** Inject the scoped outro CSS once. No-op headlessly (guarded on `doc`). */
 function ensureOutroCss() {
@@ -1855,10 +1949,86 @@ async function runOutro(result, ack, ctx) {
     cert.appendChild(exit);
     if (hosted) armSessionHandoff(handoffEl, exit);
   }
+  mountShareAction(cert, {
+    config,
+    grade: letter,
+    score: (result.maxScore > 0)
+      ? Math.round(clamp01(result.totalScore / result.maxScore) * 100)
+      : 0,
+    headline: lines.length ? String(lines[lines.length - 1]) : null,
+  });
   slotRecord.appendChild(cert);
   await sleep(30);
   cert.classList.add('is-shown');
   syncScrollHint();
+}
+
+/* ----------------------------------------------------------------------------
+ * SHARE - the record, handed to the room. DISCORD ACTIVITY ONLY.
+ *
+ * DOUBLE-GATED, and both gates have to hold or nothing is drawn: the boot config
+ * must carry an `activity` block (only the activity shell seeds one - see
+ * BootConfig.activity in core/contracts.js), and `window.__intakeShare` must be a
+ * function (the activity's own web layer installs it). In the desktop host and in
+ * a plain browser neither is ever true, so this returns before it touches the DOM
+ * and those builds are byte-for-byte what they were.
+ *
+ * THE CORE MAKES NO NETWORK CALL. It hands a flat, stable payload to the hook and
+ * waits on the promise it gets back; posting is entirely the activity's business.
+ * A hook that throws synchronously is treated exactly like a rejection.
+ * -------------------------------------------------------------------------- */
+const SHARE_IDLE_LABEL = 'Share the results';
+const SHARE_RETRY_MS = 2600;
+
+function mountShareAction(cert, info) {
+  const { config, grade, score, headline } = info || {};
+  if (!cert || !config || !config.activity) return;
+  if (typeof window === 'undefined' || typeof window.__intakeShare !== 'function') return;
+
+  const btn = el('button', 'intake-begin intake-cert-share', SHARE_IDLE_LABEL);
+  let busy = false;
+  let retryTimer = 0;
+
+  btn.addEventListener('click', () => {
+    if (busy || btn.disabled) return;
+    busy = true;
+    if (retryTimer) { clearTimeout(retryTimer); retryTimer = 0; }
+    btn.classList.remove('is-bad');
+    btn.disabled = true;
+    btn.textContent = 'Filing your record…';
+
+    let p;
+    try {
+      p = window.__intakeShare({
+        grade: String(grade || ''),
+        score: Number(score) || 0,
+        niche: String(config.niche || ''),
+        headline: headline ? String(headline) : null,
+      });
+    } catch (e) { p = Promise.reject(e); }
+
+    Promise.resolve(p).then(() => {
+      // Done and STAYS done: the record is filed once, so the button retires.
+      busy = false;
+      btn.classList.add('is-done');
+      btn.textContent = 'Record filed.';
+    }, (e) => {
+      // Never a dead end. Say so plainly, then hand the label back so they can retry.
+      busy = false;
+      shim.log('share failed: ' + (e && e.message || e));
+      btn.disabled = false;
+      btn.classList.add('is-bad');
+      btn.textContent = 'Filing failed. Try again.';
+      retryTimer = setTimeout(() => {
+        retryTimer = 0;
+        if (busy) return;
+        btn.classList.remove('is-bad');
+        btn.textContent = SHARE_IDLE_LABEL;
+      }, SHARE_RETRY_MS);
+    });
+  });
+
+  cert.appendChild(btn);
 }
 
 /* ----------------------------------------------------------------------------

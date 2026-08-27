@@ -83,6 +83,7 @@ namespace ConditioningControlPanel.Features
             {
                 ChkEnable.IsChecked = s.SpiralEnabled;
                 ChkRandomize.IsChecked = s.SpiralRandomize;
+                ChkSessionCornerGif.IsChecked = s.SessionCornerGifAllowed;
                 SliderOpacity.Value = s.SpiralOpacity;
                 TxtOpacity.Text = $"{s.SpiralOpacity}%";
                 PopulateMonitors();
@@ -99,6 +100,7 @@ namespace ConditioningControlPanel.Features
             if (e.PropertyName == nameof(Models.AppSettings.SpiralEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.SpiralOpacity) ||
                 e.PropertyName == nameof(Models.AppSettings.SpiralRandomize) ||
+                e.PropertyName == nameof(Models.AppSettings.SessionCornerGifAllowed) ||
                 e.PropertyName == nameof(Models.AppSettings.SpiralTargetMonitor))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
@@ -141,6 +143,31 @@ namespace ConditioningControlPanel.Features
             // frame cache is keyed by path, so re-picking live would cause a hitch).
             s.SpiralRandomize = ChkRandomize.IsChecked ?? false;
             App.Settings?.Save();
+        }
+
+        /// <summary>
+        /// User master for the SESSION-scoped corner GIF (ticket 1539282547484139682). Honoured
+        /// LIVE: a session already on screen drops its corner overlay the moment this is unticked,
+        /// rather than waiting for the next session. The standalone Corner GIF slots are NOT
+        /// touched - those are a separate, explicitly-configured surface.
+        /// </summary>
+        private void ChkSessionCornerGif_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            s.SessionCornerGifAllowed = ChkSessionCornerGif.IsChecked ?? false;
+            App.Settings?.Save();
+
+            try
+            {
+                SessionEngine.Active?.RefreshCornerGifPolicy();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Session corner GIF toggle: live refresh failed");
+            }
         }
 
         private void SliderOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)

@@ -131,6 +131,13 @@ namespace ConditioningControlPanel.Services
             }
             _log?.Information("ModService initialized — active mod: {ModId} ({ModName})", _activeMod.Id, _activeMod.Name);
 
+            // Say, once per launch, WHERE this mod's companion content resolved from. A user
+            // reporting "she only says the default lines" is answered by this single line:
+            // personalities=stock-presets means the AI persona is the default mod's.
+            Companion.ModCompanionContent.ResetPersonalityCache();
+            Companion.ModCompanionContent.LogResolvedSources(
+                _activeMod.Id, _activeMod.InstalledPath, _activeMod.Manifest);
+
             // Re-derive the active mod's text pools from per-mod storage (or defaults) on every
             // boot. The settings load runs before this service exists, so the active pools held
             // in settings.json may be stale or contaminated by the legacy subliminal merge; this
@@ -795,6 +802,13 @@ namespace ConditioningControlPanel.Services
             try { if (Chaos.DtrhHostService.IsActive) Chaos.DtrhHostService.CloseActive(); }
             catch (Exception ex) { _log?.Debug("ActivateMod: DTRH close failed: {E}", ex.Message); }
 
+            // The Arcademy snapshots the active mod the same way DTRH does - its mod root (the
+            // virtual-host mapping for skinned art) and its whole lexicon are resolved once at
+            // launch - so a mid-session switch would leave the campus wearing the old mod's name
+            // for every room. Same cure, same shape.
+            try { if (Arcademy.ArcademyHostService.IsActive) Arcademy.ArcademyHostService.CloseActive(); }
+            catch (Exception ex) { _log?.Debug("ActivateMod: Arcademy close failed: {E}", ex.Message); }
+
             // Save current pool customizations before switching
             SaveCurrentPoolsToSettings(oldModId);
 
@@ -822,6 +836,11 @@ namespace ConditioningControlPanel.Services
 
             // Clear resource cache
             ModResourceResolver.ClearCache();
+
+            // The AI personalities are resolved per mod (personalities.json, else the manifest, else
+            // the stock presets) and cached; drop that before anything reads a prompt for the new mod.
+            try { Companion.ModCompanionContent.ResetPersonalityCache(); }
+            catch (Exception ex) { _log?.Debug("ActivateMod: personality cache clear failed: {E}", ex.Message); }
 
             // Drop the companion's cached system-prompt prefix. Its fingerprint hashes ActiveModId,
             // so a plain switch is already covered — but everything ELSE the mod contributes
@@ -865,6 +884,7 @@ namespace ConditioningControlPanel.Services
             }
 
             _log?.Information("Mod activated: {ModId} (was {OldModId})", modId, oldModId);
+            Companion.ModCompanionContent.LogResolvedSources(mod.Id, mod.InstalledPath, mod.Manifest);
             ModChanged?.Invoke(this, mod);
         }
 
@@ -1220,14 +1240,21 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public string MakeModAware(string text)
         {
-            if (string.IsNullOrEmpty(text)) return text;
+            return ApplyTextReplacements(_activeMod.Manifest.TextReplacements, text);
+        }
 
-            // No replacements registered → nothing to do (mod-agnostic check)
-            var replacements = _activeMod.Manifest.TextReplacements;
+        /// <summary>
+        /// The pure half of <see cref="MakeModAware"/>: applies a manifest's TextReplacements to a
+        /// string, longest key first so a longer phrase always wins over a shorter one it contains
+        /// (this is what keeps "BAMBI UNIFORM LOCK" from being half-rewritten by the "UNIFORM LOCK"
+        /// and "BAMBI" rules in turn). Split out so the mapping can be tested without an App.
+        /// </summary>
+        internal static string ApplyTextReplacements(IDictionary<string, string>? replacements, string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
             if (replacements == null || replacements.Count == 0) return text;
 
             var result = text;
-            // Apply replacements in order — longer strings first to avoid partial matches
             foreach (var kvp in replacements.OrderByDescending(r => r.Key.Length))
             {
                 result = result.Replace(kvp.Key, kvp.Value);
@@ -2164,6 +2191,15 @@ namespace ConditioningControlPanel.Services
             try { ModResourceResolver.ClearCache(); }
             catch (Exception ex) { _log?.Debug("ModService: resolver cache clear failed: {Error}", ex.Message); }
 
+            // The extraction may have just delivered this mod's personalities.json, so the cached
+            // "no mod personalities, use the stock presets" answer is now wrong.
+            try
+            {
+                Companion.ModCompanionContent.ResetPersonalityCache();
+                Companion.ModCompanionContent.LogResolvedSources(package.Id, package.InstalledPath, package.Manifest);
+            }
+            catch (Exception ex) { _log?.Debug("ModService: personality cache clear failed: {Error}", ex.Message); }
+
             // Before ModChanged fires: AvatarTubeWindow re-evaluates the portrait gate from that
             // event, and the adopted package may have just delivered the portrait PNGs — a stale
             // cached "absent" would park the avatar on the legacy poses for the whole session.
@@ -2311,6 +2347,16 @@ namespace ConditioningControlPanel.Services
                     // would keep resolving to nothing for the rest of the session without this.
                     try { ModResourceResolver.ClearCache(); }
                     catch (Exception ex) { _log?.Debug("ModService: resolver cache clear failed: {Error}", ex.Message); }
+
+                    // Same reason: the pack that just landed can carry a personalities.json for a
+                    // mod that has been running on the stock (default-mod) presets all session.
+                    try
+                    {
+                        Companion.ModCompanionContent.ResetPersonalityCache();
+                        Companion.ModCompanionContent.LogResolvedSources(
+                            _activeMod.Id, _activeMod.InstalledPath, _activeMod.Manifest);
+                    }
+                    catch (Exception ex) { _log?.Debug("ModService: personality cache clear failed: {Error}", ex.Message); }
 
                     // Voice lines are enumerated per call (no list cache), but the §7.2 positional→
                     // filename id migration is deliberately skipped while the folder is empty — this
@@ -2516,6 +2562,20 @@ namespace ConditioningControlPanel.Services
                     ? new List<string>(settings.CustomTriggers)
                     : new List<string>(GetDefaultCustomTriggers());
 
+            // One-shot cleanup for the actual defect reported in #general 08-22: the Sissy mod's
+            // trigger list shipped as BambiSleep's corpus with the brand filed off, so a user who
+            // ran Sissy before this build has that corpus saved in their per-mod backup and would
+            // keep meeting it. Deliberately NARROW - it only runs under Sissy, only removes
+            // BambiSleep-specific phrases, never touches phrases the user typed, and never adds
+            // anything back (deliberate deletions stay deleted, see MainWindow.Patreon.cs). The
+            // generic vocabulary other mods share (OBEY, DROP, KNEEL...) is left alone, and the
+            // one-shot flag means a Bambi phrase re-added afterwards is kept.
+            if (ApplySissyBambiTriggerMigration(settings, modId, out var removedTriggers))
+            {
+                _log?.Information("Pruned {Count} inherited BambiSleep trigger(s) from the Sissy list: {Keys}",
+                    removedTriggers.Count, string.Join(", ", removedTriggers));
+            }
+
             if (settings.BouncingTextPoolByMod?.TryGetValue(modId, out var savedBounce) == true)
                 settings.BouncingTextPool = new Dictionary<string, bool>(savedBounce);
             else
@@ -2572,6 +2632,74 @@ namespace ConditioningControlPanel.Services
             if (toRemove.Count > 0)
                 _log?.Information("Pruned {Count} cross-mod subliminal entries from the active pool: {Keys}",
                     toRemove.Count, string.Join(", ", toRemove));
+        }
+
+        /// <summary>
+        /// Removes BambiSleep-specific trigger phrases that were inherited by the SissyHypno
+        /// trigger list before the de-Bambi'd defaults shipped (#general 08-22). Only phrases that
+        /// are a BambiSleep default AND not a SissyHypno default are candidates; phrases the user
+        /// typed themselves (<paramref name="userAdded"/>) are always kept, and nothing is ever
+        /// added back. Pure so it can be unit tested without app state.
+        /// </summary>
+        /// <summary>
+        /// Runs the one-shot Sissy trigger migration over a settings object and reports whether it
+        /// actually removed anything. Kept static and App-free so the persistence half is testable:
+        /// the pruned list is written to the ACTIVE list AND back over the per-mod backup, because
+        /// the backup is what the next launch restores from. Writing only the active list left
+        /// CustomTriggersByMod holding the old corpus, and since the one-shot flag then blocked a
+        /// second prune, the Bambi triggers came back permanently on the very next start (the
+        /// trailing self-heal is TryAdd, so it never overwrites an existing backup).
+        /// </summary>
+        internal static bool ApplySissyBambiTriggerMigration(
+            Models.AppSettings settings, string modId, out List<string> removed)
+        {
+            removed = new List<string>();
+            if (settings == null) return false;
+            if (settings.SissyBambiTriggerMigrationDone) return false;
+            if (!string.Equals(modId, Models.BuiltInMods.SissyHypnoId, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            var pruned = PruneInheritedBambiTriggers(
+                settings.CustomTriggers, settings.UserAddedCustomTriggers, out removed);
+
+            if (removed.Count > 0)
+            {
+                settings.CustomTriggers = pruned;
+                (settings.CustomTriggersByMod ??= new Dictionary<string, List<string>>())[modId] =
+                    new List<string>(pruned);
+            }
+
+            settings.SissyBambiTriggerMigrationDone = true;
+            return removed.Count > 0;
+        }
+
+        internal static List<string> PruneInheritedBambiTriggers(
+            IEnumerable<string>? current, IEnumerable<string>? userAdded, out List<string> removed)
+        {
+            removed = new List<string>();
+            var list = current?.ToList() ?? new List<string>();
+            if (list.Count == 0) return list;
+
+            var sissyDefaults = new HashSet<string>(
+                Models.BuiltInMods.SissyHypno.CustomTriggers ?? new List<string>(),
+                StringComparer.OrdinalIgnoreCase);
+            var bambiOnly = new HashSet<string>(
+                (Models.BuiltInMods.BambiSleep.CustomTriggers ?? new List<string>())
+                    .Where(t => !sissyDefaults.Contains(t)),
+                StringComparer.OrdinalIgnoreCase);
+            var userTyped = new HashSet<string>(
+                userAdded ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+
+            var kept = new List<string>();
+            foreach (var t in list)
+            {
+                if (!string.IsNullOrWhiteSpace(t) && bambiOnly.Contains(t) && !userTyped.Contains(t))
+                    removed.Add(t);
+                else
+                    kept.Add(t);
+            }
+
+            return removed.Count == 0 ? list : kept;
         }
 
         /// <summary>

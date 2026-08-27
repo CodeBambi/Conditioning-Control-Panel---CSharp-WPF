@@ -51,6 +51,31 @@ namespace ConditioningControlPanel.Services.Video.Browser
         /// <summary>Raised on the UI thread once the page posts <c>ready</c>.</summary>
         public event Action<BrowserVideoWindow>? Ready;
 
+        /// <summary>This surface's WebView2 never came up - see
+        /// <see cref="BrowserVideoSurface.InitFailed"/>. The window is still on screen and still
+        /// OPAQUE BLACK, so the engine must act on it rather than wait for a frame that cannot come.</summary>
+        public event Action<BrowserVideoWindow, string>? InitFailed;
+
+        /// <summary><see cref="Environment.TickCount64"/> when the session created this window. The
+        /// per-surface diagnostics line measures first-frame latency from here.</summary>
+        public long SessionStartTick { get; set; } = Environment.TickCount64;
+
+        /// <summary>One surface report per window per session (the page posts <c>playing</c> again
+        /// after a seek, and a mirror must not spam the log). Also the "stop watching me" flag for the
+        /// engine's first-frame sweep, which is why the sweep sets it when it condemns a window.</summary>
+        public bool FirstFrameReported { get; set; }
+
+        /// <summary>When THIS window's first frame is overdue. Every screen carries its own deadline:
+        /// a session-wide one could only ever judge the primary, which is how a mirror that came up,
+        /// handshook and then never decoded stayed black and unlogged for a whole clip. Starts at the
+        /// generous pre-handshake budget and is restarted, shorter, when the page posts <c>ready</c>
+        /// (everything before that is WebView2 start-up cost, not the clip's).</summary>
+        public DateTime FirstFrameDeadlineUtc { get; set; } = DateTime.MaxValue;
+
+        /// <summary>The budget <see cref="FirstFrameDeadlineUtc"/> was last set from, in ms, so the
+        /// diagnostics line can say which window the surface actually missed.</summary>
+        public int FirstFrameBudgetMs { get; set; }
+
         public BrowserVideoWindow(Screen screen, bool primary)
         {
             _screen = screen;
@@ -83,6 +108,7 @@ namespace ConditioningControlPanel.Services.Video.Browser
             _surface.Message += (_, o) => Message?.Invoke(this, o);
             _surface.ProcessFailed += (_, kind) => ProcessFailed?.Invoke(this, kind);
             _surface.Ready += _ => Ready?.Invoke(this);
+            _surface.InitFailed += (_, reason) => InitFailed?.Invoke(this, reason);
             Content = _surface;
 
             PinToScreen();
