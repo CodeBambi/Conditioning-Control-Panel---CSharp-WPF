@@ -83,9 +83,30 @@ namespace ConditioningControlPanel.Services
             || Settings.V2.Provider("buttplug").Enabled;
 
         /// <summary>
-        /// Buttplug.io has ~1.3s latency, so we need to trigger haptics earlier
+        /// Pure anticipation rule (#1052). The delay exists ONLY to give a real motor its spin-up
+        /// head start: Buttplug.io round-trips at roughly 1.3s, a direct provider at roughly 250ms,
+        /// and SubliminalService waits it out BEFORE drawing the card so the pulse and the text
+        /// land together. With no toy connected there is nothing to spin up, so every one of those
+        /// milliseconds was pure lag - a subliminal that is instant with haptics OFF arrived 1.3s
+        /// late with haptics merely ENABLED, which is what the lag repro shows.
+        /// Gated on the master toggle, an actually-connected device, AND the subliminal routing row
+        /// (a disabled row means PostEvent returns Completed without touching a motor).
         /// </summary>
-        public int SubliminalAnticipationMs => IsButtplugProvider ? 1300 : 250;
+        internal static int ResolveSubliminalAnticipationMs(bool hapticsEnabled, bool deviceConnected,
+            bool subliminalRuleEnabled, bool isButtplugProvider)
+        {
+            if (!hapticsEnabled || !deviceConnected || !subliminalRuleEnabled) return 0;
+            return isButtplugProvider ? 1300 : 250;
+        }
+
+        /// <summary>
+        /// Head start the subliminal visual gives the toy so the pulse and the card land together.
+        /// 0 unless a device is actually connected and routed - see
+        /// <see cref="ResolveSubliminalAnticipationMs"/>.
+        /// </summary>
+        public int SubliminalAnticipationMs => ResolveSubliminalAnticipationMs(
+            Settings.Enabled, IsConnected,
+            Settings.V2.Rule(HapticEventKind.SubliminalTrigger).Enabled, IsButtplugProvider);
 
         public List<string> ConnectedDevices
         {

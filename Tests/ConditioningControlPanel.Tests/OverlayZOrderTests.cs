@@ -147,4 +147,73 @@ public class OverlayZOrderTests
                     ResolveZOrderAction(hasVideo: false, isVideoWindow: false, aboveVideo: false,
                         needsPin: needsPin, force: force, yieldToCompositorHost: true));
     }
+
+    // ---------------------------------------------------------------------------------------
+    // #1041/#1051/#1052 - HTML5 fullscreen buried every effect.
+    //
+    // Both fullscreen browser paths Show() a NEW borderless Topmost window, which lands at the
+    // front of the topmost band above every effect window. Our overlays KEEP their WS_EX_TOPMOST
+    // bit while they are buried, so needsPin stays false and the un-forced tick resolves to None
+    // forever - there was no recovery path at all. The fix is the tick policy below: while such a
+    // window is live, every tick is a forced tick and re-issues HWND_TOPMOST.
+    // ---------------------------------------------------------------------------------------
+
+    [Fact]
+    public void BuriedButStillFlaggedTopmost_IsANoOpWithoutForce_TheBugShape()
+    {
+        // Exactly the #1041 state: nothing lost the flag, so a flag-only heal does nothing.
+        Assert.Equal(ZOrderAction.None,
+            ResolveZOrderAction(hasVideo: false, isVideoWindow: false, aboveVideo: false,
+                needsPin: false, force: false));
+    }
+
+    [Fact]
+    public void FullscreenBrowserLive_ForcesTheTick()
+    {
+        Assert.True(ShouldForceZOrderTick(explicitForce: false, fullscreenBrowserActive: true));
+    }
+
+    [Fact]
+    public void FullscreenBrowserLive_TurnsTheNoOpIntoARaise()
+    {
+        // The two halves together: the forced tick is what rescues the buried-but-flagged overlay.
+        var force = ShouldForceZOrderTick(explicitForce: false, fullscreenBrowserActive: true);
+        Assert.Equal(ZOrderAction.PinTopmost,
+            ResolveZOrderAction(hasVideo: false, isVideoWindow: false, aboveVideo: false,
+                needsPin: false, force: force));
+    }
+
+    [Fact]
+    public void NoFullscreenBrowser_LeavesTheTickPolicyExactlyAsItWas()
+    {
+        Assert.False(ShouldForceZOrderTick(explicitForce: false, fullscreenBrowserActive: false));
+        Assert.True(ShouldForceZOrderTick(explicitForce: true, fullscreenBrowserActive: false));
+    }
+
+    [Fact]
+    public void ExplicitForceStillWins_WhateverTheBrowserState()
+    {
+        foreach (var fullscreen in new[] { false, true })
+            Assert.True(ShouldForceZOrderTick(explicitForce: true, fullscreenBrowserActive: fullscreen));
+    }
+
+    [Fact]
+    public void ForcedTickCannotBuryAPlayingMandatoryVideo()
+    {
+        // The forced tick must not become a back door around #497: an overlay co-existing with a
+        // playing mandatory video still goes BELOW it, fullscreen browser or not.
+        var force = ShouldForceZOrderTick(explicitForce: false, fullscreenBrowserActive: true);
+        Assert.Equal(ZOrderAction.PinBelowVideo,
+            ResolveZOrderAction(hasVideo: true, isVideoWindow: false, aboveVideo: false,
+                needsPin: false, force: force));
+    }
+
+    [Fact]
+    public void ForcedTickStillLetsADeeperBandSitAboveTheVideo()
+    {
+        var force = ShouldForceZOrderTick(explicitForce: false, fullscreenBrowserActive: true);
+        Assert.Equal(ZOrderAction.PinTopmost,
+            ResolveZOrderAction(hasVideo: true, isVideoWindow: false, aboveVideo: true,
+                needsPin: false, force: force));
+    }
 }

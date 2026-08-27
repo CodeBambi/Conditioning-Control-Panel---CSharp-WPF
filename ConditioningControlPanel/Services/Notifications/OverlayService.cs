@@ -83,6 +83,74 @@ public class OverlayService : IDisposable
     /// abnormally-ended band (no matching exit) can't leave overlays pinned above later videos.</summary>
     internal void ResetDeeperOverlayBands() => System.Threading.Interlocked.Exchange(ref _deeperOverlayBandDepth, 0);
 
+    // #1041/#1045/#1051/#1052 - HTML5 fullscreen buries every effect.
+    //
+    // Both fullscreen browser paths (the Deeper enhancement player, and the Settings-tab browser
+    // plus its popout) answer an HTML5 fullscreen request by Show()ing a NEW borderless Topmost
+    // window. A freshly shown topmost window lands at the FRONT of the topmost band, above every
+    // effect window - and the #952/#905 "rented Topmost" handlers re-assert the claim on every
+    // activation, so it returns to the front each time the user clicks the video. Nothing on our
+    // side ever re-raised: ReassertOne only acts when a window LOST WS_EX_TOPMOST, which an overlay
+    // buried by a topmost sibling never does, so ResolveZOrderAction returned None forever and the
+    // pink tint / spiral / flashes stayed invisible for the rest of the run.
+    //
+    // While any such window is live, every reconcile tick is treated as a FORCED tick (see
+    // ShouldForceZOrderTick), which re-issues HWND_TOPMOST and puts the effects back on top within
+    // ~500ms of any re-raise. Tracked as a SET of owners rather than a counter so a double enter or
+    // a partially-unwound exit cannot strand the flag on (both exit paths are retryable by design).
+    private readonly HashSet<object> _fullscreenBrowserOwners = new();
+    private readonly object _fullscreenBrowserGate = new();
+    private volatile bool _fullscreenBrowserActive;
+
+    /// <summary>True while at least one topmost fullscreen browser window is on screen.</summary>
+    internal bool TopmostFullscreenBrowserActive => _fullscreenBrowserActive;
+
+    /// <summary>
+    /// Pure tick policy: a reconcile pass must re-issue HWND_TOPMOST unconditionally (rather than
+    /// only healing windows that lost the flag) whenever the caller asked for it OR a topmost
+    /// fullscreen browser window is live. Extracted so the #1041 rule is unit-testable.
+    /// </summary>
+    internal static bool ShouldForceZOrderTick(bool explicitForce, bool fullscreenBrowserActive)
+        => explicitForce || fullscreenBrowserActive;
+
+    /// <summary>
+    /// Register/unregister a live topmost fullscreen browser window and kick an immediate forced
+    /// z-order pass. Idempotent per <paramref name="owner"/> (pass the window, or the service that
+    /// owns it), so a caller may notify twice, or unwind twice, without unbalancing anything.
+    /// </summary>
+    public void SetFullscreenBrowserActive(object? owner, bool active)
+    {
+        if (owner == null) return;
+        lock (_fullscreenBrowserGate)
+        {
+            if (active) _fullscreenBrowserOwners.Add(owner);
+            else _fullscreenBrowserOwners.Remove(owner);
+            _fullscreenBrowserActive = _fullscreenBrowserOwners.Count > 0;
+        }
+        RequestForcedZOrderReassert();
+    }
+
+    /// <summary>
+    /// Queue a forced z-order pass on the UI thread. Public so the fullscreen enter/exit paths (and
+    /// the rented-Topmost activation handlers) can put the effects back on top the moment they move
+    /// a topmost window, instead of waiting out the next reconcile tick.
+    /// </summary>
+    public void RequestForcedZOrderReassert()
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher == null) return;
+        try
+        {
+            dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (Application.Current?.Dispatcher == null) return;
+                try { if (!_isDisposed) ReassertZOrder(force: true); }
+                catch (Exception ex) { App.Logger?.Debug("RequestForcedZOrderReassert failed: {Error}", ex.Message); }
+            }));
+        }
+        catch { }
+    }
+
     /// <summary>The AppSettings instance our PropertyChanged hook is currently attached to. Tracked
     /// rather than re-read from <c>App.Settings.Current</c>, so the unsubscribe always detaches from
     /// the object we actually attached to. Same pattern as <c>ModService</c>.</summary>
@@ -2812,6 +2880,12 @@ public class OverlayService : IDisposable
         // correct for ambient/session overlays that happen to co-exist with a mandatory video).
         bool aboveVideo = DeeperOverlayBandActive;
 
+        // A live topmost fullscreen browser window (Deeper's enhancement player, the Settings
+        // browser or its popout) re-raises itself to the front of the topmost band on every
+        // activation and never clears OUR WS_EX_TOPMOST bit - so the flag-only heal below can never
+        // notice. Treat every tick as forced while one is up (#1041/#1051/#1052).
+        force = ShouldForceZOrderTick(force, TopmostFullscreenBrowserActive);
+
         foreach (var list in new[] { _pinkFilterWindows, _spiralWindows, _brainDrainBlurWindows })
         {
             foreach (var window in list)
@@ -2863,8 +2937,37 @@ public class OverlayService : IDisposable
         {
             App.Logger?.Debug("ReassertZOrder (compositor hosts) failed: {Error}", ex.Message);
         }
+
+        // The ATTENTION LAYER: flash, subliminal and bubble windows. Each of these asserts
+        // HWND_TOPMOST once, on its own show edge, and nothing ever re-raises it - so a topmost
+        // fullscreen browser window buried every one of them with no recovery path at all (#1041).
+        // They ride the same rules as the corner GIFs: still topmost, but pinned BELOW a playing
+        // mandatory video (#497) and above it while a Deeper band owns the screen.
+        //
+        // Their recoveries deliberately do NOT feed anyRecovered: these windows come and go by the
+        // second (and pooled bubble shells idle hidden), so counting them as "topmost loss" would
+        // drive the 3s RecreateOverlays escalation on perfectly healthy overlays.
+        bool attentionRecovered = false;
+        try
+        {
+            foreach (var hwnd in App.Flash?.GetFlashWindowHandles() ?? EmptyHandleList)
+                ReassertOne(hwnd, videoHwnd, aboveVideo, force, ref attentionRecovered);
+            foreach (var hwnd in App.Subliminal?.GetSubliminalWindowHandles() ?? EmptyHandleList)
+                ReassertOne(hwnd, videoHwnd, aboveVideo, force, ref attentionRecovered);
+            foreach (var hwnd in App.Bubbles?.GetBubbleWindowHandles() ?? EmptyHandleList)
+                ReassertOne(hwnd, videoHwnd, aboveVideo, force, ref attentionRecovered);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ReassertZOrder (attention layer) failed: {Error}", ex.Message);
+        }
+
         return anyRecovered;
     }
+
+    /// <summary>Shared empty result for the attention-layer accessors (no per-tick allocation when
+    /// a service is null). Immutable on purpose - it is handed to a foreach, never appended to.</summary>
+    private static readonly IReadOnlyList<IntPtr> EmptyHandleList = Array.Empty<IntPtr>();
 
     /// <summary>One window's worth of ReassertZOrder. Normally: below the active video (#497), else
     /// topmost. When <paramref name="aboveVideo"/> (a live Deeper overlay band), the overlay is the

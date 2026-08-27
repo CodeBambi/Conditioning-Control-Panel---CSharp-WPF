@@ -245,6 +245,35 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// HWNDs of the live per-window flashes, for OverlayService's z-order reconciler (#1041).
+        /// A flash asserts HWND_TOPMOST once on its show edge and nothing ever re-raises it, so a
+        /// topmost fullscreen browser window (Deeper's player, the Settings browser popout) buried
+        /// every flash for the rest of the run with no recovery path. Solid-mode and compositor
+        /// flashes have no HWND of their own - the shared host is already in that sweep.
+        /// UI thread only; a reconciler accessor must never throw.
+        /// </summary>
+        internal List<IntPtr> GetFlashWindowHandles()
+        {
+            var handles = new List<IntPtr>();
+            try
+            {
+                if (System.Windows.Application.Current?.Dispatcher?.CheckAccess() != true) return handles;
+                lock (_lockObj)
+                {
+                    foreach (var w in _activeWindows)
+                    {
+                        if (w.UsesHost || w.UsesLayer) continue;
+                        if (!w.IsVisible) continue;
+                        var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
+                        if (hwnd != IntPtr.Zero) handles.Add(hwnd);
+                    }
+                }
+            }
+            catch { /* a diagnostic/reconciler accessor must never throw */ }
+            return handles;
+        }
+
+        /// <summary>
         /// File paths of images shown by the most recent FlashDisplayed event.
         /// Snapshot is captured immediately before the event fires so subscribers
         /// can read it synchronously. Empty when no flash has displayed yet.
@@ -384,6 +413,34 @@ namespace ConditioningControlPanel.Services
             App.DiscordRpc?.SetIdleActivity();
 
             App.Logger.Information("FlashService stopped");
+        }
+
+        /// <summary>
+        /// Cancel point-fired ("one-shot") flashes: drop any load still in flight and close what
+        /// they put on screen, WITHOUT stopping the ambient scheduler.
+        ///
+        /// #1045: a Deeper enhancement fired a flash on its last tick and the image outlived the
+        /// video. Two reasons, both handled here. TriggerFlashOnce* hand off to an <c>async void</c>
+        /// loader, so a flash dispatched just before the caller stopped materialised afterwards -
+        /// clearing <c>_oneShotActive</c> makes ShowImages bail on arrival, which is the existing
+        /// "delayed callback after Stop" guard. And an authored flash carries the segment's own
+        /// duration, which can be many seconds longer than whatever is left of the media.
+        ///
+        /// When the ambient service IS running, the windows on screen belong to the user's own
+        /// flash rhythm and are indistinguishable from a one-shot at the window level, so only the
+        /// in-flight one-shot is dropped and the ambient heartbeat keeps its windows.
+        /// </summary>
+        public void StopOneShotFlashes()
+        {
+            DispatcherHelper.RunOnUI(() =>
+            {
+                _oneShotActive = false;
+                if (_isRunning) return;   // ambient owns the windows, the heartbeat and _isBusy
+                _isBusy = false;
+                StopCurrentSound();
+                CloseAllWindows();
+                StopHeartbeat();
+            });
         }
 
         public void TriggerFlash()

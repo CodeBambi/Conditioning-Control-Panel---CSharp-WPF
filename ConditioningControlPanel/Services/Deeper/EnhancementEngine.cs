@@ -67,6 +67,16 @@ namespace ConditioningControlPanel.Services.Deeper
         // mixer's own clock and are invisible to the band flush.
         private bool _hapticDispatched;
 
+        /// <summary>
+        /// #1045 - true once this run dispatched a POINT-FIRED visual (flash or subliminal). Those
+        /// are not bands, so FlushActiveBands cannot reach them: they run out their own authored
+        /// duration on the flash/subliminal services' clocks, which is routinely longer than what
+        /// is left of the media, and their loaders are <c>async void</c> so one dispatched on the
+        /// last tick materialises AFTER Stop. Mirrors <see cref="_hapticDispatched"/>: if this run
+        /// put any up, Stop() cancels the one-shot layer.
+        /// </summary>
+        private bool _visualDispatched;
+
         // -- Per-play gamification stats (read by the host on PlaybackCompleted) --
         // Webcam trigger type strings, used to flag "webcam-trigger-used".
         private static readonly HashSet<string> WebcamTriggerTypes = new()
@@ -391,6 +401,7 @@ namespace ConditioningControlPanel.Services.Deeper
             _completedFired = false;
             _maxPlaybackTime = 0;
             _hapticDispatched = false;
+            _visualDispatched = false;
             _runCts = new CancellationTokenSource();
 
             // Prime the cursor to the current playback position so events that
@@ -489,6 +500,20 @@ namespace ConditioningControlPanel.Services.Deeper
             {
                 try { _ = App.Haptics?.StopAsync(); }
                 catch (Exception ex) { App.Logger?.Debug("EnhancementEngine stop-haptics: {Error}", ex.Message); }
+            }
+
+            // Same story for point-fired VISUALS (#1045): a flash or subliminal fired near the end
+            // carries the timeline segment's own duration and keeps rendering long after the video
+            // is gone, and the services' loaders are async void, so one dispatched on the last
+            // tick can materialise after this Stop returns. Both calls drop the one-shot latch,
+            // which is exactly what those loaders re-check before showing anything, and neither
+            // touches the ambient scheduler when the user has that feature running for real.
+            if (_visualDispatched)
+            {
+                try { App.Flash?.StopOneShotFlashes(); }
+                catch (Exception ex) { App.Logger?.Debug("EnhancementEngine stop-flash: {Error}", ex.Message); }
+                try { App.Subliminal?.StopOneShotSubliminals(); }
+                catch (Exception ex) { App.Logger?.Debug("EnhancementEngine stop-subliminal: {Error}", ex.Message); }
             }
 
             // Flip _running first so any in-flight tick / dispatch short-circuits
@@ -1006,6 +1031,12 @@ namespace ConditioningControlPanel.Services.Deeper
 
             if (action is TriggerHapticAction || action is TriggerEffectAction { EffectType: EffectTypes.Haptic })
                 _hapticDispatched = true;
+
+            // Flash and subliminal effects are always POINT-fired: unlike overlay/haptic effects the
+            // dispatcher ignores Phase for them and just shows one, so there is no band for
+            // FlushActiveBands to close on Stop. Latch either kind, whatever the authored phase.
+            if (action is TriggerEffectAction { EffectType: EffectTypes.Flash or EffectTypes.Subliminal })
+                _visualDispatched = true;
 
             try
             {

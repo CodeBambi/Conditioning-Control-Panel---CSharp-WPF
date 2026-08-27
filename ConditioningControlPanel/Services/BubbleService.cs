@@ -75,6 +75,32 @@ public class BubbleService : IDisposable
     public int ActiveFreezeBubbles => _bubbles.Count(b => b.Spec?.IsFreeze == true);
 
     /// <summary>
+    /// HWNDs of the live per-window bubbles, for OverlayService's z-order reconciler (#1041). A
+    /// bubble window asserts HWND_TOPMOST on its show edge only, so a topmost fullscreen browser
+    /// window buried the whole layer with no recovery path. Shared-host and compositor-layer
+    /// bubbles have no HWND of their own (the host is already swept), and a Free Desktop chaos
+    /// bubble deliberately born non-topmost is left exactly where it is.
+    /// UI thread only; a reconciler accessor must never throw.
+    /// </summary>
+    internal List<IntPtr> GetBubbleWindowHandles()
+    {
+        var handles = new List<IntPtr>();
+        try
+        {
+            if (System.Windows.Application.Current?.Dispatcher?.CheckAccess() != true) return handles;
+            // Index walk over a defensive count: the animation timer can retire a bubble while we
+            // read, and this must never throw into the reconciler.
+            for (int i = 0; i < _bubbles.Count; i++)
+            {
+                var hwnd = i < _bubbles.Count ? _bubbles[i].GetTopmostWindowHandle() : IntPtr.Zero;
+                if (hwnd != IntPtr.Zero) handles.Add(hwnd);
+            }
+        }
+        catch { /* a diagnostic/reconciler accessor must never throw */ }
+        return handles;
+    }
+
+    /// <summary>
     /// Snapshot of currently-poppable bubbles for Focus Gaze hit-testing.
     /// Caller iterates in reverse for topmost-first selection.
     /// </summary>
@@ -2211,6 +2237,21 @@ internal class Bubble
     }
 
     private readonly Window? _window;   // null in shared-host mode (the grid lives on ChaosBubbleHostOverlay)
+
+    /// <summary>This bubble's own HWND while it is a LIVE, VISIBLE, topmost window - otherwise zero.
+    /// Zero covers shared-host and compositor-layer bubbles (no window at all), pooled shells that
+    /// are hidden between lives, and Free Desktop chaos bubbles deliberately born non-topmost.
+    /// Feeds OverlayService's z-order reconciler; never throws.</summary>
+    internal IntPtr GetTopmostWindowHandle()
+    {
+        try
+        {
+            if (_window == null || !_isAlive || _isDestroyed) return IntPtr.Zero;
+            if (!_window.IsVisible || !_window.Topmost) return IntPtr.Zero;
+            return new System.Windows.Interop.WindowInteropHelper(_window).Handle;
+        }
+        catch { return IntPtr.Zero; }
+    }
     private readonly bool _useHost;     // AppSettings.ChaosBubbleSharedHost && chaos bubble — see the spawn block
     private readonly bool _useLayer;    // UnifiedOverlayHost: render on the compositor BubbleLayer (also window-less)
     private Compositor.BubbleLayer.BubbleItem? _layerItem;   // this bubble's draw-state on the layer (null off-layer)

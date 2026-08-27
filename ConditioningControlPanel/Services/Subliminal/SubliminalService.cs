@@ -145,6 +145,38 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Cancel point-fired ("one-shot") subliminals: drop any show still waiting behind the
+        /// haptic anticipation delay and blank what is on screen, WITHOUT stopping the ambient
+        /// scheduler. Companion of <c>FlashService.StopOneShotFlashes</c> for #1045 - a Deeper
+        /// enhancement's last-tick subliminal used to land after the video had already gone.
+        /// When the ambient service is running its own cards are left alone; only the one-shot
+        /// latch is dropped, which is what ShowSubliminalVisuals checks on arrival.
+        /// </summary>
+        public void StopOneShotSubliminals()
+        {
+            DispatcherHelper.RunOnUI(() =>
+            {
+                _oneShotActive = false;
+                if (_isRunning) return;   // ambient owns the cards on screen
+
+                foreach (var win in _screenWindows.Values)
+                {
+                    try
+                    {
+                        win.BeginAnimation(Window.OpacityProperty, null);
+                        win.Opacity = 0;
+                        win.Content = null;
+                        win.Hide();
+                    }
+                    catch { }
+                }
+                RemoveHostedCard(_ => true);
+                if (_layer?.IsActive == true) _layer.Clear();
+                StopAudio();
+            });
+        }
+
+        /// <summary>
         /// Single authority for toggling the subliminal feature from any UI entry point
         /// (the Settings-tab checkbox and the feature popup both route here). Persists the
         /// flag and, when the engine is running, starts/stops the service — but only on an
@@ -581,7 +613,11 @@ namespace ConditioningControlPanel.Services
                 // Get anticipation delay from haptic service (Buttplug needs ~1.3s, Lovense ~250ms).
                 // When the haptic is suppressed (per-effect opt-out), there's nothing to anticipate,
                 // so show the visual immediately.
-                var anticipationMs = suppressHaptic ? 0 : (App.Haptics?.SubliminalAnticipationMs ?? 250);
+                // 0 when the haptic is suppressed per-effect, and 0 when no toy is actually
+                // connected: HapticService.SubliminalAnticipationMs now returns the motor spin-up
+                // head start only when there is a motor to spin up (#1052). Defaulting to 0 when
+                // the service itself is missing, for the same reason.
+                var anticipationMs = suppressHaptic ? 0 : (App.Haptics?.SubliminalAnticipationMs ?? 0);
 
                 // Trigger haptic pattern first (pattern depends on text), unless suppressed.
                 if (!suppressHaptic)
@@ -1061,6 +1097,31 @@ namespace ConditioningControlPanel.Services
         /// Must be called on the UI thread (reads live WPF visual state); consumed by
         /// <see cref="App.GetCcpWindowRectsCached"/>.
         /// </summary>
+        /// <summary>
+        /// HWNDs of the keep-alive subliminal windows that are CURRENTLY showing a card, for
+        /// OverlayService's z-order reconciler (#1041). The window asserts HWND_TOPMOST once at
+        /// creation and nothing re-raises it, so a topmost fullscreen browser window buried every
+        /// subliminal for the rest of the run. Idle (opacity 0) windows are skipped: re-pinning a
+        /// blank keep-alive shell every tick is pure cost. Solid-mode / compositor cards live on the
+        /// shared host, which is already in that sweep. UI thread only; never throws.
+        /// </summary>
+        internal List<IntPtr> GetSubliminalWindowHandles()
+        {
+            var handles = new List<IntPtr>();
+            try
+            {
+                if (System.Windows.Application.Current?.Dispatcher?.CheckAccess() != true) return handles;
+                foreach (var win in _screenWindows.Values)
+                {
+                    if (win == null || !win.IsVisible || win.Opacity <= 0.01) continue;
+                    var hwnd = new System.Windows.Interop.WindowInteropHelper(win).Handle;
+                    if (hwnd != IntPtr.Zero) handles.Add(hwnd);
+                }
+            }
+            catch { /* a diagnostic/reconciler accessor must never throw */ }
+            return handles;
+        }
+
         public System.Drawing.Rectangle[] GetActiveTextScreenRects()
         {
             var rects = new List<System.Drawing.Rectangle>();

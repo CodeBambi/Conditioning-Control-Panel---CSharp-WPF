@@ -1773,6 +1773,12 @@ namespace ConditioningControlPanel.Views.Deeper
                 {
                     try { if (_videoFullscreenWindow != null) _videoFullscreenWindow.Topmost = true; }
                     catch { }
+                    // Re-taking the claim re-raises this window to the FRONT of the topmost band,
+                    // which is exactly what buried the pink tint / spiral / flashes for the rest of
+                    // the run (#1041/#1051/#1052). Put them straight back on top instead of waiting
+                    // out the reconcile tick.
+                    try { App.Overlay?.RequestForcedZOrderReassert(); }
+                    catch { }
                 };
 
                 EventHandler? closedHandler = null;
@@ -1797,6 +1803,11 @@ namespace ConditioningControlPanel.Views.Deeper
                     try { built!.Closed -= closedHandler!; } catch { }
 
                     _videoFullscreenWindow = null;
+                    // Release the z-order registration on the window's OWN teardown too, so a close
+                    // that did not come through ExitVideoFullscreen can't strand the forced-tick
+                    // flag on (SetFullscreenBrowserActive is idempotent per owner).
+                    try { App.Overlay?.SetFullscreenBrowserActive(built, false); }
+                    catch { }
 
                     // After reparent the underlying Chromium HWND is in a state
                     // where the page no longer receives input events (mouse
@@ -1834,6 +1845,11 @@ namespace ConditioningControlPanel.Views.Deeper
 
                 // Commit state only after reparent is fully in place.
                 _isVideoFullscreen = true;
+                // A new Topmost window at the front of the topmost band buries every effect window,
+                // and none of them re-raise themselves: register it so OverlayService forces a
+                // z-order pass on every tick while the fullscreen video is up (#1041/#1051/#1052).
+                try { App.Overlay?.SetFullscreenBrowserActive(built, true); }
+                catch (Exception ex) { App.Logger?.Debug("EnhancementPlayer: fullscreen z-order notify failed: {Error}", ex.Message); }
                 App.Logger?.Information("EnhancementPlayer: entered fullscreen on {Screen}", screen.DeviceName);
             }
             catch (Exception ex)
@@ -1950,9 +1966,16 @@ namespace ConditioningControlPanel.Views.Deeper
                 catch { }
                 if (_videoFullscreenWindow != null)
                 {
+                    try { App.Overlay?.SetFullscreenBrowserActive(_videoFullscreenWindow, false); }
+                    catch { }
                     try { _videoFullscreenWindow.Close(); }
                     catch (Exception ex) { App.Logger?.Debug("EnhancementPlayer: fullscreen window close failed: {Error}", ex.Message); }
                 }
+                // Back to windowed: the effects were pinned to the front of the topmost band while
+                // the fullscreen window was up, so re-seat everything one last time now that the
+                // forced-tick flag is off.
+                try { App.Overlay?.RequestForcedZOrderReassert(); }
+                catch { }
                 App.Logger?.Information("EnhancementPlayer: exited fullscreen");
             }
             catch (Exception ex)
