@@ -157,5 +157,43 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>Release the animation clock's pin on <paramref name="img"/>.</summary>
         internal static void Detach(Image img) => AnimatedWebp.Detach(img);
+
+        // ---- who is allowed to raise a corner overlay (ticket 1539282547484139682) ----
+        //
+        // Two independent services can put a spiral in a screen corner: SessionEngine (session and
+        // 28-day program days) and CornerGifService (the Spiral card's standalone slots). Neither
+        // knew about the other, so a program day could stack its corner spiral on top of a
+        // standalone one - two spirals, and neither answered the user's own switches. The source
+        // handling was already shared here; the ADMISSION rule belongs here too, for the same
+        // reason: a rule applied in only one of the two places is the bug all over again.
+        //
+        // Pure and static so both call sites - and the tests - reach the same answer.
+
+        /// <summary>
+        /// May a SESSION (or a 28-day program day) raise its corner GIF right now?
+        ///
+        /// <para><paramref name="templateEnabled"/> is the session/program template's own
+        /// <c>CornerGifEnabled</c>, which used to be the ONLY gate.
+        /// <paramref name="userAllowed"/> is the user's master (<c>AppSettings.SessionCornerGifAllowed</c>) -
+        /// the switch the support workaround assumed existed.
+        /// <paramref name="standaloneOverlayActive"/> is "a standalone corner overlay is already on
+        /// screen (or queued)": the user's own app-wide choice wins, and the session does not stack
+        /// a second spiral behind it.</para>
+        /// </summary>
+        internal static bool AllowSessionCornerGif(bool templateEnabled, bool userAllowed, bool standaloneOverlayActive)
+            => templateEnabled && userAllowed && !standaloneOverlayActive;
+
+        /// <summary>
+        /// May a STANDALONE corner-GIF slot realize right now? The mirror of
+        /// <see cref="AllowSessionCornerGif"/>: a slot the user enabled still yields while a
+        /// session-scoped corner GIF is on screen, so the two can never both be up. The session's
+        /// overlay is torn down at session end, and CornerGifService is refreshed there, so the
+        /// standalone slots come back on their own.
+        ///
+        /// <para>Note this does NOT read the session master: <c>SessionCornerGifAllowed</c> is about
+        /// what a session may raise, never about the user's own overlays.</para>
+        /// </summary>
+        internal static bool AllowStandaloneCornerGif(bool slotEnabled, bool sessionCornerGifActive)
+            => slotEnabled && !sessionCornerGifActive;
     }
 }

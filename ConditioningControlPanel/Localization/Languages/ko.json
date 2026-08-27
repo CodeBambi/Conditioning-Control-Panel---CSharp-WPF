@@ -4626,5 +4626,12 @@
   "arcademy_boot_failed_this_session": "The Arcademy가 이 컴퓨터에서 지난번 시도에 시작하지 못했습니다.\n\n다시 열어 볼까요?",
   "label_ambient_bubble_xp_budget": "오늘의 버블 XP: {0}/{1}",
   "label_resume_takeover_on_startup": "↻ 시작 시 테이크오버 재개",
-  "tooltip_autonomy_resume_on_startup": "켜면 다음에 앱을 실행할 때 테이크오버가 다시 활성화됩니다. 기본값은 꺼짐이므로 테이크오버는 항상 꺼진 상태로 시작합니다."
+  "tooltip_autonomy_resume_on_startup": "켜면 다음에 앱을 실행할 때 테이크오버가 다시 활성화됩니다. 기본값은 꺼짐이므로 테이크오버는 항상 꺼진 상태로 시작합니다.",
+  "setting_session_corner_gif_allowed": "세션 코너 GIF 허용",
+  "tooltip_session_corner_gif_allowed": "세션과 프로그램이 자체 GIF를 화면 모서리에 고정할 수 있게 합니다. 끄면 세션 도중에도 표시되지 않습니다. 직접 설정한 코너 GIF 오버레이에는 영향이 없습니다.",
+  "setting_panic_overrides_all": "패닉이 모든 것을 정지",
+  "tooltip_panic_overrides_all": "패닉 키를 한 번 누르면 모든 효과와 창, 소리가 한 번에 멈춥니다. 끄면 예전처럼 화면에 있는 대상(게임, 피드, 영상 일시정지)에 키가 먼저 넘어갑니다.",
+  "setting_pause_key": "일시정지 키(선택)",
+  "tooltip_pause_key": "필수 영상을 재개 카드 뒤에 세워두기만 하는 별도의 키입니다. 다른 것은 멈추지 않습니다. 기본값은 지정 안 함입니다. 클릭한 뒤 키를 누르세요. Esc를 누르면 해제됩니다.",
+  "btn_pause_key_unbound": "지정 안 함"
 }

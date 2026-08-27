@@ -105,6 +105,24 @@
                                           Unchecked="ChkRandomize_Changed"/>
                             </Grid>
 
+                            <!-- User master for the SESSION corner GIF. Sessions and 28-day program
+                                 days used to raise their corner spiral off the program template
+                                 alone, with nothing here to switch it off. -->
+                            <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_session_corner_gif_allowed}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_session_corner_gif_allowed}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" Margin="0,0,12,0"/>
+                                <CheckBox Grid.Column="1"
+                                          x:Name="ChkSessionCornerGif"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkSessionCornerGif_Changed"
+                                          Unchecked="ChkSessionCornerGif_Changed"/>
+                            </Grid>
+
                             <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_effect_monitor}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>

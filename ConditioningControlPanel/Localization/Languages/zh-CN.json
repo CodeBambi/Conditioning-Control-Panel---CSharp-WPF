@@ -5086,5 +5086,12 @@
   "arcademy_boot_failed_this_session": "The Arcademy 上次在这台电脑上启动失败了。\n\n要再打开一次吗？",
   "label_ambient_bubble_xp_budget": "今日气泡 XP：{0}/{1}",
   "label_resume_takeover_on_startup": "↻ 启动时恢复接管",
-  "tooltip_autonomy_resume_on_startup": "开启后，下次启动应用时接管会自动重新开启。默认关闭，因此接管总是以关闭状态启动。"
+  "tooltip_autonomy_resume_on_startup": "开启后，下次启动应用时接管会自动重新开启。默认关闭，因此接管总是以关闭状态启动。",
+  "setting_session_corner_gif_allowed": "允许会话角落 GIF",
+  "tooltip_session_corner_gif_allowed": "允许会话和课程把自己的 GIF 固定在屏幕角落。关闭后即使在会话进行中也不会出现。你自己设置的角落 GIF 叠加层不受影响。",
+  "setting_panic_overrides_all": "紧急键停止一切",
+  "tooltip_panic_overrides_all": "按一次紧急键即可同时停止所有特效、窗口和声音。关闭后，紧急键会像以前一样先交给屏幕上的内容（游戏、信息流、视频暂停）。",
+  "setting_pause_key": "暂停键（可选）",
+  "tooltip_pause_key": "一个单独的按键，只把强制视频停在继续卡片后面，其他都不会停止。默认未设置。点击后按下一个键。按 Esc 可清除。",
+  "btn_pause_key_unbound": "未设置"
 }

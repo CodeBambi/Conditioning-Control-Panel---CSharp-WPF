@@ -4627,5 +4627,12 @@
   "arcademy_boot_failed_this_session": "The Arcademy não conseguiu iniciar na última tentativa neste computador.\n\nQuer tentar de novo?",
   "label_ambient_bubble_xp_budget": "XP de bolhas hoje: {0}/{1}",
   "label_resume_takeover_on_startup": "↻ Retomar o Controle ao iniciar",
-  "tooltip_autonomy_resume_on_startup": "Quando ligado, o Controle se rearma na próxima vez que você abrir o app. Desligado por padrão, então o Controle sempre começa desligado."
+  "tooltip_autonomy_resume_on_startup": "Quando ligado, o Controle se rearma na próxima vez que você abrir o app. Desligado por padrão, então o Controle sempre começa desligado.",
+  "setting_session_corner_gif_allowed": "Permitir GIF de canto nas sessões",
+  "tooltip_session_corner_gif_allowed": "Permite que sessões e programas fixem o próprio GIF em um canto da tela. Desligado, isso nunca acontece, nem no meio de uma sessão. Suas próprias sobreposições de GIF de canto não são afetadas.",
+  "setting_panic_overrides_all": "Pânico para tudo",
+  "tooltip_panic_overrides_all": "Um toque na tecla de pânico para todos os efeitos, janelas e sons de uma vez. Desligue para que a tecla vá primeiro para o que estiver na tela (jogos, feed, pausa de vídeo), como era antes.",
+  "setting_pause_key": "Tecla de pausa (opcional)",
+  "tooltip_pause_key": "Uma tecla separada que apenas estaciona um vídeo obrigatório atrás de um cartão Retomar. Nada mais para. Sem atribuição por padrão. Clique e pressione uma tecla. Pressione Esc para limpar.",
+  "btn_pause_key_unbound": "Sem atribuição"
 }

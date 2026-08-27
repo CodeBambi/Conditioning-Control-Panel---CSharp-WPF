@@ -4305,7 +4305,11 @@ namespace ConditioningControlPanel.Services
                         App.Settings.Current.PanicKeyEnabled &&
                         !string.Equals(App.Settings.Current.PanicKey, Key.Escape.ToString(), StringComparison.Ordinal))
                     {
-                        if (TryGracePauseFromPanic())
+                        // fromPanicKey: FALSE. This branch only ever runs when Escape is NOT the
+                        // panic key, so v6.8.5's PanicOverridesAll (which moved the grace pause off
+                        // the PANIC key) must not reach it: this is the strict-locked user's only
+                        // out, and with it suppressed Escape would do nothing at all in here.
+                        if (TryGracePauseFromPanic(fromPanicKey: false))
                         {
                             VideoDiag.Log("PANIC", "strict window: ESC consumed as video grace pause");
                             e.Handled = true;
@@ -4348,7 +4352,12 @@ namespace ConditioningControlPanel.Services
                         e.Handled = true;
                         // #735: first try the grace pause. If it is unavailable or already spent,
                         // ESC keeps today's meaning exactly — dismiss this video via Cleanup().
-                        if (TryGracePauseFromPanic())
+                        // fromPanicKey only when Escape really IS the panic key: v6.8.5's override
+                        // owns the panic key's presses (that press stops everything through the
+                        // global hook), but plain Escape as the hardcoded dismiss key is not a panic
+                        // press and keeps its grace pause.
+                        if (TryGracePauseFromPanic(fromPanicKey: Services.Safety.PanicPolicy.EscapeIsThePanicKey(
+                                App.Settings.Current.PanicKeyEnabled, App.Settings.Current.PanicKey)))
                         {
                             VideoDiag.Log("PANIC", "ESC consumed as video grace pause");
                             return;
@@ -5070,10 +5079,27 @@ namespace ConditioningControlPanel.Services
         /// Must be called on the UI thread (both callers — MainWindow.HandlePanicKeyPress on the
         /// dispatcher, and the video window's PreviewKeyDown — already are).
         /// </summary>
-        public bool TryGracePauseFromPanic()
+        /// <param name="fromPanicKey">
+        /// TRUE only when this press really is a press of the user's PANIC key. v6.8.5: with
+        /// <c>AppSettings.PanicOverridesAll</c> on (the default) the panic key does NOT park a
+        /// video any more; it stops everything, and the grace pause lives on the optional Pause key
+        /// instead. Pass FALSE for every OTHER door into the grace pause - the Pause key binding,
+        /// the strict-lock window's Escape (which only exists when Escape is not the panic key and
+        /// is that user's only "someone walked in" out), and plain Escape as the hardcoded dismiss
+        /// key. The override moved the pause off the panic key, not off those doors.
+        /// </param>
+        public bool TryGracePauseFromPanic(bool fromPanicKey = true)
         {
             try
             {
+                if (!Services.Safety.PanicPolicy.AllowGracePause(
+                        fromPanicKey,
+                        Services.Safety.PanicPolicy.OverrideEnabled(App.Settings?.Current)))
+                {
+                    VideoDiag.Log("PANIC", "grace pause skipped - panic overrides everything (the grace pause is on the Pause key now)");
+                    return false;
+                }
+
                 var nowUtc = DateTime.UtcNow;
                 var sinceMs = _lastGracePauseActionUtc == DateTime.MinValue
                     ? double.MaxValue

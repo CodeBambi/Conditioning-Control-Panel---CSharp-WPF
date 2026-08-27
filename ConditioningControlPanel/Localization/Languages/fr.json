@@ -4628,5 +4628,12 @@
   "arcademy_boot_failed_this_session": "The Arcademy n'a pas réussi à démarrer lors de ton dernier essai sur cette machine.\n\nRéessayer ?",
   "label_ambient_bubble_xp_budget": "XP de bulles aujourd'hui : {0}/{1}",
   "label_resume_takeover_on_startup": "↻ Reprendre la Prise de contrôle au démarrage",
-  "tooltip_autonomy_resume_on_startup": "Si activé, la Prise de contrôle se réarme au prochain lancement de l'application. Désactivé par défaut, la Prise de contrôle démarre donc toujours éteinte."
+  "tooltip_autonomy_resume_on_startup": "Si activé, la Prise de contrôle se réarme au prochain lancement de l'application. Désactivé par défaut, la Prise de contrôle démarre donc toujours éteinte.",
+  "setting_session_corner_gif_allowed": "Autoriser les GIF de coin des sessions",
+  "tooltip_session_corner_gif_allowed": "Autorise les sessions et les programmes à épingler leur propre GIF dans un coin de l'écran. Désactivé, ils ne le feront jamais, même en pleine session. Vos propres surimpressions de GIF de coin ne sont pas touchées.",
+  "setting_panic_overrides_all": "La panique arrête tout",
+  "tooltip_panic_overrides_all": "Une pression sur la touche panique arrête d'un coup tous les effets, fenêtres et sons. Désactivez-la pour que la touche soit d'abord confiée à ce qui est à l'écran (jeux, fil, pause vidéo), comme avant.",
+  "setting_pause_key": "Touche pause (optionnelle)",
+  "tooltip_pause_key": "Une touche distincte qui se contente de garer une vidéo obligatoire derrière une carte Reprendre. Rien d'autre ne s'arrête. Non attribuée par défaut. Cliquez, puis appuyez sur une touche. Appuyez sur Échap pour l'effacer.",
+  "btn_pause_key_unbound": "Non attribuée"
 }

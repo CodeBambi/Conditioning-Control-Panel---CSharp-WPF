@@ -5178,5 +5178,12 @@
   "arcademy_boot_failed_this_session": "The Arcademy failed to start the last time you tried on this machine.\n\nTry opening it again?",
   "label_ambient_bubble_xp_budget": "Ambient bubble XP: {0}/{1} today",
   "label_resume_takeover_on_startup": "↻ Resume Takeover on startup",
-  "tooltip_autonomy_resume_on_startup": "When on, Takeover re-arms itself the next time you launch the app. Off by default, so Takeover always starts off."
+  "tooltip_autonomy_resume_on_startup": "When on, Takeover re-arms itself the next time you launch the app. Off by default, so Takeover always starts off.",
+  "setting_session_corner_gif_allowed": "Allow session corner GIFs",
+  "tooltip_session_corner_gif_allowed": "Let sessions and programs pin their own GIF to a screen corner. Turn it off and they never will, even mid session. Your own Corner GIF overlays are not affected.",
+  "setting_panic_overrides_all": "Panic stops everything",
+  "tooltip_panic_overrides_all": "One press of the panic key stops every effect, window and sound at once. Turn it off to hand the key to whatever is on screen first (games, feed, video pause), the way it worked before.",
+  "setting_pause_key": "Pause key (optional)",
+  "tooltip_pause_key": "A separate key that only parks a mandatory video behind a Resume card. Nothing else stops. Not set by default. Click, then press a key. Press Escape to clear it.",
+  "btn_pause_key_unbound": "Not set"
 }

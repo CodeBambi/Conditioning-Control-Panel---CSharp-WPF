@@ -4628,5 +4628,12 @@
   "arcademy_boot_failed_this_session": "The Arcademy konnte beim letzten Versuch auf diesem Rechner nicht starten.\n\nNoch einmal versuchen?",
   "label_ambient_bubble_xp_budget": "Blasen-XP heute: {0}/{1}",
   "label_resume_takeover_on_startup": "↻ Übernahme beim Start fortsetzen",
-  "tooltip_autonomy_resume_on_startup": "Wenn aktiviert, aktiviert sich die Übernahme beim nächsten Start der App erneut. Standardmäßig aus, die Übernahme startet also immer ausgeschaltet."
+  "tooltip_autonomy_resume_on_startup": "Wenn aktiviert, aktiviert sich die Übernahme beim nächsten Start der App erneut. Standardmäßig aus, die Übernahme startet also immer ausgeschaltet.",
+  "setting_session_corner_gif_allowed": "Ecken-GIFs in Sitzungen erlauben",
+  "tooltip_session_corner_gif_allowed": "Erlaubt Sitzungen und Programmen, ein eigenes GIF in eine Bildschirmecke zu heften. Deaktiviert geschieht das nie, auch nicht mitten in einer Sitzung. Deine eigenen Ecken-GIF-Overlays bleiben unberührt.",
+  "setting_panic_overrides_all": "Panik stoppt alles",
+  "tooltip_panic_overrides_all": "Ein Druck auf die Panik-Taste stoppt sofort alle Effekte, Fenster und Töne. Deaktiviert wird die Taste zuerst an das weitergereicht, was gerade auf dem Bildschirm ist (Spiele, Feed, Video-Pause), so wie bisher.",
+  "setting_pause_key": "Pause-Taste (optional)",
+  "tooltip_pause_key": "Eine eigene Taste, die nur ein Pflichtvideo hinter einer Fortsetzen-Karte parkt. Sonst wird nichts gestoppt. Standardmäßig nicht belegt. Klicken, dann eine Taste drücken. Escape löscht die Belegung.",
+  "btn_pause_key_unbound": "Nicht belegt"
 }

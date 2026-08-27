@@ -584,7 +584,10 @@ namespace ConditioningControlPanel.Services
                         settings.PanicKeyEnabled &&
                         !string.Equals(settings.PanicKey, "Escape", StringComparison.Ordinal))
                     {
-                        if (TryGracePauseFromPanic())
+                        // fromPanicKey: FALSE, same reason as the strict LibVLC window - this door
+                        // only exists when Escape is NOT the panic key, so PanicOverridesAll must
+                        // not close it (see PanicPolicy.AllowGracePause).
+                        if (TryGracePauseFromPanic(fromPanicKey: false))
                             VideoDiag.Log("PANIC", "strict browser window: ESC consumed as video grace pause");
                     }
                     return;
@@ -592,7 +595,10 @@ namespace ConditioningControlPanel.Services
 
                 if (isEscape)
                 {
-                    if (TryGracePauseFromPanic())
+                    // Twin of the LibVLC window's ESC door: a panic press only when Escape is the
+                    // panic key, otherwise the plain dismiss key, which keeps its grace pause.
+                    if (TryGracePauseFromPanic(fromPanicKey: Services.Safety.PanicPolicy.EscapeIsThePanicKey(
+                            settings.PanicKeyEnabled, settings.PanicKey)))
                     {
                         VideoDiag.Log("PANIC", "ESC consumed as video grace pause (browser window)");
                         return;
