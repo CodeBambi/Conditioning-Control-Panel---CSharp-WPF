@@ -3265,6 +3265,7 @@
   "browser_show_bambicloud_label": "Afficher BambiCloud",
   "browser_show_bambicloud_tooltip": "Révèle le bouton de site BambiCloud sur les mods qui le masquent normalement. Le site par défaut du mod reste sélectionné ; ça rend juste BambiCloud disponible pour y basculer.",
   "browser_toast_offline_blocked": "Le Mode Hors Ligne est actif, le navigateur reste donc déconnecté. Désactive-le dans les Paramètres pour naviguer.",
+  "companion_prompt_too_long_notice": "Le prompt de ta compagne est trop long pour l'IA cloud, elle répond donc avec moins de contexte. Réduis les liens de la base de connaissances ou choisis une personnalité plus courte.",
   "browser_enhance_match_none": "Aucune amélioration enregistrée pour cette page.",
   "browser_enhance_match_off": "Améliorations Deeper désactivées.",
   "browser_enhance_match_fmt": "Amélioration : {0}",

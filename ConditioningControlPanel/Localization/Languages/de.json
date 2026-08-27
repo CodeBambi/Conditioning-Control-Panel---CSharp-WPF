@@ -3265,6 +3265,7 @@
   "browser_show_bambicloud_label": "BambiCloud anzeigen",
   "browser_show_bambicloud_tooltip": "Blendet den BambiCloud-Seitenschalter auch bei Mods ein, die ihn sonst verbergen. Die Standardseite des Mods bleibt ausgewählt; das macht BambiCloud nur zum Umschalten verfügbar.",
   "browser_toast_offline_blocked": "Der Offline-Modus ist aktiv, daher bleibt der Browser getrennt. Schalte ihn in den Einstellungen aus, um zu surfen.",
+  "companion_prompt_too_long_notice": "Der Prompt deiner Begleiterin ist zu lang für die Cloud-KI, daher antwortet sie mit weniger Kontext. Kürze die Wissensdatenbank-Links oder wähle eine kürzere Persönlichkeit.",
   "browser_enhance_match_none": "Kein gespeichertes Enhancement für diese Seite.",
   "browser_enhance_match_off": "Deeper-Enhancements deaktiviert.",
   "browser_enhance_match_fmt": "Enhancement aktiv: {0}",
