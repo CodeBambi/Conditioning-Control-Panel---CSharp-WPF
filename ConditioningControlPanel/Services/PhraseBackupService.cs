@@ -43,7 +43,7 @@ namespace ConditioningControlPanel.Services
             // Mantras
             "MantraPool",
             // Custom triggers
-            "CustomTriggers", "CustomTriggersByMod",
+            "CustomTriggers", "CustomTriggersByMod", "UserAddedCustomTriggers",
             // Custom companion phrases
             "CustomCompanionPhrases",
         };

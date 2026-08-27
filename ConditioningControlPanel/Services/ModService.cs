@@ -2516,20 +2516,26 @@ namespace ConditioningControlPanel.Services
                     ? new List<string>(settings.CustomTriggers)
                     : new List<string>(GetDefaultCustomTriggers());
 
-            // Same cross-mod cleanup the subliminal and lock-card pools get. The Sissy mod's
-            // trigger list shipped as BambiSleep's corpus with the brand filed off (#general
-            // 08-22), so a user who ran Sissy before this build has that corpus saved in their
-            // per-mod backup and would keep meeting it. Only entries that are some OTHER
-            // built-in mod's default and not the active mod's are dropped, and this mod's own
-            // defaults are topped up only when something was actually pruned - a user who never
-            // had the contamination keeps their list exactly as they left it.
-            var prunedTriggers = PruneCrossModCustomTriggers(
-                settings.CustomTriggers, GetDefaultCustomTriggers(), out var removedTriggers);
-            if (removedTriggers.Count > 0)
+            // One-shot cleanup for the actual defect reported in #general 08-22: the Sissy mod's
+            // trigger list shipped as BambiSleep's corpus with the brand filed off, so a user who
+            // ran Sissy before this build has that corpus saved in their per-mod backup and would
+            // keep meeting it. Deliberately NARROW - it only runs under Sissy, only removes
+            // BambiSleep-specific phrases, never touches phrases the user typed, and never adds
+            // anything back (deliberate deletions stay deleted, see MainWindow.Patreon.cs). The
+            // generic vocabulary other mods share (OBEY, DROP, KNEEL...) is left alone, and the
+            // one-shot flag means a Bambi phrase re-added afterwards is kept.
+            if (!settings.SissyBambiTriggerMigrationDone &&
+                string.Equals(modId, Models.BuiltInMods.SissyHypnoId, StringComparison.OrdinalIgnoreCase))
             {
-                settings.CustomTriggers = prunedTriggers;
-                _log?.Information("Pruned {Count} cross-mod custom trigger(s) for mod {ModId}: {Keys}",
-                    removedTriggers.Count, modId, string.Join(", ", removedTriggers));
+                var prunedTriggers = PruneInheritedBambiTriggers(
+                    settings.CustomTriggers, settings.UserAddedCustomTriggers, out var removedTriggers);
+                if (removedTriggers.Count > 0)
+                {
+                    settings.CustomTriggers = prunedTriggers;
+                    _log?.Information("Pruned {Count} inherited BambiSleep trigger(s) from the Sissy list: {Keys}",
+                        removedTriggers.Count, string.Join(", ", removedTriggers));
+                }
+                settings.SissyBambiTriggerMigrationDone = true;
             }
 
             if (settings.BouncingTextPoolByMod?.TryGetValue(modId, out var savedBounce) == true)
@@ -2591,50 +2597,39 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Removes custom triggers that belong to a DIFFERENT built-in mod's default list and are
-        /// not part of the active mod's defaults, then - only when something was removed - tops the
-        /// list up with the active mod's own defaults. Triggers matching no built-in default are
-        /// user-typed and are always kept. Pure so it can be unit tested without app state.
+        /// Removes BambiSleep-specific trigger phrases that were inherited by the SissyHypno
+        /// trigger list before the de-Bambi'd defaults shipped (#general 08-22). Only phrases that
+        /// are a BambiSleep default AND not a SissyHypno default are candidates; phrases the user
+        /// typed themselves (<paramref name="userAdded"/>) are always kept, and nothing is ever
+        /// added back. Pure so it can be unit tested without app state.
         /// </summary>
-        internal static List<string> PruneCrossModCustomTriggers(
-            IEnumerable<string>? current, IEnumerable<string>? activeDefaults, out List<string> removed)
+        internal static List<string> PruneInheritedBambiTriggers(
+            IEnumerable<string>? current, IEnumerable<string>? userAdded, out List<string> removed)
         {
             removed = new List<string>();
             var list = current?.ToList() ?? new List<string>();
-            var active = activeDefaults?.ToList() ?? new List<string>();
             if (list.Count == 0) return list;
 
-            var activeKeys = new HashSet<string>(active, StringComparer.OrdinalIgnoreCase);
-
-            var foreignDefaults = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var allBuiltIn = new[]
-            {
-                Models.BuiltInMods.CCPDefault, Models.BuiltInMods.BambiSleep,
-                Models.BuiltInMods.SissyHypno, Models.BuiltInMods.Dronification,
-                Models.BuiltInMods.Locked
-            };
-            foreach (var m in allBuiltIn)
-                if (m.CustomTriggers != null)
-                    foreach (var t in m.CustomTriggers)
-                        foreignDefaults.Add(t);
+            var sissyDefaults = new HashSet<string>(
+                Models.BuiltInMods.SissyHypno.CustomTriggers ?? new List<string>(),
+                StringComparer.OrdinalIgnoreCase);
+            var bambiOnly = new HashSet<string>(
+                (Models.BuiltInMods.BambiSleep.CustomTriggers ?? new List<string>())
+                    .Where(t => !sissyDefaults.Contains(t)),
+                StringComparer.OrdinalIgnoreCase);
+            var userTyped = new HashSet<string>(
+                userAdded ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
 
             var kept = new List<string>();
             foreach (var t in list)
             {
-                if (!string.IsNullOrWhiteSpace(t) && foreignDefaults.Contains(t) && !activeKeys.Contains(t))
+                if (!string.IsNullOrWhiteSpace(t) && bambiOnly.Contains(t) && !userTyped.Contains(t))
                     removed.Add(t);
                 else
                     kept.Add(t);
             }
 
-            if (removed.Count == 0) return list;
-
-            var present = new HashSet<string>(kept, StringComparer.OrdinalIgnoreCase);
-            foreach (var d in active)
-                if (present.Add(d))
-                    kept.Add(d);
-
-            return kept;
+            return removed.Count == 0 ? list : kept;
         }
 
         /// <summary>

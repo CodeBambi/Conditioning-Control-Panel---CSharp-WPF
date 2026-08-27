@@ -1449,6 +1449,37 @@ namespace ConditioningControlPanel.Models
                 : new(value, StringComparer.OrdinalIgnoreCase);
         }
 
+        /// <summary>
+        /// Trigger phrases the user added by hand in the trigger editor. Mirrors
+        /// <see cref="UserAddedSubliminals"/>: protected from ModService's cross-mod trigger
+        /// prune so a typed phrase that happens to match another built-in mod's default
+        /// (OBEY, KNEEL, DROP...) is never silently deleted on startup or a mod switch.
+        /// Case-insensitive to match the prune's comparison.
+        /// </summary>
+        private HashSet<string> _userAddedCustomTriggers = new(StringComparer.OrdinalIgnoreCase);
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public HashSet<string> UserAddedCustomTriggers
+        {
+            get => _userAddedCustomTriggers;
+            set => _userAddedCustomTriggers = value == null
+                ? new(StringComparer.OrdinalIgnoreCase)
+                : new(value, StringComparer.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// One-shot marker for the v6.8.5 migration that strips inherited BambiSleep trigger
+        /// phrases out of a saved SissyHypno trigger list (#general 08-22). Set the first time
+        /// the migration actually runs under the Sissy mod, so a user who later re-adds one of
+        /// those phrases keeps it.
+        /// </summary>
+        private bool _sissyBambiTriggerMigrationDone;
+        [JsonProperty("sissy_bambi_trigger_migration_done")]
+        public bool SissyBambiTriggerMigrationDone
+        {
+            get => _sissyBambiTriggerMigrationDone;
+            set { _sissyBambiTriggerMigrationDone = value; OnPropertyChanged(); }
+        }
+
         private string _subBackgroundColor = "#000000";
         public string SubBackgroundColor
         {

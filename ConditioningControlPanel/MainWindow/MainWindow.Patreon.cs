@@ -1251,6 +1251,26 @@ namespace ConditioningControlPanel
                         .Select(kvp => kvp.Key)
                         .ToList();
 
+                    // Remember phrases the user typed themselves so ModService's cross-mod trigger
+                    // prune never deletes them - a hand-typed trigger can legitimately collide with
+                    // another built-in mod's default (OBEY, KNEEL, DROP...). Mirrors the subliminal
+                    // editor's UserAddedSubliminals bookkeeping in MainWindow.UiUpdates.cs.
+                    var modDefaults = new HashSet<string>(
+                        App.Mods?.GetDefaultCustomTriggers() ?? new List<string>(),
+                        StringComparer.OrdinalIgnoreCase);
+                    var oldTriggers = new HashSet<string>(triggerDict.Keys, StringComparer.OrdinalIgnoreCase);
+                    var newSet = new HashSet<string>(newTriggers, StringComparer.OrdinalIgnoreCase);
+                    foreach (var t in newTriggers)
+                    {
+                        if (!oldTriggers.Contains(t) && !modDefaults.Contains(t))
+                            App.Settings.Current.UserAddedCustomTriggers.Add(t);
+                    }
+                    foreach (var t in oldTriggers)
+                    {
+                        if (!newSet.Contains(t))
+                            App.Settings.Current.UserAddedCustomTriggers.Remove(t);
+                    }
+
                     App.Settings.Current.CustomTriggers = newTriggers;
                     App.Settings.Save();
                     App.Logger?.Information("Updated {Count} custom triggers", newTriggers.Count);

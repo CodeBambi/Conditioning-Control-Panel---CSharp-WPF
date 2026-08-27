@@ -273,50 +273,76 @@ public class SissyCustomTriggerTests
 
 /// <summary>
 /// Migration for users who already ran Sissy before the de-Bambi'd defaults shipped: their saved
-/// per-mod trigger backup still holds the old corpus, so ModService prunes it on restore.
+/// per-mod trigger backup still holds the old corpus, so ModService strips the Bambi-specific
+/// entries once, under Sissy only, and never adds anything back.
 /// </summary>
-public class CrossModCustomTriggerPruneTests
+public class InheritedBambiTriggerPruneTests
 {
-    private static List<string> Prune(IEnumerable<string> current, IEnumerable<string> active, out List<string> removed)
-        => ModService.PruneCrossModCustomTriggers(current, active, out removed);
+    private static List<string> Prune(IEnumerable<string> current, out List<string> removed)
+        => ModService.PruneInheritedBambiTriggers(current, null, out removed);
 
     [Fact]
-    public void ContaminatedSissyList_LosesBambiTriggersAndGainsSissyDefaults()
+    public void ContaminatedSissyList_LosesBambiSpecificTriggersOnly()
     {
         var saved = new List<string>(BuiltInMods.BambiSleep.CustomTriggers!);
-        var result = Prune(saved, BuiltInMods.SissyHypno.CustomTriggers!, out var removed);
+        var result = Prune(saved, out var removed);
 
         Assert.NotEmpty(removed);
         Assert.DoesNotContain("DROP FOR COCK", result);
         Assert.DoesNotContain("COCKBLANK LOVEDOLL", result);
-        // Top-up only fires because something was pruned.
-        Assert.Contains("SISSY NEEDS TO FOCUS", result);
-        Assert.Contains("GOOD GIRLS OBEY", result);
+        Assert.DoesNotContain("BAMBI SLEEP", result);
+        // Shared with the Sissy defaults, so it stays.
+        Assert.Contains("GOOD GIRL", result);
+        Assert.Contains("BIMBO DOLL", result);
     }
 
     [Fact]
-    public void CleanList_IsLeftExactlyAlone()
+    public void NothingIsEverAddedBack()
     {
-        var saved = new List<string> { "GOOD GIRL", "FREEZE", "MY OWN TRIGGER" };
-        var result = Prune(saved, BuiltInMods.SissyHypno.CustomTriggers!, out var removed);
+        // A curated Sissy list that the user trimmed down keeps exactly what they left, minus
+        // the inherited Bambi entry. Defaults are NOT stamped back over deliberate deletions.
+        var saved = new List<string> { "GOOD GIRL", "GIGGLETIME", "MY OWN TRIGGER" };
+        var result = Prune(saved, out var removed);
+
+        Assert.Equal(new[] { "GIGGLETIME" }, removed);
+        Assert.Equal(new[] { "GOOD GIRL", "MY OWN TRIGGER" }, result);
+        Assert.DoesNotContain("SISSY NEEDS TO FOCUS", result);
+    }
+
+    [Fact]
+    public void GenericVocabularyFromOtherMods_IsNeverTouched()
+    {
+        // The CCPDefault / Locked / Drone words are generic and can be hand-typed by anyone,
+        // so the narrow Bambi-only pass must leave them alone.
+        var saved = new List<string>
+        {
+            "OBEY", "DROP", "FOCUS", "BREATHE", "RELAX", "DEEPER", "TRANCE",
+            "KNEEL", "EMPTY", "STAY", "SINK", "EDGE", "BEG", "HOLD IT", "COLLAPSE",
+            "GOOD BOY", "COMPLY"
+        };
+        var result = Prune(saved, out var removed);
 
         Assert.Empty(removed);
         Assert.Equal(saved, result);
     }
 
     [Fact]
-    public void UserTypedTrigger_SurvivesThePrune()
+    public void UserTypedBambiPhrase_SurvivesWhenTracked()
     {
-        var saved = new List<string> { "GIGGLETIME", "PLEASE REMEMBER THIS ONE" };
-        var result = Prune(saved, BuiltInMods.SissyHypno.CustomTriggers!, out _);
-        Assert.Contains("PLEASE REMEMBER THIS ONE", result);
+        var saved = new List<string> { "GIGGLETIME", "BLONDE MOMENT" };
+        var result = ModService.PruneInheritedBambiTriggers(
+            saved, new[] { "GIGGLETIME" }, out var removed);
+
+        Assert.Equal(new[] { "BLONDE MOMENT" }, removed);
+        Assert.Contains("GIGGLETIME", result);
     }
 
     [Fact]
-    public void ActiveModsOwnDefaults_AreNeverPruned()
+    public void CleanList_IsLeftExactlyAlone()
     {
-        var saved = new List<string>(BuiltInMods.BambiSleep.CustomTriggers!);
-        var result = Prune(saved, BuiltInMods.BambiSleep.CustomTriggers!, out var removed);
+        var saved = new List<string> { "GOOD GIRL", "FREEZE", "MY OWN TRIGGER" };
+        var result = Prune(saved, out var removed);
+
         Assert.Empty(removed);
         Assert.Equal(saved, result);
     }
@@ -324,7 +350,7 @@ public class CrossModCustomTriggerPruneTests
     [Fact]
     public void EmptyList_StaysEmpty()
     {
-        var result = Prune(new List<string>(), BuiltInMods.SissyHypno.CustomTriggers!, out var removed);
+        var result = Prune(new List<string>(), out var removed);
         Assert.Empty(result);
         Assert.Empty(removed);
     }
