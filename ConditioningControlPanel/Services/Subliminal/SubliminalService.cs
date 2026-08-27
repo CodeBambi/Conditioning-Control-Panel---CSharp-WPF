@@ -68,6 +68,18 @@ namespace ConditioningControlPanel.Services
 
         private bool _isRunning;
         private bool _oneShotActive; // Allow one-shot display when service not running (remote control)
+
+        // #1045 - the same generation scheme FlashService uses. A point-fired subliminal carries the
+        // generation it was dispatched under; StopOneShotSubliminals retires that generation so a
+        // show still waiting behind the haptic anticipation delay bails on arrival, and a card
+        // already up from a retired generation is blanked. The _oneShotActive latch alone is inert
+        // while the ambient scheduler runs, because the arrival guard reads
+        // "!_isRunning && !_oneShotActive".
+        private int _oneShotGeneration;
+
+        // The generation of the point-fired subliminal currently on screen (null when the visible
+        // card is the ambient scheduler's own). UI thread only.
+        private int? _visibleOneShotGen;
         private bool _disposed;
         private int _subliminalCount;
 
@@ -114,6 +126,7 @@ namespace ConditioningControlPanel.Services
         {
             _isRunning = false;
             _timer.Stop();
+            _visibleOneShotGen = null;
 
             // Blank + hide the keep-alive windows (don't close them — a Stop can land
             // mid-chaos-run, and closing layered windows then is the deadlock trigger).
@@ -146,34 +159,52 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Cancel point-fired ("one-shot") subliminals: drop any show still waiting behind the
-        /// haptic anticipation delay and blank what is on screen, WITHOUT stopping the ambient
-        /// scheduler. Companion of <c>FlashService.StopOneShotFlashes</c> for #1045 - a Deeper
-        /// enhancement's last-tick subliminal used to land after the video had already gone.
-        /// When the ambient service is running its own cards are left alone; only the one-shot
-        /// latch is dropped, which is what ShowSubliminalVisuals checks on arrival.
+        /// haptic anticipation delay and blank a card a retired one-shot already put up, WITHOUT
+        /// stopping the ambient scheduler. Companion of <c>FlashService.StopOneShotFlashes</c> for
+        /// #1045 - a Deeper enhancement's last-tick subliminal used to land after the video had
+        /// already gone, and an authored one carries the timeline segment's own duration.
+        ///
+        /// Retiring the GENERATION (not just the latch) is what makes this work while the user has
+        /// ambient subliminals running: the arrival guard's "!_isRunning && !_oneShotActive" pair
+        /// is meaningless then, but a stale dispatch generation is not. The ambient scheduler's own
+        /// cards carry no generation and are never blanked.
         /// </summary>
         public void StopOneShotSubliminals()
         {
+            // Retire off the UI thread: the anticipation delay is awaited on the thread pool.
+            int retired = Interlocked.Increment(ref _oneShotGeneration) - 1;
+
             DispatcherHelper.RunOnUI(() =>
             {
                 _oneShotActive = false;
-                if (_isRunning) return;   // ambient owns the cards on screen
 
-                foreach (var win in _screenWindows.Values)
-                {
-                    try
-                    {
-                        win.BeginAnimation(Window.OpacityProperty, null);
-                        win.Opacity = 0;
-                        win.Content = null;
-                        win.Hide();
-                    }
-                    catch { }
-                }
-                RemoveHostedCard(_ => true);
-                if (_layer?.IsActive == true) _layer.Clear();
-                StopAudio();
+                // Ambient running: only blank if the card on screen is the point-fired one we just
+                // retired. Anything else belongs to the user's own subliminal rhythm.
+                if (!OneShotGate.ShouldBlankOnCancel(_isRunning, _visibleOneShotGen, retired)) return;
+
+                _visibleOneShotGen = null;
+                BlankCards();
             });
+        }
+
+        /// <summary>UI thread. Take every subliminal surface (per-screen window, hosted card,
+        /// compositor card) off screen and stop the whisper audio.</summary>
+        private void BlankCards()
+        {
+            foreach (var win in _screenWindows.Values)
+            {
+                try
+                {
+                    win.BeginAnimation(Window.OpacityProperty, null);
+                    win.Opacity = 0;
+                    win.Content = null;
+                    win.Hide();
+                }
+                catch { }
+            }
+            RemoveHostedCard(_ => true);
+            if (_layer?.IsActive == true) _layer.Clear();
+            StopAudio();
         }
 
         /// <summary>
@@ -294,7 +325,10 @@ namespace ConditioningControlPanel.Services
             if (text.Length > 200) text = text.Substring(0, 200);
             text = System.Text.RegularExpressions.Regex.Replace(text, "<[^>]*>", "");
             _oneShotActive = true; // Allow display even when service not running (remote control)
-            TriggerSubliminalWithHapticPattern(text, opacity, overrideDurationMs, suppressHaptic);
+            // #1045: tag this point-fired show with the current one-shot generation so
+            // StopOneShotSubliminals can cancel it even while the ambient scheduler runs.
+            TriggerSubliminalWithHapticPattern(text, opacity, overrideDurationMs, suppressHaptic,
+                Volatile.Read(ref _oneShotGeneration));
             App.Progression?.AddXP(10, XPSource.Subliminal);
         }
 
@@ -606,7 +640,7 @@ namespace ConditioningControlPanel.Services
         /// Pattern depends on the trigger text (Cum/Collapse = long, Freeze = short sharp, Sleep = decay, etc.)
         /// Buttplug.io has ~1.3s latency so we trigger haptics earlier for that provider
         /// </summary>
-        private async void TriggerSubliminalWithHapticPattern(string text, int? opacity = null, int? overrideDurationMs = null, bool suppressHaptic = false)
+        private async void TriggerSubliminalWithHapticPattern(string text, int? opacity = null, int? overrideDurationMs = null, bool suppressHaptic = false, int? oneShotGen = null)
         {
             try
             {
@@ -628,7 +662,7 @@ namespace ConditioningControlPanel.Services
                     await Task.Delay(anticipationMs);
 
                 // Now show on UI thread
-                DispatcherHelper.RunOnUI(() => ShowSubliminalVisuals(text, opacity, overrideDurationMs));
+                DispatcherHelper.RunOnUI(() => ShowSubliminalVisuals(text, opacity, overrideDurationMs, oneShotGen));
             }
             catch (Exception ex)
             {
@@ -636,12 +670,20 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private void ShowSubliminalVisuals(string text, int? opacity = null, int? overrideDurationMs = null)
+        private void ShowSubliminalVisuals(string text, int? opacity = null, int? overrideDurationMs = null, int? oneShotGen = null)
         {
+            // #1045: this show belongs to a point-fired subliminal that has since been cancelled.
+            // Checked FIRST because the pair below is inert while the ambient scheduler runs.
+            if (OneShotGate.IsRetired(oneShotGen, Volatile.Read(ref _oneShotGeneration))) return;
+
             // Guard against delayed callbacks firing after Stop() — prevents orphaned windows
             // Allow one-shot from remote control even when service not running
             if (!_isRunning && !_oneShotActive) return;
             _oneShotActive = false;
+
+            // Remember whose card is on screen, so a later StopOneShotSubliminals can tell a
+            // point-fired card (blank it) from the ambient scheduler's own (leave it alone).
+            _visibleOneShotGen = oneShotGen;
 
             // Increment counter and fire event
             _subliminalCount++;

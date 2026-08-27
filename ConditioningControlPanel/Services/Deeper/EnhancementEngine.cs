@@ -505,9 +505,11 @@ namespace ConditioningControlPanel.Services.Deeper
             // Same story for point-fired VISUALS (#1045): a flash or subliminal fired near the end
             // carries the timeline segment's own duration and keeps rendering long after the video
             // is gone, and the services' loaders are async void, so one dispatched on the last
-            // tick can materialise after this Stop returns. Both calls drop the one-shot latch,
-            // which is exactly what those loaders re-check before showing anything, and neither
-            // touches the ambient scheduler when the user has that feature running for real.
+            // tick can materialise after this Stop returns. Both calls RETIRE the service's
+            // one-shot generation: a loader that arrives with a stale generation drops its work,
+            // and anything a retired generation already put on screen is taken down. The ambient
+            // schedulers are untouched, so a user running flashes or subliminals for real keeps
+            // their own rhythm either way.
             if (_visualDispatched)
             {
                 try { App.Flash?.StopOneShotFlashes(); }

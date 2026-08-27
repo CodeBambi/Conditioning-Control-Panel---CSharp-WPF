@@ -97,6 +97,15 @@ namespace ConditioningControlPanel.Services
         private bool _isBusy;
         private bool _oneShotActive; // For TriggerFlashOnce when service not running
 
+        // #1045 - every point-fired ("one-shot") flash carries the generation that was current when
+        // it was dispatched. StopOneShotFlashes bumps the generation, so a loader still in flight
+        // bails on arrival and the windows a retired generation already put up get closed. The
+        // _oneShotActive latch alone cannot do that job: the arrival guards read
+        // "!_isRunning && !_oneShotActive", so while the ambient scheduler runs the latch is
+        // meaningless and a cancelled Deeper flash would still materialise and then sit there for
+        // the authored segment duration, long after the media it belonged to ended.
+        private int _oneShotGeneration;
+
         // Solid mode: one ref-counted hold on the shared ChaosBubbleHostOverlay for the whole
         // flash session (Start→Stop, or a one-shot burst) — NOT per flash. The host has the same
         // keep-alive contract as every chaos overlay: creating/closing a fullscreen layered window
@@ -417,30 +426,77 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Cancel point-fired ("one-shot") flashes: drop any load still in flight and close what
-        /// they put on screen, WITHOUT stopping the ambient scheduler.
+        /// they already put on screen, WITHOUT stopping the ambient scheduler.
         ///
         /// #1045: a Deeper enhancement fired a flash on its last tick and the image outlived the
         /// video. Two reasons, both handled here. TriggerFlashOnce* hand off to an <c>async void</c>
-        /// loader, so a flash dispatched just before the caller stopped materialised afterwards -
-        /// clearing <c>_oneShotActive</c> makes ShowImages bail on arrival, which is the existing
-        /// "delayed callback after Stop" guard. And an authored flash carries the segment's own
-        /// duration, which can be many seconds longer than whatever is left of the media.
+        /// loader, so a flash dispatched just before the caller stopped materialised afterwards.
+        /// And an authored flash carries the timeline segment's own duration, which can be many
+        /// seconds longer than whatever was left of the media.
         ///
-        /// When the ambient service IS running, the windows on screen belong to the user's own
-        /// flash rhythm and are indistinguishable from a one-shot at the window level, so only the
-        /// in-flight one-shot is dropped and the ambient heartbeat keeps its windows.
+        /// Both are settled by retiring the one-shot GENERATION rather than the _oneShotActive
+        /// latch: a loader that arrives with a stale generation bails whether or not the ambient
+        /// scheduler is running, and every window tagged with a retired generation is closed. The
+        /// ambient scheduler's own windows carry no generation and are never touched, so a user
+        /// running flashes for real keeps their own rhythm.
         /// </summary>
         public void StopOneShotFlashes()
         {
+            // Retire off the UI thread first: the loaders run on the thread pool and re-read the
+            // generation, so they must see the bump immediately even when the dispatcher is busy.
+            Interlocked.Increment(ref _oneShotGeneration);
+
             DispatcherHelper.RunOnUI(() =>
             {
                 _oneShotActive = false;
-                if (_isRunning) return;   // ambient owns the windows, the heartbeat and _isBusy
+                if (_isRunning)
+                {
+                    // Ambient owns the heartbeat, the shared-host reference and _isBusy - close
+                    // only the point-fired windows and leave the rest of the machinery alone.
+                    CloseOneShotWindows();
+                    return;
+                }
                 _isBusy = false;
                 StopCurrentSound();
                 CloseAllWindows();
+                // Mirror Stop(): without these the shared host window stays stranded (the deferred
+                // one-shot completion that normally releases it early-returns on _oneShotActive)
+                // and, with the unified overlay host on, the global click hook survives with a
+                // STALE hit snapshot, so every click inside the dead flash rect is silently eaten.
+                ReleaseHostRef();
+                ReleaseLayerHook();
                 StopHeartbeat();
             });
+        }
+
+        /// <summary>UI thread. Close only the windows a retired one-shot generation put up, leaving
+        /// the ambient scheduler's own windows (which carry no generation) alone.</summary>
+        private void CloseOneShotWindows()
+        {
+            int current = Volatile.Read(ref _oneShotGeneration);
+            var doomed = new List<FlashWindow>();
+            lock (_lockObj)
+            {
+                for (int i = _activeWindows.Count - 1; i >= 0; i--)
+                {
+                    var w = _activeWindows[i];
+                    if (OneShotGate.IsRetired(w.OneShotGeneration, current))
+                    {
+                        doomed.Add(w);
+                        _activeWindows.RemoveAt(i);
+                    }
+                }
+            }
+
+            if (doomed.Count == 0) return;
+
+            foreach (var w in doomed)
+                SafeCloseFlashWindow(w);
+
+            // Refresh the hook-thread hit snapshot now rather than waiting for a heartbeat tick:
+            // until it is rebuilt the hook still hit-tests rects that no longer render anything.
+            RebuildLayerHitSnapshot();
+            App.Overlay?.NotifyTopWindowClosed();
         }
 
         public void TriggerFlash()
@@ -501,7 +557,10 @@ namespace ConditioningControlPanel.Services
             // Start heartbeat timer for animation and fade management
             StartHeartbeat();
 
-            Task.Run(() => LoadAndShowImages(amount, duration, size, suppressHaptic));
+            // #1045: carry the generation this flash was dispatched under, so StopOneShotFlashes
+            // can cancel it on arrival even while the ambient scheduler keeps _isRunning true.
+            int oneShotGen = Volatile.Read(ref _oneShotGeneration);
+            Task.Run(() => LoadAndShowImages(amount, duration, size, suppressHaptic, oneShotGen));
         }
 
         /// <summary>
@@ -543,10 +602,11 @@ namespace ConditioningControlPanel.Services
             _soundPlayingForCurrentFlash = false;
             StartHeartbeat();
 
-            Task.Run(() => LoadAndShowSpecificImage(resolved, durationMs, playSound, suppressHaptic));
+            int oneShotGen = Volatile.Read(ref _oneShotGeneration);
+            Task.Run(() => LoadAndShowSpecificImage(resolved, durationMs, playSound, suppressHaptic, oneShotGen));
         }
 
-        private async void LoadAndShowSpecificImage(string imagePath, int durationMs, bool playSound, bool suppressHaptic = false)
+        private async void LoadAndShowSpecificImage(string imagePath, int durationMs, bool playSound, bool suppressHaptic = false, int? oneShotGen = null)
         {
             try
             {
@@ -568,7 +628,7 @@ namespace ConditioningControlPanel.Services
 
                 await DispatcherHelper.RunOnUIAsync(() =>
                 {
-                    ShowImages(new List<LoadedImageData> { data }, soundPath, false, customDuration: durationMs, suppressHaptic: suppressHaptic);
+                    ShowImages(new List<LoadedImageData> { data }, soundPath, false, customDuration: durationMs, suppressHaptic: suppressHaptic, oneShotGen: oneShotGen);
                 });
             }
             catch (Exception ex)
@@ -649,7 +709,7 @@ namespace ConditioningControlPanel.Services
 
         #region Image Loading
 
-        private async void LoadAndShowImages(int? amount = null, int? duration = null, int? size = null, bool suppressHaptic = false)
+        private async void LoadAndShowImages(int? amount = null, int? duration = null, int? size = null, bool suppressHaptic = false, int? oneShotGen = null)
         {
             try
             {
@@ -704,7 +764,7 @@ namespace ConditioningControlPanel.Services
                 // Show on UI thread - pass sound path only ONCE
                 await DispatcherHelper.RunOnUIAsync(() =>
                 {
-                    ShowImages(loadedImages, soundPath, false, customDuration: duration, suppressHaptic: suppressHaptic);
+                    ShowImages(loadedImages, soundPath, false, customDuration: duration, suppressHaptic: suppressHaptic, oneShotGen: oneShotGen);
                 });
             }
             catch (Exception ex)
@@ -1088,8 +1148,17 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         /// <param name="overrideLifetimeMs">If provided, overrides the calculated lifetime (used for hydra linked timing)~ 🔗</param>
         /// <param name="hydraGeneration">How many hydra hops deep these spawns are (0 = original flash)~ 🐙</param>
-        private void ShowImages(List<LoadedImageData> images, string? soundPath, bool isMultiplication, int? overrideLifetimeMs = null, int hydraGeneration = 0, int? customDuration = null, bool suppressHaptic = false)
+        private void ShowImages(List<LoadedImageData> images, string? soundPath, bool isMultiplication, int? overrideLifetimeMs = null, int hydraGeneration = 0, int? customDuration = null, bool suppressHaptic = false, int? oneShotGen = null)
         {
+            // #1045: this load was dispatched by a point-fired flash that has since been cancelled.
+            // Checked BEFORE the _isRunning/_oneShotActive pair because that pair is inert while the
+            // ambient scheduler runs, which is exactly the case the Deeper report lives in.
+            if (OneShotGate.IsRetired(oneShotGen, Volatile.Read(ref _oneShotGeneration)))
+            {
+                if (!isMultiplication) _isBusy = false;
+                return;
+            }
+
             if (!_isRunning && !_oneShotActive)
             {
                 if (!isMultiplication) _isBusy = false;
@@ -1185,7 +1254,7 @@ namespace ConditioningControlPanel.Services
                 
                 if (delayMs == 0)
                 {
-                    SpawnFlashWindow(imageData, settings, lifetimeMs, hydraGeneration, suppressHaptic);
+                    SpawnFlashWindow(imageData, settings, lifetimeMs, hydraGeneration, suppressHaptic, oneShotGen);
                 }
                 else
                 {
@@ -1193,6 +1262,7 @@ namespace ConditioningControlPanel.Services
                     var capturedLifetime = lifetimeMs;
                     var capturedGeneration = hydraGeneration;
                     var capturedSuppressHaptic = suppressHaptic;
+                    var capturedOneShotGen = oneShotGen;
                     var spawnToken = _cancellationSource?.Token ?? CancellationToken.None;
                     Task.Delay(delayMs, spawnToken).ContinueWith(_ =>
                     {
@@ -1200,8 +1270,11 @@ namespace ConditioningControlPanel.Services
                         {
                             System.Windows.Application.Current?.Dispatcher?.BeginInvoke(() =>
                             {
+                                // #1045: a staggered spawn from a retired one-shot must not land.
+                                if (OneShotGate.IsRetired(capturedOneShotGen, Volatile.Read(ref _oneShotGeneration)))
+                                    return;
                                 if (_isRunning || _oneShotActive)
-                                    SpawnFlashWindow(capturedData, settings, capturedLifetime, capturedGeneration, capturedSuppressHaptic);
+                                    SpawnFlashWindow(capturedData, settings, capturedLifetime, capturedGeneration, capturedSuppressHaptic, capturedOneShotGen);
                             });
                         }
                         catch { }
@@ -1232,8 +1305,10 @@ namespace ConditioningControlPanel.Services
         /// CopilotNotes: Each window gets a CTS that fires after lifetimeMs, triggering independent fade-out.
         /// When hydraGeneration > 0 and independent timing is active, XP is reduced by 25% per generation (floor 10%).
         /// </summary>
-        private void SpawnFlashWindow(LoadedImageData imageData, AppSettings settings, int lifetimeMs, int hydraGeneration = 0, bool suppressHaptic = false)
+        private void SpawnFlashWindow(LoadedImageData imageData, AppSettings settings, int lifetimeMs, int hydraGeneration = 0, bool suppressHaptic = false, int? oneShotGen = null)
         {
+            // #1045: the point-fired flash that asked for this spawn has been cancelled since.
+            if (OneShotGate.IsRetired(oneShotGen, Volatile.Read(ref _oneShotGeneration))) return;
             if (!_isRunning && !_oneShotActive) return;
 
             // Decide the render path up front so the concurrency cap can be mode-aware. Compositor
@@ -1321,6 +1396,9 @@ namespace ConditioningControlPanel.Services
                 window.ExpiresAt = DateTime.Now.AddMilliseconds(lifetimeMs);
                 window.OriginalLifetimeMs = lifetimeMs;
                 window.HydraGeneration = hydraGeneration;
+                // #1045: null for an ambient flash, the dispatch generation for a point-fired one.
+                // Assigned unconditionally because pooled windows are recycled across both kinds.
+                window.OneShotGeneration = oneShotGen;
                 // Capture the monitor on the window so hydra children can inherit
                 // their parent's screen (TriggerMultiplication reads window.Monitor).
                 window.Monitor = monitor;
@@ -2009,7 +2087,7 @@ namespace ConditioningControlPanel.Services
                 {
                     // Calculate remaining lifetime from the clicked window for linked timing~ 🔗
                     var remainingMs = Math.Max(1000, (int)(window.ExpiresAt - DateTime.Now).TotalMilliseconds);
-                    TriggerMultiplication(maxHydra, currentCount, window.OriginalLifetimeMs, remainingMs, window.HydraGeneration, window.Monitor);
+                    TriggerMultiplication(maxHydra, currentCount, window.OriginalLifetimeMs, remainingMs, window.HydraGeneration, window.Monitor, window.OneShotGeneration);
                 }
             }
         }
@@ -2020,10 +2098,13 @@ namespace ConditioningControlPanel.Services
         /// When HydraLinkedTiming is true, children get parentRemainingMs; when false, they get a fresh full lifetime.
         /// parentGeneration is the clicked window's generation — children will be parentGeneration + 1.
         /// </summary>
-        private async void TriggerMultiplication(int maxHydra, int currentCount, int parentLifetimeMs, int parentRemainingMs, int parentGeneration, MonitorInfo? parentMonitor = null)
+        private async void TriggerMultiplication(int maxHydra, int currentCount, int parentLifetimeMs, int parentRemainingMs, int parentGeneration, MonitorInfo? parentMonitor = null, int? oneShotGen = null)
         {
             try
             {
+                // #1045: hydra children of a point-fired flash inherit its one-shot generation, so
+                // cancelling the one-shot takes the whole family with it.
+                if (OneShotGate.IsRetired(oneShotGen, Volatile.Read(ref _oneShotGeneration))) return;
                 if (!_isRunning && !_oneShotActive) return;
 
                 var spaceAvailable = maxHydra - currentCount;
@@ -2073,7 +2154,7 @@ namespace ConditioningControlPanel.Services
                     await DispatcherHelper.RunOnUIAsync(() =>
                     {
                         // Pass null for sound - NO AUDIO FOR HYDRA
-                        ShowImages(loadedImages, null, true, capturedLifetime, capturedGeneration);
+                        ShowImages(loadedImages, null, true, capturedLifetime, capturedGeneration, oneShotGen: oneShotGen);
                     });
                 }
             }
@@ -4046,6 +4127,14 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>Compositor mode only: this flash's layer item (null once torn down).</summary>
         public Services.Compositor.FlashLayer.FlashItem? LayerItem { get; set; }
+
+        /// <summary>
+        /// #1045 - null for a flash the ambient scheduler put up; otherwise the one-shot generation
+        /// that was current when the point-fired flash was dispatched. FlashService.StopOneShotFlashes
+        /// retires a generation and closes every window still tagged with an older one, which is how a
+        /// cancelled Deeper flash is taken off screen without disturbing the user's own flash rhythm.
+        /// </summary>
+        public int? OneShotGeneration { get; set; }
 
         /// <summary>
         /// Compositor mode only: true while the off-thread frame conversion for this spawn is
