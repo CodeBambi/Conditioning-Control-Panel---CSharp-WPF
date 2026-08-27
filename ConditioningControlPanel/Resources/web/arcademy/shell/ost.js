@@ -39,9 +39,18 @@
  *     that lands on the same track (the booth window into the counter, both on
  *     ost_prizes) keeps the tune running instead of restarting it from the top.
  *     A leave() nobody follows up still stops the track, one tick later.
- *  6. NEVER UNDER LITE. The lite rung is a performance cap and a 140s mp3
- *     decoding on a phone is exactly what it exists to refuse. Read at call
- *     time, like the PA.
+ *  6. LITE DOES NOT SILENCE THE SCHOOL (was: never under lite, 2026-08-27).
+ *     A track is NEVER_BUFFERED in audio.js - an element streams it, nothing
+ *     is decoded into memory - so the performance rung has no cost to refuse
+ *     here. And the desktop's rung is AUTOMATIC (PerformanceProfile: eight
+ *     flash windows on screen is "Balanced"), so gating on it made the music
+ *     vanish whenever the rest of the app was busy, with nothing in the log.
+ *     The `lite` option is still accepted and ignored, so no caller breaks.
+ *  7. A HOLD ASKED FOR BEFORE THE FIRST TOUCH IS KEPT. On a browser host the
+ *     campus is built under the splash, before the knock, and audio.js used to
+ *     drop that cue (no context yet) - the web campus was silent until the
+ *     next screen. audio.js now parks a pre-gesture hold by slot and starts
+ *     it from the first pointer/key (pendingHolds); this module needs no retry.
  *
  * ---------------------------------------------------------------------------
  * THE PUBLIC SURFACE
@@ -50,7 +59,7 @@
  *     sfx   (name, level, extra)  optional cue helper; omitted, the module
  *                                 dispatches the `arcademy-sfx` event itself.
  *     log   (msg)=>void           the shell's `say`.
- *     lite  bool | ()=>bool       the performance cap, read at call time.
+ *     lite  bool | ()=>bool       accepted, ignored (law 6).
  *
  *   ost.enter(place)   start the track for a place ('campus', 'records', or a
  *                      class gameKey). Unknown place = leave().
@@ -125,12 +134,6 @@ function dispatchCue(name, level, extra) {
   } catch (e) { /* a cue must never be the thing that throws */ }
 }
 
-/** A cap that may be a value or a getter. Read it EVERY time; never cache. */
-function readFlag(v) {
-  if (typeof v === 'function') { try { return !!v(); } catch (e) { return false; } }
-  return !!v;
-}
-
 export function createOst(opts) {
   const o = opts || {};
   const say = (typeof o.log === 'function') ? o.log : () => {};
@@ -168,7 +171,6 @@ export function createOst(opts) {
   function enter(place) {
     const row = trackFor(place);
     if (!row) { leave(); return; }
-    if (readFlag(o.lite)) { leave(); return; }             // law 6
     if (held === row.name) { cancelPending(); return; }     // law 5
     /* The slot is keyed, so a new hold on `OST_KEY` REPLACES the old one in the
      * mixer - but the old element would be dropped without its fade. Stop
