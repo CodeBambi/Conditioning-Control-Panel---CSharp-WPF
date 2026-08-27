@@ -573,6 +573,92 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// The marker left where the middle of an oversized system message was removed.
+        /// </summary>
+        internal const string MiddleCutMarker = "\n\n[...]\n\n";
+
+        /// <summary>
+        /// Shortens an oversized system message to <paramref name="cap"/> chars by cutting from its
+        /// MIDDLE, never from either end.
+        ///
+        /// <para>The message is laid out preamble → persona/knowledge base/media → safety floor →
+        /// per-call tail. The head is <see cref="SafetyComposer.Preamble"/> and the foot is
+        /// <see cref="SafetyComposer.Floor"/> plus whatever the assembler appended after it, and
+        /// both are kept byte-for-byte: trimming either would trade a compliance control for a
+        /// length budget. What goes is the middle of the middle: the media list and knowledge base,
+        /// so the persona's opening and the output rules that close the zone both survive.</para>
+        ///
+        /// <para>Returns the input unchanged when it already fits. When the two safety blocks alone
+        /// exceed the cap there is nothing legitimate left to cut, so they are returned joined and
+        /// the request is allowed to fail rather than shipping a gutted floor.</para>
+        /// </summary>
+        internal static string MiddleCutSystemPrompt(string? systemPrompt, int cap)
+        {
+            if (string.IsNullOrEmpty(systemPrompt) || systemPrompt!.Length <= cap)
+                return systemPrompt ?? string.Empty;
+
+            var head = systemPrompt.StartsWith(SafetyComposer.Preamble, StringComparison.Ordinal)
+                ? SafetyComposer.Preamble
+                : string.Empty;
+
+            int footStart = systemPrompt.LastIndexOf(SafetyComposer.Floor, StringComparison.Ordinal);
+            if (footStart < head.Length) footStart = -1;
+            var foot = footStart >= 0 ? systemPrompt.Substring(footStart) : string.Empty;
+
+            int fixedLength = head.Length + foot.Length + MiddleCutMarker.Length;
+            if (fixedLength >= cap)
+            {
+                // Both safety blocks together already bust the cap. Neither is ours to shorten.
+                return head.Length > 0 && foot.Length > 0 ? head + "\n\n" + foot : head + foot;
+            }
+
+            int middleEnd = footStart >= 0 ? footStart : systemPrompt.Length;
+            var middle = systemPrompt.Substring(head.Length, middleEnd - head.Length);
+
+            int room = cap - fixedLength;
+            if (middle.Length <= room) return systemPrompt; // never grow the input
+
+            int keepFront = room / 2;
+            int keepBack = room - keepFront;
+            return head
+                   + middle.Substring(0, keepFront)
+                   + MiddleCutMarker
+                   + middle.Substring(middle.Length - keepBack)
+                   + foot;
+        }
+
+        /// <summary>
+        /// Last resort after an <c>input_too_large</c> rejection that shedding history did not fix:
+        /// the SYSTEM message itself is over the proxy's per-message cap, so
+        /// <see cref="CompactForRetry"/>, which keeps message 0 verbatim by design, can only ever
+        /// produce a request that fails identically.
+        ///
+        /// <para>Without this, a fat prompt (a long knowledge base, a mod with a big media list, a
+        /// taken quiz) is not a degraded companion but a permanently dead one: every cloud call
+        /// 400s and the user sees nothing but canned Idle phrases, with no way to tell that from
+        /// "the AI is broken".</para>
+        ///
+        /// <para>Returns null when there is no oversized system message to salvage, so a genuine
+        /// too-many-messages rejection does not buy a pointless third round trip.</para>
+        /// </summary>
+        internal static ProxyChatMessage[]? SalvageOversizeSystemMessage(ProxyChatMessage[]? messages, int cap)
+        {
+            if (messages == null || messages.Length == 0) return null;
+            if (!string.Equals(messages[0].Role, ChatMessage.RoleSystem, StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            var original = messages[0].Content ?? string.Empty;
+            if (original.Length <= cap) return null;
+
+            var cut = MiddleCutSystemPrompt(original, cap);
+            if (cut.Length >= original.Length) return null;
+
+            var salvaged = (ProxyChatMessage[])messages.Clone();
+            salvaged[0] = new ProxyChatMessage { Role = messages[0].Role, Content = cut };
+            return salvaged;
+        }
+
+        /// <summary>
         /// Multi-turn transport. See <see cref="IAiService.SendAsync"/> for the contract.
         ///
         /// The proxy already accepts up to 50 <c>messages[]</c> and trims the history to its own
@@ -658,6 +744,27 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Warning(
                         "AiService.SendAsync: proxy rejected the request as input_too_large and there is no history left to shed — " +
                         "the system prompt itself is over the 10000-char cap");
+                }
+
+                // Still rejected (or there was never any history to shed): the SYSTEM message is the
+                // thing that is too big, and CompactForRetry keeps it verbatim, so a second identical
+                // failure is guaranteed. Cut the system message from the middle, safety preamble and
+                // safety floor untouched, and spend one last attempt. A companion answering with less
+                // context beats a companion permanently stuck on canned phrases.
+                if (post.Outcome == ProxyOutcome.TooLarge)
+                {
+                    var salvaged = SalvageOversizeSystemMessage(
+                        compacted ?? wire, Companion.Brain.PromptAssembler.ProxyHardRejectCap);
+                    if (salvaged != null)
+                    {
+                        App.Logger?.Warning(
+                            "AiService.SendAsync: system message still over the proxy cap after shedding history " +
+                            "({Before}->{After} chars) - retrying with the middle of the prompt cut out; " +
+                            "the companion is answering with reduced context until the knowledge base or personality is trimmed",
+                            (compacted ?? wire)[0].Content?.Length ?? 0, salvaged[0].Content?.Length ?? 0);
+                        meterInputChars = salvaged.Sum(m => m.Content?.Length ?? 0);
+                        post = await PostToProxyAsync(salvaged, maxTokens, options.Temperature, options.PurposeWire, cancellationToken);
+                    }
                 }
             }
 

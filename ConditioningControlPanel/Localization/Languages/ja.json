@@ -3256,6 +3256,7 @@
   "browser_show_bambicloud_label": "BambiCloudを表示",
   "browser_show_bambicloud_tooltip": "通常はBambiCloudを隠しているmodでも、サイト切替を表示します。modの既定サイトは選ばれたままで、BambiCloudに切り替えられるようになるだけです。",
   "browser_toast_offline_blocked": "オフラインモードが有効なため、ブラウザは接続されません。閲覧するには設定でオフにしてください。",
+  "companion_prompt_too_long_notice": "コンパニオンのプロンプトがクラウドAIには長すぎるため、より少ない文脈で応答しています。ナレッジベースのリンクを減らすか、短いパーソナリティを選んでください。",
   "browser_enhance_match_none": "このページに対応する保存済みエンハンスメントはありません。",
   "browser_enhance_match_off": "Deeperのエンハンスメントは無効です。",
   "browser_enhance_match_fmt": "エンハンス中：{0}",

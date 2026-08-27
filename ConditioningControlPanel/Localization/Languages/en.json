@@ -585,6 +585,7 @@
   "browser_show_bambicloud_label": "Show BambiCloud",
   "browser_show_bambicloud_tooltip": "Reveal the BambiCloud site toggle on mods that normally hide it. The mod's default site stays selected; this just makes BambiCloud available to switch to.",
   "browser_toast_offline_blocked": "Offline Mode is on, so the browser stays disconnected. Turn it off in Settings to browse.",
+  "companion_prompt_too_long_notice": "Your companion prompt is too long for cloud AI, so she is answering with less context. Trim knowledge-base links or pick a shorter personality.",
   "browser_enhance_match_none": "No saved enhancement for this page.",
   "browser_enhance_match_off": "Deeper enhancements disabled.",
   "browser_enhance_match_fmt": "Enhancing: {0}",
