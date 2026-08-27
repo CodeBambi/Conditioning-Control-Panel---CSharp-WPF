@@ -1,4 +1,7 @@
-﻿using ConditioningControlPanel.Models;
+﻿using System;
+using System.IO;
+using System.Text.RegularExpressions;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using Newtonsoft.Json;
 using Xunit;
@@ -91,4 +94,45 @@ public class CornerGifAdmissionTests
     public void SessionCornerGifAllowed_ReadsTheSavedFalse()
         => Assert.False(JsonConvert.DeserializeObject<AppSettings>(
             "{\"SessionCornerGifAllowed\": false}", LoaderSettings)!.SessionCornerGifAllowed);
+
+    // ---- both standalone entry points ask the same question ----
+
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
+            dir = dir.Parent;
+        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
+        return dir!.FullName;
+    }
+
+    /// <summary>
+    /// CornerGifService admits a standalone slot from TWO places: RefreshOverlays (every slot, after
+    /// a config change) and RefreshSlot (ONE slot, the live size/opacity slider edit). The rule was
+    /// first written into RefreshOverlays only, which let a user enable a slot while a session
+    /// overlay was up (correctly suppressed) and then realise it anyway by nudging that slot's
+    /// slider - two corner spirals at once, ticket 1539282547484139682 all over again. Both bodies
+    /// must go through <see cref="CornerGifMedia.AllowStandaloneCornerGif"/>; neither may admit on a
+    /// bare Enabled check.
+    /// </summary>
+    [Theory]
+    [InlineData("RefreshOverlays")]
+    [InlineData("RefreshSlot")]
+    public void BothStandaloneEntryPoints_ShareTheAdmissionRule(string method)
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "ConditioningControlPanel", "Services", "CornerGifService.cs"));
+
+        var start = source.IndexOf("public void " + method + "(", StringComparison.Ordinal);
+        Assert.True(start >= 0, method + " was renamed - update this test with it");
+
+        // The body runs to the start of the next member's doc comment (every member in this file
+        // carries one), or to the end of the file for the last one.
+        var end = source.IndexOf("        /// <summary>", start, StringComparison.Ordinal);
+        var body = end > start ? source[start..end] : source[start..];
+
+        Assert.Contains("CornerGifMedia.AllowStandaloneCornerGif", body);
+        // ...and never the bare check it replaced.
+        Assert.DoesNotMatch(new Regex(@"!\s*setting\.Enabled|!\s*o\.Enabled"), body);
+    }
 }

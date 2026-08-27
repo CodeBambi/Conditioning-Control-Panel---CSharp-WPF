@@ -1117,9 +1117,25 @@ namespace ConditioningControlPanel
             // through a six-rung ladder while the screen flickered between owners.
             if (rung == Services.Safety.PanicPolicy.Rung.StopEverything)
             {
+                // The Ctrl+K palette's claim on this press is settled FIRST, before anything is torn
+                // down. Escape is the DEFAULT panic key and the LL hook delivers it whatever has
+                // focus, so an Esc aimed at "close the palette" arrives here too - and the tail below
+                // EXITS THE APP on press 2. The stop-everything pass still runs (a panic is a panic,
+                // and the palette is simply one more surface going down), but a press the palette
+                // claimed must never be the tap that quits, exactly as in the legacy ladder.
+                // Gated on the panic key really being Escape: a user who rebound panic to F8 still
+                // gets a real, ladder-advancing panic from F8 while the palette is open, and the
+                // palette is closed by the stop-all pass instead.
+                bool paletteClaimed =
+                    string.Equals(App.Settings?.Current?.PanicKey, "Escape", StringComparison.OrdinalIgnoreCase)
+                    && SettingsPaletteWindow.TryConsumeEscape();
+                if (paletteClaimed)
+                    VideoDiag.Log("PANIC", "the Ctrl+K palette claimed this press (it closes, and this press cannot exit the app)");
+
                 VideoDiag.Log("PANIC", "override mode - stopping every surface in one pass");
                 PanicStopEverySurface();
-                RunPanicStopTail(advanceExitLadder: Services.Safety.PanicPolicy.AdvancesExitLadder(rung));
+                RunPanicStopTail(advanceExitLadder:
+                    Services.Safety.PanicPolicy.AdvancesExitLadder(rung, paletteClaimed));
                 return;
             }
 
@@ -1227,8 +1243,9 @@ namespace ConditioningControlPanel
         /// through exactly the same code instead of growing a second copy of it.
         /// </summary>
         /// <param name="advanceExitLadder">FALSE for a press that was spent on a surface which must
-        /// never be the tap that quits the app (today: an open Lock Card). The stop still runs; only
-        /// the exit counter is left alone.</param>
+        /// never be the tap that quits the app: an open Lock Card, or (when Escape is the panic key)
+        /// an Escape the Ctrl+K palette claimed. The stop still runs; only the exit counter is left
+        /// alone. See <see cref="Services.Safety.PanicPolicy.AdvancesExitLadder"/>.</param>
         private void RunPanicStopTail(bool advanceExitLadder)
         {
             var now = DateTime.Now;
@@ -1417,9 +1434,11 @@ namespace ConditioningControlPanel
             Step("pop quiz windows", () => PopQuizWindow.ForceCloseAll());
             Step("bubble count windows", () => { BubbleCountWindow.ForceCloseAll(); BubbleCountResultWindow.ForceCloseAll(); });
             Step("help popover", () => Controls.HelpPopover.CloseActive());
-            // Closes the Ctrl+K palette if it is open; the return value is the legacy ladder's
-            // business, not ours - here it is simply one more surface going down.
-            Step("settings palette", () => SettingsPaletteWindow.TryConsumeEscape());
+            // CloseIfOpen, NOT TryConsumeEscape: whether this press belongs to the palette was
+            // already decided (and consumed) by the caller before this pass started, so here the
+            // palette is simply one more surface going down. Calling TryConsumeEscape a second time
+            // would burn the Escape grace window that the caller's decision depends on.
+            Step("settings palette", SettingsPaletteWindow.CloseIfOpen);
 
             // --- audio + hardware ---
             Step("haptics", () => App.Haptics?.PanicStop());

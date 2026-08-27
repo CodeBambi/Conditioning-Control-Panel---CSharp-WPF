@@ -183,7 +183,13 @@ namespace ConditioningControlPanel.Services
             if (overlays == null || index < 0 || index >= overlays.Count || index >= MaxOverlays) return;
 
             var setting = overlays[index];
-            if (setting == null || !setting.Enabled) return;
+            // The SAME admission rule as RefreshOverlays above, read from the same helper on
+            // purpose. This is the LIVE EDIT path (CornerGifWindow's debounced size/opacity
+            // sliders call it), so a rule applied in only one of the two places lets one nudge of a
+            // slider realise the very standalone overlay RefreshOverlays just suppressed - two
+            // corner spirals at once, which is exactly ticket 1539282547484139682.
+            if (setting == null || !CornerGifMedia.AllowStandaloneCornerGif(
+                    setting.Enabled, SessionEngine.IsSessionCornerGifActive)) return;
 
             QueueShow(disp, index, setting);
         }

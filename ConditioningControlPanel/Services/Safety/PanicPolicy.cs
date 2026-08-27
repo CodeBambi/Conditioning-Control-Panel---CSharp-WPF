@@ -48,10 +48,19 @@ namespace ConditioningControlPanel.Services.Safety
         internal static bool OverrideEnabled(AppSettings? settings) => settings?.PanicOverridesAll != false;
 
         /// <summary>
-        /// Whether the press may still advance the double-press "exit the app" counter. Only the
-        /// Lock Card rung refuses: a press spent dismissing a card must never be the tap that quits.
+        /// Whether the press may still advance the double-press "exit the app" counter.
+        ///
+        /// <para>Two presses refuse. The Lock Card rung: a press spent dismissing a card must never
+        /// be the tap that quits. And a press the Ctrl+K palette claimed
+        /// (<paramref name="paletteClaimedPress"/>): Escape is the default panic key and the global
+        /// hook delivers it whatever has focus, so an Escape aimed at closing the palette reaches
+        /// the panic handler too. The stop-everything pass still runs for it - a panic is a panic -
+        /// but closing a palette must not be press 1 of "quit the app". The legacy ladder answers
+        /// the same press by returning early; in override mode the caller settles the claim first
+        /// and passes it through here.</para>
         /// </summary>
-        internal static bool AdvancesExitLadder(Rung rung) => rung != Rung.DismissLockCard;
+        internal static bool AdvancesExitLadder(Rung rung, bool paletteClaimedPress = false)
+            => rung != Rung.DismissLockCard && !paletteClaimedPress;
 
         /// <summary>
         /// Whether a press of the PANIC key may still be consumed as the #735 video grace pause.
@@ -59,6 +68,25 @@ namespace ConditioningControlPanel.Services.Safety
         /// The pause key itself never goes through here.
         /// </summary>
         internal static bool AllowGracePauseFromPanicKey(bool overrideAll) => !overrideAll;
+
+        /// <summary>
+        /// The full grace-pause door, for the video window's own key handlers. Only a press of the
+        /// PANIC key is subject to the override; every other door into the grace pause is untouched
+        /// by it. That matters most for the STRICT lock window, whose Escape handler exists only
+        /// when Escape is NOT the panic key and is the strict-locked user's "someone walked in" out:
+        /// the v6.8.5 override moved the pause off the panic key, not off that door.
+        /// </summary>
+        internal static bool AllowGracePause(bool fromPanicKey, bool overrideAll)
+            => !fromPanicKey || AllowGracePauseFromPanicKey(overrideAll);
+
+        /// <summary>
+        /// True when the Escape key IS the user's panic key (and the panic key is on) - i.e. when an
+        /// Escape arriving at a video window is a panic press rather than the hardcoded
+        /// "dismiss this video" key. The video handlers use it to decide what to pass as
+        /// <c>fromPanicKey</c>, so the override reaches exactly the presses it owns.
+        /// </summary>
+        internal static bool EscapeIsThePanicKey(bool panicKeyEnabled, string? panicKey)
+            => panicKeyEnabled && string.Equals(panicKey?.Trim(), "Escape", StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
         /// True when <paramref name="pressed"/> is the user's optional pause-key binding. An unset

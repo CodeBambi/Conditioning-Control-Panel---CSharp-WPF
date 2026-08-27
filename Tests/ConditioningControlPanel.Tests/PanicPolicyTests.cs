@@ -58,6 +58,31 @@ public class PanicPolicyTests
     public void LadderPress_AdvancesTheExitLadder()
         => Assert.True(AdvancesExitLadder(Rung.RunLadder));
 
+    /// <summary>
+    /// The Ctrl+K palette rung, which override mode has to answer too. Escape is the DEFAULT panic
+    /// key and the global hook delivers it whatever has focus, so an Escape aimed at closing the
+    /// palette lands in the panic handler - and the tail EXITS THE APP on press 2 while the engine
+    /// is stopped. Closing a palette must never be press 1 of "quit".
+    /// </summary>
+    [Fact]
+    public void PalettePress_NeverAdvancesTheExitLadder_EvenInOverrideMode()
+        => Assert.False(AdvancesExitLadder(Rung.StopEverything, paletteClaimedPress: true));
+
+    [Fact]
+    public void PalettePress_StillDoesNotAdvanceOnTheLegacyLadder()
+        => Assert.False(AdvancesExitLadder(Rung.RunLadder, paletteClaimedPress: true));
+
+    [Fact]
+    public void APressThePaletteDidNotClaim_StillAdvances()
+        => Assert.True(AdvancesExitLadder(Rung.StopEverything, paletteClaimedPress: false));
+
+    [Fact]
+    public void LockCardPress_RefusesRegardlessOfThePalette()
+    {
+        Assert.False(AdvancesExitLadder(Rung.DismissLockCard, paletteClaimedPress: true));
+        Assert.False(AdvancesExitLadder(Rung.DismissLockCard, paletteClaimedPress: false));
+    }
+
     // ---- 3. the master switch ----
 
     [Fact]
@@ -89,6 +114,51 @@ public class PanicPolicyTests
     [Fact]
     public void OverrideOff_PanicKeyStillPausesTheVideoFirst()
         => Assert.True(AllowGracePauseFromPanicKey(overrideAll: false));
+
+    /// <summary>
+    /// The override owns the PANIC key's presses and nothing else. The door that matters most here
+    /// is the strict-lock video window's Escape handler: it only exists when Escape is NOT the panic
+    /// key, and it is that user's only "someone walked in" out (the Closing veto still refuses
+    /// Alt+F4). If PanicOverridesAll reached it, Escape in a strict-locked video would do nothing at
+    /// all, and the Pause key ships unbound so there would be no replacement.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void NonPanicKeyDoors_AreUntouchedByTheOverride(bool overrideAll)
+        => Assert.True(AllowGracePause(fromPanicKey: false, overrideAll: overrideAll));
+
+    [Fact]
+    public void PanicKeyDoor_ClosesUnderTheOverride()
+        => Assert.False(AllowGracePause(fromPanicKey: true, overrideAll: true));
+
+    [Fact]
+    public void PanicKeyDoor_StaysOpenWithTheOverrideOff()
+        => Assert.True(AllowGracePause(fromPanicKey: true, overrideAll: false));
+
+    // Which video-window presses count as panic presses at all.
+
+    [Fact]
+    public void EscapeIsAPanicPress_OnlyWhenItIsTheBoundPanicKey()
+    {
+        Assert.True(EscapeIsThePanicKey(panicKeyEnabled: true, panicKey: "Escape"));
+        Assert.True(EscapeIsThePanicKey(panicKeyEnabled: true, panicKey: " escape "));
+        Assert.False(EscapeIsThePanicKey(panicKeyEnabled: true, panicKey: "F8"));
+        Assert.False(EscapeIsThePanicKey(panicKeyEnabled: false, panicKey: "Escape"));
+        Assert.False(EscapeIsThePanicKey(panicKeyEnabled: true, panicKey: null));
+    }
+
+    /// <summary>The default install: Escape IS the panic key, so an Escape in a non-strict video is
+    /// a panic press and the override takes it; the strict door (Escape not the panic key) is not.</summary>
+    [Fact]
+    public void DefaultInstall_PanicKeyIsEscape_AndTheOverrideOwnsThatPress()
+    {
+        var fresh = new AppSettings();
+        Assert.True(EscapeIsThePanicKey(fresh.PanicKeyEnabled, fresh.PanicKey));
+        Assert.False(AllowGracePause(
+            fromPanicKey: EscapeIsThePanicKey(fresh.PanicKeyEnabled, fresh.PanicKey),
+            overrideAll: OverrideEnabled(fresh)));
+    }
 
     // ---- 5. the optional pause key ----
 
