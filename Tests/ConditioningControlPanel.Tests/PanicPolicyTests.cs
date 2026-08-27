@@ -1,4 +1,7 @@
-﻿using ConditioningControlPanel.Models;
+﻿using System;
+using System.IO;
+using System.Linq;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Safety;
 using Newtonsoft.Json;
 using Xunit;
@@ -13,9 +16,12 @@ namespace ConditioningControlPanel.Tests;
 /// pure decision that collapses that, and every sharp edge of it lives here:
 ///
 ///   1. the Lock Card still outranks everything, in BOTH modes, and never advances the exit ladder
-///   2. the override default is ON, including when settings failed to load
-///   3. turning the override off restores the old ladder and the old grace pause, byte for byte
-///   4. the optional pause key matches nothing until the user binds it, and loses to the panic key
+///   2. the Ctrl+K palette is rung 2 in BOTH modes and its press stops NOTHING (Escape is both the
+///      default panic key and the universal "close this popup" key, so dismissing the palette
+///      mid-session must not pause the session, cost 100 XP or track a Relapse panic)
+///   3. the override default is ON, including when settings failed to load
+///   4. turning the override off restores the old ladder and the old grace pause, byte for byte
+///   5. the optional pause key matches nothing until the user binds it, and loses to the panic key
 /// </summary>
 public class PanicPolicyTests
 {
@@ -32,17 +38,45 @@ public class PanicPolicyTests
 
     [Fact]
     public void OverrideOn_NoLockCard_StopsEverything()
-        => Assert.Equal(Rung.StopEverything, Decide(lockCardOpen: false, overrideAll: true));
+        => Assert.Equal(Rung.StopEverything,
+            Decide(lockCardOpen: false, paletteClaimedPress: false, overrideAll: true));
 
     [Fact]
     public void OverrideOff_NoLockCard_RunsTheOldLadder()
-        => Assert.Equal(Rung.RunLadder, Decide(lockCardOpen: false, overrideAll: false));
+        => Assert.Equal(Rung.RunLadder,
+            Decide(lockCardOpen: false, paletteClaimedPress: false, overrideAll: false));
 
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public void OpenLockCard_OutranksBothModes(bool overrideAll)
-        => Assert.Equal(Rung.DismissLockCard, Decide(lockCardOpen: true, overrideAll: overrideAll));
+        => Assert.Equal(Rung.DismissLockCard,
+            Decide(lockCardOpen: true, paletteClaimedPress: false, overrideAll: overrideAll));
+
+    /// <summary>
+    /// The Lock Card is asked BEFORE the palette, and the caller must not even put the palette
+    /// question to the palette while a card is open (asking closes it). Pinned here so the
+    /// ordering cannot be flipped by a later edit.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void OpenLockCard_OutranksThePaletteToo(bool overrideAll)
+        => Assert.Equal(Rung.DismissLockCard,
+            Decide(lockCardOpen: true, paletteClaimedPress: true, overrideAll: overrideAll));
+
+    /// <summary>
+    /// The bug this rung exists for: with Escape as the default panic key, dismissing the Ctrl+K
+    /// quick-settings palette mid-session used to run the whole stop-everything pass - engine
+    /// stopped, session paused with its 100 XP penalty, a Relapse panic tracked - on a default
+    /// install, for a press the user meant as "close this popup".
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PaletteClaimedPress_IsItsOwnRungInBothModes(bool overrideAll)
+        => Assert.Equal(Rung.DismissSettingsPalette,
+            Decide(lockCardOpen: false, paletteClaimedPress: true, overrideAll: overrideAll));
 
     // ---- 2. the exit ladder ----
 
@@ -59,29 +93,64 @@ public class PanicPolicyTests
         => Assert.True(AdvancesExitLadder(Rung.RunLadder));
 
     /// <summary>
-    /// The Ctrl+K palette rung, which override mode has to answer too. Escape is the DEFAULT panic
-    /// key and the global hook delivers it whatever has focus, so an Escape aimed at closing the
-    /// palette lands in the panic handler - and the tail EXITS THE APP on press 2 while the engine
-    /// is stopped. Closing a palette must never be press 1 of "quit".
+    /// The Ctrl+K palette rung. Escape is the DEFAULT panic key and the global hook delivers it
+    /// whatever has focus, so an Escape aimed at closing the palette lands in the panic handler -
+    /// and the tail EXITS THE APP on press 2 while the engine is stopped. Closing a palette must
+    /// never be press 1 of "quit".
     /// </summary>
     [Fact]
-    public void PalettePress_NeverAdvancesTheExitLadder_EvenInOverrideMode()
-        => Assert.False(AdvancesExitLadder(Rung.StopEverything, paletteClaimedPress: true));
+    public void PalettePress_NeverAdvancesTheExitLadder()
+        => Assert.False(AdvancesExitLadder(Rung.DismissSettingsPalette));
 
-    [Fact]
-    public void PalettePress_StillDoesNotAdvanceOnTheLegacyLadder()
-        => Assert.False(AdvancesExitLadder(Rung.RunLadder, paletteClaimedPress: true));
+    // ---- 2b. which rungs are allowed to tear surfaces down ----
 
-    [Fact]
-    public void APressThePaletteDidNotClaim_StillAdvances()
-        => Assert.True(AdvancesExitLadder(Rung.StopEverything, paletteClaimedPress: false));
-
-    [Fact]
-    public void LockCardPress_RefusesRegardlessOfThePalette()
+    /// <summary>
+    /// The two dismiss rungs answer the surface that owns the press and stop there. Nothing else is
+    /// touched: no stop pass, no engine stop, no session pause, no XP penalty. This is the whole
+    /// point of the palette rung, and it is also the Lock Card's long-standing contract.
+    /// </summary>
+    // Rung is internal, and xUnit only discovers PUBLIC test methods, so the theories name their
+    // rung as text and map it here rather than taking an internal parameter type.
+    private static Rung ByName(string name) => name switch
     {
-        Assert.False(AdvancesExitLadder(Rung.DismissLockCard, paletteClaimedPress: true));
-        Assert.False(AdvancesExitLadder(Rung.DismissLockCard, paletteClaimedPress: false));
+        "DismissLockCard" => Rung.DismissLockCard,
+        "DismissSettingsPalette" => Rung.DismissSettingsPalette,
+        "StopEverything" => Rung.StopEverything,
+        "RunLadder" => Rung.RunLadder,
+        _ => throw new ArgumentOutOfRangeException(nameof(name), name, "unknown rung")
+    };
+
+    [Theory]
+    [InlineData("DismissLockCard")]
+    [InlineData("DismissSettingsPalette")]
+    public void DismissRungs_StopNothing(string rung)
+        => Assert.False(StopsSurfaces(ByName(rung)));
+
+    [Theory]
+    [InlineData("StopEverything")]
+    [InlineData("RunLadder")]
+    public void RealPanicRungs_StopSurfaces(string rung)
+        => Assert.True(StopsSurfaces(ByName(rung)));
+
+    /// <summary>Every rung that stops surfaces also advances the exit ladder, and vice versa: the
+    /// two properties must not drift apart into a rung that stops the world without counting, or
+    /// counts toward "quit the app" without stopping anything.</summary>
+    [Theory]
+    [InlineData("DismissLockCard")]
+    [InlineData("DismissSettingsPalette")]
+    [InlineData("StopEverything")]
+    [InlineData("RunLadder")]
+    public void StoppingAndCountingAgreeOnEveryRung(string name)
+    {
+        var rung = ByName(name);
+        Assert.Equal(StopsSurfaces(rung), AdvancesExitLadder(rung));
     }
+
+    /// <summary>Every value of the enum is covered by the theories above - a new rung must decide
+    /// both questions on purpose, not inherit an untested default.</summary>
+    [Fact]
+    public void EveryRungIsCoveredByThoseTheories()
+        => Assert.Equal(4, Enum.GetValues(typeof(Rung)).Length);
 
     // ---- 3. the master switch ----
 
@@ -212,4 +281,88 @@ public class PanicPolicyTests
     [Fact]
     public void UnboundPauseKey_IsNotShadowed()
         => Assert.False(PauseKeyIsShadowedByPanicKey("F9", panicKeyEnabled: true, pauseKey: ""));
+
+    // ---- 6. the stop-everything surface list ----
+    //
+    // PanicStopEverySurface is UI-thread WPF code, so it cannot be exercised from a unit test; what
+    // CAN be pinned is that the surfaces the brief lists are all named in it, and that the two
+    // things it must NOT do stay out. Both regressions below were shipped once and caught in review.
+
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
+            dir = dir.Parent;
+        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
+        return dir!.FullName;
+    }
+
+    private static string PanicStopEverySurfaceBody()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+        var start = source.IndexOf("private void PanicStopEverySurface()", StringComparison.Ordinal);
+        Assert.True(start >= 0, "PanicStopEverySurface was renamed - update this test with it");
+        var end = source.IndexOf("        /// <summary>", start, StringComparison.Ordinal);
+        return end > start ? source[start..end] : source[start..];
+    }
+
+    /// <summary>
+    /// Every surface the "panic button is panic button" brief lists has to be in the one pass.
+    /// The session-scoped corner GIF is the one that was missed: CornerGifService.StopAll() owns
+    /// only the standalone Spiral-card slots, so on a program day with Corner GIF at minute 0 one
+    /// press stopped everything else and left the session spiral spinning - which is the exact
+    /// surface support ticket 1539282547484139682 is about.
+    /// </summary>
+    [Theory]
+    [InlineData("App.Video?.ForceCleanup")]
+    [InlineData("App.Flash?.Stop()")]
+    [InlineData("App.Bubbles?.Stop()")]
+    [InlineData("App.Subliminal?.Stop()")]
+    [InlineData("App.Overlay?.Stop()")]
+    [InlineData("App.Overlay?.StopSpiral()")]
+    [InlineData("App.Overlay?.StopPinkFilter()")]
+    [InlineData("App.CornerGif?.StopAll()")]
+    [InlineData("SessionEngine.Active?.PanicCloseCornerGif()")]
+    [InlineData("PanicSilence()")]
+    [InlineData("App.Chaos?.ForceShutdown()")]
+    [InlineData("DtrhHostService.CloseActive()")]
+    [InlineData("ArcademyHostService.CloseActive()")]
+    [InlineData("FypHostService.Close()")]
+    [InlineData("JustDropHostService.CloseActive()")]
+    [InlineData("App.KillAllAudio")]
+    public void StopEverything_CoversEverySurface(string call)
+        => Assert.Contains(call, PanicStopEverySurfaceBody());
+
+    /// <summary>
+    /// A panic stops what is on screen; it must never reconfigure the app. EnablePinkFilter(false)
+    /// / EnableSpiral(false) write the user's PERSISTENT feature switches, so every mid-session
+    /// panic press left Spiral and Pink Filter switched off for all their later manual runs. The
+    /// windows are already torn down by OverlayService.Stop(), which also clears its _isRunning so
+    /// no reconcile tick can repaint them.
+    /// </summary>
+    [Theory]
+    [InlineData("EnablePinkFilter(false)")]
+    [InlineData("EnableSpiral(false)")]
+    public void StopEverything_NeverWritesTheUsersPersistentFeatureSwitches(string forbidden)
+        => Assert.DoesNotContain(forbidden, CodeOnly(PanicStopEverySurfaceBody()));
+
+    /// <summary>Comment lines stripped: the body explains in prose WHY the two settings writes are
+    /// gone, and naming them there must not read as calling them.</summary>
+    private static string CodeOnly(string body)
+    {
+        const char lf = (char)10;
+        return string.Join(lf.ToString(), body
+            .Split(lf)
+            .Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// The pass must not re-ask the palette whether it claims this press: the claim (and the short
+    /// Escape grace window behind it) is settled once, in the rung decision, before anything is
+    /// torn down. Asking twice would burn the grace window that decision depends on.
+    /// </summary>
+    [Fact]
+    public void StopEverything_DoesNotReConsumeTheEscapeGraceWindow()
+        => Assert.DoesNotContain("SettingsPaletteWindow.TryConsumeEscape", PanicStopEverySurfaceBody());
 }

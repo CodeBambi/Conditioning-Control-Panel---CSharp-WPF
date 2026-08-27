@@ -417,6 +417,17 @@ namespace ConditioningControlPanel.Services
                 }
 
                 _pending.Remove(index);
+                // Admission is re-asked HERE, not only when the show was queued: realization is
+                // deferred (a dispatcher pass, plus up to 8 display-change retries), and a session
+                // can raise its own corner overlay in that window. Without this a slot queued the
+                // instant before would land behind the session's spiral - two spirals in one
+                // corner, which is ticket 1539282547484139682.
+                if (!CornerGifMedia.AllowStandaloneCornerGif(
+                        setting.Enabled, SessionEngine.IsSessionCornerGifActive))
+                {
+                    SyncSentinel();
+                    return;
+                }
                 try { ShowOne(index, setting); }
                 catch (Exception ex) { App.Logger?.Error(ex, "CornerGifService: ShowOne failed"); }
                 SyncSentinel();

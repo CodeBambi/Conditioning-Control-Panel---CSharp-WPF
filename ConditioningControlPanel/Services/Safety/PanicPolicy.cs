@@ -25,6 +25,14 @@ namespace ConditioningControlPanel.Services.Safety
             /// the press is consumed there, and it never advances the double-press exit ladder.</summary>
             DismissLockCard,
 
+            /// <summary>The Ctrl+K quick-settings palette claimed this Escape, in BOTH modes. The
+            /// palette closes and the press ends there: no stop pass, no engine stop, no session
+            /// pause, no Relapse tracking, no exit-ladder advance. Escape is the DEFAULT panic key
+            /// AND the universal "close this popup" key, so a user who opens the palette mid-session
+            /// to nudge a slider and dismisses it the normal way must not lose their session's
+            /// effects and 100 XP to it. The pre-6.8.5 ladder answered the same press this way.</summary>
+            DismissSettingsPalette,
+
             /// <summary>Override mode: stop every surface at once, then the engine.</summary>
             StopEverything,
 
@@ -35,11 +43,17 @@ namespace ConditioningControlPanel.Services.Safety
         /// <summary>
         /// The rung this press lands on. <paramref name="lockCardOpen"/> wins in both modes - see
         /// <see cref="Rung.DismissLockCard"/>; that ordering is the whole Lock Card contract and is
-        /// deliberately NOT conditional on <paramref name="overrideAll"/>.
+        /// deliberately NOT conditional on <paramref name="overrideAll"/>. The palette claim is
+        /// second, also in both modes (<see cref="Rung.DismissSettingsPalette"/>).
+        ///
+        /// <para>The caller must not even ASK the palette whether it claims the press while a lock
+        /// card is open: the question closes the palette as a side effect. Hence the order here is
+        /// the order the booleans must be evaluated in.</para>
         /// </summary>
-        internal static Rung Decide(bool lockCardOpen, bool overrideAll)
+        internal static Rung Decide(bool lockCardOpen, bool paletteClaimedPress, bool overrideAll)
         {
             if (lockCardOpen) return Rung.DismissLockCard;
+            if (paletteClaimedPress) return Rung.DismissSettingsPalette;
             return overrideAll ? Rung.StopEverything : Rung.RunLadder;
         }
 
@@ -48,19 +62,21 @@ namespace ConditioningControlPanel.Services.Safety
         internal static bool OverrideEnabled(AppSettings? settings) => settings?.PanicOverridesAll != false;
 
         /// <summary>
-        /// Whether the press may still advance the double-press "exit the app" counter.
-        ///
-        /// <para>Two presses refuse. The Lock Card rung: a press spent dismissing a card must never
-        /// be the tap that quits. And a press the Ctrl+K palette claimed
-        /// (<paramref name="paletteClaimedPress"/>): Escape is the default panic key and the global
-        /// hook delivers it whatever has focus, so an Escape aimed at closing the palette reaches
-        /// the panic handler too. The stop-everything pass still runs for it - a panic is a panic -
-        /// but closing a palette must not be press 1 of "quit the app". The legacy ladder answers
-        /// the same press by returning early; in override mode the caller settles the claim first
-        /// and passes it through here.</para>
+        /// Whether the press may still advance the double-press "exit the app" counter. The two
+        /// dismiss rungs refuse: a press spent dismissing a Lock Card or the Ctrl+K palette must
+        /// never be the tap that quits the app. Both of those rungs return before any stop runs, so
+        /// this is really a statement about the two rungs that DO reach the stop tail.
         /// </summary>
-        internal static bool AdvancesExitLadder(Rung rung, bool paletteClaimedPress = false)
-            => rung != Rung.DismissLockCard && !paletteClaimedPress;
+        internal static bool AdvancesExitLadder(Rung rung)
+            => rung != Rung.DismissLockCard && rung != Rung.DismissSettingsPalette;
+
+        /// <summary>
+        /// Whether this rung tears surfaces down at all. The two dismiss rungs do not: they answer
+        /// the surface that owns the press and stop there, leaving a running session alone. This is
+        /// the fix for "Escape closed my quick-settings palette and paused my session for 100 XP".
+        /// </summary>
+        internal static bool StopsSurfaces(Rung rung)
+            => rung == Rung.StopEverything || rung == Rung.RunLadder;
 
         /// <summary>
         /// Whether a press of the PANIC key may still be consumed as the #735 video grace pause.

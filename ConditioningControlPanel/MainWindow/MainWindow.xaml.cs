@@ -1099,16 +1099,45 @@ namespace ConditioningControlPanel
             // press ladder, so it can never be the tap that exits the app.
             // IsAnyOpen also covers a deferred show still pending; cancelling that is the right answer
             // to panic too, and DismissAll clears both, so the next press falls through normally.
+            bool lockCardOpen = LockCardWindow.IsAnyOpen();
+
+            // Rung 2, settled here for BOTH modes. Escape is the DEFAULT panic key and the LL hook
+            // delivers it whatever has focus, so an Escape aimed at "close the Ctrl+K palette"
+            // arrives here too. It closes the palette and NOTHING else: a user who opens the
+            // quick-settings palette mid-session to nudge a slider and dismisses it the normal way
+            // must not lose the session's effects, get a Relapse panic tracked and be docked 100 XP
+            // for it. That is exactly what the pre-6.8.5 ladder did with this press.
+            // Gated on the panic key really being Escape, so a user who rebound panic to F8 still
+            // gets a real panic from F8 while the palette is open; the palette then closes itself
+            // through its own Esc handler and never sees this path. TryConsumeEscape carries a
+            // short grace window, so the press is claimed exactly once whichever of the two
+            // deliveries (WPF KeyDown vs the hook's queued handler) lands first - and it is only
+            // ASKED when no lock card is open, because asking closes the palette as a side effect.
+            bool paletteClaimed = !lockCardOpen
+                && string.Equals(App.Settings?.Current?.PanicKey, "Escape", StringComparison.OrdinalIgnoreCase)
+                && SettingsPaletteWindow.TryConsumeEscape();
+
             var rung = Services.Safety.PanicPolicy.Decide(
-                lockCardOpen: LockCardWindow.IsAnyOpen(),
+                lockCardOpen: lockCardOpen,
+                paletteClaimedPress: paletteClaimed,
                 overrideAll: Services.Safety.PanicPolicy.OverrideEnabled(App.Settings?.Current));
 
             if (rung == Services.Safety.PanicPolicy.Rung.DismissLockCard)
             {
                 VideoDiag.Log("PANIC", "dismissing the open lock card (it outranks every hand-off)");
                 App.LockCard?.Stop(dismissOpenCards: true);
-                return;
             }
+            else if (rung == Services.Safety.PanicPolicy.Rung.DismissSettingsPalette)
+            {
+                VideoDiag.Log("PANIC", "press consumed by the Ctrl+K palette (palette closed, nothing stopped)");
+            }
+
+            // Both dismiss rungs answer the surface that owns the press and stop THERE: no stop
+            // pass, no engine stop, no session pause and its 100 XP, no Relapse panic tracked, no
+            // exit-ladder advance. That is the pre-6.8.5 behaviour for both of them, and for the
+            // palette it is the whole point - Escape is the default panic key AND the universal
+            // "close this popup" key.
+            if (!Services.Safety.PanicPolicy.StopsSurfaces(rung)) return;
 
             // v6.8.5 (#1054/#1066, suggestion thread 1541736938703167550 - "panic button is panic
             // button"). With PanicOverridesAll on (the default) the press is NOT handed to whatever
@@ -1117,41 +1146,9 @@ namespace ConditioningControlPanel
             // through a six-rung ladder while the screen flickered between owners.
             if (rung == Services.Safety.PanicPolicy.Rung.StopEverything)
             {
-                // The Ctrl+K palette's claim on this press is settled FIRST, before anything is torn
-                // down. Escape is the DEFAULT panic key and the LL hook delivers it whatever has
-                // focus, so an Esc aimed at "close the palette" arrives here too - and the tail below
-                // EXITS THE APP on press 2. The stop-everything pass still runs (a panic is a panic,
-                // and the palette is simply one more surface going down), but a press the palette
-                // claimed must never be the tap that quits, exactly as in the legacy ladder.
-                // Gated on the panic key really being Escape: a user who rebound panic to F8 still
-                // gets a real, ladder-advancing panic from F8 while the palette is open, and the
-                // palette is closed by the stop-all pass instead.
-                bool paletteClaimed =
-                    string.Equals(App.Settings?.Current?.PanicKey, "Escape", StringComparison.OrdinalIgnoreCase)
-                    && SettingsPaletteWindow.TryConsumeEscape();
-                if (paletteClaimed)
-                    VideoDiag.Log("PANIC", "the Ctrl+K palette claimed this press (it closes, and this press cannot exit the app)");
-
                 VideoDiag.Log("PANIC", "override mode - stopping every surface in one pass");
                 PanicStopEverySurface();
-                RunPanicStopTail(advanceExitLadder:
-                    Services.Safety.PanicPolicy.AdvancesExitLadder(rung, paletteClaimed));
-                return;
-            }
-
-            // Ctrl+K palette. Escape is the DEFAULT panic key and the LL hook delivers it whatever
-            // has focus, so an Esc aimed at "close the palette" also arrives here — and the ladder
-            // below EXITS THE APP on press 2. Consume it (which closes the palette) without
-            // advancing _panicPressCount, exactly like the lock-card hand-off above.
-            // Gated on the panic key really being Escape, so a user who rebound panic to F8 still
-            // gets a real panic from F8 while the palette is open; the palette then closes itself
-            // through its own Esc handler and never sees this path. TryConsumeEscape carries a
-            // short grace window, so the press is claimed exactly once whichever of the two
-            // deliveries (WPF KeyDown vs the hook's queued handler) lands first.
-            if (string.Equals(App.Settings?.Current?.PanicKey, "Escape", StringComparison.OrdinalIgnoreCase)
-                && SettingsPaletteWindow.TryConsumeEscape())
-            {
-                VideoDiag.Log("PANIC", "press consumed by the Ctrl+K palette (palette closed)");
+                RunPanicStopTail(advanceExitLadder: Services.Safety.PanicPolicy.AdvancesExitLadder(rung));
                 return;
             }
 
@@ -1409,12 +1406,21 @@ namespace ConditioningControlPanel
             Step("mind wipe", () => App.MindWipe?.Stop());
             Step("brain drain", () => App.BrainDrain?.Stop());
 
-            // --- overlays: clear the flags first, or a reconcile tick paints them straight back ---
-            Step("pink filter flag", () => EnablePinkFilter(false));
-            Step("spiral flag", () => EnableSpiral(false));
+            // --- overlays ---
+            // Stop() already clears _isRunning and calls StopPinkFilter/StopSpiral/StopBrainDrainBlur,
+            // and RefreshOverlays early-returns while !_isRunning, so no reconcile tick can repaint
+            // them. Deliberately NOT EnablePinkFilter(false)/EnableSpiral(false): those write the
+            // user's PERSISTENT feature switches, so every panic would leave Spiral and Pink Filter
+            // switched off for all their later manual runs. A panic stops what is on screen; it does
+            // not reconfigure the app.
+            Step("spiral", () => App.Overlay?.StopSpiral());
+            Step("pink filter", () => App.Overlay?.StopPinkFilter());
             Step("overlays", () => App.Overlay?.Stop());
-            Step("overlay refresh", () => App.Overlay?.RefreshOverlays());
             Step("corner GIFs", () => App.CornerGif?.StopAll());
+            // ...and the SESSION-scoped corner overlay, which CornerGifService does not own: it is
+            // SessionEngine's own window (ticket 1539282547484139682). Without this step one panic
+            // press stopped everything else on a program day and left the session spiral spinning.
+            Step("session corner GIF", () => SessionEngine.Active?.PanicCloseCornerGif());
 
             // --- companion tube ---
             Step("tube speech", () => _avatarTubeWindow?.PanicSilence());
@@ -1434,10 +1440,10 @@ namespace ConditioningControlPanel
             Step("pop quiz windows", () => PopQuizWindow.ForceCloseAll());
             Step("bubble count windows", () => { BubbleCountWindow.ForceCloseAll(); BubbleCountResultWindow.ForceCloseAll(); });
             Step("help popover", () => Controls.HelpPopover.CloseActive());
-            // CloseIfOpen, NOT TryConsumeEscape: whether this press belongs to the palette was
-            // already decided (and consumed) by the caller before this pass started, so here the
-            // palette is simply one more surface going down. Calling TryConsumeEscape a second time
-            // would burn the Escape grace window that the caller's decision depends on.
+            // CloseIfOpen, NOT TryConsumeEscape: a press the palette claimed never reaches this
+            // pass (it is its own rung and returns), so anything still open here is a palette that
+            // did NOT claim the press - e.g. panic rebound to F8. Calling TryConsumeEscape here
+            // would burn the Escape grace window the caller's decision depends on.
             Step("settings palette", SettingsPaletteWindow.CloseIfOpen);
 
             // --- audio + hardware ---
