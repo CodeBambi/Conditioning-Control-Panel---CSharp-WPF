@@ -117,6 +117,98 @@ namespace ConditioningControlPanel.Services
         private const int CaptureWidth = 640;
         private const int CaptureHeight = 480;
         private const int TargetFps = 30;
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  Guarded high-resolution capture — OPT-IN, DEFAULT OFF
+        // ─────────────────────────────────────────────────────────────────────
+        //  READ THIS BEFORE TURNING IT ON. Raising capture resolution is MOSTLY
+        //  A RED HERRING, and the low default above is deliberate, not an
+        //  oversight:
+        //    • All three models have FIXED input sizes — BlazeFace 128,
+        //      FaceMesh 192, Iris 64x64. The eye ROI is resized to 64x64 no
+        //      matter how many pixels arrive, so extra capture pixels are
+        //      thrown away inside Cv2.Resize.
+        //    • At a normal ~60 cm sitting distance the native eye ROI is
+        //      already 53-104 px (see the "eye ROI" figure in CaptureLoop's
+        //      periodic Debug line) — i.e. already at or above the 64 px the
+        //      model consumes. There is nothing left to gain.
+        //    • 720p over UVC frequently makes the driver silently fall back to
+        //      YUY2 at ~10 fps. That is ACTIVE HARM, not a wash: the tracker
+        //      becomes unusable and nothing else in the pipeline notices.
+        //  The ONE legitimate case is a user sitting far enough back that the
+        //  native eye ROI is SMALLER than 64 px, where the resize is an UPscale
+        //  and detail genuinely is missing. For that user only, this path asks
+        //  for a higher mode and then MEASURES whether the camera actually
+        //  delivered it, reverting automatically if it did not.
+        //  The revert IS the feature. Without it this switch is a footgun.
+        private const int HiResCaptureWidth = 1280;
+        private const int HiResCaptureHeight = 720;
+
+        // Below this measured rate the smoothing chain (IrisSmoothFrames 12,
+        // GazeBufferSize 30, the One-Euro filter's dt term) is being fed at a
+        // rate none of it was tuned for and the cursor lags visibly. Sits just
+        // under TargetFps so an ordinary 27 fps camera is KEPT, while the YUY2
+        // fallback case (~10-15 fps) is caught with a wide margin — the gap
+        // between those two clusters is large, so the exact threshold inside it
+        // is not delicate.
+        private const double HiResMinFps = 25.0;
+        // Discarded before measuring: a mode change makes the driver renegotiate
+        // the stream, and the frames right after it are not representative of
+        // the steady state.
+        private const int HiResSettleMs = 1500;
+        // Long enough that one hitch (a GC pause, a foreground-window switch)
+        // cannot decide the verdict; short enough that a bad mode is not endured.
+        private const int HiResMeasureMs = 3000;
+        // After a revert, how long to wait for the driver to actually honour it
+        // before saying out loud that it did not.
+        private const int HiResRevertConfirmMs = 2000;
+
+        /// <summary>
+        /// Opt-in switch for <see cref="HiResCaptureWidth"/>x<see cref="HiResCaptureHeight"/>
+        /// capture. DEFAULT OFF, and deliberately NOT wired to AppSettings here —
+        /// see the comment block above for why it is dangerous.
+        ///
+        /// <para>WANTED SETTING: <c>AppSettings.WebcamHighResCapture</c> (bool,
+        /// default <c>false</c>), surfaced only in the webcam advanced /
+        /// diagnostics area under the framing "only if you sit far from the
+        /// camera", and read here as
+        /// <c>App.Settings?.Current?.WebcamHighResCapture == true</c>.</para>
+        ///
+        /// <para>Takes effect on the NEXT camera open (Stop/Start), never
+        /// mid-stream: drivers negotiate pixel format and resolution at open
+        /// time, and a mid-stream request is far more likely to be ignored.</para>
+        /// </summary>
+        internal static bool HighResCaptureOptIn { get; set; }
+
+        /// <summary>
+        /// Set once the fps watchdog has reverted a high-res attempt. Sticky for
+        /// the PROCESS, not for the capture session: the entire anti-oscillation
+        /// guarantee is that a stop/start cycle — or a camera that fails the
+        /// same way every time — must not drop the user back into a 10 fps
+        /// stream over and over. Cleared only by
+        /// <see cref="ResetHighResCaptureLatch"/>.
+        /// </summary>
+        private static volatile bool _hiResLatchedOff;
+
+        /// <summary>
+        /// Clears the one-shot high-res revert latch so the next camera open may
+        /// try the high mode again. Intended for the settings UI to call when the
+        /// user changes camera DEVICE or re-ticks the option — i.e. when
+        /// something about the situation has actually changed. Never call this on
+        /// a timer or from the capture path; that would recreate exactly the
+        /// retry loop the latch exists to prevent.
+        /// </summary>
+        internal static void ResetHighResCaptureLatch() => _hiResLatchedOff = false;
+
+        /// <summary>True when the CURRENT camera open actually asked for the high mode.</summary>
+        private volatile bool _hiResRequestedThisOpen;
+
+        // Eye-ROI size diagnostic — the one number that decides whether higher
+        // capture resolution could help a given user at all. Accumulated on the
+        // capture thread and folded into CaptureLoop's periodic Debug line;
+        // never logged per frame (privacy contract at the top of this file).
+        private long _irisRoiPxSum;
+        private int _irisRoiPxCount;
         private const int MaxConsecutiveReadFails = 30;            // ~1s at 30fps
         private const int FaceLostFramesThreshold = 15;            // ~0.5s
 
@@ -366,19 +458,42 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Populates <paramref name="bounds"/> with the calibrated screen's
+        /// Populates <paramref name="boundsPx"/> with the calibrated screen's
         /// full bounds rect. Returns false in the same cases as
         /// <see cref="GetCalibratedScreen"/> returns null.
+        ///
+        /// <para><b>UNITS: PHYSICAL DEVICE PIXELS, NOT DIPs.</b> The value comes
+        /// straight from WinForms <c>Screen.Bounds</c>, which is unscaled device
+        /// pixels, and is merely PACKAGED in a <see cref="System.Windows.Rect"/>
+        /// — a WPF type whose name reads as DIPs at every call site. The two are
+        /// identical at 100% scale and diverge by the monitor's scale factor
+        /// everywhere else, which is exactly why mixing them is invisible on the
+        /// developer's machine and 1.5x wrong on the user's.</para>
+        ///
+        /// <para>A caller that wants to compare this against WPF
+        /// <c>Window.Left/Top</c>, <c>SystemParameters.WorkArea</c>, or any
+        /// desktop-DIP point MUST divide by the calibration's
+        /// <c>WebcamCalibrationData.DpiScale</c> first. This has already caused
+        /// one real bug (a caller assigned the result into a variable holding
+        /// <c>SystemParameters.WorkArea</c> and compared it against desktop-DIP
+        /// points), so the unit is in the parameter name deliberately — do not
+        /// rename it back.</para>
+        ///
+        /// <para>Note this is a DIFFERENT space again from what
+        /// <see cref="OnGazeMove"/> emits: those points are DIPs LOCAL to the
+        /// calibrated monitor (origin = that monitor's top-left, extent =
+        /// <c>Calibration.MonitorBounds.Width/Height</c>), not virtual-desktop
+        /// coordinates and not physical pixels.</para>
         /// </summary>
-        public bool TryGetCalibratedBounds(out System.Windows.Rect bounds)
+        public bool TryGetCalibratedBounds(out System.Windows.Rect boundsPx)
         {
             var screen = GetCalibratedScreen();
             if (screen == null)
             {
-                bounds = default;
+                boundsPx = default;
                 return false;
             }
-            bounds = new System.Windows.Rect(
+            boundsPx = new System.Windows.Rect(
                 screen.Bounds.X, screen.Bounds.Y,
                 screen.Bounds.Width, screen.Bounds.Height);
             return true;
@@ -598,6 +713,27 @@ namespace ConditioningControlPanel.Services
         // same signal the runtime projects). A 3-sample median rejects the
         // single-frame landmark spikes that One-Euro only partially absorbs,
         // at the cost of ≤1 frame of lag. Mirrors the MAR median de-jitter.
+        //
+        // 2026-08-27 settle-latency pass: this was EVALUATED for reduction to
+        // 2 frames as part of cutting the ~0.5-0.6s small-move settle time,
+        // and deliberately LEFT AT 3. Three reasons, in order of weight:
+        //   1. A 2-sample "median" is not a median. MedianFilter returns
+        //      arr[Count / 2], which for a 2-element sorted array is arr[1] —
+        //      the MAXIMUM. The window would silently become a max filter:
+        //      biased upward, passing every positive spike through at full
+        //      amplitude while over-rejecting negative ones. Fixing that
+        //      would mean rewriting MedianFilter, which is shared with the
+        //      MAR de-jitter, for a stage that is not the bottleneck.
+        //   2. It is the smallest lever on the board. One frame at 30fps is
+        //      ~33ms out of a 500-600ms complaint — under 7%. The follower
+        //      (ShapeCursorMotion) and the screen One-Euro below carry the
+        //      overwhelming majority of the latency.
+        //   3. This stage is upstream of OnRawIris, so every saved
+        //      calibration polynomial was FIT against a 3-median signal.
+        //      Changing the window changes the input distribution the
+        //      existing fits were trained on — a real regression risk for
+        //      zero measurable win.
+        // Do not "optimize" this to 2 without addressing (1) first.
         private const int IrisMedianFrames = 3;
         private readonly Queue<double> _irisDxMedianBuffer = new();
         private readonly Queue<double> _irisDyMedianBuffer = new();
@@ -608,14 +744,50 @@ namespace ConditioningControlPanel.Services
         // iris-space cutoff produces far more screen-DIP jitter at the edges
         // than at the center. A second One-Euro in screen-DIP space evens that
         // out — it is the stage the user actually perceives as "the cursor
-        // holding still." Beta is in DIP/s velocity units here (independent of
-        // the iris filter's units). Kept gentle so it doesn't stack noticeable
-        // lag on top of the iris filter; raise ScreenOneEuroMinCutoff if the
-        // cursor feels laggy, lower it if it still wobbles at fixation.
+        // holding still." Raise ScreenOneEuroMinCutoff if the cursor feels
+        // laggy, lower it if it still wobbles at fixation.
+        //
+        // ⚠ UNITS TRAP — READ BEFORE TOUCHING Beta. This Beta is in DIP/s
+        // velocity units. The iris filter's OneEuroBeta (0.007) is in
+        // normalized-iris-units/s. They are DIFFERENT UNIT SPACES and the
+        // numbers are NOT comparable. "Harmonising" them so they match is a
+        // bug, not a cleanup — a screen-space Beta of 0.007 would be
+        // effectively zero adaptation.
+        //
+        // 2026-08-27 settle-latency pass: raised 0.02 → 0.06 (3×). Beta is
+        // what lets the cutoff open up when the signal is actually moving; at
+        // 0.02 the screen filter behaved as a near-fixed 1.5Hz low-pass even
+        // during a deliberate corrective glance, so it contributed a fixed
+        // ~100ms of lag to EVERY move regardless of intent. At 0.06 a typical
+        // corrective move (a few hundred DIP/s) lifts the cutoff meaningfully
+        // above the floor and the stage gets out of the way, while a truly
+        // stationary gaze (dxHat ≈ 0) still sits on the same 1.5Hz floor — so
+        // fixation stability is unchanged and only motion is freed. Accepted
+        // tradeoff: marginally more visible jitter DURING movement (nobody is
+        // trying to read a pixel position mid-saccade) in exchange for the
+        // cursor stopping where the eye already stopped.
         private const double ScreenOneEuroMinCutoff = 1.5;
-        private const double ScreenOneEuroBeta = 0.02;
-        private readonly OneEuroFilter _screenXFilter = new(ScreenOneEuroMinCutoff, ScreenOneEuroBeta, OneEuroDCutoff);
-        private readonly OneEuroFilter _screenYFilter = new(ScreenOneEuroMinCutoff, ScreenOneEuroBeta, OneEuroDCutoff);
+
+        /// <summary>
+        /// Default screen-space One-Euro Beta (DIP/s units — see the units
+        /// trap above). Overridable at runtime via
+        /// <see cref="Models.AppSettings.GazeScreenOneEuroBeta"/>; this value
+        /// is the fallback when there is no settings file.
+        /// </summary>
+        private const double ScreenOneEuroBetaDefault = 0.06;
+
+        /// <summary>Live screen-space Beta — settings-backed, clamped to a sane band.</summary>
+        private static double ScreenOneEuroBeta
+        {
+            get
+            {
+                double v = App.Settings?.Current?.GazeScreenOneEuroBeta ?? ScreenOneEuroBetaDefault;
+                return double.IsFinite(v) ? Math.Clamp(v, 0.0, 1.0) : ScreenOneEuroBetaDefault;
+            }
+        }
+
+        private readonly OneEuroFilter _screenXFilter = new(ScreenOneEuroMinCutoff, ScreenOneEuroBetaDefault, OneEuroDCutoff);
+        private readonly OneEuroFilter _screenYFilter = new(ScreenOneEuroMinCutoff, ScreenOneEuroBetaDefault, OneEuroDCutoff);
 
         // Two-eye consistency gate. The projected gaze is the AVERAGE of the
         // two per-eye iris vectors, so a single-eye failure (glasses glare,
@@ -1367,10 +1539,26 @@ namespace ConditioningControlPanel.Services
                 {
                     cap.Set(VideoCaptureProperties.FourCC, VideoWriter.FourCC(fourcc[0], fourcc[1], fourcc[2], fourcc[3]));
                 }
-                cap.Set(VideoCaptureProperties.FrameWidth, CaptureWidth);
-                cap.Set(VideoCaptureProperties.FrameHeight, CaptureHeight);
+                // Opt-in high mode, default OFF (see the HiRes* block near
+                // CaptureWidth for why it is guarded). Requested at OPEN time
+                // because that is when the driver negotiates format; the capture
+                // loop's fps watchdog then measures what actually arrives and
+                // reverts if the camera cannot hold HiResMinFps. Nothing here
+                // changes for a user who has not opted in — wantHiRes is false
+                // and the two Sets below are byte-for-byte the previous ones.
+                bool wantHiRes = HighResCaptureOptIn && !_hiResLatchedOff;
+                _hiResRequestedThisOpen = wantHiRes;
+                cap.Set(VideoCaptureProperties.FrameWidth, wantHiRes ? HiResCaptureWidth : CaptureWidth);
+                cap.Set(VideoCaptureProperties.FrameHeight, wantHiRes ? HiResCaptureHeight : CaptureHeight);
                 cap.Set(VideoCaptureProperties.Fps, TargetFps);
                 cap.Set(VideoCaptureProperties.BufferSize, 1);
+                if (wantHiRes)
+                {
+                    App.Logger?.Information(
+                        "WebcamTrackingService: high-res capture opt-in — requesting {W}x{H} from {Api}; " +
+                        "fps watchdog will revert to {DW}x{DH} if delivery stays under {Floor:F0} fps",
+                        HiResCaptureWidth, HiResCaptureHeight, label, CaptureWidth, CaptureHeight, HiResMinFps);
+                }
 
                 // Slow drivers (USB UVC over a hub, virtual cameras that lazy-init
                 // their pipeline, the Lovense Webcam 2 that streams black for >1s) can
@@ -1594,6 +1782,12 @@ namespace ConditioningControlPanel.Services
             int processedFrames = 0;
             sw.Start();
 
+            // Only constructed when this open actually asked for the high mode,
+            // so the default path allocates nothing and costs nothing per frame.
+            var hiResWatchdog = _hiResRequestedThisOpen ? new HighResFpsWatchdog() : null;
+            _irisRoiPxSum = 0;
+            _irisRoiPxCount = 0;
+
             try
             {
                 while (!_stopRequested)
@@ -1624,6 +1818,16 @@ namespace ConditioningControlPanel.Services
                     }
                     consecutiveReadFails = 0;
 
+                    // Capture-clock fps watchdog. Ticked HERE — the instant
+                    // Read() returned a frame, before any processing and before
+                    // anything is emitted to the UI dispatcher — so it measures
+                    // what the camera delivers rather than what the dispatcher
+                    // got round to. Counts EVERY delivered frame, including ones
+                    // where no face is found: a frame the camera handed us is a
+                    // frame, whatever the user's head was doing.
+                    if (hiResWatchdog != null && !hiResWatchdog.OnFrame(capture, frame))
+                        hiResWatchdog = null;
+
                     try
                     {
                         Cv2.CvtColor(frame, gray, ColorConversionCodes.BGR2GRAY);
@@ -1640,11 +1844,31 @@ namespace ConditioningControlPanel.Services
                     if (processedFrames % 300 == 0)
                     {
                         var fps = processedFrames / sw.Elapsed.TotalSeconds;
+
+                        // Mean native eye-ROI side in SOURCE pixels over the last
+                        // ~300 frames, before IrisDetector resizes it to its fixed
+                        // 64x64 input. This is THE number that says whether higher
+                        // capture resolution could help this user at all: at or
+                        // above 64 the resize is a DOWNscale and extra capture
+                        // pixels are discarded, so raising resolution buys nothing;
+                        // below 64 it is an UPscale and detail genuinely is
+                        // missing. Aggregated, never per-frame — the privacy
+                        // contract forbids per-frame numbers, and a mean over 10s
+                        // is a setup property, not a behavioural trace.
+                        double roiPx = _irisRoiPxCount > 0 ? (double)_irisRoiPxSum / _irisRoiPxCount : 0;
+                        _irisRoiPxSum = 0;
+                        _irisRoiPxCount = 0;
+
                         // Debug, not Information — fires every ~10s during capture so it
                         // would otherwise dominate app-.log and ride along on bug reports
                         // (LogScrubber doesn't strip webcam telemetry). Lifecycle entries
                         // (started/stopped/exited) stay at Information.
-                        App.Logger?.Debug("WebcamTrackingService: {Frames} frames processed, ~{Fps:F1} fps", processedFrames, fps);
+                        App.Logger?.Debug(
+                            "WebcamTrackingService: {Frames} frames processed, ~{Fps:F1} fps, eye ROI ~{Roi:F0} px into a 64 px model input ({Verdict})",
+                            processedFrames, fps, roiPx,
+                            roiPx <= 0 ? "no iris samples"
+                                : roiPx >= 64 ? "downscale — more capture pixels would just be discarded"
+                                : "UPSCALE — sitting far back, higher capture resolution could actually help");
                     }
                 }
             }
@@ -1709,6 +1933,15 @@ namespace ConditioningControlPanel.Services
             var leftEye  = _irisDetector!.Detect(bgr, landmarks[LeftEyeOuterIdx],  landmarks[LeftEyeInnerIdx],  isRightEye: false);
             var rightEye = _irisDetector!.Detect(bgr, landmarks[RightEyeOuterIdx], landmarks[RightEyeInnerIdx], isRightEye: true);
             if (leftEye == null && rightEye == null) return;
+
+            // Eye-ROI size diagnostic (see the HiRes* block near CaptureWidth).
+            // Accumulate only; CaptureLoop logs the mean every ~300 frames.
+            int roiPx = _irisDetector!.LastRoiPx;
+            if (roiPx > 0)
+            {
+                _irisRoiPxSum += roiPx;
+                _irisRoiPxCount++;
+            }
 
             // 5) EAR-based blink detection on iris-model contour (more responsive
             //    to closure than FaceMesh's eyelid landmarks).
@@ -2130,6 +2363,14 @@ namespace ConditioningControlPanel.Services
                 // clamp so the smoothing operates on raw projected motion, not
                 // on the post-clamp edge plateau (which would otherwise feed
                 // the velocity estimator a string of identical clamped points).
+                //
+                // Beta is re-pointed at the live settings value each frame so
+                // the tuning knob takes effect without a restart once anything
+                // writes the setting. It is not carried filter state, so this
+                // is not a reset and cannot glitch the output.
+                double screenBeta = ScreenOneEuroBeta;
+                _screenXFilter.Beta = screenBeta;
+                _screenYFilter.Beta = screenBeta;
                 p = new System.Windows.Point(
                     _screenXFilter.Filter(p.X, nowTicks),
                     _screenYFilter.Filter(p.Y, nowTicks));
@@ -2198,6 +2439,74 @@ namespace ConditioningControlPanel.Services
         // Output follower state — capture thread only.
         private double _followX = double.NaN, _followY = double.NaN;
 
+        // ── Follower tuning ──────────────────────────────────────────────────
+        // Defaults for the distance-adaptive follower. Each is overridable at
+        // runtime through AppSettings (see the properties below) so these
+        // numbers can be swept on a real face instead of guessed; the defaults
+        // here are the tuned values and are what runs with no settings file.
+        //
+        // 2026-08-27 settle-latency pass. Symptom: small corrective gaze
+        // movements took ~0.5-0.6s to land, while large saccades felt fine.
+        // Cause: this stage. FollowMin was 0.09, i.e. a ~370ms time constant
+        // at 30fps, and because the ramp to FollowMax is QUADRATIC over
+        // RampDist a small correction gets essentially none of the speed-up —
+        // a 100-DIP move sat at t = 0.21, t² = 0.043, alpha ≈ 0.107, barely
+        // above FollowMin. So the exact moves that needed to land fast were
+        // the ones running at the slowest possible rate, and they did it while
+        // simultaneously fighting the GazeLock attractor of a neighbouring
+        // target. Large saccades were unaffected because the adaptive stages
+        // upstream open up for them.
+        //
+        // FollowMin 0.09 → 0.22: time constant 370ms → ~134ms. This is the
+        // main lever; it is what makes a small move land in a beat instead of
+        // a breath. ACCEPTED TRADEOFF: slightly more visible jitter at
+        // fixation, because the follower now tracks residual wobble that the
+        // slow glide used to average away. That is the intended exchange —
+        // settle latency was the complaint, fixation shimmer was not.
+        //
+        // RampDist 480 → 360: a modest 25% reduction, NOT a rewrite of the
+        // curve. The quadratic ramp is deliberate (it keeps mid-size
+        // corrections calm and reserves real speed for genuine jumps) and is
+        // retained. But with FollowMin raised, 480 left the 150-400 DIP band —
+        // ordinary "look at the other half of the window" corrections — still
+        // riding almost entirely on FollowMin: at 200 DIP the old curve gave
+        // alpha 0.265, the new one gives 0.300. Full catch-up speed now
+        // arrives at 360 DIP, which on any normal display is still a
+        // decisively large movement, so this does not turn noise into speed.
+        // It was kept conservative on purpose: FollowMin does the heavy
+        // lifting for the reported symptom and RampDist is a secondary trim.
+        //
+        // FollowMax stays 0.48 — large jumps already landed fine.
+        //
+        // NEVER let any of these reach 1.0. At alpha = 1 the follower stops
+        // being a follower and becomes a direct assignment, i.e. a snap. The
+        // reverted I-DT fixation lock (see the tombstone by SetGazeAttractor)
+        // is the standing reminder that a hard lock/snap on the general cursor
+        // path is not acceptable here. The clamps below enforce that.
+        private const double FollowMinDefault = 0.22;   // ~134ms time constant at 30fps
+        private const double FollowMaxDefault = 0.48;   // large jumps land in ~4-5 frames, still eased
+        private const double RampDistDefault = 360.0;   // DIPs to reach full catch-up speed
+
+        /// <summary>Live per-frame follow fraction floor. Settings-backed; clamped strictly below 1 so the follower can never become a snap.</summary>
+        private static double FollowMin
+        {
+            get
+            {
+                double v = App.Settings?.Current?.GazeCursorFollowMin ?? FollowMinDefault;
+                return double.IsFinite(v) ? Math.Clamp(v, 0.01, 0.9) : FollowMinDefault;
+            }
+        }
+
+        /// <summary>Live distance (DIPs) at which the follower reaches full catch-up speed. Settings-backed.</summary>
+        private static double RampDist
+        {
+            get
+            {
+                double v = App.Settings?.Current?.GazeCursorRampDist ?? RampDistDefault;
+                return double.IsFinite(v) && v > 1.0 ? Math.Clamp(v, 40.0, 4000.0) : RampDistDefault;
+            }
+        }
+
         /// <summary>
         /// Distance-adaptive exponential follower (see the comment at the
         /// call site). Follow fraction per frame eases quadratically from
@@ -2208,15 +2517,16 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private System.Windows.Point ShapeCursorMotion(System.Windows.Point target)
         {
-            const double FollowMin = 0.09;  // ~370ms time constant at 30fps — a slow, deliberate glide
-            const double FollowMax = 0.48;  // large jumps land in ~4-5 frames, still eased
-            const double RampDist = 480.0;  // DIPs to reach full catch-up speed
+            double followMin = FollowMin;
+            double rampDist = RampDist;
+            // FollowMax must stay above the floor even if the floor is tuned up.
+            double followMax = Math.Max(followMin, FollowMaxDefault);
 
             if (double.IsNaN(_followX)) { _followX = target.X; _followY = target.Y; return target; }
             double ex = target.X - _followX, ey = target.Y - _followY;
             double dist = Math.Sqrt(ex * ex + ey * ey);
-            double t = Math.Min(1.0, dist / RampDist);
-            double alpha = FollowMin + (FollowMax - FollowMin) * t * t;
+            double t = Math.Min(1.0, dist / rampDist);
+            double alpha = followMin + (followMax - followMin) * t * t;
             _followX += ex * alpha;
             _followY += ey * alpha;
             return new System.Windows.Point(_followX, _followY);
@@ -3025,8 +3335,15 @@ namespace ConditioningControlPanel.Services
         private sealed class OneEuroFilter
         {
             private readonly double _minCutoff;
-            private readonly double _beta;
             private readonly double _dCutoff;
+            /// <summary>
+            /// Velocity-scaling coefficient. Settable (not readonly) so the
+            /// screen-space pair can be re-pointed at the live settings value
+            /// every frame — see ScreenOneEuroBeta. Changing it mid-stream is
+            /// safe: it only feeds the per-frame cutoff, it is not part of the
+            /// filter's carried state, so no Reset() is required.
+            /// </summary>
+            public double Beta { get; set; }
             private double _xPrev;
             private double _dxPrev;
             private long _tPrevTicks;
@@ -3035,7 +3352,7 @@ namespace ConditioningControlPanel.Services
             public OneEuroFilter(double minCutoff, double beta, double dCutoff)
             {
                 _minCutoff = minCutoff;
-                _beta = beta;
+                Beta = beta;
                 _dCutoff = dCutoff;
             }
 
@@ -3068,7 +3385,7 @@ namespace ConditioningControlPanel.Services
                 double aD = Alpha(dt, _dCutoff);
                 double dxHat = aD * dx + (1 - aD) * _dxPrev;
 
-                double cutoff = _minCutoff + _beta * Math.Abs(dxHat);
+                double cutoff = _minCutoff + Beta * Math.Abs(dxHat);
                 double a = Alpha(dt, cutoff);
                 double xHat = a * x + (1 - a) * _xPrev;
 
@@ -3454,6 +3771,183 @@ namespace ConditioningControlPanel.Services
             public float[][] Contour = System.Array.Empty<float[]>();   // 71 [x, y]
         }
 
+        /// <summary>
+        /// Measures the ACTUAL delivered frame rate after a high-resolution
+        /// capture mode was requested, and reverts the capture to the default
+        /// mode when the camera cannot hold <see cref="HiResMinFps"/>. See the
+        /// HiRes* comment block near <see cref="CaptureWidth"/> for why asking
+        /// for more pixels is dangerous and why the revert is the whole point.
+        ///
+        /// <para>CLOCK: frames are timed on the CAPTURE clock — the driver's own
+        /// CAP_PROP_POS_MSEC when it reports a usable one, otherwise a monotonic
+        /// Stopwatch sampled the instant <c>VideoCapture.Read</c> returns, before
+        /// any processing. Explicitly NOT emission time: <see cref="OnGazeMove"/>
+        /// is marshalled to the UI dispatcher and only fires on frames where a
+        /// face was found and the two-eye gate passed, so counting emissions
+        /// would measure the dispatcher and the user's head position rather than
+        /// the camera, and would read low for reasons a resolution revert cannot
+        /// fix.</para>
+        ///
+        /// <para>ANTI-OSCILLATION: exactly ONE decision per camera open, after
+        /// which the instance retires. A revert additionally latches
+        /// <c>_hiResLatchedOff</c> for the process lifetime, so neither this loop
+        /// nor a stop/start cycle can retry — only an explicit
+        /// <see cref="ResetHighResCaptureLatch"/> from the settings UI can.</para>
+        ///
+        /// <para>Single-threaded by construction: only the capture thread ever
+        /// touches an instance.</para>
+        /// </summary>
+        private sealed class HighResFpsWatchdog
+        {
+            private enum Phase { Settling, Measuring, ConfirmingRevert }
+
+            private Phase _phase = Phase.Settling;
+            private readonly Stopwatch _clock = Stopwatch.StartNew();
+            private double _phaseStartMs;
+            private int _frames;
+            private double _firstDriverMs, _lastDriverMs;
+            private double _firstMonoMs, _lastMonoMs;
+            private bool _driverClock;
+
+            /// <summary>
+            /// Call once per successfully READ frame, before processing.
+            /// </summary>
+            /// <returns>
+            /// false once the watchdog has reached its verdict and can be
+            /// dropped; true while it still wants frames.
+            /// </returns>
+            public bool OnFrame(VideoCapture cap, Mat frame)
+            {
+                double mono = _clock.Elapsed.TotalMilliseconds;
+                switch (_phase)
+                {
+                    case Phase.Settling:
+                        if (mono - _phaseStartMs < HiResSettleMs) return true;
+                        // This frame is the window's opening fencepost, not a
+                        // sample: N frames arriving AFTER t0 span N intervals, so
+                        // fps is N / (tN - t0). Counting the fencepost too would
+                        // overstate the rate by (N+1)/N.
+                        _phase = Phase.Measuring;
+                        _phaseStartMs = mono;
+                        _frames = 0;
+                        _firstMonoMs = _lastMonoMs = mono;
+                        _firstDriverMs = _lastDriverMs = DriverMs(cap);
+                        _driverClock = _firstDriverMs > 0;
+                        return true;
+
+                    case Phase.Measuring:
+                        _frames++;
+                        _lastMonoMs = mono;
+                        if (_driverClock)
+                        {
+                            double d = DriverMs(cap);
+                            // A backend that returns a frozen or resetting
+                            // media-time is worse than no driver clock at all —
+                            // drop to the monotonic read clock and say so in the
+                            // decision log.
+                            if (d > _lastDriverMs) _lastDriverMs = d;
+                            else _driverClock = false;
+                        }
+                        if (mono - _phaseStartMs < HiResMeasureMs) return true;
+                        return Decide(cap, frame);
+
+                    default: // ConfirmingRevert
+                        if (frame.Width <= CaptureWidth && frame.Height <= CaptureHeight)
+                        {
+                            App.Logger?.Information(
+                                "WebcamTrackingService: high-res revert confirmed — capture now delivering {W}x{H}",
+                                frame.Width, frame.Height);
+                            return false;
+                        }
+                        if (mono - _phaseStartMs < HiResRevertConfirmMs) return true;
+                        // Some drivers ignore a mid-stream resolution change.
+                        // We do NOT reopen the camera from here — that would
+                        // mean tearing down the capture handle from inside the
+                        // capture loop that owns it. The latch is already set,
+                        // so the next open lands at the default mode; say
+                        // clearly what the user has to do to get there now.
+                        App.Logger?.Warning(
+                            "WebcamTrackingService: high-res revert was IGNORED by the driver — still delivering {W}x{H} " +
+                            "after {Ms} ms. Stop and restart tracking to reopen the camera at {DW}x{DH}.",
+                            frame.Width, frame.Height, HiResRevertConfirmMs, CaptureWidth, CaptureHeight);
+                        return false;
+                }
+            }
+
+            private bool Decide(VideoCapture cap, Mat frame)
+            {
+                double monoSpan = _lastMonoMs - _firstMonoMs;
+                double span = monoSpan;
+                string clock = "monotonic-read";
+                if (_driverClock)
+                {
+                    double driverSpan = _lastDriverMs - _firstDriverMs;
+                    // Sanity-gate the driver clock against wall time before
+                    // trusting it: some backends report a media-time on their own
+                    // scale, and a clock running at half or double real time
+                    // would hand us a confidently wrong fps.
+                    if (driverSpan > 0 && monoSpan > 0
+                        && driverSpan >= monoSpan * 0.5 && driverSpan <= monoSpan * 2.0)
+                    {
+                        span = driverSpan;
+                        clock = "driver-pos-msec";
+                    }
+                }
+                double fps = span > 0 ? _frames * 1000.0 / span : 0;
+
+                if (fps >= HiResMinFps)
+                {
+                    // Report the DELIVERED size, not the requested one. A camera
+                    // that silently clamped the request back down passes the fps
+                    // check trivially, and "KEPT" would otherwise read as "the
+                    // high mode is running" when it never started.
+                    bool gotWhatWeAsked = frame.Width >= HiResCaptureWidth && frame.Height >= HiResCaptureHeight;
+                    App.Logger?.Information(
+                        "WebcamTrackingService: high-res capture KEPT — delivering {W}x{H} at {Fps:F1} fps " +
+                        "({Frames} frames over {Span:F0} ms, {Clock} clock), floor is {Floor:F0} fps.{Note}",
+                        frame.Width, frame.Height, fps, _frames, span, clock, HiResMinFps,
+                        gotWhatWeAsked
+                            ? ""
+                            : $" NOTE: the camera ignored the {HiResCaptureWidth}x{HiResCaptureHeight} request and stayed at this size,"
+                              + " so nothing actually changed.");
+                    return false;
+                }
+
+                App.Logger?.Warning(
+                    "WebcamTrackingService: high-res capture REVERTED — {W}x{H} delivered only {Fps:F1} fps " +
+                    "({Frames} frames over {Span:F0} ms, {Clock} clock), under the {Floor:F0} fps floor. " +
+                    "Falling back to {DW}x{DH}; high-res will not be retried this session.",
+                    frame.Width, frame.Height, fps, _frames, span, clock, HiResMinFps, CaptureWidth, CaptureHeight);
+
+                // Latch BEFORE the Set calls: if a Set throws, the attempt still
+                // must not be retried.
+                _hiResLatchedOff = true;
+                try
+                {
+                    cap.Set(VideoCaptureProperties.FrameWidth, CaptureWidth);
+                    cap.Set(VideoCaptureProperties.FrameHeight, CaptureHeight);
+                    cap.Set(VideoCaptureProperties.Fps, TargetFps);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex,
+                        "WebcamTrackingService: high-res revert Set() threw; capture stays at {W}x{H} until tracking is restarted",
+                        frame.Width, frame.Height);
+                    return false;
+                }
+
+                _phase = Phase.ConfirmingRevert;
+                _phaseStartMs = _clock.Elapsed.TotalMilliseconds;
+                return true;
+            }
+
+            private static double DriverMs(VideoCapture cap)
+            {
+                try { return cap.Get(VideoCaptureProperties.PosMsec); }
+                catch { return 0; }
+            }
+        }
+
         private sealed class IrisDetector : IDisposable
         {
             private const int InputSize = 64;
@@ -3473,6 +3967,21 @@ namespace ConditioningControlPanel.Services
             private Mat? _resizedBuffer;
             private Mat? _flippedBuffer;
             private int _lastSide = -1;
+
+            /// <summary>
+            /// Side length, in SOURCE-FRAME pixels, of the square eye ROI most
+            /// recently fed to the model — i.e. the size BEFORE it is resized to
+            /// the fixed <see cref="InputSize"/> (64) input. Diagnostic only,
+            /// nothing reads it in the detection path.
+            ///
+            /// <para>It is the number that decides whether raising capture
+            /// resolution could help a given user: at or above 64 the resize is
+            /// a DOWNscale and any extra capture pixels are discarded inside
+            /// Cv2.Resize; below 64 it is an UPscale and detail is genuinely
+            /// missing. Written on the capture thread and read by the same
+            /// thread's periodic log line.</para>
+            /// </summary>
+            public int LastRoiPx { get; private set; }
 
             public IrisDetector(string modelPath)
             {
@@ -3503,6 +4012,7 @@ namespace ConditioningControlPanel.Services
                 int ry = (int)Math.Round(cy - side / 2f);
                 int rs = (int)Math.Round(side);
                 if (rs < InputSize / 4) return null;
+                LastRoiPx = rs;
 
                 if (_croppedBuffer == null || _lastSide != rs)
                 {
