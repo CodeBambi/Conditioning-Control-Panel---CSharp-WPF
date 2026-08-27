@@ -73,6 +73,10 @@ import { setBellCosmetic } from './audio.js';
  * cue leaves by the one audio door. It dispatches its own cue (bus 'voice',
  * maxMs 8000, a duck) - the shell only builds it and feeds it moments. */
 import { createPa } from './pa.js';
+/* THE SOUNDTRACK. ost.js is a table and two verbs; it holds one keyed slot on
+ * the `music` bus through the same door the beds use. The shell tells it where
+ * the player is (campus, records, a class) and clearScreen tells it they left. */
+import { createOst } from './ost.js';
 import { createIdSpotlight, idReducedMotion } from './idcard.js';
 import { createAccountChip, readAccount } from './accountchip.js';
 import { createAnnexReveal } from './annexreveal.js';
@@ -1254,6 +1258,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
   function clearScreen() {
     screenCue();
+    /* THE TUNE LEAVES WITH THE SCREEN. Silence is the default between places:
+     * the next screen that has a track asks for it, and one that does not
+     * (the lab, the prize counter, settings) gets none. A campus rebuilt after
+     * a class starts its loop from the top, which is what a hub theme does. */
+    try { if (ost) ost.leave(); } catch (e) { /* noop */ }
     // The card ceremony is deliberately NOT dropped here. It rides ON the report
     // card, and `onPayout` re-renders that report on the same screen - a wipe
     // that took the ceremony with it would delete the card the instant the host
@@ -2003,6 +2012,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
        * back. It is armed ONLY for the real campus - the plain-board fallback
        * below is an ordinary scrolling panel and reads fine upright. */
       requireOrientation('landscape', { reason: 'campus' });
+      /* THE CAMPUS THEME, once the hub has actually built. Under the reveal,
+       * under the PA (which ducks it), gone with the campus via clearScreen. */
+      try { if (ost) ost.enter('campus'); } catch (e2) { /* noop */ }
     } catch (e) {
       say('campus hub failed (' + ((e && e.message) || e) + ') - plain board fallback');
       // If the stage built and a LATER line threw, its bell interval and the
@@ -2576,6 +2588,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    *  campus callbacks above can guard on it; built once, further down, after
    *  the wallet echo exists. */
   let pa = null;
+  /** THE SOUNDTRACK (shell/ost.js). Built beside the PA, driven from three
+   *  places (the campus stand-up, startClass, showRecords) and let go of in
+   *  clearScreen. Null when the module fails to build; every call site guards. */
+  let ost = null;
 
   /** The pick, clamped to what is actually owned. Never returns junk. */
   function themePick() {
@@ -2728,6 +2744,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       daySeed: utcDateSeed,
     });
   } catch (e) { say('pa unavailable (' + ((e && e.message) || e) + ')'); pa = null; }
+
+  try {
+    ost = createOst({ log: say, lite: () => !!src.performanceMode });
+  } catch (e) { say('ost unavailable (' + ((e && e.message) || e) + ')'); ost = null; }
 
   /* ---------------------------- THE EXTRA CREDIT LEVER -------------------
    * ONE pick for the night, not one per door. A player who pulls Honors at the
@@ -2884,6 +2904,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     dismissAnnexStage();
     clearScreen();
     renderTopbar();
+    try { if (ost) ost.enter('records'); } catch (e) { /* noop */ }
     recordsRoom = createRecordsRoom({
       mount: dom && dom.screen,
       t,
@@ -4081,6 +4102,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     screen = 'class';
     clearScreen();
     renderTopbar();
+    /* THE ROOM'S OWN TUNE, if the table has one for this class; a class with
+     * no track is played in silence, which is the honest default (ost law 3). */
+    try { if (ost) ost.enter(cls.gameKey); } catch (e) { /* noop */ }
     // EMI SEAM. `family` rides along for the place-awareness table in
     // moments.js (EMI COLOR): the arrival face knows what kind of room it is.
     /* ASKS: `soft` is a01's YES, and it only ever softens a FACE. */

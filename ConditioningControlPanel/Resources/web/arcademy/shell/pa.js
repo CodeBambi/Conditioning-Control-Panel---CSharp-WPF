@@ -109,6 +109,17 @@ function range(from, to) {
   return Object.freeze(out);
 }
 
+/* THE FILES AS SHIPPED (round 3, 2026-08-27, voice Jessica). The script was
+ * written in six groups and the shelves below are four, so the numbers on
+ * disk are the script's numbers with ONE swap: the script's Closing (its
+ * 25-30) sits at 31-36 here, on the shelf law 6 keeps out of rotation, and
+ * its "Mostly the schedule, mostly" (its 31-36) sits at 25-30, on the ASIDE
+ * shelf where it belongs. Everything else is one to one:
+ *   01-06 Arrival        07-14 Class calls     15-18 Payday nights
+ *   19-24 Streaks/grades 25-30 Mostly          31-36 Closing (shelved)
+ * Fourteen of the thirty-six carry a seed; which ones is not this file's
+ * business and is not written down anywhere the page ships. */
+
 /** Doors opening. Good morning, roll call, the day's shape. Early lines. */
 export const ARRIVAL = range(1, 8);
 /** The schedule proper - rooms, periods, reminders, the notice board. */
@@ -153,10 +164,11 @@ export const CLASS_END_JITTER_MS = 1800;
 
 /** The voice bus, half level, and the longest a line may run. audio.js caps an
  *  element clip at CLIP_MAX_MS (1200ms) unless the cue ASKS for more, and it
- *  will sell up to CLIP_REQ_MAX_MS (8000ms). Every spoken line must ask, or it
- *  is cut off after a second and a fifth. */
+ *  sells a `pa_NN` name up to PA_REQ_MAX_MS (12000ms; everything else stops at
+ *  8000). Every spoken line must ask, or it is cut off after a second and a
+ *  fifth. The longest line on disk runs 10.9s under the tannoy's tail. */
 export const LINE_LEVEL = 0.5;
-export const LINE_MAX_MS = 8000;
+export const LINE_MAX_MS = 12000;
 /** She talks over the school, not under it. `voice` pulls fx/music/drops down. */
 export const LINE_DUCK = Object.freeze({ target: 'voice', mult: 0.45, ms: 3600 });
 

@@ -389,6 +389,17 @@ for (let i = 1; i <= PA_COUNT; i += 1) {
   SAMPLES[paName(i)] = './assets/sfx/' + paName(i) + '.mp3';
 }
 
+/** THE SOUNDTRACK (2026-08-27). Five Suno tracks, one per place, held on the
+ *  `music` bus by shell/ost.js exactly the way the beds are held. This file
+ *  imports nothing (trap 18), so the names are spelled here as well as in
+ *  ost.js TRACKS; the two lists are the same list and a track added to one
+ *  without the other is a file the page has been told does not exist. Flat in
+ *  `assets/sfx` beside the bells, same host scan as the PA lines. */
+const OST_SAMPLES = Object.freeze([
+  'ost_campus', 'ost_deep_end', 'ost_sort', 'ost_records', 'ost_lost_found',
+]);
+for (const n of OST_SAMPLES) SAMPLES[n] = './assets/sfx/' + n + '.mp3';
+
 /** PER-NAME HEADROOM ON A SAMPLE (owner report, 2026-08-26: "too loud").
  *  A recorded one-shot at `amp * CLIP_GAIN` is not the same loudness as the
  *  recipe it replaced - the mp3s are mastered near full scale and the recipes
@@ -423,6 +434,9 @@ const NEVER_BUFFERED = new Set([
  * beat late), and an announcement over a school PA has no beat to be late for.
  * They keep the element path, like the beds. */
 for (let i = 1; i <= PA_COUNT; i += 1) NEVER_BUFFERED.add(paName(i));
+/* A SOUNDTRACK IS A BED WITH A TUNE IN IT: element path, never decoded (a
+ * 140s track as float PCM is a hundred megabytes for one loop). */
+for (const n of OST_SAMPLES) NEVER_BUFFERED.add(n);
 
 /** The names with NO recipe under them. A missing file is SILENCE here, not
  *  a fallback: an oscillator impression of a bed track or of a whole board
@@ -443,6 +457,8 @@ const SAMPLE_ONLY = new Set([
    * the school bell's own sample, then the school bell's recipe. */
 ]);
 for (let i = 1; i <= PA_COUNT; i += 1) SAMPLE_ONLY.add(paName(i));
+/* And no oscillator impression of a soundtrack either (ost.js law 4). */
+for (const n of OST_SAMPLES) SAMPLE_ONLY.add(n);
 
 /* ----------------------------------------------------------------------------
  * THE BELL COSMETIC (Counter Stock, `brass_bell`)
@@ -501,6 +517,13 @@ const CLIP_MAX_MS = 1200;
  *  ceiling; this is the spoken one - long enough for the 4s intro bed with
  *  air to spare, short enough that no cue can annex the night. */
 const CLIP_REQ_MAX_MS = 8000;
+/** THE PA'S OWN CEILING (2026-08-27). The round-3 announcements are one
+ *  breath each but a warm read of a long sentence under the tannoy's echo tail
+ *  runs to eleven seconds, and a spoken line cut off mid-word is worse than no
+ *  line. A `pa_NN` name may buy up to this; everything else keeps the 8s cap,
+ *  so no cue that is not a person speaking can annex the night. */
+const PA_REQ_MAX_MS = 12000;
+const isPaName = (n) => /^pa_\d\d$/.test(String(n || ''));
 const CLIP_FADE_MS = 180;
 const CLIP_VOICES = 6;
 /** The headroom a recipe gets from its own `gain`, given to clips too, so a
@@ -848,7 +871,8 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
     // 1.2s default. (The old Math.min(CLIP_MAX_MS, asked) clamped every
     // request DOWN to the default, which cut the 4s intro bed at 1.2s.)
     const askedMs = Number(d.maxMs) || 0;
-    const maxMs = Math.max(80, askedMs > 0 ? Math.min(askedMs, CLIP_REQ_MAX_MS) : CLIP_MAX_MS);
+    const reqCap = isPaName(sampleName) ? PA_REQ_MAX_MS : CLIP_REQ_MAX_MS;
+    const maxMs = Math.max(80, askedMs > 0 ? Math.min(askedMs, reqCap) : CLIP_MAX_MS);
     const fadeMs = Math.max(0, Math.min(maxMs / 2, Number(d.fadeMs) || CLIP_FADE_MS));
     const rec = { el, src: null, gain: null, node: null, timer: 0, settle: settle || null, hold };
     if (hold) { try { el.loop = true; } catch { /* ignore */ } }
@@ -1027,7 +1051,10 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
     }
 
     const askedMs = Number(d.maxMs) || 0;
-    const maxMs = Math.max(80, askedMs > 0 ? Math.min(askedMs, CLIP_REQ_MAX_MS) : CLIP_MAX_MS);
+    // PA lines never take this path (NEVER_BUFFERED), the ceiling is kept
+    // symmetrical with playClip so the two doors never disagree on a name.
+    const reqCap = isPaName(name) ? PA_REQ_MAX_MS : CLIP_REQ_MAX_MS;
+    const maxMs = Math.max(80, askedMs > 0 ? Math.min(askedMs, reqCap) : CLIP_MAX_MS);
     const fadeMs = Math.max(0, Math.min(maxMs / 2, Number(d.fadeMs) || CLIP_FADE_MS));
     const rec = { el: null, src: null, gain: null, node: null, timer: 0, settle: settle || null, hold: false };
 
