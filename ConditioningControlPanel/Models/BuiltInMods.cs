@@ -491,6 +491,15 @@ namespace ConditioningControlPanel.Models
                     RankSubject = "Babe"
                 },
 
+                // NO BAMBISLEEP TRIGGERS IN HERE. This pool started life as the BambiSleep pool
+                // with the word "BAMBI" find-replaced out, which left nine of that file's named
+                // trigger phrases standing verbatim inside a mod that is not it (reported in
+                // #general 08-22). The replacements are NOT new writing: every one is a line this
+                // same mod already speaks (LockCardPhrases below, or its BubbleCountMercy pool),
+                // so the Sissy mod now conditions on its own vocabulary only. Existing users
+                // migrate for free - a key that is another built-in mod's default and not this
+                // one's is stripped by ModService.PruneCrossModSubliminals on the next mod
+                // restore, and the new keys arrive through that same pass's defaults top-up.
                 SubliminalPool = new Dictionary<string, bool>
                 {
                     { "FREEZE", true },
@@ -498,21 +507,21 @@ namespace ConditioningControlPanel.Models
                     { "DEEP SLEEP", true },
                     { "BIMBO DOLL", true },
                     { "GOOD GIRL", true },
-                    { "DROP FOR COCK", true },
-                    { "SNAP AND FORGET", true },
-                    { "PRIMPED AND PAMPERED", true },
+                    { "GOOD GIRLS OBEY", true },
+                    { "EMPTY AND OBEDIENT", true },
+                    { "SISSY IS LEARNING", true },
                     { "OBEY", true },
                     { "CUM AND COLLAPSE", true },
-                    { "ZAP COCK DRAIN OBEY", true },
-                    { "GIGGLETIME", true },
-                    { "UNIFORM LOCK", true },
-                    { "COCK ZOMBIE NOW", true },
+                    { "I LOVE BEING PROGRAMMED", true },
+                    { "SISSY LOVES BUBBLES", true },
+                    { "SISSY WILL TRY HARDER", true },
+                    { "DUMB DOLLS COUNT SLOWLY", true },
                     { "JUST OBEY", true },
                     { "TURN YOUR BRAIN OFF", true },
                     { "GOOD GIRLS DONT THINK", true },
                     { "DONT THINK SILLY", true },
-                    { "COCK TURNS MY BRAIN OFF", true },
-                    { "I CANT RESIST MY TRIGGERS", true },
+                    { "GOOD GIRLS PAY ATTENTION", true },
+                    { "SISSY NEEDS TO FOCUS", true },
                     { "THERES NO NEED TO THINK", true }
                 },
 

@@ -354,19 +354,20 @@ public static partial class BuiltInPrograms
         RewardId = "pr_ch2_banked",
         RewardDescription = "Banked: the full seven-page ledger and a phrase pack, kept locally.",
 
-        // SISSY POOL KEYS, NOT BAMBI ONES. The Sissy manifest is a near-clone of the Bambi one with
-        // the Bambi-prefixed entries renamed - BAMBI SLEEP became DEEP SLEEP, BAMBI FREEZE became
-        // FREEZE, BAMBI UNIFORM LOCK became UNIFORM LOCK - so a pack copy-pasted from the Takeover
-        // file would compile, install, and be six phrases this program's mod has never heard of.
-        // Same warning as PrSoftSubliminals.
+        // SISSY POOL KEYS, NOT BAMBI ONES. The two manifests share a shape, so a pack copy-pasted
+        // from the Takeover file would compile, install, and be six phrases this program's mod has
+        // never heard of. The overlap is now much smaller than it looks: the nine BambiSleep
+        // triggers the Sissy pool used to inherit verbatim were replaced with that mod's own lines
+        // (#general 08-22), so any Bambi phrase here is a bug, not a coincidence. Same warning as
+        // PrSoftSubliminals.
         RewardPhrases = new List<string>
         {
             "GOOD GIRL",
             "BIMBO DOLL",
-            "PRIMPED AND PAMPERED",
-            "UNIFORM LOCK",
+            "SISSY IS LEARNING",
+            "SISSY WILL TRY HARDER",
             "FREEZE",
-            "SNAP AND FORGET"
+            "EMPTY AND OBEDIENT"
         },
         Days = new List<ProgramDay>
         {
@@ -668,15 +669,15 @@ public static partial class BuiltInPrograms
 
     /// <summary>
     /// Subliminals for the passive templates. Every entry is a key of the Sissy Hypno SubliminalPool,
-    /// all 21 of which ship enabled. Note the Sissy pool is a near-clone of the Bambi one with the
-    /// Bambi-prefixed entries renamed - BAMBI SLEEP became DEEP SLEEP, BAMBI FREEZE became FREEZE - so
-    /// a phrase list copy-pasted from the Takeover file would compile, run, and be wrong.
+    /// all 21 of which ship enabled. Note the two manifests share a shape (BAMBI SLEEP is DEEP SLEEP
+    /// here, BAMBI FREEZE is FREEZE), so a phrase list copy-pasted from the Takeover file would
+    /// compile, run, and be wrong.
     /// </summary>
     private static List<string> PrSoftSubliminals() => new()
     {
         "GOOD GIRL",
         "DEEP SLEEP",
-        "PRIMPED AND PAMPERED",
+        "SISSY IS LEARNING",
         "DONT THINK SILLY",
         "THERES NO NEED TO THINK",
         "TURN YOUR BRAIN OFF"
@@ -685,15 +686,15 @@ public static partial class BuiltInPrograms
     /// <summary>
     /// The mirror pool. The manifest has no vocabulary that literally names looking or reflections, so
     /// this is the pool's set of *being looked at* phrases rather than invented ones - BIMBO DOLL,
-    /// PRIMPED AND PAMPERED, GOOD GIRL. Nothing here is authored; every line is a manifest key.
+    /// SISSY IS LEARNING, GOOD GIRL. Nothing here is authored; every line is a manifest key.
     /// </summary>
     private static List<string> PrMirrorSubliminals() => new()
     {
         "GOOD GIRL",
         "BIMBO DOLL",
-        "PRIMPED AND PAMPERED",
+        "SISSY IS LEARNING",
         "DEEP SLEEP",
-        "GIGGLETIME",
+        "SISSY LOVES BUBBLES",
         "JUST OBEY",
         "GOOD GIRLS DONT THINK",
         "DONT THINK SILLY",
@@ -705,38 +706,38 @@ public static partial class BuiltInPrograms
     {
         "GOOD GIRL",
         "BIMBO DOLL",
-        "PRIMPED AND PAMPERED",
-        "UNIFORM LOCK",
+        "SISSY IS LEARNING",
+        "SISSY WILL TRY HARDER",
         "OBEY",
         "JUST OBEY",
         "FREEZE",
-        "SNAP AND FORGET",
-        "GIGGLETIME",
+        "EMPTY AND OBEDIENT",
+        "SISSY LOVES BUBBLES",
         "GOOD GIRLS DONT THINK",
         "TURN YOUR BRAIN OFF",
-        "I CANT RESIST MY TRIGGERS"
+        "SISSY NEEDS TO FOCUS"
     };
 
     private static List<string> PrShowSubliminals() => new()
     {
         "GOOD GIRL",
         "BIMBO DOLL",
-        "PRIMPED AND PAMPERED",
-        "UNIFORM LOCK",
+        "SISSY IS LEARNING",
+        "SISSY WILL TRY HARDER",
         "FREEZE",
         "RESET",
         "DEEP SLEEP",
         "OBEY",
         "JUST OBEY",
-        "SNAP AND FORGET",
-        "DROP FOR COCK",
-        "COCK ZOMBIE NOW",
+        "EMPTY AND OBEDIENT",
+        "GOOD GIRLS OBEY",
+        "DUMB DOLLS COUNT SLOWLY",
         "CUM AND COLLAPSE",
-        "ZAP COCK DRAIN OBEY",
-        "I CANT RESIST MY TRIGGERS",
+        "I LOVE BEING PROGRAMMED",
+        "SISSY NEEDS TO FOCUS",
         "GOOD GIRLS DONT THINK",
         "TURN YOUR BRAIN OFF",
-        "GIGGLETIME"
+        "SISSY LOVES BUBBLES"
     };
 
     /// <summary>

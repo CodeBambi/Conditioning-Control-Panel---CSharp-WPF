@@ -154,6 +154,7 @@ internal static class FypHostService
                     mosaicChangeSec = s?.FypMosaicChangeSec ?? 10,
                     autoAdvance = s?.FypAutoAdvance ?? false,
                     muted = s?.FypMuted ?? false,
+                    volume = s?.FypVolume ?? 100,
                     windowOpacity = s?.FypWindowOpacity ?? 1.0,
                     audioGlow = s?.FypAudioGlow ?? true,
                     eyeControl = s?.FypEyeControl ?? false,
@@ -332,6 +333,9 @@ internal static class FypHostService
                 case "mosaicChangeSec": s.FypMosaicChangeSec = (int?)value ?? 10; break;
                 case "autoAdvance": s.FypAutoAdvance = (bool?)value ?? false; break;
                 case "muted": s.FypMuted = (bool?)value ?? false; break;
+                // 0-100. Clamped again by the property, so a hand-edited settings file or an
+                // out-of-range page value can never hand a media element an invalid volume.
+                case "volume": s.FypVolume = (int?)value ?? 100; break;
                 // Persist, and push straight onto the ghost mirror when one is up — the mirror
                 // is a plain window, so its constant alpha IS the opacity (see below).
                 case "windowOpacity":

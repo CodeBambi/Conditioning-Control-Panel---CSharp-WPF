@@ -533,6 +533,19 @@ public class QuestService : IDisposable
     /// </summary>
     private bool IsEntitlementResolved()
     {
+        // THE SIGNED-OUT WINDOW IS NOT AN ANSWER. quests.json deliberately survives a logout
+        // (BUG-BN8X9B9SZ5 / #1027), stamped with the account that owns it — but the entitlement
+        // providers do not: a logout tears them down, so between the sign-out and the next
+        // sign-in the premium gate reads a flat "no access" that belongs to nobody. Believing it
+        // let the premium-loss rerolls below discard the departed account's untouched quest
+        // purely because the user signed out, which is the same "log out and back in and your
+        // quests are different" complaint the ledger fix was meant to end. Treat the whole window
+        // as unresolved: the decision is deferred (never lost), the refresh tick stays quiet
+        // while nobody is signed in, and the first post-login sync settles it for real.
+        if (IsSignedOutWithOwnedQuests(
+                App.UnifiedUserId ?? App.Settings?.Current?.UnifiedId, Progress?.OwnerUnifiedId))
+            return false;
+
         var patreon = App.Patreon;
         if (patreon == null) return false;
         if (patreon.IsVerifying) return false;
@@ -544,6 +557,14 @@ public class QuestService : IDisposable
         if (App.SubscribeStar?.IsVerifying == true) return false;
         return DateTime.UtcNow - _startedUtc >= EntitlementSettleWindow;
     }
+
+    /// <summary>
+    /// True when nobody is signed in but the local quest ledger belongs to an account that was.
+    /// That is the logout window: the quests are being held for a returning owner whose
+    /// entitlement is currently unknowable. Pure, so it is testable without a live App.
+    /// </summary>
+    internal static bool IsSignedOutWithOwnedQuests(string? currentUnifiedId, string? questOwnerUnifiedId)
+        => string.IsNullOrEmpty(currentUnifiedId) && !string.IsNullOrEmpty(questOwnerUnifiedId);
 
     /// <summary>
     /// Feature level gating has been removed — every quest category is available from level 1.

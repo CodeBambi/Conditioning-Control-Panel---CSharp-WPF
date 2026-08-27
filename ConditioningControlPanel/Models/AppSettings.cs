@@ -3478,6 +3478,17 @@ namespace ConditioningControlPanel.Models
             set { _fypMuted = value; OnPropertyChanged(); }
         }
 
+        private int _fypVolume = 100;
+        /// <summary>Feed playback volume, 0-100. Independent of <see cref="FypMuted"/>: mute is the
+        /// one-key panic switch (M / the speaker button) and must return you to the volume you had,
+        /// so unmuting never rewrites this. 0 is a legal setting and is silence with the speaker
+        /// button still reading "on" - the page's slider label says 0% so it is not a mystery.</summary>
+        public int FypVolume
+        {
+            get => _fypVolume;
+            set { _fypVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
         private double _fypWindowOpacity = 1.0;
         /// <summary>Ghost-mode translucency for the feed (0.01-1.0) - the DWM thumbnail opacity of
         /// the see-through mirror, never the real window's alpha (the WebView2 window must never be
