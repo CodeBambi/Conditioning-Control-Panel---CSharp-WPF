@@ -1146,9 +1146,17 @@ namespace ConditioningControlPanel
             // through a six-rung ladder while the screen flickered between owners.
             if (rung == Services.Safety.PanicPolicy.Rung.StopEverything)
             {
-                VideoDiag.Log("PANIC", "override mode - stopping every surface in one pass");
+                // Sampled BEFORE the stop pass closes them. A press that takes a mini-game or the
+                // feed down must not also arm the double-press "quit the app" tap: the legacy
+                // ladder handed that press to the game and returned, so the counter never moved,
+                // and a reflexive Esc-Esc inside the Arcademy would otherwise now exit the whole
+                // app (see PanicPolicy.AdvancesExitLadder(Rung, bool)).
+                bool gameOwnedTheScreen = AnyGameSurfaceOwnsTheScreen();
+
+                VideoDiag.Log("PANIC", $"override mode - stopping every surface in one pass (gameOnScreen={gameOwnedTheScreen})");
                 PanicStopEverySurface();
-                RunPanicStopTail(advanceExitLadder: Services.Safety.PanicPolicy.AdvancesExitLadder(rung));
+                RunPanicStopTail(advanceExitLadder:
+                    Services.Safety.PanicPolicy.AdvancesExitLadder(rung, gameOwnedTheScreen));
                 return;
             }
 
@@ -1231,6 +1239,29 @@ namespace ConditioningControlPanel
             App.BlinkTrainer?.Stop();
 
             RunPanicStopTail(advanceExitLadder: true);
+        }
+
+        /// <summary>
+        /// TRUE while one of the surfaces that used to CONSUME a panic press on its own rung owns
+        /// the screen: a live Rabbit Hole descent, the DtRH window, the Arcademy, the For You feed
+        /// or Just Drop. Read once, before the stop pass closes them. Never throws - a dead host
+        /// service must not be able to eat a panic press.
+        /// </summary>
+        private static bool AnyGameSurfaceOwnsTheScreen()
+        {
+            try
+            {
+                return App.Chaos?.IsDescending == true
+                    || Services.Chaos.DtrhHostService.IsActive
+                    || Services.Arcademy.ArcademyHostService.IsActive
+                    || Services.Fyp.FypHostService.IsActive
+                    || Services.JustDrop.JustDropHostService.IsActive;
+            }
+            catch (Exception ex)
+            {
+                try { App.Logger?.Warning("PANIC: game-surface probe failed: {Error}", ex.Message); } catch { }
+                return false;
+            }
         }
 
         /// <summary>
@@ -1416,11 +1447,15 @@ namespace ConditioningControlPanel
             Step("spiral", () => App.Overlay?.StopSpiral());
             Step("pink filter", () => App.Overlay?.StopPinkFilter());
             Step("overlays", () => App.Overlay?.Stop());
-            Step("corner GIFs", () => App.CornerGif?.StopAll());
-            // ...and the SESSION-scoped corner overlay, which CornerGifService does not own: it is
-            // SessionEngine's own window (ticket 1539282547484139682). Without this step one panic
-            // press stopped everything else on a program day and left the session spiral spinning.
+            // The SESSION-scoped corner overlay first, because CornerGifService does not own it:
+            // it is SessionEngine's own window (ticket 1539282547484139682). Without this step one
+            // panic press stopped everything else on a program day and left the session spiral
+            // spinning. It closes hide-only (no handback), so it cannot re-queue a standalone slot.
             Step("session corner GIF", () => SessionEngine.Active?.PanicCloseCornerGif());
+            // ...and the standalone Spiral-card slots LAST, so this is the final word on the corner
+            // whatever the step above did. StopAll also cancels queued realizations, so a slot that
+            // was mid-stagger cannot land after the pass.
+            Step("corner GIFs", () => App.CornerGif?.StopAll());
 
             // --- companion tube ---
             Step("tube speech", () => _avatarTubeWindow?.PanicSilence());

@@ -465,9 +465,16 @@ namespace ConditioningControlPanel.Services
             App.Audio?.StopSound();
             // The session-scoped corner overlay is a window this engine owns, and a pause means
             // "get it off my screen" - it used to keep spinning through every pause, including the
-            // one the panic key triggers (ticket 1539282547484139682). Closing it also hands the
-            // corner back to the user's own standalone slot; ResumeSession re-raises it.
-            CloseCornerGif();
+            // one the panic key triggers (ticket 1539282547484139682).
+            //
+            // HIDE ONLY (handBackCorner: false). A pause is not the end of the session's claim on
+            // the corner, and pause/resume has to be symmetric: handing the corner back here let a
+            // standalone slot realize during the pause, and ResumeSession's re-raise then refused
+            // (StandaloneCornerGifActive) - one pause and a stock minute-0 program-day corner GIF
+            // was gone for the rest of the day, because the per-second tick only ever re-raises
+            // overlays with CornerGifStartMinute > 0. The handback debt is remembered instead
+            // (_cornerHandbackOwed) and settled by whichever terminal close comes first.
+            CloseCornerGif(handBackCorner: false);
 
             App.Logger?.Information("Session paused (pause #{Count}, -100 XP penalty)", _pauseCount);
         }
@@ -1631,26 +1638,56 @@ namespace ConditioningControlPanel.Services
         private static volatile bool _sessionCornerGifActive;
 
         /// <summary>
+        /// TRUE while this session still owes the user's standalone corner slots a handback: it
+        /// took the corner, they stood down for it, and nothing has re-queued them yet. Set when
+        /// the overlay is shown, cleared only when the handback actually runs, and deliberately
+        /// NOT cleared by a hide-only close - a pause or a panic press hides the overlay without
+        /// ending the session's claim, and the eventual terminal close must still pay the debt.
+        /// </summary>
+        private bool _cornerHandbackOwed;
+
+        /// <summary>
         /// Re-applies the corner-GIF admission rules right now, for the settings toggle: a user who
         /// unticks "Allow session corner GIFs" should see the overlay go, not wait for the next
         /// tick (and the tick does not run at all while a session is paused).
         /// </summary>
         public void RefreshCornerGifPolicy()
         {
+            // Re-entrancy guard. CornerGifService.RefreshOverlays now ends by calling this (so the
+            // dedupe re-resolves when the STANDALONE side changes, not only the session side), and
+            // the close below can hand the corner back, which calls RefreshOverlays again. One
+            // bounce is all this ever needs; the flag stops the pair from ping-ponging.
+            if (_refreshingCornerGifPolicy) return;
+            _refreshingCornerGifPolicy = true;
             try
             {
                 var settings = _currentSession?.Settings;
                 if (settings == null) return;
                 if (_cornerGifWindow != null && !CanRaiseCornerGif(settings)) { CloseCornerGif(); return; }
-                if (_cornerGifWindow == null && IsRunning && CanRaiseCornerGif(settings)
-                    && settings.CornerGifStartMinute == 0)
+                // NOT while paused. A pause (the pause button, or the one the panic key triggers)
+                // means "nothing on my screen", and this is now reached from the STANDALONE side
+                // too - so without the guard, switching a corner slot off after a panic press would
+                // put the session's spiral straight back up on a session the user had just stopped.
+                // ResumeSession owns the re-raise; the end minute is honoured there and here alike.
+                if (_cornerGifWindow == null && IsRunning && !IsPaused && CanRaiseCornerGif(settings)
+                    && settings.CornerGifStartMinute == 0
+                    && (settings.CornerGifEndMinute <= 0 || ElapsedTime.TotalMinutes < settings.CornerGifEndMinute))
                     ShowCornerGif(settings);
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "RefreshCornerGifPolicy failed");
             }
+            finally
+            {
+                _refreshingCornerGifPolicy = false;
+            }
         }
+
+        /// <summary>Guards <see cref="RefreshCornerGifPolicy"/> against the CornerGifService
+        /// handback calling straight back into it. UI thread only, like every other corner-GIF
+        /// field on this engine.</summary>
+        private bool _refreshingCornerGifPolicy;
 
         private void ShowCornerGif(SessionSettings settings) => ShowCornerGif(settings, 0);
 
@@ -1875,6 +1912,13 @@ namespace ConditioningControlPanel.Services
                 }
 
                 _sessionCornerGifActive = true;
+                // From here on this session OWES the user's own slots a handback: they stand
+                // down (CornerGifMedia.AllowStandaloneCornerGif) for as long as we hold the
+                // corner, and nothing but a handback re-queues them. The debt survives a
+                // HIDE-only close (a pause, a panic press, a live size/path edit) and is
+                // settled by the first close that means the session is done with the corner -
+                // which is what stops a pause that is never resumed from stranding the slot.
+                _cornerHandbackOwed = true;
 
                 App.Logger?.Information("Corner GIF shown at {Position}: {Path} (pos: {Left},{Top}, size: {Width}x{Height}px, opacity: {Opacity}%)",
                     settings.CornerGifPosition, gifUri.ToString(), left, top, (int)windowWidth, (int)windowHeight, settings.CornerGifOpacity);
@@ -1958,13 +2002,19 @@ namespace ConditioningControlPanel.Services
         /// the panic path could reach it, so on a program day with Corner GIF at minute 0 one
         /// panic press stopped everything else and left the session spiral spinning.
         ///
-        /// <para>Close only, never a re-show: if the session survives the press, the normal
-        /// admission checks (the tick, <see cref="RefreshCornerGifPolicy"/>, ResumeSession) decide
-        /// whether it comes back. Never throws.</para>
+        /// <para>Close only, never a re-show - and that includes the handback
+        /// (<c>handBackCorner: false</c>). Handing the corner back here made the panic key
+        /// re-realize the user's OWN standalone corner spiral one dispatcher pass after the
+        /// stop-all sweep had just closed it, so the headline promise ("one press takes every
+        /// surface down") failed on exactly the spiral the ticket is about. The debt is remembered
+        /// (<c>_cornerHandbackOwed</c>) and settled when the session actually ends. If the session
+        /// survives the press, the normal admission checks (the tick,
+        /// <see cref="RefreshCornerGifPolicy"/>, ResumeSession) decide whether it comes back.
+        /// Never throws.</para>
         /// </summary>
         public void PanicCloseCornerGif()
         {
-            try { CloseCornerGif(); }
+            try { CloseCornerGif(handBackCorner: false); }
             catch (Exception ex) { try { App.Logger?.Warning(ex, "PanicCloseCornerGif failed"); } catch { } }
         }
 
@@ -1973,15 +2023,24 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Tears the session-scoped corner overlay down.
         /// </summary>
-        /// <param name="handBackCorner">TRUE (every path that means "the session's corner GIF is
-        /// done") also re-realizes the user's own standalone corner slots, which stood down while
+        /// <param name="handBackCorner">TRUE (every TERMINAL close - the session is done with the
+        /// corner) also re-realizes the user's own standalone corner slots, which stood down while
         /// this overlay owned the corner (CornerGifMedia.AllowStandaloneCornerGif). Without the
-        /// handback here, a slot suppressed at minute 0 stayed invisible for the rest of the
-        /// session however often the user toggled it - only session END gave the corner back.
-        /// FALSE only for the two live editors (UpdateCornerGifSize / UpdateCornerGifPath), which
-        /// close and immediately re-Show the same overlay: handing the corner back between the two
-        /// would queue a standalone slot, and a queued slot counts as StandaloneCornerGifActive,
-        /// so the re-Show would then refuse.</param>
+        /// handback, a slot enabled mid-session stayed invisible for the rest of the session
+        /// however often the user toggled it - only session END gave the corner back.
+        ///
+        /// <para>FALSE for every HIDE-only close, where the session still means to own the corner
+        /// or must not repaint anything right now: the two live editors (UpdateCornerGifSize /
+        /// UpdateCornerGifPath, which close and immediately re-Show the same overlay - a queued
+        /// standalone slot counts as StandaloneCornerGifActive, so the re-Show would refuse),
+        /// <see cref="PauseSession"/> (resume has to be able to take the corner back) and
+        /// <see cref="PanicCloseCornerGif"/> (a panic must not re-show a spiral).</para>
+        ///
+        /// <para>A hide-only close does not cancel the debt: <c>_cornerHandbackOwed</c> stays set,
+        /// so the first terminal close afterwards still gives the user's slots the corner back even
+        /// if the window is already gone. That is why the gate below is the debt and not
+        /// <c>_cornerGifWindow != null</c> - a session paused by a panic and then stopped must
+        /// still hand back.</para></param>
         private void CloseCornerGif(bool handBackCorner)
         {
             // Release the animator BEFORE closing the window. RepeatBehavior.Forever installs a
@@ -2013,11 +2072,15 @@ namespace ConditioningControlPanel.Services
             _cornerGifWidth = 0;
             _cornerGifHeight = 0;
 
-            // The corner is free again: hand it back to the user's own slots. Best effort - a
-            // failed handback must never propagate out of a teardown that also runs on the panic
-            // path. No-ops when no standalone slot is enabled.
-            if (handBackCorner)
+            // The corner is free again: hand it back to the user's own slots - but ONLY if this
+            // session ever took it (otherwise a close that closed nothing would fire a full
+            // StopAll + re-Show burst across every standalone slot, which is the Close,Close,
+            // Show,Show shape on AllowsTransparency windows that CornerGifService.QueueShow's own
+            // doc comment names as #494/#709/#958). Best effort - a failed handback must never
+            // propagate out of a teardown that also runs on the panic path.
+            if (handBackCorner && _cornerHandbackOwed)
             {
+                _cornerHandbackOwed = false;
                 try { App.CornerGif?.RefreshOverlays(); } catch { /* corner handback is best-effort */ }
             }
         }

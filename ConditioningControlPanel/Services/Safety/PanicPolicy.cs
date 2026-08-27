@@ -71,6 +71,26 @@ namespace ConditioningControlPanel.Services.Safety
             => rung != Rung.DismissLockCard && rung != Rung.DismissSettingsPalette;
 
         /// <summary>
+        /// The same question, for a press that lands on <see cref="Rung.StopEverything"/> while a
+        /// mini-game or the feed owns the screen (a Rabbit Hole descent, the DtRH window, the
+        /// Arcademy, the For You feed, Just Drop).
+        ///
+        /// <para>Before v6.8.5 such a press was CONSUMED by that surface's own rung and returned,
+        /// so it never touched the double-press counter and the app could not be quit from inside a
+        /// mini-game. Override mode closes the window instead - which is the point - but it must not
+        /// also arm "press again within 2 s to exit the whole app": the For You rung's own comment
+        /// records that a reflexive Esc-Esc double-tap is real, play-tested user behaviour, and the
+        /// second tap would land with the engine stopped and quit the app on them.</para>
+        ///
+        /// <para>So the press that closed a game window stops the world and nothing more. The next
+        /// press, with the game already down, counts normally, so double-press-to-exit is still
+        /// reachable - it just cannot be reached by the same two taps that closed the game.</para>
+        /// </summary>
+        internal static bool AdvancesExitLadder(Rung rung, bool aGameSurfaceOwnedTheScreen)
+            => AdvancesExitLadder(rung)
+               && !(rung == Rung.StopEverything && aGameSurfaceOwnedTheScreen);
+
+        /// <summary>
         /// Whether this rung tears surfaces down at all. The two dismiss rungs do not: they answer
         /// the surface that owns the press and stop there, leaving a running session alone. This is
         /// the fix for "Escape closed my quick-settings palette and paused my session for 100 XP".

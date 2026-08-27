@@ -102,6 +102,42 @@ public class PanicPolicyTests
     public void PalettePress_NeverAdvancesTheExitLadder()
         => Assert.False(AdvancesExitLadder(Rung.DismissSettingsPalette));
 
+    /// <summary>
+    /// Override mode closes a mini-game or the feed itself instead of handing the press to it - so
+    /// that press must NOT also arm the double-press "quit the app" tap. The legacy ladder gave the
+    /// press to the game and returned, so the counter never moved and the app could not be exited
+    /// from inside the Arcademy / DtRH / a descent / the feed; the For You rung's own comment
+    /// records that a reflexive Esc-Esc double-tap is real, play-tested behaviour, and the second
+    /// tap lands with the engine stopped, i.e. straight on Application.Shutdown().
+    /// </summary>
+    [Fact]
+    public void StopEverythingPress_DoesNotArmTheExitTapWhenItClosedAGame()
+        => Assert.False(AdvancesExitLadder(Rung.StopEverything, aGameSurfaceOwnedTheScreen: true));
+
+    /// <summary>With no game on screen the press counts exactly as before: double-press-to-exit is
+    /// an escape hatch of its own and must survive this fix.</summary>
+    [Fact]
+    public void StopEverythingPress_StillArmsTheExitTapWithNoGameOnScreen()
+        => Assert.True(AdvancesExitLadder(Rung.StopEverything, aGameSurfaceOwnedTheScreen: false));
+
+    /// <summary>The two dismiss rungs never count, game or no game - a press spent on a Lock Card
+    /// or the Ctrl+K palette can never be the tap that quits the app.</summary>
+    [Theory]
+    [InlineData("DismissLockCard", true)]
+    [InlineData("DismissLockCard", false)]
+    [InlineData("DismissSettingsPalette", true)]
+    [InlineData("DismissSettingsPalette", false)]
+    public void DismissRungs_NeverCountEitherWay(string name, bool gameOnScreen)
+        => Assert.False(AdvancesExitLadder(ByName(name), gameOnScreen));
+
+    /// <summary>Legacy mode is untouched: there, a game on screen is answered by its own hand-off
+    /// rung long before the tail is reached, so the flag has nothing to say about it.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void LegacyLadderPress_IsUnaffectedByTheGameProbe(bool gameOnScreen)
+        => Assert.True(AdvancesExitLadder(Rung.RunLadder, gameOnScreen));
+
     // ---- 2b. which rungs are allowed to tear surfaces down ----
 
     /// <summary>
@@ -365,4 +401,40 @@ public class PanicPolicyTests
     [Fact]
     public void StopEverything_DoesNotReConsumeTheEscapeGraceWindow()
         => Assert.DoesNotContain("SettingsPaletteWindow.TryConsumeEscape", PanicStopEverySurfaceBody());
+
+    /// <summary>
+    /// The game probe has to be READ BEFORE the stop pass closes those windows - sampled after, it
+    /// would always be false and the exit-tap guard above would never fire.
+    /// </summary>
+    [Fact]
+    public void TheGameProbe_IsSampledBeforeTheStopPass()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+        var probe = source.IndexOf("bool gameOwnedTheScreen = AnyGameSurfaceOwnsTheScreen();", StringComparison.Ordinal);
+        Assert.True(probe >= 0, "the pre-stop game probe is gone - the exit-tap guard cannot work without it");
+        var stop = source.IndexOf("PanicStopEverySurface();", probe, StringComparison.Ordinal);
+        Assert.True(stop > probe, "the probe must be read before PanicStopEverySurface() closes those windows");
+    }
+
+    /// <summary>
+    /// ...and it must cover every surface that used to consume the press on its own rung, or that
+    /// surface's users get the reflexive-double-tap app exit back.
+    /// </summary>
+    [Theory]
+    [InlineData("App.Chaos?.IsDescending")]
+    [InlineData("DtrhHostService.IsActive")]
+    [InlineData("ArcademyHostService.IsActive")]
+    [InlineData("FypHostService.IsActive")]
+    [InlineData("JustDropHostService.IsActive")]
+    public void TheGameProbe_CoversEveryHandOffSurface(string call)
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+        var start = source.IndexOf("private static bool AnyGameSurfaceOwnsTheScreen()", StringComparison.Ordinal);
+        Assert.True(start >= 0, "AnyGameSurfaceOwnsTheScreen was renamed - update this test with it");
+        var end = source.IndexOf("        /// <summary>", start, StringComparison.Ordinal);
+        var body = end > start ? source[start..end] : source[start..];
+        Assert.Contains(call, body);
+    }
 }

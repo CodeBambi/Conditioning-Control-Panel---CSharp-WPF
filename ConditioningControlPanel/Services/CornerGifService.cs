@@ -158,6 +158,31 @@ namespace ConditioningControlPanel.Services
                 queued++;
                 QueueShow(disp, i, o);
             }
+
+            NotifySessionAdmissionChanged();
+        }
+
+        /// <summary>
+        /// Tells a running session to re-resolve the corner-GIF dedupe now that the STANDALONE side
+        /// has changed. Without this the live master was one-directional: a session whose corner GIF
+        /// was refused at start because a slot was up stayed refused for the whole run even after
+        /// the user switched that slot off, because the per-second tick only ever re-raises overlays
+        /// with CornerGifStartMinute > 0. The user turned their own corner GIF off expecting the
+        /// program's to appear, and nothing happened.
+        ///
+        /// <para>Called after the slots have settled, so <see cref="HasActiveOverlays"/> (which
+        /// counts queued realizations) already reflects the new state.
+        /// <c>SessionEngine.RefreshCornerGifPolicy</c> guards its own re-entrancy, so the handback
+        /// it may trigger cannot bounce back here forever. Never throws: this rides on config
+        /// changes and on the panic path's teardown.</para>
+        /// </summary>
+        private static void NotifySessionAdmissionChanged()
+        {
+            try { SessionEngine.Active?.RefreshCornerGifPolicy(); }
+            catch (Exception ex)
+            {
+                try { App.Logger?.Warning(ex, "CornerGifService: session corner-GIF policy refresh failed"); } catch { }
+            }
         }
 
         /// <summary>
@@ -180,7 +205,11 @@ namespace ConditioningControlPanel.Services
             TrySubscribeMainWindowClosing();
 
             var overlays = App.Settings?.Current?.CornerGifOverlays;
-            if (overlays == null || index < 0 || index >= overlays.Count || index >= MaxOverlays) return;
+            if (overlays == null || index < 0 || index >= overlays.Count || index >= MaxOverlays)
+            {
+                NotifySessionAdmissionChanged();
+                return;
+            }
 
             var setting = overlays[index];
             // The SAME admission rule as RefreshOverlays above, read from the same helper on
@@ -189,9 +218,14 @@ namespace ConditioningControlPanel.Services
             // slider realise the very standalone overlay RefreshOverlays just suppressed - two
             // corner spirals at once, which is exactly ticket 1539282547484139682.
             if (setting == null || !CornerGifMedia.AllowStandaloneCornerGif(
-                    setting.Enabled, SessionEngine.IsSessionCornerGifActive)) return;
+                    setting.Enabled, SessionEngine.IsSessionCornerGifActive))
+            {
+                NotifySessionAdmissionChanged();
+                return;
+            }
 
             QueueShow(disp, index, setting);
+            NotifySessionAdmissionChanged();
         }
 
         /// <summary>
