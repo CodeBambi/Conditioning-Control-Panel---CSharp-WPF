@@ -168,6 +168,12 @@ namespace ConditioningControlPanel.Services
         /// ambient subliminals running: the arrival guard's "!_isRunning && !_oneShotActive" pair
         /// is meaningless then, but a stale dispatch generation is not. The ambient scheduler's own
         /// cards carry no generation and are never blanked.
+        ///
+        /// SCOPE, precisely: like FlashService's, the generation is service-WIDE. FlashSubliminalCustom
+        /// is shared with keyword triggers, Autonomy and the Speak prompt cues, so a card any of those
+        /// put up since the last cancel is retired alongside the Deeper one. Bounded to the one card
+        /// that is actually on screen (ShouldBlankOnCancel checks _visibleOneShotGen), and deliberately
+        /// left unscoped for 6.8.5 - see StopOneShotFlashes for why.
         /// </summary>
         public void StopOneShotSubliminals()
         {
@@ -1139,31 +1145,6 @@ namespace ConditioningControlPanel.Services
         /// Must be called on the UI thread (reads live WPF visual state); consumed by
         /// <see cref="App.GetCcpWindowRectsCached"/>.
         /// </summary>
-        /// <summary>
-        /// HWNDs of the keep-alive subliminal windows that are CURRENTLY showing a card, for
-        /// OverlayService's z-order reconciler (#1041). The window asserts HWND_TOPMOST once at
-        /// creation and nothing re-raises it, so a topmost fullscreen browser window buried every
-        /// subliminal for the rest of the run. Idle (opacity 0) windows are skipped: re-pinning a
-        /// blank keep-alive shell every tick is pure cost. Solid-mode / compositor cards live on the
-        /// shared host, which is already in that sweep. UI thread only; never throws.
-        /// </summary>
-        internal List<IntPtr> GetSubliminalWindowHandles()
-        {
-            var handles = new List<IntPtr>();
-            try
-            {
-                if (System.Windows.Application.Current?.Dispatcher?.CheckAccess() != true) return handles;
-                foreach (var win in _screenWindows.Values)
-                {
-                    if (win == null || !win.IsVisible || win.Opacity <= 0.01) continue;
-                    var hwnd = new System.Windows.Interop.WindowInteropHelper(win).Handle;
-                    if (hwnd != IntPtr.Zero) handles.Add(hwnd);
-                }
-            }
-            catch { /* a diagnostic/reconciler accessor must never throw */ }
-            return handles;
-        }
-
         public System.Drawing.Rectangle[] GetActiveTextScreenRects()
         {
             var rects = new List<System.Drawing.Rectangle>();
@@ -1255,6 +1236,32 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("Subliminal GetActiveTextScreenRects: {E}", ex.Message);
             }
             return rects.Count == 0 ? Array.Empty<System.Drawing.Rectangle>() : rects.ToArray();
+        }
+
+        /// <summary>
+        /// HWNDs of the keep-alive subliminal windows that are CURRENTLY showing a card, for
+        /// OverlayService's z-order reconciler (#1041). The window asserts HWND_TOPMOST once at
+        /// creation and nothing re-raises it, so a topmost fullscreen browser window buried every
+        /// subliminal for the rest of the run. Idle (opacity 0) windows are skipped: re-pinning a
+        /// blank keep-alive shell every tick is pure cost. Hosted / compositor cards own no hwnd and
+        /// ride their host instead - the compositor host and ChaosBubbleHostOverlay are each swept
+        /// separately in the same pass. UI thread only; never throws.
+        /// </summary>
+        internal List<IntPtr> GetSubliminalWindowHandles()
+        {
+            var handles = new List<IntPtr>();
+            try
+            {
+                if (System.Windows.Application.Current?.Dispatcher?.CheckAccess() != true) return handles;
+                foreach (var win in _screenWindows.Values)
+                {
+                    if (win == null || !win.IsVisible || win.Opacity <= 0.01) continue;
+                    var hwnd = new System.Windows.Interop.WindowInteropHelper(win).Handle;
+                    if (hwnd != IntPtr.Zero) handles.Add(hwnd);
+                }
+            }
+            catch { /* a diagnostic/reconciler accessor must never throw */ }
+            return handles;
         }
 
         /// <summary>Center the border/main text blocks for the current content + window size.</summary>

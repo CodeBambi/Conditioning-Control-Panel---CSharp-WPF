@@ -341,7 +341,12 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "spiral_on",
                 Aliases = OnAliases("spiral", "the spiral"),
-                Execute = () => App.Overlay?.ShowOverlaySustained("spiral", 0.5),
+                // The user's OWN spiral, at the opacity they configured. ShowOverlaySustained used to
+                // drop the value entirely for spiral (#1051) so this hard-coded 0.5 never reached the
+                // screen; now that it does, pass the saved setting so "turn on spiral" keeps behaving
+                // exactly as it always has instead of suddenly rendering 5x heavier.
+                Execute = () => App.Overlay?.ShowOverlaySustained("spiral",
+                    (App.Settings?.Current?.SpiralOpacity ?? 10) / 100.0),
                 VoiceRuleId = "voicecmd_spiral_on",
                 Confirm = new()
                 {
@@ -370,7 +375,11 @@ namespace ConditioningControlPanel.Services
                 Name = "pink_on",
                 Aliases = OnAliases("pink filter", "the pink filter", "make it pink", "go pink"),
                 // OverlayService keys this overlay "pink_filter"; "pink" hits the unknown-kind no-op.
-                Execute = () => App.Overlay?.ShowOverlaySustained("pink_filter", 0.4),
+                // 0.4 is this command's own floor (a voice "go pink" should actually read as pink even
+                // for a user whose saved tint is faint) but it must never DIM a stronger live tint,
+                // which it now would - the sustained path applies the opacity it is handed (#1051).
+                Execute = () => App.Overlay?.ShowOverlaySustained("pink_filter",
+                    Math.Max(0.4, (App.Settings?.Current?.PinkFilterOpacity ?? 10) / 100.0)),
                 VoiceRuleId = "voicecmd_pink_on",
                 Confirm = new()
                 {

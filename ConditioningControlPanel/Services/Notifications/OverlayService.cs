@@ -879,32 +879,58 @@ public class OverlayService : IDisposable
                 if (kind == "pink_filter")
                 {
                     _timedPinkHolds++;
+                    // Take opacity ownership for the life of the hold, capturing whoever had it
+                    // first so the hide timer can hand it straight back (#573). Parking the hold is
+                    // also what keeps the 500ms settings-sync off this effect's opacity.
+                    if (!_bumpPinkActive) { _bumpPinkActive = true; _bumpPrevRampPink = _rampPinkOpacity; }
                     if (PinkShowing)
                     {
                         // #573: show() would early-return on an already-showing overlay, silently
                         // swallowing the boost. Bump the live opacity instead (never downward) and
                         // park it in the ramp hold so the settings-sync can't stomp it; the hide
                         // timer restores the previous owner.
-                        if (!_bumpPinkActive) { _bumpPinkActive = true; _bumpPrevRampPink = _rampPinkOpacity; }
-                        double current = _rampPinkOpacity ?? (App.Settings?.Current?.PinkFilterOpacity ?? 0) / 100.0;
-                        double target = Math.Max(current, opacityPercent / 100.0);
+                        double target = ResolveAdHocOverlayOpacity(true, _rampPinkOpacity,
+                            (App.Settings?.Current?.PinkFilterOpacity ?? 0) / 100.0, opacityPercent / 100.0);
                         _rampPinkOpacity = target;
                         ApplyPinkOpacityDirect(target);
                     }
-                    else show();
+                    else
+                    {
+                        show();
+                        // #1051: a FRESH ad-hoc overlay takes the effect's own opacity exactly. Without
+                        // the hold the settings-sync handed it straight back to the user's saved
+                        // setting, within half a second of the effect starting.
+                        if (PinkShowing)
+                        {
+                            double fresh = ResolveAdHocOverlayOpacity(false, null, 0, opacityPercent / 100.0);
+                            _rampPinkOpacity = fresh;
+                            ApplyPinkOpacityDirect(fresh);
+                        }
+                    }
                 }
                 else if (kind == "spiral")
                 {
                     _timedSpiralHolds++;
+                    if (!_bumpSpiralActive) { _bumpSpiralActive = true; _bumpPrevRampSpiral = _rampSpiralOpacity; }
                     if (SpiralShowing)
                     {
-                        if (!_bumpSpiralActive) { _bumpSpiralActive = true; _bumpPrevRampSpiral = _rampSpiralOpacity; }
-                        double current = _rampSpiralOpacity ?? (App.Settings?.Current?.SpiralOpacity ?? 0) / 100.0;
-                        double target = Math.Max(current, opacityPercent / 100.0);
+                        double target = ResolveAdHocOverlayOpacity(true, _rampSpiralOpacity,
+                            (App.Settings?.Current?.SpiralOpacity ?? 0) / 100.0, opacityPercent / 100.0);
                         _rampSpiralOpacity = target;
                         ApplySpiralOpacityDirect(target);
                     }
-                    else show();
+                    else
+                    {
+                        show();
+                        // #1051: ShowSpiralAdHoc -> StartSpiral paints the user's saved SpiralOpacity,
+                        // so a point-fired spiral effect ignored its authored opacity entirely.
+                        if (SpiralShowing)
+                        {
+                            double fresh = ResolveAdHocOverlayOpacity(false, null, 0, opacityPercent / 100.0);
+                            _rampSpiralOpacity = fresh;
+                            ApplySpiralOpacityDirect(fresh);
+                        }
+                    }
                 }
                 else
                 {
@@ -946,7 +972,10 @@ public class OverlayService : IDisposable
                         if (_bumpPinkActive)
                         {
                             _bumpPinkActive = false;
-                            if (PinkShowing)
+                            // A sustained Deeper band that started while this timed effect was up now
+                            // owns the opacity; restoring the value captured before the band existed
+                            // would hand its tint back to the settings-sync mid-band.
+                            if (PinkShowing && !_sustainedPinkHeld)
                             {
                                 _rampPinkOpacity = _bumpPrevRampPink;
                                 if (_rampPinkOpacity is double prevPink) ApplyPinkOpacityDirect(prevPink);
@@ -956,8 +985,11 @@ public class OverlayService : IDisposable
                         }
                         // Feature ownership requires the engine to be running (see
                         // HideOverlaySustained) — a ticked checkbox with the engine stopped
-                        // has no reconciler to ever tear this down.
-                        if (!(_isRunning && settings.PinkFilterEnabled)) hide();
+                        // has no reconciler to ever tear this down. A live sustained band counts as
+                        // an owner too: without that check a timed effect expiring over a Deeper
+                        // band tore the band's own overlay off screen (braindrain already guarded
+                        // this via ShouldStopHeldOverlay; pink and spiral did not).
+                        if (ShouldStopHeldOverlay(_isRunning && settings.PinkFilterEnabled, _timedPinkHolds, _sustainedPinkHeld)) hide();
                     }
                 }
                 else if (kind == "spiral")
@@ -968,7 +1000,7 @@ public class OverlayService : IDisposable
                         if (_bumpSpiralActive)
                         {
                             _bumpSpiralActive = false;
-                            if (SpiralShowing)
+                            if (SpiralShowing && !_sustainedSpiralHeld)
                             {
                                 _rampSpiralOpacity = _bumpPrevRampSpiral;
                                 if (_rampSpiralOpacity is double prevSpiral) ApplySpiralOpacityDirect(prevSpiral);
@@ -976,7 +1008,7 @@ public class OverlayService : IDisposable
                             }
                             _bumpPrevRampSpiral = null;
                         }
-                        if (!(_isRunning && settings.SpiralEnabled)) hide();
+                        if (ShouldStopHeldOverlay(_isRunning && settings.SpiralEnabled, _timedSpiralHolds, _sustainedSpiralHeld)) hide();
                     }
                 }
                 else // braindrain / braindrain_melt
@@ -1041,8 +1073,14 @@ public class OverlayService : IDisposable
                 // constant-opacity Deeper band back to the user's saved opacity within half a second
                 // (#563 symptom-1). Ramp bands overwrite this each Update tick; HideOverlaySustained
                 // clears it on band exit, so the lifecycle stays symmetric.
-                if (kind == "pink_filter") { _sustainedPinkHeld = PinkShowing; if (PinkShowing) _rampPinkOpacity = opacity; }
-                else if (kind == "spiral") { _sustainedSpiralHeld = SpiralShowing; if (SpiralShowing) _rampSpiralOpacity = opacity; }
+                // #1051: parking the hold only stops the settings-sync from stomping the band - it
+                // never APPLIED the band's opacity. ShowSpiralAdHoc -> StartSpiral paints the user's
+                // saved SpiralOpacity, so a constant-opacity spiral band rendered at the engine
+                // setting, and only a RAMP looked right (every ramp tick reaches ApplySpiralOpacityDirect).
+                // Pink had the same hole whenever the tint was already up, since ShowPinkFilterAdHoc
+                // early-returns then. Apply the band's own opacity here, for both.
+                if (kind == "pink_filter") { _sustainedPinkHeld = PinkShowing; if (PinkShowing) { _rampPinkOpacity = opacity; ApplyPinkOpacityDirect(opacity); } }
+                else if (kind == "spiral") { _sustainedSpiralHeld = SpiralShowing; if (SpiralShowing) { _rampSpiralOpacity = opacity; ApplySpiralOpacityDirect(opacity); } }
                 // braindrain / braindrain_melt share the one hold + ramp (never co-active). Gated on
                 // BrainDrainShowing for the same reason: a show() that no-oped (compositor host gone,
                 // GDI failure) must not leave a stale hold blocking a later legitimate teardown.
@@ -1168,6 +1206,23 @@ public class OverlayService : IDisposable
         _rampBrainDrainOpacity = null;
         _lastAppliedPinkOpacity = -1;
         _lastAppliedSpiralOpacity = -1;
+    }
+
+    /// <summary>
+    /// Opacity (0..1 fraction) a Deeper ad-hoc overlay effect should take.
+    /// A FRESH overlay takes the effect's own opacity exactly - #1051: the spiral show path paints
+    /// the user's saved SpiralOpacity, so an effect's authored opacity was dropped unless a RAMP
+    /// happened to overwrite it every tick. An overlay that is ALREADY up is only ever bumped UP
+    /// (#573), never dimmed, so a timed effect cannot quietly weaken a live band or the user's own
+    /// tint. Pure so the rule can be unit-tested without a window.
+    /// </summary>
+    internal static double ResolveAdHocOverlayOpacity(bool alreadyShowing, double? rampHold,
+        double settingsFraction, double requested)
+    {
+        requested = Math.Clamp(requested, 0, 1);
+        if (!alreadyShowing) return requested;
+        double current = Math.Clamp(rampHold ?? settingsFraction, 0, 1);
+        return Math.Max(current, requested);
     }
 
     private void ApplyPinkOpacityDirect(double opacity)
@@ -1460,8 +1515,12 @@ public class OverlayService : IDisposable
                         && (s.SpiralEnabled || _timedSpiralHolds > 0 || _sustainedSpiralHeld);
                     if (stillWanted && UseCompositor)
                     {
-                        GetSpiralLayer().ShowFrames(frames, delay, (s.SpiralOpacity / 100.0) * 0.1);
-                        _lastAppliedSpiralOpacity = (s.SpiralOpacity / 100.0) * 0.1;
+                        // #1051: a Deeper band/effect that parked the ramp hold owns this overlay's
+                        // opacity. The decode finishes after the show call returned, so read the hold
+                        // here rather than the user's saved setting.
+                        double baseOpacity = _rampSpiralOpacity ?? (s.SpiralOpacity / 100.0);
+                        GetSpiralLayer().ShowFrames(frames, delay, baseOpacity * 0.1);
+                        _lastAppliedSpiralOpacity = baseOpacity * 0.1;
                         App.Logger?.Debug("Spiral started on compositor layer ({Path}, decoded off-thread)", path);
                     }
                 });
@@ -2965,6 +3024,14 @@ public class OverlayService : IDisposable
                 ReassertAttentionOne(hwnd, force, ref attentionRecovered);
             foreach (var hwnd in App.Bubbles?.GetBubbleWindowHandles() ?? EmptyHandleList)
                 ReassertAttentionOne(hwnd, force, ref attentionRecovered);
+            // The shared chaos host carries the window-LESS members of this layer: solid-mode
+            // flashes (AppSettings.FlashSolidMode), hosted subliminal cards and ChaosBubbleSharedHost
+            // bubbles. It is a plain WPF window, NOT a CompositorEngine host, so the host sweep above
+            // never saw it and those users had no reconciler recovery at all. It returns Zero while
+            // the chaos layer is deliberately un-pinned (Free Desktop).
+            var bubbleHost = ChaosBubbleHostOverlay.GetActiveHandle();
+            if (bubbleHost != IntPtr.Zero)
+                ReassertAttentionOne(bubbleHost, force, ref attentionRecovered);
         }
         catch (Exception ex)
         {

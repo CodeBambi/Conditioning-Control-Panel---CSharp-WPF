@@ -258,7 +258,9 @@ namespace ConditioningControlPanel.Services
         /// A flash asserts HWND_TOPMOST once on its show edge and nothing ever re-raises it, so a
         /// topmost fullscreen browser window (Deeper's player, the Settings browser popout) buried
         /// every flash for the rest of the run with no recovery path. Solid-mode and compositor
-        /// flashes have no HWND of their own - the shared host is already in that sweep.
+        /// flashes have no HWND of their own: the compositor ones ride their CompositorEngine host,
+        /// and the solid-mode ones ride ChaosBubbleHostOverlay, which the same reconcile pass sweeps
+        /// separately (ChaosBubbleHostOverlay.GetActiveHandle).
         /// UI thread only; a reconciler accessor must never throw.
         /// </summary>
         internal List<IntPtr> GetFlashWindowHandles()
@@ -439,6 +441,16 @@ namespace ConditioningControlPanel.Services
         /// scheduler is running, and every window tagged with a retired generation is closed. The
         /// ambient scheduler's own windows carry no generation and are never touched, so a user
         /// running flashes for real keeps their own rhythm.
+        ///
+        /// SCOPE, precisely: the generation is service-WIDE, not per-caller. Every point-fired flash
+        /// shares one entry point (TriggerFlashOnce - Deeper's TriggerFlashOnceWithImage(null, ..)
+        /// falls straight through to it), so a keyword trigger, an Autonomy nudge, a chaos payload or
+        /// a Gaze reward flash dispatched since the last cancel carries the same generation and is
+        /// retired with the Deeper one. In practice that costs at most one already-visible foreign
+        /// one-shot its remaining duration (_isBusy admits only one one-shot family at a time), and
+        /// only when a Deeper enhancement ends within it. Scoping it per dispatcher would mean an
+        /// owner token threaded through every TriggerFlashOnce call site; deliberately not done for
+        /// 6.8.5. Do NOT call this from anything but a point-fired dispatcher's own stop.
         /// </summary>
         public void StopOneShotFlashes()
         {
