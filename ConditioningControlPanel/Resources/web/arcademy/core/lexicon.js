@@ -594,6 +594,16 @@ export const DEFAULT_LEXICON = Object.freeze({
   prize_payday_label: 'Hot room tonight',
   prize_payday_2: 'is paying double',
   prize_payday_5: 'is paying five times over',
+  /* the antechamber (shell/prizebooth.js): the window, the tray on the sill,
+   * and what a shut counter says. `prize_closed` is one word because it is a
+   * sign stencilled on a shutter, not a sentence. */
+  prize_booth_window: 'The service window',
+  prize_booth_tray: 'The ticket tray',
+  prize_closed: 'Closed',
+  prize_closed_line: 'The shutter is down and the sign above it has been switched off at the wall.',
+  prize_no_payday: 'No room is paying over the odds tonight. Every graded class still pays tickets.',
+  settings_classes_head: 'Classes',
+  campus_desc_prizes_shut: 'Shutter down over the window, parcels still stacked behind it. Back another night.',
   /* the Extra Credit lever, on the door card and in the painted room */
   lever_title: 'Extra Credit',
   lever_standard: 'Standard',

@@ -307,3 +307,103 @@
   .pc-glyph { font-size:17px; }
   .pc-title { letter-spacing:.1em; }
 }
+
+/* ============================================================================
+   THE TRAY BEAT (booth wiring, 2026-08-27)
+
+   The one painted thing in an otherwise drawn room, and it is only on screen
+   for a second and a half after the host confirms a purchase. It sits over the
+   shelf rather than replacing it, takes no pointer at any depth, and its whole
+   job is to show the thing landing in the tray.
+
+   TWO RENDERING RULES, AND THEY DISAGREE ON PURPOSE:
+    - THE PLATE is a 1024x1024 painting shown at whatever the viewport allows,
+      which is never an integer divisor of 1024. `pixelated` on a fractional
+      downscale drops rows of pixels and turns a soft painting into gravel, so
+      the plate gets the browser's ordinary resample and looks like a painting.
+    - THE SPRITE is 192px pixel art shown at 96 (or 64 on a phone), both exact
+      divisors, so it keeps `pixelated` like every other sprite in this room.
+   ==========================================================================*/
+
+.pc-beat {
+  position:fixed; inset:0; z-index:40;
+  display:flex; align-items:center; justify-content:center;
+  /* NOT A DIALOG: nothing here can be clicked, focused or dismissed, and the
+     shelf underneath keeps taking presses the whole time it is up. */
+  pointer-events:none;
+  background:color-mix(in srgb, var(--ground) 62%, transparent);
+  /* NO `both`, ANYWHERE IN THIS BLOCK. A backwards fill parks the element on its
+     `from` frame (opacity 0) before the animation starts and a forwards fill
+     parks it there for good if the run is cut short, so the beat would be a
+     blank scrim in any environment that stalls the clock. With no fill the
+     natural value is the RESTING state: the picture stands, and the slide is
+     the part that is optional. (A frozen clock still photographs blank - the
+     shot harness seeks the animations to their end frame for that reason.) */
+  animation:pc-beat-in 220ms ease-out;
+}
+
+.pc-beat-plate,
+.pc-beat-seat {
+  position:absolute;
+  left:50%; top:50%;
+  transform:translate(-50%, -50%);
+}
+
+.pc-beat-plate {
+  width:min(52vh, 78vw); height:min(52vh, 78vw);
+  border-radius:var(--radius);
+  border:var(--hairline);
+  box-shadow:0 18px 44px rgba(0,0,0,.5);
+  image-rendering:auto;           /* see the header - fractional downscale */
+  animation:pc-beat-rise 260ms cubic-bezier(.2,.8,.3,1);
+}
+
+/* Where the tray's brass floor is actually clear on the plate: right of the
+   ticket pile, short of the receipt spike. Measured off vn-20, not guessed. */
+.pc-beat-seat {
+  left:calc(50% + min(52vh, 78vw) * .13);
+  display:flex; align-items:center; justify-content:center;
+  width:96px; height:96px;
+  animation:pc-beat-drop 300ms cubic-bezier(.2,.8,.3,1);
+}
+
+.pc-beat-sprite {
+  width:96px; height:96px;        /* 192/2, on the grid */
+  image-rendering:pixelated;
+  filter:drop-shadow(0 6px 10px rgba(0,0,0,.55));
+}
+
+.pc-beat-glyph {
+  font-size:54px; line-height:1;
+  color:var(--gold);
+  text-shadow:0 4px 10px rgba(0,0,0,.6);
+}
+
+/* The plate refused to load: the card goes plain and the sprite still lands. */
+.pc-beat.is-bare { background:color-mix(in srgb, var(--ground) 82%, transparent); }
+.pc-beat.is-bare .pc-beat-seat { left:50%; }
+
+@keyframes pc-beat-in { from { opacity:0; } to { opacity:1; } }
+@keyframes pc-beat-rise {
+  from { opacity:0; transform:translate(-50%, calc(-50% + 14px)); }
+  to   { opacity:1; transform:translate(-50%, -50%); }
+}
+@keyframes pc-beat-drop {
+  from { opacity:0; transform:translate(-50%, calc(-50% - 22px)) scale(.86); }
+  to   { opacity:1; transform:translate(-50%, -50%) scale(1); }
+}
+
+/* REDUCED: the picture, standing still. Nothing slides, nothing fades in, and
+   the module holds it 1.2s instead of 1.6 so a still frame does not outstay. */
+.pc-beat.is-still,
+.pc-beat.is-still .pc-beat-plate,
+.pc-beat.is-still .pc-beat-seat { animation:none; }
+
+/* Lite drops the two shadows the beat costs and keeps the picture. */
+.pc-root.is-lite .pc-beat-plate { box-shadow:none; }
+.pc-root.is-lite .pc-beat-sprite { filter:none; }
+
+@media (max-width:520px) {
+  .pc-beat-seat, .pc-beat-sprite { width:64px; height:64px; }  /* 192/3 */
+  .pc-beat-glyph { font-size:36px; }
+}

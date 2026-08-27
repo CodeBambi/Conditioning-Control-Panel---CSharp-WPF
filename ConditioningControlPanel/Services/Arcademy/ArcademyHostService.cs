@@ -1607,6 +1607,17 @@ internal static class ArcademyHostService
         ["prize_payday_label"] = "Hot room tonight",
         ["prize_payday_2"] = "is paying double",
         ["prize_payday_5"] = "is paying five times over",
+        // THE ANTECHAMBER (shell/prizebooth.js). The painted booth you walk up to before
+        // the shelf opens: the lit window, the tray on the sill, and what a counter with
+        // its shutter down says. `prize_closed` is one word because it is stencilled on
+        // the shutter, not spoken.
+        ["prize_booth_window"] = "The service window",
+        ["prize_booth_tray"] = "The ticket tray",
+        ["prize_closed"] = "Closed",
+        ["prize_closed_line"] = "The shutter is down and the sign above it has been switched off at the wall.",
+        ["prize_no_payday"] = "No room is paying over the odds tonight. Every graded class still pays tickets.",
+        ["settings_classes_head"] = "Classes",
+        ["campus_desc_prizes_shut"] = "Shutter down over the window, parcels still stacked behind it. Back another night.",
         // The eight rows on the shelf. Names and blurbs both, so a page with a partial mod
         // table still reads (the catalog also ships the neutral English on the wire). Keyed
         // EXACTLY as ArcademyEconomy.Catalog's NameKey/BlurbKey - a missing row here is a blank

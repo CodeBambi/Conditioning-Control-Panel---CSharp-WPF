@@ -360,6 +360,20 @@ const ART_BASE = (function resolveArtBase() {
 /** The keyed logo file for one class. */
 function logoUrl(key) { return ART_BASE + 'logo-' + key + '.png'; }
 
+/* THE PEEK PLATE. The one painted picture the plan is allowed to show, and it
+ * is not ON the plan: it rides the hover card for the Prize Counter, which is
+ * the alley those three service windows stand in. The map stays vector to the
+ * last line (nothing raster may be drawn into the SVG - see the header's own
+ * ruling on that), and a card that pops beside the cursor is not the map.
+ *
+ * It lives with the VN plates rather than under art/campus/, because it IS one:
+ * the same painting the antechamber's neighbouring windows are cropped from. */
+const PEEK_BASE = (function resolvePeekBase() {
+  try { return new URL('../art/vn/', import.meta.url).href; }
+  catch (e) { return 'art/vn/'; }       // no URL/import.meta (a DOM double)
+}());
+const PEEK_PRIZES = PEEK_BASE + 'vn-17-prize-alley.png';
+
 /* ----------------------------------------------------------------------------
  * THE IDLE ATTRACT - tunables (Deck VI: demo, don't explain).
  * -------------------------------------------------------------------------- */
@@ -1420,6 +1434,17 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       neon.appendChild(svgText(cx, neonY + 11, null, o.sign.toUpperCase()));
       /* No marquee rect: the bulb chase is a CABINET's, and an office that
        * chased its bulbs would be advertising a class it does not teach. */
+      /* AND ONE THAT IS NOT LIT. A facility whose room is shut keeps its sign
+       * standing - a landmark you can no longer use is still the landmark you
+       * navigate by - but the power to it is off, which is two inline
+       * properties rather than a stylesheet rule: the tube dims and the bloom
+       * around it goes, because bloom is the sign being ON. */
+      if (o.signOff) {
+        try {
+          neon.style.setProperty('opacity', '.32');
+          neon.style.setProperty('filter', 'none');
+        } catch (e) { /* noop */ }
+      }
       g.appendChild(neon);
     }
     const nameY = o.nameY != null ? o.nameY : (o.side === 'n' ? y + 156 : y + 176);
@@ -1533,37 +1558,102 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     stag(annexG, 820);
   }
 
-  /* THE PRIZE COUNTER. The post bag's contract for the third time: the campus
-   * mounts the window only when the shell hands an `economy` bag, and the shell
-   * keeps the catalog, the wallet and every byte of it. A host with no economy
-   * projected in `init` gets the campus it always had, with no dark room and no
-   * gap in the alley where a room used to be. */
-  let prizesG = null;
-  if (economy) {
-    prizesG = facility({
-      rect: FACILITIES.prizes.rect, door: FACILITIES.prizes.door,
-      side: FACILITIES.prizes.side, compact: true,
-      neonY: 580, nameY: 618,
-      sign: t('wallet_tickets', 'Tickets'),
-      name: t('campus_room_prizes', 'Prize Counter'),
-      rm: FACILITIES.prizes.rm,
-      onClick: () => { if (handlers.prizes) handlers.prizes(); },
-      tip: () => ({
+  /* THE PRIZE COUNTER. THIRD WINDOW IN THE ALLEY, AND IT IS ALWAYS THERE.
+   *
+   * It used to mount only when the shell handed an `economy` bag, which made
+   * the plan tell a lie about the building: the alley has three service windows
+   * painted in it and, on a host with no economy, only two of them were rooms.
+   * A landmark that comes and goes is not a landmark, it is a menu item, and
+   * the reason this counter got a painted antechamber at all is that it is a
+   * PLACE - somewhere in the school you can be standing.
+   *
+   * So the bag no longer decides whether the room exists. It decides whether
+   * the room is OPEN, which is the distinction the east wing has always drawn:
+   *   LIT       sign burning, parcels on the shelf, "Open late", and the click
+   *             WALKS (handlers.prizes, which is the walk and then the booth).
+   *   SHUTTERED sign standing but dark, shutter down over the shelf, "Closed",
+   *             and the click raises the sealed card, whose own lockedClick is
+   *             the seam every other shut door on this campus already fires.
+   *             No walk: you do not walk somebody the length of a school to
+   *             stand in front of a window that is closed.
+   *
+   * `FACILITIES.prizes` is untouched either way. The rect, the door and the
+   * walk's stop are geography, and geography does not keep opening hours. */
+  const prizesLit = !!economy;
+  const prizesG = facility({
+    rect: FACILITIES.prizes.rect, door: FACILITIES.prizes.door,
+    side: FACILITIES.prizes.side, compact: true,
+    neonY: 580, nameY: 618,
+    sign: t('wallet_tickets', 'Tickets'),
+    signOff: !prizesLit,
+    name: t('campus_room_prizes', 'Prize Counter'),
+    rm: FACILITIES.prizes.rm,
+    onClick: () => {
+      if (prizesLit) { if (handlers.prizes) handlers.prizes(); return; }
+      /* The sealed card, exactly as the two shut wings raise it: the name, one
+       * line, a GO button that says Sealed and does nothing, and the EMI seam
+       * fired from inside `openFacilityCard` rather than from here - so a shut
+       * window and a taped-off wing are one event and never two. */
+      openFacilityCard({
         name: t('campus_room_prizes', 'Prize Counter'),
-        status: t('campus_prizes_status', 'Open late'),
-        desc: t('campus_desc_prizes',
-          'Tickets on the shelf, tokens in the case. Somebody is always restocking.'),
-      }),
-    });
-    /* THE LIT WINDOW. Records gets the trophy-case gold through this same one
-     * modifier; the counter takes its own so the stylesheet can warm it without
-     * either of them borrowing the other's rule. */
-    prizesG.setAttribute('class', 'campus-room facility prizes');
-    /* the shelf behind the glass - three parcels in a row on the back wall */
-    [1280, 1304, 1328].forEach((x) => prizesG.appendChild(
-      svg('rect', { x, y: 644, width: 18, height: 13 }, 'campus-furnf')));
-    stag(prizesG, 860);
+        status: t('prize_closed', 'Closed'),
+        desc: t('campus_desc_prizes_shut',
+          'Shutter down over the window, parcels still stacked behind it. Back another night.'),
+        sealed: true,
+      });
+    },
+    tip: () => (prizesLit ? {
+      name: t('campus_room_prizes', 'Prize Counter'),
+      status: t('campus_prizes_status', 'Open late'),
+      desc: t('campus_desc_prizes',
+        'Tickets on the shelf, tokens in the case. Somebody is always restocking.'),
+      /* THE PEEK, and this is the only card on the plan that carries one: the
+       * alley these three windows stand in, painted. It rides the card rather
+       * than the walk because walk.js has no surface to show a plate on - it is
+       * an SVG miniature of this same map with a line growing across it, and a
+       * painting inside a miniature of a map is a second camera nobody asked
+       * for. A card beside the cursor is the honest place to say what it looks
+       * like over there. */
+      art: PEEK_PRIZES,
+    } : {
+      name: t('campus_room_prizes', 'Prize Counter'),
+      status: t('prize_closed', 'Closed'),
+      desc: t('campus_desc_prizes_shut',
+        'Shutter down over the window, parcels still stacked behind it. Back another night.'),
+      /* No peek on a shut window. The painting is of a lit alley, and a picture
+       * of the place being open is the wrong thing to hand somebody the moment
+       * they find out that it is not. */
+    }),
+  });
+  /* THE LIT WINDOW. Records gets the trophy-case gold through this same one
+   * modifier; the counter takes its own so the stylesheet can warm it without
+   * either of them borrowing the other's rule. `is-shut` is that same hook one
+   * step down, and nothing in the sheet needs to know it exists for the room to
+   * read as closed - the drawing below does that on its own. */
+  prizesG.setAttribute('class', 'campus-room facility prizes' + (prizesLit ? '' : ' is-shut'));
+  /* the shelf behind the glass - three parcels in a row on the back wall */
+  [1280, 1304, 1328].forEach((x) => prizesG.appendChild(
+    svg('rect', { x, y: 644, width: 18, height: 13 }, 'campus-furnf')));
+  /* THE SHUTTER, and it goes on AFTER the parcels so the parcels are behind it,
+   * which is exactly what the card claims ("parcels still stacked behind it").
+   * Vector like every other line on this plan, and inline-coloured rather than
+   * classed: it is one room's one state, and it should not cost a stylesheet
+   * rule that a later sheet could fight over. */
+  if (!prizesLit) {
+    prizesG.appendChild(svg('rect', {
+      x: 1274, y: 637, width: 80, height: 21, rx: 1.5,
+      fill: '#0D0D1A', stroke: '#3B3455', 'stroke-width': 0.8,
+    }));
+    /* the slats, which are the thing that makes a dark box read as a shutter */
+    [641.5, 646, 650.5, 655].forEach((y) => prizesG.appendChild(svg('rect', {
+      x: 1276, y, width: 76, height: 0.9, fill: '#3B3455', opacity: 0.55,
+    })));
+    /* and the pull handle along the bottom rail */
+    prizesG.appendChild(svg('rect', {
+      x: 1300, y: 657, width: 28, height: 1.6, fill: '#6A5F8C',
+    }));
   }
+  stag(prizesG, 860);
 
   /* Entrance hall dressing (notice board, trophy case, admissions desk, crest) */
   const hall = svg('g', null, 'campus-halldress');
@@ -1786,7 +1876,19 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     walletTokenN = el('b', null, '0');
     kWrap.appendChild(walletTokenN);
     walletChip.appendChild(kWrap);
-    walletChip.addEventListener('click', () => { if (handlers.prizes) handlers.prizes(); });
+    /* THE CHIP IS NOT THE DOOR (ORIENTATION.md §2.3, the gear's ruling applied
+     * to the second thing in this cluster that opens a room). The topbar gear
+     * goes STRAIGHT to settings while the Front Office door walks there; the
+     * purse goes straight to the shelf while the alley window walks there. A
+     * shortcut that made you walk would not be a shortcut, and a door that
+     * teleported you would not be a door.
+     * `prizesShelf` is an OPT-IN override exactly like `registrarRoom` is: a
+     * caller that only knows `prizes` (every caller before the booth, and every
+     * suite) still gets the behaviour it always got. */
+    walletChip.addEventListener('click', () => {
+      const fn = handlers.prizesShelf || handlers.prizes;
+      if (fn) fn();
+    });
     try { topCluster.insertBefore(walletChip, gear); } catch (e) { topCluster.appendChild(walletChip); }
     paintWallet();
   }
@@ -1992,7 +2094,27 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   const tipName = el('div', 't-name');
   const tipStatus = el('div', 't-status');
   const tipDesc = el('div', 't-desc');
+  /* THE PEEK. Empty for every room on the plan except the one that has a
+   * painting of itself (the Prize Counter's alley), and hidden until a card
+   * asks for it. Styled INLINE on purpose: styles.css is another agent's desk
+   * this session and the campus already sets tip geometry through
+   * `tip.style.setProperty`, so this is the sheet the card already uses. */
+  const tipArt = el('img', 't-art');
+  try {
+    tipArt.alt = '';
+    tipArt.setAttribute('aria-hidden', 'true');
+    tipArt.style.setProperty('display', 'none');
+    tipArt.style.setProperty('width', '100%');
+    tipArt.style.setProperty('height', 'auto');
+    tipArt.style.setProperty('margin-top', '7px');
+    tipArt.style.setProperty('border-radius', '5px');
+    /* A 16:9 plate scaled to a 226px card is a fractional downscale, so the
+     * browser's own resample and NOT `pixelated` - see prizecounter.css's
+     * header for the same ruling, and the same reason. */
+    tipArt.style.setProperty('image-rendering', 'auto');
+  } catch (e) { /* noop */ }
   tip.appendChild(tipName); tip.appendChild(tipStatus); tip.appendChild(tipDesc);
+  tip.appendChild(tipArt);
   root.appendChild(tip);
 
   /** `onDwell` is EMI's, and only the class rooms pass one - see HOVER_DWELL_MS. */
@@ -2015,6 +2137,17 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       tipName.textContent = d.name || '';
       tipStatus.textContent = d.status || '';
       tipDesc.textContent = d.desc || '';
+      /* ONE card carries the tip for the whole plan, so a picture set on one
+       * room has to be UNSET by the next one or the alley follows the pointer
+       * around the school. Cleared first, then set - never the other way. */
+      try {
+        if (d.art) {
+          if (tipArt.getAttribute('src') !== d.art) tipArt.setAttribute('src', d.art);
+          tipArt.style.setProperty('display', 'block');
+        } else {
+          tipArt.style.setProperty('display', 'none');
+        }
+      } catch (e) { /* noop */ }
       tip.classList.add('on');
       if (onDwell && typeof setTimeout === 'function') {
         clearHoverDwell();

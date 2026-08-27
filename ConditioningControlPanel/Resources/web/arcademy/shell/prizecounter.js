@@ -201,6 +201,51 @@ export function spriteUrl(sku) {
   return urlFor('../art/prizes/' + file, 'art/prizes/' + file);
 }
 
+/** The plate behind the tray beat (see `trayBeat` below). The counter's own
+ *  half of the booth's painted set, so it lives with the counter. */
+export function trayPlateUrl() {
+  return urlFor('../art/vn/vn-20-prize-tray.png', 'art/vn/vn-20-prize-tray.png');
+}
+
+/**
+ * TONIGHT'S HOT ROOM, IN PIECES, so two rooms can say it in one voice.
+ *
+ * The counter has always drawn this line and the booth's ticket tray wants to
+ * read the same one out at the sill. Copying three keys across a second file is
+ * how a school ends up with two payday sentences that disagree the week
+ * somebody edits one of them, so the STRINGS live here, once, and each room
+ * builds its own little box around them.
+ *
+ * @param {?Object} pd  the host's projection, `{gameKey, mult}` or null
+ * @param {Function} t  the caller's lexicon lookup
+ * @param {?Function} gameName  (key) -> that room's display name, optional
+ * @returns {?{label:string, name:string, tail:string, mult:number}} null when
+ *          there is no payday worth announcing (no projection, or a multiplier
+ *          of one, which is not a payday, it is a Tuesday)
+ */
+export function paydayParts(pd, lookup, gameName) {
+  if (!pd || !pd.gameKey) return null;
+  /* Shadowed as `t` ON PURPOSE and not as `look`. The seam suite greps this
+   * page for its literal lookup call sites and proves the host ships a row for
+   * every word the school says (trap 123). A lookup renamed on its way into a
+   * helper is a lookup that check cannot see, and a key nothing can see is a
+   * key that reads fine in English and can never be translated or modded. */
+  const t = typeof lookup === 'function' ? lookup : lexT;
+  const mult = Number(pd.mult) || 0;
+  if (mult <= 1) return null;
+  let name = String(pd.gameKey);
+  try { if (typeof gameName === 'function') name = gameName(pd.gameKey) || name; }
+  catch (e) { /* the key is a fine last resort */ }
+  return {
+    label: t('prize_payday_label', 'Hot room tonight'),
+    name: name,
+    tail: mult >= 5
+      ? t('prize_payday_5', 'is paying five times over')
+      : t('prize_payday_2', 'is paying double'),
+    mult: mult,
+  };
+}
+
 /** prizecounter.css, linked once and lazily - recordsroom.js's pattern. */
 function ensureSheet(doc, log) {
   try {
@@ -337,6 +382,10 @@ export function createPrizeCounter(caps) {
   let pendingTimer = null;
   /** The last line the counter said, kept as a test seam. */
   let note = '';
+  /** THE TRAY BEAT's own two holds. One at a time, like the pending row: two
+   *  overlapping beats would be two trays, and there is one tray. */
+  let beatEl = null;
+  let beatTimer = null;
 
   /* The mirrors. Seeded from caps, and thereafter moved ONLY by settle(). */
   let wallet = readBalance();
@@ -598,16 +647,103 @@ export function createPrizeCounter(caps) {
     if (r.inv && typeof r.inv === 'object') inv = r.inv;
     if (r.unlocks && typeof r.unlocks === 'object') unlocks = r.unlocks;
 
+    let won = null;
     if (r.ok === true) {
       say(t('prize_bought', 'Wrapped up and yours.'));
       sfx('chime', 0.55);
+      won = String(r.sku || was || '');
     } else {
       const row = REFUSALS[String(r.reason || '')] || REFUSALS.unknown;
       say(t(row[0], row[1]));
       sfx('bump', 0.34);
     }
     render();
+    /* THE HAND-OVER, AND IT HANGS OFF THE ECHO. Not off the press: a press only
+     * asks, and a tray that slid out when the player pressed Buy would be the
+     * room promising a thing the host has not agreed to hand over yet. Nothing
+     * below this line can reach a refusal or a timeout. */
+    if (won !== null) trayBeat(won);
     return !!was && (!r.sku || r.sku === was);
+  }
+
+  /* -------------------------------------------------------- THE TRAY BEAT */
+
+  /**
+   * A second and a half at the sill: the booth's ticket tray, painted, with the
+   * thing that was just bought sitting in it. It is the only picture of the
+   * exchange this feature has, and it is worth the second and a half because
+   * everything else about a purchase in this school is a number moving.
+   *
+   * WHAT IT IS NOT: a dialog, a confirmation, or a thing to press. It cannot be
+   * dismissed because it cannot be answered, it takes no pointer and no focus,
+   * and it takes itself off. A player who has already looked away has lost
+   * nothing at all - the shelf underneath it has already been repainted with
+   * the new balance by the time this is on screen.
+   *
+   * REDUCED MOTION GETS THE PICTURE, NOT LESS OF IT. The plate stands still for
+   * 1.2s with no slide and no fade under `.is-still`; the sprite is not
+   * animated in either cut. Motion is the thing being turned down, and the
+   * picture was never the motion.
+   *
+   * ONE CUE, `paper`, out of the SOUNDS table (trap 115) and through the event
+   * (trap 18). The chime for the purchase has already gone; this is the sound
+   * of the tray coming out, and it is the quieter of the two on purpose.
+   *
+   * @param {string} sku the sku the host confirmed, for the sprite
+   */
+  function trayBeat(sku) {
+    if (dead) return null;
+    clearBeat();
+    const still = reduced();
+    const wrap = el('div', 'pc-beat' + (still ? ' is-still' : ''));
+    attr(wrap, 'aria-hidden', 'true');
+
+    const plate = el('img', 'pc-beat-plate');
+    try { plate.src = trayPlateUrl(); plate.alt = ''; } catch (e) { /* noop */ }
+    /* A plate that will not load takes ITSELF off and leaves the sprite over a
+     * dark card, the way a sku with no art falls back to its glyph. */
+    try {
+      plate.addEventListener('error', function () {
+        try { plate.remove(); } catch (e2) { /* noop */ }
+        addCls(wrap, 'is-bare');
+      });
+    } catch (e) { /* noop */ }
+    wrap.appendChild(plate);
+
+    /* Centred ON THE TRAY rather than on the card: the tray's mouth sits a
+     * little below the middle of a 1:1 plate, and a sprite in the geometric
+     * centre of the picture is a sprite floating above the tray. */
+    const seat = el('div', 'pc-beat-seat');
+    const url = spriteUrl(sku);
+    if (url) {
+      const sp = el('img', 'pc-beat-sprite');
+      try { sp.src = url; sp.alt = ''; } catch (e) { /* noop */ }
+      try {
+        sp.addEventListener('error', function () {
+          try { sp.remove(); } catch (e2) { /* noop */ }
+          seat.appendChild(el('span', 'pc-beat-glyph', GLYPHS[sku] || '▤'));
+        });
+      } catch (e) { /* noop */ }
+      seat.appendChild(sp);
+    } else {
+      seat.appendChild(el('span', 'pc-beat-glyph', GLYPHS[sku] || '▤'));
+    }
+    wrap.appendChild(seat);
+
+    beatEl = wrap;
+    try { root.appendChild(wrap); } catch (e) { /* noop */ }
+    sfx('paper', 0.3);
+    beatTimer = setTimeout(function () {
+      beatTimer = null;
+      clearBeat();
+    }, still ? 1200 : 1600);
+    return wrap;
+  }
+
+  /** Take the beat off, from anywhere, twice if you like. */
+  function clearBeat() {
+    if (beatTimer) { try { clearTimeout(beatTimer); } catch (e) { /* noop */ } beatTimer = null; }
+    if (beatEl) { try { beatEl.remove(); } catch (e) { /* noop */ } beatEl = null; }
   }
 
   /* ------------------------------------------------------------ the render */
@@ -659,24 +795,23 @@ export function createPrizeCounter(caps) {
     });
     signExit(back, { dir: 'back' });
     root.appendChild(exitBar([back]));
+    /* The render empties `root`, and settle() renders BEFORE it fires the beat.
+     * A refresh landing mid-beat (a payout, say) would otherwise sweep the tray
+     * off half a second in, so the beat is re-seated last and stays its second
+     * and a half however many times the shelf is repainted under it. */
+    if (beatEl) { try { root.appendChild(beatEl); } catch (e) { /* noop */ } }
     return root;
   }
 
   function paydayLine() {
     let pd = null;
     try { pd = (typeof c.payday === 'function') ? c.payday() : null; } catch (e) { pd = null; }
-    if (!pd || !pd.gameKey) return null;
-    const mult = Number(pd.mult) || 0;
-    if (mult <= 1) return null;
-    let name = String(pd.gameKey);
-    try { if (typeof c.gameName === 'function') name = c.gameName(pd.gameKey) || name; }
-    catch (e) { /* the key is a fine last resort */ }
+    const parts = paydayParts(pd, t, c.gameName);
+    if (!parts) return null;
     const line = el('div', 'pc-payday');
-    line.appendChild(el('span', 'pc-payday-lbl', t('prize_payday_label', 'Hot room tonight')));
-    line.appendChild(el('b', 'pc-payday-name', name));
-    line.appendChild(el('span', 'pc-payday-mult', mult >= 5
-      ? t('prize_payday_5', 'is paying five times over')
-      : t('prize_payday_2', 'is paying double')));
+    line.appendChild(el('span', 'pc-payday-lbl', parts.label));
+    line.appendChild(el('b', 'pc-payday-name', parts.name));
+    line.appendChild(el('span', 'pc-payday-mult', parts.tail));
     return line;
   }
 
@@ -692,6 +827,7 @@ export function createPrizeCounter(caps) {
     dead = true;
     if (pendingTimer) { try { clearTimeout(pendingTimer); } catch (e) { /* noop */ } pendingTimer = null; }
     pending = null;
+    clearBeat();
     rows.clear();
     try { root.remove(); } catch (e) { /* noop */ }
   }
@@ -716,6 +852,8 @@ export function createPrizeCounter(caps) {
     get balance() { return { t: wallet.t, k: wallet.k }; },
     /** One painted row by sku, or null (test seam). */
     rowFor(sku) { return rows.get(sku) || null; },
+    /** The tray beat currently on screen, or null (test seam). */
+    get beat() { return beatEl; },
     destroy,
   };
 }
