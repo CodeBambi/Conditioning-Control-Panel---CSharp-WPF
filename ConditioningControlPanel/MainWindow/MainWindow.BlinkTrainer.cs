@@ -1404,7 +1404,24 @@ namespace ConditioningControlPanel
                 {
                     // Off the UI thread so the camera/ONNX load doesn't freeze
                     // the window; the loading splash shows during the wait.
-                    if (await svc.StartAsync()) startedHere = true;
+                    //
+                    // A FAILED start used to fall straight through to the dialog below:
+                    // startedHere stayed false, nothing returned, and the user was left
+                    // staring at a pink dot behind a dead tracker while no sample was ever
+                    // taken. Match the Lab/Devices handler
+                    // (MainWindow.LabTab.cs BtnWebcamDebugQuickRecal_Click), which says so
+                    // and stops.
+                    if (!await svc.StartAsync())
+                    {
+                        System.Windows.MessageBox.Show(this,
+                            Localization.Loc.GetF("blink_trainer_quick_recal_start_failed_body", svc.State),
+                            Localization.Loc.Get("blink_trainer_quick_recal_start_failed_title"),
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                        RefreshBlinkTrainerWebcamColumn();
+                        return;
+                    }
+                    startedHere = true;
                 }
 
                 var recalDlg = new WebcamQuickRecalWindow { Owner = this };

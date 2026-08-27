@@ -7386,6 +7386,75 @@ namespace ConditioningControlPanel.Models
             set { _webcamAutoDriftCorrection = value; OnPropertyChanged(); }
         }
 
+        // System-wide Ctrl+Alt+G that opens Quick Recal from anywhere, so mid-session
+        // drift can be corrected without leaving whatever the user is doing to go dig
+        // the button out of a setup card. Default on; off means MainWindow simply never
+        // takes the GlobalHotkeyService slot (the three in-app buttons are unaffected).
+        // NOT the camera start/stop shortcut — that is CompanionPrompt.CameraShortcut*
+        // and it stops the tracker; this one never does.
+        private bool _webcamQuickRecalHotkeyEnabled = true;
+        public bool WebcamQuickRecalHotkeyEnabled
+        {
+            get => _webcamQuickRecalHotkeyEnabled;
+            set { _webcamQuickRecalHotkeyEnabled = value; OnPropertyChanged(); }
+        }
+
+        // ---- Gaze cursor settle tuning (no UI — JSON-only dev knobs) -------
+        // The three numbers that dominate how long the gaze cursor takes to
+        // settle after a small corrective eye movement. They live in settings
+        // ONLY so they can be swept on a real face during a play-test without
+        // a rebuild; there is deliberately no UI for them. The defaults here
+        // are the tuned values, so a missing settings file behaves identically
+        // to the hardcoded constants in WebcamTrackingService.
+        //
+        // Edit these in %LOCALAPPDATA%/ConditioningControlPanel/settings.json
+        // with the app CLOSED (a running app rewrites the file from memory on
+        // save), then relaunch.
+        //
+        // Direction of travel, if you are sweeping:
+        //   GazeCursorFollowMin      ↑ = settles faster, more shimmer at rest
+        //   GazeCursorRampDist       ↓ = mid-size corrections speed up sooner
+        //   GazeScreenOneEuroBeta    ↑ = filter gets out of the way while moving
+        // See the tuning-history comments in WebcamTrackingService for the
+        // arithmetic behind each default and the units trap on Beta.
+
+        /// <summary>
+        /// Per-frame follow fraction floor for the gaze cursor follower
+        /// (WebcamTrackingService.ShapeCursorMotion). 0.22 ≈ a 134ms time
+        /// constant at 30fps. Clamped to 0.01-0.9 by the consumer — it must
+        /// stay below 1.0 or the follower degenerates into a snap.
+        /// </summary>
+        private double _gazeCursorFollowMin = 0.22;
+        public double GazeCursorFollowMin
+        {
+            get => _gazeCursorFollowMin;
+            set { _gazeCursorFollowMin = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Distance in DIPs at which the gaze cursor follower reaches full
+        /// catch-up speed. The ramp is quadratic, so this mostly governs the
+        /// mid-size (150-400 DIP) correction band.
+        /// </summary>
+        private double _gazeCursorRampDist = 360.0;
+        public double GazeCursorRampDist
+        {
+            get => _gazeCursorRampDist;
+            set { _gazeCursorRampDist = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Beta for the SCREEN-space One-Euro filter, in DIP/s velocity units.
+        /// NOT comparable to the iris-space One-Euro beta (0.007) — different
+        /// unit space; making the two match is a bug, not a cleanup.
+        /// </summary>
+        private double _gazeScreenOneEuroBeta = 0.06;
+        public double GazeScreenOneEuroBeta
+        {
+            get => _gazeScreenOneEuroBeta;
+            set { _gazeScreenOneEuroBeta = value; OnPropertyChanged(); }
+        }
+
         // Box 2 — Focus Training
         private bool _focusGameEnabled;
         public bool FocusGameEnabled
