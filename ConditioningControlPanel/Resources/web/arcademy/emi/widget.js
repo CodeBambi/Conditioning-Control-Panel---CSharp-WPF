@@ -276,8 +276,15 @@ export function frameForFace(text) {
  * EMI'S DESK TOY (Counter Stock prize `emi_desk_toy`)
  * ==========================================================================*/
 /** The prop, docked at her lower corner. Missing art hides the node and that is
- *  the whole error path - art is allowed to arrive after the code does. */
-export const TOY_SRC = './art/emi/toy.png';
+ *  the whole error path - art is allowed to arrive after the code does.
+ *
+ *  THE FALLBACK HAS TO BE A FILE THAT EXISTS (2026-08-27). This pointed at
+ *  `art/emi/toy.png` from the day the prop was written until the art landed,
+ *  and that file was never drawn - so the "drop back to the still plate" path
+ *  below could only ever miss a second time and take the prop down with it. It
+ *  is the beads' first frame now, which is the toy the `emi_desk_toy` sprite
+ *  actually depicts, so the fallback is a real still of the real prize. */
+export const TOY_SRC = './art/emi/toys/beads_f1.png';
 /* ONE SKU, FIVE TOYS, AND THAT IS DELIBERATE. The catalog has exactly one
  * `emi_desk_toy` row and it is not getting a second: what the token buys is "a
  * toy on EMI's desk", and WHICH toy is on it rotates by day off the same seed
@@ -1037,9 +1044,10 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
    * it does not come back this sitting however often the bag is re-set. */
   if (toy.addEventListener) {
     toy.addEventListener('error', () => {
-      /* THE DAY'S LOOP MAY NOT BE IN THE BUNDLE, and TOY_SRC has shipped since
-       * the prize did - so a broken frame drops the whole loop back to the one
-       * still plate rather than taking the prop down. A second error, on the
+      /* THE DAY'S LOOP MAY NOT BE IN THE BUNDLE, so a broken frame drops the
+       * whole loop back to the one still plate rather than taking the prop
+       * down. That plate is a frame that ships in this same folder, which is
+       * the only reason this branch is worth having. A second error, on the
        * plate itself, is the end of it for the sitting. */
       stopToyLoop();
       if (!toyFellBack) {
