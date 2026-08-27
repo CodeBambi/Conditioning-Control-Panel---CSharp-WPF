@@ -4614,5 +4614,8 @@
   "lockdown_poss_safety_dose": "Nichts läuft? Lockdown wählt für dich",
   "lockdown_poss_safety_dose_tip": "Ein Lockdown läuft nie leer. Engine aus beim Start: sie wird für dich gestartet. Nichts eingeschaltet (oder du schaltest mittendrin alles aus): die Wärterin schaltet Features ein, jedes Mal eins mehr, und gibt am Ende alles zurück.",
   "st4_braindrain_audio_rate": "Audio-Häufigkeit",
-  "label_braindrain": "Brain Drain"
+  "label_braindrain": "Brain Drain",
+  "label_ambient_bubble_xp_budget": "Blasen-XP heute: {0}/{1}",
+  "label_resume_takeover_on_startup": "↻ Übernahme beim Start fortsetzen",
+  "tooltip_autonomy_resume_on_startup": "Wenn aktiviert, aktiviert sich die Übernahme beim nächsten Start der App erneut. Standardmäßig aus, die Übernahme startet also immer ausgeschaltet."
 }

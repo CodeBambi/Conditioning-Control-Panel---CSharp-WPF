@@ -92,8 +92,11 @@ public sealed class ChaosGifCascadeOverlay : Window
             // user sees them wherever they are (#493); a chaos run keeps its per-config coverage (all
             // screens when DualMonitor is on, primary-only when off).
             bool chaosRun = App.Chaos?.IsRunning == true;
-            bool dual = App.Settings?.Current?.DualMonitorEnabled ?? true;
-            _active.SetSpawnSpread(fullSpread: !chaosRun || dual);
+            // #1057: resolve through the SHARED screen path every other overlay uses instead of
+            // reading DualMonitorEnabled raw, and confine to the resolved screens' real bounds
+            // rather than assuming the primary is the target.
+            var screens = App.ResolveScreens(chaosRun ? App.MonitorTargetFollowGlobal : App.MonitorTargetAll);
+            _active.SetSpawnSpread(screens);
 
             ChaosWindowZ.RaiseAboveVideo(_active);   // un-hiding doesn't re-stack — kick over a playing video
             // Dashboard "cascade" trigger-bubble use (no chaos run): force the singleton topmost so a
@@ -261,14 +264,40 @@ public sealed class ChaosGifCascadeOverlay : Window
         };
     }
 
-    /// <summary>Set the window-local X band clips spawn/fall in. Full = the whole virtual screen (all
-    /// monitors); otherwise the primary monitor only. Window-local X = global DIP − window.Left, and the
-    /// window's Left is VirtualScreenLeft, so the primary's left edge is (0 − VirtualScreenLeft).</summary>
-    private void SetSpawnSpread(bool fullSpread)
+    /// <summary>Set the window-local X band clips spawn/fall in, from the RESOLVED target screens
+    /// (<see cref="App.ResolveScreens"/>). Window-local X = global DIP − window.Left, and the window's
+    /// Left is VirtualScreenLeft, so a screen's left edge is (screenLeftDip − VirtualScreenLeft).
+    /// The band is the union of the resolved screens' bounds so a single non-primary target confines
+    /// correctly (#1057 — the old code always fell back to PrimaryScreenWidth). Empty/failed
+    /// resolution errs toward the whole virtual screen rather than raining nowhere.</summary>
+    private void SetSpawnSpread(System.Windows.Forms.Screen[] screens)
     {
-        if (fullSpread) { _spawnLeft = 0; _spawnWidth = Width; return; }
-        _spawnLeft = 0 - SystemParameters.VirtualScreenLeft;
-        _spawnWidth = SystemParameters.PrimaryScreenWidth;
+        try
+        {
+            if (screens == null || screens.Length == 0) { _spawnLeft = 0; _spawnWidth = Width; return; }
+
+            var t = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice;
+            double minX = double.MaxValue, maxX = double.MinValue;
+            foreach (var sc in screens)
+            {
+                double l = sc.Bounds.Left, r = sc.Bounds.Right;
+                if (t.HasValue)
+                {
+                    l = t.Value.Transform(new Point(sc.Bounds.Left, sc.Bounds.Top)).X;
+                    r = t.Value.Transform(new Point(sc.Bounds.Right, sc.Bounds.Top)).X;
+                }
+                if (l < minX) minX = l;
+                if (r > maxX) maxX = r;
+            }
+            if (maxX <= minX) { _spawnLeft = 0; _spawnWidth = Width; return; }
+
+            // Global DIP -> window-local, then clip to the window so a stale bound can't spawn off-window.
+            var left = Math.Max(0, minX - SystemParameters.VirtualScreenLeft);
+            var width = Math.Min(maxX - minX, Math.Max(1, Width - left));
+            _spawnLeft = left;
+            _spawnWidth = Math.Max(1, width);
+        }
+        catch { _spawnLeft = 0; _spawnWidth = Width; }
     }
 
     /// <summary>(Re)start a cascade in the existing window — any in-flight clips are replaced.</summary>

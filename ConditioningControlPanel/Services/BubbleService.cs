@@ -873,13 +873,14 @@ public class BubbleService : IDisposable
             try
             {
                 var settings = App.Settings.Current;
-                // Baseline spawn: honor DualMonitorEnabled and let bubbles
-                // spawn on all monitors. Gaze-pop interaction on off-cal-
-                // screen bubbles is filtered by GazeFocusService.FindBestTarget;
+                // Baseline spawn: resolve through the SHARED screen path every other overlay uses
+                // (#1057) instead of reading DualMonitorEnabled raw, which ignored the single-screen
+                // restriction whenever the primary enumeration hiccuped. ResolveScreens also guards
+                // the transient-empty enumeration hazard (CLAUDE.md known issue #5). Gaze-pop on
+                // off-calibrated-screen bubbles is filtered by GazeFocusService.FindBestTarget;
                 // mouse-click still works everywhere.
-                var screens = settings.DualMonitorEnabled
-                    ? App.GetAllScreensCached()
-                    : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+                var screens = App.ResolveScreens(App.MonitorTargetFollowGlobal);
+                if (screens.Length == 0) return;
 
                 var screen = screens[_random.Next(screens.Length)];
                 // Outside sessions, bubbles are always clickable (no UI toggle exists for this setting)
@@ -924,13 +925,11 @@ public class BubbleService : IDisposable
                 StartAnimationDriver();
 
                 var settings = App.Settings.Current;
-                // Baseline spawn: keyword-triggered bubbles follow the same
-                // DualMonitorEnabled honoring as the running spawn loop. The
-                // gaze-read backstop in GazeFocusService.FindBestTarget keeps
-                // gaze-pop strictly on the calibrated screen.
-                var screens = settings.DualMonitorEnabled
-                    ? App.GetAllScreensCached()
-                    : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+                // Baseline spawn: keyword-triggered bubbles resolve through the same shared
+                // screen path as the running spawn loop (#1057). The gaze-read backstop in
+                // GazeFocusService.FindBestTarget keeps gaze-pop strictly on the calibrated screen.
+                var screens = App.ResolveScreens(App.MonitorTargetFollowGlobal);
+                if (screens.Length == 0) return;
 
                 var screen = screens[_random.Next(screens.Length)];
                 var isClickable = App.IsSessionRunning ? settings.BubblesClickable : true;
@@ -957,23 +956,30 @@ public class BubbleService : IDisposable
         var multiplier = App.SkillTree?.RollLuckyBubble() ?? 1;
         var isLucky = multiplier > 1;
 
-        // Tell bubble whether it's lucky so it can show the right visual effects
-        var hasSparkleBoost = (App.SkillTree?.GetSparkleBoostTier() ?? 0) > 0 && (App.Settings?.Current?.FlashGlowEnabled ?? true);
-        bubble.SetLucky(isLucky, hasSparkleBoost);
-
-        // Play appropriate sound (the avatar easter-egg pop comes through 50% louder)
-        PlayPopSound(isLucky, bubble.AvatarPopVolumeMult);
-
-        // Don't remove here - let the pop animation play, removal happens in OnDestroy
-        OnBubblePopped?.Invoke();
-
         // XP-economy daily bucket (feat/xp-economy): 5 XP a pop with an uncapped lucky roll was
         // the one grind loop with no ceiling at all. The bucket caps ambient-pop XP at 300 per
         // local calendar day — the lucky roll pays out of the same bucket, pops past the cap
         // still pop, sound, count for achievements and combo haptics; they just pay 0.
+        //
+        // #1019/#1026: paying 0 with NO signal at all read as "XP is broken". Drawn BEFORE the
+        // visuals now so a dry bucket can drop the golden XP flourish — the pop still pops and
+        // sounds, it just stops advertising a payout that isn't coming.
         var earnedXp = 5 * multiplier;
         var paidXp = TakeFromAmbientBubbleBucket(earnedXp);
         if (paidXp > 0) App.Progression?.AddXP(paidXp, XPSource.Bubble);
+        AmbientXpBudgetChanged?.Invoke();
+
+        // Tell bubble whether it's lucky so it can show the right visual effects. A lucky roll
+        // that paid nothing gets the ordinary pop: no gold glow, no lucky sparkle burst.
+        var paidLucky = isLucky && paidXp > 0;
+        var hasSparkleBoost = (App.SkillTree?.GetSparkleBoostTier() ?? 0) > 0 && (App.Settings?.Current?.FlashGlowEnabled ?? true);
+        bubble.SetLucky(paidLucky, hasSparkleBoost);
+
+        // Play appropriate sound (the avatar easter-egg pop comes through 50% louder)
+        PlayPopSound(paidLucky, bubble.AvatarPopVolumeMult);
+
+        // Don't remove here - let the pop animation play, removal happens in OnDestroy
+        OnBubblePopped?.Invoke();
 
         // Track for achievement
         App.Achievements?.TrackBubblePopped();
@@ -983,7 +989,34 @@ public class BubbleService : IDisposable
     }
 
     /// <summary>Daily ceiling on ambient-pop XP. Lucky rolls draw from the same bucket.</summary>
-    private const int AmbientBubbleDailyXpCap = 300;
+    public const int AmbientBubbleDailyXpCap = 300;
+
+    /// <summary>Raised (UI thread, from the pop path) whenever the ambient-bubble XP bucket moves,
+    /// so surfaces showing "N/300 today" can refresh. #1019/#1026.</summary>
+    public static event Action? AmbientXpBudgetChanged;
+
+    /// <summary>
+    /// XP already paid out of today's ambient-bubble bucket, 0..<see cref="AmbientBubbleDailyXpCap"/>.
+    /// READ-ONLY: applies the same lazy day rollover as the pop path in reasoning only — a stale day
+    /// key reads as 0 without mutating settings, so merely opening a tooltip never spends or resets
+    /// anything. #1019/#1026.
+    /// </summary>
+    public static int AmbientBubbleXpPaidToday()
+    {
+        try
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return 0;
+            var today = DateTime.Now.ToString("yyyy-MM-dd");
+            if (!string.Equals(settings.AmbientBubbleXpDayKey, today, StringComparison.Ordinal)) return 0;
+            return Math.Clamp(settings.AmbientBubbleXpPaidToday, 0, AmbientBubbleDailyXpCap);
+        }
+        catch { return 0; }
+    }
+
+    /// <summary>XP still payable from today's ambient-bubble bucket.</summary>
+    public static int AmbientBubbleXpRemainingToday()
+        => Math.Max(0, AmbientBubbleDailyXpCap - AmbientBubbleXpPaidToday());
 
     /// <summary>
     /// Draw <paramref name="earnedXp"/> from today's ambient-bubble bucket and return what the

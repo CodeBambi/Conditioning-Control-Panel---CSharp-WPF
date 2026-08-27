@@ -174,6 +174,22 @@
                                                                Foreground="#8888A0" FontSize="18" FontWeight="Bold"/>
                                                     <TextBlock x:Name="TxtTakeoverStatusSub" x:FieldModifier="internal" Text="She's not watching right now."
                                                                Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,2,0,0"/>
+
+                                                    <!-- #1048: the one setting that answers "why was Takeover off when I
+                                                         came back?" now sits ON the state card, next to the ON/OFF
+                                                         control, instead of buried in the mantra card further down. -->
+                                                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,8,0,6"/>
+                                                    <Grid Background="Transparent" ToolTip="{loc:Str tooltip_autonomy_resume_on_startup}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="{loc:Str label_resume_takeover_on_startup}" FontSize="12.5" FontWeight="SemiBold"
+                                                                   TextWrapping="Wrap" Margin="0,0,10,0"
+                                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                                        <CheckBox Grid.Column="1" x:Name="ChkAutonomyResumeOnStartup" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
+                                                                  VerticalAlignment="Center" Checked="ChkAutonomyResume_Changed" Unchecked="ChkAutonomyResume_Changed"/>
+                                                    </Grid>
                                                 </StackPanel>
                                             </Grid>
                                         </Grid>
@@ -573,18 +589,11 @@
                                                               VerticalAlignment="Center" Checked="ChkAutonomyVoice_Changed" Unchecked="ChkAutonomyVoice_Changed"/>
                                                 </Grid>
 
-                                                <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
-
-                                                <Grid Height="34" Background="Transparent" ToolTip="When on, Takeover re-arms itself the next time you launch the app. Off by default — Takeover always starts off.">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <TextBlock Grid.Column="0" Text="↻ Resume Takeover on startup" FontSize="13" FontWeight="SemiBold"
-                                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                                    <CheckBox Grid.Column="1" x:Name="ChkAutonomyResumeOnStartup" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                                              VerticalAlignment="Center" Checked="ChkAutonomyResume_Changed" Unchecked="ChkAutonomyResume_Changed"/>
-                                                </Grid>
+                                                <!-- #1048: "Resume Takeover on startup" MOVED out of this card and up
+                                                     into the state card beside the ON/OFF control. It is the setting that
+                                                     decides whether Takeover comes back armed after a restart, and buried
+                                                     down here behind mantra options it read as Takeover silently
+                                                     disarming itself. -->
 
                                                 <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
 

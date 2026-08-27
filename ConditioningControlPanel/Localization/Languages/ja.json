@@ -4605,5 +4605,8 @@
   "lockdown_poss_safety_dose": "何も動いていない？ロックダウンが代わりに選ぶ",
   "lockdown_poss_safety_dose_tip": "ロックダウンは空のままでは動きません。開始時にエンジンが止まっていれば代わりに起動します。何もオンでなければ（途中で全部オフにしても）、看守が機能をオンにし、毎回ひとつずつ増やし、タイマーが終わると全部元に戻します。",
   "st4_braindrain_audio_rate": "音声クリップの頻度",
-  "label_braindrain": "ブレインドレイン"
+  "label_braindrain": "ブレインドレイン",
+  "label_ambient_bubble_xp_budget": "本日のバブルXP: {0}/{1}",
+  "label_resume_takeover_on_startup": "↻ 起動時にテイクオーバーを再開",
+  "tooltip_autonomy_resume_on_startup": "オンにすると、次回アプリ起動時にテイクオーバーが再度有効になります。既定ではオフで、テイクオーバーは常にオフで始まります。"
 }

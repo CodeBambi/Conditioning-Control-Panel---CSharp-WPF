@@ -4614,5 +4614,8 @@
   "lockdown_poss_safety_dose": "Rien ne tourne ? Le verrouillage choisit pour toi",
   "lockdown_poss_safety_dose_tip": "Un verrouillage refuse de tourner à vide. Moteur éteint au départ : il est lancé pour toi. Rien d'activé (ou tu coupes tout en cours de route) : la gardienne active des fonctions, une de plus à chaque fois, et rend tout à la fin du minuteur.",
   "st4_braindrain_audio_rate": "Fréquence audio",
-  "label_braindrain": "Drainage Cérébral"
+  "label_braindrain": "Drainage Cérébral",
+  "label_ambient_bubble_xp_budget": "XP de bulles aujourd'hui : {0}/{1}",
+  "label_resume_takeover_on_startup": "↻ Reprendre la Prise de contrôle au démarrage",
+  "tooltip_autonomy_resume_on_startup": "Si activé, la Prise de contrôle se réarme au prochain lancement de l'application. Désactivé par défaut, la Prise de contrôle démarre donc toujours éteinte."
 }

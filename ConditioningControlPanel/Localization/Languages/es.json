@@ -4605,5 +4605,8 @@
   "lockdown_poss_safety_dose": "¿Nada en marcha? El bloqueo elige por ti",
   "lockdown_poss_safety_dose_tip": "Un bloqueo se niega a correr vacío. Motor apagado al empezar: se enciende por ti. Nada activado (o lo apagas todo a mitad): la guardiana activa funciones, una más cada vez, y lo devuelve todo cuando acaba el temporizador.",
   "st4_braindrain_audio_rate": "Frecuencia de audio",
-  "label_braindrain": "Drenaje Cerebral"
+  "label_braindrain": "Drenaje Cerebral",
+  "label_ambient_bubble_xp_budget": "XP de burbujas hoy: {0}/{1}",
+  "label_resume_takeover_on_startup": "↻ Reanudar el Control al iniciar",
+  "tooltip_autonomy_resume_on_startup": "Si está activado, el Control se rearma la próxima vez que abras la app. Desactivado por defecto, así que el Control siempre empieza apagado."
 }

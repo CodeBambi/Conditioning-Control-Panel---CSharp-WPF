@@ -3098,9 +3098,76 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private static LoadedImageData? DecodeRemoteStill(string url, Stream stream, int decodeMax)
+        /// <summary>
+        /// True when <paramref name="header"/> starts with a GIF signature ("GIF87a"/"GIF89a").
+        /// #1007: remote flashes decode from bytes, and the remote path only ever pulled ONE WIC
+        /// frame, so an online GIF flashed as a still. Content-type and URL extension are both
+        /// unreliable for these (Reddit/Scrolller renditions are served from CDNs with generic
+        /// types and extensionless paths), so the bytes are the only honest signal. Pure, so it is
+        /// unit-tested directly.
+        /// </summary>
+        internal static bool LooksLikeGif(ReadOnlySpan<byte> header)
+        {
+            if (header.Length < 6) return false;
+            if (header[0] != (byte)'G' || header[1] != (byte)'I' || header[2] != (byte)'F') return false;
+            if (header[5] != (byte)'a') return false;
+            // "87" or "89" - the only two ratified versions.
+            return header[3] == (byte)'8' && (header[4] == (byte)'7' || header[4] == (byte)'9');
+        }
+
+        /// <summary>Read the first bytes of a seekable stream and ask <see cref="LooksLikeGif"/>.
+        /// Always leaves the stream rewound for the decoder that follows.</summary>
+        private static bool StreamLooksLikeGif(Stream stream)
+        {
+            try
+            {
+                if (!stream.CanSeek) return false;
+                stream.Position = 0;
+                Span<byte> header = stackalloc byte[6];
+                int read = 0;
+                while (read < header.Length)
+                {
+                    int n = stream.Read(header.Slice(read));
+                    if (n <= 0) break;
+                    read += n;
+                }
+                return LooksLikeGif(header.Slice(0, read));
+            }
+            catch { return false; }
+            finally { try { if (stream.CanSeek) stream.Position = 0; } catch { } }
+        }
+
+        /// <param name="allowAnimated">False for the single-bitmap overlay caller, which only ever
+        /// reads frame 0 - decoding a whole GIF there would be pure waste.</param>
+        private static LoadedImageData? DecodeRemoteStill(string url, Stream stream, int decodeMax, bool allowAnimated = true)
         {
             var data = new LoadedImageData { FilePath = url };
+
+            // #1007: an ANIMATED remote GIF gets the same SKCodec frame decode (and the same frame
+            // budget: decodeMax edge, <=60 frames, <=30MB kept) as a local one in LoadGifFrames,
+            // via the stream overload. Sniffed from the bytes because the URL usually carries no
+            // usable extension. Still/single-frame GIFs return null here and fall through to the
+            // WIC still path below, exactly like the local loader's fallback.
+            if (allowAnimated && StreamLooksLikeGif(stream))
+            {
+                try
+                {
+                    if (AnimatedWebp.DecodeFrames(stream, decodeMax, maxFrames: 60, maxMemoryMb: 30.0) is { } gif
+                        && gif.Frames.Count > 0)
+                    {
+                        data.Frames.AddRange(gif.Frames);
+                        data.Width = gif.Frames[0].PixelWidth;
+                        data.Height = gif.Frames[0].PixelHeight;
+                        data.FrameDelay = gif.FrameDelay;
+                        return data;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("FlashService: remote GIF {Url} frame decode failed, falling back to still: {Error}", url, ex.Message);
+                }
+                finally { try { if (stream.CanSeek) stream.Position = 0; } catch { } }
+            }
 
             // WIC first - same decoder, same decode-time downscale and same WPF-owned buffer as
             // every local static flash, so nothing about the memory profile changes.
@@ -3263,7 +3330,7 @@ namespace ConditioningControlPanel.Services
                 // CPU-bound; the stream stays alive for it because this await is inside the using.
                 Stream captured = stream;
                 int max = Math.Clamp(decodeMax, 64, 4096);
-                var data = await Task.Run(() => DecodeRemoteStill(url, captured, max)).ConfigureAwait(false);
+                var data = await Task.Run(() => DecodeRemoteStill(url, captured, max, allowAnimated: false)).ConfigureAwait(false);
 
                 // Frozen by DecodeRemoteStill, so it is safe to hand across to the UI thread.
                 return data != null && data.Frames.Count > 0 ? data.Frames[0] : null;

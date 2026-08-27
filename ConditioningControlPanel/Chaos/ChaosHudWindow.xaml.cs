@@ -263,13 +263,69 @@ public partial class ChaosHudWindow : Window
             {
                 _collapseRecheck!.Stop();
                 if (_pinnedOpen || !_expanded) return;
-                if (Panel.IsMouseOver || Strip.IsMouseOver) return;   // never left — stay open
+                if (CursorInHudGrace()) return;   // never really left — stay open
                 Collapse();
             };
         }
         _collapseRecheck.Stop();
         _collapseRecheck.Interval = TimeSpan.FromMilliseconds(wait);
         _collapseRecheck.Start();
+    }
+
+    /// <summary>
+    /// How far outside the HUD's own bounds the cursor still counts as "on the HUD" for the
+    /// collapse grace. DIPs.
+    /// </summary>
+    private const double LEAVE_GRACE_MARGIN_DIP = 26;
+
+    /// <summary>
+    /// #1050: the grace re-check used to ask <c>Panel.IsMouseOver || Strip.IsMouseOver</c>. Those
+    /// are HIT-TEST questions, and the Locked mod (Circe) re-themes the strip narrower
+    /// (AvatarTubeWindow.Avatar.cs), so an ordinary drift along the edge clears BOTH hit-test
+    /// surfaces while the pointer is still visually on the HUD - and the sidebar snapped shut.
+    /// Asking a GEOMETRY question instead (cursor inside the union of the two elements' bounds,
+    /// grown by a margin) is independent of how a mod sizes the strip.
+    /// </summary>
+    private bool CursorInHudGrace()
+    {
+        try
+        {
+            return CursorInGrace(ElementBoundsInWindow(Panel), ElementBoundsInWindow(Strip),
+                                 Mouse.GetPosition(this), LEAVE_GRACE_MARGIN_DIP);
+        }
+        catch
+        {
+            // Never collapse on a transform/PresentationSource hiccup: the pinned-open and
+            // dwell paths can reopen it, but a spurious collapse mid-run is what was reported.
+            return true;
+        }
+    }
+
+    /// <summary>An element's bounds in this window's coordinate space, honouring render transforms
+    /// (the panel rides a TranslateTransform). Rect.Empty when the element is not laid out.
+    /// Visibility is deliberately NOT consulted: expanding HIDES the strip, but the strip's slot is
+    /// still the physical edge zone the cursor is allowed to sit in.</summary>
+    private Rect ElementBoundsInWindow(FrameworkElement? el)
+    {
+        if (el == null || el.ActualWidth <= 0 || el.ActualHeight <= 0) return Rect.Empty;
+        try
+        {
+            var origin = el.TranslatePoint(new Point(0, 0), this);
+            return new Rect(origin.X, origin.Y, el.ActualWidth, el.ActualHeight);
+        }
+        catch { return Rect.Empty; }
+    }
+
+    /// <summary>Pure half of <see cref="CursorInHudGrace"/>: is <paramref name="cursor"/> inside the
+    /// union of two (possibly empty) rects grown by <paramref name="margin"/> on every side? Empty
+    /// rects contribute nothing, and two empty rects answer false.</summary>
+    internal static bool CursorInGrace(Rect a, Rect b, Point cursor, double margin)
+    {
+        if (margin < 0) margin = 0;
+        var union = a.IsEmpty ? b : (b.IsEmpty ? a : Rect.Union(a, b));
+        if (union.IsEmpty) return false;
+        union.Inflate(margin, margin);
+        return union.Contains(cursor);
     }
 
     private void Collapse()

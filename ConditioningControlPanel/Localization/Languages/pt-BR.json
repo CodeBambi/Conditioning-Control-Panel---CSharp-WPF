@@ -4613,5 +4613,8 @@
   "lockdown_poss_safety_dose": "Nada rodando? O Lockdown escolhe por você",
   "lockdown_poss_safety_dose_tip": "Um lockdown se recusa a rodar vazio. Motor desligado no início: ele é ligado por você. Nada ativado (ou você desliga tudo no meio): a guardiã liga recursos, um a mais a cada vez, e devolve tudo quando o tempo acaba.",
   "st4_braindrain_audio_rate": "Frequência do áudio",
-  "label_braindrain": "Drenagem Cerebral"
+  "label_braindrain": "Drenagem Cerebral",
+  "label_ambient_bubble_xp_budget": "XP de bolhas hoje: {0}/{1}",
+  "label_resume_takeover_on_startup": "↻ Retomar o Controle ao iniciar",
+  "tooltip_autonomy_resume_on_startup": "Quando ligado, o Controle se rearma na próxima vez que você abrir o app. Desligado por padrão, então o Controle sempre começa desligado."
 }

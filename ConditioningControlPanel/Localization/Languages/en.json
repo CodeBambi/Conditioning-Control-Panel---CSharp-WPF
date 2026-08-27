@@ -5164,5 +5164,8 @@
   "lockdown_poss_safety_dose": "Nothing running? Lockdown picks for you",
   "lockdown_poss_safety_dose_tip": "A lockdown refuses to run empty. Engine off when it starts: the engine is started for you. Nothing switched on (or you switch everything off mid-lockdown): the warden turns features on, one more each time, and gives them all back when the timer ends.",
   "st4_braindrain_audio_rate": "Audio clip rate",
-  "label_braindrain": "Brain Drain"
+  "label_braindrain": "Brain Drain",
+  "label_ambient_bubble_xp_budget": "Ambient bubble XP: {0}/{1} today",
+  "label_resume_takeover_on_startup": "↻ Resume Takeover on startup",
+  "tooltip_autonomy_resume_on_startup": "When on, Takeover re-arms itself the next time you launch the app. Off by default, so Takeover always starts off."
 }
