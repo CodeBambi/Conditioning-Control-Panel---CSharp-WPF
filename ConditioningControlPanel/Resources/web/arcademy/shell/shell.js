@@ -2779,7 +2779,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   } catch (e) { say('pa unavailable (' + ((e && e.message) || e) + ')'); pa = null; }
 
   try {
-    ost = createOst({ log: say, lite: () => !!src.performanceMode });
+    ost = createOst({ log: say });
   } catch (e) { say('ost unavailable (' + ((e && e.message) || e) + ')'); ost = null; }
 
   /* ---------------------------- THE EXTRA CREDIT LEVER -------------------

@@ -590,7 +590,7 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
    *  names are ready to do so - between them they say whether the latency fix is
    *  actually running in this host or whether everything fell to a recipe. */
   const stats = {
-    handled: 0, played: 0, dropped: 0, ducks: 0, clips: 0, samples: 0,
+    handled: 0, played: 0, dropped: 0, ducks: 0, clips: 0, samples: 0, deferred: 0,
     buffered: 0, decoded: 0, last: null,
   };
   /** Names that fell through to `blip`, logged once each (trap 115). */
@@ -789,6 +789,17 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
   /* ---- CLIPS: a url played through a bus ------------------------------- */
   /** key -> {el, gain, node, timer} . One live clip per slot, cut on re-fire. */
   const clips = new Map();
+  /** HOLDS ASKED FOR BEFORE THE FIRST TOUCH (2026-08-27). On a browser host the
+   *  shell builds the campus UNDER the splash, ~400ms after init and a full
+   *  knock before the first pointer, so the campus theme and the campus room
+   *  tone both arrived at a mixer with no context and were dropped - and a
+   *  hold has no re-fire, so the web campus was silent until the next screen.
+   *  A one-shot fired early is rightly spent (trap 70: late is worse than
+   *  missed); a HOLD is not a beat, it is a state the room is in, so it is
+   *  kept by slot and started by onGesture the moment the context exists.
+   *  `stop` on the slot (and `stop_clips`) forgets it, the same way they would
+   *  have stopped it. The desktop host promises autoplay and never lands here. */
+  const pendingHolds = new Map();
 
   function killClip(rec, fadeMs) {
     if (!rec) return;
@@ -1129,11 +1140,12 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
     // The one CONTROL message on the sfx bus: the shell sends it when a class is
     // torn down so a trigger clip (<=1.2s) never leaks into the lobby. No audio
     // handle crosses into shell.js for this; the bus was already the seam.
-    if (d.name === 'stop_clips') { stopAllClips(); settle('dropped'); return; }
+    if (d.name === 'stop_clips') { pendingHolds.clear(); stopAllClips(); settle('dropped'); return; }
     // The second control message (HOLD): leave a room. Honoured before the mute
     // check so a bed started before the mute echo can still be let go of.
     if (d.stop === true) {
       const k = String(d.key == null ? (d.name || '') : d.key);
+      pendingHolds.delete(k);
       const held = clips.get(k);
       if (held) { clips.delete(k); killClip(held, CLIP_FADE_MS); }
       settle('stopped');
@@ -1152,7 +1164,16 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
       url: d.url || null,
     };
     if (mute || master <= 0) { stats.dropped += 1; settle('dropped'); return; }
-    if (!ensureContext()) { stats.dropped += 1; settle('dropped'); return; }
+    if (!ensureContext()) {
+      if (d.hold === true && !gestured) {
+        // Kept, not dropped (pendingHolds above). The caller's onEnded is NOT
+        // answered here: the replay wraps it again and answers it for real.
+        pendingHolds.set(String(d.key == null ? (d.name || '') : d.key), d);
+        stats.deferred += 1;
+        return;
+      }
+      stats.dropped += 1; settle('dropped'); return;
+    }
     const bus = BUSES.indexOf(d.bus) >= 0 ? d.bus : 'fx';
     // PERCEPTUAL CURVE (2026-08-24): engine levels are fractions of fractions - a 0.25
     // cue under the bus and master gains landed near -29 dB and the whole campus read
@@ -1281,6 +1302,14 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
     gestured = true;
     if (first || !ac) ensureContext();
     if (ac && ac.state === 'suspended' && typeof ac.resume === 'function') { try { ac.resume(); } catch { /* ignore */ } }
+    // The rooms that were entered before the first touch start now, in the
+    // order they were asked for. Cleared BEFORE replaying so a hold that
+    // somehow lands back here cannot loop.
+    if (ac && pendingHolds.size) {
+      const late = Array.from(pendingHolds.values());
+      pendingHolds.clear();
+      for (const d of late) { try { onSfx({ detail: d }); } catch { /* one bad hold must not eat the rest */ } }
+    }
   }
 
   if (doc && doc.addEventListener) {

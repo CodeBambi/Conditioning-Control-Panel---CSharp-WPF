@@ -2961,6 +2961,22 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     anywhere. `econtests/test-seam.mjs` reads both sides at once and fails on a
     drift; run it whenever a key moves.
 
+125. **A HOLD FIRED BEFORE THE FIRST TOUCH IS PARKED, NOT DROPPED - AND ON THE WEB THE
+    CAMPUS IS BUILT UNDER THE SPLASH** (soundtrack, 2026-08-27). `audio.js` drops every cue
+    that arrives before its context exists (`ensureContext()` is null until the first
+    pointerdown/keydown; the desktop host promises `autoplayOk` so it never sees this). On a
+    browser host the shell builds the campus ~400ms after init, a whole knock BEFORE the
+    first pointer, so `ost.enter('campus')` and `campus_idle` both fired into no context and
+    were dropped - and a hold has no re-fire, so the web campus was silent until the next
+    screen. Reproduced headless (Edge, vendored tree served locally): `ost: ost_campus in`
+    logged at 430ms, `[audio] context up` at the first click, no element ever made.
+    `audio.js` now keeps a pre-gesture `hold` by slot (`pendingHolds`) and replays it from
+    `onGesture` once `ac` exists; `stop` on the slot and `stop_clips` forget it. A one-shot
+    fired early is still spent (trap 70). `ost.js` law 6 (never under lite) went with it:
+    a track streams from an element, nothing is decoded, and the desktop rung is AUTOMATIC
+    (eight flash windows = Balanced), so the gate made the music vanish whenever the app
+    was busy, with nothing in the log. `createOst({ lite })` is accepted and ignored.
+
 ## 5. The game module contract (short version)
 
 ```js
