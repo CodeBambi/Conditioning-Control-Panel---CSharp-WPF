@@ -4612,5 +4612,15 @@
   "lockdown_poss_safety_dose": "아무것도 안 켜져 있나요? 락다운이 대신 고릅니다",
   "lockdown_poss_safety_dose_tip": "락다운은 비어 있는 채로 돌아가지 않습니다. 시작할 때 엔진이 꺼져 있으면 대신 켜 줍니다. 아무 기능도 켜져 있지 않으면(도중에 전부 끄더라도) 간수가 기능을 켜고, 매번 하나씩 더 켜며, 타이머가 끝나면 전부 원래대로 돌려놓습니다.",
   "st4_braindrain_audio_rate": "오디오 클립 빈도",
-  "label_braindrain": "브레인 드레인"
+  "label_braindrain": "브레인 드레인",
+
+  "_comment_arcademy_door": "The Arcademy (Play wall card, Ctrl+K row, failure dialogs)",
+  "play_arcademy_title": "The Arcademy",
+  "play_arcademy_new": "신규",
+  "play_arcademy_blurb": "하루에 세 과목. 화면 위의 다른 모든 것이 단순한 게임을 어렵게 만듭니다. 출석하고, 성적을 받고, 연속 기록을 지키세요.",
+  "play_arcademy_cta": "출석하기",
+  "play_arcademy_tooltip": "오늘의 시간표가 기다리고 있습니다.",
+  "arcademy_boot_error_body": "{0}을(를) 이 컴퓨터에서 시작할 수 없습니다.\n\n{1}",
+  "arcademy_open_failed_body": "The Arcademy를 열 수 없습니다:\n\n{0}",
+  "arcademy_boot_failed_this_session": "The Arcademy가 이 컴퓨터에서 지난번 시도에 시작하지 못했습니다.\n\n다시 열어 볼까요?"
 }

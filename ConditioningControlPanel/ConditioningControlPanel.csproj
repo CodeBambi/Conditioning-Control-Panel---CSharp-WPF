@@ -506,6 +506,22 @@
       $(MSBuildProjectDirectory)\Resources\web\intake\assets\music\**\*.mp3;
       $(MSBuildProjectDirectory)\Resources\web\dtrh\assets\**\*.mp3
     </ContentPackWebExcludeAbs>
+    <!-- The four arcademy *demo.html browser harnesses. Listed once here and referenced by
+         BOTH the <Content> Exclude below AND the CopyContentAfterPublish WebFiles Exclude,
+         which re-globs Resources\web independently - miss the second one and the
+         harness pages come straight back into the publish tree (and so the installer). -->
+    <ArcademyHarnessExclude>
+      Resources\web\arcademy\annex\demo.html;
+      Resources\web\arcademy\vn\demo.html;
+      Resources\web\arcademy\emi\demo.html;
+      Resources\web\arcademy\shell\recordsroom.demo.html
+    </ArcademyHarnessExclude>
+    <ArcademyHarnessExcludeAbs>
+      $(MSBuildProjectDirectory)\Resources\web\arcademy\annex\demo.html;
+      $(MSBuildProjectDirectory)\Resources\web\arcademy\vn\demo.html;
+      $(MSBuildProjectDirectory)\Resources\web\arcademy\emi\demo.html;
+      $(MSBuildProjectDirectory)\Resources\web\arcademy\shell\recordsroom.demo.html
+    </ArcademyHarnessExcludeAbs>
   </PropertyGroup>
 
   <ItemGroup>
@@ -526,10 +542,16 @@
          DtRH browser game (Resources\web\dtrh). Served to a WebView2 via virtual hosts, so they
          must live on disk in the output. Remove from the default None glob first so a no-copy
          None item can never suppress the Content copy for new extensions (woff2/json/etc).
-         Audio listed in $(ContentPackWebExclude) ships as a downloadable pack instead. -->
+         Audio listed in $(ContentPackWebExclude) ships as a downloadable pack instead.
+         The four arcademy *demo.html pages are BROWSER HARNESSES - standalone proofs for the
+         annex, the VN layer, EMI and the Records room, opened straight from a checkout during
+         development. Nothing in the app or the page graph links them (only two comments name
+         them), so they are dead weight in the installer and a stray unversioned entry point in
+         the virtual host. Excluded, not deleted: they are how those layers get worked on. -->
     <None Remove="Resources\web\**\*" />
     <Content Include="Resources\web\**\*"
              Exclude="Resources\web\**\CLAUDE.md;Resources\web\**\CAPTCHA_*.md;Resources\web\**\BUILD_PLAN.md;
+                      $(ArcademyHarnessExclude);
                       $(ContentPackWebExclude)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
@@ -593,13 +615,14 @@
   <!-- Ensure all content files are copied during publish -->
   <Target Name="CopyContentAfterPublish" AfterTargets="Publish">
     <ItemGroup>
-      <!-- The two content-pack excludes below MUST mirror the <Content> items above, or this
-           target silently re-copies the stripped audio back into the publish tree.
-           See docs/CONTENT_PACKS_PLAN.md §6. -->
+      <!-- The excludes below MUST mirror the <Content> items above, or this target silently
+           re-copies the stripped audio (and the arcademy harness pages) back into the publish
+           tree. That is why both live in properties. See docs/CONTENT_PACKS_PLAN.md §6. -->
       <SoundFiles Include="$(ProjectDir)Resources\sounds\**\*" Exclude="$(ContentPackSoundsExcludeAbs)" />
       <WebFiles Include="$(ProjectDir)Resources\web\**\*"
                 Exclude="$(ProjectDir)Resources\web\**\CLAUDE.md;$(ProjectDir)Resources\web\**\CAPTCHA_*.md;$(ProjectDir)Resources\web\**\BUILD_PLAN.md;
-                         $(ContentPackWebExcludeAbs)" />
+                         $(ContentPackWebExcludeAbs);
+                         $(ArcademyHarnessExcludeAbs)" />
       <SubAudioFiles Include="$(ProjectDir)Resources\sub_audio\**\*" />
       <AwarenessPresetFiles Include="$(ProjectDir)Resources\AwarenessPresets\**\*" />
       <DeeperDemoFiles Include="$(ProjectDir)Resources\DeeperDemos\**\*" />

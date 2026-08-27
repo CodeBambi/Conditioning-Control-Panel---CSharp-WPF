@@ -5164,5 +5164,15 @@
   "lockdown_poss_safety_dose": "Nothing running? Lockdown picks for you",
   "lockdown_poss_safety_dose_tip": "A lockdown refuses to run empty. Engine off when it starts: the engine is started for you. Nothing switched on (or you switch everything off mid-lockdown): the warden turns features on, one more each time, and gives them all back when the timer ends.",
   "st4_braindrain_audio_rate": "Audio clip rate",
-  "label_braindrain": "Brain Drain"
+  "label_braindrain": "Brain Drain",
+
+  "_comment_arcademy_door": "The Arcademy (Play wall card, Ctrl+K row, failure dialogs)",
+  "play_arcademy_title": "The Arcademy",
+  "play_arcademy_new": "NEW",
+  "play_arcademy_blurb": "three classes a day. simple little games made hard by everything else on your screen. show up, get graded, keep the streak.",
+  "play_arcademy_cta": "Attend",
+  "play_arcademy_tooltip": "today's timetable is waiting.",
+  "arcademy_boot_error_body": "{0} could not start on this machine.\n\n{1}",
+  "arcademy_open_failed_body": "Couldn't open the Arcademy:\n\n{0}",
+  "arcademy_boot_failed_this_session": "The Arcademy failed to start the last time you tried on this machine.\n\nTry opening it again?"
 }

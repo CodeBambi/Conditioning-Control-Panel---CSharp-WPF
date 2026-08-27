@@ -4614,5 +4614,15 @@
   "lockdown_poss_safety_dose": "Nichts läuft? Lockdown wählt für dich",
   "lockdown_poss_safety_dose_tip": "Ein Lockdown läuft nie leer. Engine aus beim Start: sie wird für dich gestartet. Nichts eingeschaltet (oder du schaltest mittendrin alles aus): die Wärterin schaltet Features ein, jedes Mal eins mehr, und gibt am Ende alles zurück.",
   "st4_braindrain_audio_rate": "Audio-Häufigkeit",
-  "label_braindrain": "Brain Drain"
+  "label_braindrain": "Brain Drain",
+
+  "_comment_arcademy_door": "The Arcademy (Play wall card, Ctrl+K row, failure dialogs)",
+  "play_arcademy_title": "The Arcademy",
+  "play_arcademy_new": "NEU",
+  "play_arcademy_blurb": "drei Kurse pro Tag. kleine, einfache Spiele, die alles andere auf deinem Bildschirm schwer macht. erscheine, lass dich benoten, halte die Serie.",
+  "play_arcademy_cta": "Teilnehmen",
+  "play_arcademy_tooltip": "der Stundenplan von heute wartet.",
+  "arcademy_boot_error_body": "{0} konnte auf diesem Rechner nicht gestartet werden.\n\n{1}",
+  "arcademy_open_failed_body": "The Arcademy konnte nicht geöffnet werden:\n\n{0}",
+  "arcademy_boot_failed_this_session": "The Arcademy konnte beim letzten Versuch auf diesem Rechner nicht starten.\n\nNoch einmal versuchen?"
 }

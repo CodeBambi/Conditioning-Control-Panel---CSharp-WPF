@@ -275,6 +275,25 @@ namespace ConditioningControlPanel.Services
             // in the aliases so the palette finds a feature by name, not just by room.
             Tab("play", "nav_door_play", "🕹️", "play",
                 "play lab games experiments rabbit hole dtrh descent goon gaze focus bureau mantra loom showcase tier 2");
+            // THE ARCADEMY. Not a tab and not a door - a launcher card on the Play wall - so this
+            // row navigates to the wall and highlights the card, which is the same journey the
+            // rail offers. Hand-written rather than a Tab() call for the two things Tab() cannot
+            // express: the ElementNames highlight, and the second IsAvailable predicate in this
+            // index. The gate is the same one the card's own visibility reads, so the palette can
+            // never be the place that admits to a door the Play wall is hiding; and because the
+            // row stays in All either way, the parity tests still see it while the door is shut.
+            list.Add(new SettingsPaletteEntry
+            {
+                Id = "card.arcademy",
+                LabelKey = "play_arcademy_title",
+                Glyph = "🎓",
+                TabKey = "play",
+                ElementNames = new[] { "BtnPlayArcademy", "SlotArcademy" },
+                ContextKeys = new[] { GroupNav, "nav_door_play" },
+                Aliases = "arcademy academy class classes school timetable homeroom mini games "
+                          + "daily trigger lost and found deja vu impulse control grades attendance",
+                IsAvailable = () => Arcademy.ArcademyHostService.DoorAvailable,
+            });
             Tab("deeper", "tab_deeper", "🌊", "deeper", "deeper files audio video");
             Tab("exclusives", "tab_exclusives", "⭐", "exclusives", "premium exclusives velvet vault showcase");
             Tab("gradedintake", "tab_gradedintake", "📝", "gradedintake", "intake quiz graded pass");

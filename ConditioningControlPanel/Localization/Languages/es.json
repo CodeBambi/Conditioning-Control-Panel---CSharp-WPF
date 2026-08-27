@@ -4605,5 +4605,15 @@
   "lockdown_poss_safety_dose": "¿Nada en marcha? El bloqueo elige por ti",
   "lockdown_poss_safety_dose_tip": "Un bloqueo se niega a correr vacío. Motor apagado al empezar: se enciende por ti. Nada activado (o lo apagas todo a mitad): la guardiana activa funciones, una más cada vez, y lo devuelve todo cuando acaba el temporizador.",
   "st4_braindrain_audio_rate": "Frecuencia de audio",
-  "label_braindrain": "Drenaje Cerebral"
+  "label_braindrain": "Drenaje Cerebral",
+
+  "_comment_arcademy_door": "The Arcademy (Play wall card, Ctrl+K row, failure dialogs)",
+  "play_arcademy_title": "The Arcademy",
+  "play_arcademy_new": "NUEVO",
+  "play_arcademy_blurb": "tres clases al día. juegos sencillos que todo lo demás en tu pantalla vuelve difíciles. preséntate, deja que te califiquen, mantén la racha.",
+  "play_arcademy_cta": "Asistir",
+  "play_arcademy_tooltip": "el horario de hoy te espera.",
+  "arcademy_boot_error_body": "{0} no pudo iniciarse en este equipo.\n\n{1}",
+  "arcademy_open_failed_body": "No se pudo abrir The Arcademy:\n\n{0}",
+  "arcademy_boot_failed_this_session": "The Arcademy no se pudo iniciar la última vez que lo intentaste en este equipo.\n\n¿Quieres intentarlo de nuevo?"
 }
