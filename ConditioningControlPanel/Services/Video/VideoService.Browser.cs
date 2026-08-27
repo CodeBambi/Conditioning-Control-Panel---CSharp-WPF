@@ -85,6 +85,7 @@ namespace ConditioningControlPanel.Services
                     engine.KeyPressed += OnBrowserKey;
                     engine.AttentionClicked += OnBrowserAttentionClicked;
                     engine.AttentionMoved += OnBrowserAttentionMoved;
+                    engine.WindowDropped += OnBrowserWindowDropped;
                 }
                 return engine;
             }
@@ -133,6 +134,11 @@ namespace ConditioningControlPanel.Services
                     // frozen machine, and attention targets are clicked over this surface.
                     HideCursor = false,
                     IsHostPaused = () => _gracePaused,
+                    // Lock Card / Lockdown / Possession: every screen is covered on purpose, so a
+                    // dead mirror is left black rather than uncovered mid-clip (the engine asks
+                    // VideoSurfaceHealth.ShouldUncoverDeadSurface with this). Read live, not
+                    // captured: the strict retry gap flips it while the session is up.
+                    IsHostStrict = () => IsStrictActive,
                     ConfigureBeforeShow = (win, _, _) =>
                     {
                         // Same strict contract as a LibVLC window: Closing veto + key swallowing.
@@ -235,6 +241,36 @@ namespace ConditioningControlPanel.Services
         // ===================== teardown =====================
 
         /// <summary>
+        /// A mirror was taken off screen mid-clip by the engine (init failure, ProcessFailed, or no
+        /// first frame within its own budget). The engine has already removed it from its own list, so
+        /// <see cref="StopBrowserSession"/>'s <c>engine.Windows</c> snapshot can no longer see it -
+        /// which is how a dropped window used to stay in <see cref="_windows"/> for the rest of the
+        /// run (keeping <see cref="HasOpenWindows"/> true, and getting PreventClickRaise'd on a
+        /// browser -> LibVLC handoff) and its HWND used to stay in the z-order anchor cache, which is
+        /// only cleared wholesale in CloseAll. A recycled HWND matching a live overlay window there
+        /// would flip that overlay from "below the video" to "topmost", i.e. the #497/#1016 symptom
+        /// this branch removes. Prune both at drop time so identity, not IsWindow(), keeps the anchor
+        /// list honest.
+        ///
+        /// Only fires for a mirror that actually LEFT the screen; one that strict mode keeps up as a
+        /// black cover is still a live fullscreen window and stays in the bookkeeping.
+        /// </summary>
+        private void OnBrowserWindowDropped(Window win, IntPtr hwnd)
+        {
+            try
+            {
+                _windows.Remove(win);
+                if (ReferenceEquals(_primaryVideoWindow, win)) _primaryVideoWindow = null;
+                if (hwnd != IntPtr.Zero)
+                {
+                    lock (_videoWindowHandlesLock) { _videoWindowHandles.Remove(hwnd); }
+                }
+                VideoDiag.Log("VIDEO", "browser mirror dropped from the host window list + z-order anchors");
+            }
+            catch (Exception ex) { App.Logger?.Debug("VideoService: OnBrowserWindowDropped failed - {Error}", ex.Message); }
+        }
+
+        /// <summary>
         /// Closes the browser surfaces and drops them from the shared window list. Called from
         /// CloseAll (the single teardown funnel for every path: natural end, panic, safety timeout,
         /// attention retry, session lock, suspend) and from the LibVLC fallback. Idempotent.
@@ -249,7 +285,23 @@ namespace ConditioningControlPanel.Services
             _browserPaused = false;
             _browserVideoAspect = 0;
 
-            var browserWindows = engine.Windows.ToList();
+            // DROPPED mirrors are deliberately included: they are out of engine.Windows already, so a
+            // snapshot of that alone left them in _windows and their HWNDs in the z-order anchor cache
+            // for the rest of the run - and the browser -> LibVLC handoff never runs CloseAll, which is
+            // the only place that clears the cache wholesale. Handles are read BEFORE StopSession
+            // closes the windows, because a closed window no longer has one.
+            var browserWindows = engine.Windows.Concat(engine.DroppedWindows).Distinct().ToList();
+            var browserHandles = new List<IntPtr>();
+            foreach (var w in browserWindows)
+            {
+                try
+                {
+                    var h = new System.Windows.Interop.WindowInteropHelper(w).Handle;
+                    if (h != IntPtr.Zero) browserHandles.Add(h);
+                }
+                catch { }
+            }
+
             try { engine.StopSession(); }
             catch (Exception ex) { App.Logger?.Debug("VideoService: browser StopSession failed - {Error}", ex.Message); }
 
@@ -257,6 +309,13 @@ namespace ConditioningControlPanel.Services
             {
                 _windows.Remove(w);
                 if (ReferenceEquals(_primaryVideoWindow, w)) _primaryVideoWindow = null;
+            }
+            if (browserHandles.Count > 0)
+            {
+                lock (_videoWindowHandlesLock)
+                {
+                    foreach (var h in browserHandles) _videoWindowHandles.Remove(h);
+                }
             }
         }
 
@@ -273,7 +332,13 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void FallbackToLibVlc(string reason)
         {
-            if (_browserFallbackDone) return;
+            // The two branches below are the pure policy in VideoSurfaceHealth.DecideBrowserFailure;
+            // this call site is the ONLY one that acts on it for the primary surface. (Secondary
+            // failures never reach here at all - the engine drops the mirror and keeps the session,
+            // which is DecideBrowserFailure's DropSecondary arm.)
+            var action = VideoSurfaceHealth.DecideBrowserFailure(
+                isPrimarySurface: true, alreadyFellBack: _browserFallbackDone, playbackStartedFired: _browserStartedFired);
+            if (action == VideoSurfaceHealth.BrowserFailureAction.Ignore) return;
             _browserFallbackDone = true;
 
             var path = _browserPath;
@@ -286,7 +351,7 @@ namespace ConditioningControlPanel.Services
             // NEXT play of it routes to LibVLC anyway. Mirrors BubbleCountWindow's startedOnce
             // branch: end through the same funnel a natural end uses, so it is one VideoEnded and
             // EndCurrentVideo's normal attention pass/fail handling.
-            if (_browserStartedFired)
+            if (action == VideoSurfaceHealth.BrowserFailureAction.EndClip)
             {
                 App.Logger?.Warning("VideoService: browser playback failed MID-CLIP for {File} ({Reason}) - ending the video instead of replaying it",
                     Path.GetFileName(path ?? "(none)"), reason);

@@ -2799,11 +2799,31 @@ public class OverlayService : IDisposable
         // reconciler (and NotifyTopWindowClosed after each clip) buries the video behind the
         // spiral/pink filter; the video window is deliberately non-re-raising, so it never
         // recovers, and with autonomy chaining clips the next one shows "only by flashes" (#497).
+        //
+        // MULTI-MONITOR (#1016): "below the video" has to mean "below the video window on the SAME
+        // monitor". PrimaryVideoWindow is one window on one screen; ordering an overlay that lives on
+        // monitor 2 underneath monitor 1's video window leaves it ABOVE monitor 2's own video window
+        // (they are separate windows in one global z-order), which is the reported pink/spiral filter
+        // sitting on top of the second screen's clip. Collect every live video window with the monitor
+        // it covers and let each overlay pick its own anchor.
         IntPtr videoHwnd = IntPtr.Zero;
+        var videoAnchors = new List<(IntPtr Hwnd, IntPtr Monitor)>();
         try
         {
-            if (App.Video?.IsPlaying == true && App.Video.PrimaryVideoWindow is Window vw)
-                videoHwnd = new System.Windows.Interop.WindowInteropHelper(vw).Handle;
+            if (App.Video?.IsPlaying == true)
+            {
+                if (App.Video.PrimaryVideoWindow is Window vw)
+                    videoHwnd = new System.Windows.Interop.WindowInteropHelper(vw).Handle;
+
+                foreach (var vh in App.Video.GetVideoWindowHandles())
+                {
+                    // Handles are cached at window creation and cleared at teardown, so a dead one
+                    // here means a window went away mid-sweep. Ordering against a destroyed HWND makes
+                    // SetWindowPos fail outright, which would silently skip the pin for that overlay.
+                    if (vh == IntPtr.Zero || !IsWindow(vh)) continue;
+                    videoAnchors.Add((vh, MonitorFromWindow(vh, MONITOR_DEFAULTTONEAREST)));
+                }
+            }
         }
         catch { }
 
@@ -2818,7 +2838,7 @@ public class OverlayService : IDisposable
             {
                 var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
                 if (hwnd == IntPtr.Zero) continue;
-                ReassertOne(hwnd, videoHwnd, aboveVideo, force, ref anyRecovered);
+                ReassertOne(hwnd, videoAnchors, videoHwnd, aboveVideo, force, ref anyRecovered);
             }
         }
 
@@ -2829,11 +2849,11 @@ public class OverlayService : IDisposable
         try
         {
             foreach (var hwnd in App.CornerGif?.GetOverlayHandles() ?? new List<IntPtr>())
-                ReassertOne(hwnd, videoHwnd, aboveVideo, force, ref anyRecovered);
+                ReassertOne(hwnd, videoAnchors, videoHwnd, aboveVideo, force, ref anyRecovered);
 
             var sessionCornerGif = SessionEngine.Active?.GetCornerGifHandle() ?? IntPtr.Zero;
             if (sessionCornerGif != IntPtr.Zero)
-                ReassertOne(sessionCornerGif, videoHwnd, aboveVideo, force, ref anyRecovered);
+                ReassertOne(sessionCornerGif, videoAnchors, videoHwnd, aboveVideo, force, ref anyRecovered);
         }
         catch (Exception ex)
         {
@@ -2850,7 +2870,7 @@ public class OverlayService : IDisposable
             if (App.Compositor is { } engine)
             {
                 foreach (var hostHwnd in engine.GetVisibleHostHandles())
-                    ReassertOne(hostHwnd, videoHwnd, aboveVideo, force, ref anyRecovered);
+                    ReassertOne(hostHwnd, videoAnchors, videoHwnd, aboveVideo, force, ref anyRecovered);
                 // The detached avatar tube parks itself directly BELOW the host covering its monitor
                 // so the pink tint stops flickering on and off the companion (#776). It does that on
                 // its OWN thread (AvatarOwnThread => cross-thread SetWindowPos is a deadlock source
@@ -2897,17 +2917,65 @@ public class OverlayService : IDisposable
         return ZOrderAction.None;
     }
 
-    private static void ReassertOne(IntPtr hwnd, IntPtr videoHwnd, bool aboveVideo, bool force, ref bool anyRecovered)
+    /// <summary>
+    /// Which video window a given topmost window must be pinned directly below, or
+    /// <see cref="IntPtr.Zero"/> for "there is nothing to sit under" (no video playing, or the window
+    /// being ordered IS a video window).
+    ///
+    /// Multi-monitor (#1016): a mandatory video is one fullscreen window PER SCREEN, all sharing one
+    /// global z-order. Anchoring every overlay to the primary window put overlays on the other screens
+    /// ABOVE the video windows there, which is the "pink filter / spiral covers the video on my second
+    /// monitor" report. So: prefer the video window on the same monitor as the target; fall back to
+    /// <paramref name="fallbackHwnd"/> (the primary) only when this monitor has no video window of its
+    /// own, where nothing overlaps and the choice is cosmetic.
+    ///
+    /// Pure and side-effect free so the set logic is unit-testable without any windows.
+    /// </summary>
+    internal static IntPtr ResolveVideoAnchor(
+        IReadOnlyList<(IntPtr Hwnd, IntPtr Monitor)> videoWindows,
+        IntPtr targetHwnd,
+        IntPtr targetMonitor,
+        IntPtr fallbackHwnd)
+    {
+        // Never anchor a window to itself: SetWindowPos(h, h, ...) is meaningless and would drop the
+        // window's pin entirely.
+        if (targetHwnd != IntPtr.Zero && targetHwnd == fallbackHwnd) return IntPtr.Zero;
+        if (videoWindows != null)
+        {
+            for (int i = 0; i < videoWindows.Count; i++)
+                if (videoWindows[i].Hwnd == targetHwnd) return IntPtr.Zero;
+        }
+
+        if (videoWindows == null || videoWindows.Count == 0) return fallbackHwnd;
+
+        if (targetMonitor != IntPtr.Zero)
+        {
+            for (int i = 0; i < videoWindows.Count; i++)
+                if (videoWindows[i].Monitor == targetMonitor) return videoWindows[i].Hwnd;
+        }
+        return fallbackHwnd;
+    }
+
+    private static void ReassertOne(IntPtr hwnd, IReadOnlyList<(IntPtr Hwnd, IntPtr Monitor)> videoAnchors,
+        IntPtr videoHwnd, bool aboveVideo, bool force, ref bool anyRecovered)
     {
         int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
         bool needsPin = (exStyle & WS_EX_TOPMOST) == 0;
 
-        switch (ResolveZOrderAction(videoHwnd != IntPtr.Zero, hwnd == videoHwnd, aboveVideo, needsPin, force))
+        // Resolve THIS window's anchor: the video window covering the same monitor, if there is one.
+        IntPtr anchor = ResolveVideoAnchor(videoAnchors, hwnd,
+            hwnd != IntPtr.Zero ? MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) : IntPtr.Zero,
+            videoHwnd);
+        // ResolveVideoAnchor already returns Zero when the target is itself a video window, so the
+        // isVideoWindow arm below is only reached through the anchor being absent.
+        bool isVideoWindow = anchor == IntPtr.Zero && videoHwnd != IntPtr.Zero;
+
+        switch (ResolveZOrderAction(anchor != IntPtr.Zero, isVideoWindow, aboveVideo, needsPin, force))
         {
             case ZOrderAction.PinBelowVideo:
-                // Insert directly below the active video window: stays topmost (above the
-                // desktop and other apps) but under the video the user is meant to watch.
-                SetWindowPos(hwnd, videoHwnd, 0, 0, 0, 0,
+                // Insert directly below the video window on THIS window's monitor: stays topmost
+                // (above the desktop and other apps) but under the video the user is meant to watch.
+                SetWindowPos(hwnd, anchor, 0, 0, 0, 0,
                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 if (needsPin) anyRecovered = true;
                 break;
@@ -3122,6 +3190,14 @@ public class OverlayService : IDisposable
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool IsWindow(IntPtr hwnd);
+
+    private const uint MONITOR_DEFAULTTONEAREST = 2;
 
     [System.Runtime.InteropServices.DllImport("shcore.dll")]
     private static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
