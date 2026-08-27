@@ -62,6 +62,42 @@
  * the breath; `.arm-lite` (this root carries it when `lite`) kills the breath
  * only. Neither costs the room a hotspot, a tag or a button.
  *
+ * THE ALIVE LAYER (W2, 2026-08-25). A painted room that does not move is a
+ * photograph. `fx` is a DECLARATIVE TABLE the consumer hands us - the same
+ * grammar as `hotspots` and `patches`, authored in the same stage pixels - and
+ * this file turns it into one `.asc-fx` layer per view, between the plate and
+ * the rects, `pointer-events:none`, riding the same scale.
+ *
+ *   fx: [ { kind, view, rect:[x,y,w,h] | circle:{cx,cy,r}, when?, seed?, ... } ]
+ *
+ * SEVEN KINDS, all generic, none of them knowing what a record is:
+ *   neon    a sign's halo breath, plus a SEEDED rare stutter (one 120ms dip
+ *           every 9-20s - never faster, and never a strobe).
+ *   lamp    a warm radial glow over a rect, breathing .96 -> 1 over 4s.
+ *   motes   a canvas of drifting dust INSIDE the rect, ~25 particles, edge
+ *           masked so it is lit only where the cone is.
+ *   window  a route-lamp halo pulse plus a seeded headlight band that crosses
+ *           the glass about every 40s.
+ *   clock   THE ONE DIEGETIC REAL-TIME ELEMENT: a disc masking the painted
+ *           hands and two DOM hands reading the player's own local time.
+ *   seam    a cold breath along an open door's edge and a floor pool under it.
+ *   tilt    2px of mouse parallax on the painting, desktop pointers only.
+ *
+ * FOUR LAWS THE RUNTIME KEEPS, and every one of them is a bug somebody else
+ * shipped first:
+ *   1. `.arc-reduced` gets NO LAYER AT ALL. Not a paused one, not an empty one
+ *      - the nodes are never created, so there is nothing to leak and nothing
+ *      for the global freeze to argue with.
+ *   2. `.arm-lite` keeps the CSS kinds and loses the CANVAS. A lite machine can
+ *      afford four keyframes; it cannot afford a per-frame particle loop.
+ *   3. EVERYTHING PAUSES when the tab is hidden or the window blurs, and comes
+ *      back on return - the class pauses the keyframes, and every timer and
+ *      rAF is cleared rather than left running against a page nobody is on.
+ *   4. EVERY TIMER IS OWNED. A record clears its own on a view change and on
+ *      destroy(); `fxStats().timers` is zero after either, and the suite says
+ *      so out loud. An orphan interval in a room the player walked out of is
+ *      the one bug a decoration layer is actually able to cause.
+ *
  * THE APRON LINE. Every VN set was painted with its lower third held calm and
  * dark for a dialogue band, so the apron owns that floor AT THE WIDE SHOT. A
  * `wide` hotspot row that crosses it is WARNED at construction (never thrown -
@@ -81,6 +117,17 @@
  * ==========================================================================*/
 
 import { t as lexT } from '../core/lexicon.js';
+import { isMobile, orientation } from '../core/device.js';
+
+/* THE ONE MOBILE DECISION (core/device.js), asked the way room.js asks it, and
+ * LANDSCAPE ONLY for room.js's reason: portrait is behind the rotate gate, and
+ * top-anchoring a 9:19.5 frame would hand the apron two thirds of the screen.
+ * The apron floor and the stage anchor are computed here, the box they move is
+ * styled from `html.arc-mobile[data-arc-orient="landscape"]` in scene.css, and
+ * the two must not drift. The wrapper is for the DOM double, no matchMedia. */
+function onPhone() {
+  try { return !!isMobile() && orientation() === 'landscape'; } catch (e) { return false; }
+}
 
 /** The plane the VN art was authored on. Overridable, rarely overridden. */
 const STAGE_W = 1376;
@@ -92,6 +139,9 @@ const STAGE_H = 768;
 const APRON_FRACTION = 640 / 768;
 /** The band never shrinks below this, even art-to-the-floor (px, real). */
 const APRON_MIN = 110;
+/** The phone's floor. room.js's number and room.js's reasons - the two chassis
+ *  share rooms.css's slab sizing, so they must share the band it sizes off. */
+const APRON_MIN_MOBILE = 72;
 
 /** The zoom between slides. One number, mirrored in scene.css. */
 const ZOOM_MS = 320;
@@ -101,6 +151,51 @@ const ZOOM_ARM_MS = 20;
  *  rect still reads as a zoom and a tiny one does not start at a pinprick. */
 const ZOOM_MIN_K = 0.14;
 const ZOOM_MAX_K = 0.80;
+
+/* ------------------------------------------------------ THE ALIVE LAYER --
+ * Dials, in one place, because "how often does the sign stutter" is a taste
+ * question and a taste question belongs at the top of a file, not buried in a
+ * factory. Every one of them is a CEILING as much as a value: a sign that
+ * dips more often than every nine seconds is a broken sign, and a broken sign
+ * is a different room. */
+/** The neon's rare stutter: one dip, never closer together than this. */
+const FX_NEON_MIN_MS = 9000;
+const FX_NEON_MAX_MS = 20000;
+/** How long the dip lasts. Short enough to read as a fault, not a blink. */
+const FX_NEON_DIP_MS = 120;
+/** A car goes past about this often, give or take the jitter. */
+const FX_SWEEP_EVERY_MS = 40000;
+const FX_SWEEP_JITTER_MS = 9000;
+/** ...and takes this long to cross the glass. */
+const FX_SWEEP_MS = 1500;
+/** The clock re-reads the wall clock this often. The minute hand carries the
+ *  seconds as a FRACTION, so it is never parked on a whole minute. */
+const FX_CLOCK_MS = 20000;
+/** How much dust is in the light. More than this reads as snow. */
+const FX_MOTES = 25;
+
+/** A tiny xorshift, so a "random" stutter is the SAME stutter every night for
+ *  the same seed - a rare event nobody can reproduce is a bug report. */
+function makeRng(seed) {
+  let s = (Number(seed) || 0) >>> 0;
+  if (!s) s = 0x9E3779B9;
+  return function () {
+    s ^= (s << 13); s >>>= 0;
+    s ^= (s >>> 17);
+    s ^= (s << 5); s >>>= 0;
+    return s / 4294967296;
+  };
+}
+/** A stable seed for a row that did not bring one. */
+function hashStr(str) {
+  let h = 2166136261;
+  const t = String(str);
+  for (let i = 0; i < t.length; i += 1) {
+    h ^= t.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
 
 /* ------------------------------------------------------------- small tools */
 
@@ -152,6 +247,9 @@ function htmlReduced() {
  *                        on. A leading `!` inverts it.
  *  patches   - `[{ view, art, rect:[x,y,w,h], when }]`. A small image laid over
  *              the view's plate while the flag is on.
+ *  fx        - THE ALIVE LAYER (see the header). `[{ kind, view, rect | circle,
+ *              when?, seed?, ...opts }]` in stage px. Every row is decoration:
+ *              a bad one costs a breath and never a rect.
  *  apron     - `{ back:fn, label?, lexKey? }` or null. The midway band with the
  *              BACK slab only; no hero, because a facility room starts nothing.
  *  onAction  - (action, {view, rect}) for every hotspot press.
@@ -287,7 +385,10 @@ export function createScene(opts) {
       : t(apron.lexKey || 'rake_back_to_campus', 'Back to campus');
     back.appendChild(el('span', 'arm-slab-text', backText));
     back.setAttribute('aria-label', backText);
-    back.addEventListener('click', goBack);
+    /* W3 P2-11: the slab answers the press. On the BUTTON, never inside
+     * goBack/escapeStep - those are also walked by Esc, and a key that is
+     * already answered elsewhere must not pick up a second voice here. */
+    back.addEventListener('click', function () { sfx('blip', 0.14, { pitch: 0.95 }); goBack(); });
     left.appendChild(back);
     bar.appendChild(left);
     /* The empty right side is not decoration: the two 1fr sides are what hold
@@ -318,6 +419,46 @@ export function createScene(opts) {
       if (!show && !has && bar.classList && bar.classList.add) bar.classList.add('asc-bar-away');
       else if (show && has && bar.classList && bar.classList.remove) bar.classList.remove('asc-bar-away');
     } catch (e) { /* noop */ }
+  }
+
+  /* ---------------------------------------------------- the step-back pill */
+
+  /* THE WAY OUT OF A CLOSE-UP, and there is exactly ONE of it. lab.css's
+   * `.al-back`, promoted: the apron's slab leaves the room on the way into a
+   * close-up (A ZOOM IS A ZOOM), Esc is not a thumb, so a close-up draws a
+   * pill of its own.
+   *
+   * IT HANGS OFF THE ROOT, NEVER OFF THE SLIDE. A slide lives inside
+   * `.asc-stage`, which is the 1376x768 plane scaled to fit - so a pill in
+   * there is authored in STAGE pixels and every phone rule written for it is
+   * multiplied by the fit (~0.5 on a 844x390 window: a 44px thumb target came
+   * out 22px tall with 6px type, which is the owner's "there is no way back
+   * from the book", 2026-08-25). The apron band has been a screen-pixel
+   * sibling since it was written; the pill is the same kind of thing.
+   *
+   * It comes and goes by REMOVAL (trap 27), never by `hidden`, and it is a
+   * LEVEL keyed on the view exactly the way the apron is - every showView
+   * writes it, so an interrupted walk can never strand it over the wide shot.
+   */
+  const backPill = el('button', 'asc-back', '‹ ' + t('back', 'Back'));
+  backPill.type = 'button';
+  backPill.setAttribute('aria-label', t('back', 'Back'));
+  /* The pill runs the SAME fold Esc runs: a panel opened over a close-up is
+   * the thing one press ago, so it closes first. At the wide shot escapeStep
+   * answers false and does nothing - and the pill is not up there anyway. */
+  backPill.addEventListener('click', function () {
+    sfx('blip', 0.14, { pitch: 0.95 });   // W3 P2-11: on the button, not the rung
+    escapeStep();
+  });
+  let backUp = false;
+  function backVisible(show) {
+    const want = !!show;
+    if (want === backUp) return;
+    backUp = want;
+    try {
+      if (want) root.appendChild(backPill);
+      else backPill.remove();
+    } catch (e) { /* a way out must never be the thing that throws */ }
   }
 
   /* ------------------------------------------------------------ hotspots */
@@ -378,6 +519,412 @@ export function createScene(opts) {
     return b;
   }
 
+  /* ------------------------------------------------------- THE ALIVE LAYER */
+  /* One `.asc-fx` per slide, built with it and thrown away with it. The table
+   * is the CONSUMER's (see the header); everything below is the runtime that
+   * reads it, and it knows the word "neon" but not the word "Records". */
+
+  const fxRows = Array.isArray(o.fx) ? o.fx : [];
+  /** Live records for the slides currently in the DOM. */
+  const fxRecords = [];
+  /** Held while the tab is hidden or the window is blurred. */
+  let fxHeld = false;
+  /** EVERY pending timeout and rAF, counted. The suite asserts it is 0 after a
+   *  view change and after destroy(), which is the only assertion that can
+   *  catch an orphan. */
+  let fxTimerCount = 0;
+
+  /** Arm a record's ONE timer. A record never holds two: every kind here is a
+   *  chain (wait -> do -> wait again), so a second handle would be a leak. */
+  function fxSet(rec, fn, ms) {
+    fxClearTimer(rec);
+    rec.timer = setTimeout(function () {
+      rec.timer = 0;
+      fxTimerCount -= 1;
+      if (dead || fxHeld) return;
+      try { fn(); } catch (e) { log('scene fx threw: ' + ((e && e.message) || e)); }
+    }, ms);
+    fxTimerCount += 1;
+  }
+  function fxClearTimer(rec) {
+    if (rec.timer) { try { clearTimeout(rec.timer); } catch (e) { /* noop */ } rec.timer = 0; fxTimerCount -= 1; }
+  }
+  function fxClearRaf(rec) {
+    if (rec.raf) {
+      try { if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rec.raf); }
+      catch (e) { /* noop */ }
+      rec.raf = 0;
+      fxTimerCount -= 1;
+    }
+  }
+  function fxClear(rec) { fxClearTimer(rec); fxClearRaf(rec); }
+
+  /* ---- the kinds. Each one is a small factory returning a RECORD:
+   *   { kind, node, timer, raf, pause?, resume?, stop? }
+   * `node` may be null (tilt paints nothing of its own). Anything with state
+   * beyond a keyframe implements pause/resume, and law 3 does the rest. */
+
+  /** THE SIGN. A halo that breathes, and once in a long while a dip. */
+  function fxNeon(row, rect, rng) {
+    const node = el('div', 'asc-fx-neon');
+    placeRect(node, rect);
+    const rec = { kind: 'neon', node: node, timer: 0, raf: 0 };
+    function arm() {
+      const wait = FX_NEON_MIN_MS + rng() * (FX_NEON_MAX_MS - FX_NEON_MIN_MS);
+      fxSet(rec, function () {
+        try { if (node.classList && node.classList.add) node.classList.add('is-dip'); } catch (e) { /* noop */ }
+        fxSet(rec, function () {
+          try { if (node.classList && node.classList.remove) node.classList.remove('is-dip'); } catch (e) { /* noop */ }
+          arm();
+        }, FX_NEON_DIP_MS);
+      }, wait);
+    }
+    rec.pause = function () {
+      fxClear(rec);
+      try { if (node.classList && node.classList.remove) node.classList.remove('is-dip'); } catch (e) { /* noop */ }
+    };
+    rec.resume = arm;
+    rec.stop = rec.pause;
+    arm();
+    return rec;
+  }
+
+  /** THE LAMP. Pure keyframes - a warm pool that never quite settles. */
+  function fxLamp(row, rect) {
+    const node = el('div', 'asc-fx-lamp');
+    placeRect(node, rect);
+    return { kind: 'lamp', node: node, timer: 0, raf: 0 };
+  }
+
+  /** THE WINDOW. A route lamp pulsing outside, and a car about once a minute. */
+  function fxWindow(row, rect, rng) {
+    const node = el('div', 'asc-fx-window');
+    placeRect(node, rect);
+    node.appendChild(el('i', 'asc-fx-win-halo'));
+    const beam = el('i', 'asc-fx-win-beam');
+    node.appendChild(beam);
+    const rec = { kind: 'window', node: node, timer: 0, raf: 0 };
+    function arm() {
+      const wait = (FX_SWEEP_EVERY_MS - FX_SWEEP_JITTER_MS) + rng() * (FX_SWEEP_JITTER_MS * 2);
+      fxSet(rec, function () {
+        try { if (beam.classList && beam.classList.add) beam.classList.add('is-pass'); } catch (e) { /* noop */ }
+        fxSet(rec, function () {
+          try { if (beam.classList && beam.classList.remove) beam.classList.remove('is-pass'); } catch (e) { /* noop */ }
+          arm();
+        }, FX_SWEEP_MS);
+      }, wait);
+    }
+    rec.pause = function () {
+      fxClear(rec);
+      try { if (beam.classList && beam.classList.remove) beam.classList.remove('is-pass'); } catch (e) { /* noop */ }
+    };
+    rec.resume = arm;
+    rec.stop = rec.pause;
+    arm();
+    return rec;
+  }
+
+  /**
+   * THE CLOCK, and it is the only thing in any room that knows what time it is.
+   *
+   * The plate painted a face and a pair of hands stopped at eleven. A cream
+   * disc covers the painted hands ONLY - the numerals are the painting's and
+   * stay painted, which is why the disc is a fraction of the bezel and not the
+   * whole face - and two DOM hands over it read the player's own wall clock.
+   *
+   * `now` is injectable so a suite can hand it a frozen Date; the minute hand
+   * carries the seconds as a fraction so it is never parked on a whole minute,
+   * and the sheet glides it between the twenty-second reads.
+   */
+  function fxClock(row, circle) {
+    const cx = Number(circle.cx); const cy = Number(circle.cy); const r = Number(circle.r);
+    if (!(r > 0)) return null;
+    const node = el('div', 'asc-fx-clock');
+    placeRect(node, [cx - r, cy - r, r * 2, r * 2]);
+
+    /* The mask. Big enough to bury the painted hands, small enough to leave
+     * every numeral alone (measured off the plate: the hands reach r16 and the
+     * numerals start at r21). */
+    const faceR = Number(row.faceR) > 0 ? Number(row.faceR) : Math.round(r * 0.45);
+    const disc = el('i', 'asc-fx-clock-face');
+    disc.style.left = (r - faceR) + 'px';
+    disc.style.top = (r - faceR) + 'px';
+    disc.style.width = (faceR * 2) + 'px';
+    disc.style.height = (faceR * 2) + 'px';
+    if (row.face) disc.style.background = String(row.face);
+    node.appendChild(disc);
+
+    const hourLen = Number(row.hourLen) > 0 ? Number(row.hourLen) : Math.round(r * 0.27);
+    const minLen = Number(row.minLen) > 0 ? Number(row.minLen) : Math.round(r * 0.39);
+    function hand(cls, len, w) {
+      const n = el('i', 'asc-fx-clock-hand ' + cls);
+      n.style.left = (r - w / 2) + 'px';
+      n.style.top = (r - len) + 'px';
+      n.style.width = w + 'px';
+      n.style.height = len + 'px';
+      if (row.ink) n.style.background = String(row.ink);
+      return n;
+    }
+    const hourEl = hand('asc-fx-hour', hourLen, 3);
+    const minEl = hand('asc-fx-min', minLen, 2);
+    node.appendChild(hourEl);
+    node.appendChild(minEl);
+    const hub = el('i', 'asc-fx-clock-hub');
+    hub.style.left = (r - 3) + 'px';
+    hub.style.top = (r - 3) + 'px';
+    if (row.ink) hub.style.background = String(row.ink);
+    node.appendChild(hub);
+
+    const nowFn = typeof row.now === 'function' ? row.now : function () { return new Date(); };
+    const rec = { kind: 'clock', node: node, timer: 0, raf: 0 };
+    let ang = { hour: 0, minute: 0 };
+    function setHands() {
+      let d;
+      try { d = nowFn(); } catch (e) { d = new Date(); }
+      if (!d || typeof d.getHours !== 'function') d = new Date();
+      const h = d.getHours() % 12; const m = d.getMinutes(); const sec = d.getSeconds();
+      ang = { minute: (m + sec / 60) * 6, hour: (h + m / 60 + sec / 3600) * 30 };
+      try {
+        hourEl.style.transform = 'rotate(' + ang.hour.toFixed(2) + 'deg)';
+        minEl.style.transform = 'rotate(' + ang.minute.toFixed(2) + 'deg)';
+      } catch (e) { /* noop */ }
+    }
+    function tick() { setHands(); fxSet(rec, tick, FX_CLOCK_MS); }
+    rec.pause = function () { fxClear(rec); };
+    rec.resume = tick;               // a hidden tab comes back to the right time
+    rec.stop = function () { fxClear(rec); };
+    /** Test seam: the two angles in degrees, clockwise from twelve. */
+    rec.hands = function () { return { hour: ang.hour, minute: ang.minute }; };
+    tick();
+    return rec;
+  }
+
+  /** THE DOOR, ajar. Two pieces of one idea: a cold line down the open edge
+   *  and the pool it throws on the floor. Both pure keyframes; the ROOM decides
+   *  whether they exist at all, through `when`. */
+  function fxSeam(row) {
+    const node = el('div', 'asc-fx-seam');
+    if (Array.isArray(row.edge) && row.edge.length >= 4) {
+      const edge = el('i', 'asc-fx-seam-edge');
+      placeRect(edge, row.edge);
+      node.appendChild(edge);
+    }
+    if (Array.isArray(row.pool) && row.pool.length >= 4) {
+      const pool = el('i', 'asc-fx-seam-pool');
+      placeRect(pool, row.pool);
+      node.appendChild(pool);
+    }
+    return { kind: 'seam', node: node, timer: 0, raf: 0 };
+  }
+
+  /**
+   * THE DUST. The one canvas in the chassis, and the reason `.arm-lite` is a
+   * separate rung from `.arc-reduced`: a lite machine keeps every keyframe
+   * above and loses this. The canvas IS the rect (1 canvas px = 1 stage px), so
+   * the mask is free at the edges and exact everywhere else.
+   */
+  function fxMotes(row, rect, rng) {
+    if (lite) return null;
+    let node = null;
+    try { node = doc.createElement('canvas'); } catch (e) { return null; }
+    node.className = 'asc-fx-motes';
+    try { node.width = rect[2]; node.height = rect[3]; } catch (e) { /* noop */ }
+    placeRect(node, rect);
+    const rec = { kind: 'motes', node: node, timer: 0, raf: 0 };
+    let ctx = null;
+    try { ctx = (typeof node.getContext === 'function') ? node.getContext('2d') : null; } catch (e) { ctx = null; }
+    if (!ctx || typeof requestAnimationFrame !== 'function') {
+      /* No 2d and no frames (the node double): the element still exists so the
+       * layer's shape is the same everywhere, and it simply never paints. */
+      rec.stop = function () { fxClear(rec); };
+      return rec;
+    }
+    const W = rect[2]; const H = rect[3];
+    const n = Number(row.count) > 0 ? Number(row.count) : FX_MOTES;
+    const tint = row.tint ? String(row.tint) : '255, 236, 190';
+    const ps = [];
+    for (let i = 0; i < n; i += 1) {
+      ps.push({
+        x: rng() * W, y: rng() * H,
+        r: 0.6 + rng() * 1.5,
+        v: 3 + rng() * 8,            // px a second, upward - dust, not smoke
+        a: 0.18 + rng() * 0.42,
+        w: rng() * Math.PI * 2,
+        s: 0.3 + rng() * 0.7,
+      });
+    }
+    let last = 0;
+    function frame(ts) {
+      rec.raf = 0;
+      fxTimerCount -= 1;
+      if (dead || fxHeld) return;
+      const dt = last ? Math.min(0.064, (ts - last) / 1000) : 0.016;
+      last = ts;
+      ctx.clearRect(0, 0, W, H);
+      for (let i = 0; i < ps.length; i += 1) {
+        const p = ps[i];
+        p.y -= p.v * dt;
+        p.w += p.s * dt;
+        p.x += Math.sin(p.w) * 7 * dt;
+        if (p.y < -2) { p.y = H + 2; p.x = rng() * W; }
+        if (p.x < -2) p.x = W + 2;
+        if (p.x > W + 2) p.x = -2;
+        /* THE MASK. Lit only inside the cone: a mote fades out as it nears any
+         * edge of the rect, so the dust has no border and the rect never shows. */
+        const fx = Math.min(1, Math.min(p.x, W - p.x) / (W * 0.28));
+        const fy = Math.min(1, Math.min(p.y, H - p.y) / (H * 0.32));
+        const a = p.a * Math.max(0, fx) * Math.max(0, fy);
+        if (a <= 0.005) continue;
+        ctx.beginPath();
+        ctx.fillStyle = 'rgba(' + tint + ', ' + a.toFixed(3) + ')';
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      schedule();
+    }
+    function schedule() {
+      if (dead || fxHeld || rec.raf) return;
+      try { rec.raf = requestAnimationFrame(frame); fxTimerCount += 1; } catch (e) { rec.raf = 0; }
+    }
+    rec.pause = function () { fxClear(rec); try { ctx.clearRect(0, 0, W, H); } catch (e) { /* noop */ } };
+    rec.resume = function () { last = 0; schedule(); };
+    rec.stop = function () { fxClear(rec); };
+    schedule();
+    return rec;
+  }
+
+  /**
+   * THE TILT. Two pixels of parallax under the mouse, and it moves the PAINTING
+   * (the plate, the patches, the fx layer) rather than the slide: the slide's
+   * transform belongs to the zoom, and a decoration that fights the camera is a
+   * decoration that breaks the camera. The rects stay exactly where they were
+   * measured, which at two pixels nobody can see and every audit can.
+   *
+   * Desktop pointers only, by both doors - `isMobile()` (the school's one
+   * mobile decision) and `(pointer: fine)`.
+   */
+  function fxTilt(row, slideNode) {
+    try { if (isMobile()) return null; } catch (e) { /* noop */ }
+    try {
+      if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+        const m = window.matchMedia('(pointer: fine)');
+        if (m && m.matches === false) return null;
+      }
+    } catch (e) { /* noop */ }
+    if (typeof window === 'undefined' || !window.addEventListener) return null;
+    const amp = Number(row.amp) > 0 ? Number(row.amp) : 2;
+    const rec = { kind: 'tilt', node: null, timer: 0, raf: 0 };
+    function onMove(ev) {
+      if (dead || fxHeld || !ev) return;
+      const w = window.innerWidth || 1;
+      const h = window.innerHeight || 1;
+      /* WHOLE PIXELS. The plate is `image-rendering:pixelated` on a scaled
+       * stage: a fractional translate resamples the pixel art into mush, and
+       * two pixels of parallax is not worth a soft painting. */
+      const dx = Math.round((((ev.clientX || 0) / w) - 0.5) * -2 * amp);
+      const dy = Math.round((((ev.clientY || 0) / h) - 0.5) * -2 * amp);
+      try {
+        slideNode.style.setProperty('--asc-tilt-x', dx + 'px');
+        slideNode.style.setProperty('--asc-tilt-y', dy + 'px');
+      } catch (e) { /* noop */ }
+    }
+    window.addEventListener('pointermove', onMove);
+    rec.pause = function () { /* a mouse that is not over the window sends nothing */ };
+    rec.resume = rec.pause;
+    rec.stop = function () {
+      try { window.removeEventListener('pointermove', onMove); } catch (e) { /* noop */ }
+    };
+    return rec;
+  }
+
+  /* ---- the dispatch --------------------------------------------------- */
+
+  function makeFx(row, slideNode) {
+    const kind = String(row.kind || '');
+    const rng = makeRng(row.seed != null ? row.seed : hashStr(kind + ':' + String(row.view)));
+    const rect = (Array.isArray(row.rect) && row.rect.length >= 4) ? row.rect : null;
+    try {
+      if (kind === 'neon') return rect ? fxNeon(row, rect, rng) : null;
+      if (kind === 'lamp') return rect ? fxLamp(row, rect) : null;
+      if (kind === 'motes') return rect ? fxMotes(row, rect, rng) : null;
+      if (kind === 'window') return rect ? fxWindow(row, rect, rng) : null;
+      if (kind === 'clock') return (row.circle && row.circle.r) ? fxClock(row, row.circle) : null;
+      if (kind === 'seam') return fxSeam(row);
+      if (kind === 'tilt') return fxTilt(row, slideNode);
+    } catch (e) { log('scene fx ' + kind + ' failed: ' + ((e && e.message) || e)); return null; }
+    log('scene: unknown fx kind ' + kind);
+    return null;
+  }
+
+  /**
+   * buildFx(name, slideNode) -> the `.asc-fx` layer for one slide, or NULL.
+   *
+   * Null under `.arc-reduced` is law 1 and it is deliberate: no layer, no
+   * nodes, nothing paused, nothing to argue with the global freeze about.
+   */
+  function buildFx(name, slideNode) {
+    if (!fxRows.length || reducedNow()) return null;
+    const layer = el('div', 'asc-fx');
+    try { layer.setAttribute('aria-hidden', 'true'); } catch (e) { /* noop */ }
+    for (let i = 0; i < fxRows.length; i += 1) {
+      const row = fxRows[i];
+      if (!row || row.view !== name) continue;
+      const rec = makeFx(row, slideNode);
+      if (!rec) continue;
+      rec.host = slideNode;
+      fxRecords.push(rec);
+      if (!rec.node) continue;
+      /* `when` is the hotspots' own gate, read the same way and joining the
+       * same registry - so setFlag('ajar', true) lights the seam mid-visit. */
+      if (row.when) live.push({ node: rec.node, when: row.when, host: layer, owner: slideNode });
+      if (whenOn(row.when)) layer.appendChild(rec.node);
+    }
+    return layer;
+  }
+
+  /** Stop and forget every record belonging to one slide (never call with a
+   *  falsy host unless you mean ALL of them - destroy() does). */
+  function dropFx(host) {
+    for (let i = fxRecords.length - 1; i >= 0; i -= 1) {
+      const rec = fxRecords[i];
+      if (host && rec.host !== host) continue;
+      fxRecords.splice(i, 1);
+      try { if (rec.stop) rec.stop(); } catch (e) { /* noop */ }
+      fxClear(rec);
+      try { if (rec.node) rec.node.remove(); } catch (e) { /* noop */ }
+    }
+  }
+
+  /* ---- law 3: a hidden tab, a blurred window --------------------------- */
+
+  function fxSetHold(on) {
+    const next = !!on;
+    if (fxHeld === next) return;
+    fxHeld = next;
+    /* add/remove, never `toggle` - the node double's classList has no toggle
+     * (trap 49's family: a feature test passes in exactly the world that does
+     * not matter) and a suite has to be able to see the hold land. */
+    try {
+      if (next) { if (root.classList && root.classList.add) root.classList.add('asc-fx-hold'); }
+      else if (root.classList && root.classList.remove) root.classList.remove('asc-fx-hold');
+    } catch (e) { /* noop */ }
+    for (let i = 0; i < fxRecords.length; i += 1) {
+      const rec = fxRecords[i];
+      try {
+        if (next) { if (rec.pause) rec.pause(); }
+        else if (rec.resume) rec.resume();
+      } catch (e) { /* noop */ }
+    }
+  }
+  function onVis() { try { fxSetHold(doc.hidden === true); } catch (e) { /* noop */ } }
+  function onBlur() { fxSetHold(true); }
+  function onFocus() { fxSetHold(false); }
+  if (typeof doc.addEventListener === 'function') doc.addEventListener('visibilitychange', onVis);
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
+  }
+
   /* -------------------------------------------------------------- slides */
 
   function buildSlide(name) {
@@ -408,6 +955,12 @@ export function createScene(opts) {
       if (whenOn(p.when)) node.appendChild(im);
     }
 
+    /* THE ALIVE LAYER, between the plate and everything you can touch. Null
+     * under reduced motion, and the layer takes no pointer events, so the room
+     * is exactly as clickable with it as without it. */
+    const fxLayer = buildFx(name, node);
+    if (fxLayer) node.appendChild(fxLayer);
+
     /* THE PROPS, between the patches and the hotspots. A prop is the CONSUMER's
      * node, so it is re-seated (appendChild MOVES it) rather than rebuilt - the
      * paper on the corkboard keeps its scroll position and the book keeps its
@@ -428,15 +981,12 @@ export function createScene(opts) {
       if (whenOn(opt.when)) node.appendChild(b);
     }
 
-    /* THE STEP-BACK PILL, lab.js's, on every close-up. The apron's slab LEAVES
-     * THE ROOM; a player two clicks deep needs the other verb, and Esc is not
-     * a mouse. Home has none - the apron is the way out from there. */
-    if (name !== 'wide') {
-      const pill = el('button', 'asc-back', '‹ ' + t('back', 'Back'));
-      pill.type = 'button';
-      pill.addEventListener('click', function () { showView('wide'); });
-      node.appendChild(pill);
-    }
+    /* THE STEP-BACK PILL IS NOT IN HERE ANY MORE - see backVisible(). It used
+     * to be a child of the slide, which put it inside the SCALED stage: on a
+     * phone the fit is ~0.5, so every screen pixel the phone rules asked for
+     * came out halved (a 44px thumb target measured 22px, 12px type measured
+     * 6px) and the one way out of a close-up read as a smudge. It is chrome,
+     * not paint - it hangs off the root now, in screen pixels. */
     return node;
   }
 
@@ -477,7 +1027,9 @@ export function createScene(opts) {
     lastRect = null;
 
     /* a new slide owns the flag registry: drop the outgoing one's rows */
-    for (let i = live.length - 1; i >= 0; i -= 1) { if (live[i].host === prev) live.splice(i, 1); }
+    for (let i = live.length - 1; i >= 0; i -= 1) {
+      if (live[i].host === prev || live[i].owner === prev) live.splice(i, 1);
+    }
 
     viewName = name;
     const next = buildSlide(name);
@@ -486,7 +1038,7 @@ export function createScene(opts) {
 
     if (reduced || !prev) {
       stage.appendChild(next);
-      if (prev) { try { prev.remove(); } catch (e) { /* noop */ } }
+      if (prev) { dropFx(prev); try { prev.remove(); } catch (e) { /* noop */ } }
       slide = next;
     } else {
       /* start pose, then a frame, then go - the reflow is read for the same
@@ -517,7 +1069,10 @@ export function createScene(opts) {
           prev.style.opacity = '0';
         }
       }, ZOOM_ARM_MS);
-      later(function () { try { prev.remove(); } catch (e) { /* noop */ } }, ZOOM_MS + ZOOM_ARM_MS + 40);
+      /* The fx go WITH the plate, not before it: an outgoing slide keeps its
+       * sign lit for the length of the crossfade, the way a room you are
+       * walking away from does. */
+      later(function () { dropFx(prev); try { prev.remove(); } catch (e) { /* noop */ } }, ZOOM_MS + ZOOM_ARM_MS + 40);
     }
 
     applyFlags();
@@ -525,7 +1080,16 @@ export function createScene(opts) {
      * every close-up. Written on EVERY move, not just the ones that change it,
      * so the level always matches the view that is actually up. */
     apronVisible(name === 'wide');
-    if (prevName) sfx(back ? 'door' : 'blip', back ? 0.3 : 0.16, back ? null : { pitch: 1.05 });
+    /* ...and the pill is the other half of the same law: the band and the pill
+     * are never both up, and never both away. */
+    backVisible(name !== 'wide');
+    /* W3 P1-24: A CAMERA MOVE IS AIR, NOT A DOOR. Pushing in played a `blip`
+     * (a digital tick for a lens moving) and stepping back played a full
+     * `door` thump - for a shot change inside one room, with no door in it.
+     * `door` is reserved for real doors now. Same whoosh both ways, pitched up
+     * on the way in and down on the way out, quieter going back because
+     * leaving a close-up is a smaller gesture than committing to one. */
+    if (prevName) sfx('whoosh', back ? 0.12 : 0.16, { pitch: back ? 0.85 : 1.2 });
     /* Keyboard keeps its place: the room's own verb takes focus once the node
      * is in the document (a fresh node ignores focus() in some engines). */
     later(function () {
@@ -644,6 +1208,9 @@ export function createScene(opts) {
 
   /* ---------------------------------------------------------------- fit */
 
+  /** The last scale `fit()` computed - the stage's, never a prop's own. */
+  let lastScale = 1;
+
   /** Scale to fit, then hang the apron off the painting's floor line and
    *  publish the band height. `--arm-band-h` goes on BOTH root and bar: the
    *  bar is a body-level sibling and cannot inherit a var set on root alone. */
@@ -652,20 +1219,56 @@ export function createScene(opts) {
     const w = root.clientWidth || (root.parentNode && root.parentNode.clientWidth) || stageW;
     const h = root.clientHeight || (root.parentNode && root.parentNode.clientHeight) || stageH;
     const s = Math.min(w / stageW, h / stageH) || 1;
-    stage.style.transform = 'translate(-50%,-50%) scale(' + s + ')';
+    /* ONE STAGE, ONE SCALE, and a consumer may ask for it. A prop that has to
+     * reason in SCREEN pixels (the corkboard's type floor is 10 real pixels,
+     * whatever the plate is doing) cannot measure its own host: the miniature
+     * on the wide shot carries a second scale of its own, so its rect would
+     * answer a different number than the close-up's and the two walls would
+     * lay out differently. This is the stage's number, the same for every prop
+     * on it, and `scale()` below is the only way to read it. */
+    lastScale = s;
+    /* THE PHONE ANCHORS THE PAINTING TO THE TOP and takes a 72px band instead
+     * of 110 - room.js's change, for room.js's reasons, on the chassis that
+     * shares its apron. scene.css moves the box and the origin together under
+     * `html.arc-mobile`; the origin must follow the anchor or the scale walks
+     * the plane off-axis (this file's own header). The ZOOM is untouched: it
+     * lives on `.asc-slide`, one level down, and still turns about its own
+     * centre. */
+    const phone = onPhone();
+    stage.style.transform = 'translate(-50%,' + (phone ? '0' : '-50%') + ') scale(' + s + ')';
 
     let bandH = 0;
     if (bar) {
-      const artTop = (h - stageH * s) / 2;
+      const floor = phone ? APRON_MIN_MOBILE : APRON_MIN;
+      const artTop = phone ? 0 : (h - stageH * s) / 2;
       let apronTop = artTop + apronStageTop * s;
-      if (h - apronTop < APRON_MIN) apronTop = h - APRON_MIN;
+      if (h - apronTop < floor) apronTop = h - floor;
       if (apronTop < 0) apronTop = 0;
       bandH = h - apronTop;
       bar.style.top = apronTop + 'px';
       bar.style.setProperty('--arm-band-h', bandH + 'px');
     }
     root.style.setProperty('--arm-band-h', bandH + 'px');
+    /* ...AND ON <html>, because a viewport-level modal cannot inherit it.
+     * `position:fixed` inside this room is contained by the room (root is
+     * fixed, and an overlay panel carries a transform), so anything that has
+     * to be measured against the WINDOW - the Records spotlight, a notice
+     * reader - is mounted on <body> and has no ancestor of ours to read the
+     * band off. One page-level custom property is the seam; destroy() clears
+     * it, so a screen after this one never inherits a carpet that left. */
+    setBandVar(bandH);
     return s;
+  }
+
+  /** The band height as a page fact. Defensive: the node double has no
+   *  documentElement and a page with no scene must read 0. */
+  function setBandVar(px) {
+    try {
+      const de = doc.documentElement;
+      if (de && de.style && typeof de.style.setProperty === 'function') {
+        de.style.setProperty('--arm-band-h', (Number(px) || 0) + 'px');
+      }
+    } catch (e) { /* noop */ }
   }
   function onResize() { fit(); }
 
@@ -690,11 +1293,24 @@ export function createScene(opts) {
     dead = true;
     for (let i = 0; i < timers.length; i += 1) clearTimeout(timers[i]);
     timers.length = 0;
+    /* THE ALIVE LAYER GOES FIRST, because law 4 is the one thing in this file
+     * that can outlive the room: every record stops its own timer and its own
+     * rAF here, and `fxStats().timers` is 0 on the next line. */
+    dropFx(null);
+    if (typeof doc.removeEventListener === 'function') {
+      try { doc.removeEventListener('visibilitychange', onVis); } catch (e) { /* noop */ }
+    }
+    if (typeof window !== 'undefined' && window.removeEventListener) {
+      try { window.removeEventListener('blur', onBlur); } catch (e) { /* noop */ }
+      try { window.removeEventListener('focus', onFocus); } catch (e) { /* noop */ }
+    }
     if (typeof window !== 'undefined' && window.removeEventListener) window.removeEventListener('resize', onResize);
     if (sheetScene && sheetScene.removeEventListener) { try { sheetScene.removeEventListener('load', onResize); } catch (e) { /* noop */ } }
     if (sheetRooms && sheetRooms.removeEventListener) { try { sheetRooms.removeEventListener('load', onResize); } catch (e) { /* noop */ } }
     if (overlay) { try { overlay.layer.remove(); } catch (e) { /* noop */ } overlay = null; }
     if (bar) { try { bar.remove(); } catch (e) { /* noop */ } }
+    /* The carpet goes with the room: the next screen has no band. */
+    setBandVar(0);
     try { root.remove(); } catch (e) { /* noop */ }
     live.length = 0;
     /* The props go with the room, but they are NOT ours to destroy - the
@@ -713,7 +1329,30 @@ export function createScene(opts) {
     setFlag: setFlag,
     escapeStep: escapeStep,
     fit: fit,
+    /** Stage px -> screen px, as of the last fit. See fit(). */
+    scale: function () { return lastScale; },
     destroy: destroy,
+    /* ---------------------------------------------- the alive layer's seams */
+    /** {records, timers, held} - `timers` MUST be 0 after destroy(). */
+    fxStats: function () {
+      return { records: fxRecords.length, timers: fxTimerCount, held: fxHeld };
+    },
+    /** How many live records of one kind (all of them with no argument). */
+    fxCount: function (kind) {
+      if (!kind) return fxRecords.length;
+      let n = 0;
+      for (let i = 0; i < fxRecords.length; i += 1) if (fxRecords[i].kind === String(kind)) n += 1;
+      return n;
+    },
+    /** The clock's two hands in degrees, or null if the room has no clock. */
+    fxHands: function () {
+      for (let i = 0; i < fxRecords.length; i += 1) {
+        if (fxRecords[i].kind === 'clock' && fxRecords[i].hands) return fxRecords[i].hands();
+      }
+      return null;
+    },
+    /** Drive law 3 from a suite (the DOM double fires no visibilitychange). */
+    fxHold: fxSetHold,
   };
 }
 

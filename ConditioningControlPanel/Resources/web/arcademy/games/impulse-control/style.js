@@ -175,6 +175,9 @@ html.arc-reduced .g-ic-dusk{transition:none}
 .g-ic-bubble.on{opacity:1;pointer-events:auto;animation:g-ic-reveal .16s cubic-bezier(.2,1.6,.4,1) forwards}
 @keyframes g-ic-reveal{from{transform:translate(-50%,-50%) scale(.24)}to{transform:translate(-50%,-50%) scale(1)}}
 .g-ic-bubble.pop{animation:g-ic-pop .32s ease-out forwards}
+/* a spiral pop hands the whole exit to the flourish (same artwork - letting
+   both play reads as TWO bubbles popping): the bubble snaps out instantly */
+.g-ic-bubble.gone{opacity:0;pointer-events:none;animation:none}
 @keyframes g-ic-pop{0%{transform:translate(-50%,-50%) scale(1);opacity:1}
   45%{transform:translate(-50%,-50%) scale(1.28);opacity:.85}
   100%{transform:translate(-50%,-50%) scale(1.55);opacity:0}}
@@ -551,6 +554,48 @@ html.arc-reduced .g-ic-dusk{transition:none}
 .g-ic-paper-actions{position:sticky;bottom:0;z-index:4;
   margin:8px -30px -26px;padding:12px 30px 16px;
   background:linear-gradient(180deg,rgba(26,26,50,0),#1A1A32 42%)}
+
+/* ---- THE PHONE CEILING (html.ae-touch, web CLAUDE.md trap 42) ----
+   The shell arms .ae-touch on <html> for coarse-pointer devices at boot; the
+   desktop WebView2 never wears it, so nothing below moves a desktop pixel.
+   WebKit charges several ms a frame for a backdrop-filter, for a blur over a
+   full-bleed layer, and for an animated box-shadow (a full re-raster of the
+   layer per frame). Each rule swaps the costly half of a look for a static
+   stand-in and keeps its transform/opacity half. */
+/* the depth haze keeps its intent - media edges melting into atmosphere -
+   painted as a static gradient instead of a live backdrop blur, modeled on
+   the supports-not fallback above. The base rule's mask still shapes it
+   (masking one gradient div is cheap). */
+html.ae-touch .g-ic-bg-depth{backdrop-filter:none;-webkit-backdrop-filter:none;
+  background:radial-gradient(72% 58% at 50% 46%, transparent 40%, rgba(10,10,26,.55) 85%)}
+/* the backdrop media loses its 2px blur (a per-frame GPU pass over a
+   full-bleed decode). The ken-burns drift STAYS: its keyframe is
+   transform-only, which the compositor animates for free. */
+html.ae-touch .g-ic-bg-img{filter:saturate(.9)}
+/* the X-hit burst keeps its pop but stops ANIMATING filter (a fresh filter
+   surface every frame); the red shift rides as one static filter instead */
+html.ae-touch .g-ic-bubble.hit{animation:g-ic-hitburst-t .4s ease-out forwards;
+  filter:saturate(3) hue-rotate(-40deg)}
+@keyframes g-ic-hitburst-t{0%{transform:translate(-50%,-50%) scale(1)}
+  30%{transform:translate(-50%,-50%) scale(1.2)}
+  100%{transform:translate(-50%,-50%) scale(1.4);opacity:0}}
+/* the infinite box-shadow breathers freeze at their resting shadow (their own
+   0%/100% frame); GO keeps a transform-only pulse so the one door into the
+   class still breathes */
+html.ae-touch .g-ic-hw-go{animation:g-ic-hw-go-t 2.2s ease-in-out infinite;
+  box-shadow:0 0 18px rgba(255,105,180,.32)}
+@keyframes g-ic-hw-go-t{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}
+html.ae-touch .g-ic-submit{animation:none;box-shadow:0 0 16px rgba(255,105,180,.3)}
+html.ae-touch .g-ic-hw-nohand::after{animation:none;opacity:1}
+/* the intro card loses its backdrop blur; a deeper scrim stands in */
+html.ae-touch .g-ic-break{backdrop-filter:none;-webkit-backdrop-filter:none;
+  background:rgba(14,14,32,.92)}
+/* the two animations this block re-adds must still bow to reduced motion -
+   the media block above is out-specified by html.ae-touch, so say it again */
+html.arc-reduced.ae-touch .g-ic-hw-go,html.arc-reduced.ae-touch .g-ic-bubble.hit{animation:none}
+@media (prefers-reduced-motion: reduce){
+  html.ae-touch .g-ic-hw-go,html.ae-touch .g-ic-bubble.hit{animation:none}
+}
 
 `;
 

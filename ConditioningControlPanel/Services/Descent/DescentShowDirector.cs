@@ -47,6 +47,19 @@ namespace ConditioningControlPanel.Services.Descent
         private bool _catchUpOwed;
         private bool _catchUpHolding;
 
+        /// <summary>
+        /// THE PRE-ZERO HOLD (0825 hunt, F2). Taken while the fuse is lit and zero has not come,
+        /// released only once the live window holds the ceremony itself. Before this, nothing held
+        /// offers before zero at all: the server fires on ITS clock, so a client two minutes slow
+        /// got the ceremony window while its corner clock still read gold — and then the crack
+        /// opened fullscreen over the open ceremony. With the hold, an early offer simply waits
+        /// under the bloom, which is the choreography the contract describes.
+        /// </summary>
+        private bool _preZeroHolding;
+
+        private DispatcherTimer? _retryTimer;
+        private int _retryAttempts;
+
         /// <summary>The heartbeat hook's player, exposed so a teardown can silence it.</summary>
         public DescentHeartbeat Heartbeat => _heartbeat;
 
@@ -70,6 +83,7 @@ namespace ConditioningControlPanel.Services.Descent
                 if (fuse != null)
                 {
                     fuse.ZeroReached += OnZeroReached;
+                    fuse.ZeroObservedLate += OnZeroObservedLate;
                     fuse.PhaseChanged += OnPhaseChanged;
                 }
 
@@ -79,7 +93,11 @@ namespace ConditioningControlPanel.Services.Descent
                 // Settled by Start() before the first tick, and never true at the same time as a
                 // live zero. Read once: the flags behind it are about to be written by the show.
                 _catchUpOwed = fuse?.ShouldPlayCatchUp == true;
-                if (!_catchUpOwed) return;
+                if (!_catchUpOwed)
+                {
+                    EnsurePreZeroHold();
+                    return;
+                }
 
                 Log.Information("[Fuse] The instant passed while the app was closed — the catch-up crack is owed.");
 
@@ -124,17 +142,80 @@ namespace ConditioningControlPanel.Services.Descent
                 // case where Terminal started it and the phase never announced Zero separately.
                 _heartbeat.Stop();
 
+                // NOTHING TO REVEAL (0825 F2, scenario B). An account that already answered — on
+                // this machine before a slow client clock reached zero, or on another device — has
+                // had its first light. Playing the crack again would end in forty-five seconds of
+                // refused resyncs and "The ceremony awaits." said to someone who just finished it.
+                if (AlreadyAnswered() || App.DescentMigration?.IsCeremonyOpen == true)
+                {
+                    Log.Information("[Fuse] Zero, but the question is already answered or on screen — no live show.");
+                    ReleasePreZeroHold();
+                    return;
+                }
+
                 var window = DescentFuseWindow.Open(DescentShowKind.Live);
+
+                // The window took its own hold in its constructor (released at the bloom), so the
+                // pre-zero hold's job is done. Released even when Open() refused — a hold with no
+                // show behind it would keep the ceremony shut for nothing.
+                ReleasePreZeroHold();
                 if (window is null) return;
 
                 window.Closed += (s, _) =>
                 {
                     if (s is DescentFuseWindow w && w.HandedOffToCeremony) FocusCeremony();
+                    else BeginPostZeroRetry("live handoff timed out");
                 };
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "[Fuse] The live zero show could not start.");
+                ReleasePreZeroHold();
+            }
+        }
+
+        /// <summary>
+        /// Zero was noticed late in a process that slept across it (0825 F5). The countdown has
+        /// already flipped itself to the away fork, so this is the launch-time catch-up decision
+        /// taken again, mid-session: play the condensed crack if it is owed, hold the ceremony
+        /// behind it exactly as at launch, and otherwise just make sure the offer conversation
+        /// happens.
+        /// </summary>
+        private void OnZeroObservedLate(object? sender, EventArgs e)
+        {
+            if (_disposed) return;
+            if (Application.Current?.Dispatcher?.HasShutdownStarted != false) return;
+
+            try
+            {
+                _heartbeat.Stop();
+
+                var fuse = App.DescentCountdown;
+                if (fuse?.ShouldPlayCatchUp != true)
+                {
+                    ReleasePreZeroHold();
+                    BeginPostZeroRetry("zero passed during sleep, no crack owed");
+                    return;
+                }
+
+                Log.Information("[Fuse] The instant passed while this session slept — the catch-up crack is owed.");
+
+                // Convert the pre-zero hold into the catch-up hold rather than stacking a second
+                // one: same depth, same release path (the crack's Closed handler).
+                if (_preZeroHolding) _preZeroHolding = false;
+                else App.DescentMigration?.HoldOffers();
+                _catchUpHolding = true;
+                _catchUpOwed = true;
+
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher is null || dispatcher.HasShutdownStarted) { ReleaseCatchUpHold(); return; }
+                _ = dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(PlayCatchUp));
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[Fuse] The late-zero path failed.");
+                ReleasePreZeroHold();
+                ReleaseCatchUpHold();
             }
         }
 
@@ -167,6 +248,10 @@ namespace ConditioningControlPanel.Services.Descent
                     catch (Exception ex) { Log.Debug("[Fuse] Catch-up flag write failed: {Error}", ex.Message); }
 
                     ReleaseCatchUpHold();
+
+                    // The release replays a held offer synchronously; if nothing was in hand the
+                    // startup sync that should have carried it may simply have failed (F1).
+                    if (App.DescentMigration?.IsCeremonyOpen != true) BeginPostZeroRetry("catch-up closed without an offer");
                 };
             }
             catch (Exception ex)
@@ -182,6 +267,123 @@ namespace ConditioningControlPanel.Services.Descent
             _catchUpHolding = false;
             try { App.DescentMigration?.ReleaseOffers(); }
             catch (Exception ex) { Log.Debug("[Fuse] Releasing the offer hold failed: {Error}", ex.Message); }
+        }
+
+        // ------------------------------------------------------------------
+        // The pre-zero hold (0825 F2)
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Hold offers iff the fuse is lit, zero is still ahead, and nothing else is holding. Safe
+        /// to call on every phase change: it only ever takes ONE hold and only ever when the state
+        /// says so. Release is deliberately NOT here — the moment to let go is after the live
+        /// window holds the ceremony itself (see <see cref="OnZeroReached"/>), never on the phase
+        /// change to Zero, which fires on the same tick a few lines BEFORE ZeroReached.
+        /// </summary>
+        private void EnsurePreZeroHold()
+        {
+            if (_disposed || _preZeroHolding || _catchUpHolding) return;
+
+            var fuse = App.DescentCountdown;
+            var migration = App.DescentMigration;
+            if (fuse is null || migration is null) return;
+            if (fuse.CeremonyAtUtc is null) return;
+            if (fuse.ZeroPassedWhileAway) return;
+            if (fuse.Phase >= DescentFusePhase.Zero) return;
+            if (AlreadyAnswered()) return;
+
+            try
+            {
+                migration.HoldOffers();
+                _preZeroHolding = true;
+                Log.Debug("[Fuse] Holding ceremony offers until zero.");
+            }
+            catch (Exception ex) { Log.Debug("[Fuse] Could not take the pre-zero hold: {Error}", ex.Message); }
+        }
+
+        private void ReleasePreZeroHold()
+        {
+            if (!_preZeroHolding) return;
+            _preZeroHolding = false;
+            try { App.DescentMigration?.ReleaseOffers(); }
+            catch (Exception ex) { Log.Debug("[Fuse] Releasing the pre-zero hold failed: {Error}", ex.Message); }
+        }
+
+        private static bool AlreadyAnswered()
+        {
+            var s = App.Settings?.Current;
+            if (s is null) return false;
+            return s.DescentMigrationCompleted || DescentMigrationChoices.IsValid(s.PendingDescentMigrationChoice);
+        }
+
+        // ------------------------------------------------------------------
+        // The post-zero retry (0825 F1)
+        // ------------------------------------------------------------------
+
+        /// <summary>Ask for a sync once a minute, bounded, until the ceremony conversation happens.
+        /// Policy in <see cref="DescentPostZeroRetry"/>. Idempotent: a second call while running
+        /// is a no-op.</summary>
+        private void BeginPostZeroRetry(string why)
+        {
+            if (_disposed || _retryTimer != null) return;
+
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher is null || dispatcher.HasShutdownStarted) return;
+
+            if (!RetryShouldContinue())
+            {
+                Log.Debug("[Fuse] No post-zero retry needed ({Why}).", why);
+                return;
+            }
+
+            Log.Information("[Fuse] Post-zero retry armed ({Why}): one sync a minute, up to {Max}.",
+                why, DescentPostZeroRetry.MaxAttempts);
+
+            _retryAttempts = 0;
+            _retryTimer = new DispatcherTimer(DispatcherPriority.Normal, dispatcher) { Interval = DescentPostZeroRetry.Every };
+            _retryTimer.Tick += OnRetryTick;
+            _retryTimer.Start();
+        }
+
+        private void OnRetryTick(object? sender, EventArgs e)
+        {
+            try
+            {
+                if (_disposed || Application.Current?.Dispatcher?.HasShutdownStarted != false) { StopPostZeroRetry(); return; }
+
+                if (!RetryShouldContinue())
+                {
+                    Log.Information("[Fuse] Post-zero retry done after {N} attempt(s).", _retryAttempts);
+                    StopPostZeroRetry();
+                    return;
+                }
+
+                _retryAttempts++;
+                _ = App.ProfileSync?.SyncProfileAsync();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("[Fuse] Post-zero retry tick failed: {Error}", ex.Message);
+            }
+        }
+
+        private bool RetryShouldContinue()
+        {
+            var s = App.Settings?.Current;
+            var migration = App.DescentMigration;
+            return DescentPostZeroRetry.ShouldContinue(
+                _retryAttempts,
+                fuseArmed: App.DescentCountdown?.CeremonyAtUtc != null,
+                ceremonyOpen: migration?.IsCeremonyOpen == true,
+                offerInHand: migration?.LiveOffer != null,
+                migrationCompleted: s?.DescentMigrationCompleted == true,
+                choicePending: s != null && DescentMigrationChoices.IsValid(s.PendingDescentMigrationChoice));
+        }
+
+        private void StopPostZeroRetry()
+        {
+            try { _retryTimer?.Stop(); } catch { }
+            _retryTimer = null;
         }
 
         // ------------------------------------------------------------------
@@ -347,8 +549,16 @@ namespace ConditioningControlPanel.Services.Descent
             {
                 if (e.Current == DescentFusePhase.Terminal) _heartbeat.Start();
                 else _heartbeat.Stop();
+
+                // The hold follows the fuse (F2): kill switch lets go; a re-arm (or the owner
+                // moving the date back ahead of now, F3) takes it again; a date moved into the
+                // past has no live show coming, so nothing to hold for. The transition TO Zero on
+                // a live night is deliberately left alone — ZeroReached handles that hand-over.
+                if (e.Current == DescentFusePhase.Dark) ReleasePreZeroHold();
+                else if (e.Current < DescentFusePhase.Zero) EnsurePreZeroHold();
+                else if (App.DescentCountdown?.ZeroPassedWhileAway == true) ReleasePreZeroHold();
             }
-            catch (Exception ex) { Log.Debug("[Fuse] Heartbeat phase handling failed: {Error}", ex.Message); }
+            catch (Exception ex) { Log.Debug("[Fuse] Phase handling failed: {Error}", ex.Message); }
         }
 
         // ------------------------------------------------------------------
@@ -379,6 +589,7 @@ namespace ConditioningControlPanel.Services.Descent
                 if (fuse != null)
                 {
                     fuse.ZeroReached -= OnZeroReached;
+                    fuse.ZeroObservedLate -= OnZeroObservedLate;
                     fuse.PhaseChanged -= OnPhaseChanged;
                 }
                 var migration = App.DescentMigration;
@@ -386,6 +597,8 @@ namespace ConditioningControlPanel.Services.Descent
             }
             catch { /* teardown races are not worth a log line */ }
 
+            StopPostZeroRetry();
+            ReleasePreZeroHold();
             ReleaseCatchUpHold();
             _heartbeat.Dispose();
         }

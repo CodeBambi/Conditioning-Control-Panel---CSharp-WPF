@@ -110,6 +110,9 @@ const GLOBAL_KEYS = new Set([
   SETTING_KEYS.audioMute, SETTING_KEYS.hideTutorial, SETTING_KEYS.keybinds,
   SETTING_KEYS.presenceShare,
   'masterVolume', 'remoteMediaRatio',
+  // The web's motion control (host/init.js echoes it; shell.js turns it into
+  // html.arc-reduced). A global, so it never lands in the per-game bag.
+  'motionLevel',
   // WHOLE-OBJECT echoes are globals too (W0, 2026-08-24): the host answers the
   // mixer as one `{key:'audioLevels', value:{...}}` frame, and the undotted key
   // used to slip this fence and land the whole object in the per-game flat bag.
@@ -231,8 +234,16 @@ function mult(v) { return (Math.round((Number(v) || 0) * 100) / 100).toFixed(2) 
  *                              An unknown key falls back to the full page (a
  *                              missing group would hide real knobs; too many is
  *                              the lesser bug).
+ * @param {{count:number, source:'host'|'house'}=} o.vocab  THE RESOLVED word
+ *                              pool from the shell (core/vocab.js), not
+ *                              `init.words`: on a day the player's own list is
+ *                              empty the school lends its own vocabulary, and
+ *                              the row has to name the list that is actually
+ *                              flashing. Absent -> the row falls back to
+ *                              `init.words`, which is what any caller that
+ *                              predates the floor already meant.
  */
-export function createSettingsPage({ init, bridge, games, keybinds, assets, onClose, log, gameKey } = {}) {
+export function createSettingsPage({ init, bridge, games, keybinds, assets, store, onClose, log, gameKey, vocab, emi } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const src = init || {};
   const root = el('div', 'arc-settings');
@@ -245,6 +256,21 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
   /* MEDIA-CONTRACT §1. STRICTLY true. `undefined` is the app, and the app must
    * see this page exactly as it saw it yesterday. */
   const mediaControls = flatBag.mediaControls === true;
+
+  /* WHICH HOST (owner bug, 2026-08-25). `init.platform.host` is the one signal:
+   * the C# host says 'desktop', the browser shim says 'web'. Anything that is
+   * not 'web' is the app, so a host that predates the field keeps the desktop
+   * sheet exactly. On the app the ceilings are READ-ONLY (the app owns them);
+   * on the web there is no app to point at, so the rows that mean nothing in a
+   * browser (subliminal audio, the word pool, the panic key) are not drawn, and
+   * the two the shim can actually honour - master volume (shell/audio.js reads
+   * the `masterVolume` echo) and motion (`motionLevel` echo -> html.arc-reduced)
+   * - become real controls. Only what the shim echoes is exposed: a control
+   * whose echo never comes back wears `pending` forever. */
+  const host = (src.platform && src.platform.host === 'web') ? 'web' : 'app';
+  const mobile = !!(typeof document !== 'undefined' && document.documentElement
+    && document.documentElement.classList
+    && document.documentElement.classList.contains('arc-mobile'));
 
   function send(key, value) {
     if (!bridge || typeof bridge.send !== 'function') return;
@@ -283,6 +309,25 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
     }, PREVIEW_DEBOUNCE_MS);
   }
 
+  /* THE SHEET'S OWN VOICE (W3 P0-34 / P1-23). Same defensive dispatch as the
+   * preview above, minus the debounce: these are one-per-press answers, not a
+   * slider being swept. TUTORIAL bus, because a settings page is the school
+   * explaining itself, and quiet by construction - chrome is never the loudest
+   * thing on a screen. A dropped cue is not an error. */
+  function sfx(name, level, extra) {
+    try {
+      if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+      const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+      if (!Ctor) return;
+      document.dispatchEvent(new Ctor('arcademy-sfx', {
+        detail: Object.assign(
+          { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'tutorial' },
+          extra || {}
+        ),
+      }));
+    } catch (e) { /* a cue must never be the thing that throws */ }
+  }
+
   /* ---------------------- row builders --------------------------------- */
   function sliderRow({ key, label, hint, value, min, max, step, fmt }) {
     const row = el('div', 'arc-row');
@@ -303,10 +348,13 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
     row.appendChild(lab); row.appendChild(input); row.appendChild(out);
     rows.set(key, {
       node: row,
+      value,
       apply(v) {
+        this.value = v;
         input.value = String(v);
         out.textContent = (fmt || pct)(v);
         row.classList.remove('pending');
+        refreshSummaries();
       },
     });
     return row;
@@ -326,7 +374,8 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
     row.appendChild(lab); row.appendChild(wrap);
     rows.set(key, {
       node: row,
-      apply(v) { input.checked = !!v; row.classList.remove('pending'); },
+      value: !!value,
+      apply(v) { this.value = !!v; input.checked = !!v; row.classList.remove('pending'); refreshSummaries(); },
     });
     return row;
   }
@@ -351,7 +400,8 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
     row.appendChild(lab); row.appendChild(sel);
     rows.set(key, {
       node: row,
-      apply(v) { sel.value = String(v); row.classList.remove('pending'); },
+      value,
+      apply(v) { this.value = v; sel.value = String(v); row.classList.remove('pending'); refreshSummaries(); },
     });
     return row;
   }
@@ -408,8 +458,11 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
       const res = keybinds.bind(gameKey, slot.verb, e.code || e.key);
       if (res.ok) {
         msg.textContent = '';
+        sfx('commit', 0.25);        // W3 P1-23: the key is yours now
         paintCap();
       } else {
+        // W3 P1-23: refused, and refusals are quiet (owner's standing rule).
+        sfx('bump', 0.08);
         const r = res.conflict && res.conflict.reason;
         msg.textContent = r === 'panic' ? ' - that is the panic key'
           : r === 'taken' ? ' - already bound to ' + res.conflict.with
@@ -421,6 +474,9 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
     cap.addEventListener('click', () => {
       if (capturing) { stop(); paintCap(); return; }
       capturing = true;
+      // W3 P1-23: ARMED. The cap is listening, and a cap that is listening has
+      // to say so - the glyph swaps to "press a key" and nothing else changes.
+      sfx('tell', 0.2, { pitch: 1.1 });
       cap.classList.add('capturing');
       cap.classList.add('wide');
       cap.textContent = 'press a key';
@@ -433,18 +489,127 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
     return row;
   }
 
-  function group(title) {
-    const g = el('div', 'arc-group');
-    g.appendChild(el('h3', null, title));
-    return g;
+  /* ---------------------- THE DISCLOSURE ------------------------------
+   * Every section on this page is a fold (owner brief 2026-08-25: the sheet
+   * was one long cramped scroll on a phone). A header row carries the title,
+   * a one-line summary of the section's current state, and a chevron; the body
+   * folds under it. The header is a real <button> (Enter / Space toggle for
+   * free, aria-expanded says which way it is), the summary repaints on every
+   * echo, and the open state is banked per section in the meta store under
+   * `optionsOpen.<id>` so a second trip through the front office opens the way
+   * it was left. Defaults: desktop all open; a phone opens the first section
+   * and folds the rest. Height animates on grid rows; .arc-reduced cuts it.
+   * -------------------------------------------------------------------- */
+  const sections = [];
+  const OPEN_KEY = 'optionsOpen';
+
+  function storedOpen(id) {
+    try {
+      const all = store && typeof store.get === 'function' ? store.get(OPEN_KEY, null) : null;
+      if (all && typeof all === 'object' && typeof all[id] === 'boolean') return all[id];
+    } catch (e) { /* an unreadable store is an unset one */ }
+    return null;
+  }
+  function bankOpen(id, open) {
+    try { if (store && typeof store.merge === 'function') store.merge(OPEN_KEY, { [id]: !!open }); }
+    catch (e) { say('settings: could not bank fold state for ' + id); }
   }
 
-  /* ---------------------- 1. app ceilings (read-only) ------------------- */
+  function group(title, id, summarize) {
+    const sec = el('section', 'arc-group arc-disc');
+    const sid = String(id || title).replace(/[^\w.-]+/g, '-');
+    const head = el('button', 'arc-disc-head');
+    head.type = 'button';
+    head.appendChild(el('h3', null, title));
+    const sum = el('span', 'arc-disc-sum', '');
+    head.appendChild(sum);
+    const chev = el('span', 'arc-disc-chev', '\u203A');
+    chev.setAttribute('aria-hidden', 'true');
+    head.appendChild(chev);
+    const body = el('div', 'arc-disc-body');
+    const inner = el('div', 'arc-disc-inner');
+    const bodyId = 'arc-disc-' + sid;
+    body.id = bodyId;
+    head.setAttribute('aria-controls', bodyId);
+    body.appendChild(inner);
+    sec.appendChild(head);
+    sec.appendChild(body);
+
+    const fallback = mobile ? sections.length === 0 : true;
+    const stored = storedOpen(sid);
+    let open = stored == null ? fallback : stored;
+
+    function paint() {
+      sec.classList.toggle('open', open);
+      head.setAttribute('aria-expanded', open ? 'true' : 'false');
+      // hidden is what keeps a folded section out of the tab order; the height
+      // transition rides the class, so the flag lands after the fold on close.
+      if (open) { body.hidden = false; }
+      else if (reducedMotion()) { body.hidden = true; }
+      else {
+        setTimeout(() => { if (!open) body.hidden = true; }, 240);
+      }
+    }
+    function refresh() {
+      let text = '';
+      try { text = summarize ? String(summarize() || '') : ''; }
+      catch (e) { text = ''; }
+      sum.textContent = text;
+    }
+    head.addEventListener('click', () => {
+      open = !open;
+      paint();
+      bankOpen(sid, open);
+    });
+    paint();
+    sections.push({ id: sid, node: sec, refresh, isOpen: () => open });
+    sec.body = inner;
+    sec.refresh = refresh;
+    return sec;
+  }
+
+  function reducedMotion() {
+    try { return !!(document.documentElement && document.documentElement.classList.contains('arc-reduced')); }
+    catch (e) { return false; }
+  }
+
+  function refreshSummaries() {
+    for (const s of sections) s.refresh();
+  }
+
+  /** A row's live value (the echo's, once one has landed). */
+  function val(key, fallback) {
+    const r = rows.get(key);
+    return r && r.value !== undefined ? r.value : fallback;
+  }
+  const SEP = ' \u00B7 ';
+  function fill(text, vars) {
+    let out = String(text);
+    for (const k of Object.keys(vars || {})) out = out.split('{' + k + '}').join(String(vars[k]));
+    return out;
+  }
+
+  /* ---------------------- 1. ceilings -------------------------------------
+   * TWO SHEETS, ONE FUNCTION. The app's: read-only, the app owns them, the note
+   * says so. The web's: 'This device' - master volume and motion as live
+   * controls (both echoed by the shim and honoured on this page), nothing that
+   * a browser cannot mean. */
+  function motionName(v) {
+    const n = Number(v);
+    return t('settings_motion_' + (n === 0 ? 'off' : n === 1 ? 'reduced' : 'full'),
+      n === 0 ? 'Off' : n === 1 ? 'Reduced' : 'Full');
+  }
+
   function buildCeilings() {
-    const g = group('App ceilings');
-    g.appendChild(el('p', 'arc-note',
-      'Owned by the app, shown here so you know what the school is working with. '
-      + 'Change these in the app’s own settings.'));
+    if (host === 'web') return buildDevice();
+    const g = group(t('settings_ceilings_head', 'App ceilings'), 'ceilings', () => [
+      fill(t('settings_sum_volume', 'Volume {v}'), { v: pct(src.masterVolume == null ? 1 : src.masterVolume) }),
+      fill(t('settings_sum_motion', 'Motion {v}'), {
+        v: String(src.motionLevel == null ? 2 : src.motionLevel) + (src.reducedMotion ? ' (reduced)' : ''),
+      }),
+    ].join(SEP));
+    g.body.appendChild(el('p', 'arc-note', t('settings_ceilings_note_app',
+      'Set in the app and shown here so you know what the school has to work with.')));
 
     /* THE SWAP (MEDIA-CONTRACT §9). On the app this row is the only thing the
      * page says about media, and it is read-only because the app owns the
@@ -454,38 +619,77 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
     if (!mediaControls) {
       const source = src.offlineMode ? 'local only (offline mode)'
         : (src.remoteMediaEnabled ? 'local + online' : 'local only');
-      g.appendChild(readonlyRow('Asset source', source,
-        'Online media follows the app’s media source and consent.'));
+      g.body.appendChild(readonlyRow('Asset source', source,
+        'Online media follows the app\u2019s media source and consent.'));
     }
     if (src.remoteMediaEnabled) {
-      g.appendChild(readonlyRow('Online media share', pct(src.remoteMediaRatio)));
+      g.body.appendChild(readonlyRow('Online media share', pct(src.remoteMediaRatio)));
     }
-    g.appendChild(readonlyRow('Master volume', pct(src.masterVolume == null ? 1 : src.masterVolume)));
-    g.appendChild(readonlyRow('Subliminal audio', src.audioAudible ? 'audible' : 'silent'));
-    g.appendChild(readonlyRow('Motion', String(src.motionLevel == null ? 2 : src.motionLevel)
+    g.body.appendChild(readonlyRow(t('settings_master_volume', 'Master volume'),
+      pct(src.masterVolume == null ? 1 : src.masterVolume)));
+    g.body.appendChild(readonlyRow('Subliminal audio', src.audioAudible ? 'audible' : 'silent'));
+    g.body.appendChild(readonlyRow(t('settings_motion', 'Motion'), String(src.motionLevel == null ? 2 : src.motionLevel)
       + (src.reducedMotion ? ' (reduced)' : '')));
-    if (src.performanceMode) g.appendChild(readonlyRow('Performance mode', 'on'));
-    const words = Array.isArray(src.words) ? src.words.length : 0;
-    g.appendChild(readonlyRow('Subliminal vocabulary', words + ' word' + (words === 1 ? '' : 's'),
-      words ? null : 'Empty is legal - word effects simply skip.'));
+    if (src.performanceMode) g.body.appendChild(readonlyRow('Performance mode', 'on'));
+    /* THE ROW MUST NAME THE LIST THAT IS FLASHING. `init.words` is the player's
+     * own pool; when it is empty the shell deals the school's vocabulary in its
+     * place, and a row still reading "0 words" would describe a silence the
+     * player is not getting. */
+    const house = !!(vocab && vocab.source === 'house');
+    const words = (vocab && Number.isFinite(+vocab.count)) ? Math.max(0, +vocab.count | 0)
+      : (Array.isArray(src.words) ? src.words.length : 0);
+    g.body.appendChild(readonlyRow('Subliminal vocabulary',
+      words + ' word' + (words === 1 ? '' : 's') + (house ? ' (the school’s own)' : ''),
+      house ? 'Your own list is empty, so the school lends you its vocabulary.'
+        : (words ? null : 'Empty is legal - word effects simply skip.')));
     if (keybinds && keybinds.panicKey) {
-      g.appendChild(readonlyRow('Panic key', keyLabel(keybinds.panicKey),
+      g.body.appendChild(readonlyRow('Panic key', keyLabel(keybinds.panicKey),
         'Never bindable to a class verb.'));
     }
     return g;
   }
 
+  /** The web's 'This device' sheet. Only keys the shim echoes (host/init.js
+   *  applySetting: masterVolume, motionLevel) - see the host note above. */
+  function buildDevice() {
+    const g = group(t('settings_device_head', 'This device'), 'device', () => [
+      fill(t('settings_sum_volume', 'Volume {v}'), { v: pct(val('masterVolume', src.masterVolume == null ? 1 : src.masterVolume)) }),
+      fill(t('settings_sum_motion', 'Motion {v}'), { v: motionName(val('motionLevel', src.motionLevel == null ? 2 : src.motionLevel)) }),
+    ].join(SEP));
+    g.body.appendChild(el('p', 'arc-note', t('settings_device_note',
+      'Sound and motion for this browser, on this phone or PC. Nothing here leaves the device.')));
+    g.body.appendChild(sliderRow({
+      key: 'masterVolume',
+      label: t('settings_master_volume', 'Master volume'),
+      hint: t('settings_master_volume_hint', 'One dial over every sound the school makes.'),
+      value: src.masterVolume == null ? 1 : src.masterVolume,
+      min: 0, max: 1, step: 0.05,
+    }));
+    g.body.appendChild(selectRow({
+      key: 'motionLevel',
+      label: t('settings_motion', 'Motion'),
+      hint: t('settings_motion_hint', 'Reduced keeps the room still. Off cuts every animation the school can cut.'),
+      value: src.motionLevel == null ? 2 : src.motionLevel,
+      options: [2, 1, 0],
+      format: motionName,
+    }));
+    return g;
+  }
+
   /* ---------------------- 2. global tier -------------------------------- */
   function buildGlobal() {
-    const g = group('Distraction');
-    g.appendChild(sliderRow({
+    const g = group(t('settings_distraction_head', 'Distraction'), 'distraction', () => [
+      fill(t('settings_sum_intensity', 'Intensity {v}'), { v: pct(val(SETTING_KEYS.masterIntensity, 1)) }),
+      fill(t('settings_sum_guard', 'Guard {v}'), { v: mult(val(SETTING_KEYS.effectIntensity, 0.85)) }),
+    ].join(SEP));
+    g.body.appendChild(sliderRow({
       key: SETTING_KEYS.masterIntensity,
       label: 'Master intensity',
       hint: 'One dial over every channel below.',
       value: src.masterIntensity == null ? 1 : src.masterIntensity,
       min: 0, max: 1, step: 0.05,
     }));
-    g.appendChild(sliderRow({
+    g.body.appendChild(sliderRow({
       key: SETTING_KEYS.effectIntensity,
       label: 'Flash strength guard',
       hint: 'Photosensitivity guard - every strobe-class effect routes through it.',
@@ -494,10 +698,18 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
     }));
 
     const caps = (src.caps && typeof src.caps === 'object') ? src.caps : {};
-    const gc = group('Channel ceilings');
-    gc.appendChild(el('p', 'arc-note', 'A class may use less than these. Never more.'));
+    const gc = group(t('settings_channels_head', 'Channel ceilings'), 'channels', () => {
+      let low = null;
+      for (const c of CAP_CHANNELS) {
+        const v = Number(val(SETTING_KEYS.caps[c.ch], 1));
+        if (low == null || v < low.v) low = { v, label: c.label };
+      }
+      if (!low || low.v >= 1) return t('settings_sum_caps_all', 'All at 100%');
+      return fill(t('settings_sum_caps_low', 'Lowest: {name} {v}'), { name: low.label, v: pct(low.v) });
+    });
+    gc.body.appendChild(el('p', 'arc-note', t('settings_channels_note', 'A class may use less than these. Never more.')));
     for (const c of CAP_CHANNELS) {
-      gc.appendChild(sliderRow({
+      gc.body.appendChild(sliderRow({
         key: SETTING_KEYS.caps[c.ch],
         label: c.label,
         value: caps[c.ch] == null ? 1 : caps[c.ch],
@@ -506,12 +718,14 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
     }
 
     const levels = (src.audioLevels && typeof src.audioLevels === 'object') ? src.audioLevels : {};
-    const ga = group('Sound');
-    ga.appendChild(switchRow({
+    const ga = group(t('settings_sound_head', 'Sound'), 'sound', () => (val(SETTING_KEYS.audioMute, false)
+      ? t('settings_sum_muted', 'Muted')
+      : fill(t('settings_sum_sound', 'On{sep}Music {v}'), { sep: SEP, v: pct(val(SETTING_KEYS.audio.music, 1)) })));
+    ga.body.appendChild(switchRow({
       key: SETTING_KEYS.audioMute, label: 'Mute the Arcademy', value: !!src.audioMute,
     }));
     for (const a of AUDIO_GROUPS) {
-      ga.appendChild(sliderRow({
+      ga.body.appendChild(sliderRow({
         key: SETTING_KEYS.audio[a.g],
         label: a.label,
         value: levels[a.g] == null ? 1 : levels[a.g],
@@ -519,7 +733,9 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
       }));
     }
 
-    const gt = group('Lessons');
+    const gt = group(t('settings_lessons_head', 'Lessons'), 'lessons', () => (val(SETTING_KEYS.hideTutorial, false)
+      ? t('settings_sum_tutorials_off', 'Tutorials skipped')
+      : t('settings_sum_tutorials_on', 'Tutorials on')));
     /* TODO (EMI): a "Show EMI" switch would sit here, but it is NOT a one-liner
      * and it would be a SECOND source of truth. The player already has an on/off
      * that persists - the x on EMI herself, which docks her (`emi.hidden` in the
@@ -527,12 +743,81 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
      * unknown-key bag, an echo path AND a wire down to the mounted controller
      * (`emi/index.js setEnabled`), and the two states would then have to be kept
      * in step. Wire it only if the owner wants EMI gone including the dock. */
-    gt.appendChild(switchRow({
+    gt.body.appendChild(switchRow({
       key: SETTING_KEYS.hideTutorial,
       label: 'Skip class tutorials',
       hint: 'Skips the class rules sheet, even the first time you meet a class.',
       value: !!src.hideTutorial,
     }));
+
+    /* THE MASCOT (owner, 2026-08-25: "make the bark bubble permanence time an
+     * option in the options"). This is the page's ONE local group: the value
+     * lives on the emi blob in the meta store and the mounted controller is
+     * the writer, so there is no protocol key, no host bag and no echo to
+     * wait for - the row applies on the spot and never wears `pending`.
+     * `emi` is a GETTER (shell hands over `getEmi`): the controller mounts
+     * async, and a page opened before the mascot resolves still renders the
+     * row - it reads the stored blob and banks the choice there for the next
+     * boot. The "Show EMI" switch stays deliberately unbuilt (see the note on
+     * the Lessons group). */
+    const BUBBLE_HOLDS = [
+      { v: 0.7, key: 'quick', label: 'Quick' },
+      { v: 1, key: 'normal', label: 'Normal' },
+      { v: 1.5, key: 'long', label: 'Long' },
+      { v: 2, key: 'extra', label: 'Extra long' },
+    ];
+    function mascotCtl() {
+      try { return typeof emi === 'function' ? emi() : (emi || null); }
+      catch (e) { return null; }
+    }
+    function bubbleHoldNow() {
+      const ctl = mascotCtl();
+      let v = ctl && typeof ctl.bubbleHold === 'number' ? ctl.bubbleHold : null;
+      if (v == null) {
+        try {
+          const blob = store && typeof store.get === 'function' ? store.get('emi') : null;
+          if (blob && typeof blob.holdScale === 'number' && isFinite(blob.holdScale)) v = blob.holdScale;
+        } catch (e) { /* an unreadable blob is the default */ }
+      }
+      if (v == null || !isFinite(v)) v = 1;
+      let best = BUBBLE_HOLDS[1];
+      for (const o of BUBBLE_HOLDS) { if (Math.abs(o.v - v) < Math.abs(best.v - v)) best = o; }
+      return best;
+    }
+    const gm = group(t('settings_mascot_head', 'Mascot'), 'mascot',
+      () => t('emi_bubble_hold_' + bubbleHoldNow().key, bubbleHoldNow().label));
+    {
+      const row = el('div', 'arc-row');
+      const lab = el('label', null, t('emi_bubble_hold_label', 'Speech bubble time'));
+      lab.appendChild(el('span', 'arc-hint', t('emi_bubble_hold_hint',
+        'How long her lines stay up before she lets them go. Questions always wait for an answer.')));
+      const sel = el('select');
+      for (const o of BUBBLE_HOLDS) {
+        const opt = el('option', null, t('emi_bubble_hold_' + o.key, o.label));
+        opt.value = String(o.v);
+        if (o.v === bubbleHoldNow().v) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      lab.htmlFor = sel.id = 'arc-emi-bubble-hold';
+      sel.addEventListener('change', () => {
+        const n = Number(sel.value);
+        if (!isFinite(n) || n <= 0) return;
+        const ctl = mascotCtl();
+        let applied = false;
+        try { if (ctl && typeof ctl.setBubbleHold === 'function') { ctl.setBubbleHold(n); applied = true; } }
+        catch (e) { /* the store write below still lands */ }
+        if (!applied) {
+          /* No controller on this page (a class screen, a mount that failed):
+           * bank it straight on the blob, the same field the widget reads at
+           * boot. `merge` keeps the rest of the blob honest. */
+          try { if (store && typeof store.merge === 'function') store.merge('emi', { holdScale: n }); }
+          catch (e) { /* nothing to do; the row simply did not take */ }
+        }
+        refreshSummaries();
+      });
+      row.appendChild(lab); row.appendChild(sel);
+      gm.body.appendChild(row);
+    }
 
     /* CAMPUS PRESENCE - the consent row (PRESENCE.md §3). It sits in the GLOBAL
      * tier and not in the read-only ceilings above, because it is the one thing
@@ -548,8 +833,12 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
      * only takes over for a value that round-trips as a number), which is what
      * the host's `presenceShare` clamp expects. Only the echo moves the model,
      * trap 1, exactly like every other row on this page. */
-    const gp = group(t('presence_student_body', 'Student Body'));
-    gp.appendChild(selectRow({
+    const gp = group(t('presence_student_body', 'Student Body'), 'presence', () => {
+      const rung = String(val(SETTING_KEYS.presenceShare, 'off'));
+      const line = t('presence_share_' + rung, PRESENCE_FALLBACK[rung] || rung);
+      return String(line).split(' - ')[0];
+    });
+    gp.body.appendChild(selectRow({
       key: SETTING_KEYS.presenceShare,
       label: t('presence_share_label', 'Show yourself on campus'),
       hint: t('presence_share_hint',
@@ -558,11 +847,12 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
       options: PRESENCE_RUNGS,
       format: (o) => t('presence_share_' + o, PRESENCE_FALLBACK[o] || String(o)),
     }));
-    gp.appendChild(el('p', 'arc-note', t('presence_share_discord_note',
+    gp.body.appendChild(el('p', 'arc-note', t('presence_share_discord_note',
       'Discord needs a linked account. Without one the school shows your name instead.')));
 
     const frag = document.createDocumentFragment();
     frag.appendChild(g); frag.appendChild(gc); frag.appendChild(ga); frag.appendChild(gt);
+    frag.appendChild(gm);
     frag.appendChild(gp);
     return frag;
   }
@@ -715,6 +1005,7 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
         flatBag.niches = stored.slice();
         paint();
         row.classList.remove('pending');
+        refreshSummaries();
         note.textContent = refused
           ? t('media_niches_snapback', 'That was the last one ticked, so it went straight back up.'
             + ' Tick another and then you can drop it.')
@@ -976,13 +1267,26 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
 
   /** The group itself. Only ever called behind the strict flag. */
   function buildMedia() {
-    const g = group(t('media_head', 'Media'));
-    g.appendChild(el('p', 'arc-note',
+    const g = group(t('media_head', 'Media'), 'media', () => {
+      const on = !!val(MEDIA_KEYS.remoteConsent, !!flatBag.remoteConsent);
+      const parts = [on ? t('settings_sum_online_on', 'Online on') : t('settings_sum_online_off', 'Online off')];
+      if (on) {
+        const catalog = Array.isArray(flatBag.remoteCatalog) ? flatBag.remoteCatalog : [];
+        const picked = Array.isArray(flatBag.niches) ? flatBag.niches : [];
+        const names = picked.map((id) => {
+          const c = catalog.find((x) => x && String(x.id) === String(id));
+          return c && c.label ? String(c.label) : String(id);
+        });
+        if (names.length) parts.push(names.slice(0, 3).join(', ') + (names.length > 3 ? ' +' + (names.length - 3) : ''));
+      }
+      return parts.join(SEP);
+    });
+    g.body.appendChild(el('p', 'arc-note',
       t('media_note', 'This is the counter where you say what the rooms are allowed to pull from.'
         + ' Anything you change is in play from your next class on, and whatever is running right'
         + ' now keeps the pile it already has.')));
 
-    g.appendChild(switchRow({
+    g.body.appendChild(switchRow({
       key: MEDIA_KEYS.remoteConsent,
       label: t('media_consent_label', 'Pull from online'),
       hint: t('media_consent_hint', 'With this off nothing goes out to the network at all, and the'
@@ -998,9 +1302,9 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
       consent.apply = (v) => { flatBag.remoteConsent = !!v; base(v); };
     }
 
-    g.appendChild(nicheRow());
-    g.appendChild(libraryRow());
-    g.appendChild(localRow());
+    g.body.appendChild(nicheRow());
+    g.body.appendChild(libraryRow());
+    g.body.appendChild(localRow());
     return g;
   }
 
@@ -1013,10 +1317,28 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
     const mod = entry && entry.mod;
     const manifest = (mod && mod.manifest) || {};
     const name = t('game_' + entry.key, (mod && mod.title) || entry.key);
-    const g = group(name);
+    const bsKey = boardSizeKey(entry.key);
+    /** The knobs this group draws, for the header line: [{key, kind, label, fmt}]. */
+    const knobs = [];
+    const g = group(name, 'game.' + entry.key, () => {
+      if (!entry.ok) return t('class_suspended', 'Class Suspended');
+      const parts = [];
+      if (rows.has(bsKey)) parts.push(fill(t('settings_sum_board', 'Board {v}'), { v: val(bsKey, '') }));
+      for (const k of knobs) {
+        const v = val(k.key, undefined);
+        if (v === undefined || v === null) continue;
+        if (k.kind === 'bool') { if (v) parts.push(k.label); continue; }
+        parts.push(k.kind === 'range' ? k.fmt(v) : String(v));
+      }
+      const n = keybinds ? keybinds.slotsFor(entry.key).length : 0;
+      if (n) parts.push(n === 1 ? t('settings_sum_key_one', '1 key') : fill(t('settings_sum_keys', '{n} keys'), { n }));
+      if (!parts.length) return t('settings_sum_nothing', 'Nothing to set');
+      const shown = parts.slice(0, 4);
+      return shown.join(SEP) + (parts.length > 4 ? ' +' + (parts.length - 4) : '');
+    });
 
     if (!entry.ok) {
-      g.appendChild(el('p', 'arc-note', t('class_suspended', 'Class Suspended')
+      g.body.appendChild(el('p', 'arc-note', t('class_suspended', 'Class Suspended')
         + ' — this class failed to load, so its options are hidden.'));
       return g;
     }
@@ -1030,7 +1352,7 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
       const value = gameValue(entry.key, boardSizeKey(entry.key), bs.values[0]);
       const par = bs.par || {};
       const parText = [1, 2, 3, 4].map((tier) => par[tier]).filter((v) => v != null).join(' / ');
-      g.appendChild(selectRow({
+      g.body.appendChild(selectRow({
         key,
         label: 'Board size',
         hint: 'Playing below your tier’s par caps the class at A.'
@@ -1052,17 +1374,21 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
       const label = s.label_key ? t(s.label_key, s.key) : s.key;
       const value = gameValue(entry.key, s.key, s.default);
       if (s.kind === 'bool') {
-        g.appendChild(switchRow({ key, label, hint: s.hint_key ? t(s.hint_key, '') : null, value: !!value }));
+        g.body.appendChild(switchRow({ key, label, hint: s.hint_key ? t(s.hint_key, '') : null, value: !!value }));
+        knobs.push({ key, kind: 'bool', label });
       } else if (s.kind === 'enum' && Array.isArray(s.values)) {
-        g.appendChild(selectRow({ key, label, value, options: s.values }));
+        g.body.appendChild(selectRow({ key, label, value, options: s.values }));
+        knobs.push({ key, kind: 'enum', label });
       } else if (s.kind === 'range') {
-        g.appendChild(sliderRow({
+        const fmt = s.fmt === 'mult' ? mult : pct;
+        g.body.appendChild(sliderRow({
           key, label, value: value == null ? 0 : value,
           min: s.min == null ? 0 : s.min,
           max: s.max == null ? 1 : s.max,
           step: s.step == null ? 0.05 : s.step,
-          fmt: s.fmt === 'mult' ? mult : pct,
+          fmt,
         }));
+        knobs.push({ key, kind: 'range', label, fmt });
       } else {
         say('settings: ' + entry.key + ' setting "' + s.key + '" has unknown kind "' + s.kind + '"');
         continue;
@@ -1073,11 +1399,11 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
     /* keybind slots */
     const slots = keybinds ? keybinds.slotsFor(entry.key) : [];
     if (slots.length) {
-      for (const slot of slots) g.appendChild(keyRow(entry.key, slot));
+      for (const slot of slots) g.body.appendChild(keyRow(entry.key, slot));
       any = true;
     }
 
-    if (!any) g.appendChild(el('p', 'arc-note', 'Nothing to configure - this class runs on the globals.'));
+    if (!any) g.body.appendChild(el('p', 'arc-note', t('settings_game_nothing', 'Nothing to configure - this class runs on the globals.')));
     return g;
   }
 
@@ -1109,11 +1435,17 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
     head.appendChild(el('span', 'arc-title', title));
     root.appendChild(head);
 
-    root.appendChild(buildCeilings());
-    /* The Media group takes the place the read-only Asset source row held,
-     * for the same reason it sits there: it is the first thing a player asks
-     * about, and it is not one of the global CEILINGS below. Strict flag. */
-    if (mediaControls) root.appendChild(buildMedia());
+    /* ORDER. The app keeps ceilings first, exactly as before. On the web the
+     * Media counter goes first - it is the thing a player opens this page for,
+     * and on a phone it is the one section that starts open - with the device
+     * sheet under it. Strict flag on Media either way. */
+    if (host === 'web' && mediaControls) {
+      root.appendChild(buildMedia());
+      root.appendChild(buildCeilings());
+    } else {
+      root.appendChild(buildCeilings());
+      if (mediaControls) root.appendChild(buildMedia());
+    }
     root.appendChild(buildGlobal());
     for (const entry of shown) {
       if (!entry || !entry.key) continue;
@@ -1145,6 +1477,7 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
     const bar = exitBar([out]);
     bar.className += ' arc-settings-exit';
     root.appendChild(bar);
+    refreshSummaries();
     return root;
   }
 
@@ -1165,6 +1498,15 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
       catch (e) { say('settings echo ' + key + ' failed: ' + ((e && e.message) || e)); }
       if (mine && typeof key === 'string' && key.indexOf('audioLevels.') === 0) {
         previewBusLevel(key.slice('audioLevels.'.length));
+      } else if (mine) {
+        /* W3 P0-34: EVERY OTHER CONTROL LANDS TOO. The mixer sliders have had
+         * their preview since AV CLUB and every other row on the sheet - the
+         * toggles, the enums, the per-game dials - moved in total silence, so
+         * the one page in the school that is nothing but input answered none
+         * of it. Same law as the preview and for the same reason (trap 88): it
+         * rides the ECHO, and only OUR echo, so a host-initiated push never
+         * beeps at a player who touched nothing. Up for on, down for off. */
+        sfx('tell', 0.22, { pitch: value ? 1.08 : 0.92 });
       }
     },
     /** Current per-game values as a game sees them (see shell.js ctx.settings). */
@@ -1186,6 +1528,9 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, onCl
     noteEcho(key, value) {
       if (typeof key === 'string' && key && !isGlobalSettingKey(key)) flatBag[key] = value;
     },
+    /** The folds, for a test rig: [{id, isOpen(), node}]. */
+    sections: () => sections.map((x) => ({ id: x.id, isOpen: x.isOpen, node: x.node })),
+    host,
     destroy() {
       for (const off of offs.splice(0)) { try { off(); } catch (e) { /* noop */ } }
       // A preview owed to a page that is already gone is a beep from nowhere.

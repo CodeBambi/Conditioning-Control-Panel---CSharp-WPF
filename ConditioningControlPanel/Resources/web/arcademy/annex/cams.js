@@ -54,6 +54,23 @@ const LOOK_P = 0.03, LOOK_COOLDOWN_S = 140, LOOK_HOLD_S = 1.7;
 /** Diegetic wall clock base - the Annex is an after-hours room. */
 const CLOCK_BASE_S = 22 * 3600 + 41 * 60 + 7;
 
+/* ONE AUDIO DOOR (W3 P1-22, trap 18): shell/audio.js owns the only audio node
+ * on the page, so the cam wall REQUESTS its sounds on `document` in the shape
+ * shell/ceremonies.js set. A dropped cue is not an error. */
+function sfx(name, level, extra) {
+  try {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    document.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: Object.assign(
+        { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+        extra || {}
+      ),
+    }));
+  } catch (e) { /* a cue must never be the thing that throws */ }
+}
+
 /* ----------------------------------------------------------------------------
  * THE NINE CHANNELS - one crop of the plan each, reading order = the art's.
  * `crop` is [x, y, w, h] in campus viewBox units at the CRT's own aspect.
@@ -352,6 +369,11 @@ function makeActor(wall, cam, idx, students) {
     if (!a.looked && a.route.look && p > 0.5 && Math.abs(x1 - x0) > 200
         && now - wall.lastLook > LOOK_COOLDOWN_S && rng() < LOOK_P) {
       a.looked = true; wall.lastLook = now;
+      /* W3 P1-22: SOMEBODY LOOKED AT THE LENS. The rarest thing on the wall -
+       * one shared 140s cooldown gates it, so this cue is rate-limited by the
+       * beat itself and needs no throttle of its own. Barely there on purpose:
+       * a tape flinching, not an alarm. Doubting you heard it is the point. */
+      sfx('glitch', 0.08);
       a.state = 'look'; a.until = now + LOOK_HOLD_S; a.lookAt = now + 0.8;
       g.classList.remove('an-walk'); g.classList.add('an-look');
       return;
@@ -548,6 +570,11 @@ export function createCamWall(opts) {
   function start() {
     if (running) return;
     running = true; last = 0;
+    /* W3 P1-22: nine CRTs and not one sound. `cam_bed` is a HOLD - it loops
+     * until somebody lets go of it - and stop() below is its owner, which
+     * destroy() reaches too. SAMPLE-ONLY: no mp3, no bed, no fallback, and a
+     * silent wall is the honest answer rather than a synthesised hum. */
+    sfx('cam_bed', 0.25, { bus: 'music', hold: true });
     if (!still) {
       // power-on, one stagger down the grid - the emi field-trip 200ms beat
       Object.keys(tiles).forEach((id, i) => {
@@ -562,6 +589,7 @@ export function createCamWall(opts) {
   }
   function stop() {
     running = false;
+    sfx('cam_bed', 0.25, { bus: 'music', stop: true });   // W3 P1-22: the bed's owner
     if (raf) cancelAnimationFrame(raf);
     raf = 0; last = 0;
   }

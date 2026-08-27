@@ -369,6 +369,7 @@ export function createFirstBell(o) {
      * ALWAYS run is the settler's, which is closeLayer's business and never
      * this list's. Bumping the token retires any transition step that outlived
      * killTimers. */
+    stopBed();             // W3 P1-21: every hold has an owner, and this is it
     lastPlate = null;
     plateBusy = false;
     plateWaiters = [];
@@ -509,6 +510,31 @@ export function createFirstBell(o) {
    *
    * Never awaits a decode: ensurePlate is the gate, this only paints.
    */
+  /* THE AIR IN THE ROOM (W3 P1-21). Four plates, two rooms: the gates and the
+   * midway are OUTSIDE, the admissions hall and Homeroom are INSIDE, and the
+   * opening had no ambience under either of them. Each bed is a HOLD - the
+   * mixer's only sustain - so it loops until somebody lets go of it, and the
+   * somebody is this file: the swap below stops the old one before it starts
+   * the new one, and unmountLayer stops whatever is left. Both are SAMPLE-ONLY
+   * names, so with no mp3 shipped this is honest silence and there is nothing
+   * to check. Music bus, well under the captions. */
+  let bedName = null;
+  function bedFor(url) {
+    return (url === ART.gates || url === ART.midway) ? 'vn_bed_ext' : 'vn_bed_int';
+  }
+  function stopBed() {
+    if (!bedName) return;
+    sfx(bedName, 0.25, { bus: 'music', stop: true });
+    bedName = null;
+  }
+  function setBed(url) {
+    const want = bedFor(url);
+    if (want === bedName) return;
+    stopBed();
+    bedName = want;
+    sfx(want, 0.25, { bus: 'music', hold: true });
+  }
+
   function applyPlate(url, motion, done) {
     const settle = typeof done === 'function' ? done : null;
     if (!bg || !bgWrap || !url) { if (settle) settle(); return; }
@@ -556,6 +582,12 @@ export function createFirstBell(o) {
       cls(bgWrap, 'is-out', false);
       cls(bgWrap, 'is-in', false);
       bg.style.backgroundImage = 'url("' + base + url + '")';
+      /* W3 P1-21: the room changes inside the black, so its air changes there
+       * too - never over the outgoing plate and never after the new one has
+       * settled. The `wash` is the INTERIM: one soft breath per plate, which is
+       * what carries the room change on a build where the beds have no file. */
+      setBed(url);
+      sfx('wash', 0.12);
       attr(bg, 'data-motion', reduced ? 'still' : (motion || 'still'));
       // Reflow so a re-armed animation actually re-runs (trap 4's law).
       try { void bg.offsetWidth; } catch (e) { /* the DOM double has no layout */ }
@@ -732,7 +764,21 @@ export function createFirstBell(o) {
       advance = null;
 
       if (st.hold != null) { later(step, reduced ? Math.min(200, st.hold) : st.hold); return; }
-      if (st.fx === 'neon') { cls(neon, 'is-on', true); step(); return; }
+      if (st.fx === 'neon') {
+        cls(neon, 'is-on', true);
+        /* W3 P1-21: THE ARCH CATCHES. The sign over the gates flickered on in
+         * total silence, and a neon tube striking is one of the few sounds
+         * everybody already knows. Three bursts from ONE dispatch - the two
+         * failed strikes at 180 and 420ms ride the mixer's own timeline, so
+         * this file owns no timer for them - and the third carries the recipe's
+         * hum layer, which is the tube holding. Reduced motion has no flicker
+         * to score (trap 66), so it hears nothing. */
+        if (!reduced) {
+          sfx('neon_strike', 0.22, { steps: [{ atMs: 180 }, { atMs: 420 }] });
+        }
+        step();
+        return;
+      }
       if (st.swap) {
         ensurePlate(st.swap).then((ok) => {
           if (destroyed || over) return;
@@ -753,6 +799,11 @@ export function createFirstBell(o) {
       if (st.paper) { showPaper(st.paper, step); return; }
       if (st.caption) {
         setCaption(tx(st.caption));
+        /* W3 P1-21: the lower third had a cue on its DISMISS and none on its
+         * arrival, which is backwards - the card sliding in is the thing the
+         * player did not do. Quiet and high: paper moving, not an event. The
+         * tap's own answer stays where it is; an input still gets an answer. */
+        sfx('slide', 0.12, { pitch: 1.1 });
         const mine = () => {
           if (advance !== mine) return;
           advance = null;

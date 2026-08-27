@@ -30,6 +30,8 @@ let voice = null;
 let trips = null;
 /** emi/asks.js (wave EMI ASKS), on the same terms. Null is normal. */
 let asks = null;
+/** emi/heartbeat.js (THE METRONOME, 2026-08-25), on the same terms. */
+let heart = null;
 let voicePending = null;
 /** () => bool: can EMI actually PERFORM right now (is her face attached). */
 let voiceGate = null;
@@ -103,6 +105,9 @@ export function getTrips() { return trips; }
 /** The ask engine (emi/asks.js), once it has loaded. Null is normal. */
 export function getAsks() { return asks; }
 
+/** The metronome (emi/heartbeat.js), once it has loaded. Null is normal. */
+export function getHeartbeat() { return heart; }
+
 /**
  * ASK THE VOICE, SAFELY. `moments.js` routes every moment through here before
  * it reaches the wordless table.
@@ -163,7 +168,7 @@ export function voiceMoment(name, payload) {
  * @param {Function=} o.log
  * @returns {Object|null} the controller, or null when there is nothing to mount
  */
-export function mountEmi({ layer, store, toast, enabled = true, log, assets, settings } = {}) {
+export function mountEmi({ layer, store, toast, enabled = true, log, assets, settings, strings } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   if (!layer) return null;
   if (singleton) return singleton;
@@ -172,7 +177,12 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
    * is `init.settings`. NOW WATCHING is the only thing in EMI that wants
    * either, and both are optional - a host that hands neither simply plans that
    * channel out of the wheel (never a stub, never a black glass). */
-  const widget = createWidget({ root: layer, store, toast, log: say, assets, settings });
+  /* `strings` is the SHELL's resolved lexicon rows - today exactly one,
+   * `askSend`. EMI has never imported core/lexicon.js and this does not change
+   * that: the side of the page that has `t` does the resolving and hands the
+   * ANSWER down, the way shell/orientation.js already hands her three lines
+   * over as `payload.line`. */
+  const widget = createWidget({ root: layer, store, toast, log: say, assets, settings, strings });
   if (!widget) return null;
 
   /* THE OPENING BEAT LANDS LATE OR NOT AT ALL. The renderer is one dynamic
@@ -253,7 +263,7 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
      * is. `opts.hold` still wins when it asks for MORE; it can never ask for
      * less. The typing cadence is untouched.
      * @param {string} line
-     * @param {{face?:string, hold?:number, nod?:boolean}=} opts
+     * @param {{face?:string, hold?:number, nod?:boolean, ask?:boolean}=} opts
      */
     say(line, opts) {
       const o = opts || {};
@@ -280,7 +290,11 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
       try { chain = make(line, o.face || '^_^', sayHoldMs(line, o.hold)); }
       catch (e) { say('emi: makeSay threw - ' + ((e && e.message) || e)); return false; }
       if (o.nod) chain = Object.assign({}, chain, { body: 'nod' });
-      return widget.play(chain, { protect: true, force: true });
+      /* `ask` IS THE ONE LINE THAT OUTRANKS A LIVE ASK, because it IS the ask
+       * (emi/asks.js is its only caller). Everything else offered while she is
+       * waiting is held or refused - see widget.js's ask-owns-the-glass block
+       * and trap 104. */
+      return widget.play(chain, { protect: true, force: true, ask: o.ask === true });
     },
 
     /** Back to the resting state (0_0 + blink + breath). */
@@ -314,6 +328,14 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
     setWidth(px) { return widget.setWidth(px); },
     get width() { return widget.width; },
 
+    /**
+     * How long her lines hang on the glass, as a scale on the say-hold curve
+     * (owner option, 2026-08-25). Clamped by the widget, persisted on the emi
+     * blob; 1 is the shipped cadence. The options page is the caller.
+     */
+    setBubbleHold(scale) { return widget.setBubbleHold(scale); },
+    get bubbleHold() { return widget.bubbleHold; },
+
     /** Lifetime telemetry, read-only. A later Records Office beat reads this. */
     stats() { return widget.stats(); },
     /** Force the debounced persistence write out now (host shutdown, tests). */
@@ -339,6 +361,9 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
      *  `flags` (a01's comfort faces) and its `classResult` (the dare payout);
      *  everything else on it is a test/debug handle. */
     get asks() { return asks; },
+    /** The metronome (emi/heartbeat.js), once it has loaded. Test/debug only:
+     *  nothing on the page drives it, which is the point of a heartbeat. */
+    get heartbeat() { return heart; },
     /** Debug: the one moment waiting on the voice + the face, by name. */
     get pendingMoment() { return voicePending ? voicePending.name : null; },
 
@@ -357,7 +382,21 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
     /** Her babble (emi/vox.js), once it has loaded. Test/debug handle only. */
     get vox() { return vox; },
 
+    /**
+     * W3 P1-19: WHICH POSE SHE IS WEARING, read-only. The widget already
+     * resolved the mood when it drew the face (`frameForFace`, or the chain's
+     * own `bodyFrame`), so a caller that wants the FEELING of the reaction it
+     * just fired reads it here instead of keeping a second copy of the table.
+     * `emi/moments.js` is the one caller: it hands this straight to
+     * `vox.react()` so a wordless moment sounds like the face it put on.
+     */
+    get bodyFrame() { try { return widget.bodyFrame; } catch (e) { return 'idle'; } },
+
     destroy() {
+      /* THE HEARTBEAT GOES FIRST: it is the one thing here that owns a running
+       * interval, and a tick that landed between the widget's teardown and its
+       * own would be a beat spent on a mascot that is no longer in the page. */
+      try { if (heart) heart.destroy(); } catch (e) { /* noop */ }
       try { widget.destroy(); } catch (e) { /* noop */ }
       try { if (asks) asks.destroy(); } catch (e) { /* noop */ }
       try { if (trips) trips.destroy(); } catch (e) { /* noop */ }
@@ -367,6 +406,7 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
       voice = null;
       trips = null;
       asks = null;
+      heart = null;
       voicePending = null;
       voiceGate = null;
       if (singleton === api) singleton = null;
@@ -425,6 +465,27 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
       if (singleton !== api || !a || typeof a.createAsks !== 'function') return;
       asks = a.createAsks({ widget, emi: api, voice, store, log: say });
     }).catch((e) => { say('emi: asks.js unavailable (' + ((e && e.message) || e) + ')'); });
+    /* THE HEARTBEAT, LAST (2026-08-25). It is a CONSUMER of all three - it
+     * spends the voice's lines, the deck's channels and the ask engine's
+     * questions and owns none of them - so it is mounted after the voice and
+     * takes `asks`/`trips` as GETTERS: those two are one more import away and
+     * a heartbeat that captured them here would capture null for ever.
+     * Optional on the same terms as everything else in this file: a missing
+     * or broken metronome costs EMI her idle life, never her face, her verbs
+     * or the shell's boot. */
+    import('./heartbeat.js').then((hb) => {
+      if (singleton !== api || !hb || typeof hb.createHeartbeat !== 'function') return;
+      heart = hb.createHeartbeat({
+        widget,
+        emi: api,
+        voice,
+        asks: () => asks,
+        trips: () => trips,
+        store,
+        log: say,
+      });
+      try { if (heart) heart.start(); } catch (e) { /* noop */ }
+    }).catch((e) => { say('emi: heartbeat.js unavailable (' + ((e && e.message) || e) + ')'); });
   }).catch((e) => { say('emi: voice.js unavailable (' + ((e && e.message) || e) + ')'); });
 
   return api;

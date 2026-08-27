@@ -113,9 +113,15 @@ export const MOMENTS = Object.freeze({
   },
 
   /* --- mid-class (EMI COLOR: the tension mirror) ------------------------
-   * FACE ONLY, by design: no bark pool exists on either name and none may be
-   * added - a mascot that talks during a clutch moment is a distraction with
-   * a fanbase. The games ration these through ctx.mood in shell.js. */
+   * FACE FIRST, and these two are still very nearly face-only. The rule that
+   * "no bark pool may ever sit on tense or clutch" was REVERSED by the owner on
+   * 2026-08-25 ("it needs to comment ALSO WHILE IN A SESSION"): a small,
+   * clown-only pool on either name is legal now, and the class ration in
+   * voice.js (CLASS_BARK_FLOOR_MS + CLASS_BARKS_MAX, plus the `mood.hold`
+   * danger gate) is what keeps a clutch moment from becoming a conversation.
+   * The ordinary road for class commentary is `ctx.mood.note()` and the
+   * `game:*` names it mints - see GAME_NOTE_FACES below. The games still ration
+   * these two through ctx.mood in shell.js. */
   /** The room got serious. She leans in and stays leaned. */
   tense: { face: 'o_o', hold: 1600 },
   /** The one big moment. Wide eyes, a little shiver, nothing said. */
@@ -207,9 +213,75 @@ export const MOMENTS = Object.freeze({
   glitch: { chain: 'glitch' },
 });
 
+/* ============================================================================
+ * CLASS COMMENTARY: the generic `game:*` row (HEARTBEAT wave, 2026-08-25)
+ *
+ * `ctx.mood.note('lf.tile.repeat', {kind:'tease', n:3})` fires the moment
+ * `game:lf.tile.repeat`. There will be dozens of those names and this table
+ * will never have a row for most of them, which is the design: a note declares
+ * what KIND of feeling it is and the mascot answers with a face from this
+ * closed set. So EVERY note gets at least a face, and the voice ladder decides
+ * separately whether it also earns a line (pool `game:<id>`).
+ *
+ * Six kinds, one fallback. An unknown kind - and a note that declared none -
+ * reads as `ambient`, which is the GLANCE: "I noticed", the cheapest true
+ * thing she can say about a moment she has no opinion on. A named row here
+ * would out-rank all of this; nothing stops a specific `game:` name being
+ * added to MOMENTS above when one earns it.
+ * ==========================================================================*/
+export const GAME_NOTE_PREFIX = 'game:';
+export const GAME_NOTE_FACES = Object.freeze({
+  celebrate: Object.freeze({ face: '^_^', hold: 1000, fx: 'hearts', body: 'bounce' }),
+  commiserate: Object.freeze({ face: '>_<', hold: 900 }),
+  tease: Object.freeze({ face: '(¬‿¬)', hold: 1200 }),
+  tension: Object.freeze({ face: 'o_o', hold: 1400 }),
+  curiosity: Object.freeze({ face: '0_0', hold: 1100 }),
+  ambient: Object.freeze({ chain: 'glance' }),
+});
+
+/** The wordless answer to a `game:*` note, or null when it is not one. */
+function gameNoteSpec(name, p) {
+  if (typeof name !== 'string' || name.indexOf(GAME_NOTE_PREFIX) !== 0) return null;
+  const kind = String((p && p.kind) || '');
+  return (Object.prototype.hasOwnProperty.call(GAME_NOTE_FACES, kind)
+    ? GAME_NOTE_FACES[kind]
+    : GAME_NOTE_FACES.ambient);
+}
+
 /* The escalation counter for tabAway/suspend. Session-only by design: coming
  * back tomorrow should not inherit yesterday's side-eye. */
 const seen = Object.create(null);
+
+/**
+ * W3 P1-19: THE WORDLESS REACTIONS GET A VOICE.
+ *
+ * Fifteen of the rows above are a face and nothing else, and every one of them
+ * landed in silence - which is the one thing a mascot who murmurs at every
+ * LINE cannot afford, because it reads as her only being there when there are
+ * words. `vox.react()` answers with one or two blips in the mood of the pose
+ * she just put on.
+ *
+ * THIS FILE ONLY CALLS IT. The melody, the timbre and the ration all live in
+ * `emi/vox.js` beside `speak`, for the reason trap 70 gives: one stop cuts
+ * everything she can be heard making, and that stop is reached from exactly one
+ * place (widget.js `setBubble(null)`).
+ *
+ * A LINE OUTRANKS IT. If a bubble is up she is already babbling, and a react
+ * over the top would be two EMIs. `emi.saying` is the honest read of that.
+ *
+ * @param {Object} emi   the mounted handle
+ * @param {boolean} ok   did the reaction actually land
+ * @returns {boolean} ok, unchanged - a cue never decides what a moment returns
+ */
+function react(emi, ok) {
+  if (!ok) return false;
+  try {
+    if (emi.saying) return true;
+    const vox = emi.vox;
+    if (vox && typeof vox.react === 'function') vox.react(emi.bodyFrame);
+  } catch (e) { /* a cue may never break a screen transition */ }
+  return true;
+}
 
 /**
  * Fire one moment. Unknown names, an unmounted EMI and a dismissed EMI are all
@@ -221,7 +293,12 @@ const seen = Object.create(null);
 export function fireMoment(name, payload) {
   const emi = getEmi();
   if (!emi || typeof name !== 'string') return false;
-  const spec = Object.prototype.hasOwnProperty.call(MOMENTS, name) ? MOMENTS[name] : null;
+  /* A NAMED ROW WINS; a `game:*` note with no row of its own falls back to the
+   * face for its declared kind. Resolved before the voice is asked, because the
+   * fallback is the thing that makes "every note gets a face" true. */
+  const spec = Object.prototype.hasOwnProperty.call(MOMENTS, name)
+    ? MOMENTS[name]
+    : gameNoteSpec(name, payload);
 
   const p = Object.assign({}, payload || {});
   if (name === 'tabAway' || name === 'suspend') {
@@ -253,9 +330,11 @@ export function fireMoment(name, payload) {
       if (!out.line) return false;
       return !!emi.say(out.line, { face: out.face, nod: !!out.nod });
     }
-    if (entry.chain) return !!emi.emote(entry.chain);
+    /* W3 P1-19: the pose is put on FIRST and the blips read it off her, so the
+     * reaction sounds like the face the player is looking at. */
+    if (entry.chain) return react(emi, !!emi.emote(entry.chain));
     if (entry.face) {
-      return !!emi.emote(entry.face, { hold: entry.hold, fx: entry.fx, body: entry.body });
+      return react(emi, !!emi.emote(entry.face, { hold: entry.hold, fx: entry.fx, body: entry.body }));
     }
   } catch (e) { /* a mascot may never break a screen transition */ }
   return false;

@@ -30,7 +30,24 @@ export const GRADE_THRESHOLDS = Object.freeze({
   // below B -> C
 });
 
-/** Best -> worst. Index doubles as the rank (0 = best). */
+/* THE HONORS LETTER (economy wave, 2026-08-26). S+ is the ONE grade a player
+ * can choose to make reachable: it needs the Honors lever pulled AND a composite
+ * at or above SPLUS_THRESHOLD, so it is never handed out by accident and never
+ * appears on a run that did not ask for it. Everything about it is ADDITIVE:
+ *  - the S threshold and every letter below it are byte-for-byte what they were,
+ *    so a class played on Standard grades exactly as it always did;
+ *  - it is NOT in GRADE_ORDER, because that list is the CEILING ladder the caps
+ *    walk (`capAt` indexes it) and no cap may ever raise a letter to S+;
+ *  - `gradeRank` answers -1 for it, one better than S's 0, so every existing
+ *    "lower rank is better" comparison keeps working and S+ simply wins.
+ * The host re-derives the honors flag from the lever it stored at class-started
+ * and degrades a claimed S+ to S when the lever was not Honors - the page may
+ * propose this letter, it may never mint it. */
+export const SPLUS = 'S+';
+export const SPLUS_THRESHOLD = 0.97;
+
+/** Best -> worst. Index doubles as the rank (0 = best). S+ sits ABOVE this list
+ *  (rank -1) on purpose - see the note above. */
 export const GRADE_ORDER = Object.freeze(['S', 'A', 'B', 'C']);
 export const PASS = 'pass';
 
@@ -44,8 +61,9 @@ export const CAP_REASONS = Object.freeze({
   accessibility_aid: 'A', // Misdirection's numbered-shell aid
 });
 
-/** Promotion rule (shell-owned, BUILD-CONTRACT §11): S or A promotes a tier. */
-export const PROMOTING_GRADES = Object.freeze(['S', 'A']);
+/** Promotion rule (shell-owned, BUILD-CONTRACT §11): S or A promotes a tier.
+ *  S+ promotes for the same reason S does - it is an S with the lever pulled. */
+export const PROMOTING_GRADES = Object.freeze([SPLUS, 'S', 'A']);
 
 /* ----------------------------------------------------------------------------
  * SMALL HELPERS
@@ -56,8 +74,16 @@ export function clamp01(n) {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
-/** 0 = best (S). 'pass' and anything unknown sort last. */
+/** True for the honors letter, however it was cased or spaced. */
+export function isSPlus(grade) {
+  return String(grade == null ? '' : grade).trim().toUpperCase() === SPLUS;
+}
+
+/** 0 = best (S), -1 for S+. 'pass' and anything unknown sort last. Every caller
+ *  compares ranks rather than reading the number, so the one negative rung is
+ *  free: "smaller is better" was always the contract. */
 export function gradeRank(grade) {
+  if (isSPlus(grade)) return -1;
   const i = GRADE_ORDER.indexOf(String(grade || '').toUpperCase());
   return i < 0 ? GRADE_ORDER.length : i;
 }
@@ -80,6 +106,19 @@ export function letterFor(composite) {
   return 'C';
 }
 
+/**
+ * The CSS-SAFE key for a letter. Every badge on the page is styled by
+ * `.grade.<key>`, and 'S+' lowercases to `s+` - which is a class attribute CSS
+ * will not match without an escape, so the honours letter would have painted as
+ * the unstyled default everywhere at once. One helper, so the report card, the
+ * records wall and the campus chip cannot disagree about the answer.
+ * @returns {string} 'splus' | 's' | 'a' | 'b' | 'c' | 'pass' | ''
+ */
+export function gradeKey(grade) {
+  const raw = String(grade == null ? '' : grade).trim().toLowerCase();
+  return raw === 's+' ? 'splus' : raw;
+}
+
 /** True when this grade should promote the player's per-game tier. */
 export function isPromoting(grade) {
   return PROMOTING_GRADES.indexOf(String(grade || '').toUpperCase()) >= 0;
@@ -94,6 +133,7 @@ export function isPromoting(grade) {
  * @property {Object=} hardGates               declared gates, e.g. {sGate:true}. FALSE = failed.
  * @property {boolean=} zen                    zen / untimed class
  * @property {Object=} assists                 {peek, below_par_board, tempo_assist, ...} truthy = used
+ * @property {boolean=} honors                 the Honors lever was pulled for this run
  *
  * @typedef {Object} GradeResult
  * @property {'S'|'A'|'B'|'C'|'pass'} grade
@@ -124,7 +164,13 @@ export function gradeClass(input) {
     };
   }
 
-  const baseGrade = letterFor(composite);
+  /* THE HONORS RUNG. Only ever reached with the lever pulled, and only from a
+   * composite that would already have been an S with room to spare. It is put on
+   * the BASE letter rather than after the caps so a hard gate or an A-cap knocks
+   * it straight down to A like any other top letter - honors buys a ceiling, it
+   * never buys forgiveness. */
+  const baseGrade = (src.honors === true && composite >= SPLUS_THRESHOLD)
+    ? SPLUS : letterFor(composite);
   let grade = baseGrade;
   const capped = [];
   const gatesFailed = [];

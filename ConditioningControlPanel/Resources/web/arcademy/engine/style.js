@@ -50,6 +50,12 @@ export const STYLE_TEXT = `
 /* ---- sub_flash ----------------------------------------------------------- */
 .ae-sub{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);opacity:0;
   animation:ae-sub-blip var(--ae-dur,420ms) ease-out forwards;max-width:44vw;max-height:44vh}
+/* HONEST BOX (media variant only - a word box sizes to its text): a cold <img>
+   has intrinsic height 0 and painted NOTHING for its whole blip. An intrinsic
+   square inside the existing 44vw/44vh maxima + the burst's faint tint, so an
+   unloaded card still reads as a card that is filling in. Cross-platform. */
+img.ae-sub{width:min(38vw,38vh);aspect-ratio:1;object-fit:cover;border-radius:10px;
+  background:rgba(255,105,180,.10)}
 .ae-sub-word{font-family:Georgia,'Times New Roman',serif;font-weight:700;letter-spacing:.06em;
   color:var(--ae-ink);text-shadow:0 0 18px var(--ae-pink);font-size:clamp(28px,6vw,64px);white-space:nowrap}
 .ae-sub-scatter{left:var(--ae-x,50%);top:var(--ae-y,50%)}
@@ -58,7 +64,13 @@ export const STYLE_TEXT = `
   22%{opacity:var(--ae-alpha,.6)}70%{opacity:var(--ae-alpha,.6)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.03)}}
 
 /* ---- flash_burst / gif_burst nodes -------------------------------------- */
+/* HONEST BOX: width-only + a cold media node = intrinsic height 0 = an
+   invisible burst for its whole hold (the owner's placeholder-only rain bug,
+   same flaw here). aspect-ratio pins the card's height to its width var so an
+   unloaded node still reads as a card filling in; the tint was already here.
+   Cross-platform by design (A). .ae-burst-cover's explicit height wins over it. */
 .ae-burst{position:absolute;left:var(--ae-x,50%);top:var(--ae-y,50%);width:var(--ae-size,180px);
+  aspect-ratio:1;
   transform:translate(-50%,-50%) rotate(var(--ae-rot,0deg));opacity:0;border-radius:10px;
   box-shadow:0 0 22px rgba(255,105,180,.35);animation:ae-burst-in var(--ae-dur,900ms) ease-out forwards;
   object-fit:cover;background:rgba(255,105,180,.10)}
@@ -77,7 +89,12 @@ export const STYLE_TEXT = `
   100%{opacity:0;transform:translate(-50%,-50%) rotate(var(--ae-rot,0deg)) scale(1.06)}}
 
 /* ---- gif_rain ----------------------------------------------------------- */
+/* HONEST BOX: same law as .ae-burst - width only meant a cold <img>/<video>
+   fell as a 0-height nothing for its whole 2.9-4.3s life (only the 240x240
+   placeholder SVGs ever painted). A square card + a faint pink-violet tint so
+   the fall reads even before the media lands. Cross-platform by design (A). */
 .ae-rain{position:absolute;top:-22vh;left:var(--ae-x,10%);width:var(--ae-size,140px);border-radius:8px;
+  aspect-ratio:1;background:linear-gradient(160deg,rgba(255,105,180,.12),rgba(184,166,232,.10));
   animation:ae-fall var(--ae-fall,3s) linear forwards;opacity:var(--ae-alpha,.8);object-fit:cover}
 @keyframes ae-fall{from{transform:translateY(0) rotate(var(--ae-rot,0deg))}
   to{transform:translateY(128vh) rotate(calc(var(--ae-rot,0deg) * 3))}}
@@ -220,9 +237,11 @@ export const STYLE_TEXT = `
        drain wash is up. Its gradient already carries the drain; only the blur
        goes, exactly as in lite.
      - a BLEND SURFACE has to read what is under it before it can write, and
-       these four are FULL-SCREEN (the spiral is 150vmax, over twice the
-       viewport). On the near-black ground screen and plain alpha read almost
-       identically, so the tint stays and the read-back goes.
+       these five are FULL-SCREEN (the spiral is 150vmax, over twice the
+       viewport; .ae-crt is inset:0 with overlay - it was the one fullscreen
+       blend this list originally missed). On the near-black ground screen,
+       overlay and plain alpha read almost identically, so the tint stays and
+       the read-back goes.
      - a FILTER over a live decode is a whole GPU pass per decoded frame
        (ae-burst-double lands on gif_burst nodes, which are <video> whenever
        the pool hands back a webm), and ae-mosh's blur re-runs that pass every
@@ -232,10 +251,27 @@ export const STYLE_TEXT = `
    (background-position, the one pattern the perf trace named), so it holds
    still on touch - the scanlines themselves stay. */
 .ae-touch .ae-wash-drain{backdrop-filter:none;-webkit-backdrop-filter:none}
-.ae-touch .ae-wash-pink,.ae-touch .ae-wash-spiral,.ae-touch .ae-wash-sublim,.ae-touch .ae-jackpot{mix-blend-mode:normal}
+.ae-touch .ae-wash-pink,.ae-touch .ae-wash-spiral,.ae-touch .ae-wash-sublim,.ae-touch .ae-jackpot,.ae-touch .ae-crt{mix-blend-mode:normal}
 .ae-touch .ae-crt-live{animation:none}
 .ae-touch .ae-burst-double{filter:none}
 .ae-touch .ae-glitch-datamosh{filter:none;animation:ae-shudder var(--ae-dur,600ms) steps(2,end) 1}
+/* the mobile graphics diet (2026-08-26), same ceiling:
+     - the spiral holds still exactly as on lite - a held spiral still reads as
+       a wash while parked;
+     - will-change on every wash pre-promotes a DPR-sized layer per held kind
+       even at opacity 0; the .45s opacity transition promotes on demand;
+     - rgbsplit keeps its text-shadow, drops the filter pass;
+     - vhsroll's clip-path is a per-step re-raster of the whole node - it gets
+       the transform-only shudder datamosh already gets;
+     - the burst box-shadow is a blur pass per node per frame of its fade. */
+.ae-touch .ae-wash-spiral{animation:none}
+.ae-touch .ae-wash{will-change:auto}
+.ae-touch .ae-glitch-rgbsplit{filter:none}
+.ae-touch .ae-glitch-vhsroll{animation:ae-shudder var(--ae-dur,600ms) steps(2,end) 1}
+.ae-touch .ae-burst{box-shadow:none}
+/* .ae-mote stays animated on touch ON PURPOSE: ae-float is transform-only
+   (compositor-cheap, no re-raster), and the phone cost of the ambient field is
+   its NODE COUNT, which the lite ladder now caps (curves.js ambientLite). */
 
 /* ---- reduced motion: neutralise EVERY animation -------------------------- */
 @media (prefers-reduced-motion: reduce){

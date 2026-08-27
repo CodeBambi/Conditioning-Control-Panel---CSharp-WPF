@@ -46,6 +46,9 @@ bridge.js    postMessage seam: queue-until-init out, pre-buffer + multi-subscrib
 core/lexicon.js    t(key, fallback) over init.lexicon  (mod display strings ONLY)
 core/timetable.js  §7 seeded generator (PURE)
 core/grades.js     §8 rubric + A-caps (PURE)
+core/vocab.js      HOUSE_WORDS (24, niche-agnostic) + slug() + dayVocabulary()
+                   (PURE): the word FLOOR the shell deals when init.words is
+                   empty. FALLBACK ONLY, never a merge - see trap 108
 core/store.js      meta-command client, local cache + write-through
 core/rng.js        makeRng/hash01            <- NOT ours (engine agent)
 core/caps.js       clampToCaps + heat curve  <- NOT ours (engine agent)
@@ -85,14 +88,31 @@ shell/enrollment.js the once-ever intro (ENROLL_LEX: 3 flavour cards per class)
                    the tenth = the unlock beat)
 shell/room.js      THE ROOM SCENE (VN antechamber): the painted set between the
                    campus door and a class, REPLACING the door card for rooms
-                   listed in its SCENES table. FIVE ROOMS LIVE: daily_trigger
-                   (Homeroom 101, vn-04, chalkboard + painted corridor door),
+                   listed in its SCENES table. ALL TEN ROOMS LIVE, so the door
+                   card is now the exception: daily_trigger (Homeroom 101,
+                   vn-04, chalkboard + painted corridor door),
                    deja_vu (Memory Lab 102, vn-05, the card racks),
                    impulse_control (Discipline Hall 103, vn-06, THE red button
                    under glass + the panelled door), lost_and_found (L&F 104,
                    vn-07, the central shelf bay - NOT the whole 850px wall, a
-                   highlight that big reads as a bug) and the_deep_end (The
-                   Pool 105, vn-08, open lane water + the ladder). campus.js
+                   highlight that big reads as a bug), the_deep_end (The
+                   Pool 105, vn-08, open lane water + the ladder), and the
+                   Semester II + III five: sort (The Sorting Room 201, vn-12,
+                   the card conveyor - the belt, not the three bins),
+                   echo (Music Room 202, vn-13, the four lit drum heads on the
+                   stage), instant_recall (Lecture Hall 203, vn-14, the blank
+                   projection screen - NOT the lectern), anomaly (Darkroom 301,
+                   vn-15, the drying lines framed on the ONE crooked print +
+                   the black light-trap curtain as the painted exit) and
+                   composure (The Studio 302, vn-16, the sliding-tile canvas on
+                   the easel). Three of the ten have a painted exit (101, 103,
+                   301); the other seven are doorless and that is legal.
+                   TWO PLATES ARE COMPOSITED, never regenerated: vn-16's wall
+                   sign was painted "COMPOSUE", so the sign rect was cloned out
+                   and logo-composure-keyed.png pasted back in (the homeroom
+                   "DAILeR" recipe), and vn-12's far-left window pane carried a
+                   stray second neon fragment, cloned out from the next pane
+                   along. campus.js
                    OFFERS every enterable door via handlers.roomScene(key,
                    {plate}) before popping the card; shell.js takes keys the
                    table has (walkThen first - door, THEN room), declines the
@@ -162,6 +182,40 @@ shell/scene.js     THE SCENE CHASSIS: a generalised point-and-click ROOM (the
                    fold that answers FALSE at home). Dumb by construction - it
                    renders a table it was handed and calls back; it owns no
                    store, no bridge, no key and no lexicon row. + scene.css
+                   THE ALIVE LAYER (W2 0825): a DECLARATIVE `fx` table, the
+                   same grammar as `hotspots` and `patches` and the same stage
+                   pixels - `[{kind, view, rect:[x,y,w,h] | circle:{cx,cy,r},
+                   when?, seed?, ...opts}]` - mounted as ONE `.asc-fx` per
+                   view between the plate and the rects,
+                   `pointer-events:none`, riding the scale. Seven kinds, all
+                   generic: `neon` (halo breath + a seeded 120ms stutter every
+                   9-20s), `lamp` (warm radial, .96-1 over 4s), `motes` (THE
+                   one canvas: ~25 edge-masked particles drifting up), `window`
+                   (halo pulse + a seeded headlight pass ~40s), `clock` (a
+                   cream disc over the painted hands + DOM hands on the
+                   player's REAL local time, `now` injectable, re-read every
+                   20s with the seconds carried as a fraction), `seam` (a cold
+                   edge + a floor pool, `when`-gated), `tilt` (2px mouse
+                   parallax, moved on the PAINTING not the slide - the slide's
+                   transform is the zoom's - desktop pointers only).
+                   FOUR LAWS: `.arc-reduced` gets NO LAYER AT ALL (not a paused
+                   one - the nodes are never created); `.arm-lite` keeps the
+                   keyframes and loses the CANVAS; everything pauses on a
+                   hidden tab / blurred window (`.asc-fx-hold` for the
+                   keyframes, every timer and rAF CLEARED) and re-arms on
+                   return; and EVERY TIMER IS OWNED - `fxStats().timers` is 0
+                   after a camera move and after destroy(), which is the one
+                   assertion that can catch an orphan interval in a room the
+                   player walked out of. Test seams: `fxStats`, `fxCount`,
+                   `fxHands`, `fxHold`. An unknown kind is LOGGED, never
+                   thrown - a table is data
+                   THE STEP-BACK PILL IS THE ROOT'S, NOT THE SLIDE'S (0825): one
+                   `.asc-back` hangs off `.asc-root`, added and removed by view
+                   the way the apron's class is written, so it is SCREEN pixels
+                   on every host - a pill inside the stage rides the fit scale
+                   and lands at half size on a phone (trap 101). It runs
+                   `escapeStep()`, not `showView('wide')`, so a panel opened
+                   over a close-up folds first.
                    A ZOOM IS A ZOOM (owner ruling 0825): the apron band belongs
                    to the WIDE shot and FADES OUT on showView(non-wide) (~200ms,
                    `.asc-bar-away`; .arc-reduced cuts; visibility rides the same
@@ -171,13 +225,36 @@ shell/scene.js     THE SCENE CHASSIS: a generalised point-and-click ROOM (the
                    WARNING IS WIDE-ONLY: a close-up's rects and props are free
                    to run below y=640 and are never warned about. A consumer
                    must NOT clamp a close-up host to 640 - the paper is measured
-                   from the painting or it is not measured at all
+                   from the painting or it is not measured at all.
+                   `scale()` is the chassis's one measurement seam: the stage
+                   scale as of the last `fit()`. A prop that has to reason in
+                   SCREEN pixels asks the STAGE, never its own host - the
+                   Records miniature carries a second scale of its own, so its
+                   host would answer a different number than the close-up's and
+                   the two walls would lay out differently
 shell/recordsroom.js THE RECORDS OFFICE AS A ROOM (0825), the chassis's first
                    tenant. Four rects on vn-09: the TRAY (the one breathing
                    verb - it opens records.js in a scene panel, and wears the
                    two nudges), the CORKBOARD (a close-up of the cork with
                    corkboard.js's own mountNotices pinned over `corkInner`,
-                   FULL measured rect - the band is away in a close-up),
+                   FULL measured rect - the band is away in a close-up -
+                   `readable:true`, so every sheet carries an `.arc-cork-open`
+                   door and one press lifts corkboard.js's READER: a full-size,
+                   scrollable copy of that sheet on <body> at z56, above the
+                   apron band and below the toasts, and the FIRST rung of this
+                   room's Esc fold. It is the answer to a wall that is painted
+                   at stage scale: on a phone the close-up's body copy lands
+                   near 7px, so the type comes up and a drawn lens glyph says
+                   the paper can be picked up.
+                   A PRINTED SHEET SHOWS ALL OF ITSELF (owner ruling 0825):
+                   the old phone rule capped a sheet at 292px and faded it out
+                   with a `mask-image`, which dissolved a notice mid-sentence.
+                   Gone. A sheet is now exactly as tall as its copy;
+                   corkboard.js's FIT shrinks one sheet's `--note-fs` toward a
+                   floor of 10 real screen px on a phone / 11 on a desktop
+                   while that buys a row its share of the board; and the
+                   close-up host SCROLLS (both sizes now, scrollbar hidden)
+                   rather than hanging a term's worth of paper off the rail),
                    the BOOK (a close-up with deskbook.js over `ledgerPages`)
                    and the STOREROOM (`when:'ajar'`, so no flag = no rect, no
                    patch, nothing at all). THE TWO NUDGES: `.rr-fresh`, a pink
@@ -190,10 +267,47 @@ shell/recordsroom.js THE RECORDS OFFICE AS A ROOM (0825), the chassis's first
                    2px/.30 resting rim going away is not something a player can
                    see. Both are OFF under .arc-reduced (and .arm-lite gets no
                    solo ring either - static state only).
+                   THE MINIATURE hangs on `CORK_WIDE` [237,165,302,152], the
+                   PAINTED cork measured off vn-09 (frame inner edges x 236 and
+                   539, y 163 and 362, so the cork face is 237..538 x 165..361)
+                   and trimmed to stop 5px above `LAMP_SHADE_TOP` (322). It is
+                   NOT `RECTS.corkboard` - that rect is the framed OBJECT with
+                   press slack under it, and paper hung on it sat on the frame,
+                   ran onto the desk and landed on the banker's lamp (trap 105).
+                   The mini is dealt the close-up's own `fit` (same `boxH`, same
+                   stage `scale`) plus `wholeRows:true`, so it is a picture of
+                   the top of the board and never a sheet sliced along a rail.
+                   THE ROOM'S FX TABLE (W2 0825) is `recordsFx()`, exported
+                   beside the rects and crop-verified on the plate: the sign
+                   [577,169,346,91], the lamp pool [383,433,282,42], the dust
+                   cone [420,300,200,180], the window [52,120,64,291], the
+                   clock {1009,187,r44} with a `faceR` of 19 (the painted hands
+                   reach r16 and the numerals start at r21, so the disc buries
+                   one and leaves the other painted), and - `when:'ajar'` only
+                   - the seam's edge [1180,132,6,444] plus a floor pool
+                   [1107,552,180,148] that runs BELOW the apron line on
+                   purpose, because it is light on a floor and not a rect. The
+                   corkboard's paper flutter is pure CSS in corkboard.css
+                   scoped to `.rr-cork`, animating `rotate` and NOT `transform`
+                   (the slot deals each sheet a rotation and `.look-askew` adds
+                   its own; a `transform` keyframe would snap every sheet
+                   straight on hover). NO AMBIENT BED: `arcademy-sfx` reads no
+                   `loop` and has no per-name stop, so the room asks for none
+                   and says so in a TODO rather than owning an audio node
+                   (trap 18)
                    Narrow caps, the annex's law: the shell keeps the store, the
                    bridge and EMI. AND IT MUST BE TORN DOWN IN clearScreen -
                    the apron is on <body>, so a room left standing leaves a
                    slab across the next screen. + recordsroom.css
+                   THE MINIATURE (0825): the wide shot hangs a scaled copy of
+                   the SAME night's wall in the cork rect
+                   (`mountNotices({preview:true})` inside `.rr-corkmini`), so
+                   the painted board has paper on it before you walk up to it.
+                   A preview marks nothing read and banks no visit - looking at
+                   a board is not reading it - and it takes no pointer, so the
+                   board hotspot owns every press over it. The scale is DERIVED
+                   (rect width / CORK_INNER width), never typed, so a sheet in
+                   the picture is the shape of the sheet on the wall.
 shell/deskbook.js  THE BOOK ON THE DESK: a two-page spread mounted over the two
                    painted page rects. `left`/`right` are SIDE HOSTS (.rdb-side,
                    no clip) with the paper (.rdb-page, overflow:hidden) inside:
@@ -204,11 +318,26 @@ shell/deskbook.js  THE BOOK ON THE DESK: a two-page spread mounted over the two
                    page arrows and ArrowLeft/ArrowRight (guarded on an injected
                    isActive(), never Escape - trap 80's lesson), a CSS leaf that
                    turns on the spine with the spread repainting at its midpoint,
-                   and the last spread remembered in `recordsBookPage`. `BOOK` is
-                   a PLACEHOLDER table until the owner's prose lands. The prose
-                   does NOT go through the lexicon (trap 26 caps a row at 96
-                   chars and a paragraph is not a label) - only the chapter tabs
-                   and the two arrows are keyed
+                   and the last spread remembered in `recordsBookPage`. THE PROSE
+                   LANDED (W2 0825): `BOOK` is the owner's approved draft
+                   transcribed VERBATIM - 3 chapters (`story` / `rules` /
+                   `tips`, keeping the three `records_book_ch_*` rows the C#
+                   NeutralLexicon already mirrors), 26 pages, 13 spreads, two
+                   BLANK cream pages (the inside cover's verso and the back)
+                   and the ten house rules as a real `<ol>` whose every item
+                   carries its own `value`, so THE REST opens at six. A page is
+                   `{head, body, list?, blank?}`; `body` is PARAGRAPHS split on
+                   a blank line and painted one `<p>` each. SIX PAGES ARE
+                   CONTINUATIONS with no head: the draft budgeted 90-140 words
+                   a page and the real ceiling at the shipped 19px on a 436x492
+                   rect is nearer 95 with a heading, so four of its pages ran
+                   31-167px past the fore-edge (measured headless on every
+                   spread) and TURN at a paragraph or rule boundary rather than
+                   dropping the type. Every chapter still starts on an EVEN
+                   page so a tab lands on a whole spread. The prose does NOT go
+                   through the lexicon (trap 26 caps a row at 96 chars and a
+                   paragraph is not a label) - only the chapter tabs and the
+                   two arrows are keyed
 shell/idcard.js    THE STUDENT ID: the laminated card in the corner of the
                    campus, and the spotlight it opens (records.js's shape, z 46,
                    veil + key light + placard + Tab trap + one Esc rung above
@@ -224,6 +353,16 @@ shell/idcard.js    THE STUDENT ID: the laminated card in the corner of the
                    photo IS the `presenceShare` discord rung (owner ruling, see
                    §3) and paints only from the echo. NOT SHAREABLE by ruling -
                    reportcard.js stays the one share pipeline (trap 13)
+shell/accountchip.js THE ACCOUNT CHIP: the round photo miniature at the far right
+                   of the topbar AND of the campus top-right cluster, and the
+                   front-desk menu under it (Signed in as / Open my card /
+                   Profile / Sign out). A HOST SLOT: mounted only when
+                   `init.account` (or `account` on a `profile` frame) arrives -
+                   the C# host never sends it, so the desktop is unchanged. The
+                   page holds NO url: it posts `account-action {action}` and
+                   the host walks (cclabs-web PROFILE-CONTRACT §8). Photo =
+                   same-origin path or a drawn monogram; "Open my card" is the
+                   shell's own showIdCard. No Esc rung (trap 59's shape)
 shell/annexreveal.js THE NIGHT THE WALL MOVED: the once-ever reveal cinematic
                      (cut to black -> a thud from below -> EMI startled -> one
                      second of the records office at night with a wall panel
@@ -232,9 +371,45 @@ shell/annexreveal.js THE NIGHT THE WALL MOVED: the once-ever reveal cinematic
                      over the black for free. Fires on the tenth hole of the
                      LAST card and sets `annexRevealSeen` - the only gate the
                      ajar panel on the records wall reads
+shell/prizecounter.js THE PRIZE COUNTER (economy wave): the two-currency shop, a
+                   SCREEN at depth 1 beside records - tickets (`t`, the nightly
+                   wage) on a timber shelf, tokens (`k`, one a day at best) in a
+                   glass case, so a player can tell what a thing costs from six
+                   feet away without reading a word. Narrow caps, the annex's
+                   law taken to the letter: it imports NO store, NO bridge, NO
+                   lexicon and NO EMI - `catalog()`, `balance()`, `inv()`,
+                   `unlocks()`, `payday()` and `t` all arrive as functions, so
+                   the whole room is importable in bare Node. THE ECHO LAW IS
+                   THE WHOLE DESIGN (trap 1): a Buy press paints a WAITING state
+                   and sends `prize-buy`; nothing about the wallet, the
+                   inventory or the unlocks moves until `settle()` is handed a
+                   `wallet-result` frame by the shell. A 6s watchdog clears the
+                   waiting look and says "the counter has gone quiet" - it does
+                   NOT grant, refund or retry, because a page that guessed at a
+                   purchase is a page that can sell the same token twice. Refusal
+                   reasons (`poor`/`owned`/`full`/`locked`) each have their own
+                   line; an unknown one degrades to a generic. Node-double
+                   convention throughout (findCls by children index, never
+                   querySelector) + prizecounter.css
+shell/lever.js     THE EXTRA CREDIT LEVER, in ONE place: the words, the lock
+                   lines and the rail painting for the three-way wager
+                   (Standard / Extra Credit / Honors). It has TWO hosts - the
+                   campus door card (under Begin) and the room scene's apron
+                   (beside the knobs) - because the room REPLACES the card for
+                   every painted room, so a rail that lived only on the card
+                   would be invisible in nine rooms out of ten. Imports nothing
+                   at all (`t` and the caps arrive as arguments), and A LOCKED
+                   RUNG STAYS ON THE RAIL, DIMMED: what you cannot pull yet is
+                   the whole reason to walk to the counter, so hiding it would
+                   hide the feature. Rebuilt on every pop rather than mutated -
+                   a token spent between doors has to light Honors on the very
+                   next door
 shell/peek.js      the shared hold-to-reveal verb (caps the class at A)
 shell/keybinds.js  manifest-declared verb slots, one blob, PanicKey conflict check
 shell/audio.js     THE consumer of engine 'arcademy-sfx' (WebAudio, procedural)
+                   + SAMPLES door (assets/sfx, host-listed), ALIASES (verdict names
+                   and sample floors), HOLD/STOP for room-tone beds (trap 114),
+                   unknown-name blip logged once (trap 115)
 games/registry.js  guarded allSettled registry + tier math + class_suspended stub
                    + GAME_SEMESTER / OPEN_SEMESTERS (the release gate: a CLOSED semester's
                    games are ABSENT from the pool, never stubs; isOpenSemester())
@@ -462,7 +637,21 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
                idlePlayer tabAway suspend resume rareDrop firstUnlock reportCard
                glitch) + fireMoment(name, payload). An unknown name, an unmounted
                EMI and a dismissed EMI are all silent no-ops, which is why every
-               call site in shell.js is one unguarded line.
+               call site in shell.js is one unguarded line. Plus the ONE generic
+               row: any `game:*` name (a class-commentary note from
+               `ctx.mood.note()`) answers out of GAME_NOTE_FACES by
+               `payload.kind`, so a name this table has never heard of still
+               gets a face. Traps 112-113.
+  heartbeat.js THE METRONOME (2026-08-25): createHeartbeat({widget, emi, voice,
+               asks, trips}) -> {start, stop, tick, state, destroy}. ONE
+               setInterval at HB_DIALS.TICK_MS that measures how long since
+               anything visible happened (`widget.onActivity`) and, when the
+               period is up and every gate holds, draws ONE act off a weighted
+               wheel under the sequence law: face / fidget / nudge / screen /
+               bark / ask. It owns no data, no rations and no verbs - it decides
+               WHEN, and the engines that own each act decide whether. The one
+               sanctioned unattended spender in EMI; mounted last from index.js
+               and destroyed first. Traps 109-111.
   widget.css   the layer (.arc-emi, fixed, z 50), the grab/grabbing cursors, the
                x affordance, the edge dock, and the bubble's `.bubble-left` /
                `.bubble-low` flips (right margin / top edge). Plus THE CRT
@@ -570,7 +759,8 @@ the voice's `labSeen` on first entry. Progress is ONE page-owned meta blob under
 metric, subject, experiment, data) are legal DOWNSTAIRS ONLY - `annex/docs.js` and the
 `annex_*` lexicon rows - and nowhere else in the school. The REGISTRY's live counts arrive
 through the host verb `annex-stats` (C# fetches the public aggregate; a null body is LINK
-DOWN, and the page never invents a number).
+DOWN, and the page never invents a number). **The web build has a third key to that door
+and it is not a third gate** - see trap 99, `init.devAnnex`.
 
 ## 3. Cross-agent seams — change these only with the other side
 
@@ -1261,8 +1451,20 @@ DOWN, and the page never invents a number).
     a frame for a backdrop-filter or a full-screen blend surface that a desktop GPU eats for
     free. So The Deep End probes the device once per class - `matchMedia('(pointer: coarse)')`
     or `navigator.maxTouchPoints > 1` - and puts **`.ae-touch` on `<html>`**, the same
-    document-root seam `.ae-lite` uses (the game sets it, the engine only reads it, and
-    BOTH come off on destroy or the lobby inherits a phone's ceiling).
+    document-root seam `.ae-lite` uses (the game sets it, the engine only reads it).
+    - **GLOBALLY ARMED SINCE 2026-08-25 (perf/arcademy-mobile-web):** `core/device.js`
+      arms `.ae-touch` page-wide at paint when `isMobile() && touchProbe()` and stamps
+      `data-ae-touch-global="1"` on `<html>` - ONCE ON, NEVER OFF (a rotate can flip
+      `isMobile()`, the GPU that needed the ceiling still needs it). The Deep End's own
+      lifecycle add/remove SKIPS when the marker is present (its destroy used to hand
+      the lobby back its desktop-cost washes); its per-class probe survives only as the
+      fallback for big tablets/touch laptops where `isMobile()` is false. The arming
+      gates on `isMobile()` too - NOT the bare probe - because desktop WebView2 on a
+      touch-screen laptop must never change visuals, and `isMobile()` (coarse PRIMARY
+      pointer, no fine pointer anywhere) is structurally false there. A phone also gets
+      the engine's lite node budgets (`curves.js` *Lite twins, `ctx.lite()` = coarse or
+      motionLevel<=1), the shell's GPU DIET block at the bottom of `styles.css`, and
+      per-game `html.ae-touch` blocks (impulse-control's blur diet among them).
     - It is **NOT a third rung**: it applies on FULL too, and `de_perf: full` does not opt
       out of it. There is no setting and there must never be one - the device is the setting.
     - It **composes with the rung in the PROTECTIVE direction, and the two dials point
@@ -1804,6 +2006,24 @@ DOWN, and the page never invents a number).
     gesture - the host passes `--autoplay-policy=no-user-gesture-required`, a plain browser
     without the flag stays gesture-gated.
 
+    **THE ONE-SHOTS ARE PRE-DECODED NOW (2026-08-26, owner report "late and too loud").** A
+    sample used to mint a fresh `new Audio()` per fire, so every tap paid a fetch off the
+    virtual host plus an mp3 decode before anything sounded - ~0.6s in WebView2 on cues
+    (`paper`, `door`) whose whole job is to be simultaneous with the click. So the moment the
+    context comes up, `audio.js` fetches and `decodeAudioData`s every AVAILABLE sample except
+    `NEVER_BUFFERED` (the five `hold` beds plus `intro_bed`, which the splash strikes at boot
+    long before any decode could land) and fires them from an AudioBufferSourceNode into the
+    same bus graph - same slots, same governor, same `onEnded` reasons. Two consequences to
+    hold on to: **a cue that beats its own decode takes the RECIPE, never the element** (trap
+    70 - instant and quiet beats late and loud; a SAMPLE_ONLY name with nothing decoded drops
+    exactly as a missing file drops), and a fetch/decode failure **strikes the name off
+    `available`** with the same verdict the element's `error` handler passes. Loudness is a
+    separate table, `SAMPLE_TRIM` (paper .45, door .55, whoosh .65, everything else 1),
+    multiplied into the one-shot gain on both paths - the mp3s are mastered near full scale
+    where the recipes they replaced were quiet by construction. `CLIP_GAIN` is deliberately
+    untouched: the trigger whispers ride it too and they were never the loud ones.
+    `stats().buffered` / `.decoded` say whether any of this is actually running in a host.
+
 87. **SPLITFLAP'S CUE TIMING IS HARD-COUPLED TO THE CSS CASCADE.** `cueCascade()` staggers
     its `flap` row ticks at `ROW_STEP_MS = 400` and lands `commit` at `(rows-1)*400 + 1500`,
     mirroring `styles.css`'s `--r * .4s` stagger and meta fade. Change one, move both. The
@@ -1856,13 +2076,19 @@ DOWN, and the page never invents a number).
 
 
 90. **`ctx.mood` IS THE TENSION MIRROR, AND IT IS FACE-ONLY BY LAW (EMI COLOR,
-    2026-08-24).** A game may tell the mascot how the room feels - `ctx.mood.tense()`
+    2026-08-24).** **LAW (1) WAS REVERSED BY THE OWNER ON 2026-08-25 - READ TRAP
+    112 WITH THIS ONE.** A game may tell the mascot how the room feels -
+    `ctx.mood.tense()`
     latches until `.calm()`, `.clutch()` is the one big moment, `.stumble()` is a small
     >_<, `.runLost()` the once-per-class K.O. - and every one of them is throttled in
     shell.js (15s shared spacing, 3 stumbles a class, tense latch), so a game cannot
-    flood her and must never build its own rate limit on top. Three laws: (1) NO BARK
-    POOL may ever sit on `tense` or `clutch` - mid-class speech is barred and the only
-    words a stumble can buy are the `miss` pool's own (maxPerClass:1); (2) call sites
+    flood her and must never build its own rate limit on top. Three laws: (1) ~~NO BARK
+    POOL may ever sit on `tense` or `clutch` - mid-class speech is barred~~ **a small,
+    clown-only pool on either name is legal since the heartbeat wave; mid-class WORDS
+    are now rationed by voice.js (a 20s floor, 8 a class, and the `mood.hold` danger
+    gate) rather than barred, and the ordinary road for commentary is
+    `ctx.mood.note()`** - and the only
+    words a stumble can buy are still the `miss` pool's own (maxPerClass:1); (2) call sites
     are opt-in and null-safe (`if (ctx.mood) ...` inside try/catch) because rigs stub
     ctx without it; (3) ride the game's EXISTING beat (L&F calls it inside its own
     `clutch()` ease) rather than inventing a parallel one. The `classStart` payload
@@ -1918,8 +2144,9 @@ DOWN, and the page never invents a number).
     the whole layer now, and `test-asks.mjs` counts them. The rest of trap 59
     survives untouched and is asserted the same way: `widget.js` still makes
     exactly ONE `preventDefault()` call (the `pointerdown` on `.emi`), the ask
-    engine's two document listeners are `{passive:true}` in the bubble phase and
-    call neither `preventDefault` nor `stopPropagation` (trap 80's shape), and
+    engine's one document listener (keydown; its pointerdown left with the
+    any-press cancel, trap 118) is `{passive:true}` in the bubble phase and
+    calls neither `preventDefault` nor `stopPropagation` (trap 80's shape), and
     EMI still adds no rung to the Esc ladder - Esc dismisses an ask on its way
     past and the ladder never notices it happened.
 93. **AN ASK MAY NEVER LAND ON TOP OF A LINE, AND THAT IS TWO SEPARATE RULES.**
@@ -1985,9 +2212,11 @@ DOWN, and the page never invents a number).
     beat before the class chrome is built and long before a board takes input),
     but it does not keep it there: a strip nobody answers would still be up when
     the board goes live. Hence `DARE_GIVE_UP_MS` (12s, against the ordinary 40s)
-    on every `classStart` ask, plus the universal any-press cancel. If a future
-    ask wants to ride a moment that fires ON a live board, it does not - move the
-    offer to the class-rules sheet (trap 85) instead.
+    on every `classStart` ask, plus the `classStart` latch in `note()` closing
+    any OTHER ask still standing (it had to move there when presses stopped
+    cancelling, trap 118). If a future ask wants to ride a moment that fires ON
+    a live board, it does not - move the offer to the class-rules sheet
+    (trap 85) instead.
 
 98. **THE STRIP LIVES INSIDE `.emi`, SO EVERY CHIP PRESS HAS TO BE HANDED BACK -
     AND ONLY A BROWSER CAN SEE THAT IT WAS NOT.** `.emi`'s `pointerdown` is the
@@ -2003,6 +2232,600 @@ DOWN, and the page never invents a number).
     cannot express this failure at all; `proof-asks.mjs` (port 8753) caught it on
     the first run. Any future affordance placed inside `.emi` needs the same
     early return, and a browser assertion to prove it.
+
+99. **`init.devAnnex` IS A PEEK, NOT A REVEAL - AND THE DESKTOP CANNOT SEE IT.**
+    The owner needs to walk the Records Annex on `app.cclabs.app/arcademy` without
+    burning the once-ever reveal, so the WEB host projects one extra init boolean,
+    `devAnnex`, beside `devDoor`. `shell.js` reads it once as `annexPeek` and ORs
+    it into exactly TWO places - the campus hatch's bag (`annex:`) and the Records
+    Office's `ajar` - which is the whole feature: the lab becomes REACHABLE.
+    **It must never widen past that.** In particular:
+    - `maybeAnnexReveal` and the morning-after catch-up probe that schedules it
+      are UNTOUCHED. OR-ing `annexPeek` into the `if (!store.get('annexRevealSeen'))`
+      guard would *suppress* the real beat for good, which is the exact opposite
+      of a peek.
+    - `store.set('annexRevealSeen', ...)` still happens in ONE place and a peek is
+      not it. Nothing about a peek is persisted.
+    - `seenFlags.annex` (the postman's ctx) deliberately keeps reading the real
+      store flag. That flag gates letters, and a delivered letter *is* persisted
+      state; a peek that minted mail would be a reveal wearing a hat.
+    - `shell/seep.js`'s `postReveal()` keeps reading the real flag too, for the
+      same reason - the Seep's escalation is a story beat, not a door.
+
+    **`ArcademyHostService.cs` has never sent this field and must not start.**
+    Absent is false, so the desktop build cannot reach the branch at all; the
+    C# side of this feature is that there isn't one. The web end is
+    `cclabs-web`: `ARCADEMY_ANNEX_PEEK_EMAILS` (server allow-list) + `?annex=1`
+    on the lobby -> `arc-web:annexpeek` in localStorage -> `host/init.js`. The
+    query string alone is never enough, and the lobby REMOVES the key on any
+    visit that is not a peek. None of it is a security boundary - the web meta
+    store is localStorage, so devtools could always reach the annex - it keeps
+    the lab off the *supported* path, which is all it was ever asked to do.
+100. **THE STUDENT ID NEVER `display:none`s ON A SMALL STAGE, IT FOLDS (owner bug 2026-08-25,
+    "I cannot see my profile card on the web").** `styles.css`'s "small stages" query
+    (`max-width:760px, max-height:600px`) is EVERY phone in BOTH orientations - an iPhone is
+    <=430px on its short side, so landscape trips the height clause and portrait the width one -
+    and from the first hub commit it hid `.campus-idcard` outright, written when the card was
+    decoration. PR #299 then built the post row around "once the card is gone the corner is
+    free". The SAME node now folds into a ~185x52 tag (photo, name, number; band / stats / tier
+    / chip / clip hidden by class, never by replacing the node - trap 93 still holds) and the
+    post row stepped right of it (`+ 212px`) - which parked both props across the front of The
+    Pool, so on the owner's second pass the same day the row left the bottom edge altogether
+    and took the TOP-LEFT corner instead (`.campus-crest` is already hidden up there). If a
+    future small-stage rule needs the bottom-left corner, fold
+    harder; never hide. The web host's account chip (`shell/accountchip.js`) also offers "Open my
+    card" from the bar, so the full ID is one tap away on a phone either way.
+102. **THE ID CARD FACE HAS EXACTLY ONE DRAWN WIDTH, AND THE PORTRAIT GATE IS WHY (owner bug
+    2026-08-25, "the card is cut off at the top and the page will not scroll to it").** Three
+    lessons, and only the first is the obvious one.
+    (a) A CENTRED FLEX CHILD TALLER THAN ITS CONTAINER OVERFLOWS THE **START** EDGE. `.arc-id`
+    centres `.arc-id-stage` with `align-items:center`; the stage measured 656px in a 390px
+    window, so the top of the card sat at y=-133 with `overflow:visible` all the way up and
+    nothing anywhere to scroll. The cure is the STAGE owning `overflow-y:auto` - never
+    `.arc-id`, because the veil, the key light and the close button live outside it and must
+    not scroll away - plus `overflow-x:hidden`, since `overflow-y:auto` alone computes the
+    OTHER axis to auto as well and the 150%-wide `.arc-id-lamp` then grows a horizontal
+    scrollbar.
+    (b) THE OBVIOUS SECOND HALF - a smaller `width` on `.arc-id-big` - IS WRONG. The face is
+    absolute percentages over fixed 22px insets and fixed 9-24px type, so at ~330px the meta
+    column overruns the body and the homeroom row falls off the bottom of the card. Nothing had
+    ever caught that because **a phone cannot reach this card at any width but 560px**: portrait
+    is refused outright by the orientation gate, so landscape is the only live phone view and
+    92vw never binds there. Scale it with `zoom` on `.arc-id-cardwrap` instead. `zoom` scales
+    the LAYOUT BOX as well as the paint, so the row and the scroller measure the card at its
+    drawn size; a `transform:scale()` would leave a 346px hole in the flow AND fight
+    `arc-id-cardin`, which animates that same transform. `zoom` takes a number and there is no
+    dividing a `dvh` by a `px` to get one, so the steps are a ladder of media queries.
+    (c) A CUSTOM PROPERTY IS HOW YOU BEAT `html.arc-mobile` WITHOUT AN `!important`.
+    `html.arc-mobile .arc-id-sheet` is (0,2,1); a bare `.arc-id-sheet` in a LATER media query
+    is (0,1,0) and loses, source order be damned. Anything that has to retune a value the
+    mobile block already sets gets published as a `--var` on a shared ancestor and READ by the
+    mobile rule (`width:var(--id-w, min(560px, 92vw))`) - only one rule ever sets the property,
+    so there is no contest to lose. Same shape as `--arc-mobile-chrome-h`.
+
+103. **THE SPLASH EXIT IS A CHAIN OF GATES NOW, AND SILENCE HAS TO ANSWER INSTANTLY
+    (owner report 2026-08-25, "wait for the jingle to end before opening the Arcademy").**
+    `intro_bed.mp3` is 4.000s and the splash used to walk out on it on BOTH host paths - the
+    autoplay host at INTRO_MIN_MS + the fade (hidden ~3.27s from t0) and the knock host at
+    KNOCK_EXIT_MS + the fade (hidden ~1.02s after the strike). `dismissLoader()` is now
+    RE-ENTRANT and each gate is a "come back to me", never a sleep: the knock, then the bed,
+    then the INTRO_MIN_MS floor. Three things about it are load-bearing.
+    - **A CUE THAT WILL NOT SOUND MUST SAY SO INSIDE THE DISPATCH.** `shell/audio.js` answers
+      the new `detail.onEnded` hook with `'dropped'` SYNCHRONOUSLY on every road that never
+      reaches an element (mute, master 0, a zero fx bus, no AudioContext, a SAMPLE_ONLY name
+      with no file). Move one of those answers onto a timer and every muted player sits
+      through the cap staring at a loading screen for a sound they were never going to hear.
+      A muted mixer, a zero bus and a host with no `intro_bed.mp3` all dismiss on the OLD
+      timing, and that is the test that proves the hook is wired the right way round.
+    - **THE CAP IS NOT OPTIONAL AND IT IS BOOT'S OWN.** `onEnded` is a courtesy: a host with
+      no consumer on the `arcademy-sfx` bus, an older audio.js, or an element that stalls
+      forever answers NOTHING. `BED_HOLD_CAP_MS` (INTRO_BED_MAX_MS + 200) is measured from the
+      strike and ends the hold whatever the audio is doing. Never make the splash's exit
+      depend on a promise only the mixer can keep.
+    - **REDUCED MOTION MAY NEVER ACQUIRE A HOLD** (trap 66 again): it takes no cues, so it
+      strikes no bed, so there is nothing to wait for and it still dismisses at ~3.27s.
+    What makes the extra ~1.4s of cover safe is that the loader's CSS timeline ALREADY loops
+    when the beat is over (`arc-intro-breath` from 3.1s, `arc-intro-rail-chase` from 2.3s,
+    both `infinite`). Shorten those to one-shots and the splash freezes on its last frame for
+    over a second while the jingle finishes. Measured after: hidden at ~4.6s from t0 on the
+    autoplay host, and knock + ~4.4s on the browser (headless, real mp3 decode).
+
+101. **A CONTROL INSIDE A SCALED OR TRANSFORMED ROOM IS NOT MEASURED IN SCREEN PIXELS,
+    AND ON A PHONE THAT IS THE DIFFERENCE BETWEEN A CONTROL AND A SMUDGE (owner bugs
+    2026-08-25, Records Office in landscape).** A scene room is a fixed 1376x768 plane
+    scaled to fit; a phone in landscape fits it at about **0.5**. Four separate bug
+    reports came out of one arithmetic mistake, and the rule that closes all four is:
+    **paint is authored in stage pixels, chrome is authored in screen pixels, and the
+    two may not live in the same box.**
+    - **`.asc-back` was a child of the slide.** Every phone rule written for it - a 44px
+      minimum thumb target, 12px type, a safe-area inset - was multiplied by the fit and
+      landed as a 39x22 pill with 6px type. It hangs off `.asc-root` now (fixed to the
+      window, like the apron band always has been). The same arithmetic hit
+      `.arm-hot.arm-exit`'s 2px rim (one physical pixel) and its 13px tag (six).
+    - **`position:fixed` LOSES TO ANY TRANSFORMED ANCESTOR.** `.arc-rs` (the card
+      spotlight) is `fixed; inset:0` and was appended into `.arc-records` - which, inside
+      the Records room, sits in `.asc-panel`, and that panel carries a `transform` for its
+      slide-up. A transformed ancestor becomes the containing block, so the whole
+      presentation was laid out inside an 810x302 scroller parked at the bottom of the
+      phone: veil stopped at the panel edge, card centred on the panel, top of the card
+      cut off. **A modal over the window is mounted on `<body>`** - records.js's spotlight
+      and corkboard.js's notice reader both are - and anything it must clear (the apron
+      band) reaches it as a custom property `scene.js` publishes on `<html>`
+      (`--arm-band-h`, cleared in destroy()). A `padding-bottom` written against an
+      ancestor it does not actually have is not a fix; it is the same bug twice.
+    - **A HOVER-ONLY AFFORDANCE IS NOT AN AFFORDANCE ON A PHONE.** `.arm-exit` was dark
+      until `:hover`/`:focus-visible`. A thumb has neither, so the Records storeroom door
+      (the only way to the annex from the office) was 75x231 of painted wall that said
+      nothing. It carries a resting rim + its tag under `html.arc-mobile` only; the
+      desktop stays "found, not advertised".
+    - **AND THE HUB HEADER CAN COME BACK OVER A ROOM.** `.arc-topbar` is sticky at z30 and
+      a room is fixed at z10. `setStage()` hides the bar, but `renderTopbar()` guarded on
+      `campus` alone - so any unconditional repaint (`onMeta` from a host `meta` push,
+      `onPayout`) hoisted it back over the Records room, the report card and the annex,
+      swallowing the top band and the step-back pill with it. The guard is
+      `!!campus || !!stageMode` now: **a full-bleed stage owns the window.**
+
+    Sitting behind all of it: **a phone viewport is a merge gate** (section 6). Every one
+    of these was invisible at 1600x900 and obvious in the first 844x390 shot.
+
+104. **AN ASK IS A BUBBLE THAT IS WAITING FOR YOU, AND THE SAY LAW ALONE CANNOT
+    PROTECT ONE (owner bug 2026-08-25: "the how can I call you prompt got removed
+    because I think I triggered another speech").** widget.js's law 3 is "a protected
+    chain refuses to be replaced by an UNPROTECTED one" - and every line EMI says is
+    protected, so a bark landing thirty seconds into a question walked straight over it.
+    The question text was replaced, the chips stayed, and the first click the player made
+    to get rid of the orphaned strip dismissed the ask for free. **An ask therefore
+    raises a second, higher fence:** `askOwnsGlass()` is true from the question's own
+    `emi.say(q, {ask:true})` until `unmountAsk()`, a later SAY is parked in ONE slot and
+    released afterwards if it is still worth saying (`ASK_QUEUE_MS`, 8s), and every other
+    reaction - a raw face, a chain, an emote, `force` and all - is refused outright.
+    Four things fall out of it and each one was its own half-bug:
+    - **THE HOLD OPENS WITH THE LINE, NOT WITH THE STRIP.** The chips land
+      `STRIP_LEAD_MS` (1560ms) after the question does, and that gap is the window the
+      owner's bug actually fell through. `mountAsk` therefore calls `dropStrip()` - the
+      half WITHOUT the release - so clearing a previous strip on the way in cannot take
+      down the question that is landing.
+    - **THE QUESTION HAS NO AUTO-HIDE AT ALL.** `GIVE_UP_MS` is **0**, which is not
+      "expire immediately" but "she waits": the hold handed to the say is an hour
+      (`DIALS.ASK_HOLD_MS`, a large FINITE number because `chains.js makeSay` does
+      `holdMs | 0` and `Infinity | 0` is a 400ms flash), and `releaseAskLine()` is the
+      only thing that ever ends it. The player cannot be trapped by that - Esc is a
+      free dismiss and an answer is two chips away (presses stopped cancelling on
+      2026-08-25, trap 118) - and there is exactly ONE carve-out: the dares still
+      leave after `DARE_GIVE_UP_MS`, because trap 97 says a strip may not be sitting over
+      a board that is about to take input.
+    - **THE 220ms LEAVE ANIMATION CANNOT RIDE `later()`.** Every resolution an ask has is
+      followed in the same tick by her reaction to it, and a reaction runs `killTimers()`.
+      The drop timer went with it, so `.out` faded the strip to opacity 0 and left a node
+      with two `pointer-events:auto` chips over the board for the rest of the sitting -
+      trap 59's failure mode, and invisible in every screenshot. It has its own handle.
+    - **AN INTERRUPTED ASK IS NOT AN ANSWERED ONE, AND `a14_name` PAID FOR THAT TWICE.**
+      A press records nothing (trap 96), so an interrupted question simply vanished; it
+      now comes back once a sitting on the next `idlePlayer` or the next firing of its own
+      trigger (`S.reask`, dares excluded for the reason above). And the name ask's window
+      was `sessions === 3` **exactly**, so one stray click on session three meant EMI
+      could never learn your name on that save. It is `>= 3` while unanswered now, held
+      off by a once-a-sitting latch the way a15's `bedAsked` is.
+    The one display string she renders (the Send button's label, `emi_ask_send`) is
+    resolved by **shell.js** and handed to `mountEmi` as `strings.askSend`: no lexicon
+    reaches EMI, and this did not change that.
+
+    Two more the phone shot found, both of them trap 61's heuristic coming due:
+    - **THE BUBBLE'S EAR TEST IS SIZED OFF HER BODY, AND THE PHONE PAIR DOES NOT FIT
+      IT.** `faceBubble`'s reach is `left + w * 1.55`, where `w` is EMI's WIDTH -
+      calibrated for the desktop pair (150px EMI, 104px box). A phone runs an 86px EMI
+      beside a box allowed `min(72vw, 168px)`, so the correct ear still left "what do i
+      call you?" 75px off the right edge at 844x390. The bubble now gets the same
+      MEASURED pull-back the strip has had (`--emi-bubble-cx`, on `left`, never on
+      `transform` - `.emi-bubble.pop` animates the transform and would out-rank an
+      inline one for its whole 280ms).
+    - **AND IT HAS TO BE MEASURED WITH `offsetWidth`, NOT WITH A RECT.** That same pop
+      is a scale keyframe, and `getBoundingClientRect` reports the TRANSFORMED box
+      (trap 74's twin half). A rect read on the frame the line lands measures the box
+      at about 60% and produces a clamp a sixth of the size it should be - which is
+      exactly what the first attempt shipped, and it looked almost right.
+
+    **The suite: `scratchpad/emihold/test-askhold.mjs`, 117 assertions**, real widget +
+    real asks.js + real chains.js over the DOM double and a VIRTUAL CLOCK (an hour-long
+    hold cannot be asserted on the wall clock). `before-probe.mjs` beside it is the
+    before/after: point its `arc/` at main and watch "rough day?" become "you came back."
+    with the chips still up.
+
+105. **`background:` IS A SHORTHAND, AND THAT IS WHY THE NOTICE READER WAS A PANE OF
+    GLASS (owner bugs 2026-08-25, three defects on one corkboard).** All three of the
+    owner's phone shots were one wave; only the first is a geometry bug and the other two
+    share a single root.
+
+    **(a) A HOTSPOT RECT IS NOT A PLACE TO HANG PAPER.** The wide shot's miniature was
+    pinned to `RECTS.corkboard` [226,153,323,226] - the rect you PRESS, which covers the
+    timber frame and carries a few pixels of slack under it so a thumb is comfortable. The
+    painted cork inside that frame is [237,165,302,197]: nine pixels lower at the top and
+    seventeen higher at the bottom. So the preview started on the frame, ended on the desk,
+    and its bottom-right sheet landed on the banker's lamp - which breaks the cork plane at
+    y=322 and reaches back to x=480, INSIDE the board's own right third. Every number here
+    was measured off `art/vn/vn-09-records-office.png` with a script, not read off
+    `records-room-spec.json`, and the constant that came out of it (`CORK_WIDE`, trimmed to
+    152 tall so the paper stops above the shade) carries the derivation in its comment. The
+    rule: **a rect you press and a rect you decorate are two different measurements of the
+    same object**, and a room that has both must name both.
+
+    **(b) A SHORTHAND RESETS WHAT IT DOES NOT MENTION.** `.arc-corknote` painted its paper
+    as `background:linear-gradient(...)`, which sets background-IMAGE and resets
+    background-COLOR to `transparent`. Every sheet was therefore one `background-image:none`
+    away from being a window - and `.arc-corknote.look-pencil { background-image: none; }`
+    is exactly that rule, shipped, for the groundskeeper's notices. On the board they read
+    as cork-through-paper. In the READER, which mounts the same `.arc-corknote` stock over
+    the dusk on `<body>`, the same sheet was a transparent rectangle with dark ink on it and
+    the whole noticeboard legible through it. Nobody had seen it because the look is dealt
+    per NOTICE and the reader is opened per SHEET: it took a specific night and a specific
+    press. The paper colour is a `background-color` now and the stocks are
+    `background-image`s over it, so a rule that turns a texture off can never take the
+    opacity with it. **Any element whose colour matters declares that colour as a colour.**
+
+    **(c) A PERCENTAGE THAT WAS SAFE ON A CAPPED SHEET IS NOT SAFE ON AN UNCAPPED ONE.**
+    Dropping the `max-height:292px` + `mask-image` fade (owner: "that is not how printed
+    paper works, we should see the full doc") let a sheet grow to its copy - and the torn
+    corner, `clip-path` at `100% 89%`, bit 11% of the height: 20px on the old sheet and 66px
+    on a 600px one, eating sentences. It is `calc(100% - var(--tear))` now, with a matching
+    `padding-bottom`, so the bite and the blank paper under the copy are the same fixed
+    number. **When you remove a cap, re-read every percentage that was measured against it.**
+
+    Three smaller things the wave settled, each of which cost a run:
+    - **THE FIT MUST UNTRIM BEFORE IT MEASURES.** A `display:none` slot measures zero, and a
+      zero-height sheet is a sheet the fit believes already fits - so a fit run over an
+      already-trimmed wall leaves everything below the cut at full type, and the next trim
+      cuts higher for that reason alone. Untrim, fit, trim, in that order, every time. Two
+      passes of the wrong order took the desktop miniature from six sheets to three.
+    - **A PROP INSIDE A SCALED ROOM CANNOT MEASURE ITS OWN SCALE** (trap 101's cousin). The
+      corkboard's type floor is 10 REAL pixels, so the fit has to divide by the stage scale
+      - and the miniature carries a second scale of its own, so `rect.width / offsetWidth`
+      on ITS host answers a fifth of the truth and prints the thumbnail in bigger type than
+      the board it is a picture of. `scene.js` exposes `scale()` (the stage's, as of the
+      last `fit()`) and both walls are handed the same one.
+    - **TWO SHEETS, ONE SELECTOR, NO WINNER.** `.rr-cork.arc-cork-wall` is written in
+      corkboard.css AND in recordsroom.css at the same (0,2,1... 0,2,0) specificity, and the
+      two files are lazy-linked by two different modules in whatever order the network
+      answers. Whichever landed last won. Every declaration on that selector now has exactly
+      one owner, and the room suite greps recordsroom.css (comments stripped - the prose
+      explaining what left names the properties) to keep it that way.
+
+106. **THE BED IS STRUCK BEFORE INIT ON THE APP HOST, OR IT IS NOT STRUCK AT ALL (owner,
+    third report, 2026-08-25: "wait for the jingle to end before entering, the jingle should
+    start sooner").** Trap 105's neighbour, THE SPLASH WAITS FOR THE JINGLE, was correct and
+    did nothing on the desktop: strikeBed sits behind the mixer, the mixer behind `init`, and
+    the WebView2 host sends init ~3s after the page (log: launched 10:28:49.686, sent init
+    10:28:52.922) - five times INTRO_BED_WINDOW_MS - so scheduleIntroCues dealt the stitched
+    beats every time and the splash walked out at INTRO_MIN_MS. boot.js now strikes
+    `assets/sfx/intro_bed.mp3` as a plain element at module evaluation (`strikeEarlyBed`) on a
+    REAL WebView2 only (`window.chrome.webview` without the web shim's `__deliver` seam), sets
+    `bedStruck` so the mixer never re-fires it and no stitched beat lands over it, and
+    `tuneEarlyBed()` on init applies the mixer's own element math (sqrt(level) * CLIP_GAIN *
+    fx * master) or STOPS it under audioMute / zero bus / reduced motion (trap 66). A refused
+    play() (a browser) hands the strike back to the knock. tuneEarlyBed runs BEFORE the audio
+    consumer import: a host whose mixer fails to load must not keep a muted school's bed
+    playing. Test seam `introBedState()`; suite in session fe888044 scratchpad
+    `bell/test-earlybed.mjs` (boot.js under a fake DOM, `?instance=n` per world; bridge.js is
+    ONE shared instance, so its webview listener belongs to the first world - keep it).
+    Same PR: the phone bell chip is two lines (grid, icon spanning both rows) stepped left
+    of the bell tower's painted clock by clamp(32px, 5vw, 48px); every rule html.arc-mobile.
+
+107. **EMI'S CADENCE IS THREE DIALS AND ONE LATCH, RETUNED 2026-08-25 (owner: "very
+    few comments and animations").** `voice.js` `BARK_FLOOR_MS` 90s -> 40s;
+    `CAMPUS_ODDS_MULT` x1.5 scales a pool's odds on every moment that is NOT in
+    `MID_CLASS_MOMENTS` (miss/fail/runLost/tense/clutch/thinking) AND not while the
+    session latch `S.inClass` is up (classStart/suspend set it, win/fail/runLost/
+    reportCard/dayDone/greet/resume clear it - `miss` does NOT, a miss is mid-class).
+    `channels.js` `SL_DIALS` 90s/20s/180s/6 -> 30s/10s/60s/14 and every per-channel
+    cooldown halved. NEW: **the fidget** - a weighted wordless chain (`FIDGET_CHAINS`,
+    glance/wink/thinking/sus/nod/smug/dizzy/wake) that rides `blinkIdle` AFTER the
+    glitch passes, `FIDGET_ODDS` per blink, campus-only, and never inside
+    `FIDGET_AFTER_SAY_MS` of a line (`S.lastSayAt` is stamped in `sayIt`, the one
+    funnel every bark/beat/ask lands through). It owns no timer: it can only fire
+    when the blink can, so the blink's own guards (busy/hidden/dragging/disabled)
+    are its guards. A pool with `maxPerSession` (idlePlayer = 2) still caps itself
+    - the multiplier moves the dice, never the ration or the doubles slot.
+
+108. **THE WORD FLOOR IS A FALLBACK, AND THE VOICE ON IT IS OPT-IN WITH A LATCH**
+    (2026-08-25, `core/vocab.js` + `assets/sublim/`). Three rules, and each one is
+    a lie waiting to happen if you invert it.
+    - **HOUSE WORDS ARE A FALLBACK, NEVER A MERGE.** `dayVocabulary(init.words, rng)`
+      returns the host pool untouched when it holds anything and a seeded 12-word slice
+      of `HOUSE_WORDS` only when it is empty (nothing enabled, or a creator mod whose
+      manifest ships no `SubliminalPool` - `ModService.cs:1091`). Merging house words
+      into a configured pool would dilute a list the player deliberately curated, in the
+      one layer they cannot audit while it runs. One call site, `shell/shell.js`'s
+      `dayWords`; `src.words` is NEVER mutated (init is the host's frame and other
+      readers index it), and trap 24 is untouched - `ctx.absorb` pushes into the same
+      array either way and `SubliminalPool` is still never written.
+    - **THE SETTINGS ROW MUST NAME THE LIST THAT IS FLASHING.** The row used to read
+      `init.words.length`; on a house day that says "0 words" while the classes flash
+      twelve. The shell passes the RESOLVED `vocab: {count, source}` into
+      `createSettingsPage` and the row says "12 words (the school's own)". Any caller
+      that omits `vocab` falls back to `init.words` and reads exactly as it did before.
+    - **`ctx.triggers` MUST ALWAYS DESCRIBE `ctx.words`.** On a house day the rows come
+      from `init.houseTriggers` (`ArcademyHostService.BuildHouseTriggers`, a
+      `TopDirectoryOnly` scan of `assets/sublim/*.mp3` cached in a static, empty on a
+      missing folder - trap 86's law) FILTERED to the words actually dealt. Never
+      synthesise `{text, audio:null}` rows for words the host did not list: echo's
+      `triggerPool()` and instant-recall's `clipRows()` both count rows, and audio-less
+      ones they already get off the `ctx.words` leg.
+    - **`voice` IS OPT-IN, ONE CLIP AT A TIME, AND THE SHELL HOLDS THE GATE.**
+      `fire('sub_flash', {voice:true, voiceKey:'<game>-whisper'})` says the word as it
+      paints it, through this file's own `audio_trigger` - never `new Audio()`. It needs
+      `opts.wordAudio[word]`, which the SHELL builds from the day's trigger rows and
+      passes ONLY under `init.audioAudible`, so the flag is inert on a muted day and no
+      game has to gate on `ctx.audioAudible` itself. `VOICE_MIN_GAP_MS` (= `SUB_HOLD_MAX_MS`,
+      1400) is the latch: the stream ticks as fast as `SUB_MS.fast` 360 and six clips a
+      second would empty `CLIP_VOICES` in one breath, so an early tick paints the word and
+      stays silent. A call that passes BOTH `sfx` and `voice` (deja-vu's preview flash)
+      plays the CLIP and skips the synthesised whisper for that tick - the oscillator is
+      the fallback, not a layer over the real voice.
+    - The 24 words are spelled the same in `core/vocab.js` and in `HouseWords` in
+      `ArcademyHostService.cs`, and the filename is `slug(word)` (lowercase, spaces to
+      underscores: "LET GO" -> `let_go.mp3`). Rename a word on one side and you orphan a
+      clip on the other, silently.
+    - The browser host shim lives in the SITE repo (`scripts/arcademy-web-ext`), so it must
+      list `houseTriggers` in its fake init the same way it lists `sfxSamples`, or the web
+      build flashes house words with no voice under them.
+109. **THE HEARTBEAT IS THE ONE SANCTIONED UNATTENDED SPENDER, AND IT EXISTS SO
+    NOTHING ELSE HAS TO BE (owner, 2026-08-25: "It's awfully quiet, tho we got a
+    lot of lines. Never be completely idle: something new every 10 seconds ...
+    Always do something. It has to feel alive").** This REVERSES the 2026-08-24
+    field bug's rule. That rule stands where it was made - `voice.js onGesture`
+    still spends no beat and no bark from an idle blink - but "nobody may spend a
+    beat unattended" is now "exactly ONE thing may, and it is not the blink".
+    `emi/heartbeat.js` carries the four gates a blink structurally cannot:
+    - **`document.visibilityState`, and it takes the TIMER down, not the tick.**
+      `visibilitychange` -> hidden CLEARS the interval; visible re-arms it AND
+      re-stamps the clock, or the whole absence reads as silence and she
+      performs on the first frame of a screen you have only just come back to.
+    - **THE GEOFENCE, unchanged and absolute.** The Records Office, the annex
+      and the lab are `emi.setEnabled(false)` screens, so `emi.enabled` IS the
+      gate here. No dial and no data file can open it.
+    - **`widget.askReady()` is the whole "is she free" question** - no say, no
+      chain, no press, no drag, no trip, no live channel, no strip, not
+      dismissed, not disabled. It never pre-empts and it never QUEUES: a refused
+      tick is skipped and the next one is 2.5s away.
+    - **It decides WHEN, never WHETHER.** Every act goes through the engine that
+      already owns it (`emi.emote`, the deck, `voice.onMoment`, `asks.offer`)
+      and every ration those keep - the bark floor, the doubles slot, the deck's
+      cooldowns and PER_SESSION_CAP, all five ask gates - is untouched.
+    ONE `setInterval` at `TICK_MS`, one short gaze-release timer in widget.js,
+    and `destroy()` (called BEFORE the widget's, from `emi/index.js`) takes the
+    interval, the visibility listener and the activity subscription with it.
+
+110. **THE CLOCK IS MEASURED, NOT SLEPT, AND IT MEASURES `widget.onActivity`.**
+    The tick asks one question - how long since anything visible happened - so
+    the period stays honest even though the interval is coarse. `onActivity` is
+    fired from FOUR choke points, and the exclusion is the trap: `play()` (every
+    chain, say and emote), `raw()` (a held face), `apparate()` (a field trip),
+    the deck's **`onStat('takeovers')`** - because trap 77's second canvas never
+    runs through `play()` AND a wheel-rolled channel that waited on `prepare`
+    starts a tick after its caller returned - plus every `emitGesture` **except
+    `blinkIdle`**. Counting the idle blink would re-stamp the clock every 5.2s
+    and the beat could never come due at all. A player verb counting as activity
+    is the feature, not a bug: the heartbeat fills silence and never competes
+    with a hand on the mouse.
+    The gaze half of a `nudge` is `widget.nudgeGaze(dx, dy, ms)` - the same CSS
+    translate on the canvas ELEMENT the cursor lean rides (trap 71), never a
+    repaint. It is REFUSED outright under reduced motion (W1's gaze is off
+    there and a heartbeat may not smuggle it back in) and over any live verb,
+    and its release timer is cleared inside `restGaze()`, which is the one
+    funnel every take-the-glass path already runs through. The widget's old
+    internal `nudgeGaze()` (kick the rAF) is now `kickGaze()`.
+
+111. **THE SEQUENCE LAW IS THE OWNER'S RHYTHM, AND IT IS WHY THE WHEEL IS NOT
+    JUST WEIGHTS.** Never the same KIND twice in a row (a second face counts as
+    a repeat even when the glyph differs); a SPOKEN kind (bark, ask) is always
+    followed by at least one WORDLESS one; a screen never follows a screen; and
+    after a bark the next act comes at `x AFTER_BARK_MULT` so the animation
+    ANSWERS the line. STARVATION is the other half - past `SPEAK_STARVE_MS`
+    (75s campus) / `CLASS_STARVE_MS` (90s in class) the next act is forced to a
+    bark, **but only when the voice's own floor would let one through**, or the
+    beat is spent on a refusal. The starvation clock reads `voice.lastSayAt`,
+    not just the heartbeat's own acts: a bark spent by a shell MOMENT is words
+    too. A refused kind is RE-DRAWN (bounded, three tries a tick) rather than
+    queued, which is what stops a cooling deck or a spent ask from eating the
+    whole beat. In class the wheel is four kinds - `screen` and `ask` are
+    weighted 0, because the deck refuses a channel there anyway and an ask is
+    campus-only by owner rule. A heartbeat-sourced deck pulse lifts EXACTLY one
+    leg of `eligible()`, `THEATRE_IDLE_MS`; the per-channel cooldowns,
+    `GLOBAL_COOLDOWN_MS`, `PER_SESSION_CAP` and every other leg still refuse,
+    and the deep-idle screensaver pair is deliberately out of a pulse's reach
+    (a screensaver that can be summoned is not a screensaver).
+    `HB_DIALS` is the one frozen table. The period floor inside `rollPeriod` is
+    deliberately 1000ms and NOT `TICK_MS`, so a suite that lengthens the tick to
+    keep the interval out of its way does not silently lengthen the period
+    underneath itself - that cost twenty red assertions the first time.
+
+112. **MID-CLASS SPEECH IS LEGAL NOW, AND IT IS PAID FOR WITH A CEILING AND A
+    DANGER GATE (owner, 2026-08-25: "it needs to comment ALSO WHILE IN A
+    SESSION and react to what's happening").** This reverses trap 90's first law
+    - "NO BARK POOL may ever sit on `tense` or `clutch`" - and the wider "no
+    speech mid-class" rationale in `voice.js` and `moments.js`. What replaced it,
+    all in `voice.js`:
+    - `CLASS_BARK_FLOOR_MS` **20000** for a mid-class pool; the 40s
+      `BARK_FLOOR_MS` is the CAMPUS floor from here on. Mid-class means `game:*`
+      (always - only a game can fire one) and `heartbeat` with `payload.inClass`.
+    - `CLASS_BARKS_MAX` **8** per class, reset by `classStart`. Ceremony pools
+      are exempt from both, exactly as they always were.
+    - **`ctx.mood.hold(true/false)` is the DANGER GATE.** A game holds the window
+      where a sentence would actually cost the player the round (Impulse
+      Control's go/no-go, Echo's playback, Misdirection's shuffle) and while it
+      is held voice.js refuses WORDS on `game:*` and `heartbeat` - asked before
+      the pool is even looked up, so no floor, ration or no-repeat is spent by a
+      line that was never going to land. **FACES still fall through**, which is
+      the tension mirror still working. It arrives as an ordinary `moodHold`
+      moment (the games keep ONE seam) but is answered ABOVE the readiness
+      check, so it can never be buffered as `pending` and replayed as a reaction
+      three seconds into the window it was meant to protect; and it
+      AUTO-RELEASES on `classStart` and on every class-ending moment, so a game
+      that throws mid-window cannot mute her for the rest of the sitting.
+    Predicates `campus` / `inClass` are how ONE trigger name serves both sides
+    of the door, and `payload.inClass` OUTRANKS the session latch - the
+    heartbeat knows which screen it is standing on, the latch is only as fresh
+    as the last moment the shell fired. The campus cadence did not move:
+    `BARK_FLOOR_MS` 40s and `CAMPUS_ODDS_MULT` x1.5 are as trap 107 left them.
+
+113. **A `game:*` NOTE ALWAYS GETS A FACE, AND A PAYLOAD TOKEN WITH NOTHING
+    BEHIND IT KILLS THE LINE.** `ctx.mood.note(id, extra)` mints the moment
+    `game:<id>` - and `<id>` IS the bark pool's key, so renaming one orphans the
+    other. There will be dozens of those names and `MOMENTS` deliberately has a
+    row for none of them: `moments.js` answers every `game:*` from
+    `GAME_NOTE_FACES`, keyed off `extra.kind` (celebrate / commiserate / tease /
+    tension / curiosity / ambient - unknown AND absent both read as the ambient
+    GLANCE). That is the promise the wave makes to a game author: every note
+    gets at least a face, and the voice decides separately whether it also earns
+    a line. The throttles are shell.js's and they are a FLOOD GUARD, not a
+    ration - 2500ms between any two notes, 6000ms between two of the same id, 40
+    a class - because the VOICE does the rationing and a game must never build
+    its own on top (trap 90's third law, unchanged). They keep their own
+    counters: sharing `lastAt` with `tense`/`clutch` would let one note eat the
+    room's whole 15s weather budget. `hold()` is edge-triggered for the same
+    reason - a game may call it every frame.
+    **THE TOKENS:** `{n} {tile} {word} {left} {streak} {grade}`, resolved off the
+    moment's payload the way `{name}` is (trap 94) with ONE difference that is
+    the whole design - `{name}` collapses to the un-named variant because it was
+    WRITTEN to, but a `{n}` the payload did not carry is a sentence about
+    nothing, so the LINE IS SKIPPED. The filter runs in `pickLine`, so the pool
+    answers with a plain sibling instead of falling silent, and `sayIt` carries
+    the same check as the fence behind the fence. A raw `{n}` may never reach the
+    bubble. Zero IS a value; `null`, `''`, `NaN` and a boolean are not. A pool of
+    nothing but token lines is simply silent on a payload that carried none, so
+    always write plain siblings beside a token line.
+
+114. **A HOLD HAS AN OWNER, AND ONLY A FILE CAN HOLD** (W3 sfx, 2026-08-25,
+    `shell/audio.js`). The mixer's one sustain: `detail.hold:true` on a SAMPLED name
+    (or a `detail.url`) loops the element in slot `detail.key || name`, fades in over
+    `CLIP_FADE_MS`, ignores `maxMs`; `detail.stop:true` fades that slot out, and is
+    honoured even when muted so a room can always be left; `stop_clips` and the mute
+    echo cut holds too. A recipe CANNOT hold: a hold asked of a name with no file
+    behind it is `'dropped'` (a looping oscillator impression of a room is a different
+    room), so the five beds (`records_bed` `campus_idle` `vn_bed_ext` `vn_bed_int`
+    `cam_bed`) are SAMPLE_ONLY and a bed call site needs no fallback and no
+    `hasSample()`. The rule that costs time: WHOEVER STARTS A BED STOPS IT in its own
+    teardown / unmount / scene-change path (records room teardown, campus idle, VN
+    `applyPlate` int/ext swap, annex cams). The mixer will never guess that a room has
+    been left, and a bed that outlives its room plays under the next class.
+
+115. **AN UNKNOWN CUE NAME IS A BLIP, NOT AN ERROR - SO ADD THE NAME IN THE SAME PR
+    AS ITS FIRST CALL SITE** (W3). Misdirection fired `hit` `miss` `ride` `bank`
+    `reveal` for a whole semester and every one of them degraded to the 660Hz tick;
+    nobody noticed because nothing was thrown. The mixer now logs
+    `[audio] unknown cue "x" - playing blip` ONCE per name (`unknownNames`), and those
+    five are `ALIASES` onto real recipes (sting / thud / pop / commit / tell). The
+    merge gate for any sfx wave is mechanical: every name in
+    `grep -rhoE "(tick|cue|tone|audio|sfx)\('([a-z_]+)'" games engine shell emi vn annex`
+    must be a key of SOUNDS, SAMPLES or ALIASES. Aliases resolve ONE level deep and
+    may carry a `pitch` multiplier (`tape_stop` = glitch at .7 when its file is
+    absent); the sample lookup always uses the name AS FIRED.
+
+116. **COUNTDOWNS TICK ON THE SECOND BOUNDARY, NEVER ON THE TICKER** (W3). Every
+    visible timer drained in silence before this wave, and the wrong fix is one
+    `clock_tick` per rAF / per 60ms poll (a Geiger counter). The convention every
+    game now follows: fire only when `Math.ceil(remaining/1000)` CHANGES, only in the
+    last third (or last 3s, whichever the game's window makes sensible), pitch
+    `1 + .06 * n` climbing toward zero, level .10 -> .18, and KILL it in the window's
+    disarm so a resolved round never ticks once more over its stamp. Rate limits are
+    the caller's job: the mixer will happily play sixty a second.
+
+117. **ENGINE SUSTAINS CUE PER WAVE, NOT PER NODE** (W3, `engine/sustained.js`,
+    `engine/loomWash.js`). Bubble beds, bursts, gif rain and the Loom's spiral are
+    streams of DOM nodes; a cue per node is the fastest way to turn the fx bus into
+    noise and the clip table into a queue. Bursts cap at 3-4 cues per burst, `gif_rain`
+    is never per drop, `spiral_hum` strikes on mount and on each re-trigger only, wash
+    air fires per wash CHANGE (not per re-entrant `startWash`), and teardown coalesces
+    into ONE wash. `sub_flash`'s synth whisper stays suppressed on a voiced tick (108).
+
+118. **AN ASK OUTLIVES EVERY PRESS, AND EXACTLY FOUR THINGS END IT** (owner,
+    2026-08-25: "keep the prompt there till we respond - if we click elsewhere
+    or on emi we trigger a new bark and we lose it"). The EMI ASKS wave shipped
+    an any-press/any-key free dismiss (a document pointerdown listener plus a
+    keydown fallthrough, and pet/drag/fling in the gesture handler); in play it
+    meant the question was gone before it was ever read, because the FIRST tap
+    after a bubble lands is muscle memory. All of that is deleted. A standing
+    ask now survives clicks anywhere, petting, dragging, stray keys and the
+    heartbeat (its `askReady`/`askOpen` gates already refuse every act), and
+    the glass hold keeps barks parked under it. The ONLY closers: a chip (the
+    answer), Esc (the deliberate "not now"), `hide`/`gone` (the screen killed
+    her), and the `classStart` latch in `asks.js note()` - which is NEW there,
+    because "the player pressed Begin" used to close the strip as a side
+    effect and trap 59/97 still forbid a chip strip over a live board. Every
+    non-chip closer spends no cadence and banks the question (`rememberReask`).
+    If you find yourself adding a new dismiss path, it is almost certainly the
+    old bug coming back with better manners.
+
+119. **THE BUBBLE-HOLD SCALE IS MODULE-LEVEL, MULTIPLIES THE CURVE, AND NEVER
+    AN EXPLICIT HOLD** (`widget.js sayHoldMs`, owner option 2026-08-25: "make
+    the bark bubble permanence time an option in the options"). `holdScale`
+    (0.6..3, default 1) lives beside `sayHoldMs` because the helper is a pure
+    module export with no instance to ask; the widget seeds it from
+    `saved.holdScale` on boot, `setBubbleHold` on the handle (and the emi
+    controller) is the one writer after that, and the blob persists it ONLY
+    when it is not 1. It scales `max(floor, grown)` and NOT the explicit-ms
+    argument - `ASK_HOLD_MS` is an hour because a question waits (trap 118),
+    and a player who chose "Quick" did not choose quick questions. The options
+    page's Mascot group is the UI: the page's one LOCAL row, no protocol key,
+    no echo, never `pending` - `shell/settings.js` reaches the controller
+    through a getter because the mascot mounts async, and falls back to
+    `store.merge('emi', ...)` so the choice lands even when she never did.
+
+120. **A PURCHASE IS AN ECHO, AND THE WATCHDOG NEVER GRANTS** (economy wave,
+    `shell/prizecounter.js`). The counter is trap 1 with money on it, which is
+    the one place the echo law actually has teeth. The press sends `prize-buy`
+    and paints a WAITING state; `settle(frame)` - fed only by the host's
+    `wallet-result` - is the ONLY thing in the page that may move the wallet,
+    the inventory or the lever unlocks. The 6s watchdog clears the waiting look
+    and says the counter has gone quiet; it does **not** grant, refund, retry or
+    re-send, because a page that guessed would sell one token twice. The same
+    rule reaches one rung up in `shell.js`: `walletEcho` is written ONLY by
+    `payout-result` / `wallet-result` and cleared by the next `meta` snapshot, so
+    it is an overlay ON the host's truth and never an optimistic paint. If a
+    balance ever moves without a frame arriving, the bug is a write that skipped
+    `settle()`, not a lost echo.
+
+121. **A GRADE LETTER IS STRING-COMPARED IN FIVE PLACES, AND `S+` BREAKS FOUR OF
+    THEM** (economy wave, `core/grades.js`). Adding the S+ letter is one line in
+    `gradeClass`; making it WORK is a sweep. `/^[sab]$/i` does not match `'S+'`
+    (shell.js's `endMoment` - an honours run would fire EMI's FAIL pool),
+    `g === 's'` does not either (ceremonies' `payoff()` - the jackpot silently
+    demoted to the stamp floor), `GRADE_PITCH['s+']` was undefined (the chime
+    rang at PASS pitch), `.grade.s+` is not a selector CSS honours unescaped
+    (every S+ badge painted bare), and `letter === 'S'` on the student ID did not
+    count the best day the player had ever had. Hence `gradeKey()`: `'S+'` ->
+    `'splus'`, and every class name goes through it. S+ is deliberately NOT in
+    `GRADE_ORDER` and `gradeRank()` answers -1 for it, so the cap ladder
+    (`capAt`, `capsRaised`) is untouched - it is a letter above S, not a new rung
+    in the ceiling.
+
+122. **THE ROOM SCENE REPLACES THE DOOR CARD, SO EVERY CARD CONTROL OWES A
+    SECOND HOME** (economy wave, `shell/lever.js`). Nine of ten rooms are
+    painted now, which means the door card is the EXCEPTION and anything mounted
+    only on the card is invisible to almost everybody. The Extra Credit lever
+    found this the hard way: card-only, it would have shipped as a feature the
+    Prize Counter sells a rung for and the player can never see. The fix is one
+    shared painter with two hosts (card + `room.js` apron), never two copies -
+    two implementations of a three-way switch is two chances for the labels, the
+    lock lines and the unlock rules to drift apart. When you add a control to
+    `popCard()`, ask what the ten painted rooms do with it before you finish.
+
+123. **A LEXICON KEY THE HOST DOES NOT SHIP FAILS SILENTLY, IN ENGLISH** (economy
+    wave integration). `t(key, fallback)` is total: a key with no
+    `NeutralLexicon` row behind it renders the fallback and the room reads
+    perfectly, so a whole screen can ship with nothing a mod or a translation can
+    ever re-voice and no play-test will notice. This wave built both halves at
+    once and they disagreed about eight spellings - `prize_trade` against
+    `prize_buy`, `prize_reason_poor` against `prize_poor`, one `lever_hint`
+    against the three per-rung `lever_*_hint` rows, `grade_s_plus` against
+    `grade_splus` - plus twelve host rows (`tickets`, `token`, `payday` and the
+    rest) that nothing on the page ever asked for. The rule: **the PAGE's call
+    sites are authoritative**, because they are the thing that runs;
+    `core/lexicon.js` mirrors them as the offline fallback, and the host's table
+    is exactly that set plus the per-sku `nameKey`/`blurbKey` rows the catalog
+    projects. Those per-sku rows are the ones no grep of the page can find, since
+    they arrive as `item.nameKey` off the wire and never appear as a literal
+    anywhere. `econtests/test-seam.mjs` reads both sides at once and fails on a
+    drift; run it whenever a key moves.
 
 ## 5. The game module contract (short version)
 
@@ -2056,6 +2879,37 @@ Semester III class brought forward) - the placeholder stubs are gone. The shell 
 UI: see §6.
 
 ## 6. Verifying changes (no app UI — the owner is remote)
+
+**A PHONE VIEWPORT IS A MERGE GATE for campus props, rooms and overlays.** Any PR that
+touches the campus furniture (`.campus-postrow` and the two `.arc-*prop`s), a room chassis
+(`shell/room.js` + `rooms.css`, `shell/scene.js` + `scene.css`) or an overlay that carries a
+sticky exit bar (corkboard, mailbox, Bugle) gets a **shot at 844x390 AND at 667x375** from
+the CDP screenshot rig before it merges, plus a 1600x900 shot proving the desktop rects did
+not move. Three of the five bugs in the 2026-08-25 web/mobile wave were invisible at desktop
+size, and one of them - both post-row props stacked on a single pixel, hanging off the bottom
+of the window - had been shipping on the DESKTOP too, unseen, because nothing ever measured
+the row.
+
+The rig lives at `scratchpad/web-mobile-diag/`: `server.mjs` serves `site/` on
+127.0.0.1:8731 with stubbed `/api/arcademy/*`, and `shoot.mjs OUTDIR BASEURL shots.json
+seed.js` drives headless Chrome over raw CDP - one entry per shot (`w`, `h`, `query`,
+`script`, `probe`, `touch:true` for touch emulation). Four things it will bite you with:
+
+- **`site/` GOES STALE.** It is a COPY of the web tree, not a link, and it is the whole
+  trap: re-copy this folder into it (keeping `web/`, `web-shim.js`, `SYNC.json` and the
+  `web-shim.js` script tag in `index.html`) before every run, or you screenshot last week's
+  bug. The 2026-08-25 copy was 20 files behind and had no Records room in it at all.
+- A `pointerup` dispatched on `document` is needed to pass the knock gate, and a seeded
+  `arc-web:meta` in localStorage (`seed.js`) to skip Orientation and First Bell.
+- `?forcemobile=1` is what makes `isMobile()` true - headless reports a FINE pointer however
+  the viewport is sized, so `html.arc-mobile` never lands without it. `?dev=1` on localhost
+  enters an unscheduled painted room.
+- **MEASURE, DO NOT EYEBALL.** The `probe` expression returns `getBoundingClientRect()` and
+  `getComputedStyle` for whatever you name, and diffing a BEFORE run (the touched files
+  restored from `HEAD`) against an AFTER run is the only way to prove "desktop is
+  pixel-identical". It is also how a diagnosed fix gets refuted: the corkboard's sticky bar
+  reaches its flow position at the end of the scroll with or without content padding, so the
+  padding that was supposed to clear it bought nothing but dead cork underneath.
 
 Everything here is testable headless. The harness lives in the session scratchpad, not the
 repo: it copies this folder next to a `package.json` with `{"type":"module"}` (node treats
@@ -2167,6 +3021,31 @@ pair and `BankAccumulator`'s bankable row, impulse-control's additive `newBest`,
 count of `pointer-events:auto` rules on the EMI layer. It brings its OWN augmented
 `document` (one that takes listeners) rather than touching `domshim.mjs`, because every
 other suite depends on `audio.js` no-opping there.
+
+`scratchpad/emi-heart/tests/` (2026-08-25, THE HEARTBEAT) is the metronome's three,
+**249 assertions**, dropped into a copy of the ask suite's harness (`run.sh` re-copies the
+web root into `arc/` - re-run it after every edit or you test last hour's file, which cost
+twenty phantom red lines here):
+- `test-heartbeat.mjs` (**122**) drives the real `emi/heartbeat.js` with a fake widget, a
+  fake emi and `tick()` called by hand over a virtual clock - the dials verbatim and frozen,
+  every IDLE_FACE resolved against `chains.js` FACES and every NUDGE_BODY against the real
+  `emi.css`, the period and its jitter, the x0.7 after a bark, all four legs of the gate,
+  the sequence law over 200 beats (zero repeats, zero doubled speech, zero screen-on-screen),
+  both starvation floors, the class wheel's two zero weights, a refused kind being re-drawn,
+  `destroy()` taking the interval AND the listener AND the subscription, and an act that
+  throws never escaping the tick. Two sections drive the REAL widget: the activity tap
+  (raw / play / say / a player verb all stamp it) and `nudgeGaze` under reduced motion.
+- `test-classvoice.mjs` (**73**) drives the real `emi/voice.js` with INJECTED pools, which
+  is how both new shapes (`on:'heartbeat'` + `when:['campus']`, and `on:'game:<id>'`) are
+  proven to resolve before a single line exists: the two floors, the class ceiling and the
+  ceremony exemption, the danger gate spending nothing, the payload tokens (substituted,
+  skipped, and never printed raw), and the campus cadence proven UNMOVED.
+- `test-moodnote.mjs` (**54**) mounts the WHOLE EMI stack under the DOM double with a
+  2d-context stub and reads back the face that reached the canvas for every note kind -
+  the "every note gets a face" promise, asserted rather than assumed - plus the shell.js
+  `ctx.mood.note` / `hold` contract by source shape.
+The rest of the suites are unchanged by the wave: 885 passing / 51 failing before it and
+the identical 885 / 51 after (those 51 are drift from an older worktree, red on both sides).
 
 **`test-voice.mjs` used to crash before it finished.** `boot.js` binds a document listener
 and the shared `domshim.mjs` document is a plain object, so the file threw at its boot

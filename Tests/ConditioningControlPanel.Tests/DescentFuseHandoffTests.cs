@@ -155,25 +155,38 @@ public class DescentFuseHandoffTests
     // ------------------------------------------------------------ the timeout
 
     /// <summary>
-    /// Forty-five seconds with no offer: say the standing line, hold it four seconds, close. §2.3
-    /// exactly — and note what does NOT happen, which is anything being written or retried forever.
-    /// The re-offer contract takes it from there.
+    /// The timeout with no offer: say the standing line, hold it four seconds, close. §2.3's
+    /// shape — and note what does NOT happen, which is anything being written or retried forever.
+    /// The re-offer contract (and, since 0825, the director's bounded post-zero retry) takes it
+    /// from there.
     /// </summary>
     [Fact]
-    public void NoOfferInFortyFiveSeconds_SaysTheLineThenCloses()
+    public void NoOfferByTheTimeout_SaysTheLineThenCloses()
     {
+        var t = DescentFuseHandoff.TimeoutSeconds;
         var handoff = new DescentFuseHandoff();
-        var actions = Run(handoff, 0, 44.9, ceremonyOpen: false);
+        var actions = Run(handoff, 0, t - 0.1, ceremonyOpen: false);
         Assert.All(actions, a => Assert.Equal(DescentHandoffAction.Resync, a));
 
-        Assert.Equal(DescentHandoffAction.SpeakAwaits, handoff.Advance(45.0, false));
+        Assert.Equal(DescentHandoffAction.SpeakAwaits, handoff.Advance(t, false));
         Assert.True(handoff.IsAnnouncing);
 
         // Held, silently, for the four seconds. No more syncs — the machine has stopped asking.
-        Assert.Empty(Run(handoff, 45.02, 48.9, ceremonyOpen: false));
+        Assert.Empty(Run(handoff, t + 0.02, t + 3.9, ceremonyOpen: false));
 
-        Assert.Equal(DescentHandoffAction.Close, handoff.Advance(49.0, false));
+        Assert.Equal(DescentHandoffAction.Close, handoff.Advance(t + 4.0, false));
         Assert.True(handoff.IsDone);
+    }
+
+    /// <summary>
+    /// 0825 D1: the timeout must clear TWO client-side sync cooldowns (30s each) plus the bloom,
+    /// or a client that synced in the last half-minute before zero, and then ate one 429, misses
+    /// the happy path on a perfectly healthy night.
+    /// </summary>
+    [Fact]
+    public void Timeout_ClearsTwoSyncCooldowns()
+    {
+        Assert.True(DescentFuseHandoff.TimeoutSeconds >= 2 * 30 + 8);
     }
 
     /// <summary>
@@ -184,14 +197,15 @@ public class DescentFuseHandoffTests
     [Fact]
     public void LateOffer_DoesNotStrandTheWindow()
     {
+        var t = DescentFuseHandoff.TimeoutSeconds;
         var handoff = new DescentFuseHandoff();
-        Run(handoff, 0, 44.9, ceremonyOpen: false);
-        Assert.Equal(DescentHandoffAction.SpeakAwaits, handoff.Advance(45.0, false));
+        Run(handoff, 0, t - 0.1, ceremonyOpen: false);
+        Assert.Equal(DescentHandoffAction.SpeakAwaits, handoff.Advance(t, false));
 
-        var late = Run(handoff, 45.02, 48.9, ceremonyOpen: true);
+        var late = Run(handoff, t + 0.02, t + 3.9, ceremonyOpen: true);
         Assert.Empty(late);
 
-        Assert.Equal(DescentHandoffAction.Close, handoff.Advance(49.0, ceremonyOpen: true));
+        Assert.Equal(DescentHandoffAction.Close, handoff.Advance(t + 4.0, ceremonyOpen: true));
         Assert.True(handoff.IsDone);
     }
 

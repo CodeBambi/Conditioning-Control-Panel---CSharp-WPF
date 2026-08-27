@@ -87,6 +87,18 @@ public sealed class MisrouteEffect : PossessionEffectBase
                 : _toDoor;
             if (to == null) return null;
 
+            // The destination was picked at Apply, and HoldFor is 20 s: the room has had that long to
+            // change shape underneath us (a door hidden by a tier change, a tab gated, a rail that
+            // re-rendered). Re-ask the host now, at fire time. If the door we chose is no longer a live
+            // one, this press carries on to where the user actually asked to go - a joke that lands on
+            // a missing tab is not a joke, it is a broken app. The hook stays armed, so the next press
+            // can still land if the door comes back before the hold runs out.
+            if (!DoorIsLive(to))
+            {
+                App.Logger?.Debug("Possession misroute stood down: {Door} is no longer a live door", to);
+                return null;
+            }
+
             _fired = true;
             ClearHook();
 
@@ -174,6 +186,21 @@ public sealed class MisrouteEffect : PossessionEffectBase
             return doors[Rng.Next(doors.Count)];
         }
         catch { return null; }
+    }
+
+    /// <summary>Is <paramref name="doorKey"/> a door the user could press RIGHT NOW? The host's registry
+    /// already drops anything invisible, but it is rebuilt lazily (up to 750 ms / 10 s stale), so the
+    /// element's own flags are checked as well - this runs once, on a press, and being right matters more
+    /// here than being fast.</summary>
+    private bool DoorIsLive(string doorKey)
+    {
+        try
+        {
+            var el = DoorElement(doorKey);
+            if (el == null) return false;
+            return el.IsVisible && el.IsEnabled && el.IsHitTestVisible;
+        }
+        catch { return false; }
     }
 
     private FrameworkElement? DoorElement(string doorKey)

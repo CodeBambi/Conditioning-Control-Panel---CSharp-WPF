@@ -2257,6 +2257,19 @@ namespace ConditioningControlPanel.Services
                             App.Logger?.Information("VideoService: scheduler tick skipped — cleanup in progress; retrying in {Retry}s", SkipRetrySeconds);
                             ScheduleNext(SkipRetrySeconds);
                         }
+                        else if (Services.UI.DoNotDisturbGuard.ShouldSuppressVideos())
+                        {
+                            // The user named this app as one of their own media players (VLC, mpv,
+                            // PotPlayer...) and it owns the foreground window right now. Opening a
+                            // mandatory video over it is the app competing with the thing the user
+                            // actually chose to watch, which is exactly what the DND list exists to
+                            // stop. Reschedule rather than drop, like the two skips above: the moment
+                            // they alt-tab away, videos resume on their own. Logging is throttled
+                            // inside the guard (a minute at most) because this branch is hit on EVERY
+                            // tick for as long as the film lasts.
+                            Services.UI.DoNotDisturbGuard.LogSuppressionThrottled("scheduled video");
+                            ScheduleNext(SkipRetrySeconds);
+                        }
                         else
                         {
                             TriggerVideo();
@@ -2897,7 +2910,7 @@ namespace ConditioningControlPanel.Services
                 // child sees the press - and it swallows every one of them. The attention plane
                 // therefore has to be offered the click here, by hand, or an in-window target could
                 // never be clicked at all.
-                if (attentionLayer != null && e.ChangedButton == MouseButton.Left &&
+                if (attentionLayer != null && (e.ChangedButton == MouseButton.Left || e.ChangedButton == MouseButton.Right) &&
                     attentionLayer.TryHit(e.GetPosition(attentionLayer)))
                 {
                     e.Handled = true;

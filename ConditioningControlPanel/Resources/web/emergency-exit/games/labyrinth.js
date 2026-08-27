@@ -13,6 +13,12 @@
  * press again near the trace tip to continue, or press the entry to restart.
  * Keyboard: focus the canvas, arrow keys step the tip one cell (walls = hit).
  *
+ * THE CLOCK: 25 s of ACTIVE play, not 25 s of wall time. It does not start until
+ * the player's first press or arrow key on the maze, and it stops whenever the
+ * page is hidden (resumes when it comes back). Opening the window and walking
+ * away must never spend the budget: a `failed` here is a sendback, which restarts
+ * the whole lockdown timer, and nobody consents to that by getting distracted.
+ *
  * Photosafe: no static burst (soft board slide + tint), no shake on hits (tint),
  * slower heartbeat. Everything via api.photosafe / the .ee-photosafe class.
  *
@@ -151,6 +157,31 @@
    * ------------------------------------------------------------------------- */
   var G = null; // live game state
 
+  /* ---- the active clock -------------------------------------------------
+   * banked = seconds of play already spent; segAt = when the running segment
+   * began. Not begun and not running both read as "no time has passed".
+   * ---------------------------------------------------------------------- */
+  function elapsed() {
+    if (!G || !G.begun) return 0;
+    return G.banked + (G.running ? (performance.now() - G.segAt) / 1000 : 0);
+  }
+  function clockBegin() {
+    if (!G || G.begun || G.done || G.locking) return;
+    G.begun = true; G.running = true; G.segAt = performance.now();
+  }
+  function clockPause() {
+    if (!G || !G.running) return;
+    G.banked += (performance.now() - G.segAt) / 1000;
+    G.running = false;
+  }
+  function clockResume() {
+    if (!G || !G.begun || G.running) return;
+    G.running = true; G.segAt = performance.now();
+  }
+  function onVisibility() {
+    if (document.hidden) clockPause(); else clockResume();
+  }
+
   function start(init, api) {
     var rng = api.rng;
     var n = 9 + Math.floor(rng() * 3);             // 9..11
@@ -178,7 +209,7 @@
     side.innerHTML =
       '<h2 class="lab-title">trace <em>the exit</em></h2>' +
       '<p class="lab-sub">Press the ember, drag to the door, do not touch the walls. ' +
-      'You have ' + TIME_LIMIT + ' seconds. The exit has been... restless lately.</p>' +
+      'You get ' + TIME_LIMIT + ' seconds, counted from your first touch. The exit has been... restless lately.</p>' +
       '<div class="lab-legend">' +
       '<div><span class="lab-dot is-entry"></span>entry: press here to begin (or to start over)</div>' +
       '<div><span class="lab-dot is-exit"></span>exit: where it is right now</div>' +
@@ -207,14 +238,15 @@
       entry: entry, entryEdge: entryEdge, exit: exit, exitEdge: exitEdge,
       trace: [], cells: [], dragging: false, pointerId: null,
       resets: 0, moves: 0, done: false,
-      t0: performance.now(), limit: TIME_LIMIT, left: TIME_LIMIT,
+      begun: false, running: false, banked: 0, segAt: 0,
+      limit: TIME_LIMIT, left: TIME_LIMIT,
       glitchAt: TIME_LIMIT * (0.45 + rng() * 0.1), glitched: false, glitchFx: 0, oldExit: null, oldExitFade: 0,
       hitFx: 0, winFx: 0, lockFx: 0, locking: false, heart: false,
       embers: [], raf: 0, tick: 0, rng: rng, photosafe: !!api.photosafe
     };
 
     api.hud.timer(TIME_LIMIT);
-    api.say('press the ember and trace your way out. the walls are not shy.');
+    api.say('press the ember and trace your way out. the clock waits for your hand. the walls are not shy.');
 
     // --- input
     canvas.addEventListener('pointerdown', onDown);
@@ -224,6 +256,7 @@
     canvas.addEventListener('lostpointercapture', onUp);
     canvas.addEventListener('keydown', onKey);
     canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    document.addEventListener('visibilitychange', onVisibility);
 
     G.tick = setInterval(onSecond, 100);
     G.raf = requestAnimationFrame(frame);
@@ -308,6 +341,7 @@
 
   function onDown(e) {
     if (!G || G.done || G.locking) return;
+    clockBegin();                       // a hand on the maze is what starts the 25 s
     var p = canvasPoint(e), t = tip();
     if (t && Math.hypot(p[0] - t[0], p[1] - t[1]) < TIP_GRAB) {
       G.dragging = true;
@@ -340,10 +374,11 @@
     if (!G || G.done || G.locking) return;
     var d = e.key === 'ArrowUp' ? 0 : e.key === 'ArrowRight' ? 1 : e.key === 'ArrowDown' ? 2 : e.key === 'ArrowLeft' ? 3 : -1;
     if (d < 0) {
-      if (e.key === ' ' || e.key === 'Enter') { if (!G.trace.length) { G.trace = [cellCenter(G.entry)]; G.cells = [G.entry.slice()]; G.api.say('go.'); } e.preventDefault(); }
+      if (e.key === ' ' || e.key === 'Enter') { clockBegin(); if (!G.trace.length) { G.trace = [cellCenter(G.entry)]; G.cells = [G.entry.slice()]; G.api.say('go.'); } e.preventDefault(); }
       return;
     }
     e.preventDefault();
+    clockBegin();                       // an arrow key on the maze counts the same as a press
     if (!G.trace.length) { G.trace = [cellCenter(G.entry)]; G.cells = [G.entry.slice()]; }
     var cur = G.cells[G.cells.length - 1];
     var cell = G.grid[cur[1]][cur[0]];
@@ -419,7 +454,7 @@
 
   function onSecond() {
     if (!G || G.done || G.locking) return;
-    var el = (performance.now() - G.t0) / 1000;
+    var el = elapsed();
     G.left = Math.max(0, G.limit - el);
     G.api.hud.timer(G.left);
     if (!G.glitched && el >= G.glitchAt) doGlitch();
@@ -660,6 +695,7 @@
     if (!G) return;
     clearInterval(G.tick);
     cancelAnimationFrame(G.raf);
+    try { document.removeEventListener('visibilitychange', onVisibility); } catch (_e) {}
     try {
       G.canvas.removeEventListener('pointerdown', onDown);
       G.canvas.removeEventListener('pointermove', onMove);

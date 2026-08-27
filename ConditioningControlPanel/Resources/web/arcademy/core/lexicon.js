@@ -43,6 +43,8 @@ export const DEFAULT_LEXICON = Object.freeze({
   /* performance */
   grade: 'Grade',
   grade_s: 'S', grade_a: 'A', grade_b: 'B', grade_c: 'C', grade_pass: 'PASS',
+  /* the honors letter - spelled out because 'grade_s+' is not a legal key */
+  grade_splus: 'S+',
   grade_tier: 'Year',
   grade_tier_1: 'Year 1', grade_tier_2: 'Year 2', grade_tier_3: 'Year 3', grade_tier_4: 'Year 4',
   attendance: 'Attendance',
@@ -198,6 +200,47 @@ export const DEFAULT_LEXICON = Object.freeze({
      it reads init.lexicon directly with the same English as its own fallback -
      keep the two strings identical when either moves. */
   intro_knock: 'Knock to enter',
+  /* THE SECOND ASKING (boot.js escalateKnock). Four seconds after the school is
+     ready and still nobody has touched anything, the line changes rather than
+     repeating - the first words did not land, so louder is not the answer. */
+  intro_knock_wait: 'Tap anywhere to knock',
+  /* --- THE FRONT OFFICE SHEET (shell/settings.js) -----------------------
+     Section titles, the two ceilings blurbs (one per host), the web's device
+     rows, and the one-line summaries the folded headers wear. `{v}`, `{n}`,
+     `{name}` and `{sep}` are filled by the page. */
+  settings_ceilings_head: 'App ceilings',
+  settings_ceilings_note_app: 'Set in the app and shown here so you know what the school has to work with.',
+  settings_device_head: 'This device',
+  settings_device_note: 'Sound and motion for this browser, on this phone or PC. Nothing here leaves the device.',
+  settings_master_volume: 'Master volume',
+  settings_master_volume_hint: 'One dial over every sound the school makes.',
+  settings_motion: 'Motion',
+  settings_motion_hint: 'Reduced keeps the room still. Off cuts every animation the school can cut.',
+  settings_motion_off: 'Off',
+  settings_motion_reduced: 'Reduced',
+  settings_motion_full: 'Full',
+  settings_distraction_head: 'Distraction',
+  settings_channels_head: 'Channel ceilings',
+  settings_channels_note: 'A class may use less than these. Never more.',
+  settings_sound_head: 'Sound',
+  settings_lessons_head: 'Lessons',
+  settings_game_nothing: 'Nothing to configure - this class runs on the globals.',
+  settings_sum_volume: 'Volume {v}',
+  settings_sum_motion: 'Motion {v}',
+  settings_sum_online_on: 'Online on',
+  settings_sum_online_off: 'Online off',
+  settings_sum_intensity: 'Intensity {v}',
+  settings_sum_guard: 'Guard {v}',
+  settings_sum_caps_all: 'All at 100%',
+  settings_sum_caps_low: 'Lowest: {name} {v}',
+  settings_sum_muted: 'Muted',
+  settings_sum_sound: 'On{sep}Music {v}',
+  settings_sum_tutorials_on: 'Tutorials on',
+  settings_sum_tutorials_off: 'Tutorials skipped',
+  settings_sum_board: 'Board {v}',
+  settings_sum_keys: '{n} keys',
+  settings_sum_key_one: '1 key',
+  settings_sum_nothing: 'Nothing to set',
   /* --- THE MEDIA COUNTER, web only (MEDIA-CONTRACT §8) -------------------
      Rendered by shell/settings.js ONLY where the browser host shim declares
      `init.settings.mediaControls === true`, so the WebView2 build never draws
@@ -340,6 +383,15 @@ export const DEFAULT_LEXICON = Object.freeze({
   id_open_records: 'Open Records',
   id_spot_close: 'Close',
 
+  /* THE ACCOUNT CHIP (shell/accountchip.js). A host slot: the web host fills it
+     with a login to control from the top bar, the desktop never sends it. Front
+     desk voice, no em-dashes, every row under the 96-char cap. */
+  account_menu: 'Account',
+  account_signed_in_as: 'Signed in as',
+  account_open_card: 'Open my card',
+  account_profile: 'Profile',
+  account_sign_out: 'Sign out',
+
   /* Semester II ghost labels behind the tape (unregistered games get their
    * game_<key> row here, same convention the registry uses once they ship). */
   game_misdirection: 'Misdirection',
@@ -355,6 +407,12 @@ export const DEFAULT_LEXICON = Object.freeze({
      re-voices the whole beat. The room this walks to is the Front Office and it
      is NEVER named in any of them. */
   orientation_kicker: 'Orientation Day',
+  /* EMI ASKS: the Send button on the one question with a keyboard (a14, "what
+     do i call you?"). The ONLY display string EMI renders - her questions,
+     chips and reactions are all VERBATIM content and never pass through t().
+     shell/shell.js resolves it and hands the answer to mountEmi. Her voice is
+     lowercase, so this row is too. */
+  emi_ask_send: 'send',
   emi_orientation_hi: 'a new student! i did a little spin. you missed it.',
   emi_orientation_card: "official! now you have to come back. it's the rules.",
   emi_orientation_go: "go! your first class doesn't know how lucky it is.",
@@ -382,6 +440,8 @@ export const DEFAULT_LEXICON = Object.freeze({
   board_kind_notice: 'Notice',
   board_kind_flyer: 'Flyer',
   board_kind_minutes: 'Minutes',
+  board_note_open: 'Take this one down and read it',
+  board_note_close: 'Put it back on the wall',
   bugle_issue: 'Issue',
   bugle_page: 'Page',
   bugle_pages: 'Pages',
@@ -497,6 +557,58 @@ export const DEFAULT_LEXICON = Object.freeze({
   campus_annex: 'Records Annex',
   campus_annex_status: 'Stairs down',
   campus_desc_annex: 'Under the office. The lights are off down there. The screens are not.',
+
+  /* ------------------------------------------------------------------------
+   * THE PRIZE COUNTER and the two currencies (economy wave, 2026-08-26).
+   * Front-desk voice: warm, a bit scruffy, never a form. Every row here is a
+   * NeutralLexicon candidate and every one of them is under the 96-character
+   * cap a mod needs to be able to re-voice it (trap 26). The prize NAMES and
+   * blurbs are deliberately NOT here - they ride init.economy.catalog from the
+   * host, so the shelf is whatever the host says it is.
+   * ---------------------------------------------------------------------- */
+  campus_room_prizes: 'Prize Counter',
+  campus_prizes_status: 'Open late',
+  campus_desc_prizes: 'Tickets on the shelf, tokens in the case. Somebody is always restocking.',
+  wallet_tickets: 'Tickets',
+  wallet_tokens: 'Tokens',
+  prize_counter_title: 'Prize Counter',
+  prize_counter_sub: 'Tickets on the shelf, tokens in the case',
+  prize_shelf: 'Ticket Shelf',
+  prize_shelf_hint: 'Every graded class pays tickets. This is where they go.',
+  prize_case: 'Token Case',
+  prize_case_hint: 'Tokens only. Your first S of the day drops one in the tray.',
+  prize_you_have: 'On you',
+  prize_owned: 'Yours',
+  prize_held: 'Holding',
+  prize_buy: 'Trade',
+  prize_soon: 'Arriving soon',
+  prize_wait: 'Asking the counter',
+  prize_bought: 'Wrapped up and yours.',
+  prize_poor: 'Not quite enough on you for that one yet.',
+  prize_owned_msg: 'You have that one already.',
+  prize_full: 'Your pockets are full of those. Use one first.',
+  prize_locked_msg: 'That one stays in the case for now.',
+  prize_unknown: 'The counter does not know that one. Odd.',
+  prize_quiet: 'The counter went quiet on that one. Try again in a moment.',
+  prize_empty: 'Shelf is bare tonight. Come back when the truck has been.',
+  prize_payday_label: 'Hot room tonight',
+  prize_payday_2: 'is paying double',
+  prize_payday_5: 'is paying five times over',
+  /* the Extra Credit lever, on the door card and in the painted room */
+  lever_title: 'Extra Credit',
+  lever_standard: 'Standard',
+  lever_extra: 'Extra Credit',
+  lever_honors: 'Honors',
+  lever_standard_hint: 'Play it straight. Tickets pay the usual.',
+  lever_extra_hint: 'Half again the tickets, and it asks more of you.',
+  lever_honors_hint: 'Double tickets, and the only road to an S plus.',
+  lever_extra_locked: 'Earn an A on anything and this one wakes up.',
+  lever_honors_locked: 'The counter sells this one for a token.',
+  free_swim_key_hint: 'Your key opens this one for a practice run. Nothing counts, nothing costs.',
+  /* the payout beat on the report card */
+  payout_tickets: 'Tickets',
+  payout_token_minted: 'A token dropped in the tray. That is your one for today.',
+  late_slip_used: 'A late slip covered you. Your streak never noticed.',
 });
 
 let table = Object.create(null);
@@ -546,10 +658,15 @@ export function tierLabel(tier) {
   return t('grade_tier_' + n, 'Year ' + n);
 }
 
-/** Grade letter display ('S'|'A'|'B'|'C'|'pass'). */
+/** Grade letter display ('S+'|'S'|'A'|'B'|'C'|'pass').
+ *  S+ CANNOT USE THE DERIVED KEY: 'grade_s+' is not a key shape a NeutralLexicon
+ *  row (or a mod table) can carry, so the one letter with punctuation in it is
+ *  spelled out as `grade_splus` here and nowhere else. */
 export function gradeLabel(grade) {
-  const g = String(grade || '').toLowerCase();
-  return t('grade_' + g, g === 'pass' ? 'PASS' : String(grade || '').toUpperCase());
+  const raw = String(grade == null ? '' : grade).trim();
+  if (raw.toUpperCase() === 'S+') return t('grade_splus', 'S+');
+  const g = raw.toLowerCase();
+  return t('grade_' + g, g === 'pass' ? 'PASS' : raw.toUpperCase());
 }
 
 /** Family chip display. */

@@ -158,19 +158,34 @@
    bar is the last thing in flow, so at the end of the scroll the final row sits
    above it naturally, and mid-scroll the cards pass underneath an opaque band
    instead of behind two floating buttons. */
-.rr-cards { --rr-barh: 62px; }
+.rr-cards { --rr-barh: 62px; --rr-panel-x: 24px; }
+html.arc-mobile .rr-cards { --rr-panel-x: 16px; }
 .rr-cards .arc-exitbar {
   min-height: var(--rr-barh);
-  margin: 16px -24px -24px;        /* out to the panel's edges, down to its floor */
-  padding-left: 24px;
-  padding-right: 24px;
+  /* out to the panel's edges, and NOTHING below: with no bottom padding the
+     content box bottom IS the floor, so a negative bottom margin here would
+     only push the band past the box it belongs to. */
+  margin: 16px calc(var(--rr-panel-x) * -1) 0;
+  padding-left: var(--rr-panel-x);
+  padding-right: var(--rr-panel-x);
   border-top: 1px solid color-mix(in srgb, var(--pink), transparent 62%);
   background: linear-gradient(180deg,
     color-mix(in srgb, var(--navy), black 6%) 0%,
     color-mix(in srgb, var(--navy), black 26%) 100%);
   box-shadow: 0 -10px 22px rgba(6, 4, 14, 0.55);
 }
-.asc-panel.rr-cards { padding-bottom: 0; }
+/* ...AND THE PHONE HAS TO BE TOLD TWICE. `html.arc-mobile .asc-panel` in
+   scene.css is a shorthand `padding: 14px 16px 16px` at (0,2,1), which outranks
+   a bare `.asc-panel.rr-cards` at (0,2,0) whatever the sheet order - so the
+   16px came straight back on a phone and the band floated a card-row up over
+   the wall (owner screenshot, iPhone landscape 844x390, 2026-08-25). Both
+   selectors, one declaration: the floor is the floor on every viewport.
+
+   The bar's own bleed follows the PANEL's padding rather than a hard 24, for
+   the same reason - the phone's panel is padded 16 and a -24 bleed hung the
+   band two pixels off each edge of the box it is supposed to be the floor of. */
+.asc-panel.rr-cards,
+html.arc-mobile .asc-panel.rr-cards { padding-bottom: 0; }
 
 /* THE STRIP ON A FINISHED CARD FITS THE STRIP. The complete card's MASTERED
    line came out as "IASTERE" - the text zone is an authored rect on the face
@@ -184,13 +199,76 @@
    Records screen keeps the type it was signed off with. */
 .rr-cards .arc-pc-small .arc-pc-mastered { font-size: 8px; letter-spacing: .06em; }
 .rr-cards .arc-pc-small .arc-pc-date { font-size: 7.5px; letter-spacing: .02em; }
+/* ...and the four-up phone wall is narrower again, so the same clip comes back
+   at the same fraction. The zone is a WINDOW onto the picture and does not
+   open; the type comes down to fit it, exactly as it did at desktop width. */
+html.arc-mobile .rr-cards .arc-pc-small .arc-pc-mastered { font-size: 6px; letter-spacing: 0; }
+html.arc-mobile .rr-cards .arc-pc-small .arc-pc-date { font-size: 5.5px; letter-spacing: 0; }
 
-/* THE SPOTLIGHT STILL LIFTS A CARD, and it is `position:fixed` over the whole
-   viewport - which, inside the room's z10 stacking context, means the apron
-   band (a <body>-level sibling at z55) paints over its lower edge. fit()
-   publishes the band height on the room's root and the box inherits it down, so
-   one line of padding keeps the presentation above the carpet. */
-.rr-room .arc-rs-stage { padding-bottom: var(--arm-band-h, 0px); }
+/* THE SPOTLIGHT IS NOT THIS FILE'S ANY MORE, and the rule that used to sit
+   here (`.rr-room .arc-rs-stage { padding-bottom: var(--arm-band-h) }`) was
+   never going to be enough. It assumed the lit card was a DESCENDANT of the
+   room; it is `position:fixed`, and it was appended into the card panel, which
+   carries a transform - so it was laid out inside an 810x302 scroller and the
+   padding was clearing a band it could not even see. records.js mounts it on
+   <body> now and scene.js publishes `--arm-band-h` on <html>, so the one
+   padding line lives in styles.css beside the rest of the spotlight and works
+   from any embedding. Nothing about the spotlight belongs in this file. */
+
+/* ---------------------------------------------- THE PANEL, IN A HAND ------
+   THE CARDS COME FIRST (owner bug 2026-08-25, iPhone landscape: "I have to
+   scroll to see a single card"). A 390px window leaves the panel a 296px
+   scroller, and the office was spending 228 of it on a kicker, a display-type
+   headline, a sentence of lede and a row of tallies before the wall started.
+   The wall IS the screen; the words about the wall are not.
+
+   What goes: the kicker (you are standing in the Records Office - the room
+   said so), and the lede (one sentence of flavour, and the cards say it
+   better). What shrinks: the headline down to a label, the tallies to one
+   compact non-wrapping row, and the cards to a four-up grid so a WHOLE row
+   clears the sticky bar with the next row showing under it - which is also
+   how a player learns there is more wall below. Nothing is deleted from the
+   DOM: this is a phone layout, and the desktop panel is untouched. */
+html.arc-mobile .rr-cards .arc-kicker,
+html.arc-mobile .rr-cards .arc-lede { display: none; }
+html.arc-mobile .rr-cards .arc-records-desk { gap: 8px; }
+html.arc-mobile .rr-cards .arc-h1 {
+  margin: 0;
+  font-size: 17px;
+  letter-spacing: .16em;
+}
+html.arc-mobile .rr-cards .arc-records-tally {
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+}
+html.arc-mobile .rr-cards .arc-records-tally .chip {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+html.arc-mobile .rr-cards .arc-records-wall {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 2px 0 0;
+}
+html.arc-mobile .rr-cards .arc-records-slot { padding: 7px 6px 6px; gap: 5px; }
+/* THE CARD FILLS ITS COLUMN. `.arc-pc-small` is a FIXED 236px and the face is
+   `background-size:cover` against an authored aspect - so in a narrower column
+   the card is squeezed horizontally and the art is cropped down both sides
+   (the four-up wall came out as four windows onto the middle of four cards).
+   The 560px media query already does this for a one-column wall; a phone in
+   landscape never trips it. */
+html.arc-mobile .rr-cards .arc-pc { --pc-w: 100%; }
+/* A SHORTER FLOOR, so a whole row of cards clears it. The bar is a bar, not a
+   button rail: 54px still holds two 44px thumb targets with air around them. */
+html.arc-mobile .rr-cards { --rr-barh: 54px; }
+html.arc-mobile .rr-cards .arc-records-slotline { font-size: 9px; letter-spacing: .08em; }
+/* The docket is the long read and it lives under the wall; on a phone the
+   spotlight is what a tap opens, so the docket keeps its place and simply
+   stops reserving 120px of empty box above the fold. */
+html.arc-mobile .rr-cards .arc-records-docket { min-height: 0; }
 
 /* ------------------------------------------------------------- THE CORK */
 
@@ -208,32 +286,41 @@
    `.arc-cork-wall{grid-template-columns:1fr}` at the same specificity, and
    which sheet linked last is not something this file gets to know. */
 .rr-cork.arc-cork-wall {
-  /* PINNED PAPER HANGS. A sheet that runs past the bottom rail of the frame is
-     hanging off the board the way pinned paper does - it is NOT cut by the
-     cork and it does NOT put a scrollbar on a corkboard (owner 2026-08-25). So
-     the host never clips; a busy term's overrun spills over the frame's
-     bottom rail onto the wall, and only the stage edge itself ever cuts it. */
-  overflow: visible;
+  /* THE SCROLL AND THE STACK ARE corkboard.css'S NOW, and this rule must not
+     take them back: `.rr-cork.arc-cork-wall` there and `.rr-cork.arc-cork-wall`
+     here are the SAME specificity (0,2,0), so whichever sheet the lazy links
+     happened to land in last would win - and the two sheets are linked by two
+     different modules, in whatever order the network answers. One owner per
+     declaration is the only stable arrangement.
+
+     What went, and why (owner ruling 2026-08-25, "we should see the full doc"):
+     `overflow:visible` hung a busy term's overrun off the bottom rail, which
+     was fine while a sheet was capped at 292px and faded out. A sheet is as
+     tall as its copy now, so the overrun is boards deep - it scrolls. And
+     `align-content:space-between` spread the rows over the host's own height,
+     which the MINIATURE on the wide shot cannot reproduce (its box is the
+     painted cork, 45 stage px shorter): `start` in both is what makes the
+     thumbnail the same picture as the board. */
   padding: 12px 18px 14px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  /* THE WALL USES ITS HEIGHT. A cork with four sheets in one band across the
-     top and 40% of bare board underneath reads as a board somebody stripped,
-     not as a board somebody pinned. Two rows, pushed to the two edges: the
-     host is the grid AND the scroller, and its height is the measured rect, so
-     `space-between` has a real box to distribute in. A busy term overruns the
-     frame and hangs below it, and `space-between` degrades to `start` on its own. */
-  align-content: space-between;
   row-gap: clamp(16px, 2vw, 30px);
 }
 .rr-cork .arc-cork-slot { animation-duration: .28s; }
 
 /* This paper is read at arm's length across a room, not on a phone in a 900px
    column: the plate is 1285 stage px wide and a third of it is a big sheet.
-   Type up to match, or the copy is technically dark and practically a texture. */
-.rr-cork .arc-cork-notetitle { font-size: 17px; margin-bottom: 6px; }
-.rr-cork .arc-cork-notebody { font-size: 14.5px; line-height: 1.5; }
-.rr-cork .arc-cork-kind { font-size: 10.5px; margin-bottom: 6px; }
-.rr-cork .arc-corknote { padding: 18px 18px 15px; }
+   Type up to match, or the copy is technically dark and practically a texture.
+
+   ONE DIAL. `--note-fs` is corkboard.css's single type size and the title and
+   the tag are ratios of it, which is what lets corkboard.js's FIT shrink one
+   sheet toward the floor without knowing anything about three rules. */
+.rr-cork .arc-corknote { --note-fs: 14.5px; padding: 18px 18px 15px; }
+.rr-cork .arc-cork-notetitle { font-size: calc(var(--note-fs) * 1.172); margin-bottom: 6px; }
+.rr-cork .arc-cork-notebody { line-height: 1.5; }
+.rr-cork .arc-cork-kind { font-size: calc(var(--note-fs) * .724); margin-bottom: 6px; }
+/* A torn corner is a fixed bite out of the bottom (corkboard.css THE TEAR), so
+   the blank paper under the copy is the same fixed number in this room too. */
+.rr-cork .arc-corknote.is-torn { padding-bottom: calc(15px + var(--tear)); }
 
 /* ------------------------------------------------------------- THE BOOK */
 
@@ -271,6 +358,13 @@
    somebody forgot to finish. Deep navy-black at 19/1.5 reads as writing. */
 .rdb-body { margin: 0 0 14px; color: #241C2E; }
 .rdb-blank { margin: 0; min-height: 1em; }
+/* THE HOUSE RULES, and they are a real list because they are a real list. Every
+   <li> carries its own `value` (deskbook.js), so THE REST opens at six and the
+   numbers in the book are the numbers in the draft. The marker takes the
+   heading's brown so it reads as the same hand that wrote the headings. */
+.rdb-list { margin: 0 0 12px; padding-left: 25px; }
+.rdb-rule { margin: 0 0 9px; }
+.rdb-rule::marker { font-weight: 700; color: #6B4A2E; }
 .rdb-folio {
   position: absolute;
   left: 0; right: 0; bottom: 16px;

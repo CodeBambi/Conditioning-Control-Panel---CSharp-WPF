@@ -29,9 +29,17 @@ public enum QuestCategory
     // Patreon-exclusive categories (quests carrying these set RequiresPremium = true)
     Autonomy,       // Minutes Bambi Takeover (autonomy) is running
     Lockdown,       // Lockdowns completed
-    Remote,         // Remote-control commands received
+    Remote,         // Remote-control commands RECEIVED (subject side)
     KeywordTrigger, // Keyword/OCR triggers fired
-    BlinkTrainer    // Blinks logged in the live blink trainer
+    BlinkTrainer,   // Blinks logged in the live blink trainer
+
+    // --- Giving side of remote control. NOT premium-gated. ---
+    // Counts commands the user ISSUES to another subject as a Controller. Deliberately open
+    // to every tier: browsing Available Subjects is free by design (MainWindow.RemoteControl.cs)
+    // and the matchmaking pool needs Controllers at least as badly as it needs subjects.
+    // It counts a command at ANY intensity level - the quest must never be a reason to push a
+    // subject onto a heavier tier.
+    RemoteIssue     // Remote-control commands ISSUED to another subject (controller side)
 }
 
 public class QuestDefinition
@@ -169,6 +177,9 @@ public class QuestDefinition
             "autonomy" => QuestCategory.Autonomy,
             "lockdown" => QuestCategory.Lockdown,
             "remote" => QuestCategory.Remote,
+            "remoteissue" => QuestCategory.RemoteIssue,
+            "remoteissued" => QuestCategory.RemoteIssue,
+            "remotegiven" => QuestCategory.RemoteIssue,
             "keyword" => QuestCategory.KeywordTrigger,
             "keywordtrigger" => QuestCategory.KeywordTrigger,
             "blink" => QuestCategory.BlinkTrainer,
@@ -205,6 +216,13 @@ public class QuestDefinition
         new("lock_it_in_d", "Lock It In", "Complete 2 lock cards", QuestType.Daily, QuestCategory.LockCard, 2, 200, "\uD83D\uDD12", "pack://application:,,,/Resources/quests/lock_it_in_d.png"),
         new("count_along_d", "Count Along", "Finish 2 bubble count games", QuestType.Daily, QuestCategory.BubbleCount, 2, 175, "\uD83C\uDFAF", "pack://application:,,,/Resources/quests/count_along_d.png"),
         new("soft_static_d", "Soft Static", "Spend 25 minutes with any overlay active", QuestType.Daily, QuestCategory.Combined, 25, 175, "\uD83E\uDDE0", "pack://application:,,,/Resources/quests/soft_static_d.png"),
+
+        // --- GIVING SIDE of remote control (free for every tier) ---
+        // The answer to the two threads: a solo user could not finish a "take N remote
+        // commands" quest, and nothing rewarded the Controllers the matchmaking pool needs.
+        // Counts commands issued to ANOTHER subject only (self-control never counts - see
+        // QuestService.TrackRemoteCommandIssued) and counts them at ANY intensity level.
+        new("take_the_reins_d", "Take the Reins", "Issue 10 remote commands to other subjects", QuestType.Daily, QuestCategory.RemoteIssue, 10, 200, "\uD83C\uDFAE", "pack://application:,,,/Resources/quests/take_the_reins_d.png"),
 
         // --- PATREON (exclusive features, RequiresPremium) ---
         new("takeover_drift_d", "Hands Off", "Let Bambi Takeover run for 15 minutes", QuestType.Daily, QuestCategory.Autonomy, 15, 250, "\uD83C\uDF80", "pack://application:,,,/Resources/quests/takeover_drift_d.png", true),

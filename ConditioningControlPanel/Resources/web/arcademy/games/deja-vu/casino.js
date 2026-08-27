@@ -231,12 +231,23 @@ export function createDvCasino(o) {
       const node = el('div', 'g-dv-almost');
       if (!node) return;
       const url = face && face._url;
-      if (url && face.tagName === 'IMG') {
-        const img = el('img');
-        if (img) { img.alt = ''; img.src = url; node.appendChild(img); }
-      } else {
+      const wearGlyph = () => {
         node.textContent = (face && face._glyph) || '◈';
         node.classList.add('glyph');
+      };
+      if (url && face.tagName === 'IMG') {
+        const img = el('img');
+        if (img) {
+          img.alt = '';
+          /* the ghost copies a face that may be dying: index.js drops a dead url
+           * to its glyph pair, and this echo takes the same floor rather than
+           * flashing the browser's broken-image icon over the board */
+          img.onerror = () => { try { img.remove(); } catch (e) { /* noop */ } wearGlyph(); };
+          img.src = url;
+          node.appendChild(img);
+        }
+      } else {
+        wearGlyph();
       }
       host.appendChild(node);
       timers.after(DV_CASINO.ALMOST_MS, () => { try { node.remove(); } catch (e) { /* ignore */ } });

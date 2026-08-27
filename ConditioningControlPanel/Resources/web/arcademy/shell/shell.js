@@ -26,10 +26,11 @@
  *   dates  -> UTC seeds content, LOCAL date rolls attendance (regression #978)
  * ==========================================================================*/
 
-import { t, setLexicon, tierLabel } from '../core/lexicon.js';
+import { t, setLexicon, tierLabel, gradeLabel } from '../core/lexicon.js';
 import { makeRng } from '../core/rng.js';
+import { dayVocabulary } from '../core/vocab.js';
 import { buildTimetable, dayAdd } from '../core/timetable.js';
-import { gradeClass, capsRaised } from '../core/grades.js';
+import { gradeClass, capsRaised, isSPlus, gradeKey } from '../core/grades.js';
 import { createStore } from '../core/store.js';
 import {
   loadGames, descriptors, tierFor, tierForPromotions, advance, suspendedStub, MAX_TIER,
@@ -55,7 +56,9 @@ import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
  * player's whole experience of this import is one controller that stands down. */
 import { createFirstBell } from '../vn/index.js';
 import { createRecordsRoom } from './recordsroom.js';
+import { createPrizeCounter } from './prizecounter.js';
 import { createIdSpotlight, idReducedMotion } from './idcard.js';
+import { createAccountChip, readAccount } from './accountchip.js';
 import { createAnnexReveal } from './annexreveal.js';
 /* THE SEEP - the foreshadowing layer. ONE director, and the shell's whole
  * relationship with it is: build it, hand it read-only seams and three gate
@@ -71,7 +74,7 @@ import { createAnnexLab } from '../annex/lab.js';
  * and a class, replacing the door card for the rooms that have art - room.js
  * owns the SCENES table and the stage; the shell keeps the walk, the launch
  * path and the Esc rung (narrow caps, records.js style). */
-import { createRoomScene, hasRoomScene } from './room.js';
+import { createRoomScene, hasRoomScene, prefetchRoomArt } from './room.js';
 /* THE PHANTOM POST: the mail engine and its three paper overlays. The engines
  * hold NO storage of their own (their STATE-NEEDS law) - the shell hands each
  * an injected blob below and banks it through the store like any page key. */
@@ -117,7 +120,13 @@ function sfx(name, level, extra) {
 
 /** Screen depth, so a swap knows which way it went. An ORDER, not a router -
  *  the router is `screen` and it stays exactly where it was. */
-const SCREEN_DEPTH = Object.freeze({ board: 0, room: 1, records: 1, annex: 2, report: 2, settings: 3, class: 4 });
+const SCREEN_DEPTH = Object.freeze({ board: 0, room: 1, records: 1, prizes: 1, annex: 2, report: 2, settings: 3, class: 4 });
+
+/** Walk targets EMI never remarks on arriving at. The three office doors are
+ *  voice.js's geofence read from the other end: she is silent on the Records
+ *  side of them anyway, so a `campus.walkArrived` there would be a line spent
+ *  on the last step before she is switched off (heartbeat wave, 2026-08-25). */
+const SILENT_WALK_TARGETS = new Set(['records', 'registrar', 'annex']);
 
 /* ----------------------------------------------------------------------------
  * DECK V - THE RAKE (house-rules.txt). Built ONCE here so all ten classes wear
@@ -241,6 +250,11 @@ export function tierProgress(gameMeta) {
  * resolved pool a class may OFFER as answers (`ctx.spiralPool`). They walk the
  * same rows in the same order at the same weights, so factoring the second one
  * out moved no pick for any seed.
+ *
+ * SINCE 2026-08-25 this gif pool is the FLOOR, not the default: pickClassLoom
+ * (below) weaves the class spiral with the vendored Loom generator, and the
+ * gif pick survives as the wrapper's `href` (the no-WebGL fallback) and as the
+ * whole answer when the generator module is unavailable.
  * -------------------------------------------------------------------------- */
 const SPIRAL_POOL = Object.freeze([
   ['sp6.gif', 34], ['sp7.gif', 26], ['sp1.gif', 9], ['sp2.webp', 9],
@@ -310,6 +324,59 @@ function pickSpiralUrl(seed, settings) {
     return spiralUrlFor(file);
   } catch (e) { return null; }
 }
+
+/* ----------------------------------------------------------------------------
+ * THE GENERATED LOOM (owner directive, 2026-08-25: "on ALL the games the
+ * spirals should be generated with the Loom"). The class spiral is now WOVEN
+ * per class by the vendored Loom generator (engine/loom/seeded.js) instead of
+ * dealt from the gif pool - the engine's wash routes a params WRAPPER to a
+ * live shader canvas (engine/loomWash.js). The wrapper's shape is the page's
+ * contract with every consumer:
+ *
+ *   { loom: true,
+ *     id:     'loom:xxxxxxxx'   stable hash of the normalized params - the
+ *                               LEDGER id a class records and quizzes on,
+ *     params: <loomField v2>,   what the shader draws,
+ *     href:   <bundled gif url> the WebGL floor AND the paintable url for any
+ *                               consumer that needs a static image (a pin, a
+ *                               legacy string-path wash),
+ *     toString() -> id }        so accidental string coercion prints the id
+ *
+ * POLICY: with SAVED user looms (init.settings.loomSpirals), a seeded coin
+ * gives the owner's own hand-woven gifs half the classes and the generator the
+ * other half; with none, every class weaves. The `href` fallback is the OLD
+ * pick (pickSpiralUrl, its own '|spiral' stream, untouched), so a no-WebGL
+ * player sees exactly the class spiral they always saw. All new dice ride the
+ * NEW '|loom' tagged stream - the append-only stream law; nothing existing
+ * moved a pick for any seed. `loomSeed` is the shell's dynamically-imported
+ * {seededParams2, loomId} pair, null when the module refused to load - and
+ * null simply hands the class the old gif pick.
+ */
+function pickClassLoom(seed, settings, loomSeed) {
+  if (!loomSeed || typeof loomSeed.seededParams2 !== 'function'
+    || typeof loomSeed.loomId !== 'function') return null;
+  try {
+    const rng = makeRng(String(seed == null ? '' : seed) + '|loom');
+    const userRows = loomSpiralRows(settings);
+    // the seeded coin: hand-woven half the time, when there is a hand to honour
+    if (userRows.length && rng() < 0.5) {
+      const row = userRows[Math.floor(rng() * userRows.length)];
+      return row && typeof row[0] === 'string' ? row[0] : null;
+    }
+    /* centerpiece:false - the live wash shader draws no centerpiece, and the
+     * quiz thumbnails (composeFrame) must show the same picture the wash wore */
+    const params = loomSeed.seededParams2(rng, { centerpiece: false });
+    const id = loomSeed.loomId(params);
+    return Object.freeze({
+      loom: true, id, params,
+      href: pickSpiralUrl(seed, settings),
+      toString() { return id; },
+    });
+  } catch (e) { return null; }
+}
+/** The generated loom's weight among the class's OFFERED spirals (ctx.spiralPool):
+ *  level with sp6, the pool's current top row - prominent, never dominant. */
+const LOOM_GEN_WEIGHT = 34;
 
 /** Monotonic-if-available clock for the time bar (a wall-clock step must not
  *  teleport the fill; performance.now cannot be moved by the system clock). */
@@ -412,9 +479,25 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   /* ---------------------- look & lexicon -------------------------------- */
   setLexicon(src.lexicon);
   applyPalette(src.palette, say);
-  const reducedMotion = !!src.reducedMotion || src.motionLevel === 0;
+  let reducedMotion = !!src.reducedMotion || src.motionLevel === 0;
   if (reducedMotion && document.documentElement) {
     document.documentElement.classList.add('arc-reduced');
+  }
+  /** THE WEB'S MOTION CONTROL. The settings page's 'This device' sheet posts
+   *  `motionLevel` (0 off / 1 reduced / 2 full) and the shim echoes it; this is
+   *  the echo landing. The desktop never echoes the key (its Motion row is
+   *  read-only, the app owns it), so on the app this is never reached. CSS
+   *  rides html.arc-reduced at once; the JS consumers read `reducedMotion` at
+   *  their next build (a class start, a screen change), which is the same
+   *  contract every other setting on that page already makes. */
+  function applyMotionLevel(level) {
+    const n = Number(level);
+    if (!Number.isFinite(n)) return;
+    src.motionLevel = n;
+    src.reducedMotion = n !== 2;
+    reducedMotion = n === 0 || !!src.reducedMotion;
+    const html = document.documentElement;
+    if (html && html.classList) html.classList.toggle('arc-reduced', reducedMotion);
   }
   /* THE MOBILE SEAM (core/device.js). One decision, painted on <html> as
    * `arc-mobile` and kept there across a rotate, so the stylesheet's phone rules
@@ -440,18 +523,41 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * (DECISIONS #10, the ramp-never-writes precedent). Reload and it is gone. */
   const ABSORB_MAX_LEN = 40;         // a subliminal card, not a paragraph
   const ABSORB_MAX_ADDED = 64;       // a runaway game cannot grow this unbounded
-  const dayWords = (Array.isArray(src.words) ? src.words : [])
-    .filter((w) => typeof w === 'string' && w.trim());
+  /* THE FLOOR UNDER THE FLOOR (core/vocab.js). With nothing enabled in the
+   * player's pool - or a creator mod that ships none - init.words arrives empty
+   * and the word layer simply stops existing. dayVocabulary() lends the school's
+   * own 24-word vocabulary in that one case and hands the host's list straight
+   * back in every other, so a configured day is byte-identical. src.words is
+   * never mutated: init is the host's frame and other readers index it. */
+  const dayVocab = dayVocabulary(src.words, makeRng(utcDateSeed + '|vocab'));
+  const dayWords = dayVocab.words;
+  const wordSource = dayVocab.source;      // 'host' | 'house', for the settings row
   let absorbed = 0;
 
   /* THE DAY'S TRIGGERS: init.triggers = [{text, audio}] - the same phrases as
    * init.words, each with its whisper clip url (ccp.subaudio / ccp.modaudio) or
    * null. Frozen, never absorbed into: a game that wants a clip reads
    * ctx.triggers, a game that wants words reads ctx.words. Echo's pads are the
-   * consumer (0823). Garbage rows are dropped, never thrown on. */
-  const dayTriggers = Object.freeze((Array.isArray(src.triggers) ? src.triggers : [])
+   * consumer (0823). Garbage rows are dropped, never thrown on.
+   *
+   * ON A HOUSE DAY they come from init.houseTriggers instead, filtered to the
+   * words actually dealt. ctx.triggers must always describe ctx.words: rows for
+   * a pool the classes are not flashing would have echo's triggerPool() and
+   * instant-recall's clipRows() reading a vocabulary nobody sees. */
+  const triggerRows = (rows) => (Array.isArray(rows) ? rows : [])
     .filter((t) => t && typeof t.text === 'string' && t.text.trim())
-    .map((t) => Object.freeze({ text: t.text, audio: typeof t.audio === 'string' && t.audio ? t.audio : null })));
+    .map((t) => Object.freeze({ text: t.text, audio: typeof t.audio === 'string' && t.audio ? t.audio : null }));
+  const dayTriggers = Object.freeze(wordSource === 'house'
+    ? triggerRows(src.houseTriggers).filter((r) => dayWords.indexOf(r.text) >= 0)
+    : triggerRows(src.triggers));
+
+  /* THE VOICED WORD MAP the engine gets (engine/oneshots.js `voice`). Built from
+   * the rows that actually carry a clip, and ONLY when the app-wide whisper mute
+   * is off - which is why no game has to gate its own `voice:true` on
+   * ctx.audioAudible: on a silent day this is empty and the flag does nothing. */
+  const dayWordAudio = Object.freeze((src.audioAudible ? dayTriggers : [])
+    .filter((r) => r.audio)
+    .reduce((m, r) => { m[r.text] = r.audio; return m; }, Object.create(null)));
 
   /** @returns {boolean} true when the word was taken (new, legal, under the cap). */
   function absorbWord(word) {
@@ -565,11 +671,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     const up = currentCorkboard();
     if (up && !up.closed) return;
     openCorkboard({ daySeed: utcDateSeed, onClose: refreshCampusPost, log: say });
+    fireMoment('campus.corkboardOpened', { inClass: false });   // EMI SEAM
   }
   function openBugleOverlay() {
     const up = currentBugle();
     if (up && !up.closed) return;
     openBugle(null, { onClose: refreshCampusPost, log: say });
+    fireMoment('campus.bugleOpened', { inClass: false });       // EMI SEAM
   }
 
   /** gameKey -> {grade, zen, composite, capped, tier, xp, levelUp} for TODAY. */
@@ -600,6 +708,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   let stageClear = false;
   let board = null;
   let campus = null;               // the night-campus hub (OPTIONAL - see showBoard)
+  /* WHICH FULL-BLEED STAGE IS UP, or null. setStage() is the one writer and
+   * renderTopbar() is the one reader - a stage owns the window, so the bar
+   * stays retired for as long as one is up, whoever asks for the repaint. */
+  let stageMode = null;
   // THE STUDENT BODY (PRESENCE.md). Optional in exactly the way the campus is:
   // it hangs off the campus's own ghost layer, so it lives and dies with it and
   // no other screen has ever heard of it.
@@ -656,6 +768,18 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    *  optional here - the scene chassis hangs its apron on <body>, so a cached
    *  handle would leave a band over the next screen. */
   let recordsRoom = null;
+  /** THE PRIZE COUNTER (shell/prizecounter.js). Same lifecycle as the office:
+   *  built fresh per visit, destroyed by clearScreen. The handle is kept while
+   *  it is up for exactly one reason - the `wallet-result` echo has to find the
+   *  live room to settle into, and a purchase settled into a room that is no
+   *  longer on screen is a purchase the player never sees land. */
+  let prizeRoom = null;
+  /** THE LEVER THIS CLASS WAS STARTED ON. Latched at the opening bracket rather
+   *  than read again at the end, so a player who buys the Honors lever DURING a
+   *  run does not retroactively promote the run they are already in - the host
+   *  clamps the same way from its own stored pending lever, and the two answers
+   *  have to agree or an S+ the page painted would be degraded to an S by C#. */
+  let activeLever = 'standard';
   /* ---------------------- THE STUDENT ID (shell/idcard.js) ----------------
    * The card in the corner of the campus is a document you can pick up now.
    * The shell owns three things about it and the card owns none of them: the
@@ -684,6 +808,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       discordLinked: !!src.profile.discordLinked,
       presenceShare: idRung(src.profile.presenceShare, profile.presenceShare),
     };
+  }
+  /* ---------------------- THE ACCOUNT CHIP (shell/accountchip.js) ----------
+   * A HOST SLOT. `init.account` (and `account` on a `profile` frame) is the
+   * web host's word that there is a login to control from this bar: name,
+   * a same-origin photo path and the ACTIONS it will honour. The desktop
+   * never sends it, so `account` stays null and no chip is ever mounted.
+   * ONE state, TWO chips (the topbar's and the campus cluster's) - both paint
+   * from `account` and both post the verb through `postAccountAction`. */
+  let account = readAccount(src.account);
+  let topAccountChip = null;
+  function postAccountAction(action) {
+    try { bridge.send({ type: 'account-action', action: String(action) }); }
+    catch (e) { say('account-action ' + action + ' refused: ' + ((e && e.message) || e)); }
   }
   /** THE LAB (ANNEX-OS.md). Built fresh per visit and destroyed on every path
    *  out - it runs a cam-wall rAF and holds EMI's bracket, neither of which
@@ -726,10 +863,27 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   let introToldEmi = false;
   let active = null;               // the running class (see startClass)
   let suspendedGlobally = false;
+  /* The reason the CURRENT suspend level was set with (null when lifted).
+   * Written only by applySuspend; read only by the web tab-visibility wiring
+   * below, so it can refuse to lift a suspend it did not apply itself. */
+  let suspendReason = null;
   let destroyed = false;
   // Host opened the building through the dev switch (`--arcademy`). Unlocks
   // Begin on every campus door regardless of the seed; never true for players.
   const devPass = src.devDoor === true;
+  /* THE ANNEX PEEK (web only, owner only). The web lobby stamps it for an
+   * account on the server's ARCADEMY_ANNEX_PEEK_EMAILS allow-list arriving at
+   * /arcademy?annex=1; the C# host has never sent the field and absent is
+   * false, so the desktop cannot see this branch at all.
+   *
+   * IT IS A PEEK, NOT A REVEAL. It makes the lab REACHABLE - the campus hatch
+   * and the office's ajar door - and touches nothing else. It never writes
+   * `annexRevealSeen`, so maybeAnnexReveal below is untouched and the real
+   * beat still waits for the tenth card and lands once, for real, later. It
+   * deliberately does NOT reach `seenFlags.annex` either: that flag gates the
+   * postman, and a delivered letter is persisted state a peek must not mint. */
+  const annexPeek = src.devAnnex === true;
+  if (annexPeek) say('ANNEX PEEK (owner dev): lab reachable, nothing stamped');
 
   /* ---------------------- registry + timetable -------------------------- */
   const games = await loadGames(say);
@@ -752,6 +906,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
   const createEngine = await loadOptional('../engine/index.js', 'createEngine', NULL_ENGINE_FACTORY, say);
   const createAssets = await loadOptional('../provider/index.js', 'createAssets', NULL_ASSETS_FACTORY, say);
+
+  /* THE LOOM GENERATOR - optional in exactly the engine's way: a module that
+   * fails to import costs the woven spirals and nothing else (pickClassLoom
+   * answers null and every class wears the old gif pick). Pure math at import
+   * time; the shader only wakes inside the engine when a wash mounts. */
+  let loomSeed = null;
+  try {
+    const m = await import('../engine/loom/seeded.js');
+    if (m && typeof m.seededParams2 === 'function' && typeof m.loomId === 'function') loomSeed = m;
+    else say('engine/loom/seeded.js: no seededParams2/loomId export - gif spirals only');
+  } catch (e) {
+    say('engine/loom/seeded.js import failed (' + ((e && e.message) || e) + ') - gif spirals only');
+  }
 
   let assets;
   try {
@@ -786,10 +953,28 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     assets = NULL_ASSETS_FACTORY();
   }
 
+  /* THE BOOT ASK (0826). The provider's first 'assets-request' used to leave
+   * the page when a class was CLAIMED, which made the whole door / menu /
+   * rules-sheet stretch network dead air - 10-30 seconds of it on the owner's
+   * cellular phone, after which the first board still dressed itself in
+   * placeholders because the host was only then doing its round trip. This
+   * starts the remote pools filling NOW; the web shim has already preconnected
+   * the Scrolller API and the CDN origins by this point, and this is the ask
+   * that makes that preconnect pay off instead of letting the sockets go cold.
+   * Modest on purpose - a head start, not a supply run; the class's own claim
+   * still asks for what it needs. Mints no pool and draws no rand, so no
+   * class's served media moves, and it is a silent no-op with remote media
+   * off, under OfflineMode, or with no bridge at all. */
+  try { if (assets && typeof assets.warmPool === 'function') assets.warmPool({ loop: 8, still: 8 }); }
+  catch (e) { say('[assets] boot warm refused (' + ((e && e.message) || e) + ')'); }
+
   const ceremonies = createCeremonies({
     engine: null,                  // rebound per class (the engine is per class)
     layer: dom && dom.ceremony,
     reducedMotion,
+    // The Prize Counter's one cosmetic that shows up mid-play. A getter, so a
+    // stamp bought tonight garnishes the very next one.
+    confetti: () => ownsSku('confetti_stamp'),
     log: say,
   });
 
@@ -1098,6 +1283,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       recordsRoom = null;
       try { rr.destroy(); } catch (e) { /* noop */ }
     }
+    /* THE PRIZE COUNTER hangs nothing on <body>, but it DOES hold a watchdog
+     * timer for the buy it is waiting on, and a timer that outlives its room is
+     * a timer that repaints a dead node. destroy() clears it, so the counter is
+     * torn down here for the same reason every other screen is: one funnel, no
+     * survivors. */
+    if (prizeRoom) {
+      const pr = prizeRoom;
+      prizeRoom = null;
+      try { pr.destroy(); } catch (e) { /* noop */ }
+    }
     extrasBox = null;
     /* THE ROTATE GATE BELONGS TO A SCREEN, NOT TO THE PAGE. Every screen change
      * funnels through here, so dropping it here is what stops a gate the campus
@@ -1124,9 +1319,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   function setStage(mode) {
     const html = document.documentElement;
     if (html && html.classList) {
-      html.classList.remove('arc-class-on', 'arc-report-on');
+      html.classList.remove('arc-class-on', 'arc-report-on', 'arc-settings-on');
       if (mode) html.classList.add(mode);
     }
+    stageMode = mode || null;
     if (dom && dom.topbar) dom.topbar.hidden = !!mode;
   }
 
@@ -1156,7 +1352,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // (attendance tick, EMI's voice ledger) lands here via store.onChange - the
     // old unconditional unhide resurrected the bar OVER the campus and buried
     // the hanging timetable plaque under it (owner screenshot, 0824).
-    bar.hidden = !!campus;
+    /* AND RETIRED UNDER A FULL-BLEED STAGE, for the same reason (owner bug
+     * 2026-08-25, "the hub header is sitting on top of the corkboard"). The
+     * guard read `campus` alone, so any UNCONDITIONAL repaint - a `meta` push
+     * from the host landing mid-visit, a payout frame - hoisted the bar back
+     * over the Records room, the report card and the annex. It paints at z30
+     * over a room fixed at z10, so it swallowed the close-up's whole top band,
+     * step-back pill and all. A stage owns the window until it hands it back. */
+    bar.hidden = !!campus || !!stageMode;
     bar.textContent = '';
     /* THE WORDMARK IS THE DOOR (owner ruling 2026-08-24). On the campus the
      * name is just the name - a back button pointing at the room you are
@@ -1189,6 +1392,22 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     gear.type = 'button';
     gear.addEventListener('click', () => showSettings());
     bar.appendChild(gear);
+    /* THE ACCOUNT CHIP, far right, beside SETTINGS. Web host only: the slot
+     * stays empty on a desktop that never sent `init.account`. The bar is
+     * rebuilt on every render, so the chip is too - one mint per render, the
+     * old one destroyed so its document listeners go with it. */
+    if (topAccountChip) { try { topAccountChip.destroy(); } catch (e) { /* noop */ } topAccountChip = null; }
+    if (account) {
+      try {
+        topAccountChip = createAccountChip({
+          t, account, isMobile,
+          onOpenCard: () => showIdCard(),
+          onAction: postAccountAction,
+          log: say,
+        });
+        if (topAccountChip) bar.appendChild(topAccountChip.el);
+      } catch (e) { say('account chip unavailable (' + ((e && e.message) || e) + ')'); topAccountChip = null; }
+    }
   }
 
   /* ============================ SCREEN: BOARD =========================== */
@@ -1303,10 +1522,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       strip.appendChild(el('span', 'rlabel', 'Yesterday'));
       for (const key of yClasses.slice(0, 4)) {
         const r = y.classes[key] || {};
-        const g = String(r.grade || '').toLowerCase();
+        const g = gradeKey(r.grade);
         const cell = el('span', 'rcell');
         cell.appendChild(el('span', 'grade ' + (g === 'pass' ? 'pass' : g || 'none'),
-          r.grade ? String(r.grade).toUpperCase() : '--'));
+          r.grade ? gradeLabel(r.grade) : '--'));
         cell.appendChild(el('span', null, gameName(key)));
         strip.appendChild(cell);
       }
@@ -1361,7 +1580,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
        * (mail.js law 2), the campus built below paints the chip already
        * knowing about it, and a silent repaint is not an arrival - walking in
        * and out of the settings page cannot stack the box. */
-      try { mail.deliver(); } catch (e) { say('mail deliver threw: ' + ((e && e.message) || e)); }
+      // EMI SEAM: the pip on the envelope chip is a moment. Null = nothing landed.
+      try {
+        const landed = mail.deliver();
+        if (landed) fireMoment('campus.mailLanded', { letter: landed.id, inClass: false });
+      } catch (e) { say('mail deliver threw: ' + ((e && e.message) || e)); }
     }
     /* THE MORNING-AFTER CATCH-UP: a save that sealed its last card before this
      * wave shipped (or whose final-seal ceremony was torn down by a host-forced
@@ -1435,6 +1658,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           return;
         }
         lastRoomKey = targetKey;
+        // EMI SEAM: the miniature arrived. The three office doors are the
+        // geofence's, so she never comments on the walk to Records.
+        if (!SILENT_WALK_TARGETS.has(String(targetKey))) {
+          fireMoment('campus.walkArrived', {
+            targetKey, trips: (residueTrail && residueTrail.length) || 0, inClass: false,
+          });
+        }
         fire();
       };
       try { walker.walkTo(targetKey, { onDone: go }); }
@@ -1510,9 +1740,20 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
          * hatch joins the plan only after the reveal AND a first visit through
          * the office panel - revisits skip the walk, discovery never does.
          * Same bag contract as `post`: campus draws, the shell keeps state. */
-        annex: (store.get('annexRevealSeen') && (store.get('annex') || {}).visited)
+        annex: (annexPeek || (store.get('annexRevealSeen') && (store.get('annex') || {}).visited))
           ? { open: () => walkThen('annex', () => showAnnex()) }
           : null,
+        /* THE ECONOMY, handed down rather than read. campus.js is under the
+         * header law (it imports no store and no bridge), so the wallet chip in
+         * its top-right cluster and the Extra Credit lever on its door card
+         * both live entirely on these two getters. Same bag contract as `post`
+         * and `annex`: the campus draws, the shell keeps every byte of state.
+         * A host with no economy in `init` hands null and the campus is exactly
+         * the campus it was - no chip, no lever, no gap where one used to be. */
+        economy: economyCatalog().length ? {
+          balance: () => walletBalance(),
+          lever: leverCaps(),
+        } : null,
         on: {
           /* THE STUDENT BODY STARTS HERE AND NOWHERE ELSE (PRESENCE §4): after
            * the entry reveal, never during it. The campus fires this once; a
@@ -1537,6 +1778,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
               if (store.get('boardOpenedDate') !== localDate) store.set('boardOpenedDate', localDate);
             } catch (e) { say('boardOpenedDate write failed: ' + ((e && e.message) || e)); }
             if (board) board.replay();
+            fireMoment('campus.boardOpened', { inClass: false });   // EMI SEAM
           },
           begin: (gameKey) => walkThen(gameKey, () => launchGraded(gameKey)),
           /* THE ROOM SCENE TAKEOVER. campus.js offers every enterable door
@@ -1551,6 +1793,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           },
           freeSwim: (gameKey) => walkThen(gameKey, () => startFreeSwim(gameKey)),
           records: () => walkThen('records', () => showRecords()),
+          /* THE PRIZE COUNTER'S DOOR. A walk like the office's, because it is
+           * across the quad like the office is - the wallet chip in the chrome
+           * is the thing you can read without going anywhere. */
+          prizes: () => walkThen('prizes', () => showPrizes()),
           annex: () => walkThen('annex', () => showAnnex()),
           /* THE DOOR walks; THE GEAR does not. campus.js calls `registrarRoom`
            * for the Front Office room and falls back to `registrar` for the
@@ -1566,6 +1812,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
            * there is ONE switch (owner ruling 1). */
           idChip: () => onIdChip(),
         },
+        /* THE ACCOUNT CHIP in the campus's top-right cluster (web host only -
+         * null on the desktop, and the cluster is what it always was). Same
+         * state and the same two verbs as the topbar's chip. */
+        account: {
+          get: () => account,
+          isMobile,
+          onOpenCard: () => showIdCard(),
+          onAction: postAccountAction,
+        },
         log: say,
       });
       campus.noteDescriptors(campusDescriptors());
@@ -1579,6 +1834,20 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       campus.boardMount.appendChild(board.root);
       renderBoardExtras(campus.footMount);
       dom.screen.appendChild(campus.root);
+      /* WARM TONIGHT'S ROOMS. The campus is up and the player is about to spend
+       * a while looking at it; the plates behind tonight's painted doors are
+       * ~1MB each and on a phone they arrive AFTER the room does, which is how
+       * a lit room ships as a black rectangle with a glowing rect in it. One
+       * `<link rel=prefetch as=image>` per painted key, lowest priority, once
+       * per boot (room.js keeps the ledger, so the rebuild on every campus
+       * visit adds nothing the second time). Unpainted keys are skipped. A
+       * desktop WebView2 window reads these off local disk, where it costs a
+       * file open that was going to happen anyway - harmless, and not worth a
+       * "which build am I" test the page has no business taking. */
+      try {
+        const warmed = prefetchRoomArt(timetable.classes.map((c) => c.gameKey));
+        if (warmed) say('prefetched ' + warmed + ' room plate(s)');
+      } catch (e) { say('room art prefetch threw: ' + ((e && e.message) || e)); }
       /* CAMPUS PRESENCE. Built AFTER the stage is in the document and started
        * only by the campus's revealDone hook. It is its own try/catch for the
        * campus's reason: a ghost layer that throws costs the player some company,
@@ -1712,17 +1981,32 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     screen = 'settings';
     clearScreen();
     renderTopbar();
+    /* The marker styles.css keys the phone's settings rules off (the opaque
+     * bottom bar, the scroller's padding, EMI stepping off the title). Not a
+     * stage: the topbar stays up. clearScreen() -> setStage(null) unwinds it. */
+    if (document.documentElement && document.documentElement.classList) {
+      document.documentElement.classList.add('arc-settings-on');
+    }
     settingsPage = createSettingsPage({
       init: src,
       bridge,
       games: games.list,
       keybinds,
+      /* The Mascot group's writer - a getter, because the controller mounts
+       * async and the page must render either way. */
+      emi: () => { try { return getEmi(); } catch (e) { return null; } },
+      // The folds bank their open state here (`optionsOpen.<section>`).
+      store,
       /* THE DOOR'S TWO WRITE VERBS, lent to the web Media group so its add
        * and remove buttons ride SORT's `probe-sub` / `library-remove` frames
        * rather than a second copy of them. The group only renders behind
        * `init.settings.mediaControls === true`, so on the app this is an
        * unread argument. */
       assets,
+      /* THE RESOLVED WORD POOL, not init.words. With the house floor under it
+       * the two can disagree, and the row that says "0 words" while the classes
+       * flash twelve is a straight lie about a layer the player cannot audit. */
+      vocab: { count: dayWords.length, source: wordSource },
       log: say,
       gameKey: gameKey || null,
       onClose: () => {
@@ -1856,7 +2140,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       for (const key of Object.keys(days)) {
         const classes = (days[key] && days[key].classes) || {};
         for (const g of Object.keys(classes)) {
-          if (String((classes[g] || {}).grade).toUpperCase() === 'S') { n++; break; }
+          /* An S+ is an S with the lever pulled, and a day the card counts. */
+          const letter = String((classes[g] || {}).grade).toUpperCase();
+          if (letter === 'S' || letter === 'S+') { n++; break; }
         }
       }
     } catch (e) { /* noop */ }
@@ -1876,6 +2162,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // place. The chip's hint has to say which, so it has to know.
       web: src.mediaControls === true,
     };
+  }
+
+  /** The frame the card wears tonight, if one was bought. Gold wins when both
+   *  are owned, because gold is the dearer of the two and nobody buys the dear
+   *  one to be shown the cheap one. */
+  function idFrame() {
+    if (ownsSku('id_frame_gold')) return 'gold';
+    if (ownsSku('id_frame_navy')) return 'navy';
+    return '';
   }
 
   /** What the card says about your ATTENDANCE. Every number is somebody else's
@@ -1997,6 +2292,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           isMobile,
           profile: idProfile,
           stats: idStats,
+          frame: idFrame,
           onChip: onIdChip,
           onRecords: () => showRecords(),
           onClose: releaseIdCard,
@@ -2031,6 +2327,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     if (!idEmiPrev) return;
     idEmiPrev = false;
     try { const emi = getEmi(); if (emi && emi.setEnabled) emi.setEnabled(true); } catch (e) { /* noop */ }
+    // EMI SEAM: she is only switched back on HERE, so this is the one edge of
+    // the spotlight she is allowed to have watched.
+    fireMoment('campus.idCardClosed', { inClass: false });
   }
 
   /** Put the card back, wherever the ask came from. True when one was up. */
@@ -2040,6 +2339,240 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     try { was = !!idSpotlight.dismiss(silent); } catch (e) { was = false; }
     releaseIdCard();
     return was;
+  }
+
+  /* ============================ THE ECONOMY =============================
+   * TWO CURRENCIES, AND THE PAGE MINTS NEITHER OF THEM. `wallet` is a
+   * HOST-OWNED meta key: the shell reads it and never writes it, the same
+   * arrangement `days`, `streak` and the punch cards have had since day one.
+   * Tickets land on a graded finish, the token lands on the first S-rank of a
+   * local day, and both of those sums are computed in C# where the page cannot
+   * reach them. Everything below is a READER.
+   *
+   * WHY THE SHELL HOLDS THESE AND NOT THE COUNTER. Two surfaces need the same
+   * numbers - the campus chip and the Prize Counter - and one of them (the
+   * campus) is under the header law and may not touch the store at all. One
+   * reader here, handed down as caps to both, is the only arrangement where the
+   * chip and the shelf can never disagree about what you are holding.
+   * ==================================================================== */
+
+  /** THE LAST THING THE HOST SAID ABOUT THE WALLET, laid over the meta snapshot
+   *  until the next `meta` frame replaces it. This is NOT an optimistic paint -
+   *  every byte of it arrived on a host frame (`payout-result`, `wallet-result`)
+   *  and the host had already banked it before it was posted. It exists because
+   *  the meta snapshot is pushed on its own schedule, and a player who watches
+   *  a token drop into the tray and then finds the campus chip still reading
+   *  yesterday's number has been told two different truths. */
+  let walletEcho = null;
+
+  /** Fold a host frame's wallet fields into the echo. Missing means unchanged. */
+  function noteWalletEcho(frame) {
+    const f = frame || {};
+    const next = walletEcho ? Object.assign({}, walletEcho) : {};
+    let moved = false;
+    if (f.wallet && typeof f.wallet === 'object') {
+      const tt = Number(f.wallet.t); const kk = Number(f.wallet.k);
+      if (Number.isFinite(tt)) { next.t = tt; moved = true; }
+      if (Number.isFinite(kk)) { next.k = kk; moved = true; }
+    }
+    if (f.inv && typeof f.inv === 'object') { next.inv = f.inv; moved = true; }
+    if (f.unlocks && typeof f.unlocks === 'object') { next.unlocks = f.unlocks; moved = true; }
+    if (moved) walletEcho = next;
+  }
+
+  /** The wallet blob, shaped. A wallet that has never been written is an empty
+   *  purse and never a throw - a player who has not finished a class yet is the
+   *  ordinary case on a first night. */
+  function walletBag() {
+    let base = {};
+    try {
+      const w = store.get('wallet');
+      if (w && typeof w === 'object') base = w;
+    } catch (e) { base = {}; }
+    return walletEcho ? Object.assign({}, base, walletEcho) : base;
+  }
+
+  /** {t, k}: what is on the player right now. */
+  function walletBalance() {
+    const w = walletBag();
+    const tt = Number(w.t); const kk = Number(w.k);
+    return { t: Number.isFinite(tt) && tt > 0 ? tt : 0, k: Number.isFinite(kk) && kk > 0 ? kk : 0 };
+  }
+
+  function walletInv() {
+    const v = walletBag().inv;
+    return (v && typeof v === 'object') ? v : {};
+  }
+
+  /** The lever's two permanent unlocks, plus anything else the host banked
+   *  there. init.economy.leverUnlocks is the projection at boot; the wallet's
+   *  own copy is what a purchase echo moves, so the wallet WINS where it says
+   *  something - a token spent on the Honors lever lights it that same second. */
+  function walletUnlocks() {
+    const boot = (src.economy && src.economy.leverUnlocks) || {};
+    const live = walletBag().unlocks;
+    const out = { extra: !!boot.extra, honors: !!boot.honors };
+    if (live && typeof live === 'object') {
+      for (const k of Object.keys(live)) out[k] = live[k] === true;
+    }
+    return out;
+  }
+
+  /** The host's catalog, exactly as init projected it. The page never prices a
+   *  row and never invents one: an empty catalog is a bare shelf, which the
+   *  counter has a sentence for. */
+  function economyCatalog() {
+    const rows = src.economy && src.economy.catalog;
+    return Array.isArray(rows) ? rows.filter((r) => r && r.sku) : [];
+  }
+
+  function catalogRow(sku) {
+    for (const r of economyCatalog()) if (r.sku === sku) return r;
+    return null;
+  }
+
+  /** How many of a consumable may be held at once. Display only - the host is
+   *  the one that refuses the third late slip, with reason "full". */
+  function stackMaxFor(sku) {
+    const row = catalogRow(sku);
+    if (!row || row.kind !== 'consumable') return 0;
+    const n = Number(row.max);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 3;
+  }
+
+  /** Tonight's hot room, or null. Seeded per UTC day in C#; the page displays. */
+  function economyPayday() {
+    const pd = src.economy && src.economy.payday;
+    if (!pd || !pd.gameKey) return null;
+    const mult = Number(pd.mult);
+    return Number.isFinite(mult) && mult > 1 ? { gameKey: String(pd.gameKey), mult } : null;
+  }
+
+  /** Does the player own a thing? Unlocks live in two places (see walletUnlocks)
+   *  and either witness counts. */
+  function ownsSku(sku) {
+    const inv = walletInv();
+    const row = inv[sku];
+    if (row === true) return true;
+    if (typeof row === 'number' && row > 0) return true;
+    if (row && typeof row === 'object') {
+      const n = Number(row.n);
+      return Number.isFinite(n) ? n > 0 : true;
+    }
+    const un = walletUnlocks();
+    if (sku === 'honors_lever') return un.honors === true;
+    if (sku === 'free_swim_key') return un.freeSwim === true;
+    return false;
+  }
+
+  /* ---------------------------- THE EXTRA CREDIT LEVER -------------------
+   * ONE pick for the night, not one per door. A player who pulls Honors at the
+   * Music Room has decided how they want to play tonight, and asking them again
+   * at the next door would be a form rather than a lever. It rides the
+   * page-owned meta key `leverPick`, so it survives a screen change and a
+   * reload; the HOST re-clamps it on every class-started anyway (an unlock the
+   * page thinks it has and the host does not simply grades as Standard).
+   * -------------------------------------------------------------------- */
+
+  /** Legal positions, worst to best. Order matters: the lever walks it. */
+  const LEVER_POSITIONS = ['standard', 'extra', 'honors'];
+
+  /** The pick, clamped to what is actually unlocked. Never returns junk. */
+  function leverPick() {
+    let want = 'standard';
+    try { want = String(store.get('leverPick') || 'standard'); } catch (e) { want = 'standard'; }
+    if (LEVER_POSITIONS.indexOf(want) < 0) return 'standard';
+    const un = walletUnlocks();
+    if (want === 'honors' && un.honors !== true) return 'standard';
+    if (want === 'extra' && un.extra !== true) return 'standard';
+    return want;
+  }
+
+  /** Set it, clamped the same way, and answer what actually stuck. */
+  function setLeverPick(pos) {
+    const want = LEVER_POSITIONS.indexOf(String(pos || '')) >= 0 ? String(pos) : 'standard';
+    const un = walletUnlocks();
+    const ok = want === 'standard'
+      || (want === 'extra' && un.extra === true)
+      || (want === 'honors' && un.honors === true);
+    const next = ok ? want : 'standard';
+    try { store.set('leverPick', next); } catch (e) { say('lever pick write failed'); }
+    return next;
+  }
+
+  /** The bag both class-start surfaces hand their lever control. Narrow caps:
+   *  the door card and the room scene draw a lever, they never read a wallet. */
+  function leverCaps() {
+    return {
+      positions: LEVER_POSITIONS.slice(),
+      get: () => leverPick(),
+      set: (pos) => setLeverPick(pos),
+      unlocks: () => walletUnlocks(),
+    };
+  }
+
+  /* ============================ SCREEN: PRIZES ==========================
+   * The counter is a page under the annex's law (shell/prizecounter.js): it
+   * takes readers and callbacks and it imports no store, no bridge and no EMI.
+   * The one thing worth reading twice is `onBuy`: it SENDS and returns. There
+   * is no optimistic paint anywhere in this screen, because the host owns every
+   * balance in it and a page that spent its own money is a page that can be
+   * lied to (trap 1, and the whole reason `wallet` is host-owned).
+   * ==================================================================== */
+
+  function showPrizes() {
+    screen = 'prizes';
+    dismissEndCard();
+    dismissPunchStage();
+    dismissAnnexStage();
+    clearScreen();
+    renderTopbar();
+    prizeRoom = createPrizeCounter({
+      mount: dom && dom.screen,
+      t,
+      log: say,
+      lite: !!src.performanceMode,
+      reduced: reducedMotion,
+      catalog: () => economyCatalog(),
+      balance: () => walletBalance(),
+      inv: () => walletInv(),
+      unlocks: () => walletUnlocks(),
+      stackMax: (sku) => stackMaxFor(sku),
+      payday: () => economyPayday(),
+      gameName,
+      /* THE PROPOSAL, and nothing else. The counter has already put the row to
+       * sleep; the host's `wallet-result` lands at onWalletResult below and
+       * settles it, or it never lands and the row wakes up unchanged. */
+      onBuy: (sku) => {
+        try { bridge.send({ type: 'prize-buy', sku: String(sku) }); }
+        catch (e) { say('prize-buy send failed: ' + ((e && e.message) || e)); }
+      },
+      onBack: () => showBoard(),
+    });
+    setStage('arc-report-on');
+  }
+
+  /**
+   * THE ECHO (host `wallet-result`). Everything a purchase changes is already
+   * in the host's meta by the time this arrives, so the counter is handed the
+   * frame and the rest of the page simply re-reads. When the counter is not up
+   * (a buy answered after the player walked out) the frame is still worth
+   * having: the lever's unlocks may have moved.
+   */
+  function onWalletResult(m) {
+    const frame = m || {};
+    noteWalletEcho(frame);
+    if (prizeRoom && typeof prizeRoom.settle === 'function') {
+      try { prizeRoom.settle(frame); }
+      catch (e) { say('wallet settle threw: ' + ((e && e.message) || e)); }
+    }
+    /* A lever position that was legal a second ago may not be any more (it can
+     * only ever have been WON here, never lost, but re-clamping is free and it
+     * is the one line that stops a stale pick outliving a wallet reset). */
+    setLeverPick(leverPick());
+    if (screen === 'board' && campus) {
+      try { campus.update(buildCampusState(), campusStats()); } catch (e) { /* noop */ }
+    }
   }
 
   /* ============================ SCREEN: RECORDS =========================
@@ -2101,8 +2634,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       daySeed: utcDateSeed,
       onCorkRead: () => { /* the read rows are the module's own; nothing owed here */ },
       // THE STOREROOM. The shell keeps the gate: the door exists only once the
-      // reveal has fired (ANNEX-OS.md §1), and the room just draws it.
-      ajar: !!store.get('annexRevealSeen'),
+      // reveal has fired (ANNEX-OS.md §1), and the room just draws it. The
+      // owner's peek is the second key to the same door and stamps nothing.
+      ajar: !!store.get('annexRevealSeen') || annexPeek,
       onBack: () => showBoard(),
       onReport: () => showReport(),
       onAnnex: () => showAnnex(),
@@ -2209,10 +2743,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
        * than anywhere else, so the room lends them its own way back: settings
        * opened from here folds into the room it left, never past it. */
       onOptions: () => showSettings(gameKey, { onClose: () => showRoomScene(gameKey, info) }),
+      /* THE WAGER, on the second surface. The room replaces the door card for
+       * every painted room, and the card is where the Extra Credit rail lives -
+       * so a painted room without this would be a room where the lever does not
+       * exist, which is nine rooms out of ten. Null when the host sent no
+       * catalog: no economy, no rail, exactly like the card. */
+      lever: economyCatalog().length ? leverCaps() : null,
     });
     if (dom && dom.screen) dom.screen.appendChild(roomPage.root);
     setStage('arc-report-on');
     if (typeof roomPage.fit === 'function') roomPage.fit();
+    // EMI SEAM: standing in the painted room, nothing armed yet. Always BEFORE
+    // classStart, which has eleven pools of its own further in.
+    fireMoment('campus.roomEntered', { gameKey, done, scheduled, inClass: false });
   }
 
   /* ============================ THE ANNEX ===============================
@@ -2224,6 +2767,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * verb the lab wave owns - which arms b27, the glitch and the wrong
    * channel without adding a word of dialogue.
    * ==================================================================== */
+  /** 'yyyy-mm-dd' as a whole day count. Calendar arithmetic only - the keys
+   *  ARE local dates (trap 8) and never go near a timezone on the way back. */
+  function annexDayNumber(key) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key || ''));
+    if (!m) return 0;
+    return Math.floor(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 86400000);
+  }
+
   function showAnnex() {
     screen = 'annex';
     dismissEndCard();
@@ -2248,6 +2799,32 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       saveAnnex: (patch) => { try { store.merge('annex', patch); } catch (e) { say('annex merge failed'); } },
       liveFile: () => subjectFile(),
       fetchStats: () => requestAnnexStats(),
+      /* THE ONE LIVE THING ON PAPER: nights attended per week for the last
+       * six weeks, oldest first, off the page's own graded `days`. A night
+       * counts once whatever it graded. No rows at all answers [] and the
+       * paper draws nothing - a strip that invents a bar is the one lie this
+       * room does not tell. */
+      attendance: () => {
+        const out = [0, 0, 0, 0, 0, 0];
+        let any = false;
+        try {
+          const today = annexDayNumber(localDate);
+          if (!today) return [];
+          const days = store.get('days') || {};
+          for (const key of Object.keys(days)) {
+            const row = days[key];
+            const classes = (row && row.classes) || null;
+            if (!classes || !Object.keys(classes).length) continue;
+            const n = annexDayNumber(key);
+            if (!n) continue;
+            const back = today - n;
+            if (back < 0 || back > 41) continue;
+            out[5 - Math.floor(back / 7)] += 1;
+            any = true;
+          }
+        } catch (e) { return []; }
+        return any ? out : [];
+      },
       onExit: () => showRecords(),
     });
     if (dom && dom.screen) dom.screen.appendChild(annexPage.root);
@@ -2653,27 +3230,44 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     /* --- the grade, as a thing --- */
     const gradeHost = el('div', 'arc-endcard-grade');
     card.appendChild(gradeHost);
-    try {
-      ceremonies.gradeObject({
-        grade: graded && graded.grade,
-        zen: !!(graded && graded.zen),
-        target: gradeHost,
-        hold: 600000,               // it is the card's subject, not a flash
-      });
-    } catch (e) { say('end card grade object failed: ' + ((e && e.message) || e)); }
+    /* W3 P0-28: THE CARD IS A SEQUENCE, NOT A FRAME. The stamp and the payoff
+     * used to land on the same tick as the card itself, so the biggest beat in
+     * the night arrived from nowhere and three sounds fought over one moment.
+     * Now: the card arrives on a whoosh, 350ms of nothing (that silence IS the
+     * anticipation), the stamp comes down, 500ms more, and the payoff pays.
+     * The timers are ceremonies' own, so a screen change sweeps them; each one
+     * still checks the card is the card it was built for, because `endCard` is
+     * assigned below and a dismiss can beat either beat to the frame.
+     * The payoff keeps its own jackpot duck - that lives in ceremonies. */
+    const mine = () => !!(endCard && endCard.root === root);
+    sfx('whoosh', 0.2);
+    ceremonies.later(() => {
+      if (!mine()) return;
+      try {
+        ceremonies.gradeObject({
+          grade: graded && graded.grade,
+          zen: !!(graded && graded.zen),
+          target: gradeHost,
+          hold: 600000,             // it is the card's subject, not a flash
+        });
+      } catch (e) { say('end card grade object failed: ' + ((e && e.message) || e)); }
+    }, 350);
 
     card.appendChild(el('h2', 'arc-h2', gameName(gameKey)));
 
     /* --- LOSSES DISGUISED: a C, or a dropped hard gate, still gets a beat --- */
-    try {
-      const kind = ceremonies.payoff({
-        grade: graded && graded.grade,
-        zen: !!(graded && graded.zen),
-        capped,
-        target: gradeHost,
-      });
-      say('end card payoff (' + gameKey + '): ' + kind);
-    } catch (e) { say('end card payoff failed: ' + ((e && e.message) || e)); }
+    ceremonies.later(() => {
+      if (!mine()) return;
+      try {
+        const kind = ceremonies.payoff({
+          grade: graded && graded.grade,
+          zen: !!(graded && graded.zen),
+          capped,
+          target: gradeHost,
+        });
+        say('end card payoff (' + gameKey + '): ' + kind);
+      } catch (e) { say('end card payoff failed: ' + ((e && e.message) || e)); }
+    }, 850);
 
     /* --- THE SUNK-COST METER --- */
     const prog = progressFor(gameKey);
@@ -2691,6 +3285,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     meter.setAttribute('aria-label', meterText);
     card.appendChild(meter);
     card.appendChild(el('p', 'arc-rake-meterlabel', meterText));
+    /* W3 P1-18: THE METER SAYS HOW CLOSE. It is the only cross-class progress
+     * the player ever sees and it painted in silence. One `streak` note, pitched
+     * by the fill, 400ms after the payoff so it is the last thing on the card
+     * rather than a fourth voice in the pile-up. Drops bus (it is progress
+     * toward a payout), and it never runs ahead of a dismiss. */
+    ceremonies.later(() => {
+      if (!mine()) return;
+      sfx('streak', 0.3, { bus: 'drops', pitch: 1 + 0.5 * (Number(prog.eased) || 0) });
+    }, 1250);
 
     /* --- THE DROP. Never on a retake (the day already paid), never endless. --- */
     const drop = isRetake ? null : rollRakeDrop(gameKey);
@@ -2708,6 +3311,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       box.appendChild(el('p', 'arc-note', t(drop.lineKey, drop.line)));
       card.appendChild(box);
       say('rake drop minted for ' + gameKey + ': ' + drop.id + ' (no XP - C# owns that)');
+      /* EMI SEAM (heartbeat wave, 2026-08-25). `rareDrop` has carried a MOMENTS
+       * row and a bark pool since the first wave and had NO caller anywhere, so
+       * the whole beat was unreachable. This is the caller. */
+      fireMoment('rareDrop', {
+        gameKey, drop: drop.id, grade: graded && graded.grade, isRetake: false, inClass: false,
+      });
     }
 
     /* --- THE BUTTONS. Order is fixed: the lit one first, then the two small
@@ -2751,6 +3360,28 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     card.appendChild(el('p', 'arc-note arc-endcard-chip',
       t('rake_retake_chip', 'Free replay. It pays nothing, and today keeps your first grade.')));
 
+    /* --- THE CARD LINE (T2 tester report, 2026-08-26: "card not updating past
+     *     1st game"). A no-op mint still gets NO CEREMONY and never will - a
+     *     beat for a hole that was not punched is the one lie this screen must
+     *     not tell - but silence was being read as a broken stamp card. So the
+     *     card keeps a slot for one quiet sentence, filled only when
+     *     `punchcard-result` comes back having minted nothing, in the same
+     *     voice as the retake chip above. A LINE, NEVER A BEAT: no sound, no
+     *     stamp, no overlay, nothing that claims a hole was punched.
+     *     It sits above the buttons so the fixed exits row never re-flows. --- */
+    let punchNote = null;
+    function setPunchNote(text) {
+      const line = String(text == null ? '' : text);
+      if (!line || !mine()) return false;
+      if (!punchNote) {
+        punchNote = el('p', 'arc-note arc-endcard-chip arc-endcard-punchnote');
+        try { card.insertBefore(punchNote, actions); }
+        catch (e) { card.appendChild(punchNote); }
+      }
+      punchNote.textContent = line;
+      return true;
+    }
+
     /** Enter = one more. Esc is NOT touched: it walks boot.js's ladder exactly
      *  as it did before this card existed. */
     function onKey(e) {
@@ -2772,6 +3403,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     function doRetake() {
       if (taken) return;
       taken = true;
+      fireMoment('campus.endCardRetake', { gameKey, grade: graded && graded.grade });  // EMI SEAM
       dismissEndCard();
       // A free swim never reaches this card, so this is always a real class.
       try { startClass(cls); }
@@ -2785,6 +3417,8 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     endCard = {
       root,
       gameKey,
+      /** The card's one quiet slot - see THE CARD LINE above. */
+      setPunchNote,
       destroy() {
         if (typeof window !== 'undefined' && window.removeEventListener) {
           window.removeEventListener('keydown', onKey);
@@ -3090,6 +3724,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     };
   }
 
+  /** Which rooms have already rung tonight (W3 P1-18). A first sitting rings;
+   *  a retake of the same room does not ring twice. */
+  const classBellRung = new Set();
+
   /**
    * @param {Object} cls   a timetable class (or the synthetic one freeSwimClass
    *   builds for a room that is not on tonight's board)
@@ -3111,6 +3749,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (vn && vn.gateClass({ gameKey: cls.gameKey, homeroom: !!cls.homeroom },
         () => startClass(cls, opts))) return;
     } catch (e) { say('first bell walk skipped (' + ((e && e.message) || e) + ')'); }
+    /* W3 P1-18: CLASS BEGINS. A school rings a bell when a lesson starts and
+     * this one never did. BELOW the VN gate on purpose - while the first-bell
+     * walk owns the beat the school stays quiet and lets it - and once per
+     * room per night, so a retake does not re-ring what already rang. Lighter
+     * and higher than the night's own first bell at maybeFirstBell. */
+    if (cls && cls.gameKey && !classBellRung.has(cls.gameKey)) {
+      classBellRung.add(cls.gameKey);
+      sfx('bell', 0.3, { pitch: 1.15 });
+    }
     dismissEndCard();
     dismissPunchStage();
     dismissAnnexStage();
@@ -3168,17 +3815,33 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * engine asks per wash, and a fresh answer every time would swap the image
      * mid-fade. Never awaited, never preloaded here - the browser fetches it
      * when the first spiral wash actually mounts, and the CSS conic gradient
-     * is still the fallback if it 404s. */
-    const classSpiral = pickSpiralUrl(seed, src.settings);
+     * is still the fallback if it 404s.
+     * SINCE 2026-08-25 the pick is WOVEN first: pickClassLoom answers the
+     * params wrapper (or a saved user-loom gif url), and only a dead generator
+     * falls back to the old gif pick - see the contract block above. */
+    const classSpiral = pickClassLoom(seed, src.settings, loomSeed)
+      || pickSpiralUrl(seed, src.settings);
     /* THIS ROOM'S CAMERA, for the class-side kit's Resume Slate (`FEED 05 - SYNC`
      * in The Deep End). The DIRECTOR owns the Annex map, so it resolves the tag
      * and the shell keeps no second copy of a table it does not own. */
     const seepFeedTag = seep ? seep.feedTag(cls.gameKey) : '';
     /* The whole pool, frozen, for a class that needs to OFFER spirals rather
      * than only wear one (Instant Recall's SPIRAL question). Same rows, same
-     * order, same weights the pick walks - see spiralPoolRows. */
+     * order, same weights the pick walks - see spiralPoolRows.
+     * PLUS the woven row (2026-08-25): when the class spiral is a generated
+     * loom, its wrapper rides the pool tail as {loom:true, id, params, href,
+     * weight} - deliberately with NO `url` key, so a consumer that normalises
+     * rows to string urls (Instant Recall's rowsOf today) skips it cleanly
+     * instead of trying to paint 'loom:...' as an image. A loom-aware consumer
+     * reads `row.loom` and takes id/params/href whole. */
     const spiralPool = Object.freeze(spiralPoolRows(src.settings)
-      .map((r) => Object.freeze({ url: r.url, weight: r.weight })));
+      .map((r) => Object.freeze({ url: r.url, weight: r.weight }))
+      .concat((classSpiral && typeof classSpiral === 'object' && classSpiral.loom === true)
+        ? [Object.freeze({
+          loom: true, id: classSpiral.id, params: classSpiral.params,
+          href: classSpiral.href, weight: LOOM_GEN_WEIGHT,
+        })]
+        : []));
     let engine;
     try {
       engine = createEngine({
@@ -3190,6 +3853,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         // The DAY pool, not init.words: a word absorbed by an earlier class this
         // session is in here (ctx.absorb), and createEngine copies at construction.
         words: dayWords.slice(),
+        // ...and which of those words the school can SAY. Empty on a day the
+        // whisper mute is on, so `voice:true` in a class is inert by itself.
+        wordAudio: dayWordAudio,
         assets,
         motionLevel: src.motionLevel == null ? 2 : src.motionLevel,
         reducedMotion,
@@ -3223,7 +3889,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     const keys = keybinds.runtime(cls.gameKey, window);
     const peek = createPeek({ log: say });
     const classCeremonies = createCeremonies({
-      engine, layer: (dom && dom.ceremony) || null, reducedMotion, log: say,
+      engine, layer: (dom && dom.ceremony) || null, reducedMotion,
+      confetti: () => ownsSku('confetti_stamp'),
+      log: say,
     });
 
     /* --- per-game settings view (never a global) --- */
@@ -3243,18 +3911,45 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     let ended = false;
 
     /* ---- ctx.mood (EMI COLOR, 2026-08-24): THE TENSION MIRROR ------------
-     * A game may TELL the mascot how the room feels; it may not make her talk.
-     * `tense`/`clutch` reach only the wordless MOMENTS table (no pool exists on
-     * either name, by design - mid-class speech stays barred), `stumble` fires
-     * the small 'miss' face whose pool always said "one wrong answer, one
-     * dropped tile" and finally means it (its own maxPerClass:1 still rations
-     * the words), and `runLost` is the mid-class K.O. All throttled HERE so no
-     * game can flood her: tense latches until calm, everything shares a 15s
-     * spacing, stumbles cap at 3 a class, the K.O. spends once. Opt-in per
-     * game; a class that never calls it plays exactly as before. */
+     * A game may TELL the mascot how the room feels. `tense`/`clutch` are the
+     * two big ones and are still mostly wordless, `stumble` fires the small
+     * 'miss' face whose pool always said "one wrong answer, one dropped tile"
+     * and finally means it (its own maxPerClass:1 still rations the words), and
+     * `runLost` is the mid-class K.O. All throttled HERE so no game can flood
+     * her: tense latches until calm, everything shares a 15s spacing, stumbles
+     * cap at 3 a class, the K.O. spends once. Opt-in per game; a class that
+     * never calls it plays exactly as before.
+     *
+     * THE 2026-08-25 HEARTBEAT WAVE ADDED THE OTHER TWO VERBS, and reversed one
+     * rule while it was there. "Mid-class speech is barred" is gone - the owner
+     * wants her commenting during a class - so a pool on `tense`/`clutch` is
+     * legal now and voice.js rations mid-class WORDS on its own (a 20s floor, a
+     * per-class ceiling, and the danger gate below).
+     *
+     *   note(id, extra)  the ordinary road for class commentary. Fires the
+     *                    moment `game:<id>`; moments.js answers EVERY note with
+     *                    a face keyed off `extra.kind` and the voice decides
+     *                    separately whether it also earns a line. The throttles
+     *                    here are a FLOOD GUARD, not a ration - the voice does
+     *                    the rationing, and a game must never build its own.
+     *   hold(on)         THE DANGER GATE. A timing-critical window (a go/no-go,
+     *                    a playback, a shuffle) where a sentence would actually
+     *                    cost the player the round. While held she may not spend
+     *                    WORDS on class commentary; faces still land, because a
+     *                    one-second face on her own glass is the mirror working.
+     *                    It auto-releases when the class ends, so a game that
+     *                    throws mid-window cannot mute her for the sitting. */
     const mood = (() => {
       let tenseLatch = false, stumbles = 0, lastAt = 0, koSpent = false;
       const MOOD_SPACING_MS = 15000;
+      /* THE NOTE THROTTLES, and they are deliberately NOT the 15s spacing
+       * above: a note is a small true thing about the board and there are many
+       * of them, where a `tense` is a whole change of weather. */
+      const NOTE_SPACING_MS = 2500;    // between any two notes
+      const NOTE_SAME_MS = 6000;       // between two notes of the SAME id
+      const NOTE_CAP = 40;             // per class - a flood guard, nothing more
+      let notes = 0, lastNoteAt = 0, held = false;
+      const noteAt = Object.create(null);
       const fire = (name, extra) => {
         try { fireMoment(name, Object.assign({ gameKey: cls.gameKey, midClass: true }, extra || {})); }
         catch (e) { /* a mascot may never break a class */ }
@@ -3277,6 +3972,33 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           stumbles += 1; lastAt = now; fire('miss');
         },
         runLost() { if (koSpent) return; koSpent = true; fire('runLost'); },
+        /**
+         * ONE THING THAT JUST HAPPENED ON THE BOARD.
+         * @param {string} id     stable, dotted, the game's own namespace
+         *                        ('lf.tile.repeat'). It IS the pool key
+         *                        (`game:lf.tile.repeat`) and the bark data
+         *                        hangs off it, so renaming one orphans a pool.
+         * @param {Object=} extra `kind` picks the face (celebrate, commiserate,
+         *                        tease, tension, curiosity, ambient) and the
+         *                        payload tokens {n} {tile} {word} {left}
+         *                        {streak} {grade} are read off it by voice.js.
+         */
+        note(id, extra) {
+          if (typeof id !== 'string' || !id) return;
+          if (notes >= NOTE_CAP) return;
+          const now = Date.now();
+          if (now - lastNoteAt < NOTE_SPACING_MS) return;
+          if (now - (noteAt[id] || 0) < NOTE_SAME_MS) return;
+          notes += 1; lastNoteAt = now; noteAt[id] = now;
+          fire('game:' + id, extra);
+        },
+        /** The danger gate. Edge-triggered: a game may call it every frame. */
+        hold(on) {
+          const next = on !== false;
+          if (next === held) return;
+          held = next;
+          fire('moodHold', { on: next });
+        },
       });
     })();
 
@@ -3323,9 +4045,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       sessionWords,
       // The phrases WITH their whisper clips (frozen rows; see dayTriggers).
       triggers: dayTriggers.slice(),
-      // The class's spiral POOL (frozen `{url, weight}` rows) beside the one
+      // The class's spiral POOL (frozen `{url, weight}` rows, plus at most one
+      // `{loom:true, id, params, href, weight}` woven row) beside the one
       // spiral the engine wears. A class that never reads it is unaffected.
       spiralPool,
+      /* THE CLASS SPIRAL ITSELF, opaque (2026-08-25): the exact value the
+       * engine's spiralUrl() provider answers - a url string, or the loom
+       * wrapper {loom:true, id, params, href}. For a game that paints a STATIC
+       * image of it (The Deep End's pin), `classSpiral.href || classSpiral` is
+       * always a paintable url. Pass it to sustain('wash', {url}) whole -
+       * never stringify the wrapper. Additive; nothing that ignores it moves. */
+      classSpiral,
 
       /* ---- THE EXITS (shell/exits.js) ------------------------------------
        * A shell PRIMITIVE, like peek and ceremonies: a class never mints its
@@ -3400,9 +4130,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // not know, so `endless` is free to carry: a free swim opens the same
     // bracket and closes it with `class-left` from teardownClass (never with
     // `class-ended`, which is what would credit attendance and pay XP).
+    /* THE LEVER RIDES THE OPENING BRACKET AND NOWHERE ELSE. It is a PROPOSAL:
+     * the host clamps it against the unlocks it holds, stores the clamped value
+     * as this game's pending lever, and applies the multiplier itself at
+     * class-ended. The page never echoes a multiplier back and never sees one -
+     * which is also why a free swim carries the lever and is paid nothing for
+     * it (an endless run ends with `class-left`, and no bracket closes). */
+    activeLever = leverPick();
     bridge.send(endless
-      ? { type: 'class-started', gameKey: cls.gameKey, gradeTier, endless: true }
-      : { type: 'class-started', gameKey: cls.gameKey, gradeTier });
+      ? { type: 'class-started', gameKey: cls.gameKey, gradeTier, endless: true, lever: activeLever }
+      : { type: 'class-started', gameKey: cls.gameKey, gradeTier, lever: activeLever });
 
     /* THE GAME STARTS HERE, AND NOT BEFORE. Everything above is the stage; this
      * is the class. Enrollment (below) delays it by a few cards on a first run
@@ -3519,11 +4256,33 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     if (!entry || !entry.ok) return null;
     const m = entry.mod && entry.mod.manifest;
     const e = m && m.endless;
-    if (!e || typeof e !== 'object') return null;
+    if (!e || typeof e !== 'object') {
+      /* THE FREE SWIM KEY (Prize Counter, 1 token). It does not unlock a room
+       * and it does not unlock a grade: it opens the UNGRADED door on a class
+       * you are enrolled in but whose game never declared one. Enrollment is
+       * the floor on purpose - the key is a way to practise a room you already
+       * go to, never a way to walk into one you have not been let into. Every
+       * downstream reader (the door card's second button, the room scene's
+       * furniture, startFreeSwim's own re-check) rides this one function, so
+       * the key lights all three surfaces at once and none of them had to hear
+       * about it. */
+      if (ownsSku('free_swim_key') && isEnrolled(gameKey)) {
+        return { labelKey: 'free_swim', hintKey: 'free_swim_key_hint' };
+      }
+      return null;
+    }
     return {
       labelKey: typeof e.label_key === 'string' ? e.label_key : '',
       hintKey: typeof e.hint_key === 'string' ? e.hint_key : '',
     };
+  }
+
+  /** Has this room's card ever been opened? The key's floor. */
+  function isEnrolled(gameKey) {
+    try {
+      const card = store.punchCard(gameKey) || {};
+      return typeof card.enrolledAt === 'string' && !!card.enrolledAt;
+    } catch (e) { return false; }
   }
 
   /** gameKey -> endless declaration, for every game that has one. */
@@ -3627,6 +4386,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       hardGates: r.hardGates,
       zen: !!r.zen,
       assists,
+      /* THE HONORS INPUT, and it is exactly one boolean. The rubric does the
+       * rest (core/grades.js): honors plus a composite at or above 0.97 is the
+       * only road to S+, and every cap still bites it the way it bites an S. */
+      honors: activeLever === 'honors',
     };
     const graded = gradeClass(input);
     // The A-caps the rubric RAISED, whether or not they moved the letter. The
@@ -3684,7 +4447,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     /* ASKS: `newBest` is impulse-control's, reported additively on its own
      * endClass frame (trap 54's spirit), and it is what a11's dare resolves
      * against. Every other class simply never carries it. */
-    const endMoment = /^[sab]$/i.test(String(graded.grade)) || graded.grade === 'pass' ? 'win' : 'fail';
+    /* S+ IS A WIN AND THE REGEX DID NOT KNOW IT. `/^[sab]$/` matched exactly one
+     * letter, so the best result in the school would have fired EMI's FAIL pool
+     * - the honours run gets the rage chain. `isSPlus` is the additive answer
+     * and every other branch here is byte-for-byte what it was. */
+    const endMoment = isSPlus(graded.grade) || /^[sab]$/i.test(String(graded.grade))
+      || graded.grade === 'pass' ? 'win' : 'fail';
     const endPayload = {
       grade: graded.grade, streak: store.streak().count,
       gameKey: cls.gameKey, perfect: allDone(),
@@ -3839,6 +4607,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       catch (e) { say('game pause/resume threw: ' + ((e && e.message) || e)); }
       try { active.peek.forceHide(); } catch (e) { /* noop */ }
       if (!active.pauseEl) {
+        /* W3 P0-27: THE FREEZE HAS A SOUND NOW. Every road into a pause - the
+         * card, the settings screen, applySuspend(true) - lands here, and until
+         * now the loudest thing in the school went silent with no cue at all.
+         * A low thud and a short duck: the room stops. Inside the card-build
+         * guard, so a second pause on an already-paused class is silent, which
+         * is what keeps this the strict inverse of the lift below. */
+        sfx('thud', 0.3, { pitch: 0.85, duck: { target: 'spotlight', mult: 0.2, ms: 400 } });
         const overlay = el('div', 'arc-suspended');
         overlay.appendChild(el('h2', 'arc-h2', 'Paused'));
         const bar = el('div', 'arc-classbar');
@@ -3883,6 +4658,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
        * graded time, and a tell may never cost a timing window. */
       if (active.pauseEl) {
         active.pauseEl.remove();
+        // W3 P0-27: the inverse, on the removal line itself - the card goes and
+        // the room comes back up. No duck: this one is the un-ducking.
+        sfx('lift', 0.28);
         active.pauseEl = null;
       }
       const cls0 = active;
@@ -3989,6 +4767,37 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     document.addEventListener('pointermove', onExitAim, { passive: true });
   }
 
+  /* WEB TAB SUSPEND (perf/arcademy-mobile-web). On the desktop host the bridge
+   * drives applySuspend (onSuspend below); in a browser nothing ever did, so a
+   * backgrounded tab kept every loop warm. Wired ONLY when the host is not the
+   * desktop (init.platform.host), and with its own reason string so it can
+   * never be confused with - or lift - a suspend the host initiated:
+   * - hidden: refuse while ANY suspend already holds the level (trap 28: it is
+   *   a LEVEL, and whoever set it owns it), and refuse while an Orientation
+   *   Day beat is on stage - applySuspend(true) SKIPS a running beat and banks
+   *   it as seen, which must not be spent on a mere tab switch (background
+   *   throttling stills the beat anyway; the same shape as orientFreeze's
+   *   both-direction guard).
+   * - visible: lift ONLY a 'tabhidden' suspend this listener applied itself.
+   *   A mid-class return lands on the pause card with its Resume button -
+   *   applySuspend(false) deliberately leaves the class paused. */
+  const platformHost = String((src.platform && src.platform.host) || 'desktop');
+  function onTabVisibility() {
+    try {
+      if (document.visibilityState === 'hidden') {
+        if (suspendedGlobally) return;
+        try { if (orientation && orientation.active()) return; } catch (e) { /* noop */ }
+        applySuspend(true, 'tabhidden');
+      } else if (suspendedGlobally && suspendReason === 'tabhidden') {
+        applySuspend(false, 'tabhidden');
+      }
+    } catch (e) { say('tab suspend threw: ' + ((e && e.message) || e)); }
+  }
+  if (platformHost !== 'desktop'
+      && typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('visibilitychange', onTabVisibility);
+  }
+
   /* ASKS: a01's YES buys a SOFT night - comfort faces on arrival and one extra
    * line on the report card. The flag lives in the ask engine (it is
    * session-only and it is hers); this is the shell's read of it, and a page
@@ -4008,6 +4817,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    */
   function applySuspend(on, reason) {
     suspendedGlobally = !!on;
+    suspendReason = on ? (reason || '') : null;
     fireMoment(on ? 'suspend' : 'resume', { reason });   // EMI SEAM
     // NO GHOSTS UNDER A MANDATORY VIDEO. The layer rides the same one funnel the
     // pause card does, and it is a LEVEL (trap 28), so both edges are written.
@@ -4043,7 +4853,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         pauseClass(true);
         showSuspendedOverlay(reason === 'audio-only'
           ? 'An audio-only session started. Your attendance is safe.'
-          : reason === 'panic' ? 'Stopped. Press the panic key again to leave.' : 'Paused for a video.',
+          : reason === 'panic' ? 'Stopped. Press the panic key again to leave.'
+            /* 'tabhidden' is the web wiring's own reason - the desktop host
+             * never sends it, so its three lines above are byte-identical. */
+            : reason === 'tabhidden' ? 'Paused while you were away.'
+              : 'Paused for a video.',
           { resumable: reason === 'panic' });
       } else {
         if (active.suspendEl) {
@@ -4138,6 +4952,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (src.settings && typeof src.settings === 'object' && !isGlobalSettingKey(m.key)) {
         src.settings[m.key] = m.value;
       }
+      if (m.key === 'motionLevel') applyMotionLevel(m.value);
       if (settingsPage) { settingsPage.noteEcho(m.key, m.value); settingsPage.applyEcho(m.key, m.value); }
       if (m.key === SETTING_KEYS.keybinds) keybinds.applyEcho(m.value);
       /* THE PHOTO CHIP IS THE `presenceShare` DISCORD RUNG (owner ruling 1), so
@@ -4182,6 +4997,24 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       clearIdLinkTimer();
       idChipWait = null;
       paintIdProfile();
+      /* THE ACCOUNT CHIP rides the same frame (a late fetch, a name that
+       * landed after init). Additive: a frame without `account` changes
+       * nothing, and a desktop host never sends one. */
+      const acct = readAccount(m && m.account);
+      if (acct) {
+        const first = !account;
+        account = acct;
+        // A chip that never existed (init shipped without `account`) is minted
+        // now; one that did repaints in place.
+        // Only a bar that is UP is re-rendered here: a hidden one (campus, class)
+        // is the next renderTopbar's job, and un-hiding it mid-class would be a
+        // regression of its own.
+        try {
+          if (topAccountChip) topAccountChip.setAccount(acct);
+          else if (first && dom && dom.topbar && !dom.topbar.hidden) renderTopbar();
+        } catch (e) { /* noop */ }
+        try { if (campus && campus.setAccount) campus.setAccount(acct); } catch (e) { /* noop */ }
+      }
       const result = m && typeof m.result === 'string' ? m.result : null;
       if (result === 'linked') {
         runIdPhotoDay();
@@ -4197,17 +5030,53 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         + ': ' + (profile.discordLinked ? 'linked' : 'not linked') + ', ' + profile.presenceShare);
     },
 
-    /** {type:'payout-result'} - the ONLY source of an XP number on this page. */
+    /** {type:'payout-result'} - the ONLY source of an XP number on this page,
+     *  and since the economy wave the only source of a TICKET number too. */
     onPayout(m) {
       if (!m || !m.gameKey) return;
       const r = results[m.gameKey];
       if (r) { r.xp = m.xp; r.levelUp = !!m.levelUp; }
       // The same frame carries the host's authoritative attendance figures.
       try { store.applyPayout(m); } catch (e) { say('applyPayout: ' + ((e && e.message) || e)); }
+      /* THE PAYDAY. Tickets and the token are minted in C# and simply reported
+       * here; the report card draws the beat. Stashing it on the result row is
+       * what lets showReport() repaint the same card without re-firing the
+       * ceremony (the card's own `arrived` gate does the rest). */
+      noteWalletEcho(m);
+      /* AND THE CHIP MOVES WITH IT. A payout normally lands while the report is
+       * up, but an end-run that dropped the player straight back on the board
+       * would otherwise leave the purse reading the number it had before the
+       * class - the same silent repaint `wallet-result` takes. */
+      if (screen === 'board' && campus) {
+        try { campus.update(buildCampusState(), campusStats()); } catch (e) { /* noop */ }
+      }
+      if (r) {
+        const tk = Math.max(0, Math.round(Number(m.tickets) || 0));
+        if (tk > 0 || m.tokenMinted === true) {
+          r.payout = {
+            tickets: tk,
+            base: Math.max(0, Math.round(Number(m.ticketBase) || 0)),
+            mult: Number(m.ticketMult) || 1,
+            token: m.tokenMinted === true,
+            balance: walletBalance(),
+          };
+        }
+      }
+      /* THE LATE SLIP. The host consumed one inside the attendance path, which
+       * is the one purchase a player never sees happen - so it is the one that
+       * has to be said out loud. */
+      if (m.lateSlipUsed === true) {
+        try { shout(t('late_slip_used', 'A late slip covered you. Your streak never noticed.')); }
+        catch (e) { /* a toast may never hold a door */ }
+      }
       if (m.levelUp) shout('Level up');
       renderTopbar();
       if (screen === 'report') showReport();
     },
+
+    /** {type:'wallet-result'} - the answer to a `prize-buy`, and the ONLY thing
+     *  on this page allowed to move a balance, a badge or a lever unlock. */
+    onWalletResult(m) { onWalletResult(m); },
 
     /**
      * {type:'punchcard-result'} - the host's same-frame truth about a card
@@ -4248,10 +5117,31 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (m.reason !== 'daily') return;
       disarmPunch();
       // A NO-OP MINT GETS NO CEREMONY. Same local day twice, a full card, a
-      // class the host declined to stamp: nothing was punched, so nothing is
-      // shown. A card beat for a hole that did not happen is the one lie this
+      // class the host declined to stamp: nothing was punched, so no beat is
+      // played. A card beat for a hole that did not happen is the one lie this
       // screen must never tell.
-      if (!m.minted || !norm) return;
+      //
+      // IT DOES GET A LINE, THOUGH (T2 tester report, 2026-08-26: "card not
+      // updating past 1st game"). No ceremony read to the tester as no card, so
+      // the end card says WHY in one quiet sentence - a full card gets the
+      // unlock line it earned, everything else the come-back-tomorrow one. The
+      // frame carries the post-mint card, so the shell is reading the host's
+      // own truth here and still counting nothing of its own.
+      if (!m.minted) {
+        if (endCard && endCard.gameKey === m.gameKey && endCard.setPunchNote) {
+          // The frame names its own cap; `store.holes` is the parachute.
+          const cap = Math.round(Number(m.holes) || Number(store.holes) || 10);
+          const full = !!(norm && (norm.complete || Number(norm.punches) >= cap));
+          try {
+            endCard.setPunchNote(full
+              ? t('punchcard_unlocked_line',
+                'This room is now open even when the course is not in session.')
+              : t('punchcard_next_hole', 'Come back tomorrow for the next stamp.'));
+          } catch (e) { say('punch note failed: ' + ((e && e.message) || e)); }
+        }
+        return;
+      }
+      if (!norm) return;
       try {
         runPunchCeremony({
           gameKey: m.gameKey,
@@ -4298,7 +5188,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     onSuspend(m) { applySuspend(!!(m && m.on), m && m.reason); },
 
     /** {type:'meta'} is consumed by the store; this just repaints the chrome. */
-    onMeta() { renderTopbar(); if (screen === 'board') showBoard({ silent: true }); },
+    /* A fresh meta snapshot IS the wallet now, so the frame-by-frame echo laid
+     * over it has done its job and is dropped - two truths about one purse is
+     * one truth too many. */
+    onMeta() {
+      walletEcho = null;
+      renderTopbar();
+      if (screen === 'board') showBoard({ silent: true });
+      if (prizeRoom && typeof prizeRoom.refresh === 'function') {
+        try { prizeRoom.refresh(); } catch (e) { /* noop */ }
+      }
+    },
 
     /**
      * One rung of the Esc ladder. Returns true when the shell consumed it, so
@@ -4399,6 +5299,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // A ROOM SCENE is a screen like records: Esc walks back to campus. Its
       // hotspots are buttons, not modals - the room owns no inner rungs.
       if (screen === 'room') { showBoard(); return true; }
+      // THE PRIZE COUNTER is a flat screen like settings: one rung, straight out
+      // to the quad. It owns no modal and no close-up, and a buy that is still
+      // in the air is not a rung either - the frame that answers it lands on a
+      // room that has gone, which is exactly what onWalletResult is written to
+      // survive (the counter is null by then and only the lever re-clamps).
+      if (screen === 'prizes') { showBoard(); return true; }
       // THE ANNEX folds inward-out (trap 48's shape, one ladder both sides of
       // the seam): the lab's own rungs first - paper down, OS window shut,
       // laptop closed, close-up stepped back - then the stairs walk home to
@@ -4475,9 +5381,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         annexStatsWait = null;
       }
       setStage(null);
-      /* ASKS: the exit-aim listener is the shell's, so the shell takes it. */
+      /* ASKS: the exit-aim listener is the shell's, so the shell takes it.
+       * The web tab-suspend listener is the shell's too (a no-op remove on the
+       * desktop host, where it was never added). */
       if (typeof document !== 'undefined' && document.removeEventListener) {
         try { document.removeEventListener('pointermove', onExitAim); } catch (e) { /* noop */ }
+        try { document.removeEventListener('visibilitychange', onTabVisibility); } catch (e) { /* noop */ }
       }
       if (orientation) { const ob = orientation; orientation = null; try { ob.destroy(); } catch (e) { /* noop */ } }
       if (ghosts) { try { ghosts.destroy(); } catch (e) { /* noop */ } ghosts = null; }
@@ -4509,7 +5418,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * draws through the provider the same way a class does (the host fetches,
      * the page never does) and falls back to `init.settings.localAssets`. Both
      * are optional to her - absent means the channel is absent. */
-    if (emiLayer) mountEmi({ layer: emiLayer, store, toast: shout, log: say, assets, settings: src.settings });
+    /* `strings` is the ONE lexicon row EMI renders (the ask strip's Send
+     * button). Resolved HERE because this side of the page has `t` and she has
+     * never imported the lexicon - the same seam orientation.js uses for her
+     * three opening lines. */
+    if (emiLayer) {
+      mountEmi({
+        layer: emiLayer, store, toast: shout, log: say, assets, settings: src.settings,
+        strings: { askSend: t('emi_ask_send', 'send') },
+      });
+    }
   } catch (e) { say('EMI failed to mount (the shell is unaffected): ' + ((e && e.message) || e)); }
 
   /* FIRST BELL. Built here, BEFORE the first showBoard(), for the same reason

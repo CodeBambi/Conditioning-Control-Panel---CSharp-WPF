@@ -89,12 +89,34 @@ const GAME_KEY = 'anomaly';
 const VIDEO_URL_RE = /\.(mp4|webm|m4v)(\?|#|$)/i;
 const isVideoUrl = (url) => VIDEO_URL_RE.test(String(url || ''));
 
+/** The provider's bundled glyph-floor svg (the L&F redress law, ported). */
+const PLACEHOLDER_RE = /\/ae-ph-\d+\.svg(\?|#|$)/i;
+const wearsPlaceholder = (url) => !url || PLACEHOLDER_RE.test(String(url));
+
+/** A cross-origin http(s) url - the only kind worth waiting on the provider's
+ *  warm rail for; local/same-origin urls paint instantly and gate on nothing
+ *  (pool.ready answers those true at once anyway). */
+function isRemoteUrl(url) {
+  const s = String(url || '');
+  if (!/^https?:\/\//i.test(s)) return false;
+  try {
+    if (typeof location !== 'undefined' && location.origin
+      && s.indexOf(location.origin + '/') === 0) return false;
+  } catch (e) { /* ignore */ }
+  return true;
+}
+
 /** How many draws to spend looking for a tile-able url before giving up on
  *  media entirely (a video-only pool on a 5x5 grid = plain faces, not 25
  *  <video> elements - the L&F 30Hz lock). */
 const MEDIA_TRIES = 5;
 /** A round shorter than this cannot be offered before the bell. */
 const MIN_ROUND_MS = 2600;
+/** The longest a round's deal may hold the verdict beat waiting for the
+ *  provider's warm rail to land the dealt url (0825 media-warming). */
+const READY_GATE_MS = 900;
+/** W3 P0-2: the widest a round countdown may be heard, in ms. */
+const COUNTDOWN_MS = 3000;
 /** The shared ticker. */
 const TICK_MS = 110;
 
@@ -203,6 +225,17 @@ export default {
     };
     const say = (m) => { try { ctx.log('[an] ' + m); } catch (e) { /* noop */ } };
 
+    /* EMI COMMENTARY SEAMS (the heartbeat wave). note() names a moment the
+     * mascot may react to - the shell prefixes 'game:' and its own voice engine
+     * decides whether the moment is worth a face, a line or nothing at all.
+     * Additive, one-way and fully guarded: an older shell has none of it, and a
+     * mascot may never break a class. Anomaly takes no hold() window - the find
+     * advance is contract-protected dead-air-free space, not a fenced one. */
+    const note = (id, extra) => {
+      try { if (ctx.mood && typeof ctx.mood.note === 'function') ctx.mood.note(id, extra); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+
     /* ---- lifecycle flags ------------------------------------------------ */
     let dead = false;
     let paused = false;
@@ -218,6 +251,11 @@ export default {
     let plan = null;
     let reduced = false;
     let coarse = false;
+    /* Does this class have a LOOP LANE at all? Set once, in claimAssets(), from
+     * the same facts dealUrl's `videoOk` runs on (they cannot change mid-class)
+     * plus whether the library holds local loops. False = the class claims no
+     * loops and dealUrl never draws one; see claimAssets for the why. */
+    let loopLane = true;
     let retake = false;
     let budgetMs = 300000;
     let pool = null;
@@ -252,6 +290,8 @@ export default {
     let stallMs = 0;                       // ms since the player's last tap
     let stallSinceReport = 0;              // accumulator for the ~500ms report
     let lifetimeBefore = 0;
+    let emiBigGridSeen = false;            // an.bigGrid is a once-per-class seam
+    let emiRefusedTaps = 0;                // refusals that survived the bump throttle
     const findTimes = [];
     const recoveryTimes = [];
     const kindsSeen = new Map();           // kind -> {offered, cleared}
@@ -395,6 +435,8 @@ export default {
       if (now - lastBumpAt < REFUSE_GAP_MS) return;
       lastBumpAt = now;
       cue('bump', 0.15);   /* owner 2026-08-24: error cues -50% */
+      emiRefusedTaps += 1;
+      note('an.refusedTap', { kind: 'tease', n: emiRefusedTaps });
     }
 
     /* ---- the decks, null-safe ------------------------------------------- */
@@ -502,10 +544,37 @@ export default {
     /* ==================================================================== *
      * MEDIA - one url, every tile. mediaEl semantics, copied not imported.
      * ==================================================================== */
+    /** THE DEAD URL (0826). A url that 404s paints the browser's own broken-image
+     *  glyph into all n^2 tiles - a tester saw exactly that. This class already
+     *  has a floor for "no media": PLAIN faces, which every dealable kind still
+     *  works on (the delta is CSS on .g-an-face, never on the media node), so a
+     *  failure just walks back to it and asks the pool for another url. Convicted
+     *  ONCE per url: every tile wears the same src, so n^2 error events arrive for
+     *  one dead row. pool.markBroken keeps it out of the next draw. */
+    const brokeUrls = new Set();
+    function mediaBroke(url) {
+      const u = String(url || '');
+      if (dead || ended || !u || u !== lastUrl || brokeUrls.has(u)) return;
+      brokeUrls.add(u);
+      try { if (pool && typeof pool.markBroken === 'function') pool.markBroken(u); }
+      catch (e) { /* an optional seam never breaks a class */ }
+      say('media failed, back to plain faces: ' + u);
+      run(() => {
+        paintGrid('');
+        if (cur && !cur.done) applyFace(cur.oddIndex);
+        redress();                     /* the pool skips the url we just convicted */
+      });
+    }
+    /** Rebound on every repaint: a recycled node carries the OLD url's closure. */
+    function bindMediaError(node, url) {
+      try { node.onerror = () => mediaBroke(url); } catch (e) { /* ignore */ }
+    }
+
     function makeMedia(url) {
       const video = isVideoUrl(url);
       const node = document.createElement(video ? 'video' : 'img');
       node.className = 'g-an-media';
+      bindMediaError(node, url);
       if (video) {
         try {
           node.muted = true; node.loop = true; node.autoplay = true; node.playsInline = true;
@@ -535,8 +604,17 @@ export default {
       const videoOk = n <= PLAYTEST.VIDEO_GRID_MAX && !reduced && !coarse && motionLevelOf(ctx) > 1;
       let firstVideo = null;
       for (let k = 0; k < MEDIA_TRIES; k++) {
+        const kind = reduced || k >= 3 ? 'still' : 'loop';
+        /* NO LOOP LANE (0825 touch, widened 0826): when the class claims no
+         * loops (see claimAssets) the loop pool is the placeholder floor, so a
+         * loop draw here would either burn provider rng forecasting mp4s the
+         * grid cannot wear or - worse - hand back a bundled SVG and paint the
+         * whole board with it. Skipped WITHOUT drawing. This moves which
+         * emissions such a class consumes vs old builds; a class that KEEPS
+         * its loop lane draws exactly as before. */
+        if (!loopLane && kind === 'loop') continue;
         let a = null;
-        try { a = pool.next(reduced || k >= 3 ? 'still' : 'loop'); } catch (e) { a = null; }
+        try { a = pool.next(kind); } catch (e) { a = null; }
         const url = a && a.url ? String(a.url) : '';
         if (!url) continue;
         if (isVideoUrl(url)) {
@@ -566,6 +644,7 @@ export default {
         }
         if (existing && existing.tagName === (want === 'video' ? 'VIDEO' : 'IMG')) {
           try {
+            bindMediaError(existing, url);
             existing.src = url;
             if (want === 'video') {
               existing.playbackRate = 1;
@@ -643,9 +722,37 @@ export default {
         r = asBreather(r, plan);
         whiffStreak = 0;
         breathers += 1;
+        note('an.breather', { kind: 'curiosity', n: breathers });
       }
 
+      /* WARM AHEAD (0825): the provider's look-ahead consumes no rng, and the
+       * verdict beat between rounds is warm time. */
+      warmAhead();
       const url = dealUrl();
+      /* THE READY GATE (0825): a remote url holds the verdict/briefing beat
+       * until the warm rail reports it landed - never longer than
+       * READY_GATE_MS, so a broken network cannot stall the class. `busy` is
+       * still true and `cur` does not exist yet, so the shared ticker credits
+       * this round NOTHING: the round clock never runs against an unpainted
+       * board. Local urls and a poolless class start at once, as before. */
+      if (url && isRemoteUrl(url) && pool && typeof pool.ready === 'function') {
+        const myIdx = roundIdx;
+        let launched = false;
+        const go = () => {
+          if (launched) return;
+          launched = true;
+          run(() => { if (roundIdx === myIdx) beginRound(r, url); });
+        };
+        try { Promise.resolve(pool.ready(url, { timeoutMs: READY_GATE_MS })).then(go, go); }
+        catch (e) { go(); }
+        return;
+      }
+      beginRound(r, url);
+    }
+
+    /** The dealt round proper - everything below the (possibly gated) deal. */
+    function beginRound(r, url) {
+      if (ended || dead || bellOn) return;
       paintGrid(url);
 
       /* THE VIDEO KINDS: the plan always deals an img-safe kind AND, on a small
@@ -678,6 +785,8 @@ export default {
         remainingMs: r.durationMs,
         done: false,
         ghost: -1,
+        /* W3 P0-2: the last whole second this round's countdown ticked on. */
+        lastTickSec: 0,
       };
 
       /* every tile back to a clean, identical slate, then the one delta */
@@ -697,7 +806,9 @@ export default {
       /* THE ROUND FLIP IS AUDIBLE (W2). setPhase writes a CSS attribute and
        * nothing else, so a fresh sheet used to be dealt in silence - an eye
        * that looked away missed the deal entirely. One soft carriage tell. */
-      cue('tell', 0.3);
+      /* W3 P1-5: a breather round IS the comeback, so its deal is pitched a
+       * gear down - the same carriage tell, audibly a softer one. */
+      cue('tell', 0.3, r.breather ? { pitch: 0.84 } : null);
       paintHud();
       busy = false;
       stallMs = 0;
@@ -706,6 +817,7 @@ export default {
 
       deck('casino', 'roundStart', roundsOffered, kind);
       deck('pressure', 'beat', 'round');
+      note('an.roundStart', { kind: 'curiosity', n: roundsOffered, word: kind, left: n * n });
       if (r.breather) msg('an_breather', AN_LEX.an_breather);
       else if (roundsOffered === 1) msg('an_play_hint', AN_LEX.an_play_hint);
       say('round ' + roundsOffered + ': ' + kind + ' d=' + delta + (r.breather ? ' BREATHER' : '')
@@ -776,6 +888,7 @@ export default {
       if (cur.relocated > 0) {
         relocatedCleared += 1;
         if (cur.lastRelocAt >= 0) recoveryTimes.push(Math.max(1, Math.round(latency - cur.lastRelocAt)));
+        note('an.relocatedCleared', { kind: 'celebrate', n: relocatedCleared, streak, tile: i });
       }
       const kseen = kindsSeen.get(cur.kind) || { offered: 1, cleared: 0 };
       kseen.cleared += 1;
@@ -847,15 +960,24 @@ export default {
             ctx.ceremonies.reward('near_miss', { text: t('an_moved', AN_LEX.an_moved), target: tile || gridEl });
           }
         } catch (e) { /* noop */ }
-        cue('near', 0.15);
+        /* W3 P1-5: the ghost refund HANDS TIME BACK, so it is a reward and
+         * belongs above the error floor, not down with the wrong taps. */
+        cue('near', 0.34);
         msg('an_moved', AN_LEX.an_moved);
+        /* the ghost branch owns this tap - an.whiff is the timeout and
+         * an.refusedTap is a dead press, so the three can never double-fire */
+        note('an.ghostTap', { kind: 'commiserate', n: ghostFinds, tile: i, word: cur.kind });
       } else {
         cur.remainingMs -= PLAYTEST.WRONG_BURN_MS;
         cue('thud', 0.13, { pitch: 0.8 });
         msg('an_wrong', AN_LEX.an_wrong);
       }
 
-      if (streak !== 0) { streak = 0; deck('pressure', 'setStreak', 0); heat(); litCheck(); }
+      if (streak !== 0) {
+        const lostStreak = streak;
+        streak = 0; deck('pressure', 'setStreak', 0); heat(); litCheck();
+        note('an.streakBroken', { kind: 'commiserate', streak: lostStreak });
+      }
       deck('casino', 'tap', {
         correct: false, i, latencyMs: latency, streak,
         first: false, jackpot: false, kind: cur.kind, moved,
@@ -886,6 +1008,9 @@ export default {
       if (cur.wrong > 0) msg('an_reveal', AN_LEX.an_reveal);
       else msg('an_timeout', AN_LEX.an_timeout);
       cue('thud', 0.12, { pitch: 0.7 });
+      /* W3 P1-5: the answer being pointed at is its own beat, so a whiff no
+       * longer sounds exactly like an ordinary wrong tap. */
+      after(260, () => cue('near', 0.12, { pitch: 0.8 }));
       paintHud();
       /* THE BREATH AFTER A WHIFF. `busy` is set and `cur.done` with it, so every
        * tap lands in the refusal branch; the reveal is up and the next round is
@@ -895,6 +1020,7 @@ export default {
        * round armed. A dead moment that has to be shortened is not a dead
        * moment. */
       deadBeatSafe('round_gap');
+      note('an.whiff', { kind: 'commiserate', n: whiffStreak, tile: cur.oddIndex, word: cur.kind });
       after(reduced ? PLAYTEST.WHIFF_HOLD_MS_REDUCED : PLAYTEST.WHIFF_HOLD_MS, endRound);
     }
 
@@ -912,7 +1038,14 @@ export default {
       litOn = want;
       if (want) gridEl.classList.add('is-lit');
       else gridEl.classList.remove('is-lit');
-      if (want) msg('an_streak_lit', AN_LEX.an_streak_lit);
+      if (want) {
+        msg('an_streak_lit', AN_LEX.an_streak_lit);
+        /* W3 P1-5: the grid igniting is the loudest thing a streak does here.
+         * The false -> true edge only - `litOn` above is the latch. */
+        cue('chime', 0.5, { pitch: pitchFor(streak) });
+        cue('pad', 0.22);
+        note('an.streakLit', { kind: 'celebrate', streak, n: roundsCleared });
+      }
     }
 
     /** The variable-ratio canon, engine first, seeded local fallback second. */
@@ -961,7 +1094,15 @@ export default {
       const ms = cadenceMs(plan.subFlashMs, currentHeat, plan.subJitter[subIdx % plan.subJitter.length]);
       subTimer = after(ms, () => {
         subTimer = 0;
-        const r = fireSafe('sub_flash', { anchor: wellEl, variant: subIdx % 2 ? 'scatter' : 'whisper' });
+        /* VOICE: the cadence floor here is 4500 * CADENCE_MIN_MULT * (1 - CADENCE_JITTER)
+           = ~1316ms, under the 1400ms voiced-gap floor - so only every second beat
+           is voiced (>= ~2632ms apart). The visual cadence is untouched. */
+        const r = fireSafe('sub_flash', {
+          anchor: wellEl,
+          variant: subIdx % 2 ? 'scatter' : 'whisper',
+          voice: subIdx % 2 === 0,
+          voiceKey: 'anomaly-whisper',
+        });
         if (r) subFlashes += 1;
         subIdx += 1;
         armSubFlash();
@@ -987,6 +1128,7 @@ export default {
           for (const rec of cur.relocations) {
             if (!rec.applied && cur.spentMs >= rec.at) { armRelocation(rec); break; }
           }
+          countdown();
         }
         /* THE STALL is the player's own: ms since the last TAP, reported to the
          * trickster on a ~500ms cadence (0 resets it). It runs during a live
@@ -1003,12 +1145,34 @@ export default {
         paintHud();
         if (!bellOn && elapsedMs >= budgetMs) { bell(); return; }
         if (!bellOn && budgetMs - elapsedMs <= PLAYTEST.BELL_WARN_SEC * 1000) {
-          if (stage && stage.getAttribute('data-warn') !== '1') stage.setAttribute('data-warn', '1');
+          if (stage && stage.getAttribute('data-warn') !== '1') {
+            stage.setAttribute('data-warn', '1');
+            /* W3 P0-3: the warn is the end bell struck softer. The attribute
+             * edge is the latch, so it can only land once. */
+            cue('bell', 0.3);
+          }
         }
         if (cur && !cur.done && cur.remainingMs <= 0) whiff();
       });
     }
     function stopClock() { if (tickId) { clearTimer(tickId); tickId = 0; } }
+
+    /* THE COUNTDOWN (W3 P0-2). The round deadline enters the ear for its last
+     * third, capped at three seconds: one tick per whole-second boundary with
+     * the pitch climbing, never one per ticker frame. A breather round is the
+     * comeback and is left in peace. It dies with the round for free, because
+     * the clock only calls it while `cur` is live and undone. */
+    function countdown() {
+      const r = cur.round;
+      if (bellOn || busy || !r || r.breather) return;
+      const gate = Math.min(COUNTDOWN_MS, Math.round(r.durationMs / 3));
+      if (cur.remainingMs > gate || cur.remainingMs <= 0) return;
+      const sec = Math.ceil(cur.remainingMs / 1000);
+      if (sec === cur.lastTickSec) return;
+      cur.lastTickSec = sec;
+      const step = Math.max(0, Math.ceil(gate / 1000) - sec);
+      cue('clock_tick', Math.min(0.18, 0.1 + 0.04 * step), { pitch: 1 + 0.06 * step });
+    }
 
     function bell() {
       if (ended || bellOn) return;
@@ -1022,6 +1186,7 @@ export default {
         if (cur.relocations.length) relocatedRounds = Math.max(0, relocatedRounds - 1);
         const kseen = kindsSeen.get(cur.kind);
         if (kseen) kseen.offered = Math.max(0, kseen.offered - 1);
+        note('an.bellMidRound', { kind: 'commiserate', n: roundsOffered, word: cur.kind, streak: bestStreak });
       }
       setPhase('verdict');
       deck('casino', 'bell', true);
@@ -1032,7 +1197,10 @@ export default {
         }
       } catch (e) { /* noop */ }
       msg('an_bell', AN_LEX.an_bell);
-      cue('stamp', 0.55);
+      /* W3 P0-3: the bell IS the end of the class, and the stamp lands after
+       * it - the school speaks first and the paperwork follows. */
+      cue('bell', 0.5);
+      after(420, () => cue('stamp', 0.55));
       after(reduced ? PLAYTEST.CEREMONY_MS_REDUCED : PLAYTEST.CEREMONY_MS, finish);
     }
 
@@ -1063,6 +1231,9 @@ export default {
       });
       const gates = hardGates({ roundsOffered, firstTapFinds });
       const fx = flavorXp(subSecondFinds, relocatedCleared);
+      /* the sGate IS the perfect class - every offered round on the first tap.
+       * finish() runs once (guarded by `ended`), so this cannot repeat. */
+      if (gates.sGate) note('an.perfectClass', { kind: 'celebrate', n: firstTapFinds, streak: bestStreak });
 
       try {
         const prior = (ctx.store && typeof ctx.store.gameMeta === 'function')
@@ -1231,20 +1402,93 @@ export default {
       }
       if (!node) node = fallbackHowto(onGo);
       if (!node) { onDone(); return; }
+      /* W3 P1-5: the sheet ARRIVES - a page landing on the desk, not silence
+       * until GO is pressed. */
+      cue('paper', 0.3);
       howtoEl = node;
+      /* sheet-reading time = warm time (0825). Usually a no-op here - the
+       * claim lands async and warms on arrival - but a pool that beat the
+       * sheet up starts filling its rail now. */
+      warmAhead();
     }
 
     /* ==================================================================== *
      * ASSETS
      * ==================================================================== */
+    /** The provider's bounded look-ahead; consumes NO rng (recon-verified),
+     *  so it is free to call anywhere. Null-safe: the claim lands async. */
+    function warmAhead() {
+      try { if (pool && typeof pool.prewarm === 'function') pool.prewarm(6); }
+      catch (e) { /* a warm-up never breaks a class */ }
+    }
+
+    /** UPGRADE-ON-ARRIVAL (0825). A round dealt before media landed is a full
+     *  placeholder board and used to wear it to round end; when the pool now
+     *  serves the needed kind, re-draw and repaint mid-round. Honest here
+     *  because the media is NOISE - the answer lives in the CSS delta on
+     *  .g-an-face, so a mid-round upgrade lies about nothing. DEGRADED PATH
+     *  ONLY: a round wearing real media returns before any draw, so the clean
+     *  path's rng sequence never moves (house law). */
+    function redress() {
+      if (dead || ended || !pool || !cur || cur.done) return;
+      if (!wearsPlaceholder(lastUrl)) return;
+      const u = dealUrl();
+      if (!u || u === lastUrl || wearsPlaceholder(u)) return;
+      paintGrid(u);
+      applyFace(cur.oddIndex);
+    }
+
+    /** Does the library hold LOCAL loop media (gifs on the player's own disk)?
+     *  Deterministic from the host's manifest - no rand, no network. */
+    function haveLocalLoops() {
+      try {
+        const s = ctx.assets && typeof ctx.assets.stats === 'function' ? ctx.assets.stats() : null;
+        return !!(s && s.local && (s.local.loop | 0) > 0);
+      } catch (e) { return false; }
+    }
+
     function claimAssets() {
+      /* THE LOOP LANE (0825 touch, widened 0826 desktop). dealUrl() can only
+       * paint a VIDEO url when `videoOk` holds - grid <= VIDEO_GRID_MAX, full
+       * motion, not reduced, not coarse (rounds.js: N playing <video> elements
+       * pin the page to 30Hz) - and that predicate is constant for a whole
+       * class, because the grid size is dealt once with the plan. So from tier
+       * 2 up, where the grid is 4x4 or 5x5, the 10 loops this class used to
+       * claim were UNDRAWABLE: every loop draw returned an mp4 dealUrl threw
+       * away, the warm rail spent its bandwidth on those mp4s, and the still
+       * lane - the only lane that paints - stopped refilling at 4 rows
+       * (askRemote's goal was max(4, spec)). Four stills across ~129 rounds is
+       * the duplicate wall the owner reported.
+       *
+       * A loop draw is still worth making when the pool can answer it with a
+       * GIF, which is an <img> and needs no video at all - so on DESKTOP the
+       * lane closes only when videos are undrawable AND the library has no
+       * local loops. A COARSE device keeps the 0825 ruling unconditionally:
+       * no loop lane at all, gifs included. Deterministic from tier /
+       * settings / the host manifest; no rand. */
+      const videoClass = n <= PLAYTEST.VIDEO_GRID_MAX && !reduced && !coarse && motionLevelOf(ctx) > 1;
+      loopLane = !coarse && (videoClass || haveLocalLoops());
+      const claimSpec = loopLane
+        ? { loops: 10, targets: 0, stills: 4, canvasSafe: false }
+        : { loops: 0, targets: 0, stills: 12, canvasSafe: false };
+      say('media lane: ' + (loopLane ? 'loops + stills' : 'stills only')
+        + ' (grid ' + n + 'x' + n + ', video ' + (videoClass ? 'ok' : 'off') + ')');
       Promise.resolve()
-        .then(() => ctx.assets.claim({ loops: 10, targets: 0, stills: 4, canvasSafe: false }))
+        .then(() => ctx.assets.claim(claimSpec))
         .then((p) => {
           if (dead || !p || typeof p.next !== 'function') return;
           pool = p;
-          /* a round already on screen with plain faces gets its media now */
-          if (cur && mediaMode === 'plain') run(() => { const u = dealUrl(); if (u) { paintGrid(u); applyFace(cur.oddIndex); } });
+          /* the rules sheet is usually still up here: reading time = warm time */
+          warmAhead();
+          /* remote batches stream in AFTER the claim resolves (the provider's
+           * ask-again loop): re-dress a placeholder round as each one lands.
+           * The subscription dies with pool.release(). */
+          if (typeof p.onUpdate === 'function') {
+            try { p.onUpdate(() => run(redress)); } catch (e) { /* optional seam */ }
+          }
+          /* a round already on screen with plain/placeholder faces gets its
+           * media now (redress gates itself to that degraded state) */
+          if (cur) run(redress);
         })
         .catch((e) => say('asset claim failed - plain faces: ' + ((e && e.message) || e)));
     }
@@ -1270,6 +1514,12 @@ export default {
           seed, gradeTier: tier, timeBudgetSec: budgetMs / 1000, kindsMode, reduced, coarse,
         });
         n = plan.n;
+        /* twenty-five identical tiles is the whole "oh no" of tier 3+. Once per
+         * class only - the grid size never changes once the plan is dealt. */
+        if (!emiBigGridSeen && n >= 5) {
+          emiBigGridSeen = true;
+          note('an.bigGrid', { kind: 'tension', n, left: n * n });
+        }
 
         rollLocal = (() => {
           const roll = makeTaggedRoll(seed + '|an-vr');

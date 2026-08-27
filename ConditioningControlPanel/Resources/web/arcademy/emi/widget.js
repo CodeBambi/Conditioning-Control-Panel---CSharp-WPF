@@ -89,9 +89,32 @@ export const DIALS = Object.freeze({
   /* --- the speech bubble ------------------------------------------------ */
   BUBBLE_SHIFT_X: 15,      // px further off her ear (owner, 2026-08-24). Mirrored
                            // by `.bubble-left` and paid for in faceBubble's reach.
-  SAY_HOLD_MIN_MS: 3000,   // a landed line NEVER holds less than this...
-  SAY_HOLD_BASE_MS: 1400,  // ...and a long one grows: BASE + PER_CHAR x length
-  SAY_HOLD_PER_CHAR_MS: 45,
+  /* HOW LONG A LANDED LINE HANGS. Every one of these three was multiplied by
+   * 1.35 on 2026-08-25 (owner: "increase the persistence time of the bubble in
+   * general, +35%") - floor 3000 -> 4050, base 1400 -> 1890, per-character
+   * 45 -> 61. They are scaled HERE, at the source, because `sayHoldMs` is the
+   * one function that turns a line into a hold and every call site in the page
+   * goes through it; scaling at a call site would have moved some lines and
+   * not others. There is deliberately no ceiling: the growth is linear in the
+   * line and her longest bark is under 120 characters, so a cap would only
+   * ever fire on a line nobody has written yet. */
+  SAY_HOLD_MIN_MS: 4050,   // a landed line NEVER holds less than this...
+  SAY_HOLD_BASE_MS: 1890,  // ...and a long one grows: BASE + PER_CHAR x length
+  SAY_HOLD_PER_CHAR_MS: 61,
+  /* AN ASK IS NOT AN ORDINARY LINE AND HAS NO AUTO-HIDE AT ALL (owner,
+   * 2026-08-25: "keep the bubble in sight till we respond"). The question is
+   * handed this as its hold, and the only thing that ever takes it down is the
+   * strip's own end - an answer, a dismiss, or a screen that kills her. It is
+   * a large FINITE number and not Infinity because `chains.js makeSay` does
+   * `holdMs | 0`, which turns Infinity into 0 and the whole question into a
+   * 400ms flash. One hour is longer than any sitting and still inside int32.
+   * The timer it arms is owned: `releaseAskLine()` cancels it. */
+  ASK_HOLD_MS: 3600000,
+  /* A LINE THAT ARRIVED WHILE SHE WAS WAITING gets ONE slot and this long to
+   * be worth saying. Past it the moment has gone and the line is dropped -
+   * the same trade `index.js`'s VOICE_PENDING_MS makes for the opening beat. */
+  ASK_QUEUE_MS: 8000,
+  ASK_QUEUE_POLL_MS: 250,  // ...and how often the released line re-tries a busy glass
 
   /* --- the field trip (wave W2a) --------------------------------------- */
   CRT_MS: 200,             // ONE power-off: squish to a line (~140) + flash dot (~60).
@@ -189,8 +212,11 @@ export function frameForFace(text) {
 
 /**
  * HOW LONG A LANDED LINE STAYS UP (owner ruling 2026-08-24: "3 sec, or more
- * according to length"). The typing cadence is UNCHANGED - `. .. ...` still
- * runs 420/420/520 and the clear frame is still 200 - only the hold grows.
+ * according to length", re-scaled x1.35 on 2026-08-25). The typing cadence is
+ * UNCHANGED - `. .. ...` still runs 420/420/520 and the clear frame is still
+ * 200 - only the hold grows. Before/after, for the record: the floor is
+ * 3000 -> 4050ms, a 20-character line 3000 -> 4050 (still the floor), a
+ * 40-character line 3200 -> 4330, an 80-character line 5000 -> 6770.
  * An explicit ask from a caller wins when it is LONGER; it can never pull a
  * line back under the floor.
  */
@@ -198,8 +224,27 @@ export function sayHoldMs(line, explicitMs) {
   const n = typeof line === 'string' ? line.length : 0;
   const grown = DIALS.SAY_HOLD_BASE_MS + n * DIALS.SAY_HOLD_PER_CHAR_MS;
   const asked = (typeof explicitMs === 'number' && isFinite(explicitMs)) ? Math.round(explicitMs) : 0;
-  return Math.max(DIALS.SAY_HOLD_MIN_MS, grown, asked);
+  /* THE PLAYER'S OWN DIAL (owner, 2026-08-25: "make the bark bubble permanence
+   * time an option in the options"). The scale multiplies the floor and the
+   * growth but NOT an explicit ask - ASK_HOLD_MS is an hour because a question
+   * waits, and a "short" player has not asked for short questions. Applied
+   * here for the same reason the x1.35 was: every line in the page becomes a
+   * hold through this one function. */
+  return Math.max(Math.round(Math.max(DIALS.SAY_HOLD_MIN_MS, grown) * holdScale), asked);
 }
+/* The scale `sayHoldMs` reads. MODULE-level on purpose: there is one EMI on a
+ * page and the pure helpers (chains.js callers included) have no instance to
+ * ask. The widget seeds it from its blob on boot and `setBubbleHold` is the
+ * one writer after that. */
+const HOLD_SCALE_MIN = 0.6;
+const HOLD_SCALE_MAX = 3;
+let holdScale = 1;
+export function setSayHoldScale(x) {
+  const n = typeof x === 'number' && isFinite(x) ? x : 1;
+  holdScale = Math.min(HOLD_SCALE_MAX, Math.max(HOLD_SCALE_MIN, n));
+  return holdScale;
+}
+export function getSayHoldScale() { return holdScale; }
 /** Everything in a locked SAY that is NOT the hold: . / .. / ... plus the clear. */
 export const SAY_LEAD_MS = 420 + 420 + 520 + 200;
 /* The bubble hangs UP OFF EMI's right ear (emi.css: left:58%, bottom:96%,
@@ -267,6 +312,9 @@ function readStats(raw) {
  * collapse the runs -> 8 characters. An empty answer is a SKIP, never an empty
  * name - `emi.name` is either a real string or absent. */
 export const ASK_NAME_MAX = 8;
+/** The Send button's shipped English. The live label comes from the SHELL,
+ *  which resolves `emi_ask_send` through the lexicon (see createWidget). */
+export const ASK_SEND_LABEL = 'send';
 export function sanitizeAskName(raw) {
   if (typeof raw !== 'string') return '';
   let s = raw.toLowerCase().replace(/[^a-z0-9 ]+/g, '');
@@ -305,6 +353,31 @@ function readAskState(raw) {
   return out;
 }
 
+/* ----------------------------------------------------------------------------
+ * W3 "EVERY INPUT ANSWERED" (2026-08-25): SHE ANSWERS A TOUCH NOW.
+ *
+ * Picking her up, putting her down, patting her and the ask strip coming up
+ * were all silent, which is the one gap the wave is named after: a press that
+ * makes no sound reads as a press the page did not get.
+ *
+ * `shell/audio.js` holds the only audio node on the page (trap 18), so this is
+ * a REQUEST on `document` and never a sound - the same defensive shape
+ * `emi/fieldtrips.js` and `shell/ceremonies.js` already use, and a dropped cue
+ * is not an error. Everything fired from this file rides the VOICE bus and sits
+ * at or under her Blipese (`emi_blip` goes out at .10, and the loudest touch
+ * cue is a .16 thud), because the mascot is never the loudest thing on screen.
+ * -------------------------------------------------------------------------- */
+function sfx(name, level, pitch) {
+  try {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    document.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: { name: String(name || 'blip'), level: Number(level) || 0.1, bus: 'voice', pitch },
+    }));
+  } catch (e) { /* a cue must never be the thing that throws */ }
+}
+
 /* ============================================================================
  * createWidget
  * ==========================================================================*/
@@ -318,8 +391,18 @@ function readAskState(raw) {
  * @param {Function=} o.toast         the SHELL's toast (boot.js -> createShell's `shout`)
  * @param {Function=} o.log
  */
-export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, log, assets, settings } = {}) {
+export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, log, assets, settings, strings } = {}) {
   const say = typeof log === 'function' ? log : () => {};
+  /* THE ONE DISPLAY STRING EMI HAS EVER BEEN HANDED, AND IT ARRIVES RESOLVED.
+   * No lexicon reaches EMI (emi/moments.js's law, and emi/channels.js says it
+   * out loud) - the SHELL has `t` and hands the answer down, exactly the way
+   * shell/orientation.js hands her three lines over as `payload.line`. The
+   * fallback is the shipped English so a host that passes nothing still gets a
+   * labelled button rather than an empty one. */
+  const ASK_STRINGS = Object.freeze({
+    send: (strings && typeof strings.askSend === 'string' && strings.askSend.trim())
+      ? strings.askSend.trim() : ASK_SEND_LABEL,
+  });
   /* OFF CHANNELS (W3): the two things NOW WATCHING needs and nothing else in
    * this file does - the shell's provider handle (media through the HOST, the
    * only remote path this bundle has) and `init.settings` (the player's own
@@ -360,6 +443,11 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   let fy0 = num(saved.y);
   let hidden = saved.hidden === true;
   let hintShown = saved.hintShown === true;
+  /* The bubble-hold scale rides the same blob (see `setSayHoldScale`). A blob
+   * without one is a player who never touched the option: scale 1, unwritten. */
+  if (typeof saved.holdScale === 'number' && isFinite(saved.holdScale) && saved.holdScale !== 1) {
+    setSayHoldScale(saved.holdScale);
+  }
   let enabled = true;
 
   let saveTimer = null;
@@ -390,6 +478,8 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     // viewport rule for ever after the first drag.
     if (userSized && userWidth != null) b.w = userWidth;
     if (hintShown) b.hintShown = true;
+    // The bubble-hold option, written only when it is not the default.
+    if (holdScale !== 1) b.holdScale = holdScale;
     /* ASKS: the ledger rides out with everything else. Written only when there
      * is something to write, so a player who has never been asked anything
      * keeps the blob they always had. */
@@ -668,8 +758,16 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     if (fx0 == null || fy0 == null) {
       /* First run: park her bottom-right, clear of the dock's corner. A phone has
        * no room for the desktop's 24/56 standoff, so she docks tight into the
-       * corner there and leaves the middle of the glass to the board. */
-      const padX = isMobile() ? 6 : 24;
+       * bottom edge there and leaves the middle of the glass to the board.
+       * THE 72 IS THE POSTBOX. 2026-08-25 moved the campus mail chip out of the
+       * top-right cluster and into the bottom-right corner (shell/mail.css), and
+       * a 6px standoff parked her flat on top of a 44px control she would then
+       * eat every tap on - her body is the one `pointer-events:auto` thing on
+       * that layer. 6 + 44 + 14 (the chip's own bottom inset) + 8 of daylight
+       * steps her left of it and leaves the bottom edge she is meant to dock to.
+       * FIRST RUN ONLY: a stored spot never comes through here, so nobody who
+       * has ever moved her sees this number. */
+      const padX = isMobile() ? 72 : 24;
       const padY = isMobile() ? 10 : 56;
       fx0 = (vp.w - s.w - padX) / vp.w;
       fy0 = (vp.h - s.h - padY) / vp.h;
@@ -702,6 +800,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
      * reach test is - measured, because a strip is wider than a bark and the
      * reach heuristic above was calibrated for a 104px box. */
     clampAskStrip();
+    clampBubble();
   }
 
   /** Record the CURRENT pixel position back into the fractions. */
@@ -770,11 +869,53 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
    * cancel path in this file funnels through the `null` branch, so hanging the
    * voice here (and nowhere else) is what makes "dismiss mid-babble cuts her
    * instantly" true by construction instead of by discipline. See trap 70. */
+  /** The bubble's own MEASURED viewport clamp, in px, signed. See widget.css. */
+  function setBubbleCx(px) {
+    try {
+      if (el.style && typeof el.style.setProperty === 'function') {
+        el.style.setProperty('--emi-bubble-cx', Math.round(Number(px) || 0) + 'px');
+      }
+    } catch (e) { /* noop */ }
+  }
+  /**
+   * KEEP THE LINE INSIDE THE WINDOW. `faceBubble`'s reach test picks the EAR
+   * (trap 61) and it is a heuristic scaled off her BODY width - calibrated for
+   * the desktop pair, a 150px EMI beside a 104px box. A phone runs an 86px EMI
+   * beside a box that is allowed 168, so even the correct ear leaves the line
+   * hanging off the edge. This is the same measured pull-back `clampAskStrip`
+   * does for the strip, and it runs when a line LANDS rather than when she
+   * moves, because the width is a property of the sentence.
+   */
+  function clampBubble() {
+    try {
+      if (!bubble || bubble.hidden || !el.getBoundingClientRect) return;
+      setBubbleCx(0);
+      /* IT IS MEASURED OFF `offsetWidth`, NOT off a rect, AND THAT IS THE WHOLE
+       * TRICK. `.emi-bubble.pop` is a 280ms scale keyframe and
+       * `getBoundingClientRect` reports the TRANSFORMED box (trap 74's twin
+       * half), so a rect read on the frame the line lands is the box at ~60%
+       * and the clamp comes out about a sixth of what it should be. The
+       * offset* pair is the LAYOUT box and the pop cannot touch it. */
+      const w = Number(bubble.offsetWidth) || 0;
+      if (!w) return;
+      const er = el.getBoundingClientRect();
+      if (!er) return;
+      const left = Number(er.left) + (Number(bubble.offsetLeft) || 0);
+      const vp = viewport();
+      const pad = 4;
+      let dx = 0;
+      if (left + w > vp.w - pad) dx = Math.round((vp.w - pad) - (left + w));
+      if (left + dx < pad) dx = Math.round(pad - left);
+      setBubbleCx(dx);
+    } catch (e) { /* a clamp may never be the thing that throws */ }
+  }
+
   function setBubble(text) {
     if (text == null || text === '') {
       bubble.hidden = true;
       bubble.textContent = '';
       bubble.classList.remove('dots', 'pop');
+      setBubbleCx(0);
       if (vox) { try { vox.stop(); } catch (e) { /* a voice may never break a bubble */ } }
       return;
     }
@@ -797,6 +938,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
         if (typeof queueMicrotask === 'function') queueMicrotask(speak); else speak();
       }
     }
+    clampBubble();
   }
 
   /* BODY MOVES GO ON THE ROOT. Agent A's keyframes animate `transform` on `.emi`
@@ -848,14 +990,64 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     current = null;
   }
 
+  /* ==========================================================================
+   * AN ASK OWNS THE GLASS UNTIL IT IS ANSWERED (owner bug 2026-08-25: "the how
+   * can I call you prompt got removed because I think I triggered another
+   * speech"). A question is a bubble that is WAITING FOR YOU, and the say law
+   * one line down - a protected chain may be replaced by another protected one
+   * - let any later bark walk straight over it. So an ask raises a second,
+   * higher fence for as long as it is up:
+   *
+   *   a SAY that arrives while she is waiting is HELD (one slot, the newest
+   *   wins) and released when the ask ends, if the moment has not gone stale;
+   *   anything else - a raw face, a chain, an emote - is simply refused, the
+   *   same answer it already gets over a live say.
+   *
+   * The hold is opened by the ask's own line (`opts.ask`) rather than by the
+   * strip, because the question lands STRIP_LEAD_MS before the chips do and
+   * that gap is the window the owner's bug actually fell through. It is closed
+   * in exactly one place, `unmountAsk()`, which is the one function that ends
+   * an ask however it ended. See trap 104.
+   * ======================================================================== */
+  let askHold = false;
+  /** The one line waiting for the ask to finish: {chain, opts, at}. */
+  let heldLine = null;
+  /** Its own handle, NOT a `later()` one: `killTimers()` runs on every play. */
+  let heldTimer = null;
+  function askOwnsGlass() { return askHold || !!askLive; }
+  function dropHeldLine() {
+    heldLine = null;
+    if (heldTimer !== null) { clearTimeout(heldTimer); heldTimer = null; }
+  }
+  /** Give the held line the glass, once the glass is actually free. */
+  function pumpHeldLine() {
+    heldTimer = null;
+    if (!heldLine) return;
+    if (Date.now() - heldLine.at >= DIALS.ASK_QUEUE_MS) { heldLine = null; return; }
+    if (askOwnsGlass()) return;              // she is already waiting on the next one
+    if (busy() || saying()) {                // a reaction line landed first, and it wins
+      heldTimer = setTimeout(pumpHeldLine, DIALS.ASK_QUEUE_POLL_MS);
+      return;
+    }
+    const h = heldLine;
+    heldLine = null;
+    play(h.chain, h.opts);
+  }
+
   /**
    * Run one chain object. A protected chain (a SAY) refuses to be replaced by an
-   * unprotected one - law 3 in the header.
+   * unprotected one - law 3 in the header. A live ASK outranks both.
    * @returns {boolean} true when it started
    */
   function play(chain, opts) {
     const o = opts || {};
     if (!chain || typeof playChain !== 'function' || !painter) return false;
+    if (askOwnsGlass() && !o.ask) {
+      /* ONE SLOT, NEWEST WINS - the same trade emi/index.js makes for the one
+       * moment it buffers. A queue would replay a conversation nobody had. */
+      if (o.protect) heldLine = { chain, opts: Object.assign({}, o), at: Date.now() };
+      return false;
+    }
     if (saying() && !o.protect && !o.force) return false;
     cancelChain();
     killTimers();
@@ -883,7 +1075,9 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
         idle();
       },
     });
-    current = { handle, protect: !!o.protect };
+    current = { handle, protect: !!o.protect, ask: !!o.ask };
+    if (o.ask) askHold = true;
+    stampActivity(o.protect ? 'say' : 'play');
     return true;
   }
 
@@ -891,6 +1085,11 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   function raw(text, opts) {
     const o = opts || {};
     if (!painter) return false;
+    /* A FACE IS A REACTION, AND A REACTION TO A MOMENT THAT PASSED IS WORSE
+     * THAN NO REACTION - so this one is refused outright and never queued.
+     * `force` cannot buy past a live ask; the ask engine's own `-_-` runs
+     * AFTER `unmountAsk()` has already closed the hold. */
+    if (askOwnsGlass() && !o.ask) return false;
     if (saying() && !o.force) return false;
     cancelChain();
     killTimers();
@@ -904,6 +1103,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     if (o.fx) burst(o.fx);
     const hold = typeof o.hold === 'number' ? o.hold : DIALS.RAW_HOLD_MS;
     if (hold > 0) later(() => idle(), hold);
+    stampActivity('raw');
     return true;
   }
 
@@ -943,9 +1143,37 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     return () => gestureSubs.delete(cb);
   }
   function emitGesture(kind, detail) {
+    /* THE HEARTBEAT'S EAR (2026-08-25). A player verb IS activity, so it resets
+     * the metronome exactly as one of her own acts does - the heartbeat only
+     * ever fills silence, it never competes with a hand on the mouse. The ONE
+     * exclusion is `blinkIdle`, which IS the unattended idle blink: counting it
+     * would re-stamp the clock every 5.2s and the beat could never come due. */
+    if (kind !== 'blinkIdle') stampActivity('gesture:' + kind);
     if (!gestureSubs.size) return;
     for (const cb of gestureSubs) {
       try { cb(kind, detail || {}); } catch (e) { /* noop */ }
+    }
+  }
+
+  /* ---------------------- the activity tap (HEARTBEAT, 2026-08-25) ------
+   * ONE stamp for "something visible just happened", so `emi/heartbeat.js` can
+   * measure silence without twenty call sites learning about it. It is fired
+   * from the FOUR choke points every visible verb funnels through - `play`
+   * (every chain, every say, every emote), `raw` (a held face), the deck's
+   * `screenTakeover` (trap 77: the second canvas is its own path and does NOT
+   * run through play) and `apparate` (a field trip) - plus every player gesture
+   * above. A subscriber that throws is swallowed here: a listener may never
+   * reach into a pointer handler or a chain runner. */
+  const activitySubs = new Set();
+  function onActivity(cb) {
+    if (typeof cb !== 'function') return () => {};
+    activitySubs.add(cb);
+    return () => activitySubs.delete(cb);
+  }
+  function stampActivity(kind) {
+    if (!activitySubs.size) return;
+    for (const cb of activitySubs) {
+      try { cb(String(kind || '')); } catch (e) { /* noop */ }
     }
   }
 
@@ -1115,6 +1343,11 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     askSpot = null;
     stats.drags += 1;
     touchSeen();
+    /* W3 P1-19: SHE IS OFF THE GROUND. A soft pad up a tone - the lightest cue
+     * in the file, because a lift is a beginning and the drop is the event. It
+     * fires on the DRAG, never on the press: a tap that never travelled is a
+     * pet and already has its own answer. */
+    sfx('pad', 0.08, 1.2);
     el.classList.add('dragging');
     // The reaction is a raw face, not a chain: a chain would fight the next
     // frame of movement. A live SAY keeps the glass (law 3).
@@ -1201,6 +1434,13 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       clearDangle(false);
       const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { left: 0, top: 0 };
       commit(r.left, r.top);
+      remeasureAsk();   // a question survives a drag now; its clamp does not
+      /* W3 P1-19: SHE LANDS. The body move here is already NAMED `thud` for a
+       * throw and `bounce` for a set-down, so the ear gets the same two things:
+       * a low sawtooth knock pitched down for the fling, a lighter one for the
+       * ordinary drop. It rides the DROP and not the animation, so a reduced-
+       * motion player - who gets no move at all - still hears her land. */
+      sfx(wasFling ? 'thud' : 'bump', wasFling ? 0.16 : 0.12, wasFling ? 0.8 : 1);
       if (wasFling) stats.flings += 1;
       // SETTLE: ^_^ for a beat, then back to resting. The landing move is the
       // playbook's BOUNCE, or a THUD when she was thrown.
@@ -1251,6 +1491,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     endPress();
     if (wasDragging) {
       commit(r ? r.left : 0, r ? r.top : 0);
+      remeasureAsk();   // same law as the ordinary drop
       save();
       if (!saying()) idle();
     }
@@ -1267,6 +1508,12 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     if (takeoverAtePet()) return;
     stats.pets += 1;
     touchSeen();
+    /* W3 P1-19: EVERY PAT IS ANSWERED, INCLUDING THE COOLED ONE. A small pop,
+     * under the drop cues, on the guaranteed floor - the third pat then STACKS
+     * its chime over the top of this rather than replacing it, which is the
+     * reward rule the plan writes down (a payoff never removes the answer the
+     * input already earned). */
+    sfx('pop', 0.08, 1);
     const t = nowMs();
     if (t < petCooldownUntil) {
       // Spam guard: she still notices you, she just does not do the whole show.
@@ -1282,6 +1529,10 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       petTimes = [];
       petCooldownUntil = t + DIALS.PET_COOLDOWN_MS;
       stats.petStreaks3 += 1;
+      /* W3 P1-19: ...and the THIRD one pays. A clean bell over the pop above:
+       * the rarest sound she makes for a touch, and the only one a player can
+       * work out how to earn. */
+      sfx('chime', 0.14, 1);
       // THE LOCK SAYS THE THIRD PET LANDS ON (≧◡≦) - that is `glee`, not
       // `love` (which ends on the lovestruck kaomoji and is a different beat).
       /* THE POSE IS THE PET ONE, not the ceremony one. `glee` is shared: it is
@@ -1311,6 +1562,13 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     // next pointerup commit a position read off a display:none element.
     endPress();
     cancelTrip();                    // W2a: dismissed mid-trip = home first, then the dock
+    /* ASKS: A DOCKED EMI IS A SCREEN CHANGE THAT LEGITIMATELY KILLS HER, and it
+     * is the one such change a SILENT (API) hide can make without the ask
+     * engine hearing a gesture - so the strip is taken down here rather than
+     * left hanging inside a `display:none` root. `gone` is what tells the
+     * engine the question ended, and it spends no cadence. */
+    emitGesture('gone', { reason: 'hide' });
+    unmountAsk(false); dropHeldLine();
     cancelChain(); killTimers(); stopBlink(); stopSway(); clearBody(); setBubble(null);
     clearApproachTimers();
     restGaze();
@@ -1407,18 +1665,54 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     try { canvas.style.transform = 'translate(' + gazeX.toFixed(2) + 'px,' + gazeY.toFixed(2) + 'px)'; } catch (e) { /* noop */ }
     if (typeof requestAnimationFrame === 'function') gazeRaf = requestAnimationFrame(gazeStep);
   }
-  function nudgeGaze() {
+  /** Wake the easing loop. (Was `nudgeGaze` until the heartbeat wave took that
+   *  name for the PUBLIC verb below - this one only kicks the rAF.) */
+  function kickGaze() {
     if (gazeRaf == null && typeof requestAnimationFrame === 'function') {
       gazeRaf = requestAnimationFrame(gazeStep);
     }
+  }
+  /* THE GAZE NUDGE (HEARTBEAT, 2026-08-25). "A nudge in a direction" is a
+   * whole act on the wheel, and it is the CHEAPEST one she has: no chain, no
+   * bubble, no repaint - the same CSS translate on the canvas ELEMENT the
+   * cursor lean already rides (trap 71). `dx`/`dy` are a DIRECTION in -1..1,
+   * scaled by GAZE_MAX_PX, held `ms` and then eased home.
+   *
+   * Reduced motion REFUSES it outright rather than snapping: W1's gaze is off
+   * under `prefers-reduced-motion` and a heartbeat may not smuggle it back in.
+   * It also refuses over any live verb, because a lean that survives a say is
+   * a face stuck off-centre. */
+  let gazeNudgeTimer = null;
+  function clearGazeNudge() {
+    if (gazeNudgeTimer !== null) { clearTimeout(gazeNudgeTimer); gazeNudgeTimer = null; }
+  }
+  function nudgeGaze(dx, dy, ms) {
+    if (!painter || hidden || !enabled || dragging || pressing) return false;
+    if (busy() || saying() || reducedMotion()) return false;
+    const x = Number(dx), y = Number(dy);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+    if (x === 0 && y === 0) return false;
+    clearGazeNudge();
+    gazeTX = clamp(x, -1, 1) * DIALS.GAZE_MAX_PX;
+    gazeTY = clamp(y, -1, 1) * DIALS.GAZE_MAX_PX;
+    kickGaze();
+    const hold = Number.isFinite(Number(ms)) && Number(ms) > 0 ? Math.round(Number(ms)) : 1500;
+    gazeNudgeTimer = setTimeout(() => { gazeNudgeTimer = null; restGaze(); }, hold);
+    return true;
   }
   /** Ease the lean home NOW (a hide, a disable, a drag taking over). The
    *  ASKS bias is deliberately NOT cleared here: it belongs to the class, and
    *  `gazeActive()` already parks the whole lean at 0 while anything else owns
    *  the glass, so it simply comes back when she is idle again. */
   function restGaze() {
+    /* A HEARTBEAT NUDGE IS EASED HOME BY WHATEVER TAKES THE GLASS NEXT. Every
+     * path that owns her face (play / raw / idle / hide / disable / a drag)
+     * already calls this, so the release timer is cleared HERE and nowhere
+     * else - a nudge that outlived the reaction after it would be a lean
+     * nobody asked for. */
+    clearGazeNudge();
     gazeTX = 0; gazeTY = 0;
-    nudgeGaze();
+    kickGaze();
   }
 
   function clearApproachTimers() {
@@ -1448,9 +1742,10 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
 
     // GAZE: the lean is proportional and capped, and the loop eases it home
     // on its own the moment gazeActive() goes false.
+    clearGazeNudge();          // the cursor outranks a heartbeat's idle look
     gazeTX = clamp(dx / DIALS.GAZE_DIV, -DIALS.GAZE_MAX_PX, DIALS.GAZE_MAX_PX);
     gazeTY = clamp(dy / DIALS.GAZE_DIV, -DIALS.GAZE_MAX_PX, DIALS.GAZE_MAX_PX);
-    nudgeGaze();
+    kickGaze();
 
     // APPROACH: measured from her EDGE, so a bigger EMI is not a bigger doorbell.
     const inside = d < r.width / 2 + DIALS.APPROACH_PX;
@@ -1584,6 +1879,12 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
           },
           seed: String((stats.firstSeenAt || '') + '|' + (isoDay() || '')),
           onStat(key) {
+            /* TRAP 77's OTHER HALF, AND THE ONE PLACE THAT SEES EVERY CHANNEL.
+             * The glass never runs through play(), and a wheel-rolled takeover
+             * that waited on `prepare` starts a tick AFTER the caller returned -
+             * so the heartbeat's clock is stamped off the deck's own counter
+             * rather than off any one call site. */
+            if (key === 'takeovers') stampActivity('takeover');
             if (!Object.prototype.hasOwnProperty.call(stats, key)) return;
             stats[key] += 1;
             save();
@@ -1614,6 +1915,8 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       wasNarrowVp = narrow;
       if (narrow && !hidden && enabled) emitGesture('windowSquish');
     }
+    // A standing question re-fits against the new box (phones rotate).
+    remeasureAsk();
   }
   if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('resize', onResize);
@@ -1886,6 +2189,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     const line = typeof o.line === 'string' && o.line.trim() ? o.line : null;
     const face = typeof o.face === 'string' && o.face ? o.face : '^_^';
     trip = { timer: null, left: 0, top: 0, onDone: typeof o.onDone === 'function' ? o.onDone : null };
+    stampActivity('apparate');
 
     // Where she is standing right now, in pixels, so a cancel during the very
     // first squish still knows the spot it is being asked to keep.
@@ -1991,6 +2295,10 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
 
   /** {onChip, onDismiss, nodes} while a strip is up; null the rest of the time. */
   let askLive = null;
+  /** The late re-measure's timer - see `remeasureAsk`. */
+  let askFitTimer = null;
+  /** The leave animation's own timer - see `dropStrip`. */
+  let askDropTimer = null;
   /** The viewport clamp, in px, shared with the sheet as `--emi-ask-dx`. */
   let askDx = 0;
   function setAskDx(px) {
@@ -2037,8 +2345,39 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     } catch (e) { /* noop */ }
   }
 
+  /** RE-FIT A STANDING STRIP. `askLift` reads `offsetHeight` the instant the
+   *  strip mounts - but on a phone Press Start 2P lands LATE, the 44px thumb
+   *  floor grows the chips, and `max-width: min(84vw, 248px)` can wrap a row
+   *  that measured as one line into two. A stale `--emi-ask-h` is exactly the
+   *  bubble sitting ON the chips (owner, 2026-08-25: "on mobile the prompt and
+   *  the box to respond get overlapped and we cant see the question"). So the
+   *  measurement is taken AGAIN: one beat after mount, once more when the
+   *  document's fonts resolve, and on every resize / rotate / drag-drop while
+   *  a strip stands. Idempotent and cheap - two reads, two custom props. */
+  function remeasureAsk() {
+    if (!askLive || askStrip.hidden) return;
+    askLift();
+    clampAskStrip();
+  }
+  function scheduleAskFit() {
+    if (askFitTimer !== null) { clearTimeout(askFitTimer); askFitTimer = null; }
+    askFitTimer = setTimeout(() => { askFitTimer = null; remeasureAsk(); }, 280);
+    try {
+      if (typeof document !== 'undefined' && document.fonts && document.fonts.ready
+        && typeof document.fonts.ready.then === 'function') {
+        document.fonts.ready.then(() => remeasureAsk()).catch(() => {});
+      }
+    } catch (e) { /* a font API may never break a question */ }
+  }
+
   function fireChip(i, text) {
     if (!askLive) return;
+    /* W3 P0-35: THE ANSWER IS HEARD. A chip press moved a real decision (a06's
+     * seat, a14's name) and answered nothing at all. One pop, on the press, so
+     * it lands before the strip starts leaving. Every route in - the chip, the
+     * Send button, the Enter key and the suite's `pick()` - comes through here,
+     * which is why the cue is here and not on the buttons. */
+    sfx('pop', 0.12, 1);
     const cb = askLive.onChip;
     try { cb(Math.max(0, i | 0), typeof text === 'string' ? text : ''); }
     catch (e) { /* a chip may never break a screen transition */ }
@@ -2046,13 +2385,15 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
 
   /**
    * MOUNT ONE STRIP. `spec` is asks.js's, and this file understands exactly
-   * five fields: {id, chips[2], input, maxLength, onChip(i, text), onDismiss}.
+   * six fields: {id, chips[2], input, maxLength, onChip(i, text), onDismiss}.
+   * `input:true` turns chip one into a FIELD plus a visible Send button; both
+   * of them, and the Enter key, call `onChip(0, text)`.
    * @returns {?Object} {el, pick(i), destroy()} - null when it could not build.
    */
   function mountAsk(spec) {
     if (!spec || !Array.isArray(spec.chips) || !spec.chips.length) return null;
     if (!enabled || hidden) return null;
-    unmountAsk(false);
+    dropStrip(false);
     try {
       askStrip.textContent = '';
       askStrip.classList.remove('out');
@@ -2081,8 +2422,28 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
         nodes.push(field);
       }
 
+      /* AND THE FIELD NEEDS A BUTTON (owner, 2026-08-25: "we need a send button
+       * visible"). Enter still submits and always did - but Enter is invisible,
+       * and on a phone it is a key on a keyboard that covers the mascot. The
+       * button IS chip one, so it carries `data-chip="0"` and goes through the
+       * same `fireChip(0, text)` the Enter key does: one submit path, and the
+       * suite can press either. It is inserted between the field and the out
+       * chip, which is the reading order the answer is given in. */
+      if (spec.input === true) {
+        const sendBtn = document.createElement('button');
+        sendBtn.className = 'emi-chip emi-chip-send';
+        sendBtn.type = 'button';
+        sendBtn.textContent = ASK_STRINGS.send;
+        if (sendBtn.setAttribute) sendBtn.setAttribute('data-chip', '0');
+        sendBtn.addEventListener('click', () => {
+          fireChip(0, field ? String(field.value || '') : '');
+        });
+        askStrip.appendChild(sendBtn);
+        nodes.push(sendBtn);
+      }
+
       spec.chips.forEach((label, i) => {
-        if (spec.input === true && i === 0) return;   // the field IS chip one
+        if (spec.input === true && i === 0) return;   // the field + send ARE chip one
         const b = document.createElement('button');
         b.className = 'emi-chip';
         b.type = 'button';
@@ -2103,7 +2464,14 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       };
       askLift();
       el.classList.add('ask-up');
+      /* W3 P0-35: SHE IS WAITING FOR YOU NOW. The strip arrives STRIP_LEAD_MS
+       * after the question, so it is a second event and it needs a second
+       * sound - one blip of her own voice, up a tone and a half from resting,
+       * which reads as the question mark the line already ended on. Deliberately
+       * `emi_blip` and not a piece of chrome: an ask is EMI asking. */
+      sfx('emi_blip', 0.10, 1.15);
       clampAskStrip();
+      scheduleAskFit();
       /* FOCUS THE FIELD, NEVER A CHIP. Stealing focus onto a button would put
        * a school-wide Enter on EMI; the field is the one place a keystroke is
        * unambiguously hers. */
@@ -2125,8 +2493,22 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
    * reduced motion drops it to a plain hide); anything urgent passes false.
    */
   function unmountAsk(slide) {
+    /* THE HOLD IS CLOSED HERE AND NOWHERE ELSE, and BEFORE the early return -
+     * a question whose strip never managed to build still opened the hold with
+     * its line, and this is the call that ends it. `dropStrip` is the half
+     * WITHOUT that, and `mountAsk` is its one caller: clearing a previous
+     * strip on the way in must not take down the question that is landing. */
+    releaseAskLine();
+    return dropStrip(slide);
+  }
+  function dropStrip(slide) {
+    /* A PENDING LEAVE DIES HERE WHATEVER HAPPENS - `mountAsk` comes through
+     * this branch on its way in, and a 220ms drop left running would hide the
+     * strip that is replacing it. */
+    if (askDropTimer !== null) { clearTimeout(askDropTimer); askDropTimer = null; }
+    if (askFitTimer !== null) { clearTimeout(askFitTimer); askFitTimer = null; }
     if (!askLive) {
-      try { askStrip.hidden = true; askStrip.textContent = ''; } catch (e) { /* noop */ }
+      try { askStrip.hidden = true; askStrip.textContent = ''; askStrip.classList.remove('out'); } catch (e) { /* noop */ }
       return false;
     }
     askLive = null;
@@ -2135,6 +2517,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       if (el.style && typeof el.style.setProperty === 'function') el.style.setProperty('--emi-ask-h', '0px');
     } catch (e) { /* noop */ }
     const drop = () => {
+      if (askDropTimer !== null) { clearTimeout(askDropTimer); askDropTimer = null; }
       try {
         askStrip.hidden = true;
         askStrip.textContent = '';
@@ -2145,11 +2528,44 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     };
     if (slide && !reducedMotion()) {
       try { askStrip.classList.add('out'); } catch (e) { /* noop */ }
-      later(drop, 220);
+      /* ITS OWN HANDLE, NOT `later()`. Every resolution an ask has is followed
+       * within the same tick by a line or a face - her reaction to the answer,
+       * the wordless `-_-` - and both of those run `killTimers()`, which used
+       * to take this one with them. The strip then never dropped: `.out`
+       * animated it to opacity 0 and left a node with two `pointer-events:auto`
+       * chips sitting over the board for the rest of the sitting (trap 59's
+       * failure mode, and invisible in every screenshot). */
+      if (askDropTimer !== null) clearTimeout(askDropTimer);
+      askDropTimer = setTimeout(() => { askDropTimer = null; drop(); }, 220);
     } else {
       drop();
     }
     return true;
+  }
+
+  /**
+   * TAKE THE QUESTION OFF THE GLASS AND LET THE WAITING LINE THROUGH.
+   *
+   * The question's hold is an hour (DIALS.ASK_HOLD_MS) precisely so that
+   * nothing but this can end it, which means this is also the only place its
+   * timer is cancelled - `idle()` funnels through `cancelChain()` and clears
+   * the bubble, and every resolution the ask engine has (a reaction line, the
+   * wordless `-_-`) lands on the free glass a beat later.
+   *
+   * The held line is released on a TIMER and not on the spot, because an
+   * ANSWER is followed immediately by her reaction to it: giving the stale
+   * bark the glass synchronously would put it under a line that is about to
+   * replace it. `pumpHeldLine` waits for a quiet glass and gives up at
+   * ASK_QUEUE_MS, so an ask that sat for a minute drops the line instead of
+   * saying it into a room that has moved on.
+   */
+  function releaseAskLine() {
+    const was = askHold;
+    askHold = false;
+    if (was && current && current.ask) { try { idle(); } catch (e) { /* noop */ } }
+    if (!heldLine) return;
+    if (heldTimer !== null) { clearTimeout(heldTimer); heldTimer = null; }
+    heldTimer = setTimeout(pumpHeldLine, DIALS.ASK_QUEUE_POLL_MS);
   }
 
   /** MAY SHE ASK RIGHT NOW. One honest answer, owned by the file that owns the
@@ -2196,7 +2612,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   function setGazeBias(dir) {
     const d = Number(dir);
     askGaze = Number.isFinite(d) ? clamp(d, -1, 1) : 0;
-    nudgeGaze();
+    kickGaze();
     return askGaze;
   }
 
@@ -2236,6 +2652,10 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     attach,
     /** Subscribe to the pointer verbs (emi/voice.js). Returns an unsubscribe. */
     onGesture,
+    /* HEARTBEAT (2026-08-25): subscribe to "she just did something visible",
+     * and the idle gaze nudge. `emi/heartbeat.js` is the only caller of either;
+     * both are inert until something subscribes. */
+    onActivity, nudgeGaze,
     play, raw, idle,
     /** Swap the body png by frame key (BODY_FRAME_SRC). Test/host seam. */
     setBodyFrame,
@@ -2264,6 +2684,15 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     get hidden() { return hidden; },
     /** True once the first-dismiss hint has been spent (persisted). */
     get hintShown() { return hintShown; },
+    /** The options page's one verb (owner, 2026-08-25): how long her lines
+     *  hang, as a scale on the say-hold curve. Persists on the emi blob;
+     *  this file stays the blob's only writer. */
+    setBubbleHold(scale) {
+      const v = setSayHoldScale(scale);
+      save();
+      return v;
+    },
+    get bubbleHold() { return getSayHoldScale(); },
     /**
      * THE RESIZE SEAM. There is no UI for it yet; the moment there is, calling
      * this is what turns the width from "the window's default" into "the
@@ -2290,6 +2719,8 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
         accrueVisible();
         endPress();
         cancelTrip();                // W2a: switched off mid-trip = home first
+        emitGesture('gone', { reason: 'disabled' });   // ASKS: see hide()
+        unmountAsk(false); dropHeldLine();
         cancelChain(); killTimers(); stopBlink(); stopSway(); clearBody();
         root.hidden = true;
         save(true);
@@ -2316,7 +2747,20 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       if (!deck) return false;
       const p = typeof which === 'string' ? (CHANNEL_TABLE && CHANNEL_TABLE[which]) : which;
       if (!p) return false;
+      // The heartbeat's clock is stamped off the deck's own `onStat` counter,
+      // not from here - see the loadChannels block.
       try { return !!deck.screenTakeover(p, opts || {}); } catch (e) { return false; }
+    },
+    /**
+     * THE HEARTBEAT'S DOOR ONTO THE WHEEL (2026-08-25). One wheel tick with the
+     * player-silence floor (THEATRE_IDLE_MS) lifted and every OTHER deck
+     * refusal - the per-channel cooldowns, the global cooldown, PER_SESSION_CAP,
+     * a class owning the screen, a live say, a hidden document - still standing.
+     * The owner wants screen animations frequent; they are still the deck's.
+     */
+    pulseChannel() {
+      if (!deck || typeof deck.pulse !== 'function') return false;
+      try { return !!deck.pulse(); } catch (e) { return false; }
     },
     /** The deck itself: the suites drive the wheel and the clock through it. */
     get channels() { return deck; },
@@ -2333,11 +2777,15 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       accrueVisible();
       cancelTrip();                  // W2a: never leave a trip timer behind
       unmountAsk(false);             // ASKS: never leave a live chip behind
+      dropHeldLine();                // ...nor a line waiting for one to end
+      if (askDropTimer !== null) { clearTimeout(askDropTimer); askDropTimer = null; }
       save(true);
       // clearBody() is the easy one to miss: `bodyTimer` outlives everything else
       // and its callback re-adds `.breath` to a node that is no longer in the page.
       cancelChain(); killTimers(); stopBlink(); stopSway(); disarmHold(); clearBody();
       clearApproachTimers();
+      clearGazeNudge();               // HEARTBEAT: the one timer restGaze owns
+      activitySubs.clear();
       if (gazeRaf != null && typeof cancelAnimationFrame === 'function') {
         cancelAnimationFrame(gazeRaf); gazeRaf = null;
       }

@@ -75,7 +75,7 @@ import {
 } from './scoring.js';
 import { createRender } from './render.js';
 import { IC_LEX } from './lex.js';
-import { createIcCasino } from './casino.js';
+import { createIcCasino, IC_CASINO, isJust, isRecordPing } from './casino.js';
 import { createIcPressure } from './pressure.js';
 import { createIcTrickster } from './trickster.js';
 
@@ -147,6 +147,18 @@ function probe(query) {
       const m = window.matchMedia(query);
       return !!(m && m.matches);
     }
+  } catch (e) { /* noop */ }
+  return false;
+}
+/* THE PHONE PROBE (web CLAUDE.md trap 42's seam): coarse pointer or a real
+ * touch digitiser. The CSS side rides the shell's global html.ae-touch; JS
+ * decisions use this local probe so the module answers the same on a bare
+ * harness. A Windows touchscreen laptop also answers true - accepted
+ * deliberately, the ceiling is hardware-protective and cheap. */
+function coarseTouch() {
+  if (probe('(pointer: coarse)')) return true;
+  try {
+    if (typeof navigator !== 'undefined' && navigator && Number(navigator.maxTouchPoints) > 1) return true;
   } catch (e) { /* noop */ }
   return false;
 }
@@ -222,9 +234,24 @@ export default {
       try { return ctx.lexicon(k, f == null ? IC_LEX[k] : f); }
       catch (e) { return f == null ? (IC_LEX[k] || k) : f; }
     };
+    /* EMI COMMENTARY SEAMS (the heartbeat wave). note() names a moment the
+     * mascot may react to - the shell prefixes 'game:' and its own voice engine
+     * decides whether the moment is worth a face, a line or nothing at all.
+     * hold() fences a timing-critical window where she may pull faces but never
+     * words. Both are additive, one-way and fully guarded: an older shell has
+     * neither, and a mascot may never break a class. */
+    const note = (id, extra) => {
+      try { if (ctx.mood && typeof ctx.mood.note === 'function') ctx.mood.note(id, extra); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+    const holdWords = (on) => {
+      try { if (ctx.mood && typeof ctx.mood.hold === 'function') ctx.mood.hold(!!on); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
     const timers = createTimers();
     const reduced = probe('(prefers-reduced-motion: reduce)')
       || !!(ctx.motion && ctx.motion.reducedMotion);
+    const touch = coarseTouch();
     const dev = ctx.dev === true;
 
     let S = null;
@@ -390,7 +417,11 @@ export default {
         root: ctx.root,
         t,
         reduced,
-        perf: false,
+        /* the tube's cheap ladder (tube3d: fewer segments, smaller band canvas,
+           4Hz band redraw, fewer particles) arms on a coarse-pointer device -
+           a phone's GPU is the ceiling, not the frame budget. Desktop answers
+           false and renders byte-identically. */
+        perf: touch,
         showRt: settingOf('ic_show_rt', true) !== false,
         seed,                    // the tube grows its skin from the class seed
         log: say,
@@ -417,6 +448,10 @@ export default {
         stagePhase: 'intro',     // intro|load|slide|reveal|gap|debrief
         slideStart: 0, slideMs: 0,
         revealAt: 0,
+        /* W3 P0-8: the slide riser's own bookkeeping. `descendOn` is the arm
+           flag every stop path clears; `descendAt` is when the next strike is
+           due (the mixer has no sustain, so a riser is RE-STRUCK - trap 108). */
+        descendOn: false, descendAt: 0,
         travelTimer: 0, phaseTimer: 0, windowTimer: 0, autoTimer: 0,
         lastPressAt: -1e9,
         paused: false, suspended: false, running: false,
@@ -516,6 +551,10 @@ export default {
            holds a node and can never raise this tier's audio ceiling. */
         cue: (name, level, extra) => deckEngine.audio(name, level, extra),
         log: say,
+        /* EMI COMMENTARY SEAMS: two moments live only inside a deck (the
+           casino's ALMOST, the pressure ladder stepping back down), so the
+           guarded note() rides down with the rest of the base kit. */
+        note,
       };
       try {
         casino = createIcCasino(Object.assign({}, base, {
@@ -618,7 +657,12 @@ export default {
     function swapBackdrop() {
       if (!S || !S.pool) return;
       try {
-        const kind = S.rngFx() < 0.7 ? 'loop' : 'still';
+        /* the desktop draws loops 70% of the time (gifs, cheap in an <img>);
+           a phone flips that share to stills-first so the blurred backdrop
+           never spends one of iOS's few hardware video decode sessions. ONE
+           rng draw either way, so the seeded stream stays aligned. */
+        const roll = S.rngFx();
+        const kind = roll < 0.7 ? (touch ? 'still' : 'loop') : (touch ? 'loop' : 'still');
         const got = S.pool.next(kind);
         if (got && got.url) { S.render.swapBg(got.url); S.swaps++; }
       } catch (e) { /* keep the old one */ }
@@ -686,6 +730,9 @@ export default {
       S.bubble = b;
       S.stagePhase = 'load';
       hud();
+      /* W3 P1-12: the round starts. A short high thud at the mouth of the tube,
+       * so the anticipation has a downbeat to hang off. */
+      deckEngine.audio('thud', 0.2, { pitch: 1.3 });
       S.render.showLoad();
       heat();
       /* the decks learn the KIND at the mouth - the trickster's tell needs it
@@ -701,6 +748,28 @@ export default {
       S.phaseTimer = timers.after(LOAD_MS, () => beginSlide(b));
     }
 
+    /* W3 P0-8: THE SLIDE RISER. The whole trip down the tube used to be dead
+     * air, which is why the pop arrived from nowhere. `descend` is a 1200ms
+     * finite riser, so the travel loop re-strikes it while the bubble is in
+     * flight, climbing .06 -> .18 with the distance covered. Two rules:
+     *   - it is DRIVEN BY THE TRAVEL LOOP, never by a ticker of its own, so a
+     *     freeze or a suspend that stops the slide stops the sound with it;
+     *   - the last strike is timed to resolve INTO the reveal (peak under
+     *     bubble_pop), and no new strike is ever armed after one, because a
+     *     recipe has no stop (trap 108) - what we cancel is the re-strike. */
+    const DESCEND_STEP_MS = 520;
+    const DESCEND_LEAD_MS = 260;   // no strike this close to the mouth
+    function stopDescend() {
+      if (!S) return;
+      S.descendOn = false;
+      S.descendAt = 0;
+    }
+    function descendStrike(p) {
+      if (!S || !S.descendOn) return;
+      const k = Math.max(0, Math.min(1, p));
+      deckEngine.audio('descend', 0.06 + 0.12 * k, { pitch: 1 + 0.1 * k });
+      S.descendAt = now() + DESCEND_STEP_MS;
+    }
     function beginSlide(b) {
       if (!S || S.paused || S.suspended) return;
       S.stagePhase = 'slide';
@@ -708,11 +777,16 @@ export default {
       S.slideMs = b.slideMs;
       S.render.setTravel(0);
       decks('slide', { idx: S.idx, slideMs: b.slideMs });
+      S.descendOn = true;
+      S.descendAt = 0;
       const tick = () => {
         if (!S || S.stagePhase !== 'slide' || S.paused || S.suspended) return;
         const p = (now() - S.slideStart) / S.slideMs;
         if (p >= 1) { reveal(b); return; }
         S.render.setTravel(p);
+        /* W3 P0-8: one strike per DESCEND_STEP_MS, never one per travel tick. */
+        if (S.descendOn && now() >= S.descendAt
+          && (S.slideMs - (now() - S.slideStart)) > DESCEND_LEAD_MS) descendStrike(p);
         S.travelTimer = timers.after(TRAVEL_TICK_MS, tick);
       };
       S.travelTimer = timers.after(TRAVEL_TICK_MS, tick);
@@ -721,12 +795,24 @@ export default {
     function reveal(b) {
       if (!S || S.paused || S.suspended) return;
       S.stagePhase = 'reveal';
+      stopDescend();                          // W3 P0-8: the slide is over
       if (b.kind === 'denied') S.tally.deniedShown++; else S.tally.goodShown++;
+      /* W3 P0-7: the face turns and the window opens, and until now that was
+       * the loudest silence in the class. KIND-BLIND, and that is the whole
+       * discipline of it: one level, one pitch, whatever the bubble is. A cue
+       * that knew the kind would be a free tell (casino.js's no-tell law). */
+      deckEngine.audio('shutter', 0.35);
       S.render.revealBubble(b);
       S.revealAt = now();                       // the clock starts ON the paint call
       /* RT INTEGRITY: the deck event is routed only AFTER the stamp is taken,
          so no deck can ever sit between the paint and the clock. */
       S.windowTimer = timers.after(b.windowMs, () => windowEnd(b));
+      /* THE GO / NO-GO WINDOW IS LIVE. Faces yes, words never: the score here
+         is literally (window - rt), and on the X the correct play is to touch
+         nothing for two seconds. Placed after the clock stamp and the window
+         timer so it can never sit between the paint and the reading. Every
+         resolution path below closes it. */
+      holdWords(true);
       decks('reveal', {
         idx: S.idx,
         kind: b.kind,
@@ -740,6 +826,8 @@ export default {
     function windowEnd(b) {
       if (!S || S.stagePhase !== 'reveal') return;
       S.stagePhase = 'gap';
+      stopDescend();                          // W3 P0-8: nothing is in flight
+      holdWords(false);                 // the window resolved on its own clock
       const streakBefore = S.streak;
       if (b.kind === 'denied') {
         /* the X survived - restraint pays, and the backdrop turns over */
@@ -748,12 +836,14 @@ export default {
         S.render.deniedPassed();
         S.render.stamp('calm', t('ic_denied_pass', 'Withheld'));
         swapBackdrop();
+        note('ic.heldTheX', { kind: 'celebrate', n: S.tally.deniedHeld, streak: S.streak });
       } else {
         /* drifted away - 0 points, NOT an error */
         S.tally.drifted++;
         S.streak = 0;
         S.render.fadeBubble();
         S.render.stamp('', t('ic_missed', 'It drifted away'));
+        note('ic.driftedAway', { kind: 'commiserate', n: S.tally.drifted, streak: streakBefore });
       }
       S.tally.score = S.score;
       hud();
@@ -773,6 +863,7 @@ export default {
       const b = S.bubble;
       timers.cancel(S.windowTimer);
       S.stagePhase = 'gap';
+      holdWords(false);                 // the window resolved on a real press
 
       if (b.kind === 'denied') {
         /* THE X. The one error in the game. */
@@ -793,6 +884,8 @@ export default {
           if (ctx.mood && streakBefore >= 6) { ctx.mood.runLost(); ctx.mood.calm(); }
           else if (ctx.mood) { ctx.mood.stumble(); ctx.mood.calm(); }
         } catch (e) { /* noop */ }
+        /* the one K.O. in the room: a long chain eaten by the X */
+        if (streakBefore >= 6) note('ic.xEatenBigChain', { kind: 'commiserate', n: Math.round(rt), streak: streakBefore });
         say('X clicked (' + source + ') at +' + Math.round(rt) + 'ms: -' + X_PENALTY);
       } else {
         const rt = Math.max(0, at - S.revealAt);
@@ -841,9 +934,23 @@ export default {
           flavor: b.flavor,
           score: S.score,
         });
+        /* EMI COMMENTARY SEAMS, all four once per tap and all off the numbers
+           the ledger already settled above - nothing here is recomputed for a
+           payload and nothing here may write back. */
+        if (newRecord) note('ic.newPersonalBest', { kind: 'celebrate', n: Math.round(rt), streak: S.streak });
+        if (kind === 'perfect') note('ic.perfectPop', { kind: 'celebrate', n: Math.round(rt), streak: S.streak });
+        if (isJust(rt, b.windowMs)) note('ic.justMadeIt', { kind: 'tease', n: Math.round(rt), streak: S.streak });
+        else if (!newRecord && isRecordPing(rt, record)) note('ic.recordPing', { kind: 'commiserate', n: Math.round(rt), streak: S.streak });
+        if (IC_CASINO.MILESTONES.indexOf(S.streak) >= 0) note('ic.streakMilestone', { kind: 'celebrate', streak: S.streak, n: S.bestStreak });
       }
       S.phaseTimer = timers.after(b.gapMs, nextBubble);
     }
+
+    /* VOICE throttle for the 'sub' pop. The flavour bag can seat two 'sub'
+       bubbles back to back across a bag boundary, and the shortest bubble cycle
+       is LOAD_MS + SLIDE_END_MS + GAP_MS = ~1110ms - under the 1400ms voiced-gap
+       floor. Every second sub pop speaks; the visual beat is untouched. */
+    let subBeatIdx = 0;
 
     /** The pop's effect beat - one of exactly three, all decoration. */
     function beat(flavor) {
@@ -857,8 +964,17 @@ export default {
         const went = deckEngine.fire('flash_burst', { clickSafe: true, strength: 0.6, sizePx: Math.round(vmin * 0.34), holdMs });
         if (went) deck('pressure', 'beat', { flavor, holdMs });
       } else if (flavor === 'sub') {
-        deckEngine.fire('sub_flash', { clickSafe: true, strength: 0.6 });
+        deckEngine.fire('sub_flash', {
+          clickSafe: true,
+          strength: 0.6,
+          voice: subBeatIdx % 2 === 0,
+          voiceKey: 'impulse-control-whisper',
+        });
+        subBeatIdx += 1;
       } else if (flavor === 'spiral') {
+        /* W3 P1-12: one of the three pop flavours was mute. The flourish gets a
+         * thin high wash so all three beats land as three beats. */
+        deckEngine.audio('wash', 0.22, { pitch: 1.3 });
         S.render.flourish();
       }
     }
@@ -869,6 +985,7 @@ export default {
       S.debriefed = true;
       S.running = false;
       S.stagePhase = 'debrief';
+      holdWords(false);                 // class over: nothing is scored again
       S.render.setTravel(null);
       /* the ENGINE cools here, as it always has. The decks keep the heat they
          earned until their own end()/destroy() sighs it out - zeroing them
@@ -916,6 +1033,7 @@ export default {
       deck('pressure', 'end', endInfo);
       deck('trickster', 'end', endInfo);
       const royal = !!(casinoEnd && casinoEnd.royal);
+      if (royal) note('ic.royal', { kind: 'celebrate', n: led.score, streak: S.bestStreak });
 
       /* W2 CHROME - THE TICKET. style.js prints the whole receipt in one
          pass (no per-row stagger anywhere in .g-ic-paper-grid), so the ladder
@@ -960,6 +1078,17 @@ export default {
         }
       } catch (e) { /* a ceremony must never be the thing that fails */ }
 
+      /* W3 P1-12: four outcomes used to share one `slide`. The ticket keeps its
+         slide; the STAMP now says which of the four this was, and a lifetime
+         best tops it 400ms later. Outside the ceremony's try/catch on purpose -
+         the sound of the verdict does not depend on whether the shell had a
+         stamp slot to draw in. A ROYAL is left alone: the casino's royal ladder
+         owns that beat and doubling it would flatten the rarest thing here.
+         debrief() runs once a class, so neither line needs a latch; the IN-PLAY
+         record cue is the casino's and is latched there (P0-4). */
+      if (!royal && perfect) deckEngine.audio('stamp', 0.4, { pitch: 1.2 });
+      if (!royal && newBest) timers.after(400, () => deckEngine.audio('record', 0.45));
+
       say('debrief: score ' + led.score
         + ', median ' + (led.medianRt == null ? 'n/a' : Math.round(led.medianRt) + 'ms')
         + ', popped ' + S.tally.popped + '/' + S.tally.goodShown
@@ -968,6 +1097,10 @@ export default {
         + ', swaps ' + S.swaps + (perfect ? ', PERFECT' : '') + (royal ? ', ROYAL' : ''));
 
       S.autoTimer = timers.after(AUTO_SUBMIT_MS, submit);
+      /* THE TICKET IS UP. The class's biggest hole: a static screen, two
+         buttons and up to AUTO_SUBMIT_MS of dead air. Announced ONCE, right
+         here - no timer of its own, the seam simply says how long she has. */
+      note('ic.debriefIdle', { kind: 'ambient', n: Math.round(AUTO_SUBMIT_MS / 1000) });
     }
 
     function writeMeta() {
@@ -993,6 +1126,9 @@ export default {
       const fold = foldBaseline(S.meta, sessionMedian, true);
       if (fold) {
         S.recalibrated = true;
+        /* W3 P1-12: the one destructive button on the ticket answered with
+         * nothing at all. `commit` is the school's "that is done now". */
+        deckEngine.audio('commit', 0.4);
         S.result.fold = fold;
         try { ctx.store.mergeGameMeta(GAME_KEY, { baselineMs: fold.baselineMs, baselineUpdatedAt: Date.now(), bestRtMs: 0 }); }
         catch (e) { /* noop */ }
@@ -1003,6 +1139,7 @@ export default {
     function submit() {
       if (!S || ended) return;
       ended = true;
+      holdWords(false);                 // class end, whichever door it came out
       timers.cancel(S.autoTimer);
       const { led } = S.result || {};
       writeMeta();
@@ -1032,6 +1169,10 @@ export default {
     /* ============================================================ FREEZE */
     function freeze() {
       timers.cancel(S.phaseTimer); timers.cancel(S.windowTimer); timers.cancel(S.travelTimer);
+      stopDescend();                          // W3 P0-8: the travel loop is dead, so is its riser
+      /* pause / tab-away / mandatory video: any live window is void, so the
+         word fence comes down here too - it must never outlive the bubble. */
+      holdWords(false);
       /* a bubble in flight is void - hide it, it re-deals from the mouth */
       if (S.stagePhase === 'reveal' || S.stagePhase === 'slide' || S.stagePhase === 'load') {
         /* a voided REVEAL was already counted as shown; un-count it, or the
@@ -1050,6 +1191,9 @@ export default {
       if (!S.running || S.debriefed) return;
       S.phaseTimer = timers.after(RESUME_DELAY_MS, () => {
         if (!S || S.paused || S.suspended) return;
+        /* W3 P1-12: the thaw. The class picks itself up and says so, so the
+         * first bubble after a freeze is not a surprise. */
+        deckEngine.audio('lift', 0.25);
         /* Only a bubble the freeze actually VOIDED is dealt again. A freeze
            that landed in the settle gap has nothing in flight - re-dealing the
            cursor there would replay a bubble that already resolved (double
@@ -1110,6 +1254,7 @@ export default {
 
       destroy() {
         destroyed = true;
+        holdWords(false);               // teardown never leaves the fence up
         decks('destroy');
         casino = null; pressure = null; trickster = null;
         timers.killAll();

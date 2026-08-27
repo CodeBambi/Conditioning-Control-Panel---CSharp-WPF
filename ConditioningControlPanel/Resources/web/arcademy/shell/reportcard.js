@@ -18,6 +18,7 @@
  * ==========================================================================*/
 
 import { t, gradeLabel, tierLabel } from '../core/lexicon.js';
+import { gradeKey } from '../core/grades.js';
 import { exitBar, sign as signExit, campusPillRow } from './exits.js';
 
 /** Mod-anonymous, name-only, no URL. Do not "improve" this. */
@@ -155,6 +156,24 @@ export function createReportCard({ ceremonies, seep, toast, log } = {}) {
   // class names on the rows/grades/share block - only the frame changed.
   const root = el('div', 'arc-reportstage');
 
+  /* EVERY HOLD HAS AN OWNER. The till's count-up is the card's first timer, and
+   * a timer that outlives its paper writes into a node the shell has already
+   * dropped - so they are all swept here, on a repaint AND on destroy. */
+  const timers = new Set();
+  function later(fn, ms) {
+    if (typeof setTimeout !== 'function') { try { fn(); } catch (e) { /* noop */ } return 0; }
+    const id = setTimeout(() => {
+      timers.delete(id);
+      try { fn(); } catch (e) { /* a beat must never be the thing that throws */ }
+    }, Math.max(0, Number(ms) || 0));
+    timers.add(id);
+    return id;
+  }
+  function sweep() {
+    for (const id of Array.from(timers)) { try { clearTimeout(id); } catch (e) { /* noop */ } }
+    timers.clear();
+  }
+
   /**
    * @param {Object} state
    * @param {Object} state.timetable   buildTimetable() result
@@ -173,6 +192,7 @@ export function createReportCard({ ceremonies, seep, toast, log } = {}) {
     const s = state || {};
     const results = s.results || {};
     const classes = (s.timetable && s.timetable.classes) || [];
+    sweep();
     root.textContent = '';
     if (s.arrived) sfx('paper', 0.3);
 
@@ -198,7 +218,11 @@ export function createReportCard({ ceremonies, seep, toast, log } = {}) {
       const r = results[c.gameKey];
       const cell = el('span', 'rcell' + (r ? '' : ' pending'));
       const g = r ? String(r.grade || '') : '';
-      const gk = g.toLowerCase();
+      /* 'S+' LOWERCASES TO A CLASS NOBODY CAN STYLE. `.grade.s+` is not a
+       * selector CSS will honour without escaping, so the honours letter wears
+       * `splus` here and in every other badge on the page - the LABEL is still
+       * the lexicon's own 'S+' one line down. */
+      const gk = gradeKey(g);
       const badge = el('span', 'grade ' + (gk === 'pass' ? 'pass' : gk || 'none'),
         r ? gradeLabel(r.grade) : '--');
       cell.appendChild(badge);
@@ -210,6 +234,118 @@ export function createReportCard({ ceremonies, seep, toast, log } = {}) {
       strip.appendChild(cell);
     }
     put(strip);
+
+    /* W3 P0-29: THE STRIP COUNTS ITSELF OUT. Four grades and the day's XP used
+     * to land in one silent paint, which is the one moment of the night the
+     * player is actually reading numbers. One `pip` per graded class, 160ms
+     * apart and a step higher each time so a run of four reads as a tally, then
+     * a short `clock_tick` roll under the XP total - the adding machine, quiet
+     * enough to stay under the pips. The whole thing is ONE dispatch: `steps`
+     * are scheduled on the mixer's own timeline, so nothing here owns a timer.
+     * Drops bus (this is the payout), and never on a repaint (see `arrived`). */
+    if (s.arrived) {
+      const graded = classes.filter((c) => results[c.gameKey]).length;
+      const xpTotal = classes.reduce((sum, c) => {
+        const r = results[c.gameKey];
+        return sum + ((r && r.xp) ? Math.round(r.xp) : 0);
+      }, 0);
+      if (graded > 0) {
+        const steps = [];
+        for (let i = 1; i < graded; i += 1) {
+          steps.push({ atMs: 160 * i, pitch: 1 + 0.08 * i });
+        }
+        if (xpTotal > 0) {
+          // The roll starts after the last pip and never runs past 600ms.
+          const rollFrom = 160 * (graded - 1) + 240;
+          for (let k = 0; k < 6; k += 1) {
+            steps.push({ atMs: rollFrom + 90 * k, name: 'clock_tick', level: 0.12, pitch: 1 + 0.03 * k });
+          }
+        }
+        sfx('pip', 0.3, { bus: 'drops', steps });
+      }
+    }
+
+    /* --- THE TILL (economy wave, 2026-08-26) -------------------------------
+     * The night's tickets, counted out onto the paper, and - on the rare night
+     * that earned one - the token dropping into the tray. Both numbers are the
+     * HOST'S: they arrive on `payout-result` and the shell parks them on the
+     * result row, so nothing here adds anything up that C# has not already
+     * added up. The card only knows how to count TO a number.
+     *
+     * TICKETS ARE THE SMALL BEAT AND THE TOKEN IS THE BIG ONE, on purpose. A
+     * ticket payout happens every single graded class; if it rang like a
+     * jackpot the jackpot would stop meaning anything by Wednesday. So tickets
+     * get the adding machine (the same `pip` ladder the strip above uses, one
+     * bus, one dispatch) and the token gets the actual ceremony.
+     * --------------------------------------------------------------------- */
+    const till = { tickets: 0, token: false };
+    for (const c of classes) {
+      const p = results[c.gameKey] && results[c.gameKey].payout;
+      if (!p) continue;
+      till.tickets += Math.max(0, Math.round(Number(p.tickets) || 0));
+      if (p.token === true) till.token = true;
+    }
+    if (till.tickets > 0 || till.token) {
+      const row = el('div', 'arc-classbar arc-till');
+      const tChip = el('span', 'chip arc-till-t');
+      const tIco = el('i', 'arc-tick');
+      try { tIco.setAttribute('aria-hidden', 'true'); } catch (e) { /* noop */ }
+      tChip.appendChild(tIco);
+      const tNum = el('b', 'arc-till-n', String(s.arrived ? 0 : till.tickets));
+      tChip.appendChild(tNum);
+      tChip.appendChild(el('span', null, ' ' + t('payout_tickets', 'Tickets')));
+      row.appendChild(tChip);
+      put(row);
+
+      if (s.arrived && till.tickets > 0) {
+        /* THE COUNT-UP. Twelve steps and out, eased so the last few land slow -
+         * a counter that ticks evenly reads as a progress bar, and a counter
+         * that slows down reads as money being counted. A repaint (`arrived`
+         * false) skips straight to the total: the number is not news twice. */
+        const STEPS = 12;
+        const dur = 720;
+        for (let i = 1; i <= STEPS; i += 1) {
+          const frac = i / STEPS;
+          const eased = 1 - Math.pow(1 - frac, 2.2);
+          const at = Math.round(dur * frac);
+          const shown = Math.round(till.tickets * eased);
+          later(() => { try { tNum.textContent = String(shown); } catch (e) { /* noop */ } }, at);
+        }
+        sfx('pip', 0.26, {
+          bus: 'drops',
+          steps: [
+            { atMs: 0, pitch: 0.94 }, { atMs: 150, pitch: 1.02 },
+            { atMs: 320, pitch: 1.1 }, { atMs: 520, pitch: 1.18 },
+            { atMs: 700, name: 'chime', level: 0.34, pitch: 1 },
+          ],
+        });
+      }
+
+      if (till.token) {
+        const kChip = el('span', 'chip arc-till-k');
+        const kIco = el('i', 'arc-tok', '◉');
+        try { kIco.setAttribute('aria-hidden', 'true'); } catch (e) { /* noop */ }
+        kChip.appendChild(kIco);
+        kChip.appendChild(el('span', null,
+          t('payout_token_minted', 'A token dropped in the tray. That is your one for today.')));
+        row.appendChild(kChip);
+        /* THE ONE BIG BEAT OF THE NIGHT, and it is borrowed rather than built:
+         * ceremonies.reward('jackpot') is the engine's own jackpot with the CSS
+         * floor behind it, which is exactly what a once-a-day mint should be
+         * spending. It lands AFTER the ticket count-up so the two do not step on
+         * each other - the small number finishes, then the rare thing happens. */
+        if (s.arrived && ceremonies) {
+          later(() => {
+            try {
+              ceremonies.reward('jackpot', {
+                target: kChip,
+                text: t('wallet_tokens', 'Tokens'),
+              });
+            } catch (e) { say('token mint beat failed: ' + ((e && e.message) || e)); }
+          }, till.tickets > 0 ? 820 : 120);
+        }
+      }
+    }
 
     /* --- attendance --- */
     const att = el('div', 'arc-classbar');
@@ -321,7 +457,7 @@ export function createReportCard({ ceremonies, seep, toast, log } = {}) {
     return root;
   }
 
-  return { root, render, destroy() { root.remove(); } };
+  return { root, render, destroy() { sweep(); root.remove(); } };
 }
 
 export default createReportCard;

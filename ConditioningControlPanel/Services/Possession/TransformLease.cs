@@ -134,6 +134,9 @@ public sealed class TransformLease
     {
         if (_released) return;
         if (--_refCount > 0) return;
+        // Released HERE rather than after the ease-back, so a Take() during the animation gets a
+        // clean new lease instead of joining one that is on its way out. The cost is that this lease
+        // can be superseded before it lands; RestoreNow is what keeps that harmless.
         _released = true;
 
         try
@@ -161,11 +164,16 @@ public sealed class TransformLease
         RestoreNow();
     }
 
-    /// <summary>Crash-safe synchronous restore (UndoAll). No animation, no awaits.</summary>
+    /// <summary>
+    /// Crash-safe synchronous restore (UndoAll). No animation, no awaits. Refcounted like
+    /// <see cref="ReleaseAsync"/>: when a second effect is still leaning on the same control, dropping
+    /// our reference is the whole job - snapping ITS transforms back to identity and handing the
+    /// element away would undo an effect that is still live and still owns the ledger entry.
+    /// </summary>
     public void ReleaseImmediate()
     {
         if (_released) return;
-        _refCount = 0;
+        if (--_refCount > 0) return;
         _released = true;
         ZeroNow();
         RestoreNow();
@@ -173,6 +181,16 @@ public sealed class TransformLease
 
     private void RestoreNow()
     {
+        // Are we still the lease this element answers to? A release that animates back (150-600 ms
+        // for a scene beat) marks itself released the moment it starts, so a Take() in that window
+        // builds a FRESH lease around our group and registers it. When we finally land, the element
+        // belongs to that lease: restoring the origin would clobber the one it is using, and removing
+        // the table entry would delete ITS registration - after which IsLeased lies and the next
+        // effect stacks another TransformGroup on top. So a superseded lease touches neither.
+        bool stillRegistered = false;
+        try { stillRegistered = _table.TryGetValue(_el, out var current) && ReferenceEquals(current, this); }
+        catch { }
+
         try
         {
             // Only give the element back if OUR group is still the installed transform; if something
@@ -186,14 +204,18 @@ public sealed class TransformLease
                 else _el.ClearValue(UIElement.RenderTransformProperty);
             }
 
-            if (_priorOriginWasLocal) _el.RenderTransformOrigin = _priorOrigin;
-            else _el.ClearValue(UIElement.RenderTransformOriginProperty);
+            if (stillRegistered)
+            {
+                if (_priorOriginWasLocal) _el.RenderTransformOrigin = _priorOrigin;
+                else _el.ClearValue(UIElement.RenderTransformOriginProperty);
+            }
         }
         catch (Exception ex)
         {
             App.Logger?.Warning("TransformLease restore failed: {Error}", ex.Message);
         }
-        try { _table.Remove(_el); } catch { }
+
+        if (stillRegistered) { try { _table.Remove(_el); } catch { } }
     }
 }
 

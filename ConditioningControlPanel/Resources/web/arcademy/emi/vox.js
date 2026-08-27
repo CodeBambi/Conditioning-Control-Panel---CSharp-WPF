@@ -9,6 +9,7 @@
  *   const vox = createVox({ log });
  *   vox.tick();                        // one dot frame typed
  *   vox.speak('nice one!', { face: 'celebration' });
+ *   vox.react('sad');                  // W3 P1-19: a face-only moment, no words
  *   vox.stop();                        // the bubble cleared - cut, no tail
  *
  * WHAT THIS FILE IS NOT: an audio node. CLAUDE.md trap 18 is absolute -
@@ -83,6 +84,16 @@ export const VOX_DIALS = Object.freeze({
 
   /* --- the typing tick --------------------------------------------------- */
   DOT_TICKS: true,           // ON by default (owner: the anticipation is the point)
+
+  /* --- the WORDLESS reaction (W3 P1-19) ---------------------------------
+   * About fifteen of the moments in moments.js are a face and nothing else -
+   * a miss, a glance, the side-eye - and every one of them was silent. This is
+   * the sound they get: one or two blips off the SAME timbre and the SAME mood
+   * dials her speech uses, so a reaction is heard as EMI rather than as a beep
+   * the school made. It is quieter than a line and it is rationed, because the
+   * fastest way to make a mascot annoying is to answer everything twice. */
+  REACT_LEVEL: 0.3,          // under LEVEL: a reaction is a smaller thing than a line
+  REACT_GAP_MS: 1200,        // ...and at most one of them per this, whoever asks
 
   /* --- the moods, keyed by BODY FRAME family (widget.js frameForFace) ----
    * `decline` is in semitones per sentence and a NEGATIVE one rises; `tail` is
@@ -295,7 +306,50 @@ export function makeScore(text, mood, dials) {
 }
 
 /**
- * createVox({ dials, log }) -> { speak, tick, stop, destroy }
+ * makeReact(mood, dials?) -> [{atMs, pitch, gain}, ...]   (W3 P1-19)
+ *
+ * THE WORDLESS REACTION, and it is the same instrument playing a shorter
+ * phrase. There is no second table and no second timbre: the mood's own dials
+ * decide everything, which is why a `celebration` react and a `celebration`
+ * line are recognisably the same character.
+ *
+ * TWO BLIPS FOR THE MOODS THAT HURRY, ONE FOR THE REST. `gap` under 1 is the
+ * dial that already says "this feeling is quick" (celebration and shock), and
+ * a quick feeling gets a second syllable to move through; the calm ones get a
+ * single note, because a two-note sigh is a melody and a sigh is not.
+ *
+ * The step between the two is the mood's DECLINATION with its sign flipped -
+ * so a mood that rises through a sentence rises here too - and the last blip
+ * still takes the mood's `tail`. PURE and DETERMINISTIC, seeded on the mood
+ * name: `sad` always sounds like `sad`.
+ */
+export function makeReact(mood, dials) {
+  const D = (dials && typeof dials === 'object') ? Object.assign({}, VOX_DIALS, dials) : VOX_DIALS;
+  const moods = D.MOODS || VOX_DIALS.MOODS;
+  const key = (typeof mood === 'string' && moods[mood]) ? mood : 'idle';
+  const M = moods[key];
+  const rng = makeRng('emi-react|' + key);
+
+  const n = M.gap < 1 ? 2 : 1;
+  const step = -M.decline;
+  const blips = [];
+  let t = 0;
+  for (let i = 0; i < n; i++) {
+    if (i > 0) t += Math.max(16, D.GAP_SYL_MS * M.gap);
+    let semi = i * step;
+    if (i === n - 1) semi += M.tail;
+    semi += (rng() * 2 - 1) * D.JITTER_SEMI * M.jitter;
+    blips.push({
+      atMs: Math.round(t),
+      pitch: clamp(D.BASE_PITCH * M.pitch * semiToRatio(semi), PITCH_MIN, PITCH_MAX),
+      gain: clamp(D.REACT_LEVEL * M.gain, 0.02, 1),
+    });
+  }
+  return blips;
+}
+
+/**
+ * createVox({ dials, log }) -> { speak, react, tick, stop, destroy }
  * Owns nothing but timers. Every entry point is safe to call on a platform with
  * no document, no CustomEvent and no audio at all.
  */
@@ -304,7 +358,9 @@ export function createVox({ dials, log } = {}) {
   const D = Object.assign({}, VOX_DIALS, (dials && typeof dials === 'object') ? dials : {});
   const timers = new Set();
   let dead = false;
-  const stats = { spoke: 0, blips: 0, ticks: 0, cut: 0 };
+  /** W3 P1-19: when the last wordless reaction went out, for the ration. */
+  let lastReactAt = 0;
+  const stats = { spoke: 0, reacted: 0, blips: 0, ticks: 0, cut: 0 };
 
   /** The ONE way a sound leaves this file. A cue may never be what throws. */
   function cue(name, level, pitch) {
@@ -355,6 +411,40 @@ export function createVox({ dials, log } = {}) {
       const score = makeScore(line, (opts && opts.face) || 'idle', D);
       if (!score.length) return false;
       stats.spoke += 1;
+      stats.blips += score.length;
+      for (const b of score) {
+        if (b.atMs <= 0) { cue('emi_blip', b.gain, b.pitch); continue; }
+        const id = setTimeout(() => { timers.delete(id); cue('emi_blip', b.gain, b.pitch); }, b.atMs);
+        timers.add(id);
+      }
+      return true;
+    },
+
+    /**
+     * W3 P1-19: ANSWER A WORDLESS MOMENT. One or two blips in the mood of the
+     * pose she just put on, and no words anywhere near it.
+     *
+     * It lives HERE, beside `speak`, for the reason trap 70 gives: everything
+     * that can put a sound in EMI's mouth has to be cut by the same `stop()`,
+     * and `stop()` is reached from exactly one place in widget.js
+     * (`setBubble(null)`). A reaction fired from anywhere else with a timer of
+     * its own would be the second speak path that trap forbids.
+     *
+     * RATIONED, AND THE RATION IS THIS FILE'S. Moments arrive in clusters (a
+     * miss, then the next miss 400ms later), so the caller is not trusted to
+     * space them: one react per REACT_GAP_MS, refused otherwise, and a refusal
+     * is a normal answer.
+     * @param {string=} face  a body-frame family (widget.js bodyFrame)
+     */
+    react(face) {
+      if (dead || !D.ENABLED) return false;
+      const t = Date.now();
+      if (lastReactAt && (t - lastReactAt) < D.REACT_GAP_MS) return false;
+      const score = makeReact(face, D);
+      if (!score.length) return false;
+      lastReactAt = t;
+      stop();                                 // ONE VOICE: never two at once
+      stats.reacted += 1;
       stats.blips += score.length;
       for (const b of score) {
         if (b.atMs <= 0) { cue('emi_blip', b.gain, b.pitch); continue; }

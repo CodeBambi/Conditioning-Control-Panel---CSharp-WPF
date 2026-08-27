@@ -23,10 +23,11 @@ namespace ConditioningControlPanel.Services.EmergencyExit;
 /// closes it and nothing changed", which is already the `abandon` verdict.</para>
 ///
 /// <para><b>The host is authoritative.</b> The page reports what HAPPENED (completed / failed); the
-/// verdict is rolled here (<see cref="SendBackChance"/>) and applied to
-/// <see cref="LockdownService"/> the instant it is decided, BEFORE the page is told. A page that is
-/// hand-edited, reloaded or killed mid-outro therefore cannot invent an escape, and cannot dodge a
-/// sendback by never playing the outro.</para>
+/// verdict is rolled here (<see cref="SendBackChance"/>) and applied to <see cref="LockdownService"/>
+/// in the same synchronous turn it is decided. A page that is hand-edited, reloaded or killed
+/// mid-outro therefore cannot invent an escape, and cannot dodge a sendback by never playing the
+/// outro. The page is told first (<see cref="OnGameFinished"/> explains why that ordering is
+/// load-bearing) but it is never ASKED anything.</para>
 ///
 /// <para><b>Nothing here is a wall.</b> Every path out of this window is safe: the X, Esc, a dead
 /// render process and app shutdown all land on <see cref="Close"/>, which changes nothing about the
@@ -52,6 +53,12 @@ internal static class EmergencyExitHostService
     private static DispatcherTimer? _failsafe;
     private static string _game = "";
     private static bool _verdictSent;
+    /// <summary>True from the moment the verdict is posted to the page until the window is torn
+    /// down. While it is set, the LockdownDeactivated handler leaves the window ALONE: an `escape`
+    /// verdict deactivates the lockdown, and closing the window from that event would kill the page
+    /// before it ever rendered the escape card the user just earned. The outro's `outro-done` (or
+    /// <see cref="OutroFailsafe"/>) closes it a beat later instead.</summary>
+    private static bool _outroPending;
     private static bool _closing;          // reentrancy: Dispose closes the window -> Closed -> Close()
     private static bool _hooked;           // LockdownDeactivated subscription (one-shot, lazily armed)
     private static bool _preview;          // --emergency-exit-preview: verdicts logged, NEVER applied
@@ -106,6 +113,7 @@ internal static class EmergencyExitHostService
             EnsureHooked();
             _preview = preview;
             _verdictSent = false;
+            _outroPending = false;
             _closing = false;
 
             if (!preview)
@@ -208,6 +216,13 @@ internal static class EmergencyExitHostService
     /// <para>LockdownDeactivated is the single reset point: it closes a window that outlived its
     /// lockdown (the secret phrase, a panic key, the timer simply expiring while a game is open) and
     /// clears the per-lockdown attempt counter and no-repeat memory.</para>
+    ///
+    /// <para>With ONE exception, which is the whole reason <see cref="_outroPending"/> exists: an
+    /// `escape` verdict deactivates the lockdown itself, and this event fires synchronously from
+    /// inside that call. Closing here would tear the window down between the verdict being posted
+    /// and the page painting the escape card, so the player who just won would watch the window
+    /// vanish instead. The counters still reset (the lockdown IS over); only the window survives,
+    /// until `outro-done` or the failsafe closes it.</para>
     /// </summary>
     private static void EnsureHooked()
     {
@@ -215,9 +230,7 @@ internal static class EmergencyExitHostService
         _hooked = true;
         App.Lockdown.LockdownDeactivated += () =>
         {
-            // Ordering matters: close FIRST (an open window over a finished lockdown is the bug),
-            // then reset, so the next lockdown starts at attempt #1 with a free game pick.
-            Close();
+            if (!_outroPending) Close();
             _attempt = 0;
             _lastGame = "";
         };
@@ -374,8 +387,18 @@ internal static class EmergencyExitHostService
     }
 
     /// <summary>
-    /// The one decision this service exists to make. Roll, APPLY, then tell the page - in that order,
-    /// so the lockdown state is already correct no matter what the page does next.
+    /// The one decision this service exists to make. Roll, TELL THE PAGE, then apply.
+    ///
+    /// <para>The post has to come first, and the reason is not cosmetic. Applying an `escape` calls
+    /// <see cref="LockdownService.Deactivate"/>, which raises LockdownDeactivated synchronously,
+    /// which used to run <see cref="Close"/> and dispose the WebView - all before the verdict message
+    /// was ever posted, so the post landed on a null host and the winning player's window simply
+    /// disappeared. Posting first, plus the <see cref="_outroPending"/> guard on the deactivation
+    /// handler, is what lets the page show the card it has always been able to render.</para>
+    ///
+    /// <para>The apply still happens synchronously right after, and is NOT deferred onto the
+    /// dispatcher: the host is authoritative, and a verdict queued behind a dispatcher that is
+    /// shutting down is a verdict that silently never happens.</para>
     /// </summary>
     private static void OnGameFinished(JObject msg)
     {
@@ -396,6 +419,15 @@ internal static class EmergencyExitHostService
             "EmergencyExit: verdict (game {Game}, result {Result}, outcome {Outcome}, roll {Roll:0.###}/{Chance:0.###})",
             game, result, outcome, roll, chance);
 
+        // Tell the page, arm its deadline, and only then change the world. The outro is only
+        // "pending" once the failsafe that will close the window is actually on its way: without one
+        // (no window, or a dispatcher that is already shutting down) the deactivation handler stays
+        // the thing that tears it down, exactly as before.
+        var host = _host;
+        try { host?.Post(new { type = "verdict", outcome }); }
+        catch (Exception ex) { App.Logger?.Warning("EmergencyExit: posting the verdict failed: {E}", ex.Message); }
+        _outroPending = ArmOutroFailsafe(host);
+
         if (_preview)
         {
             App.Logger?.Information("EmergencyExit: PREVIEW - verdict NOT applied");
@@ -412,9 +444,6 @@ internal static class EmergencyExitHostService
             try { App.Bark?.NotifyEmergencyExitVerdict(game, outcome); }
             catch (Exception ex) { App.Logger?.Debug("EmergencyExit: verdict bark failed: {E}", ex.Message); }
         }
-
-        _host?.Post(new { type = "verdict", outcome });
-        ArmOutroFailsafe();
     }
 
     /// <summary>
@@ -434,26 +463,40 @@ internal static class EmergencyExitHostService
 
     /// <summary>The outro card gets <see cref="OutroFailsafe"/> to play and post <c>outro-done</c>.
     /// After that the window closes regardless: the verdict is already applied, so the card is
-    /// courtesy and must never be able to strand a window over the app.</summary>
-    private static void ArmOutroFailsafe()
+    /// courtesy and must never be able to strand a window over the app.
+    ///
+    /// <para>The timer belongs to the window instance that armed it. It is armed on the dispatcher
+    /// (one turn later than the verdict), and by the time it fires 8 s after that, <see cref="_host"/>
+    /// may hold a completely different window - the outro finished, the user pressed the big button
+    /// again, and the next lockdown's game is up. An untethered failsafe closes THAT one. So the host
+    /// is captured and compared, both when arming and when firing.</para></summary>
+    /// <returns>True when a failsafe is on its way, i.e. when the window is guaranteed to close
+    /// even if the page never answers.</returns>
+    private static bool ArmOutroFailsafe(ChaosWebViewHost? host)
     {
+        if (host == null) return false;
         var disp = Application.Current?.Dispatcher;
-        if (disp == null || disp.HasShutdownStarted) return;
+        if (disp == null || disp.HasShutdownStarted) return false;
         disp.BeginInvoke(new Action(() =>
         {
             try
             {
+                if (!ReferenceEquals(_host, host)) return;   // that window is already gone
                 CancelOutroFailsafe();
-                _failsafe = new DispatcherTimer { Interval = OutroFailsafe };
-                _failsafe.Tick += (_, _) =>
+                var timer = new DispatcherTimer { Interval = OutroFailsafe };
+                _failsafe = timer;
+                timer.Tick += (_, _) =>
                 {
+                    timer.Stop();
+                    if (!ReferenceEquals(_host, host)) return;
                     App.Logger?.Information("EmergencyExit: outro failsafe fired - closing");
                     Close();
                 };
-                _failsafe.Start();
+                timer.Start();
             }
             catch (Exception ex) { App.Logger?.Debug("EmergencyExit: failsafe arm failed: {E}", ex.Message); }
         }));
+        return true;
     }
 
     private static void CancelOutroFailsafe()
@@ -498,6 +541,7 @@ internal static class EmergencyExitHostService
                 App.Logger?.Information("EmergencyExit: closed (game {Game})", _game);
             }
             _verdictSent = false;
+            _outroPending = false;
             _preview = false;
         }
         catch (Exception ex) { App.Logger?.Debug("EmergencyExitHostService.Close: {E}", ex.Message); }

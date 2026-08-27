@@ -27,8 +27,11 @@
  * Two pairs of decoration vars are composed INTO the transform for the decks:
  *   --de-lie-dx / --de-lie-dy   unitless step offsets (trickster cameo)
  *   --de-lean-x / --de-lean-y   -1..1 lean toward a partner (casino strain)
- * They default to 0 and are removed by the deck that set them. The SAME lean
- * pair on .g-de-bench (inherits:false, so it never reaches a tile) tilts the
+ * They default to 0 and are removed by the deck that set them. The bench's
+ * own lean is the SEPARATE --de-bench-lean-x/y pair (it used to share the
+ * tile names, and on any host without @property registration the bench value
+ * inherited into every tile's positional transform - an extra transform
+ * transition per tile per slide, and again on the spring-back): it tilts the
  * whole bench toward a move and springs it back (casino.slide / bump).
  *
  * PASS 2 - THE SLIDE, THE WALL, THE FACES. index.js marks moving tiles
@@ -144,6 +147,8 @@ export const STYLE_TEXT = `
 @property --de-n-scale{syntax:'<number>';inherits:true;initial-value:1}
 @property --de-lean-x{syntax:'<number>';inherits:false;initial-value:0}
 @property --de-lean-y{syntax:'<number>';inherits:false;initial-value:0}
+@property --de-bench-lean-x{syntax:'<number>';inherits:false;initial-value:0}
+@property --de-bench-lean-y{syntax:'<number>';inherits:false;initial-value:0}
 @property --de-lie-dx{syntax:'<number>';inherits:false;initial-value:0}
 @property --de-lie-dy{syntax:'<number>';inherits:false;initial-value:0}
 /* pass 3 - THE HAND: the grab vector lives on the BOARD (index.js writes it on
@@ -343,10 +348,11 @@ export const STYLE_TEXT = `
 /* ---- the bench: the board fills the frame -------------------------------- */
 .g-de-bench{position:relative;z-index:1;flex:1;min-height:0;width:100%;
   display:flex;justify-content:center;align-items:center;
-  /* pass 2: the lean (casino.slide / bump set --de-lean-x/y here; a spring
-     curve carries it there and back) */
-  transform:perspective(1200px) rotateY(calc(var(--de-lean-x,0) * 2.2deg)) rotateX(calc(var(--de-lean-y,0) * -2.2deg))
-    translate3d(calc(var(--de-lean-x,0) * 6px), calc(var(--de-lean-y,0) * 6px), 0);
+  /* pass 2: the lean (casino.slide / bump set --de-bench-lean-x/y here; a
+     spring curve carries it there and back). BUG FIX 2026-08-25: this pair
+     used to be --de-lean-x/y, the same names the tiles read - see the header. */
+  transform:perspective(1200px) rotateY(calc(var(--de-bench-lean-x,0) * 2.2deg)) rotateX(calc(var(--de-bench-lean-y,0) * -2.2deg))
+    translate3d(calc(var(--de-bench-lean-x,0) * 6px), calc(var(--de-bench-lean-y,0) * 6px), 0);
   transition:transform .36s cubic-bezier(.2,1.6,.35,1)}
 /* ---- 15 SOMETHING BELOW (the seep's Deep End special) --------------------
    A soft-edged shape drifting once through the shallows, BEHIND the tiles.
@@ -955,6 +961,65 @@ html.ae-touch .g-de-p-glitch.is-on{backdrop-filter:none;-webkit-backdrop-filter:
 html.ae-touch .g-de-tile.is-merged .g-de-glyph{animation:g-de-glyphpop-t .42s ease-out 1}
 @keyframes g-de-glyphpop-t{0%{transform:scale(1.25);opacity:.72}100%{transform:none;opacity:1}}
 
+/* ---- pass 6b: THE TOUCH GPU DIET (html.ae-touch, 2026-08-25) -------------
+   The owner's iPhone 13 Pro Max dropped frames on EVERY tile slide, even with
+   two tiles on the board. The per-slide bill, retired here (the JS half -
+   flock skip, still merge punch, still faces, grab coalescing - is gated on
+   the game's own touch flag):
+     - .g-de-arrow wore a drop-shadow FILTER: 10-16 filtered nodes per slide,
+       up to 32 live. The flock is not even spawned on touch (casino.js); the
+       filter goes too for any host that arms ae-touch without the game flag.
+     - the bench lean was a perspective/rotateY/rotateX 3D transform - a 360ms
+       re-composite of the WHOLE board subtree per slide. Flat 2D shove now.
+     - the seven .g-de-bd layers each ran infinite animations (ken-burns +
+       pattern drifts). Frozen exactly like .g-de-lite freezes them - the
+       static gradients stay, so the pool still LOOKS dressed. (ae-touch is a
+       hardware ceiling: a phone on FULL is owed these cuts too, and the auto
+       probe samples an idle board so a phone never demoted on its own.)
+     - g-de-deepbreath is a FILTER (brightness) animation: always-on on the
+       deepest tile, and re-listed on every sliding tile's body. Dropped; the
+       stretch/squash (transform-only) is kept on the slide.
+     - the marquee flash animated brightness + drop-shadow over a board-sized
+       frame on every merge: opacity-only twin.
+     - the ken-burns pan on still faces: a composited transform per face, 16s,
+       forever. Off.
+   Everything here is also either killed or matched by the reduced-motion
+   blocks BELOW this one (their animation:none !important kills and later
+   equal-specificity bench rules still win), so reduced motion is unchanged. */
+html.ae-touch .g-de-arrow{filter:none}
+html.ae-touch .g-de-bench{transform:translate3d(calc(var(--de-bench-lean-x,0) * 6px), calc(var(--de-bench-lean-y,0) * 6px), 0)}
+html.ae-touch .g-de-bd,
+html.ae-touch .g-de-bd-veil::before,
+html.ae-touch .g-de-bd-bands::before,html.ae-touch .g-de-bd-bands::after,
+html.ae-touch .g-de-bd-lens::before,html.ae-touch .g-de-bd-lens::after,
+html.ae-touch .g-de-bd-motes::before,html.ae-touch .g-de-bd-motes::after,
+html.ae-touch .g-de-bd-rays::before,html.ae-touch .g-de-bd-vortex::before{animation:none}
+html.ae-touch .g-de-tile.is-deepest::before{animation:none}
+html.ae-touch .g-de-tile.is-sliding-x:not(.is-merged):not(.is-silt)::before{
+  animation:g-de-stretchx .32s cubic-bezier(.3,.7,.3,1) 1}
+html.ae-touch .g-de-tile.is-sliding-y:not(.is-merged):not(.is-silt)::before{
+  animation:g-de-stretchy .32s cubic-bezier(.3,.7,.3,1) 1}
+html.ae-touch .g-de-mq.g-de-mq-flash,
+html.ae-touch .g-de-mq.g-de-mq-bell.g-de-mq-flash{animation:g-de-mqflash-t .6s ease-out 1}
+@keyframes g-de-mqflash-t{0%{opacity:1}100%{opacity:var(--g-de-mqa,.26)}}
+html.ae-touch img.g-de-media{animation:none}
+/* pass 7 (the merge choreography): --de-n-depth is a REGISTERED, INHERITING
+   number with a transition on the whole stage, so every new-deepest write is a
+   window of per-frame inherited-value recompute across the stage subtree. On a
+   phone 1.6s of that lands right on the reward beat; .6s keeps the
+   step-darker read and drops the window to a third. The transition list is
+   restated whole (a transition property does not merge). Desktop keeps 1.6s. */
+html.ae-touch .g-de-stage{
+  transition:--de-n-depth .6s ease, --de-n-a-bands 3.2s ease, --de-n-a-rays 3.2s ease,
+    --de-n-a-lens 3.2s ease, --de-n-a-vortex 3.2s ease, --de-n-a-motes 3.2s ease,
+    --de-n-a-veil 3.2s ease, --de-n-tilt 4s ease, --de-n-scale 4s ease}
+/* the OS-level reduced-motion query pins the bench flat at LOWER specificity
+   than the touch rule above, so the touch sheet restates it (the class-based
+   html.arc-reduced rule below already outranks by order). */
+@media (prefers-reduced-motion: reduce){
+  html.ae-touch .g-de-bench{transform:none;transition:none}
+}
+
 /* ---- reduced motion: the mechanic survives, the motion does not ---------- */
 html.arc-reduced .g-de-stage *{animation:none !important}
 html.arc-reduced .g-de-stage{transition:none}
@@ -1239,6 +1304,61 @@ html.arc-reduced .g-de-hw-ladder i{opacity:1}
    terminal screens, and this one is a door in, not a door out. */
 .g-de-howto{pointer-events:auto}
 .g-de-hw-go{position:sticky;bottom:0;z-index:3;align-self:stretch;margin-top:14px}
+
+/* ---- pass 6c: THE TOUCH GPU DIET, second sweep (html.ae-touch) ------------
+   Same rung and the same law as passes 5 and 6b above (the device is the
+   setting; desktop is untouched to the byte). 6b took the board's biggest
+   filter loop - g-de-deepbreath - and the seven backdrop layers. This pass
+   takes the ones that were left, all of the same shape: a keyframe that
+   repaints a filter, a box-shadow or a text glow every frame, on nodes there
+   can be sixteen of at once.
+     - the NAME ladder. Tiers 4-6 breathed brightness and tiers 10-11 pulsed
+       it. The neon IS the stacked text-shadow, and it is untouched: 4-6 simply
+       hold their light, and 10-11 keep the pulse on scale alone. The tier-7-9
+       flicker and the 10-11 scan bar were already opacity-only and still run.
+     - the STRAIN glow and the tier-11 ECLIPSE glyph: both froze at their base
+       frame, which is the LIT one - the strain rim and the glyph halo are
+       reads and they stay on the screen, they just stop pumping.
+     - the MELT keyframed border-radius under a filtered body, which is a
+       repaint of a filtered layer per frame. The sag is transform-only now;
+       the sagging ink and the drip were always transform/opacity and stay.
+     - the PRESSURE WHEEL span the board under mix-blend-mode:screen, so every
+       frame was a fresh read-back-and-blend of a board-sized node. Frozen: the
+       wheel still hangs there as light behind the square.
+     - the GLITCH SHUDDER keyframed hue-rotate + saturate on a FULL-STAGE layer
+       at steps(2), forever, on top of the backdrop-filter 6b already took off.
+       The slip stays (transform), the hue churn goes.
+   Reduced motion is unchanged: its animation:none !important kills outrank
+   every twin named here. --------------------------------------------------- */
+/* THE :not() GUARDS ARE LOAD BEARING. These selectors out-specify every rule
+   that hands a name or a glyph a DIFFERENT animation for a moment - the merge
+   pop, the melt's sliding ink, the trickster's lie shiver - and a plain tier
+   override would silently eat all three on touch only. Excluding those states
+   lets them fall through to the cascade they already win on desktop. */
+html.ae-touch .g-de-tile[data-tier="4"]:not(.g-de-melt):not(.is-merged) .g-de-name:not(.g-de-lielabel),
+html.ae-touch .g-de-tile[data-tier="5"]:not(.g-de-melt):not(.is-merged) .g-de-name:not(.g-de-lielabel),
+html.ae-touch .g-de-tile[data-tier="6"]:not(.g-de-melt):not(.is-merged) .g-de-name:not(.g-de-lielabel){animation:none}
+html.ae-touch .g-de-tile[data-tier="10"]:not(.g-de-melt):not(.is-merged) .g-de-name:not(.g-de-lielabel),
+html.ae-touch .g-de-tile[data-tier="11"]:not(.g-de-melt):not(.is-merged) .g-de-name:not(.g-de-lielabel){
+  animation:g-de-namepulse-t 1.6s ease-in-out infinite alternate}
+@keyframes g-de-namepulse-t{from{transform:scale(1)}to{transform:scale(1.05)}}
+html.ae-touch .g-de-tile[data-tier="11"]:not(.g-de-melt):not(.is-merged) .g-de-glyph{animation:none}
+html.ae-touch .g-de-tile.is-strain::before{animation:none}
+html.ae-touch .g-de-tile.g-de-melt::before{animation:g-de-meltbody-t 2.4s ease-in-out infinite alternate}
+@keyframes g-de-meltbody-t{from{transform:scaleY(1) skewX(0)}
+  to{transform:scaleY(1.09) skewX(-3deg) translateY(3%)}}
+/* the two forever-glow chips freeze at their bright frame, never dark */
+html.ae-touch .g-de-chip.g-de-surface{animation:none;
+  box-shadow:0 0 18px color-mix(in srgb, var(--pink), transparent 58%)}
+html.ae-touch .g-de-stage[data-phase="bell"] .g-de-clock{animation:none;
+  box-shadow:0 0 16px rgba(240,194,75,.7)}
+/* the pressure layer */
+html.ae-touch .g-de-p-pin{animation:none}
+html.ae-touch .g-de-p-glitch.is-shudder{animation:g-de-p-shudder-t .16s steps(2) infinite}
+@keyframes g-de-p-shudder-t{0%{transform:translate(0,0)}
+  50%{transform:translate(-1.2%,0)}100%{transform:translate(1.2%,0)}}
+/* the rules sheet: a drop-shadow on the one arrow that moves */
+html.ae-touch .g-de-hw-arrow.right{filter:none}
 
 `;
 

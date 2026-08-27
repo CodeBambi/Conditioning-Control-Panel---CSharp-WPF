@@ -35,6 +35,10 @@ public sealed class RetitleEffect : PossessionEffectBase
     private TextBlock? _tb;
     private string? _originalText;
 
+    /// <summary>The exact line we WROTE, so the restore can tell "still ours" from "the world moved on"
+    /// - see UndoCoreAsync. HoldFor is Zero here, so that window is the whole rest of the lockdown.</summary>
+    private string? _writtenText;
+
     public override string Id => "retitle";
     public override PossessionRung MinRung => PossessionRung.Collapse;
     public override PossessionIntensity MinIntensity => PossessionIntensity.FullDoki;
@@ -62,18 +66,29 @@ public sealed class RetitleEffect : PossessionEffectBase
             line = _lines[(Array.IndexOf(_lines, line) + 1) % _lines.Length];
 
         _tb.Text = line;
+        _writtenText = line;
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Restore only while the title still says our line. This one holds until reassembly, so an hour can
+    /// pass between the write and the restore - and the only titles it can take are code-driven ones
+    /// ({loc:Str} is a Binding, which IsRewritable declines), i.e. exactly the ones something else
+    /// rewrites. Putting an hour-old string back over a fresher one is the restore that loses something.
+    /// Same guard as XpDrainEffect.RestoreTheLevel.
+    /// </summary>
     protected override Task UndoCoreAsync(TimeSpan duration)
     {
         try
         {
-            if (_tb != null && _originalText != null) _tb.Text = _originalText;
+            if (_tb != null && _originalText != null && _writtenText != null
+                && string.Equals(_tb.Text, _writtenText, StringComparison.Ordinal))
+                _tb.Text = _originalText;
         }
         catch (Exception ex) { App.Logger?.Warning("Possession retitle restore failed: {Error}", ex.Message); }
         _tb = null;
         _originalText = null;
+        _writtenText = null;
         return Task.CompletedTask;
     }
 }

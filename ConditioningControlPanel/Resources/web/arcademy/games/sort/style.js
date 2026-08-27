@@ -86,7 +86,12 @@ export const SORT_CSS = `
   0%,100%{transform:scale(1)}
   50%{transform:scale(1.015)}}
 
-.g-sort-card{position:absolute;inset:0;border-radius:18px;overflow:hidden;
+/* THE CARD DOES NOT CLIP. Its old overflow:hidden was eating the ripe ring:
+   the ringbox hangs OUTSIDE the box at inset:-10px, so only an inner sliver of
+   the stroke survived, the glow was clipped whole and the corners were cut.
+   The rounded clip the media needs lives on .g-sort-clip below instead - the
+   stamps sit well inside the box and never needed the clip. */
+.g-sort-card{position:absolute;inset:0;border-radius:18px;
   background:hsl(var(--sort-card-h-hue,318) 38% 18%);
   border:1px solid var(--sort-line);
   box-shadow:0 18px 44px rgba(0,0,0,.55),0 2px 0 rgba(255,255,255,.05) inset;
@@ -125,6 +130,10 @@ export const SORT_CSS = `
 .g-sort-card[data-depth="1"]{--sort-peek:10px}
 .g-sort-card[data-depth="2"]{--sort-peek:16px}
 
+/* THE CLIP LAYER: the back and the face live in here, because the ken-burns
+   face scales past the box every cycle and the card itself no longer clips. */
+.g-sort-clip{position:absolute;inset:0;border-radius:18px;overflow:hidden}
+
 /* the face. A loop is a muted video, a still an img, and a card with neither
    is the drawn back: a seeded hue and a soft chevron weave. */
 .g-sort-face{position:absolute;inset:0;width:100%;height:100%;
@@ -161,19 +170,53 @@ export const SORT_CSS = `
 .g-sort-card.is-wrong .g-sort-stamp{color:#8B8FAE;text-shadow:none}
 
 /* ----------------------------------------------------------- THE RIPE RING */
+/* Unclipped at last (see .g-sort-card / .g-sort-clip): the full stroke and its
+   glow render for the first time. The BLOOM is a second, wider arc BEHIND the
+   main one reading the same --sort-ring var - a halo bought with stroke-width
+   and opacity alone, no filter and no blend over the live face (trap 36; the
+   drop-shadow stays on the thin arc only, where it always was, and the touch
+   rung below still strips it). The ripe/just steps keep their colour and gain
+   width; the pulses ride transform/opacity on the box - compositor only. */
 .g-sort-ringbox{position:absolute;inset:-10px;z-index:4;pointer-events:none}
 .g-sort-ringbox svg{width:100%;height:100%;display:block;overflow:visible}
 .g-sort-ring-track{fill:none;stroke:rgba(237,235,255,.14);stroke-width:3}
-.g-sort-ring-arc{fill:none;stroke:var(--sort-pink);stroke-width:4;
+.g-sort-ring-bloom{fill:none;stroke:var(--sort-pink);stroke-width:12;opacity:.25;
+  stroke-linecap:round;
+  stroke-dasharray:var(--sort-ring-len,1000);
+  stroke-dashoffset:calc(var(--sort-ring-len,1000) * (1 - var(--sort-ring,1)));
+  transition:stroke 160ms linear}
+.g-sort-ring-arc{fill:none;stroke:var(--sort-pink);stroke-width:5.5;
   stroke-linecap:round;
   stroke-dasharray:var(--sort-ring-len,1000);
   stroke-dashoffset:calc(var(--sort-ring-len,1000) * (1 - var(--sort-ring,1)));
   filter:drop-shadow(0 0 6px rgba(255,105,180,.45));
   transition:stroke 160ms linear}
 .g-sort-ringbox[data-ripe="ripe"] .g-sort-ring-arc{stroke:var(--sort-gold);
+  stroke-width:6.5;
   filter:drop-shadow(0 0 10px rgba(255,201,74,.65))}
 .g-sort-ringbox[data-ripe="just"] .g-sort-ring-arc{stroke:#FFF0B8;
+  stroke-width:6.5;
   filter:drop-shadow(0 0 14px rgba(255,240,184,.85))}
+.g-sort-ringbox[data-ripe="ripe"] .g-sort-ring-bloom{stroke:var(--sort-gold);opacity:.32}
+.g-sort-ringbox[data-ripe="just"] .g-sort-ring-bloom{stroke:#FFF0B8;opacity:.38}
+/* the ripe pulse: one composited transform on the whole box */
+.g-sort-ringbox[data-ripe="ripe"],
+.g-sort-ringbox[data-ripe="just"]{animation:g-sort-ripe 700ms ease-in-out infinite}
+/* the last 12%: a 400ms opacity breathe. index.js toggles is-closing off the
+   same tick that writes --sort-ring, so the breathe never argues with the
+   number. Both states at once = both animations (the shorthand would otherwise
+   drop whichever rule lost the cascade). */
+.g-sort-ringbox.is-closing{animation:g-sort-ringbreathe 400ms ease-in-out infinite}
+.g-sort-ringbox.is-closing[data-ripe="ripe"],
+.g-sort-ringbox.is-closing[data-ripe="just"]{
+  animation:g-sort-ripe 700ms ease-in-out infinite,
+    g-sort-ringbreathe 400ms ease-in-out infinite}
+@keyframes g-sort-ripe{
+  0%,100%{transform:scale(1)}
+  50%{transform:scale(1.02)}}
+@keyframes g-sort-ringbreathe{
+  0%,100%{opacity:1}
+  50%{opacity:.52}}
 
 /* --------------------------------------------------------------- THE CHROME */
 /* THE STRIP OWNS THE TOP 56px (styles.css CLASS RUNNER). .arc-proctor is pinned
@@ -326,6 +369,16 @@ export const SORT_CSS = `
 .g-sort[data-reduced="1"] .g-sort-ringbox .g-sort-ring-arc{opacity:.45}
 .g-sort[data-reduced="1"] .g-sort-ringbox[data-ripe="ripe"] .g-sort-ring-arc{opacity:.8}
 .g-sort[data-reduced="1"] .g-sort-ringbox[data-ripe="just"] .g-sort-ring-arc{opacity:1}
+/* the pulses are MOTION and stop; the colour and width steps are STATES and
+   stay. Every pulse selector is repeated so the (0,3,0)+ compounds above are
+   outranked here by specificity or, at worst, by source order. */
+.g-sort[data-reduced="1"] .g-sort-ringbox,
+.g-sort[data-reduced="1"] .g-sort-ringbox.is-closing,
+.g-sort[data-reduced="1"] .g-sort-ringbox[data-ripe="ripe"],
+.g-sort[data-reduced="1"] .g-sort-ringbox[data-ripe="just"],
+.g-sort[data-reduced="1"] .g-sort-ringbox.is-closing[data-ripe="ripe"],
+.g-sort[data-reduced="1"] .g-sort-ringbox.is-closing[data-ripe="just"]{animation:none}
+.g-sort[data-reduced="1"] .g-sort-ring-bloom{transition:none;opacity:.16}
 
 @media (prefers-reduced-motion: reduce){
   .g-sort-stack,.g-sort-face,.g-sort-halo,.g-sort-demo-card,
@@ -338,6 +391,12 @@ export const SORT_CSS = `
      data-reduced="1" already says the same thing above. */
   .g-sort-card.is-gone,.g-sort-card.is-sink{transform:none}
   .g-sort-stage.is-shiver{animation:none}
+  /* the ring pulses, same list as the data-reduced block above: the compound
+     selectors tie the FX rules' specificity and this block is later in source */
+  .g-sort-ringbox,.g-sort-ringbox.is-closing,
+  .g-sort-ringbox[data-ripe="ripe"],.g-sort-ringbox[data-ripe="just"],
+  .g-sort-ringbox.is-closing[data-ripe="ripe"],
+  .g-sort-ringbox.is-closing[data-ripe="just"]{animation:none}
 }
 
 /* A COARSE POINTER PAYS FOR EVERY BLUR AND EVERY BLEND (trap 42). The room has
@@ -550,6 +609,7 @@ export const DECK_CSS = `
    the eye. Never a filter over a live decode (trap 36) - this is one flat
    plate at low alpha. */
 .g-sort-tk-frost{position:absolute;inset:0;pointer-events:none;
+  border-radius:18px;
   background:linear-gradient(160deg,rgba(210,225,255,.2),rgba(120,140,200,.14));
   box-shadow:0 0 0 1px rgba(220,235,255,.2) inset}
 .g-sort-card[data-tk-freeze="1"] .g-sort-face{animation-play-state:paused}
@@ -581,7 +641,10 @@ export const DECK_CSS = `
    tick; while a card is crooked the arc reads a SECOND variable the trickster
    writes instead, and the two meet exactly in the last 15%. Nothing about the
    real ring, the ripe attribute or the verdict moves - only the face. */
-.g-sort-ringbox[data-crooked="1"] .g-sort-ring-arc{
+/* The BLOOM bends with the arc, or the wider halo behind the lie would paint
+   the truth and the crooked card would announce itself. */
+.g-sort-ringbox[data-crooked="1"] .g-sort-ring-arc,
+.g-sort-ringbox[data-crooked="1"] .g-sort-ring-bloom{
   stroke-dashoffset:calc(var(--sort-ring-len,1000) * (1 - var(--sort-ring-bend,1)))}
 
 /* STAT FLICKER. The chain chip reads a number that was never true, then

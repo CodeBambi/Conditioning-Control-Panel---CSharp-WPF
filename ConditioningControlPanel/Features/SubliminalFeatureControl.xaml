@@ -158,6 +158,21 @@
                                           Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
                                           Checked="ChkSolidMode_Changed" Unchecked="ChkSolidMode_Changed"/>
                             </Grid>
+
+                            <!-- Font: any family installed on Windows, plus the bundled Fredoka. -->
+                            <Grid Height="34" Background="Transparent"
+                                  ToolTip="Any font installed on Windows. Applies to the next subliminal.">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="90"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str label_font}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <ComboBox Grid.Column="1" x:Name="CmbFont" Height="26" MaxWidth="220"
+                                          HorizontalAlignment="Right" VerticalAlignment="Center"
+                                          Style="{DynamicResource DarkComboBoxStyle}"
+                                          SelectionChanged="CmbFont_Changed"/>
+                            </Grid>
                         </StackPanel>
                     </Grid>
                 </Border>

@@ -520,6 +520,10 @@ export function createBoard(o) {
     const opts = o || {};
     const share = clamp(opts.share, 0, 1);
     const wantRng = typeof opts.rng === 'function' ? opts.rng : rng;
+    // Optional stagger for the strong-twin repaints (per-round target rotation
+    // on touch): the url still lands NOW - bookkeeping stays correct - only the
+    // paint is deferred, through setUrl's own paintDelayMs seam.
+    const paintDelay = Math.max(0, opts.paintDelayMs | 0);
     for (const tile of tiles) if (!tile.target) tile.warm = false;
     if (share <= 0) return 0;
 
@@ -540,7 +544,8 @@ export function createBoard(o) {
         // (it always is - this IS the target's url), so a strong twin never
         // mints a decoder. setUrl still arbitrates, so the budget cannot be
         // side-stepped through this door either.
-        && setUrl(tile, { url: target.url, remote: target.remote })) {
+        && setUrl(tile, { url: target.url, remote: target.remote },
+          paintDelay ? { paintDelayMs: paintDelay * (strong + 1) } : null)) {
         // same media, different hue: the honest local version of a near-twin
         used.delete(tile.grad + ':' + tile.hue);
         tile.warm = true;

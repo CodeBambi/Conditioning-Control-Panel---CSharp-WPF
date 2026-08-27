@@ -630,6 +630,40 @@ namespace ConditioningControlPanel.Models
             set { _lastDailyQuestDate = value; OnPropertyChanged(); }
         }
 
+        private int _mobileQuestDailyCompleted = 0;
+        /// <summary>
+        /// Lifetime daily quests completed on the MOBILE app — a mirror of the server's
+        /// authoritative mobile_stats ledger (/v2/user/quest-complete), adopted verbatim on every
+        /// V2 sync. Display-only: summed with QuestProgress.TotalDailyQuestsCompleted for combined
+        /// totals, and NEVER added into the counters this client pushes (the server's max-merge
+        /// would double-count every mobile quest).
+        /// </summary>
+        public int MobileQuestDailyCompleted
+        {
+            get => _mobileQuestDailyCompleted;
+            set { _mobileQuestDailyCompleted = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private int _mobileQuestWeeklyCompleted = 0;
+        /// <summary>
+        /// Lifetime weekly quests completed on the mobile app. See <see cref="MobileQuestDailyCompleted"/>.
+        /// </summary>
+        public int MobileQuestWeeklyCompleted
+        {
+            get => _mobileQuestWeeklyCompleted;
+            set { _mobileQuestWeeklyCompleted = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private int _mobileQuestXP = 0;
+        /// <summary>
+        /// Lifetime XP from quests completed on the mobile app. See <see cref="MobileQuestDailyCompleted"/>.
+        /// </summary>
+        public int MobileQuestXP
+        {
+            get => _mobileQuestXP;
+            set { _mobileQuestXP = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
         private int _streakShieldsRemaining = 0;
         /// <summary>
         /// Weekly streak shields remaining.
@@ -1434,6 +1468,16 @@ namespace ConditioningControlPanel.Models
         {
             get => _subTextColor;
             set { _subTextColor = value ?? "#FF00FF"; OnPropertyChanged(); }
+        }
+
+        // Family name of any font installed on Windows, or the "Fredoka (bundled)" sentinel.
+        // Read per flash by SubliminalService.CreateTextBlock via Helpers.FontPickerHelper.Resolve
+        // (chains to Arial, this feature's historical face, if the pick is gone).
+        private string _subliminalFont = "Arial";
+        public string SubliminalFont
+        {
+            get => _subliminalFont;
+            set { _subliminalFont = string.IsNullOrWhiteSpace(value) ? "Arial" : value; OnPropertyChanged(); }
         }
 
         private bool _subTextTransparent = false;
@@ -2743,6 +2787,39 @@ namespace ConditioningControlPanel.Models
         {
             get => _rampCurve;
             set { _rampCurve = value; OnPropertyChanged(); }
+        }
+
+        // Range ramping (community request). Stored by ordinal like RampCurve above; a settings
+        // file written before this shipped has no field, so it deserializes to Multiplier and the
+        // ramp behaves exactly as it did. See Helpers/RampMath.cs for the factor formula.
+        private RampMode _rampMode = RampMode.Multiplier;
+        public RampMode RampMode
+        {
+            get => _rampMode;
+            set { _rampMode = value; OnPropertyChanged(); }
+        }
+
+        // Range-mode endpoints, as a PERCENT OF EACH LINKED FEATURE'S OWN CONFIGURED VALUE, not
+        // absolute units - that is what lets one pair of dials drive spiral opacity, flash rate and
+        // volume at once with no per-feature ramp matrix. 100 -> 100 is a deliberate no-op default:
+        // flipping to Range mode changes nothing until the user moves a slider.
+        private int _rampStartPercent = 100;
+        public int RampStartPercent
+        {
+            get => _rampStartPercent;
+            set { _rampStartPercent = Math.Clamp(value, 0, 300); OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// End of the Range-mode sweep. May be BELOW <see cref="RampStartPercent"/> - a ramp-down
+        /// is the point (wakener audio, gentle wind-down instead of a hard stop), and the
+        /// Multiplier mode's 1x floor cannot express it.
+        /// </summary>
+        private int _rampEndPercent = 100;
+        public int RampEndPercent
+        {
+            get => _rampEndPercent;
+            set { _rampEndPercent = Math.Clamp(value, 0, 300); OnPropertyChanged(); }
         }
 
         #endregion
@@ -4098,6 +4175,16 @@ namespace ConditioningControlPanel.Models
             set { _bouncingTextFixedColor = value ?? ""; OnPropertyChanged(); }
         }
 
+        // Family name of any font installed on Windows, or the "Fredoka (bundled)" sentinel for
+        // the face that ships with the app. Resolved through Helpers.FontPickerHelper.Resolve,
+        // which chains to Segoe UI so uninstalling the pick degrades instead of throwing.
+        private string _bouncingTextFont = "Segoe UI";
+        public string BouncingTextFont
+        {
+            get => _bouncingTextFont;
+            set { _bouncingTextFont = string.IsNullOrWhiteSpace(value) ? "Segoe UI" : value; OnPropertyChanged(); }
+        }
+
         private bool _bouncingTextFxBreathing = false;
         public bool BouncingTextFxBreathing
         {
@@ -4387,6 +4474,48 @@ namespace ConditioningControlPanel.Models
         {
             get => _videoForceHardwareDecoding;
             set { _videoForceHardwareDecoding = value; OnPropertyChanged(); }
+        }
+
+        private List<string> _dndProcessList = new();
+        /// <summary>
+        /// Do-not-disturb apps: process names, lower-cased and WITHOUT the ".exe" (e.g. "vlc",
+        /// "mpv", "potplayermini64"). While one of these owns the foreground window the app stops
+        /// scheduling its own media over the top of it - see
+        /// <see cref="Services.UI.DoNotDisturbGuard"/>. Empty by default and never auto-populated:
+        /// guessing which player someone uses would silently turn features off for people who never
+        /// asked, so the list only ever holds apps the user named.
+        /// </summary>
+        [JsonProperty("dnd_process_list", ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> DndProcessList
+        {
+            get => _dndProcessList;
+            set { _dndProcessList = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private bool _dndSuppressVideos = true;
+        /// <summary>
+        /// Whether a do-not-disturb app in the foreground suppresses SCHEDULED mandatory videos.
+        /// Default ON - this is the whole point of naming a player. A video that is already playing
+        /// is never interrupted; only the next spawn is held.
+        /// </summary>
+        [JsonProperty("dnd_suppress_videos")]
+        public bool DndSuppressVideos
+        {
+            get => _dndSuppressVideos;
+            set { _dndSuppressVideos = value; OnPropertyChanged(); }
+        }
+
+        private bool _dndSuppressFlashes = false;
+        /// <summary>
+        /// Whether a do-not-disturb app in the foreground also suppresses ambient flash images.
+        /// Default OFF: flashes are brief and translucent, so plenty of people happily watch a film
+        /// with them running. Opt-in for those who do not.
+        /// </summary>
+        [JsonProperty("dnd_suppress_flashes")]
+        public bool DndSuppressFlashes
+        {
+            get => _dndSuppressFlashes;
+            set { _dndSuppressFlashes = value; OnPropertyChanged(); }
         }
 
         #endregion

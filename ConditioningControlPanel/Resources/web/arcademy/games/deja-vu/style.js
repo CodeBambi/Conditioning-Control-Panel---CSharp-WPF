@@ -46,6 +46,17 @@ export const STYLE_TEXT = `
 .g-dv-stage{position:absolute;inset:0;overflow:hidden;display:flex;flex-direction:column;
   align-items:center;gap:8px;padding:72px 18px 14px;
   --g-dv-gap:14px;
+  /* THE TWO FIT DIALS (mobile fit wave). They live HERE, on the stage, not on
+     .g-dv-grid, because a breakpoint has to be able to move them from ONE
+     place: a custom property declared on the grid itself would out-vote an
+     inherited override every time.
+       --g-dv-fill  how much of the bench WIDTH the board may take, in cqw
+       --g-dv-arn   the plate aspect as a NUMBER (w/h). 4/3 is the lab's
+                    landscape slide; a phone re-shapes it (see the breakpoints)
+                    so the board can actually fill a portrait or a letterbox
+                    frame instead of floating in the middle of it. */
+  --g-dv-fill:94;
+  --g-dv-arn:1.3333;
   background:
     radial-gradient(1000px 560px at 10% -6%, var(--dv-n-glowa, color-mix(in srgb, var(--lav), transparent 80%)), transparent 62%),
     radial-gradient(1000px 560px at 90% -6%, var(--dv-n-glowb, color-mix(in srgb, var(--lav), transparent 83%)), transparent 62%),
@@ -76,16 +87,45 @@ export const STYLE_TEXT = `
 .g-dv-hud .g-dv-meterwrap{display:inline-flex;align-items:center;gap:6px}
 
 /* ---- the bench: the board fills the frame -------------------------------- */
+/* THE BENCH IS THE MEASURE. 'container-type:size' turns the boardwrap into a
+   size query container, so 100cqw/100cqh inside it are the REAL width and
+   height of the space left under the HUD and above the Cram row - measured,
+   not guessed. That is the whole mobile fix: the old rule reserved a flat
+   250px of chrome off 100dvh, which on a 390px-tall landscape phone left 140px
+   for the board and dealt 33x24px cards. Containment is safe here because both
+   axes are decided from OUTSIDE (flex:1 for the height, width:100% for the
+   width), so nothing cycles. */
 .g-dv-boardwrap{position:relative;z-index:1;flex:1;min-height:0;width:100%;
-  display:flex;justify-content:center;align-items:center}
+  display:flex;justify-content:center;align-items:center;
+  /* THE MARQUEE'S OWN BAND. cq units measure the CONTENT box, so this padding
+     is two things at once: the gutter the casino bulb frame (.g-dv-mq, inset
+     6px, 7px bars) lives in, and the ceiling on the fit below. Without it a
+     board that fills the bench edge to edge paints its outer plates under the
+     bulbs. */
+  padding:var(--g-dv-bench-pad,14px);
+  container-type:size}
 .g-dv-grid{position:relative;display:grid;gap:var(--g-dv-gap);perspective:1100px;justify-content:center;
   grid-template-columns:repeat(var(--g-dv-cols,4),1fr);
-  /* height-fit: plates are 4/3 landscape, so width = (rowHeight * 4/3 * cols)
-     + gaps. ~250px of chrome (proctor strip + hud + hint + pads) is reserved. */
+  /* FALLBACK, first, for an engine with no container queries: the old
+     100dvh-minus-chrome guess. A 'cqw' an engine cannot parse invalidates the
+     whole declaration below at PARSE time, so this one survives in the cascade.
+     (The cq units must be written out literally rather than hidden in a var:
+     a var() that fails is invalid at COMPUTED-VALUE time, which resets width to
+     auto instead of falling back to the previous declaration.) */
   width:min(94%, calc(((100dvh - 250px - (var(--g-dv-rows,3) - 1) * var(--g-dv-gap))
-    / var(--g-dv-rows,3)) * 1.3333 * var(--g-dv-cols,4)
-    + (var(--g-dv-cols,4) - 1) * var(--g-dv-gap)))}
-.g-dv-cell{position:relative;aspect-ratio:4/3}
+    / var(--g-dv-rows,3)) * var(--g-dv-arn,1.3333) * var(--g-dv-cols,4)
+    + (var(--g-dv-cols,4) - 1) * var(--g-dv-gap)));
+  /* THE FIT: one cell is the SMALLER of what the width allows and what the
+     height allows, and the board is that cell times the columns plus the gaps.
+     The rows come free - .g-dv-cell carries the aspect - so the board can never
+     be taller than the bench and never needs a scrollbar. */
+  width:calc(min(
+      (var(--g-dv-fill,94) * 1cqw - (var(--g-dv-cols,4) - 1) * var(--g-dv-gap))
+        / var(--g-dv-cols,4),
+      ((100cqh - (var(--g-dv-rows,3) - 1) * var(--g-dv-gap)) / var(--g-dv-rows,3))
+        * var(--g-dv-arn,1.3333)
+    ) * var(--g-dv-cols,4) + (var(--g-dv-cols,4) - 1) * var(--g-dv-gap))}
+.g-dv-cell{position:relative;aspect-ratio:var(--g-dv-arn,1.3333)}
 
 /* ---- specimen slides ------------------------------------------------------ */
 .g-dv-card{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
@@ -95,7 +135,12 @@ export const STYLE_TEXT = `
     linear-gradient(165deg, color-mix(in srgb, var(--panel2), var(--lav) 14%), var(--panel) 58%,
       color-mix(in srgb, var(--panel), black 12%));
   box-shadow:0 10px 26px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.07);
-  transform-style:preserve-3d;transition:transform .22s ease,opacity .2s ease,
+  transform-style:preserve-3d;
+  /* .154s IS 'TIMING.flipMs' 154 (script.js), 30% off the old .22s/220 pair.
+     index.js waits exactly that long before it swaps the face and rotates the
+     card back, so these are ONE number living in two files - move them
+     together or the plate snaps mid-turn. */
+  transition:transform .154s ease,opacity .2s ease,
     box-shadow .2s ease,filter .25s ease;
   cursor:pointer;font:inherit;font-size:clamp(20px,3.2vmin,34px);line-height:1}
 /* glass sheen over everything on the slide */
@@ -131,7 +176,7 @@ export const STYLE_TEXT = `
 
 /* faces: one media node per card, opacity-toggled (never re-created on a flip) */
 .g-dv-face{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
-  opacity:0;transition:opacity .18s ease;pointer-events:none;background:var(--panel)}
+  opacity:0;transition:opacity .126s ease;pointer-events:none;background:var(--panel)}
 .g-dv-face.g-dv-glyph{display:flex;align-items:center;justify-content:center;
   font-size:clamp(30px,7vmin,76px);line-height:1;
   color:color-mix(in srgb, var(--ground), var(--lav) 34%);
@@ -305,7 +350,7 @@ html.arc-reduced .g-dv-mq{opacity:.16}
 }
 
 /* ---- reduced motion: the mechanic survives, the motion does not --------- */
-html.arc-reduced .g-dv-card{transition:opacity .16s ease}
+html.arc-reduced .g-dv-card{transition:opacity .112s ease}
 html.arc-reduced .g-dv-card.flipping{transform:none;opacity:.45}
 html.arc-reduced .g-dv-card.dealt,
 html.arc-reduced .g-dv-card.judge,
@@ -325,7 +370,7 @@ html.arc-reduced .chip.g-dv-statlie,
 html.arc-reduced .g-dv-kb .g-dv-card.up .g-dv-face:not(.g-dv-glyph),
 html.arc-reduced .g-dv-kb .g-dv-card.locked .g-dv-face:not(.g-dv-glyph){animation:none}
 @media (prefers-reduced-motion: reduce){
-  .g-dv-card{transition:opacity .16s ease}
+  .g-dv-card{transition:opacity .112s ease}
   .g-dv-card.flipping{transform:none;opacity:.45}
   .g-dv-card.dealt,.g-dv-card.judge,.g-dv-card.pulse,.g-dv-card.jiggle{animation:none}
   .g-dv-card.tell{animation:none;border-color:var(--gold);box-shadow:0 0 0 2px rgba(240,194,75,.55)}
@@ -338,14 +383,51 @@ html.arc-reduced .g-dv-kb .g-dv-card.locked .g-dv-face:not(.g-dv-glyph){animatio
   .g-dv-kb .g-dv-card.locked .g-dv-face:not(.g-dv-glyph){animation:none}
 }
 
-/* ---- narrow / touch: >=64px targets, the rack folds away ----------------- */
+/* ---- narrow / touch: the board takes the frame, the rack folds away ------
+   THE RULE THAT USED TO BE HERE THREW THE FIT AWAY. 'width:100%' on the grid
+   overrode the height-fit outright and 'minmax(64px,1fr)' put a hard floor under
+   a column, so a narrow frame got a full-width band of short cards with two
+   thirds of the bench empty under it - and a short frame overflowed instead.
+   Both are gone: the fit above is the only thing that sizes the board now, and
+   it cannot overflow, so the touch floor is kept by giving the board the room
+   rather than by forcing a minimum into a box that has none. */
 @media (max-width:560px){
-  .g-dv-stage{padding:64px 10px 10px}
-  .g-dv-grid{gap:8px;--g-dv-gap:8px;width:100%;
-    grid-template-columns:repeat(var(--g-dv-cols,4),minmax(64px,1fr))}
-  .g-dv-cell{min-height:64px}
+  .g-dv-stage{padding:64px 10px 10px;gap:6px;--g-dv-gap:8px;--g-dv-fill:100;
+    --g-dv-bench-pad:9px}
+  .g-dv-mq{inset:2px}
   .g-dv-rack{display:none}
 }
+/* PORTRAIT: the frame is tall and the board is wide, so the plate turns. At
+   4/3 a 4x3 board is 1.78:1 and can only ever be a band across the middle of a
+   phone; at 0.8 that same board is about 1:1 and every card is half again as
+   big in both directions. It is still a plate - the faces are object-fit:cover
+   and the glyph faces are centred - and no desktop window ever sees this. */
+@media (max-width:560px) and (orientation:portrait){
+  .g-dv-stage{--g-dv-arn:0.8}
+}
+/* SHORT FRAME - a landscape phone, and the one case 'max-width:560px' never
+   matched, because 844x390 is a WIDE viewport. Height is the entire budget
+   here, so every strip of chrome is worth a row of pixels on the cards, and
+   the plate widens: width is the thing there is plenty of. */
+@media (max-height:560px) and (orientation:landscape){
+  .g-dv-stage{gap:4px;--g-dv-gap:7px;--g-dv-fill:100;--g-dv-arn:1.55;
+    --g-dv-bench-pad:9px}
+  .g-dv-mq{inset:2px}
+  .g-dv-hud{font-size:10px;gap:2px 10px;letter-spacing:.1em}
+  .g-dv-hint{font-size:10px;letter-spacing:.12em;min-height:1.1em}
+  .g-dv-cram .arc-peekbtn{padding:5px 12px}
+  .g-dv-rack{display:none}
+}
+/* THE PHONE ITSELF (core/device.js's one decision, 'html.arc-mobile').
+   '.arc-classroot' is ALREADY pushed down by --arc-mobile-chrome-h while a
+   class is up, so the stage's own 64/72px reservation for the proctor strip is
+   counted TWICE on a phone: 64px of dead sky over every board. It goes, and
+   the sides and floor pick up the safe-area insets they never had. */
+html.arc-mobile.arc-class-on .g-dv-stage{
+  padding:8px calc(10px + env(safe-area-inset-right,0px))
+          calc(8px + env(safe-area-inset-bottom,0px))
+          calc(10px + env(safe-area-inset-left,0px));
+  --g-dv-fill:100}
 
 /* ---- THE CLASS RULES SHEET (Deck VI, Law IV: drawn, not told) ------------ */
 /* A lab card over the bench: three vignettes cut from the same slide chrome the
@@ -466,6 +548,43 @@ html.arc-reduced .g-dv-hw-lock{opacity:1}
    terminal screens, and this one is a door in, not a door out. */
 .g-dv-howto{pointer-events:auto}
 .g-dv-hw-go{position:sticky;bottom:0;z-index:3;align-self:stretch;margin-top:14px}
+
+/* ---- THE PHONE CEILING (html.ae-touch) ------------------------------------
+   The shell arms .ae-touch on <html> for coarse-pointer devices at boot. The
+   worst thing in this sheet was the tell: a screen-blended scanline plate
+   re-blending itself five and a half times a SECOND for as long as the
+   telegraph runs, over a card that was shuddering a box-shadow at the same
+   time. The tell is a read the whole game rests on, so it keeps its shudder
+   (transform only) and keeps its scanlines - they just paint flat and hold
+   still, the way html.arc-reduced already leaves them, only lit instead of
+   blanked. The other win is invisible: a locked card is a FILTERED card, and
+   the ken-burns drift inside it made the phone re-run that filter every frame
+   for every archived plate on the board. Filed plates now hold still; lit
+   plates still drift. Desktop is untouched.
+   -------------------------------------------------------------------------- */
+html.ae-touch .g-dv-card.tell::before{mix-blend-mode:normal;animation:none;opacity:.5}
+html.ae-touch .g-dv-card.tell{animation:g-dv-shudder-t .6s linear infinite}
+@keyframes g-dv-shudder-t{0%,100%{transform:none}20%{transform:translateX(-2px)}
+  45%{transform:translateX(2px)}70%{transform:translateX(-1px)}}
+/* an archived plate is a filtered plate: it stops drifting under the filter */
+html.ae-touch .g-dv-kb .g-dv-card.locked .g-dv-face:not(.g-dv-glyph){animation:none}
+/* THE ALMOST haunted the card through a blur ramp: opacity-only twin */
+html.ae-touch .g-dv-almost{animation:g-dv-almost-t .62s ease-out both}
+@keyframes g-dv-almost-t{0%{opacity:0}30%{opacity:.55}70%{opacity:.5}100%{opacity:0}}
+/* the bell marquee's drop-shadow sat over four crawling bulb bars */
+html.ae-touch .g-dv-mq.g-dv-mq-bell{filter:none}
+html.ae-touch .g-dv-mq.g-dv-mq-flash{animation:g-dv-mqflash-t .6s ease-out 1}
+@keyframes g-dv-mqflash-t{0%{opacity:1}100%{opacity:var(--g-dv-mqa,.26)}}
+/* the twins carry new names, so the reduced gate has to say its kills again */
+html.arc-reduced.ae-touch .g-dv-card.tell{animation:none;border-color:var(--gold);
+  box-shadow:0 0 0 2px rgba(240,194,75,.55)}
+html.arc-reduced.ae-touch .g-dv-card.tell::before{animation:none;background:none}
+html.arc-reduced.ae-touch .g-dv-almost,
+html.arc-reduced.ae-touch .g-dv-mq.g-dv-mq-flash{animation:none}
+@media (prefers-reduced-motion: reduce){
+  html.ae-touch .g-dv-card.tell,html.ae-touch .g-dv-card.tell::before,
+  html.ae-touch .g-dv-almost,html.ae-touch .g-dv-mq.g-dv-mq-flash{animation:none}
+}
 
 `;
 

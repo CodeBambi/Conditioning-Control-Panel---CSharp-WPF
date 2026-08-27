@@ -487,6 +487,96 @@ function sfx(name, level, extra) {
   } catch (e) { /* a cue must never be the thing that throws */ }
 }
 
+/* ----------------------------------------------------------------------------
+ * THE FIT - a sheet is as tall as its copy, and the TYPE comes down to the box
+ *
+ * The office's cork is a close-up of a painting: the sheets are laid out in the
+ * plate's own 1285x692 pixels and the whole plate is scaled to the window, so
+ * on a phone in landscape one stage pixel is about half a screen pixel. The
+ * first pass at that gave every sheet a `max-height` and a `mask-image` fade,
+ * and a long notice dissolved mid-sentence - which is not how printed paper
+ * works (owner ruling, 2026-08-25). So nothing is cut any more. What is left
+ * is an ordering problem, and this is the cheap half of the answer:
+ *
+ *   a row of the board is worth `boxH / rows`. A sheet over that budget gives
+ *   up TYPE - `--note-fs`, the one dial the three type rules are ratios of -
+ *   down to a floor of real SCREEN pixels (10 on a phone, 11 on a desktop,
+ *   divided back out by the stage scale). A sheet that is still over at the
+ *   floor keeps every word it has and the board scrolls instead.
+ *
+ * Height goes roughly with the square of the type (a smaller face fits more
+ * characters per line AND more lines per inch), so the step is a sqrt and
+ * three passes are plenty; a pass that would move the size by less than a
+ * fifth of a pixel is the end of the ladder.
+ *
+ * IT MEASURES IN LAYOUT PIXELS, WHICH IS WHAT MAKES THE MINIATURE HONEST.
+ * `offsetHeight` ignores the transform the stage rides, so a wall laid out at
+ * 1285px measures 1285px whether it is painted at half size on a phone or a
+ * fifth of that in the wide shot's thumbnail. Hand BOTH the same `boxH` and
+ * the same `scale` and they deal the same type at the same rows - which is the
+ * whole of why the preview is a picture of the board and not a second board.
+ * -------------------------------------------------------------------------- */
+
+/** The smallest type this wall will print, in SCREEN pixels. */
+export const FIT_FLOOR_PHONE = 10;
+export const FIT_FLOOR_DESK = 11;
+
+function isPhone() {
+  try {
+    const de = (typeof document !== 'undefined') ? document.documentElement : null;
+    return !!(de && de.classList && de.classList.contains('arc-mobile'));
+  } catch (e) { return false; }
+}
+
+function px(v, dflt) {
+  const n = parseFloat(v);
+  return isFinite(n) ? n : dflt;
+}
+
+/**
+ * Shrink each sheet's type until its row's share of the board holds it.
+ * @param {Object} hostEl   the wall (the grid)
+ * @param {Array} sheets    the `.arc-corknote` nodes, in DOM order
+ * @param {{boxH:number, scale:(number|Function), floorPx:number=}} fit
+ */
+export function fitSheets(hostEl, sheets, fit) {
+  if (!fit || !hostEl || !sheets || !sheets.length) return false;
+  if (typeof window === 'undefined' || typeof window.getComputedStyle !== 'function') return false;
+  const boxH = Number(fit.boxH) || Number(hostEl.clientHeight) || 0;
+  if (!(boxH > 80)) return false;
+  let scale = 1;
+  try { scale = (typeof fit.scale === 'function') ? Number(fit.scale()) : Number(fit.scale); }
+  catch (e) { scale = 1; }
+  if (!(scale > 0)) scale = 1;
+  const floor = (Number(fit.floorPx) || (isPhone() ? FIT_FLOOR_PHONE : FIT_FLOOR_DESK)) / scale;
+
+  const cs = window.getComputedStyle(hostEl);
+  const cols = String(cs.gridTemplateColumns || '').trim().split(/\s+/).filter(Boolean).length || 1;
+  const rows = Math.max(1, Math.ceil(sheets.length / cols));
+  const gap = px(cs.rowGap, 0);
+  const budget = (boxH - px(cs.paddingTop, 0) - px(cs.paddingBottom, 0) - gap * (rows - 1)) / rows;
+  if (!(budget > 60)) return false;
+
+  for (let i = 0; i < sheets.length; i += 1) {
+    const sheet = sheets[i];
+    if (!sheet || !sheet.style || typeof sheet.style.setProperty !== 'function') continue;
+    try { sheet.style.removeProperty('--note-fs'); } catch (e) { /* noop */ }
+    const base = px(window.getComputedStyle(sheet).getPropertyValue('--note-fs'), 0);
+    if (!(base > 0) || base <= floor + 0.25) continue;
+    let fs = base;
+    for (let pass = 0; pass < 3; pass += 1) {
+      const h = Number(sheet.offsetHeight) || 0;
+      if (!(h > budget)) break;
+      let next = fs * Math.sqrt(budget / h);
+      if (next < floor) next = floor;
+      if (next >= fs - 0.2) break;          // nothing left to give
+      fs = next;
+      sheet.style.setProperty('--note-fs', fs.toFixed(2) + 'px');
+    }
+  }
+  return true;
+}
+
 function kindLabel(kind) {
   if (kind === 'flyer') return t('board_kind_flyer', 'Flyer');
   if (kind === 'minutes') return t('board_kind_minutes', 'Minutes');
@@ -628,8 +718,35 @@ export function hasUnread(daySeed, override) {
  * @param {Function=} opts.save         save(state) callback
  * @param {number=} opts.slots          how many sheets are up (default 4)
  * @param {Function=} opts.onRead       onRead(noticeId) per sheet marked read
+ * @param {boolean=} opts.preview       A MINIATURE, not a visit: the same wall
+ *                                      painted for a room to look alive from
+ *                                      across it. Marks nothing read, banks no
+ *                                      visit, takes no pointer and holds no
+ *                                      focus. The Records Office's WIDE shot
+ *                                      hangs one of these in the cork rect so
+ *                                      the painted board has tonight's paper on
+ *                                      it before you walk up to it.
+ * @param {boolean=} opts.readable      each sheet gets a real control over it,
+ *                                      and pressing one opens the READER (a
+ *                                      full-size, scrollable copy over the
+ *                                      window). Off by default: the hall's
+ *                                      board is a page you already scroll.
+ * @param {boolean=} opts.wholeRows    a wall that ends on a WHOLE sheet: any
+ *                                      slot that does not fit inside the host
+ *                                      is taken down, along with everything
+ *                                      after it. For the MINIATURE, whose box
+ *                                      is a painted board with a bottom rail -
+ *                                      a sheet sliced flat along that rail
+ *                                      reads as a rendering fault from across
+ *                                      the room, where a shorter wall reads as
+ *                                      a wall. Needs `fit` (it runs after it).
+ * @param {Object=} opts.fit          THE FIT (see above): {boxH, scale, floorPx}
+ *                                      in STAGE pixels. Hand the same pair to
+ *                                      a wall and to its miniature and the two
+ *                                      lay out identically. Absent = the type
+ *                                      the stylesheet asked for, untouched.
  * @param {Function=} opts.log
- * @returns {?Object} {notices, daySeed, first, destroy()} - null with no DOM
+ * @returns {?Object} {notices, daySeed, first, refit(), closeReader(), destroy()}
  */
 export function mountNotices(hostEl, opts) {
   const o = opts || {};
@@ -649,7 +766,15 @@ export function mountNotices(hostEl, opts) {
   };
 
   const mounted = [];
+  const sheets = [];
+  const timers = [];
   let first = null;
+  /* A MINIATURE IS SCENERY. It paints the same wall and writes nothing: no
+   * `seenAt` rows, no banked visit, no focus, no pointer (the sheet's own
+   * class does that half), and it is hidden from a reader - the real wall is
+   * one press away and announcing both would be announcing it twice. */
+  const preview = o.preview === true;
+  if (preview) attr(hostEl, 'aria-hidden', 'true');
 
   if (!up.length) {
     // A wall with nothing on it is a real state (a table trimmed to nothing),
@@ -698,7 +823,21 @@ export function mountNotices(hostEl, opts) {
       sheet.appendChild(tabs);
     }
 
+    /* THE READER'S DOOR. A transparent control the size of the paper, so the
+     * sheet keeps being an <article> (a document, which is what it is) and the
+     * press still lands on a real button with a real name. Never minted for a
+     * preview - a miniature is scenery. */
+    if (o.readable === true && !preview) {
+      const open = el('button', 'arc-cork-open');
+      open.type = 'button';
+      attr(open, 'aria-label', noticeTitle(notice));
+      open.setAttribute('title', t('board_note_open', 'Read this one'));
+      open.addEventListener('click', function () { openNoticeReader(notice, { log: say }); });
+      slot.appendChild(open);
+    }
+
     slot.appendChild(sheet);
+    sheets.push(sheet);
     /* THE PIN GOES THROUGH THE SLOT, NOT THROUGH THE SHEET. A torn sheet is a
      * clip-path, and clip-path clips its children too - a pin parented to the
      * paper came out as a half circle on every torn notice (caught in the
@@ -714,31 +853,232 @@ export function mountNotices(hostEl, opts) {
      * corkboard is read at a glance, and a click-to-expand on a paragraph of
      * copy would be a door with nothing behind it. So the visit marks every
      * sheet it actually pinned up, once. */
-    if (!seenBefore) {
+    if (!seenBefore && !preview) {
       s.notices[notice.id] = { seenAt: today };
       try { if (typeof o.onRead === 'function') o.onRead(notice.id); }
       catch (e) { say('corkboard onRead: ' + ((e && e.message) || e)); }
     }
   }
 
-  /* THE VISIT, BANKED. One write per mount, at the end, never per sheet. */
-  s.lastPinDay = seed;
-  s.openedAt = today;
-  s.visits = Math.max(0, Math.round(Number(s.visits) || 0)) + 1;
-  persist(s, o.save);
+  /* THE VISIT, BANKED. One write per mount, at the end, never per sheet - and
+   * a PREVIEW is not a visit. Looking at the board from across the room does
+   * not read the board: a miniature that banked the night would clear the
+   * prop's fresh dot for a wall the player never walked up to. */
+  if (!preview) {
+    s.lastPinDay = seed;
+    s.openedAt = today;
+    s.visits = Math.max(0, Math.round(Number(s.visits) || 0)) + 1;
+    persist(s, o.save);
+  }
+
+  /* THE FIT, AND THE THREE TIMES IT HAS TO RUN. The first measurement races
+   * the LAZY stylesheet links (this file's and the room's): an unstyled sheet
+   * measures at the browser's own defaults and would be handed type it never
+   * needed. scene.js has the same race and answers it the same way - now, next
+   * frame, and once more after the sheets have had time to land. Resizing the
+   * window changes the stage scale, which changes the floor, which is a fourth
+   * reason to run it. */
+  const fitOpts = (o.fit && typeof o.fit === 'object') ? o.fit : null;
+  let pending = false;
+
+  /* THE WHOLE WALL GOES BACK UP BEFORE ANYTHING IS MEASURED. A hidden slot
+   * measures zero, and a zero-height sheet is a sheet THE FIT thinks already
+   * fits - so a fit run over a trimmed wall leaves every sheet below the cut
+   * at full type, and the next trim then cuts the wall higher for that reason
+   * alone. Two runs of that and the miniature is one row. Untrim, fit, trim,
+   * in that order, every time. */
+  function refit() {
+    if (!fitOpts) return false;
+    let ok = false;
+    try { untrim(); } catch (e) { /* noop */ }
+    try { ok = !!fitSheets(hostEl, sheets, fitOpts); }
+    catch (e) { say('corkboard fit: ' + ((e && e.message) || e)); }
+    try { trimWholeRows(); }
+    catch (e) { say('corkboard trim: ' + ((e && e.message) || e)); }
+    return ok;
+  }
+
+  /** Every slot back in the flow (see refit). */
+  function untrim() {
+    if (o.wholeRows !== true) return;
+    for (let i = 0; i < mounted.length; i += 1) {
+      const slot = mounted[i];
+      if (!slot || !slot.style || typeof slot.style.removeProperty !== 'function') continue;
+      try { slot.style.removeProperty('display'); } catch (e) { /* noop */ }
+    }
+  }
+
+  /* WHOLE SHEETS ONLY (the miniature's rule - see opts.wholeRows). Measure the
+   * whole standing wall first and only then take slots down: a grid re-places
+   * what is left the moment one item leaves the flow, so a one-pass "measure,
+   * hide, measure the next" walks the wall up under itself. Trailing items are
+   * the only ones taken down, so the auto-placement above the cut cannot move. */
+  function trimWholeRows() {
+    if (!fitOpts || o.wholeRows !== true) return;
+    const box = Number(hostEl.clientHeight) || 0;
+    if (!(box > 0)) return;
+    const seen = [];
+    for (let i = 0; i < mounted.length; i += 1) {
+      const slot = mounted[i];
+      if (slot && slot.style && typeof slot.style.removeProperty === 'function') seen.push(slot);
+    }
+    let cut = -1;
+    for (let i = 0; i < seen.length; i += 1) {
+      const top = Number(seen[i].offsetTop) || 0;
+      const h = Number(seen[i].offsetHeight) || 0;
+      if (top + h > box + 1) { cut = i; break; }
+    }
+    if (cut < 0) return;
+    for (let i = cut; i < seen.length; i += 1) seen[i].style.display = 'none';
+  }
+
+  function refitSoon() {
+    if (pending) return;
+    pending = true;
+    const run = () => { pending = false; refit(); };
+    if (typeof requestAnimationFrame === 'function') {
+      try { requestAnimationFrame(run); return; } catch (e) { /* noop */ }
+    }
+    timers.push(setTimeout(run, 32));
+  }
+
+  let onResize = null;
+  if (fitOpts) {
+    refit();
+    refitSoon();
+    if (typeof setTimeout === 'function') timers.push(setTimeout(refit, 420));
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      onResize = refitSoon;
+      window.addEventListener('resize', onResize);
+    }
+  }
 
   return {
     notices: up,
     daySeed: seed,
     first: first,
+    /** The sheets, for a suite that wants to measure one. */
+    sheets: sheets,
+    /** Re-run THE FIT (the stage scale moved, or a sheet landed late). */
+    refit: refit,
+    /** The Esc fold's handle: true when a reader was up and is now down. */
+    closeReader() { return closeNoticeReader(); },
     destroy() {
+      if (!preview) closeNoticeReader();
+      if (onResize && typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+        try { window.removeEventListener('resize', onResize); } catch (e) { /* noop */ }
+        onResize = null;
+      }
+      for (let i = 0; i < timers.length; i += 1) { try { clearTimeout(timers[i]); } catch (e) { /* noop */ } }
+      timers.length = 0;
       for (let i = 0; i < mounted.length; i += 1) {
         try { mounted[i].remove(); } catch (e) { /* noop */ }
       }
       mounted.length = 0;
+      sheets.length = 0;
     },
   };
 }
+
+/* ----------------------------------------------------------------------------
+ * THE READER - one sheet, off the wall, in your hands.
+ *
+ * The office's cork is a CLOSE-UP of a painting: the sheets are laid out in
+ * stage pixels and scaled with the plate, so on a phone in landscape (the fit
+ * is about a half) the body copy lands somewhere near seven pixels and the
+ * bottom row hangs off the frame and out of the window. The wall is still the
+ * wall - it is meant to be read at a glance - but a glance you cannot resolve
+ * is a texture. So a sheet can be TAKEN DOWN: one press lifts a full-size,
+ * scrollable copy over the window at type nobody has to squint at.
+ *
+ * The corkboard's own header said there is no per-sheet open verb, because a
+ * click-to-expand on a paragraph of copy is a door with nothing behind it.
+ * That was written for a wall you read at desk size. The owner's ruling
+ * (2026-08-25, iPhone landscape) is that on paper this small the door has the
+ * paper behind it, which is the whole of what it needs.
+ *
+ * IT HANGS OFF <body> AT z56. A room is `position:fixed` at z10 and its apron
+ * band is a body-level sibling at z55 - a reader mounted inside the room would
+ * be laid out inside the room and painted under the carpet. Above the band,
+ * under the toasts (60), and it marks nothing read: the wall already did that
+ * when it pinned the sheet up.
+ * -------------------------------------------------------------------------- */
+
+/** The one open reader, or null. Two sheets in one hand is a bug. */
+let reader = null;
+
+/**
+ * Take one notice off the wall.
+ * @param {Object} notice  a row of NOTICES (or the same shape)
+ * @param {Object=} opts   {mount, log, onClose}
+ * @returns {?Object} {root, close()} - null with no DOM
+ */
+export function openNoticeReader(notice, opts) {
+  const o = opts || {};
+  const doc = (typeof document !== 'undefined') ? document : null;
+  if (!doc || typeof doc.createElement !== 'function' || !notice) return null;
+  const mount = o.mount || doc.body;
+  if (!mount || typeof mount.appendChild !== 'function') return null;
+
+  // ONE SHEET. A second press is the first one replaced, never a second stage.
+  closeNoticeReader();
+  ensureStyles(doc);
+
+  const root = el('div', 'arc-cork-reader');
+  attr(root, 'role', 'dialog');
+  attr(root, 'aria-modal', 'true');
+  attr(root, 'aria-label', noticeTitle(notice));
+
+  const veil = el('div', 'arc-cork-reader-veil');
+  attr(veil, 'aria-hidden', 'true');
+  veil.addEventListener('click', function () { closeNoticeReader(); });
+  root.appendChild(veil);
+
+  const looks = String(notice.look || '').split(/\s+/).filter(Boolean)
+    .map(function (w) { return ' look-' + w; }).join('');
+  const sheet = el('article', 'arc-corknote arc-cork-readnote kind-' + notice.kind + looks);
+  sheet.appendChild(el('span', 'arc-cork-kind', kindLabel(notice.kind).toUpperCase()));
+  sheet.appendChild(el('h2', 'arc-cork-notetitle', noticeTitle(notice)));
+  const paras = Array.isArray(notice.body) ? notice.body : [notice.body];
+  for (let p = 0; p < paras.length; p += 1) {
+    sheet.appendChild(el('p', 'arc-cork-notebody', noticeParagraph(notice, p, paras[p])));
+  }
+  root.appendChild(sheet);
+
+  const close = el('button', 'arc-cork-readclose', t('board_note_close', 'Put it back on the wall'));
+  close.type = 'button';
+  close.addEventListener('click', function () { closeNoticeReader(); });
+  root.appendChild(close);
+
+  /* One focusable thing in here, so the trap is one line - records.js's
+   * spotlight shape. Escape is NOT bound: the shell owns the ladder and the
+   * room's escapeStep asks closeReader() first (trap 48's order). */
+  root.addEventListener('keydown', function (ev) {
+    if (!ev || ev.key !== 'Tab') return;
+    try { ev.preventDefault(); } catch (e) { /* noop */ }
+    try { close.focus(); } catch (e) { /* noop */ }
+  });
+
+  mount.appendChild(root);
+  reader = { root: root, onClose: typeof o.onClose === 'function' ? o.onClose : null };
+  focusSoon(close);
+  sfx('paper', 0.24);
+  return { root: root, close: closeNoticeReader };
+}
+
+/** Put the sheet back. Returns true when one was in hand (the Esc rung). */
+export function closeNoticeReader() {
+  if (!reader) return false;
+  const r = reader;
+  reader = null;
+  try { if (r.root && r.root.remove) r.root.remove(); } catch (e) { /* noop */ }
+  sfx('paper', 0.18);
+  try { if (r.onClose) r.onClose(); } catch (e) { /* noop */ }
+  return true;
+}
+
+/** Is a sheet in hand right now? (test seam) */
+export function readerUp() { return !!reader; }
 
 /* ----------------------------------------------------------------------------
  * THE OVERLAY

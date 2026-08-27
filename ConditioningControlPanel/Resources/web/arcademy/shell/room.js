@@ -9,8 +9,11 @@
  * The SCENES table is the whole fan-out surface - a room joins the program by
  * adding a row, and every room without one keeps the door card it always had
  * (campus.js only offers the takeover; shell.js declines it for keys this
- * table lacks). Five rooms are painted: Homeroom 101 (the pilot), Memory Lab
- * 102, Discipline Hall 103, Lost & Found 104 and The Pool 105.
+ * table lacks). All ten class rooms are painted now: Homeroom 101 (the pilot),
+ * Memory Lab 102, Discipline Hall 103, Lost & Found 104, The Pool 105, and the
+ * Semester II + III five - The Sorting Room 201, the Music Room 202, Lecture
+ * Hall 203, the Darkroom 301 and the Studio 302. Nothing falls to the dark
+ * stage any more, so a door card is now the exception, not the rule.
  *
  * THE FREE SWIM RULE. The door card carried a second, subordinate button for
  * games that declare `manifest.endless`, and the room REPLACES that card - so
@@ -31,6 +34,9 @@
  *  - nine-broken-logos law: art resolves module-relative via import.meta.url.
  * ==========================================================================*/
 
+import { isMobile, orientation } from '../core/device.js';
+import { buildLever, paintLever } from './lever.js';
+
 /** Stage plane the art was authored on (the annex's, promoted). */
 const STAGE_W = 1376;
 const STAGE_H = 768;
@@ -45,6 +51,13 @@ const STAGE_H = 768;
 const APRON_STAGE_TOP = 640;
 /** The apron never shrinks below this, even art-to-the-floor (px, real). */
 const APRON_MIN = 110;
+/* THE PHONE'S FLOOR, and why it is a different number. 110px is a quarter of a
+ * landscape phone's 390px of glass, which is a band, not an apron: the room it
+ * is the front edge OF ends up smaller than the furniture in front of it. 72px
+ * still clears the 44px thumb floor for all three slabs (rooms.css sizes them
+ * off --arm-band-h and clamps each one at 44) and hands the painting back the
+ * 38px it was eating. Desktop keeps 110 exactly. */
+const APRON_MIN_MOBILE = 72;
 
 /**
  * The fan-out table. Rects are [x, y, w, h] in stage pixels. Rects must keep
@@ -53,8 +66,8 @@ const APRON_MIN = 110;
  *  - `hotspot`  : the class furniture - the ONE lit thing, wears the action tag.
  *  - `exit`     : optional painted way out (a door in the art). Same verb as
  *                 the apron's back slab; a room without one just keeps the slab.
- *                 Only rooms whose art actually HAS a door get one - three of
- *                 the five are painted doorless and that stays legal.
+ *                 Only rooms whose art actually HAS a door get one - seven of
+ *                 the ten are painted doorless and that stays legal.
  *  - `freeSwim` : optional second furniture, for a game that declares
  *                 `manifest.endless`. Renders only when the shell hands down an
  *                 onFreeSwim; spends the same one-class latch as the hotspot.
@@ -99,7 +112,72 @@ const SCENES = Object.freeze({
     hotspot: Object.freeze([490, 368, 400, 104]),
     freeSwim: Object.freeze([335, 408, 132, 140]),
   }),
+  /* THE SORTING ROOM 201. The card conveyor, not the three bins: the bins are
+   * where a decision LANDS, the belt is where it is asked for, and the deck of
+   * face-down cards riding up it is the two-pile swipe sitting in the furniture.
+   * The rect takes the belt's whole diagonal run, so the last card is caught at
+   * the mouth of the pink bin. Doorless: the far-right recess is a dark alcove
+   * behind a bin, not a painted way out. */
+  sort: Object.freeze({
+    art: 'vn-12-sorting-room-201.png',
+    hotspot: Object.freeze([744, 402, 320, 168]),
+  }),
+  /* THE MUSIC ROOM 202. The four lit drum heads on the low stage - pink, gold,
+   * cream, purple - which is the Simon ring already dealt out as furniture, and
+   * the only thing in the room that is lit from inside. The rect is the row and
+   * the stage lip under it, never the wall sign above. Doorless set: the walls
+   * are acoustic foam and glazing. */
+  echo: Object.freeze({
+    art: 'vn-13-music-room-202.png',
+    hotspot: Object.freeze([478, 392, 418, 110]),
+  }),
+  /* LECTURE HALL 203. The blank projection screen. The lectern is the room's
+   * focal furniture and it is NOT the game - the wall of faces is - so the rect
+   * is the screen fabric, inside the bezel, all 538px of it. Big by the L&F
+   * rule, and it stays big on purpose: the montage is full-bleed, and a
+   * highlight on a corner of a blank screen would be the arbitrary one.
+   * Doorless: the two aisles climb out of frame, no painted door. */
+  instant_recall: Object.freeze({
+    art: 'vn-14-lecture-hall-203.png',
+    hotspot: Object.freeze([420, 136, 538, 254]),
+  }),
+  /* THE DARKROOM 301. The drying lines, framed on the ONE crooked print - the
+   * odd-one-out is the class, so the rect is the block of pegged prints that
+   * holds it near its centre rather than the whole 780px of wall. The black
+   * light-trap curtain on the back wall is a real painted way out. */
+  anomaly: Object.freeze({
+    art: 'vn-15-darkroom-301.png',
+    hotspot: Object.freeze([250, 226, 296, 196]),
+    exit: Object.freeze([936, 200, 128, 276]),
+  }),
+  /* THE STUDIO 302. The sliding-tile canvas on the easel - the rect is the
+   * scrambled grid, not the white board around it, because the board is a
+   * canvas and the grid is the puzzle. Doorless: an arched window one side,
+   * stacked canvases the other. */
+  composure: Object.freeze({
+    art: 'vn-16-studio-302.png',
+    hotspot: Object.freeze([583, 242, 216, 216]),
+  }),
 });
+
+/* THE ONE MOBILE DECISION (core/device.js). JS asks the function, CSS reads the
+ * class and the `data-arc-orient` attribute it writes, and this module needs
+ * both to agree: the apron's floor and the stage's anchor are computed here and
+ * the box they move is styled there.
+ *
+ * LANDSCAPE ONLY, and that is the half that matters. Portrait is behind the
+ * rotate gate (shell/orientgate.js), so it is not designed for - but a room
+ * left standing while the phone is turned still has to render something sane,
+ * and top-anchoring a 9:19.5 frame would hand the apron two thirds of the
+ * screen. Portrait keeps the centred stage and the 110px floor it always had.
+ * rooms.css carries the SAME `[data-arc-orient="landscape"]` qualifier on the
+ * two rules that move with this flag; drift and the scale walks off-axis.
+ *
+ * Wrapped because a suite's DOM double has no matchMedia and must get `false`
+ * rather than a throw at fit() time. */
+function onPhone() {
+  try { return !!isMobile() && orientation() === 'landscape'; } catch (e) { return false; }
+}
 
 /** Does this game have a painted room? The shell's decline test. */
 export function hasRoomScene(gameKey) {
@@ -109,6 +187,60 @@ export function hasRoomScene(gameKey) {
 function artUrl(file) {
   try { return new URL('../art/vn/' + file, import.meta.url).href; }
   catch (e) { return 'art/vn/' + file; }
+}
+
+/**
+ * THE PLATE'S URL, for anybody who wants it before the room is built. The one
+ * consumer is the shell's prefetch (below): the campus knows tonight's four
+ * keys, and a plate that is already in cache when the door opens is the whole
+ * difference between a painted room and a lit void. Keeps the SCENES table
+ * private - a caller gets a string or null, never the row.
+ * @param {string} gameKey
+ * @returns {?string}
+ */
+export function artUrlFor(gameKey) {
+  const scene = SCENES[gameKey];
+  return scene ? artUrl(scene.art) : null;
+}
+
+/**
+ * WARM THE ROOMS THAT ARE ON TONIGHT. Called once a boot, from the seam where
+ * the campus is shown, with the keys the timetable dealt. Every painted key
+ * gets one `<link rel=prefetch as=image>` in <head>; unpainted keys, repeats
+ * and a second call are no-ops.
+ *
+ * `prefetch`, not `preload`: this is art for a screen the player may never
+ * open, so it must ride at the lowest priority the browser has and must never
+ * warn about an unused preload. A desktop WebView2 window reads these files off
+ * the local disk, where the whole thing costs a file open that would have
+ * happened anyway - which is why this is safe to run everywhere rather than
+ * behind a "is this the web build" test the page has no business taking.
+ *
+ * @param {Array<string>} gameKeys tonight's board (any order, dupes fine)
+ * @returns {number} how many links this call actually added
+ */
+const prefetched = Object.create(null);
+export function prefetchRoomArt(gameKeys) {
+  if (!Array.isArray(gameKeys) || typeof document === 'undefined') return 0;
+  const head = document.head || document.documentElement;
+  if (!head || typeof head.appendChild !== 'function') return 0;
+  if (typeof document.createElement !== 'function') return 0;
+  let n = 0;
+  for (let i = 0; i < gameKeys.length; i += 1) {
+    const key = gameKeys[i];
+    const href = artUrlFor(key);
+    if (!href || prefetched[href]) continue;
+    prefetched[href] = true;
+    try {
+      const link = document.createElement('link');
+      link.rel = 'prefetch';
+      link.as = 'image';
+      link.href = href;
+      head.appendChild(link);
+      n += 1;
+    } catch (e) { /* a browser without prefetch loses nothing but the warm-up */ }
+  }
+  return n;
 }
 
 /* A real file (shell/rooms.css), linked once and lazily, resolved against this
@@ -154,6 +286,10 @@ function el(tag, cls, text) {
  *  onFreeSwim  - start the class untimed (Free Swim); absent = no second hero
  *                AND no painted freeSwim rect, however the SCENES row reads.
  *  freeSwimLabel - display label for both free-swim surfaces (t('free_swim')).
+ *  lever       - Extra Credit caps { positions, get, set, unlocks }; absent =
+ *                no rail, exactly like an absent onOptions means no cog. The
+ *                door card carries the same rail, so a room that painted over
+ *                the card would otherwise swallow the whole wager.
  *  lite        - performance mode; kills the pulse like reduced motion does.
  *  log         - shell's say.
  */
@@ -320,6 +456,17 @@ export function createRoomScene(opts) {
     });
     barRight.appendChild(cog);
   }
+  /* THE EXTRA CREDIT RAIL, on the control plate beside the knobs. It is a
+   * choice about the run, not a way to take it, so it stays off the marquee and
+   * out of the hero group - same reasoning as the card, where it sits under
+   * Begin. Absent caps = absent rail; this module decides nothing about who may
+   * pull which rung, it only paints what the shell hands down. */
+  if (o.lever) {
+    const lv = buildLever(t, 'arm-lever');
+    const repaint = () => { if (!destroyed) paintLever(lv, o.lever, t, repaint); };
+    repaint();
+    barRight.appendChild(lv.root);
+  }
   bar.appendChild(barRight);
   /* The apron mounts on <body>, NOT inside root: .arm-root is its own
    * stacking context at z 10, so a child could never rise above EMI (#arc-emi
@@ -335,13 +482,21 @@ export function createRoomScene(opts) {
     const w = root.clientWidth || (root.parentNode && root.parentNode.clientWidth) || STAGE_W;
     const h = root.clientHeight || (root.parentNode && root.parentNode.clientHeight) || STAGE_H;
     const s = Math.min(w / STAGE_W, h / STAGE_H) || 1;
-    stage.style.transform = 'translate(-50%,-50%) scale(' + s + ')';
+    /* THE PHONE ANCHORS THE PAINTING TO THE TOP. A centred stage splits its
+     * letterbox above and below; above is the ceiling of the room, which is the
+     * half a player reads the set from, and below is the calm floor the apron
+     * was going to cover anyway. So on a phone the whole void goes to the
+     * bottom, under the band. rooms.css moves the box (`top:0`) and the origin
+     * (`50% 0`) under the same class - the two have to agree or the scale walks
+     * the plane off-axis (lab.css's lesson). Desktop is untouched. */
+    const phone = onPhone();
+    stage.style.transform = 'translate(-50%,' + (phone ? '0' : '-50%') + ') scale(' + s + ')';
     /* The apron hugs the painting's floor line and swallows the letterbox:
-     * top = the APRON_STAGE_TOP row of the scaled, centered stage; bottom =
-     * the viewport. Never thinner than APRON_MIN, even art-to-the-floor. */
-    const artTop = (h - STAGE_H * s) / 2;
+     * top = the APRON_STAGE_TOP row of the scaled stage; bottom = the viewport.
+     * Never thinner than the floor for this frame (APRON_MIN / _MOBILE). */
+    const artTop = phone ? 0 : (h - STAGE_H * s) / 2;
     let apronTop = artTop + APRON_STAGE_TOP * s;
-    if (h - apronTop < APRON_MIN) apronTop = h - APRON_MIN;
+    if (h - apronTop < (phone ? APRON_MIN_MOBILE : APRON_MIN)) apronTop = h - (phone ? APRON_MIN_MOBILE : APRON_MIN);
     if (apronTop < 0) apronTop = 0;
     bar.style.top = apronTop + 'px';
     /* Published on both: the bar is a body-level sibling, so it cannot
@@ -358,8 +513,24 @@ export function createRoomScene(opts) {
    * Refit when the skin lands, when the art decodes, and once next frame -
    * cheap, idempotent, and the resize listener owns every later change. */
   if (cssLink) cssLink.addEventListener('load', onResize);
-  art.addEventListener('load', onResize);
+  /* THE COLD LOAD. The plate starts at opacity 0 over the stage's painted
+   * fallback (rooms.css) and is lit here, on the image's own load - the same
+   * listener that was already refitting, one class heavier. A cached plate is
+   * in on the first frame; a plate off a phone's network eases onto a lit
+   * room-shaped void instead of blinking over a black rectangle. */
+  function lightArt() {
+    try { art.classList.add('is-in'); } catch (e) { /* DOM double: nothing to light */ }
+  }
+  art.addEventListener('load', () => { lightArt(); onResize(); });
+  art.addEventListener('error', lightArt);   // a 404 must never leave a hidden img
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(onResize);
+  /* THE BELT. `load` cannot fire before this turn ends, so the listener above
+   * always sees it - but a decoded-from-cache plate in a browser that skips the
+   * event, or a suite that hands us a fake image, must not be left invisible. */
+  if (art.complete && art.naturalWidth) lightArt();
+  else if (typeof setTimeout === 'function') {
+    setTimeout(() => { if (!destroyed && art.complete) lightArt(); }, 1200);
+  }
 
   /* Focus after the caller has appended us (a fresh node not yet in the
    * document ignores focus() in some engines - the end card's lesson). */

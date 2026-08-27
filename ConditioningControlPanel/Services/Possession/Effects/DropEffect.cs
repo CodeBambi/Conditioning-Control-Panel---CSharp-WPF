@@ -35,6 +35,10 @@ public sealed class DropEffect : PossessionEffectBase
 
     private TextBlock? _tb;
     private string? _originalText;
+    /// <summary>What the TextBlock reads as while WE own it. RebuildInlines only ever changes the ink,
+    /// never the characters, so this is the original string - but reading it back is how we tell our own
+    /// handiwork from a label something else has rewritten since (see MovedOn).</summary>
+    private string? _writtenText;
     private readonly HashSet<int> _dropped = new();
     private readonly List<Glyph> _glyphs = new();
     private RenderTargetBitmap? _snapshot;
@@ -71,21 +75,22 @@ public sealed class DropEffect : PossessionEffectBase
         if (!PossessionVisual.IsRewritable(_tb, 4)) return Task.CompletedTask;
 
         _originalText = _tb!.Text;
-        if (!TryMeasureLine(_tb, out _startX, out _)) { _originalText = null; return Task.CompletedTask; }
+        _writtenText = _originalText;   // nothing rebuilt yet, and what stands there IS ours
+        if (!TryMeasureLine(_tb, out _startX, out _)) { _originalText = null; _writtenText = null; return Task.CompletedTask; }
 
         // The title lives inside the design Viewbox; the glyphs will live in the ghost layer OUTSIDE
         // it. Everything measured off the TextBlock (FormattedText widths, its own height) is design
         // space and gets scaled on the way out, and the snapshot is rendered at that same scale so the
         // falling letters are crisp instead of resampled.
         var bounds = PossessionVisual.BoundsOf(ctx.Host, _tb);
-        if (bounds.IsEmpty) { _originalText = null; return Task.CompletedTask; }
+        if (bounds.IsEmpty) { _originalText = null; _writtenText = null; return Task.CompletedTask; }
         var scale = PossessionVisual.ScaleOf(ctx.Host, _tb);
         _sx = scale.X;
         _sy = scale.Y;
 
         _dpi = VisualTreeHelper.GetDpi(_tb);
         _snapshot = Ghost.Snapshot(_tb, _dpi, _sx, _sy);
-        if (_snapshot == null) { _originalText = null; return Task.CompletedTask; }
+        if (_snapshot == null) { _originalText = null; _writtenText = null; return Task.CompletedTask; }
 
         _tbOrigin = new Point(bounds.X, bounds.Y);
         _maxDrops = Math.Max(1, (int)(CountEligible(_originalText) * 0.4));
@@ -102,6 +107,9 @@ public sealed class DropEffect : PossessionEffectBase
             {
                 if (!await PossAnim.DelayAsync(Rand(2000, 4000), ct).ConfigureAwait(true)) return;
                 if (ct.IsCancellationRequested) return;
+                // The label stopped being ours while we waited (a level-up, a counter): stop dropping
+                // rather than rebuilding it out of a string nobody is showing any more.
+                if (MovedOn()) return;
                 await DropOneAsync(ctx, ct).ConfigureAwait(true);
             }
         }
@@ -243,9 +251,13 @@ public sealed class DropEffect : PossessionEffectBase
         }
         catch (Exception ex) { App.Logger?.Warning("Possession drop undo failed: {Error}", ex.Message); }
 
+        // The exact string as one Run - but only while the word is still ours. HoldFor is Zero, so an
+        // hour can pass between the drop and the reassembly, and the only labels this effect can take
+        // are code-driven ones ({loc:Str} is a Binding, which IsRewritable declines): exactly the ones
+        // something else rewrites in the meantime. Same guard as XpDrainEffect.RestoreTheLevel.
         try
         {
-            if (_tb != null && _originalText != null) _tb.Text = _originalText;   // exact string, one Run
+            if (_tb != null && _originalText != null && !MovedOn()) _tb.Text = _originalText;
         }
         catch (Exception ex) { App.Logger?.Warning("Possession drop text restore failed: {Error}", ex.Message); }
 
@@ -253,7 +265,22 @@ public sealed class DropEffect : PossessionEffectBase
         _dropped.Clear();
         _snapshot = null;
         _originalText = null;
+        _writtenText = null;
         _tb = null;
+    }
+
+    /// <summary>True when the TextBlock no longer reads as what we left there - something else owns the
+    /// string now and neither the next drop nor the restore may touch it. The transparent Runs keep the
+    /// characters, so "ours" is still the original string.</summary>
+    private bool MovedOn()
+    {
+        try
+        {
+            var tb = _tb;
+            if (tb == null || _writtenText == null) return true;
+            return !string.Equals(tb.Text, _writtenText, StringComparison.Ordinal);
+        }
+        catch { return true; }
     }
 
     // ---- text plumbing -------------------------------------------------------------------------

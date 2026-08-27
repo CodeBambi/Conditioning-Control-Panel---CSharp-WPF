@@ -14,7 +14,7 @@
  *   .45     rung 3  DRIFT       the HUD chips sway + THE TREMOR wakes     [engine row_drift:sway]
  *                               + the haze comes up under the washes     [local .g-cp-p-haze]
  *   .60     rung 4  BURST       gif bursts ride locks                    [engine gif_burst]
- *   .75     rung 5  WHEEL       the spiral wash wakes (a real image)     [engine wash:spiral url]
+ *   .75     rung 5  WHEEL       the spiral wash wakes (the class spiral) [engine wash:spiral]
  *                               + the easel shudders on locks            [engine glitch_swap]
  *   .90     rung 6  SUBS        sub flash stream + flash bursts on locks [engine sub_flash, flash_burst]
  *   solve   rung 7  ROYAL       the pink flood, three flash bursts, the  [engine wash:pink, flash_burst,
@@ -54,8 +54,12 @@
  * NEVER: engine.stop('wash'). It blacks out EVERY wash kind at once (trap 33).
  * A wash is stepped down by re-triggering its variant at a whisper alpha with
  * a short hold (the engine's own transition carries it out) - including on
- * stop() and destroy(). The one spiral gif is chosen once per class (sp6/sp7
- * weighted, sp5 never).
+ * stop() and destroy(). THE WHEEL WEARS THE CLASS SPIRAL (2026-08-25, the Loom
+ * directive): the wash is triggered with NO url, so the engine's own
+ * spiralUrl() provider answers - the shell's woven Loom params (a live shader
+ * canvas), a saved user-loom gif, or the bundled-gif floor. The private
+ * SPIRALS pool that used to live here is gone; the echo/misdirection posture
+ * is the pattern now.
  * ==========================================================================*/
 
 import { makeRng } from '../../core/rng.js';
@@ -122,16 +126,6 @@ export const CP_PRESSURE = Object.freeze({
   CUE_LEVEL_BASE: 0.25,
   CUE_LEVEL_STEP: 0.05,
   AUDIO_CEIL: Object.freeze({ 1: 0.45, 2: 0.6, 3: 0.75, 4: 0.9 }),
-  /* ---- the one spiral image per class ---------------------------------- */
-  SPIRAL_DIR: '../../../dtrh/assets/bubbles/effects/spirals/',
-  SPIRALS: Object.freeze([
-    Object.freeze({ file: 'sp6.gif', w: 4 }),
-    Object.freeze({ file: 'sp7.gif', w: 4 }),
-    Object.freeze({ file: 'sp1.gif', w: 1 }),
-    Object.freeze({ file: 'sp2.webp', w: 1 }),
-    Object.freeze({ file: 'sp3.gif', w: 1 }),
-    Object.freeze({ file: 'sp4.webp', w: 1 }),
-  ]),
   NODE_BUDGET: 2,
 });
 
@@ -213,17 +207,6 @@ export function punchFor(streak) {
   return { px: +px.toFixed(2), ms, scale };
 }
 
-function pickSpiral(roll) {
-  const list = CP_PRESSURE.SPIRALS;
-  let total = 0;
-  for (const s of list) total += s.w;
-  let r = roll * total;
-  let file = list[0].file;
-  for (const s of list) { r -= s.w; if (r <= 0) { file = s.file; break; } }
-  let href = CP_PRESSURE.SPIRAL_DIR + file;
-  try { href = new URL(CP_PRESSURE.SPIRAL_DIR + file, import.meta.url).href; } catch (e) { /* relative is fine */ }
-  return { file, href };
-}
 function el(tag, cls) {
   try { const n = document.createElement(tag); if (cls) n.className = cls; return n; } catch (e) { return null; }
 }
@@ -334,15 +317,17 @@ export function createCpPressure(o) {
     if (typeof eng.stop !== 'function') return;
     try { eng.stop(kind); } catch (e) { /* ignore */ }
   }
-  function cue(name, rung) {
+  function cueAt(name, level, extra) {
     if (!name || !sounds()) return;
     /* deliberately NOT through fire(): that road gates on armed(), and the
      * whole point of the decouple is that a cue does not (W2) */
     count('audio_trigger');
     if (typeof eng.fire !== 'function') return;
-    const level = Math.min(audioCeil, P.CUE_LEVEL_BASE + P.CUE_LEVEL_STEP * rung) * (zen ? 0.6 : 1);
-    try { eng.fire('audio_trigger', { name, level }); } catch (e) { /* a refused cue is not an error */ }
+    const lv = Math.min(audioCeil, level) * (zen ? 0.6 : 1);
+    try { eng.fire('audio_trigger', Object.assign({ name, level: lv }, extra || {})); }
+    catch (e) { /* a refused cue is not an error */ }
   }
+  function cue(name, rung) { cueAt(name, P.CUE_LEVEL_BASE + P.CUE_LEVEL_STEP * rung); }
 
   /* ---- state -------------------------------------------------------------- */
   let started = false; let stopped = false; let paused = false;
@@ -352,8 +337,11 @@ export function createCpPressure(o) {
   let bellOn = false; let royalOn = false; let outOn = false;
   let streak = 0;
   const present = new Set();
-  const spiral = pickSpiral(roll('spiral'));
-  let preload = null;
+  /* NO PRIVATE SPIRAL (2026-08-25): the wheel wash carries no url, so the
+   * engine's spiralUrl() provider answers with the class spiral - the shell's
+   * woven Loom, a saved user gif, or the bundled floor. One picker, one truth.
+   * (roll('spiral') is gone with it; tags are independent streams, so no other
+   * roll moved.) */
   let haze = null; let ring = null;
   let breathTimer = 0; let ringTimer = 0; let flareTimer = 0;
   const chipBloomTimers = new Map();
@@ -407,7 +395,8 @@ export function createCpPressure(o) {
     if (haze) frame.appendChild(haze);
     ring = el('i', 'g-cp-p-ring');
     if (ring) frame.appendChild(ring);
-    try { if (typeof Image === 'function') { preload = new Image(); preload.src = spiral.href; } } catch (e) { preload = null; }
+    // no spiral preload: the engine owns the class spiral (and the Loom path
+    // renders live - there is nothing to fetch ahead of the first wheel)
   }
 
   /* ---- the loop ------------------------------------------------------------ */
@@ -559,7 +548,9 @@ export function createCpPressure(o) {
     const ms = lerp(P.BREATH_MS, heat) * (zen ? 1.5 : 1) * (0.85 + roll('breath') * 0.3);
     breathTimer = after(Math.round(ms), () => { breathTimer = 0; if (has('breath') && !stopped) { breathe(); armBreath(); } });
   }
-  function wheelWash() { sustain('wash', { variant: 'spiral', url: spiral.href, alpha: lerp(P.WHEEL_ALPHA, heat), sustainForever: true }); }
+  /** No url: the engine's spiralUrl() provider supplies the class spiral
+   *  (echo/misdirection posture; since 2026-08-25 that is the woven Loom). */
+  function wheelWash() { sustain('wash', { variant: 'spiral', alpha: lerp(P.WHEEL_ALPHA, heat), sustainForever: true }); }
   /** NEVER stop('wash'): a whisper alpha + a short hold lets the engine's own transition carry it out. */
   function fadeWash(variant, extra) { sustain('wash', Object.assign({ variant, alpha: 0.01, holdMs: 120 }, extra || {})); }
   function frameRoll(seconds) {
@@ -590,7 +581,7 @@ export function createCpPressure(o) {
     },
     haze: { on() { cls(haze, 'is-on', true); }, off() { cls(haze, 'is-on', false); } },
     burst: { on() { burstAt(null, 1); }, off() {} },
-    wheel: { on() { wheelWash(); }, off() { fadeWash('spiral', { url: spiral.href }); } },
+    wheel: { on() { wheelWash(); }, off() { fadeWash('spiral'); } },
     subs: { on() { sustain('sub_flash', { variant: P.SUB_VARIANT }); flashes(1, 600); }, off() { stopKind('sub_flash'); } },
     royal: {
       on() {
@@ -631,11 +622,16 @@ export function createCpPressure(o) {
     retune();
     say('pressure: rung ' + from + ' -> ' + r + ' (frac ' + frac.toFixed(2) + ') on: ' + Array.from(present).join(','));
   }
-  function descend(r) {
+  function descend(r, quiet) {
     if (r >= rung) return;
     const from = rung;
     for (let k = from; k > r; k--) leaveRung(k, r);
     rung = r;
+    /* W3 P1-7: the ladder only ever announced its climb. Coming down is
+     * relief and sounds like it - ONE cue per descend call however many rungs
+     * were shed, half the climb's level and pitched under it. The teardown
+     * walk to zero passes `quiet`: the bell owns that beat. */
+    if (!quiet) cueAt('slide', (P.CUE_LEVEL_BASE + P.CUE_LEVEL_STEP * r) / 2, { pitch: 0.8 });
     retune();
     say('pressure: rung ' + from + ' -> ' + r + ' (fade)');
   }
@@ -655,7 +651,7 @@ export function createCpPressure(o) {
   }
   function everythingOff() {
     cancelHyst();
-    descend(0);
+    descend(0, true);
     if (ringTimer) { cancel(ringTimer); ringTimer = 0; }
     if (flareTimer) { cancel(flareTimer); flareTimer = 0; }
     cls(ring, 'is-hit', false); cls(ring, 'is-deep', false);
@@ -677,7 +673,7 @@ export function createCpPressure(o) {
       ensureStyle();
       mount();
       retune();
-      say('pressure: mounted ' + [haze, ring].filter(Boolean).length + ' layers, wheel ' + spiral.file + (zen ? ' (zen: rungs 0-2 only)' : ''));
+      say('pressure: mounted ' + [haze, ring].filter(Boolean).length + ' layers, wheel = class spiral' + (zen ? ' (zen: rungs 0-2 only)' : ''));
     },
     setHeat(h) {
       heat = clamp01(h);
@@ -802,7 +798,7 @@ export function createCpPressure(o) {
       clearTranslate();
       for (const k of Object.keys(chips)) { const c = chips[k]; if (c.el) { cls(c.el, 'g-cp-p-bloom', false); try { c.el.style.transform = ''; } catch (e) { /* ignore */ } } }
       for (const node of [haze, ring]) { if (node) { try { node.remove(); } catch (e) { /* ignore */ } } }
-      haze = null; ring = null; preload = null;
+      haze = null; ring = null;
       present.clear();
     },
     diagnostics() {
@@ -815,7 +811,9 @@ export function createCpPressure(o) {
         chips: { moves: { writes: chips.moves.writes }, locked: { writes: chips.locked.writes }, calm: { writes: chips.calm.writes } },
         liveNodes: [haze, ring].filter(Boolean).length,
         hazeOn: !!(haze && haze.classList && haze.classList.contains('is-on')),
-        spiral: spiral.file, spiralUrl: spiral.href,
+        /* keys kept for rig continuity; the value is the engine's since the
+         * Loom directive - this deck no longer holds a spiral of its own */
+        spiral: 'class', spiralUrl: null,
         fires: Object.assign({}, fires), timers: live.size,
       };
     },

@@ -7,6 +7,13 @@
  * swap (or tap one, then tap another). Correctly placed tiles wear a thin ember
  * outline (the tell). 60 s HUD countdown.
  *
+ * THE CLOCK is 60 s of ACTIVE play, not 60 s of wall time: it does not start
+ * until the player's first press on the board, and it stops while the page is
+ * hidden (resumes when it comes back). A `failed` here is a sendback, which
+ * restarts the entire lockdown timer, so the budget must never be spent by a
+ * window that was opened and then ignored. The glitch schedule below reads the
+ * same active clock.
+ *
  * THE GLITCH: at ~40% progress or after ~12 s (whichever first) a static burst
  * (photosafe: a soft ember breath + crossfade) swaps the picture to a DIFFERENT
  * gif (tile positions kept) and two tiles trade places - preferring tiles that
@@ -219,7 +226,7 @@
       var panel = el('div', 'eejig-panel');
       panel.appendChild(el('p', 'eejig-kicker', 'emergency exit'));
       panel.appendChild(el('h2', 'eejig-title', 'Rearrange the picture'));
-      panel.appendChild(el('p', 'eejig-sub', 'Drag a tile onto another to swap them. Or tap one, then the other. Put it back the way it was.'));
+      panel.appendChild(el('p', 'eejig-sub', 'Drag a tile onto another to swap them. Or tap one, then the other. Put it back the way it was. The clock starts when you touch the board.'));
       var pips = el('div', 'eejig-pips');
       var pipEls = [];
       for (var p = 0; p < TILES; p++) { var pe = el('i', 'eejig-pip'); pips.appendChild(pe); pipEls.push(pe); }
@@ -245,7 +252,11 @@
       var tiles = [];                      // tiles[piece] = element
       var tileSize = 140, gap = 6, boardSize = 460;
       var moves = 0, glitches = 0, done = false;
-      var t0 = performance.now(), firstGlitchAt = 0, glitch1 = false, glitch2 = false;
+      // The active clock: banked ms of play plus the running segment. `begun` stays false (and
+      // elapsed() stays 0) until the first press on the board, and the segment stops whenever the
+      // document is hidden. firstGlitchAt is stamped in the same active milliseconds.
+      var begun = false, running = false, banked = 0, segAt = 0;
+      var firstGlitchAt = 0, glitch1 = false, glitch2 = false;
       var glitch2Roll = rng() < 0.75;      // the second glitch is likely, not certain
       var sel = -1;                        // selected piece (tap mode)
 
@@ -263,6 +274,14 @@
           tiles[q].style.backgroundPosition = pos.x + '% ' + pos.y + '%';
         }
       }
+      function elapsed() { return begun ? banked + (running ? performance.now() - segAt : 0) : 0; }
+      function clockBegin() { if (begun || done) return; begun = true; running = true; segAt = performance.now(); }
+      function clockPause() { if (!running) return; banked += performance.now() - segAt; running = false; }
+      function clockResume() { if (!begun || running || done) return; running = true; segAt = performance.now(); }
+      function onVisibility() { if (document.hidden) clockPause(); else clockResume(); }
+      document.addEventListener('visibilitychange', onVisibility);
+      self._off.push(function () { document.removeEventListener('visibilitychange', onVisibility); });
+
       function slotOf(piece) { return slots.indexOf(piece); }
       function slotXY(slot) {
         var r = Math.floor(slot / N), c = slot % N;
@@ -352,6 +371,7 @@
         if (!tEl || !board.contains(tEl)) return;
         if (ev.button != null && ev.button !== 0) return;
         ev.preventDefault();
+        clockBegin();                   // a hand on a tile is what starts the 60 s
         var piece = parseInt(tEl.getAttribute('data-piece'), 10);
         var r = board.getBoundingClientRect(), xy = slotXY(slotOf(piece));
         dragging = {
@@ -421,7 +441,7 @@
       // ---- the glitch ------------------------------------------------------
       function glitchNow(second) {
         glitches++;
-        firstGlitchAt = performance.now();
+        firstGlitchAt = elapsed();
         var pair = pickGlitchSwap(slots, rng);
         var nextPic = pickOtherIndex(picIdx, gifs.length, rng);
         var burstMs = photosafe ? 900 : 420;
@@ -446,26 +466,26 @@
       }
       function maybeGlitch() {
         if (done) return;
-        var now = performance.now();
+        var now = elapsed();          // active ms, so a paused game cannot glitch its way forward
         var prog = countCorrect(slots) / TILES;
         if (!glitch1) {
-          if (prog >= GLITCH_PROGRESS || now - t0 >= GLITCH_AFTER_MS) { glitch1 = true; glitchNow(false); }
+          if (prog >= GLITCH_PROGRESS || now >= GLITCH_AFTER_MS) { glitch1 = true; glitchNow(false); }
           return;
         }
-        if (!glitch2 && glitch2Roll && prog >= GLITCH2_PROGRESS && now - firstGlitchAt >= GLITCH2_MIN_GAP_MS && now - t0 < TIME_LIMIT_MS - 8000) {
+        if (!glitch2 && glitch2Roll && prog >= GLITCH2_PROGRESS && now - firstGlitchAt >= GLITCH2_MIN_GAP_MS && now < TIME_LIMIT_MS - 8000) {
           glitch2 = true; glitchNow(true);
         }
       }
 
       // ---- end states ------------------------------------------------------
       function meta() {
-        return { moves: moves, glitches: glitches, correct: countCorrect(slots), elapsedMs: Math.round(performance.now() - t0) };
+        return { moves: moves, glitches: glitches, correct: countCorrect(slots), elapsedMs: Math.round(elapsed()) };
       }
       function checkWin() {
         if (done || !isSolved(slots)) return;
         done = true;
         board.classList.add('is-done');
-        try { if (hud.timer) hud.timer(Math.max(0, Math.ceil((TIME_LIMIT_MS - (performance.now() - t0)) / 1000))); } catch (_e) {}
+        try { if (hud.timer) hud.timer(Math.max(0, Math.ceil((TIME_LIMIT_MS - elapsed()) / 1000))); } catch (_e) {}
         say('fine. it is a picture again. for now.');
         fine.textContent = 'verified: you remember what it looked like.'; fine.classList.remove('is-warn');
         self._after(700, function () { try { api.finish('completed', meta()); } catch (_e) {} });
@@ -494,10 +514,10 @@
       var lastShown = -1, glitchTimeChecked = false;
       var clock = setInterval(function () {
         if (!self._alive || done) return;
-        var left = TIME_LIMIT_MS - (performance.now() - t0);
+        var left = TIME_LIMIT_MS - elapsed();
         var sec = Math.max(0, Math.ceil(left / 1000));
         if (sec !== lastShown) { lastShown = sec; try { if (hud.timer) hud.timer(sec); } catch (_e) {} }
-        if (!glitch1 && !glitchTimeChecked && performance.now() - t0 >= GLITCH_AFTER_MS && !dragging) { glitchTimeChecked = true; maybeGlitch(); }
+        if (!glitch1 && !glitchTimeChecked && elapsed() >= GLITCH_AFTER_MS && !dragging) { glitchTimeChecked = true; maybeGlitch(); }
         if (left <= 0) fail();
       }, 200);
       this._timers.push(clock);

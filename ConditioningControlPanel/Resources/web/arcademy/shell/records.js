@@ -233,7 +233,25 @@ export function createRecords({ gameName, punchCard, log } = {}) {
       try { close.focus(); } catch (e) { /* noop */ }
     });
 
-    root.appendChild(box);
+    /* THE SPOTLIGHT HANGS OFF <body>, NOT OFF THIS WALL (owner bug 2026-08-25,
+     * "the card is cut off at the top and it is not in the middle"). It is
+     * `position:fixed; inset:0` - a modal over the WINDOW - and it used to be
+     * appended to `root`. On the standalone screen root is itself fixed and
+     * that read as viewport-sized by luck; inside the Records room root sits in
+     * `.asc-panel`, which carries a TRANSFORM, and a transformed ancestor
+     * becomes the containing block for a fixed descendant. So the whole
+     * presentation was being laid out inside a 810x302 scroller parked at the
+     * bottom of a phone: the veil stopped at the panel's edge, the card was
+     * centred on the panel rather than the screen, and its top ran off the top
+     * of the box. Body-level, it is measured against the window on every host
+     * and in every embedding. The band it must clear is `--arm-band-h`, which
+     * scene.js publishes on <html> for exactly this reason. */
+    let spotHost = root;
+    try {
+      if (typeof document !== 'undefined' && document.body
+        && typeof document.body.appendChild === 'function') spotHost = document.body;
+    } catch (e) { /* the node double may have no body - the wall is the floor */ }
+    spotHost.appendChild(box);
     spot = { el: box, timers: [], from: from || null };
     try { close.focus(); } catch (e) { /* noop */ }
 
@@ -276,7 +294,10 @@ export function createRecords({ gameName, punchCard, log } = {}) {
      * differences, both here, and OFF by default - a caller that never passes
      * the flag renders the screen byte for byte. */
     const embedded = s.embedded === true;
-    // A render empties the root, so any spotlight node is already gone with it.
+    /* A render empties the root - and the spotlight is not in the root any
+     * more (it is on <body>), so this call is now load-bearing rather than
+     * belt-and-braces: without it a repaint would strand a lit card over the
+     * wall it was lifted from. */
     dismissSpotlight(true);
     root.textContent = '';
     // The docket coming out. `shell.js showRecords()` renders once per visit, so

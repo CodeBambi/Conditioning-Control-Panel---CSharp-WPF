@@ -162,7 +162,9 @@ public class DescentZeroShowOrderingTests
 
         Assert.Equal(4, DescentCountdownService.DimStepFor(at, at));
         Assert.Equal(4, DescentCountdownService.DimStepFor(at, at.AddHours(6)));
-        Assert.Equal(4, DescentCountdownService.DimStepFor(at, at.AddDays(9)));
+        Assert.Equal(4, DescentCountdownService.DimStepFor(at, at.AddHours(11)));
+        // ...and lets go on its own once the night is long over (0825 F4, DimHoldPastZero).
+        Assert.Equal(0, DescentCountdownService.DimStepFor(at, at.AddDays(9)));
     }
 
     /// <summary>

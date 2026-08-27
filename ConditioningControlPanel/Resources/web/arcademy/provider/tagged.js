@@ -21,7 +21,7 @@
  *   });
  *   pool.next('target', { prefer:'loop' })  -> row | null
  *   pool.counts() / pool.thin(tag) / pool.empty(tag) / pool.prewarm(n)
- *   pool.dealt() / pool.dispose()
+ *   pool.spare(tag) / pool.dealt() / pool.dispose()
  *
  * FIVE LAWS
  *  1. THE TAG IS THE TRUTH. A row keeps the tag of the SOURCE that served it
@@ -109,9 +109,11 @@ export function normalizeSources(list) {
  * @param {Function} o.prewarm   the provider's bounded prewarm(urls)
  * @param {Function} o.log
  * @param {boolean} o.remoteAllowed  remote media gate (local rows ignore it)
+ * @param {Function} [o.broken]  (url) => boolean, the provider's shared url
+ *                               blacklist; a dead row is skipped at serve time
  * @returns {Promise<Object>} the pool (resolves per law 3, never rejects)
  */
-export function createTaggedPool({ spec, channel, platform, prewarm, log, remoteAllowed } = {}) {
+export function createTaggedPool({ spec, channel, platform, prewarm, log, remoteAllowed, broken } = {}) {
   const s = spec || {};
   const say = typeof log === 'function' ? log : () => {};
   const sources = normalizeSources(s.sources);
@@ -165,11 +167,19 @@ export function createTaggedPool({ spec, channel, platform, prewarm, log, remote
   }
 
   /* ---------------------- the ask ---------------------------------------- */
-  /** How many distinct rows a tag is still worth asking for. */
+  /** How many distinct rows a tag is still worth asking for.
+   *
+   *  LET THE PILE GROW PAST THE SPEC (0826, the claim()-side twin). This is the
+   *  BACKGROUND top-up gate only - `perSourceMin` is still the settle gate the
+   *  door waits on, and raising THAT would just delay the door. What this
+   *  bounds is how long the ask-again loop keeps pulling rows in after the
+   *  class has already started, and stopping it at the deal spec is why a pile
+   *  settled at exactly its ask and every later hand re-served the same faces.
+   *  Both spec-shaped terms are doubled; TAG_CAP is still the ceiling. */
   function targetFor(tag) {
     const rows = sources.filter((x) => x.tag === tag.name).length || 1;
-    const share = Math.ceil((want.loop + want.still) / Math.max(1, tagNames.length));
-    return Math.max(perSourceMin, Math.min(TAGGED.TAG_CAP, share || perSourceMin * 2, rows * 40));
+    const share = Math.ceil((want.loop + want.still) / Math.max(1, tagNames.length)) * 2;
+    return Math.max(perSourceMin, Math.min(TAGGED.TAG_CAP, share || perSourceMin * 2, rows * 80));
   }
 
   function ask(src, kind, attempt) {
@@ -283,29 +293,47 @@ export function createTaggedPool({ spec, channel, platform, prewarm, log, remote
     tag.cursor = 0;
   }
 
+  const isDead = (url) => { try { return typeof broken === 'function' && !!broken(url); } catch (e) { return false; } };
+
   function nextRow(tagName, opts) {
     const tag = tags[tagName];
     if (!tag || !tag.rows.length) return null;
-    if (tag.cursor >= tag.order.length) reserve(tag);
-    if (!tag.order.length) return null;
     const prefer = opts && (opts.prefer === 'loop' || opts.prefer === 'still') ? opts.prefer : null;
-    if (prefer) {
-      /* PREFERENCE IS A SWAP, NOT A SKIP: the wanted kind is pulled forward into
-       * the cursor's slot and the row it displaced keeps its place in the pass,
-       * so a preference can never starve a kind out of the deck. */
-      for (let i = tag.cursor; i < tag.order.length; i++) {
-        if (tag.order[i].kind === prefer) {
-          if (i !== tag.cursor) {
-            const t = tag.order[i]; tag.order[i] = tag.order[tag.cursor]; tag.order[tag.cursor] = t;
+    /* A BLACKLISTED URL IS SKIPPED and the SEEDED RE-SERVE is the substitute
+     * source: the cursor just walks on (starting the next seeded pass when it
+     * runs off the end), so the replacement for a dead row is the same row a
+     * dry tag would have re-served anyway - deterministic for a given seed and
+     * blacklist state, and with a clean blacklist this loop runs exactly once,
+     * serving the identical sequence it always served. Bounded at two full
+     * passes: a tag whose EVERY url died still answers (law 2 - null means
+     * zero rows, nothing else), and the game's own floor takes it from there. */
+    const cap = Math.max(1, tag.rows.length * 2);
+    let row = null;
+    for (let attempt = 0; attempt <= cap; attempt++) {
+      if (tag.cursor >= tag.order.length) reserve(tag);
+      if (!tag.order.length) return null;
+      if (prefer && attempt === 0) {
+        /* PREFERENCE IS A SWAP, NOT A SKIP: the wanted kind is pulled forward
+         * into the cursor's slot and the row it displaced keeps its place in
+         * the pass, so a preference can never starve a kind out of the deck. */
+        for (let i = tag.cursor; i < tag.order.length; i++) {
+          if (tag.order[i].kind === prefer) {
+            if (i !== tag.cursor) {
+              const t = tag.order[i]; tag.order[i] = tag.order[tag.cursor]; tag.order[tag.cursor] = t;
+            }
+            break;
           }
-          break;
         }
       }
+      const cand = tag.order[tag.cursor];
+      tag.cursor += 1;
+      if (cand && isDead(cand.url) && attempt < cap) continue;
+      row = cand || null;
+      break;
     }
-    const row = tag.order[tag.cursor];
-    tag.cursor += 1;
+    if (!row) return null;
     tag.served += 1;
-    return row || null;
+    return row;
   }
 
   /* ---------------------- the pool object -------------------------------- */
@@ -343,6 +371,16 @@ export function createTaggedPool({ spec, channel, platform, prewarm, log, remote
         total += urls.length;
       }
       return total;
+    },
+
+    /** Every distinct row the pool holds for ONE tag, in ARRIVAL order (stable
+     *  for a given claim, so a pure-hash pick over it repeats on a retake).
+     *  The substitute widener's window onto media the deck froze out: the pool
+     *  keeps filling to targetFor() after the deal, and those late rows never
+     *  reach a frozen deck any other way. */
+    spare(tag) {
+      const x = tags[String(tag || '')];
+      return x ? x.rows.slice() : [];
     },
 
     /** Every DISTINCT row, for the retake cache (a superset of {url,tag,src}). */

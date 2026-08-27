@@ -393,6 +393,20 @@ namespace ConditioningControlPanel.Services
             // dropped flash is invisible; a new surface during the composition rebuild is not (freeze cluster).
             if (Services.UI.DisplayChangeCoordinator.SpawnsSuppressed) return;
 
+            // Do-not-disturb: one of the user's own media players (VLC, mpv, PotPlayer...) owns the
+            // foreground window and they asked for flashes to be held while it does. Off by default —
+            // a flash is brief and most people are happy to keep them during a film — so this is a
+            // no-op unless both the list and DndSuppressFlashes are set. Returning here IS the
+            // reschedule: SchedulerTimer_Tick calls ScheduleNextFlash() whatever this does, so the
+            // ambient rhythm continues and simply resumes the moment they alt-tab away. Only the
+            // SCHEDULED spawn is gated: one-shot flashes are things the user or a running minigame
+            // asked for by hand, and those are never the thing fighting a media player.
+            if (Services.UI.DoNotDisturbGuard.ShouldSuppressFlashes())
+            {
+                Services.UI.DoNotDisturbGuard.LogSuppressionThrottled("flash");
+                return;
+            }
+
             _isBusy = true;
             _soundPlayingForCurrentFlash = false; // Reset for new flash event
             Task.Run(() => LoadAndShowImages());

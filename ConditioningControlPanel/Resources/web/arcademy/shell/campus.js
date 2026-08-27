@@ -45,9 +45,11 @@ import { isMobile, onDeviceChange } from '../core/device.js';
 import { genericPortrait, portraitSrc, portraitLabel, chipRung, paintChip, runPhotoDay,
   studentNumber } from './idcard.js';
 import { thud as punchThud } from './punchcard.js';
+import { createAccountChip } from './accountchip.js';
 import { mountMailChip } from './mailbox.js';
 import { mountBoardProp } from './corkboard.js';
 import { mountBugleProp } from './bugle.js';
+import { paintLever } from './lever.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -367,6 +369,24 @@ const ATTRACT_DWELL_MS = 1000;          // how long a room holds its glow
 const ATTRACT_LOOP_GAP_MS = 2600;       // dark beat before the show repeats
 const ATTRACT_TICK_MS = 50;             // cursor lerp tick (20fps - a hint, not a game)
 const ATTRACT_FLIP_MS = 70;             // one split-flap flip
+/* THE PHONE HALF-RATE (perf/arcademy-mobile-web). The attract loop is a 20Hz
+ * SVG cursor transform plus sign textContent rewritten ~14Hz inside filtered
+ * groups - polish that is invisible at phone sizes and expensive on WebKit.
+ * On a coarse pointer both tickers run at HALF rate (tick 100ms, flip 140ms);
+ * glideCursor derives its step count from the tick, so a glide still takes the
+ * same wall time. Probed ONCE at module init (trap 42's own probe pair);
+ * desktop evaluates to the untouched constants above. */
+const ATTRACT_COARSE = (() => {
+  try {
+    if (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) return true;
+  } catch (e) { /* noop */ }
+  try {
+    return typeof navigator !== 'undefined' && Number(navigator.maxTouchPoints) > 1;
+  } catch (e) { /* noop */ }
+  return false;
+})();
+const ATTRACT_TICK_EFF_MS = ATTRACT_COARSE ? ATTRACT_TICK_MS * 2 : ATTRACT_TICK_MS;
+const ATTRACT_FLIP_EFF_MS = ATTRACT_COARSE ? ATTRACT_FLIP_MS * 2 : ATTRACT_FLIP_MS;
 const ATTRACT_FLIPS = 8;                // flips before a sign has fully settled
 const ATTRACT_GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const ATTRACT_GLOW = 'brightness(1.3) saturate(1.12)';
@@ -512,6 +532,15 @@ export const FACILITIES = Object.freeze({
    * starts there. Drawn only when the shell hands the bag (gated build). */
   annex: Object.freeze({
     rect: [1260, 300, 108, 72], side: 'w', door: 336, stop: [1250, 422], rm: '000',
+  }),
+  /* THE PRIZE COUNTER (economy wave, 2026-08-26). Third counter down the same
+   * alley, under the Front Office: it belongs with the other two because it IS
+   * the other two - a window with somebody behind it. Same width, same west
+   * door, same three-step walk, and its stop simply continues down the alley
+   * the way the registrar's continues past Records. Nothing about the pathing
+   * is special-cased for it. */
+  prizes: Object.freeze({
+    rect: [1260, 572, 108, 84], side: 'w', door: 614, stop: [1250, 614], rm: '003',
   }),
 });
 
@@ -670,6 +699,17 @@ function sfx(name, level, extra) {
 const HOVER_GAP_MS = 150;
 let lastHoverCue = 0;
 
+/** EMI's hover seam is the DWELL, never the enter (heartbeat wave, 2026-08-25).
+ *  A pointer crossing the plan fires mouseenter dozens of times a minute, and
+ *  the throttle above only bounds the RATE - the same reason the owner took the
+ *  hover cue down 60%. So the moment is "the pointer SETTLED on one room", and
+ *  it is cancelled the instant the pointer leaves. The rest of the ration is the
+ *  pool's own: odds 0.15, a three-minute cooldown and maxPerSession 2. */
+const HOVER_DWELL_MS = 1200;
+
+/** How close to the last bell EMI is allowed to notice, once a night. */
+const BELL_NEAR_SEC = 300;
+
 function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -740,21 +780,73 @@ function idCrestGlyph() {
  *   shell/seep.js - it asks `beat('door_card')` and paints what it is told,
  *   exactly the way the split-flap board takes `misprintFor`. Absent = a school
  *   that is simply quiet, and the card is what it always was.
+ * @param {Object=} o.economy   THE TWO CURRENCIES, handed down and never read:
+ *   {balance:() => ({t,k}), lever:{positions, get, set, unlocks}}. This file is
+ *   under the header law - it imports no store and no bridge - so the wallet
+ *   chip, the Prize Counter's window and the Extra Credit lever on the door
+ *   card all live entirely on these getters. Absent = none of the three is
+ *   mounted, and the campus is byte-for-byte the campus it was.
  * @param {Function=} o.log
  * @returns {{root, boardMount, footMount, update, closeCard, destroy}}
  */
 export function createCampus({ state, gameName, banner, stats, reducedMotion, on, log,
-  dateSeed, attractIdleMs, boardPulse, idCardMode, holdAttract, post, seep, annex } = {}) {
+  dateSeed, attractIdleMs, boardPulse, idCardMode, holdAttract, post, seep, annex,
+  account, economy } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const handlers = on || {};
+  /* THE ACCOUNT CHIP (shell/accountchip.js): a host slot in the top-right
+   * cluster. `account` = {get, isMobile, onOpenCard, onAction}; `get()` is
+   * null on every host that never sent `init.account` (the desktop), and then
+   * nothing is mounted. Minted lazily so a late `profile` frame can still
+   * bring the chip in through setAccount(). */
+  const acctBag = account && typeof account.get === 'function' ? account : null;
+  let acctChip = null;
+  let topClusterEl = null;
+  let gearEl = null;
+  function mountAccountChip(a) {
+    if (!acctBag || !topClusterEl || acctChip) return;
+    try {
+      acctChip = createAccountChip({
+        t, account: a, isMobile: acctBag.isMobile,
+        onOpenCard: acctBag.onOpenCard, onAction: acctBag.onAction, log: say,
+      });
+      if (acctChip) topClusterEl.insertBefore(acctChip.el, gearEl ? gearEl.nextSibling : null);
+    } catch (e) { say('account chip unavailable (' + ((e && e.message) || e) + ')'); acctChip = null; }
+  }
   const name = typeof gameName === 'function' ? gameName : (k) => String(k);
   let st = state || campusState({ classes: [], records: {} });
   let cardOpen = false;
   let destroyed = false;
+  /* EMI's two campus latches (heartbeat wave). `hoverDwell` is the settle timer
+   * behind `campus.roomHover`; `bellNagged` makes `campus.bellNear` a once-per-
+   * campus EDGE rather than a thing the 1s bell tick could say sixty times. */
+  let hoverDwell = 0;
+  let bellNagged = false;
+  function clearHoverDwell() {
+    if (!hoverDwell) return;
+    try { clearTimeout(hoverDwell); } catch (e) { /* noop */ }
+    hoverDwell = 0;
+  }
   /* PHANTOM POST furniture handles - null when no `post` bag arrived. */
   let mailChip = null;
   let boardProp = null;
   let bugleProp = null;
+  /* THE WALLET CHIP's three nodes - null when no `economy` bag arrived. */
+  let walletChip = null;
+  let walletTicketN = null;
+  let walletTokenN = null;
+
+  /** Repaint the wallet chip from the shell's own reader. Guarded end to end:
+   *  a chip is furniture, and furniture may never be the thing that throws. */
+  function paintWallet() {
+    if (!walletChip || !economy || typeof economy.balance !== 'function') return;
+    let b = null;
+    try { b = economy.balance(); } catch (e) { b = null; }
+    const tt = Math.max(0, Math.round(Number(b && b.t) || 0));
+    const kk = Math.max(0, Math.round(Number(b && b.k) || 0));
+    try { if (walletTicketN) walletTicketN.textContent = String(tt); } catch (e) { /* noop */ }
+    try { if (walletTokenN) walletTokenN.textContent = String(kk); } catch (e) { /* noop */ }
+  }
   const holdsAttract = typeof holdAttract === 'function' ? holdAttract : () => false;
   /* The seep director, always ASKED and never held (see the `seep` param). */
   const seepDir = typeof seep === 'function' ? seep : () => null;
@@ -787,6 +879,14 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     try { if (typeof handlers.revealDone === 'function') handlers.revealDone(); }
     catch (e) { say('revealDone hook threw: ' + ((e && e.message) || e)); }
   }
+  /* W3 P0-31: THE CAMPUS WAKING UP. Four and a half seconds of establishing
+   * shot used to play in total silence, right after the intro bed had just
+   * finished proving the page can make a sound. `campus_wake` is a 4.2s swell
+   * on the MUSIC bus that rises under the cascade and is gone before the board
+   * deals, once per mount and never twice. Reduced motion has no cascade to
+   * score, so it gets no swell either (trap 66: no cues where there is no
+   * animation). */
+  if (!reducedMotion) sfx('campus_wake', 0.3, { bus: 'music' });
   if (typeof setTimeout === 'function') {
     // Reduced motion has no cascade to wait out (the sheet refuses it), so the
     // hook fires on the next turn rather than four and a half seconds late.
@@ -1276,7 +1376,10 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     g.appendChild(neon);
     roomRefs[key] = { g, neon, neonText, ping, spec, sub };
     g.addEventListener('click', () => openClassCard(key));
-    attachTip(g, () => classTip(key));
+    // EMI SEAM: the pointer SETTLED on this room (HOVER_DWELL_MS), not crossed it.
+    attachTip(g, () => classTip(key), () => {
+      try { fireMoment('campus.roomHover', { gameKey: key, inClass: false }); } catch (e) { /* noop */ }
+    });
     plan.appendChild(g);
     return g;
   }
@@ -1428,6 +1531,38 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     });
     annexG.setAttribute('class', 'campus-room facility annex');
     stag(annexG, 820);
+  }
+
+  /* THE PRIZE COUNTER. The post bag's contract for the third time: the campus
+   * mounts the window only when the shell hands an `economy` bag, and the shell
+   * keeps the catalog, the wallet and every byte of it. A host with no economy
+   * projected in `init` gets the campus it always had, with no dark room and no
+   * gap in the alley where a room used to be. */
+  let prizesG = null;
+  if (economy) {
+    prizesG = facility({
+      rect: FACILITIES.prizes.rect, door: FACILITIES.prizes.door,
+      side: FACILITIES.prizes.side, compact: true,
+      neonY: 580, nameY: 618,
+      sign: t('wallet_tickets', 'Tickets'),
+      name: t('campus_room_prizes', 'Prize Counter'),
+      rm: FACILITIES.prizes.rm,
+      onClick: () => { if (handlers.prizes) handlers.prizes(); },
+      tip: () => ({
+        name: t('campus_room_prizes', 'Prize Counter'),
+        status: t('campus_prizes_status', 'Open late'),
+        desc: t('campus_desc_prizes',
+          'Tickets on the shelf, tokens in the case. Somebody is always restocking.'),
+      }),
+    });
+    /* THE LIT WINDOW. Records gets the trophy-case gold through this same one
+     * modifier; the counter takes its own so the stylesheet can warm it without
+     * either of them borrowing the other's rule. */
+    prizesG.setAttribute('class', 'campus-room facility prizes');
+    /* the shelf behind the glass - three parcels in a row on the back wall */
+    [1280, 1304, 1328].forEach((x) => prizesG.appendChild(
+      svg('rect', { x, y: 644, width: 18, height: 13 }, 'campus-furnf')));
+    stag(prizesG, 860);
   }
 
   /* Entrance hall dressing (notice board, trophy case, admissions desk, crest) */
@@ -1626,6 +1761,40 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       try { topCluster.insertBefore(mailChip.el, gear); } catch (e) { /* order is cosmetic */ }
     }
   }
+  /* THE WALLET, between the envelope and the gear. It is a READING, not a
+   * control: two numbers and the two glyphs, and pressing it walks to the
+   * counter the same way the Records door walks to the office. It repaints on
+   * every campus update() because a payout can land while the board is up and
+   * a chip that lied about your tickets for a whole screen is worse than no
+   * chip at all. */
+  if (economy && typeof economy.balance === 'function') {
+    walletChip = el('button', 'campus-wallet');
+    walletChip.type = 'button';
+    walletChip.setAttribute('aria-label', t('campus_room_prizes', 'Prize Counter'));
+    walletChip.setAttribute('title', t('campus_room_prizes', 'Prize Counter'));
+    const tWrap = el('span');
+    const tIco = el('i', 'arc-tick');
+    tIco.setAttribute('aria-hidden', 'true');
+    tWrap.appendChild(tIco);
+    walletTicketN = el('b', null, '0');
+    tWrap.appendChild(walletTicketN);
+    walletChip.appendChild(tWrap);
+    const kWrap = el('span');
+    const kIco = el('i', 'arc-tok', '◉');
+    kIco.setAttribute('aria-hidden', 'true');
+    kWrap.appendChild(kIco);
+    walletTokenN = el('b', null, '0');
+    kWrap.appendChild(walletTokenN);
+    walletChip.appendChild(kWrap);
+    walletChip.addEventListener('click', () => { if (handlers.prizes) handlers.prizes(); });
+    try { topCluster.insertBefore(walletChip, gear); } catch (e) { topCluster.appendChild(walletChip); }
+    paintWallet();
+  }
+  /* THE ACCOUNT CHIP, after the gear - the far right, the way the topbar and
+   * the main web app both place it. Web host only. */
+  topClusterEl = topCluster;
+  gearEl = gear;
+  try { mountAccountChip(acctBag ? acctBag.get() : null); } catch (e) { /* noop */ }
   root.appendChild(topCluster);
 
   /* THE HINT HAS TO BE TRUE. There is no hover on a phone, so the desktop line
@@ -1826,7 +1995,8 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   tip.appendChild(tipName); tip.appendChild(tipStatus); tip.appendChild(tipDesc);
   root.appendChild(tip);
 
-  function attachTip(g, dataFn) {
+  /** `onDwell` is EMI's, and only the class rooms pass one - see HOVER_DWELL_MS. */
+  function attachTip(g, dataFn, onDwell) {
     g.addEventListener('mouseenter', () => {
       let d;
       try { d = dataFn(); } catch (e) { d = null; }
@@ -1846,6 +2016,13 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       tipStatus.textContent = d.status || '';
       tipDesc.textContent = d.desc || '';
       tip.classList.add('on');
+      if (onDwell && typeof setTimeout === 'function') {
+        clearHoverDwell();
+        hoverDwell = setTimeout(() => {
+          hoverDwell = 0;
+          try { onDwell(); } catch (e) { /* noop */ }
+        }, HOVER_DWELL_MS);
+      }
     });
     g.addEventListener('mousemove', (e) => {
       const r = (root.getBoundingClientRect ? root.getBoundingClientRect() : null);
@@ -1854,7 +2031,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       tip.style.setProperty('left', Math.min(e.clientX + 18, w - 270) - r.left + 'px');
       tip.style.setProperty('top', (e.clientY + 18 - r.top) + 'px');
     });
-    g.addEventListener('mouseleave', () => tip.classList.remove('on'));
+    g.addEventListener('mouseleave', () => { tip.classList.remove('on'); clearHoverDwell(); });
   }
 
   function classTip(key) {
@@ -1917,13 +2094,38 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   const ccAltHint = el('p', 'cc-althint', '');
   ccAltHint.hidden = true;
   card.appendChild(ccAltHint);
+  /* THE EXTRA CREDIT LEVER, under the two doors. It sits BELOW Begin on purpose:
+   * it is a choice about the run you are about to take, not a way to take it,
+   * and a control above the verb would read as a step you have to complete
+   * first. Three positions on one rail, and a position you have not unlocked is
+   * DIM AND STILL THERE - what you cannot pull yet is the whole reason to walk
+   * down to the counter, so hiding it would hide the feature. Mounted only when
+   * the shell handed an `economy` bag; the card is otherwise unchanged. */
+  const ccLever = el('div', 'arc-lever');
+  ccLever.hidden = true;
+  const ccLeverRail = el('div', 'arc-lever-rail');
+  const ccLeverHint = el('p', 'arc-lever-hint', '');
+  if (economy && economy.lever) {
+    ccLever.appendChild(el('p', 'arc-lever-title', t('lever_title', 'Extra Credit')));
+    ccLever.appendChild(ccLeverRail);
+    ccLever.appendChild(ccLeverHint);
+    card.appendChild(ccLever);
+  }
   scrim.appendChild(card);
   root.appendChild(scrim);
 
   let cardAction = null;
   let cardAltAction = null;
-  scrim.addEventListener('click', (e) => { if (e.target === scrim) closeCard(); });
-  ccX.addEventListener('click', () => closeCard());
+  /* COLD FEET, and only cold feet (EMI SEAM, heartbeat wave). `closeCard()`
+   * itself is the wrong seam: Begin and Free Swim shut the card on their way IN
+   * and would read as a back-out. These two listeners are the only paths that
+   * dismiss the card and go nowhere. */
+  function backOut() {
+    if (!closeCard()) return;
+    try { fireMoment('campus.doorBackedOut', { inClass: false }); } catch (e) { /* noop */ }
+  }
+  scrim.addEventListener('click', (e) => { if (e.target === scrim) backOut(); });
+  ccX.addEventListener('click', () => backOut());
   ccGo.addEventListener('click', () => {
     const act = cardAction;
     closeCard();
@@ -1958,6 +2160,18 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     cardAltAction = () => { if (handlers.freeSwim) handlers.freeSwim(key); };
   }
 
+  /**
+   * Paint (or retire) the Extra Credit rail. The words, the lock lines and the
+   * painting all live in shell/lever.js, because the room scene's apron shows
+   * the SAME rail and two copies of a three-way switch is two chances to drift.
+   * Rebuilt on every card pop rather than mutated - see paintLever's note.
+   */
+  function setLever(show) {
+    if (show === false || !economy || !economy.lever) { ccLever.hidden = true; return; }
+    ccLever.hidden = false;
+    paintLever({ rail: ccLeverRail, hint: ccLeverHint }, economy.lever, t, () => setLever(true));
+  }
+
   function popCard() {
     /* THE DOOR. `card.swing` IS the door-open animation (the mockup's reflow
      * trick, one line down), so the thump belongs here rather than at any of the
@@ -1975,6 +2189,11 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   function closeCard() {
     if (!cardOpen) return false;
     cardOpen = false;
+    /* W3 P1-18. popCard has thumped since the door card existed and nothing
+     * ever answered it: the card simply vanished. Same door, lighter and a
+     * touch higher, because shutting one is not the same gesture as opening
+     * it. Guarded by `cardOpen` above, so a stray close is silent. */
+    sfx('door', 0.18, { pitch: 1.1 });
     scrim.classList.remove('on');
     chalkClear();          // a card that shut mid-ghost still settles its title
     return true;
@@ -2118,6 +2337,11 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       try { fireMoment('lockedClick', { what: 'room', gameKey: key }); } catch (e) { /* noop */ }
     }
     setAltButton(key, r);
+    /* THE LEVER rides the class card and only the class card: it is a wager on
+     * a graded run, so a facility door has nothing to wager. Rebuilt here rather
+     * than once at boot so a token spent at the counter lights Honors on the
+     * very next door the player opens. */
+    setLever(true);
     /* THE CHALK GHOST, and it must be asked BEFORE the card pops - see above. */
     chalkGhost(key);
     popCard();
@@ -2145,6 +2369,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       cardAction = d.action || null;
     }
     setAltButton(null, null);        // facilities are never swum
+    setLever(false);                 // nor wagered on
     popCard();
   }
 
@@ -2178,6 +2403,10 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     if (mailChip) { try { mailChip.update(); } catch (e) { /* noop */ } }
     if (boardProp) { try { boardProp.refresh(post && post.daySeed); } catch (e) { /* noop */ } }
     if (bugleProp) { try { bugleProp.refresh(); } catch (e) { /* noop */ } }
+    /* ...and so does the wallet, off the same silent-repaint path: a payout
+     * lands while the board is up, and the chip has to have moved by the time
+     * the player looks at it. */
+    paintWallet();
 
     for (const key of Object.keys(roomRefs)) {
       const ref = roomRefs[key];
@@ -2339,9 +2568,9 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   }
   function glideCursor(to, ms, done) {
     const from = cursorAt.slice();
-    const steps = Math.max(1, Math.round(ms / ATTRACT_TICK_MS));
+    const steps = Math.max(1, Math.round(ms / ATTRACT_TICK_EFF_MS));
     let i = 0;
-    const id = attractEvery(ATTRACT_TICK_MS, () => {
+    const id = attractEvery(ATTRACT_TICK_EFF_MS, () => {
       if (!attractOn) { attractStop(id); return; }
       i += 1;
       const p = Math.min(1, i / steps);
@@ -2369,7 +2598,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     const truth = ref ? neonLabel(key) : '';
     if (!ref || !truth) { done(); return; }
     let k = 0;
-    const id = attractEvery(ATTRACT_FLIP_MS, () => {
+    const id = attractEvery(ATTRACT_FLIP_EFF_MS, () => {
       if (!attractOn) { attractStop(id); return; }
       k += 1;
       if (k >= ATTRACT_FLIPS) {
@@ -2379,6 +2608,11 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
         return;
       }
       try { ref.neonText.textContent = flapText(truth, k); } catch (e) { /* noop */ }
+      /* W3 P1-18: the sign flutters, so the sign ticks. The vane cue lives HERE
+       * and not in splitflap's cueCascade (trap 87): that board's stagger is
+       * hard-coupled to the stylesheet and this one runs on its own dial.
+       * Quiet - it is a sign across a dark campus, not the departure board. */
+      sfx('flap', 0.12);
     });
     if (!id) done();
   }
@@ -2429,6 +2663,14 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     const order = attractOrder();
     if (!order.length) { armIdle(); return; }
     attractOn = true;
+    /* W3 P1-22: THE ROOM TONE UNDER THE ATTRACT. The player has gone quiet, the
+     * cursor is about to tour an empty campus, and the empty campus has never
+     * had any air in it. `campus_idle` is a HOLD - the mixer's only sustain - so
+     * it is a bed, not a cue, and it must be let go of by the same code that
+     * started it: cancelAttract stops it, and destroy() reaches cancelAttract.
+     * The bed is SAMPLE-ONLY: with no file shipped this is honest silence, no
+     * fallback and nothing to check. Music bus, under everything. */
+    sfx('campus_idle', 0.25, { bus: 'music', hold: true });
     arng = makeRng('arcademy|campus|attract|' + attractSeed);   // same show, every loop
     if (reducedMotion) { order.forEach((k) => glow(k, true)); return; }
     ensureCursor();
@@ -2446,6 +2688,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   function cancelAttract(rearm) {
     if (attractOn) {
       attractOn = false;
+      sfx('campus_idle', 0.25, { bus: 'music', stop: true });   // W3 P1-22: the bed's owner
       attractClearAll();
       unglowAll();
       resettleSigns();
@@ -2493,7 +2736,18 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     try { bellText.textContent = bellLabel(sec == null ? bellSecondsLeft() : sec); }
     catch (e) { /* noop */ }
   }
-  function tickBell() { if (bellHeld == null) paintBell(null); }
+  function tickBell() {
+    if (bellHeld != null) return;
+    paintBell(null);
+    /* EMI SEAM: the ONE tick that crosses five minutes, and only with the night
+     * unfinished. A once-per-campus edge, never a countdown she reads aloud. */
+    if (bellNagged || st.allDone) return;
+    let left = 0;
+    try { left = bellSecondsLeft(); } catch (e) { return; }
+    if (!(left > 0 && left <= BELL_NEAR_SEC)) return;
+    bellNagged = true;
+    try { fireMoment('campus.bellNear', { secondsLeft: left, inClass: false }); } catch (e) { /* noop */ }
+  }
   function clearBellCatch() {
     for (const id of bellCatch) { try { clearTimeout(id); } catch (e) { /* noop */ } }
     bellCatch = [];
@@ -2514,15 +2768,24 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     bellHeld = start;
     paintBell(start);
     try { bellText.classList.add('arc-seep-held'); } catch (e) { /* noop */ }
+    /* W3 P2-10 (THE SEEP, tell 07). The catch-up is the tell: three quick
+     * repaints where a clock should have ticked once. One tick per PAINT, and
+     * the cue lives here rather than in seep.js because here is where the
+     * paints are - a caller counting them out on its own timer would drift the
+     * moment these two numbers move. Under the doctrine's floor: a clock you
+     * half-heard resync, not a clock announcing itself. The hold itself is
+     * silent, which is what makes the three ticks read as catching up. */
     bellCatch.push(setTimeout(() => {
       try { bellText.classList.remove('arc-seep-held'); } catch (e) { /* noop */ }
       try { bellText.classList.add('arc-seep-catch'); } catch (e) { /* noop */ }
       paintBell(start - 1);
-      bellCatch.push(setTimeout(() => paintBell(start - 2), 110));
+      sfx('clock_tick', 0.09);
+      bellCatch.push(setTimeout(() => { paintBell(start - 2); sfx('clock_tick', 0.09); }, 110));
       bellCatch.push(setTimeout(() => {
         bellHeld = null;
         try { bellText.classList.remove('arc-seep-catch'); } catch (e) { /* noop */ }
         paintBell(null);
+        sfx('clock_tick', 0.09);
       }, 220));
     }, hold));
     return true;
@@ -2551,6 +2814,13 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
      * the stand-in portrait and the unlinked chip it was built with.
      */
     setProfile: setIdProfile,
+    /** THE ACCOUNT CHIP's seam: a later `account` repaints the chip, or mints
+     *  it when init shipped without one. Nothing on a host that sent none. */
+    setAccount(a) {
+      if (!a) return;
+      if (acctChip) { try { acctChip.setAccount(a); } catch (e) { /* noop */ } }
+      else mountAccountChip(a);
+    },
     /** The chip's in-flight looks, which only the shell knows about:
      *  'wait' (a link is in the air) and 'pending' (a set-setting is waiting on
      *  its echo). Every resting rung comes from `setProfile`. */
@@ -2634,9 +2904,11 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       destroyed = true;
       chalkClear();          // the title goes back and the claim is freed (trap 30)
     if (mailChip) { try { mailChip.destroy(); } catch (e) { /* noop */ } mailChip = null; }
+      if (acctChip) { try { acctChip.destroy(); } catch (e) { /* noop */ } acctChip = null; }
       if (boardProp) { try { boardProp.destroy(); } catch (e) { /* noop */ } boardProp = null; }
       if (bugleProp) { try { bugleProp.destroy(); } catch (e) { /* noop */ } bugleProp = null; }
       cancelAttract(false);
+      clearHoverDwell();     // a settle timer must never outlive the plan it sat on
       if (idleTimer) { try { clearTimeout(idleTimer); } catch (e) { /* noop */ } idleTimer = 0; }
       try { INPUT_EVENTS.forEach((n) => root.removeEventListener(n, onInput, true)); } catch (e) { /* noop */ }
       if (docBound) { try { document.removeEventListener('keydown', onInput, true); } catch (e) { /* noop */ } }

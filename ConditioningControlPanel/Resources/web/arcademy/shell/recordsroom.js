@@ -35,6 +35,20 @@
  * It touches no store, no bridge and no EMI - the shell hands it narrow caps,
  * the annex's law (`showAnnex`'s), and it calls back.
  *
+ * THE ROOM IS ALIVE (W2). scene.js grew a declarative FX layer; this file
+ * grew the office's TABLE for it, below `RECTS`. Six rows on the wide shot -
+ * the sign, the lamp, the dust in its cone, the window, the clock and (only
+ * when the storeroom is open) the seam - plus two pixels of parallax on the
+ * painting. None of it is a verb: every rect down there is decoration, and the
+ * four things you can press are exactly the four things you could press
+ * before. The seventh piece, the corkboard's paper flutter, is pure CSS in
+ * corkboard.css, because a hover state does not need a runtime.
+ *
+ * THE CLOCK IS THE ONE PIECE THAT IS NOT DECORATION. It reads the player's own
+ * wall clock, and it is the only diegetic real-time element in the school
+ * (owner ruling 2026-08-25). The plate painted a face stopped at eleven; a
+ * cream disc buries the painted hands and two DOM hands tell the truth over it.
+ *
  * THE APRON OWNS THE FLOOR OF THE WIDE SHOT, and only of the wide shot. All
  * four measured rects up there clear y=640 on their own. The two CLOSE-UP hosts
  * (the cork, the book's pages) are measured from the PLATE and run under that
@@ -49,7 +63,7 @@ import { t as lexT } from '../core/lexicon.js';
 import { createScene } from './scene.js';
 import { createRecords } from './records.js';
 import { createDeskBook } from './deskbook.js';
-import { mountNotices } from './corkboard.js';
+import { mountNotices, closeNoticeReader, readerUp } from './corkboard.js';
 
 /* ----------------------------------------------------------------------------
  * THE TABLE
@@ -68,8 +82,98 @@ export const RECTS = Object.freeze({
 /** The ajar panel, laid over the wide plate while `ajar` is on. */
 export const DOOR_PATCH = Object.freeze([1050, 100, 326, 476]);
 
+/* ----------------------------------------------------------------------------
+ * THE ALIVE LAYER'S TABLE
+ *
+ * scene.js's `fx` contract, in the same stage pixels as everything else, and
+ * every rect below was crop-verified against `art/vn/vn-09-records-office.png`
+ * rather than trusted from the spec sheet. Where a number here differs from
+ * `records-room-spec.json` the difference is written down beside it.
+ *
+ * NOTHING IN THIS TABLE IS A VERB. The layer takes no pointer events and no
+ * row of it appears in the Esc fold, the tab order or the audit; a row that
+ * fails to build costs a breath and never a rect. The apron-line warning does
+ * not apply either - it audits HOTSPOTS, and the floor pool under the storeroom
+ * door is light on a floor, which is exactly where light on a floor goes.
+ * -------------------------------------------------------------------------- */
+
+/** The RECORDS sign over the counter. */
+export const FX_SIGN = Object.freeze([577, 169, 346, 91]);
+/** The banker's lamp's pool on the counter (the rect is centred on the base). */
+export const FX_LAMP = Object.freeze([383, 433, 282, 42]);
+/** The cone above it - the lamp head down to the counter, where the dust is. */
+export const FX_MOTES = Object.freeze([420, 300, 200, 180]);
+/** The window, and the route lamp burning outside it. */
+export const FX_WINDOW = Object.freeze([52, 120, 64, 291]);
+/** The wall clock. `r` is the BEZEL; `faceR` is the disc that buries the
+ *  painted hands, measured off the plate (hands reach r16, numerals start at
+ *  r21) so the numerals stay painted and the hands do not. */
+export const FX_CLOCK = Object.freeze({ cx: 1009, cy: 187, r: 44 });
+export const FX_CLOCK_FACE_R = 19;
+/** The open door's leading edge - the bright side of the gap in the ajar
+ *  plate, measured off the composite at x=1180 (the door rect's own left edge,
+ *  1175, is the JAMB, and a breath on the jamb is a breath on the wall). */
+export const FX_SEAM_EDGE = Object.freeze([1180, 132, 6, 444]);
+/** ...and what it throws on the floor. Below the apron line on purpose: the
+ *  patch is cut at y=575 and the light has to land somewhere. */
+export const FX_SEAM_POOL = Object.freeze([1107, 552, 180, 148]);
+
+/**
+ * THE TABLE ITSELF. Seeds are literal so a "random" stutter is the same
+ * stutter every night - a rare event nobody can reproduce is a bug report.
+ * `now` is left off the clock row, so it reads the real Date; a suite hands
+ * its own in through `caps.now`.
+ */
+export function recordsFx(now) {
+  return [
+    { kind: 'neon', view: 'wide', rect: FX_SIGN, seed: 0x5EC0DE },
+    { kind: 'lamp', view: 'wide', rect: FX_LAMP },
+    { kind: 'motes', view: 'wide', rect: FX_MOTES, seed: 0x11FADE },
+    { kind: 'window', view: 'wide', rect: FX_WINDOW, seed: 0x0FF1CE },
+    {
+      kind: 'clock', view: 'wide', circle: FX_CLOCK,
+      faceR: FX_CLOCK_FACE_R,
+      hourLen: 12, minLen: 17,
+      now: typeof now === 'function' ? now : undefined,
+    },
+    /* THE SEAM IS THE DOOR'S OWN GATE, read the way the rect reads it: no
+     * reveal, no flag, no nodes. */
+    {
+      kind: 'seam', view: 'wide', when: 'ajar',
+      rect: RECTS.door, edge: FX_SEAM_EDGE, pool: FX_SEAM_POOL,
+    },
+    { kind: 'tilt', view: 'wide', amp: 2 },
+  ];
+}
+
 /** The bare cork inside the board close-up - where the paper goes. */
 export const CORK_INNER = Object.freeze([43, 37, 1285, 692]);
+
+/* ----------------------------------------------------------------------------
+ * THE PAINTED CORK ON THE WIDE PLATE, and the lamp that stands in front of it.
+ *
+ * `RECTS.corkboard` is the HOTSPOT - the whole framed object, timber and all,
+ * with a few pixels of slack under it so the press is comfortable. It is not a
+ * place to hang paper, and hanging paper on it is exactly what the first
+ * miniature did: the sheets started 9px above the cork (on the frame), ran 17px
+ * below its bottom rail onto the desk, and the bottom-right one landed on the
+ * banker's lamp (owner screenshot, 2026-08-25).
+ *
+ * These two numbers are measured off `art/vn/vn-09-records-office.png` itself,
+ * not read off a spec sheet:
+ *   - the frame's INNER edges are the dark outline at x=236 and x=539, y=163
+ *     and y=362, so the cork face is x 237..538, y 165..361 (302 x 197);
+ *   - the lamp's shade breaks that plane at y=322 and reaches back to x=480,
+ *     which is inside the cork's own right third.
+ * So the paper stops five pixels above the shade: [237, 165, 302, 152]. The
+ * bottom band of the board is bare on purpose - it is the part of the board
+ * the lamp is standing in front of.
+ * -------------------------------------------------------------------------- */
+
+/** The painted cork on the WIDE plate, trimmed to clear the lamp shade. */
+export const CORK_WIDE = Object.freeze([237, 165, 302, 152]);
+/** The top edge of the banker's lamp shade on that plate (stage px). */
+export const LAMP_SHADE_TOP = 322;
 
 /** The two blank pages inside the book close-up. */
 export const LEDGER_PAGES = Object.freeze({
@@ -89,6 +193,23 @@ const FRESH_H = 20;
 /* ----------------------------------------------------------------------------
  * PLUMBING
  * -------------------------------------------------------------------------- */
+
+/* ONE AUDIO DOOR (trap 18): shell/audio.js owns the only audio node on the
+ * page, so every sound this room makes is a REQUEST on `document` - the exact
+ * defensive shape shell/ceremonies.js set. A dropped cue is not an error. */
+function sfx(name, level, extra) {
+  try {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    document.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: Object.assign(
+        { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+        extra || {}
+      ),
+    }));
+  } catch (e) { /* a cue must never be the thing that throws */ }
+}
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -183,6 +304,8 @@ function findCls(node, cls) {
  *  daySeed      - the UTC day string the notices are dealt from.
  *  onCorkRead   - optional (noticeId) per sheet the visit marked read.
  *  ajar         - is the storeroom open at all (the reveal has fired)?
+ *  now          - optional () -> Date for the wall clock (a suite's seam; the
+ *                 shipping room leaves it off and reads the real one).
  *  onBack / onAnnex / onReport - the three ways out.
  *  reportLabel  - the report card's own label, the shell's word for it.
  */
@@ -207,6 +330,8 @@ export function createRecordsRoom(caps) {
   let closeCards = null;       // the live panel's own close, or null
   let book = null;             // shell/deskbook.js, built on the first book view
   let paper = null;            // the corkboard's mount handle, or null
+  let mini = null;             // the WIDE shot's miniature wall, or null
+  let miniOff = null;          // its unmount
   let freshEl = null;          // the pink tab, or null
   let freshOff = null;         // its unmount
   let ajar = !!c.ajar;
@@ -255,6 +380,8 @@ export function createRecordsRoom(caps) {
     patches: [
       { view: 'wide', art: 'vn-09-records-door-ajar.png', rect: DOOR_PATCH, when: 'ajar' },
     ],
+    /* THE ROOM BREATHES. Decoration only - see the table's own header. */
+    fx: recordsFx(typeof c.now === 'function' ? c.now : undefined),
     apron: { back: () => { try { if (c.onBack) c.onBack(); } catch (e) { log('records room back threw'); } } },
     onAction: onAction,
   });
@@ -262,6 +389,25 @@ export function createRecordsRoom(caps) {
 
   try { scene.root.classList.add('rr-room'); } catch (e) { /* noop */ }
   scene.setFlag('ajar', ajar);
+  mountMiniCork();
+
+  /* THE ROOM TONE, WIRED AT LAST (W3 P1-22). This file carried a TODO for two
+   * waves saying the bed could not be built: `arcademy-sfx` had no loop and no
+   * per-name stop, so a room tone meant either an audio node in here (trap 18,
+   * the law that says a room owns no node) or a private timer re-firing a
+   * one-shot forever, which is worse. The HOLD contract closed that gap - a
+   * SAMPLED name with `detail.hold` loops in a keyed slot and `detail.stop`
+   * fades it out - and the two calls landed exactly where the TODO said they
+   * would: here, and in destroy().
+   * Two rules ride with it. EVERY HOLD HAS AN OWNER: destroy() below is this
+   * one's, without exception, and the shell's clearScreen reaches it. And a
+   * bed is SAMPLE-ONLY: with no mp3 shipped the hold is dropped and the room
+   * is silent, which is the honest answer - a synthesised impression of a room
+   * tone is a different room. The `pad` under it is the INTERIM: one breath of
+   * air on the way in, so the door still means something on a build with no
+   * files behind the beds. */
+  sfx('records_bed', 0.25, { bus: 'music', hold: true });
+  sfx('pad', 0.06);
 
   /* ------------------------------------------------------- THE FRESH TAB */
   /* A pink tab on the tray whenever the school has stamped a card since the
@@ -384,7 +530,82 @@ export function createRecordsRoom(caps) {
     });
   }
 
+  /* ------------------------------------------------------- THE MINIATURE */
+
+  /**
+   * THE BOARD HAS PAPER ON IT FROM ACROSS THE ROOM (owner ruling 2026-08-25).
+   * The plate paints bare cork, so until you walked up to it the office's
+   * noticeboard was an empty board in a room that is supposed to be lived in.
+   * This hangs the SAME night's set - one table, one state, one wall - into the
+   * cork rect on the wide shot, stood back from.
+   *
+   * IT IS A PREVIEW, AND THAT WORD IS LOAD-BEARING: `mountNotices({preview})`
+   * marks nothing read and banks no visit, so looking at the board is not
+   * reading the board and the fresh dot survives the glance.
+   *
+   * THE SCALE IS DERIVED, NEVER TYPED. The inner wall is laid out at the
+   * CLOSE-UP's own width, so a sheet in the miniature is the same shape as the
+   * sheet you walk up to, and the whole thing is then scaled by the ratio the
+   * two rects give us. Its height is the rect divided back out by that scale,
+   * so the miniature is the TOP of the close-up's own board - the same grid,
+   * the same rows, the same type - ending where the painted cork ends.
+   *
+   * IT HANGS ON `CORK_WIDE`, NOT ON THE HOTSPOT. See that constant: the rect
+   * you press is the framed object and the rect paper hangs on is the cork
+   * inside it, minus the band the lamp stands in front of.
+   *
+   * AND IT IS DEALT THE CLOSE-UP'S OWN FIT. Same `boxH`, same `scale`, so the
+   * two walls shrink the same sheet by the same amount and the thumbnail is a
+   * picture of the board rather than a second, differently-typeset board.
+   */
+  function mountMiniCork() {
+    if (dead || mini) return;
+    const rect = CORK_WIDE;
+    const scale = rect[2] / CORK_INNER[2];
+    if (!(scale > 0)) return;
+    const wrap = el('div', 'rr-corkmini');
+    attr(wrap, 'aria-hidden', 'true');
+    /* `rr-cork` so it is laid out and inked exactly like the wall it is a
+     * picture of; `rr-cork-mini` so nothing - a sheet, a suite - can mistake
+     * the picture for the wall. */
+    const inner = el('div', 'rr-cork rr-cork-mini arc-cork-wall');
+    try {
+      inner.style.width = CORK_INNER[2] + 'px';
+      inner.style.height = Math.round(rect[3] / scale) + 'px';
+      inner.style.transform = 'scale(' + scale.toFixed(4) + ')';
+    } catch (e) { /* the node double has no style box - the wall still mounts */ }
+    wrap.appendChild(inner);
+    miniOff = scene.mountInView('wide', wrap, rect);
+    mini = mountNotices(inner, {
+      daySeed: c.daySeed,
+      preview: true,
+      fit: corkFit(),
+      /* The board has a bottom rail painted into it: a sheet sliced flat along
+       * that rail is a rendering fault, a shorter wall is a wall. */
+      wholeRows: true,
+      log: log,
+    });
+    if (!mini) log('records room: the miniature wall could not be pinned');
+  }
+
   /* ------------------------------------------------------------ THE BOARD */
+
+  /**
+   * THE FIT BOTH WALLS SHARE. `boxH` is the close-up cork's height in stage px
+   * and `scale` is the STAGE's, read live off the chassis (a window resize
+   * moves it, and corkboard.js re-runs the fit on its own resize listener).
+   * The miniature must never measure its own host for this: it carries a
+   * second scale of its own, which would answer a smaller number and print the
+   * thumbnail in bigger type than the board it is a picture of.
+   */
+  function corkFit() {
+    return {
+      boxH: CORK_INNER[3],
+      scale: function () {
+        try { return scene.scale ? scene.scale() : 1; } catch (e) { return 1; }
+      },
+    };
+  }
 
   /** Pin the night's sheets over the bare cork, once per visit to the room. */
   function mountBoard() {
@@ -396,6 +617,15 @@ export function createRecordsRoom(caps) {
     paper = mountNotices(host, {
       daySeed: c.daySeed,
       onRead: typeof c.onCorkRead === 'function' ? c.onCorkRead : undefined,
+      /* EVERY SHEET COMES OFF THE WALL. The close-up is a painting scaled to
+       * the window, so on a phone its body copy lands near seven pixels and
+       * the bottom row hangs out of the frame; one press lifts the paper to
+       * full size over the window (corkboard.js's READER). The wall is still
+       * read at a glance - this is what a glance you cannot resolve does next. */
+      readable: true,
+      /* The board's own box, and the stage's own scale - the miniature above
+       * is handed this same pair on purpose. */
+      fit: corkFit(),
       log: log,
     });
     if (!paper) log('records room: the wall could not be pinned');
@@ -430,8 +660,16 @@ export function createRecordsRoom(caps) {
    */
   function escapeStep() {
     if (dead) return false;
+    /* A SHEET IN THE HAND IS THE THING ONE PRESS AGO, so it folds before the
+     * spotlight and before the chassis - inward-out, all the way down. */
+    if (dismissReader()) return true;
     if (dismissSpotlight()) return true;
     try { return !!scene.escapeStep(); } catch (e) { return false; }
+  }
+
+  /** The reader's own rung, kept separate so the shell can name it. */
+  function dismissReader() {
+    try { return !!closeNoticeReader(); } catch (e) { return false; }
   }
 
   /** The spotlight's own rung, kept separate so the shell can name it. */
@@ -452,10 +690,17 @@ export function createRecordsRoom(caps) {
   function destroy() {
     if (dead) return;
     dead = true;
+    sfx('records_bed', 0.25, { bus: 'music', stop: true });   // W3 P1-22: the bed's owner
     for (let i = 0; i < timers.length; i += 1) { try { clearTimeout(timers[i]); } catch (e) { /* noop */ } }
     timers.length = 0;
     if (book) { try { book.destroy(); } catch (e) { /* noop */ } book = null; }
     if (paper) { try { paper.destroy(); } catch (e) { /* noop */ } paper = null; }
+    /* The miniature is scenery and goes with the room; its unmount is the
+     * chassis's, its sheets are corkboard.js's, and a reader left in the
+     * player's hand is a <body>-level node that would outlive both. */
+    if (mini) { try { mini.destroy(); } catch (e) { /* noop */ } mini = null; }
+    if (miniOff) { try { miniOff(); } catch (e) { /* noop */ } miniOff = null; }
+    try { closeNoticeReader(); } catch (e) { /* noop */ }
     if (recordsPage) { try { recordsPage.destroy(); } catch (e) { /* noop */ } recordsPage = null; }
     closeCards = null;
     freshEl = null;
@@ -470,7 +715,14 @@ export function createRecordsRoom(caps) {
     escapeStep: escapeStep,
     dismissSpotlight: dismissSpotlight,
     setAjar: setAjar,
-    fit: function () { try { return scene.fit(); } catch (e) { return null; } },
+    fit: function () {
+      let s = null;
+      try { s = scene.fit(); } catch (e) { s = null; }
+      /* The stage moved, so the type floor moved with it. */
+      if (paper && paper.refit) { try { paper.refit(); } catch (e) { /* noop */ } }
+      if (mini && mini.refit) { try { mini.refit(); } catch (e) { /* noop */ } }
+      return s;
+    },
     destroy: destroy,
     /* ------------------------------------------------------- test seams */
     scene: scene,
@@ -483,6 +735,11 @@ export function createRecordsRoom(caps) {
     book: function () { return book; },
     /** The night's pinned sheets, once the cork has been visited. */
     notices: function () { return paper ? paper.notices : null; },
+    /** The wide shot's miniature wall, or null. */
+    miniNotices: function () { return mini ? mini.notices : null; },
+    /** Is a sheet in the player's hand right now? */
+    readerUp: function () { try { return !!readerUp(); } catch (e) { return false; } },
+    dismissReader: dismissReader,
     /** Was this the room's first-ever visit? */
     firstVisit: function () { return firstEver; },
     /** Is the tray wearing the first-visit solo ring right now? */

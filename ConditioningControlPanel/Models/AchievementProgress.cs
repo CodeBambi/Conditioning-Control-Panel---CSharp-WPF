@@ -232,6 +232,17 @@ public class AchievementProgress
     public bool PendingStreakBonus { get; set; }
 
     /// <summary>
+    /// Mobile streak parity: a launch-time gap was detected but the break decision (shield burn /
+    /// Oopsie spend / reset) is DEFERRED until the first V2 sync answers — the phone may have kept
+    /// the streak alive on days this machine never launched, and burning a shield for a gap the
+    /// cloud says never happened wastes a real, finite token. Deliberately NOT persisted: if the
+    /// app dies while pending, <see cref="LastLaunchDate"/> was never stamped, so the next launch
+    /// re-detects the same gap and defers again — no state to migrate, nothing to get stuck.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool PendingStreakBreak { get; private set; }
+
+    /// <summary>
     /// Check and update consecutive days streak.
     /// Integrates streak shields, oopsie insurance, milestone rewards, and CurrentStreak sync.
     /// </summary>
@@ -246,6 +257,11 @@ public class AchievementProgress
 
         var today = DateTime.Today;
         var lastDate = LastLaunchDate.Date;
+
+        // A deferred break decision is in flight (waiting on the first V2 sync / its timeout).
+        // ResolveDeferredStreakBreak owns the next write to LastLaunchDate — running the gap
+        // math again here would burn the shield the deferral exists to protect.
+        if (PendingStreakBreak) return;
 
         // No recorded launch history (LastLaunchDate == default/MinValue). This is either a
         // genuine first run OR a fresh/reset achievements.json after a reinstall, failed update
@@ -282,37 +298,20 @@ public class AchievementProgress
             App.Logger?.Information("Login streak gap detected: {Days} day(s) missed (last launch: {LastDate}, today: {Today}, streak was: {Streak})",
                 daysMissed, lastDate.ToString("yyyy-MM-dd"), today.ToString("yyyy-MM-dd"), ConsecutiveDays);
 
-            // Streak would break - try streak shield first
-            if (App.SkillTree?.UseStreakShield() == true)
+            // Mobile streak parity: a signed-in account may have kept this streak alive on the
+            // phone. Hold the break decision (and the shield/Oopsie tokens) until the first V2
+            // sync merges the cloud's last_streak_date/consecutive_days, or the timeout gives up.
+            // LastLaunchDate is deliberately NOT stamped: the push that races this deferral must
+            // carry the honest pre-gap date, not claim today.
+            if (CanDeferStreakBreakToCloud())
             {
-                // Shield saved the streak! Increment as normal
-                ConsecutiveDays++;
-                App.Logger?.Information("Streak shield protected streak! Now at {Days} days", ConsecutiveDays);
-                PendingStreakBonus = true;
+                PendingStreakBreak = true;
+                App.Logger?.Information("Login streak: break deferred pending cloud answer (mobile may have covered the gap)");
+                ScheduleDeferredStreakBreakTimeout();
+                return;
+            }
 
-                // Record the missed day(s) that were shielded
-                var settings = App.Settings?.Current;
-                if (settings != null)
-                {
-                    for (var d = lastDate.AddDays(1); d < today; d = d.AddDays(1))
-                    {
-                        if (!settings.StreakShieldUsedDates.Contains(d.Date))
-                            settings.StreakShieldUsedDates.Add(d.Date);
-                    }
-                }
-            }
-            else if (App.SkillTree?.UseOopsieInsurance() == true)
-            {
-                // A streak fix charge was spent automatically — keep current streak
-                App.Logger?.Information("Oopsie Insurance auto-spent a streak fix, saving streak at {Days} days", ConsecutiveDays);
-            }
-            else
-            {
-                // Streak broken, reset to 1
-                App.Logger?.Warning("Login streak RESET from {OldStreak} to 1 — gap of {Days} day(s), no shield/insurance available (last launch: {LastDate})",
-                    ConsecutiveDays, daysMissed, lastDate.ToString("yyyy-MM-dd"));
-                ConsecutiveDays = 1;
-            }
+            ResolveStreakGapNow(lastDate, today, daysMissed);
         }
 
         LastLaunchDate = today;
@@ -324,6 +323,234 @@ public class AchievementProgress
         // CurrentStreak because the server-driven season reset can zero CurrentStreak before
         // the recap snapshot runs — the peak must survive that.
         SeasonRecapService.TrackStreakPeak(ConsecutiveDays);
+    }
+
+    /// <summary>
+    /// The actual streak-break spend/reset, extracted so the deferred path and the immediate path
+    /// share one implementation: shield first, then Oopsie Insurance, then reset to 1.
+    /// Mutates ConsecutiveDays/PendingStreakBonus only — the caller stamps LastLaunchDate.
+    /// </summary>
+    private void ResolveStreakGapNow(DateTime lastDate, DateTime today, int daysMissed)
+    {
+        // Streak would break - try streak shield first
+        if (App.SkillTree?.UseStreakShield() == true)
+        {
+            // Shield saved the streak! Increment as normal
+            ConsecutiveDays++;
+            App.Logger?.Information("Streak shield protected streak! Now at {Days} days", ConsecutiveDays);
+            PendingStreakBonus = true;
+
+            // Record the missed day(s) that were shielded
+            var settings = App.Settings?.Current;
+            if (settings != null)
+            {
+                for (var d = lastDate.AddDays(1); d < today; d = d.AddDays(1))
+                {
+                    if (!settings.StreakShieldUsedDates.Contains(d.Date))
+                        settings.StreakShieldUsedDates.Add(d.Date);
+                }
+            }
+        }
+        else if (App.SkillTree?.UseOopsieInsurance() == true)
+        {
+            // A streak fix charge was spent automatically — keep current streak
+            App.Logger?.Information("Oopsie Insurance auto-spent a streak fix, saving streak at {Days} days", ConsecutiveDays);
+        }
+        else
+        {
+            // Streak broken, reset to 1
+            App.Logger?.Warning("Login streak RESET from {OldStreak} to 1 — gap of {Days} day(s), no shield/insurance available (last launch: {LastDate})",
+                ConsecutiveDays, daysMissed, lastDate.ToString("yyyy-MM-dd"));
+            ConsecutiveDays = 1;
+        }
+    }
+
+    /// <summary>
+    /// The deferral only makes sense when a cloud answer can actually arrive: a V2 identity to
+    /// sync with, and sync not deliberately disabled. Everyone else gets the immediate decision.
+    /// </summary>
+    private static bool CanDeferStreakBreakToCloud()
+    {
+        var settings = App.Settings?.Current;
+        return settings != null
+            && !string.IsNullOrEmpty(settings.UnifiedId)
+            && settings.OfflineMode != true;
+    }
+
+    /// <summary>
+    /// Safety net for the deferral: if no sync resolves the pending break (server down, network
+    /// gone, sync never attempted), fall back to the immediate decision after a grace window —
+    /// exactly the behavior a signed-out user gets at launch.
+    /// </summary>
+    private void ScheduleDeferredStreakBreakTimeout()
+    {
+        _ = System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(120)).ContinueWith(_ =>
+        {
+            try
+            {
+                if (System.Windows.Application.Current?.Dispatcher == null) return;
+                ResolveDeferredStreakBreak("cloud answer timeout");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Deferred streak-break timeout failed: {Error}", ex.Message);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Settle a deferred streak break. Called after the first V2 sync of the launch has merged
+    /// the cloud's streak fields (which may have moved <see cref="LastLaunchDate"/> forward over
+    /// mobile-covered days), on sync failure, and by the timeout. Idempotent; safe from any
+    /// thread (marshals itself to the UI dispatcher).
+    /// </summary>
+    public void ResolveDeferredStreakBreak(string reason)
+    {
+        if (!PendingStreakBreak) return;
+
+        // A profile switch / achievements reload can replace App.Achievements.Progress while
+        // the 120s timeout closure still holds THIS instance. Resolving from a stale instance
+        // would spend the shield/Oopsie tokens of whoever is signed in NOW (App.SkillTree is
+        // global) for a gap that belongs to the OLD profile. A superseded instance only clears
+        // its own flag and steps aside — the live instance re-detects its own gap at launch.
+        if (!ReferenceEquals(App.Achievements?.Progress, this))
+        {
+            PendingStreakBreak = false;
+            App.Logger?.Information("Deferred streak break ({Reason}) dropped: progress instance superseded", reason);
+            return;
+        }
+
+        // Shutting down (or no WPF app at all): there is no dispatcher to marshal to and no
+        // point burning tokens into state that may not save. Clear the flag and do nothing —
+        // the next launch re-detects the same gap and defers again, which is the designed
+        // no-state-to-migrate property of this flag.
+        var app = System.Windows.Application.Current;
+        if (app?.Dispatcher == null || app.Dispatcher.HasShutdownStarted)
+        {
+            PendingStreakBreak = false;
+            return;
+        }
+
+        var dispatcher = app.Dispatcher;
+        if (!dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(new Action(() => ResolveDeferredStreakBreak(reason)));
+            return;
+        }
+
+        if (!PendingStreakBreak) return; // re-check after the hop — another caller may have won
+        PendingStreakBreak = false;
+
+        var today = DateTime.Today;
+        var lastDate = LastLaunchDate.Date;
+        App.Logger?.Information("Deferred streak break resolving ({Reason}): last banked {LastDate}, streak {Streak}",
+            reason, lastDate.ToString("yyyy-MM-dd"), ConsecutiveDays);
+
+        if (lastDate == today)
+        {
+            // The cloud merge moved the date all the way to today — the phone already banked this
+            // day (and its streak figure was adopted with it). No increment and no bonus HERE:
+            // paying the launch bonus for a day another device earned would double-pay it.
+        }
+        else if (lastDate == today.AddDays(-1))
+        {
+            // The cloud covered the gap up to yesterday — today is a normal launch increment.
+            ConsecutiveDays++;
+            PendingStreakBonus = true;
+            LastLaunchDate = today;
+        }
+        else
+        {
+            // The gap is real even by the cloud's account — make the decision we deferred.
+            // SkillTree exists by now (sync runs long after startup), so unlike the old
+            // constructor-time path the shield can actually fire here.
+            ResolveStreakGapNow(lastDate, today, (today - lastDate).Days);
+            LastLaunchDate = today;
+        }
+
+        SyncCurrentStreak();
+        SeasonRecapService.TrackStreakPeak(ConsecutiveDays);
+        AwardDeferredStreakBonus();
+        App.Achievements?.Save();
+        App.Settings?.Save();
+    }
+
+    /// <summary>
+    /// Pure merge rule for adopting the cloud's login-streak pair (consecutive_days +
+    /// last_streak_date) into the local one. Mirrors the mobile client's decideLoginStreakAdopt
+    /// (CCPMobile src/lib/sync/contract.ts) so the two clients converge on the same answer:
+    ///  - a zero/negative server streak carries no run to merge — refuse it outright (both
+    ///    clients), or a degenerate record's DATE alone could move LastLaunchDate forward;
+    ///  - never lowers the local streak (the server ratchet is preserved deliberately);
+    ///  - a server date exactly one day AFTER the local one means the runs are contiguous — the
+    ///    local run extends it (max(server, local+1)), not just max;
+    ///  - symmetrically, a local date one day after the server's takes max(local, server+1);
+    ///  - a newer server date is adopted (clamped to today so a timezone-skewed phone can never
+    ///    push LastLaunchDate into the future, which would read as a negative gap next launch);
+    ///  - a wide gap in either direction falls back to plain max — the preserved ratchet.
+    /// One deliberate divergence from the mobile twin: with NO usable server date the desktop
+    /// still does a date-blind take-higher (the pre-parity behavior, kept for records written
+    /// by servers older than the parity deploy); mobile answers null there and leaves local
+    /// alone, because it has no pre-parity history to stay compatible with.
+    /// Returns null when nothing changes. Static and clock-free for testability.
+    /// </summary>
+    public static (int Streak, DateTime LastDate)? DecideLoginStreakAdopt(
+        int localStreak, DateTime localLastDate, int serverStreak, DateTime? serverLastDate, DateTime today)
+    {
+        if (serverStreak <= 0) return null;
+
+        var local = localLastDate.Date;
+        int nextStreak;
+        DateTime nextDate;
+
+        if (serverLastDate == null || serverLastDate.Value.Date == default)
+        {
+            // No usable server date — date-blind take-higher, the pre-parity behavior.
+            nextStreak = Math.Max(localStreak, serverStreak);
+            nextDate = local;
+        }
+        else
+        {
+            var server = serverLastDate.Value.Date;
+            if (server > today.Date) server = today.Date;
+
+            if (local == default)
+            {
+                nextStreak = Math.Max(localStreak, serverStreak);
+                nextDate = server;
+            }
+            else if (server == local)
+            {
+                nextStreak = Math.Max(localStreak, serverStreak);
+                nextDate = local;
+            }
+            else if (server == local.AddDays(1))
+            {
+                nextStreak = Math.Max(serverStreak, localStreak + 1);
+                nextDate = server;
+            }
+            else if (server > local)
+            {
+                nextStreak = Math.Max(serverStreak, localStreak);
+                nextDate = server;
+            }
+            else if (local == server.AddDays(1))
+            {
+                nextStreak = Math.Max(localStreak, serverStreak + 1);
+                nextDate = local;
+            }
+            else
+            {
+                nextStreak = Math.Max(localStreak, serverStreak);
+                nextDate = local;
+            }
+        }
+
+        // Backstop only — every branch above max()es with localStreak, so this cannot fire
+        // today. It stays to keep the "never lowers" contract true against future edits.
+        if (nextStreak < localStreak) return null;
+        if (nextStreak == localStreak && nextDate == local) return null;
+        return (nextStreak, nextDate);
     }
 
     /// <summary>

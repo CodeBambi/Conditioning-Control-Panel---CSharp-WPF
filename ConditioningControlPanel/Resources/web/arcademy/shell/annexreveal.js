@@ -171,6 +171,18 @@ export function createAnnexReveal(opts) {
     later(function () { cue('thud', 0.45, 0.5); }, T.echo);
     later(sayLine, T.line);
     later(function () { root.classList.add('is-still'); }, T.still);
+    /* W3 P1-22: THE THREE SECONDS OF BLACK. From `still` to `out` the office
+     * fades up out of nothing and the whole stretch played in silence, which
+     * left the two thuds at the top sounding like the end of the beat rather
+     * than the start of it. Three strikes of the seep's own hum, 800ms apart,
+     * pitched down a step: the mixer cannot sustain a recipe, so a synth
+     * "sustain" is re-struck on the caller's clock (trap 108) and is therefore
+     * self-limiting - and these are `later` timers, which destroy() sweeps, so
+     * a skipped reveal takes them with it. Reduced motion runs a much shorter
+     * timeline and is deliberately left alone. */
+    later(function () { cue('seep_hum', 0.16, 0.9); }, 2600);
+    later(function () { cue('seep_hum', 0.16, 0.9); }, 3400);
+    later(function () { cue('seep_hum', 0.16, 0.9); }, 4200);
     later(function () { leave(false); }, T.out);
   }
 

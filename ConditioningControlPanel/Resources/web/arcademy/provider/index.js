@@ -12,6 +12,9 @@
  *   pool.next('loop')   -> { url, remote }   NEVER blocks, NEVER null
  *   pool.next('target') -> { url, remote }   the hunt target (its own slot)
  *   pool.release()
+ *   assets.warmPool({loop, still})   the BOOT ASK: start filling the remote
+ *                                    pools at page boot instead of at the first
+ *                                    claim (no pool, no rand - see warmPool)
  *
  * SECOND SHAPE, ADDITIVE (SORT, 2026-08-23): `claimTagged({sources, want,
  * perSourceMin, seed, timeoutMs})` deals TWO PILES whose rows carry the `tag`
@@ -31,8 +34,19 @@
  *  - iOS is mp4-only; formats are filtered per platform.
  *  - Remote goes through the BRIDGE ('assets-request'/'assets'), never a fetch
  *    from the page, and never at all under OfflineMode or a closed consent gate.
- *  - claim() PREWARMS (link rel=preload, else new Image()) so the first draw is
- *    already decoded.
+ *  - claim() runs an ON-DECK WARM RAIL (0825, mobile web): the pool FORECASTS
+ *    its next few draws with the very selection code next() runs, then warms
+ *    those bytes the SORT way - a detached Image()+decode() for stills/gifs,
+ *    fetch(url,{mode:'no-cors'}) for video urls (NEVER a detached <video> -
+ *    it spins a demuxer, trap 36). Remote urls only; local is the host serving
+ *    the player's own disk and warming it is waste (and what keeps the desktop
+ *    WebView2 build inert). The draw itself is still decided AT DRAW TIME by
+ *    the same seeded logic, so the served sequence never moves.
+ *  - THE MANIFEST SEAM (0825): a game that knows its WHOLE ordered media list
+ *    up front (SORT's deck) hands it to pool.warmManifest(entries) and walks
+ *    pool.warmCursor(i); pool.ready(url) answers when a url's warm landed, and
+ *    pool.markBroken(url)/isBroken(url) drive the shared url blacklist that
+ *    every draw skips. All five verbs live on BOTH pool shapes.
  *
  * LOCAL INVENTORY. A virtual host cannot be enumerated from JS, so SOMETHING has
  * to hand the page the list. Accepted (first non-empty wins, all merged):
@@ -43,6 +57,18 @@
  *     localManifest / manifest / assets / media
  * Entries may be ccp.assets-relative paths or absolute ccp.* urls. With NO
  * manifest at all the provider still works — on the bundled placeholder tiles.
+ *
+ * THE WEB HAS NO MANIFEST (2026-08-26; MEDIA-CONTRACT §7). A browser cannot
+ * enumerate a folder, so the shim host ships `localAssets` EMPTY and serves the
+ * player's ingested folder/zip/gallery — the SESSION PILE — as blob: rows over
+ * the same `assets` mailbox the remote pool answers on. Two consequences, both
+ * of them live only where `init.settings.localMedia` exists (never on desktop):
+ *   - `absorbLocal()` takes those rows into `localPools`, so a claim already
+ *     dealing re-syncs and re-dresses. They are LOCAL: never remotePools, never
+ *     remoteRatio, never the remote recency ring.
+ *   - `claim()` sends `local-sample-request {local:true}` whenever a pile is
+ *     present, INCLUDING with remote media off — the consent gate is about the
+ *     network, not the player's own disk (remote.js request(), trap 54).
  * ==========================================================================*/
 
 import { buildLocalPools, isLocalUrl, formatOk, kindOf, wantRemote } from './inventory.js';
@@ -61,6 +87,124 @@ function placeholderUrls() {
 }
 
 const REMOTE_CAP = 80;        // mirrors intake's REMOTE_CAP: a page never hoards media
+
+/* THE SESSION PILE (web only, 2026-08-26; MEDIA-CONTRACT §7 in the site repo's
+ * `scripts/arcademy-web-ext`). On the desktop the host hands the player's own
+ * media over as a MANIFEST (`init.settings.localAssets`, trap 16) of absolute
+ * ccp.assets urls, so the provider knows the whole inventory at create time. A
+ * BROWSER has no folder to enumerate: the shim ingests a folder/zip/gallery
+ * into a session pile of object URLs and serves it in FRAMES, the same `assets`
+ * mailbox the remote pool answers on. Those rows are `blob:` (or `data:`), they
+ * are local by origin, and they are the only local media a web player has.
+ *
+ * A pile row is recognised by its SCHEME, never by a marker: a `local-sample`
+ * reply carries `src` only when it was tagged (host provider.js `rows()`), so
+ * the scheme is the one fact always on the wire. Desktop local rows are
+ * `https://ccp.assets/...` and therefore never take this path - which is what
+ * keeps the desktop build byte-identical. */
+const PILE_URL_RE = /^(blob|data):/i;
+const LOCAL_CAP = 240;        // the pile is the player's own disk, so this is far looser
+                              // than REMOTE_CAP - but a 5000-file folder ingest still may
+                              // not grow the page's arrays without end. At the cap the
+                              // pool STOPS taking rows rather than shifting: a live claim
+                              // walks a cursor over its copy of these lists, and evicting
+                              // from under it would move draws for no gain.
+const RECENT_MAX = 24;        // recency-ring depth (0826): a draw step-skips the last
+                              // min(L-1, RECENT_MAX) urls its kind SERVED - the skip
+                              // consumes no rand (the blacklist skip's law), it only
+                              // changes which url a given rand maps to.
+                              // 24 = the board that named the bug: a 24-tile board off
+                              // a 24-url pool. Simulated over 200 seeds, the old
+                              // re-rolled jump dressed it in 15.3 distinct urls (8.7
+                              // duplicate tiles); a ring of 20 leaves 1.2 and 24 leaves
+                              // none. Deeper buys nothing a page this size can see, and
+                              // the min(L-1, ...) bound is what keeps a SMALL pool
+                              // legal - it always leaves the walk a row to land on.
+
+/* THE ON-DECK RAIL's dials (0825). SORT's warm rail proved the shape and the
+ * numbers' logic (games/sort/index.js WARM_AHEAD/WARM_INFLIGHT header): the
+ * deck is a LOOK-AHEAD, not a supply figure, and the warm is a background
+ * TRICKLE that must lose to whatever is already on screen. */
+export const DECK_AHEAD = 6;      // draws forecast (and byte-warmed) ahead, per kind
+export const WARM_INFLIGHT = 3;   // warms in flight at once - a third lane lets small
+                                  // stills slip past one slow multi-megabyte download
+const WARM_VIDEO_INFLIGHT = 2;    // of those, at most TWO may be video fetches - a
+                                  // third stalled mp4 would eat into Safari's
+                                  // 6-connections-per-host budget the game plays on
+const WARM_VIDEO_TIMEOUT_MS = 20000;  // a video warm that outlives this is aborted
+                                      // (an abort is a shrug, never a blacklist).
+                                      // 12s was a DESKTOP number: at a cellular
+                                      // 3-5s RTT the TLS handshake alone eats a
+                                      // third of it and a multi-megabyte body
+                                      // never lands, so every loop warm on the
+                                      // owner's phone aborted and (before the
+                                      // un-poison below) took the url with it.
+                                      // The video lanes are capped at
+                                      // WARM_VIDEO_INFLIGHT, so a longer
+                                      // deadline costs a fast link nothing.
+const WARM_HELD_MAX = 24;         // decoded detached Images held against GC
+/* A warm that FAILED is not a url that is dead (the blacklist owns that verdict,
+ * and only on proof). It may be re-queued - but never forever: in production
+ * connect-src excludes the media CDNs, so a video warm can reject INSTANTLY and
+ * a re-queue on every draw would be a fetch storm. Three attempts per url per
+ * page, then the url stays warmed-out and draws serve it cold. */
+const WARM_RETRY_MAX = 3;
+const VIDEO_URL_RE = /\.(mp4|webm|m4v)(\?|#|$)/i;
+
+/* THE MANIFEST WARMER's windows (0825, SORT). A game that knows its complete
+ * ordered media need list up front (SORT builds the whole deck before the first
+ * card shows) hands the list to pool.warmManifest() and advances
+ * pool.warmCursor() as its own play position moves; the warm window rides the
+ * cursor. IDLE is the door/ghost-round/rules-sheet time - the cursor has never
+ * advanced, the player is reading and the network is otherwise quiet, so the
+ * window is deep. Once the cursor moves the window narrows to a look-ahead a
+ * fast swiper cannot outrun but that still loses to whatever is on screen.
+ * Manifest warms ride the SAME rail as the forecast deck above - one
+ * WARM_INFLIGHT budget, one warm per url per provider, WARM_HELD_MAX held,
+ * nothing at all under Data Saver. */
+export const MANIFEST_AHEAD_IDLE = 24;
+export const MANIFEST_AHEAD_PLAY = 10;
+
+/* THE URL BLACKLIST (0825), module-level so a dead CDN url stays dead across
+ * every pool and every class this page runs (it empties with the page). Fed by
+ * PROOF only: an image warm that completed with zero pixels, and games
+ * reporting a face whose error actually convicts the url via pool.markBroken().
+ * A no-cors video fetch REJECTING is NOT proof and never lands here - CSP
+ * refusal (production's connect-src excludes the media CDNs), a content
+ * blocker, a dropped cellular link and a page-backgrounding abort all reject
+ * exactly the way a dead host does, and treating them as verdicts once
+ * blacklisted the entire loop pool in seconds. Entries FORGIVE: the first
+ * strike heals after BROKEN_TTL_MS (a transient stumble is not a sentence),
+ * a second strike is permanent for the page. Draws skip a broken url and
+ * serve the next eligible row instead; the placeholder floor stays the final
+ * answer. Bounded: the least recently struck entry is forgotten first. */
+const BROKEN_URL_CAP = 400;
+const BROKEN_TTL_MS = 45000;      // one strike heals after this; two never do
+const brokenUrls = new Map();     // url -> { at, strikes }
+export function markBrokenUrl(url) {
+  const s = String(url || '');
+  if (!s) return false;
+  const prior = brokenUrls.get(s);
+  if (prior) {
+    /* a repeat offender: bump the strike and re-stamp. delete + set keeps the
+     * Map's insertion order meaning "least recently struck evicts first". */
+    brokenUrls.delete(s);
+    brokenUrls.set(s, { at: Date.now(), strikes: prior.strikes + 1 });
+    return false;
+  }
+  brokenUrls.set(s, { at: Date.now(), strikes: 1 });
+  while (brokenUrls.size > BROKEN_URL_CAP) {
+    const oldest = brokenUrls.keys().next().value;
+    if (oldest == null) break;
+    brokenUrls.delete(oldest);
+  }
+  return true;
+}
+export function isBrokenUrl(url) {
+  const rec = brokenUrls.get(String(url || ''));
+  if (!rec) return false;
+  return rec.strikes >= 2 || (Date.now() - rec.at) < BROKEN_TTL_MS;
+}
 
 /** Keys the shell/host might carry the local inventory under. A page cannot
  *  enumerate a virtual host, so SOMETHING has to hand us the list; we accept
@@ -106,6 +250,31 @@ export function createAssets(options = {}) {
   const remoteRatio = Number.isFinite(opts.remoteMediaRatio) ? Math.max(0, Math.min(1, opts.remoteMediaRatio)) : 0;
   const defaultNiches = Array.isArray(opts.niches) ? opts.niches.slice() : null;
 
+  /* ------------------------------------------------------------------------
+   * THE SESSION PILE's presence flag. `init.settings.localMedia` is the web
+   * shim's boot shape (always zeros at init - the pile is session-only) and the
+   * `local-media` push carries every later state. The C# host ships NEITHER, so
+   * on desktop `localPile` stays null, `pilePresent()` is false forever, and not
+   * one line below this changes what the desktop provider does.
+   * --------------------------------------------------------------------- */
+  function readPile(v) {
+    if (!v || typeof v !== 'object') return null;
+    if (!('active' in v) && !('images' in v) && !('videos' in v)) return null;
+    return {
+      images: Math.max(0, v.images | 0),
+      videos: Math.max(0, v.videos | 0),
+      active: !!v.active,
+    };
+  }
+  let localPile = readPile(
+    (opts.settings && typeof opts.settings === 'object' ? opts.settings.localMedia : null) || opts.localMedia,
+  );
+  /** "The player has media of their own on this device." `active` is the host's
+   *  own word for it; the counts are the belt to its braces (a host that pushes
+   *  counts without the flag still gets its pile served). */
+  const pilePresent = () => !!localPile && (localPile.active || (localPile.images + localPile.videos) > 0);
+  const pileCbs = new Set();        // live claims waiting for a pile to appear
+
   const placeholders = placeholderUrls();
   const localPools = buildLocalPools(resolveManifest(opts), platform);
   // the placeholder floor: only used when a kind has no real local entries
@@ -117,10 +286,40 @@ export function createAssets(options = {}) {
   // ArcademyHostService answers 'assets-request' with {type:'assets', reqId, urls,
   // done} and may also push an unsolicited batch; bridge.on is multi-subscriber
   // (bridge.js header) so this costs the shell nothing and cannot steal frames.
-  if (remoteEnabled && opts.bridge) { try { channel.listen(); } catch { /* ignore */ } }
+  // ...and the SAME mailbox answers `local-sample-request`, which is not gated on
+  // remote consent (a file on the player's device is not a network call), so a
+  // player with "Pull from online" OFF but a session pile ingested must have the
+  // channel armed too. Arming it twice is a no-op (`listening` latches).
+  const ensureListening = () => {
+    if (!opts.bridge) return;
+    if (!remoteEnabled && !pilePresent()) return;
+    try { channel.listen(); } catch { /* ignore */ }
+  };
+  ensureListening();
   const claims = new Set();
   let prewarmed = new Set();
   let disposed = false;
+
+  /* ------------------------------------------------------------------------
+   * THE RAND BUFFER - the seam that lets a pool decide its draws EARLY without
+   * moving them. next() used to call rng() inline; now every draw takes its
+   * values through takeRand() (a FIFO over the same stream) and a FORECAST
+   * peeks the values a future draw WILL take via peekRand() without consuming
+   * them. Emissions are handed to real draws strictly in emission order, so
+   * for a given seed the served sequence is byte-identical to the pre-deck
+   * provider - peeking pulls values into the buffer early, never past a draw.
+   * The buffer is provider-level because the rng is (shell.js hands us
+   * makeRng(utcDateSeed + '|assets') and nothing else consumes it).
+   * --------------------------------------------------------------------- */
+  const randBuf = [];
+  const takeRand = () => (randBuf.length ? randBuf.shift() : rng());
+  const peekRand = (i) => { while (randBuf.length <= i) randBuf.push(rng()); return randBuf[i]; };
+
+  /** Data Saver is the player's word that we do not spend bytes on a guess. */
+  const saveData = (() => {
+    try { return !!(typeof navigator !== 'undefined' && navigator.connection && navigator.connection.saveData === true); }
+    catch { return false; }
+  })();
 
   function absorbRemote(entries) {
     let added = 0;
@@ -140,41 +339,503 @@ export function createAssets(options = {}) {
     return added;
   }
 
-  /**
-   * Prewarm: decode-ahead without blocking anything. Silent on failure.
+  /* ------------------------------------------------------------------------
+   * THE SESSION PILE's absorb (web only). absorbRemote() drops every row whose
+   * url `isLocalUrl` on the DESKTOP's reasoning - "the host already gives us
+   * locals", i.e. the `localAssets` manifest is the whole local inventory. On
+   * the web there IS no manifest, the pile arrives as blob: rows in the very
+   * same `assets` replies, and that `continue` threw away the player's own
+   * media on every host that has one. This is where those rows land instead.
    *
-   * BOUNDED, and that is load-bearing (0821, Lost & Found's dense-board pass).
-   * A `link rel=preload as=image` is a HIGH-priority fetch: firing one per
-   * manifest entry (a claim can ask for 130+ loops) puts the whole library in
-   * front of the media the player is actually looking at, and for gifs it also
-   * starts decoders the board has no budget for. A short warm queue is the
-   * point of a prewarm; a long one is a stampede that races the visible loads.
+   * A pile row is NEVER remote: it does not enter remotePools, does not count
+   * toward remoteRatio and never touches the remote recency ring. It is local
+   * inventory that arrived late, which is exactly what `localPools` holds.
+   * --------------------------------------------------------------------- */
+  const pileUrls = new Set();          // every url this provider took FROM the pile
+  const localRefreshers = new Set();   // live claims re-syncing their local lists
+
+  /** A pile row's kind, from the fact the host put on the wire. The url cannot
+   *  answer this: a blob: url has no extension for kindOf() to sniff, so every
+   *  pile video would otherwise land in the STILL pool. */
+  function pileKind(row, url) {
+    if (row && typeof row === 'object') {
+      if (row.kind === 'loop' || row.kind === 'still') return row.kind;
+      const mime = String(row.mime || '');
+      if (/^video\//i.test(mime)) return 'loop';
+      if (/^image\/gif$/i.test(mime)) return 'loop';
+      if (/^image\//i.test(mime)) return 'still';
+    }
+    return kindOf(url);
+  }
+
+  /** iOS is mp4-only, local files included (MEDIA-CONTRACT §0). The web shim
+   *  already refuses them at ingest; this is the page's own belt, run off the
+   *  mime for the same reason pileKind is. */
+  function pileFormatOk(row, url) {
+    const mime = (row && typeof row === 'object') ? String(row.mime || '') : '';
+    if (!/^video\//i.test(mime)) return formatOk(url, platform);
+    const sub = mime.slice(6).toLowerCase().split(';')[0].trim();
+    return formatOk('x.' + (sub === 'quicktime' ? 'mov' : sub), platform);
+  }
+
+  /* THE EXTENSION HINT, and it is load-bearing. Every consumer of a pool url -
+   * anomaly, composure, deja-vu, echo, impulse-control, instant-recall, and the
+   * provider's own warm rail - decides `<video>` vs `<img>` by testing the url
+   * against /\.(mp4|webm|m4v)(\?|#|$)/. A blob: url has no extension, so a pile
+   * VIDEO would be mounted in an <img> and show nothing at all. The URL Standard
+   * resolves a blob URL against the store with the fragment EXCLUDED, so a
+   * trailing `#.mp4` is ignored by the fetch and read by every one of those
+   * regexes. Stills and gifs are handed over untouched - an <img> is already
+   * what they want. */
+  function hintedPileUrl(row, url, kind) {
+    if (kind !== 'loop') return url;
+    if (VIDEO_URL_RE.test(url)) return url;
+    const mime = (row && typeof row === 'object') ? String(row.mime || '') : '';
+    if (!/^video\//i.test(mime)) return url;            // a gif wants an <img>
+    const sub = mime.slice(6).toLowerCase().split(';')[0].trim();
+    const ext = sub === 'webm' ? 'webm' : (sub === 'x-m4v' ? 'm4v' : 'mp4');
+    return url + (url.indexOf('#') >= 0 ? '' : '#.' + ext);
+  }
+
+  function absorbLocal(entries) {
+    let added = 0;
+    for (const e of (entries || [])) {
+      const raw = e && (e.url || e);
+      if (!raw || typeof raw !== 'string') continue;
+      if (!PILE_URL_RE.test(raw)) continue;              // desktop rows are ccp.assets urls
+      if (!pileFormatOk(e, raw)) continue;
+      const k = pileKind(e, raw);
+      const url = hintedPileUrl(e, raw, k);
+      const arr = localPools[k] || localPools.still;
+      if (arr.length >= LOCAL_CAP) continue;
+      if (pileUrls.has(url) || arr.includes(url)) continue;
+      pileUrls.add(url);
+      arr.push(url);
+      added += 1;
+    }
+    if (added) {
+      log('pile +' + added + ' (loop ' + localPools.loop.length + ' / still ' + localPools.still.length + ')');
+      /* every live claim re-reads its local lists and re-dresses: a class that
+       * started on the placeholder floor swaps to the player's own media */
+      for (const fn of [...localRefreshers]) { try { fn(); } catch { /* a bad claim never kills the absorb */ } }
+    }
+    return added;
+  }
+
+  /** The host revoked the pile's object URLs (media.clearLocal): every url we
+   *  took from it is dead now, so drop them and let the live claims re-sync. */
+  function dropPile() {
+    if (!pileUrls.size) return 0;
+    let gone = 0;
+    for (const k of ['loop', 'still']) {
+      const arr = localPools[k];
+      if (!arr) continue;
+      for (let i = arr.length - 1; i >= 0; i--) {
+        if (pileUrls.has(arr[i])) { arr.splice(i, 1); gone += 1; }
+      }
+    }
+    pileUrls.clear();
+    if (gone) {
+      log('pile cleared (-' + gone + ')');
+      for (const fn of [...localRefreshers]) { try { fn(); } catch { /* ignore */ } }
+    }
+    return gone;
+  }
+
+  /** The host's `local-media` push (MEDIA-CONTRACT §4). Desktop never sends it. */
+  function onLocalMediaFrame(msg) {
+    const m = (msg && msg.detail) || msg;
+    const next = readPile(m);
+    if (!next) return;
+    const was = pilePresent();
+    const held = localPile ? (localPile.images + localPile.videos) : 0;
+    localPile = next;
+    const now = pilePresent();
+    if (was && !now) { dropPile(); return; }             // a clear, or an ingest of nothing
+    /* A pile that appears (or GROWS - a second ingest on top of a first) MID-CLASS
+     * is still this class's media, so every live claim asks again rather than
+     * waiting for the next one. A push that changes nothing asks nothing: the
+     * host posts one after a CANCELLED picker too (MEDIA-CONTRACT §4). */
+    if (now && (!was || (next.images + next.videos) > held)) {
+      ensureListening();
+      for (const fn of [...pileCbs]) { try { fn(); } catch { /* ignore */ } }
+    }
+  }
+
+  /* ------------------------------------------------------------------------
+   * THE BOOT ASK (0826). The provider used to send its FIRST 'assets-request'
+   * from claim() - i.e. when the player claims a class - so the whole door /
+   * menu / rules-sheet stretch was network dead air. On the owner's cellular
+   * phone that is 10-30 seconds of a warm rail with nothing to warm, and the
+   * first board dresses itself in placeholders while the host is still doing
+   * its round trip. warmPool() runs the SAME ask machinery at boot, mints no
+   * pool, and hands its batches to absorbRemote() - which draws no rand, so
+   * the served sequence for every later claim is byte-identical.
+   *
+   * The web shim already preconnects the Scrolller API and the CDN origins on
+   * its side; this ask is what makes that preconnect pay off - the sockets it
+   * opened get used while the door is still on screen instead of going cold.
+   *
+   * Gated exactly like claim()'s ask: OfflineMode, remote media off, no bridge
+   * or a zero mix ratio all make it a silent no-op, and every reqId rides the
+   * channel's own mailbox, so a later claim()'s asks are untouched by it.
+   * --------------------------------------------------------------------- */
+  const BOOT_RETRY_MS = 1500;      // claim()'s RETRY_MS, backed off by attempt
+  const BOOT_MAX_ASKS = 4;         // half claim()'s budget: this is a head start,
+                                   // not the supply run the class itself makes
+  const bootTimers = new Set();
+  let bootAsked = false;
+
+  function bootAsk(kind, count, attempt) {
+    if (disposed) return;
+    channel.request({
+      kind, count, niches: defaultNiches,
+      onBatch: (entries) => {
+        if (disposed) return;
+        /* on the web an app-wide reply INTERLEAVES the session pile with the
+         * remote pool (MEDIA-CONTRACT §7); absorbRemote drops those blob: rows
+         * on origin, so they are taken here or they are lost */
+        absorbLocal(entries);
+        absorbRemote(entries);       // zero rand: no deck to re-deal, no pool yet
+        /* the host's contract is "ask again after every reply" (a cold buffer
+         * answers empty and streams the real batch later) */
+        if ((remotePools[kind] || []).length < count && attempt < BOOT_MAX_ASKS) {
+          const t = setTimeout(() => { bootTimers.delete(t); bootAsk(kind, count, attempt + 1); }, BOOT_RETRY_MS * Math.max(1, attempt));
+          bootTimers.add(t);
+        }
+      },
+    });
+  }
+
+  /**
+   * warmPool({loop, still}) -> boolean. Start filling the remote pools NOW,
+   * before any class is claimed. Once per provider; returns false when the
+   * gates are shut (and when there is nothing to ask over).
+   */
+  function warmPool(spec) {
+    if (disposed || bootAsked) return false;
+    if (!remoteEnabled || offlineMode || !opts.bridge) return false;
+    if (!(remoteRatio > 0)) return false;              // local-only mix: no ask
+    const s = spec || {};
+    const loop = Math.max(0, Math.min(REMOTE_CAP, s.loop | 0));
+    const still = Math.max(0, Math.min(REMOTE_CAP, s.still | 0));
+    if (!loop && !still) return false;
+    bootAsked = true;
+    if (loop) bootAsk('loop', Math.max(4, loop), 1);
+    if (still) bootAsk('still', Math.max(4, still), 1);
+    log('boot ask: loop ' + loop + ' / still ' + still);
+    return true;
+  }
+
+  /* ------------------------------------------------------------------------
+   * THE WARM RAIL - bytes AND decode ahead of the deal, and nothing else.
+   *
+   * The old mechanism was a `link rel=preload` at fetchPriority low: a hint
+   * that bought no decode, and it was pointed at urls the cursor+jump draw
+   * almost never actually served. Deleted in favour of the two warms SORT's
+   * rail proved on a phone (games/sort/index.js, owner report 2026-08-24):
+   *
+   *  - a still or gif warms in a DETACHED new Image() + decode(). Nothing
+   *    composites; the strong ref in warmHeld only keeps GC off the request,
+   *    and the decoded frames land in the browser's image cache keyed by url -
+   *    exactly where the game's own <img> will look.
+   *  - a video url warms with fetch(url, {mode:'no-cors'}) and the opaque
+   *    reply is thrown away unread. Deliberately NEVER a detached <video>: a
+   *    warm <video> starts a demuxer the instant it has bytes - an off-screen
+   *    decoder no ceiling ever counted (trap 36's law).
+   *
+   * BOUNDED, and that is load-bearing (0821, Lost & Found's dense-board pass):
+   * a stampede of warms races the media the player is looking at. This is a
+   * TRICKLE - WARM_INFLIGHT lanes, every url at most once per provider, only
+   * the deck HEAD may ask for 'high' priority - and under Data Saver no byte
+   * moves at all. REMOTE urls only: local (ccp.* / relative / data: / blob: /
+   * same-origin) is the host serving the player's own disk, already instant,
+   * which is what keeps the desktop WebView2 build's behaviour inert.
+   * --------------------------------------------------------------------- */
+  const warmQueue = [];
+  const warmHeld = new Map();       // url -> the detached Image holding it open
+  let warmFlight = 0;
+  let warmVideoFlight = 0;          // the video lanes within warmFlight (capped)
+  let warmFails = new Map();        // url -> attempts that ended in a failure
+
+  /* THE UN-POISON (0826). `prewarmed` is "this url has been asked for", and it
+   * used to be a LIFE SENTENCE: a video warm that hit the abort deadline or an
+   * image whose decode() rejected stayed marked warmed, warmable() refused to
+   * re-queue it, and ready() answered false for the rest of the page. On the
+   * owner's cellular phone that permanently killed every clip that missed once.
+   * A failure now RELEASES the url (bounded by WARM_RETRY_MAX) so the next
+   * forecast may try it again. It does NOT fight the blacklist: a url the
+   * blacklist has convicted is still refused by warmable() below for as long as
+   * the conviction stands, and only a healed one gets its second chance. */
+  function warmFailed(url) {
+    const s = String(url || '');
+    if (!s) return;
+    const n = (warmFails.get(s) | 0) + 1;
+    warmFails.set(s, n);
+    if (n < WARM_RETRY_MAX) prewarmed.delete(s);
+  }
+
+  /** Only bytes that actually travel: remote http(s), not our own origin. */
+  function warmable(url) {
+    const s = String(url || '');
+    if (!s || prewarmed.has(s)) return false;
+    if (isBrokenUrl(s)) return false;            // a dead url is never re-asked for
+    if (isLocalUrl(s)) return false;             // ccp.* / relative / data: / blob:
+    if (!/^https?:\/\//i.test(s)) return false;
+    try {
+      if (typeof location !== 'undefined' && location.origin && new URL(s).origin === location.origin) return false;
+    } catch { return false; }
+    return true;
+  }
+
+  /** A url whose warm cannot help: local disk, our own origin, data:/blob:.
+   *  These are ready the instant an element asks - ready() answers true NOW. */
+  function instantUrl(url) {
+    const s = String(url || '');
+    if (!s) return false;
+    if (isLocalUrl(s)) return true;
+    if (!/^https?:\/\//i.test(s)) return true;
+    try {
+      if (typeof location !== 'undefined' && location.origin && new URL(s).origin === location.origin) return true;
+    } catch { /* an unparsable url is not instant */ }
+    return false;
+  }
+
+  /* Warm OUTCOMES, for ready(): which urls finished (bytes + decode for a
+   * still/gif, bytes for a video) and who is waiting to hear. */
+  const warmDoneUrls = new Set();
+  const readyWaiters = new Map();   // url -> Set of resolve callbacks
+
+  function flushReady(url, ok) {
+    const set = readyWaiters.get(url);
+    if (!set) return;
+    readyWaiters.delete(url);
+    for (const fn of [...set]) { try { fn(!!ok); } catch { /* a bad waiter never kills the rail */ } }
+  }
+  /** The instance's blacklist verb: the module Set, plus this instance's
+   *  waiters answered "no" so a gate consulting ready() moves on at once. */
+  function markBroken(url) {
+    const s = String(url || '');
+    if (!s) return;
+    markBrokenUrl(s);
+    flushReady(s, false);
+  }
+
+  function warmDone(video) {
+    warmFlight = Math.max(0, warmFlight - 1);
+    if (video) warmVideoFlight = Math.max(0, warmVideoFlight - 1);
+    if (!disposed) warmPump();
+  }
+  function warmOk(url, video) { warmDoneUrls.add(url); flushReady(url, true); warmDone(video); }
+  function warmPump() {
+    while (!disposed && warmFlight < WARM_INFLIGHT && warmQueue.length) {
+      /* the video lanes are capped BELOW the rail's: with both spoken for, a
+       * queued image may still overtake, but a third mp4 waits its turn */
+      let at = 0;
+      if (warmVideoFlight >= WARM_VIDEO_INFLIGHT) {
+        at = warmQueue.findIndex((j) => !j.video);
+        if (at < 0) break;                  // only videos queued and both lanes busy
+      }
+      const job = warmQueue.splice(at, 1)[0];
+      warmFlight += 1;
+      if (job.video) {
+        /* the opaque reply's body is CANCELLED the moment the headers land:
+         * warmOk was always a headers-level verdict, and an unread multi-MB
+         * mp4 body parked on the socket starves Safari's 6-per-host budget
+         * until later requests time out. A REJECTED warm proves NOTHING about
+         * the url - CSP refusal, content blockers, a dropped link and our own
+         * deadline abort all reject identically - so it NEVER feeds the
+         * blacklist; the waiters just hear "no" and the draw moves on. */
+        warmVideoFlight += 1;
+        try {
+          if (typeof fetch !== 'function') { warmDone(true); continue; }
+          const init = { mode: 'no-cors', credentials: 'omit' };
+          if (job.high) init.priority = 'high';       // Fetch Priority API; unknown keys are ignored
+          let deadline = 0;
+          try {
+            if (typeof AbortController === 'function') {
+              const ctl = new AbortController();
+              init.signal = ctl.signal;
+              deadline = setTimeout(() => { try { ctl.abort(); } catch { /* noop */ } }, WARM_VIDEO_TIMEOUT_MS);
+            }
+          } catch { /* engines without AbortController warm undeadlined */ }
+          const settle = () => { if (deadline) { try { clearTimeout(deadline); } catch { /* noop */ } } };
+          const pr = fetch(job.url, init);
+          if (pr && pr.then) pr.then((res) => {
+            settle();
+            /* opaque responses may carry a null body - the cancel is guarded */
+            try { if (res && res.body && typeof res.body.cancel === 'function') res.body.cancel(); } catch { /* noop */ }
+            warmOk(job.url, true);
+          }, () => { settle(); warmFailed(job.url); flushReady(job.url, false); warmDone(true); });
+          else { settle(); warmDone(true); }
+        } catch { warmDone(true); }
+      } else {
+        let img = null;
+        try { img = new Image(); } catch { img = null; }
+        if (!img) { warmDone(); continue; }
+        warmHeld.set(job.url, img);
+        while (warmHeld.size > WARM_HELD_MAX) {
+          const oldest = warmHeld.keys().next().value;
+          if (oldest == null) break;
+          warmHeld.delete(oldest);
+        }
+        try {
+          img.decoding = 'async';
+          try { img.fetchPriority = job.high ? 'high' : 'low'; } catch { /* older engines */ }
+          img.src = job.url;
+          /* BYTES ARE HALF THE BILL: a cached gif still pays its decode on
+           * first paint, so a warm is not done until decode() says the first
+           * frame exists. Fallback for engines without decode(): load/error,
+           * bytes-only. */
+          if (typeof img.decode === 'function') {
+            img.decode().then(() => warmOk(job.url), () => {
+              warmHeld.delete(job.url);
+              /* decode() also rejects when a HEALTHY url's decode is aborted
+               * mid-flight; only a url with no pixels at all is actually dead.
+               * Either way the warm did not land, so the url is released for a
+               * later attempt - a conviction keeps warmable() off it until the
+               * blacklist's own TTL forgives, which is the blacklist's call. */
+              warmFailed(job.url);
+              if (img.complete && !(Number(img.naturalWidth) > 0)) markBroken(job.url);
+              else flushReady(job.url, false);
+              warmDone();
+            });
+          } else {
+            img.onload = () => warmOk(job.url);
+            img.onerror = () => { warmHeld.delete(job.url); warmFailed(job.url); markBroken(job.url); warmDone(); };
+          }
+        } catch { warmHeld.delete(job.url); warmDone(); }
+      }
+    }
+  }
+
+  /** Queue one url for warming. Returns true if it was actually queued.
+   *  `videoHint` overrides the extension sniff when the caller knows the mime. */
+  function warmUrl(url, high, videoHint) {
+    if (disposed || saveData) return false;
+    if (typeof document === 'undefined') return false;   // node harness: inert
+    if (!warmable(url)) return false;
+    const s = String(url);
+    prewarmed.add(s);
+    warmQueue.push({ url: s, video: videoHint == null ? VIDEO_URL_RE.test(s) : !!videoHint, high: !!high });
+    warmPump();
+    return true;
+  }
+
+  /**
+   * prewarm(urls): the bounded warm verb (tagged.js injects it; its pool.prewarm
+   * already peeks the rows its cursor WILL serve, so its urls are honest). The
+   * first url that actually queues is the caller's own deck head - 'high'.
    */
   const PREWARM_MAX = 12;
   function prewarm(urls) {
-    if (typeof document === 'undefined') return;
     let n = 0;
-    for (const url of urls) {
+    for (const url of (urls || [])) {
       if (n >= PREWARM_MAX) break;
       if (!url || prewarmed.has(url)) continue;
-      prewarmed.add(url);
-      n += 1;
-      try {
-        const head = document.head || document.documentElement;
-        if (head) {
-          const link = document.createElement('link');
-          link.rel = 'preload';
-          link.as = /\.(mp4|webm|m4v)(\?|#|$)/i.test(url) ? 'video' : 'image';
-          // a warm-up must never outrank what is already on screen
-          try { link.fetchPriority = 'low'; } catch { /* older engines */ }
-          link.href = url;
-          head.appendChild(link);
-          continue;
-        }
-      } catch { /* fall through to Image() */ }
-      try { const img = new Image(); img.src = url; } catch { /* ignore */ }
+      if (warmUrl(url, n === 0)) n += 1;
     }
   }
+
+  /* ------------------------------------------------------------------------
+   * THE MANIFEST WARMER (0825). warmManifest(entries) declares the ORDERED
+   * media need list a game already knows in full; warmCursor(i) is the game's
+   * play position in it. The warm window is [cursor, cursor + ahead): deep
+   * (MANIFEST_AHEAD_IDLE) while the cursor has never advanced - the door /
+   * intro / rules-sheet time - and a tight look-ahead (MANIFEST_AHEAD_PLAY)
+   * once play starts. One manifest per provider: a game claims one pool at a
+   * time, and a new warmManifest() simply replaces the old list. Everything
+   * funnels through warmUrl(), so remote-only, once per url, WARM_INFLIGHT
+   * shared with the forecast rail, WARM_HELD_MAX held, saveData-inert - all
+   * of it holds here by construction. The 6-deep forecast rail above stays
+   * exactly as it was for games that never call this.
+   * --------------------------------------------------------------------- */
+  let manifest = null;    // { entries: [{url, video}], cursor, moved }
+
+  function normalizeManifestEntries(entries) {
+    const out = [];
+    for (const e of (Array.isArray(entries) ? entries : [])) {
+      const url = typeof e === 'string' ? e : (e && e.url);
+      if (!url || typeof url !== 'string') continue;
+      const mime = (e && typeof e === 'object') ? String(e.mime || '') : '';
+      out.push({ url: String(url), video: /^video\//i.test(mime) || VIDEO_URL_RE.test(url) });
+    }
+    return out;
+  }
+
+  /** Warm the window the cursor currently commands. Returns how many queued. */
+  function pumpManifest() {
+    if (!manifest || disposed) return 0;
+    const ahead = manifest.moved ? MANIFEST_AHEAD_PLAY : MANIFEST_AHEAD_IDLE;
+    const at = Math.max(0, Math.min(manifest.cursor, manifest.entries.length));
+    const end = Math.min(manifest.entries.length, at + ahead);
+    let queued = 0;
+    for (let k = at; k < end; k++) {
+      const e = manifest.entries[k];
+      /* the HEAD of the window is the card the player is (about to be) looking
+       * at - the one warm allowed to ask for priority */
+      if (e && warmUrl(e.url, k === at, e.video)) queued += 1;
+    }
+    return queued;
+  }
+
+  function warmManifest(entries) {
+    manifest = { entries: normalizeManifestEntries(entries), cursor: 0, moved: false };
+    return pumpManifest();
+  }
+
+  function warmCursor(i) {
+    if (!manifest) return;
+    const n = Math.max(0, Math.round(Number(i) || 0));
+    if (n > 0) manifest.moved = true;
+    if (n === manifest.cursor) return;
+    manifest.cursor = n;
+    pumpManifest();
+  }
+
+  /**
+   * ready(url, {timeoutMs}) -> Promise<boolean>. True the moment the url's
+   * warm has completed (immediately if it already has, and immediately for a
+   * local / same-origin url - the host serving the player's own disk cannot be
+   * probed and does not need to be); false on a KNOWN failure (the blacklist)
+   * or when timeoutMs passes first. Never rejects: a media gate that could
+   * throw would be a class that could not start. timeoutMs 0 answers from
+   * what is known right now.
+   */
+  const READY_DEFAULT_MS = 1000;
+  function readyFor(url, opts) {
+    const s = String(url || '');
+    if (!s) return Promise.resolve(false);
+    if (isBrokenUrl(s)) return Promise.resolve(false);
+    if (instantUrl(s)) return Promise.resolve(true);
+    if (warmDoneUrls.has(s)) return Promise.resolve(true);
+    const t = (opts && opts.timeoutMs != null) ? Math.max(0, Number(opts.timeoutMs) || 0) : READY_DEFAULT_MS;
+    /* nothing pending can ever land: disposed, Data Saver (no warm runs), or
+     * a zero timeout - answer with what is known */
+    if (t === 0 || disposed || saveData) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      let set = readyWaiters.get(s);
+      if (!set) { set = new Set(); readyWaiters.set(s, set); }
+      let timer = 0;
+      const fn = (ok) => { try { clearTimeout(timer); } catch { /* noop */ } resolve(!!ok); };
+      set.add(fn);
+      timer = setTimeout(() => {
+        const cur = readyWaiters.get(s);
+        if (cur) { cur.delete(fn); if (!cur.size) readyWaiters.delete(s); }
+        resolve(false);
+      }, t);
+    });
+  }
+
+  /** The media seam every pool shape exposes (claim() below, claimTagged's
+   *  wrapper, and deck-side adapters forward these five verbs verbatim). */
+  const mediaSeam = {
+    warmManifest: (entries, opts) => { void opts; return warmManifest(entries); },
+    warmCursor: (i) => warmCursor(i),
+    ready: (url, opts) => readyFor(url, opts),
+    markBroken: (url) => markBroken(url),
+    isBroken: (url) => isBrokenUrl(url),
+  };
 
   /* ==========================================================================
    * THE DOOR'S SEAM (SORT). Four reads and two writes, all additive.
@@ -304,6 +965,10 @@ export function createAssets(options = {}) {
   if (opts.bridge) {
     try { channel.subscribe('library', onLibraryFrame); } catch { /* ignore */ }
     try { channel.subscribe('sub-probe', onSubProbeFrame); } catch { /* ignore */ }
+    /* The web shim's session-pile push. Same loose `bridge.on` seam, which is
+     * multi-subscriber by design (trap 11) - `shell/settings.js` listens for the
+     * very same frame to paint its counts and neither steals the other's. */
+    try { channel.subscribe('local-media', onLocalMediaFrame); } catch { /* ignore */ }
   }
 
   /**
@@ -327,6 +992,12 @@ export function createAssets(options = {}) {
      * the local side is the placeholder floor, so EVERY draw is a remote draw
      * and a whole board could dress itself in one clip. */
     const remoteCursors = { loop: 0, still: 0 };
+    /* THE RECENCY RING (0826) - see computeLocal's header. One ring per KIND
+     * BUCKET ('target' shares the still bucket: it draws the same urls out of
+     * the same two lists, and a hunt target that also dresses a decoy is the
+     * one repeat L&F cannot survive). It rides the draw STATE beside the
+     * cursors, so a forecast clones it and mutates nothing serving reads. */
+    const recent = { loop: [], still: [] };
     let released = false;
     let reqIds = [];
 
@@ -337,11 +1008,45 @@ export function createAssets(options = {}) {
     // target is never the tile the decoys are drawing from in the same frame
     const localTargets = localStills.slice().reverse();
 
-    // A HANDFUL of each kind, not the whole manifest: see prewarm()'s header.
-    // The first draws are what this is for; everything after them is dressed
-    // progressively by the game anyway.
-    prewarm(localLoops.slice(0, Math.min(6, Math.max(4, want.loop)))
-      .concat(localStills.slice(0, Math.min(6, Math.max(4, want.still + want.target)))));
+    // (The claim-time warm moved BELOW the deck machinery: it now warms the
+    //  actual first deck entries - the urls next() WILL serve - instead of a
+    //  slice of the local lists, which on the web build were placeholder SVGs
+    //  and on desktop are the host's own disk. See refreshDeck().)
+
+    /* THE SESSION PILE's re-sync (web only). The three lists above are SNAPSHOTS
+     * taken at claim time - on the desktop that is the whole truth, because the
+     * `localAssets` manifest is complete before a class is ever claimed. A web
+     * pile arrives in frames AFTER the claim (and may be ingested mid-class), so
+     * its rows have to reach a claim that is already dealing. The lists are
+     * refilled IN PLACE: the cursors index them modulo length and the recency
+     * rings hold urls, so nothing that is serving has to be rebuilt - the pool
+     * simply gets wider, exactly the way an absorbed remote batch widens it.
+     * A claim whose local lists never move (every desktop claim) never runs the
+     * body of this. */
+    function syncLocal() {
+      if (released || disposed) return;
+      const nextLoops = localFor('loop');
+      const nextStills = localFor('still');
+      const same = (a, b) => a.length === b.length && a.every((u, i) => u === b[i]);
+      let moved = false;
+      if (!same(localLoops, nextLoops)) {
+        localLoops.length = 0;
+        for (const u of nextLoops) localLoops.push(u);
+        moved = true;
+      }
+      if (!same(localStills, nextStills)) {
+        localStills.length = 0;
+        for (const u of nextStills) localStills.push(u);
+        const rev = nextStills.slice().reverse();
+        localTargets.length = 0;
+        for (const u of rev) localTargets.push(u);
+        moved = true;
+      }
+      if (!moved) return;
+      refreshDeck();          // the forecast is stale: re-deal it and warm the new tail
+      notifyUpdate();         // and a class already on placeholders re-dresses
+    }
+    localRefreshers.add(syncLocal);
 
     // --- the remote side, if the gate is open ------------------------------
     // The host's contract is "whatever is buffered NOW, and ask again after
@@ -360,15 +1065,35 @@ export function createAssets(options = {}) {
     }
     function askRemote(kind, count, attempt) {
       if (released || disposed) return;
+      /* KEEP ASKING PAST THE SPEC (0826). The top-up used to stop the moment
+       * the pool covered `count` - the claim spec - so a pool SETTLED at
+       * exactly the ask (Anomaly's desktop still lane: 4 rows for ~129 rounds)
+       * and REMOTE_CAP was never approached. The spec is what a board needs at
+       * once, not what a class needs all hour; doubling it is what turns the
+       * recency ring below from "spread the repeats" into "there are none".
+       * Pool GROWTH is free by law: batches already arrive on network timing,
+       * and absorbRemote draws no rand. */
+      const topUpTo = Math.min(REMOTE_CAP, Math.max(1, count) * 2);
       const id = channel.request({
         kind, count, niches,
         onBatch: (entries) => {
           if (released || disposed) return;
+          /* THE INTERLEAVE (web, MEDIA-CONTRACT §7). With both a remote pool and
+           * a session pile alive the host fills a reply batch from BOTH, so an
+           * app-wide reply carries blob: rows beside the http ones. absorbRemote
+           * refuses them on origin - correctly, they are not remote and must
+           * never count toward remoteRatio or the remote ring - so they are
+           * taken as LOCAL first. absorbLocal fires the refreshers itself, which
+           * is what re-deals the deck and re-dresses the board. */
+          absorbLocal(entries);
           if (absorbRemote(entries)) {
-            prewarm((remotePools[kind] || []).slice(-4));
+            /* The pool just grew, so every forecast is stale: re-deal the deck
+             * and warm ITS urls. (The old `slice(-4)` warmed the newest
+             * arrivals, which the cursor+jump draw almost never served next.) */
+            refreshDeck();
             notifyUpdate();
           }
-          if ((remotePools[kind] || []).length < count && attempt < MAX_ASKS) {
+          if ((remotePools[kind] || []).length < topUpTo && attempt < MAX_ASKS) {
             const t = setTimeout(() => { retryTimers.delete(t); askRemote(kind, count, attempt + 1); }, RETRY_MS * Math.max(1, attempt));
             retryTimers.add(t);
           }
@@ -385,16 +1110,237 @@ export function createAssets(options = {}) {
       log('canvasSafe claim: local-only pool (CORS two-pool law)');
     }
 
-    function drawLocal(kind) {
-      const list = kind === 'loop' ? localLoops : (kind === 'target' ? localTargets : localStills);
-      if (!list.length) return placeholders[Math.floor(rng() * placeholders.length)] || null;
-      const i = cursors[kind] % list.length;
-      cursors[kind] += 1;
-      // a deterministic walk with a seeded jump keeps repeats far apart without
-      // ever risking "the same tile twice in a row" on a tiny local pool
-      const jump = list.length > 2 ? Math.floor(rng() * (list.length - 1)) : 0;
-      return list[(i + jump) % list.length];
+    /* =======================================================================
+     * THE SESSION PILE's ask (web only, 2026-08-26).
+     *
+     * The bug two testers hit: with "Pull from online" OFF, `remoteEnabled` is
+     * false, so the block above sends NOTHING - and the player's own uploaded
+     * folder/zip/gallery was therefore never asked for at all. Every class dealt
+     * itself the six bundled placeholder tiles while the pile sat in the host.
+     *
+     * A LOCAL sample is NOT a network call, so it is not the consent gate's
+     * business (`provider/remote.js` request(): `local:true` rides straight past
+     * the enabled/offline check, which is the same door SORT's local piles have
+     * used since 0823). It is also legal for a `canvasSafe` claim: a blob: from
+     * our own origin passes `isLocalUrl`, which is what the two-pool law
+     * actually tests - the pile is the one media a web player can put on a
+     * canvas at all. On the desktop `pilePresent()` is false, so this whole
+     * block is dead code and not one frame leaves the page.
+     * ==================================================================== */
+    const LOCAL_MAX_ASKS = 4;
+    function askLocal(kind, count, attempt) {
+      if (released || disposed) return;
+      const id = channel.request({
+        type: 'local-sample-request', local: true, kind, count,
+        onBatch: (entries) => {
+          if (released || disposed) return;
+          absorbLocal(entries);          // fires the refreshers: re-deal + re-dress
+          /* the host's contract is the same one the remote ask keeps: ask again
+           * after every reply until the pool covers the spec or the budget is
+           * spent. An empty pile answers `{urls:[], done:true}` and this stops. */
+          if ((localPools[kind] || []).length < count && attempt < LOCAL_MAX_ASKS) {
+            const t = setTimeout(() => { retryTimers.delete(t); askLocal(kind, count, attempt + 1); }, RETRY_MS * Math.max(1, attempt));
+            retryTimers.add(t);
+          }
+        },
+      });
+      if (id) reqIds.push(id);
     }
+    function askPile() {
+      if (released || disposed || !opts.bridge || !pilePresent()) return;
+      if (want.loop) askLocal('loop', Math.min(LOCAL_CAP, Math.max(4, want.loop)), 1);
+      if (want.still + want.target) askLocal('still', Math.min(LOCAL_CAP, Math.max(4, want.still + want.target)), 1);
+    }
+    askPile();
+    /* ...and again if the player ingests one WHILE this class is running. */
+    pileCbs.add(askPile);
+
+    /* =======================================================================
+     * THE DRAW, parameterized (THE ON-DECK RAIL, 0825).
+     *
+     * computeDraw/computeLocal are next()'s old inline selection logic MOVED,
+     * not changed: same branches, same cursor walk, same seeded jump, and the
+     * rand supplier `take` is called at exactly the code positions rng() sat.
+     * next() runs them against the LIVE cursors with takeRand() (consuming the
+     * stream in emission order - byte-identical serving); refreshDeck() runs
+     * them against CLONED cursors with peekRand() (consuming nothing) to learn
+     * which urls the next DECK_AHEAD draws of a kind WILL serve, and hands the
+     * remote ones to the warm rail - the head at 'high' priority. A forecast
+     * is exact until the pool grows; every draw and every absorbed batch
+     * re-deals it, so the deck head is always the truth.
+     * ==================================================================== */
+    /* THE RECENCY RING's two verbs. `bucket` is 'loop' or 'still' ('target'
+     * draws the still lists), and the ring holds the last urls that bucket
+     * actually SERVED, newest last, capped at RECENT_MAX.
+     *
+     * Only the last min(L-1, RECENT_MAX) entries are ever consulted against a
+     * list of length L, and that bound is load-bearing: it leaves at least one
+     * row of every list outside the ring, so the forward step-skip can never
+     * walk off the end and fall through to the placeholder floor. On a small
+     * list the skip degrades naturally into a plain cursor walk - which is the
+     * without-replacement behaviour the comment below used to claim. */
+    function recentlyServed(ring, url, L) {
+      const depth = Math.min(L - 1, RECENT_MAX);
+      if (!ring || !url || depth <= 0) return false;
+      for (let i = Math.max(0, ring.length - depth); i < ring.length; i++) {
+        if (ring[i] === url) return true;
+      }
+      return false;
+    }
+    function noteServed(ring, url) {
+      if (!ring || !url) return;
+      ring.push(url);
+      while (ring.length > RECENT_MAX) ring.shift();
+    }
+
+    /**
+     * THE FORWARD STEP-SKIP, both lists' one implementation. From the raw index
+     * the rand chose, walk forward to the first row that is neither blacklisted
+     * nor inside this bucket's recency window.
+     *
+     * The SECOND pass is the guarantee that keeps this legal: if the ring
+     * somehow covers every row - a manifest that lists a url twice, a list most
+     * of which the blacklist has taken - the walk falls back to "merely not
+     * blacklisted", i.e. exactly the row the pre-ring provider served. A draw
+     * can therefore never be pushed OFF its list by the ring, which is what
+     * would have moved a take() (the remote list falling through to the local
+     * one costs a second rand). Neither pass consumes rand.
+     */
+    function stepSkip(list, from, ring) {
+      for (let step = 0; step < list.length; step++) {
+        const cand = list[(from + step) % list.length];
+        if (cand && !isBrokenUrl(cand) && !recentlyServed(ring, cand, list.length)) return cand;
+      }
+      for (let step = 0; step < list.length; step++) {
+        const cand = list[(from + step) % list.length];
+        if (cand && !isBrokenUrl(cand)) return cand;
+      }
+      return null;
+    }
+
+    function computeLocal(kind, st, take) {
+      const list = kind === 'loop' ? localLoops : (kind === 'target' ? localTargets : localStills);
+      const bucket = kind === 'loop' ? 'loop' : 'still';
+      if (!list.length) return placeholders[Math.floor(take() * placeholders.length)] || null;
+      const i = st.cursors[kind] % list.length;
+      st.cursors[kind] += 1;
+      // a deterministic walk with a seeded jump, re-rolled every draw: on its
+      // own that samples WITH replacement (a 24-tile board over a 24-url pool
+      // shows ~9 duplicate tiles), which is what the skip below exists to fix
+      const jump = list.length > 2 ? Math.floor(take() * (list.length - 1)) : 0;
+      /* THE FORWARD STEP-SKIP consumes no rand: the walk steps to the next
+       * eligible row and the rand that chose the raw index is untouched, so the
+       * COUNT and ORDER of the draws on this path are what they always were.
+       * It skips two things now - a blacklisted url, and one this bucket served
+       * inside its recency window - which together guarantee the board is
+       * dressed WITHOUT replacement for as long as the list can cover it. */
+      const ring = st.recent[bucket];
+      const cand = stepSkip(list, i + jump, ring);
+      if (cand) { noteServed(ring, cand); return cand; }
+      return placeholders[(i + jump) % placeholders.length] || null;   // every row dead: the floor
+    }
+
+    function computeDraw(k, st, take) {
+      const remoteKind = k === 'target' ? 'still' : k;
+      // The ratio is a MIX dial, not a veto: on the placeholder floor (no real
+      // local media of this kind) there is nothing to mix WITH, so the remote
+      // pool serves every draw it can cover.
+      const bareLocal = !(remoteKind === 'loop' ? localPools.loop.length : localPools.still.length);
+      if (wantRemote(bareLocal ? 1 : remoteRatio, take(), (remotePools[remoteKind] || []).length > 0, canvasSafe)) {
+        const list = remotePools[remoteKind];
+        const i = st.remoteCursors[remoteKind] % list.length;
+        st.remoteCursors[remoteKind] += 1;
+        const jump = list.length > 2 ? Math.floor(take() * (list.length - 1)) : 0;
+        /* the same forward step-skip, and for the same reason: the raw index is
+         * a WITH-REPLACEMENT pick, so on the remote lists - which under an
+         * online-only source dress EVERY tile - it was the whole duplicate bug.
+         * No rand consumed; a fully dead remote list falls through to local. */
+        const ring = st.recent[remoteKind];
+        const url = stepSkip(list, i + jump, ring);
+        if (url && (!canvasSafe || isLocalUrl(url))) { noteServed(ring, url); return { url, remote: true }; }
+      }
+      return { url: computeLocal(k, st, take), remote: false };
+    }
+
+    const liveState = { cursors, remoteCursors, recent };
+
+    /** The next `depth` draws of one kind, decided EARLY over cloned cursors
+     *  and peeked rand values. Mutates nothing that serving reads - the rings
+     *  are COPIED, so a forecast avoids its own picks exactly the way the real
+     *  draws will and still leaves the live rings alone. */
+    function forecast(k, depth) {
+      const st = {
+        cursors: Object.assign({}, cursors),
+        remoteCursors: Object.assign({}, remoteCursors),
+        recent: { loop: recent.loop.slice(), still: recent.still.slice() },
+      };
+      let pi = 0;
+      const take = () => peekRand(pi++);
+      const out = [];
+      for (let i = 0; i < depth; i++) out.push(computeDraw(k, st, take));
+      return out;
+    }
+
+    /* Forecast only the kinds this claim actually asked for; a spec-less claim
+     * still decks the default kind. Each kind's forecast starts at peek index
+     * 0 - "the next draws are all this kind" - so whichever kind the game asks
+     * for next, that kind's deck HEAD is the url it gets. */
+    const deckKinds = [];
+    if (want.loop) deckKinds.push('loop');
+    if (want.still) deckKinds.push('still');
+    if (want.target) deckKinds.push('target');
+    if (!deckKinds.length) deckKinds.push('still');
+
+    /* THE DOMINANT KIND (0826): the one the game asked for most of, and so the
+     * one most of the coming draws will be. Ties keep deckKinds' order. */
+    const dominantKind = deckKinds.reduce(
+      (best, k) => ((want[k] | 0) > (want[best] | 0) ? k : best), deckKinds[0],
+    );
+
+    /**
+     * How deep to forecast each kind for a `d`-slot warm budget.
+     *
+     * THE MIXED-KIND FORECAST (0826). Every kind's forecast restarts peekRand
+     * at 0 - it has to, or a kind's deck HEAD would stop being the url that
+     * kind's next draw serves - which means each kind's forecast assumes the
+     * coming draws are ALL its own. Warming `d` deep for every kind therefore
+     * spent 50-66% of a 2-3-kind claim's warm bandwidth on urls that will
+     * never be served, which on cellular is bandwidth the on-screen board
+     * needed. The real interleave is "a bit of each, mostly the dominant one",
+     * so: the first 2 of EACH kind (the heads are always honest), and every
+     * slot left over goes to the dominant kind's tail. forecast() only PEEKS,
+     * so no scheme here can move the served sequence - the only thing at stake
+     * is which bytes arrive early.
+     */
+    function deckPlan(d) {
+      const head = Math.min(2, d);
+      const plan = Object.create(null);
+      let spent = 0;
+      for (const k of deckKinds) { plan[k] = head; spent += head; }
+      if (spent < d) plan[dominantKind] = Math.min(DECK_AHEAD, plan[dominantKind] + (d - spent));
+      return plan;
+    }
+
+    /** Re-deal the deck and warm its remote urls. Returns how many queued. */
+    function refreshDeck(depth) {
+      if (released || disposed || saveData) return 0;
+      if (typeof document === 'undefined') return 0;
+      const d = Math.max(1, Math.min(DECK_AHEAD, (depth | 0) || DECK_AHEAD));
+      const plan = deckPlan(d);
+      let queued = 0;
+      for (const k of deckKinds) {
+        const entries = forecast(k, plan[k]);
+        for (let i = 0; i < entries.length; i++) {
+          const e = entries[i];
+          if (e && e.url && e.remote && warmUrl(e.url, i === 0)) queued += 1;
+        }
+      }
+      return queued;
+    }
+
+    /* The claim-time warm: the actual first deck entries. On desktop (local
+     * media, remote pool empty or unused) this queues nothing - inert. */
+    refreshDeck();
 
     const pool = {
       spec: { loops: want.loop, stills: want.still, targets: want.target, canvasSafe, niches: niches || null },
@@ -406,21 +1352,34 @@ export function createAssets(options = {}) {
       next(kind) {
         const k = (kind === 'loop' || kind === 'gif') ? 'loop' : (kind === 'target' ? 'target' : 'still');
         if (released) return { url: placeholders[0] || null, remote: false };
-        const remoteKind = k === 'target' ? 'still' : k;
-        // The ratio is a MIX dial, not a veto: on the placeholder floor (no real
-        // local media of this kind) there is nothing to mix WITH, so the remote
-        // pool serves every draw it can cover.
-        const bareLocal = !(remoteKind === 'loop' ? localPools.loop.length : localPools.still.length);
-        if (wantRemote(bareLocal ? 1 : remoteRatio, rng(), (remotePools[remoteKind] || []).length > 0, canvasSafe)) {
-          const list = remotePools[remoteKind];
-          const i = remoteCursors[remoteKind] % list.length;
-          remoteCursors[remoteKind] += 1;
-          const jump = list.length > 2 ? Math.floor(rng() * (list.length - 1)) : 0;
-          const url = list[(i + jump) % list.length];
-          if (url && (!canvasSafe || isLocalUrl(url))) return { url, remote: true };
-        }
-        return { url: drawLocal(k), remote: false };
+        /* Decided NOW, with the live cursors and the next rand emissions - the
+         * deck never serves, it only warmed what this call is about to pick. */
+        const res = computeDraw(k, liveState, takeRand);
+        refreshDeck();               // the window moved: warm the new tail
+        return res;
       },
+      /**
+       * Warm the next n deck entries' bytes now (bounded by DECK_AHEAD).
+       * SORT's quick path has always called this behind a typeof guard - it
+       * was a claimTagged-only verb before 0825. Returns how many queued.
+       */
+      prewarm(n) {
+        const d = Math.round(Number(n) || 0);
+        return d > 0 ? refreshDeck(d) : 0;
+      },
+      /**
+       * THE MANIFEST SEAM (0825), same five verbs on every pool shape:
+       *   warmManifest(entries[, opts])  ordered [{url, kind?, mime?}] (or bare
+       *                                  url strings) - the game's full need
+       *   warmCursor(i)                  the game's play position in it
+       *   ready(url, {timeoutMs})       -> Promise<boolean> (see readyFor)
+       *   markBroken(url) / isBroken(url) the shared url blacklist
+       */
+      warmManifest: mediaSeam.warmManifest,
+      warmCursor: mediaSeam.warmCursor,
+      ready: mediaSeam.ready,
+      markBroken: mediaSeam.markBroken,
+      isBroken: mediaSeam.isBroken,
       /** How many candidates the pool can actually serve right now. */
       stats() {
         return {
@@ -441,6 +1400,10 @@ export function createAssets(options = {}) {
         if (released) return;
         released = true;
         reqIds = [];
+        localRefreshers.delete(syncLocal);   // the pile seam dies with the claim too
+        pileCbs.delete(askPile);
+        recent.loop.length = 0;        // the recency rings die with the claim
+        recent.still.length = 0;
         updateCbs.clear();
         for (const t of retryTimers) clearTimeout(t);
         retryTimers.clear();
@@ -467,6 +1430,9 @@ export function createAssets(options = {}) {
       platform,
       prewarm,
       log,
+      /* the shared url blacklist: a tagged serve skips a dead row and the
+       * seeded re-serve is its substitute source (see tagged.js nextRow) */
+      broken: isBrokenUrl,
       /* The remote gate is the app's, not the door's: with remote media off (or
        * OfflineMode on) a remote source row simply never asks, the tag lands
        * empty, and the door refuses to start on pool.empty(). A LOCAL row is
@@ -477,6 +1443,12 @@ export function createAssets(options = {}) {
         taggedPools.add(pool);
         const dispose = pool.dispose;
         pool.dispose = () => { taggedPools.delete(pool); dispose(); };
+        /* the manifest seam rides BOTH pool shapes (see claim().warmManifest) */
+        pool.warmManifest = mediaSeam.warmManifest;
+        pool.warmCursor = mediaSeam.warmCursor;
+        pool.ready = mediaSeam.ready;
+        pool.markBroken = mediaSeam.markBroken;
+        pool.isBroken = mediaSeam.isBroken;
       }
       return pool;
     });
@@ -485,6 +1457,14 @@ export function createAssets(options = {}) {
   return {
     claim,
     claimTagged,
+    /**
+     * warmPool({loop, still}) - the BOOT ASK (see above). The shell calls it
+     * once, right after createAssets, so the door / menu / rules stretch is
+     * spent filling the remote pools instead of waiting on the first claim.
+     * Mints no pool, draws no rand, and is a silent no-op with remote media
+     * off, under OfflineMode, or with no bridge at all.
+     */
+    warmPool: (spec) => warmPool(spec),
     /** The pickable world, as projected on init.settings. Never null fields. */
     catalog() {
       return {
@@ -565,6 +1545,12 @@ export function createAssets(options = {}) {
         // tile. The shell surfaces this as its one asset-seam diagnostic.
         placeholderFloor: !localPools.loop.length && !localPools.still.length,
         claims: claims.size,
+        /* THE SESSION PILE, the web's only local inventory. `pileRows` counts
+         * what actually reached the pools, which is the one number that tells a
+         * "the pile never arrived" report apart from a "the pile is empty" one.
+         * Both are 0 / false on the desktop, always. */
+        pilePresent: pilePresent(),
+        pileRows: pileUrls.size,
         remoteEnabled, remoteRatio, offlineMode,
         /* the SORT seam, read-only: live tagged pools and the pickable world */
         taggedPools: taggedPools.size,
@@ -578,6 +1564,9 @@ export function createAssets(options = {}) {
     },
     dispose() {
       disposed = true;
+      for (const t of bootTimers) { try { clearTimeout(t); } catch { /* noop */ } }
+      bootTimers.clear();
+      /* every claim's release() empties its own recency rings */
       for (const p of [...claims]) p.release();
       for (const p of [...taggedPools]) { try { p.dispose(); } catch { /* ignore */ } }
       taggedPools.clear();
@@ -587,8 +1576,22 @@ export function createAssets(options = {}) {
       }
       probes.clear();
       libraryCbs.clear();
+      localRefreshers.clear();
+      pileCbs.clear();
+      pileUrls.clear();
       channel.dispose();
+      manifest = null;
+      for (const url of [...readyWaiters.keys()]) flushReady(url, false);
+      warmDoneUrls.clear();
+      warmQueue.length = 0;
+      for (const img of warmHeld.values()) {
+        try { img.onload = null; img.onerror = null; } catch { /* noop */ }
+      }
+      warmHeld.clear();
+      warmFlight = 0;
+      warmVideoFlight = 0;
       prewarmed = new Set();
+      warmFails = new Map();
     },
   };
 }

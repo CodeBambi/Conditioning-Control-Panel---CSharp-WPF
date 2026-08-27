@@ -178,8 +178,17 @@ const CLIP_CHANCE = 0.25;
  *  faces, kept plumbed but no longer the look anyone gets by accident. */
 const FACE_MODES = Object.freeze(['words', 'glyphs', 'media']);
 
-/** How often the honest window ring repaints (the trickster polls it). */
+/** How often the honest window ring repaints (the trickster polls it). On a
+ *  touch device the ring repaints at 100ms - the countdown cue keys off the
+ *  SECOND boundary (windowTickSec), never the tick count, so the cue count is
+ *  identical at either cadence. */
 const WINDOW_TICK_MS = 60;
+const WINDOW_TICK_MS_COARSE = 100;
+
+/** The resize -> refit debounce (both platforms; the RESULT is identical, the
+ *  fit just waits for the trailing edge - iOS fires resize continuously while
+ *  the URL bar collapses). */
+const RESIZE_DEBOUNCE_MS = 150;
 
 /* Diagnostics seams (the DV / DE precedent): the live class, the last report,
  * the final snapshot. The shell never reads these; the harness does. */
@@ -284,6 +293,21 @@ export default {
     };
     const say = (m) => { try { ctx.log('[ec] ' + m); } catch (e) { /* noop */ } };
 
+    /* EMI COMMENTARY SEAMS (the heartbeat wave). note() names a moment the
+     * mascot may react to - the shell prefixes 'game:' and its own voice engine
+     * decides whether the moment is worth a face, a line or nothing at all.
+     * hold() fences a timing-critical window where she may pull faces but never
+     * words. Both are additive, one-way and fully guarded: an older shell has
+     * neither, and a mascot may never break a class. */
+    const note = (id, extra) => {
+      try { if (ctx.mood && typeof ctx.mood.note === 'function') ctx.mood.note(id, extra); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+    const holdWords = (on) => {
+      try { if (ctx.mood && typeof ctx.mood.hold === 'function') ctx.mood.hold(!!on); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+
     /* ---- lifecycle flags ------------------------------------------------ */
     let dead = false;
     let paused = false;
@@ -296,6 +320,7 @@ export default {
     let seed = '';
     let tier = 1;
     let reduced = false;
+    let coarse = false;                 // touch pointer (the perf diet; set in start)
     let retake = false;
     let audible = true;
     let budgetMs = 120000;
@@ -344,8 +369,15 @@ export default {
     let currentHeat = 0;
     let bellOn = false;
     let stallMs = 0;
+    let emiStallNoted = false;          // one stall seam per input turn, never per tick
+    let emiLongestDealt = 0;            // high-water length, so the long-echo seam never repeats itself
+    let emiInPlayback = false;          // is the playback word-fence currently owed? (pause drops it, resume owes it back)
     let lastPressAt = 0;
     let newRecord = false;
+    /** W3 P0-4: the record cue is once a class, not once a clear. */
+    let recordCued = false;
+    /** W3 P1-8 / P2-4: one breath per stall, never one per stall tick. */
+    let stallCued = false;
 
     /* ---- pads / faces --------------------------------------------------- */
     let faceMode = 'words';             // ec_pad_words, after the empty-pool rule
@@ -369,7 +401,10 @@ export default {
     let rulerEl = null;                 // the hidden measuring span (see ruler())
     let tokenW100 = 0;                  // widest dealt word at 100px type
     let fitPending = 0;
+    let fitKey = '';                    // memo: pad width + the dealt hand (see fitWords)
+    let lastFitPadPx = 0;               // the pad width the last fit measured (resize early-out)
     let onResize = null;
+    let resizeDebounce = 0;             // the trailing-edge resize timer
     /* THE CLIP ROLL (CLIP_CHANCE). `clipUntil` is when the airwave frees up. */
     let clipRoll = null;
     let clipBeat = 0;
@@ -385,6 +420,9 @@ export default {
     let stage = null; let backdrop = null; let hud = null; let ring = null;
     let msgEl = null; let well = null; let endEl = null; let howtoEl = null;
     let lenChip = null; let clockChip = null; let streakChip = null; let bestChip = null;
+    /* The streak meter currently MOUNTED in the chip, and the pair that drew it
+     * (see paintStreak). -1 means "nothing mounted, rebuild". */
+    let streakMeterEl = null; let streakMeterLit = -1; let streakMeterGold = false;
     /* THE TURN, drawn twice over so neither the ear nor a still frame can miss
      * it: the BANNER says whose turn it is in words, the STRIP says how far
      * through the sequence we are in dots. Both are attribute+text only, so
@@ -1086,23 +1124,57 @@ export default {
           el.style.fontSize = '100px';
         }
       } catch (e) { /* the CSS floor already dressed it */ }
+      /* ONE LAYOUT, NOT ONE PER TOKEN. Every write lands first - a child span
+       * per token, wearing the ruler's type by inheritance - and every width is
+       * read in a second pass, so the whole hand costs a single forced layout
+       * where the old write/read interleave forced one per token (12-24 a fit).
+       * Same numbers on both platforms: each span is its own inline box and its
+       * rect is the token's advance, exactly what the single-node measure was. */
+      const spans = [];
+      try { el.textContent = ''; } catch (e) { /* noop */ }
       for (let i = 0; i < padWords.length; i++) {
         const parts = String(padWords[i] || '').split(/\s+/);
         for (let k = 0; k < parts.length; k++) {
           if (!parts[k]) continue;
           try {
-            el.textContent = parts[k];
-            const w = el.getBoundingClientRect().width || 0;
-            if (w > tokenW100) tokenW100 = w;
+            const s = document.createElement('span');
+            s.textContent = parts[k];
+            el.appendChild(s);
+            spans.push(s);
           } catch (e) { /* noop */ }
         }
       }
+      for (let i = 0; i < spans.length; i++) {
+        try {
+          const w = spans[i].getBoundingClientRect().width || 0;
+          if (w > tokenW100) tokenW100 = w;
+        } catch (e) { /* noop */ }
+      }
       try { el.textContent = ''; } catch (e) { /* noop */ }
+    }
+    /** The pads the fit actually has to read: pad 0 and the longest phrase.
+     *  Every pad wears the SAME box (one --ec-pad, one --ec-word-px) so the two
+     *  tests below are decided by the phrase alone - the wrap test by the
+     *  longest one, and the no-split test by tokenW100, which measureTokens
+     *  already takes across the WHOLE hand, not per pad. Reading all six was
+     *  six forced layouts per binary-search step for the same verdict. */
+    function fitProbeIdx() {
+      const out = [];
+      if (padWords[0]) out.push(0);
+      let longest = -1;
+      for (let i = 0; i < padEls.length; i++) {
+        if (!padWords[i]) continue;
+        if (longest < 0 || String(padWords[i]).length > String(padWords[longest]).length) longest = i;
+      }
+      if (longest >= 0 && longest !== 0) out.push(longest);
+      return out;
     }
     function ringFitsAt(px) {
       if (!stage) return true;
       try { stage.style.setProperty('--ec-word-px', px + 'px'); } catch (e) { return true; }
-      for (let i = 0; i < padEls.length; i++) {
+      const probes = fitProbeIdx();
+      for (let n = 0; n < probes.length; n++) {
+        const i = probes[n];
         if (!padWords[i]) continue;
         const w = wordNodeOf(padEls[i]);
         if (!w) continue;
@@ -1128,6 +1200,17 @@ export default {
           ? Math.round(padEls[0].getBoundingClientRect().width) : 0;
       } catch (e) { padPx = 0; }
       if (!padPx) return;               // not laid out yet; the next pass gets it
+      lastFitPadPx = padPx;
+      /* THE MEMO. The fitted px is a pure function of the pad's width and the
+       * dealt hand (the word's type never changes inside a class), so the same
+       * key skips the token measure and the whole binary search: the trickster's
+       * label lie and an iOS URL-bar resize both re-ask for a fit that cannot
+       * have changed. Both platforms - a hit repaints the SAME px it computed. */
+      const key = padPx + '|' + padWords.join('');
+      if (key === fitKey && fittedPx > 0) {
+        try { stage.style.setProperty('--ec-word-px', fittedPx + 'px'); } catch (e) { /* noop */ }
+        return;
+      }
       measureTokens();                    // the widest word, once, for every candidate
       const maxPx = Math.max(
         PLAYTEST.FIT_MIN_PX,
@@ -1135,6 +1218,7 @@ export default {
       );
       const px = fitFontPx({ maxPx, minPx: PLAYTEST.FIT_MIN_PX, fits: ringFitsAt });
       try { stage.style.setProperty('--ec-word-px', px + 'px'); } catch (e) { /* noop */ }
+      fitKey = key;
       if (px !== fittedPx) {
         fittedPx = px;
         say('fit: the ring wears ' + px + 'px (pad ' + padPx + 'px, longest "'
@@ -1223,22 +1307,48 @@ export default {
     }
     function paintStreak() {
       if (!streakChip) return;
+      const label = 'x ' + pressStreak;
       if (pressStreak < PLAYTEST.STREAK_VISIBLE) {
         streakChip.hidden = true;
-        streakChip.textContent = 'x ' + pressStreak;
+        streakChip.textContent = label;      // takes the meter with it
+        streakMeterEl = null; streakMeterLit = -1;
         return;
       }
       streakChip.hidden = false;
-      streakChip.textContent = 'x ' + pressStreak;
+      const filled = Math.min(PLAYTEST.STREAK_CAP, pressStreak);
+      const gold = ratchet >= PLAYTEST.RATCHET_CAP;
       /* The meter is the SHELL's primitive (10 segments, always); it rides
-       * inside the chip so the contract's DOM gains no extra node. */
-      try {
-        const meter = ctx.ceremonies.streakMeter({
-          filled: Math.min(PLAYTEST.STREAK_CAP, pressStreak),
-          gold: ratchet >= PLAYTEST.RATCHET_CAP,
-        });
-        if (meter) streakChip.appendChild(meter);
-      } catch (e) { /* a ceremony must never be the thing that fails */ }
+       * inside the chip so the contract's DOM gains no extra node.
+       *
+       * THE CEREMONY IS ASKED EVERY TIME, unconditionally: streakMeter() is
+       * also where the STREAK CHIME lives (ceremonies.js - the chime ladder
+       * rides the call, not the node), so skipping the call would silence a
+       * cue. What is skipped is the MOUNT. Eleven nodes were torn down and
+       * re-inserted on every press, and the meter can only look different on
+       * (filled, gold) - the count is capped, so a streak past the cap draws
+       * the same ten segments - so an unchanged pair keeps the mounted one and
+       * the label goes into the chip's own text node, which writing through
+       * textContent would take the meter with. The parentNode test is the
+       * honest one: anything that rewrote the chip behind our back re-mounts.
+       * TOUCH ONLY, and that is not timidity: a re-mount replays the segment
+       * shimmer (arc-seg, a per-mount animation), so skipping it is a visible
+       * delta. The phone trades that shimmer for eleven fewer nodes a press;
+       * desktop has the frames and keeps the shimmer. */
+      let meter = null;
+      try { meter = ctx.ceremonies.streakMeter({ filled, gold }); }
+      catch (e) { /* a ceremony must never be the thing that fails */ }
+      if (coarse && filled === streakMeterLit && gold === streakMeterGold
+        && streakMeterEl && streakMeterEl.parentNode === streakChip
+        && streakChip.firstChild && streakChip.firstChild.nodeType === 3) {
+        if (streakChip.firstChild.nodeValue !== label) streakChip.firstChild.nodeValue = label;
+        return;
+      }
+      streakChip.textContent = label;
+      streakMeterEl = null; streakMeterLit = -1;
+      if (meter) {
+        streakChip.appendChild(meter);
+        streakMeterEl = meter; streakMeterLit = filled; streakMeterGold = gold;
+      }
     }
 
     /* ==================================================================== *
@@ -1256,9 +1366,46 @@ export default {
      * indistinguishable. Hover / focus / press clear it as well, but that half
      * is CSS (style.js) because a pointer is not a game state.
      * ==================================================================== */
+    /* THE TRIGGER FLASH (owner, 2026-08-25). Desktop reads a frosted word by
+     * hovering; a finger cannot hover, so EVERY press - refused and locked taps
+     * included - flashes the pad's word for FLASH_MS. The flash OWNS the veil
+     * while it runs: `flashOn` gates setVeil so a shorter state hold (a 130ms
+     * `pressed`, say) cannot re-frost the word mid-read, and the restore rides
+     * the pause-aware timer registry like every other beat. A pad that is in a
+     * non-idle state when the flash expires is left alone - that state already
+     * unveils, and its own idle restore re-frosts (padState's timer). */
+    const flashTimers = new Map();      // pad index -> the timer that re-frosts
+    const flashOn = new Set();          // pads whose word a press is showing
+    function flashWord(i, ms) {
+      const pad = padEls[i];
+      if (!pad) return;
+      const dur = Number(ms) > 0 ? Number(ms)
+        : (reduced ? PLAYTEST.FLASH_MS_REDUCED : PLAYTEST.FLASH_MS);
+      const prev = flashTimers.get(i);
+      if (prev) clearTimer(prev);
+      flashOn.add(i);
+      setVeil(pad, false);
+      flashTimers.set(i, after(dur, () => {
+        flashTimers.delete(i);
+        flashOn.delete(i);
+        const p = padEls[i];
+        if (p && p.getAttribute('data-state') === 'idle') setVeil(p, true);
+      }));
+    }
+    function clearFlashes() {
+      for (const id of Array.from(flashTimers.values())) clearTimer(id);
+      flashTimers.clear();
+      flashOn.clear();
+    }
     function setVeil(pad, on) {
       if (!pad) return;
-      try { pad.setAttribute('data-veil', on ? 'on' : 'off'); } catch (e) { /* noop */ }
+      let want = !!on;
+      if (want) {
+        /* A live flash refuses the frost - whoever asked (a state hold ending,
+         * a re-deal) the player is still owed the rest of the read. */
+        try { if (flashOn.has(Number(pad.getAttribute('data-pad')))) want = false; } catch (e) { /* noop */ }
+      }
+      try { pad.setAttribute('data-veil', want ? 'on' : 'off'); } catch (e) { /* noop */ }
     }
     function padState(i, state, holdMs) {
       const pad = padEls[i];
@@ -1282,6 +1429,7 @@ export default {
     function clearPads() {
       for (const id of Array.from(padTimers.values())) clearTimer(id);
       padTimers.clear();
+      clearFlashes();                   // a fresh deal never inherits a live flash
       for (const pad of padEls) {
         if (!pad) continue;
         pad.setAttribute('data-state', 'idle');
@@ -1328,6 +1476,10 @@ export default {
      *  with no sensory echo is a broken slot handle) - but it moves nothing. */
     function press(i, how) {
       if (dead || paused || ended) return;
+      /* THE FLASH rides the ONE press funnel, refused taps included: on touch
+       * the press IS the hover, and even a locked tap during LISTEN answers by
+       * showing you what that pad says (the tell you were owed anyway). */
+      flashWord(i);
       if (!inputOpen) {
         padState(i, 'pressed', reduced ? 90 : 130);
         tone(PAD_SFX, 0.16, pitchFor(i, 0));
@@ -1391,7 +1543,14 @@ export default {
       /* THE RESHUFFLE. Every sequence after the first re-deals the phrases -
        * the ENCORE deliberately does not, because it is the same melody again
        * and moving the words under it would be a different room. */
-      if (sequencesDealt > 0) { roundIdx += 1; dealFaces(); }
+      /* W3 P1-11: the ring re-deals its words and that is a real change to the
+       * board, so it gets the paper it deserves instead of happening silently. */
+      if (sequencesDealt > 0) {
+        roundIdx += 1;
+        dealFaces();
+        tone('paper', 0.25, 1);
+        note('ec.reshuffled', { kind: 'curiosity', n: want, word: padWords[0] || '' });
+      }
       sequencesDealt += 1;
       expectIdx = 0;
       stepIdx = 0;
@@ -1401,11 +1560,21 @@ export default {
       paintHud();
       heat();
       setPhase('play');
+      /* A GENUINELY LONG ONE. 8 is the tier-1 S length, and the high-water mark
+       * keeps it to the first deal at each new length. */
+      if (want >= 8 && want > emiLongestDealt) {
+        emiLongestDealt = want;
+        note('ec.longEcho', { kind: 'tension', n: want });
+      }
       /* TIER 2 TELEGRAPHS THE DECOY (SYNTHESIS #2 - the signature twist enters
        * at tier 2, announced; tier 3+ says nothing at all). */
       const telegraphed = round.decoys.some((d) => d.telegraph);
       if (telegraphed) {
         msg('ec_msg_decoy_warn', EC_LEX.ec_msg_decoy_warn);
+        /* W3 P1-11: the TELEGRAPHED tier says so out loud - a low tell under the
+         * banner. Tier 3+ never reaches this branch and must not: a decoy the
+         * ear can hear coming is not a decoy. */
+        tone('tell', 0.3, 0.7);
         if (stage) stage.setAttribute('data-telegraph', '1');
       } else {
         if (stage) stage.removeAttribute('data-telegraph');
@@ -1429,7 +1598,11 @@ export default {
       setPhase('encore');
       if (stage) stage.setAttribute('data-encore', '1');
       msg('ec_msg_encore', EC_LEX.ec_msg_encore);
+      /* W3 P1-11: the comeback. One low whoosh with a duck under it, so the
+       * room visibly and audibly makes space for the same melody again. */
+      tone('whoosh', 0.35, 0.75, { duck: 'voice', duckMs: 500 });
       deck('casino', 'encore', true);
+      note('ec.encoreStart', { kind: 'tension', n: curLen });
       after(reduced ? 500 : 800, () => startPlayback());
     }
 
@@ -1437,9 +1610,20 @@ export default {
       if (dead || ended || !round) return;
       busy = true;
       inputOpen = false;
+      /* THE ONE WINDOW THAT IS SACRED. Playback IS the signal - light plus note,
+       * and at a silent desk the light alone. A word over it is a word over the
+       * thing the player is trying to hold, so from here to the end of the last
+       * step she may pull faces and nothing else. Released in seam() (the normal
+       * end), and again on every other way out of a round. */
+      holdWords(true);
+      emiInPlayback = true;
       stepIdx = 0;
       resetSteps();
       setPhase(inEncore ? 'encore' : 'echo');
+      /* W3 P1-11: the room's turn is signed. The hand-off bell, dropped well
+       * below its own pitch, so "now it is me" and "now it is you" are the same
+       * bell at two ends of the room and can never be confused. */
+      tone(HANDOFF_SFX, 0.3, 0.66);
       if (!audible && sequencesDealt <= 1) msg('ec_msg_silent', EC_LEX.ec_msg_silent);
       else if (!inEncore) msg('ec_msg_watch', EC_LEX.ec_msg_watch);
       playStep();
@@ -1466,13 +1650,16 @@ export default {
           }
         } else {
           /* At tier 3+ a decoy is indistinguishable from a real step, and that
-           * includes its trigger: a pad that sounded silent would be a free tell. */
-          padVoice(step.pad, 0.34, pitchFor(step.pad, ratchet));
+           * includes its trigger: a pad that sounded silent would be a free tell.
+           * (Level matches the real step below - always.) */
+          padVoice(step.pad, 0.55, pitchFor(step.pad, ratchet));
         }
         deck('casino', 'padLit', step.pad, i, round.len);
       } else {
         padState(step.pad, 'lit', lit);
-        padVoice(step.pad, 0.34, pitchFor(step.pad, ratchet));
+        /* .55, was .34 (2026-08-25, "no sound in Echo"): the note is the second
+         * half of the SIGNAL, not a garnish - it plays at signal level. */
+        padVoice(step.pad, 0.55, pitchFor(step.pad, ratchet));
         /* THE STRIP DURING LISTEN: the room fills the dots as it plays, so the
          * player can see how much of the sequence is still coming. */
         stepFillSet(step.index, 'on');
@@ -1484,6 +1671,10 @@ export default {
     /** THE INTERFERENCE BEAT: the seam between playback and input is the
      *  Distraction Engine's, and only the engine's - it never moves a hitbox. */
     function seam() {
+      /* PLAYBACK IS OVER - the last pad has gone dark. Release before the
+       * guards, so a class that died mid-sequence never leaves her muted. */
+      holdWords(false);
+      emiInPlayback = false;
       if (dead || ended || !round) return;
       beatSafe();
       deck('trickster', 'afterPlayback');
@@ -1535,6 +1726,8 @@ export default {
        * never lock its pad out of the next turn. */
       try { heldByKey.clear(); } catch (e) { heldByKey = new Set(); }
       stallMs = 0;
+      stallCued = false;
+      emiStallNoted = false;
       lastPressAt = Date.now();
       armInputWindow();
       /* Tier 2+ pressure DURING the input turn (the dossier's ladder). Every
@@ -1549,15 +1742,23 @@ export default {
     let windowTimer = 0;
     let windowTick = 0;
     let windowUntil = 0;
+    /* W3 P0-2 / P0-15. The countdown's own state: the last whole-seconds figure
+     * we sounded, and how many ticks this window has spent. The ring repaints
+     * on WINDOW_TICK_MS (100ms on touch), so the cue rides the SECOND BOUNDARY
+     * and nothing else - the cadence cannot move the cue count. */
+    let windowTickSec = -1;
+    let windowTickN = 0;
     function armInputWindow() {
       if (windowTimer) { clearTimer(windowTimer); windowTimer = 0; }
       if (!round || !round.windowMs) return;
       windowUntil = Date.now() + round.windowMs;
+      windowTickSec = -1;
+      windowTickN = 0;
       if (timerEl) {
         timerEl.hidden = false;
         try { timerEl.style.setProperty('--ec-k', '1'); } catch (e) { /* noop */ }
       }
-      if (!windowTick) windowTick = every(WINDOW_TICK_MS, paintWindow);
+      if (!windowTick) windowTick = every(coarse ? WINDOW_TICK_MS_COARSE : WINDOW_TICK_MS, paintWindow);
       windowTimer = after(round.windowMs, () => {
         windowTimer = 0;
         if (!inputOpen || dead || ended) return;
@@ -1570,11 +1771,23 @@ export default {
       if (!timerEl || !round || !round.windowMs || !inputOpen) return;
       const k = Math.max(0, Math.min(1, (windowUntil - Date.now()) / round.windowMs));
       try { timerEl.style.setProperty('--ec-k', k.toFixed(3)); } catch (e) { /* noop */ }
+      /* W3 P0-2 / P0-15: the last third of the window enters the ear. One tick
+       * per whole second, climbing in pitch and level, and the whole thing is
+       * killed by disarmInputWindow the moment the press lands. */
+      const secs = Math.ceil(Math.max(0, windowUntil - Date.now()) / 1000);
+      if (k < 0.35 && secs !== windowTickSec) {
+        windowTickSec = secs;
+        const n = Math.min(4, windowTickN);
+        tone('clock_tick', 0.1 + 0.02 * n, 1 + 0.06 * n);
+        windowTickN += 1;
+      }
     }
     function disarmInputWindow() {
       if (windowTimer) { clearTimer(windowTimer); windowTimer = 0; }
       if (windowTick) { clearTimer(windowTick); windowTick = 0; }
       windowUntil = 0;
+      windowTickSec = -1;
+      windowTickN = 0;
       if (timerEl) {
         timerEl.hidden = true;
         try { timerEl.style.setProperty('--ec-k', ''); } catch (e) { /* noop */ }
@@ -1588,6 +1801,8 @@ export default {
       const dt = Math.max(0, now - lastPressAt);
       lastPressAt = now;
       stallMs = 0;
+      stallCued = false;
+      emiStallNoted = false;
       presses += 1;
       latencySum += dt;
       latencyCount += 1;
@@ -1599,6 +1814,9 @@ export default {
         decoysTaken += 1;
         padState(i, 'decoy', reduced ? 260 : 420);
         deck('casino', 'padPressed', i, false, pressStreak);
+        note('ec.decoyTaken', {
+          kind: 'commiserate', n: expectIdx, left: round.seq.length - expectIdx, tile: padWords[i] || '',
+        });
         fail(i, 'decoy');
         return;
       }
@@ -1610,7 +1828,8 @@ export default {
         bestStreak = Math.max(bestStreak, pressStreak);
         ratchet = Math.min(PLAYTEST.RATCHET_CAP, ratchet + 1);
         padState(i, 'pressed', reduced ? 140 : 200);
-        padVoice(i, 0.42, pitchFor(i, ratchet));
+        /* .65, was .42 (2026-08-25): your own note answers you at full voice. */
+        padVoice(i, 0.65, pitchFor(i, ratchet));
         /* The soft tick: the note is the melody, this is the "yes". */
         tone(TICK_SFX, 0.22, 1);
         /* THE DOT the player just earned. */
@@ -1638,6 +1857,10 @@ export default {
       /* WRONG. The pad flashes RED and its face shakes - a state of its own, so
        * a still frame of the room says "that was wrong" with no sound at all. */
       padState(i, 'wrong', reduced ? 260 : 420);
+      /* W3 P1-11: a wrong pad still sounds its OWN note, quiet and a hair flat,
+       * so the mistake is a wrong note rather than the absence of one. The
+       * buzzer in fail() answers the miss; this answers the finger. */
+      padVoice(i, 0.2, pitchFor(i, 0) * 0.98);
       deck('casino', 'padPressed', i, false, pressStreak);
       fail(i, how === 'timeout' ? 'timeout' : 'wrong');
     }
@@ -1649,8 +1872,22 @@ export default {
       disarmInputWindow();
       const len = round.seq.length;
       if (len > bestLen) { bestLen = len; if (bestLen > lifetimeBefore) newRecord = true; }
+      /* W3 P0-4: a LIFETIME best is the rarest thing this class can hand out and
+       * it used to sound exactly like an ordinary clear. It lands 150ms behind
+       * the clear cue so the ear hears the win first and then the topper, and it
+       * is latched: once a class, however many records the run stacks up. */
+      if (newRecord && !recordCued) {
+        recordCued = true;
+        after(150, () => { tone('record', 0.45, 1); });
+      }
       sequencesCleared += 1;
       clearStreak += 1;
+      /* The sequence is complete: whatever the playback hold left standing comes
+       * off here too, so no path out of a round can strand it. */
+      holdWords(false);
+      emiInPlayback = false;
+      if (inEncore) note('ec.encoreCleared', { kind: 'celebrate', n: len, streak: clearStreak });
+      if (clearStreak >= 3) note('ec.clearStreak', { kind: 'celebrate', streak: clearStreak, n: len });
       paintHud();
       deck('casino', 'sequenceDone', len);
       deck('pressure', 'beat', 'clear');
@@ -1710,7 +1947,16 @@ export default {
       /* THE BUZZER: low, short, and nothing else in the room sounds like it. */
       tone(FAIL_SFX, 0.2, 1);
       stopInputPressure();
-      if (near) { nearMisses += 1; ceremonySafe('near_miss', {}); }
+      /* The round is over on the other path too - never leave her muted. */
+      holdWords(false);
+      emiInPlayback = false;
+      if (near) {
+        nearMisses += 1;
+        ceremonySafe('near_miss', {});
+        note('ec.nearMiss', { kind: 'commiserate', n: expectIdx, left: len - expectIdx });
+      }
+      /* ONE FAIL IS NOT THE CLASS, and the first one is where that gets learned. */
+      if (fails === 1) note('ec.firstFail', { kind: 'commiserate', n: expectIdx, left: len - expectIdx, word: why });
       /* THE DOT that broke it goes red, and stays red through the hold. */
       if (expectIdx >= 0 && expectIdx < stepEls.length) stepFillSet(expectIdx, 'bad');
       const late = why === 'timeout';
@@ -1741,6 +1987,7 @@ export default {
         if (encoreArmed && !inEncore) { startEncore(); return; }
         if (inEncore) {
           msg('ec_msg_encore_fail', EC_LEX.ec_msg_encore_fail);
+          note('ec.encoreFailed', { kind: 'commiserate', n: len, left: len - expectIdx });
           inEncore = false;
           if (stage) stage.removeAttribute('data-encore');
           deck('casino', 'encore', false);
@@ -1901,7 +2148,10 @@ export default {
           deck('casino', 'bell', true);
           deck('pressure', 'beat', 'bell');
           msg('ec_msg_bell_warn', EC_LEX.ec_msg_bell_warn);
-          tone('sting', 0.4, 1);
+          /* W3 P0-3: the bell vocabulary. The warning used to be a `sting`,
+           * which is what a hundred other things in the school are. One school,
+           * one bell: warn at .3, the end at .5. */
+          tone('bell', 0.3, 1);
         }
         if (elapsedMs >= budgetMs) { stopClock(); run(bell); }
       });
@@ -1921,11 +2171,19 @@ export default {
       ended = true;
       inputOpen = false;
       busy = true;
+      /* THE BELL. Nothing is timing-critical after it, and the end card is the
+       * one place in the class she is allowed to talk over. */
+      holdWords(false);
+      emiInPlayback = false;
       disarmInputWindow();
       stopClock();
       clearPads();
       stopAmbience();
       setPhase('ended');
+      /* W3 P0-3: the class ends on the bell, and the debrief's own `slide`
+       * follows it 420ms later (see renderEnd) rather than landing on the same
+       * frame. Two beats, in the order the school says them. */
+      tone('bell', 0.5, 1);
       deck('casino', 'dimOut');
       deck('pressure', 'stop');
       deck('trickster', 'stop');
@@ -1962,6 +2220,15 @@ export default {
         }
       } catch (e) { say('meta merge failed (the class still grades): ' + ((e && e.message) || e)); }
 
+      /* THE TWO END-OF-CLASS SEAMS, once each and never before the bell: a
+       * lifetime record, and a class with no wrong pad in it at all. */
+      if (newRecord) {
+        note('ec.newBest', { kind: 'celebrate', n: bestLen, streak: bestStreak });
+      }
+      if (presses > 0 && correctPresses === presses) {
+        note('ec.perfectClass', { kind: 'celebrate', n: bestLen, streak: bestStreak });
+      }
+
       renderEnd(graded, meanLatencyMs, stepMs, lifetimeAfter);
 
       const report = { metrics: { composite: graded.composite }, hardGates: gates, flavorXp: fx };
@@ -1994,7 +2261,8 @@ export default {
        * card fades in as one object (.g-ec-end / g-ec-endin), so there is no
        * visual stagger for a blip ladder to ride: the House Book's answer to an
        * unstaggered debrief is ONE `slide`, on the same beat as the fade. */
-      tone('slide', 0.35, 1);
+      /* W3 P0-3: +420ms, so the bell finish() struck has the frame to itself. */
+      after(420, () => { tone('slide', 0.35, 1); });
       endEl.appendChild(el('h3', 'g-ec-end-title', t('ec_end_title', EC_LEX.ec_end_title)));
       const row = (cls, k, v) => {
         const r = el('div', 'g-ec-end-row' + (cls ? ' ' + cls : ''));
@@ -2046,6 +2314,10 @@ export default {
         budgetMs = Math.max(20000, (Number(spec.timeBudgetSec) || 120) * 1000);
         retake = !!spec.retake;
         reduced = probeReduced(ctx);
+        /* THE PHONE DIET's one signal. The host populates isTouch (desktop
+         * WebView2 answers false), and it gates the JS half of the diet the
+         * same way html.ae-touch gates the CSS half. It NEVER gates a roll. */
+        coarse = !!(ctx.platform && ctx.platform.isTouch);
         audible = ctx.audioAudible !== false;
         attempt = 0;
         encoreArmed = true;
@@ -2053,9 +2325,16 @@ export default {
         inEncore = false;
         ratchet = 0;
         newRecord = false;
+        recordCued = false;
+        stallCued = false;
         faceUrls.clear();
         clipsFired = 0;
-        faceKind = (reduced || motionLevelOf() <= 1) ? 'still' : 'loop';
+        /* MEDIA FACES ARE STILLS ON A PHONE (../CLAUDE.md trap 42): six pads
+         * dealt a loop is six live decodes, and iOS caps hardware video decode
+         * sessions at ~3-4 - the ring would stall on whichever pads lost the
+         * race. Device-classed on purpose; desktop keeps the motionLevel test
+         * byte-identical. The pool draws the same asset either way. */
+        faceKind = (reduced || coarse || motionLevelOf() <= 1) ? 'still' : 'loop';
 
         try {
           lifetimeBefore = Math.max(0, Math.floor(Number((ctx.store.gameMeta(GAME_KEY) || {}).bestLen) || 0));
@@ -2072,6 +2351,8 @@ export default {
         clipsRolledOff = 0;
         clipsSkipped = 0;
         fittedPx = 0;
+        fitKey = '';                    // a new hand invalidates the memo
+        lastFitPadPx = 0;
         rollLocal = (() => {
           const roll = makeTaggedRoll(seed + '|ec-vr');
           return () => {
@@ -2092,7 +2373,7 @@ export default {
         try {
           casino = createEcCasino({
             seed, tier, stage, board: ring, ring, hud, backdrop,
-            timers: deckTimers, reduced, capsOk, t, engine: deckEngine, assets: deckAssets,
+            timers: deckTimers, reduced, coarse, capsOk, t, engine: deckEngine, assets: deckAssets,
             padEl: (i) => padEls[i] || null,
             pads: () => padEls.slice(),
             padCount: PLAYTEST.PADS,
@@ -2104,7 +2385,7 @@ export default {
             seed, tier, timers: deckTimers, reduced, capsOk,
             stage, board: ring, hud, backdrop, engine: deckEngine, assets: deckAssets,
             budgetSec: Math.round(budgetMs / 1000),
-            coarse: !!(ctx.platform && ctx.platform.isTouch),
+            coarse,
             isHalted: () => dead || paused || ended || busy,
             /* READ-ONLY views of the truth. A deck may READ the ledger (the
              * Ghost Cursor lures to a pad ADJACENT to the due one, which is
@@ -2154,6 +2435,7 @@ export default {
             tier,
             reduced,
             motionLevel: motionLevelOf(),
+            coarse,
             stage,
             ring,
             backdrop,
@@ -2177,7 +2459,27 @@ export default {
         after(220, () => scheduleFit());
         try {
           if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-            onResize = () => scheduleFit();
+            /* THE TRAILING EDGE. iOS fires resize continuously for the whole
+             * URL-bar collapse, and every one of those asked for a fit. One
+             * fit lands, RESIZE_DEBOUNCE_MS after the last event, and it is
+             * skipped outright when the pad has settled back to the width the
+             * last fit already measured - one rect read, against a fit that
+             * measures the hand and walks a binary search. Both platforms; the
+             * same final px, just once instead of per event. */
+            onResize = () => {
+              if (resizeDebounce) clearTimer(resizeDebounce);
+              resizeDebounce = after(RESIZE_DEBOUNCE_MS, () => {
+                resizeDebounce = 0;
+                if (dead) return;
+                let padPx = 0;
+                try {
+                  padPx = (padEls[0] && typeof padEls[0].getBoundingClientRect === 'function')
+                    ? Math.round(padEls[0].getBoundingClientRect().width) : 0;
+                } catch (e) { padPx = 0; }
+                if (padPx && padPx === lastFitPadPx) return;
+                scheduleFit();
+              });
+            };
             window.addEventListener('resize', onResize);
           }
         } catch (e) { onResize = null; }
@@ -2185,7 +2487,21 @@ export default {
         every(PLAYTEST.STALL_TICK_MS, () => {
           if (ended || !inputOpen) return;
           stallMs += PLAYTEST.STALL_TICK_MS;
-          if (stallMs >= PLAYTEST.STALL_MS) deck('trickster', 'stalled', stallMs);
+          if (stallMs >= PLAYTEST.STALL_MS) {
+            /* W3 P1-8 / P2-4: the ghost cursor's lure gets a breath, ONCE per
+             * stall. It is non-tonal on purpose - a pitched cue here would read
+             * as a hint about which pad comes next. */
+            if (!stallCued) { stallCued = true; tone('whisper', 0.12, 0.85); }
+            deck('trickster', 'stalled', stallMs);
+            /* THE WATCHING BEAT - once per input turn, and only where no window
+             * is burning. Tiers 1-2 are untimed (windowMs 0), so a freeze there
+             * costs the player nothing; at tier 3-4 a soft window is running out
+             * under the silence and a word over it would be a word over a timer. */
+            if (!emiStallNoted && round && !round.windowMs) {
+              emiStallNoted = true;
+              note('ec.stall', { kind: 'ambient', n: expectIdx, left: curLen - expectIdx });
+            }
+          }
         });
 
         msg('ec_brief', EC_LEX.ec_brief);
@@ -2220,6 +2536,10 @@ export default {
       pause() {
         if (paused) return;
         paused = true;
+        /* A frozen class is not a timing-critical one, so the fence comes off
+         * even mid-playback. `emiInPlayback` remembers that it is still owed, and
+         * resume() puts it back before the deferred steps replay. */
+        holdWords(false);
         deck('pressure', 'pause');
         deck('trickster', 'pause');
         deck('casino', 'pause');
@@ -2235,6 +2555,9 @@ export default {
         deck('casino', 'resume');
         lastTick = Date.now();
         lastPressAt = Date.now();
+        /* The fence was owed when we froze - put it back BEFORE the deferred
+         * playback steps replay, not after. */
+        if (emiInPlayback) holdWords(true);
         const q = deferred.splice(0);
         for (const fn of q) run(fn);
       },
@@ -2244,6 +2567,10 @@ export default {
 
       destroy() {
         dead = true;
+        /* TEARDOWN. The last release, unconditional: a class that goes away must
+         * never take her voice with it. */
+        holdWords(false);
+        emiInPlayback = false;
         stopClock();
         disarmInputWindow();
         clearTimers();
@@ -2265,7 +2592,11 @@ export default {
         } catch (e) { /* noop */ }
         onResize = null;
         fitPending = 0;
+        resizeDebounce = 0;
+        streakMeterEl = null; streakMeterLit = -1;
         padTimers.clear();
+        flashTimers.clear();
+        flashOn.clear();
         padEls.length = 0;
         stepEls.length = 0;
         stepFill.length = 0;

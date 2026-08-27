@@ -76,6 +76,7 @@ public sealed class DeleteDialogEffect : PossessionEffectBase
             if (_names.Count == 0) return;
 
             _cancelled = false;
+            _grinned = false;   // one grin per DIALOG; the reset lives here, not on the close path
             _dialog = BuildDialog(ctx, out status, out bar, out list);
             if (_dialog == null) return;
 
@@ -330,7 +331,12 @@ public sealed class DeleteDialogEffect : PossessionEffectBase
     private bool _grinned;
 
     /// <summary>Closing it does not end the joke, it lands it: a second, quieter bark under the same
-    /// PossessionEffect trigger, keyed so the packs can answer the close specifically.</summary>
+    /// PossessionEffect trigger, keyed so the packs can answer the close specifically.
+    ///
+    /// <para>ONE per dialog, however it goes: the Cancel handler grins and then closes, and closing
+    /// raises Window.Closing, which grins too. The latch is cleared when the next dialog is BUILT, never
+    /// on the way out - clearing it inside CloseDialog (as it once was) re-armed it a line before
+    /// Window.Close() and the warden said it twice.</para></summary>
     private void GrinOnTheWayOut()
     {
         if (_grinned) return;
@@ -346,7 +352,6 @@ public sealed class DeleteDialogEffect : PossessionEffectBase
 
         var dlg = _dialog;
         _dialog = null;
-        _grinned = false;
         if (dlg == null) return;
         try { dlg.Close(); }
         catch (Exception ex) { App.Logger?.Warning("Possession delete dialog close failed: {Error}", ex.Message); }

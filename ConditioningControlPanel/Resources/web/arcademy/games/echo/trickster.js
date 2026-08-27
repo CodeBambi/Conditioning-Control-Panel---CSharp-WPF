@@ -599,7 +599,9 @@ export function createEcTrickster(o) {
        the real chip's honest face steps aside while the twin is up; the real
        chip keeps painting --ec-k, which is the truth the twin bends */
     layer.appendChild(ringEl);
-    ringPoll = every(Math.round(1000 / T.RING_STEPS / 2), tickRing);
+    /* touch: half the poll rate (~83ms) - the bend is a 12-step face, so a
+       slower poll paints the same steps; the poll consumes no rng */
+    ringPoll = every(Math.round(1000 / T.RING_STEPS / (coarse ? 1 : 2)), tickRing);
   }
   function tickRing() {
     if (!ringEl || !ringReal || destroyed || stopped || paused) return;

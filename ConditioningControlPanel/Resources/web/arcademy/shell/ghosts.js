@@ -55,6 +55,23 @@ const SVGNS = 'http://www.w3.org/2000/svg';
 export const PRESENCE_V = 1;
 /** Simultaneous drawn ghosts. Overflow feeds the busyness chips, never the map. */
 export const MAX_GHOSTS = 24;
+/** THE TOUCH CEILING (perf/arcademy-mobile-web). Every drawn ghost writes an
+ * SVG transform attribute per rAF frame into the campus plan, and 24 of those
+ * is a standing tax an iPhone pays whenever the campus is up. On a coarse
+ * pointer the map draws at most this many; the rest feed the busyness chips
+ * exactly the way overflow always has. Desktop keeps MAX_GHOSTS untouched. */
+export const TOUCH_MAX_GHOSTS = 8;
+/* Probed ONCE at module init (same probe as trap 42's `.ae-touch` seam):
+ * coarse pointer, or a touch digitiser on a host whose media queries lie. */
+const IS_COARSE = (() => {
+  try {
+    if (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) return true;
+  } catch (e) { /* noop */ }
+  try {
+    return typeof navigator !== 'undefined' && Number(navigator.maxTouchPoints) > 1;
+  } catch (e) { /* noop */ }
+  return false;
+})();
 /** Rooms with at least this many attendees wear a count chip (PRESENCE §6). */
 export const BUSY_MIN = 3;
 /** The replay window. Anything older than this is not a ghost at all. */
@@ -826,6 +843,12 @@ export function createGhosts(o) {
   let looker = null;           // THE LOOKER (shell/seep.js tell 05), or null
   let sparkTimers = [];
   let lastNearCue = -1e9;      // wall ms of the last pass-by cue (see NEAR_GAP_MS)
+  /* W3 P1-20. Two more ambient floors, each on its own wall clock and each on
+   * the same NEAR_GAP_MS budget as the pass-by above: the classmates SPEAKING,
+   * and the S flourish at a door. Separate counters on purpose - one shared
+   * one would let a spark eat the speech for the next eight seconds. */
+  let lastSpeakCue = -1e9;
+  let lastSparkCue = -1e9;
 
   /* ---------------------------------------------------------------- data -- */
 
@@ -834,7 +857,14 @@ export function createGhosts(o) {
     const nowMs = clock.now();
     const snap = normalizeSnapshot(raw, nowMs);
     if (!snap) { say('presence: snapshot refused (shape or version)'); return; }
-    plan = buildSchedules({ snapshot: snap, nowMs, self: selfId });
+    plan = buildSchedules({
+      snapshot: snap,
+      nowMs,
+      self: selfId,
+      // The touch ceiling (see TOUCH_MAX_GHOSTS). On a fine pointer this is
+      // buildSchedules' own default, byte for byte.
+      cap: IS_COARSE ? TOUCH_MAX_GHOSTS : MAX_GHOSTS,
+    });
     planEpoch = -1;
     planBaseMs = nowMs;
     render();
@@ -970,6 +1000,20 @@ export function createGhosts(o) {
     hideBubble(rec);
     const b = buildBubble(text, lift, dx);
     if (b) { rec.g.appendChild(b); rec.bubble = b; }
+    /* W3 P1-20: THE STUDENT BODY IS AUDIBLE. Two classmates greeting each
+     * other across the plan was the whole payoff of the presence layer and it
+     * played silently. One syllable, at a twentieth of a game pop and pitched
+     * DOWN - these are classmates, not the mascot, so they sit on the fx bus
+     * and never near her Blipese. Only when a bubble actually landed, only
+     * where there is walking to hear it over, and never more than once every
+     * NEAR_GAP_MS whatever the campus is doing. */
+    if (b && !still && !paused) {
+      const nowWall = clock.now();
+      if (nowWall - lastSpeakCue >= NEAR_GAP_MS) {
+        lastSpeakCue = nowWall;
+        sfx('emi_blip', 0.04, { pitch: 0.85 });
+      }
+    }
   }
   function hideBubble(rec) {
     if (rec && rec.bubble) {
@@ -983,6 +1027,17 @@ export function createGhosts(o) {
     const g = buildSpark(x, y);
     if (!g) return;
     mount.appendChild(g);
+    /* W3 P1-20: somebody took an S behind that door. The rarest thing the
+     * presence layer draws, and the quietest cue in the file - it is a glint
+     * across a dark campus, not a payout. Same eight-second floor as the rest
+     * of the ambient, on its own clock. */
+    if (!paused) {
+      const nowWall = clock.now();
+      if (nowWall - lastSparkCue >= NEAR_GAP_MS) {
+        lastSparkCue = nowWall;
+        sfx('chime', 0.06, { pitch: 1.3 });
+      }
+    }
     if (typeof setTimeout !== 'function') return;
     const id = setTimeout(() => {
       try { if (g.parentNode) g.parentNode.removeChild(g); } catch (e) { /* noop */ }

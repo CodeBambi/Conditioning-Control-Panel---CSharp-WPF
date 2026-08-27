@@ -50,6 +50,7 @@ import {
   ASSEMBLE_STAGGER_MS, CLAIM_TIMEOUT_MS, POOL_OVERPROVISION, DISCRETE_STEP_MS,
   DENSITY_LEVELS, DENSITY_HARD_CAP, DENSITY_COARSE_CAP,
 } from './constants.js';
+import { makeRng } from '../../core/rng.js';
 import { createBoard, paintLook, isVideoUrl, isAnimatedUrl } from './board.js';
 import { createHud } from './hud.js';
 import { createTrickster } from './trickster.js';
@@ -166,6 +167,18 @@ export default {
     const rng = typeof ctx.rng === 'function' ? ctx.rng : Math.random;
     const timers = createTimers();
 
+    /* EMI COMMENTARY SEAMS (the heartbeat wave). note() names a moment the
+     * mascot may react to - the shell prefixes 'game:' and its own voice engine
+     * decides whether the moment is worth a face, a line or nothing at all.
+     * It is additive, one-way and fully guarded: an older shell has no note()
+     * at all, and a mascot may never break a class.
+     * NO hold() HERE: this hunt is click-precision but LONG, and the ruling is
+     * that a long phase is not fenced - the voice engine rations itself. */
+    const note = (id, extra) => {
+      try { if (ctx.mood && typeof ctx.mood.note === 'function') ctx.mood.note(id, extra); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+
     /* ------------------------------------------------------------- state */
     let phase = 'idle';           // idle | briefing | hunt | ceremony | done
     let tier = 1;
@@ -182,6 +195,8 @@ export default {
     let bellFind = finalBellFindForTier(1);
     let reduced = false;
     let coarse = false;
+    let touch = false;            // coarse probe OR ctx.platform.isTouch
+    let classSeed = 'lf';         // spec.seed, for the per-round rotation streams
 
     let board = null;
     let hud = null;
@@ -201,6 +216,12 @@ export default {
     let jackpots = 0;
     let relocations = 0;
     const findTimes = [];
+    /* EMI SEAM STATE. Read by the commentary seams and by nothing else - no
+       game rule, grade input or timing hangs off any of these four. */
+    let emiFindSum = 0;            // running sum of finds so far (fast / slow)
+    let emiWarmNotedFind = -1;     // one warm note per hunt round, not per click
+    let emiRelocAtHuntStart = 0;   // relocations banked when this hunt began
+    let emiPeekNoted = false;      // the first peek is remarked on once ever
 
     let modifierOn = false;
     let bellRung = false;
@@ -443,6 +464,57 @@ export default {
       }
       return null;
     }
+    /* ------------------------------------------------------------------------
+     * THE SLEEPER LEDGER (0826). ~16 sleeping seats dress themselves off a
+     * still pool that can be six urls deep, and drawSleeper used to exclude
+     * exactly one thing - the target - so the same still landed on three seats
+     * of one wall. The provider's recency ring now spreads the DRAWS; this
+     * spreads what we do with them, and it does it WITHOUT a single extra
+     * pool.next(): the seats are dressed in one pass, so the draws a seat makes
+     * and discards (the target's own url, an animated row when a still was
+     * asked for) are BANKED instead of thrown away, and the next seat that
+     * would otherwise repeat spends a banked url instead. Draw-then-assign, on
+     * draws that already happened.
+     *   used  the urls this dressing pass has already given to sleeper seats
+     *   bank  drawn-but-unspent urls, oldest first
+     * ---------------------------------------------------------------------- */
+    const SLEEPER_BANK_MAX = 8;
+    let sleeperUsed = new Set();
+    const sleeperBank = [];
+    function sleeperReset() {
+      sleeperUsed = new Set();
+      sleeperBank.length = 0;
+    }
+    function sleeperBankPush(got) {
+      if (!got || !got.url || sleeperUsed.has(got.url)) return;
+      if (sleeperBank.some((e) => e.url === got.url)) return;
+      sleeperBank.push(got);
+      while (sleeperBank.length > SLEEPER_BANK_MAX) sleeperBank.shift();
+    }
+    /** A banked url no seat is wearing yet, preferring a real still. */
+    function sleeperBankTake(targetUrl) {
+      let at = -1;
+      for (let i = 0; i < sleeperBank.length; i++) {
+        const e = sleeperBank[i];
+        if (!e || !e.url || sleeperUsed.has(e.url)) continue;
+        if (targetUrl && e.url === targetUrl) continue;
+        if (!isAnimatedUrl(e.url)) { at = i; break; }
+        if (at < 0) at = i;
+      }
+      return at < 0 ? null : sleeperBank.splice(at, 1)[0];
+    }
+    function sleeperTake(got, targetUrl) {
+      if (!got || !got.url) return got;
+      if (!sleeperUsed.has(got.url)) { sleeperUsed.add(got.url); return got; }
+      /* this seat would repeat: spend a banked url if one is free, and bank the
+       * repeat in its place (it may still dress a later seat) */
+      const alt = sleeperBankTake(targetUrl);
+      if (!alt) return got;                       // nothing banked: the repeat stands
+      sleeperBankPush(got);
+      sleeperUsed.add(alt.url);
+      return alt;
+    }
+
     function drawSleeper(targetUrl) {
       if (!pool || typeof pool.next !== 'function') return null;
       // a gifs-only library HAS no stills; six bundled SVGs across 170 seats is
@@ -453,10 +525,14 @@ export default {
         const got = pool.next('still');
         if (!got || !got.url) break;
         if (targetUrl && got.url === targetUrl) continue;
-        if (!isAnimatedUrl(got.url)) return got;  // the still we actually asked for
+        // the still we actually asked for
+        if (!isAnimatedUrl(got.url)) { if (animated) sleeperBankPush(animated); return sleeperTake(got, targetUrl); }
         if (!animated) animated = got;            // a pool that ignores `kind`
+        else sleeperBankPush(got);
       }
-      return parkedUrl(targetUrl) || animated;
+      const parked = parkedUrl(targetUrl);
+      if (parked) { if (animated) sleeperBankPush(animated); return parked; }
+      return animated ? sleeperTake(animated, targetUrl) : null;
     }
 
     /** Redraw for a seat that already exists, keeping it on the same side of
@@ -655,6 +731,10 @@ export default {
     function dressBoard(o) {
       if (!board || !pool) return;
       const onlyBare = !!(o && o.onlyBare);
+      /* a full dressing is a fresh wall: the sleeper ledger starts empty. A
+       * LATE batch keeps it, because the seats it is upgrading around are
+       * exactly the ones the ledger already knows about. */
+      if (!onlyBare) sleeperReset();
       const target = board.targetTile();
       // A pool that lands LATE (slow disk, remote batch mid-class) may still
       // upgrade the decoys, but the target's look is frozen the moment the player
@@ -841,9 +921,63 @@ export default {
       relocations += 1;
       if (telegraph) {
         tasteShown = true;
+        /* W3 P1-14: THE TASTE OF THE TWIST. The one relocate the class shows you
+         * gets a long, low glitch - two strikes so the smear lasts as long as
+         * the 1.4s crossfade does. Every OTHER relocate stays exactly as silent
+         * as the churn it hides inside, and that is the twist, not an omission:
+         * a lie that announces itself is not a lie. */
+        cue('glitch', 0.3, { pitch: 0.8 });
+        timers.after(90, () => cue('glitch', 0.22, { pitch: 0.75 }));
         announce(t('lf_relocate', 'It moved - the same glitch hides the churn'), 2400);
       }
       return moved;
+    }
+
+    /**
+     * PER-ROUND TARGET ROTATION (owner 2026-08-25): a NEW target look every
+     * round. The class PROMOTES a different tile that is already on the wall -
+     * a fresh grad+hue+url for free, zero provider draws, zero new decoders
+     * (the look is already dealt and budgeted).
+     *
+     * DETERMINISM: the draw rides a FRESH per-round stream
+     * (seed|lf-target|round - the decks' append-only per-tag makeRng idiom).
+     * It NEVER consumes ctx.rng: finds are player-paced, so a shared-stream
+     * draw here would shift every downstream seeded choice on a retake.
+     * assignWarm re-keys the near-twins off the SAME round stream, so the
+     * whole rotation is one self-contained draw.
+     *
+     * The OLD target's look stays on the wall as a red herring - intended;
+     * the re-brief card (ceremony tail below) is the fairness guarantee.
+     * TIER4_MIDHUNT_RELOCATE stays seat-only: it calls relocate(), never this.
+     */
+    function rotateTarget(round) {
+      if (!board) return false;
+      const r = makeRng(classSeed + '|lf-target|' + round);
+      const old = board.targetTile();
+      // candidates: a real look to memorise - never the outgoing target, never
+      // a warm twin (its look is a tease of the OLD target), never the bundled
+      // glyph floor; fall back to any other tile on a bare board
+      let cands = board.tiles.filter((tile) => tile !== old && !tile.warm
+        && tile.url && !wearsPlaceholder(tile));
+      if (!cands.length) cands = board.tiles.filter((tile) => tile !== old);
+      if (!cands.length) return false;
+      const pick = cands[Math.floor(r() * cands.length)];
+      board.setTarget(pick);
+      pick.warm = false;             // setTarget marks, it never un-warms - and
+                                     // a target that is warm would tease, not find
+      // Near-twins re-key to the NEW look, seeded off the round stream. On
+      // touch the strong-twin repaint is capped and staggered so the ceremony
+      // tail never lands on a decode stampede (paintDelayMs = board.js seam).
+      board.assignWarm({
+        share: dials.nearTwinShare,
+        rng: r,
+        urlCap: touch ? Math.min(2, PLAYTEST.NEAR_TWIN_URL_CAP) : undefined,
+        paintDelayMs: touch ? 240 : 0,
+      });
+      // THE FUNNEL: refreshCards repaints the chip AND any live peek/spot card
+      // and the howto polaroid - never setTargetArt alone.
+      if (hud) hud.refreshCards(targetLook());
+      return true;
     }
 
     /* ------------------------------------------------------------- how-to */
@@ -896,10 +1030,20 @@ export default {
       // The mosaic assembles tile by tile - diegetic loading that doubles as
       // preloader cover for whatever the provider is still fetching.
       const els = board.tiles.map((tile) => board.primaryEl(tile)).filter(Boolean);
+      /* W3 P1-14. THE ASSEMBLE. The mosaic builds itself tile by tile and did it
+       * in silence, so the opening of the class had no sound at all. A very
+       * faint tell per tile turns the load into a ladder - CAPPED AT 24 ticks,
+       * because a 200-tile board would be a hailstorm, and the level is .06:
+       * this is texture under a picture, not an event. */
+      let assembleTicks = 0;
       els.forEach((node, i) => {
         if (node && node.style) node.style.opacity = '0';
+        const cueThis = assembleTicks < 24;
+        if (cueThis) assembleTicks += 1;
+        const n = assembleTicks - 1;
         timers.after(Math.min(1400, i * ASSEMBLE_STAGGER_MS), () => {
           if (node && node.style) node.style.opacity = '';
+          if (cueThis) cue('tell', 0.06, { pitch: 1 + 0.02 * n });
         });
       });
       // The count is a NUMBER in the sentence now, so the row carries a {n} slot
@@ -958,7 +1102,31 @@ export default {
       }
     }
 
+    /* W3 P1-14. THE BOARD WAKES UP, and until now that was a banner and a set of
+     * numbers nobody could hear change. The woken board carries a presence: a
+     * `seep_hum` re-struck on its own timer (the mixer has no sustain - trap
+     * 108), just under the threshold of "a sound". It is stopped in
+     * stopEffects(), which is every road out of this class. */
+    const WAKE_HUM_MS = 640;
+    let wakeHumTimer = 0;
+    function stopWakeHum() {
+      if (wakeHumTimer) { timers.cancel(wakeHumTimer); wakeHumTimer = 0; }
+    }
+    function startWakeHum() {
+      if (wakeHumTimer || ended) return;
+      const strike = () => {
+        wakeHumTimer = 0;
+        if (ended || phase === 'done' || !modifierOn) return;
+        /* a paused / suspended class is not breathing: the loop stays alive so
+           the room comes back with the player, but it says nothing meanwhile. */
+        if (!halted) cue('seep_hum', 0.08, { pitch: 0.95 });
+        wakeHumTimer = timers.after(WAKE_HUM_MS, strike);
+      };
+      strike();
+    }
+
     function stopEffects() {
+      stopWakeHum();                 // W3 P1-14: every hold has an owner (trap 108)
       for (const kind of ['row_drift', 'bubble_field', 'crt', 'wash', 'sub_flash', 'ambient_field']) {
         try { ctx.engine.stop(kind); } catch (e) { /* optional */ }
       }
@@ -996,6 +1164,7 @@ export default {
       cleanThisFind = true;
       findStartedAt = Date.now();
       findPausedBase = pausedMs;
+      emiRelocAtHuntStart = relocations;
       if (hud) {
         hud.setProgress(finds, findsTarget);
         hud.dim(false);
@@ -1007,6 +1176,7 @@ export default {
         bellRung = true;
         if (casino) casino.bell(true);       // the frame goes gold for the last hunt
         announce(t('lf_final_bell', 'Final bell'), 2000);
+        note('lf.finalBell', { kind: 'tension', n: findsTarget, left: 1, streak: bestCleanStreak });
         // "guaranteed clutch cinematics": if the clock never gets tight enough,
         // the board relents anyway on the last find.
         timers.after(PLAYTEST.CLUTCH_BELL_DELAY_MS, () => {
@@ -1018,10 +1188,16 @@ export default {
     function armPity() {
       if (pityTimer) { timers.cancel(pityTimer); pityTimer = 0; }
       if (!board) return;
+      /* W3 P1-14: the pity shimmer is the room quietly helping, and it was
+       * purely visual - on a wall of moving pictures, easy to miss entirely. A
+       * high, tiny tell says "over here". CAPPED AT THREE: a fourth would stop
+       * being help and start being a metronome. */
+      let pityCues = 0;
       pityTimer = timers.after(PLAYTEST.PITY_STUCK_MS, function pulse() {
         if (halted || phase !== 'hunt') return;
         if (Date.now() - findStartedAt < PLAYTEST.PITY_MIN_ELAPSED_MS) return;
         const target = board.targetTile();
+        if (pityCues < 3) { pityCues += 1; cue('tell', 0.1, { pitch: 1.6 }); }
         board.mark(target, 'g-lf-pity', true);
         timers.after(PLAYTEST.PITY_SHIMMER_MS + 60, () => board.mark(target, 'g-lf-pity', false));
         pityTimer = timers.after(PLAYTEST.PITY_REPEAT_MS, pulse);
@@ -1035,18 +1211,39 @@ export default {
       if (board) board.setDriftMult(PLAYTEST.CLUTCH_DRIFT_EASE);
       setHeat();
       announce(t('lf_clutch', 'The board relents'), 1800);
+      /* W3 P0-17. THE CLUTCH. The churn stops, the drift eases and the board
+       * lets go, and all of it was a banner. One low whoosh with a duck under
+       * it, so the room audibly makes space. ONCE - the clutchOn latch above
+       * has already returned for every repeat call. */
+      cue('whoosh', 0.3, { pitch: 0.7, duck: 'voice', duckMs: 500 });
       /* EMI COLOR: the board's own clutch beat is the mascot's too. */
       try { if (ctx.mood) ctx.mood.clutch(); } catch (e) { /* noop */ }
+      note('lf.clutch', { kind: 'tension', n: finds, left: Math.max(0, findsTarget - finds) });
       say('clutch ease engaged');
     }
 
+    /* W3 P0-2. THE COUNTDOWN. `tick` runs on TICK_MS, so the cue rides the
+     * WHOLE SECONDS figure changing and never the ticker. ZEN NEVER TICKS -
+     * a mode whose whole promise is no clock does not get a clock in the ear -
+     * and the run is short by design: the pitch ladder is 1 + .06n over five
+     * rungs, which is what makes the last one read as the last one. */
+    const CLOCK_TICK_FROM_SEC = 5;
+    let clockTickSec = -1;
     function tick() {
       if (halted || phase === 'done') return;
       if (!hud) return;
       if (zen) { hud.setClock(null); return; }
       const left = secLeft();
       hud.setClock(left);
-      if (left <= 0) { finish(false); return; }
+      if (left > 0 && left <= CLOCK_TICK_FROM_SEC) {
+        const secs = Math.ceil(left);
+        if (secs !== clockTickSec) {
+          clockTickSec = secs;
+          const n = Math.min(4, CLOCK_TICK_FROM_SEC - secs);
+          cue('clock_tick', 0.1 + 0.02 * n, { pitch: 1 + 0.06 * n });
+        }
+      } else if (left > CLOCK_TICK_FROM_SEC) clockTickSec = -1;
+      if (left <= 0) { clockTickSec = -1; finish(false); return; }
       if (finds === findsTarget - 1 && left <= PLAYTEST.CLUTCH_SEC_LEFT) clutch();
     }
 
@@ -1090,6 +1287,25 @@ export default {
         cleanStreak = 0;
       }
 
+      /* EMI SEAMS: the two branches of ONE find resolution, judged against this
+       * class's own running mean rather than a par recompute on the beat (a
+       * 200-tile wall at tier 1 and a 40-tile wall at tier 4 are not the same
+       * fast), plus the tier-4 case where the seat moved mid-hunt and the
+       * player tracked it anyway. */
+      const emiPrior = findTimes.length - 1;
+      const emiMean = emiPrior > 0 ? emiFindSum / emiPrior : 0;
+      const emiLeft = Math.max(0, findsTarget - finds);
+      const emiMoved = Math.max(0, relocations - emiRelocAtHuntStart);
+      emiFindSum += took;
+      if (emiPrior >= 2 && took <= emiMean * 0.55) {
+        note('lf.fastFind', { kind: 'celebrate', n: Math.round(took), streak: cleanStreak, left: emiLeft });
+      } else if (emiPrior >= 2 && took >= emiMean * 1.8) {
+        note('lf.slowFind', { kind: 'commiserate', n: Math.round(took), streak: cleanStreak, left: emiLeft });
+      }
+      if (emiMoved > 0) {
+        note('lf.trackedRelocation', { kind: 'celebrate', n: emiMoved, streak: cleanStreak, left: emiLeft });
+      }
+
       if (pityTimer) { timers.cancel(pityTimer); pityTimer = 0; }
       if (churnTimer) { timers.cancel(churnTimer); churnTimer = 0; }
 
@@ -1123,6 +1339,8 @@ export default {
       // the streak that is actually buying the player something.
       const goldStreak = sGateStreakFor(findsTarget);
       try { ctx.ceremonies.streakMeter({ target: hud && hud.streakMount, filled: cleanStreak, gold: cleanStreak >= goldStreak }); } catch (e) { /* optional */ }
+      // the CROSSING, not the state - a streak that stays gold is gold once
+      if (cleanStreak === goldStreak) note('lf.cleanStreakGold', { kind: 'celebrate', streak: cleanStreak, n: finds, left: emiLeft });
       if (!reduced) {
         try { ctx.engine.sustain('ambient_field', { kind: cleanStreak >= goldStreak ? 'goldleaf' : 'confetti' }); } catch (e) { /* optional */ }
         timers.after(900, () => { try { ctx.engine.stop('ambient_field'); } catch (e) { /* ignore */ } });
@@ -1143,9 +1361,11 @@ export default {
         try { ctx.ceremonies.reward('jackpot', { intensity: 1, target: hud && hud.stampAnchor, text: t('lf_royal', 'ROYAL PAYOUT') }); } catch (e) { /* optional */ }
         // INPUT TRUST: clickSafe over a click-precision board, always.
         try { ctx.engine.fire('gif_burst', { clickSafe: true, count: 5, assetKind: 'loop' }); } catch (e) { /* optional */ }
+        note('lf.royalPayout', { kind: 'celebrate', n: finds, streak: bestCleanStreak });
       } else if (roll && roll.jackpot) {
         try { ctx.ceremonies.reward('jackpot', { intensity: roll.intensity, target: hud && hud.stampAnchor, text: t('lf_jackpot', 'Jackpot') }); } catch (e) { /* optional */ }
         try { ctx.engine.fire('gif_burst', { clickSafe: true, count: 4, assetKind: 'loop' }); } catch (e) { /* optional */ }
+        note('lf.jackpot', { kind: 'celebrate', n: jackpots, streak: cleanStreak });
       } else if (roll && roll.nearMiss) {
         try { ctx.ceremonies.reward('near_miss', { intensity: roll.intensity, target: hud && hud.stampAnchor }); } catch (e) { /* optional */ }
       }
@@ -1154,6 +1374,8 @@ export default {
       if (finds >= modifierFind && !modifierOn) {
         modifierOn = true;
         announce(t('lf_modifier', 'The board wakes up'), 2000);
+        startWakeHum();          // W3 P1-14: the escalation stops being a banner
+        note('lf.boardWakesUp', { kind: 'tension', n: finds, left: emiLeft });
         say('modifier engaged after find ' + finds);
       }
 
@@ -1162,10 +1384,41 @@ export default {
         if (phase === 'done') return;
         if (hud) hud.hideSpot();
         if (finds >= findsTarget) { finish(true); return; }
-        relocate();
-        // the churn resumes unless the board has already relented
-        if (!clutchOn) churnTimer = timers.every(dials.swapMs, () => { if (!halted) noiseSwap(); });
-        beginHunt();
+        /* PER-ROUND ROTATION (owner 2026-08-25): rotate the LOOK, re-brief,
+           THEN relocate the seat under the collapse - the same fake-out as the
+           opening briefing, so the player never sees where the new look lands.
+           The re-brief runs ON the clock exactly like the ceremony it extends
+           (the opening briefing is off the clock only because the clock has
+           not started yet; mid-class there is no pause to borrow). phase stays
+           'ceremony' through it: clicks bump, the trickster holds, the hover
+           tell is silent, and dressBoard's late-target guard stays shut. The
+           board stays dimmed and frozen from the ceremony; beginHunt() lifts
+           both. */
+        rotateTarget(finds);
+        if (hud) hud.showBriefing(targetLook(), t('lf_rebrief', 'New target. Memorize her.'));
+        /* SAMPLED. Up to 25 re-briefs a class, so the seam offers the FIRST one
+         * and then every fourth - the board is dimmed and frozen here, which
+         * makes it the one guaranteed-safe speech window, but a reaction to
+         * every single new face would narrate the whole class. */
+        if (finds === 1 || finds % 4 === 0) note('lf.rebrief', { kind: 'curiosity', n: finds, left: Math.max(0, findsTarget - finds) });
+        const holdMs = reduced ? 700 : Math.min(Math.round(dials.previewSec * 1000), 1400);
+        timers.after(holdMs, () => {
+          if (phase === 'done') return;
+          if (hud) hud.collapseBriefing();
+          /* W3 P2-6: the MID-CLASS re-brief card shrinks into the board a frame
+           * before the relocate it covers. A short high whoosh sells the card
+           * going in. The OPENING briefing keeps its own silence - that one is
+           * off the clock and the room has not started yet. */
+          cue('whoosh', 0.22, { pitch: 1.2 });
+          relocate();
+          timers.after(reduced ? 60 : 420, () => {
+            if (phase === 'done') return;
+            if (hud) hud.hideBriefing();
+            // the churn resumes unless the board has already relented
+            if (!clutchOn) churnTimer = timers.every(dials.swapMs, () => { if (!halted) noiseSwap(); });
+            beginHunt();
+          });
+        });
       });
     }
 
@@ -1207,6 +1460,10 @@ export default {
         announce(t('lf_misclick_streak', 'Focus'), 1500);
         if (tier >= PLAYTEST.MISCLICK_WASH_FROM_TIER) {
           try { ctx.engine.sustain('wash', { variant: 'pink', holdMs: 600 }); } catch (err) { /* optional */ }
+          /* W3 P2-6: the third miss in a row escalates and the escalation was
+           * silent. The QUIETEST of this class's three washes on purpose - it
+           * is a loss cue, and the House Book halves those. */
+          cue('wash', 0.15, { pitch: 0.7 });
         }
       }
     }
@@ -1233,6 +1490,12 @@ export default {
         board.mark(target, 'g-lf-warm', true);
         timers.after(PLAYTEST.NEAR_TWIN_SHIMMER_MS + 60, () => board.mark(target, 'g-lf-warm', false));
       }
+      /* ONCE PER HUNT ROUND, never per press: a flailing player can hit two
+       * twins in a row and she only gets to be fooled once a target. */
+      if (emiWarmNotedFind !== finds) {
+        emiWarmNotedFind = finds;
+        note('lf.warmClick', { kind: 'tease', tile: Number(tile && tile.i) | 0, n: misclicks, left: Math.max(0, findsTarget - finds) });
+      }
     }
 
     /* --------------------------------------------------------------- finish */
@@ -1244,8 +1507,16 @@ export default {
       stopGovernor();
       stopEffects();
       if (trickster) trickster.stop();
+      /* W3 P0-16. THE COMPLETION. Finishing the hunt used to end on exactly the
+       * same descending sigh as running out of time - the marquee's dimOut -
+       * so the class scored a failure better than a success. The win gets its
+       * own bright note FIRST, and the sigh then plays under it as the lights
+       * going down rather than as the verdict. */
+      if (complete) cue('chime', 0.35, { pitch: 1.3 });
       if (casino) { casino.stop(); casino.dimOut(); }
-      if (hud) { hud.hideSpot(); hud.hidePeek(); hud.dim(false); hud.setClock(zen ? null : secLeft()); }
+      // hideBriefing: the bell can land mid-RE-BRIEF (per-round rotation) and
+      // killAll() has just eaten the timer that would have dismissed the card
+      if (hud) { hud.hideSpot(); hud.hidePeek(); hud.hideBriefing(); hud.dim(false); hud.setClock(zen ? null : secLeft()); }
       if (board) board.freeze(true);
 
       const peeks = peeksNow();
@@ -1291,9 +1562,17 @@ export default {
 
     /* ------------------------------------------------------------ the peek */
     function wirePeek() {
+      /* W3 P1-14. THE PEEK COSTS THE CLASS AN A AND SOUNDED LIKE NOTHING, in
+       * either direction. Both cues hang off the shell's own handlers rather
+       * than the button, so the KEY path is covered too: a lift on the way in
+       * (the card comes up), a low slide on the way out (it is taken away). */
       ctx.peek.setHandlers({
-        onReveal: () => { if (hud) hud.showPeek(targetLook()); },
+        onReveal: () => {
+          if (hud) hud.showPeek(targetLook());
+          cue('lift', 0.25, { pitch: 1.15 });
+        },
         onHide: () => {
+          cue('slide', 0.2, { pitch: 0.85 });
           if (!hud) return;
           hud.hidePeek();
           hud.setChips(misclicks, peeksNow());     // the count moves on EVERY peek
@@ -1302,6 +1581,10 @@ export default {
           // The cap itself is the shell's; we only tell the player, once.
           announce(t('peek_hint', 'Hold to peek. Using it caps this class at A.'), 1800);
           if (hud) hud.setChips(misclicks, peeksNow());
+          if (!emiPeekNoted) {
+            emiPeekNoted = true;
+            note('lf.peekFirstUse', { kind: 'tease', n: peeksNow(), left: Math.max(0, findsTarget - finds) });
+          }
         },
       });
       const btn = hud && hud.peekButton;
@@ -1338,6 +1621,8 @@ export default {
         zen = !!(ctx.settings && ctx.settings.lf_zen);
         reduced = probeReduced();
         coarse = probeCoarse();
+        touch = coarse || !!(ctx.platform && ctx.platform.isTouch);
+        classSeed = String(spec.seed || 'lf');
         density = effectiveDensity();
 
         injectStyles();

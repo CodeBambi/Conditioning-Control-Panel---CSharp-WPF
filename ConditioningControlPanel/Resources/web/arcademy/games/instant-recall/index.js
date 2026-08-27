@@ -287,6 +287,18 @@ export default {
     };
     const say = (m) => { try { ctx.log('[ir] ' + m); } catch (e) { /* noop */ } };
 
+    /* EMI COMMENTARY SEAMS (the heartbeat wave). emiNote() names a moment the
+     * mascot may react to - the shell prefixes 'game:' and its own voice engine
+     * decides whether the moment is worth a face, a line or nothing at all.
+     * Named emiNote because this module already owns a note() - the LEDGER
+     * write - and the two must never be confused. Additive, one-way and fully
+     * guarded: an older shell has neither, and a mascot may never break a
+     * class. */
+    const emiNote = (id, extra) => {
+      try { if (ctx.mood && typeof ctx.mood.note === 'function') ctx.mood.note(id, extra); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+
     /* ---- lifecycle ------------------------------------------------------ */
     let dead = false;
     let paused = false;
@@ -315,6 +327,13 @@ export default {
      *  `ring` the subset the emission ring walks (PLAYTEST.SPIRAL_RING). */
     let spirals = null;
     let spiralSet = { set: [], ring: [], kin: {} };
+    /** THE WOVEN CLASS SPIRAL (Loom directive 2026-08-25): the shell's
+     *  generated loom pool row {loom:true, id, params, href}, when one exists.
+     *  Its params live in loomParamsById so a 'loom:' id can grow a thumbnail
+     *  face wherever it appears - truth or decoy. */
+    let loomSpiralRow = null;
+    const loomParamsById = new Map();
+    const isLoomId = (v) => typeof v === 'string' && v.indexOf('loom:') === 0;
     /**
      * THE WALL BOOK. One frozen `montage.snapshot()` per stop, captured AFTER
      * the freeze and the quench, capped at 16. Every WALL_* question is read
@@ -374,6 +393,7 @@ export default {
     let timerEl = null; let truthEl = null; let msgEl = null; let well = null;
     let endEl = null; let howtoEl = null; let qFaceEl = null;
     let clockChip = null; let stopsChip = null; let densityChip = null;
+    let payoutEl = null;
     let optEls = [];
 
     /* THE DEALER. One timer, one queue: every pool key carries its own due time
@@ -559,6 +579,28 @@ export default {
       const semis = Math.min(PLAYTEST.PITCH_CAP, streak);
       const o = Object.assign({ name, level, pitch: 1 + semis * PLAYTEST.PITCH_STEP }, extra || {});
       return fireSafe('audio_trigger', o);
+    }
+
+    /* W3 P2-5: THE GOLDLEAF'S OWN NOTE. A run of two lights the wall with gold
+     * grain and said nothing, so the run was visible and inaudible. The mixer
+     * has no sustain (trap 108), so this is a RE-STRUCK `pad` - one soft high
+     * note every GOLD_HUM_MS while the run is alive, self-limiting because it
+     * re-arms only from inside itself. It is stopped at the streak break, at
+     * the bell and in destroy: a hum with no owner outlives its class. */
+    const GOLD_HUM_MS = 2200;
+    let goldHumTimer = 0;
+    function stopGoldHum() {
+      if (goldHumTimer) { clearTimer(goldHumTimer); goldHumTimer = 0; }
+    }
+    function startGoldHum() {
+      if (goldHumTimer || dead || ended) return;
+      const strike = () => {
+        goldHumTimer = 0;
+        if (dead || ended || streak < 2) return;
+        tick('pad', 0.1, { pitch: 1.4 });
+        goldHumTimer = after(GOLD_HUM_MS, strike);
+      };
+      strike();
     }
 
     /** Every deck call: null-safe, try/catch'd, never able to break the class. */
@@ -790,6 +832,8 @@ export default {
       if (montage) montage.reshuffle();
       deck('casino', 'layoutChange', 'reshuffle');
       deck('pressure', 'beat', 'layout');
+      /* board-level: once per reshuffle, never per tile. */
+      emiNote('ir.wallReshuffled', { kind: 'ambient', n: stopsResolved, streak });
     }
 
     /* ==================================================================== *
@@ -928,6 +972,14 @@ export default {
             holdMs: PLAYTEST.SUB_HOLD_MS[tier],
           });
           if (r) note('subliminal', r.text ? { word: String(r.text) } : { assetId: 'card' }, r.variant || variant);
+          /* W3 P1-13, THE PILOT. Eight of the ten pool channels are silent and
+           * this is the ONE that gets a mark, because a held word is what the
+           * questions ask about most and the easiest thing to miss with the eye
+           * on the wall. Deliberately faint (.12) and READ-ONLY: it writes NO
+           * ledger entry (the sub_flash above already wrote the truth), it is
+           * not an emission, and nothing may ever resolve against it. If it
+           * reads as a tell in play-test, this one call is the whole feature. */
+          if (r) tick('whisper', 0.12, { pitch: 1.1 });
           break;
         }
         case 'whisper': {
@@ -1005,7 +1057,17 @@ export default {
             alpha: PLAYTEST.SPIRAL_ALPHA[0]
               + (PLAYTEST.SPIRAL_ALPHA[1] - PLAYTEST.SPIRAL_ALPHA[0]) * band,
           };
-          if (ring.length) opts.url = ring[walk[ringIndex('spiral') % walk.length] % ring.length];
+          if (ring.length) {
+            const entry = ring[walk[ringIndex('spiral') % walk.length] % ring.length];
+            /* a WOVEN ring row goes to the engine WHOLE (the loom wrapper
+             * contract, engine/sustained.js): the handle still answers a
+             * STRING - the stable 'loom:' id, or the fallback gif url the
+             * WebGL floor actually painted - so the ledger line below is
+             * unchanged either way. */
+            opts.url = (entry && typeof entry === 'object' && entry.loom === true)
+              ? { loom: true, id: entry.id, params: entry.params, href: entry.href }
+              : entry;
+          }
           r = sustainSafe('wash', opts);
           if (r) {
             note('spiral', {
@@ -1120,6 +1182,23 @@ export default {
       else deck('casino', 'stop', stop.n, stop.announced);
       deck('pressure', 'beat', 'stop');
       deck('trickster', 'afterStop');
+      /* THE FREEZE. A stop that arrived with no warning bell is its own moment
+       * - branch, never both. */
+      if (stop.announced) {
+        emiNote('ir.freezeLanded', {
+          kind: 'tension',
+          n: Number(stop.n) | 0,
+          left: Math.max(0, plan.stops.length - stopIdx),
+          streak,
+        });
+      } else {
+        emiNote('ir.unannouncedFreeze', {
+          kind: 'tension',
+          n: Number(stop.n) | 0,
+          left: Math.max(0, plan.stops.length - stopIdx),
+          streak,
+        });
+      }
       if (!stop.announced && tier === 2) {
         /* SYNTHESIS #2: the taste of the twist is DEBRIEFED, once. */
         after(1200, () => { if (live) msg('ir_nobell_debrief', IR_LEX.ir_nobell_debrief); });
@@ -1350,14 +1429,51 @@ export default {
       if (template === 'SPIRAL') {
         const truth = avail.spiralTruth.payload.url;
         const set = (spiralSet && Array.isArray(spiralSet.set)) ? spiralSet.set : [];
+        /** a WOVEN option's face: value = the ledger id, url = a rendered
+         *  ~96px thumb (spirals.loomThumbDataUrl). null = not paintable here
+         *  (headless / no canvas) - the option, or the question, stands down. */
+        const loomFace = (id, params) => {
+          const thumb = (spirals && typeof spirals.loomThumbDataUrl === 'function' && params)
+            ? spirals.loomThumbDataUrl(params, 96) : null;
+          return thumb ? { value: id, url: thumb, media: 'spiral', label: '' } : null;
+        };
+        if (isLoomId(truth)) {
+          /* a WOVEN truth: three genuinely different seeded weaves from the
+           * same generator (the doctrine in spirals.js) - never the gif set,
+           * never a filtered copy of what played. */
+          const tp = loomParamsById.get(truth)
+            || (loomSpiralRow && loomSpiralRow.id === truth ? loomSpiralRow.params : null);
+          if (!tp || !spirals || typeof spirals.loomDecoyParams !== 'function') return null;
+          const tFace = loomFace(truth, tp);
+          if (!tFace) return null;
+          const dFaces = [];
+          for (const d of (spirals.loomDecoyParams(seed, 3, truth) || [])) {
+            const f = loomFace(d.id, d.params);
+            if (f) { loomParamsById.set(d.id, d.params); dFaces.push(f); }
+          }
+          if (dFaces.length < 3) return null;
+          return mk('ir_q_spiral', IR_LEX.ir_q_spiral, [tFace].concat(dFaces.slice(0, 3)), truth, { kind: 'spiral' });
+        }
         let ds = [];
         if (spirals && typeof spirals.spiralDecoys === 'function') {
           try { ds = spirals.spiralDecoys(truth, set, qroll) || []; } catch (e) { ds = []; }
         }
-        if (!Array.isArray(ds) || ds.length < 3) ds = set.filter((u) => u !== truth).slice(0, 3);
-        ds = ds.filter((u) => typeof u === 'string' && u && u !== truth).slice(0, 3);
-        if (ds.length < 3) return null;
-        const opts = [face(truth, 'spiral')].concat(ds.map((u) => face(u, 'spiral')));
+        if (!Array.isArray(ds) || ds.length < 3) ds = set.filter((u) => u !== truth).slice(0, 4);
+        /* the set may now hold the woven id: it decoys a gif truth through its
+         * thumb, and an unpaintable weave simply stands down (never a bare
+         * 'loom:' string into an <img>). */
+        const opts = [face(truth, 'spiral')];
+        for (const u of ds) {
+          if (opts.length >= 4) break;
+          if (typeof u !== 'string' || !u || u === truth) continue;
+          if (isLoomId(u)) {
+            const f = loomFace(u, loomParamsById.get(u));
+            if (f) opts.push(f);
+            continue;
+          }
+          opts.push(face(u, 'spiral'));
+        }
+        if (opts.length < 4) return null;
         return mk('ir_q_spiral', IR_LEX.ir_q_spiral, opts, truth, { kind: 'spiral' });
       }
       if (template === 'WALL_PICK') {
@@ -1488,6 +1604,10 @@ export default {
       question.weight = (6000 / question.windowMs) * optionWeight(question.options.length);
       live.question = question;
       live.askedCount += 1;
+      /* W3 P1-13: the FIRST card of a stop arrives on the freeze's own beat and
+       * needs no cue of its own; every card after it used to appear in silence.
+       * One sheet of paper says "another one". */
+      if (qi > 0) tick('paper', 0.22, { pitch: 1 });
       renderQuestion(question);
       startWindow(question);
       if (qi === 0) armPlant(stop, question);
@@ -1585,20 +1705,35 @@ export default {
         timerEl.style.setProperty('--ir-left', '1');
         timerEl.textContent = Math.ceil(question.windowMs / 1000) + '';
       }
+      /* W3 P0-2: the countdown's own state. The window ticker runs at 100ms; the
+       * cue rides the whole-seconds figure the chip already prints. */
+      live.tickSec = -1;
+      live.ticks = 0;
       const step = 100;
       live.windowTimer = every(step, () => {
         if (!live || !live.question) return;
         live.elapsedInWindow += step;
         live.windowLeft = Math.max(0, question.windowMs - live.elapsedInWindow);
+        const secs = Math.ceil(live.windowLeft / 1000);
         if (timerEl) {
           timerEl.style.setProperty('--ir-left', (live.windowLeft / question.windowMs).toFixed(3));
-          timerEl.textContent = Math.ceil(live.windowLeft / 1000) + '';
+          timerEl.textContent = secs + '';
+        }
+        /* W3 P0-2: the last 3 seconds enter the ear, one tick per boundary,
+         * pitch and level climbing. stopWindow() kills it - which is every road
+         * out of a question, a commit and a timeout alike. */
+        if (live.windowLeft > 0 && secs <= 3 && secs !== live.tickSec) {
+          live.tickSec = secs;
+          const n = Math.min(4, live.ticks);
+          tick('clock_tick', 0.1 + 0.02 * n, { pitch: 1 + 0.06 * n });
+          live.ticks += 1;
         }
         if (live.windowLeft <= 0) commit(-1, 'timeout');
       });
     }
     function stopWindow() {
       if (live && live.windowTimer) { clearTimer(live.windowTimer); live.windowTimer = 0; }
+      if (live) { live.tickSec = -1; live.ticks = 0; }   // W3 P0-2: the countdown is disarmed with the window
     }
 
     /* ---- the decoy plant (tier 3+, SetPiece-gated) ---------------------- */
@@ -1709,6 +1844,24 @@ export default {
       deck('pressure', 'beat', correct ? 'hit' : 'miss');
       if (live.plantMatch >= 0 && !decoyHit) deck('casino', 'plantResisted');
 
+      /* THE RESOLUTION. One seam per outcome, never two: a fast correct answer
+       * is answerFast ONLY, a merely correct one is answerCorrect. `n` is the
+       * commit time in ms. */
+      if (correct) {
+        if (latencyMs <= q.windowMs * 0.3) {
+          emiNote('ir.answerFast', { kind: 'celebrate', n: latencyMs | 0, streak });
+        } else {
+          emiNote('ir.answerCorrect', { kind: 'celebrate', n: latencyMs | 0, streak });
+        }
+      } else if (timedOut) {
+        emiNote('ir.answerTimeout', { kind: 'commiserate', n: timeouts | 0, streak });
+      }
+      /* the two halves of the decoy: the plant landed, or it did not. */
+      if (live.plantMatch >= 0) {
+        if (decoyHit) emiNote('ir.decoyTaken', { kind: 'commiserate', n: plantExposures | 0, streak });
+        else emiNote('ir.decoyResisted', { kind: 'celebrate', n: plantsResisted | 0, streak });
+      }
+
       /* THE VERDICT IS THE PROOF, so the wall comes back for it and the tiles
        * that really wore the answer are ringed. */
       try { if (stage) stage.setAttribute('data-shroud', '0'); } catch (e) { /* noop */ }
@@ -1716,6 +1869,11 @@ export default {
         highlightSafe(q.meta.truthTiles, true);
       }
       renderVerdict(q, index, { correct, timedOut, voided, decoyHit });
+      /* W3 P1-13: taking the PLANT is not the same mistake as a plain miss, and
+       * it used to make the same sound. The false memory answers in its own
+       * voice, 200ms behind the verdict stamp so the two do not smear. Quiet:
+       * it is still a loss. */
+      if (decoyHit) after(200, () => { tick('whisper', 0.22, { pitch: 0.6 }); });
 
       const hold = reduced ? PLAYTEST.VERDICT_MS_REDUCED : PLAYTEST.VERDICT_MS;
       live.plantMatch = -1;
@@ -1777,6 +1935,8 @@ export default {
       } else if (!how.correct && !how.timedOut && !how.voided && isNearMiss(q, index)) {
         const nk = kind === 'spiral' ? 'ir_near_spiral' : kind === 'phrase' ? 'ir_near_heard' : 'ir_near';
         line = t(nk, IR_LEX[nk]);
+        /* it DID happen - just earlier. The recency error, not a blank. */
+        emiNote('ir.nearMissRecency', { kind: 'commiserate', word: String(kind), streak });
       } else if (how.voided) line = t('ir_voided', IR_LEX.ir_voided);
       truthEl.appendChild(el('p', 'g-ir-truth-line', line));
       if (msgEl) msgEl.textContent = line;
@@ -1839,6 +1999,11 @@ export default {
         if (fullyCorrect) {
           correctedWeight += correctionPending;
           msg('ir_corrected', IR_LEX.ir_corrected);
+          /* W3 P1-13: THE COMEBACK. Once a class, and it was a banner and
+           * nothing else. It lands 250ms behind the stop's own win so it reads
+           * as a second, separate piece of good news. */
+          after(250, () => { tick('lift', 0.28, { pitch: 1.2 }); });
+          emiNote('ir.comebackCorrected', { kind: 'celebrate', n: Number(stop.n) | 0, streak });
         }
         correctionPending = 0;
       } else if (!fullyCorrect && !correctionUsed && asked > 0) {
@@ -1852,9 +2017,18 @@ export default {
         if (fullyCorrect) {
           streak += 1;
           bestRun = Math.max(bestRun, streak);
+          /* W3 P0-5: THE GUARANTEED WIN. Clearing a whole stop only ever
+           * sounded when the variable-ratio roll happened to pay, so the ear
+           * heard the misses (a `sting` at .6) far more reliably than the wins.
+           * The floor is fired HERE, before rewardBeat(), so a roll that pays
+           * stacks ON TOP of it instead of replacing it. Pitch is the run. */
+          tick('streak', 0.3, { pitch: 1 + 0.06 * Math.min(PLAYTEST.PITCH_CAP, streak) });
+          /* a clean stop, and how long the run is now. */
+          emiNote('ir.cleanStopStreak', { kind: 'celebrate', n: bestRun, streak, left: Math.max(0, plan.stopCount - stopsResolved - 1) });
           rewardBeat();
         } else {
           streak = 0;
+          stopGoldHum();          // W3 P2-5: the run is over, its dressing goes
         }
       }
       deck('pressure', 'setStreak', streak);
@@ -1909,6 +2083,12 @@ export default {
       try { if (stage) stage.removeAttribute('data-shroud'); } catch (e) { /* noop */ }
       highlightSafe(null, false);
       try { if (well && well.style) well.style.setProperty('opacity', '1'); } catch (e) { /* noop */ }
+      /* W3 P1-13: the freeze had an entrance and no exit. `shutter_close` is
+       * the shutter opening in reverse, so the wall going live again is the
+       * counterpart of the wall stopping. Pitch stays 1 HERE: with no mp3 the
+       * name falls to `shutter` and the alias already carries the .8, and a
+       * second .8 on top would drop it to .64. */
+      tick('shutter_close', 0.3, { pitch: 1 });
       if (montage) montage.freeze(false);
       reshuffleWall();
       recomputeBand();
@@ -1919,7 +2099,8 @@ export default {
        * golden grain. It is DRESSING, not an effect: `ambient_field` is not a
        * pool key, it writes NO ledger entry and it can never be an option -
        * the owner's ruling is that a quiz only ever names what CCP names. */
-      if (streak >= 2) sustainSafe('ambient_field', { kind: 'goldleaf', density: 0.3 + 0.3 * band });
+      if (streak >= 2) { sustainSafe('ambient_field', { kind: 'goldleaf', density: 0.3 + 0.3 * band }); startGoldHum(); }
+      else stopGoldHum();
       halted = false;
       seedDealer();
       armDealer();
@@ -1931,24 +2112,79 @@ export default {
     }
 
     /* ---- variable ratio (the shared canon, with a local fallback) -------- */
+    /**
+     * THE PAYOUT LAYER - the fire branch's pixels. Game-local chrome and
+     * NOTHING else: one solid radial gold bloom over the stage, opacity-only,
+     * no blend mode / no filter / no engine kind and NO ledger write, so it
+     * can never be mistaken for a POOL effect and can never hand the next
+     * question a second honest answer (the same law that keeps the jackpot's
+     * goldleaf off the pool). Created once, reused; restarted reflow-free
+     * (WAAPI rewind first, a rAF class re-add as the fallback - never a
+     * `void offsetWidth` layout flush over a wall of live decodes).
+     */
+    function payoutBloom(big) {
+      if (dead || !stage || !capsArmed()) return;
+      if (!payoutEl) {
+        payoutEl = el('div', 'g-ir-payout');
+        payoutEl.setAttribute('aria-hidden', 'true');
+        stage.appendChild(payoutEl);
+      }
+      try { payoutEl.classList.toggle('is-big', !!big); } catch (e) { /* noop */ }
+      const on = payoutEl.classList.contains('is-on');
+      if (!on) { payoutEl.classList.add('is-on'); return; }
+      if (typeof payoutEl.getAnimations === 'function') {
+        try {
+          const anims = payoutEl.getAnimations();
+          if (anims.length) {
+            for (const a of anims) { a.currentTime = 0; a.play(); }
+            return;
+          }
+        } catch (e) { /* fall through to the class toggle */ }
+      }
+      payoutEl.classList.remove('is-on');
+      const arm = () => { try { if (!dead && payoutEl) payoutEl.classList.add('is-on'); } catch (e) { /* noop */ } };
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(arm); else after(16, arm);
+    }
     function rewardBeat() {
       let outcome = null;
       try {
-        if (ctx.engine && typeof ctx.engine.rewardRoll === 'function') outcome = ctx.engine.rewardRoll({}) || null;
+        if (ctx.engine && typeof ctx.engine.rewardRoll === 'function') {
+          /* the roll is FED now: heat lifts the base chance off its .30 floor
+           * (schedule.js: .30 + .30*smoothstep(heat)), streak rides the
+           * intensity multiplier, success keeps the run bookkeeping honest.
+           * Same shape as the-deep-end / sort. */
+          outcome = ctx.engine.rewardRoll({ heat: currentHeat, streak, success: true }) || null;
+        }
       } catch (e) { outcome = null; }
       if (!outcome && rewardLocal) outcome = rewardLocal();
       if (!outcome) return;
       if (outcome.jackpot) {
         jackpots += 1;
-        try { ctx.ceremonies.reward('jackpot', { target: stage, text: t('ir_jackpot', IR_LEX.ir_jackpot) }); }
-        catch (e) { /* noop */ }
+        /* garnish:false is LOAD-BEARING (casino.js's own law, mosaic rework
+         * 2026-08-23): the engine's jackpot ceremony otherwise FORCES a
+         * drain|spiral wash - both POOL effects in this class - and a wash
+         * the ledger never saw would give the next question a second honest
+         * answer. */
+        try {
+          ctx.ceremonies.reward('jackpot', {
+            target: stage, text: t('ir_jackpot', IR_LEX.ir_jackpot), garnish: false,
+          });
+        } catch (e) { /* noop */ }
         /* "Photographic Memory": gold leaf over the hall. It is DELIBERATELY
          * not a pool primitive - a gif burst here would be a real Corner GIF /
          * Fullscreen GIF that the ledger never saw, and the very next question
-         * would have two honest answers. Dressing pays the ceremony instead. */
-        sustainSafe('ambient_field', { kind: 'goldleaf', density: 0.55 });
+         * would have two honest answers. Dressing pays the ceremony instead.
+         * `count` raises the FLECK count (the alpha ceiling is engine-side and
+         * stays the engine's); the payout layer below is the visible part. */
+        sustainSafe('ambient_field', { kind: 'goldleaf', density: 0.55, count: 48 });
+        payoutBloom(true);
         tick('jackpot', 0.5);
       } else if (outcome.fire) {
+        /* the fire branch was audio-only; now it pays PIXELS - the payout
+         * bloom plus a gild stamp on the HUD, both game-local chrome. */
+        payoutBloom(false);
+        try { ctx.ceremonies.stamp({ text: t('ir_payout', IR_LEX.ir_payout), tone: 'gild', target: hud }); }
+        catch (e) { /* noop */ }
         tick('streak', 0.42);
       }
     }
@@ -1990,8 +2226,15 @@ export default {
       if (elapsedMs - guardSince > PLAYTEST.ESCAPE_MS) { guardHits = 0; guardSince = elapsedMs; }
       guardHits += 1;
       if (guardHits >= PLAYTEST.ESCAPE_TAPS) {
+        /* the frustration detector: they mashed the card and the school took
+         * the stop away. Read the count BEFORE it is reset. */
+        emiNote('ir.escapeGuardVoid', { kind: 'commiserate', n: guardHits | 0, streak });
         guardHits = 0;
         say('escape guard: stop ' + live.stop.n + ' voided');
+        /* W3 P2-5: a VOID is not a wrong answer, it is the class letting you
+         * out, and it sounded identical to a miss. A low slide says the card
+         * was taken away rather than failed. */
+        tick('slide', 0.18, { pitch: 0.7 });
         commit(-1, 'void');
       }
     }
@@ -2062,6 +2305,9 @@ export default {
         if (!bellOn && left <= PLAYTEST.BELL_WARN_SEC) {
           bellOn = true;
           deck('casino', 'bell', true);
+          /* W3 P0-3: the bell vocabulary. This class's last-stretch warning had
+           * no sound at all. One school, one bell: warn .3, the end .5. */
+          tick('bell', 0.3, { pitch: 1 });
           if (!live) msg('ir_bell_warn', IR_LEX.ir_bell_warn);
         }
         const stop = nextStop();
@@ -2094,7 +2340,11 @@ export default {
       stopClock();
       clearChannels();
       stopWindow();
+      stopGoldHum();                    // W3 P2-5: the run's dressing never outlives the class
       stopAmbience();
+      /* W3 P0-3: the class ends on the bell, and the debrief's own `slide`
+       * follows it 420ms later (renderEnd) instead of sharing the frame. */
+      tick('bell', 0.5, { pitch: 1 });
       /* the bell's freeze is HOUSEKEEPING, not a stop: no shutter (the debrief
        * slide is the beat here, and two cues on one frame is a smear). */
       if (montage) { montage.stopGovernor(); montage.stop(); montage.freeze(true, { silent: true }); }
@@ -2166,7 +2416,8 @@ export default {
        * card fades in as one object (.g-ir-end / g-ir-endin), so there is no
        * visual stagger for a blip ladder to ride: the House Book's answer to an
        * unstaggered debrief is ONE `slide`, on the same beat as the fade. */
-      tick('slide', 0.35, { pitch: 1 });
+      /* W3 P0-3: +420ms, so the bell finish() struck has the frame to itself. */
+      after(420, () => { tick('slide', 0.35, { pitch: 1 }); });
       endEl.appendChild(el('h3', 'g-ir-end-title', t('ir_end_title', IR_LEX.ir_end_title)));
       const row = (k, v, cls) => {
         const r = el('div', 'g-ir-end-row' + (cls ? ' ' + cls : ''));
@@ -2226,9 +2477,28 @@ export default {
             pool: spiralPool(), seed, ringSize: PLAYTEST.SPIRAL_RING[tier],
           });
           if (built && Array.isArray(built.set)) {
-            spiralSet = { set: built.set.slice(), ring: (built.ring || built.set).slice(), kin: built.kin || {} };
+            spiralSet = { set: built.set.slice(), ring: (built.ring || built.set).slice(), kin: Object.assign({}, built.kin || {}) };
+            /* THE WOVEN ROW (Loom directive 2026-08-25). The shell ships the
+             * generated class loom as a URL-LESS pool row, so buildSpiralSet's
+             * string reader skipped it by design; loomRowsOf is the read that
+             * takes it. It LEADS the ring - it is the very spiral the shell's
+             * own washes wear - and its id joins the set so it can stand as a
+             * decoy on a gif question. The emitter below unwraps ring rows. */
+            if (typeof spirals.loomRowsOf === 'function') {
+              try {
+                const woven = (spirals.loomRowsOf(spiralPool()) || [])[0] || null;
+                if (woven && woven.id && woven.params) {
+                  loomSpiralRow = woven;
+                  loomParamsById.set(woven.id, woven.params);
+                  spiralSet.ring.unshift(woven);
+                  if (spiralSet.set.indexOf(woven.id) < 0) spiralSet.set.push(woven.id);
+                  spiralSet.kin[woven.id] = 'loom';
+                }
+              } catch (e) { /* the woven row is a nicety; the gif ring stands */ }
+            }
             if (typeof spirals.preloadSpirals === 'function') {
-              try { spirals.preloadSpirals(spiralSet.set); } catch (e) { /* best effort */ }
+              // 'loom:' ids are params hashes, not fetchable urls - never Image.src them
+              try { spirals.preloadSpirals(spiralSet.set.filter((u) => !isLoomId(u))); } catch (e) { /* best effort */ }
             }
           }
         }
@@ -2333,7 +2603,15 @@ export default {
           cue: (name, level, extra) => tick(name, level, extra),
           seed, tier, reduced,
           coarse: !!(ctx.platform && ctx.platform.isTouch),
-          lite: !!(ctx.motion && Number(ctx.motion.motionLevel) <= 1),
+          /* LITE ENGAGES ON TOUCH TOO (mobile web, ../CLAUDE.md trap 42): a
+           * phone at the default motion level was getting the desktop dials
+           * (LIVE_LOOP_CAP 12 / VIDEO_TILE_CAP 4), and iOS caps hardware video
+           * decode sessions at ~3-4 - so the wall now STARTS from the 6/2 lite
+           * dials on a coarse pointer instead of the governor catching the
+           * fire late. Same signal as `coarse` above; desktop WebView2 answers
+           * isTouch false and keeps the motionLevel test byte-identical. */
+          lite: !!((ctx.motion && Number(ctx.motion.motionLevel) <= 1)
+            || (ctx.platform && ctx.platform.isTouch)),
           density: densityMultFor(densityValue),
           timeScale,
           log: say,
@@ -2440,6 +2718,7 @@ export default {
         dead = true;
         stopClock();
         clearChannels();
+        stopGoldHum();                  // W3 P2-5: every hold has an owner (trap 108)
         clearTimers();
         stopAmbience();
         unbindInput();
@@ -2456,6 +2735,7 @@ export default {
         pool = null;
         live = null;
         optEls = [];
+        payoutEl = null;               // removed with the stage below
         try { ctx.root.textContent = ''; } catch (e) { /* noop */ }
         if (liveClass === instance) liveClass = null;
       },

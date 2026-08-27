@@ -15,7 +15,7 @@
  *   .g-ic-basin     the reveal surface: THE bubble (the one interactive node)
  *   .g-ic-hud       THE LIT MACHINE, pinned to the bottom edge
  *   .g-ic-howto     the class rules SHEET · .g-ic-break intro card
- *   .g-ic-debrief   the machine TICKET
+ *   .g-ic-debrief   the machine RESULTS SLIP
  *
  * HOUSE RULES WAVE - what this file gained, and why it is here and not in a
  * deck:
@@ -37,7 +37,11 @@
  *     10-segment streak meter is a SHELL primitive (SYNTHESIS #10) that
  *     index.js mounts through ctx.ceremonies.streakMeter. The old private
  *     5-pip meter that used to live here is DELETED - it was a fork.
- *   THE TICKET (Deck V + VI). debrief() prints a receipt: perforated edges, a
+ *   THE RESULTS SLIP (Deck V + VI). "Ticket" is the school's word for MONEY as
+ *     of the economy wave, so this thing is a results slip and the `.g-ic-ticket*`
+ *     class names are the only place the old word survives (renaming them would
+ *     be a stylesheet rewrite for a word nobody reads). debrief() prints a slip:
+ *     perforated edges, a
  *     slow light sweep, the backdrop still breathing behind it, the grade
  *     arriving as an OBJECT in `nodes.ticketStamp` (index.js drops the shell's
  *     stamp ceremony there). Submit is lit, pulsing and pre-focused; recal is a
@@ -58,7 +62,7 @@
  * integrity).
  *
  * NEVER STILL (Law III): the lamps breathe, the thread head pulses, the topline
- * sweeps, the ticket's light crawls. Every one of those is a CSS animation, so
+ * sweeps, the slip's light crawls. Every one of those is a CSS animation, so
  * `.suspended` (animation-play-state:paused, pseudo-elements included) and
  * prefers-reduced-motion both freeze the whole room from the stylesheet, even
  * if a JS path forgets.
@@ -78,6 +82,9 @@ const FLAVOR_SRC = {
 };
 const BUBBLE_SRC = './assets/bubble.png';
 const DENIED_SFX = './assets/denied.mp3';
+/* the WEB host's 'loop' assets are mp4/webm - an <img> errors on them silently
+   and the backdrop never turns over. A url matching this gets a <video>. */
+const VIDEO_RE = /\.(mp4|webm|m4v)(\?|$)/i;
 
 function url(rel) {
   try { return new URL(rel, import.meta.url).href; } catch (e) { return rel; }
@@ -266,24 +273,73 @@ export function createRender(o = {}) {
     bgFade = Math.max(0, Math.min(0.8, Number(v) || 0));
     applyBg();
   }
+  const isVideoEl = (n) => { try { return !!n && String(n.tagName).toUpperCase() === 'VIDEO'; } catch (e) { return false; } };
+  let bgHeld = false;   // suspend(): a paused class must not keep a decoder warm
   function applyBg() {
     const act = bgActive === 0 ? nodes.bgA : nodes.bgB;
     const idle = bgActive === 0 ? nodes.bgB : nodes.bgA;
     if (act) { act.style.opacity = String(bgFade); act.classList.add('on'); }
     if (idle) { idle.style.opacity = '0'; idle.classList.remove('on'); }
+    /* a faded-out video keeps decoding unless it is told to stop */
+    if (isVideoEl(act) && !bgHeld) {
+      try { const p = act.play(); if (p && typeof p.catch === 'function') p.catch(() => {}); } catch (e) { /* noop */ }
+    }
+    if (isVideoEl(idle)) { try { idle.pause(); } catch (e) { /* noop */ } }
+  }
+  /* The two bg slots recycle: a slot holds an <img> until a video url needs it
+     to be a <video> (and back), swapped IN PLACE so the depth/veil layers above
+     keep their order. The crossfade contract is unchanged either way - same
+     class, same .on toggle, same opacity ride, so style.js and applyBg treat
+     both element kinds identically. */
+  function bgSlotFor(slot, wantVideo) {
+    const key = slot === 0 ? 'bgA' : 'bgB';
+    const cur = nodes[key];
+    if (!cur || isVideoEl(cur) === wantVideo) return cur;
+    const next = el(wantVideo ? 'video' : 'img', 'g-ic-bg-img', null);
+    if (!next) return cur;
+    if (wantVideo) {
+      try {
+        next.muted = true; next.loop = true; next.autoplay = true;
+        next.playsInline = true;
+        next.setAttribute('muted', '');
+        next.setAttribute('playsinline', '');
+        next.setAttribute('preload', 'auto');
+      } catch (e) { /* attributes are best effort */ }
+    }
+    try {
+      if (cur.parentNode) cur.parentNode.replaceChild(next, cur);
+      else if (nodes.bg) nodes.bg.appendChild(next);
+      else return cur;
+    } catch (e) { return cur; }
+    try { if (isVideoEl(cur)) { cur.pause(); cur.removeAttribute('src'); cur.load(); } } catch (e) { /* noop */ }
+    nodes[key] = next;
+    return next;
   }
   /** Swap the backdrop to a new url (crossfades when it loads). */
   function swapBg(u) {
     if (!u || !nodes.bgA) return;
-    const next = bgActive === 0 ? nodes.bgB : nodes.bgA;
-    const flip = () => { bgActive = bgActive === 0 ? 1 : 0; applyBg(); };
+    const idleSlot = bgActive === 0 ? 1 : 0;
+    const wantVideo = VIDEO_RE.test(String(u));
+    const next = bgSlotFor(idleSlot, wantVideo);
+    if (!next) return;
+    const flip = () => { bgActive = idleSlot; applyBg(); };
     try {
       let done = false;
-      next.onload = () => { if (!done) { done = true; flip(); } };
+      const ok = () => { if (!done) { done = true; flip(); } };
       next.onerror = () => { done = true; };
-      next.src = u;
-      /* a cached image may never fire onload under some webviews */
-      if (next.complete) { if (!done) { done = true; flip(); } }
+      if (wantVideo) {
+        next.onloadeddata = ok;
+        next.src = u;
+        if (!bgHeld) {
+          try { const p = next.play(); if (p && typeof p.catch === 'function') p.catch(() => {}); } catch (e) { /* autoplay refusal keeps the old backdrop */ }
+        }
+        if (next.readyState >= 2) ok();
+      } else {
+        next.onload = ok;
+        next.src = u;
+        /* a cached image may never fire onload under some webviews */
+        if (next.complete) ok();
+      }
     } catch (e) { /* keep the old backdrop */ }
   }
 
@@ -297,7 +353,7 @@ export function createRender(o = {}) {
   function revealBubble(b) {
     const bub = nodes.bubble;
     if (!bub) return;
-    bub.classList.remove('pop', 'fade', 'hit');
+    bub.classList.remove('pop', 'fade', 'hit', 'gone');
     if (nodes.bubbleImg) nodes.bubbleImg.src = url(b.kind === 'denied' ? BUBBLE_SRC : (FLAVOR_SRC[b.flavor] || BUBBLE_SRC));
     setCls(nodes.x, 'on', b.kind === 'denied');
     if (nodes.holdring) {
@@ -348,6 +404,12 @@ export function createRender(o = {}) {
   function flourish() {
     if (!nodes.flourish || !doc) return;
     try {
+      /* the flourish IS the spiral bubble's pop: it wears the same spiral.png
+         and spawns at the same basin point, so if the bubble's own .pop
+         scale-out is left running the player sees a second bubble popping.
+         Snap the bubble out and let the flourish carry the whole exit. */
+      const bub = nodes.bubble;
+      if (bub) { bub.classList.remove('on', 'pop'); bub.classList.add('gone'); }
       const img = doc.createElement('img');
       img.className = 'g-ic-flourish-img';
       img.src = url(FLAVOR_SRC.spiral);
@@ -500,11 +562,11 @@ export function createRender(o = {}) {
     if (nodes.card) { try { nodes.card.remove(); } catch (e) { /* noop */ } nodes.card = null; }
   }
 
-  /* THE TICKET (Deck V + Deck VI). Same signature, same fields, plus the two
-     optional flags the casino decides: d.perfect (no X popped, nothing drifted)
-     and d.royal. The grade arrives as an OBJECT: index.js drops the shell's
-     stamp ceremony into nodes.ticketStamp. Nothing here grades anything - every
-     number on this receipt was handed to it. */
+  /* THE RESULTS SLIP (Deck V + Deck VI). Same signature, same fields, plus the
+     two optional flags the casino decides: d.perfect (no X popped, nothing
+     drifted) and d.royal. The grade arrives as an OBJECT: index.js drops the
+     shell's stamp ceremony into nodes.ticketStamp. Nothing here grades anything
+     - every number on this slip was handed to it. */
   function debrief(d, onSubmit, onRecal) {
     clearCard();
     hideHowto();
@@ -589,10 +651,24 @@ export function createRender(o = {}) {
   /* ------------------------------------------------------------ lifecycle */
   function suspend(on) {
     setCls(nodes.stage, 'suspended', !!on);
+    /* CSS pauses the animations; a backdrop <video> needs telling by hand */
+    bgHeld = !!on;
+    const act = bgActive === 0 ? nodes.bgA : nodes.bgB;
+    if (isVideoEl(act)) {
+      try {
+        if (bgHeld) act.pause();
+        else { const p = act.play(); if (p && typeof p.catch === 'function') p.catch(() => {}); }
+      } catch (e) { /* noop */ }
+    }
     tubeCall('suspend', on);
   }
   function destroy() {
     tubeDead = true;
+    /* release any backdrop decoder before the stage goes */
+    for (const key of ['bgA', 'bgB']) {
+      const n = nodes[key];
+      try { if (isVideoEl(n)) { n.pause(); n.removeAttribute('src'); n.load(); } } catch (e) { /* noop */ }
+    }
     try { if (tube) tube.destroy(); } catch (e) { /* noop */ }
     tube = null;
     try {

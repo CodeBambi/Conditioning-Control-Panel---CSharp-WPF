@@ -161,6 +161,15 @@
 
 html, body { height:100%; }
 
+/* NO DOUBLE-TAP ZOOM. iOS reserves ~300ms after every tap to see whether a
+   second one is coming, and on a fast board (Daily Trigger's keys, an EMI chip
+   strip) it decided the second tap was a zoom instead of a press. `manipulation`
+   drops double-tap-to-zoom and keeps PINCH zoom, so the accessibility gesture
+   survives. Element rules win over this one, so the drag surfaces that declare
+   their own `touch-action:none` (emi/widget.css, composure, sort, L&F,
+   the-deep-end, .arc-peekbtn) keep it - this is the floor, not a ceiling. */
+html, body { touch-action:manipulation; }
+
 body {
   margin:0;
   background:var(--ground);
@@ -323,6 +332,15 @@ kbd {
   color:var(--ground); background:var(--slate);
 }
 .grade.s { background:var(--gS); box-shadow:0 0 10px rgba(240,194,75,.5); }
+/* THE HONOURS LETTER. `splus`, not `s+`, because a class attribute with a plus
+   in it needs escaping to be selected and one unstyled badge is worse than one
+   extra rule. Same gold as the S it is built on, lit harder and with the plus
+   allowed to overhang - it has to read as MORE than an S at badge size. */
+.grade.splus {
+  background:var(--gS); color:var(--ground);
+  padding:0 5px; letter-spacing:-.02em;
+  box-shadow:0 0 14px rgba(240,194,75,.75), inset 0 0 0 1px rgba(255,255,255,.35);
+}
 .grade.a { background:var(--gA); box-shadow:0 0 10px rgba(255,105,180,.4); }
 .grade.b { background:var(--gB); }
 .grade.c { background:var(--gC); }
@@ -519,6 +537,103 @@ html.arc-reduced .arc-endcard-actions .arc-retake { animation:none; box-shadow:0
   padding-top:9px; margin-top:2px;
 }
 
+/* ============================ THE TWO CURRENCIES =========================
+   The ticket stub and the token, drawn once and worn by THREE surfaces: the
+   campus wallet chip, the Prize Counter's shelf, and the report card's till.
+   They live here rather than in prizecounter.css on purpose - that sheet is
+   linked lazily, the first time the counter is opened, so a report card that
+   paid out before the player ever walked to the shop would have rendered two
+   unstyled squares. A currency glyph is a shell primitive.
+
+   THE TICKET is a cream stub with a bite out of each long edge, which is the
+   whole visual idea of a ticket and costs no image. THE TOKEN is a struck
+   coin with its mark centred in it. */
+.arc-tick {
+  flex:none; display:inline-block; width:18px; height:11px;
+  border-radius:2px; font-style:normal;
+  background:
+    radial-gradient(circle at 0 50%, transparent 0 2.5px,
+      color-mix(in srgb, var(--ink), var(--pink) 22%) 2.6px),
+    radial-gradient(circle at 100% 50%, transparent 0 2.5px,
+      color-mix(in srgb, var(--ink), var(--pink) 22%) 2.6px);
+  background-blend-mode:multiply;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.35);
+}
+.arc-tok {
+  flex:none; display:inline-flex; align-items:center; justify-content:center;
+  width:18px; height:18px; border-radius:50%;
+  font-style:normal; font-size:11px; line-height:1;
+  color:color-mix(in srgb, var(--navy), black 30%);
+  background:radial-gradient(circle at 34% 30%,
+    color-mix(in srgb, var(--gold), white 34%), var(--gold) 58%,
+    color-mix(in srgb, var(--gold), black 34%));
+  box-shadow:inset 0 -1px 2px rgba(0,0,0,.45);
+}
+
+/* THE TILL on the report card: the night's tickets counted out, and on a rare
+   night the token beside them. One row, two chips, the shell's chip primitive. */
+.arc-till { gap:10px; flex-wrap:wrap; }
+.arc-till-t { display:inline-flex; align-items:center; gap:6px; }
+.arc-till-n { font-family:var(--mono); font-size:15px; color:var(--pink); }
+.arc-till-k {
+  display:inline-flex; align-items:center; gap:7px;
+  border:1px solid color-mix(in srgb, var(--gold), transparent 58%);
+  background:color-mix(in srgb, var(--gold), transparent 90%);
+}
+
+/* THE CAMPUS WALLET CHIP. It rides the top-right cluster beside the account
+   chip, it is READ-ONLY, and pressing it walks to the Prize Counter. */
+.campus-wallet {
+  display:inline-flex; align-items:center; gap:9px;
+  padding:5px 11px; border-radius:999px;
+  border:1px solid var(--campus-line-dim);
+  background:color-mix(in srgb, var(--campus-hall), black 18%);
+  color:var(--campus-text);
+  font-family:var(--body); font-size:12px; line-height:1;
+  cursor:pointer;
+}
+.campus-wallet:hover, .campus-wallet:focus-visible {
+  border-color:var(--campus-line);
+  color:var(--ink);
+}
+.campus-wallet span { display:inline-flex; align-items:center; gap:5px; }
+.campus-wallet b { font-family:var(--mono); font-size:13px; }
+.campus-wallet .arc-tick + b { color:var(--pink); }
+.campus-wallet .arc-tok + b { color:var(--gold); }
+
+/* ============================ THE EXTRA CREDIT LEVER =====================
+   Three positions on one rail, on the door card and on the room-scene apron.
+   A locked position is DIM AND STILL PRESENT: what you cannot pull yet is the
+   whole reason to walk to the counter, so hiding it would hide the feature. */
+.arc-lever {
+  display:flex; flex-direction:column; gap:6px;
+  margin-top:10px;
+}
+.arc-lever-title {
+  font-family:var(--disp); font-size:10.5px; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--ink-faint);
+}
+.arc-lever-rail {
+  display:inline-flex; align-items:stretch; gap:0;
+  border:1px solid var(--line); border-radius:8px; overflow:hidden;
+}
+.arc-lever-pos {
+  appearance:none; border:0; cursor:pointer;
+  padding:6px 11px;
+  font-family:var(--disp); font-size:11px; letter-spacing:.12em;
+  text-transform:uppercase;
+  color:var(--ink-dim); background:color-mix(in srgb, var(--panel), black 10%);
+  border-right:1px solid var(--line);
+}
+.arc-lever-pos:last-child { border-right:0; }
+.arc-lever-pos.is-on {
+  color:var(--ground); background:var(--gold);
+}
+.arc-lever-pos.is-locked {
+  color:var(--ink-faint); opacity:.6; cursor:default;
+}
+.arc-lever-hint { font-size:11.5px; color:var(--ink-faint); line-height:1.35; }
+
 /* ============================ CEREMONIES ================================= */
 .arc-ceremony { position:fixed; inset:0; z-index:45; pointer-events:none; }
 .arc-stamp {
@@ -533,6 +648,29 @@ html.arc-reduced .arc-endcard-actions .arc-retake { animation:none; box-shadow:0
   0% { transform:rotate(-6deg) scale(2.4); opacity:0; }
   55% { transform:rotate(-6deg) scale(.94); opacity:1; }
   100% { transform:rotate(-6deg) scale(1); opacity:1; }
+}
+/* THE CONFETTI STAMP (Prize Counter, 300 tickets). A GARNISH and nothing else:
+   two rings of paper thrown off the stamp as it lands, drawn on ::before and
+   ::after so the stamp node itself is byte-for-byte the stamp it always was.
+   Never mounted under reduced motion (ceremonies.js gates the class), which is
+   why the rule is free to be pure animation with no still state to design. */
+.arc-stamp-confetti { position:relative; }
+.arc-stamp-confetti::before,
+.arc-stamp-confetti::after {
+  content:''; position:absolute; left:50%; top:50%;
+  width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:1px;
+  pointer-events:none;
+  box-shadow:
+    -34px -18px 0 var(--pink), 30px -22px 0 var(--gold),
+    -22px 20px 0 var(--lav), 26px 16px 0 var(--pink),
+    -44px 4px 0 var(--gold), 42px 0 0 var(--lav);
+  animation:arc-confetti-burst .62s ease-out both;
+}
+.arc-stamp-confetti::after { animation-delay:.09s; filter:hue-rotate(38deg); }
+@keyframes arc-confetti-burst {
+  0% { transform:scale(.2) rotate(0deg); opacity:0; }
+  25% { opacity:1; }
+  100% { transform:scale(1.5) rotate(28deg); opacity:0; }
 }
 
 /* 10-segment streak meter - the shared shell primitive (SYNTHESIS #10). */
@@ -725,9 +863,61 @@ html.arc-reduced .arc-timebar-fill::before { content:none; }
 .arc-row.readonly { opacity:.85; }
 .arc-row .arc-conflict { color:var(--gold); font-size:11px; }
 
-/* switch */
+/* ---- the folds (shell/settings.js group()) --------------------------------
+   Every section is a disclosure: a header <button> with the title, a live
+   one-line summary and a chevron, then a body that folds. Height animates on
+   grid rows (0fr -> 1fr) so no pixel height is ever measured; .arc-reduced and
+   prefers-reduced-motion cut the transition and the fold lands at once. The
+   header is the whole row, thumb-sized on a phone. */
+.arc-disc { padding:0; overflow:hidden; }
+.arc-disc-head {
+  display:flex; align-items:center; gap:10px; width:100%; min-height:44px;
+  padding:12px 14px; margin:0; text-align:left; cursor:pointer;
+  background:transparent; border:0; color:inherit; font:inherit;
+}
+.arc-disc-head:hover { background:color-mix(in srgb, var(--panel), transparent 55%); }
+.arc-disc-head:focus-visible { outline:2px solid var(--pink); outline-offset:-2px; }
+.arc-disc-head > h3 {
+  margin:0; flex:0 1 auto; min-width:0;
+  font-family:var(--disp); font-size:13px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.arc-disc-sum {
+  flex:1 1 auto; min-width:0; margin-left:auto; text-align:right;
+  font-family:var(--mono); font-size:11.5px; color:var(--ink-faint);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+.arc-disc.open .arc-disc-sum { color:var(--ink-dim); }
+.arc-disc-chev {
+  flex:0 0 auto; width:22px; text-align:center; font-size:20px; line-height:1;
+  color:var(--lav); transform:rotate(90deg); transition:transform .22s ease;
+}
+.arc-disc.open .arc-disc-chev { transform:rotate(-90deg); }
+.arc-disc-body {
+  display:grid; grid-template-rows:0fr; transition:grid-template-rows .24s ease;
+}
+.arc-disc.open .arc-disc-body { grid-template-rows:1fr; }
+.arc-disc-body[hidden] { display:none; }
+.arc-disc-inner { min-height:0; overflow:hidden; padding:0 14px; }
+.arc-disc.open .arc-disc-inner { padding-bottom:12px; }
+.arc-disc-inner > .arc-row:first-of-type { border-top:0; }
+.arc-disc-inner > .arc-note:first-child { margin-top:0; }
+html.arc-reduced .arc-disc-body, html.arc-reduced .arc-disc-chev { transition:none; }
+@media (prefers-reduced-motion: reduce) {
+  .arc-disc-body, .arc-disc-chev { transition:none; }
+}
+
+/* switch
+   THE KNOB IS NOT THE TARGET: the invisible <input> comes FIRST in the DOM
+   (settings.js switchRow, and `input:checked + span` needs that order), so the
+   knob <span> - absolute, inset:0, later sibling - painted over it and ate every
+   press on the switch itself. Only the row label still toggled. z-index:1 lifts
+   the input back to the front WITHOUT reordering the DOM; :hover still reads on
+   the span (it propagates from the input's box) and the sibling selectors are
+   untouched. */
 .arc-switch { position:relative; width:42px; height:22px; flex:0 0 auto; }
-.arc-switch input { position:absolute; opacity:0; width:100%; height:100%; margin:0; cursor:pointer; }
+.arc-switch input { position:absolute; opacity:0; width:100%; height:100%; margin:0; cursor:pointer; z-index:1; }
 .arc-switch span {
   position:absolute; inset:0; border-radius:999px; background:var(--panel2);
   border:var(--hairline); transition:background .15s;
@@ -920,6 +1110,37 @@ html.arc-reduced .arc-timebar-fill::before { content:none; }
 @media (prefers-reduced-motion: reduce) {
   .arc-boot-knock { animation:none; opacity:.7; }
 }
+/* THE DOOR IS THE LAST THING WAITING (boot.js escalateKnock, T2 tester report
+   2026-08-26). `is-ready` says the school is BUILT and only the gesture is
+   outstanding, so the splash stops reading as a progress bar: the rail lands
+   full and holds, the Opening caption steps back, and the hint stops being a
+   caption and becomes the instruction. The `:not(.is-heard)` guard is load
+   bearing - is-heard is the fade-out on the tap, and it is the LESS specific
+   selector, so without it a knocked door would keep its sign up.
+   The scale pulse is the only thing added and the only thing reduced motion
+   takes away: the SIZE and the INK are the fix, the pulse is seasoning. */
+.arc-loader.is-ready .arc-intro-rail {
+  transform:scaleX(1) !important;    /* an !important beats a running animation */
+  animation-play-state:paused;       /* ...and the chase stops chasing */
+}
+.arc-loader.is-ready .arc-intro-caption { opacity:.4; transition:opacity .3s ease-out; }
+.arc-loader.is-ready .arc-boot-knock:not(.is-heard) {
+  font-size:16px; letter-spacing:.26em; color:var(--ink); opacity:1;
+  text-shadow:0 0 18px color-mix(in srgb, var(--pink) 55%, transparent);
+  animation:arc-knock-ready 1.6s ease-in-out infinite both;
+}
+@keyframes arc-knock-ready {
+  0%, 100% { opacity:.78; transform:scale(1); }
+  50%      { opacity:1;   transform:scale(1.045); }
+}
+html.arc-reduced .arc-loader.is-ready .arc-boot-knock:not(.is-heard) {
+  animation:none; opacity:1; transform:none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .arc-loader.is-ready .arc-boot-knock:not(.is-heard) {
+    animation:none; opacity:1; transform:none;
+  }
+}
 .arc-loader.is-done .arc-intro-stage {
   animation:none; transform:scale(1.07); transition:transform .3s ease-in;
 }
@@ -940,6 +1161,10 @@ html.arc-reduced .arc-timebar-fill::before { content:none; }
 }
 @keyframes arc-intro-burst-in { from { opacity:0; } to { opacity:.085; } }
 @keyframes arc-intro-burst-turn { to { transform:rotate(360deg); } }
+/* touch: keep the entrance, drop the infinite turn - an 18s rotate on a
+   150vmax masked conic is a permanent oversized composite a phone pays for
+   from boot onward */
+html.ae-touch .arc-intro-burst { animation:arc-intro-burst-in .6s ease-out .5s both; }
 
 /* ---- the stage: the wordmark + everything that hangs off it -------------- */
 .arc-intro-stage {
@@ -1923,13 +2148,40 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
 /* ---- the post row (PHANTOM POST furniture: noticeboard + folded Bugle).
    The props style themselves (corkboard.css / bugle.css); this row only says
    where they lean: beside the student ID, on the same baseline. On a phone the
-   card owns that corner, so the row steps up onto the wall above it. */
+   card owns that corner, so the row steps up onto the wall above it.
+
+   THE ROW IS THE ONLY ABSOLUTE THING HERE. Both props default to
+   `position:relative` inside it (corkboard.css / bugle.css, `.is-pinned` for a
+   driver that wants to pin one somewhere else on the plan) - an absolute child
+   is out of flow, which collapsed this flex row to 0x0, stacked the two props
+   on the same pixel and hung them BELOW the `bottom:22px` anchor by their own
+   height. On a desktop window too, which is how it reached the owner.
+
+   THE BREAKPOINT IS THE CARD'S BREAKPOINT, VERBATIM. The phone rule exists to
+   clear `.campus-idcard`, so it has to use exactly the query that FOLDS the
+   card ("small stages", further down this file). A row that dodged at 740px
+   while the card folded at 760px/600px landed the props back on the
+   architecture of every landscape phone. */
 .campus-postrow {
   position:absolute; left:calc(clamp(12px, 2.5vw, 44px) + 256px); bottom:22px;
   z-index:24; display:flex; align-items:flex-end; gap:12px;
 }
-@media (max-width: 740px) {
-  .campus-postrow { left:clamp(12px, 2.5vw, 44px); bottom:172px; }
+/* THE PHONE CORNERS (owner bug, 2026-08-25). Stepping the row RIGHT of the
+   folded ID tag kept it out of the tag but parked both props across the front
+   of The Pool (room 105) at the bottom of the plan, which is where the owner
+   found them. On a small stage the props take the TOP-LEFT corner instead:
+   `.campus-crest` is already `display:none` up there, so it is the one band a
+   phone leaves genuinely empty, and the row keeps the crest's own left inset
+   so it hangs off the same margin the title would have used.
+
+   IT HAS TO STOP ABOVE EMI. She is 86x87 on a phone and the owner parks her
+   at about y=100 on an 844x390 window; the row is 70px tall, so top:12px ends
+   it at y=82 and leaves 18px of sky. Her bubble RISES off her ear into that
+   band when she talks (emi/widget.js BUBBLE_RISE), and that is fine and not a
+   collision to dodge: the whole EMI layer is #arc-emi z50 and these props are
+   z24, so she is drawn OVER the furniture, never under it. */
+@media (max-width:760px), (max-height:600px) {
+  .campus-postrow { left:clamp(12px, 2.5vw, 44px); top:12px; bottom:auto; }
 }
 
 /* ---- tooltip ---- */
@@ -2268,10 +2520,38 @@ html.arc-reduced .campus-trace.fading { transition:none; opacity:.22; }
   .campus-trace.fading { transition:none; opacity:.22; }
 }
 
-/* small stages: hide the flourishes before they collide with the board */
+/* small stages: the flourishes step down before they collide with the board.
+   THE STUDENT ID DOES NOT LEAVE (owner bug, 2026-08-25: "I cannot see my
+   profile card on the web"). Every phone lands in this query in BOTH
+   orientations (an iPhone is <=430px on its short side, so landscape trips
+   max-height:600 and portrait trips max-width:760), and the old
+   `display:none` here - written when the card was decoration - took the whole
+   ID with it. The SAME node now folds into a tag: photo, name and number in
+   one strip, band / stats / tier / chip / clip hidden, still a `role=button`
+   that opens the spotlight, still the one node orientation.js and
+   emi/fieldtrips.js measure. The crest still goes: it is only a title. */
 @media (max-width:760px), (max-height:600px) {
-  .campus-idcard { display:none; }
+  .campus-idcard {
+    width:auto; max-width:200px; min-width:150px; bottom:14px;
+    padding:6px 12px 6px 7px; border-radius:10px; transform:none;
+  }
+  .campus-idcard:hover,
+  .campus-idcard:focus-visible { transform:translateY(-2px); }
+  .campus-idcard:active { transform:translateY(0) scale(.985); }
+  .campus-idcard .id-clip, .campus-idcard .id-band, .campus-idcard .id-foil,
+  .campus-idcard .id-stats, .campus-idcard .id-tier, .campus-idcard .id-no,
+  .campus-idcard > .id-chip, .campus-idcard::after { display:none; }
+  .campus-idcard .id-top { align-items:center; gap:8px; }
+  .campus-idcard .id-well { width:34px; }
+  .campus-idcard .id-photo { width:34px; height:38px; border-radius:6px; }
+  .campus-idcard .id-name { font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .campus-idcard .id-num { margin-top:2px; white-space:nowrap; }
   .campus-crest { display:none; }
+  /* THE HINT STEPS LEFT for the envelope. shell/mail.css pins `.arc-mailchip`
+     into this corner on exactly this query, and the hint is the only
+     instruction on the screen - it may share the baseline, never the pixels.
+     44px of chip plus 12px of gap. */
+  .campus-hint { right:calc(clamp(12px, 2.5vw, 40px) + 56px); }
 }
 
 /* ============================ EXITS ======================================
@@ -3202,11 +3482,18 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
 .arc-rs.is-closing .arc-rs-close { animation:arc-rs-out .18s ease-in both; }
 @keyframes arc-rs-out { to { opacity:0; } }
 
+/* THE STAGE IS CENTRED IN WHAT THE PLAYER CAN SEE, not in the window. A scene
+   room parks an opaque apron band along the bottom and publishes its height on
+   <html> as `--arm-band-h` (scene.js fit(); zero, and therefore harmless, on
+   every screen that is not a room). Padding it out of the stage is what keeps
+   the card off the carpet instead of half behind it. */
 .arc-rs-stage {
   position:relative;
   display:flex; flex-direction:column; align-items:center; gap:14px;
   max-width:96vw;
+  max-height:100%;
   padding:10px;
+  padding-bottom:calc(10px + var(--arm-band-h, 0px));
 }
 /* The key light: a warm cone behind the card, breathing very slowly. */
 .arc-rs-lamp {
@@ -3788,6 +4075,28 @@ html.ae-lite .arc-rs-name .arc-rs-l { animation-play-state:running, paused; }
     inset 0 1px 0 rgba(255,255,255,.08);
 }
 .arc-id-face.is-back { transform:rotateY(180deg); }
+
+/* THE FRAMES THE COUNTER SELLS. Border and glow ONLY - the face keeps its own
+   gradient, its photo, its foil and every inset it had, because a frame is a
+   thing you put a card in, not a different card. Both faces take it so the
+   frame survives the flip, and nothing here touches layout, so a framed card
+   and a bare one are the same card at the same size on the same three-line
+   layout that the 330px note above spent so long earning. */
+.arc-id-big.is-frame-gold .arc-id-face {
+  border-color:color-mix(in srgb, var(--gold), transparent 30%);
+  box-shadow:0 34px 84px rgba(0,0,0,.72),
+    0 0 52px color-mix(in srgb, var(--gold), transparent 70%),
+    inset 0 0 0 2px color-mix(in srgb, var(--gold), transparent 52%),
+    inset 0 1px 0 rgba(255,255,255,.10);
+}
+.arc-id-big.is-frame-navy .arc-id-face {
+  border-color:color-mix(in srgb, var(--lav), transparent 42%);
+  box-shadow:0 34px 84px rgba(0,0,0,.78),
+    0 0 40px color-mix(in srgb, var(--lav), transparent 74%),
+    inset 0 0 0 2px color-mix(in srgb, var(--navy), var(--lav) 34%),
+    inset 0 1px 0 rgba(255,255,255,.06);
+}
+
 /* THE LAMINATE. A specular that follows the pointer by TRANSFORM off the two
    custom properties the tilt handler writes - plain alpha, no blend surface
    (trap 36's first third: a blend must read back what is under it). */
@@ -4048,13 +4357,70 @@ html.ae-lite .arc-id-glint,
 /* A PHONE STACKS. The card over the sheet, the sheet two columns of whatever
    is left, and the chip at a thumb's size (owner bug C's rule). */
 html.arc-mobile .arc-id-row { flex-direction:column; gap:14px; align-items:center; }
-html.arc-mobile .arc-id-sheet { grid-template-columns:repeat(2, 1fr); width:min(560px, 92vw); }
+html.arc-mobile .arc-id-sheet { grid-template-columns:repeat(2, 1fr); width:var(--id-w, min(560px, 92vw)); }
 html.arc-mobile .arc-id-chip { min-height:44px; font-size:11px; }
 html.arc-mobile .arc-id-stage { gap:12px; }
 @media (max-width:820px) {
   .arc-id-row { flex-direction:column; align-items:center; }
-  .arc-id-sheet { grid-template-columns:repeat(2, 1fr); width:min(560px, 92vw); }
+  .arc-id-sheet { grid-template-columns:repeat(2, 1fr); width:var(--id-w, min(560px, 92vw)); }
 }
+
+/* ---- A SHORT STAGE (phone landscape) ----------------------------------
+   OWNER BUG, 2026-08-25: "the card is not centred, the top is cut off and the
+   page will not scroll to it". A CENTRED COLUMN TALLER THAN ITS WINDOW CLIPS
+   AT THE START EDGE. `.arc-id` is a flex box with `align-items:center` and the
+   stage stacks card -> stats -> placard, which measures 656px on an 844x390
+   phone; centring 656 in 390 puts the top of the card at y=-133, and there is
+   no `overflow` anywhere above it, so nothing could ever scroll up to the
+   photo. Two halves, and they are deliberately different.
+
+   THE CARD FACE SCALES, AND IT SCALES - IT DOES NOT NARROW. The obvious fix is
+   a smaller `width` on `.arc-id-big`, and it is wrong: the face is laid out in
+   absolute percentages over fixed 22px insets and fixed 9-24px type, so at
+   ~330px the meta column overruns the body and the homeroom row falls off the
+   bottom edge. Nothing had ever caught that because a phone CANNOT reach this
+   card at 330px any other way - portrait is refused outright by the
+   orientation gate, so 560px is the only width the face has ever been drawn
+   at. `zoom` on the wrapper scales the LAYOUT BOX as well as the paint, so the
+   row and the scroller measure the card at its drawn size and the whole face
+   arrives in proportion; a `transform:scale()` would leave a 346px hole in the
+   flow and would fight `arc-id-cardin`, which animates that same transform.
+   The steps are a ladder rather than a calc because `zoom` takes a number and
+   there is no dividing a vh by a px to get one.
+
+   THE STATS SCROLL. The stage becomes the scroller. The veil, the key light
+   and the close button are NOT inside it, so they stay put - which is the
+   whole reason the close stays reachable at every scroll position.
+
+   THREE THINGS THAT LOOK OPTIONAL AND ARE NOT: `overflow-x` is pinned hidden
+   because `overflow-y:auto` alone computes the OTHER axis to auto as well and
+   the 150%-wide key light would grow a horizontal scrollbar; the lamp goes
+   with it, because a radial glow that wide is a hard-edged rectangle the
+   moment a scroller clips it, and the veil's own gradient already lights the
+   middle; and the top padding is the close button's own reach
+   (clamp(10px, 3vh, 26px) + 44px, which is 62px at the top of this query) plus
+   four pixels of daylight. */
+@media (max-height:600px) {
+  .arc-id-stage {
+    --id-zoom:.86;
+    --id-w:calc(560px * var(--id-zoom));
+    max-height:100vh;
+    max-height:100dvh;
+    overflow-y:auto; overflow-x:hidden;
+    -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
+    padding:66px 10px 18px;
+  }
+  .arc-id-cardwrap { zoom:var(--id-zoom); }
+  .arc-id-lamp { display:none; }
+  .arc-id-row { flex-direction:column; align-items:center; }
+  /* The sheet reads the same --id-w the mobile block reads, so a SHORT but
+     WIDE window (a resized desktop, where neither html.arc-mobile nor the
+     820px query lands) still gets a stat sheet the width of its card. */
+  .arc-id-sheet { grid-template-columns:repeat(2, 1fr); width:var(--id-w, min(560px, 92vw)); }
+}
+@media (max-height:520px) { .arc-id-stage { --id-zoom:.74; } }
+@media (max-height:450px) { .arc-id-stage { --id-zoom:.66; } }
+@media (max-height:400px) { .arc-id-stage { --id-zoom:.58; } }
 
 /* ---- THE WALL WHISPER --------------------------------------------------
    A breath of each class's spotlight identity on the pinned cards - but the
@@ -4300,8 +4666,43 @@ html.arc-mobile .arc-exitbar .btn { min-height:44px; }
    above, since the web build is the one that gets held in a hand. */
 html.arc-mobile .arc-settings { gap:11px; }
 html.arc-mobile .arc-group { padding:12px; }
+html.arc-mobile .arc-disc { padding:0; }
+html.arc-mobile .arc-disc-head { padding:13px 12px; min-height:52px; }
+html.arc-mobile .arc-disc-inner { padding:0 12px; }
+/* The title wins the header line on a phone; the summary is what ellipsizes. */
+html.arc-mobile .arc-disc-head > h3 { flex:0 0 auto; max-width:62%; }
+html.arc-mobile .arc-disc-sum { font-size:11px; }
 html.arc-mobile .arc-row select { min-height:44px; }
 html.arc-mobile .arc-row input[type=range] { min-height:32px; }
+/* LEGIBLE IN A HAND (owner brief 2026-08-25). More air per row; the label
+   owns the line and the value column keeps its width; a slider drops under its
+   label instead of sharing the line with it at a third of the width. */
+html.arc-mobile .arc-row { padding:12px 0; gap:6px 12px; }
+html.arc-mobile .arc-row > label, html.arc-mobile .arc-row > .arc-rowlabel {
+  flex:1 1 60%; font-size:14px;
+}
+html.arc-mobile .arc-row .arc-hint { font-size:12px; line-height:1.35; margin-top:2px; }
+html.arc-mobile .arc-row .arc-val { min-width:60px; font-size:13px; }
+html.arc-mobile .arc-row input[type=range] { flex:1 1 100%; order:3; min-height:44px; }
+html.arc-mobile .arc-row select { flex:0 1 auto; max-width:60%; }
+/* The tick chips: two to a line, each a full 44px thumb target. */
+html.arc-mobile .arc-media-chips { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+html.arc-mobile .arc-check { min-height:44px; justify-content:flex-start; font-size:13px; }
+html.arc-mobile .arc-media-btns .btn { min-height:44px; }
+/* THE BACK BAR. Opaque, so the chips no longer read through it, and at the very
+   bottom: `sticky; bottom:0` is measured inside the scroller's padding, so the
+   screen's 64px bottom padding is what floated it mid-page. The padding goes
+   to 0 while this page is up and the bar carries its own safe-area inset. */
+html.arc-mobile.arc-settings-on .arc-screen { padding-bottom:0; }
+html.arc-mobile .arc-settings-exit {
+  margin-top:12px;
+  background:var(--ground);
+  border-top:1px solid color-mix(in srgb, var(--lav), transparent 60%);
+  box-shadow:0 -10px 24px rgba(0,0,0,.35);
+}
+/* EMI stands on the title on a phone; this page has no beat for her. */
+html.arc-mobile.arc-settings-on .arc-emi { display:none; }
+html.arc-mobile .arc-settings > .arc-classbar { padding-right:0; }
 
 /* ---- the campus, whole (owner bugs A and B) ------------------------------
    The plan is `xMidYMid slice` on a desktop and that is right there: the window
@@ -4323,6 +4724,26 @@ html.arc-mobile .campus-gearbtn { width:44px; height:44px; font-size:19px; }
 html.arc-mobile .campus-boardtab { padding:12px 18px; }
 /* The room tooltip follows a cursor that does not exist on a phone. */
 html.arc-mobile .campus-tip { display:none; }
+
+/* ---- THE CARD SPOTLIGHT, IN A HAND (owner bug 2026-08-25) ----------------
+   Two things are wrong with the desktop dial on a phone in landscape. The card
+   width is capped at `(100vh - 250px) * 1.5`, and 250px of a 390px window is
+   most of it - the exhibit came out 210px wide on an 844px screen, a thumbnail
+   under a key light. And the placard's 3.6vw name is display type sized for a
+   1600px window. So the ceiling is re-derived from what is actually free: the
+   window, less the room's apron band, less the placard's own two lines. The
+   `62vw` term is the other axis (a card wider than that stops being a card
+   held up and starts being a wall), and the 720px cap is still the art's. */
+html.arc-mobile .arc-rs .arc-pc {
+  --pc-w:min(720px, 62vw, calc((100vh - var(--arm-band-h, 0px) - 128px) * 1.5));
+}
+html.arc-mobile .arc-rs-stage { gap:8px; padding:6px; padding-bottom:calc(6px + var(--arm-band-h, 0px)); }
+html.arc-mobile .arc-rs-name { font-size:clamp(15px, 2.6vw, 24px); letter-spacing:.12em; }
+html.arc-mobile .arc-rs-sub { font-size:10px; letter-spacing:.12em; }
+html.arc-mobile .arc-rs-placard { gap:3px; }
+/* The close button keeps its 44px, and it stops sharing a corner with the
+   card: on a short window the stage reaches the top of the glass. */
+html.arc-mobile .arc-rs-close { top:8px; right:10px; }
 
 /* ---- the turn-your-phone card (shell/orientgate.js) ----------------------
    Campus signage, not a browser error: the school's own sky, the school's own
@@ -4646,3 +5067,185 @@ html.arc-reduced .emi.arc-seep-frame::after { content:none; }
   .campus-seepscan, .campus-seeprec { animation:none; }
   .arc-seep-draft.is-on { animation:none; opacity:0; }
 }
+
+/* ============================ ACCOUNT CHIP ===============================
+   shell/accountchip.js. A HOST SLOT: the round photo miniature at the far
+   right of the topbar and of the campus's top-right cluster, and the small
+   front-desk menu under it. The desktop never sends `init.account`, so on the
+   app nothing below is ever on the page. Photo or a drawn monogram, never
+   both (`.has-photo` flips on a successful <img> load and off on error). */
+.arc-acct { position:relative; flex:none; }
+.arc-acct-btn {
+  width:36px; height:36px; padding:0; border-radius:50%; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; overflow:hidden;
+  background:color-mix(in srgb, var(--navy), transparent 13%);
+  border:2px solid var(--pink-deep); color:var(--ink);
+  box-shadow:0 2px 10px rgba(0,0,0,.45);
+  transition:border-color .15s, box-shadow .15s, transform .15s;
+  backdrop-filter:blur(4px);
+}
+.arc-acct-btn:hover { border-color:var(--pink); transform:translateY(-1px); }
+.arc-acct-btn:focus-visible { outline:2px solid var(--pink); outline-offset:2px; }
+.arc-acct.is-open .arc-acct-btn {
+  border-color:var(--pink);
+  box-shadow:0 0 14px color-mix(in srgb, var(--pink), transparent 45%);
+}
+.arc-acct-img { display:none; width:100%; height:100%; object-fit:cover; }
+.arc-acct-mono {
+  font-family:var(--disp); font-size:15px; letter-spacing:.04em; line-height:1;
+  color:var(--pink);
+}
+.arc-acct.has-photo .arc-acct-img { display:block; }
+.arc-acct.has-photo .arc-acct-mono { display:none; }
+
+.arc-acct-menu {
+  position:absolute; right:0; top:calc(100% + 8px); z-index:120;
+  min-width:200px; max-width:min(262px, calc(100vw - 24px));
+  background:color-mix(in srgb, var(--navy), transparent 4%);
+  border:1px solid var(--pink-deep); border-radius:12px; padding:8px;
+  box-shadow:0 16px 44px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.06);
+  text-align:left;
+}
+.arc-acct-who { padding:6px 10px 8px; border-bottom:1px solid var(--line); margin-bottom:6px; }
+.arc-acct-cap {
+  display:block; font-family:var(--mono); font-size:8.5px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--ink-faint);
+}
+.arc-acct-name {
+  display:block; font-family:var(--disp); font-size:13px; letter-spacing:.06em;
+  color:var(--ink); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.arc-acct-item {
+  display:block; width:100%; min-height:36px; padding:8px 10px; text-align:left;
+  background:transparent; border:0; border-radius:8px; cursor:pointer;
+  font-size:12px; letter-spacing:.06em; color:var(--ink-dim);
+  transition:background .12s, color .12s;
+}
+.arc-acct-item:hover, .arc-acct-item:focus-visible { background:var(--panel); color:var(--ink); outline:none; }
+.arc-acct-item.is-signout { color:var(--ink-faint); }
+.arc-acct-item.is-card { color:var(--pink); }
+
+/* On a phone: a thumb-sized chip and a SHEET under the bar. Fixed and edge to
+   edge so it never runs off the screen and never lands over the campus's own
+   controls; the top is measured by the chip at open (under whichever bar it
+   is in). 44px rows are the floor for anything a thumb has to hit. */
+html.arc-mobile .arc-acct-btn { width:44px; height:44px; }
+html.arc-mobile .arc-acct-mono { font-size:18px; }
+html.arc-mobile .arc-acct-menu {
+  position:fixed; left:12px; right:12px; top:64px; max-width:none; min-width:0;
+  padding:10px;
+}
+html.arc-mobile .arc-acct-item { min-height:44px; padding:12px 12px; font-size:13px; }
+
+/* THE BELL CHIP IS TWO LINES ON A PHONE (owner, 2026-08-25). One row of chip
+   (149px wide) lay straight across the bell tower's own painted clock face at
+   the top right of the plan (x ~690-720 of 844), and at 667 it brushed the
+   hanging TIMETABLE plaque. Now: the icon on the left spanning both rows, the
+   NEXT BELL caption over the time, smaller type (~90px wide), and the whole chip
+   stepped left of the tower by clamp(32px, 5vw, 48px): 33 at 667, 42 at 844,
+   47 at 932. Desktop keeps the one-row pill above; every rule here is
+   html.arc-mobile-scoped. */
+html.arc-mobile .campus-bellchip {
+  display:grid; grid-template-columns:auto auto; column-gap:7px; row-gap:2px;
+  align-items:center; padding:5px 11px 5px 9px; border-radius:14px;
+  margin-right:clamp(32px, 5vw, 48px);
+}
+html.arc-mobile .campus-bellchip .ic { grid-row:1 / 3; font-size:13px; }
+html.arc-mobile .campus-bellchip .cap { display:block; font-size:7.5px; letter-spacing:.18em; line-height:1; }
+html.arc-mobile .campus-bellchip .tm { font-size:10px; line-height:1; }
+
+/* ======================= GPU DIET (html.ae-touch) ========================
+   PHONE STANDING COSTS (perf/arcademy-mobile-web). `html.ae-touch` is the
+   DEVICE seam (trap 42): boot arms it once on coarse pointers / touch
+   digitisers, the desktop WebView2 host never wears it, so every rule in
+   this block is invisible to the desktop build - byte-identical evaluation.
+   Two families of cut, both about what WebKit charges per frame:
+
+     - INFINITE KEYFRAMES ON NON-COMPOSITED PROPERTIES (stroke-dashoffset,
+       box-shadow, background-position, filter, left) freeze to their RESTING
+       frame - the lit state, never a dead one (the reduced-motion block's
+       own law: a dead sign reads as a closed room);
+     - BIG blur() FILTERS (fog 60px, room glow 22px) become soft gradients /
+       a small blur - the look survives, the surface-per-frame does not.
+
+   Transform/opacity-only loops (fog drift, room pulse, ping ring, timebar
+   head breath, glint) are composited and CHEAP - they stay, so the campus
+   still breathes. The split-flap keyframes (arc-flap) are deliberately NOT
+   here: the board reveal is beat-critical and keeps full fidelity. ------- */
+
+/* tonight's route: the marching ants rest, one halo instead of two. The
+   .done arm restates its filter because this guard outranks its bare (0,2,0);
+   the entry reveal keeps its one-shot fade and sheds only the infinite march. */
+html.ae-touch .campus-route {
+  animation:none;
+  filter:drop-shadow(0 0 4px var(--pink));
+}
+html.ae-touch .campus-route.done { filter:none; }
+html.ae-touch .campus-stage.enter .campus-route {
+  animation:campus-routein .9s 1.05s both;
+}
+
+/* neon signs: no flicker, ONE tight halo per sign (~10 filtered groups sit on
+   the plan at once). The .v and .off arms are restated because the base guard
+   outranks their bare selectors; [data-compact]'s tighter 2.5px halo already
+   outranks this and is untouched. */
+html.ae-touch .campus-neon {
+  animation:none;
+  filter:drop-shadow(0 0 5px var(--pink));
+}
+html.ae-touch .campus-neon.v { filter:drop-shadow(0 0 5px var(--lav)); }
+html.ae-touch .campus-neon.off { filter:none; }
+
+/* the bulb chase: parked lit, exactly the reduced-motion treatment. */
+html.ae-touch g.campus-room.open rect.campus-marquee { animation:none; opacity:.85; }
+
+/* the fog: blur(60px) on two 70%x44% sheets was a re-raster the campus paid
+   the whole time it was up. The same hues become one soft-edged ellipse per
+   sheet; the drift stays (transform-only, composited). */
+html.ae-touch .campus-fog { filter:none; }
+html.ae-touch .campus-fog.a {
+  background:radial-gradient(closest-side,
+    color-mix(in srgb, var(--panel2), var(--lav) 18%) 0%,
+    color-mix(in srgb, color-mix(in srgb, var(--panel2), var(--lav) 18%), transparent 45%) 40%,
+    color-mix(in srgb, color-mix(in srgb, var(--panel2), var(--lav) 18%), transparent 80%) 68%,
+    transparent 92%);
+}
+html.ae-touch .campus-fog.b {
+  background:radial-gradient(closest-side,
+    color-mix(in srgb, var(--panel2), var(--pink) 14%) 0%,
+    color-mix(in srgb, color-mix(in srgb, var(--panel2), var(--pink) 14%), transparent 45%) 40%,
+    color-mix(in srgb, color-mix(in srgb, var(--panel2), var(--pink) 14%), transparent 80%) 68%,
+    transparent 92%);
+}
+
+/* room glows: a readable bloom at a fraction of the surface. The opacity
+   pulse riding these is composited and keeps running. */
+html.ae-touch g.campus-room.open .campus-lit,
+html.ae-touch g.campus-room.retake .campus-lit,
+html.ae-touch g.campus-room.facility .campus-lit { filter:blur(8px); }
+
+/* the class time bar's travelling sheen (background-position, the whole
+   class long): parked. The head breath (::before, opacity) still moves, so
+   Law III's "never still" survives on the cheap channel. */
+html.ae-touch .arc-timebar-fill::after { animation:none; }
+
+/* the end card's retake pulse (box-shadow): the arc-reduced resting glow. */
+html.ae-touch .arc-endcard-actions .arc-retake {
+  animation:none;
+  box-shadow:0 0 16px rgba(255,105,180,.4);
+}
+
+/* the ID card sheen (animates `left`): parked off-card at its own 0% frame. */
+html.ae-touch .campus-idcard::after { animation:none; }
+
+/* the photo-rim breaths (box-shadow), furniture card and big card both:
+   parked at their shared 0% frame (no shadow - the border still tells
+   placeholder from real). */
+html.ae-touch .campus-idcard .id-photo,
+html.ae-touch .arc-id-photo { animation:none; }
+
+/* the record spotlight's star wave + slot stir: ten simultaneous filter /
+   background-color loops while the spotlight is up. Parked at their resting
+   frames; the entrance choreography (one-shot) is untouched. */
+html.ae-touch .arc-rs .arc-pc-hole.is-punched,
+html.ae-touch .arc-rs .arc-pc-hole:not(.is-punched) { animation:none; }

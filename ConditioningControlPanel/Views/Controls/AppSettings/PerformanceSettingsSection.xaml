@@ -180,6 +180,91 @@
                     </ComboBox>
                 </Grid>
 
+                <!-- ============================================================
+                     DO NOT DISTURB (Wobberjockey's request). The user lists the
+                     apps they watch things in; while one of those owns the
+                     FOREGROUND window the app stops scheduling its own media over
+                     the top of it. It lives in Performance rather than in the
+                     Videos tab because it is a system-behaviour rule, not a video
+                     setting - it governs flashes too.
+
+                     Three contracts:
+                       1. The list is stored NORMALISED (lower-case, no ".exe").
+                          TxtDndProcesses is only ever a view of it - parsing lives
+                          in Services/UI/DoNotDisturbGuard.ParseProcessList so the
+                          same rules apply to typed and picked entries.
+                       2. It starts EMPTY and is never auto-populated. Guessing
+                          someone's player would silently turn features off for a
+                          user who never asked for it.
+                       3. Suppression is spawn-only. A video already playing is
+                          never torn down when a listed app comes to the front.
+                     ============================================================ -->
+                <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Opacity="0.5"
+                        Margin="0,10,0,8"/>
+
+                <TextBlock Text="{loc:Str set2_dnd_header}" FontSize="12.5" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextLightBrush}"/>
+                <TextBlock Text="{loc:Str set2_dnd_hint}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,2,0,6"/>
+
+                <TextBox x:Name="TxtDndProcesses" x:FieldModifier="internal"
+                         AcceptsReturn="True" TextWrapping="NoWrap" MinHeight="52" MaxHeight="110"
+                         VerticalScrollBarVisibility="Auto" FontSize="11"
+                         Foreground="{DynamicResource TextLightBrush}" Background="{DynamicResource SurfaceBgBrush}"
+                         BorderBrush="{DynamicResource PanelAccentHoverBrush}" BorderThickness="1" Padding="6,4"
+                         LostFocus="TxtDndProcesses_LostFocus"
+                         ToolTip="{loc:Str set2_dnd_list_tooltip}"/>
+
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,2">
+                    <Button x:Name="BtnDndPickApp" x:FieldModifier="internal"
+                            Content="{loc:Str set2_dnd_btn_pick}"
+                            Style="{StaticResource OutlineButton}" Padding="12,5"
+                            Click="BtnDndPickApp_Click"
+                            ToolTip="{loc:Str set2_dnd_btn_pick_tooltip}"/>
+                </StackPanel>
+
+                <Grid Margin="0,6,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="6"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Style="{StaticResource SettingChip}"
+                            ToolTip="{loc:Str set2_tooltip_dnd_videos}">
+                        <Grid MinHeight="22">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{loc:Str set2_setting_dnd_videos}"
+                                       Foreground="{DynamicResource TextLightBrush}"
+                                       FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <CheckBox Grid.Column="1" x:Name="ChkDndSuppressVideos" x:FieldModifier="internal"
+                                      Style="{StaticResource ToggleStyle}" VerticalAlignment="Center" IsChecked="True"
+                                      Checked="ChkDndSuppressVideos_Changed" Unchecked="ChkDndSuppressVideos_Changed"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Column="2" Style="{StaticResource SettingChip}"
+                            ToolTip="{loc:Str set2_tooltip_dnd_flashes}">
+                        <Grid MinHeight="22">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{loc:Str set2_setting_dnd_flashes}"
+                                       Foreground="{DynamicResource TextLightBrush}"
+                                       FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <CheckBox Grid.Column="1" x:Name="ChkDndSuppressFlashes" x:FieldModifier="internal"
+                                      Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                      Checked="ChkDndSuppressFlashes_Changed" Unchecked="ChkDndSuppressFlashes_Changed"/>
+                        </Grid>
+                    </Border>
+                </Grid>
+
             </StackPanel>
         </Grid>
     </Border>

@@ -19,7 +19,14 @@ namespace ConditioningControlPanel.Services;
 public class LockdownService : IDisposable
 {
     private bool _isActive;
+    /// <summary>When the CURRENT stretch of clock started. <see cref="RestartTimer"/> rebases it, so
+    /// the countdown and the Possession ladder both rewind with the Emergency Exit's sendback.</summary>
     private DateTime _activatedAt;
+    /// <summary>When the user was first locked in. Set ONLY by <see cref="Activate"/> and never
+    /// rebased, so <see cref="LastActiveDuration"/> reports the whole sitting even when the Emergency
+    /// Exit sent them back halfway through (45 min + sendback + 45 min is a 90-minute lockdown, and
+    /// the throw_away_the_key achievement has to be able to see that).</summary>
+    private DateTime _startedAt;
     private TimeSpan _duration;
     private DispatcherTimer? _countdownTimer;
     private bool _preStrictLock;
@@ -111,6 +118,7 @@ public class LockdownService : IDisposable
     /// This is the single source of truth for "how long did the user sit through a
     /// lockdown" — gamification reads this instead of tracking its own start time, so
     /// the value can't desync from the service. TimeSpan.Zero before the first lockdown.
+    /// Measured from <see cref="_startedAt"/>, so a sendback does not erase the time already served.
     /// </summary>
     public TimeSpan LastActiveDuration { get; private set; }
 
@@ -153,9 +161,13 @@ public class LockdownService : IDisposable
 
         _duration = duration;
         _activatedAt = DateTime.Now;
+        _startedAt = _activatedAt;
         _isActive = true;
         _escapeRepeats.Clear();
         _escapeTotal = 0;
+        // The syskey tripwire is throttled to one per 2 s. Without this reset, a lockdown started
+        // within 2 s of the previous one's end swallows its own FIRST system-key attempt.
+        _lastSysKeyAttempt = DateTime.MinValue;
         RestartCount = 0;
 
         // Start countdown timer (ticks every second)
@@ -196,7 +208,10 @@ public class LockdownService : IDisposable
         // Capture how long this lockdown ran BEFORE clearing _isActive, so gamification
         // (throw_away_the_key, "60+ minute lockdown") reads an authoritative duration
         // straight from the service rather than maintaining its own start timestamp.
-        LastActiveDuration = DateTime.Now - _activatedAt;
+        // From _startedAt, NOT _activatedAt: RestartTimer rebases _activatedAt, so measuring from
+        // it would report only the time since the last sendback and no amount of sitting through
+        // Emergency Exit restarts could ever earn the long-lockdown achievement.
+        LastActiveDuration = DateTime.Now - _startedAt;
         _isActive = false;
 
         App.Logger?.Information("Lockdown deactivated after {Minutes:F1} minutes", LastActiveDuration.TotalMinutes);
@@ -279,6 +294,10 @@ public class LockdownService : IDisposable
     /// Rewind the running lockdown to its FULL duration (the Emergency Exit's "you always come back"
     /// verdict). Escape-attempt counters are kept (friction escalates), safeties untouched, the same
     /// countdown timer keeps ticking. No-op when inactive. Raises <see cref="TimerRestarted"/>.
+    ///
+    /// <para>Only <see cref="_activatedAt"/> is rebased: the Possession ladder NEEDS the rewind (rung
+    /// back to Settle), while <see cref="_startedAt"/> keeps the time already served so
+    /// <see cref="LastActiveDuration"/> survives a sendback.</para>
     /// </summary>
     public void RestartTimer(string reason)
     {
@@ -289,9 +308,13 @@ public class LockdownService : IDisposable
             _duration.TotalMinutes, reason, RestartCount);
         Helpers.DispatcherHelper.RunOnUI(() =>
         {
-            try { CountdownTick?.Invoke(Remaining); } catch { }
+            // TimerRestarted FIRST. The elapsed fraction is already back at ~0, so a CountdownTick
+            // raised ahead of it makes the Possession director walk its ladder down to Settle and
+            // bark it, and OnTimerRestarted then resets and barks the same rung a second time.
+            // The restart is the news; the tick is only the repaint that follows it.
             try { TimerRestarted?.Invoke(reason ?? ""); }
             catch (Exception ex) { App.Logger?.Warning("Lockdown TimerRestarted handler failed: {Error}", ex.Message); }
+            try { CountdownTick?.Invoke(Remaining); } catch { }
         });
     }
 
@@ -315,12 +338,21 @@ public class LockdownService : IDisposable
     private void OnCountdownTick(object? sender, EventArgs e)
     {
         var remaining = Remaining;
-        CountdownTick?.Invoke(remaining);
 
         if (remaining <= TimeSpan.Zero)
         {
+            // The expiry tick is NOT a live tick, so it does not get raised as one. Raising it first
+            // handed every listener a lockdown that still said IsActive while it had in fact just
+            // ended, and the Dose keeper answers a tick by conscripting features and restarting the
+            // engine - all of which Deactivate tore down inside the same second. Nothing is left
+            // un-painted by skipping it either: Deactivate collapses the active panel, the badge and
+            // the rail countdown in the same dispatcher turn, so there is no surface for a final
+            // 0:00 to land on.
             Deactivate();
+            return;
         }
+
+        CountdownTick?.Invoke(remaining);
     }
 
     public void Dispose()

@@ -249,6 +249,9 @@ export function createIcCasino(o) {
   const C = IC_CASINO;
   const say = typeof opts.log === 'function' ? opts.log : () => {};
   const t = typeof opts.t === 'function' ? opts.t : ((k, f) => f);
+  /* EMI COMMENTARY SEAM: the game hands its guarded note() down in the base
+     kit. A deck built by anything older simply has none. */
+  const note = typeof opts.note === 'function' ? opts.note : () => {};
   const reduced = !!opts.reduced;
   const motion = Math.max(0, Math.min(2, Math.round(opts.motionLevel == null ? 2 : Number(opts.motionLevel) || 0)));
   const still = reduced || motion <= 0;
@@ -290,8 +293,13 @@ export function createIcCasino(o) {
 
   /* ---- the engine, counted ------------------------------------------------ */
   const counts = { cues: 0, jackpots: 0, nearMisses: 0, floods: 0, words: 0 };
+  /* THE DECOUPLE (W2 sec 3, owner ruling: a visual dial must not mute the room).
+   * Every LIGHT below stays behind armed(); the cue road gates on everything
+   * EXCEPT capsOk, because bgIntensity 0 is the player's visual exit (Law VI),
+   * not a mute. */
+  const sounds = () => armedBase && !destroyed;
   function cue(name, level, extra) {
-    if (!armed()) return;
+    if (!sounds()) return;
     counts.cues++;
     try {
       if (typeof eng.audio === 'function') eng.audio(name, level, extra || {});
@@ -336,6 +344,9 @@ export function createIcCasino(o) {
   let punchTimer = 0;
   let royalTimer = 0;
   let bestStreakSeen = 0;
+  /** W3 P0-4: the record topper is once a class, however many times the number
+   *  moves. A deck instance is built per class, so this latch is the class. */
+  let recordCued = false;
   const jackLog = [];
 
   function nowMs() {
@@ -452,28 +463,47 @@ export function createIcCasino(o) {
     wordTimer = after(C.WORD_MS + 40, () => { setCls(word, 'on', false); });
   }
   function openGate(windowMs) {
-    if (!gate || !armed()) return;
-    gate.className = 'g-ic-cs-gate';
-    setVar(gate, '--ic-gate', '1');
-    void (gate.offsetWidth);
-    /* the arc closes over the window: a single CSS transition on the var is
-       not animatable without @property, so drive it in 5 steps from the
-       game's timers (cheap, pause-aware, and exact enough for an eye) */
-    setCls(gate, 'on', true);
+    /* THE DECOUPLE, the gate's half: the ARC is a light and keeps its armed()
+       gate, but the LADDER underneath it is the reaction window's countdown -
+       a game-called beat, which trap 69 says still sounds with the lights off.
+       So one loop drives both and the var write is simply skipped when there is
+       no gate to write to. */
+    if (!sounds()) return;
+    const lit = !!gate && armed();
+    if (lit) {
+      gate.className = 'g-ic-cs-gate';
+      setVar(gate, '--ic-gate', '1');
+      void (gate.offsetWidth);
+      /* the arc closes over the window: a single CSS transition on the var is
+         not animatable without @property, so drive it in 5 steps from the
+         game's timers (cheap, pause-aware, and exact enough for an eye) */
+      setCls(gate, 'on', true);
+    }
+    if (!lit && still) return;          // nothing to draw and nothing to sound
     const steps = still ? 1 : 6;
     const stepMs = windowMs / steps;
     let k = 0;
     cancel(gateTimer);
     const tick = () => {
       k++;
-      setVar(gate, '--ic-gate', (1 - k / steps).toFixed(3));
+      if (lit && gate) setVar(gate, '--ic-gate', (1 - k / steps).toFixed(3));
+      /* W3 P0-9: THE GATE LADDER. The reaction window is this class's only
+         countdown, and it drained in silence. The cue rides the gate's OWN
+         steps - it is not a ticker and there is nothing here per frame - and
+         closeGate() cancels gateTimer, which is what kills it. Skipped under
+         reduced motion, where the arc is a single step and a ladder would be a
+         sound with no picture. The last rung lands ON windowEnd (k === steps
+         fires at exactly windowMs). */
+      if (!still) cue('clock_tick', 0.1, { pitch: 1 + 0.08 * k });
       if (k < steps) gateTimer = after(stepMs, tick);
     };
     gateTimer = after(stepMs, tick);
   }
   function closeGate(just) {
-    if (!gate) return;
+    /* the ladder is cancelled FIRST and unconditionally: with the lights off
+       there is no gate node, and a countdown nobody can see still has to stop. */
     cancel(gateTimer);
+    if (!gate) return;
     if (just && !still) {
       setCls(gate, 'just', true);
       after(180, () => { if (gate) { gate.className = 'g-ic-cs-gate'; } });
@@ -552,6 +582,16 @@ export function createIcCasino(o) {
       else if (!e.newRecord && isRecordPing(e.rt, e.recordRt)) { showWord('ic_record_ping', 'record', 'lav'); nearMiss('record', C.NEAR_MISS_I.record); }
       /* THE JACKPOT LADDER */
       const mi = C.MILESTONES.indexOf(streak);
+      /* W3 P0-4: A LIFETIME RECORD. It used to sound exactly like an ordinary
+         pop, which is the one thing the rarest event in the class must not do.
+         It lands 150ms BEHIND the pop so the ear gets the win and then the
+         topper, it is latched to once a class, and the MILESTONE is checked
+         first: a record that falls on a jackpot rung leaves that rung the
+         frame and never stacks two payoffs on one beat. */
+      if (e.newRecord && mi < 0 && !recordCued) {
+        recordCued = true;
+        after(150, () => cue('record', 0.45, { pitch: 1 }));
+      }
       if (mi >= 0) {
         cue('streak', C.MILESTONE_LEVEL, { pitch: pitchForStreak(streak) });
         jackpot(C.MAJOR_I[mi], 'major@' + streak);
@@ -570,6 +610,9 @@ export function createIcCasino(o) {
       if (tempted || (hoverOn && lastReveal && nowMs() - hoverSince >= C.ALMOST_HOVER_MS)) {
         showWord('ic_almost', 'ALMOST', 'lav');
         nearMiss('almost', C.NEAR_MISS_I.almost);
+        /* the hand sat ON the X and still held - the only near-crime in the
+           room, and the deck is the only thing that saw it */
+        note('ic.almostTouchedIt', { kind: 'tease', streak: Math.max(0, Number(e.streak) || 0) });
       }
       tempted = false;
       void e;

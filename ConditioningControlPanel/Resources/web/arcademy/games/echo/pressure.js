@@ -210,7 +210,8 @@ function contains(a, b) {
 
 /**
  * @param {Object} o
- *   seed, gradeTier|tier, reduced, motionLevel, stage, ring, backdrop,
+ *   seed, gradeTier|tier, reduced, motionLevel, coarse (touch pointer - the
+ *   perf diet; every seeded roll is still consumed), stage, ring, backdrop,
  *   chrome:[els] (the tremor rides the top-level ones), hud:{len,clock,streak,best},
  *   engine {fire, sustain, stop, channels}, assets {next}, timers {after,every,clear|cancel},
  *   capsOk (fn or bool), log
@@ -220,6 +221,7 @@ export function createEcPressure(o) {
   const P = EC_PRESSURE;
   const say = typeof opts.log === 'function' ? opts.log : () => {};
   const reduced = !!opts.reduced;
+  const coarse = !!opts.coarse;
   const motion = Math.max(0, Math.min(2, Math.round(opts.motionLevel == null ? 2 : Number(opts.motionLevel) || 0)));
   const still = reduced || motion <= 0;
   const tier = Math.max(1, Math.min(4, Math.round(Number(opts.gradeTier != null ? opts.gradeTier : opts.tier) || 1)));
@@ -455,7 +457,10 @@ export function createEcPressure(o) {
        deadline (never stop('wash'); the core may hold one too) */
     sustain('wash', { variant, alpha: P.WHISPER_ALPHA, holdMs: P.WHISPER_HOLD_MS });
   }
-  function wheel() { sustain('wash', { variant: 'spiral', alpha: lerp(P.WHEEL_ALPHA, heat), sustainForever: true }); }
+  /* On touch the held spiral runs at half strength: a sustained full-screen
+   * wash is the single heaviest thing this ladder holds on a phone. No roll
+   * is consumed here, so the scale is rng-neutral (Law V). */
+  function wheel() { sustain('wash', { variant: 'spiral', alpha: lerp(P.WHEEL_ALPHA, heat) * (coarse ? 0.5 : 1), sustainForever: true }); }
   function ambientBack() { sustain('ambient_field', { kind: P.AMBIENT_OF_TIER[tier] || 'specks' }); }
   function veil(variant, seconds) {
     if (still || !opts.backdrop) return null;
@@ -506,25 +511,35 @@ export function createEcPressure(o) {
   function repaintHeat() {
     if (Math.abs(heat - lastPaintHeat) < P.HEAT_REPAINT_STEP) return;
     lastPaintHeat = heat;
-    if (on.has('wheel')) wheel();
+    /* On touch the held spiral is NOT re-mounted on every 0.06 heat move - it
+     * keeps its arm-time alpha. The rung ladder still steps it down through
+     * whisperOut (applyAdd / stop), which never rides this repaint. */
+    if (on.has('wheel') && !coarse) wheel();
     if (on.has('storm')) sustain('ambient_field', { kind: 'embers', density: lerp(P.STORM_EMBERS, heat) });
   }
 
   /* ---- the riders (on a clear) ------------------------------------------ */
   function ridersOnClear(l) {
     if (!armed() || stopped) return;
+    /* THE TOUCH DIET, under Law V: every roll below is consumed exactly as it
+     * always was - compute-then-discard - and only the FIRE is gated or capped,
+     * so a phone and a desktop walk identical rng streams from the same seed. */
     if (on.has('burst') && roll('burst') < lerp(P.BURST_CHANCE, heat)) {
+      const sizePx = Math.round(vmin() * lerp(P.BURST_VMIN, heat));
       fire('gif_burst', {
         count: Math.round(lerp(P.BURST_COUNT, heat)), clickSafe: true,
-        sizePx: Math.round(vmin() * lerp(P.BURST_VMIN, heat)),
+        sizePx: coarse ? Math.min(sizePx, Math.round(vmin() * 0.28)) : sizePx,
         holdMs: Math.round(lerp(P.BURST_HOLD_MS, heat)),
       });
     }
     if (on.has('giant') && roll('giant') < lerp(P.GIANT_CHANCE, heat)) {
-      fire('gif_burst', { count: 1, clickSafe: true, x: 50, y: 50, sizePx: Math.round(vmin() * P.GIANT_VMIN), holdMs: Math.round(lerp(P.GIANT_HOLD_MS, heat)), variant: 'single' });
+      /* a 0.9vmin decode is a whole-screen gif on a phone - the roll spends
+       * its turn and the giant simply does not land there */
+      if (!coarse) fire('gif_burst', { count: 1, clickSafe: true, x: 50, y: 50, sizePx: Math.round(vmin() * P.GIANT_VMIN), holdMs: Math.round(lerp(P.GIANT_HOLD_MS, heat)), variant: 'single' });
     }
     if (on.has('veil') && roll('veil') < lerp(P.VEIL_CHANCE, heat)) {
-      veil(P.VEIL_VARIANTS[Math.floor(roll('veil') * P.VEIL_VARIANTS.length)], lerp(P.VEIL_S, heat));
+      const vIdx = Math.floor(roll('veil') * P.VEIL_VARIANTS.length);   // ALWAYS drawn
+      if (!coarse) veil(P.VEIL_VARIANTS[vIdx], lerp(P.VEIL_S, heat));
     }
     if (on.has('flashes')) fire('flash_burst', { count: P.FLASH_COUNT, clickSafe: true });
     void l;

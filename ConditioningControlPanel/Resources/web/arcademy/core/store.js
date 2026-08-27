@@ -66,7 +66,7 @@ export const S_DAY_PUNCHES = 2;
 /** Keys the host mints. The page never writes them (the write would be refused). */
 export const HOST_OWNED_KEYS = Object.freeze([
   'streak', 'perfectAttendance', 'lastAttendanceLocalDate', 'todayClasses', 'xpPaidDays',
-  'punchCards',
+  'punchCards', 'wallet',
 ]);
 const HOST_OWNED = new Set(HOST_OWNED_KEYS);
 

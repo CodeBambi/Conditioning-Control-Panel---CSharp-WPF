@@ -7,7 +7,8 @@
  *   - ONE reused DOM element per WASH KIND (spiral / pink / braindrain / sublim),
  *     refreshing its fade deadline — overlapping triggers never pile DOM
  *     (DTRH holdOn, verbatim posture);
- *   - node budgets: gif_rain 14, bubbles 18, ambient 24;
+ *   - node budgets: gif_rain 14 (6 coarse/low-motion), bubbles 18 (8),
+ *     ambient 24 (10) - the lite twins ride ctx.lite(), flashBurstLite's seam;
  *   - cadences come from the clamped channel vector (bubbleRate 2200->260ms,
  *     rain gap from flashRate, drift speed/amplitude from bgIntensity) and
  *     RETUNE LIVE when setHeat changes them;
@@ -23,12 +24,26 @@
  * so every existing caller is byte-identical and simply ignores a new field.
  * It exists because a class may only record what the engine DID (Law I), and
  * "which spiral did you just see" is unanswerable off the request alone.
+ *
+ * ADDITIVE (2026-08-25, the Loom directive): the spiral source may now be a
+ * PARAMS WRAPPER instead of a url string - {loom:true, id:'loom:xxxxxxxx',
+ * params:<loomField v2>, href:<bundled gif fallback url>} - from `opts.url` or
+ * from the shell's spiralUrl() provider. That routes through loomWash.js: ONE
+ * <canvas> child inside the SAME wash element (the one-element-per-kind law is
+ * untouched; the parent's opacity stays the intensity channel), drawn live by
+ * the vendored Loom shader. The handle's `url` then answers the wrapper's
+ * STABLE id ('loom:'+hash of the normalized params) - and on the WebGL floor
+ * (no context, or a context lost) the bundled `href` gif is painted through the
+ * plain path and the handle answers THAT url, because the ledger records what
+ * is actually on screen (Law I). A plain string source is byte-identical to
+ * before.
  * ==========================================================================*/
 
 import { clamp01 } from '../core/caps.js';
 import { NODE_CAPS, washSpec, gifRainSpec, ambientSpec, driftSpec, bubbleSpec } from './curves.js';
-import { rand, hasDom, mediaEl, budgetedKind } from './util.js';
+import { rand, hasDom, mediaEl, budgetedKind, isVideoUrl } from './util.js';
 import { createEscapeGuard } from './escape.js';
+import { createLoomWash } from './loomWash.js';
 
 /** ambient_field kinds ported from DTRH fieldFx AMBIENT_KINDS (DOM subset). */
 const AMBIENT = {
@@ -45,25 +60,134 @@ const AMBIENT = {
 };
 export const AMBIENT_KINDS = Object.freeze(Object.keys(AMBIENT));
 
+/** The touch rung: html.ae-touch, the same read style.js's rules key off.
+ *  A hardware ceiling, not a quality level - it applies on FULL too. */
+function touchClass() {
+  try { return hasDom() && document.documentElement.classList.contains('ae-touch'); } catch { return false; }
+}
+
+/** Touch holds at most this many wash kinds' elements at once. */
+const WASH_HOLD_CAP_TOUCH = 2;
+/** Touch renewal deadline on a forever hold: the loom rAF stops until the next
+ *  re-trigger (pressure decks re-assert held washes on every repaintHeat). */
+const WASH_FOREVER_RENEW_MS = 20000;
+
 export function createSustained(ctx) {
   /** kind -> handle. sustain() on a live kind RETUNES it instead of stacking. */
   const active = new Map();
   const washHolds = new Map();   // washKind -> { el, hideTimer } — the one-element law
   const live = { rain: 0, bubbles: 0 };
+  /* W3 (trap 117): a sustain is cued PER WAVE, never per node, so the three
+   * things a re-entrant starter has to remember live up here.
+   *   lastWashKind  the wash that last took the air, so a refresh of the SAME
+   *                 wash is silent and a change of kind is not (P0-25);
+   *   lastHumAt     the Loom hum's own floor - the spiral is re-triggered by
+   *                 the pressure decks far faster than the 1.4s recipe, and a
+   *                 stack of hums is a drone nobody asked for (P0-26). */
+  let lastWashKind = null;
+  let lastHumAt = 0;
+  const SPIRAL_HUM_GAP_MS = 1400;
 
   /* ---- wash -------------------------------------------------------------- */
   function ensureWash(washKind) {
     if (!hasDom()) return null;
     let h = washHolds.get(washKind);
     if (!h) {
+      /* Touch caps the held-element roster: each kind is a full-screen layer,
+       * and the least-recently-triggered one gives its element back. */
+      if (touchClass() && washHolds.size >= WASH_HOLD_CAP_TOUCH) {
+        let oldKind = null; let oldAt = Infinity;
+        for (const [k, o] of washHolds) {
+          if ((o.lastAt || 0) < oldAt) { oldAt = o.lastAt || 0; oldKind = k; }
+        }
+        if (oldKind != null) {
+          const o = washHolds.get(oldKind);
+          if (o.hideTimer) { ctx.timers.cancel(o.hideTimer); o.hideTimer = 0; }
+          loomDrop(o);
+          ctx.timers.release(o.el);
+          washHolds.delete(oldKind);
+        }
+      }
       const node = document.createElement('div');
       node.className = 'ae-wash ae-wash-' + washKind + (ctx.reduced() ? ' ae-wash-static' : '');
       ctx.layers.back.appendChild(node);
       ctx.timers.own(node);
-      h = { el: node, hideTimer: 0, forever: false, heldAlpha: 0 };
+      h = { el: node, hideTimer: 0, forever: false, heldAlpha: 0, lastAt: 0 };
       washHolds.set(washKind, h);
     }
+    h.lastAt = Date.now();
     return h;
+  }
+
+  /* ---- the live Loom inside a wash hold (see the 2026-08-25 header note) --- */
+  /** Is this spiral source the Loom params wrapper rather than a url string? */
+  function isLoomWrap(v) {
+    return !!(v && typeof v === 'object' && v.loom === true && v.params);
+  }
+  /** Mount/retune the loom canvas on this hold. Returns the LEDGER answer:
+   *  the wrapper's id while the canvas is live, the fallback gif url when the
+   *  WebGL floor caught it, or null (the CSS conic kept the element). */
+  function loomMount(h, wrap) {
+    try {
+      if (!h.loom) h.loom = createLoomWash({ log: ctx.log });
+      if (h.loom.supported()) {
+        const ok = h.loom.mount(h.el, wrap.params, {
+          still: ctx.reduced(),
+          /* context lost MID-HOLD: the canvas is gone, so the gif takes the
+           * element at once - the screen never goes bare. (The one answer
+           * already handed out for this hold can go stale for its remainder;
+           * every NEXT trigger answers the gif url, honestly.) */
+          onLost: () => {
+            try {
+              if (wrap.href) h.el.style.backgroundImage = 'url("' + wrap.href + '")';
+            } catch (e) { /* ignore */ }
+          },
+        });
+        if (ok) {
+          h.el.style.backgroundImage = 'none';
+          return String(wrap.id || 'loom:0');
+        }
+      }
+    } catch (e) { ctx.log('loom wash refused (' + ((e && e.message) || e) + ') - gif fallback'); }
+    // THE FLOOR: no WebGL -> the bundled gif IS what is shown, so it IS the answer.
+    loomDrop(h);
+    if (wrap.href && typeof wrap.href === 'string') {
+      h.el.style.backgroundImage = 'url("' + wrap.href + '")';
+      return String(wrap.href);
+    }
+    return null;
+  }
+  /** Tear the loom canvas off a hold entirely (a url string took the element,
+   *  or the hold is being released). Safe on a hold that never had one. */
+  function loomDrop(h) {
+    if (h && h.loom) { try { h.loom.dispose(); } catch (e) { /* ignore */ } h.loom = null; }
+  }
+  /** The hold's opacity was driven to 0 (or back up): idle the loom's rAF. */
+  function loomActive(h, on) {
+    if (h && h.loom) { try { h.loom.setActive(!!on); } catch (e) { /* ignore */ } }
+  }
+
+  /**
+   * Pre-warm the spiral wash's live-loom path (2026-08-26, the deep-end merge
+   * choreography). The first jackpot garnish / spiral sustain used to pay
+   * WebGL context creation + two shader compiles + a draw INLINE on a reward
+   * frame. This mounts the loom canvas on the spiral hold NOW - the element
+   * sits at its CSS opacity 0, one frame renders, the rAF loop is idled - so
+   * the first real trigger reuses the same canvas and compiled program.
+   * No rng, no fx event, nothing visible; a gif-path class (no loom wrapper
+   * from the provider) is a no-op, and a hold already live is left alone.
+   * @returns {boolean} true when a canvas was warmed.
+   */
+  function warmSpiral() {
+    if (!hasDom() || typeof ctx.spiralUrl !== 'function') return false;
+    let src = null;
+    try { src = ctx.spiralUrl(); } catch (e) { src = null; }
+    if (!isLoomWrap(src)) return false;
+    const h = ensureWash('spiral');
+    if (!h || h.loom || h.forever) return false;   // live or held: already paid for
+    const took = loomMount(h, src);
+    loomActive(h, false);
+    return took != null;
   }
 
   /**
@@ -77,7 +201,18 @@ export function createSustained(ctx) {
     const h = ensureWash(washKind);
     if (!h) return null;
     const strength = ctx.ceiling('bgIntensity', opts.strength);
-    if (strength <= 0.001) return null;       // bgIntensity capped off -> no wash
+    if (strength <= 0.001) {
+      /* bgIntensity capped off -> no wash. A HELD wash must release here too:
+       * wash handles never sit in `active`, so nothing else ever ends a forever
+       * hold once its channel gates off - the alpha and loom rAF would outlive
+       * the cap and every later trigger would land on this early return. */
+      if (h.forever) {
+        if (h.hideTimer) { ctx.timers.cancel(h.hideTimer); h.hideTimer = 0; }
+        h.forever = false; h.heldAlpha = 0;
+        h.el.style.opacity = '0'; loomActive(h, false);
+      }
+      return null;
+    }
     const spec = washSpec(washKind === 'drain' || washKind === 'braindrain' ? 'braindrain' : washKind,
       ctx.magnitude(strength), opts.durationMult || 1);
     const alpha = Math.min(spec.alpha, clamp01(opts.alpha == null ? spec.alpha : ctx.pct(opts.alpha))) * (ctx.reduced() ? 0.7 : 1);
@@ -89,10 +224,22 @@ export function createSustained(ctx) {
      * (Law I: the ledger records what the engine did). `null` when nothing was
      * written - a pink/drain wash with no url keeps its CSS gradient. */
     let wroteUrl = null;
+    let loomTook = false;
     if (opts.url || (washKind === 'spiral' && ctx.spiralUrl)) {
       const url = opts.url || ctx.spiralUrl();
-      if (url) { h.el.style.backgroundImage = 'url("' + url + '")'; wroteUrl = String(url); }
+      if (isLoomWrap(url)) {
+        // THE LOOM PATH (2026-08-25): a params wrapper - live canvas, stable id.
+        wroteUrl = loomMount(h, url);
+        loomTook = typeof wroteUrl === 'string' && wroteUrl.indexOf('loom:') === 0;
+      } else if (url) {
+        loomDrop(h);   // a url string takes the element back; no-op when no canvas
+        h.el.style.backgroundImage = 'url("' + url + '")'; wroteUrl = String(url);
+      }
     }
+    /* Was this wash already on screen? Read BEFORE the opacity is written: it
+     * is the difference between a wash arriving and a wash being refreshed,
+     * which is the whole of P0-25's per CHANGE, not per re-trigger. */
+    const wasUp = parseFloat(h.el.style.opacity || '0') > 0.001;
     if (h.hideTimer) { ctx.timers.cancel(h.hideTimer); h.hideTimer = 0; }
     h.el.style.opacity = String(alpha);
     /* THE HELD WASH. sustainForever HOLDS the element at alpha until a later
@@ -104,19 +251,50 @@ export function createSustained(ctx) {
        fell back to 0 and silently killed the class's wheel. */
     if (opts.sustainForever === true) {
       h.forever = true; h.heldAlpha = alpha;
-    } else if (h.forever && alpha > (h.heldAlpha || 0)) {
+      /* Touch renewal deadline: the pixels stay at heldAlpha, only the loom
+       * rAF stops - every trigger cancels hideTimer above, so the next
+       * re-trigger renews the deadline and wakes the loop. Desktop keeps the
+       * timerless hold. */
+      if (touchClass()) {
+        h.hideTimer = ctx.timers.after(WASH_FOREVER_RENEW_MS, () => { h.hideTimer = 0; loomActive(h, false); });
+      }
+    } else if (h.forever && (h.heldAlpha || 0) > 0.02 && alpha > (h.heldAlpha || 0)) {
+      /* A FLARE only over a held alpha above the whisper floor: heldAlpha can
+       * be scaled under the flat 0.02 whisper (live in sort), and a step-down
+       * mistaken for a flare leaves `forever` set with the loom running
+       * invisibly for the rest of the class. */
       const back = h.heldAlpha;
       h.hideTimer = ctx.timers.after(holdMs, () => { h.el.style.opacity = String(back); h.hideTimer = 0; });
     } else {
       h.forever = false; h.heldAlpha = 0;
-      h.hideTimer = ctx.timers.after(holdMs, () => { h.el.style.opacity = '0'; h.hideTimer = 0; });
+      h.hideTimer = ctx.timers.after(holdMs, () => { h.el.style.opacity = '0'; h.hideTimer = 0; loomActive(h, false); });
     }
     ctx.fx('wash', washKind);
-    if (opts.sfx) ctx.sfx(typeof opts.sfx === 'string' ? opts.sfx : 'wash', 0.2 + 0.3 * strength, { duck: 'voice' });
+    /* W3 P0-25: THE AIR. `if (opts.sfx)` was never true - no caller in the
+     * school ever set it - so the heaviest thing the engine draws arrived in
+     * silence. A wash now takes the air by default and `sfx:false` is the way
+     * out; a string still names the cue. It fires on a CHANGE only: the wash
+     * arriving, or a different kind taking the element. startWash is re-entrant
+     * by design (a deck refreshes the deadline several times a second at the
+     * top of the ladder) and one cue per refresh would be a hiss. */
+    const washChanged = !wasUp || washKind !== lastWashKind;
+    if (opts.sfx !== false && washChanged) {
+      ctx.sfx(typeof opts.sfx === 'string' ? opts.sfx : 'wash', 0.2 + 0.3 * strength, { duck: 'voice' });
+    }
+    lastWashKind = washKind;
+    /* W3 P0-26: the Loom is the biggest thing on the screen and had no sound at
+     * all. The hum is struck on the mount and on each re-trigger that takes the
+     * canvas - never per frame (loomWash draws at 30-60fps and owns no cue) -
+     * and never on warmSpiral, which mounts at opacity 0 and does not come
+     * through here. The recipe's own 1.4s length is the floor between strikes. */
+    if (loomTook) {
+      const now = Date.now();
+      if (now - lastHumAt >= SPIRAL_HUM_GAP_MS) { lastHumAt = now; ctx.sfx('spiral_hum', 0.22); }
+    }
     return {
       kind: 'wash', variant: washKind, alpha, holdMs, url: wroteUrl,
       retune() { /* alpha follows the next trigger; nothing to animate */ },
-      stop() { if (h.hideTimer) { ctx.timers.cancel(h.hideTimer); h.hideTimer = 0; } h.forever = false; h.heldAlpha = 0; h.el.style.opacity = '0'; },
+      stop() { if (h.hideTimer) { ctx.timers.cancel(h.hideTimer); h.hideTimer = 0; } h.forever = false; h.heldAlpha = 0; h.el.style.opacity = '0'; loomActive(h, false); },
     };
   }
 
@@ -132,7 +310,11 @@ export function createSustained(ctx) {
     const variant = ctx.variant('row_drift', bg, opts.variant);
     const phase = targets.map((_, i) => (opts.stagger === false ? 0 : i * 0.7 + ctx.rng() * 0.3));
 
-    if (ctx.reduced() || ctx.motion() <= 0) {
+    /* Touch rides the breathe degrade too: a per-frame translate3d write on
+     * every row is main-thread layout traffic a phone does not owe. The rng is
+     * safe - phase[] drew per target ABOVE this branch, so both paths consume
+     * identical draws (shared-rng law). */
+    if (ctx.reduced() || ctx.motion() <= 0 || touchClass()) {
       // degrade: slow opacity breathing, no transforms at all
       for (const t of targets) { try { t.classList.add('ae-drift', 'ae-drift-breathe'); } catch { /* ignore */ } }
       ctx.fx('row_drift', 'breathe');
@@ -182,17 +364,26 @@ export function createSustained(ctx) {
     if (rate <= 0.001) { ctx.log('bubble_field: bubbleRate is 0 at this heat/cap - no field'); return null; }
     let spec = bubbleSpec(rate);
     const variant = ctx.variant('bubble_field', spec.alpha, opts.variant);
-    const max = Math.min(NODE_CAPS.bubbles, opts.max == null ? NODE_CAPS.bubbles : opts.max | 0);
+    // the lite twin rides flashBurstLite's own seam: ctx.lite() at spend time
+    const bubbleCap = ctx.lite() ? NODE_CAPS.bubblesLite : NODE_CAPS.bubbles;
+    const max = Math.min(bubbleCap, opts.max == null ? bubbleCap : opts.max | 0);
     const clickSafe = !!opts.clickSafe;
     const clickable = !clickSafe && opts.clickable !== false && typeof opts.onPop === 'function';
     let guard = null;
     if (clickable) {
       guard = createEscapeGuard({
         timers: ctx.timers,
+        sfx: ctx.sfx,                      // W3 P0-24: the trip is a release
         onComplete: (why) => { ctx.log('bubble_field escape (' + why + ')'); if (typeof opts.onForceComplete === 'function') { try { opts.onForceComplete(why); } catch { /* ignore */ } } },
       });
       guard.arm();
     }
+    /* W3 P1-17: the field's own air, ONE cue for the wave (trap 117). The
+     * clickSafe field - decoration, nobody pops it - was silent from entrance
+     * to exit, which is the whole reason the row exists. The exit is the
+     * teardown's coalesced wash, not a second cue here. */
+    ctx.sfx('bubble_bed', 0.24);
+    let popN = 0;
 
     function spawn() {
       if (live.bubbles >= max) return;
@@ -214,7 +405,9 @@ export function createSustained(ctx) {
           try { ev.stopPropagation(); } catch { /* ignore */ }
           if (guard) guard.note();
           node.classList.add('ae-bubble-pop');
-          ctx.sfx('bubble_pop', 0.3 + 0.3 * clamp01(spec.alpha));
+          // W3 P1-17: the pop ladder climbs a semitone a bubble, capped at 8.
+          popN = Math.min(8, popN + 1);
+          ctx.sfx('bubble_pop', 0.3 + 0.3 * clamp01(spec.alpha), { pitch: 1 + 0.06 * popN });
           try { opts.onPop(node); } catch { /* game's problem */ }
           ctx.timers.after(280, () => kill(node));
         }, { once: true });
@@ -246,6 +439,7 @@ export function createSustained(ctx) {
       stop() {
         if (timer) ctx.timers.cancel(timer);
         timer = 0;
+        popN = 0;
         if (guard) guard.cancel();
         // fade, never snap: existing bubbles finish their rise
       },
@@ -263,13 +457,30 @@ export function createSustained(ctx) {
     const spec = gifRainSpec(ctx.magnitude(rate), opts.durationMult || 1);
     const clickSafe = opts.clickSafe !== false;      // rain is decoration by default
     const endAt = (opts.durationMs == null ? spec.durationMs : opts.durationMs) + Date.now();
+    // gifRainSpec is PURE (spec.max is the desktop cap); the lite twin is
+    // composed here, on flashBurstLite's own ctx.lite() seam, min = protective.
+    const rainCap = ctx.lite() ? Math.min(spec.max, NODE_CAPS.gifRainLite) : spec.max;
     let timer = 0;
 
     function spawn() {
-      if (live.rain >= spec.max) return;
+      if (live.rain >= rainCap) return;
       /* THE DECODER BUDGET (util.js): past it a 'loop' request is served a
        * still, so the rain keeps its node count and drops its decode cost. */
-      const url = ctx.assetUrlSync(budgetedKind(opts.assetKind || 'loop'));
+      const drawn = ctx.assetUrlSync(budgetedKind(opts.assetKind || 'loop'));
+      /* WARM-MEDIA SEAM (opt-in, 2026-08-25): `opts.pick()` may answer a url
+       * the game KNOWS is warm (already decoded on its own board). The original
+       * draw above still happens either way - the provider pool consumes its
+       * own shared rng on next(), so the draw may never be skipped (the
+       * shared-rng law); a null/absent pick falls back to it byte-identically.
+       * A picked VIDEO may only ride a slot the decoder budget already granted
+       * (drawn itself a video), so a pick can never upgrade a still draw into
+       * an uncounted decoder session. */
+      let url = drawn;
+      if (typeof opts.pick === 'function') {
+        let picked = null;
+        try { picked = opts.pick() || null; } catch { picked = null; }
+        if (picked && (!isVideoUrl(picked) || isVideoUrl(drawn))) url = picked;
+      }
       const node = (url && mediaEl(url)) || document.createElement('div');   // <video> for a webm/mp4 loop
       node.className = 'ae-rain';
       node.style.setProperty('--ae-x', Math.round(rand(ctx.rng, 2, 88)) + '%');
@@ -313,7 +524,11 @@ export function createSustained(ctx) {
     const spec = ambientSpec(ctx.magnitude(ctx.ceiling('bgIntensity', opts.density)), opts.count || 16);
     if (!spec.on) return null;
     const nodes = [];
-    const count = Math.max(1, Math.round(spec.count * (ctx.motion() <= 0 ? 0.4 : 1)));
+    // ambientSpec is PURE (spec.count <= NODE_CAPS.ambient); the lite twin is
+    // composed here on ctx.lite(), exactly the flashBurstLite pick. Up to 24
+    // forever-animating motes is the phone cost this trims to 10.
+    const ambientCap = ctx.lite() ? NODE_CAPS.ambientLite : NODE_CAPS.ambient;
+    const count = Math.max(1, Math.min(ambientCap, Math.round(spec.count * (ctx.motion() <= 0 ? 0.4 : 1))));
     for (let i = 0; i < count; i++) {
       const node = document.createElement('div');
       node.className = 'ae-mote' + (def.shape === 'dot' ? '' : ' ae-mote-' + def.shape);
@@ -352,6 +567,9 @@ export function createSustained(ctx) {
     ctx.timers.own(node);
     // one frame later so the opacity transition actually runs
     ctx.timers.after(16, () => { node.style.opacity = String(clamp01(0.10 + level * 0.45)); });
+    /* W3 P1-17: a CRT coming up is a room getting a machine in it. The seep's
+     * own hum, quieter than the tell that owns it, once for the wave. */
+    ctx.sfx('seep_hum', 0.12);
     ctx.fx('crt', variant.name);
     return {
       kind: 'crt', variant: variant.name,
@@ -392,7 +610,8 @@ export function createSustained(ctx) {
         if (h.hideTimer) { ctx.timers.cancel(h.hideTimer); h.hideTimer = 0; }
         h.forever = false; h.heldAlpha = 0;
         h.el.style.opacity = '0';
-        if (immediate) ctx.timers.release(h.el);
+        loomActive(h, false);
+        if (immediate) { loomDrop(h); ctx.timers.release(h.el); }
       }
       if (immediate) washHolds.clear();
       return true;
@@ -404,18 +623,30 @@ export function createSustained(ctx) {
     return true;
   }
 
-  function stopAll(immediate) {
+  /**
+   * stopAll(immediate, quiet)
+   * W3 P1-17: the teardown tears six things down on one frame, so it gets ONE
+   * cue and not six (trap 117) - the wash recipe pitched down, quiet, the exit
+   * half of every entrance above. Two guards on it. It only speaks when
+   * something was actually up (a stopAll over an empty stage is not a beat),
+   * and `quiet` silences it for the SUSPEND path: a panic, a mandatory video
+   * or an audio-only flip is the one teardown that must make no sound at all.
+   */
+  function stopAll(immediate, quiet) {
+    const hadAnything = !quiet && (active.size > 0 || washHolds.size > 0);
     for (const kind of [...active.keys()]) stop(kind, immediate);
     stop('wash', immediate);
+    lastWashKind = null;
     live.rain = 0;
     live.bubbles = 0;
+    if (hadAnything) ctx.sfx('wash', 0.12, { pitch: 0.8 });
   }
 
   function retuneAll() {
     for (const [, h] of active) { try { h.retune(); } catch { /* ignore */ } }
   }
 
-  return { sustain, stop, stopAll, retuneAll, live, active, AMBIENT_KINDS };
+  return { sustain, stop, stopAll, retuneAll, warmSpiral, live, active, AMBIENT_KINDS };
 }
 
 export default createSustained;

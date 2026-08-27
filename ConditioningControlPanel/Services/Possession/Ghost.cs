@@ -33,10 +33,19 @@ public sealed class Ghost : IDisposable
 {
     private readonly IPossessionHost _host;
     private readonly FrameworkElement _target;
-    private readonly double _originalOpacity;
-    private readonly bool _originalHitTestVisible;
     private readonly List<Image> _tiles = new();
     private readonly List<UIElement> _extras = new();
+
+    // What Hide() found before it wrote anything. "Was there a local value at all" is half of the
+    // answer: a control whose Opacity or IsHitTestVisible comes from a Style setter, a trigger or a
+    // storyboard has NO local value, and stamping one on the way back pins it forever - the hover
+    // highlight never fires again, the disabled state never greys out. See FallEffect and
+    // Ghost.NeutralTransform for the same dance.
+    private bool _opacityWasLocal;
+    private double _opacityValue = 1;
+    private bool _hitTestChanged;
+    private bool _hitTestWasLocal;
+    private bool _hitTestValue = true;
 
     private bool _hidden;
     private bool _disposed;
@@ -67,8 +76,6 @@ public sealed class Ghost : IDisposable
     {
         _host = host;
         _target = target;
-        _originalOpacity = target.Opacity;
-        _originalHitTestVisible = target.IsHitTestVisible;
         Bitmap = bmp;
         Origin = origin;
         SizeDip = size;
@@ -294,22 +301,44 @@ public sealed class Ghost : IDisposable
         if (_disposed || _hidden) return;
         try
         {
+            _opacityWasLocal = _target.ReadLocalValue(UIElement.OpacityProperty) != DependencyProperty.UnsetValue;
+            _opacityValue = _target.Opacity;
             _target.Opacity = 0;
-            if (alsoDisableHitTesting) _target.IsHitTestVisible = false;
+
+            if (alsoDisableHitTesting)
+            {
+                _hitTestWasLocal = _target.ReadLocalValue(UIElement.IsHitTestVisibleProperty) != DependencyProperty.UnsetValue;
+                _hitTestValue = _target.IsHitTestVisible;
+                _target.IsHitTestVisible = false;
+                _hitTestChanged = true;
+            }
             _hidden = true;
         }
         catch (Exception ex) { App.Logger?.Warning("Ghost.Hide failed: {Error}", ex.Message); }
     }
 
-    /// <summary>Put the real control's ORIGINAL opacity back and drop every borrowed visual.</summary>
+    /// <summary>
+    /// Put the real control's ORIGINAL opacity back and drop every borrowed visual. Original means
+    /// what it had, INCLUDING "it had no local value of its own": Hide's write is cleared rather than
+    /// overwritten in that case, so a control whose opacity or hit-testing comes from a style, a
+    /// trigger or a running storyboard is handed back still under their control. Hit-testing is only
+    /// touched when Hide actually turned it off.
+    /// </summary>
     public void Restore()
     {
         try
         {
             if (_hidden)
             {
-                _target.Opacity = _originalOpacity;
-                _target.IsHitTestVisible = _originalHitTestVisible;
+                if (_opacityWasLocal) _target.Opacity = _opacityValue;
+                else _target.ClearValue(UIElement.OpacityProperty);
+
+                if (_hitTestChanged)
+                {
+                    if (_hitTestWasLocal) _target.IsHitTestVisible = _hitTestValue;
+                    else _target.ClearValue(UIElement.IsHitTestVisibleProperty);
+                    _hitTestChanged = false;
+                }
                 _hidden = false;
             }
         }

@@ -169,6 +169,27 @@ const STYLE_TEXT = `
 html.arc-reduced .g-ir-tk-ring{opacity:0 !important}
 html.arc-reduced .g-ir-timer.g-ir-tk-bent{opacity:1}
 html.arc-reduced .g-ir-tk-ghost{opacity:0 !important;animation:none}
+/* ---- THE PHONE CEILING (html.ae-touch) ------------------------------------
+   Coarse pointer. Three loops here repainted a shadow every frame instead of
+   composing one: the lure ghost breathed a drop-shadow (on a node a
+   transition is also moving), the stat pop keyframed brightness+contrast, and
+   the lying option shivered a text-shadow under a whole sentence of text. All
+   three keep their beat on opacity - the ghost keeps its glow, it just holds
+   it still. Nothing is hidden: every one of these is trickster READ.
+   -------------------------------------------------------------------------- */
+html.ae-touch .g-ir-tk-ghost{filter:none}
+html.ae-touch .g-ir-tk-ghost.is-lure{animation:g-ir-tk-ghostpulse-t 1.5s ease-in-out infinite}
+@keyframes g-ir-tk-ghostpulse-t{50%{opacity:.82}}
+html.ae-touch .g-ir-chip.g-ir-tk-flick{animation:g-ir-tk-static-t .16s steps(3) 2}
+@keyframes g-ir-tk-static-t{0%{opacity:1}40%{opacity:.55}100%{opacity:1}}
+html.ae-touch .g-ir-opt.g-ir-tk-lie{animation:g-ir-tk-shiver-t .5s ease-in-out infinite}
+@keyframes g-ir-tk-shiver-t{0%,100%{opacity:1}50%{opacity:.86}}
+/* the twins carry new names, so the reduced gates have to say their kills again */
+html.arc-reduced.ae-touch .g-ir-tk-ghost.is-lure{animation:none}
+@media (prefers-reduced-motion: reduce){
+  html.ae-touch .g-ir-tk-ghost.is-lure,html.ae-touch .g-ir-chip.g-ir-tk-flick,
+  html.ae-touch .g-ir-opt.g-ir-tk-lie{animation:none}
+}
 `;
 
 function ensureStyle() {

@@ -152,10 +152,26 @@ string over the network and calls into another service. There is no per-command 
    - **Quest credit**: `App.xaml.cs:1522` → `Quests?.TrackRemoteCommand()` (`QuestService.cs:728` →
      `QuestCategory.Remote`). This is a **Patreon-exclusive quest category** — Remote quests carry
      `RequiresPremium = true` (`Quest.cs:216-247`, e.g. "Hand Over Control", "Puppet Strings").
+     **These no longer appear in the DAILY roll** (`QuestService.IsRollableAsDaily`): a subject with
+     nobody controlling them cannot move a receive-remote quest, so the daily slot skips the whole
+     category. The definitions, the counter and the weekly slot are all untouched, so a quest
+     already rolled still completes and persisted progress survives.
    - **UI log/notification**: `MainWindow.RemoteControl.cs:1103` (`OnRemoteCommandReceived`) → a
      toast (`ShowCommandNotification`) + the tab command log, unless the action is in
      `SuppressedCommands` (`MainWindow.xaml.cs:145`: the high-frequency flash/subliminal/opacity/duck
      verbs are logged silently to avoid toast spam).
+
+### 4a-bis. The GIVING side has no local dispatch
+
+This app is only ever the **subject**. The Controller surface is the `cclabs.app/remote/` web page
+(`cclabs-site`) and `CCP-Mobile`, and both enqueue commands straight onto the proxy — nothing in
+this repo ever *sends* one. The giving-side quest (`take_the_reins_d`, free for every tier) is
+therefore fed by a **reporting hook**, not by a send call: whoever learns that this user issued a
+command calls `RemoteControlService.ReportCommandIssued(targetUnifiedId, action)`, which raises
+`CommandIssued`; `App.xaml.cs` forwards that to `QuestService.TrackRemoteCommandIssued`. Commands
+aimed at this install's own unified id are dropped (self-control never earns credit), and a command
+counts the same at any intensity level. **Until the Controller surface reports back, that hook has
+no caller in this repo** — the server/web side of the loop is the remaining work.
 
 ### 4b. The dispatch table (`ExecuteCommand`, `:967`) — every command and where it lands
 

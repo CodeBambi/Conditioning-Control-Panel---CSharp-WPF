@@ -277,6 +277,24 @@ export default {
     };
     const say = (m) => { try { ctx.log('[cp] ' + m); } catch (e) { /* noop */ } };
 
+    /* EMI COMMENTARY SEAMS (the heartbeat wave). note() names a moment the
+     * mascot may react to - the shell prefixes 'game:' and its own voice engine
+     * decides whether the moment is worth a face, a line or nothing at all.
+     * Composure has no timing-critical input window anywhere (no per-move timer
+     * and no clock term in the grade), so there is no hold() fence in this
+     * file. The seam is additive, one-way and fully guarded: an older shell has
+     * no note() at all, and a mascot may never break a class. */
+    const note = (id, extra) => {
+      try { if (ctx.mood && typeof ctx.mood.note === 'function') ctx.mood.note(id, extra); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+    /* Seam bookkeeping. `emiStallNotedAt` remembers WHICH stall has already
+     * been spoken for by storing the `lastLockAtMs` it belonged to - every lock
+     * and every fresh deal moves that value, so the seam re-arms itself and
+     * needs no reset of its own. `emiPeekNoted` is once ever per class. */
+    let emiStallNotedAt = -1;
+    let emiPeekNoted = false;
+
     /* ---- lifecycle flags ------------------------------------------------ */
     let dead = false;
     let paused = false;
@@ -893,7 +911,14 @@ export default {
        * the one thing the deal must never hand them). */
       if (banking) return false;
       if (busy) {
-        if (PLAYTEST.QUEUE_SLOTS > 0) { queued = { kind, v }; return false; }
+        if (PLAYTEST.QUEUE_SLOTS > 0) {
+          queued = { kind, v };
+          /* W3 P0-10: a press taken into the lock slot is ACCEPTED, not
+           * refused, and it gets its own answer - held, it is coming. The
+           * lock itself is the rate limit. */
+          tick('queue', 0.12);
+          return false;
+        }
         bumpCue();                       // no queue slot to take it: simply refused
         return false;
       }
@@ -925,6 +950,9 @@ export default {
         bumpTimer = after(240, () => { bumpTimer = 0; if (boardEl) boardEl.classList.remove('is-bump'); });
       }
       bumpCue();
+      /* Milestone-gated off the class's own bump counter: a mashing player
+       * cannot machine-gun this the way they can the thud. */
+      if (bumps === 3 || (bumps > 3 && bumps % 10 === 0)) note('cp.bump', { kind: 'tease', n: bumps });
     }
 
     /* ==================================================================== *
@@ -954,11 +982,15 @@ export default {
       if (isBack) {
         backtracks += 1;
         lockStreak = 0;
+        /* W3 P2-1: an undo is a move with a direction of its own, so it is
+         * the ordinary slide dropped a whole step. */
+        if (!washOn) tick('slide', 0.16, { pitch: 0.88 });
         if (washOn) {
           thrash += 1;
           deck('casino', 'thrash');
           deck('pressure', 'beat', 'thrash');
           msg('cp_backtrack_line', CP_LEX.cp_backtrack_line, 1600);
+          note('cp.thrash', { kind: 'commiserate', n: thrash, streak: backtracks });
         }
       }
       lastMove = { id: res.id, from: res.from, to: res.to };
@@ -973,6 +1005,9 @@ export default {
         lockStreak += 1;
         bestLockStreak = Math.max(bestLockStreak, lockStreak);
         lastLockAtMs = elapsedMs;
+        /* W3 P1-4: the assist letting go is the player taking the board back.
+         * The false edge only - a lock with no rescue up says nothing. */
+        if (rescueActive) tick('lift', 0.22, { pitch: 1.1 });
         clearHint();
         rescueActive = false;
         deck('casino', 'lock', locked, tileCount(n));
@@ -981,12 +1016,21 @@ export default {
         tick('streak', 0.28 + 0.03 * Math.min(8, lockStreak),
           { pitch: Math.pow(2, Math.min(7, lockStreak - 1) / 12) });
         if (locked >= tileCount(n) - 1) msg('cp_lock_line', CP_LEX.cp_lock_line, 1400);
+        /* Milestone-gated: the streak climbs one link at a time, so testing for
+         * the exact link fires this once per crossing and never per move. */
+        if (lockStreak === 3 || lockStreak === 5 || lockStreak === PLAYTEST.LOCK_STREAK_CAP) {
+          note('cp.lockStreak', {
+            kind: 'celebrate', streak: lockStreak, n: locked, left: tileCount(n) - locked,
+          });
+        }
       }
 
       /* 4. the decks see the truth AFTER the ledger moved */
       deck('casino', 'slide', { id: res.id, locked: locked > prevLocked, moves });
       deck('trickster', 'afterSlide');
-      tick('slide', 0.13 + 0.05 * Math.min(1, lockedFrac()), { pitch: 1 + 0.12 * lockedFrac() });
+      /* W3 P1-1: the slide cue is casino.js's alone (it carries heat and the
+       * progress pitch). Two of them on one move was the most frequent sound
+       * in the class, doubled into mush. */
 
       paintHud();
       heat();
@@ -1064,6 +1108,11 @@ export default {
       deck('casino', 'assist');
       msg('cp_rescue_line', CP_LEX.cp_rescue_line, 3200);
       tick('whisper', 0.28);
+      /* The stamp already said "capped at A" - she is here for the tile, not
+       * the rubric. Once per episode, off the clock tick. */
+      note('cp.rescueArmed', {
+        kind: 'commiserate', n: rescueEpisodes, left: tileCount(n) - locked,
+      });
       showHint();
     }
     function showHint() {
@@ -1109,6 +1158,8 @@ export default {
       sustainSafe('wash', { variant: reduced ? 'pink' : w.variant, alpha, holdMs: w.ms });
       tick('wash', 0.3);
       msg('cp_wash_line', CP_LEX.cp_wash_line, 2200);
+      /* Once per wash window, never per frame of it. */
+      note('cp.washOn', { kind: 'tension', n: washes, left: tileCount(n) - locked });
       /* THE WHISPER-OUT. NEVER stop('wash') mid-class (CLAUDE.md trap 33):
        * a LOWER-alpha re-trigger is the step-down and ends the hold cleanly. */
       const stepAt = Math.max(200, Math.round(w.ms * (1 - plan.washStepdownShare)));
@@ -1124,6 +1175,12 @@ export default {
         washOn = false;
         if (stage) stage.removeAttribute('data-wash');
         deck('trickster', 'washOn', false);
+        /* W3 P0-11: the room letting go of the board. The same wash pitched
+         * down is the honest inverse of its arrival, and the beat pressure.js
+         * has always answered to but nobody dispatched clears the haze flare
+         * it would otherwise leave lingering. */
+        tick('wash', 0.18, { pitch: 0.8 });
+        deck('pressure', 'beat', 'unwash');
       });
     }
 
@@ -1136,6 +1193,10 @@ export default {
         const r = fireSafe('sub_flash', {
           anchor: wellEl,
           variant: plan.subVariants[subIdx % plan.subVariants.length],
+          /* VOICE: cadence floor is 5200 * CADENCE_MIN_MULT * (1 - CADENCE_JITTER)
+             = ~1690ms, clear of the 1400ms voiced-gap floor. */
+          voice: true,
+          voiceKey: 'composure-whisper',
         });
         if (r) subFlashes += 1;
         subIdx += 1;
@@ -1253,6 +1314,16 @@ export default {
       fireSafe('flash_burst', { count: 3, alpha: 0.45 });
       say('BANKED board ' + (boardIndex + 1) + ' in ' + boardMoves + ' moves (par ' + par
         + ') - ' + banked + ' this class');
+      /* THE SAFEST WORDS IN THE CLASS. The picture is whole, presses are inert
+       * rather than refused, and the file already calls this a dead beat. */
+      note('cp.banked', {
+        kind: 'celebrate', n: banked, left: Math.max(0, expectedBoards - banked),
+      });
+      if (boardMoves <= par) {
+        note('cp.underPar', {
+          kind: 'celebrate', n: boardMoves, left: Math.max(0, par - boardMoves),
+        });
+      }
       /* The clock is NOT stopped: the bell owns the class now. */
       const playMs = reduced ? PLAYTEST.SOLVE_PLAY_MS_REDUCED : PLAYTEST.SOLVE_PLAY_MS;
       after(playMs, dealNextBoard);
@@ -1292,6 +1363,10 @@ export default {
        * holds it for another 700ms (300 reduced) on top of the 1800 the
        * celebration already spent. Nothing can be costed here. */
       deadBeatSafe('round_gap');
+      /* Once per deal, never per tile of it - the widest breath in the class. */
+      note('cp.dealNext', {
+        kind: 'curiosity', n: boardIndex + 1, left: Math.max(0, expectedBoards - banked),
+      });
       say('dealing board ' + (boardIndex + 1) + ' (walk ' + scrambleWalkFor(tier, zen, boardIndex)
         + ', mh ' + mhStart + ', baseline ' + baseline + ', par ' + par + ')');
 
@@ -1329,7 +1404,17 @@ export default {
       try { ctx.ceremonies.stamp({ text: t('cp_stamp_bell', CP_LEX.cp_stamp_bell), tone: 'pink', target: frame }); }
       catch (e) { /* noop */ }
       msg('cp_bell_line', CP_LEX.cp_bell_line);
-      tick('stamp', 0.55);
+      /* W3 P0-3: the bell IS the end of the class, and the stamp lands after
+       * it - the school speaks first and the paperwork follows. */
+      tick('bell', 0.5);
+      after(420, () => tick('stamp', 0.55));
+      /* The bell caught a picture halfway home. Input is dead and the ceremony
+       * owns the next 2400ms, so this is a safe place for actual words. */
+      if (!solved && state && locked < tileCount(n)) {
+        note('cp.bellMidBoard', {
+          kind: 'commiserate', n: locked, left: tileCount(n) - locked, streak: banked,
+        });
+      }
       after(reduced ? PLAYTEST.CEREMONY_MS_REDUCED : PLAYTEST.CEREMONY_MS, () => finish('bell'));
     }
 
@@ -1343,8 +1428,16 @@ export default {
       closing = true;
       banking = false;
       try { if (finishBtn) finishBtn.disabled = true; } catch (e) { /* noop */ }
+      /* W3 P1-4: an ending the player CHOSE is a committed press, not a
+       * silent exit. */
+      tick('commit', 0.4);
       if (boardEl) boardEl.classList.remove('is-dealing');
       stopClock();
+      /* Zen's only ending, and the only one with no letter attached: zen
+       * reports 'pass', so there is no band to hand her here. */
+      note('cp.zenFinish', {
+        kind: banked > 0 ? 'celebrate' : 'commiserate', n: banked, streak: boardIndex + 1,
+      });
       finish('left');
     }
 
@@ -1489,14 +1582,28 @@ export default {
         elapsedMs += dt / Math.max(0.0001, timeScale);
         if (clockChip) clockChip.textContent = clockText();
         checkRescue();
-        deck('trickster', 'stalled', Math.max(0, elapsedMs - lastLockAtMs));
+        const stallMs = Math.max(0, elapsedMs - lastLockAtMs);
+        deck('trickster', 'stalled', stallMs);
+        /* HALF the rescue clock: nothing has come home for a while and the
+         * room still has minutes in it. Edge-detected off `lastLockAtMs`
+         * itself, so one stall gets one note and a lock or a deal re-arms it.
+         * No new timer - this rides the clock tick the class already runs. */
+        if (opened && !banking && !closing && stallMs >= PLAYTEST.RESCUE_MS / 2
+          && emiStallNotedAt !== lastLockAtMs) {
+          emiStallNotedAt = lastLockAtMs;
+          note('cp.stallNoLock', {
+            kind: 'ambient', n: Math.round(stallMs / 1000), left: tileCount(n) - locked,
+          });
+        }
         if (zen) return;                       // an untimed class has no bell
         const left = secLeft();
         if (!bellOn && left <= plan.bellWarnSec && elapsedMs < budgetMs) {
           bellOn = true;
           deck('casino', 'bell', true);
           msg('cp_bell_warn', CP_LEX.cp_bell_warn, 2200);
-          tick('sting', 0.36);
+          /* W3 P0-3: the warn is the end bell struck softer, one vocabulary
+           * across the school. `bellOn` above is the latch, so it lands once. */
+          tick('bell', 0.3);
         }
         if (elapsedMs >= budgetMs) { stopClock(); run(bell); }
       });
@@ -1522,6 +1629,14 @@ export default {
           },
           onFirstUse: () => {
             msg('peek_hint', 'Hold to peek. Using it caps this class at A.', 2400);
+            /* Once ever per class. The shell owns the A-cap and the hint line
+             * already said it - she is only here for the looking. */
+            if (!emiPeekNoted) {
+              emiPeekNoted = true;
+              note('cp.peekFirstUse', {
+                kind: 'tease', n: locked, left: tileCount(n) - locked, streak: banked,
+              });
+            }
           },
         });
       } catch (e) { say('peek handlers refused: ' + ((e && e.message) || e)); }

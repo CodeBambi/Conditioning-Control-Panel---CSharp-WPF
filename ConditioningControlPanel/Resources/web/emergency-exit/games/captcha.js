@@ -12,6 +12,11 @@
  * Hold fills  -> api.finish("completed", meta)
  * 90 s timer  -> api.finish("failed", meta)   (the verification expired)
  *
+ * THE CLOCK is 90 s of ACTIVE play, not 90 s of wall time: it does not start
+ * until the player's first press (or space/enter) on the verify box, and it
+ * stops while the page is hidden. A `failed` here is a sendback, which restarts
+ * the whole lockdown timer, and a window nobody touched must never buy that.
+ *
  * Shell contract: EMERGENCY_EXIT.md "Shell API". Plain script: calls
  * EE.registerGame at load, self-loads games/captcha-ads.js. Pure gate math is
  * exposed as EE_CAPTCHA_LOGIC for the Node smoke test (ee-logic-tests.js in the authoring scratchpad).
@@ -218,7 +223,19 @@
       var state = { p: 0, closed: 0, gate: gateNeed(rng), popupOpen: false };
       var held = false, pointerId = null, done = false;
       var spawned = 0, threshold = nextThreshold(0, rng);
-      var t0 = performance.now(), last = t0, lastRung = -1, lastPct = -1;
+      var last = performance.now(), lastRung = -1, lastPct = -1;
+      // The active clock: banked ms of play plus the running segment. Stays at 0 until the first
+      // press on the box, and stops while the document is hidden.
+      var begun = false, running = false, banked = 0, segAt = 0;
+      function elapsed() { return begun ? banked + (running ? performance.now() - segAt : 0) : 0; }
+      function clockBegin() { if (begun || done) return; begun = true; running = true; segAt = performance.now(); }
+      function clockPause() { if (!running) return; banked += performance.now() - segAt; running = false; }
+      function clockResume() { if (!begun || running || done) return; running = true; segAt = performance.now(); }
+      function onVisibility() {
+        if (document.hidden) { clockPause(); release(); }
+        else { clockResume(); last = performance.now(); }
+      }
+      document.addEventListener('visibilitychange', onVisibility);
       var usedAds = [], usedSteal = [], usedClosed = [];
       var ads = fallbackAds();
       loadAds(function (a) { if (a && a.ads && a.ads.length) ads = a; });
@@ -242,6 +259,7 @@
         if (done) return;
         if (ev.button != null && ev.button !== 0) return;
         ev.preventDefault();
+        clockBegin();                   // a hand on the box is what starts the 90 s
         if (state.popupOpen) { setStatus('close the offer first.', true); return; }
         held = true; pointerId = ev.pointerId;
         box.classList.add('is-held');
@@ -276,6 +294,7 @@
         if (done || (ev.key !== ' ' && ev.key !== 'Enter')) return;
         if (document.activeElement !== box) return;
         ev.preventDefault();
+        clockBegin();                   // space/enter on the box counts the same as a press
         if (state.popupOpen || keyHeld) return;
         keyHeld = true; held = true; box.classList.add('is-held');
       }
@@ -288,6 +307,7 @@
       this._off = [function () {
         document.removeEventListener('keydown', onKeyDown);
         document.removeEventListener('keyup', onKeyUp);
+        document.removeEventListener('visibilitychange', onVisibility);
       }];
 
       // ---- popups -----------------------------------------------------------
@@ -409,7 +429,7 @@
 
       // ---- end states ------------------------------------------------------
       function meta() {
-        return { popupsClosed: state.closed, popupsShown: spawned, gate: state.gate, elapsedMs: Math.round(performance.now() - t0) };
+        return { popupsClosed: state.closed, popupsShown: spawned, gate: state.gate, elapsedMs: Math.round(elapsed()) };
       }
       function complete() {
         if (done) return;
@@ -436,7 +456,7 @@
       var lastShown = -1;
       var clock = setInterval(function () {
         if (!self._alive || done) return;
-        var left = TIME_LIMIT_MS - (performance.now() - t0);
+        var left = TIME_LIMIT_MS - elapsed();
         var sec = Math.max(0, Math.ceil(left / 1000));
         if (sec !== lastShown) { lastShown = sec; try { if (hud.timer) hud.timer(sec); } catch (_e) {} }
         if (left <= 0) fail();
@@ -448,7 +468,7 @@
       try {
         var q = new URLSearchParams(location.search);
         if (q.get('autopop') === '1') this._after(500, function () { state.p = 0.38; setRing(state.p); spawnPopup(); });
-        if (q.get('autohold') === '1') this._after(300, function () { held = true; box.classList.add('is-held'); });
+        if (q.get('autohold') === '1') this._after(300, function () { clockBegin(); held = true; box.classList.add('is-held'); });
         if (q.get('autodone') === '1') this._after(1500, complete);
       } catch (_e) {}
     },

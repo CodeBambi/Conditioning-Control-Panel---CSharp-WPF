@@ -93,6 +93,32 @@ const AUDIO_CEIL = Object.freeze([0.45, 0.6, 0.75, 0.9]);
  *  a burst. */
 const BUMP_MIN_MS = 250;
 
+/** THE TOUCH PLAY-WINDOW (mobile web, ../CLAUDE.md trap 42). On the web host
+ *  every remote loop is an mp4 <video>, and 2+ simultaneously PLAYING videos
+ *  degrade the compositor on BOTH engines (Chromium locks the page to 30Hz;
+ *  iOS caps hardware decode sessions at ~3-4 and the rest stall or fall to
+ *  CPU). A 12-20 card preview playing every face at once is the worst case in
+ *  the school. So on a coarse-touch device at most TOUCH_PLAY_CAP card videos
+ *  play at a time, and the preview ROTATES that window through the board every
+ *  TOUCH_PREVIEW_STEP_MS so every face is still seen animating. Desktop
+ *  (WebView2, fine pointer) never enters any of these paths. */
+const TOUCH_PLAY_CAP = 2;
+const TOUCH_PREVIEW_STEP_MS = 1000;
+/** The rotation's floor when a beat sizes its own step off its window (0825):
+ *  below this the cap-of-2 windows churn decoders faster than iOS spins them
+ *  up, and nothing is seen animating at all. */
+const TOUCH_PREVIEW_STEP_MIN_MS = 400;
+
+/** THE PREVIEW MEDIA GATE (0825 media-warming): before the memorize clock
+ *  arms, each of the board's distinct remote faces gets up to
+ *  PREVIEW_GATE_URL_MS on pool.ready(), and the WHOLE gate is capped at
+ *  PREVIEW_GATE_CAP_MS so a broken network can never hang the class. */
+const PREVIEW_GATE_URL_MS = 1200;
+const PREVIEW_GATE_CAP_MS = 1500;
+
+/** The provider's bundled glyph-floor svg (the L&F redress law, ported). */
+const PLACEHOLDER_RE = /\/ae-ph-\d+\.svg(\?|#|$)/i;
+
 /** Diagnostics seam (the engine has one too): the live class, for the scratch
  *  harness and any future "what is the board doing" debug overlay. The shell
  *  never reads this. */
@@ -128,6 +154,24 @@ function probeReduced() {
 }
 
 function isVideoUrl(url) { return /\.(mp4|m4v|webm|mov)(\?|#|$)/i.test(String(url || '')); }
+
+/** Coarse-touch probe - the canonical device test (../CLAUDE.md trap 42):
+ *  pointer:coarse OR maxTouchPoints > 1. The host's own isTouch is OR-ed in at
+ *  start() (ctx.platform is create-scope). A Windows touchscreen laptop
+ *  matching via maxTouchPoints is the trap's deliberately accepted caveat -
+ *  hardware-protective and cheap. */
+function probeTouch() {
+  try {
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+      const m = window.matchMedia('(pointer: coarse)');
+      if (m && m.matches) return true;
+    }
+  } catch (e) { /* ignore */ }
+  try {
+    if (typeof navigator !== 'undefined' && Number(navigator.maxTouchPoints) > 1) return true;
+  } catch (e) { /* ignore */ }
+  return false;
+}
 
 export default {
   key: 'deja_vu',
@@ -182,6 +226,28 @@ export default {
     };
     const say = (m) => { try { ctx.log(m); } catch (e) { /* noop */ } };
 
+    /* EMI COMMENTARY SEAMS (the heartbeat wave). emiNote() names a moment the
+     * mascot may react to - the shell prefixes 'game:' and its own voice engine
+     * decides whether the moment is worth a face, a line or nothing at all.
+     * emiHold() fences a timing-critical window where she may pull faces but
+     * never words. Both are additive, one-way and fully guarded: an older shell
+     * has neither, and a mascot may never break a class.
+     * Named emiNote/emiHold and not note/hold because runSwap already owns a
+     * local `note` (the swap tell's DOM label) and a seam fires inside it. */
+    const emiNote = (id, extra) => {
+      try { if (ctx.mood && typeof ctx.mood.note === 'function') ctx.mood.note(id, extra); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+    const emiHold = (on) => {
+      try { if (ctx.mood && typeof ctx.mood.hold === 'function') ctx.mood.hold(!!on); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+    /* THE ONE HELD WINDOW: the memorize preview. Held from preview() to
+     * previewDown(), and released by every exit path (bell, clear, finish,
+     * pause/suspend, destroy) so the fence can never outlive the beat. */
+    let emiPreviewHeld = false;
+    let emiPopNoted = false;       // one bubble note a board, never one a pop
+
     /* ---- lifecycle flags ------------------------------------------------- */
     let dead = false;
     let paused = false;
@@ -215,6 +281,7 @@ export default {
     let boardGlyphs = GLYPHS.slice();   // THIS board's glyph order (re-shuffled per board)
     let reduced = false;
     let posterOnly = false;
+    let touch = false;           // coarse-touch device: TOUCH_PLAY_CAP applies
     let loopPolicy = { play: true, reason: 'auto' };
     let retake = false;
     let ambienceKey = '';        // the sustained-dial signature, so a restart is rare
@@ -223,6 +290,8 @@ export default {
     let boardNo = 0;             // 1-based; 0 = nothing dealt yet
     let boardsCleared = 0;       // the class's score, and the grade's main term
     let belled = false;          // the bell has taken the board (one-way)
+    /** W3 P0-2: the widest a countdown window may be heard, in ms. */
+    const COUNTDOWN_MS = 3000;
     let lastCallDone = false;    // the last-ten-seconds drum has beaten
     const boardLog = [];         // {board, pairs, attempts, clearSec} per cleared board
 
@@ -459,6 +528,8 @@ export default {
     function rackAdd(pairId) {
       if (!rack) return;
       try {
+        /* W3 P2-3: a specimen sliding into the rack is paper on paper. */
+        tick('paper', 0.16);
         rack.appendChild(el('span', 'g-dv-slide', glyphFor(pairId)));
         const slides = rack.querySelectorAll ? rack.querySelectorAll('.g-dv-slide') : null;
         if (slides && slides.length > RACK_MAX) slides[0].remove();
@@ -484,6 +555,24 @@ export default {
       };
     }
 
+    /** THE DEAD URL (0826). A face whose url 404s paints the browser's own
+     *  broken-image glyph - a tester saw one on this board. The floor is already
+     *  here: a pair with NO url wears its GLYPH face, and a glyph pair plays
+     *  exactly like a media pair. So a broken url is dropped from `pairUrls` and
+     *  BOTH of the pair's cards are re-applied together - a pair whose two halves
+     *  wore different faces would be a worse bug than the one being fixed.
+     *  Convicted once (the twin fires its own error on the same url), and
+     *  pool.markBroken keeps the row out of the next board's draw. */
+    function faceBroke(pairId, url) {
+      const u = String(url || '');
+      if (dead || !u || pairUrls[pairId] !== u) return;    // already dropped, or stale
+      pairUrls[pairId] = null;
+      try { if (pool && typeof pool.markBroken === 'function') pool.markBroken(u); }
+      catch (e) { /* an optional seam never breaks a class */ }
+      say('face failed, glyph pair ' + pairId + ': ' + u);
+      for (const c of cells) if (c && c.pairId === pairId) applyMedia(c);
+    }
+
     /** One media node per card, created once and never re-created on a flip. */
     function applyMedia(cell) {
       const url = pairUrls[cell.pairId];
@@ -501,6 +590,7 @@ export default {
       } else if (url) {
         node = el('img', 'g-dv-face');
         node.setAttribute('alt', '');
+        node.onerror = () => faceBroke(cell.pairId, url);
         node.src = url;
       } else {
         node = el('div', 'g-dv-face g-dv-glyph', glyph);
@@ -519,6 +609,63 @@ export default {
         if (on && !posterOnly) { if (typeof f.play === 'function') { const p = f.play(); if (p && p.catch) p.catch(() => {}); } }
         else if (typeof f.pause === 'function') f.pause();
       } catch (e) { /* a poster frame is an acceptable floor */ }
+    }
+
+    /* ==================================================================== *
+     * THE TOUCH PLAY-WINDOW (touch only - see TOUCH_PLAY_CAP above).
+     * The whole-board show beats (preview, re-deal) still give every card its
+     * media element and its 'up' face, but only TOUCH_PLAY_CAP of the video
+     * faces PLAY at once; the window rotates through the list on a short
+     * interval so every face gets its animated moment, then the beat's own
+     * flip-down pauses everything. The steps ride after()/run(), so a suspend
+     * defers them and clearTimers() (startBoard, bell, destroy) kills the
+     * chain outright. Never entered on desktop: every caller is touch-gated.
+     * ==================================================================== */
+    let previewing = false;      // a play-window is live (touch only, one-way per beat)
+    let previewTicks = false;    // W3 P0-2: the memorize countdown is armed
+    let previewList = null;      // the cells the window rotates over
+    let previewCursor = 0;
+    let previewStepMs = TOUCH_PREVIEW_STEP_MS;   // this beat's rotation step
+
+    function videoFaces(list) {
+      const out = [];
+      for (const c of list) if (c && c.face && c.face.tagName === 'VIDEO') out.push(c);
+      return out;
+    }
+    function playWindowStart(list, windowMs) {
+      previewList = list;
+      previewCursor = 0;
+      previewing = true;
+      /* THE ROTATION ARITHMETIC (0825): a fixed 1000ms step never reached
+       * every face inside a shrinking previewMs (tier 3: 10 of 16 faces were
+       * NEVER played during the memorize beat). When the caller knows its
+       * window, the step is sized so ceil(faces / TOUCH_PLAY_CAP) rotations
+       * fit inside it, floored at TOUCH_PREVIEW_STEP_MIN_MS. The cap of 2
+       * PLAYING videos (the iOS decode ceiling) is untouched - the window
+       * just rotates faster. Callers without a window keep the old step. */
+      const vids = videoFaces(list || []);
+      const rotations = Math.max(1, Math.ceil(vids.length / TOUCH_PLAY_CAP));
+      previewStepMs = Number(windowMs) > 0
+        ? Math.max(TOUCH_PREVIEW_STEP_MIN_MS, Math.floor(Number(windowMs) / rotations))
+        : TOUCH_PREVIEW_STEP_MS;
+      playWindowStep();
+    }
+    function playWindowStep() {
+      if (!previewing || dead || ended || belled) return;
+      const vids = videoFaces(previewList || []);
+      const n = vids.length;
+      if (!n) return;
+      for (const c of vids) playFace(c, false);
+      for (let k = 0; k < Math.min(TOUCH_PLAY_CAP, n); k++) {
+        playFace(vids[(previewCursor + k) % n], true);
+      }
+      previewCursor = (previewCursor + TOUCH_PLAY_CAP) % n;
+      // a board with no more videos than the cap has nothing to rotate
+      if (n > TOUCH_PLAY_CAP) after(previewStepMs, playWindowStep);
+    }
+    function playWindowStop() {
+      previewing = false;
+      previewList = null;
     }
 
     /* ---- HUD paint ------------------------------------------------------- */
@@ -594,6 +741,24 @@ export default {
       pairUrls = [];
       for (let pid = 0; pid < want; pid++) pairUrls[pid] = draw[pid] || null;
       facesDirty = false;
+      /* THE IMMINENT BOARD HEADS THE WARM WINDOW (0825). warmManifest /
+       * warmCursor consume NO rng (recon-verified) - free on every path. */
+      warmBoardFaces();
+    }
+
+    /** Hand THIS board's faces to the provider's manifest warmer, cursor at
+     *  the top, so the deal/preview about to run is what the rail fetches
+     *  first. Replaces the class-wide facePool manifest for the board's
+     *  lifetime (one manifest per provider, by design). */
+    function warmBoardFaces() {
+      if (!pool || typeof pool.warmManifest !== 'function') return;
+      try {
+        const need = [];
+        for (const u of pairUrls) if (u && need.indexOf(u) < 0) need.push(u);
+        if (!need.length) return;
+        pool.warmManifest(need.map((u) => ({ url: u })));
+        if (typeof pool.warmCursor === 'function') pool.warmCursor(0);
+      } catch (e) { /* a warm-up never breaks a deal */ }
     }
 
     /** Mint this board's cells into the (emptied) grid. */
@@ -619,6 +784,7 @@ export default {
        * on the new board. This call is safe from inside a run() step because
        * after() removes its own id before it runs the step. */
       clearTimers();
+      if (touch) playWindowStop();   // a dead board's window must not survive it
 
       boardNo = n;
       /* THE LADDER: board N's dials are the player's tier bumped one gentle
@@ -644,6 +810,7 @@ export default {
       swapAttempt.clear();
       drumrolled = false;
       watchLie = -1;
+      emiPopNoted = false;
       clearLie();
       busy = true;                       // input is closed until this preview is over
       facesLocked = false;
@@ -675,10 +842,20 @@ export default {
      * PHASE 0 - deal & preview (with the first poison beat)
      * ==================================================================== */
     function deal() {
+      /* W3 P0-12: the cards LAND. Twelve to twenty of them at the stagger
+       * would be a hiss, so the ear gets the first six and the last one - the
+       * deal starting and the deal finishing - each jittered off the class
+       * stream so no two land on the same note. The re-deal path (runRedeal)
+       * is a re-showing, not a deal, and stays out of this. */
+      const lastDealt = layout.dealOrder.length - 1;
+      // one note for the whole cascade, never one a card
+      emiNote('dv.dealCascade', { kind: 'ambient', n: layout.dealOrder.length, left: dials.pairs });
       layout.dealOrder.forEach((cellIndex, n) => {
+        const audible = n < 6 || n === lastDealt;
         after(n * TIMING.dealStaggerMs, () => {
           const c = cells[cellIndex];
           if (!c) return;
+          if (audible) tick('card_deal', 0.22, { pitch: 1 + (roll('deal') - 0.5) * 0.08 });
           applyMedia(c);
           c.card.classList.add('dealt');
         });
@@ -687,26 +864,97 @@ export default {
     }
 
     function preview() {
+      /* THE MEDIA GATE (0825): the memorize clock must not run against faces
+       * still fetching (<video preload="metadata"> moves no frame bytes until
+       * play(), so a cold preview was a board of black cards). Hold the deal
+       * beat - `busy` is up since startBoard and the "Dealing the board." hint
+       * stays - until every distinct remote face reports pool.ready(), capped
+       * at PREVIEW_GATE_CAP_MS total so a broken network cannot hang the
+       * class. Glyph and placeholder boards gate on nothing and open at once. */
+      const gate = previewGate();
+      if (!gate) { previewShow(); return; }
+      const myBoard = boardNo;
+      gate.then(() => run(() => {
+        if (dead || ended || belled || boardNo !== myBoard) return;
+        previewShow();
+      }));
+    }
+
+    /** The board's distinct real urls -> one settled-fast promise, or null
+     *  when there is nothing to wait on. Never rejects (pool.ready never
+     *  does; the race cap resolves regardless). */
+    function previewGate() {
+      if (!pool || typeof pool.ready !== 'function') return null;
+      const need = [];
+      for (const u of pairUrls) {
+        if (u && !PLACEHOLDER_RE.test(String(u)) && need.indexOf(u) < 0) need.push(u);
+      }
+      if (!need.length) return null;
+      const waits = need.map((u) => {
+        try { return pool.ready(u, { timeoutMs: PREVIEW_GATE_URL_MS }); }
+        catch (e) { return Promise.resolve(false); }
+      });
+      const cap = new Promise((res) => { setTimeout(res, scaled(PREVIEW_GATE_CAP_MS)); });
+      return Promise.race([Promise.all(waits), cap]);
+    }
+
+    function previewShow() {
       /* THE MEMORIZE BEAT IS PER BOARD and it is kept deliberately: it is the
        * whole encoding moment, and it is tier- (and ladder-) dialled, shrinking
        * a notch per cleared board toward tier 4's own floor. It spends bell
        * time; that is priced into the grade's board cost (script.js). */
       facesLocked = true;      // nothing may re-face a board the player is reading
+      /* THE FENCE GOES UP. The memorize window is the class's whole mechanic
+       * and it is already being attacked on purpose by the poison sub_flash;
+       * EMI may pull a face here, never a word. */
+      emiPreviewHeld = true; emiHold(true);
       setHint('dv_preview_hint', 'Memorize the board.');
       if (grid) grid.classList.add('scanning');       // the machine shows you
       for (const c of cells) {
         applyMedia(c);
         c.card.classList.add('up');
-        playFace(c, true);
+        if (!touch) playFace(c, true);
       }
-      tick('sting', 0.4);
+      /* On touch the memorize beat plays TOUCH_PLAY_CAP faces at a time and
+       * rotates; on desktop every face plays at once, exactly as before. The
+       * window is sized to previewMs so EVERY face gets its animated moment
+       * before the cards go down (0825). */
+      if (touch) playWindowStart(cells.slice(), dials.previewMs);
+      /* W3 P1-10: the board coming up is air moving, not a generic sting. */
+      tick('whoosh', 0.35);
+      /* W3 P0-2: the memorize window is a countdown, so it ticks - one per
+       * whole second inside its last third (capped at three), pitch climbing.
+       * The whole ladder is scheduled up front off a known window and dies
+       * with `previewTicks` at previewDown, or with clearTimers() at the bell. */
+      armPreviewTicks(dials.previewMs);
       // THE MEMORIZE-POISON BEAT: exactly at preview end -400ms.
       const poisonAt = Math.max(0, dials.previewMs - TIMING.poisonLeadMs);
       if (dials.subFlash) after(poisonAt, () => poison('preview'));
       after(dials.previewMs, previewDown);
     }
 
+    /** W3 P0-2: the memorize window's own countdown ladder. */
+    function armPreviewTicks(ms) {
+      previewTicks = true;
+      const gate = Math.min(COUNTDOWN_MS, Math.round(ms / 3));
+      const notes = Math.floor(gate / 1000);
+      for (let k = notes; k >= 1; k--) {
+        const step = notes - k;                       // 0 is the first one heard
+        after(Math.max(0, ms - k * 1000), () => {
+          if (!previewTicks || dead || ended || belled) return;
+          tick('clock_tick', Math.min(0.18, 0.1 + 0.04 * step), { pitch: 1 + 0.06 * step });
+        });
+      }
+    }
+
     function previewDown() {
+      previewTicks = false;                           // W3 P0-2: the window is over
+      /* W3 P0-13: the board goes face down and the clock starts. The thud is
+       * the inverse of the whoosh that opened it. */
+      tick('thud', 0.3, { pitch: 1.2 });
+      // the faces are going down: the reading is over, so the fence comes down
+      emiPreviewHeld = false; emiHold(false);
+      if (touch) playWindowStop();                    // the preview's window dies with it
       if (grid) grid.classList.remove('scanning');    // the machine is done showing
       for (const c of cells) {
         c.card.classList.add('flipping');
@@ -727,6 +975,10 @@ export default {
         variant: where === 'preview' ? 'centre' : 'whisper',
         anchor: well,
         sfx: where === 'preview',
+        /* VOICE: phase-locked, never a cadence - the preview beat is once per
+           board, the mismatch beat once per failed pair (both well over 1400ms). */
+        voice: true,
+        voiceKey: 'deja-vu-whisper',
       });
       if (r) say('sub_flash poison beat (' + where + ')');
     }
@@ -751,7 +1003,12 @@ export default {
       /* FAKE SHUFFLE (House Rules): the pantomime rides the tail of the
        * preview - cards feint trades and land home. Nothing moves, no tell
        * fires, and input stays closed until the theatre leaves the stage. */
-      if (trickster) trickster.shuffle(cells, open); else open();
+      if (trickster) {
+        // the return says the pantomime actually played: one note a board, and
+        // none at all on the boards where the deck holds the card back
+        const feinted = trickster.shuffle(cells, open);
+        if (feinted) emiNote('dv.fakeShuffle', { kind: 'tease', n: cells.length });
+      } else open();
     }
 
     /* ==================================================================== *
@@ -784,6 +1041,7 @@ export default {
           watchLie = -1;
           if (called) {
             calledLies += 1;
+            emiNote('dv.calledTheLie', { kind: 'celebrate', n: calledLies, tile: i, streak: combo });
             setHint('dv_called_it', 'You called the lie.', true);
             tick('streak', 0.7, { pitch: 1.3 });
             rewardBeat(true);
@@ -797,6 +1055,9 @@ export default {
     function judge() {
       busy = true;
       attempts += 1;
+      /* W3 P0-14: judgeMs is a held breath and it used to be held in silence.
+       * A pad under the pause, resolving into the streak or the stamp. */
+      tick('pad', 0.2, { pitch: 0.95 });
       const [a, b] = faceUp;
       cells[a].card.classList.add('judge');
       cells[b].card.classList.add('judge');
@@ -815,6 +1076,8 @@ export default {
       mismatchStreak = 0;
       /* EMI COLOR: one pair left on the bench = the lean-in. */
       try { if (ctx.mood && unmatchedPairs() === 1) ctx.mood.tense(); } catch (e) { /* noop */ }
+      // the same beat, named: the board is down to its guaranteed last pair
+      if (unmatchedPairs() === 1) emiNote('dv.lastPair', { kind: 'tension', left: 1, n: matched, streak: combo });
       const pairId = cells[a].pairId;
 
       /* "tracked through the static": matched within 2 attempts of the pair
@@ -825,6 +1088,10 @@ export default {
         trackedThis = true;
         tracked += 1;
         swapAttempt.delete(pairId);
+        /* W3 P1-10: the rarest skill this class measures - you followed a card
+         * through the static. It lands over the match cue, not under it. */
+        after(120, () => tick('chime', 0.45, { pitch: 1.5 }));
+        emiNote('dv.trackedThroughStatic', { kind: 'celebrate', n: tracked, tile: pairId, streak: combo });
         setHint('dv_tracked', 'Tracked through the static.', true);
       }
 
@@ -888,6 +1155,8 @@ export default {
           catch (e) { /* noop */ }
           // the almost: the face you NEEDED haunts the card you picked
           if (casino) casino.almost(cells[b], cells[a]);
+          // she watched them see it - fires with the ceremony, once an attempt
+          emiNote('dv.nearMissPartner', { kind: 'commiserate', tile: partner, streak: mismatchStreak });
         }
         tick('stamp_bad', 0.2);
         after(reduced ? TIMING.flipReducedMs : TIMING.flipMs, () => {
@@ -907,6 +1176,9 @@ export default {
     function pressure() {
       if (cramEnabled() && peekBtn) {
         peekBtn.classList.add('armed');
+        /* W3 P1-10: the assist offering itself. Quiet - it is a door, not a
+         * reward, and it costs the class its A. */
+        tick('lift', 0.25, { pitch: 0.9 });
         setHint('dv_cram_ready', 'Cram Assist ready. Hold it - it caps this class at A.', true);
       }
       if (dials.burstPressure) {
@@ -962,6 +1234,14 @@ export default {
       if (url && !isVideoUrl(url)) {
         const img = el('img');
         img.setAttribute('alt', '');
+        /* the same glyph floor the video branch below already takes: a lie that
+         * renders as a broken-image icon is a tell, and a very unfair one */
+        img.onerror = () => {
+          try { img.remove(); } catch (e) { /* noop */ }
+          node.textContent = glyph;
+          node.classList.add('glyph');
+          faceBroke(wearPairId, url);
+        };
         img.src = url;
         node.appendChild(img);
       } else {
@@ -991,12 +1271,15 @@ export default {
         applyMedia(c);
         if (redealLie && c === redealLie.cell) wearLie(c, redealLie.wearPairId);
         c.card.classList.add('up');
-        playFace(c, true);
+        if (!touch) playFace(c, true);
         showing.push(c);
       }
+      /* the re-deal is the preview's beat again: same touch cap, same window */
+      if (touch) playWindowStart(showing.slice());
       say('re-deal: showing ' + showing.length + ' cards'
         + (redealLie ? ' (one is a lie)' : ' (truthful)'));
       after(trickster ? trickster.redealShowMs : 1500, () => {
+        if (touch) playWindowStop();
         for (const c of showing) { c.card.classList.add('flipping'); playFace(c, false); }
         after(reduced ? TIMING.flipReducedMs : TIMING.flipMs, () => {
           for (const c of showing) c.card.classList.remove('flipping', 'up');
@@ -1004,8 +1287,16 @@ export default {
           const lied = !!redealLie;
           watchLie = lied ? redealLie.cell.index : -1;
           clearLie();
+          /* W3 P1-10: the gift and the lie were the same silence, which is
+           * the one thing they must never be - the tell is what the called-it
+           * bonus is scored on. */
+          if (lied) tick('decoy', 0.3);
+          else tick('chime', 0.3, { pitch: 1.2 });
           if (lied) setHint('dv_redeal_hint', 'One of those was a lie.', true);
           else setHint('dv_redeal_gift', 'The machine blinked.', true);
+          /* the tensest three seconds in the class, or the one honest gift */
+          if (lied) emiNote('dv.redealLied', { kind: 'tension', tile: watchLie, n: settledWindow });
+          else emiNote('dv.redealGift', { kind: 'celebrate', n: showing.length, left: Math.floor(showing.length / 2) });
           busy = false;
           endgameCheck();
         });
@@ -1069,8 +1360,12 @@ export default {
       cells[a].card.classList.add('tell');
       cells[b].card.classList.add('tell');
       cells[b].holder.appendChild(note);
-      tick('glitch', 0.55);
+      /* W3 P1-10: the TELL. */
+      tick('glitch', 0.5);
       setHint('dv_swap_hint', 'The board is moving.', true);
+      /* the law says the tell always precedes - she is part of the announcement */
+      emiNote('dv.swapTell', { kind: 'tension', tile: a, n: swapsFired + 1,
+        left: Math.max(0, dials.swapBudget - swapsFired - 1) });
 
       after(TIMING.tellMs, () => {
         let swapped = false;
@@ -1080,7 +1375,9 @@ export default {
           swapCells(a, b);
           swapsFired += 1;
           entry.swappedAt = settledWindow;
-          tick('glitch', 0.4);
+          /* W3 P1-10: and the LAND. Two glitches 600ms apart said nothing had
+           * happened yet; a body knock says the board settled. */
+          tick('thud', 0.3, { pitch: 1.1 });
           paintHud();
         };
         const res = fireSafe('glitch_swap', {
@@ -1235,6 +1532,7 @@ export default {
     function win() {
       if (dead || ended || belled) return;
       busy = true;                          // the board is over; nothing may land
+      emiPreviewHeld = false; emiHold(false);   // no fence survives a board
       boardsCleared += 1;
       const clearSec = Math.max(0, (elapsedMs - boardPlayMs) / 1000);
       boardLog.push({
@@ -1248,6 +1546,9 @@ export default {
       try { ctx.ceremonies.stamp({ text: t('dv_stamp_clear', 'CLEAR'), target: grid }); } catch (e) { /* noop */ }
       tick('stamp', 0.8);
       paintHud();
+      /* the running score of the class, counted out loud */
+      emiNote('dv.boardClear', { kind: 'celebrate', n: boardsCleared, streak: combo,
+        left: Math.max(0, Math.ceil((budgetMs - elapsedMs) / 1000)) });
       say('board ' + boardNo + ' clear in ' + clearSec.toFixed(1) + 's ('
         + attempts + ' attempts) - ' + boardsCleared + ' cleared, '
         + Math.max(0, Math.ceil((budgetMs - elapsedMs) / 1000)) + 's left');
@@ -1281,8 +1582,10 @@ export default {
       if (ended || belled) return;
       belled = true;
       busy = true;                           // 1. input is shut BEFORE anything else
+      emiPreviewHeld = false; emiHold(false);  // the bell may fall mid-preview
       stopClock();
       clearTimers();                         // 2. truncate: no step from the live board runs
+      if (touch) playWindowStop();
       flipping = 0;
       faceUp.length = 0;
       clearLie();
@@ -1293,8 +1596,16 @@ export default {
       stopAmbience();
       if (casino) casino.dimOut();           // the bell is never silence
       setHint('dv_bell', 'The bell. Class over.', true);
+      /* cut off mid-sentence by a school bell - `left` is what the live board
+       * still owed, so one pair short of clear reads as one pair short */
+      emiNote('dv.bellMidBoard', { kind: 'commiserate', n: boardsCleared,
+        left: Math.max(0, playablePairs() - matched) });
       try { ctx.ceremonies.stamp({ text: t('dv_stamp_bell', 'BELL'), tone: 'pink', target: grid }); } catch (e) { /* noop */ }
-      tick('stamp_bad', 0.6);
+      /* W3 P0-3: the bell is this class's NORMAL ending (trap 82) and it was
+       * playing the loudest error sound in the school. The school's own bell,
+       * with the stamp landing after it. */
+      tick('bell', 0.5);
+      after(420, () => tick('stamp', 0.5));
       after(TIMING.ceremonyMs, () => finish(true));   // 3. the ONE surviving timer
     }
 
@@ -1303,6 +1614,7 @@ export default {
     function finish(timeout) {
       if (ended) return;
       ended = true;
+      emiPreviewHeld = false; emiHold(false);   // the class end always releases
       stopClock();
       stopAmbience();
       if (trickster) trickster.stop();
@@ -1410,6 +1722,12 @@ export default {
           restart,
           onPop: () => {
             bubblesPopped += 1;
+            /* ONE note a board, not one a pop: a storm of decoys is still a
+             * single act of procrastination as far as she is concerned. */
+            if (!emiPopNoted) {
+              emiPopNoted = true;
+              emiNote('dv.bubblePop', { kind: 'tease', n: bubblesPopped });
+            }
             tick('bubble_pop', 0.4);
             if (grid) {
               grid.classList.add('jiggle');
@@ -1518,6 +1836,58 @@ export default {
      * plays the leftovers on their glyph faces (always distinct) rather than
      * repeating someone else's clip.
      */
+    /** Draw distinct loop urls into facePool. `clean` additionally refuses the
+     *  provider's bundled placeholder svgs - the RE-draw path must not refill
+     *  with the very floor it is replacing. The first fill keeps the original
+     *  accept-anything semantics (a placeholder pool still deals a board). */
+    function fillFacePool(clean) {
+      if (!pool || typeof pool.next !== 'function') return;
+      for (let n = 0; n < FACE_POOL_WANT * 3 && facePool.length < FACE_POOL_WANT; n++) {
+        const got = pool.next('loop');
+        const u = got && got.url;
+        if (!u) continue;
+        if (clean && PLACEHOLDER_RE.test(String(u))) continue;
+        if (facePool.indexOf(u) < 0) facePool.push(u);
+      }
+    }
+
+    /** The face pool was built cold: short, or wearing the placeholder floor. */
+    function poolDegraded() {
+      if (facePool.length < FACE_POOL_WANT) return true;
+      for (const u of facePool) if (!u || PLACEHOLDER_RE.test(String(u))) return true;
+      return false;
+    }
+
+    /** pool.onUpdate landed: a fresh media batch exists (0825). DEGRADED PATH
+     *  ONLY - a clean, full facePool returns before ANY rng is consumed, so
+     *  the clean path's draw sequence never moves (house law: extra next()
+     *  calls are permitted only where the state already serves degraded
+     *  results). Contents of facePool are unseeded; the board's seeded shuffle
+     *  in dealFaces is untouched, so determinism is safe. */
+    function refaceFromUpdate() {
+      if (dead || ended || belled || !pool) return;
+      if (!poolDegraded()) return;
+      facePool = facePool.filter((u) => u && !PLACEHOLDER_RE.test(String(u)));
+      const before = facePool.length;
+      fillFacePool(true);
+      if (facePool.length === before) return;         // the batch had nothing new
+      say('media batch landed - face pool now ' + facePool.length + ' distinct');
+      /* re-issue the class warm list; dealFaces below narrows it again */
+      try {
+        if (typeof pool.warmManifest === 'function' && facePool.length) {
+          pool.warmManifest(facePool.map((u) => ({ url: u })));
+        }
+      } catch (e) { /* noop */ }
+      /* the same landing law as the first claim: a board the player has
+       * memorised or started is never re-faced - the NEXT board gets it. */
+      if (facesLocked || faceUp.length || matched > 0) {
+        facesDirty = true;
+        return;
+      }
+      dealFaces(boardNo || 1);
+      for (const c of cells) applyMedia(c);
+    }
+
     function claimAssets() {
       // NEVER block a draw: the board is already dealing on glyph faces and the
       // urls drop in when the pool resolves (empty remote -> local, silently).
@@ -1528,13 +1898,21 @@ export default {
         .then((p) => {
           if (dead || !p || typeof p.next !== 'function') return;
           pool = p;
-          for (let n = 0; n < FACE_POOL_WANT * 3 && facePool.length < FACE_POOL_WANT; n++) {
-            const got = p.next('loop');
-            const u = got && got.url;
-            if (u && facePool.indexOf(u) < 0) facePool.push(u);
-          }
+          fillFacePool();
           say('asset pool ready (' + facePool.length + ' distinct loops; a board wears '
             + (dials ? dials.pairs : '?') + ')');
+          /* THE CLASS WARM LIST (0825): facePool is the class's whole media
+           * need, so the how-to sheet becomes the idle warm window. Each
+           * board's dealFaces re-heads the manifest with its own subset. */
+          if (typeof p.warmManifest === 'function' && facePool.length) {
+            try { p.warmManifest(facePool.map((u) => ({ url: u }))); } catch (e) { /* noop */ }
+          }
+          /* THE REVIVED RE-FACE PATH (0825): remote media streams in after the
+           * claim resolves; the old guard below ran once inside this .then()
+           * and never re-fired. The subscription dies with pool.release(). */
+          if (typeof p.onUpdate === 'function') {
+            try { p.onUpdate(() => run(refaceFromUpdate)); } catch (e) { /* optional seam */ }
+          }
           /* THE LATE POOL. If the player is already reading a preview or a live
            * board, re-facing it would be a lie the tell system never promised -
            * so the draw is banked and the NEXT board is the first with media.
@@ -1740,6 +2118,9 @@ export default {
         budgetMs = Math.max(20000, (Number(spec.timeBudgetSec) || 300) * 1000);
         reduced = probeReduced();
         posterOnly = reduced;
+        /* Coarse touch: the local probe OR the host's own flag (the web shim
+         * populates ctx.platform.isTouch; the desktop host answers false). */
+        touch = probeTouch() || !!(ctx.platform && ctx.platform.isTouch);
 
         /* THE BOARD SIZE is the player's for the WHOLE class - the escalation
          * ladder never touches the grid, so a below-par choice is still exactly
@@ -1765,6 +2146,14 @@ export default {
         loopPolicy = matchedLoopPolicy(ctx.settings && ctx.settings.dv_matched_loops, tier, posterOnly);
         if (loopPolicy.reason === 'ceiling') {
           say('dv_matched_loops: "keep-playing" refused by the quality/tier ceiling - frozen');
+        }
+        /* THE TOUCH SETTLE: matchedLoopPolicy's semantics are untouched, but a
+         * phone cannot afford matched pairs looping forever - by the end of a
+         * board that is `pairs` extra live decoders under the play cap. Same
+         * "a knob may use less, never more" direction the ceiling rule takes. */
+        if (touch && loopPolicy.play) {
+          loopPolicy = { play: false, reason: 'touch' };
+          say('dv_matched_loops: matched pairs settle to poster on touch (playing-video cap)');
         }
 
         /* retake detection: the same seed already played today replays the
@@ -1821,6 +2210,8 @@ export default {
       pause() {
         if (paused) return;
         paused = true;
+        // a frozen class may sit here forever - the fence must not sit with it
+        emiHold(false);
         // the lab holds its breath: every CSS animation (sweep, beam, shudder)
         // freezes in place via animation-play-state
         if (stage) stage.classList.add('suspended');
@@ -1830,6 +2221,8 @@ export default {
       resume() {
         if (!paused) return;
         paused = false;
+        // the preview the pause interrupted is still the preview: re-fence it
+        if (emiPreviewHeld && !dead && !ended && !belled) emiHold(true);
         if (stage) stage.classList.remove('suspended');
         lastTick = Date.now();
         for (const c of cells) if (c.state === 'up' || (c.state === 'locked' && loopPolicy.play)) playFace(c, true);
@@ -1844,7 +2237,9 @@ export default {
 
       destroy() {
         dead = true;
+        emiPreviewHeld = false; emiHold(false);   // teardown always releases
         hideHowto();
+        if (touch) playWindowStop();
         stopClock();
         clearTimers();
         stopAmbience();
@@ -1899,7 +2294,7 @@ export default {
           revealed: revealed.slice(),
           elapsedMs, budgetMs, classPlayMs, boardPlayMs, ended, busy, paused,
           loopPolicy: Object.assign({}, loopPolicy),
-          posterOnly, reduced,
+          posterOnly, reduced, touch,
           pairUrls: pairUrls.slice(),
           cellsDom: cells.map((c) => c.card),
           well,

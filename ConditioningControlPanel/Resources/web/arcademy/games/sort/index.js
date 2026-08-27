@@ -201,6 +201,14 @@ const RING_TICK_MS = 50;
 const RING_TICK_MS_REDUCED = 100;
 const SPRING_MS = SWIPE.SPRING_MS;
 const INTRO_MS = 900;
+/** The ring may not start against a face that has not PAINTED (owner,
+ *  2026-08-25: the countdown ran while the gif was still downloading -
+ *  unplayable on a slow link, and a cold video at a 750ms ring could time out
+ *  into a PASS before its first frame existed). faceReady() below resolves on
+ *  decode / loadeddata; this is the ceiling a hung url may hold the class for -
+ *  past it the round runs anyway, which is exactly what a broken url already
+ *  does (its face removes itself and the drawn back is the fair round). */
+const READY_FALLBACK_MS = 1000;
 const AUTO_SUBMIT_MS = 45000;
 /** Live <video> nodes this class may hold at once (trap 36). A CONCURRENCY
  *  ceiling, not a supply one: the stack is three cards deep whatever the class
@@ -210,19 +218,12 @@ const DECODER_CEILING = 2;
  *  supply figure - six rows in front of a cursor is six rows whether the deck
  *  is 60 long or 120. Stays 6. */
 const PREWARM = 6;
-/** Cards the WARM RAIL pulls bytes for, standing BEHIND the three-deep stack.
- *  Not a supply figure either: PREWARM buys rows (urls), this buys the bytes
- *  behind them. Four was the first guess and a fast swiper beat it (owner
- *  report, 2026-08-24: a sub-second rhythm against multi-megabyte gifs on a
- *  phone link outran the window before the trickle refilled it). Eight is the
- *  same idea sized to the actual burn rate: ~0.5s a card is ~4s of slack,
- *  which is one big gif's worth of download on a bad day. */
-const WARM_AHEAD = 8;
-/** Warms in flight at once. This is a background TRICKLE and it is competing
- *  with the top card's own download, which always wins - but two lanes stalled
- *  behind one slow gif while the swiper burned the window down, so a third
- *  lets small stills slip past a big download instead of queueing behind it. */
-const WARM_INFLIGHT = 3;
+/* (The game-local WARM_AHEAD/WARM_INFLIGHT byte rail moved INTO the provider
+ * as the manifest warmer, 0825: buildDeck knows the whole ordered deck before
+ * the first card shows, so warmDeck() below hands it to pool.warmManifest()
+ * and reseat() walks pool.warmCursor(). Windows and lanes live in
+ * provider/index.js - MANIFEST_AHEAD_IDLE/PLAY, WARM_INFLIGHT - and the
+ * saveData gate rides inside warmUrl(), where it always was.) */
 /** The claim, when the door never resolved one for us (QUICK SORT floor).
  *  Moved 48/32 -> 72/48 with the deck (see claimOpts): a 120-card tier-4 deck
  *  fed by an 80-row claim would be repeats before the bell. */
@@ -283,6 +284,37 @@ export default {
       try { return ctx.lexicon(k, f == null ? SORT_LEX[k] : f); }
       catch (e) { return f == null ? (SORT_LEX[k] || k) : f; }
     };
+
+    /* EMI COMMENTARY SEAMS (the heartbeat wave). emiNote() names a moment the
+     * mascot may react to - the shell prefixes 'game:' and its own voice engine
+     * decides whether the moment is worth a face, a line or nothing at all.
+     * emiHold() fences a timing-critical window where she may pull faces but
+     * never words. Both are additive, one-way and fully guarded: an older shell
+     * has neither, and a mascot may never break a class. They are emiNote /
+     * emiHold and not note / hold because this room already owns a note() -
+     * the lexicon strip under the stack. */
+    const emiNote = (id, extra) => {
+      try { if (ctx.mood && typeof ctx.mood.note === 'function') ctx.mood.note(id, extra); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+    const emiHold = (on) => {
+      try { if (ctx.mood && typeof ctx.mood.hold === 'function') ctx.mood.hold(!!on); }
+      catch (e) { /* a mascot may never break a class */ }
+    };
+    /** The rung the halo starts CHASING at - see data-chase in armTop(). */
+    const EMI_CHASE_RUNG = 6;
+    let emiRingHeld = false;
+    let emiCapped = false;
+    let emiWallWoke = false;
+    /** The hold is a WINDOW, not a pulse: idempotent, so a second arm or a
+     *  second release can never leave her fenced with no ring to fence. */
+    const emiHoldRing = (on) => {
+      const want = !!on;
+      if (want === emiRingHeld) return;
+      emiRingHeld = want;
+      emiHold(want);
+    };
+
     const timers = createTimers();
     const reduced = probe('(prefers-reduced-motion: reduce)')
       || !!(ctx.motion && ctx.motion.reducedMotion);
@@ -336,6 +368,69 @@ export default {
       },
     };
 
+    /* EMI RIDES THE BUS rather than twenty-odd call sites. Every moment this
+     * room already announces to its decks is a moment the mascot may react to,
+     * so the heartbeat subscribes ONCE, here, and the play loop never learns
+     * she exists. A mapper returns [seam id, payload] or null to let the beat
+     * pass unremarked - `grab` and `drag` are deliberately not mapped at all
+     * (the player's finger is on the card and she does nothing). */
+    const EMI_SEAMS = {
+      commit: (p) => {
+        /* JUST is the near-miss you won, ALMOST the one you lost; they are
+         * mutually exclusive, and an ordinary correct swipe is wallpaper. */
+        if (p.just) return ['sort.just', { kind: 'celebrate', n: S ? S.just : 0, streak: Number(p.chain) | 0 }];
+        if (p.almost) return ['sort.almost', { kind: 'commiserate', n: Number(p.rung) | 0, streak: Number(p.chain) | 0 }];
+        return null;
+      },
+      wrong: (p) => ['sort.wrong', {
+        kind: 'commiserate',
+        n: S ? S.wrong : 0,
+        streak: S ? S.chain : 0,
+        tile: (p.card && p.card.tag) ? String(p.card.tag) : '',
+      }],
+      pass: (p) => ['sort.pass', { kind: 'tease', n: S ? S.passed : 0, streak: Number(p.chain) | 0 }],
+      rung: (p) => {
+        if (p.down) return null;
+        const to = Number(p.to) | 0;
+        /* THE CEILING, ONCE. A tier hands out 5/6/7/8 rungs and no more, so
+         * arriving at the cap is a different piece of news from climbing, and
+         * the same instant is never both: the cap beat outranks the rung-up. */
+        if (S && !emiCapped && to >= S.rungCap) {
+          emiCapped = true;
+          return ['sort.rungCapped', { kind: 'celebrate', n: to, streak: S.chain }];
+        }
+        return ['sort.rungUp', { kind: 'celebrate', n: to, streak: S ? S.chain : 0 }];
+      },
+      jackpot: (p) => {
+        const why = String(p.why || '');
+        if (why === 'royal') {
+          return ['sort.royal', { kind: 'celebrate', n: Number(p.rung) | 0, streak: Number(p.chain) | 0 }];
+        }
+        /* a MINOR pays several times a class and is not news */
+        if (why.indexOf('major@') !== 0) return null;
+        return ['sort.majorJackpot', {
+          kind: 'celebrate',
+          n: Number(p.rung) | 0,
+          streak: Number(p.chain) | 0,
+          left: S ? Math.max(0, CHAIN.MAJOR_RUNGS.length - S.majorsPaid.length) : 0,
+        }];
+      },
+      end: (p) => {
+        const tk = p.ticket || {};
+        return ['sort.ticket', {
+          kind: (p.royal || Number(p.composite) >= 0.7) ? 'celebrate' : 'commiserate',
+          n: Number(tk.sorted) | 0,
+          streak: Number(tk.longestChain) | 0,
+        }];
+      },
+    };
+    for (const evt of Object.keys(EMI_SEAMS)) {
+      bus.on(evt, (p) => {
+        const r = EMI_SEAMS[evt](p || {});
+        if (r) emiNote(r[0], r[1]);
+      });
+    }
+
     /* ==================================================================== *
      * THE ENGINE, AS A DECK SEES IT. Null-safe everywhere, frozen while the
      * class is frozen, and every burst over the stack is welded click-safe -
@@ -382,6 +477,20 @@ export default {
         return deckEngine.fire('audio_trigger', Object.assign({ name, level: lv }, extra || {}));
       },
     };
+
+    /**
+     * W3 P0-20 - THE DOOR'S CUE. setup.js runs BEFORE the class exists, and
+     * `halted()` is true while `S` is null, so deckEngine.audio() would have
+     * swallowed every cue the door fired. This is the same road with the same
+     * ceiling (tier 1's, since no tier is dealt yet) and the same one owner -
+     * setup.js is handed this closure, holds no node and imports no mixer.
+     */
+    function doorCue(name, level, extra) {
+      if (destroyed || !ctx.engine || typeof ctx.engine.fire !== 'function') return;
+      const lv = Math.min(audioCeil(), level == null ? 0.4 : Number(level) || 0);
+      try { ctx.engine.fire('audio_trigger', Object.assign({ name, level: lv }, extra || {})); }
+      catch (e) { /* a cue never takes the door down */ }
+    }
     const deckTimers = {
       after(ms, fn) { return timers.after(ms, () => { if (halted()) return; fn(); }); },
       every(ms, fn) { return timers.every(ms, () => { if (halted()) return; fn(); }); },
@@ -607,6 +716,7 @@ export default {
         try {
           door = createSetupDoor({
             ctx, t, mount: ctx.root, existing, assets: ctx.assets, onPlay, onLeave,
+            cue: doorCue,                     // W3 P0-20: the door's one road to sound
           }) || null;
         } catch (e) {
           say('the door refused to open (' + ((e && e.message) || e) + ') - QUICK SORT');
@@ -726,8 +836,12 @@ export default {
           root.setAttribute('preserveAspectRatio', 'none');
         } catch (e) { /* noop */ }
         const track = svg('rect', 'g-sort-ring-track');
+        /* the BLOOM: a second, wider stroke behind the arc reading the same
+         * --sort-ring var - a cheap halo with no filter and no blend, so it is
+         * safe over a live video (trap 36) and it survives the touch rung. */
+        const bloom = svg('rect', 'g-sort-ring-bloom');
         const arc = svg('rect', 'g-sort-ring-arc');
-        for (const r of [track, arc]) {
+        for (const r of [track, bloom, arc]) {
           if (!r) continue;
           try {
             r.setAttribute('x', '2'); r.setAttribute('y', '2');
@@ -744,8 +858,14 @@ export default {
         el: box,
         /** @param {number} left 1 -> full ring, 0 -> closed */
         set(left, ripe) {
-          setVar(box, '--sort-ring', String(Math.round(clamp01(left) * 1000) / 1000));
+          const v = clamp01(left);
+          setVar(box, '--sort-ring', String(Math.round(v * 1000) / 1000));
           setAttr(box, 'data-ripe', ripe || 'fresh');
+          /* THE LAST 12% BREATHES. ringTick drives this through set() on the
+           * same tick that writes --sort-ring, so the breathe can never argue
+           * with the number; armTop's set(1,'fresh') clears it. Reduced motion
+           * neutralises the animation in the sheet, never the class. */
+          if (v < 0.12) addCls(box, 'is-closing'); else delCls(box, 'is-closing');
         },
       };
     }
@@ -766,15 +886,24 @@ export default {
       setAttr(node, 'data-seen', card.seen ? '1' : '0');
       setVar(node, '--sort-depth', String(depth));
       setVar(node, '--sort-scale', String(scaleForDepth(depth)));
+      /* THE CLIP LAYER. The card node itself no longer clips - its old
+       * overflow:hidden was eating the ripe ring (the ringbox hangs at
+       * inset:-10px, so only an inner sliver of the stroke survived and the
+       * glow died entirely). The rounded clip the MEDIA needs (the ken-burns
+       * face scales past the box every cycle) lives on this inner layer; the
+       * stamps and the ring stay the card's own children, above it. */
+      const clip = el('div', 'g-sort-clip');
+      if (clip) node.appendChild(clip);
+      const mediaHost = clip || node;
       const back = el('div', 'g-sort-back');
       if (back) {
         const h = Math.round(hash01(card.url + '|back') * 360);
         setVar(back, '--sort-back-h', String(h));
         setVar(back, '--sort-back-h2', String((h + 310) % 360));
-        node.appendChild(back);
+        mediaHost.appendChild(back);
       }
       const face = mintFace(card, depth);
-      if (face) node.appendChild(face);
+      if (face) mediaHost.appendChild(face);
       const yes = stampNode('yes', '♥', t('sort_stamp_yes', 'YES'));
       const no = stampNode('no', '⊘', t('sort_stamp_no', 'NO'));
       if (yes) node.appendChild(yes);
@@ -784,7 +913,7 @@ export default {
         ring = makeRing();
         if (ring && ring.el) node.appendChild(ring.el);
       }
-      return { node, face, ring, yes, no, card, depth, video: face && face.tagName === 'VIDEO' };
+      return { node, clip, face, ring, yes, no, card, depth, video: face && face.tagName === 'VIDEO', slotFreed: false };
     }
     function stampNode(side, glyph, text) {
       const n = el('div', 'g-sort-stamp ' + side);
@@ -796,30 +925,207 @@ export default {
       setAttr(n, 'aria-hidden', 'true');
       return n;
     }
+    /* ---------------------------------------------------- broken media law */
+    /** The pool's shared url blacklist, guarded: a pool double without the
+     *  seam (the shell's null-assets, an old harness) just answers "fine". */
+    function poolIsBroken(url) {
+      try { const p = S && S.pool; return !!(p && typeof p.isBroken === 'function' && url && p.isBroken(url)); }
+      catch (e) { return false; }
+    }
+    function poolMarkBroken(url) {
+      try { const p = S && S.pool; if (p && typeof p.markBroken === 'function' && url) p.markBroken(url); }
+      catch (e) { /* noop */ }
+    }
+    /** The pool's spare rows for a tag (tagged pools hold up to TAG_CAP rows
+     *  the frozen deck never dealt), guarded like the verbs above: a pool
+     *  without the accessor - quick sort, an old double - answers none. */
+    function poolSpare(tag) {
+      try {
+        const p = S && S.pool;
+        const rows = p && typeof p.spare === 'function' ? p.spare(tag) : null;
+        return Array.isArray(rows) ? rows : [];
+      } catch (e) { return []; }
+    }
+    /**
+     * THE SUBSTITUTE for a card whose url is dead - decided at MINT time, and
+     * the stored deck (the retake cache) is NEVER touched: game state and the
+     * judge keep reading the deck record, the FACE is presentation. Same-tag
+     * by law (the player judges the pixels, the ledger judges card.tag - and
+     * in QUICK SORT same tag IS same kind, so the kind-truth holds too), and
+     * deterministic by construction: the pick is pure hashing of (seed, deck
+     * index) over an order-stable candidate list - the same pool and blacklist
+     * state show the same substitute on a retake, and no seeded stream is
+     * consumed (determinism law). FRESH BLOOD FIRST (0825): the pool's spare
+     * rows - same-tag media it kept absorbing after the deck froze - stand in
+     * before any deck survivor, because a substitute drawn from the deck itself
+     * is by construction a repeat, and a modest blacklist was reading as "the
+     * variety collapsed" in playtest. The deck's own survivors stay the floor.
+     */
+    function substituteFor(card) {
+      if (!S || !card) return null;
+      const rows = S.deckRows || [];
+      const inDeck = new Set();
+      for (const c of rows) if (c && c.url) inDeck.add(c.url);
+      const seen = new Set();
+      const spares = [];
+      for (const c of poolSpare(card.tag)) {
+        if (!c || !c.url || c.tag !== card.tag) continue;
+        if (c.url === card.url || inDeck.has(c.url) || seen.has(c.url) || poolIsBroken(c.url)) continue;
+        seen.add(c.url);
+        spares.push(c);
+      }
+      const list = spares;
+      if (!list.length) {
+        /* THE HOLE THE FALLBACK LEFT (0826): the deck walk checked the card's
+         * own url and the blacklist, but nothing about the cards STANDING NEXT
+         * TO IT - so a substitute was free to mirror the face right beside it,
+         * which reads as the duplicate the spares branch exists to avoid. The
+         * standing urls are collected first and the deck survivors that mirror
+         * one are held BACK, not dropped: if they were all we had, a repeat
+         * beats a drawn back. (Deck rows only - the spares branch above is
+         * already whole-deck exclusive, so it cannot hit this.) */
+        const standing = new Set();
+        for (const live of S.live) {
+          if (live && live.card && live.card.url && live.card.url !== card.url) standing.add(live.card.url);
+        }
+        const mirrors = [];
+        for (const c of rows) {
+          if (!c || !c.url || c.tag !== card.tag) continue;
+          if (c.url === card.url || seen.has(c.url) || poolIsBroken(c.url)) continue;
+          seen.add(c.url);
+          if (standing.has(c.url)) mirrors.push(c);
+          else list.push(c);
+        }
+        if (!list.length) for (const c of mirrors) list.push(c);
+      }
+      if (!list.length) return null;
+      const pick = list[Math.floor(hash01(String(S.seed) + '|sub|' + (card.i | 0)) * list.length)];
+      return pick ? { url: pick.url, mime: pick.mime || '' } : null;
+    }
+    /** What the face actually shows: the card's own url, or its substitute
+     *  when that url is on the blacklist. Null = no healthy media at all -
+     *  the drawn back stands, which is the fair round it always was. */
+    function displaySrcOf(card) {
+      if (!card || !card.url) return null;
+      if (!poolIsBroken(card.url)) return { url: card.url, mime: card.mime || '' };
+      const sub = substituteFor(card);
+      return sub || null;
+    }
+    /** The live entry currently holding this face element, if any. */
+    function liveHolding(face) {
+      if (!S || !face) return null;
+      for (const live of S.live) if (live && live.face === face) return live;
+      return null;
+    }
+    /**
+     * BUG A's fix: the decoder SLOT frees the moment the card LEAVES PLAY
+     * (flyOut / the pass's sink), not when its node is torn down 400ms later -
+     * in that gap the next card's video used to hit the ceiling, mint null,
+     * and top the stack cold. The node keeps playing while it flies (the slot
+     * is a claim on the future, and the brief overlap is the accepted cost);
+     * `slotFreed` makes the free idempotent across flyOut -> dropCard -> error,
+     * and a re-minted face resets it (reseat's grow branch).
+     */
+    function freeSlot(live) {
+      if (!live || !live.video || live.slotFreed) return;
+      live.slotFreed = true;
+      videoCount = Math.max(0, videoCount - 1);
+    }
+    /** Tear a face out of a live card NOW (a dead url): slot freed, element
+     *  silenced and removed, refs cleared so reseat()'s re-mint branch refires. */
+    function killFace(live) {
+      if (!live || !live.face) return;
+      const face = live.face;
+      if (live.video) {
+        freeSlot(live);
+        /* the dying flag FIRST: removeAttribute('src') + load() can surface as
+         * an 'error' on some WebKit paths, and a teardown that condemned the
+         * url the player just watched would feed the blacklist a healthy card */
+        try { face._aeDying = true; } catch (e) { /* noop */ }
+        try { if (face.pause) face.pause(); face.removeAttribute('src'); if (face.load) face.load(); }
+        catch (e) { /* noop */ }
+      }
+      try { if (face.parentNode) face.remove(); } catch (e) { /* noop */ }
+      live.face = null;
+      live.video = false;
+    }
+    /** Which face errors CONVICT the url, and which are the element's own
+     *  weather. iOS fires <video> 'error' on benign decoder-pool exhaustion
+     *  and aborted loads, so a video only condemns on the codes that name the
+     *  URL as the problem: MEDIA_ERR_NETWORK (2) and MEDIA_ERR_SRC_NOT_SUPPORTED
+     *  (4) - ABORTED (1) and DECODE (3) re-mint without a verdict. An <img> is
+     *  guilty only "loaded and has no pixels" (the provider's own image law). */
+    function faceErrorCondemns(face) {
+      if (!face) return false;
+      if (face.tagName === 'VIDEO') {
+        const code = face.error && face.error.code;
+        return code === 2 || code === 4;
+      }
+      return !!(face.complete && !(Number(face.naturalWidth) > 0));
+    }
+    /** BUG B's fix, shared by both element kinds: a face whose error CONVICTS
+     *  its url (faceErrorCondemns) is a url the whole page should stop dealing.
+     *  Blacklist it, clear the face so the re-mint branch refires, and reseat
+     *  now - the re-mint swaps in the substitute without waiting for the stack
+     *  to move. A benign error still kills and re-mints the face, it just
+     *  never condemns the url; our own teardown (the dying flag) is inert. */
+    function faceDied(face) {
+      if (face && face._aeDying) return;    // killFace/dropCard letting go, not a death
+      const url = face && face._aeUrl ? String(face._aeUrl) : '';
+      if (url && faceErrorCondemns(face)) poolMarkBroken(url);
+      const live = liveHolding(face);
+      if (live) {
+        killFace(live);
+        try { reseat(); } catch (e) { /* noop */ }
+      } else {
+        /* already out of play: its slot was freed when it left (flyOut/pass);
+         * just make sure the element itself lets go */
+        try { if (face && face.pause) face.pause(); } catch (e) { /* noop */ }
+        try { if (face && face.parentNode) face.remove(); } catch (e) { /* noop */ }
+      }
+    }
+
     function mintFace(card, depth) {
       if (!card || !card.url) return null;
       if (depth > 1) return null;                       // the third card is a back
-      const isVid = isVideoUrl(card.url, card.mime);
-      const wantVideo = depth === 0 && isVid;
+      /* a BLACKLISTED url swaps its face for the deterministic substitute
+       * here, at mint time - the deck record itself is never rewritten */
+      const src = displaySrcOf(card);
+      if (!src) return null;                            // nothing healthy: the back stands
+      const isVid = isVideoUrl(src.url, src.mime);
+      /* A VIDEO MAY NOW MINT AT DEPTH 1 TOO - warm, not playing. preload=auto
+       * with no play() call pulls bytes and readies the first frame while the
+       * card is still second, so the promotion's faceReady gate is usually a
+       * no-op. It COUNTS against DECODER_CEILING like any live <video> (the
+       * ceiling is a concurrency claim and the warm holds a demuxer), and the
+       * card is already MOUNTED in the stack - never a detached video (trap:
+       * a detached demuxer the ceiling could not see). Over budget the back
+       * stands, exactly as before, and the ordinary depth-0 grow still runs. */
+      const wantVideo = depth <= 1 && isVid;
+      const isTop = depth === 0;
       if (wantVideo && videoCount < DECODER_CEILING) {
         const v = el('video', 'g-sort-face');
         if (!v) return null;
         videoCount += 1;
-        v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true;
+        v.muted = true; v.loop = true; v.autoplay = isTop; v.playsInline = true;
         try {
           v.setAttribute('muted', ''); v.setAttribute('loop', '');
-          v.setAttribute('playsinline', ''); v.setAttribute('preload', 'metadata');
+          v.setAttribute('playsinline', '');
+          /* preload=auto at EVERY depth: depth 1 is the pre-mint warm, and a
+           * video minting cold AT depth 0 (a substitute, a promoted back) needs
+           * its bytes now, not a metadata probe - the old 'metadata' top-card
+           * branch was for faces play() would drive anyway, and on a cold top
+           * card it sat under the 1s ceiling doing nothing. */
+          v.setAttribute('preload', 'auto');
           v.setAttribute('disablepictureinpicture', '');
         } catch (e) { /* DOM double */ }
         try { v.disableRemotePlayback = true; } catch (e) { /* not everywhere */ }
+        try { v._aeUrl = src.url; } catch (e) { /* noop */ }
         if (typeof v.addEventListener === 'function') {
-          v.addEventListener('error', () => {
-            try { v.removeAttribute('src'); if (v.load) v.load(); } catch (e) { /* ignore */ }
-            try { if (v.parentNode) v.remove(); } catch (e) { /* ignore */ }
-          });
+          v.addEventListener('error', () => faceDied(v));
         }
-        v.src = card.url;
-        if (typeof v.play === 'function') {
+        v.src = src.url;
+        if (isTop && typeof v.play === 'function') {
           try { const p = v.play(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* autoplay policy */ }
         }
         return v;
@@ -836,16 +1142,19 @@ export default {
       img.alt = '';
       try { img.setAttribute('draggable', 'false'); img.setAttribute('decoding', 'async'); }
       catch (e) { /* DOM double */ }
+      try { img._aeUrl = src.url; } catch (e) { /* noop */ }
       if (typeof img.addEventListener === 'function') {
-        img.addEventListener('error', () => { try { if (img.parentNode) img.remove(); } catch (e) { /* ignore */ } });
+        img.addEventListener('error', () => faceDied(img));
       }
-      img.src = card.url;
+      img.src = src.url;
       return img;
     }
     function dropCard(live) {
       if (!live) return;
+      freeSlot(live);
       if (live.video) {
-        videoCount = Math.max(0, videoCount - 1);
+        /* dying flag first, same law as killFace: teardown never self-condemns */
+        try { if (live.face) live.face._aeDying = true; } catch (e) { /* noop */ }
         try { const v = live.face; if (v) { if (v.pause) v.pause(); v.removeAttribute('src'); if (v.load) v.load(); } }
         catch (e) { /* noop */ }
       }
@@ -853,144 +1162,31 @@ export default {
     }
 
     /* ==================================================================== *
-     * THE WARM RAIL - bytes ahead of the deal, and nothing else.
+     * THE MANIFEST HAND-OFF (0825) - the game-local warm rail, superseded.
      *
-     * A card asks the network for its media only when it is MINTED into the
-     * three-deep stack, and a VIDEO card does not even do that: since the
-     * blank-card fix a video url never rides an <img>, so the card stands as a
-     * drawn back until reseat() grows the real <video> at the moment it
-     * SURFACES. On a phone against a remote CDN that is a guaranteed blank-back
-     * window - the download starts on the card the player is already being
-     * timed on. PREWARM above does not help: it is the provider's ROW
-     * look-ahead, and a row is a url, not a byte.
-     *
-     * So the rail peeks the cards that hold a url and no bytes - the faceless
-     * ones still in the stack, then the few standing behind it - and asks the
-     * browser to put their bytes in the HTTP cache, so that the element minted
-     * later finds them already there. Two rules keep it honest:
-     *
-     *   - a still or a gif is warmed by a DETACHED `new Image()`. It is never
-     *     attached to the document, so nothing composites and nothing is on
-     *     screen; the strong ref in `held` exists only so GC cannot collect the
-     *     request out from under itself mid-flight, and it is dropped the
-     *     moment the card surfaces or the window walks past it.
-     *   - a video url is warmed by `fetch(url, {mode:'no-cors'})` and the
-     *     opaque reply is thrown away unread. It is deliberately NOT a detached
-     *     <video>: trap 36 says the DECODER COUNT is the only lever that
-     *     matters, DECODER_CEILING is 2, and a warm <video> would start a demux
-     *     the instant it had bytes - a third decoder, off screen, that the
-     *     ceiling never counted. A cache entry costs no decoder at all.
-     *
-     * And it is a trickle, not a race: WARM_INFLIGHT at a time, every url at
-     * most once a class, nothing local or blob-backed (already instant), and
-     * under Data Saver the rail is never built in the first place.
+     * buildDeck writes THE WHOLE ordered deck before the first card shows, so
+     * this class does not need to peek a window itself: warmDeck() hands the
+     * full need list to pool.warmManifest() the moment the deal lands - the
+     * door / ghost round / rules sheet then becomes warm time under the
+     * provider's deep IDLE window - and reseat() (the one seam every advance
+     * already rides) walks pool.warmCursor() so the window follows play. The
+     * warm primitives, the inflight trickle, the once-per-url law, the held
+     * bound and the Data Saver gate all live in the provider now (one rail,
+     * not two); trap 36 still holds - a video warms as a no-cors fetch, never
+     * a detached <video>.
      * ==================================================================== */
-    /** Data Saver is the player's word that we do not spend bytes on a guess. */
-    const saveData = (() => {
-      try { return !!(navigator.connection && navigator.connection.saveData === true); }
-      catch (e) { return false; }
-    })();
-
-    function createWarmRail() {
-      const warmed = new Set();     // every url this class has already asked for
-      const held = new Map();       // url -> the detached Image holding it open
-      const queue = [];
-      let flight = 0;
-      let dead = false;
-
-      /** Only bytes that actually travel. A blob:/data:/file: url has no
-       *  network behind it, and same-origin media is the host serving the
-       *  player's own disk - both are instant and warming them is waste. */
-      function warmable(url) {
-        const s = String(url || '');
-        if (!s || warmed.has(s)) return false;
-        try {
-          const u = new URL(s, (typeof location !== 'undefined' && location.href) || undefined);
-          if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
-          if (typeof location !== 'undefined' && u.origin === location.origin) return false;
-        } catch (e) { return false; }
-        return true;
-      }
-      function done() { flight = Math.max(0, flight - 1); if (!dead) pump(); }
-      function pump() {
-        while (!dead && flight < WARM_INFLIGHT && queue.length) {
-          const job = queue.shift();
-          flight += 1;
-          if (job.video) {
-            /* fire and forget, and swallow everything: a rejected warm is a
-             * card that will simply load the ordinary way. */
-            try {
-              const pr = fetch(job.url, { mode: 'no-cors', credentials: 'omit' });
-              if (pr && pr.then) pr.then(done, done); else done();
-            } catch (e) { done(); }
-          } else {
-            let img = null;
-            try { img = new Image(); } catch (e) { img = null; }
-            if (!img) { done(); continue; }
-            held.set(job.url, img);
-            try {
-              img.decoding = 'async';
-              img.src = job.url;
-              /* BYTES ARE HALF THE BILL. A cached gif still pays its DECODE on
-               * first paint, and on a phone that is the visible half of the
-               * stutter the owner reported - so a warm is not done until
-               * decode() says the first frame exists. The decoded frames live
-               * in the browser's image cache keyed by url, which is exactly
-               * where the card's own <img> will look. Fallback for engines
-               * without decode(): the old load/error pair, bytes-only. */
-              if (typeof img.decode === 'function') {
-                img.decode().then(done, () => { held.delete(job.url); done(); });
-              } else {
-                img.onload = done;
-                img.onerror = () => { held.delete(job.url); done(); };
-              }
-            } catch (e) { held.delete(job.url); done(); }
-          }
-        }
-      }
-      return {
-        /** THE WINDOW IS EVERY CARD WITH NO BYTES YET, and it starts INSIDE the
-         *  stack. A minted card is not a loaded one: the third card is a back
-         *  by law, and since the blank-card fix a video card is a back at depth
-         *  1 too - both hold a url and no request. So the faceless live cards
-         *  come first (they surface soonest), then the cards the cursor has not
-         *  dealt. The tail can be short near the end of the deck, which is
-         *  fine: what follows a spent deck is the passes and a reshuffle, urls
-         *  this class has already met and the cache already holds. */
-        refresh() {
-          if (dead || !S || !S.cards || !S.cards.length) return;
-          const ahead = [];
-          for (const live of (S.live || [])) {
-            if (live && !live.face && live.card && live.card.url) ahead.push(live.card);
-          }
-          for (let k = 0; k < WARM_AHEAD; k++) {
-            const card = S.cards[S.cursor + k];
-            if (card && card.url) ahead.push(card);
-          }
-          const window_ = new Set(ahead.map((c) => String(c.url)));
-          for (const url of Array.from(held.keys())) if (!window_.has(url)) held.delete(url);
-          for (const card of ahead) {
-            const url = String(card.url);
-            if (!warmable(url)) continue;
-            warmed.add(url);
-            queue.push({ url, video: isVideoUrl(url, card.mime) });
-          }
-          pump();
-        },
-        destroy() {
-          dead = true;
-          queue.length = 0;
-          for (const img of held.values()) {
-            try { img.onload = null; img.onerror = null; } catch (e) { /* noop */ }
-          }
-          held.clear();
-          warmed.clear();
-          flight = 0;
-        },
-        diagnostics() { return { warmed: warmed.size, held: held.size, queued: queue.length, flight }; },
-      };
+    function warmDeck() {
+      if (!S || !S.pool || typeof S.pool.warmManifest !== 'function') return;
+      try {
+        S.pool.warmManifest(S.cards.map((c) => ({ url: c.url, kind: c.kind, mime: c.mime })));
+      } catch (e) { /* a warm-up never breaks a deal */ }
     }
-    const warmRail = saveData ? null : createWarmRail();
+    function warmFollow() {
+      if (!S || !S.pool || typeof S.pool.warmCursor !== 'function') return;
+      /* the play position in DECK ORDER: the top card's index, i.e. the deal
+       * cursor minus the cards still standing in the stack */
+      try { S.pool.warmCursor(Math.max(0, S.cursor - S.live.length)); } catch (e) { /* noop */ }
+    }
 
     /* ==================================================================== *
      * THE DEAL
@@ -1009,10 +1205,31 @@ export default {
           const back = S.passQueue.splice(0, S.passQueue.length);
           S.cards = S.cards.concat(back);
         } else {
-          S.cards = shuffled(S.cards, S.rngDeal);
+          /* THE CARDS STILL IN YOUR HAND ARE NOT IN THE DECK (0826). The
+           * reshuffle used to include the two or three cards STANDING in the
+           * stack - they are the last ones the cursor dealt, so a reshuffle
+           * could drop one straight back at index 0 and the player watched the
+           * same face arrive behind itself. They are held out of the shuffle
+           * and appended AFTER it instead: still in the deck, still dealt, but
+           * a whole pass away, which is exactly what a recycle is for.
+           * The INPUT list is filtered rather than the output re-ordered, so
+           * this is the same single shuffled() call on S.rngDeal it always was
+           * (sort's own stream, not the provider's - no shared draw moves). */
+          const standing = new Set();
+          for (const live of S.live) if (live && live.card && live.card.url) standing.add(live.card.url);
+          const held = standing.size ? S.cards.filter((c) => c && standing.has(c.url)) : [];
+          const feed = held.length ? S.cards.filter((c) => !(c && standing.has(c.url))) : S.cards;
+          S.cards = feed.length ? shuffled(feed, S.rngDeal).concat(held) : shuffled(S.cards, S.rngDeal);
           S.recycles += 1;
+          emiNote('sort.deckRecycle', { kind: 'curiosity', n: S.recycles, left: S.cards.length });
         }
         S.cursor = 0;
+        /* the deck ORDER just changed (passes returned or a reshuffle), so the
+         * manifest the warmer holds is a lie from here on - it would warm the
+         * OLD order for the rest of the class. Re-hand it the new sequence;
+         * warmManifest resets the warm cursor with it, and warmFollow re-walks
+         * it from reseat() exactly as it did on the first pass. */
+        warmDeck();
       }
       const card = S.cards[S.cursor++];
       if (!card) return null;
@@ -1048,28 +1265,149 @@ export default {
           if (face) {
             live.face = face;
             live.video = face.tagName === 'VIDEO';
-            /* seat it where mintCard does: over the back, UNDER the stamps -
-             * appended last it would paint over the yes/no verdict stamps. */
-            try { live.node.insertBefore(face, live.node.children[1] || null); }
-            catch (e) { try { live.node.appendChild(face); } catch (e2) { /* noop */ } }
+            /* a fresh face is a fresh slot claim: the free that matters is the
+             * one for THIS face (an earlier face's free already happened) */
+            live.slotFreed = false;
+            /* seat it where mintCard does: inside the clip layer, over the
+             * back. The stamps and the ring are the card node's own children
+             * and stay above the clip either way; the insertBefore fallback is
+             * for a card whose clip never minted (DOM double). */
+            try {
+              if (live.clip) live.clip.appendChild(face);
+              else live.node.insertBefore(face, live.node.children[1] || null);
+            } catch (e) { try { live.node.appendChild(face); } catch (e2) { /* noop */ } }
           }
+        }
+        /* A PREWARMED VIDEO PLAYS THE MOMENT IT SURFACES. Depth 1 minted it
+         * with preload and NO play() (a warm holds the decoder slot, it does
+         * not run); depth 0 is where it runs. paused === false means it is
+         * already playing (the ordinary top card) and there is nothing to do. */
+        if (i === 0 && live.video && live.face) {
+          try {
+            const v = live.face;
+            if (v.paused !== false) {
+              v.autoplay = true;
+              if (typeof v.play === 'function') { const p = v.play(); if (p && p.catch) p.catch(() => {}); }
+            }
+          } catch (e) { /* autoplay policy */ }
         }
         if (i === 0 && !live.ring) {
           live.ring = makeRing();
           if (live.ring && live.ring.el) { try { live.node.appendChild(live.ring.el); } catch (e) { /* noop */ } }
         }
       }
-      /* THE WARM RAIL RIDES THE RESEAT, because this is the ONE function every
-       * advance already goes through: fillStack() ends here after the deal, and
-       * both shifts - a commit and a pass - call it the instant the stack moves,
-       * which is a beat EARLIER than the fill that follows them. One seam, no
-       * new lifecycle. */
-      if (warmRail) warmRail.refresh();
+      /* THE WARM WINDOW RIDES THE RESEAT, because this is the ONE function
+       * every advance already goes through: fillStack() ends here after the
+       * deal, and both shifts - a commit and a pass - call it the instant the
+       * stack moves, which is a beat EARLIER than the fill that follows them.
+       * One seam, no new lifecycle. */
+      warmFollow();
     }
 
     /* ==================================================================== *
      * THE RING CLOCK - ours, not a keyframe's.
      * ==================================================================== */
+    /**
+     * THE MEDIA-READY GATE. The ring used to start on a bare timer, so on a
+     * slow link the countdown ran against a face still downloading. done()
+     * fires exactly ONCE: on a painted first frame (img decode / video
+     * loadeddata), on a bare-back card (no face IS ready), or on
+     * READY_FALLBACK_MS, whichever lands first. The fallback rides the class's
+     * own timer registry, so the bell, a destroy and the fake clock all own
+     * it; the DOM double answers now - the scratch harness sees no new
+     * asynchrony.
+     *
+     * A DEAD URL NO LONGER COUNTS AS READY (the old `error -> finish` armed
+     * the ring over a blank back and the url came back next pass, still dead):
+     * the blacklist is consulted FIRST - a url the warm rail already condemned
+     * swaps to its substitute before any waiting starts - and an error while
+     * we wait rides faceDied() (blacklist + re-mint) and then WATCHES THE
+     * SUBSTITUTE, all inside the same 1s ceiling. With the manifest warmer
+     * ahead of play the common case is a warm url whose element check answers
+     * near-synchronously, and the ring arms over a painted face at ~0 wait.
+     */
+    function faceReady(live, done) {
+      let spent = false;
+      let guardId = 0;
+      const finish = () => {
+        if (spent) return;
+        spent = true;
+        timers.cancel(guardId);
+        try { done(); } catch (e) { /* noop */ }
+      };
+      if (!live) { finish(); return; }
+      let hops = 0;
+      const failed = () => {
+        if (spent) return;
+        /* the error handler (faceDied) has blacklisted the url, cleared the
+         * face and re-minted the substitute; watch THAT face. Bounded: every
+         * hop condemns one more url, and a deck out of substitutes answers
+         * with no face at all - ready. */
+        if (++hops > 3) { finish(); return; }
+        timers.after(0, () => {
+          if (spent) return;
+          if (!S || destroyed) { finish(); return; }
+          try { reseat(); } catch (e) { /* noop */ }   // idempotent when faceDied already ran it
+          watch();
+        });
+      };
+      const watch = () => {
+        if (spent) return;
+        const face = live.face;
+        if (!face) { finish(); return; }                // the drawn back IS ready
+        /* the blacklist first: a url condemned since the mint (a warm failure
+         * landing in the gap) swaps NOW instead of waiting the ceiling out */
+        const shown = face._aeUrl ? String(face._aeUrl) : '';
+        if (shown && poolIsBroken(shown)) {
+          killFace(live);
+          failed();
+          return;
+        }
+        let hooked = false;
+        try {
+          if (face.tagName === 'VIDEO') {
+            /* a double without a readyState is not LOADING anything: answer now
+             * rather than parking a suite on the fallback timer */
+            if (typeof face.readyState !== 'number') { finish(); return; }
+            if (Number(face.readyState) >= 2) { finish(); return; }
+            if (typeof face.addEventListener === 'function') {
+              face.addEventListener('loadeddata', finish, { once: true });
+              face.addEventListener('error', failed, { once: true });
+              hooked = true;
+            }
+          } else {
+            /* same law for the img double: no boolean `complete`, no network */
+            if (typeof face.complete !== 'boolean') { finish(); return; }
+            if (face.complete && Number(face.naturalWidth) > 0) { finish(); return; }
+            if (face.complete) { failed(); return; }    // complete with no pixels: dead
+            if (typeof face.decode === 'function') {
+              face.decode().then(finish, failed);
+              hooked = true;
+            } else if (typeof face.addEventListener === 'function') {
+              face.addEventListener('load', finish, { once: true });
+              face.addEventListener('error', failed, { once: true });
+              hooked = true;
+            }
+          }
+        } catch (e) { hooked = false; }
+        if (!hooked) { finish(); return; }              // the DOM double answers now
+      };
+      guardId = timers.after(READY_FALLBACK_MS, finish);
+      watch();
+    }
+    /**
+     * armTop, deferred until the class can honestly take it. A gate (or the
+     * plain 200ms advance timer) that resolves during a freeze PARKS the arm
+     * on S.pendingArm and thaw() plays it - WHICH ALSO FIXES A PRE-EXISTING
+     * PAUSE STALL: the old arm callback fired during a pause, armTop() bailed
+     * on halted() without ever setting S.armed, and thaw() only re-armed if
+     * S.armed - so the class came back with a live card, no ring, no input.
+     */
+    function armWhenReady() {
+      if (destroyed || !S || S.over) return;
+      if (halted()) { S.pendingArm = true; return; }
+      armTop();
+    }
     function armTop() {
       if (!S || halted() || S.over) return;
       const top = S.live[0];
@@ -1081,8 +1419,19 @@ export default {
       setAttr(S.nodes.stage, 'data-chase', S.rung >= 6 ? '1' : '0');
       if (top.ring) top.ring.set(1, 'fresh');
       if (S.swipe) S.swipe.enabled(true);
+      /* W3 P1-15: the GO of every beat in this class. The ring lights, the hand
+       * comes up, and it happened in silence; `tell` is the house's "look at
+       * this" and it climbs with the rung, because a deeper rung is a shorter
+       * ring and the beat matters more. */
+      cue('tell', Math.min(0.3, 0.2 + 0.012 * S.rung));
+      armCountdown();                 // W3 P0-2: a fresh ring, a fresh count
       timers.cancel(S.ringTimer);
       S.ringTimer = timers.every(reduced ? RING_TICK_MS_REDUCED : RING_TICK_MS, ringTick);
+      /* AN ARMED RING AT A CHASE RUNG is the one window in this room where a
+       * spoken line would cost the player something real: rung 6 is a 1050ms
+       * ring and rung 8 a 750ms one, read and committed. Faces yes, words no,
+       * for that ring only - disarm(), a freeze and the teardown all let go. */
+      emiHoldRing(S.rung >= EMI_CHASE_RUNG);
       /* THE NODE RIDES THE DEAL (LOT D). A deck that dresses the top card -
        * the freeze's poster hold, the mirrored doppelganger, the ghost drift,
        * the lying label - needs the element, and this is the ONE moment the
@@ -1096,14 +1445,19 @@ export default {
       const elapsed = now() - S.ringStart;
       const v = verdictFor(elapsed, S.ringMs);
       if (top.ring) top.ring.set(1 - Math.min(1, elapsed / S.ringMs), v.just ? 'just' : v.perfect ? 'ripe' : 'fresh');
+      countdown(S.ringMs - elapsed, S.ringMs);   // W3 P0-2, on the second, not the tick
       if (elapsed >= S.ringMs) onPass();
     }
     function disarm() {
       if (!S) return;
       S.armed = false;
+      armCountdown();                 // W3 P0-2: the window is gone, so is its count
       timers.cancel(S.ringTimer);
       S.ringTimer = 0;
       if (S.swipe) S.swipe.enabled(false);
+      /* the ring is down, so the fence comes down with it - commit, pass and
+       * the bell all come through here */
+      emiHoldRing(false);
     }
 
     /* ==================================================================== *
@@ -1140,7 +1494,10 @@ export default {
         if (v.just) S.just += 1;
         beat.chain = S.chain;
         beat.rung = S.rung;
-        cue('bubble_pop', 0.42, { pitch: chimePitch(Math.min(CHAIN.CHIME_CAP, S.chain)) });
+        /* W3 P1-15: a card is not a bubble. The verb of this room is filing,
+         * so the clean sort is the sound of paper being swept off a stack; the
+         * chain ladder rides it unchanged, which is the part that was right. */
+        cue('slide', 0.42, { pitch: chimePitch(Math.min(CHAIN.CHIME_CAP, S.chain)) });
         if (v.just) verdictWord(t('sort_just', 'JUST'), 'gold');
         else if (v.perfect) verdictWord(t('sort_perfect', 'PERFECT'), 'gold');
         if (step.rungUp) onRungUp(step.from, step.rung);
@@ -1175,7 +1532,9 @@ export default {
       timers.after(reduced ? SWIPE.FADE_MS : SPRING_MS, () => {
         if (!S || destroyed || S.over) return;
         fillStack();
-        armTop();
+        /* the delay above is FEEL (the spring), the gate after it is NETWORK:
+         * the ring arms when the new top card's face has actually painted. */
+        faceReady(S.live[0], armWhenReady);
       });
       return true;
     }
@@ -1192,6 +1551,7 @@ export default {
       /* a sinking card is not the top card either (see flyOut) */
       setAttr(top.node, 'data-depth', 'x');
       setAttr(top.node, 'data-gone', '1');
+      freeSlot(top);      /* Bug A's law again: leaving play frees the slot */
       addCls(top.node, 'is-sink');
       verdictWord(t('sort_pass', 'PASSED'), 'grey');
       cue('whisper', 0.22, { pitch: 0.85 });
@@ -1204,7 +1564,9 @@ export default {
       timers.after(reduced ? SWIPE.FADE_MS : SPRING_MS, () => {
         if (!S || destroyed || S.over) return;
         fillStack();
-        armTop();
+        /* the delay above is FEEL (the spring), the gate after it is NETWORK:
+         * the ring arms when the new top card's face has actually painted. */
+        faceReady(S.live[0], armWhenReady);
       });
     }
 
@@ -1223,7 +1585,16 @@ export default {
     function onRungUp(from, to) {
       bus.emit('rung', { from, to, down: false });
       cue('streak', 0.42, { pitch: chimePitch(Math.min(CHAIN.CHIME_CAP, to)) });
-      if (S.wall) S.wall.show(to, false);
+      if (S.wall) {
+        /* THE WALL WAKES. show() is idempotent and reports what the wall is
+         * doing now, so the first true here is the first time the collage of
+         * the player's own sorted cards stands up behind the stack. */
+        const wallOn = S.wall.show(to, false);
+        if (wallOn && !emiWallWoke) {
+          emiWallWoke = true;
+          emiNote('sort.wallWakes', { kind: 'curiosity', n: S.correct + S.wrong, streak: S.chain });
+        }
+      }
       /* THE MAJOR JACKPOTS: rungs 3, 5 and 7, once each per class. */
       if (isMajorRung(to) && S.majorsPaid.indexOf(to) < 0) {
         S.majorsPaid.push(to);
@@ -1264,6 +1635,43 @@ export default {
     }
     function cue(name, level, extra) { deckEngine.audio(name, level, extra); }
 
+    /**
+     * W3 P0-2 - THE COUNTDOWN CONVENTION. The ring drains on RING_TICK_MS and
+     * the ear wants a SECOND, so the cue is gated on the ceil'd seconds value
+     * changing, it only speaks inside the last third of the ring (or its last
+     * three seconds, whichever is shorter), and the pitch climbs a step a tick
+     * so a run reads as a run. armCountdown() is the disarm and disarm() calls
+     * it, which is what keeps a countdown from outliving its window (trap 116).
+     */
+    let cdSec = -1;
+    let cdN = 0;
+    function armCountdown() { cdSec = -1; cdN = 0; }
+    function countdown(msLeft, totalMs) {
+      const s = Math.ceil(Math.max(0, msLeft) / 1000);
+      if (s === cdSec) return;
+      cdSec = s;
+      if (s <= 0) return;
+      /* THE LAST THIRD OR THE LAST THREE SECONDS, WHICHEVER IS SHORTER. A
+       * 6s window ticks twice; a 2.4s ring ticks once, at the end; a class
+       * clock would tick three times and no more. Taking the LONGER of the
+       * two would have made Sort's 750ms ring tick from the frame it armed,
+       * which is a metronome, not a countdown. */
+      if (msLeft > Math.min(3000, (Number(totalMs) || 0) / 3)) return;
+      cue('clock_tick', Math.min(0.18, 0.1 + cdN * 0.02), { pitch: 1 + 0.06 * cdN });
+      cdN += 1;
+    }
+
+    /** W3 P1-15 - the rubber band, throttled the way every refusal in the
+     *  school is. A hand that keeps testing the threshold gets one answer, not
+     *  a stutter of them. */
+    let lastBandAt = 0;
+    function bandRefused() {
+      const at = now();
+      if (at - lastBandAt < 250) return;
+      lastBandAt = at;
+      cue('bump', 0.15);   /* owner 2026-08-24: error cues -50% */
+    }
+
     /* ------------------------------------------------------------- the fly */
     function flyOut(live, dir, wrong) {
       if (!live) return;
@@ -1278,6 +1686,11 @@ export default {
        * the instant it is thrown. */
       setAttr(live.node, 'data-depth', 'x');
       setAttr(live.node, 'data-gone', '1');
+      /* BUG A: the SLOT frees now, at the throw - not at the node teardown
+       * 400ms on. The next card's video mints inside the ceiling instead of
+       * topping the stack cold; the thrown card keeps playing while it flies
+       * (dropCard below still tears it down on the old clock). */
+      freeSlot(live);
       addCls(live.node, 'is-gone');
       if (wrong) addCls(live.node, 'is-wrong');
       delCls(live.node, 'is-held');
@@ -1285,6 +1698,9 @@ export default {
       setVar(live.node, '--sort-tilt', (dir === 'right' ? SWIPE.TILT_CAP : -SWIPE.TILT_CAP) + 'deg');
       setVar(live.node, '--sort-a-yes', dir === 'right' ? '1' : '0');
       setVar(live.node, '--sort-a-no', dir === 'left' ? '1' : '0');
+      /* W3 P0-19: the FLIGHT. Quiet - it is the travel between the verdict and
+       * the landing, and the landing is the loud half. */
+      cue('paper', 0.2);
       const card = live.card;
       const flyMs = reduced ? SWIPE.FADE_MS : SWIPE.FLY_MS;
       const shrinkMs = reduced ? 0 : SWIPE.SHRINK_MS;
@@ -1295,7 +1711,13 @@ export default {
         try { if (S.wall) tile = S.wall.land(card, { wrong: !!wrong }) || null; } catch (e) { /* noop */ }
         /* THE THUD, as an event. The wall slot is where the casino's BANK
          * token leaves from and where the surge's shudder is felt, and only
-         * this callback knows which tile the card actually landed in. */
+         * this callback knows which tile the card actually landed in.
+         * W3 P0-19: and now as a SOUND. This file has called it the thud since
+         * it was written and it never made one. Per instance and deliberately
+         * unthrottled - it is the verb of the room, and a room whose verb is
+         * rate-limited feels broken. Level by rung (a deeper wall is a heavier
+         * landing), pitch by side, gently: the side is a hint, not a klaxon. */
+        cue('thud', Math.min(0.5, 0.3 + 0.025 * S.rung), { pitch: dir === 'right' ? 1.08 : 0.92 });
         bus.emit('land', { card, tile, dir, wrong: !!wrong });
       });
     }
@@ -1330,10 +1752,18 @@ export default {
       }
       setVar(n.ladder, '--sort-ladder', String(ladderFrac(S.chain, S.rung, S.rungCap).toFixed(3)));
     }
+    const BELL_WARN_MS = 20000;
     function paintClock() {
       if (!S || !S.nodes || !S.nodes.chipClock) return;
       const left = Math.max(0, S.budgetMs - (now() - S.startedAt));
       S.nodes.chipClock.set(clockFace(left));
+      /* W3 P0-3: this room had NO warning branch at all - the only class in the
+       * school where the clock ran out without a word first. Twenty seconds
+       * out, one quiet strike of the same bell that ends it. Once a class. */
+      if (S.budgetMs > 0 && !S.bellWarned && left > 0 && left <= BELL_WARN_MS) {
+        S.bellWarned = true;
+        cue('bell', 0.3);
+      }
       if (S.budgetMs > 0 && left <= 0) bell();
     }
     /* HEAT IS A RATIO, NOT A STOPWATCH: `progress` is elapsed over the class's
@@ -1417,6 +1847,11 @@ export default {
         const dismiss = () => {
           if (done || !S) return;
           done = true;
+          /* W3 P0-20: the GO of a one-page sheet IS the start press of the
+           * class (trap 69's chrome vocabulary), and it is the only cue the
+           * sheet gets - a turn cue as well would be two sounds for one
+           * gesture. */
+          cue('lift', 0.5);
           const list = howtoSeenTiers();
           if (list.indexOf(S.gradeTier) < 0) { list.push(S.gradeTier); mergeMeta({ howtoTiers: list }); }
           try { veil.remove(); } catch (e) { /* noop */ }
@@ -1455,7 +1890,7 @@ export default {
         rngJack: makeRng(seed + '|jack'),
         quick: !!pending.quick,
         pool: pending.pool,
-        cards: [], cursor: 0, dealt: 0, recycles: 0,
+        cards: [], deckRows: [], cursor: 0, dealt: 0, recycles: 0,
         passQueue: [],
         live: [],
         wall: null,
@@ -1464,8 +1899,12 @@ export default {
         correct: 0, wrong: 0, passed: 0, perfect: 0, just: 0,
         wrongsSinceRoyalFloor: 0, majorsPaid: [], royal: false, jackpots: 0,
         heat: 0.2,
-        armed: false, ringMs: ringMsFor(0), ringStart: 0, ringTimer: 0,
+        armed: false, pendingArm: false, ringMs: ringMsFor(0), ringStart: 0, ringTimer: 0,
         clockTimer: 0, autoTimer: 0,
+        /* W3: the two latches the sound needs. `dragSide` is the stamp
+           crossing's memory (P1-15) and `bellWarned` the T-20s warning's
+           once-a-class gate (P0-3). Neither is ever read by the ledger. */
+        dragSide: '', bellWarned: false,
         startedAt: now(),
         frozenAt: 0, frozenElapsed: 0,
         paused: false, suspended: false, over: false, submitted: false,
@@ -1488,6 +1927,13 @@ export default {
       S.wall = createWall({
         mount: nodes.stage, tier: gradeTier, reduced, seed, log: say,
         stageOf: () => stageBox(),
+        /* THE WALL SEES WHAT THE STACK SAW (0826). A tile used to paint the
+         * card's RAW url, so a card whose url was blacklisted - the stack
+         * showed it as a same-tag substitute - landed on the wall as the dead
+         * url, and the wall disagreed with the class the player just played.
+         * One resolver, both surfaces; null means no healthy media at all and
+         * the drawn back stands, exactly as it does in the stack. */
+        resolve: (card) => displaySrcOf(card),
       });
       /* the wall lives BEHIND the playfield: it was appended last, so move it */
       try { if (S.wall.el && nodes.stage.insertBefore) nodes.stage.insertBefore(S.wall.el, nodes.playfield); }
@@ -1503,6 +1949,7 @@ export default {
           if (!S || !S.armed) return;
           const top = S.live[0];
           if (top) addCls(top.node, 'is-held');
+          S.dragSide = '';                      // W3 P1-15: a fresh hand, no side yet
           bus.emit('grab', { card: top ? top.card : null, rung: S.rung });
         },
         onDrag: (d) => {
@@ -1518,6 +1965,14 @@ export default {
           setVar(top.node, '--sort-tilt', d.tilt.toFixed(2) + 'deg');
           setVar(top.node, '--sort-a-yes', d.side === 'right' ? d.alpha.toFixed(3) : '0');
           setVar(top.node, '--sort-a-no', d.side === 'left' ? d.alpha.toFixed(3) : '0');
+          /* W3 P1-15: THE CROSSING. The stamp fades in with the lean, and the
+           * moment it picks a side is the moment the hand has said something.
+           * Latched on the side CHANGING, so a drag that hovers on one side is
+           * one blip and not a stream of them - the drag runs per pointermove. */
+          if (d.side !== S.dragSide) {
+            S.dragSide = d.side;
+            if (d.side) cue('blip', 0.12, { pitch: d.side === 'right' ? 1.2 : 0.8 });
+          }
           bus.emit('drag', { dx: d.dx, side: d.side, alpha: d.alpha, card: top.card });
         },
         onRelease: (r) => {
@@ -1525,9 +1980,13 @@ export default {
           const top = S.live[0];
           if (!top) return;
           delCls(top.node, 'is-held');
+          S.dragSide = '';                      // W3 P1-15: the lean is over
           if (r.commit) return;
           /* THE RUBBER BAND: under both the threshold and the fling, home in
-           * 260ms. The class is unchanged; a look is not a swipe. */
+           * 260ms. The class is unchanged; a look is not a swipe.
+           * W3 P1-15: and it is ANSWERED now. A swipe that did not reach the
+           * threshold is a refused input, so it gets the school's refusal. */
+          bandRefused();
           addCls(top.node, 'is-band');
           setVar(top.node, '--sort-dx', '0px');
           setVar(top.node, '--sort-tilt', '0deg');
@@ -1552,6 +2011,8 @@ export default {
       if (retake && cacheUsable(meta.deck, S.day, seed)) {
         const built = deckFromRows(meta.deck.rows, !!meta.deck.quick);
         S.cards = built.cards;
+        S.deckRows = built.cards.slice();     // same rows, same order, same substitutes
+        warmDeck();
         say('retake: re-dealing the cached deck of ' + built.cards.length);
         openRoom();
       } else if (S.pool) {
@@ -1583,6 +2044,9 @@ export default {
         rng: makeRng(S.seed + '|deck'),
       });
       S.cards = built.cards;
+      /* the DEAL-ORDER snapshot: substituteFor walks this, never S.cards -
+       * reshuffles and pass returns must not move a substitute pick */
+      S.deckRows = built.cards.slice();
       S.thin = !!built.thin;
       /* THE RETAKE CACHE, written ONCE at the deal. */
       if (S.cards.length) {
@@ -1593,6 +2057,9 @@ export default {
           },
         });
       }
+      /* the deck IS the manifest: hand the whole ordered need list to the
+       * provider's warmer while the player is still at the door / rules sheet */
+      warmDeck();
       say('dealt ' + built.counts.size + ' cards ('
         + built.counts.target + ' target / ' + built.counts.noise + ' noise, '
         + built.counts.loops + ' loops, max run ' + built.counts.maxRun
@@ -1623,7 +2090,9 @@ export default {
         fillStack();
         timers.after(reduced ? 0 : INTRO_MS, () => {
           if (!S || destroyed || S.over) return;
-          armTop();
+          /* reduced motion keeps its shorter intro but STILL gets the gate -
+           * a reduced class on a slow link was the worst case (0ms intro). */
+          faceReady(S.live[0], armWhenReady);
         });
       });
     }
@@ -1668,13 +2137,23 @@ export default {
     function bell() {
       if (!S || S.over) return;
       S.over = true;
+      S.bellWarned = true;
       disarm();
       timers.cancel(S.clockTimer);
       S.clockTimer = 0;
+      /* W3 P0-3: the bell itself, at full weight. The stamp is not doubled up
+       * behind it here the way it was in the other two classes - this room's
+       * grade lands on the ticket a whole BLEED_MS later, which is already the
+       * pause the convention asks for. */
+      cue('bell', 0.5);
       decksCall('end');
       /* THE WALL TAKES THE STAGE for three seconds before anything is said
        * about it. What you sorted is the last thing the room shows you. */
       try { if (S.wall) { S.wall.show(S.rung, true); S.wall.bleed(true); } } catch (e) { /* noop */ }
+      /* THREE SECONDS OF THE PLAYER'S OWN TASTE, with the hand down and
+       * nothing playable. The safest window in the room, and the best one. */
+      emiHoldRing(false);
+      emiNote('sort.bellWall', { kind: 'celebrate', n: S.correct + S.wrong, streak: S.longestChain });
       for (const live of S.live.slice()) { addCls(live.node, 'is-sink'); }
       timers.after(reduced ? 400 : WALL.BLEED_MS, () => {
         if (!S || destroyed) return;
@@ -1809,6 +2288,9 @@ export default {
         if (S.swipe) S.swipe.enabled(false);
       }
       S.frozenAt = now();
+      /* a frozen ring is not a timing-critical one - she is free again until
+       * the thaw re-arms it */
+      emiHoldRing(false);
     }
     function thaw() {
       if (!S || S.over) return;
@@ -1818,10 +2300,22 @@ export default {
         if (S.armed) S.ringStart = now() - (S.frozenElapsed || 0);
         S.frozenAt = 0;
       }
+      /* AN ARM THAT LANDED DURING THE FREEZE PLAYS NOW. armWhenReady parked it
+       * (the ring was never armed, so the re-base above touched only the bell
+       * clock); armTop deals a FRESH ring and a fresh deal event, and the
+       * decks resume the same way the ordinary thaw resumes them. */
+      if (S.pendingArm) {
+        S.pendingArm = false;
+        armTop();
+        decksCall('resume');
+        return;
+      }
       if (S.armed) {
         if (S.swipe) S.swipe.enabled(true);
         timers.cancel(S.ringTimer);
         S.ringTimer = timers.every(reduced ? RING_TICK_MS_REDUCED : RING_TICK_MS, ringTick);
+        /* the ring the freeze interrupted is live again, fence and all */
+        emiHoldRing(S.rung >= EMI_CHASE_RUNG);
       }
       decksCall('resume');
     }
@@ -1863,6 +2357,8 @@ export default {
 
       destroy() {
         destroyed = true;
+        /* a class that is gone can never be the thing still fencing her */
+        emiHoldRing(false);
         decksCall('destroy');
         decks.casino = null; decks.pressure = null; decks.trickster = null;
         listeners.clear();
@@ -1878,7 +2374,6 @@ export default {
         try { if (pending.pool && pending.pool !== (S && S.pool) && typeof pending.pool.dispose === 'function') pending.pool.dispose(); }
         catch (e) { /* noop */ }
         pending = { pool: null, quick: false, hot: false, thin: false, sources: null };
-        if (warmRail) warmRail.destroy();
         videoCount = 0;
         S = null;
       },
@@ -1892,7 +2387,6 @@ export default {
         if (!S) {
           return {
             live: false, timers: timers.size, videoCount,
-            warm: warmRail ? warmRail.diagnostics() : null,
             decks: { casino: dg(decks.casino), pressure: dg(decks.pressure), trickster: dg(decks.trickster) },
           };
         }
@@ -1911,13 +2405,13 @@ export default {
            * freeze - which is the opposite of what the freeze did. */
           ring: {
             armed: S.armed,
+            pending: !!S.pendingArm,
             ms: S.ringMs,
             frozen: !!S.frozenAt,
             elapsed: !S.armed ? 0 : (S.frozenAt ? (S.frozenElapsed || 0) : now() - S.ringStart),
           },
           heat: S.heat, over: S.over, submitted: S.submitted,
           videoCount, timers: timers.size,
-          warm: warmRail ? warmRail.diagnostics() : null,
           wall: S.wall ? S.wall.diagnostics() : null,
           swipe: S.swipe ? S.swipe.diagnostics() : null,
           decks: { casino: dg(decks.casino), pressure: dg(decks.pressure), trickster: dg(decks.trickster) },

@@ -180,17 +180,6 @@ export const DE_PRESSURE = Object.freeze({
   CUE_LEVEL_STEP: 0.05,
   AUDIO_CEIL: Object.freeze({ 1: 0.45, 2: 0.6, 3: 0.75, 4: 0.9 }),
 
-  /* ---- the one spiral image per class ---------------------------------- */
-  SPIRAL_DIR: '../../../dtrh/assets/bubbles/effects/spirals/',
-  /** sp6 (123K) / sp7 (721K) carry most of the weight; sp5 (5.3M) is never drawn. */
-  SPIRALS: Object.freeze([
-    Object.freeze({ file: 'sp6.gif', w: 4 }),
-    Object.freeze({ file: 'sp7.gif', w: 4 }),
-    Object.freeze({ file: 'sp1.gif', w: 1 }),
-    Object.freeze({ file: 'sp2.webp', w: 1 }),
-    Object.freeze({ file: 'sp3.gif', w: 1 }),
-    Object.freeze({ file: 'sp4.webp', w: 1 }),
-  ]),
   /** game-local nodes, total: pin + ring + glitch. */
   NODE_BUDGET: 3,
 });
@@ -232,19 +221,6 @@ export function punchFor(o) {
   return { scale: +scale.toFixed(3), px: +px.toFixed(2), ms };
 }
 
-/** The class's spiral image, chosen once from the bundled dtrh pool (weighted). */
-function pickSpiral(roll) {
-  const list = DE_PRESSURE.SPIRALS;
-  let total = 0;
-  for (const s of list) total += s.w;
-  let r = roll * total;
-  let file = list[0].file;
-  for (const s of list) { r -= s.w; if (r <= 0) { file = s.file; break; } }
-  let href = DE_PRESSURE.SPIRAL_DIR + file;
-  try { href = new URL(DE_PRESSURE.SPIRAL_DIR + file, import.meta.url).href; } catch (e) { /* relative is fine */ }
-  return { file, href };
-}
-
 function el(tag, cls) {
   try {
     const n = document.createElement(tag);
@@ -274,8 +250,10 @@ function cafFn() {
 /**
  * @param {Object} o   see THE INTERFACE in the pass-4 sheet:
  *   seed, gradeTier, reduced, motionLevel, stage, bench, board,
- *   hud:{score,depth,chain,clock}, engine:{fire,sustain,stop,channels},
- *   assets:{next(kind)}, timers:{after,every,clear}, capsOk:()=>bool, log
+ *   hud:{score,depth,chain,clock}, engine:{fire,sustain,stop,channels,warm?},
+ *   assets:{next(kind)}, timers:{after,every,clear}, capsOk:()=>bool, log,
+ *   pickRainUrl? (R3: () => url|null over the game's already-decoded board
+ *   faces - rides the engine's gif_rain opts.pick seam; optional everywhere)
  */
 export function createDePressure(o) {
   const opts = o || {};
@@ -284,6 +262,11 @@ export function createDePressure(o) {
   const reduced = !!opts.reduced;
   const motion = Math.max(0, Math.min(2, Math.round(opts.motionLevel == null ? 2 : Number(opts.motionLevel) || 0)));
   const still = reduced || motion <= 0;           // no tremor, no chip transforms, no spin, no shudder
+  /* pass 6 - THE TOUCH RUNG: on a phone the merge punch takes the reduced-
+     motion body (the ring bloom) instead of the rAF board-translate loop -
+     `board.style.translate` per frame restyles the whole board subtree, and it
+     fires on the very first 2-tile merge. */
+  const touchDev = !!opts.touch;
   const gradeTier = Math.max(1, Math.min(4, Number(opts.gradeTier) || 1));
   const audioCeil = P.AUDIO_CEIL[gradeTier] || P.AUDIO_CEIL[1];
   const hud = opts.hud || {};
@@ -379,7 +362,21 @@ export function createDePressure(o) {
   let royalOn = false;
   let outOn = false;
   const present = new Set();          // feature keys ON right now
-  const spiral = pickSpiral(roll('spiral'));
+  /* THE CLASS SPIRAL comes from the SHELL now (the Loom directive,
+   * 2026-08-25): opts.classSpiral is either the loom params wrapper
+   * {loom:true, id, params, href} or a plain url string (a user-saved loom
+   * gif / the bundled floor). The wheel wash goes URL-LESS - the engine's
+   * spiralUrl() provider answers with this same class spiral, live canvas
+   * and all - and the static PIN paints the paintable half (`href` on the
+   * wrapper, the string itself otherwise). The old private bundled pool and
+   * its `|spiral` roll are gone; the deck rolls are per-tag streams, so
+   * removing a tag shifts nothing else. */
+  const classSpiral = opts.classSpiral || null;
+  const spiral = (classSpiral && typeof classSpiral === 'object' && classSpiral.loom === true)
+    ? { file: String(classSpiral.id || 'loom'), href: typeof classSpiral.href === 'string' ? classSpiral.href : null }
+    : (typeof classSpiral === 'string' && classSpiral
+      ? { file: classSpiral.split('/').pop() || classSpiral, href: classSpiral }
+      : { file: 'provider', href: null });
   let preload = null;
   let assetUrl = null;                // the glitch wash's pool image (one per kind)
 
@@ -424,13 +421,83 @@ export function createDePressure(o) {
       node.classList.add(name);
     } catch (e) { /* ignore */ }
   }
-  /** A tile's centre as a % of the viewport (the engine layer's own units). */
+  /* ---- board geometry, measured ONCE (pass 7, FIX 1) ----------------------
+   * burstAt used to getBoundingClientRect a MID-TRANSITION tile: a forced
+   * layout inside the merge path AND an interpolated anchor, so the bursts
+   * landed wherever the slide happened to be. Same cure the casino's
+   * anchorOf got (casino.js 2026-08-25): the board rect + grid step are
+   * cached (invalidated by resize/orientation) and a tile's centre is derived
+   * from its honest --r/--c vars - no flush, and the TRUE cell. */
+  let bgeom = null;                 // {left, top, w, h, n, tile, step} viewport px
+  let geomBound = false;
+  const invalidateGeom = () => { bgeom = null; };
+  function measureGeom() {
+    const r = rectOf(opts.board);
+    if (!r || !r.width || !r.height) { bgeom = null; return null; }
+    const g = { left: r.left, top: r.top, w: r.width, h: r.height, n: 0, tile: 0, step: 0 };
+    try {
+      const cells = opts.board && typeof opts.board.querySelectorAll === 'function'
+        ? opts.board.querySelectorAll('.g-de-cell').length : 0;
+      if (cells > 0) g.n = Math.round(Math.sqrt(cells));
+    } catch (e) { /* stays 0 */ }
+    if (g.n > 0) {
+      let gap = 0;
+      try {
+        if (typeof getComputedStyle === 'function') gap = parseFloat(getComputedStyle(opts.board).columnGap) || 0;
+      } catch (e) { gap = 0; }
+      g.tile = (g.w - (g.n - 1) * gap) / g.n;
+      g.step = g.tile + gap;
+    }
+    bgeom = g;
+    return g;
+  }
+  function geomNow() { return bgeom || measureGeom(); }
+  function bindGeom() {
+    if (geomBound || typeof window === 'undefined' || !window.addEventListener) return;
+    try {
+      window.addEventListener('resize', invalidateGeom);
+      window.addEventListener('orientationchange', invalidateGeom);
+      geomBound = true;
+    } catch (e) { /* stays unbound; the first measure keeps standing */ }
+  }
+  function unbindGeom() {
+    if (!geomBound) return;
+    geomBound = false;
+    try {
+      window.removeEventListener('resize', invalidateGeom);
+      window.removeEventListener('orientationchange', invalidateGeom);
+    } catch (e) { /* ignore */ }
+  }
+  /** A tile's honest row/col, read (never written) off its inline --r/--c. */
+  function cellOf(tileEl) {
+    if (!tileEl || !tileEl.style || typeof tileEl.style.getPropertyValue !== 'function') return null;
+    try {
+      const r = parseFloat(tileEl.style.getPropertyValue('--r'));
+      const c = parseFloat(tileEl.style.getPropertyValue('--c'));
+      if (Number.isFinite(r) && Number.isFinite(c)) return { r, c };
+    } catch (e) { /* fall through */ }
+    return null;
+  }
+  /** A tile's centre as a % of the viewport (the engine layer's own units) -
+   *  derived from --r/--c against the cached grid, never a live rect read. */
   function pctOf(tileEl) {
-    const r = rectOf(tileEl);
+    if (!tileEl) return null;
+    const g = geomNow();
     let w = 0; let h = 0;
     try { w = typeof window !== 'undefined' ? Number(window.innerWidth) || 0 : 0; h = typeof window !== 'undefined' ? Number(window.innerHeight) || 0 : 0; } catch (e) { /* none */ }
-    if (!r || !r.width || !w || !h) return null;
-    return { x: Math.round((r.left + r.width / 2) / w * 100), y: Math.round((r.top + r.height / 2) / h * 100), size: Math.round(r.width) };
+    if (!g || !w || !h) return null;
+    const cell = cellOf(tileEl);
+    let cx; let cy; let size;
+    if (cell && g.step > 0) {
+      cx = g.left + cell.c * g.step + g.tile / 2;
+      cy = g.top + cell.r * g.step + g.tile / 2;
+      size = g.tile;
+    } else {
+      cx = g.left + g.w / 2;
+      cy = g.top + g.h / 2;
+      size = g.tile || g.w / 4;
+    }
+    return { x: Math.round((cx / w) * 100), y: Math.round((cy / h) * 100), size: Math.round(size) };
   }
   function nextAsset() {
     const a = opts.assets;
@@ -447,7 +514,8 @@ export function createDePressure(o) {
     pin = el('div', 'g-de-p-pin');
     if (pin) {
       if (pin.style) {
-        try { pin.style.backgroundImage = 'url("' + spiral.href + '")'; } catch (e) { /* ignore */ }
+        // a wrapper with no paintable href leaves the pin's own CSS ground
+        if (spiral.href) { try { pin.style.backgroundImage = 'url("' + spiral.href + '")'; } catch (e) { /* ignore */ } }
         setVar(pin, '--de-p-spindir', roll('pin-dir') < 0.5 ? '-1' : '1');
       }
       opts.bench.appendChild(pin);
@@ -458,9 +526,10 @@ export function createDePressure(o) {
       glitch = el('div', 'g-de-p-glitch');
       if (glitch) opts.stage.appendChild(glitch);
     }
-    // preload the ONE spiral this class will ever show (the pin and the wash share it)
+    // preload the pin/fallback gif when there is one (a generated loom class
+    // draws its wash live - there are no bytes to warm)
     try {
-      if (typeof Image === 'function') { preload = new Image(); preload.src = spiral.href; }
+      if (spiral.href && typeof Image === 'function') { preload = new Image(); preload.src = spiral.href; }
     } catch (e) { preload = null; }
   }
 
@@ -568,7 +637,7 @@ export function createDePressure(o) {
   /** Extend-not-stack: the louder amplitude wins, the deadline moves out. */
   function punchBoard(px, ms) {
     if (!armed() || stopped) return;
-    if (still) { bloomRing(false); return; }
+    if (still || touchDev) { bloomRing(false); return; }   // touch: bloom, never the translate loop
     const a = Math.min(P.PUNCH_PX_CAP, Math.max(0, Number(px) || 0)) * P.MOTION_MUL[motion];
     if (a < 0.1) return;
     const t = nowMs();
@@ -613,7 +682,11 @@ export function createDePressure(o) {
   /* ------------------------------------------------------------ the rungs */
   function retune() {
     const base = tremorAmpPx(tierNow, heat, reduced) * P.MOTION_MUL[motion] * (exhaleOn ? P.EXHALE_TREMOR_MUL : 1);
-    tremorAmp = (stopped || outOn || !armed()) ? 0 : Math.min(P.TREMOR_CAP_PX, base);
+    /* pass 7, FIX 3: touchDev mirrors punchBoard's gate - the idle tremor is
+     * a board.style.translate write per FRAME from rung 3+, and that restyles
+     * the whole board subtree; the exact cost the punch gate was added to
+     * remove. A phone never arms the tremor loop. Desktop unchanged. */
+    tremorAmp = (stopped || outOn || touchDev || !armed()) ? 0 : Math.min(P.TREMOR_CAP_PX, base);
     if (pin) {
       setVar(pin, '--de-p-pa', lerp(P.PIN_ALPHA, heat).toFixed(2));
       const spin = lerp(P.PIN_SPIN_S, heat) * (has('wheel') ? P.PIN_FAST_MUL : 1) * (exhaleOn ? P.EXHALE_SPIN_MUL : 1);
@@ -638,7 +711,9 @@ export function createDePressure(o) {
     breathTimer = after(Math.round(ms), () => { breathTimer = 0; if (has('breath') && !stopped) { breathe(); armBreath(); } });
   }
   function wheelWash() {
-    sustain('wash', { variant: 'spiral', url: spiral.href, alpha: lerp(P.WHEEL_ALPHA, heat), sustainForever: true });
+    /* URL-LESS (Loom directive): the engine's spiralUrl() provider answers -
+     * the live loom canvas on a generated class, the user/bundled gif else. */
+    sustain('wash', { variant: 'spiral', alpha: lerp(P.WHEEL_ALPHA, heat), sustainForever: true });
   }
   function fadeWash(variant, extra) {
     // NEVER stop('wash'): it blacks out the drain index.js holds. A tiny alpha
@@ -671,8 +746,21 @@ export function createDePressure(o) {
     if (still || !opts.bench) return null;
     return fire('glitch_swap', { targets: opts.bench, variant: 'vhsroll', seconds: seconds || 0.6, onSwap() {}, sfx: false });
   }
+  /** R3 - the warm-media nudge. Zero rng (the pool's prewarm forecasts over
+   *  cloned cursors), zero visuals; a beat of byte-warm lead so the rain's own
+   *  draws are not stone cold on a phone. Optional at every layer. */
+  function warmMedia() {
+    if (!armedBase || destroyed || typeof eng.warm !== 'function') return;
+    try { eng.warm('media'); } catch (e) { /* optional */ }
+  }
   function rain(variant, ms) {
-    return sustain('gif_rain', { variant, durationMs: Math.round(ms), clickSafe: true });
+    const o2 = { variant, durationMs: Math.round(ms), clickSafe: true };
+    /* R3 - the warm-media seam: the game's picker over its own already-decoded
+     * board faces (index.js pickRainUrl). The engine still performs its
+     * original pool draw either way (shared-rng law); an absent/empty picker
+     * is byte-identical to before. */
+    if (typeof opts.pickRainUrl === 'function') o2.pick = opts.pickRainUrl;
+    return sustain('gif_rain', o2);
   }
   function burstAt(tileEl, n) {
     const at = pctOf(tileEl);
@@ -699,7 +787,7 @@ export function createDePressure(o) {
       off() { glitchOff(); },
     },
     rain: { on() { rain('light', lerp(P.RAIN_MS, heat)); }, off() { stopKind('gif_rain'); } },
-    wheel: { on() { wheelWash(); }, off() { fadeWash('spiral', { url: spiral.href }); } },
+    wheel: { on() { wheelWash(); }, off() { fadeWash('spiral'); } },   // url-less both ways: same provider answer
     drain: { on() { drainDeep(true); }, off() { drainDeep(false); } },
     slideglitch: { on() { fire('flash_burst', { count: 2, holdMs: 700, clickSafe: true, clickable: false }); }, off() {} },
     subs: { on() { sustain('sub_flash', { variant: P.SUB_VARIANT }); }, off() { stopKind('sub_flash'); } },
@@ -722,6 +810,10 @@ export function createDePressure(o) {
   function enterRung(k) {
     const row = P.LADDER[k];
     if (!row) return;
+    /* R3: one rung BEFORE the rain arms (rung 5), start byte-warming the pool's
+     * next draws - a rain node lives ~3-4s and a cold phone fetch cannot land
+     * inside that. No rng, no visuals. */
+    if (k === 4) warmMedia();
     for (const key of row.adds) {
       if (present.has(key)) continue;
       present.add(key);
@@ -754,6 +846,15 @@ export function createDePressure(o) {
     for (let k = from; k > r; k--) leaveRung(k, r);
     rung = r;
     retune();
+    /* W3 P1-7: the ladder only ever cued on the way UP, so the room getting
+     * lighter - the relief the whole surge is built to buy - happened in
+     * silence. ONE slide for the descend however many rungs it sheds, pitched
+     * down and at half the climb's level: a release is quieter than a threat. */
+    if (armedBase && !destroyed && !stopped && typeof eng.fire === 'function') {
+      count('audio_trigger');
+      const level = Math.min(audioCeil, (P.CUE_LEVEL_BASE + P.CUE_LEVEL_STEP * r) * 0.5);
+      try { eng.fire('audio_trigger', { name: 'slide', level, pitch: 0.8 }); } catch (e) { /* a cue never throws upward */ }
+    }
     say('pressure: rung ' + from + ' -> ' + r + ' (fade)');
   }
   function cancelHyst() { if (hystTimer) { cancel(hystTimer); hystTimer = 0; } hystTarget = -1; }
@@ -802,6 +903,8 @@ export function createDePressure(o) {
       if (!armed()) { say('pressure: caps 0 - the ladder climbs for SOUND only'); return; }
       mount();
       retune();
+      bindGeom();
+      measureGeom();   // one deliberate layout HERE, not in the merge path (FIX 1)
       say('pressure: mounted ' + [pin, ring, glitch].filter(Boolean).length + ' layers, wheel ' + spiral.file);
     },
 
@@ -830,7 +933,11 @@ export function createDePressure(o) {
       if (roll('slide-g') < lerp(P.SLIDE_GLITCH_CHANCE, heat)) benchRoll(P.SLIDE_GLITCH_S);
     },
 
-    /** Every merge, after the ledger: the punch, the juice, the rung's riders. */
+    /** Every merge, after the ledger: the punch, the juice, the rung's riders.
+     *  Pass 7: called per POP of the swipe's cascade; `chip:false` on the
+     *  follow-up pops keeps the chip punch (and its reduced-motion bloom
+     *  restart, a forced layout) to ONE per swipe - the board punch itself is
+     *  extend-not-stack and stays per pop. */
     merge(m) {
       if (!started || stopped || !armed()) return;
       const info = m || {};
@@ -838,8 +945,10 @@ export function createDePressure(o) {
       const tier = Math.max(1, Math.min(11, Number(info.tier) || 1));
       const p = punchFor({ link, tier, deltaScore: info.deltaScore });
       punchBoard(p.px, p.ms);
-      punchChip('score', p.scale, p.ms + 60);
-      if (link > 1) punchChip('chain', 1 + P.CHAIN_SCALE_PER_LINK * Math.min(8, link), 220);
+      if (info.chip !== false) {
+        punchChip('score', p.scale, p.ms + 60);
+        if (link > 1) punchChip('chain', 1 + P.CHAIN_SCALE_PER_LINK * Math.min(8, link), 220);
+      }
       if (has('burst') && roll('burst') < lerp(P.BURST_CHANCE, heat) + 0.05 * Math.min(4, link - 1)) {
         burstAt(info.tileEl, Math.round(lerp(P.BURST_COUNT, heat)) + (link >= 3 ? 1 : 0));
       }
@@ -853,6 +962,7 @@ export function createDePressure(o) {
     /** A new deepest tier this dive: the rung climbs NOW, then the heavy hit. */
     newDeepest(tier, tileEl) {
       if (!started || stopped || !armed()) return;
+      warmMedia();                       // R3: the rain below draws in seconds - warm the deck now
       tierNow = Math.max(1, tierOf(tier));
       stepTo(rungFor(tierNow), false);
       punchBoard(Math.min(P.PUNCH_PX_CAP, P.PUNCH_DEEP_PX + P.PUNCH_DEEP_PER_TIER * tierNow), P.PUNCH_DEEP_MS);
@@ -938,6 +1048,7 @@ export function createDePressure(o) {
       if (destroyed) return;
       api.stop();
       destroyed = true;
+      unbindGeom();
       for (const id of Array.from(live)) cancel(id);
       live.clear();
       haltLoop();

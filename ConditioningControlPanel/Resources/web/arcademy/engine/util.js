@@ -47,13 +47,14 @@ export const isVideoUrl = (url) => VIDEO_URL_RE.test(String(url || ''));
  * THE TOUCH RUNG reads `.ae-touch` on <html>, set the same way and by the same
  * kind of caller, and it is a HARDWARE ceiling rather than a quality level: iOS
  * caps concurrent hardware decode SESSIONS (three or four before VideoToolbox
- * thrashes and every stream stutters), so a phone gets 3 even on the FULL rung.
- * The two compose the protective way - fewer decoders always wins - so
- * touch+lite is min(2,3) = 2 and a lite phone is never handed MORE video than a
- * lite desktop. */
+ * thrashes and every stream stutters), and the mobile graphics diet found even
+ * two simultaneous 854x480 decodes fighting the game for the frame - so a
+ * phone gets ONE decoration decoder, on the FULL rung too. The two compose the
+ * protective way - fewer decoders always wins - so touch+lite is min(2,1) = 1
+ * and a lite phone is never handed MORE video than a lite desktop. */
 export const VIDEO_BUDGET = 6;
 export const VIDEO_BUDGET_LITE = 2;
-export const VIDEO_BUDGET_TOUCH = 3;
+export const VIDEO_BUDGET_TOUCH = 1;
 let liveVideos = 0;
 /** How many decoration <video> nodes mediaEl has minted and not yet released. */
 export const liveVideoCount = () => liveVideos;

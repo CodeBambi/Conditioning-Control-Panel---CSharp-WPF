@@ -654,6 +654,57 @@ html.arc-reduced .g-cp-tile.is-hint::after{opacity:1}
 .g-cp-howto{pointer-events:auto}
 .g-cp-hw-go{position:sticky;bottom:0;z-index:3;align-self:stretch;margin-top:14px}
 
+/* ---- THE PHONE CEILING (html.ae-touch) ------------------------------------
+   The shell arms .ae-touch on <html> for coarse-pointer devices at boot. The
+   studio's three blended layers each made the phone read the backdrop back out
+   of the framebuffer, two of them behind a blur as well; the varnish sheen and
+   the mote drift repainted their whole layer every frame; and the deal flash
+   keyframed a filter across the ENTIRE board six or seven times a class. On
+   touch the wash layers paint flat (saturate stays - one shader pass, and it
+   is what made the wash a ghost instead of a picture), the drifts hold still,
+   and every filter/box-shadow loop is either frozen at its LIT frame or given
+   a transform/opacity twin. The hint ring is a READ, so it freezes bright, the
+   way html.arc-reduced already leaves it. Desktop is untouched.
+   -------------------------------------------------------------------------- */
+/* the asset wash on the wall: no backdrop read, no full-stage blur */
+html.ae-touch .g-cp-bd-wall::after{mix-blend-mode:normal;filter:saturate(.2);
+  opacity:calc(var(--cp-n-a-asset,0) * .8)}
+/* the same pool as the end card's paper */
+html.ae-touch .g-cp-end::before{mix-blend-mode:normal;filter:saturate(.1);
+  opacity:calc(var(--cp-n-a-asset,0) * 1.1)}
+/* the sheet's wash veil: blend + blur on a node that pulses forever */
+html.ae-touch .g-cp-hw-wash .g-cp-hw-a{mix-blend-mode:normal;filter:none}
+/* the motes stay in the lamplight, they just stop drifting (a background
+   -position loop repaints the whole masked layer every frame) */
+html.ae-touch .g-cp-bd-motes::before{animation:none}
+/* the varnish sheen runs on EVERY locked face at once; frozen it is gloss */
+html.ae-touch .g-cp-tile.is-locked .g-cp-face::after{animation:none;
+  background-position:60% 0}
+/* THE RESCUE ring: frozen at its bright frame, never dark (arc-reduced twin) */
+html.ae-touch .g-cp-tile.is-hint::after{animation:none;opacity:1;
+  box-shadow:0 0 22px color-mix(in srgb, var(--lav), transparent 30%), inset 0 0 14px color-mix(in srgb, var(--lav), transparent 50%)}
+/* the three forever-glow chips freeze lit */
+html.ae-touch .g-cp-stage.g-cp-bell .g-cp-chip.g-cp-clock{animation:none;
+  box-shadow:0 0 16px rgba(240,194,75,.7)}
+html.ae-touch .g-cp-hud .g-cp-finish{animation:none;
+  box-shadow:0 0 18px color-mix(in srgb, var(--pink), transparent 58%)}
+html.ae-touch .g-cp-hw-go{animation:none;
+  box-shadow:0 0 30px color-mix(in srgb, var(--lav), transparent 30%), 0 3px 0 color-mix(in srgb, var(--lav), black 35%)}
+/* THE DEAL: same beat, on opacity and scale instead of a whole-board filter */
+html.ae-touch .g-cp-stage[data-phase="dealing"] .g-cp-board,
+html.ae-touch .g-cp-board.is-dealing{animation:g-cp-deal-t 640ms cubic-bezier(.2,.7,.3,1) both}
+@keyframes g-cp-deal-t{0%{opacity:.2;transform:scale(1.035)}
+  50%{opacity:1}100%{opacity:1;transform:none}}
+/* the sheet's bank flash: keep the pop, drop the brightness/saturate frame */
+html.ae-touch .g-cp-hw-bank .g-cp-hw-a{animation:g-cp-hwbank-t 3.4s ease-in-out infinite}
+@keyframes g-cp-hwbank-t{0%,22%{opacity:1;transform:scale(1)}
+  34%{opacity:1;transform:scale(1.04)}48%,100%{opacity:0;transform:scale(.92)}}
+/* the sheet's lock snap: transform only, the ring node already draws the land */
+html.ae-touch .g-cp-hw-lock .g-cp-hw-a{animation:g-cp-hwlock-t 2.6s ease-out infinite;
+  box-shadow:0 3px 8px rgba(0,0,0,.6)}
+@keyframes g-cp-hwlock-t{0%,20%{transform:translateX(var(--hw-s))}
+  38%,88%{transform:translateX(0)}100%{transform:translateX(var(--hw-s))}}
+
 `;
 
 /** Inject once per document. No-op headless (the DOM double has no head). */

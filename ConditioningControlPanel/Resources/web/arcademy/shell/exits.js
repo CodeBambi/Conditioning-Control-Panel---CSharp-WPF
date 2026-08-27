@@ -37,10 +37,15 @@ import { t } from '../core/lexicon.js';
  * REQUEST on `document` and never a sound - the exact defensive shape
  * shell/ceremonies.js sfx() set. A dropped cue is not an error.
  * -------------------------------------------------------------------------- */
-/* ONE cue in this file, and it is on the PILL - the leave-campus verb itself.
- * Not on the confirm's Go and not on any signed button: those all land on a
- * screen change, and shell.js's clearScreen() already cues the swap. A door
- * thump on top of that swap would be the double this wave exists to avoid.
+/* THE PILL, AND THE ONE DIALOG THAT COSTS SOMETHING (W3 P0-37). The pill is the
+ * leave-campus verb and has always sounded. Ordinary signed buttons still do
+ * not: they land on a screen change and shell.js's clearScreen() already cues
+ * the swap, so a second thump there is the double this wave exists to avoid.
+ * The jeopardy confirm is the exception the owner's ruling carves out - it is
+ * the only place in the school where a press can cost a class, and a dialog
+ * that asks that question in silence is a dialog nobody reads. Three beats,
+ * strictly graded: it opens on air, Stay is a tick, and Go is a full door,
+ * because Go is a committed choice.
  */
 function sfx(name, level, extra) {
   try {
@@ -199,12 +204,14 @@ export function createConfirm(o) {
   const stay = el('button', 'btn primary arc-confirm-stay', s.cancelLabel || '');
   stay.type = 'button';
   stay.addEventListener('click', () => {
+    sfx('blip', 0.16);              // W3 P0-37: nothing happened, and that is the point
     close();
     try { if (s.onCancel) s.onCancel(); } catch (e) { /* noop */ }
   });
   const go = el('button', 'btn', s.confirmLabel || '');
   go.type = 'button';
   go.addEventListener('click', () => {
+    sfx('door', 0.3);               // W3 P0-37: the committed choice, full door
     close();
     try { if (s.onConfirm) s.onConfirm(); } catch (e) { /* noop */ }
   });
@@ -217,6 +224,8 @@ export function createConfirm(o) {
 
   root.appendChild(card);
   s.mount.appendChild(root);
+  // W3 P0-37: the room holds its breath. Quiet, and under both answers above.
+  sfx('pad', 0.18);
   focusSoon(stay);
 
   return { root, close, get closed() { return closed; } };

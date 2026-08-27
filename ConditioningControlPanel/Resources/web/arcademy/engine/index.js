@@ -247,6 +247,11 @@ export const FIRE_KINDS = Object.freeze(['glitch_swap', 'sub_flash', 'flash_burs
 export const SUSTAIN_KINDS = Object.freeze(['row_drift', 'bubble_field', 'wash', 'gif_rain', 'ambient_field', 'crt']);
 export const CEREMONY_KINDS = Object.freeze(['stamp', 'streak_meter', 'jackpot', 'near_miss']);
 
+/** warm('media') asks the pool to byte-warm this many upcoming draws - the
+ *  provider's own DECK_AHEAD (its prewarm clamps to it anyway); kept local so
+ *  the engine never imports the provider. */
+const WARM_MEDIA_AHEAD = 6;
+
 /** Bundled mono-pink placeholder tiles — the floor under every asset draw. */
 const PLACEHOLDERS = ['ae-ph-1.svg', 'ae-ph-2.svg', 'ae-ph-3.svg', 'ae-ph-4.svg', 'ae-ph-5.svg', 'ae-ph-6.svg']
   .map((f) => {
@@ -264,6 +269,23 @@ export function createEngine(options = {}) {
   const coarse = probeCoarsePointer();
   const allow = Array.isArray(opts.effectsConsumed) && opts.effectsConsumed.length ? opts.effectsConsumed.slice() : null;
   const wordsIn = Array.isArray(opts.words) ? opts.words.filter((w) => typeof w === 'string' && w.trim()) : [];
+  /* THE VOICED WORD MAP (2026-08-25), a sibling of `words`: word -> whisper clip
+   * url. The SHELL resolves it - built from the day's trigger rows and passed
+   * ONLY when the app-wide whisper mute is off, so the engine never learns what
+   * SubAudioAudible is and an inaudible day simply arrives as no map at all.
+   * Null prototype: a word spelled '__proto__' or 'constructor' must MISS here,
+   * not inherit a function off Object and hand it to the mixer as a url. */
+  const wordAudioIn = (() => {
+    const bag = opts.wordAudio;
+    if (!bag || typeof bag !== 'object') return null;
+    const map = Object.create(null);
+    let n = 0;
+    for (const k of Object.keys(bag)) {
+      const u = bag[k];
+      if (k && typeof u === 'string' && u) { map[k] = u; n += 1; }
+    }
+    return n ? map : null;
+  })();
 
   let heat = 0;
   let channels = clampToCaps(heatToChannels(0), capsVec);
@@ -275,7 +297,7 @@ export function createEngine(options = {}) {
   const variantPools = new Map();
   const garnishBag = createGarnishBag(rng);
   const schedule = createRewardSchedule({ seed: seed + '|reward', mode: RewardMode.VariableRatio });
-  const director = createSetpieceDirector({ rng, log: (m) => log(m) });
+  const director = createSetpieceDirector({ rng, log: (m) => log(m), sfx });
 
   /* ---- asset pool (never blocks a draw) ---------------------------------- */
   let pool = null;
@@ -334,8 +356,14 @@ export function createEngine(options = {}) {
   function log(msg) { emit('arcademy-log', { msg: 'engine: ' + msg }); }
   function fx(kind, variant) { emit('arcademy-fx', { kind, variant: variant || null }); }
   function sfxRaw(detail) { emit('arcademy-sfx', detail); }
+  /* W3 P1-17: `extra.pitch` rides through to the mixer the way audio_trigger's
+   * detail already did. Half of the engine's W3 rows are one recipe at two
+   * pitches (the teardown wash under the entrance wash, the hydra's pop over
+   * the plain one), and without this each of them would have had to reach for
+   * sfxRaw and re-do the clamp. The mixer owns the 0.5-2 window. */
   function sfx(name, level, extra) {
     const detail = { name, level: clampIntensity(level == null ? 0.5 : level, capsVec), bus: (extra && extra.bus) || 'fx' };
+    if (extra && extra.pitch != null && Number.isFinite(Number(extra.pitch))) detail.pitch = Number(extra.pitch);
     if (extra && extra.duck) {
       const policy = { voice: 0.4, spotlight: 0.25, voiceUnderSpotlight: 0.15 }[extra.duck];
       if (policy != null) detail.duck = { target: extra.duck, mult: 1 - (1 - policy) * clamp01(channels.duckDepth), ms: 250 };
@@ -497,6 +525,14 @@ export function createEngine(options = {}) {
     reduced: () => reducedMotion || motionLevel === 0,
     lite: () => coarse || motionLevel <= 1,
     words: () => wordsIn,
+    /** One word's whisper clip url, or null. Null for every word on a day the
+     *  app-wide whisper mute is on, which is how `voice` stays inert without a
+     *  single game having to ask about audio. */
+    wordAudio(w) {
+      if (!wordAudioIn || typeof w !== 'string' || !w) return null;
+      const u = wordAudioIn[w];
+      return (typeof u === 'string' && u) ? u : null;
+    },
     assetUrlSync,
     spiralUrl,
     sfx, sfxRaw, fx, log,
@@ -642,7 +678,8 @@ export function createEngine(options = {}) {
       // and a claim nobody releases closes the haunting for the whole session.
       seepClear();
       if (layers.root) layers.root.classList.add('ae-suspended');
-      try { sustained.stopAll(true); } catch { /* ignore */ }
+      // W3 P1-17: `quiet` - a panic freeze is the one teardown that says nothing.
+      try { sustained.stopAll(true, true); } catch { /* ignore */ }
       if (subStream.timer) { timers.cancel(subStream.timer); subStream.timer = 0; }
       timers.kill();
       oneshots.reset();
@@ -679,8 +716,32 @@ export function createEngine(options = {}) {
     isPlainBeat: (i01, floor, early) => isPlainBeat(i01, rng(), floor, early),
     cadenceMs,
     rewardRoll: (o = {}) => schedule.roll(Object.assign({ heat }, o)),
+    /** Pre-warm a heavy path in idle time (2026-08-26). 'spiral' (the default)
+     *  mounts the loom wash canvas + compiles its shader while the element sits
+     *  at opacity 0, so the first jackpot garnish / spiral sustain reuses it
+     *  instead of paying WebGL setup on a reward frame.
+     *  'media' (2026-08-25) asks the asset pool to byte-warm the urls its next
+     *  few draws WILL serve (pool.prewarm forecasts over CLONED cursors +
+     *  peekRand, so it consumes NO rng and moves NO draw) - a game calls it a
+     *  beat before a media shower so cold phone fetches land in time.
+     *  No rng, no fx, nothing visible; safe to skip, safe to repeat. */
+    warm(what) {
+      if (disposed || suspended) return false;
+      if (what === 'media') {
+        if (!pool || typeof pool.prewarm !== 'function') return false;
+        try { pool.prewarm(WARM_MEDIA_AHEAD); return true; }
+        catch (e) { log('warm refused: ' + ((e && e.message) || e)); return false; }
+      }
+      if (what != null && what !== 'spiral') return false;
+      ensureLayer();
+      try { return sustained.warmSpiral(); } catch (e) { log('warm refused: ' + ((e && e.message) || e)); return false; }
+    },
     garnish: (o = {}) => applyGarnish(garnishBag.draw(o.avail || ['pink', 'drain', 'spiral', 'sublim']), o.intensity),
-    escapeGuard: (o = {}) => createEscapeGuard(Object.assign({ timers }, o)),
+    /* W3 P0-24: a guard that trips is a blocking effect LETTING GO, and that
+     * is the one beat in the engine the player is relieved by. The guard holds
+     * no ctx, so sfx is threaded in here and at the two internal call sites; it
+     * fires once per trip, never per note(). */
+    escapeGuard: (o = {}) => createEscapeGuard(Object.assign({ timers, sfx }, o)),
     deadBeat,
     channels: () => Object.assign({}, channels),
     visual: () => channelsToVisual(channels),

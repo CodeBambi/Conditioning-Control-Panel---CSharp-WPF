@@ -374,7 +374,50 @@
   .arc-letter-mark { width:34px; height:34px; }
 }
 html.arc-mobile .arc-mail-item { padding:12px; min-height:44px; }
-html.arc-mobile .arc-mailchip { width:40px; height:40px; }
+/* 44px, not 40: the mobile pass's thumb floor is a floor, and the chip was the
+   one control in this file sitting under it. */
+html.arc-mobile .arc-mailchip { width:44px; height:44px; }
+
+/* THE POSTBOX MOVES TO THE THUMB (owner bug, 2026-08-25). On a phone the chip
+   was the fourth thing in the top-right cluster, at the far end of the reach
+   from a hand holding a phone in landscape, so on a small stage it leaves the
+   cluster and takes the BOTTOM-RIGHT corner. `.campus-hint` steps left by the
+   chip's width plus a gap to make room (styles.css) - the hint must never be
+   sat on, it is the only instruction on the screen.
+
+   `fixed` RATHER THAN `absolute`, and that is the whole trick: shell/campus.js
+   mints this chip INSIDE `.campus-topright`, which is itself absolute, so an
+   absolute chip would still be pinned to the cluster it is trying to leave.
+   Nothing above it carries a transform, a filter or a `will-change` (the
+   cluster's only animation is `campus-fadein`, opacity and nothing else), so
+   `fixed` resolves against the viewport the way it reads.
+
+   THE BREAKPOINT IS THE CARD'S BREAKPOINT, VERBATIM (styles.css's post-row
+   law): the corner it lands in is furniture the same query arranges, so the
+   two can never disagree about what a small stage is. No bare `display:` here
+   either - mailbox.js hides this node with the `hidden` property (trap 27). */
+@media (max-width: 760px), (max-height: 600px) {
+  .campus-topright .arc-mailchip {
+    position:fixed;
+    right:clamp(12px, 2.5vw, 40px);
+    bottom:14px;
+  }
+}
+
+/* THE CLOSE BAR IS NOT ON THE LETTER, AND THE HARNESS IS WHY THIS IS 10px.
+   `.arc-exitbar` is `position:sticky; bottom:0`, which on the corkboard means a
+   bar pinned over a scrolling page (corkboard.css carries that fix). Here it
+   does NOT: `.arc-mailbox` is a flex COLUMN with `overflow:hidden`, the body
+   above it has `min-height:0` and shrinks, so the bar is laid out under the
+   panes rather than over them. Measured at 844x390: paper ends at y282, the bar
+   starts at y292. What the pane actually wants at that size is a line of breath
+   at the end of a scroll, not a bar's height of it - 56px of clearance would
+   have cost a third of a 179px reading window to solve a problem that is not
+   there. If this ever DOES overlap, the fix is still here and not on
+   `.arc-mailbox`: a sticky bottom is measured against the scrollport's padding
+   box, so padding the container lifts the bar and opens a gap under it. */
+html.arc-mobile .arc-mail-list,
+html.arc-mobile .arc-mail-paper { padding-bottom:10px; }
 
 /* =========================== REDUCED MOTION ==============================
    The global freeze runs every animation once at .001s, which is the right

@@ -184,6 +184,23 @@ html.arc-reduced .g-an-tk-wax::before,html.arc-reduced .g-an-tk-wax::after{displ
 html.arc-reduced .g-an-tk-outline.on{animation:none;opacity:.9}
 html.arc-reduced .g-an-tk-refund.on{animation:none;opacity:1}
 .g-an-stage.suspended .g-an-tk *{animation-play-state:paused !important}
+/* ---- THE PHONE CEILING (html.ae-touch) ------------------------------------
+   Coarse pointer. The lure ghost pulsed a drop-shadow forever - a filter
+   re-rastered every frame on a node a transition is also moving - and the stat
+   flicker keyframed brightness+contrast. Both keep their beat on opacity
+   instead; the ghost keeps its shape and its colour, it just stops breathing
+   its glow. The chrome still's two static passes (saturate/contrast over a
+   decoded photo) come off too. Nothing here is hidden: it is all read.
+   -------------------------------------------------------------------------- */
+html.ae-touch .g-an-tk-ghost{filter:none}
+html.ae-touch .g-an-tk-ghost.lure{animation:g-an-tk-ghostpulse-t 1.5s ease-in-out infinite}
+@keyframes g-an-tk-ghostpulse-t{50%{opacity:.78}}
+html.ae-touch .g-an-tk-flick{animation:g-an-tk-static-t .16s steps(3) 2}
+@keyframes g-an-tk-static-t{0%{opacity:1}40%{opacity:.55}100%{opacity:1}}
+/* the twin is a new name, so the reduced gate has to say its kill again */
+html.arc-reduced.ae-touch .g-an-tk-flick{animation:none}
+@media (prefers-reduced-motion: reduce){html.ae-touch .g-an-tk-flick{animation:none}}
+html.ae-touch .g-an-tk-chrome img{filter:none}
 `;
 
 function ensureStyle() {
@@ -554,6 +571,10 @@ export function createAnTrickster(o) {
     } catch (e) { clockObs = null; }
     if (!hooked) clockPoll = every(T.CLOCK_POLL_MS, bendFace);
     bendFace();
+    /* W3 P1-6: the room starts lying about time, and it says so ONCE - a
+     * single tick a hair flat of the honest countdown's. armClock returns
+     * early once armed, so this cannot repeat inside a class. */
+    cue('clock_tick', 0.2, { pitch: 0.94 });
     say('trickster: the clock goes crooked (' + (hooked ? 'observer' : 'poll') + ')');
     return true;
   }
@@ -733,7 +754,17 @@ export function createAnTrickster(o) {
       gx = pt.x; gy = pt.y;
       setCls(ghost, 'on', true); setCls(ghost, 'lure', false);
     } else {
-      if (!lure) { lure = pickLure(); if (lure) { ghostSeen = true; fired.ghost++; } }
+      if (!lure) {
+        lure = pickLure();
+        if (lure) {
+          ghostSeen = true;
+          fired.ghost++;
+          /* W3 P1-8: ONE breath as the ghost takes a frame, never one per
+           * ghostTick. Non-tonal on purpose - a pitched cue would read as a
+           * hint about the frame it is lying about. */
+          cue('whisper', 0.18, { pitch: 0.85 });
+        }
+      }
       const r = lure ? tileRect(lure) : null;
       if (r) { gx += (r.cx - gx) * T.GHOST_LERP; gy += (r.cy - gy) * T.GHOST_LERP; }
       setCls(ghost, 'on', true); setCls(ghost, 'lure', true);

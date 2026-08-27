@@ -15,7 +15,18 @@
  *                (trap 70: the voice hangs off setBubble and nowhere else).
  *   the strip    two chips under the bubble, inside `.emi` (the widget mints
  *                and owns the node; this file only says what goes on it).
- *   the end      a chip click, a dismiss, or she gives up after 40s.
+ *   the end      a chip click or a dismiss. SHE DOES NOT GIVE UP any more
+ *                (owner, 2026-08-25): the question has no auto-hide and the
+ *                bubble stays in sight until it is answered. The one exception
+ *                is the dares, which ride `classStart` and must be off the
+ *                glass before the board takes input (trap 97).
+ *
+ * AND SHE CANNOT BE TALKED OVER. From the moment the question lands until the
+ * strip comes down, the widget holds the glass for her: a later SAY is parked
+ * in one slot and released afterwards if it is still worth saying, and every
+ * other reaction is refused. That fence is widget.js's (`askOwnsGlass`), and
+ * it is what trap 104 is about - the ask's own line carries `ask: true` and is
+ * the only thing that may cross it.
  *
  * THE IGNORED PATH IS WORDLESS AND UNIVERSAL. Chips slide out, `-_-` holds
  * 1400, the bubble says `...`, then idle. No line, ever. Silence is on-lock:
@@ -38,17 +49,21 @@
  *   5. ONE ASK A SITTING. Session-local on purpose: banking it would make a
  *      reload the way to farm a second one.
  *
- * ANY PRESS CANCELS, AND CANCELLING IS FREE. A pointerdown or a keypress that
- * is not the strip's own ends the ask as `ignored` and spends NO cadence - the
- * player was doing something else, and charging them three sessions for that
- * would be the feature punishing them for playing the game. Touch always wins
- * (trap 75's law, one level up).
+ * A PRESS NO LONGER CANCELS (owner, 2026-08-25: "keep the prompt there till we
+ * respond - if we click elsewhere or on emi we trigger a new bark and we lose
+ * it"). The question WAITS: clicking the campus, petting her, dragging her,
+ * even wandering off the screen leaves the strip standing, and the glass hold
+ * (`askOwnsGlass`) keeps every bark parked until it comes down. Exactly four
+ * things end an unanswered ask, each one deliberate: a chip, the Esc key, a
+ * screen that kills her (`hide`/`gone`), and `classStart` - a strip may never
+ * sit over a live board (trap 59/97). All four spend NO cadence and the
+ * interrupted ones come back (`rememberReask`).
  *
- * THE LISTENERS ARE TRAP 80's SHAPE. `document` pointerdown + keydown, both
- * `{passive:true}`, both in the BUBBLE phase, neither ever calling
- * `preventDefault` or `stopPropagation`, both removed on `destroy()`. EMI adds
- * no rung to the Esc ladder here either: Esc dismisses the ask on its way past
- * and the ladder never notices.
+ * THE ONE LISTENER LEFT IS TRAP 80's SHAPE. `document` keydown, `{passive:
+ * true}`, BUBBLE phase, never `preventDefault` or `stopPropagation`, removed
+ * on `destroy()`. The pointerdown listener is GONE with the rule that needed
+ * it. EMI adds no rung to the Esc ladder: Esc dismisses the ask on its way
+ * past and the ladder never notices.
  *
  * INPUT TRUST (trap 59). `#arc-emi` is `pointer-events:none` and exactly two
  * nodes turned it back on. The chips are the THIRD, and they are the only new
@@ -58,7 +73,7 @@
 /* THE SAY CADENCE IS THE WIDGET'S (voice.js's import, for the same reason):
  * the strip has to land WITH the line, not with the typing dots, so this file
  * needs to know how long the run-up actually is. */
-import { SAY_LEAD_MS, sanitizeAskName } from './widget.js';
+import { SAY_LEAD_MS, sanitizeAskName, DIALS as WIDGET_DIALS } from './widget.js';
 
 /* ONE SANITISER, TWO READERS. widget.js owns it because widget.js is the file
  * that reads the stored `emi` blob back on boot; re-exported here so the ask
@@ -72,8 +87,27 @@ export const ASK_DIALS = Object.freeze({
   CADENCE_MIN_SESSIONS: 2,    // ...and the short one, on a roll
   CADENCE_ROLL: 1 / 3,        // ...the roll
   ASKS_PER_SESSION: 1,        // gate 5 (the NAME ask is over and above it)
-  GIVE_UP_MS: 40000,          // she waits this long, then gives up wordlessly
-  DARE_GIVE_UP_MS: 12000,     // ...but a dare lives on the room card, not the board
+  /* SHE DOES NOT GIVE UP (owner, 2026-08-25: "when EMI asks us something we
+   * need to keep the bubble in sight till we respond"). Zero is not "expire
+   * immediately", it is NO AUTO-HIDE: the question and its chips stay on the
+   * glass until they are answered or dismissed, and the player can never be
+   * trapped by that because Esc is a free dismiss and an answer is two chips
+   * away (see the header). It was 40000 through the EMI ASKS wave. */
+  GIVE_UP_MS: 0,
+  /* ...WITH ONE CARVE-OUT, AND IT IS TRAP 97's. A dare is offered on
+   * `classStart`, one beat before a board takes input; a strip that sat there
+   * would be a pointer-active node over a live precision board (trap 59). So
+   * the dares alone still leave, and they leave fast. */
+  DARE_GIVE_UP_MS: 12000,
+  /* HOW LONG THE QUESTION ITSELF HOLDS. Not a timeout - widget.js's
+   * ASK_HOLD_MS is an hour, and `releaseAskLine()` is what actually takes it
+   * down. Read from the widget so there is one number, not two. */
+  HOLD_MS: WIDGET_DIALS.ASK_HOLD_MS,
+  /* AN INTERRUPTED ASK COMES BACK, ONCE. A press, a pet, a drag or a docking
+   * is not an answer and not a refusal, so the question is owed one more go on
+   * the next quiet moment of the same sitting. One, so a player who keeps
+   * clicking past her is never nagged into a third. */
+  REASK_MAX: 1,
   IGNORED_HOLD_MS: 1400,      // -_- , then `...` , then idle
   /* THE STRIP LANDS WITH THE LINE, not with the typing dots - so its lead IS
    * the say ladder's run-up. A dial and not a constant only so a suite can
@@ -82,7 +116,7 @@ export const ASK_DIALS = Object.freeze({
   /* HOW LONG A LANDED LINE OWNS THE GLASS, near enough. Anything this file
    * schedules AFTER one of her lines waits STRIP_LEAD_MS + this, so a follow-up
    * never lands on a bubble that is still up (trap 72s lesson). */
-  AFTER_SAY_MS: 3400,
+  AFTER_SAY_MS: 4590,         // (3400 x 1.35 - it tracks the bubble hold, 2026-08-25)
   NAME_MAX: 8,                // a14: 8 characters, sanitised
   NAME_REASK_AFTER: 10,       // a skipped name is asked once more, this many later
   BED_SKIPS_GROGGY: 3,        // three skipped "bed?"s in a row buys the groggy greet
@@ -95,7 +129,21 @@ export const ASK_DIALS = Object.freeze({
 /** The moments this module is willing to be woken by. */
 export const ASK_TRIGGERS = Object.freeze([
   'greet', 'classStart', 'idlePlayer', 'reportCard', 'streakBroken', 'exitAim',
+  /* THE HEARTBEAT'S SLOT (2026-08-25). Not a new question and not a new
+   * cadence - a WAY IN. The metronome fills campus silence every ten seconds
+   * or so, and one of the things it may draw is "her question, now" rather
+   * than making an eligible ask wait for the next `greet` or the next
+   * `idlePlayer` edge, which on a quiet campus can be minutes away. Every gate
+   * in this file still runs, and NO frequency dial moved. */
+  'heartbeat',
 ]);
+
+/** Which `on` rows a `heartbeat` may stand in for. The heartbeat IS campus
+ *  idle, so it answers for the two triggers that already mean that - the
+ *  arrival and the quiet - and for nothing else. A dare (`classStart`) is
+ *  emphatically not on this list: trap 97 owns where those may be offered,
+ *  and `exitAim` is a hand travelling to the close button (trap 95). */
+const HEARTBEAT_STANDS_IN = Object.freeze({ idlePlayer: true, greet: true });
 
 /** The three dare kinds, and the only strings the payout frame may carry. */
 export const DARE_KINDS = Object.freeze(['S', 'streak', 'fast']);
@@ -265,11 +313,19 @@ export const ASKS = Object.freeze([
     /* NO `once` HERE, deliberately: the whole re-ask ladder (asked at 3, one
      * more try ten sittings after a skip, then never) is in `when`, and a
      * `once` gate on top of it would wall off the second try. */
-    /* Session 3 exactly; a skip re-opens it once, ten sessions later, and then
-     * never again (`n >= 2` is the wall). */
+    /* Session 3 ONWARDS while it has never been answered; a skip re-opens it
+     * once, ten sessions later, and then never again (`n >= 2` is the wall).
+     *
+     * IT WAS `=== ASK_FROM_SESSION` UNTIL 2026-08-25 AND THAT WAS THE ONE-SHOT
+     * BUG. Nothing is written to the ledger when an ask is INTERRUPTED (a
+     * press spends no cadence and records no answer - trap 96), so a name ask
+     * that a stray click took away left `answerOf` empty, session 3 never came
+     * round again, and she could never learn your name on that save. `>=` is
+     * the whole fix; the nagging it would otherwise buy is held off by
+     * `S.nameAsked`, which is once a SITTING the way a15's `bedAsked` is. */
     when: (c) => {
       const prev = c.answerOf('a14_name');
-      if (!prev) return c.sessions === ASK_DIALS.ASK_FROM_SESSION;
+      if (!prev) return c.sessions >= ASK_DIALS.ASK_FROM_SESSION;
       if (prev.a === 'yes' || intOf(prev.n) >= 2) return false;
       return c.sessions - intOf(prev.s) >= ASK_DIALS.NAME_REASK_AFTER;
     },
@@ -362,6 +418,9 @@ export function createAsks(o = {}) {
     soft: false,           // a01 yes: comfort faces + the extra report line
     softLineSpent: false,
     bedAsked: false,       // a15 is once a sitting
+    nameAsked: false,      // ...and so is a14, now that its window is open-ended
+    reask: null,           // the id of an ask a press took away, owed one more go
+    reasks: 0,             // ...and how many have been paid back (cap D.REASK_MAX)
     dare: null,            // {kind, gameKey} - flagged on the NEXT class
     dareSpent: false,      // one dare a session, win or lose
     groggySpent: false,
@@ -449,10 +508,14 @@ export function createAsks(o = {}) {
 
   function eligible(name, c) {
     const out = [];
+    /* A HEARTBEAT IS A SLOT, NOT A TRIGGER. It matches the rows that already
+     * ride campus idle; every other gate below is untouched. */
+    const hb = name === 'heartbeat';
     for (const a of TABLE) {
-      if (a.on !== name) continue;
+      if (hb ? !HEARTBEAT_STANDS_IN[a.on] : a.on !== name) continue;
       if (spent(a, c)) continue;
       if (a.id === 'a15_bed' && S.bedAsked) continue;
+      if (a.id === 'a14_name' && S.nameAsked) continue;
       if (a.dareKind || (a.yes && a.yes.dare)) { if (S.dareSpent || S.dare) continue; }
       if (typeof a.when === 'function') {
         let ok = false;
@@ -493,10 +556,30 @@ export function createAsks(o = {}) {
     try { widget.unmountAsk(slide !== false); } catch (e) { /* noop */ }
   }
 
+  /**
+   * SHE IS OWED ONE MORE GO (owner, 2026-08-25). An ask that a press, a pet, a
+   * drag or a docking took off the glass was neither answered nor declined -
+   * it was INTERRUPTED - and the ledger records nothing for it (trap 96), so
+   * without this the question is simply gone for the rest of the sitting. It
+   * comes back on the next quiet moment instead.
+   *
+   * NOT THE DARES. Their whole window is the room card, one beat before a
+   * board takes input (trap 97); an idle moment is the wrong side of it, and a
+   * dare armed off a moment with no class behind it would resolve against
+   * whatever the player happened to play next.
+   */
+  function rememberReask(a) {
+    if (!a || S.reask) return;
+    if (S.reasks >= D.REASK_MAX) return;
+    if (a.on === 'classStart' || (a.yes && a.yes.dare)) return;
+    S.reask = a.id;
+  }
+
   /** THE UNIVERSAL WORDLESS END. No line, ever - see the header. */
   function ignored(a, c, opts) {
     const noSpend = !!(opts && opts.noSpend);
     unmount(true);
+    if (noSpend) rememberReask(a);
     if (!noSpend) record(keyFor(a, c), 'ignored');
     /* ...AND A PRESS IS NOT A SKIPPED BEDTIME EITHER. She only loses the sleep
      * when the question sat there unanswered; a player who was doing something
@@ -588,12 +671,14 @@ export function createAsks(o = {}) {
   function mount(a, c) {
     const chips = Array.isArray(a.chips) ? a.chips.slice(0, 2) : ['ok', 'nah'];
     const giveUp = giveUpMsFor(a);
-    /* THE LINE FIRST, AND IT HOLDS FOR THE WHOLE ASK. `sayHoldMs` treats an
-     * explicit hold as a FLOOR it may raise and never lower, so handing it the
-     * give-up window is what keeps the question on the glass under the chips
-     * instead of expiring three seconds in. */
+    /* THE LINE FIRST, AND IT DOES NOT COME DOWN ON ITS OWN. `ask: true` is the
+     * flag widget.js reads: it opens the hold that keeps every later bark off
+     * the glass (trap 104) and it hands the question a hold nothing but
+     * `unmountAsk()` can end. Until 2026-08-25 the hold was the GIVE-UP window,
+     * which meant a question with no give-up would have flashed for three
+     * seconds and a later line could walk over it at any point. */
     let spoke = false;
-    try { spoke = !!emi.say(a.q, { face: a.face || 'o_o', hold: giveUp }); }
+    try { spoke = !!emi.say(a.q, { face: a.face || 'o_o', hold: D.HOLD_MS, ask: true }); }
     catch (e) { spoke = false; }
     if (!spoke) return false;
 
@@ -620,63 +705,66 @@ export function createAsks(o = {}) {
       } catch (e) { strip = null; }
       if (!strip) { unmount(false); return; }
       live.strip = strip;
-      live.giveUp = setTimeout(() => {
-        if (!live || live.ask !== a) return;
-        live.giveUp = null;
-        ignored(a, c);
-      }, giveUp);
+      /* ZERO IS "SHE WAITS" (D.GIVE_UP_MS). Only the classStart carve-out arms
+       * a timer at all, and it is the one ask that must be off the glass
+       * before a board goes live. */
+      if (giveUp > 0) {
+        live.giveUp = setTimeout(() => {
+          if (!live || live.ask !== a) return;
+          live.giveUp = null;
+          ignored(a, c);
+        }, giveUp);
+      }
     };
     if (D.STRIP_LEAD_MS > 0) later(raise, D.STRIP_LEAD_MS); else raise();
 
     if (!a.exempt) S.asked += 1;
     if (a.id === 'a15_bed') S.bedAsked = true;
+    if (a.id === 'a14_name') S.nameAsked = true;
     say('emi asks: ' + a.id);
     return true;
   }
 
-  /* ---------------------- any press cancels ----------------------------- */
+  /* ---------------------- the keyboard ---------------------------------- */
   /* TRAP 80's SHAPE, one level up: passive, bubble phase, no preventDefault,
-   * no stopPropagation, never a rung on the Esc ladder. A press that lands on
-   * the strip itself is the ANSWER and is left alone; anything else ends the
-   * ask as ignored and spends NO cadence. */
-  function insideStrip(target) {
-    try {
-      if (!live || !live.strip || !live.strip.el || !target) return false;
-      const el = live.strip.el;
-      if (target === el) return true;
-      return !!(el.contains && el.contains(target));
-    } catch (e) { return false; }
-  }
-
-  const onDocDown = (ev) => {
-    if (!live) return;
-    if (insideStrip(ev && ev.target)) return;
-    ignored(live.ask, live.ctx, { noSpend: true });
-  };
+   * no stopPropagation, never a rung on the Esc ladder. Until 2026-08-25 ANY
+   * press or stray key was a dismiss; now the question waits (see the header)
+   * and the keyboard keeps exactly three verbs: the chip shortcuts, the name
+   * field's own keys, and Esc - the one deliberate "not now". */
   const onDocKey = (ev) => {
     if (!live || !ev) return;
     const k = String(ev.key || '');
-    /* THE KEYBOARD REACH (spec): 1 and 2 pick the chips. Anything else is a
-     * player doing something else, and that is a dismiss. */
+    /* THE FIELD'S KEYS COME FIRST, AND THAT ORDER IS THE FIX. `1` and `2` are
+     * the chip shortcuts below, but they are also two of the eight characters
+     * a name may be made of - typing "player1" into a14's field used to SUBMIT
+     * on the last keystroke. A question with a keyboard has no chip shortcuts;
+     * it has a field, a Send button and Enter. */
+    if (live.ask && live.ask.input) {
+      if (k === 'Escape') ignored(live.ask, live.ctx, { noSpend: true });
+      return;                                                // every other key is typing
+    }
+    /* THE KEYBOARD REACH (spec): 1 and 2 pick the chips; Esc is the one
+     * deliberate dismiss. Every other key belongs to whatever the player is
+     * doing, and the question just keeps waiting. */
     if (k === '1' || k === '2') {
       if (live.strip && typeof live.strip.pick === 'function') { live.strip.pick(k === '1' ? 0 : 1); return; }
     }
-    if (k === 'Tab' || k === 'Enter' || k === ' ') return;   // focus + activate
-    if (live.ask && live.ask.input && k.length === 1) return; // typing a name
-    if (live.ask && live.ask.input && (k === 'Backspace' || k === 'Delete')) return;
-    ignored(live.ask, live.ctx, { noSpend: true });
+    if (k === 'Escape') ignored(live.ask, live.ctx, { noSpend: true });
   };
   if (typeof document !== 'undefined' && document.addEventListener) {
-    document.addEventListener('pointerdown', onDocDown, { passive: true });
     document.addEventListener('keydown', onDocKey, { passive: true });
   }
-  /* The widget's own pointer verbs are the other half: a pet, a drag or a
-   * fling on EMI herself never reaches `document` before the widget acts. */
+  /* The widget's own pointer verbs SURVIVE the question now (owner, same
+   * ruling): a pet, a drag or a fling on EMI herself is the player fidgeting
+   * with the mascot, not walking away from her, and the reaction each would
+   * spend is refused by `askOwnsGlass` anyway. Only the screen changes that
+   * legitimately KILL her still close it: `hide` is the x button, `gone` is
+   * an API hide and `setEnabled(false)`. Both spend nothing, and both bank
+   * the question for the next quiet moment (`rememberReask`). */
   const unGesture = typeof widget.onGesture === 'function'
     ? widget.onGesture((kind) => {
       if (!live) return;
-      if (kind === 'pet' || kind === 'petStreak3' || kind === 'drag'
-        || kind === 'fling' || kind === 'dropAt' || kind === 'hide') {
+      if (kind === 'hide' || kind === 'gone') {
         ignored(live.ask, live.ctx, { noSpend: true });
       }
     })
@@ -727,6 +815,13 @@ export function createAsks(o = {}) {
         /* The dare offer is evaluated BEFORE this latch closes (see `offer`),
          * which is the whole reason the two entry points exist. */
         S.midClass = true;
+        /* A question still standing when a board goes live comes down HERE.
+         * Presses stopped cancelling on 2026-08-25, so "the player clicked
+         * Begin" no longer closes it as a side effect - and a chip strip is a
+         * pointer-active node that may never sit over a precision board
+         * (trap 59/97). It was interrupted, not declined: no cadence, and it
+         * comes back on the next quiet moment. */
+        if (live) ignored(live.ask, live.ctx, { noSpend: true });
         return;
       }
       if (name === 'win' || name === 'fail' || name === 'runLost') {
@@ -810,6 +905,29 @@ export function createAsks(o = {}) {
       const c = context(name, payload);
       if (name === 'reportCard' && softLine()) return false;
 
+      /* THE INTERRUPTED ASK COMES BACK FIRST (owner, 2026-08-25). It is not a
+       * new question, so it jumps the eligibility roll and the cadence - but
+       * every LIVE gate above still had to pass, and its own `when` is
+       * re-checked, because the world moved while she was waiting. It rides
+       * the next `idlePlayer` (the quiet moment the owner asked for) or the
+       * next firing of its own trigger, whichever comes first. */
+      const back = S.reask ? (TABLE.find((a) => a.id === S.reask) || null) : null;
+      if (S.reask && !back) S.reask = null;
+      // ...and a `heartbeat` is the quiet moment too (2026-08-25), so the one
+      // owed question does not have to wait for an idle EDGE to come round.
+      if (back && (name === 'idlePlayer' || name === 'heartbeat' || name === back.on)) {
+        S.reask = null;
+        let ok = !spent(back, c);
+        if (ok && typeof back.when === 'function') {
+          try { ok = !!back.when(c); } catch (e) { ok = false; }
+        }
+        if (ok) {
+          S.reasks += 1;
+          say('emi asks: ' + back.id + ' comes back (interrupted)');
+          return mount(back, c);
+        }
+      }
+
       const list = eligible(name, c);
       if (!list.length) return false;
       /* THE EXEMPT ONE FIRST. The name ask neither waits on the cadence nor
@@ -864,7 +982,6 @@ export function createAsks(o = {}) {
       unmount(false);
       try { unGesture(); } catch (e) { /* noop */ }
       if (typeof document !== 'undefined' && document.removeEventListener) {
-        document.removeEventListener('pointerdown', onDocDown);
         document.removeEventListener('keydown', onDocKey);
       }
     },

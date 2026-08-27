@@ -54,6 +54,41 @@
  * samples, which is exactly the shape of the build today and sounds precisely
  * as it did before this wave.
  *
+ * WHY THE ONE-SHOTS ARE PRE-DECODED (owner report, 2026-08-26: "opening a paper
+ * arrives late and shouts"). A sample used to be a fresh `new Audio()` per fire:
+ * every tap paid a fetch off the virtual host, an mp3 decode and a media
+ * pipeline spin-up before a single sample left the speaker - 300-700ms in
+ * WebView2, on a cue whose whole job is to be simultaneous with a click. (The
+ * files are clean; ffmpeg says there is no leading silence in any of them.) So
+ * the moment the context comes up we fetch and `decodeAudioData` every AVAILABLE
+ * one-shot once, keep the AudioBuffer, and fire it through an
+ * AudioBufferSourceNode into the same bus graph: no element, no decode, no wait.
+ * Three consequences worth knowing:
+ *   - A CUE THAT BEATS ITS OWN DECODE FALLS TO THE RECIPE, never to the old
+ *     element path. Trap 70's doctrine, applied to loudness as well as time: an
+ *     instant oscillator impression beats a late recording, and re-minting the
+ *     element here would only reintroduce the lateness we are deleting. A
+ *     SAMPLE_ONLY name with nothing decoded yet drops, exactly as a missing file
+ *     drops - the imitation it does not have is still the imitation it may not
+ *     make up.
+ *   - A FETCH OR DECODE FAILURE STRIKES THE NAME OFF `available`, the same
+ *     verdict the element's `error` handler passes: the name is a recipe for the
+ *     rest of the session rather than a decoder spent once a beat.
+ *   - THE BEDS STAY ON THE ELEMENT. `NEVER_BUFFERED` below: the five room tones
+ *     loop on `hold` (an element loops for free and holds no buffer for the
+ *     night), and `intro_bed` is the splash's 4s jingle - fired once, at boot,
+ *     before any decode could plausibly have finished, and a bed that arrives
+ *     half a beat late is a bed, while a bed that drops is a silent opening.
+ *
+ * SAMPLES ARE LOUDER THAN RECIPES, AND THE TABLE ADMITS IT. The recorded files
+ * are mastered hot (peaks -0.5 to -3 dBFS) where the recipes they replaced were
+ * built quiet by construction, so `paper` and `door` - shell furniture, the two
+ * cues the Records Annex fires most - arrived shouting. `SAMPLE_TRIM` is a
+ * per-name multiplier on the one-shot gain, applied on both the buffer path and
+ * the element one. It is deliberately NOT a change to CLIP_GAIN: the whisper
+ * clips and every other url ride that number too, and they were never the ones
+ * that were too loud.
+ *
  * CLIPS (2026-08-23, Echo's trigger bubbles). A cue may carry `detail.url` - a
  * SAME-ORIGIN `ccp.*` media file (the app's own whisper clips). It is then
  * played from an HTMLAudioElement routed through the requested bus, so every
@@ -72,6 +107,22 @@
  *     same headroom the SOUNDS table's `gain` gives an oscillator.
  * A url the browser will not decode is silently dropped, exactly like a name
  * that is not in SOUNDS - a cue must never be the thing that throws.
+ *
+ * THE ENDED HOOK (2026-08-25). A caller may pass `detail.onEnded` and be told,
+ * EXACTLY ONCE and never fatally, what became of its cue:
+ *     'ended'   the element played the file out
+ *     'cap'     the maxMs governor cut it
+ *     'stopped' something took the slot (a re-fire, the voice cap, teardown)
+ *     'error'   the file will not load and the name has been struck off
+ *     'recipe'  the name fell back to its oscillator impression
+ *     'dropped' the cue never sounded at all - muted, zero master, zero bus,
+ *               no context, or a SAMPLE_ONLY name with no file behind it
+ * THE 'dropped' ANSWER IS SYNCHRONOUS, inside the dispatch, and that is the
+ * point of it: boot.js holds the intro splash until the 4s bed is over, so it
+ * has to learn INSTANTLY when there is no bed rather than sit out a timeout.
+ * The hook is a courtesy, not a contract - a caller that waits on it must still
+ * carry its own cap (boot.js does), because a host with no consumer at all on
+ * the `arcademy-sfx` bus will never answer anything.
  * ==========================================================================*/
 
 const BUSES = ['fx', 'voice', 'tutorial', 'drops', 'music'];
@@ -117,12 +168,22 @@ const SOUNDS = {
      `lift` are Misdirection's trackability tell and the decoy-lid sting; `near` the
      Anomaly near-miss ping (distinct from the long `near_miss` riser); `chime` a
      clean bell for the streak ladders; `shutter` the darkroom's camera click. */
-  pad:       { type: 'triangle', f0: 392, f1: 392, ms: 200, gain: 0.55 },
+  /* ECHO'S SILENCE (2026-08-25, "no sound in Echo on mobile or web"). The pad
+     was a lone 392Hz triangle at gain .55 - after the engine's binaural scaler,
+     the perceptual sqrt and the bus/master law it landed near -25 dBFS, which a
+     phone speaker rounds down to nothing. Three changes, one recipe: gain up to
+     .9 (a game NOTE, not chrome - it may sit at the top of the table), f0 down
+     to 330 (phone speakers roll off less there, and the pitch ladder's 0.67..2x
+     spread keeps every pad inside the mixer's clamp), and a sine OCTAVE layer at
+     .3 - the existing `layer` field, so it rides pitch, mute and duck for free
+     and gives the tone a second partial a tiny speaker can actually find. */
+  pad:       { type: 'triangle', f0: 330, f1: 330, ms: 200, gain: 0.9,
+               layer: { type: 'sine', f0: 660, f1: 660, ms: 200, gain: 0.3 } },
   decoy:     { noise: true, hp: 600,  lp: 3800, ms: 120, gain: 0.6, bits: 5 },
-  tell:      { type: 'sine',     f0: 880, f1: 880, ms: 70,  gain: 0.5 },
+  tell:      { type: 'sine',     f0: 880, f1: 880, ms: 70,  gain: 0.7 },
   lift:      { type: 'triangle', f0: 330, f1: 495, ms: 120, gain: 0.55 },
   near:      { type: 'sine',     f0: 740, f1: 620, ms: 110, gain: 0.55 },
-  chime:     { type: 'sine',     f0: 1046.5, f1: 1046.5, ms: 160, gain: 0.5 },
+  chime:     { type: 'sine',     f0: 1046.5, f1: 1046.5, ms: 160, gain: 0.7 },
   shutter:   { noise: true, hp: 1800, lp: 9000, ms: 40,  gain: 0.7 },
   /* EMI's VOICE, "Blipese" (2026-08-24, emi/vox.js). Two recipes and no third:
      the mascot babbles by firing `emi_blip` many times with a per-blip `pitch`,
@@ -196,6 +257,76 @@ const SOUNDS = {
      heard has to sit. Rides every mute / duck / bus law for free. */
   seep_hum:  { type: 'triangle', f0: 50, f1: 49.4, ms: 700, gain: 0.3, attack: 0.16,
                layer: { type: 'sine', f0: 100.6, f1: 99.2, ms: 640, gain: 0.2, attack: 0.18 } },
+  /* W3 "EVERY INPUT ANSWERED" (2026-08-25). Eleven recipes the moment table
+     asked for and the table did not have. Each is named for the GESTURE, not
+     the game, so a second class can borrow it without a rename.
+       queue        the mixer's "heard you, not yet": a 40ms sine, quieter than
+                    a blip, for a press that was accepted into a queue rather
+                    than acted on (Composure). Distinct from `bump` (refused).
+       pip          the report card's per-cell tally: a rising sine so a ladder
+                    of six reads as a count, not a beep repeated.
+       step         a footstep. Dry low noise, 30ms; the caller alternates
+                    pitch .96/1.04 so two feet are two feet.
+       record       a lifetime best, the RAREST sound in the building: a three
+                    note triangle arp with a real tail. Louder than jackpot on
+                    purpose - a record is allowed to be the loudest thing.
+       false_solve  the Sort trickster's fake solve: jackpot's shape a hair
+                    flat (pitch .983 in the caller) over a wash, so it sounds
+                    like a win to the ear and wrong to the gut.
+       descend      the Impulse Control tube slide: a 1.2s saw riser under a
+                    noise band sweeping up. Faded by the caller on reveal.
+       neon_strike  a neon tube striking: one square burst here; the VN fires
+                    the second and third through `steps` at 180/420ms, and the
+                    third carries the saw hum layer.
+       campus_wake  the campus revealing itself, 4.2s, music bus, the only
+                    recipe that slow. Never under reducedMotion (caller's law).
+       drain_bed    water leaving a tank, 1.6s falling band (Deep End resurface)
+                    and the floor under the `water_drain` sample.
+       bubble_bed   the bubble sustain's own air, per WAVE never per node.
+       spiral_hum   the Loom's spiral on mount: 62Hz triangle under a sine a
+                    fifth up, 1.4s, quieter than seep_hum's fired level. */
+  queue:       { type: 'sine',     f0: 520, f1: 520, ms: 40,  gain: 0.35, attack: 0.2 },
+  pip:         { type: 'sine',     f0: 660, f1: 990, ms: 70,  gain: 0.55 },
+  step:        { noise: true, hp: 120,  lp: 900,  ms: 30,  gain: 0.3 },
+  record:      { arp: [660, 880, 1320], ms: 300, gain: 0.8 },
+  false_solve: { arp: [523.25, 659.25, 783.99], ms: 110, gain: 0.5,
+                 layer: { noise: true, hp: 120, lp: 900, ms: 400, gain: 0.3, attack: 0.3 } },
+  descend:     { type: 'sawtooth', f0: 90, f1: 180, ms: 1200, gain: 0.25, attack: 0.5, riser: true,
+                 layer: { noise: true, hp: 300, lp: 1400, ms: 1200, gain: 0.2, attack: 0.5, sweep: 8 } },
+  neon_strike: { type: 'square',   f0: 120, f1: 120, ms: 60,  gain: 0.5,
+                 layer: { type: 'sawtooth', f0: 120, f1: 120, ms: 300, gain: 0.08, attack: 0.1 } },
+  campus_wake: { type: 'triangle', f0: 110, f1: 220, ms: 4200, gain: 0.5, attack: 0.38,
+                 layer: { type: 'triangle', f0: 165, f1: 330, ms: 4200, gain: 0.25, attack: 0.38 } },
+  drain_bed:   { noise: true, hp: 90,   lp: 900,  ms: 1600, gain: 0.5, attack: 0.3, sweep: 0.35 },
+  bubble_bed:  { noise: true, hp: 180,  lp: 600,  ms: 1200, gain: 0.4, attack: 0.5, sweep: 1.8 },
+  spiral_hum:  { type: 'triangle', f0: 62, f1: 62, ms: 1400, gain: 0.3, attack: 0.4,
+                 layer: { type: 'sine', f0: 93.4, f1: 93.4, ms: 1300, gain: 0.2, attack: 0.4 } },
+};
+
+/** ALIASES (W3). A cue name that is really another recipe, optionally re-pitched.
+ *  Two families live here:
+ *    - Misdirection's VERDICT names (`hit` `miss` `ride` `bank` `reveal`): the
+ *      game fired them since Semester II and every one degraded to `blip`, so
+ *      its five most important beats were the same tick. Named here so the
+ *      call sites keep their vocabulary and the ear gets five sounds.
+ *    - the FLOOR under a sampled name: `knock` with no file is a `door`,
+ *      `tape_stop` with no file is a `glitch` slowed to .7. The sample plays
+ *      when the host says the file is there; the alias plays when it is not.
+ *  Resolution is ONE level deep, on purpose. A sample lookup uses the name as
+ *  fired; only the recipe fallback walks the alias. */
+const ALIASES = {
+  hit:    { name: 'sting' },
+  miss:   { name: 'thud' },
+  ride:   { name: 'pop' },
+  bank:   { name: 'commit' },
+  reveal: { name: 'tell' },
+  knock:          { name: 'door' },
+  bell_short:     { name: 'bell' },
+  card_deal:      { name: 'paper' },
+  shutter_close:  { name: 'shutter', pitch: 0.8 },
+  mail_drop:      { name: 'flap' },
+  water_drain:    { name: 'drain_bed' },
+  tape_stop:      { name: 'glitch', pitch: 0.7 },
 };
 
 /** THE SAMPLE DOOR (AV CLUB, 2026-08-24): cue name -> a file beside the page.
@@ -210,13 +341,74 @@ const SAMPLES = {
   door:       './assets/sfx/door.mp3',
   paper:      './assets/sfx/paper.mp3',
   whoosh:     './assets/sfx/whoosh.mp3',
+  /* W3 (2026-08-25): seven one-shots with a recipe floor (see ALIASES)... */
+  knock:          './assets/sfx/knock.mp3',
+  bell_short:     './assets/sfx/bell_short.mp3',
+  card_deal:      './assets/sfx/card_deal.mp3',
+  shutter_close:  './assets/sfx/shutter_close.mp3',
+  mail_drop:      './assets/sfx/mail_drop.mp3',
+  water_drain:    './assets/sfx/water_drain.mp3',
+  tape_stop:      './assets/sfx/tape_stop.mp3',
+  /* ...and five ROOM-TONE BEDS, sample-only, meant for `hold` (below). */
+  records_bed:    './assets/sfx/records_bed.mp3',
+  campus_idle:    './assets/sfx/campus_idle.mp3',
+  vn_bed_ext:     './assets/sfx/vn_bed_ext.mp3',
+  vn_bed_int:     './assets/sfx/vn_bed_int.mp3',
+  cam_bed:        './assets/sfx/cam_bed.mp3',
 };
 
-/** The two names with NO recipe under them. A missing file is SILENCE here, not
+/** PER-NAME HEADROOM ON A SAMPLE (owner report, 2026-08-26: "too loud").
+ *  A recorded one-shot at `amp * CLIP_GAIN` is not the same loudness as the
+ *  recipe it replaced - the mp3s are mastered near full scale and the recipes
+ *  were written to sit under a game cue. This is the correction, as DATA rather
+ *  than as a re-master: the number is what the file needs, the name is what the
+ *  ear complained about, and anything not listed here is 1 (untouched).
+ *  `paper` and `door` are the Records Annex's own furniture and fire on every
+ *  page turn and every slide, so they take the deepest cuts. */
+const SAMPLE_TRIM = {
+  paper:  0.45,
+  door:   0.55,
+  whoosh: 0.65,
+};
+const trimFor = (name) => {
+  const t = SAMPLE_TRIM[name];
+  return (Number.isFinite(t) && t > 0) ? t : 1;
+};
+
+/** Samples that are NEVER pre-decoded and always play from an element: the five
+ *  room-tone beds (only ever fired with `hold`, and an element loops for free)
+ *  plus the splash jingle, which is struck once at boot ahead of any decode.
+ *  Everything else in SAMPLES is a short one-shot and wants to be instant. */
+const NEVER_BUFFERED = new Set([
+  'records_bed', 'campus_idle', 'vn_bed_ext', 'vn_bed_int', 'cam_bed',
+  'intro_bed',
+]);
+
+/** The names with NO recipe under them. A missing file is SILENCE here, not
  *  a fallback: an oscillator impression of a bed track or of a whole board
  *  dealing at once would be a different sound wearing the same name, and the
- *  cue sites that fire these two are the ones nobody gets to hear twice. */
-const SAMPLE_ONLY = new Set(['intro_bed', 'flap_deal']);
+ *  cue sites that fire these are the ones nobody gets to hear twice. */
+const SAMPLE_ONLY = new Set([
+  'intro_bed', 'flap_deal',
+  'records_bed', 'campus_idle', 'vn_bed_ext', 'vn_bed_int', 'cam_bed',
+]);
+
+/* HOLD (W3, 2026-08-25) - the mixer's first and only SUSTAIN. Until this wave
+ * the mixer could not loop anything: every sound was a one-shot capped at 8s,
+ * and the rooms (Records Office, the campus at idle, the VN's gate and hallway,
+ * the annex cams) had no air under them. The contract, all of it:
+ *   - `detail.hold: true` on a SAMPLED name (or a `detail.url`) LOOPS the
+ *     element in the slot `detail.key || name`, ignores `maxMs`, and fades IN
+ *     over CLIP_FADE_MS. Same bus, mute, master, level and duck laws as a clip.
+ *   - `detail.stop: true` fades that slot OUT over CLIP_FADE_MS. `stop` is
+ *     honoured even when muted, so a room can always be left.
+ *   - `stop_clips` (class teardown) and the mute echo cut holds too.
+ *   - a RECIPE cannot hold. A hold asked of a name with no file behind it is
+ *     'dropped' - a looping oscillator impression of a room is a different
+ *     room. So a bed without its mp3 is honest silence, same as intro_bed.
+ *   - a held slot is not evicted by the voice cap while a one-shot slot exists.
+ * EVERY HOLD HAS AN OWNER: the code that starts a bed stops it in its own
+ * teardown (trap 114). The mixer will not guess when a room has been left. */
 
 const clamp01 = (v) => (Number.isFinite(+v) ? Math.max(0, Math.min(1, +v)) : 0);
 
@@ -239,6 +431,18 @@ const PITCH_MAX = 2;
 const clampPitch = (v) => (
   Number.isFinite(+v) && +v > 0 ? Math.max(PITCH_MIN, Math.min(PITCH_MAX, +v)) : 1
 );
+
+/** A `detail.onEnded` callback, wrapped so it fires at most once and so a
+ *  listener that throws can never break the cue bus (header: THE ENDED HOOK). */
+function onceCb(fn) {
+  let f = (typeof fn === 'function') ? fn : null;
+  return (reason) => {
+    if (!f) return;
+    const g = f;
+    f = null;
+    try { g(String(reason || 'ended')); } catch { /* a listener may never break the bus */ }
+  };
+}
 
 /**
  * @param {Object} o
@@ -269,7 +473,16 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
   let out = null;                    // master gain
   const busGain = Object.create(null);   // bus -> {level: GainNode, duck: GainNode}
   let gestured = autoplayOk === true;
-  const stats = { handled: 0, played: 0, dropped: 0, ducks: 0, clips: 0, samples: 0, last: null };
+  /** `clips` counts every VOICE taken (element or buffer); `buffered` is the
+   *  subset that fired from a pre-decoded AudioBuffer and `decoded` how many
+   *  names are ready to do so - between them they say whether the latency fix is
+   *  actually running in this host or whether everything fell to a recipe. */
+  const stats = {
+    handled: 0, played: 0, dropped: 0, ducks: 0, clips: 0, samples: 0,
+    buffered: 0, decoded: 0, last: null,
+  };
+  /** Names that fell through to `blip`, logged once each (trap 115). */
+  const unknownNames = new Set();
 
   /* WHICH SAMPLES ARE ACTUALLY THERE, and why the page is not the one to guess.
    * A media element cannot answer "does this file exist" synchronously - it 404s
@@ -304,6 +517,9 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
       }
       applyMaster();
       say('[audio] context up (' + (ac.sampleRate || '?') + 'Hz)');
+      // The graph exists, so the one-shots can start decoding into it. This is
+      // the earliest possible moment: everything before it had no decoder.
+      prebufferSamples();
     } catch (e) { ac = null; say('[audio] no context: ' + ((e && e.message) || e)); }
     return ac;
   }
@@ -325,8 +541,10 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
     return noiseBuf;
   }
 
-  function envelope(node, peak, ms, attackFrac) {
-    const t = ac.currentTime;
+  function envelope(node, peak, ms, attackFrac, at) {
+    // `at` (seconds, optional): schedule the whole envelope ahead on the
+    // context timeline - the cascade's follow-up blips ride one dispatch.
+    const t = ac.currentTime + (at > 0 ? at : 0);
     const dur = Math.max(0.02, ms / 1000);
     const atk = Math.max(0.004, dur * (attackFrac == null ? 0.06 : attackFrac));
     const g = node.gain;
@@ -354,16 +572,16 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
    *     the envelope. A static band is a texture; a moving one is a gesture,
    *     and `whoosh` needed to be a gesture.
    * Neither field exists on any older recipe, so nothing above sounds different. */
-  function playRecipe(rec, bus, amp, pitch, depth) {
+  function playRecipe(rec, bus, amp, pitch, depth, at) {
     const p = clampPitch(pitch);
     if (rec.layer && !(depth > 0)) {
-      try { playRecipe(rec.layer, bus, amp, pitch, 1); } catch { /* a layer is a garnish */ }
+      try { playRecipe(rec.layer, bus, amp, pitch, 1, at); } catch { /* a layer is a garnish */ }
     }
     const env = ac.createGain();
     voiceOut(bus, env);
     // Duration is deliberately NOT scaled: a pitch ratchet should climb, not
     // speed up - the cadence belongs to whoever is firing the cues.
-    const { t, dur } = envelope(env, amp * (rec.gain == null ? 0.7 : rec.gain), rec.ms, rec.attack);
+    const { t, dur } = envelope(env, amp * (rec.gain == null ? 0.7 : rec.gain), rec.ms, rec.attack, at);
     const stop = t + dur + 0.02;
 
     if (rec.noise) {
@@ -410,7 +628,7 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
       const f = ac.createBiquadFilter();
       f.type = 'lowpass'; f.frequency.value = hz(420, p);
       const g = ac.createGain();
-      envelope(g, amp * 0.5, Math.min(90, rec.ms));
+      envelope(g, amp * 0.5, Math.min(90, rec.ms), undefined, at);
       n.connect(f); f.connect(g); voiceOut(bus, g);
       n.start(t); n.stop(t + 0.12);
     }
@@ -422,10 +640,23 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
 
   function killClip(rec, fadeMs) {
     if (!rec) return;
+    // Every teardown road passes through here, so this is the one place that can
+    // promise a waiting caller it will always be told (header: THE ENDED HOOK).
+    // It is a no-op for whichever path already named a more specific reason.
+    if (rec.settle) rec.settle('stopped');
     try { if (rec.timer) clearTimeout(rec.timer); } catch { /* ignore */ }
     rec.timer = 0;
     const fade = Math.max(0, Number(fadeMs) || 0);
     const stop = () => {
+      // A BUFFER VOICE HAS NO ELEMENT, and stopping its source is the whole
+      // teardown: no decoder to release, no src to take back. Everything below
+      // is the element's business and is skipped for it.
+      try { if (rec.src) rec.src.stop(); } catch { /* already ended */ }
+      try { if (rec.src) rec.src.disconnect(); } catch { /* ignore */ }
+      if (!rec.el) {
+        try { if (rec.gain) rec.gain.disconnect(); } catch { /* ignore */ }
+        return;
+      }
       try { rec.el.pause(); } catch { /* ignore */ }
       // Releasing the src lets the decoder go; a MediaElementSource cannot be
       // re-created for the same element, so the element is never reused.
@@ -452,21 +683,27 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
 
   /** @param {string=} sampleName  set when the url came from SAMPLES, so a file
    *   that turns out not to be playable can strike itself off `available`.
+   *  @param {Function=} settle  the one-shot `detail.onEnded` reporter. Only the
+   *   paths that TAKE the clip pay it; a `false` return leaves it to the caller.
    *  @returns {boolean} true if the clip was taken (played or scheduled). */
-  function playClip(d, bus, amp, sampleName) {
+  function playClip(d, bus, amp, sampleName, settle) {
     if (typeof Audio !== 'function') return false;
     const url = String(d.url == null ? '' : d.url);
     if (!url) return false;
     const key = String(d.key == null ? url : d.key);
 
+    const hold = d.hold === true;
     const prev = clips.get(key);
     if (prev) { clips.delete(key); killClip(prev, 60); }
     // A game that forgets to key its slots must still not run away with the
-    // decoders: the oldest slot goes first.
+    // decoders: the oldest ONE-SHOT slot goes first; a held bed is evicted only
+    // when there is nothing else left to evict (HOLD, above).
     while (clips.size >= CLIP_VOICES) {
-      const oldest = clips.keys().next().value;
-      const rec = clips.get(oldest);
-      clips.delete(oldest);
+      let victim = null;
+      for (const [k, r] of clips) { if (!r.hold) { victim = k; break; } }
+      if (victim == null) victim = clips.keys().next().value;
+      const rec = clips.get(victim);
+      clips.delete(victim);
       killClip(rec, 60);
     }
 
@@ -486,12 +723,25 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
     const askedMs = Number(d.maxMs) || 0;
     const maxMs = Math.max(80, askedMs > 0 ? Math.min(askedMs, CLIP_REQ_MAX_MS) : CLIP_MAX_MS);
     const fadeMs = Math.max(0, Math.min(maxMs / 2, Number(d.fadeMs) || CLIP_FADE_MS));
-    const rec = { el, gain: null, node: null, timer: 0 };
+    const rec = { el, src: null, gain: null, node: null, timer: 0, settle: settle || null, hold };
+    if (hold) { try { el.loop = true; } catch { /* ignore */ } }
+    // The per-name trim rides the element path too, so a build that cannot
+    // pre-decode (or a bed, which never does) is not the loud one.
+    const trim = sampleName ? trimFor(sampleName) : 1;
 
     let routed = false;
     try {
       const g = ac.createGain();
-      g.gain.value = Math.max(0.0001, amp * CLIP_GAIN);
+      const target = Math.max(0.0001, amp * CLIP_GAIN * trim);
+      if (hold) {
+        // A bed arrives, it does not start: fade in over the same window the
+        // fade-out uses, so entering and leaving a room are the same gesture.
+        const t0 = ac.currentTime;
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.linearRampToValueAtTime(target, t0 + CLIP_FADE_MS / 1000);
+      } else {
+        g.gain.value = target;
+      }
       const node = ac.createMediaElementSource(el);
       node.connect(g);
       voiceOut(bus, g);
@@ -505,17 +755,28 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
     }
     if (!routed) {
       try {
-        el.volume = clamp01(amp * CLIP_GAIN * (levels[bus] == null ? 1 : levels[bus]) * master * (mute ? 0 : 1));
+        el.volume = clamp01(amp * CLIP_GAIN * trim * (levels[bus] == null ? 1 : levels[bus]) * master * (mute ? 0 : 1));
       } catch { /* ignore */ }
     }
 
     clips.set(key, rec);
-    rec.timer = setTimeout(() => {
-      rec.timer = 0;
-      if (clips.get(key) === rec) clips.delete(key);
-      killClip(rec, fadeMs);
-    }, maxMs);
-    try { el.addEventListener('ended', () => { if (clips.get(key) === rec) { clips.delete(key); killClip(rec, 0); } }); } catch { /* ignore */ }
+    // A held bed has no governor: its owner stops it (HOLD contract).
+    if (!hold) {
+      rec.timer = setTimeout(() => {
+        rec.timer = 0;
+        if (clips.get(key) === rec) clips.delete(key);
+        if (rec.settle) rec.settle('cap');
+        killClip(rec, fadeMs);
+      }, maxMs);
+    }
+    try {
+      el.addEventListener('ended', () => {
+        if (clips.get(key) !== rec) return;
+        clips.delete(key);
+        if (rec.settle) rec.settle('ended');
+        killClip(rec, 0);
+      });
+    } catch { /* ignore */ }
     try {
       el.addEventListener('error', () => {
         // STILL IN THE MAP IS WHAT MAKES THIS A VERDICT ON THE FILE. Every
@@ -529,14 +790,13 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
         // is not ours and the rest of this handler reads as it always did.
         if (clips.get(key) !== rec) return;
         clips.delete(key);
+        if (rec.settle) rec.settle('error');
         killClip(rec, 0);
         // The file the host promised is not playable. Take the name back rather
         // than spending a decoder on it once a beat for the rest of the night;
         // from the next cue on it is a recipe again (or, for the sample-only
         // pair, honest silence).
-        if (sampleName && available.delete(sampleName)) {
-          say('[audio] sample ' + sampleName + ' will not load - falling back');
-        }
+        strikeSample(sampleName);
       });
     } catch { /* ignore */ }
 
@@ -549,6 +809,137 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
 
   function stopAllClips() {
     for (const [k, rec] of Array.from(clips.entries())) { clips.delete(k); killClip(rec, 0); }
+  }
+
+  /* ---- PRE-DECODED ONE-SHOTS (header: WHY THE ONE-SHOTS ARE PRE-DECODED) --
+   * The same laws as a clip, minus the wait. A voice lives in the same `clips`
+   * map so every road that already took a clip down - a re-fire on the key, the
+   * voice cap, `stop_clips`, the mute echo, teardown - takes a buffer voice down
+   * too, and killClip stays the one place a waiting caller is answered. */
+  const buffers = new Map();     // name -> AudioBuffer, ready to fire
+  const decoding = new Set();    // names with a fetch/decode in the air
+  /** Can this host pre-decode at all? A node harness with no `fetch` and a
+   *  webview with no `decodeAudioData` both say no, and then a sampled one-shot
+   *  keeps the element path it has always had rather than losing its sound. */
+  let canBuffer = false;
+
+  /** THE VERDICT ON A FILE, in one place. The element's `error` handler and a
+   *  failed decode reach the same conclusion - the host promised a file this
+   *  browser will not play - so they say it the same way: the name comes off
+   *  `available` and is a recipe (or honest silence) for the rest of the night. */
+  function strikeSample(name, why) {
+    if (!name || !available.delete(name)) return;
+    say('[audio] sample ' + name + ' will not load - falling back'
+      + (why ? ' (' + why + ')' : ''));
+  }
+
+  /** Idempotent by construction (`buffers` / `decoding` / a struck name is no
+   *  longer in `available`), so it is safe to re-arm from a cue that found no
+   *  buffer waiting - which is how a sample that became known after the context
+   *  came up still ends up decoded. */
+  function prebufferSamples() {
+    if (!ac) return;
+    // No fetch, no decoder: leave `canBuffer` false and the element path stands.
+    if (typeof fetch !== 'function' || typeof ac.decodeAudioData !== 'function') return;
+    canBuffer = true;
+    for (const name of Array.from(available)) {
+      if (NEVER_BUFFERED.has(name)) continue;
+      if (buffers.has(name) || decoding.has(name)) continue;
+      const url = SAMPLES[name];
+      if (!url) continue;
+      decoding.add(name);
+      try { fetchAndDecode(name, url); }
+      catch (e) { decoding.delete(name); strikeSample(name, (e && e.message) || e); }
+    }
+  }
+
+  function fetchAndDecode(name, url) {
+    Promise.resolve(fetch(url))
+      .then((res) => {
+        // `ok === false` is a 404 wearing a 200's clothes as far as decode goes.
+        if (res && res.ok === false) throw new Error('HTTP ' + res.status);
+        if (!res || typeof res.arrayBuffer !== 'function') throw new Error('no body');
+        return res.arrayBuffer();
+      })
+      .then((bytes) => new Promise((resolve, reject) => {
+        if (!ac) { reject(new Error('no context')); return; }
+        // BOTH SHAPES: the modern promise and the old callback pair. An impl
+        // that honours both simply resolves twice, which a promise ignores.
+        const p = ac.decodeAudioData(bytes, resolve, reject);
+        if (p && typeof p.then === 'function') p.then(resolve, reject);
+      }))
+      .then((buf) => {
+        decoding.delete(name);
+        if (!buf) throw new Error('empty decode');
+        buffers.set(name, buf);
+        stats.decoded += 1;
+      })
+      .catch((e) => {
+        decoding.delete(name);
+        strikeSample(name, (e && e.message) || e);
+      });
+  }
+
+  /** Fire a decoded one-shot into the bus graph. Same slot semantics, same
+   *  governor and the same `onEnded` reasons as the element path - the only
+   *  differences are that it starts NOW and that it takes its per-name trim.
+   *  @returns {boolean} true if the voice was taken. */
+  function playBuffer(d, bus, amp, name, pitch, settle) {
+    const buf = buffers.get(name);
+    if (!ac || !buf) return false;
+    const key = String(d.key == null ? name : d.key);
+    const prev = clips.get(key);
+    if (prev) { clips.delete(key); killClip(prev, 60); }
+    while (clips.size >= CLIP_VOICES) {
+      let victim = null;
+      for (const [k, r] of clips) { if (!r.hold) { victim = k; break; } }
+      if (victim == null) victim = clips.keys().next().value;
+      const dead = clips.get(victim);
+      clips.delete(victim);
+      killClip(dead, 60);
+    }
+
+    const askedMs = Number(d.maxMs) || 0;
+    const maxMs = Math.max(80, askedMs > 0 ? Math.min(askedMs, CLIP_REQ_MAX_MS) : CLIP_MAX_MS);
+    const fadeMs = Math.max(0, Math.min(maxMs / 2, Number(d.fadeMs) || CLIP_FADE_MS));
+    const rec = { el: null, src: null, gain: null, node: null, timer: 0, settle: settle || null, hold: false };
+
+    try {
+      const g = ac.createGain();
+      g.gain.value = Math.max(0.0001, amp * CLIP_GAIN * trimFor(name));
+      const s = ac.createBufferSource();
+      s.buffer = buf;
+      // Pitch is the CALLER's only: an alias's pitch belongs to the recipe
+      // impression underneath, never to the recording it stands in for.
+      try { if (s.playbackRate) s.playbackRate.value = pitch; } catch { /* ignore */ }
+      s.connect(g);
+      voiceOut(bus, g);
+      rec.gain = g;
+      rec.src = s;
+      s.onended = () => {
+        // Still ours? A cap, a re-fire or a teardown deletes the record first
+        // and has already named its own reason (playClip's `error` block has
+        // the long version of why that ordering is load-bearing).
+        if (clips.get(key) !== rec) return;
+        clips.delete(key);
+        if (rec.settle) rec.settle('ended');
+        killClip(rec, 0);
+      };
+      s.start();
+    } catch {
+      try { if (rec.src) rec.src.disconnect(); } catch { /* ignore */ }
+      try { if (rec.gain) rec.gain.disconnect(); } catch { /* ignore */ }
+      return false;
+    }
+
+    clips.set(key, rec);
+    rec.timer = setTimeout(() => {
+      rec.timer = 0;
+      if (clips.get(key) === rec) clips.delete(key);
+      if (rec.settle) rec.settle('cap');
+      killClip(rec, fadeMs);
+    }, maxMs);
+    return true;
   }
 
   function duck(spec) {
@@ -574,49 +965,117 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
   function onSfx(e) {
     const d = (e && e.detail) || {};
     stats.handled += 1;
+    /* THE ENDED HOOK (header). Wrapped once here, paid exactly once on every
+     * road out of this function - including the four early returns below, which
+     * answer 'dropped' inside the dispatch so a caller waiting on the cue is
+     * never left holding a timeout for a sound that was never going to happen. */
+    const settle = onceCb(d.onEnded);
     // The one CONTROL message on the sfx bus: the shell sends it when a class is
     // torn down so a trigger clip (<=1.2s) never leaks into the lobby. No audio
     // handle crosses into shell.js for this; the bus was already the seam.
-    if (d.name === 'stop_clips') { stopAllClips(); return; }
-    const pitch = clampPitch(d.pitch);
+    if (d.name === 'stop_clips') { stopAllClips(); settle('dropped'); return; }
+    // The second control message (HOLD): leave a room. Honoured before the mute
+    // check so a bed started before the mute echo can still be let go of.
+    if (d.stop === true) {
+      const k = String(d.key == null ? (d.name || '') : d.key);
+      const held = clips.get(k);
+      if (held) { clips.delete(k); killClip(held, CLIP_FADE_MS); }
+      settle('stopped');
+      return;
+    }
+    const alias = ALIASES[String(d.name || '')] || null;
+    const pitch = clampPitch(d.pitch) * (alias && alias.pitch ? alias.pitch : 1);
     stats.last = {
       name: d.name || null, level: d.level, bus: d.bus || 'fx', duck: d.duck || null, pitch,
       url: d.url || null,
     };
-    if (mute || master <= 0) { stats.dropped += 1; return; }
-    if (!ensureContext()) { stats.dropped += 1; return; }
+    if (mute || master <= 0) { stats.dropped += 1; settle('dropped'); return; }
+    if (!ensureContext()) { stats.dropped += 1; settle('dropped'); return; }
     const bus = BUSES.indexOf(d.bus) >= 0 ? d.bus : 'fx';
     // PERCEPTUAL CURVE (2026-08-24): engine levels are fractions of fractions - a 0.25
     // cue under the bus and master gains landed near -29 dB and the whole campus read
     // as silent. sqrt lifts the quiet floor (0.25 -> 0.5) while 1.0 stays 1.0, so the
     // relative loudness ladder the games ratchet is preserved, just audible.
     const amp = Math.sqrt(clamp01(d.level == null ? 0.5 : d.level));
-    if (amp <= 0 || levels[bus] <= 0) { stats.dropped += 1; return; }
+    if (amp <= 0 || levels[bus] <= 0) { stats.dropped += 1; settle('dropped'); return; }
     const name = String(d.name || '');
     try {
       // A url is a CLIP, whatever the name says. If the host cannot play one we
       // fall through to the recipe rather than going silent.
-      let took = d.url ? playClip(d, bus, amp) : false;
+      let took = d.url ? playClip(d, bus, amp, undefined, settle) : false;
       // ...and a SAMPLED name is a url the caller did not have to know about.
       // The slot is the name, so a cue that re-fires cuts its own tail instead
       // of stacking (twelve flaps in half a second is the case that matters).
       if (!took && available.has(name)) {
-        took = playClip(
-          Object.assign({}, d, { url: SAMPLES[name], key: d.key == null ? name : d.key }),
-          bus, amp, name
-        );
-        if (took) stats.samples += 1;
+        // A ONE-SHOT SAMPLE COMES OFF A BUFFER OR IT DOES NOT COME AT ALL.
+        // Minting an element here is what made a page turn arrive half a beat
+        // after the page turned; if the decode has not landed yet we take the
+        // recipe below instead, which is instant and quiet (header, trap 70).
+        // Beds and `url` clips are not one-shots and keep the element path.
+        const oneShot = d.hold !== true && !d.url && !NEVER_BUFFERED.has(name);
+        if (oneShot && canBuffer) {
+          if (buffers.has(name)) {
+            took = playBuffer(d, bus, amp, name, clampPitch(d.pitch), settle);
+            if (took) { stats.samples += 1; stats.buffered += 1; }
+          } else {
+            // Nothing decoded yet: re-arm (idempotent) and let the floor answer.
+            prebufferSamples();
+          }
+        } else {
+          took = playClip(
+            Object.assign({}, d, { url: SAMPLES[name], key: d.key == null ? name : d.key }),
+            bus, amp, name, settle
+          );
+          if (took) stats.samples += 1;
+        }
       }
       if (took) { stats.clips += 1; stats.played += 1; }
-      else if (SAMPLE_ONLY.has(name)) {
+      else if (SAMPLE_ONLY.has(name) || d.hold === true) {
         // No file, no imitation. The cue is spent, not queued (trap 70: a beat
-        // played late is worse than a beat missed).
+        // played late is worse than a beat missed). A HOLD with no file behind
+        // it lands here too: a recipe cannot loop (HOLD contract).
         stats.dropped += 1;
+        settle('dropped');
       } else {
-        playRecipe(SOUNDS[name] || SOUNDS.blip, bus, amp, pitch);
+        const rName = alias ? alias.name : name;
+        const rec = SOUNDS[rName];
+        if (!rec && !unknownNames.has(name)) {
+          // Trap 110: an unknown name is a blip, not an error - which is how
+          // Misdirection's verdicts went a semester as ticks. Say so, once.
+          unknownNames.add(name);
+          say('[audio] unknown cue "' + name + '" - playing blip');
+        }
+        playRecipe(rec || SOUNDS.blip, bus, amp, pitch);
         stats.played += 1;
+        // A recipe has no element and no `ended`: the impression is not the
+        // recording, so a caller waiting for the FILE is told so and moves on.
+        settle('recipe');
       }
-    } catch (err) { stats.dropped += 1; say('[audio] ' + (name || '?') + ' failed: ' + ((err && err.message) || err)); }
+    } catch (err) {
+      stats.dropped += 1;
+      settle('dropped');
+      say('[audio] ' + (name || '?') + ' failed: ' + ((err && err.message) || err));
+    }
+    /* THE CASCADE (2026-08-26, deep-end choreography). `detail.steps` are
+     * follow-up blips pre-scheduled on the SAME context timeline inside this
+     * one dispatch - one graph build for a whole run of merge pops instead of
+     * one per pop. Each step: {atMs, name?, pitch?, level?}; a missing field
+     * inherits the main cue's. Recipes only (a clip cannot be scheduled ahead
+     * without a decoder per step, which is the cost this exists to avoid). */
+    if (ac && Array.isArray(d.steps) && d.steps.length) {
+      for (const s of d.steps.slice(0, 16)) {
+        if (!s) continue;
+        const at = Math.max(0, Math.min(4000, Number(s.atMs) || 0)) / 1000;
+        const sAmp = Math.sqrt(clamp01(s.level == null ? (d.level == null ? 0.5 : d.level) : s.level));
+        if (sAmp <= 0) continue;
+        try {
+          const sn = String(s.name || name);
+          const sa = ALIASES[sn] || null;
+          playRecipe(SOUNDS[sa ? sa.name : sn] || SOUNDS.blip, bus, sAmp,
+            clampPitch(s.pitch == null ? pitch : s.pitch), 0, at);
+        } catch { /* a step must never break the bus */ }
+      }
+    }
     if (d.duck) duck(d.duck);
   }
 
@@ -686,6 +1145,9 @@ export function createAudio({ init, bridge, log, autoplayOk } = {}) {
       stopAllClips();
       if (ac && typeof ac.close === 'function') { try { ac.close(); } catch { /* ignore */ } }
       ac = null; out = null; noiseBuf = null;
+      // An AudioBuffer belongs to the context that decoded it, so it dies with
+      // it; a fresh context decodes afresh.
+      buffers.clear(); decoding.clear(); canBuffer = false;
     },
   };
 }

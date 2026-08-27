@@ -495,6 +495,15 @@ export function createMdPressure(o) {
       cue(P.RUNG_CUE[r], r);
     } else {
       for (let k = rung; k > r; k--) for (const add of P.RUNG_ADDS[k]) applyAdd(add, false);
+      /* W3 P1-7: the ladder only ever cued on the way UP, so the room getting
+       * lighter - which is the relief the whole surge is built to buy - was
+       * silent. ONE slide for the descend, whatever it sheds, pitched down and
+       * at half the climb's level: a release is quieter than a threat. */
+      if (armed()) {
+        const lv = Math.min(audioCeil, (P.CUE_LEVEL_BASE + r * P.CUE_LEVEL_STEP) * 0.5);
+        count('cue');
+        fire('audio_trigger', { name: 'slide', level: lv, pitch: 0.8 });
+      }
     }
     rung = r;
     retune();

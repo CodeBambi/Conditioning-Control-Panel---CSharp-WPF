@@ -535,6 +535,10 @@ internal static class ArcademyHostService
                 break;
             case "class-started":
                 _classActive = true;
+                // THE EXTRA CREDIT LEVER, remembered rather than believed. The page says which
+                // notch it thinks it pulled; the host clamps it against what is actually unlocked
+                // and holds the answer until class-ended asks. The page never echoes a multiplier.
+                NotePendingLever((string?)o["gameKey"], (string?)o["lever"]);
                 App.Logger?.Information("ArcademyHost: class started ({Game}, tier {Tier})",
                     (string?)o["gameKey"], (int?)o["gradeTier"] ?? 0);
                 // CAMPUS PRESENCE: a door opened. Best-effort and gated on the share rung inside;
@@ -546,6 +550,9 @@ internal static class ArcademyHostService
                 break;
             case "enrollment-done":
                 OnEnrollmentDone(o);
+                break;
+            case "prize-buy":
+                OnPrizeBuy(o);
                 break;
             case "class-left":
                 // The closing bracket for `class-started`. Leaving a class with Esc ends no class,
@@ -677,6 +684,13 @@ internal static class ArcademyHostService
             // binds one per pad and plays it under the pad's note; `words` stays exactly as it
             // was for every other class. Empty audio everywhere when SubAudioAudible is off.
             triggers = BuildTriggers(phrases),
+            // THE HOUSE VOCABULARY'S clips: one row per word of the school's own 24-word list
+            // that has an mp3 beside the page. `words` above may legally be EMPTY - nothing
+            // enabled, or a creator mod that ships no pool - and on that day the page deals the
+            // house list instead (core/vocab.js) and reads its triggers from HERE. Listed always,
+            // audible only under SubAudioAudible, exactly like `triggers`; the page filters these
+            // to the words it actually dealt so ctx.triggers never describes a pool nobody sees.
+            houseTriggers = BuildHouseTriggers(),
             // UTC date seeds the content so the day's classes are globally identical (#978)...
             utcDateSeed = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             // ...and the LOCAL date is what rolls the attendance streak.
@@ -706,7 +720,63 @@ internal static class ArcademyHostService
             // THE STUDENT ID (STUDENT ID contract, "Wire contract"). Who the card is made out to,
             // whether there is a photo on it, and the one consent rung that governs both.
             profile = BuildProfile(s),
+            // THE PRIZE COUNTER. The shelf, tonight's payday and the two lever rungs, all resolved
+            // here - the page renders the catalog it is handed and never prices anything. The
+            // WALLET itself is not here: it rides `meta` above under its own host-owned key, so
+            // there is exactly one copy of the balances on the wire.
+            economy = BuildEconomy(),
         };
+    }
+
+    /// <summary>
+    /// THE PRIZE COUNTER's projection. Wrapped like every other optional block here: a throw would
+    /// kill <c>init</c>, and a page that never gets <c>init</c> never boots. A failure costs the
+    /// shelf its stock for the session, never the Arcademy.
+    ///
+    /// <para><c>payday</c> is the SEEDED nightly draw, computed once here off the UTC date and the
+    /// enrolled roster (<see cref="ArcademyEconomy.PickPayday"/>) so every machine on the same day
+    /// agrees. The page displays it; it never rolls anything.</para>
+    /// </summary>
+    private static object BuildEconomy()
+    {
+        try
+        {
+            var payday = ArcademyEconomy.PickPayday(
+                DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                _meta?.EnrolledGameKeys());
+            var (extra, honors) = _meta?.LeverUnlocks() ?? (false, false);
+            return new
+            {
+                catalog = ArcademyEconomy.CatalogJson(),
+                payday = new { gameKey = payday.GameKey, mult = payday.Mult },
+                leverUnlocks = new { extra, honors },
+                // Which per-game setting VALUES the counter holds the door on. One row today
+                // (The Deep End's wide board); the settings page draws a locked value from this
+                // rather than guessing which enum entry a sku is talking about. The host refuses
+                // the write regardless (PrizeGateAllows), so this is dressing, never the gate.
+                settingUnlocks = new JArray
+                {
+                    new JObject
+                    {
+                        ["key"] = DeepEndBoardSizeKey,
+                        ["value"] = DeepEndWideBoard,
+                        ["sku"] = ArcademyEconomy.SkuDeepEndWideBoard,
+                        ["owned"] = _meta?.WalletOwns(ArcademyEconomy.SkuDeepEndWideBoard) == true,
+                    },
+                },
+            };
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ArcademyHost.BuildEconomy: {E}", ex.Message);
+            return new
+            {
+                catalog = new JArray(),
+                payday = new { gameKey = (string?)null, mult = 1 },
+                leverUnlocks = new { extra = false, honors = false },
+                settingUnlocks = new JArray(),
+            };
+        }
     }
 
     /// <summary>
@@ -907,6 +977,97 @@ internal static class ArcademyHostService
         {
             App.Logger?.Debug("ArcademyHost.BuildSfxSamples: {E}", ex.Message);
             return _sfxSamples = Array.Empty<string>();
+        }
+    }
+
+    /// <summary>
+    /// THE SCHOOL'S OWN VOCABULARY, mirrored from <c>Resources/web/arcademy/core/vocab.js</c>
+    /// (<c>HOUSE_WORDS</c>). The page owns the list and only ever falls back to it when the
+    /// player's <c>SubliminalPool</c> is empty; this copy exists so the host can answer WHICH of
+    /// those words has a clip on disk without the page probing for files. The spelling is LOCKED
+    /// on both sides: the filename is the word lowercased with spaces turned into underscores
+    /// ("LET GO" -> <c>let_go.mp3</c>), so renaming a word here or there orphans a clip.
+    /// </summary>
+    private static readonly string[] HouseWords =
+    {
+        "FOCUS", "RELAX", "BREATHE", "LET GO", "SINK", "DEEPER", "DRIFT", "BLANK",
+        "EMPTY", "LISTEN", "OBEY", "GOOD", "AGAIN", "STAY", "SMILE", "SOFTER",
+        "MELT", "CALM", "DROP", "TRUST", "QUIET", "OPEN", "GIVE IN", "FLOAT",
+    };
+
+    /// <summary>The file stem a house word's clip ships under: lowercase, spaces to underscores.</summary>
+    private static string HouseSlug(string word)
+        => (word ?? string.Empty).Trim().ToLowerInvariant().Replace(' ', '_');
+
+    /// <summary>
+    /// Which house-word clips are on disk. Cached for the process for the same reason
+    /// <see cref="BuildSfxSamples"/> is: the folder ships with the build and cannot change under
+    /// a running app. <c>null</c> = not scanned yet, never "none found".
+    /// </summary>
+    private static string[]? _sublimStems;
+
+    private static string[] SublimStems()
+    {
+        if (_sublimStems != null) return _sublimStems;
+        try
+        {
+            var dir = Path.Combine(AppContext.BaseDirectory, "Resources", "web", "arcademy", "assets", "sublim");
+            if (!Directory.Exists(dir)) return _sublimStems = Array.Empty<string>();
+            _sublimStems = Directory.EnumerateFiles(dir, "*.mp3", SearchOption.TopDirectoryOnly)
+                .Select(f => Path.GetFileNameWithoutExtension(f) ?? string.Empty)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .OrderBy(n => n, StringComparer.Ordinal)
+                .ToArray();
+            return _sublimStems;
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ArcademyHost.SublimStems: {E}", ex.Message);
+            return _sublimStems = Array.Empty<string>();
+        }
+    }
+
+    /// <summary>
+    /// The house vocabulary WITH its whisper clips: <c>[{text, audio}]</c>, one row per house word
+    /// that actually has an mp3 beside the page. The page uses these only on a day it fell back to
+    /// the house list (an empty <c>SubliminalPool</c>), and it filters them down to the words it
+    /// dealt, so <c>ctx.triggers</c> always describes <c>ctx.words</c>.
+    /// <para>
+    /// The url is RELATIVE to the page (<c>./assets/sublim/&lt;slug&gt;.mp3</c>), exactly like the
+    /// sample door's cues: the whole arcademy folder is served off one origin, so the element that
+    /// plays it stays same-origin and can feed the mixer's bus graph instead of slipping it.
+    /// </para>
+    /// <para>
+    /// GATED ON <see cref="Models.AppSettings.SubAudioAudible"/> the same way
+    /// <see cref="BuildTriggers"/> is: with the app-wide whisper mute on, every row is text-only
+    /// and the page has nothing it could play. The rows are still listed - the host says what
+    /// EXISTS (trap 86); the flag says whether it may be heard. An empty or missing folder is an
+    /// empty list and the school simply flashes its words in silence.
+    /// </para>
+    /// </summary>
+    private static object[] BuildHouseTriggers()
+    {
+        try
+        {
+            var stems = SublimStems();
+            if (stems.Length == 0) return Array.Empty<object>();
+            var have = new HashSet<string>(stems, StringComparer.OrdinalIgnoreCase);
+            var audible = App.Settings?.Current?.SubAudioAudible == true;
+            var rows = new List<object>(HouseWords.Length);
+            foreach (var word in HouseWords)
+            {
+                var slug = HouseSlug(word);
+                if (slug.Length == 0 || !have.Contains(slug)) continue;
+                rows.Add(audible
+                    ? (object)new { text = word, audio = "./assets/sublim/" + slug + ".mp3" }
+                    : new { text = word, audio = (string?)null });
+            }
+            return rows.ToArray();
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ArcademyHost.BuildHouseTriggers: {E}", ex.Message);
+            return Array.Empty<object>();
         }
     }
 
@@ -1304,8 +1465,91 @@ internal static class ArcademyHostService
         ["grade_tier_2"] = "Year 2",
         ["grade_tier_3"] = "Year 3",
         ["grade_tier_4"] = "Year 4",
+        // The one letter with punctuation in it. 'grade_s+' is not a key shape a lexicon row
+        // (or a mod table) can carry, so core/lexicon.js spells it out and so does this.
+        ["grade_splus"] = "S+",
         ["attendance"] = "Attendance",
         ["perfect_attendance"] = "Perfect Attendance",
+        // ---- the Prize Counter (economy, 2026-08-26) -----------------------------------
+        // Every row here is the front desk talking: warm, a bit scruffy, never a form letter.
+        // These keys are the ONES THE PAGE ACTUALLY ASKS FOR: core/lexicon.js carries the same
+        // set as its offline fallback and shell/lever.js + shell/prizecounter.js look them up
+        // by exactly these names. A row nothing calls is a row a mod would re-voice for
+        // nothing, so the list is kept to what is consumed and the harness checks both ways.
+        // ---- the door on the west wall
+        ["campus_room_prizes"] = "Prize Counter",
+        ["campus_prizes_status"] = "Open late",
+        ["campus_desc_prizes"] = "Tickets on the shelf, tokens in the case. Somebody is always restocking.",
+        // ---- the two currencies, as they read on a chip
+        ["wallet_tickets"] = "Tickets",
+        ["wallet_tokens"] = "Tokens",
+        // ---- the counter itself
+        ["prize_counter_title"] = "Prize Counter",
+        ["prize_counter_sub"] = "Tickets on the shelf, tokens in the case",
+        ["prize_shelf"] = "Ticket Shelf",
+        ["prize_shelf_hint"] = "Every graded class pays tickets. This is where they go.",
+        ["prize_case"] = "Token Case",
+        ["prize_case_hint"] = "Tokens only. Your first S of the day drops one in the tray.",
+        ["prize_you_have"] = "On you",
+        ["prize_owned"] = "Yours",
+        ["prize_held"] = "Holding",
+        ["prize_buy"] = "Trade",
+        ["prize_soon"] = "Arriving soon",
+        ["prize_wait"] = "Asking the counter",
+        // What the counter says back. The five refusals line up one for one with the reason
+        // strings on `wallet-result` (unknown / poor / owned / full / locked); the last two are
+        // what the page says on its own when no answer came back at all.
+        ["prize_bought"] = "Wrapped up and yours.",
+        ["prize_poor"] = "Not quite enough on you for that one yet.",
+        ["prize_owned_msg"] = "You have that one already.",
+        ["prize_full"] = "Your pockets are full of those. Use one first.",
+        ["prize_locked_msg"] = "That one stays in the case for now.",
+        ["prize_unknown"] = "The counter does not know that one. Odd.",
+        ["prize_quiet"] = "The counter went quiet on that one. Try again in a moment.",
+        ["prize_empty"] = "Shelf is bare tonight. Come back when the truck has been.",
+        // Tonight's hot room, painted from the seeded draw `init` already handed down.
+        ["prize_payday_label"] = "Hot room tonight",
+        ["prize_payday_2"] = "is paying double",
+        ["prize_payday_5"] = "is paying five times over",
+        // The eight rows on the shelf. Names and blurbs both, so a page with a partial mod
+        // table still reads (the catalog also ships the neutral English on the wire). Keyed
+        // EXACTLY as ArcademyEconomy.Catalog's NameKey/BlurbKey - a missing row here is a blank
+        // label on the shelf, so the harness checks the two lists against each other.
+        ["prize_id_frame_gold"] = "Gold Pinstripe Frame",
+        ["prize_id_frame_gold_blurb"] = "A thin gold pinstripe around your ID photo, for being seen.",
+        ["prize_id_frame_navy"] = "Navy Varsity Frame",
+        ["prize_id_frame_navy_blurb"] = "Deep navy with a varsity edge, like the old team photos.",
+        ["prize_confetti_stamp"] = "Confetti Stamp",
+        ["prize_confetti_stamp_blurb"] = "Your stamp lands in a little burst of paper now, every time.",
+        ["prize_late_slip"] = "Late Slip",
+        ["prize_late_slip_blurb"] = "Slide one over and a single missed day never touches your streak.",
+        ["prize_honors_lever"] = "Honors Lever",
+        ["prize_honors_lever_blurb"] = "Unbolts the third notch, which is where the S+ nights live.",
+        ["prize_free_swim_key"] = "Free Swim Key",
+        ["prize_free_swim_key_blurb"] = "Opens Free Swim on every room you are in, card or no card.",
+        ["prize_de_5x5"] = "The Wide Board",
+        ["prize_de_5x5_blurb"] = "Adds the roomy 5x5 board to The Deep End, for a gentler soak.",
+        ["prize_jukebox"] = "Jukebox",
+        ["prize_jukebox_blurb"] = "The slot is dressed and the case is empty. It is on the truck.",
+        // ---- the Extra Credit lever ----------------------------------------------------
+        // shell/lever.js owns the words on BOTH class-start surfaces (the door card and the
+        // painted room's apron), so every rung is one key and one locked line, no more.
+        ["lever_title"] = "Extra Credit",
+        ["lever_standard"] = "Standard",
+        ["lever_extra"] = "Extra Credit",
+        ["lever_honors"] = "Honors",
+        ["lever_standard_hint"] = "Play it straight. Tickets pay the usual.",
+        ["lever_extra_hint"] = "Half again the tickets, and it asks more of you.",
+        ["lever_honors_hint"] = "Double tickets, and the only road to an S plus.",
+        ["lever_extra_locked"] = "Earn an A on anything and this one wakes up.",
+        ["lever_honors_locked"] = "The counter sells this one for a token.",
+        // ---- the till, as it reads after a class ---------------------------------------
+        // The payday's own words live on the counter (prize_payday_*); what lands here is the
+        // report card's payout beat and the one purchase a player never watches being spent.
+        ["free_swim_key_hint"] = "Your key opens this one for a practice run. Nothing counts, nothing costs.",
+        ["payout_tickets"] = "Tickets",
+        ["payout_token_minted"] = "A token dropped in the tray. That is your one for today.",
+        ["late_slip_used"] = "A late slip covered you. Your streak never noticed.",
         // Reserved vocabulary: designed for, not built in v1 (GROUND-RULES §3).
         ["detention"] = "Detention",
         ["diploma"] = "Diploma",
@@ -1649,6 +1893,7 @@ internal static class ArcademyHostService
         // ---- Lost & Found (games/lost-and-found) --------------------------------------
         ["lf_briefing_n"] = "Memorize her, then find her {n} times.",
         ["lf_clutch"] = "The board relents",
+        ["lf_rebrief"] = "New target. Memorize her.",
         ["lf_final_bell"] = "Final bell",
         ["lf_find_prompt"] = "Find her",
         ["lf_density"] = "Board density",
@@ -1980,7 +2225,7 @@ internal static class ArcademyHostService
         ["ec_msg_near"] = "One short of it.",
         ["ec_msg_new"] = "A new one, then.",
         ["ec_msg_resisted"] = "You let it pass. Good.",
-        ["ec_msg_silent"] = "No sound tonight. Watch the light.",
+        ["ec_msg_silent"] = "No whispers tonight - listen for the tones.",
         ["ec_msg_timeout"] = "Too slow. Listen again.",
         ["ec_msg_watch"] = "Watch.",
         ["ec_near_miss"] = "So nearly",
@@ -2065,6 +2310,7 @@ internal static class ArcademyHostService
         ["ir_howto_title"] = "The vigil",
         ["ir_jackpot"] = "Photographic Memory",
         ["ir_layout_mosaic"] = "Mosaic",
+        ["ir_payout"] = "LOCKED IN",
         ["ir_layout_rows"] = "Rows",
         ["ir_layout_swirl"] = "Swirl",
         ["ir_near"] = "So close. That one flashed, but earlier.",
@@ -2334,6 +2580,13 @@ internal static class ArcademyHostService
         ["emi_orientation_card"] = "official! now you have to come back. it's the rules.",
         ["emi_orientation_go"] = "go! your first class doesn't know how lucky it is.",
 
+        // EMI ASKS: the Send button on the one question with a keyboard (a14,
+        // "what do i call you?"). The ONLY display string EMI renders - her
+        // questions, chips and reactions are verbatim content and never pass
+        // through the lexicon. shell/shell.js resolves this one and hands the
+        // answer to mountEmi. Her voice is lowercase, so this row is too.
+        ["emi_ask_send"] = "send",
+
         // THE PHANTOM POST chrome (shell/mail.js, mailbox.js, corkboard.js,
         // bugle.js). Copy of core/lexicon.js's block - copy the values, do not
         // re-word them (the IC_LEX rule). Letter bodies, notices and newspaper
@@ -2357,6 +2610,8 @@ internal static class ArcademyHostService
         ["board_kind_notice"] = "Notice",
         ["board_kind_flyer"] = "Flyer",
         ["board_kind_minutes"] = "Minutes",
+        ["board_note_open"] = "Take this one down and read it",
+        ["board_note_close"] = "Put it back on the wall",
         ["bugle_issue"] = "Issue",
         ["bugle_page"] = "Page",
         ["bugle_pages"] = "Pages",
@@ -2427,8 +2682,41 @@ internal static class ArcademyHostService
         ["annex_os_code"] = "subject code",
         ["annex_os_open_file"] = "open file",
         ["annex_os_notfound"] = "that code is not on file. check the paper in the binder.",
+        ["annex_os_search_slip"] = "codes are issued at intake. your sheet is in the FIELD DATA binder, on the shelf.",
         ["annex_os_file_title"] = "SUBJECT FILE",
         ["annex_os_ongoing"] = "ONGOING",
+        // ---- the reading room (waves 1-3, 2026-08-25): explorer, papers, drawer ----
+        ["annex_os_bin"] = "RECYCLE",
+        ["annex_os_bin_empty"] = "nothing in here.",
+        ["annex_os_skim_on"] = "skim: on",
+        ["annex_os_skim_off"] = "skim: off",
+        ["annex_os_read_n"] = "read {n}/{total}",
+        ["annex_os_withheld_n"] = "withheld {n}",
+        ["annex_os_new"] = "new",
+        ["annex_os_newtag"] = "NEW",
+        ["annex_os_tldr"] = "TL;DR",
+        ["annex_os_prev"] = "prev",
+        ["annex_os_next"] = "next",
+        ["annex_os_pos"] = "{i} of {n}",
+        ["annex_os_chart"] = "chart",
+        ["annex_os_archivefig"] = "archive figure",
+        ["annex_os_audio"] = "audio log",
+        ["annex_os_play"] = "play",
+        ["annex_os_scan"] = "scan",
+        ["annex_os_pick"] = "pick a file.",
+        ["annex_os_back"] = "back",
+        ["annex_os_closed"] = "CLOSED",
+        ["annex_tab_projects"] = "PROJECTS",
+        ["annex_tab_fielddata"] = "FIELD DATA",
+        ["annex_tab_misc"] = "MISC",
+        ["annex_tab_unread"] = "unread",
+        ["annex_row_terminal"] = "on the terminal",
+        ["annex_row_withheld"] = "withheld",
+        ["annex_turn_over"] = "turn over",
+        ["annex_turn_back"] = "turn back",
+        ["annex_page_of"] = "{i} / {n}",
+        ["annex_drawer_label"] = "the binder drawer",
+        ["annex_drawer_close"] = "put it back",
         ["annex_f_general"] = "GENERAL",
         ["annex_f_since"] = "on record since",
         ["annex_f_level"] = "level",
@@ -2501,6 +2789,54 @@ internal static class ArcademyHostService
         ["id_records_line"] = "Records: {n} of {m} cards mastered",
         ["id_open_records"] = "Open Records",
         ["id_spot_close"] = "Close",
+        // ---- the front office sheet (shell/settings.js): section titles, per-host blurbs, folds --
+        ["settings_ceilings_head"] = "App ceilings",
+        ["settings_ceilings_note_app"] = "Set in the app and shown here so you know what the school has to work with.",
+        ["settings_device_head"] = "This device",
+        ["settings_device_note"] = "Sound and motion for this browser, on this phone or PC. Nothing here leaves the device.",
+        ["settings_master_volume"] = "Master volume",
+        ["settings_master_volume_hint"] = "One dial over every sound the school makes.",
+        ["settings_motion"] = "Motion",
+        ["settings_motion_hint"] = "Reduced keeps the room still. Off cuts every animation the school can cut.",
+        ["settings_motion_off"] = "Off",
+        ["settings_motion_reduced"] = "Reduced",
+        ["settings_motion_full"] = "Full",
+        ["settings_distraction_head"] = "Distraction",
+        ["settings_channels_head"] = "Channel ceilings",
+        ["settings_channels_note"] = "A class may use less than these. Never more.",
+        ["settings_sound_head"] = "Sound",
+        ["settings_lessons_head"] = "Lessons",
+        ["settings_mascot_head"] = "Mascot",
+        ["emi_bubble_hold_label"] = "Speech bubble time",
+        ["emi_bubble_hold_hint"] = "How long her lines stay up before she lets them go. Questions always wait for an answer.",
+        ["emi_bubble_hold_quick"] = "Quick",
+        ["emi_bubble_hold_normal"] = "Normal",
+        ["emi_bubble_hold_long"] = "Long",
+        ["emi_bubble_hold_extra"] = "Extra long",
+        ["settings_game_nothing"] = "Nothing to configure - this class runs on the globals.",
+        ["settings_sum_volume"] = "Volume {v}",
+        ["settings_sum_motion"] = "Motion {v}",
+        ["settings_sum_online_on"] = "Online on",
+        ["settings_sum_online_off"] = "Online off",
+        ["settings_sum_intensity"] = "Intensity {v}",
+        ["settings_sum_guard"] = "Guard {v}",
+        ["settings_sum_caps_all"] = "All at 100%",
+        ["settings_sum_caps_low"] = "Lowest: {name} {v}",
+        ["settings_sum_muted"] = "Muted",
+        ["settings_sum_sound"] = "On{sep}Music {v}",
+        ["settings_sum_tutorials_on"] = "Tutorials on",
+        ["settings_sum_tutorials_off"] = "Tutorials skipped",
+        ["settings_sum_board"] = "Board {v}",
+        ["settings_sum_keys"] = "{n} keys",
+        ["settings_sum_key_one"] = "1 key",
+        ["settings_sum_nothing"] = "Nothing to set",
+        // ---- THE ACCOUNT CHIP (2026-08-25): a host slot the web build fills (init.account); the desktop
+        // never sends it, so these rows are here for the mirror law and mod skins only.
+        ["account_menu"] = "Account",
+        ["account_signed_in_as"] = "Signed in as",
+        ["account_open_card"] = "Open my card",
+        ["account_profile"] = "Profile",
+        ["account_sign_out"] = "Sign out",
     };
 
     /// <summary>The mockup's owner-approved tokens (BUILD-CONTRACT §10). A mod overrides them via
@@ -2676,8 +3012,50 @@ internal static class ArcademyHostService
         if (Models.AppSettings.DefaultArcademyAudioLevels().ContainsKey(group))
             return SetAudioLevel(s, group, Num(0.5));
 
+        if (!PrizeGateAllows(s, key, value))
+        {
+            // Refused, never wiped: echo what is STORED so the page's pending paint converges on
+            // the truth rather than on the value it asked for (the keybinds precedent above).
+            return (ParseJsonObject(s.ArcademySettingsJson) ?? new JObject())[key];
+        }
         return SetGameSetting(s, key, value);
     }
+
+    /// <summary>
+    /// THE ONE PER-GAME KNOB THE PRIZE COUNTER GUARDS: The Deep End's wide board. The enum itself
+    /// is declared page-side in the game's manifest (a game file, which the economy does not
+    /// touch), so the door is held HERE — a value the player has not bought is refused on the way
+    /// in, and the counter's projection is what tells the page to draw the row as locked.
+    ///
+    /// <para>GRANDFATHERED, deliberately. 5x5 shipped free, so a save that already sits on it keeps
+    /// it: the gate only ever refuses a CHANGE onto the wide board, never yanks a player off one
+    /// they were already using. Nothing anyone already had is taken away.</para>
+    /// </summary>
+    private static bool PrizeGateAllows(Models.AppSettings s, string key, JToken? value)
+    {
+        if (!string.Equals(key, DeepEndBoardSizeKey, StringComparison.Ordinal)) return true;
+        if (!string.Equals((value as JValue)?.Value as string, DeepEndWideBoard, StringComparison.Ordinal))
+            return true;
+        try
+        {
+            var stored = (ParseJsonObject(s.ArcademySettingsJson) ?? new JObject())[key] as JValue;
+            if (string.Equals(stored?.Value as string, DeepEndWideBoard, StringComparison.Ordinal))
+                return true;   // already there before the counter existed - leave them on it
+            if (_meta?.WalletOwns(ArcademyEconomy.SkuDeepEndWideBoard) == true) return true;
+            App.Logger?.Information("ArcademyHost: the wide board is not bought yet - '{Key}' refused", key);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ArcademyHost.PrizeGateAllows: {E}", ex.Message);
+            return true;   // a wallet we cannot read never costs the player a setting
+        }
+    }
+
+    /// <summary>The Deep End's board-size knob and its wide value. Mirrors the game manifest's
+    /// <c>de_board_size</c> enum (<c>games/the-deep-end/index.js</c>) - the two must agree.</summary>
+    private const string DeepEndBoardSizeKey = "de_board_size";
+    private const string DeepEndWideBoard = "5x5";
 
     private static double SetAudioLevel(Models.AppSettings s, string group, double raw)
     {
@@ -2764,7 +3142,9 @@ internal static class ArcademyHostService
     /// <summary>Grade multiplier. Zen reports <c>pass</c> and pays the B row (DECISIONS #1).</summary>
     private static readonly Dictionary<string, double> XpGradeMult = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["S"] = 1.5, ["A"] = 1.25, ["B"] = 1.0, ["C"] = 0.6, ["pass"] = 1.0,
+        // S+ is the Honors-only rung (economy, 2026-08-26). It sits in the SAME table so the
+        // existing "unknown grade degrades to C" clamp below recognises it instead of eating it.
+        ["S+"] = 1.6, ["S"] = 1.5, ["A"] = 1.25, ["B"] = 1.0, ["C"] = 0.6, ["pass"] = 1.0,
     };
 
     /// <summary>Ceiling on the per-game flavour bonus, so a game can season its payout without
@@ -2780,6 +3160,52 @@ internal static class ArcademyHostService
     /// the field is free text off a postMessage and it must never be able to widen the table.</summary>
     private static readonly HashSet<string> DareKinds =
         new(StringComparer.Ordinal) { "S", "streak", "fast" };
+
+    // ============================ the Extra Credit lever ============================
+
+    /// <summary>
+    /// THE PENDING LEVER, per game key: what <c>class-started</c> claimed, already clamped against
+    /// what this save has unlocked. Process-lifetime on purpose — a crash mid-class simply means
+    /// the finish pays the standard rate, which is the safe way for this to fail. Persisting it
+    /// would buy nothing and would give a stale file a way to claim a multiplier.
+    /// </summary>
+    private static readonly Dictionary<string, string> _pendingLever = new(StringComparer.Ordinal);
+
+    /// <summary>Remember the clamped notch for <paramref name="gameKey"/>. Unknown text, and any
+    /// notch the player has not unlocked, become "standard".</summary>
+    private static void NotePendingLever(string? gameKey, string? lever)
+    {
+        try
+        {
+            var key = (gameKey ?? "").Trim();
+            if (key.Length == 0 || key.Length > 64) return;
+            var (extra, honors) = _meta?.LeverUnlocks() ?? (false, false);
+            var clamped = ArcademyEconomy.ClampLever(lever?.Trim(), extra, honors);
+            lock (_pendingLever)
+            {
+                // Bounded for the same reason every other page-fed map here is: there are a dozen
+                // rooms, and a frame loop must not be able to grow this without end.
+                if (clamped == "standard") _pendingLever.Remove(key);
+                else if (_pendingLever.Count < 64 || _pendingLever.ContainsKey(key))
+                    _pendingLever[key] = clamped;
+            }
+            if (clamped != "standard")
+                App.Logger?.Information("ArcademyHost: lever '{Lever}' armed for {Game}", clamped, key);
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.NotePendingLever: {E}", ex.Message); }
+    }
+
+    /// <summary>Read and CLEAR the pending notch. Once spent it is gone, so a second
+    /// <c>class-ended</c> for the same room pays the standard rate.</summary>
+    private static string TakePendingLever(string gameKey)
+    {
+        lock (_pendingLever)
+        {
+            if (!_pendingLever.TryGetValue(gameKey, out var lever)) return "standard";
+            _pendingLever.Remove(gameKey);
+            return lever;
+        }
+    }
 
     /// <summary>
     /// <c>class-ended</c> -> the ONE XP table, the attendance/streak write, and the
@@ -2804,6 +3230,20 @@ internal static class ArcademyHostService
             bool zen = ReadBool(o, "zen", false);
             var grade = (ReadString(o, "grade") ?? "").Trim();
             if (zen || !XpGradeMult.ContainsKey(grade)) grade = zen ? "pass" : "C";
+
+            // THE LEVER, read back and spent. Taken here rather than at the payout below because
+            // it also decides whether the S+ the page is claiming is even reachable.
+            var lever = TakePendingLever(gameKey);
+
+            // S+ IS UNREACHABLE OUTSIDE HONORS, so a claimed one that did not start on the Honors
+            // notch is degraded to a plain S rather than refused: the run really did grade at the
+            // top, it simply cannot be worth the Honors row. Never trust the page for a number.
+            if (string.Equals(grade, "S+", StringComparison.OrdinalIgnoreCase) && lever != "honors")
+            {
+                App.Logger?.Warning("ArcademyHost: S+ claimed for {Game} without the Honors lever - graded S",
+                    gameKey);
+                grade = "S";
+            }
             double flavor = Math.Clamp(ReadDouble(o, "flavorXp", 0), 0, FlavorXpCap);
 
             // THE FARM GUARD: one payout per class per UTC day. Replaying a class is a supported,
@@ -2855,7 +3295,14 @@ internal static class ArcademyHostService
             // running it unconditionally is what keeps a retake on a NEW local day (same UTC day,
             // player east of UTC) crediting the streak it has earned.
             var localDate = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-            var (streak, perfect, classesToday) = _meta?.RecordAttendance(localDate, gameKey) ?? (0, 0, 0);
+            var (streak, perfect, classesToday, lateSlipUsed) =
+                _meta?.RecordAttendance(localDate, gameKey) ?? (0, 0, 0, false);
+
+            // ============================ THE TILL ============================
+            // Tickets and tokens, wrapped on their own: the attendance credit above is the thing we
+            // must not lose, and the money must never become a second way to lose it. Everything
+            // here is host-decided - the frame carries a grade and a room, and nothing else.
+            var till = MintCurrency(gameKey, grade, zen, streak, localDate, lever);
 
             // THE PUNCH CARD RIDES THE ATTENDANCE CREDIT (PUNCHCARD §2.1). Same frame, same local
             // date, same idempotence - a graded finish is exactly the event that stamps, so there
@@ -2875,7 +3322,9 @@ internal static class ArcademyHostService
                 // degrade to "pass"/"C"), so this cannot be talked into an S by a junk field, and
                 // the mint's own per-day idempotence means a retake that grades S is still worth
                 // nothing (trap 23).
-                bool gradedS = string.Equals(grade, "S", StringComparison.OrdinalIgnoreCase);
+                // S+ counts as an S day here (economy, 2026-08-26): it is the same night's work
+                // with the lever pushed, and the double hole is the reward for the letter.
+                bool gradedS = ArcademyEconomy.IsTokenGrade(grade, zen: false);
                 punch = _meta?.StampPunchCard(gameKey, localDate, gradedS);
                 // A real punch is worth mirroring; a same-day retake is not. Debounced, so the
                 // enrollment ceremony's second mint rides the same request (PUNCHCARD §5).
@@ -2906,16 +3355,138 @@ internal static class ArcademyHostService
                 // Additive (EMI ASKS): what the dare bonus actually paid, so the page never has
                 // to guess. 0 on every class that carried no dare, and on a retake.
                 dareXp = darePaid ? DareBonusXp : 0,
+                // Additive (economy): the till, already counted. `tickets` is what was minted,
+                // `ticketBase`/`ticketMult` are its working so the debrief can show the lever and
+                // the payday doing their jobs, and `wallet` is the POST-mint balance, so the page
+                // never adds anything up itself.
+                grade,
+                tickets = till.Tickets,
+                ticketBase = till.Base,
+                ticketMult = till.Mult,
+                tokenMinted = till.TokenMinted,
+                payday = till.Payday,
+                lever = till.Lever,
+                lateSlipUsed,
+                wallet = till.Wallet,
             });
             PostPunchCard(gameKey, "daily", punch);
             App.Logger?.Information(
-                "ArcademyHost: class complete ({Game}, tier {Tier}, grade {Grade}) = {Xp:0} XP{Dare}{Retake}, streak {Streak}, {Today}/4 today",
+                "ArcademyHost: class complete ({Game}, tier {Tier}, grade {Grade}) = {Xp:0} XP{Dare}{Retake}, {Tickets} tickets (x{Mult}{Lever}){Token}, streak {Streak}, {Today}/4 today",
                 gameKey, tier, grade, xp,
                 darePaid ? " +" + DareBonusXp.ToString("0", CultureInfo.InvariantCulture) + " dare (" + dareWon + ")" : "",
                 firstToday ? "" : " (retake - already paid for " + dayUtc + ")",
+                till.Tickets, till.Mult.ToString("0.##", CultureInfo.InvariantCulture),
+                lever == "standard" ? "" : ", " + lever,
+                till.TokenMinted ? " +1 TOKEN" : "",
                 streak, classesToday);
         }
         catch (Exception ex) { App.Logger?.Warning("ArcademyHost.OnClassEnded: {E}", ex.Message); }
+    }
+
+    // ============================ the till ============================
+
+    /// <summary>What one finish put in the drawer, ready to ride <c>payout-result</c>.</summary>
+    private readonly record struct TillResult(
+        int Tickets, int Base, double Mult, bool TokenMinted,
+        int Payday, string Lever, JObject Wallet);
+
+    /// <summary>
+    /// TICKETS AND TOKENS for one graded finish. The whole sum lives in
+    /// <see cref="ArcademyEconomy"/>; this only gathers the inputs the store owns (the replay
+    /// counter, tonight's roster) and writes the result back.
+    ///
+    /// <para>Deliberately NOT gated on the XP farm guard. A retake is free XP-wise because the day's
+    /// seed makes it the same script, but it is still a night at the machine — the replay ladder is
+    /// what bounds it, dropping the second run to 40% and everything after to 15%.</para>
+    ///
+    /// <para>Wrapped whole: a wallet that threw would otherwise cost the frame that carries the
+    /// attendance credit, and no amount of money is worth a streak.</para>
+    /// </summary>
+    private static TillResult MintCurrency(string gameKey, string grade, bool zen, int streak,
+        string localDate, string lever)
+    {
+        var empty = new JObject { ["t"] = 0, ["k"] = 0 };
+        if (_meta == null || gameKey.Length == 0)
+            return new TillResult(0, 0, 1.0, false, 1, lever, empty);
+        try
+        {
+            // A first A-or-better is what opens the Extra Credit notch, so it is checked before
+            // anything is paid - the night that earns it does not get to use it, which is right.
+            _meta.TryUnlockExtraCredit(grade);
+
+            var prior = _meta.NoteWalletPlay(localDate, gameKey);
+            var payday = ArcademyEconomy.PickPayday(
+                DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                _meta.EnrolledGameKeys());
+            var paydayMult = ArcademyEconomy.PaydayMultFor(payday, gameKey);
+
+            var sum = ArcademyEconomy.ComputeTickets(grade, prior, streak, paydayMult, lever);
+            _meta.EarnTickets(sum.Tickets);
+
+            // ONE TOKEN A DAY, on the first S-rank of the LOCAL day, never from a zen pass.
+            // Independent of the tickets above: a token night still pays its tickets.
+            bool token = ArcademyEconomy.IsTokenGrade(grade, zen) && _meta.TryClaimTokenDay(localDate);
+
+            var wallet = _meta.WalletSnapshot();
+            return new TillResult(sum.Tickets, sum.Base, sum.Mult, token, paydayMult, lever,
+                ArcademyEconomy.BalanceJson(wallet));
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning("ArcademyHost.MintCurrency: {E}", ex.Message);
+            return new TillResult(0, 0, 1.0, false, 1, lever, empty);
+        }
+    }
+
+    /// <summary>
+    /// <c>prize-buy {sku}</c> -> the counter. Validation is entirely host-side
+    /// (<see cref="ArcademyEconomy.Buy"/>): the frame carries a sku and nothing else, so there is
+    /// no price, no currency and no quantity on it to argue with.
+    ///
+    /// <para>The reply is posted on EVERY attempt, refusals included, because the counter settles
+    /// its UI only on the echo (nothing optimistic) — a silent refusal would leave the page holding
+    /// a spinner it could never put down.</para>
+    /// </summary>
+    private static void OnPrizeBuy(JObject o)
+    {
+        try
+        {
+            var sku = (ReadString(o, "sku") ?? "").Trim();
+            if (sku.Length > 64) sku = sku[..64];
+            if (_meta == null)
+            {
+                PostWalletResult(sku, false, "unknown", null);
+                return;
+            }
+
+            var localDate = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            var result = _meta.Buy(sku, localDate);
+            if (result.Ok) _host?.Post(_meta.SnapshotMessage());
+            PostWalletResult(sku, result.Ok, result.Reason, _meta.WalletSnapshot());
+        }
+        catch (Exception ex) { App.Logger?.Warning("ArcademyHost.OnPrizeBuy: {E}", ex.Message); }
+    }
+
+    /// <summary>The <c>wallet-result</c> frame: same-frame truth for the counter, on the same
+    /// pattern <see cref="PostPunchCard"/> uses. Carries the post-trade balances, the whole
+    /// inventory and the lever rungs, so the shelf can repaint from one message.</summary>
+    private static void PostWalletResult(string sku, bool ok, string? reason, JObject? wallet)
+    {
+        try
+        {
+            var w = ArcademyEconomy.EnsureShape(wallet);
+            _host?.Post(new
+            {
+                type = "wallet-result",
+                ok,
+                sku,
+                reason,
+                wallet = ArcademyEconomy.BalanceJson(w),
+                inv = ArcademyEconomy.InvJson(w),
+                unlocks = ArcademyEconomy.UnlocksJson(w),
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.PostWalletResult: {E}", ex.Message); }
     }
 
     // ============================ enrollment-done: the first-run punches ============================

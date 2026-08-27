@@ -263,6 +263,10 @@ export function createDtTrickster(o) {
       if (!armed || stopped) return Math.round(Math.max(0, Number(elapsedSec) || 0));
       if (!clockArmed && getRung() >= DT_TRICKSTER.CLOCK_RUNG) {
         clockArmed = true;
+        /* W3 P1-6: the room starts lying about time and says so ONCE, a tick
+         * a hair flat of an honest countdown's. The latch above is what keeps
+         * it to one per class. */
+        if (sounds()) cue('clock_tick', 0.2, { pitch: 0.94 });
         say('trickster: the clock goes crooked (rung ' + getRung() + ')');
       }
       if (!clockArmed) return Math.round(Math.max(0, Number(elapsedSec) || 0));

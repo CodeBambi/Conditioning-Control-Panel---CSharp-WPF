@@ -74,6 +74,11 @@ body::after {
   animation: intake-spin .9s linear infinite;
 }
 @keyframes intake-spin { to { transform: rotate(360deg); } }
+/* Boot-step caption (boot.js loaderStep) — which await the loader is sitting on. */
+.intake-loader-step {
+  margin-top: -8px; font-size: 12px; letter-spacing: .04em;
+  color: var(--intake-dim); opacity: .8;
+}
 
 /* --- Phase-0 stub renderer widgets (replaced by Agent C) ------------------ */
 .intake-beat {
