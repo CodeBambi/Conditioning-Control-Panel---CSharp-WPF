@@ -1030,6 +1030,34 @@ internal sealed class ChaosWebViewHost : IDisposable
         try { _opts.OnProcessFailed?.Invoke(e.ProcessFailedKind); } catch { }
     }
 
+    /// <summary>
+    /// Map a page <c>{type:'log'}</c> envelope's <c>level</c> field onto a Serilog level.
+    ///
+    /// <para>The distinction that carries the weight here is ABSENT versus DECLARED. The global
+    /// logger floor is Information and it is set unconditionally, in every build (App.OnStartup),
+    /// so a message routed to Debug is not demoted - it is DROPPED, and page logs are the only
+    /// devtools-less window a hosted surface has. Six of the ten bridges (dtrh, m2test, tunnel,
+    /// goon, intake web-shim, player) send no level field at all, so an absent field has to keep
+    /// meaning Information or those surfaces go dark. A page that declares 'debug' is opting out
+    /// on purpose: that is how the Arcademy's chatter goes quiet without silencing anybody
+    /// else.</para>
+    ///
+    /// <para>Case- and whitespace-insensitive. Unknown junk reads as chatter, never as loud.</para>
+    /// </summary>
+    internal static Serilog.Events.LogEventLevel PageLogLevel(string? level)
+    {
+        // Absent or blank: the legacy contract, kept verbatim for the bridges that predate the
+        // level field entirely. Never route this to Debug: it is where six live surfaces sit.
+        if (string.IsNullOrWhiteSpace(level)) return Serilog.Events.LogEventLevel.Information;
+        return level.Trim().ToLowerInvariant() switch
+        {
+            "error" or "fatal" => Serilog.Events.LogEventLevel.Error,
+            "warn" or "warning" => Serilog.Events.LogEventLevel.Warning,
+            "info" or "information" => Serilog.Events.LogEventLevel.Information,
+            _ => Serilog.Events.LogEventLevel.Debug,
+        };
+    }
+
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
         try
@@ -1052,9 +1080,15 @@ internal sealed class ChaosWebViewHost : IDisposable
                     if (_opts.HostOwnedFullscreen && _isFullscreen) SetFullscreen(false);
                     break;
                 case "log":
-                    // Information, not Debug: the global logger floor is Information and page
-                    // logs are the only devtools-less window into the hosted page.
-                    App.Logger?.Information("{Tag}[page]: {Msg}", _opts.LogTag, (string?)o["msg"]);
+                    // Honour the page's own `level`. This used to write EVERY page log at
+                    // Information because that was the global logger floor and page logs were the
+                    // only devtools-less window into the page - fine for the tunnel's handful of
+                    // sites, ruinous once the Arcademy landed with 118 of them behind one funnel
+                    // and buried the real log under class chatter. Debug means DROPPED here, not
+                    // demoted (the floor is Information in every build), so the router only
+                    // silences a page that asked for it: say nothing and you are still heard.
+                    App.Logger?.Write(PageLogLevel((string?)o["level"]),
+                        "{Tag}[page]: {Msg}", _opts.LogTag, (string?)o["msg"]);
                     break;
                 default:
                     _opts.OnMessage?.Invoke(o);

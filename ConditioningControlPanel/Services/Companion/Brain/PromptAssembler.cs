@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using ConditioningControlPanel.Services.AIService;
 
 namespace ConditioningControlPanel.Services.Companion.Brain
@@ -469,6 +470,36 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             return WarnIfOversize(prefix + "\n\n" + trimmed);
         }
 
+        /// <summary>
+        /// Loc key for the user-visible "your prompt is too long" notice. Kept next to the code that
+        /// raises it so the two cannot drift.
+        /// </summary>
+        internal const string OversizeNoticeLocKey = "companion_prompt_too_long_notice";
+
+        /// <summary>0 until the oversize notice has been raised; one per app session, via Interlocked
+        /// because prompts are composed from whichever thread the call came in on.</summary>
+        private static int _oversizeNoticeRaised;
+
+        /// <summary>Resets the once-per-session latch. Tests only.</summary>
+        internal static void ResetOversizeNoticeForTests() => Interlocked.Exchange(ref _oversizeNoticeRaised, 0);
+
+        /// <summary>True once the notice has been raised this session. Tests + diagnostics.</summary>
+        internal static bool OversizeNoticeRaised => Volatile.Read(ref _oversizeNoticeRaised) != 0;
+
+        /// <summary>
+        /// Takes the session's single notice, or returns false because someone already has it.
+        /// Split out from the raise so the once-per-session property is testable on its own: the
+        /// raise itself is guarded on a live dispatcher, which a test host does not have.
+        /// </summary>
+        internal static bool ClaimOversizeNotice() => Interlocked.Exchange(ref _oversizeNoticeRaised, 1) == 0;
+
+        /// <summary>
+        /// Test seam for the surface the notice is raised on. Null in production, where the surface
+        /// is <c>Application.Current?.Dispatcher</c>. A test host has no Application, so without
+        /// this the guard-before-latch ordering below could only be observed as "nothing happened".
+        /// </summary>
+        internal static Func<System.Windows.Threading.Dispatcher?>? NoticeDispatcherForTests;
+
         private static string WarnIfOversize(string systemPrompt)
         {
             if (systemPrompt.Length > SystemMessageCharCeiling)
@@ -478,7 +509,56 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     "trim the knowledge base or the mod's video list",
                     systemPrompt.Length);
             }
+
+            // Past the HARD cap the request will actually be rejected, and the companion falls back
+            // to a middle-cut prompt (AiService.SalvageOversizeSystemMessage) or, failing that, to
+            // canned phrases. That is a visible change in her behaviour with no visible cause, so it
+            // gets a visible reason: once per session, on the surface the app already uses for
+            // this kind of thing, never a dialog and never per call.
+            if (systemPrompt.Length > ProxyHardRejectCap) RaiseOversizeNoticeOnce();
+
             return systemPrompt;
+        }
+
+        /// <summary>
+        /// Raises the user-visible notice exactly once per app session, on the UI thread, through
+        /// the existing toast surface. Never throws: a diagnostic must not be able to take chat
+        /// down, and prompts are composed from background threads where a WPF failure would
+        /// otherwise surface as an unobserved task exception.
+        /// </summary>
+        private static void RaiseOversizeNoticeOnce()
+        {
+            try
+            {
+                // The guard comes FIRST and the latch second. An oversize compose can happen before
+                // Application.Current exists (a startup ambient call) or after shutdown began;
+                // burning the session's single notice on one of those would leave the user with the
+                // degraded companion and no explanation at all.
+                var dispatcher = NoticeDispatcherForTests != null
+                    ? NoticeDispatcherForTests()
+                    : System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                if (!ClaimOversizeNotice()) return;
+
+                dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        App.Notifications?.Show(
+                            Localization.Loc.Get(OversizeNoticeLocKey),
+                            NotificationType.Warning,
+                            TimeSpan.FromSeconds(12));
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("PromptAssembler: oversize notice failed to show: {Error}", ex.Message);
+                    }
+                }));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("PromptAssembler: oversize notice dispatch failed: {Error}", ex.Message);
+            }
         }
 
         /// <summary>

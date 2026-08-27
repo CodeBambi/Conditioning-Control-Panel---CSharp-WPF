@@ -469,14 +469,16 @@ namespace ConditioningControlPanel.Services.Awareness
         }
 
         /// <summary>
-        /// The CCP surfaces awareness must not talk over: a mandatory video, a lock card, or a live
-        /// DtRH run. Each already has authored lines of its own.
+        /// The CCP surfaces awareness must not talk over: a mandatory video, a lock card, a live
+        /// DtRH run, or a class in the Arcademy. Each already has authored lines of its own - and
+        /// the Arcademy in particular has EMI, whose whole job is to be the voice in that window.
         /// </summary>
         private static bool IsBlockingSurfaceActive()
         {
             try { if (App.Video?.IsPlaying == true) return true; } catch { }
             try { if (ConditioningControlPanel.LockCardWindow.IsAnyOpen()) return true; } catch { }
             try { if (Services.Chaos.DtrhHostService.IsActive) return true; } catch { }
+            try { if (Services.Arcademy.ArcademyHostService.IsActive) return true; } catch { }
             return false;
         }
 

@@ -14,6 +14,7 @@ using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Chaos;
 using ConditioningControlPanel.Services.Fyp.Online;
 
@@ -94,9 +95,15 @@ internal static class ArcademyHostService
 
     public static bool IsActive => _host != null;
 
-    /// <summary>The page reported <c>boot-error</c> this app session (or the host's own deadline
-    /// fired). Entry points can read this to stop sending someone back through a door that has
-    /// already failed on this machine.</summary>
+    /// <summary>The page's LAST boot attempt failed: it reported <c>boot-error</c>, or the host's
+    /// own progress deadline fired. Entry points read this to warn before sending someone back
+    /// through a door that just failed on this machine.
+    ///
+    /// <para>It is a LAST-attempt flag, not a session tombstone. <see cref="OnPageReady"/> clears
+    /// it, because most of what sets it is transient - a cold WebView2 runtime, a machine under
+    /// load, a stalled GPU driver, all of which the 45s <c>BootDeadline</c> reads as failure. The
+    /// entry point offers a retry rather than refusing outright; only a session where the campus
+    /// has never once come up stays latched.</para></summary>
     public static bool BootFailedThisSession { get; private set; }
 
     // ============================== the gate ==============================
@@ -106,18 +113,18 @@ internal static class ArcademyHostService
     /// opens the Arcademy asks this - the Play card's visibility in
     /// <c>MainWindow.RefreshPlayCards</c> and the refusal at the top of <see cref="Launch"/>.
     ///
-    /// <para><c>false</c> because the Arcademy is BUILT but not launched: Semester 1 landed on
-    /// main (PR #241) ahead of its public reveal, and 6.8.4 is an auth/stability patch that must
-    /// ship those fixes without also shipping an unannounced feature. A HIDE, not a lockband, for
-    /// the same reason Just Drop hides: a lockband advertises something the account could buy,
-    /// and a door we have not opened yet is not for sale.</para>
+    /// <para><c>true</c> since v6.8.5 "First Bell": the Arcademy is open. Semester 1 landed on
+    /// main (PR #241) ahead of its public reveal and stayed hidden through 6.8.4; this is the
+    /// release that reveals it. Flipping this back to <c>false</c> is still the whole hide - a
+    /// HIDE, not a lockband, for the same reason Just Drop hides: a lockband advertises something
+    /// the account could buy, and a door we have not opened is not for sale.</para>
     ///
-    /// <para>Flip to <c>true</c> to reveal it - that is the whole reveal. The T2 bar and the
-    /// AudioOnlySession rule below are untouched and still apply underneath it.</para>
+    /// <para>The T2 bar and the AudioOnlySession rule below are untouched and still apply
+    /// underneath it.</para>
     /// </summary>
     /// <remarks>static readonly, not const: a const would make the guard in <see cref="Launch"/>
     /// compile-time unreachable (CS0162), exactly as JustDropService.Withheld documents.</remarks>
-    public static readonly bool DoorAvailable = false;
+    public static readonly bool DoorAvailable = true;
     /// <summary>Whether the live instance was opened through the dev switch (recovery relaunch keeps it).</summary>
     private static bool _devDoor;
 
@@ -152,7 +159,7 @@ internal static class ArcademyHostService
         //    no announced feature to explain a refusal about yet.
         if (!DoorAvailable && !devDoor)
         {
-            App.Logger?.Information("ArcademyHost.Launch refused: the Arcademy door is not open yet (unreleased)");
+            App.Logger?.Information("ArcademyHost.Launch refused: the Arcademy door is closed in this build");
             return;
         }
 
@@ -457,6 +464,11 @@ internal static class ArcademyHostService
         {
             _lastHeartbeatUtc = DateTime.UtcNow;
             CancelBootDeadline();
+            // The campus is up, so whatever failed last time did not stick. Clearing here (and only
+            // here) is what keeps BootFailedThisSession a statement about the LAST attempt: a cold
+            // runtime start that blew the 45s deadline must not cost the user the feature for the
+            // rest of the app's life.
+            BootFailedThisSession = false;
             // Keyboard focus does not land in the WebView2 child until a click on a fresh launch -
             // claim it now so the Esc ladder works from the first frame.
             _host?.FocusWeb();
@@ -5078,7 +5090,7 @@ internal static class ArcademyHostService
             try
             {
                 MessageBox.Show(
-                    $"{ProductName} could not start on this machine.\n\n{msg}",
+                    Loc.GetF("arcademy_boot_error_body", ProductName, msg ?? string.Empty),
                     ProductName, MessageBoxButton.OK, MessageBoxImage.Warning);
             }
             catch { }

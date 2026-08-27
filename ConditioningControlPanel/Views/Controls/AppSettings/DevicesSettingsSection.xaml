@@ -527,6 +527,41 @@
                                 Click="BtnPanicKey_Click" ToolTip="{loc:Str tooltip_click_to_change_panic_key}"/>
                     </Grid>
 
+                    <!-- v6.8.5: what ONE panic press means. On (default) = stop everything at
+                         once. Off = the pre-6.8.5 hand-off ladder. -->
+                    <Grid Margin="0,0,0,6" ToolTip="{loc:Str tooltip_panic_overrides_all}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,14,0">
+                            <helpers:EmojiTextBlock Text="{loc:Str setting_panic_overrides_all}"
+                                                    Style="{StaticResource SettingLabel}" FontSize="12"/>
+                            <TextBlock Text="{loc:Str tooltip_panic_overrides_all}"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                       TextWrapping="Wrap" Margin="0,2,0,0"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="1" x:Name="ChkPanicOverridesAll" x:FieldModifier="internal"
+                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                  Checked="ChkPanicOverridesAll_Changed" Unchecked="ChkPanicOverridesAll_Changed"/>
+                    </Grid>
+
+                    <!-- Optional pause-key rebind. Same capture pattern as the panic key above;
+                         unbound by default, and Escape during capture clears it again. -->
+                    <Grid MinHeight="34" Margin="0,0,0,6" ToolTip="{loc:Str tooltip_pause_key}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str setting_pause_key}"
+                                                Style="{StaticResource SettingLabel}" FontSize="12"
+                                                Margin="0,0,12,0" TextTrimming="CharacterEllipsis"/>
+                        <Button Grid.Column="1" x:Name="BtnPauseKey" x:FieldModifier="internal"
+                                Content="{loc:Str btn_pause_key_unbound}" Style="{StaticResource OutlineButton}"
+                                Padding="12,6" VerticalAlignment="Center"
+                                Click="BtnPauseKey_Click" ToolTip="{loc:Str tooltip_pause_key}"/>
+                    </Grid>
+
                     <!-- Disable the panic key entirely (double-confirmed in the handler).
                          DANGER ROW: the consequence line stays VISIBLE per the contract. -->
                     <Grid Margin="0,0,0,10">

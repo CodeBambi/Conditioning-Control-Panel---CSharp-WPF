@@ -28,32 +28,25 @@ namespace ConditioningControlPanel.Services.Bark
         public static string EmbeddedManifestPath =>
             CompanionPhraseService.ResolveCompanionAudioFile(ManifestFileName);
 
-        /// <summary>Active mod's manifest from its InstalledPath (Locked/Drone-style packaged mods). Null if none.</summary>
+        /// <summary>
+        /// The active mod's overlay manifest, wherever it actually lives: its extracted .ccpmod
+        /// (Locked/Drone), the per-mod folder bundled in the install dir, or that same folder
+        /// delivered by a downloaded content pack (Bambi/Sissy have no .ccpmod at all, so those
+        /// two rungs are the only ones they can ever hit). One ladder, in
+        /// <see cref="Services.Companion.CompanionContentResolver"/>, so the ordering is not
+        /// re-typed slightly differently in every consumer.
+        /// </summary>
+        public static Services.Companion.CompanionContentPick ActiveModManifest =>
+            Services.Companion.ModCompanionContent.ResolveActive(
+                Services.Companion.CompanionChannel.BarkRules);
+
+        /// <summary>Active mod's overlay manifest path, or null when it ships none.</summary>
         public static string? ActiveModManifestPath
         {
             get
             {
-                var modPath = App.Mods?.ActiveMod?.InstalledPath;
-                if (string.IsNullOrEmpty(modPath)) return null;
-                var p = Path.Combine(modPath, "resources", "sounds", "companion_audio", ManifestFileName);
-                return File.Exists(p) ? p : null;
-            }
-        }
-
-        /// <summary>
-        /// Active mod's manifest from the EMBEDDED per-mod folder
-        /// (Resources/sounds/companion_audio/mods/{modId}/). This is how built-in mods that have
-        /// no InstalledPath (Bambi/Sissy) ship their bark content; it also covers Locked/Drone
-        /// uniformly. Null if the active mod has no embedded manifest.
-        /// </summary>
-        public static string? EmbeddedModManifestPath
-        {
-            get
-            {
-                var modId = App.Mods?.ActiveModId;
-                if (string.IsNullOrEmpty(modId)) return null;
-                var p = CompanionPhraseService.ResolveCompanionAudioFile("mods", modId, ManifestFileName);
-                return File.Exists(p) ? p : null;
+                var pick = ActiveModManifest;
+                return pick.Found ? pick.Path : null;
             }
         }
 
@@ -75,10 +68,9 @@ namespace ConditioningControlPanel.Services.Bark
 
             int baseCount = MergeFile(merged, EmbeddedManifestPath, "embedded");
             int modCount = 0;
-            // Prefer a packaged-mod manifest (InstalledPath); otherwise the embedded per-mod folder.
-            var modPath = ActiveModManifestPath ?? EmbeddedModManifestPath;
-            if (modPath != null)
-                modCount = MergeFile(merged, modPath, "mod");
+            var modPick = ActiveModManifest;
+            if (modPick.Found)
+                modCount = MergeFile(merged, modPick.Path!, "mod");
 
             var rules = new List<BarkRule>();
             foreach (var obj in merged.Values)
@@ -98,8 +90,9 @@ namespace ConditioningControlPanel.Services.Bark
             }
 
             App.Logger?.Information(
-                "BarkRuleLoader: loaded {Total} rules ({Base} base, {Mod} mod-overlay; field-level merge)",
-                rules.Count, baseCount, modCount);
+                "BarkRuleLoader: loaded {Total} rules ({Base} base, {Mod} mod-overlay from {Source}; field-level merge)",
+                rules.Count, baseCount, modCount,
+                Services.Companion.CompanionContentResolver.Describe(modPick.Source));
 
             return new BarkRuleSet(rules);
         }

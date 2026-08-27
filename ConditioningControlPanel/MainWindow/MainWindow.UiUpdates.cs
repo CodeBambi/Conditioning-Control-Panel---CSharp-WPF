@@ -922,7 +922,17 @@ namespace ConditioningControlPanel
                 //
                 // ApplyTierGate is called for both verdicts, not just the locked one: this method is
                 // also how a freshly validated T2 account gets its lockband taken away.
-                if (!labUnlocked)
+                //
+                // #1048: the repair now also waits for the entitlement to be RESOLVED. MainWindow
+                // comes up while PatreonService.InitializeAsync is still in flight, and until it
+                // answers, HasLabAccess is false because nothing is known yet - not because the
+                // account lapsed. Reading that blank as a lapse force-cleared and SAVED the switch
+                // on every single launch, which is exactly the "AI Effect Control turns itself off
+                // every restart" report. UpdateUnlockablesVisibility is re-run when validation
+                // lands (MainWindow.Patreon.cs) and on every XP refresh, so a genuine lapse is
+                // still repaired moments later - just never against an unknown.
+                var entitlementKnown = App.Patreon?.EntitlementResolved == true;
+                if (!labUnlocked && entitlementKnown)
                 {
                     var cp = App.Settings?.Current?.CompanionPrompt;
                     if (cp != null && cp.AllowAiToControlEffects)
@@ -2387,6 +2397,33 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// v6.8.5 master: ON (default) = one panic press stops every surface at once; OFF = the
+        /// pre-6.8.5 hand-off ladder, byte for byte. No confirmation dialog either way - both
+        /// settings are safe, they only differ in how many presses an emergency stop costs.
+        /// </summary>
+        internal void ChkPanicOverridesAll_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            s.PanicOverridesAll = AppSettingsTab.ChkPanicOverridesAll.IsChecked ?? true;
+            SaveSettings();
+            App.Logger?.Information("Panic override mode: {State}", s.PanicOverridesAll ? "stop everything" : "legacy ladder");
+        }
+
+        /// <summary>
+        /// Begins capture for the optional Pause key. Same reasoning as
+        /// <see cref="BtnPanicKey_Click"/>: no blocking MessageBox, because the global hook fires
+        /// straight through one. The next key the hook sees becomes the binding; Escape clears it.
+        /// </summary>
+        internal void BtnPauseKey_Click(object sender, RoutedEventArgs e)
+        {
+            _isCapturingPauseKey = true;
+            UpdatePauseKeyButton();
+        }
+
         internal void BtnPanicKey_Click(object sender, RoutedEventArgs e)
         {
             // Don't show a blocking MessageBox: the global keyboard hook fires through
@@ -2841,6 +2878,24 @@ namespace ConditioningControlPanel
                     AppSettingsTab.ChkStartHidden.IsChecked = false;
                 }
             }
+        }
+
+        /// <summary>
+        /// Live readout of the ambient-bubble daily XP budget on the XP bar's tooltip (#1019/#1026).
+        /// Ambient pops stop paying at <see cref="Services.BubbleService.AmbientBubbleDailyXpCap"/> XP
+        /// per local day; with nothing on screen saying so, two users reported XP as broken. Computed
+        /// on open so it is never stale, and read-only — it can't spend or reset the bucket.
+        /// </summary>
+        private void XPBarTrack_ToolTipOpening(object sender, ToolTipEventArgs e)
+        {
+            try
+            {
+                if (XPBarTrack == null) return;
+                XPBarTrack.ToolTip = Loc.GetF("label_ambient_bubble_xp_budget",
+                    Services.BubbleService.AmbientBubbleXpPaidToday(),
+                    Services.BubbleService.AmbientBubbleDailyXpCap);
+            }
+            catch (Exception ex) { App.Logger?.Debug("XPBarTrack_ToolTipOpening: {E}", ex.Message); }
         }
 
         #endregion

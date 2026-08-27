@@ -400,6 +400,14 @@ namespace ConditioningControlPanel.Services
 
         private (Window Window, Image ImageControl) CreateFullscreenWindow(Screen screen, WriteableBitmap bitmap)
         {
+            // Screen.Bounds is PHYSICAL pixels; WPF Left/Top/Width/Height are DIPs. Assigning one to
+            // the other is only correct at 100% scaling - at 150% it produced a window 1.5x the screen
+            // (and on mixed-DPI rigs a part-width window on the secondary), which is the same class of
+            // bug ForceFullScreenBounds/PinToScreen already fix for the other video surfaces. The
+            // SourceInitialized SetWindowPos below is the real authority (Win32 works in pixels); this
+            // just stops the pre-HWND layout pass from flashing a wrong-sized black window first.
+            var dpiScale = BubbleCountWindow.GetDpiForScreen(screen);
+            if (dpiScale <= 0) dpiScale = 1.0;
             // Image control that displays this window's bitmap
             var image = new Image
             {
@@ -426,10 +434,10 @@ namespace ConditioningControlPanel.Services
                 ShowInTaskbar = false,
                 Background = Brushes.Black,
                 Content = grid,
-                Left = screen.Bounds.Left,
-                Top = screen.Bounds.Top,
-                Width = screen.Bounds.Width,
-                Height = screen.Bounds.Height
+                Left = screen.Bounds.Left / dpiScale,
+                Top = screen.Bounds.Top / dpiScale,
+                Width = screen.Bounds.Width / dpiScale,
+                Height = screen.Bounds.Height / dpiScale
             };
 
             // Handle keyboard input for escape to close

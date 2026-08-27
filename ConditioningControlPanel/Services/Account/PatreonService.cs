@@ -174,6 +174,21 @@ namespace ConditioningControlPanel.Services
             || (App.SubscribeStar?.IsWhitelisted == true)
             || HasCachedLabAccess;
 
+        /// <summary>
+        /// False until <see cref="InitializeAsync"/> has finished deciding this launch's entitlement
+        /// (validated online, or settled from cache/offline mode). Startup order puts MainWindow up
+        /// while validation is still in flight, so before this flips, a false
+        /// <see cref="HasLabAccess"/> means "not known yet", NOT "not entitled".
+        ///
+        /// #1048: the AI-effect-control repair in MainWindow.UpdateUnlockablesVisibility read that
+        /// unresolved false as a lapse and force-cleared + SAVED AllowAiToControlEffects on every
+        /// single launch, so the switch could never survive a restart. Any DESTRUCTIVE entitlement
+        /// repair must wait for this; advisory UI (lockbands, badges) may keep reading the raw
+        /// properties, because a lockband that appears for a second and then goes away costs
+        /// nothing.
+        /// </summary>
+        public bool EntitlementResolved { get; private set; }
+
         public PatreonService()
         {
             _tokenStorage = new SecureTokenStorage();
@@ -201,6 +216,7 @@ namespace ConditioningControlPanel.Services
                 {
                     App.Logger?.Information("Offline mode enabled, using cached Patreon state only");
                     LoadCachedState();
+                    EntitlementResolved = true;   // cache IS the answer offline (#1048)
                     return;
                 }
 
@@ -245,6 +261,13 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to validate Patreon subscription on startup");
+            }
+            finally
+            {
+                // Resolved either way: a validation that THREW leaves the cached/grace state as this
+                // launch's answer, which is still an answer. What must never happen is a destructive
+                // repair firing against the pre-validation blank (#1048).
+                EntitlementResolved = true;
             }
         }
 

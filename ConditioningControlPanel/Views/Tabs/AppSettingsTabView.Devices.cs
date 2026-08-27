@@ -58,6 +58,8 @@ namespace ConditioningControlPanel.Views.Tabs
         // ── panic key (was SettingsTab.*, in the dead LegacyDashboardHost) ─────────────────
         internal CheckBox ChkNoPanic => SectionDevices.ChkNoPanic;
         internal Button BtnPanicKey => SectionDevices.BtnPanicKey;
+        internal CheckBox ChkPanicOverridesAll => SectionDevices.ChkPanicOverridesAll;
+        internal Button BtnPauseKey => SectionDevices.BtnPauseKey;
 
         // ── global hotkey launchers (labels repainted by MainWindow.SessionIO.cs) ──────────
         internal TextBlock TxtChatShortcutLabelDevices => SectionDevices.TxtChatShortcutLabelDevices;

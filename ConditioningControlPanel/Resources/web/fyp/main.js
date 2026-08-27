@@ -58,6 +58,7 @@ let settings = {
   mosaicChangeSec: 10,
   autoAdvance: false,
   muted: false,
+  volume: 100,             // 0-100; independent of `muted` (mute is the panic switch)
   audioGlow: true,
   windowOpacity: 1,
   eyeControl: false,
@@ -276,6 +277,10 @@ const pageCtx = {
   },
   isAutoAdvance: () => settings.autoAdvance,
   isMuted: () => settings.muted,
+  // 0..1 for the media elements. Every surface reads this through applyAudio, so a
+  // drag on the slider reaches the clip that is currently speaking AND every clip
+  // mounted after it (mount() ends in applyAudio).
+  volume: () => clampVolume(settings.volume) / 100,
   audioGlow: () => settings.audioGlow !== false,
   audioFocus: (compKey) => audioFocus.get(compKey),
   mosaicAutoChange: () => settings.mosaicAutoChange,
@@ -433,6 +438,25 @@ function setMuted(m) {
   pageAt(activeIdx)?.applyAudio();
 }
 
+function clampVolume(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 100;
+  return Math.min(100, Math.max(0, Math.round(n)));
+}
+
+/**
+ * Volume is deliberately NOT coupled to mute. Mute is the one-key panic switch (M, or the
+ * speaker button) and has to give you back exactly the loudness you had, so unmuting never
+ * touches this value and setting a volume never clears the mute. `post` is left to the
+ * caller: a slider drag applies locally on every frame but only persists on release.
+ */
+function setVolume(pct, persist) {
+  settings.volume = clampVolume(pct);
+  if (persist) post({ type: 'settings-changed', key: 'volume', value: settings.volume });
+  $('feed-volume-label').textContent = `${settings.volume}%`;
+  pageAt(activeIdx)?.applyAudio();
+}
+
 function setAutoAdvance(on) {
   settings.autoAdvance = on;
   post({ type: 'settings-changed', key: 'autoAdvance', value: on });
@@ -460,6 +484,8 @@ function updateOptionsUi() {
   $('mosaic-slider-row').classList.toggle('hidden', !settings.mosaicAutoChange);
   $('mosaic-sec').value = String(settings.mosaicChangeSec);
   $('mosaic-sec-label').textContent = `${settings.mosaicChangeSec}s`;
+  $('feed-volume').value = String(clampVolume(settings.volume));
+  $('feed-volume-label').textContent = `${clampVolume(settings.volume)}%`;
   $('toggle-audio-glow').classList.toggle('on', settings.audioGlow !== false);
   const pct = Math.round(clampOpacity(settings.windowOpacity) * 100);
   $('window-opacity').value = String(pct);
@@ -1111,6 +1137,15 @@ function wireChrome() {
     setting('mosaicChangeSec', Math.max(3, Math.min(60, Number($('mosaic-sec').value) || 10)));
     updateOptionsUi();
   });
+  // Drag = hear it now (local only); release = persist. Mirrors the opacity slider's
+  // split, minus the throttle: setting .volume on a handful of elements is free, so the
+  // live half needs no host round trip at all.
+  $('feed-volume').addEventListener('input', () => {
+    setVolume(Number($('feed-volume').value), false);
+  });
+  $('feed-volume').addEventListener('change', () => {
+    setVolume(Number($('feed-volume').value), true);
+  });
   $('toggle-audio-glow').addEventListener('click', () => {
     setting('audioGlow', settings.audioGlow === false);
     updateOptionsUi();
@@ -1242,6 +1277,7 @@ function onHostMessage(data) {
       settings = { ...settings, ...(data.settings || {}) };
       // Host may omit either (older builds) — both default rather than go undefined.
       settings.audioGlow = settings.audioGlow !== false;
+      settings.volume = clampVolume(settings.volume);
       settings.windowOpacity = clampOpacity(settings.windowOpacity);
       onlineCatalog = Array.isArray(data.online?.niches) ? data.online.niches : [];
       customSubs = normalizeLibrary(data.online?.library, data.online?.customSubs);

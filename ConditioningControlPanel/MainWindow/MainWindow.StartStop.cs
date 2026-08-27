@@ -700,14 +700,16 @@ namespace ConditioningControlPanel
                 return false;
             }
 
-            // Parse start and end times
-            if (!TimeSpan.TryParse(settings.SchedulerStartTime, out var startTime))
+            // Parse start and end times. NOT TimeSpan.TryParse: it is culture-sensitive, reads a
+            // bare "7" as seven DAYS, and refused "22:0" / "2.5" outright - see SchedulerTime and
+            // #984/#985/#999, where the fallback below silently replaced schedules users had set.
+            if (!Helpers.SchedulerTime.TryParse(settings.SchedulerStartTime, out var startTime))
             {
                 App.Logger?.Warning("Scheduler: Could not parse start time '{Time}', using default 16:00", settings.SchedulerStartTime);
                 startTime = new TimeSpan(16, 0, 0);
             }
 
-            if (!TimeSpan.TryParse(settings.SchedulerEndTime, out var endTime))
+            if (!Helpers.SchedulerTime.TryParse(settings.SchedulerEndTime, out var endTime))
             {
                 App.Logger?.Warning("Scheduler: Could not parse end time '{Time}', using default 22:00", settings.SchedulerEndTime);
                 endTime = new TimeSpan(22, 0, 0);
