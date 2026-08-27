@@ -131,6 +131,13 @@ namespace ConditioningControlPanel.Services
             }
             _log?.Information("ModService initialized — active mod: {ModId} ({ModName})", _activeMod.Id, _activeMod.Name);
 
+            // Say, once per launch, WHERE this mod's companion content resolved from. A user
+            // reporting "she only says the default lines" is answered by this single line:
+            // personalities=stock-presets means the AI persona is the default mod's.
+            Companion.ModCompanionContent.ResetPersonalityCache();
+            Companion.ModCompanionContent.LogResolvedSources(
+                _activeMod.Id, _activeMod.InstalledPath, _activeMod.Manifest);
+
             // Re-derive the active mod's text pools from per-mod storage (or defaults) on every
             // boot. The settings load runs before this service exists, so the active pools held
             // in settings.json may be stale or contaminated by the legacy subliminal merge; this
@@ -830,6 +837,11 @@ namespace ConditioningControlPanel.Services
             // Clear resource cache
             ModResourceResolver.ClearCache();
 
+            // The AI personalities are resolved per mod (personalities.json, else the manifest, else
+            // the stock presets) and cached; drop that before anything reads a prompt for the new mod.
+            try { Companion.ModCompanionContent.ResetPersonalityCache(); }
+            catch (Exception ex) { _log?.Debug("ActivateMod: personality cache clear failed: {E}", ex.Message); }
+
             // Drop the companion's cached system-prompt prefix. Its fingerprint hashes ActiveModId,
             // so a plain switch is already covered — but everything ELSE the mod contributes
             // (GetCompanionName, GetUserTerm, MakeModAware's replacements) is read at build time and
@@ -872,6 +884,7 @@ namespace ConditioningControlPanel.Services
             }
 
             _log?.Information("Mod activated: {ModId} (was {OldModId})", modId, oldModId);
+            Companion.ModCompanionContent.LogResolvedSources(mod.Id, mod.InstalledPath, mod.Manifest);
             ModChanged?.Invoke(this, mod);
         }
 
@@ -2171,6 +2184,15 @@ namespace ConditioningControlPanel.Services
             try { ModResourceResolver.ClearCache(); }
             catch (Exception ex) { _log?.Debug("ModService: resolver cache clear failed: {Error}", ex.Message); }
 
+            // The extraction may have just delivered this mod's personalities.json, so the cached
+            // "no mod personalities, use the stock presets" answer is now wrong.
+            try
+            {
+                Companion.ModCompanionContent.ResetPersonalityCache();
+                Companion.ModCompanionContent.LogResolvedSources(package.Id, package.InstalledPath, package.Manifest);
+            }
+            catch (Exception ex) { _log?.Debug("ModService: personality cache clear failed: {Error}", ex.Message); }
+
             // Before ModChanged fires: AvatarTubeWindow re-evaluates the portrait gate from that
             // event, and the adopted package may have just delivered the portrait PNGs — a stale
             // cached "absent" would park the avatar on the legacy poses for the whole session.
@@ -2318,6 +2340,16 @@ namespace ConditioningControlPanel.Services
                     // would keep resolving to nothing for the rest of the session without this.
                     try { ModResourceResolver.ClearCache(); }
                     catch (Exception ex) { _log?.Debug("ModService: resolver cache clear failed: {Error}", ex.Message); }
+
+                    // Same reason: the pack that just landed can carry a personalities.json for a
+                    // mod that has been running on the stock (default-mod) presets all session.
+                    try
+                    {
+                        Companion.ModCompanionContent.ResetPersonalityCache();
+                        Companion.ModCompanionContent.LogResolvedSources(
+                            _activeMod.Id, _activeMod.InstalledPath, _activeMod.Manifest);
+                    }
+                    catch (Exception ex) { _log?.Debug("ModService: personality cache clear failed: {Error}", ex.Message); }
 
                     // Voice lines are enumerated per call (no list cache), but the §7.2 positional→
                     // filename id migration is deliberately skipped while the folder is empty — this
