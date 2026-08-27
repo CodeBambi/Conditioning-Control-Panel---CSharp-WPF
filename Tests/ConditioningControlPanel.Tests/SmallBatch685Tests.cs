@@ -355,3 +355,203 @@ public class InheritedBambiTriggerPruneTests
         Assert.Empty(removed);
     }
 }
+
+/// <summary>
+/// The persistence half of the same migration. The prune has to reach the PER-MOD BACKUP, not just
+/// the active list: RestorePoolsFromSettings rebuilds CustomTriggers from CustomTriggersByMod on
+/// every launch, and the one-shot flag stops the prune from running a second time. Writing only the
+/// active list meant the next launch restored the stale Bambi corpus over the pruned one and could
+/// never clean it again, so the reported triggers came back permanently for exactly the users the
+/// migration targets.
+/// </summary>
+public class SissyBambiTriggerMigrationPersistenceTests
+{
+    private const string SissyId = BuiltInMods.SissyHypnoId;
+
+    private static AppSettings ContaminatedSissySettings()
+    {
+        var settings = new AppSettings
+        {
+            SissyBambiTriggerMigrationDone = false,
+            CustomTriggersByMod = new Dictionary<string, List<string>>
+            {
+                [SissyId] = new List<string>(BuiltInMods.BambiSleep.CustomTriggers!)
+            }
+        };
+        // What RestorePoolsFromSettings does just before the migration runs.
+        settings.CustomTriggers = new List<string>(settings.CustomTriggersByMod[SissyId]);
+        return settings;
+    }
+
+    [Fact]
+    public void Migration_WritesThePrunedListBackOverThePerModBackup()
+    {
+        var settings = ContaminatedSissySettings();
+
+        Assert.True(ModService.ApplySissyBambiTriggerMigration(settings, SissyId, out var removed));
+
+        Assert.NotEmpty(removed);
+        Assert.DoesNotContain("DROP FOR COCK", settings.CustomTriggers!);
+        Assert.DoesNotContain("DROP FOR COCK", settings.CustomTriggersByMod![SissyId]);
+        Assert.DoesNotContain("COCKBLANK LOVEDOLL", settings.CustomTriggersByMod![SissyId]);
+        Assert.Equal(settings.CustomTriggers, settings.CustomTriggersByMod![SissyId]);
+    }
+
+    [Fact]
+    public void SecondLaunch_StillSeesThePrunedList()
+    {
+        var settings = ContaminatedSissySettings();
+        ModService.ApplySissyBambiTriggerMigration(settings, SissyId, out _);
+
+        // Next launch: the restore reloads the active list from the backup, and the one-shot flag
+        // means the prune does NOT run again. The list must already be clean.
+        Assert.True(settings.SissyBambiTriggerMigrationDone);
+        settings.CustomTriggers = new List<string>(settings.CustomTriggersByMod![SissyId]);
+        Assert.False(ModService.ApplySissyBambiTriggerMigration(settings, SissyId, out var removedAgain));
+
+        Assert.Empty(removedAgain);
+        Assert.DoesNotContain("DROP FOR COCK", settings.CustomTriggers!);
+        Assert.DoesNotContain("GIGGLETIME", settings.CustomTriggers!);
+        Assert.DoesNotContain("ZAP COCK DRAIN OBEY", settings.CustomTriggers!);
+        Assert.Contains("GOOD GIRL", settings.CustomTriggers!);
+    }
+
+    [Fact]
+    public void OtherMods_AreNeverTouchedAndTheFlagStaysUnset()
+    {
+        var settings = ContaminatedSissySettings();
+
+        Assert.False(ModService.ApplySissyBambiTriggerMigration(settings, BuiltInMods.BambiSleepId, out var removed));
+
+        Assert.Empty(removed);
+        Assert.False(settings.SissyBambiTriggerMigrationDone);
+        Assert.Contains("DROP FOR COCK", settings.CustomTriggersByMod![SissyId]);
+    }
+
+    [Fact]
+    public void AlreadyMigrated_IsANoOp()
+    {
+        var settings = ContaminatedSissySettings();
+        settings.SissyBambiTriggerMigrationDone = true;
+
+        Assert.False(ModService.ApplySissyBambiTriggerMigration(settings, SissyId, out var removed));
+
+        Assert.Empty(removed);
+        // A phrase the user deliberately re-added after the migration is kept, as designed.
+        Assert.Contains("DROP FOR COCK", settings.CustomTriggers!);
+    }
+
+    [Fact]
+    public void CleanList_LeavesTheBackupAloneAndStillStampsTheFlag()
+    {
+        var settings = new AppSettings
+        {
+            CustomTriggers = new List<string> { "GOOD GIRL", "MY OWN TRIGGER" },
+            CustomTriggersByMod = new Dictionary<string, List<string>>
+            {
+                [SissyId] = new List<string> { "GOOD GIRL", "MY OWN TRIGGER" }
+            }
+        };
+
+        Assert.False(ModService.ApplySissyBambiTriggerMigration(settings, SissyId, out var removed));
+
+        Assert.Empty(removed);
+        Assert.True(settings.SissyBambiTriggerMigrationDone);
+        Assert.Equal(new[] { "GOOD GIRL", "MY OWN TRIGGER" }, settings.CustomTriggersByMod![SissyId]);
+    }
+
+    [Fact]
+    public void NoBackupYet_IsCreatedByTheMigration()
+    {
+        var settings = new AppSettings
+        {
+            CustomTriggers = new List<string>(BuiltInMods.BambiSleep.CustomTriggers!),
+            CustomTriggersByMod = null
+        };
+
+        Assert.True(ModService.ApplySissyBambiTriggerMigration(settings, SissyId, out _));
+
+        Assert.NotNull(settings.CustomTriggersByMod);
+        Assert.DoesNotContain("GIGGLETIME", settings.CustomTriggersByMod![SissyId]);
+    }
+}
+
+/// <summary>
+/// The other half of the same report: the shipped built-in sessions still prescribe the named
+/// BambiSleep triggers as subliminal phrases, and SessionEngine installs every session phrase into
+/// the live pool through ModService.MakeModAware. Rules for the trigger names that carry no
+/// "Bambi" in them were missing, so a Sissy user still met them through the Sessions tab. Every
+/// replacement is the line that already took that phrase's place in the Sissy pool - no new writing.
+/// </summary>
+public class SissySessionPhraseTranslationTests
+{
+    private static string Sissy(string text)
+        => ModService.ApplyTextReplacements(BuiltInMods.SissyHypno.TextReplacements, text);
+
+    public static TheoryData<string, string> SessionPhrases => new()
+    {
+        { "DROP FOR COCK", "GOOD GIRLS OBEY" },
+        { "SNAP AND FORGET", "EMPTY AND OBEDIENT" },
+        { "PRIMPED AND PAMPERED", "SISSY IS LEARNING" },
+        { "ZAP COCK DRAIN OBEY", "I LOVE BEING PROGRAMMED" },
+        { "GIGGLETIME", "SISSY LOVES BUBBLES" },
+        { "COCK ZOMBIE NOW", "DUMB DOLLS COUNT SLOWLY" },
+        { "COCK TURNS MY BRAIN OFF", "GOOD GIRLS PAY ATTENTION" },
+        { "I CANT RESIST MY TRIGGERS", "SISSY NEEDS TO FOCUS" },
+        { "UNIFORM LOCK", "SISSY WILL TRY HARDER" },
+        { "BAMBI UNIFORM LOCK", "SISSY WILL TRY HARDER" },
+        { "BAMBI SLEEP", "DEEP SLEEP" },
+    };
+
+    [Theory]
+    [MemberData(nameof(SessionPhrases))]
+    public void SessionPhrase_ArrivesAsTheSissyLine(string prescribed, string expected)
+        => Assert.Equal(expected, Sissy(prescribed));
+
+    [Theory]
+    [MemberData(nameof(SessionPhrases))]
+    public void TranslatedPhrase_IsAlreadyPartOfTheSissyMod(string prescribed, string expected)
+    {
+        _ = prescribed;
+        var mod = BuiltInMods.SissyHypno;
+        var own = new List<string>();
+        if (mod.SubliminalPool != null) own.AddRange(mod.SubliminalPool.Keys);
+        if (mod.LockCardPhrases != null) own.AddRange(mod.LockCardPhrases.Keys);
+        if (mod.CustomTriggers != null) own.AddRange(mod.CustomTriggers);
+        if (mod.Phrases != null) foreach (var set in mod.Phrases.Values) own.AddRange(set);
+        Assert.Contains(expected, own);
+    }
+
+    [Fact]
+    public void EveryBuiltInSessionPhrase_LandsCleanOfNamedBambiTriggers()
+    {
+        var named = new[]
+        {
+            "DROP FOR COCK", "GIGGLETIME", "ZAP COCK DRAIN OBEY", "SNAP AND FORGET",
+            "PRIMPED AND PAMPERED", "COCK ZOMBIE NOW", "UNIFORM LOCK", "BAMBI",
+        };
+
+        foreach (var session in new[]
+        {
+            Session.MorningDrift, Session.GamerGirl, Session.DistantDoll, Session.GoodGirlsDontCum,
+        })
+        {
+            foreach (var phrase in session.Settings.SubliminalPhrases)
+            {
+                var landed = Sissy(phrase);
+                foreach (var bad in named)
+                    Assert.DoesNotContain(bad, landed, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+    }
+
+    [Fact]
+    public void BambiMod_IsUntouched()
+    {
+        // The base mod registers no replacements, so its own sessions still say their own words.
+        var replacements = BuiltInMods.BambiSleep.TextReplacements;
+        Assert.True(replacements == null || replacements.Count == 0);
+        Assert.Equal("DROP FOR COCK",
+            ModService.ApplyTextReplacements(replacements, "DROP FOR COCK"));
+    }
+}

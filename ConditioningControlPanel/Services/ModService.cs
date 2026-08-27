@@ -1220,14 +1220,21 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public string MakeModAware(string text)
         {
-            if (string.IsNullOrEmpty(text)) return text;
+            return ApplyTextReplacements(_activeMod.Manifest.TextReplacements, text);
+        }
 
-            // No replacements registered → nothing to do (mod-agnostic check)
-            var replacements = _activeMod.Manifest.TextReplacements;
+        /// <summary>
+        /// The pure half of <see cref="MakeModAware"/>: applies a manifest's TextReplacements to a
+        /// string, longest key first so a longer phrase always wins over a shorter one it contains
+        /// (this is what keeps "BAMBI UNIFORM LOCK" from being half-rewritten by the "UNIFORM LOCK"
+        /// and "BAMBI" rules in turn). Split out so the mapping can be tested without an App.
+        /// </summary>
+        internal static string ApplyTextReplacements(IDictionary<string, string>? replacements, string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
             if (replacements == null || replacements.Count == 0) return text;
 
             var result = text;
-            // Apply replacements in order — longer strings first to avoid partial matches
             foreach (var kvp in replacements.OrderByDescending(r => r.Key.Length))
             {
                 result = result.Replace(kvp.Key, kvp.Value);
@@ -2524,18 +2531,10 @@ namespace ConditioningControlPanel.Services
             // anything back (deliberate deletions stay deleted, see MainWindow.Patreon.cs). The
             // generic vocabulary other mods share (OBEY, DROP, KNEEL...) is left alone, and the
             // one-shot flag means a Bambi phrase re-added afterwards is kept.
-            if (!settings.SissyBambiTriggerMigrationDone &&
-                string.Equals(modId, Models.BuiltInMods.SissyHypnoId, StringComparison.OrdinalIgnoreCase))
+            if (ApplySissyBambiTriggerMigration(settings, modId, out var removedTriggers))
             {
-                var prunedTriggers = PruneInheritedBambiTriggers(
-                    settings.CustomTriggers, settings.UserAddedCustomTriggers, out var removedTriggers);
-                if (removedTriggers.Count > 0)
-                {
-                    settings.CustomTriggers = prunedTriggers;
-                    _log?.Information("Pruned {Count} inherited BambiSleep trigger(s) from the Sissy list: {Keys}",
-                        removedTriggers.Count, string.Join(", ", removedTriggers));
-                }
-                settings.SissyBambiTriggerMigrationDone = true;
+                _log?.Information("Pruned {Count} inherited BambiSleep trigger(s) from the Sissy list: {Keys}",
+                    removedTriggers.Count, string.Join(", ", removedTriggers));
             }
 
             if (settings.BouncingTextPoolByMod?.TryGetValue(modId, out var savedBounce) == true)
@@ -2603,6 +2602,38 @@ namespace ConditioningControlPanel.Services
         /// typed themselves (<paramref name="userAdded"/>) are always kept, and nothing is ever
         /// added back. Pure so it can be unit tested without app state.
         /// </summary>
+        /// <summary>
+        /// Runs the one-shot Sissy trigger migration over a settings object and reports whether it
+        /// actually removed anything. Kept static and App-free so the persistence half is testable:
+        /// the pruned list is written to the ACTIVE list AND back over the per-mod backup, because
+        /// the backup is what the next launch restores from. Writing only the active list left
+        /// CustomTriggersByMod holding the old corpus, and since the one-shot flag then blocked a
+        /// second prune, the Bambi triggers came back permanently on the very next start (the
+        /// trailing self-heal is TryAdd, so it never overwrites an existing backup).
+        /// </summary>
+        internal static bool ApplySissyBambiTriggerMigration(
+            Models.AppSettings settings, string modId, out List<string> removed)
+        {
+            removed = new List<string>();
+            if (settings == null) return false;
+            if (settings.SissyBambiTriggerMigrationDone) return false;
+            if (!string.Equals(modId, Models.BuiltInMods.SissyHypnoId, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            var pruned = PruneInheritedBambiTriggers(
+                settings.CustomTriggers, settings.UserAddedCustomTriggers, out removed);
+
+            if (removed.Count > 0)
+            {
+                settings.CustomTriggers = pruned;
+                (settings.CustomTriggersByMod ??= new Dictionary<string, List<string>>())[modId] =
+                    new List<string>(pruned);
+            }
+
+            settings.SissyBambiTriggerMigrationDone = true;
+            return removed.Count > 0;
+        }
+
         internal static List<string> PruneInheritedBambiTriggers(
             IEnumerable<string>? current, IEnumerable<string>? userAdded, out List<string> removed)
         {

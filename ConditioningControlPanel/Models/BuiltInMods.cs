@@ -913,7 +913,29 @@ namespace ConditioningControlPanel.Models
                     { "Bambi", "babe" },
                     { "BAMBI", "SISSY" },
                     { "BambiCloud", "HypnoTube" },
-                    { "BambiSprite", "BimboDoll" }
+                    { "BambiSprite", "BimboDoll" },
+
+                    // The named BambiSleep triggers that carry no "Bambi" in them, so the rules
+                    // above never caught them. The shipped built-in sessions still prescribe these
+                    // as subliminal phrases, and SessionEngine pipes every session phrase through
+                    // MakeModAware (Services/Session/SessionEngine.cs) before it enters the pool -
+                    // so without these rows a Sissy user still met DROP FOR COCK / GIGGLETIME via
+                    // the Sessions tab even after the pool itself was cleaned. Each right-hand side
+                    // is the exact line that replaced it in SubliminalPool above: reused Sissy
+                    // vocabulary, no new writing. "BAMBI UNIFORM LOCK" is listed explicitly because
+                    // replacements run longest-key-first, so the bare "UNIFORM LOCK" rule would
+                    // otherwise fire first and leave a stray "BAMBI" behind for the "BAMBI" rule.
+                    { "I CANT RESIST MY TRIGGERS", "SISSY NEEDS TO FOCUS" },
+                    { "COCK TURNS MY BRAIN OFF", "GOOD GIRLS PAY ATTENTION" },
+                    { "PRIMPED AND PAMPERED", "SISSY IS LEARNING" },
+                    { "ZAP COCK DRAIN OBEY", "I LOVE BEING PROGRAMMED" },
+                    { "BAMBI UNIFORM LOCK", "SISSY WILL TRY HARDER" },
+                    { "COCK ZOMBIE NOW", "DUMB DOLLS COUNT SLOWLY" },
+                    { "SNAP AND FORGET", "EMPTY AND OBEDIENT" },
+                    { "DROP FOR COCK", "GOOD GIRLS OBEY" },
+                    { "UNIFORM LOCK", "SISSY WILL TRY HARDER" },
+                    { "GIGGLETIME", "SISSY LOVES BUBBLES" },
+                    { "Giggletime", "Sissy Loves Bubbles" }
                 }
             };
         }
