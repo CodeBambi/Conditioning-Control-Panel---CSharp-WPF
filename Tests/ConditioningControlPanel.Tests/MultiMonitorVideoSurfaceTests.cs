@@ -394,4 +394,89 @@ public class MultiMonitorVideoSurfaceTests
         Assert.Equal(Video1, OverlayService.ResolveVideoAnchor(
             TwoScreenVideo(), targetHwnd: Overlay2, targetMonitor: IntPtr.Zero, fallbackHwnd: Video1));
     }
+
+    // ---- browser first-frame deadline arming (round 4 blocker) ----
+
+    [Fact]
+    public void AMirrorWhoseInitHasNotStartedIsNeverCondemned()
+    {
+        // BrowserVideoEngine.InitWindowsAsync brings the WebView2 windows up STRICTLY SERIALLY. A
+        // mirror sitting in that queue has not been asked to render anything yet, so no amount of
+        // wall clock may condemn it. DateTime.MaxValue is the "unarmed" state.
+        Assert.False(FrameDeadlinePassed(DateTime.MaxValue, new DateTime(2026, 8, 27, 12, 0, 0, DateTimeKind.Utc)));
+        Assert.False(FrameDeadlinePassed(DateTime.MaxValue, DateTime.MaxValue));
+    }
+
+    [Fact]
+    public void AQueuedMirrorSurvivesTheSweepNoMatterHowLongThePrimaryTakes()
+    {
+        // The regression this pins: a 4-monitor rig on a cold disk used to reach the 20s pre-ready
+        // budget on mirror 4 while mirror 4's WebView2 had not started, and the sweep closed a
+        // perfectly healthy window. Unarmed must resolve to Wait, never DropMirror.
+        var anHourLater = new DateTime(2026, 8, 27, 13, 0, 0, DateTimeKind.Utc);
+        Assert.Equal(BrowserFrameSweepAction.Wait, DecideBrowserFrameSweep(
+            firstFrameSeen: false,
+            deadlinePassed: FrameDeadlinePassed(DateTime.MaxValue, anHourLater),
+            isPrimarySurface: false));
+    }
+
+    [Fact]
+    public void AnArmedSurfacePastItsBudgetIsCondemned()
+    {
+        var now = new DateTime(2026, 8, 27, 12, 0, 0, DateTimeKind.Utc);
+        Assert.True(FrameDeadlinePassed(now.AddSeconds(-1), now));
+        Assert.True(FrameDeadlinePassed(now, now)); // the deadline itself counts as passed
+    }
+
+    [Fact]
+    public void AnArmedSurfaceInsideItsBudgetIsLeftAlone()
+    {
+        var now = new DateTime(2026, 8, 27, 12, 0, 0, DateTimeKind.Utc);
+        Assert.False(FrameDeadlinePassed(now.AddSeconds(1), now));
+    }
+
+    [Fact]
+    public void OnlyThePrimaryArmsItsFrameClockAtSessionStart()
+    {
+        // The primary is initialised first so it never queues, and its session-start clock is the
+        // only deadline left that can still fire if the shared WebView2 environment task hangs
+        // forever - without it a hung environment would sit black until the 10 minute safety timer.
+        Assert.True(ArmsFrameDeadlineAtSessionStart(isPrimarySurface: true));
+        Assert.False(ArmsFrameDeadlineAtSessionStart(isPrimarySurface: false));
+    }
+
+    [Fact]
+    public void AGracePauseSlidesAnArmedDeadlineByOneTick()
+    {
+        var deadline = new DateTime(2026, 8, 27, 12, 0, 0, DateTimeKind.Utc);
+        Assert.Equal(deadline.AddMilliseconds(500), SlidePendingDeadline(deadline, 500));
+    }
+
+    [Fact]
+    public void AGracePauseLeavesAQueuedMirrorUnarmed()
+    {
+        // Sliding MaxValue would overflow; it must stay the unarmed sentinel instead, so a session
+        // paused while the mirrors are still queuing does not silently arm them.
+        Assert.Equal(DateTime.MaxValue, SlidePendingDeadline(DateTime.MaxValue, 500));
+    }
+
+    // ---- uncovering a dead surface (round 4 strict-mode guard) ----
+
+    [Fact]
+    public void ADeadMirrorUnderAStrictLockStaysCovered()
+    {
+        // Lock Card / Lockdown / Possession are commitment devices: the user asked to be unable to
+        // look away. Hiding a dead mirror would hand back a monitor mid-clip, so it stays on screen
+        // as an opaque black cover instead. Close() is vetoed by the strict Closing handler, but
+        // Hide() is not, so this rule is the only thing standing between a wedge and an escape hatch.
+        Assert.False(ShouldUncoverDeadSurface(hostStrict: true));
+    }
+
+    [Fact]
+    public void ADeadMirrorOutsideStrictIsUncovered()
+    {
+        // No commitment in play: leaving a black rectangle over a second screen for the rest of the
+        // clip is just broken, so the window goes away and that monitor comes back.
+        Assert.True(ShouldUncoverDeadSurface(hostStrict: false));
+    }
 }

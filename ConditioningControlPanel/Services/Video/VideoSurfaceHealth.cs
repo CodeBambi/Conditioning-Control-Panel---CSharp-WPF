@@ -166,6 +166,58 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Whether a browser surface's first-frame deadline has actually expired.
+        ///
+        /// <see cref="DateTime.MaxValue"/> means UNARMED, and that is load-bearing rather than a
+        /// convenience sentinel: the engine initialises its windows STRICTLY SERIALLY
+        /// (BrowserVideoEngine.InitWindowsAsync), so on a cold start a mirror's WebView2 has not begun
+        /// coming up at all while the primary's is still building. Arming every window's budget at
+        /// SESSION start therefore made the trailing mirrors burn their whole pre-ready budget while
+        /// QUEUED, and on a 2-4 monitor rig with a slow disk a window could reach its deadline before
+        /// its own init even started - condemning and closing a perfectly healthy secondary. A mirror
+        /// is now armed when ITS init starts; until then it is unarmed and can never be judged. (The
+        /// primary still arms at session start - see <see cref="ArmsFrameDeadlineAtSessionStart"/>.)
+        /// </summary>
+        internal static bool FrameDeadlinePassed(DateTime deadlineUtc, DateTime nowUtc)
+            => deadlineUtc != DateTime.MaxValue && nowUtc >= deadlineUtc;
+
+        /// <summary>
+        /// Which surfaces get their first-frame budget armed at SESSION start rather than when their
+        /// own init begins. Only the audio-bearing one, and it is a safety net rather than a nicety:
+        /// the primary is initialised FIRST, so it never queues behind anybody, and its session-start
+        /// deadline is the ONLY thing that ends a session whose WebView2 environment task never
+        /// completes at all - the serial init loop cannot arm anything in that case because it never
+        /// runs. Every MIRROR is armed when its own init starts instead, so the time it spent queued
+        /// behind the primary can never condemn it.
+        /// </summary>
+        internal static bool ArmsFrameDeadlineAtSessionStart(bool isPrimarySurface) => isPrimarySurface;
+
+        /// <summary>
+        /// Push a pending first-frame deadline out by one watch tick (the grace-pause slide). An
+        /// UNARMED deadline stays unarmed: sliding <see cref="DateTime.MaxValue"/> would throw
+        /// ArgumentOutOfRangeException and abandon the rest of that tick's sweep.
+        /// </summary>
+        internal static DateTime SlidePendingDeadline(DateTime deadlineUtc, int tickMs)
+            => deadlineUtc == DateTime.MaxValue ? deadlineUtc : deadlineUtc.AddMilliseconds(tickMs);
+
+        /// <summary>
+        /// Whether a dead surface's screen may be UNCOVERED (its window hidden), or has to stay covered
+        /// by that opaque black window for the rest of the clip.
+        ///
+        /// A mandatory video under a STRICT lock (Lock Card / Lockdown / Possession) covers every
+        /// screen and refuses Alt+F4 on purpose - that IS the commitment device. Freeing a dead
+        /// mirror's monitor there would hand the user a fully interactive desktop mid-clip, so under
+        /// strict a stalled mirror stays black: a dead screen is a far better outcome than an escape
+        /// hatch, and it is what the released build already did (a vetoed Close left the window up).
+        /// Outside strict mode nothing is being committed to, and parking a dead fullscreen topmost
+        /// window over someone's second monitor for the whole clip is pure harm - so it goes.
+        ///
+        /// Both engines ask this, so the WebView2 path and the LibVLC blur path leave the same visible
+        /// state for the same failure instead of disagreeing about it.
+        /// </summary>
+        internal static bool ShouldUncoverDeadSurface(bool hostStrict) => !hostStrict;
+
+        /// <summary>
         /// Whether a retire request that did NOT come from the currently playing clip must wait.
         /// A leased player (bubble count, mini player, previews) whose Stop() wedged used to retire the
         /// shared LibVLC instance immediately - the same instance the mandatory video's per-monitor

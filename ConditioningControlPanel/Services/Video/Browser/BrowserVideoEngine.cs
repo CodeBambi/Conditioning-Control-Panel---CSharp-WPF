@@ -51,6 +51,12 @@ namespace ConditioningControlPanel.Services.Video.Browser
         /// first-frame watchdog must not count that time, or a pause taken before the first frame
         /// would fake a decode failure and force a pointless LibVLC fallback.</summary>
         public Func<bool>? IsHostPaused { get; init; }
+
+        /// <summary>True while this clip is running under a STRICT lock (Lock Card / Lockdown /
+        /// Possession), where every screen is covered on purpose and Alt+F4 is refused. A dead mirror
+        /// is then left on screen as an opaque black window rather than hidden - see
+        /// <c>VideoSurfaceHealth.ShouldUncoverDeadSurface</c>. Absent = never strict.</summary>
+        public Func<bool>? IsHostStrict { get; init; }
     }
 
     /// <summary>
@@ -152,8 +158,17 @@ namespace ConditioningControlPanel.Services.Video.Browser
         // primary, which is exactly how a black mirror stayed invisible - see ArmFirstFrameWatch.
         private DispatcherTimer? _firstFrameWatch;
         private Func<bool>? _isHostPaused;
+        private Func<bool>? _isHostStrict;
         private bool _failedRaised;
         private int _sessionId;
+
+        /// <summary>A mirror was taken off screen mid-clip (dropped and hidden). The host keeps its own
+        /// window list and a cache of video-window HWNDs for z-order anchoring, and neither can learn
+        /// about the drop from <see cref="Windows"/> - the window is out of that list by then. Carries
+        /// the HWND because it is read BEFORE the Close(), after which it is gone. NOT raised for a
+        /// mirror that strict mode keeps on screen: that one is still a live fullscreen cover and must
+        /// stay in the host's bookkeeping.</summary>
+        public event Action<Window, IntPtr>? WindowDropped;
 
         private BrowserVideoEngine() { }
 
@@ -166,6 +181,12 @@ namespace ConditioningControlPanel.Services.Video.Browser
 
         /// <summary>The windows of the live session, for the host to add to its own teardown list.</summary>
         public IReadOnlyList<Window> Windows => _windows;
+
+        /// <summary>Mirrors dropped mid-clip (<see cref="DropSecondaryWindow"/>), which are NOT in
+        /// <see cref="Windows"/> any more. The host has its own window list and its own cache of
+        /// video-window HWNDs, and both would otherwise keep a dropped mirror forever on the paths
+        /// that do not run CloseAll (the browser -> LibVLC handoff), so teardown reads this too.</summary>
+        public IReadOnlyList<Window> DroppedWindows => _dropped.ToArray();
 
         /// <summary>The audio-bearing window, or null when no session is live.</summary>
         public Window? PrimaryWindow => _primary;
@@ -401,6 +422,7 @@ namespace ConditioningControlPanel.Services.Video.Browser
             var session = ++_sessionId;
             _failedRaised = false;
             _isHostPaused = req.IsHostPaused;
+            _isHostStrict = req.IsHostStrict;
 
             try
             {
@@ -441,8 +463,22 @@ namespace ConditioningControlPanel.Services.Video.Browser
             {
                 win = new BrowserVideoWindow(screen, primary);
                 win.SessionStartTick = Environment.TickCount64;
-                win.FirstFrameBudgetMs = PreReadyTimeoutMs;
-                win.FirstFrameDeadlineUtc = DateTime.UtcNow.AddMilliseconds(PreReadyTimeoutMs);
+                // Only the PRIMARY is armed here. InitWindowsAsync brings the windows up ONE AT A
+                // TIME, so arming a mirror now would charge it for the whole time it spends queued
+                // behind the primary's WebView2 - on a cold multi-screen start the last mirror could
+                // be past its deadline before its own init had even begun, and the sweep would then
+                // hide and close a perfectly healthy screen. Mirrors are armed when their init
+                // starts; until then they are UNARMED (DateTime.MaxValue) and cannot be judged.
+                //
+                // The primary keeps the session-start clock on purpose: it is initialised first so it
+                // never queues, and this is the only deadline that can still fire if the WebView2
+                // ENVIRONMENT task never completes - in that case the serial init loop never runs, so
+                // nothing else would ever end the session and hand the clip to LibVLC.
+                if (VideoSurfaceHealth.ArmsFrameDeadlineAtSessionStart(primary))
+                {
+                    win.FirstFrameBudgetMs = PreReadyTimeoutMs;
+                    win.FirstFrameDeadlineUtc = DateTime.UtcNow.AddMilliseconds(PreReadyTimeoutMs);
+                }
                 win.Message += OnWindowMessage;
                 win.ProcessFailed += OnWindowProcessFailed;
                 win.Ready += OnWindowReady;
@@ -497,6 +533,17 @@ namespace ConditioningControlPanel.Services.Video.Browser
             foreach (var w in _windows.ToArray())
             {
                 if (session != _sessionId) return;
+                // Arm a still-UNARMED window (every mirror) as its own init starts - never at session
+                // start, because this loop is serial and a window queued behind the primary has not
+                // begun coming up yet. A cold WebView2 can eat well over ten seconds by itself (see
+                // PreReadyTimeoutMs), which is exactly how a healthy third screen used to be
+                // condemned. The primary is already armed from session start and is NOT re-armed
+                // here: that clock is the backstop for a hung environment and must not slide.
+                if (w.FirstFrameDeadlineUtc == DateTime.MaxValue)
+                {
+                    w.FirstFrameBudgetMs = PreReadyTimeoutMs;
+                    w.FirstFrameDeadlineUtc = DateTime.UtcNow.AddMilliseconds(PreReadyTimeoutMs);
+                }
                 // EnsureCoreWebView2Async only works once the control is in the visual tree, which
                 // is why this runs after Show().
                 await w.InitAsync(env, mappings, StartUrl, GameHost).ConfigureAwait(true);
@@ -512,6 +559,7 @@ namespace ConditioningControlPanel.Services.Video.Browser
             _sessionId++;   // invalidates every in-flight continuation and late page message
             StopFirstFrameWatch();
             _isHostPaused = null;
+            _isHostStrict = null;
 
             var windows = _windows.ToArray();
             _windows.Clear();
@@ -728,17 +776,24 @@ namespace ConditioningControlPanel.Services.Video.Browser
             RaiseFailed("primary surface init failed: " + reason, blameFile: false);
         }
 
-        /// <summary>Unhook and drop ONE mirror without touching the session. Shared by the two
+        /// <summary>Unhook and drop ONE mirror without touching the session. Shared by the three
         /// secondary-only failure paths so they cannot drift apart.
         ///
-        /// Hide() comes FIRST and is the load-bearing call. Every window the host builds carries the
-        /// strict Closing veto (VideoService.SetupStrictHandlers), which cancels Close() outright
-        /// while <c>_videoPlaying</c> is set - and it is already set by the time any surface can fail,
-        /// because PlayVideo sets it before the browser session starts. A vetoed Close would leave the
-        /// dead mirror on that monitor as an OPAQUE BLACK fullscreen window for the whole clip, with
-        /// every handler unhooked so nothing could act on it again: exactly the symptom this method
-        /// exists to remove. Hide() is not vetoable, so the screen is freed either way, and the real
-        /// Close lands here or at StopSession once the veto is down.</summary>
+        /// The window is always unhooked and taken out of <see cref="_windows"/>, so nothing
+        /// broadcasts to it and the sweep stops judging it. What happens to the SCREEN depends on the
+        /// lock (VideoSurfaceHealth.ShouldUncoverDeadSurface):
+        ///
+        ///   * NOT strict - Hide() then Close(). Hide() comes first and is the load-bearing call:
+        ///     every window the host builds carries the strict Closing veto
+        ///     (VideoService.SetupStrictHandlers), which cancels Close() while <c>_videoPlaying</c> is
+        ///     set - and it is already set by the time any surface can fail. A vetoed Close alone
+        ///     would leave the dead mirror on that monitor as an opaque black fullscreen window for
+        ///     the whole clip with every handler unhooked. Hide() is not vetoable, so the screen is
+        ///     freed either way, and the real Close lands here or at StopSession.
+        ///   * STRICT (Lock Card / Lockdown / Possession) - the window STAYS on screen, black. Every
+        ///     screen being covered is the point of that lock; hiding one would hand the user an
+        ///     interactive desktop mid-clip, which is a worse failure than a dead screen and is not
+        ///     something the released build ever did. StopSession closes it once the veto is down.</summary>
         private void DropSecondaryWindow(BrowserVideoWindow win, string why)
         {
             try
@@ -747,8 +802,30 @@ namespace ConditioningControlPanel.Services.Video.Browser
                 win.ProcessFailed -= OnWindowProcessFailed;
                 win.Ready -= OnWindowReady;
                 win.InitFailed -= OnWindowInitFailed;
+                // Stops the sweep judging it again even if something re-adds it, and stops a late
+                // `playing` from this window double-reporting the surface.
+                win.FirstFrameReported = true;
                 _windows.Remove(win);
                 if (!_dropped.Contains(win)) _dropped.Add(win);
+
+                bool strict = false;
+                try { strict = _isHostStrict?.Invoke() == true; }
+                catch (Exception ex) { App.Logger?.Debug("BrowserVideo: strict probe threw: {E}", ex.Message); }
+
+                if (!VideoSurfaceHealth.ShouldUncoverDeadSurface(strict))
+                {
+                    App.Logger?.Warning("BrowserVideo[secondary]: {Screen} dropped after {Why}, but the clip is under a STRICT lock - the screen stays covered (black) instead of being uncovered mid-video",
+                        win.Screen.DeviceName, why);
+                    return;
+                }
+
+                // Read the HWND while the window still has one: the host prunes it from its z-order
+                // anchor cache, and after Close() there is nothing left to read.
+                IntPtr hwnd = IntPtr.Zero;
+                try { hwnd = new System.Windows.Interop.WindowInteropHelper(win).Handle; } catch { }
+                try { WindowDropped?.Invoke(win, hwnd); }
+                catch (Exception ex) { App.Logger?.Debug("BrowserVideo: WindowDropped handler threw: {E}", ex.Message); }
+
                 try { win.Hide(); }
                 catch (Exception ex) { App.Logger?.Debug("BrowserVideo: secondary hide after {Why} failed: {E}", why, ex.Message); }
                 win.Close();
@@ -814,7 +891,7 @@ namespace ConditioningControlPanel.Services.Video.Browser
                         foreach (var w in wins)
                         {
                             if (!w.FirstFrameReported)
-                                w.FirstFrameDeadlineUtc = w.FirstFrameDeadlineUtc.AddMilliseconds(WatchTickMs);
+                                w.FirstFrameDeadlineUtc = VideoSurfaceHealth.SlidePendingDeadline(w.FirstFrameDeadlineUtc, WatchTickMs);
                         }
                         return;
                     }
@@ -823,7 +900,11 @@ namespace ConditioningControlPanel.Services.Video.Browser
                     bool anyPending = false;
                     foreach (var w in wins)
                     {
-                        switch (VideoSurfaceHealth.DecideBrowserFrameSweep(w.FirstFrameReported, now >= w.FirstFrameDeadlineUtc, w.IsPrimary))
+                        // An UNARMED deadline (this window's init has not started - the loop in
+                        // InitWindowsAsync is serial) reads as "not passed", so a queued window is
+                        // never condemned for the time it spent waiting its turn.
+                        switch (VideoSurfaceHealth.DecideBrowserFrameSweep(w.FirstFrameReported,
+                                    VideoSurfaceHealth.FrameDeadlinePassed(w.FirstFrameDeadlineUtc, now), w.IsPrimary))
                         {
                             case VideoSurfaceHealth.BrowserFrameSweepAction.Ignore:
                                 continue;
