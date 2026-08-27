@@ -4615,5 +4615,8 @@
   "play_arcademy_tooltip": "el horario de hoy te espera.",
   "arcademy_boot_error_body": "{0} no pudo iniciarse en este equipo.\n\n{1}",
   "arcademy_open_failed_body": "No se pudo abrir The Arcademy:\n\n{0}",
-  "arcademy_boot_failed_this_session": "The Arcademy no se pudo iniciar la última vez que lo intentaste en este equipo.\n\n¿Quieres intentarlo de nuevo?"
+  "arcademy_boot_failed_this_session": "The Arcademy no se pudo iniciar la última vez que lo intentaste en este equipo.\n\n¿Quieres intentarlo de nuevo?",
+  "label_ambient_bubble_xp_budget": "XP de burbujas hoy: {0}/{1}",
+  "label_resume_takeover_on_startup": "↻ Reanudar el Control al iniciar",
+  "tooltip_autonomy_resume_on_startup": "Si está activado, el Control se rearma la próxima vez que abras la app. Desactivado por defecto, así que el Control siempre empieza apagado."
 }

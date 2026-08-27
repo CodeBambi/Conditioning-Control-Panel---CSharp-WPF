@@ -922,7 +922,17 @@ namespace ConditioningControlPanel
                 //
                 // ApplyTierGate is called for both verdicts, not just the locked one: this method is
                 // also how a freshly validated T2 account gets its lockband taken away.
-                if (!labUnlocked)
+                //
+                // #1048: the repair now also waits for the entitlement to be RESOLVED. MainWindow
+                // comes up while PatreonService.InitializeAsync is still in flight, and until it
+                // answers, HasLabAccess is false because nothing is known yet - not because the
+                // account lapsed. Reading that blank as a lapse force-cleared and SAVED the switch
+                // on every single launch, which is exactly the "AI Effect Control turns itself off
+                // every restart" report. UpdateUnlockablesVisibility is re-run when validation
+                // lands (MainWindow.Patreon.cs) and on every XP refresh, so a genuine lapse is
+                // still repaired moments later - just never against an unknown.
+                var entitlementKnown = App.Patreon?.EntitlementResolved == true;
+                if (!labUnlocked && entitlementKnown)
                 {
                     var cp = App.Settings?.Current?.CompanionPrompt;
                     if (cp != null && cp.AllowAiToControlEffects)
@@ -2841,6 +2851,24 @@ namespace ConditioningControlPanel
                     AppSettingsTab.ChkStartHidden.IsChecked = false;
                 }
             }
+        }
+
+        /// <summary>
+        /// Live readout of the ambient-bubble daily XP budget on the XP bar's tooltip (#1019/#1026).
+        /// Ambient pops stop paying at <see cref="Services.BubbleService.AmbientBubbleDailyXpCap"/> XP
+        /// per local day; with nothing on screen saying so, two users reported XP as broken. Computed
+        /// on open so it is never stale, and read-only — it can't spend or reset the bucket.
+        /// </summary>
+        private void XPBarTrack_ToolTipOpening(object sender, ToolTipEventArgs e)
+        {
+            try
+            {
+                if (XPBarTrack == null) return;
+                XPBarTrack.ToolTip = Loc.GetF("label_ambient_bubble_xp_budget",
+                    Services.BubbleService.AmbientBubbleXpPaidToday(),
+                    Services.BubbleService.AmbientBubbleDailyXpCap);
+            }
+            catch (Exception ex) { App.Logger?.Debug("XPBarTrack_ToolTipOpening: {E}", ex.Message); }
         }
 
         #endregion

@@ -4622,5 +4622,8 @@
   "play_arcademy_tooltip": "сегодняшнее расписание ждёт.",
   "arcademy_boot_error_body": "Не удалось запустить {0} на этом компьютере.\n\n{1}",
   "arcademy_open_failed_body": "Не удалось открыть The Arcademy:\n\n{0}",
-  "arcademy_boot_failed_this_session": "The Arcademy не смогла запуститься в прошлый раз на этом компьютере.\n\nПопробовать открыть снова?"
+  "arcademy_boot_failed_this_session": "The Arcademy не смогла запуститься в прошлый раз на этом компьютере.\n\nПопробовать открыть снова?",
+  "label_ambient_bubble_xp_budget": "Опыт за пузыри сегодня: {0}/{1}",
+  "label_resume_takeover_on_startup": "↻ Возобновлять Захват при запуске",
+  "tooltip_autonomy_resume_on_startup": "Когда включено, Захват снова активируется при следующем запуске приложения. По умолчанию выключено, поэтому Захват всегда начинается выключенным."
 }

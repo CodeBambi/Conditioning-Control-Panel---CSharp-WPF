@@ -4615,5 +4615,8 @@
   "play_arcademy_tooltip": "今日の時間割が待っています。",
   "arcademy_boot_error_body": "{0} はこのパソコンで起動できませんでした。\n\n{1}",
   "arcademy_open_failed_body": "The Arcademy を開けませんでした:\n\n{0}",
-  "arcademy_boot_failed_this_session": "The Arcademy はこのパソコンで前回の起動に失敗しました。\n\nもう一度開いてみますか？"
+  "arcademy_boot_failed_this_session": "The Arcademy はこのパソコンで前回の起動に失敗しました。\n\nもう一度開いてみますか？",
+  "label_ambient_bubble_xp_budget": "本日のバブルXP: {0}/{1}",
+  "label_resume_takeover_on_startup": "↻ 起動時にテイクオーバーを再開",
+  "tooltip_autonomy_resume_on_startup": "オンにすると、次回アプリ起動時にテイクオーバーが再度有効になります。既定ではオフで、テイクオーバーは常にオフで始まります。"
 }

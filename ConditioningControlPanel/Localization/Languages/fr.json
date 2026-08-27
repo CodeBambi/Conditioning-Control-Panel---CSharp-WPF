@@ -4624,5 +4624,8 @@
   "play_arcademy_tooltip": "l'emploi du temps du jour t'attend.",
   "arcademy_boot_error_body": "{0} n'a pas pu démarrer sur cette machine.\n\n{1}",
   "arcademy_open_failed_body": "Impossible d'ouvrir The Arcademy :\n\n{0}",
-  "arcademy_boot_failed_this_session": "The Arcademy n'a pas réussi à démarrer lors de ton dernier essai sur cette machine.\n\nRéessayer ?"
+  "arcademy_boot_failed_this_session": "The Arcademy n'a pas réussi à démarrer lors de ton dernier essai sur cette machine.\n\nRéessayer ?",
+  "label_ambient_bubble_xp_budget": "XP de bulles aujourd'hui : {0}/{1}",
+  "label_resume_takeover_on_startup": "↻ Reprendre la Prise de contrôle au démarrage",
+  "tooltip_autonomy_resume_on_startup": "Si activé, la Prise de contrôle se réarme au prochain lancement de l'application. Désactivé par défaut, la Prise de contrôle démarre donc toujours éteinte."
 }

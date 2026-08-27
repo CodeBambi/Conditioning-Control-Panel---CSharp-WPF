@@ -4624,5 +4624,8 @@
   "play_arcademy_tooltip": "der Stundenplan von heute wartet.",
   "arcademy_boot_error_body": "{0} konnte auf diesem Rechner nicht gestartet werden.\n\n{1}",
   "arcademy_open_failed_body": "The Arcademy konnte nicht geöffnet werden:\n\n{0}",
-  "arcademy_boot_failed_this_session": "The Arcademy konnte beim letzten Versuch auf diesem Rechner nicht starten.\n\nNoch einmal versuchen?"
+  "arcademy_boot_failed_this_session": "The Arcademy konnte beim letzten Versuch auf diesem Rechner nicht starten.\n\nNoch einmal versuchen?",
+  "label_ambient_bubble_xp_budget": "Blasen-XP heute: {0}/{1}",
+  "label_resume_takeover_on_startup": "↻ Übernahme beim Start fortsetzen",
+  "tooltip_autonomy_resume_on_startup": "Wenn aktiviert, aktiviert sich die Übernahme beim nächsten Start der App erneut. Standardmäßig aus, die Übernahme startet also immer ausgeschaltet."
 }
