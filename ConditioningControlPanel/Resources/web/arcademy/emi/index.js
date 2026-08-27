@@ -229,6 +229,11 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
     /** COUNTER STOCK: re-read what the player owns (the shell calls this on a
      *  settled purchase). Returns {deskToy, varsity, jacket}. */
     setPrizes(bag) { return widget.setPrizes(bag); },
+    /** COUNTER STOCK (art install): wear one of `OUTFITS` - 'varsity' (bought),
+     *  or 'labcoat' / 'cheer' / 'swim', which cost nothing and unlock nothing.
+     *  Null or junk puts her back in the standard set. Returns the probe state.
+     *  TODO: no surface in the school calls this yet - see widget.js at OUTFITS. */
+    setOutfit(name) { return widget.setOutfit(name); },
     /** The `.emi` node. Read-only to callers; the widget owns its geometry. */
     get el() { return widget.el; },
     /** The dock button (bottom-right edge, up only while EMI is dismissed). */

@@ -182,21 +182,52 @@ export const BODY_FRAME_SRC = Object.freeze({
  * cosmetic. The swap is therefore armed by ONE probe (`armVarsity` below) and
  * the whole map moves at once or nothing does - and a probe that fails is
  * permanent for the sitting, because art is allowed to lag code. */
-export const VARSITY_DIR = './art/emi/varsity/';
-/** `./art/emi/body-idle.png` -> `./art/emi/varsity/body-idle.png`. PURE. */
-export function varsitySrc(std) {
+/* AND IT IS NOT THE ONLY COAT ANY MORE. The install of 2026-08-27 brought
+ * three more ten-pose sheets in - labcoat, cheer, swim - authored the same way
+ * and living in the same shape one folder down. So the jacket's lookup is
+ * GENERALISED rather than copied: one directory rule, one url rule, one map
+ * built by walking BODY_FRAME_SRC, and `varsitySrc`/`VARSITY_FRAME_SRC` kept
+ * as the names the rest of the bundle already imports.
+ *
+ * ONLY VARSITY IS A PURCHASE. `emi_varsity` is an sku in the catalog and the
+ * prize bag turns it on; labcoat, cheer and swim are NOT skus, carry no price
+ * and unlock nothing - they are art that is simply present, armed by the same
+ * neutral `setOutfit()` seam. Nothing in this file may invent a price, an sku
+ * or an unlock for them.
+ *
+ * TODO (owner decision, unmade): there is no surface in the school for CHOOSING
+ * an outfit. Until there is, the three unpriced sheets reach a player only
+ * through `setOutfit()`, exactly as varsity reaches one through the bag. Where
+ * the picker lives - the Records Office wardrobe, a settings row, a Prize
+ * Counter tab - is a design call, not a call this file gets to make. */
+/** The four sheets that exist as art. `varsity` is the only purchasable one. */
+export const OUTFITS = Object.freeze(['varsity', 'labcoat', 'cheer', 'swim']);
+/** Where a sheet lives. One folder down, same ten filenames. PURE. */
+export function outfitDir(name) { return './art/emi/' + String(name) + '/'; }
+/** `./art/emi/body-idle.png` -> `./art/emi/<outfit>/body-idle.png`. PURE. */
+export function outfitSrc(name, std) {
   const s = typeof std === 'string' ? std : '';
   const i = s.lastIndexOf('/');
-  return VARSITY_DIR + (i < 0 ? s : s.slice(i + 1));
+  return outfitDir(name) + (i < 0 ? s : s.slice(i + 1));
 }
-export const VARSITY_FRAME_SRC = Object.freeze((() => {
-  const out = {};
-  for (const k of Object.keys(BODY_FRAME_SRC)) out[k] = varsitySrc(BODY_FRAME_SRC[k]);
-  return out;
+/** outfit name -> its frozen ten-frame map. Built, never typed out by hand. */
+export const OUTFIT_FRAME_SRC = Object.freeze((() => {
+  const all = {};
+  for (const name of OUTFITS) {
+    const out = {};
+    for (const k of Object.keys(BODY_FRAME_SRC)) out[k] = outfitSrc(name, BODY_FRAME_SRC[k]);
+    all[name] = Object.freeze(out);
+  }
+  return all;
 })());
+export const VARSITY_DIR = outfitDir('varsity');
+/** `./art/emi/body-idle.png` -> `./art/emi/varsity/body-idle.png`. PURE. */
+export function varsitySrc(std) { return outfitSrc('varsity', std); }
+export const VARSITY_FRAME_SRC = OUTFIT_FRAME_SRC.varsity;
 /** The map a set name resolves to. Junk answers the standard set, never throws. */
 export function frameSetFor(name) {
-  return name === 'varsity' ? VARSITY_FRAME_SRC : BODY_FRAME_SRC;
+  return Object.prototype.hasOwnProperty.call(OUTFIT_FRAME_SRC, name)
+    ? OUTFIT_FRAME_SRC[name] : BODY_FRAME_SRC;
 }
 
 /* THE POSE WALK. Out to one side and back through the centre, then out to the
@@ -247,6 +278,60 @@ export function frameForFace(text) {
 /** The prop, docked at her lower corner. Missing art hides the node and that is
  *  the whole error path - art is allowed to arrive after the code does. */
 export const TOY_SRC = './art/emi/toy.png';
+/* ONE SKU, FIVE TOYS, AND THAT IS DELIBERATE. The catalog has exactly one
+ * `emi_desk_toy` row and it is not getting a second: what the token buys is "a
+ * toy on EMI's desk", and WHICH toy is on it rotates by day off the same seed
+ * her toy LINE already rotates on. Same night, same toy, every player - and
+ * tomorrow it is a different one. Nothing here adds an sku, a price or an
+ * unlock; the shelf is the counter's business and this is a wardrobe.
+ *
+ * A toy is a FRAME LIST or a single plate. `frames` is the animated shape;
+ * `src` on its own is a still, and it is legal - a toy that is drawn once and
+ * never moves must not need a four-entry array of the same file.
+ */
+/** How long one frame of a toy loop holds. Slow enough to read as a prop
+ *  fidgeting on a desk, not as a second thing on the screen asking to be
+ *  looked at - the same claim `emi-toy-bob` makes in widget.css. */
+export const TOY_FRAME_MS = 140;
+/** `./art/emi/toys/spinner_f1.png` ... PURE. */
+export function toyFrameSrc(name, n) {
+  return './art/emi/toys/' + String(name) + '_f' + String(n) + '.png';
+}
+function loop(name, n, ms) {
+  const frames = [];
+  for (let i = 1; i <= n; i += 1) frames.push(toyFrameSrc(name, i));
+  return Object.freeze({ key: name, frames: Object.freeze(frames), ms: ms || TOY_FRAME_MS });
+}
+/** The props that exist as art, in install order. */
+export const TOYS = Object.freeze([
+  loop('spinner', 4),
+  loop('globe', 4),
+  loop('lamp', 4),
+  /* the beads loop was composited frame by frame and is EIGHT, not four */
+  loop('beads', 8),
+  /* TODO (another agent, in flight 2026-08-27): the FLIP CLOCK is the fifth
+   * toy and it slots in RIGHT HERE, one more row, nothing else moves. If it
+   * ships as a single drawn plate rather than a frame list, the legal shape is
+   *   Object.freeze({ key: 'flipclock', src: './art/emi/toys/flipclock.png' })
+   * and `toyFrames()` below already reads it. */
+]);
+/** A toy's frames, whichever shape it was written in. Never throws, never
+ *  answers a hole: junk answers an empty list and the caller falls back. */
+export function toyFrames(toy) {
+  if (!toy || typeof toy !== 'object') return [];
+  if (Array.isArray(toy.frames) && toy.frames.length) return toy.frames;
+  if (typeof toy.src === 'string' && toy.src) return [toy.src];
+  return [];
+}
+/** WHICH TOY TONIGHT. Seeded on the UTC day exactly like the line, and TAGGED
+ *  so that adding a fifth toy can never re-deal the line under it (the
+ *  corkboard's rule for its poster, corkboard.js:405). PURE. */
+export function toyIndex(day) {
+  const s = (typeof day === 'string' ? day : '') + '|desk-toy';
+  let h = 5381;
+  for (let i = 0; i < s.length; i += 1) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return TOYS.length ? h % TOYS.length : 0;
+}
 /* THE THREE LINES, and the shipped English lives right here for the reason
  * ASK_SEND_LABEL's does: no lexicon ever reaches EMI (emi/moments.js's law), so
  * the SHELL resolves `emi_toy_1..3` and hands the ANSWERS down as
@@ -787,6 +872,63 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   /** The toy art 404'd once; the prop stays down however often the bag is set. */
   let toyBroken = false;
 
+  /* ---------------------- the desk toy's loop --------------------------- */
+  /* TONIGHT'S TOY, picked ONCE at mount off the same UTC day the line is picked
+   * off. It does not re-roll mid-sitting: a prop that changed shape while a
+   * player was looking at it would read as a bug, not as a rotation. */
+  const toyPick = TOYS[toyIndex(isoDay() || '')] || TOYS[0] || null;
+  /* An empty table is not a crash: TOY_SRC is what the prop wore before any of
+   * this landed and it is still a legal plate to stand on. */
+  let toyPlan = toyFrames(toyPick);
+  if (!toyPlan.length) toyPlan = [TOY_SRC];
+  /** The day's loop would not load. TOY_SRC is the last plate she falls back
+   *  to, and it is tried exactly once before the prop is given up on. */
+  let toyFellBack = false;
+  let toyStep = 0;
+  let toyTimer = null;
+
+  function stopToyLoop() {
+    if (toyTimer !== null) { clearInterval(toyTimer); toyTimer = null; }
+  }
+
+  /* THREE SEPARATE REFUSALS, and they are not the same question.
+   *  - REDUCED MOTION kills the animation outright (splitflap.js's ruling): the
+   *    prop is still on the desk, it simply stands still on frame 1.
+   *  - A HIDDEN TAB has nothing to paint, so the interval must not exist.
+   *  - A DOCKED EMI is inside `display:none`; same.
+   * It is SILENT by design. shell/audio.js owns the only audio node on this
+   * page and a prop that ticked every 140ms would be unbearable, so no cue is
+   * fired here - the toy already has its one voice, at pokeToy(). */
+  function startToyLoop() {
+    stopToyLoop();
+    if (toy.hidden || toyBroken || hidden) return;
+    if (toyPlan.length < 2) return;              // a single plate never animates
+    if (reducedMotion()) { showToyFrame(0); return; }
+    if (typeof document !== 'undefined' && document.hidden === true) return;
+    const ms = Math.max(60, Number(toyPick && toyPick.ms) || TOY_FRAME_MS);
+    toyTimer = setInterval(() => {
+      if (toy.hidden || toyBroken || hidden || reducedMotion()
+        || (typeof document !== 'undefined' && document.hidden === true)) { stopToyLoop(); return; }
+      showToyFrame(toyStep + 1);
+    }, ms);
+  }
+
+  function showToyFrame(i) {
+    if (!toyPlan.length) return;
+    toyStep = ((i % toyPlan.length) + toyPlan.length) % toyPlan.length;
+    try { toy.src = toyPlan[toyStep]; } catch (e) { /* noop */ }
+  }
+
+  /* The tab going away is not a hide and not a destroy, so nothing above hears
+   * it. One listener, and destroy() takes it back off. */
+  function onToyVisibility() {
+    if (typeof document !== 'undefined' && document.hidden === true) stopToyLoop();
+    else startToyLoop();
+  }
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('visibilitychange', onToyVisibility);
+  }
+
   /** Move the whole wardrobe over, and repaint the pose she is wearing now. */
   function useFrameSet(map) {
     if (!map || map === frameSet) return false;
@@ -805,6 +947,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
    * double) leaves the standard set standing for ever and says so once.
    */
   function armVarsity() {
+    if (outfitPick) return;          // a chosen sheet outranks the bag's default
     if (!prizeState.varsity || varsityState !== 'off') return;
     if (typeof Image !== 'function') { varsityState = 'failed'; return; }
     let im = null;
@@ -827,12 +970,65 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     preloaded.push(im);
   }
 
+  /* ---------------------- the neutral outfit selector -------------------
+   * THREE OF THE FOUR SHEETS ARE NOT PRIZES. `emi_varsity` is an sku and the
+   * bag above turns it on; labcoat, cheer and swim are art that is simply in
+   * the bundle, with no price, no sku and no unlock - so they reach her through
+   * a plain seam that names a sheet and nothing else. This function must never
+   * grow an ownership test for those three, and `setOutfit('varsity')` still
+   * defers to the bag because that one IS bought.
+   *
+   * THE SWAP IS STILL ALL TEN FRAMES OR NONE, for the reason THE VARSITY JACKET
+   * gives at the top of this file: one probe on `body-idle.png`, and a sheet
+   * that is not in the bundle leaves the standard set standing.
+   *
+   * TODO (owner decision, unmade): nothing in the school CALLS this yet, because
+   * there is no surface for choosing an outfit. Deliberately not invented here -
+   * see the note at OUTFITS. */
+  let outfitPick = null;
+  let outfitState = 'off';
+
+  function armOutfit(name) {
+    const want = (typeof name === 'string' && OUTFITS.indexOf(name) >= 0) ? name : null;
+    if (want === 'varsity' && !prizeState.varsity) return outfitState;   // the one gate
+    outfitPick = want;
+    if (!want) {
+      outfitState = 'off';
+      useFrameSet(BODY_FRAME_SRC);
+      return outfitState;
+    }
+    const map = frameSetFor(want);
+    if (typeof Image !== 'function') { outfitState = 'failed'; return outfitState; }
+    let im = null;
+    try { im = new Image(); } catch (e) { outfitState = 'failed'; return outfitState; }
+    outfitState = 'probing';
+    im.onload = () => {
+      if (outfitState !== 'probing' || outfitPick !== want) return;
+      outfitState = 'on';
+      useFrameSet(map);
+      preloadFrames(map);
+      say('emi: outfit ' + want + ' on - the whole pose set moved');
+    };
+    im.onerror = () => {
+      if (outfitState !== 'probing' || outfitPick !== want) return;
+      outfitState = 'failed';
+      outfitPick = null;
+      useFrameSet(BODY_FRAME_SRC);
+      say('emi: outfit ' + want + ' is not in the bundle yet - the standard set stands');
+    };
+    try { im.src = map.idle; }
+    catch (e) { outfitState = 'failed'; }
+    preloaded.push(im);
+    return outfitState;
+  }
+
   /** Re-read the bag and light (or unlight) what it says. Idempotent. */
   function applyPrizes() {
     prizeState = readPrizes(prizeSrc);
     const wantToy = prizeState.deskToy && !toyBroken;
-    if (wantToy && !toy.src) { try { toy.src = TOY_SRC; } catch (e) { /* noop */ } }
+    if (wantToy && !toy.src) showToyFrame(0);
     toy.hidden = !wantToy;
+    if (wantToy) startToyLoop(); else stopToyLoop();
     armVarsity();
     return prizeState;
   }
@@ -840,7 +1036,20 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   /* A PROP THAT WILL NOT LOAD IS NOT AN ERROR EITHER: the node goes away, and
    * it does not come back this sitting however often the bag is re-set. */
   if (toy.addEventListener) {
-    toy.addEventListener('error', () => { toyBroken = true; toy.hidden = true; });
+    toy.addEventListener('error', () => {
+      /* THE DAY'S LOOP MAY NOT BE IN THE BUNDLE, and TOY_SRC has shipped since
+       * the prize did - so a broken frame drops the whole loop back to the one
+       * still plate rather than taking the prop down. A second error, on the
+       * plate itself, is the end of it for the sitting. */
+      stopToyLoop();
+      if (!toyFellBack) {
+        toyFellBack = true;
+        toyPlan = [TOY_SRC];
+        showToyFrame(0);
+        return;
+      }
+      toyBroken = true; toy.hidden = true;
+    });
     /* INSIDE `.emi`, so stopping this stream is legal and necessary - the x
      * does exactly the same, and for the same reason: a poke at the toy is
      * never also a head-pat and never the start of a drag. Nothing OUTSIDE the
@@ -1834,6 +2043,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     emitGesture('gone', { reason: 'hide' });
     unmountAsk(false); dropHeldLine();
     cancelChain(); killTimers(); stopBlink(); stopSway(); clearBody(); setBubble(null);
+    stopToyLoop();                   // COUNTER STOCK: no interval inside display:none
     clearApproachTimers();
     restGaze();
     try { canvas.style.transform = ''; } catch (e) { /* noop */ }
@@ -1858,6 +2068,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     dock.hidden = true;
     place();
     beginVisible();
+    startToyLoop();                  // COUNTER STOCK: the prop picks its loop back up
     idle();
     save(true);
     if (!(opts && opts.silent)) emitGesture('restore');
@@ -2941,6 +3152,17 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     },
     /** What she is wearing: 'off' | 'probing' | 'on' | 'failed'. Read-only. */
     get varsity() { return varsityState; },
+    /**
+     * WEAR A SHEET. One of OUTFITS, or null/junk for the standard set. Returns
+     * the probe state. `varsity` is the only name that can be refused, because
+     * it is the only one that is bought; the other three are just art.
+     * @param {?string} name
+     */
+    setOutfit(name) { return armOutfit(name); },
+    /** The sheet a selector asked for, or null when she is in the standard set. */
+    get outfit() { return outfitPick; },
+    /** The selector's probe: 'off' | 'probing' | 'on' | 'failed'. Read-only. */
+    get outfitState() { return outfitState; },
     /** The url the CURRENT wardrobe resolves a frame key to. Test seam. */
     frameSrc(key) { return frameUrl(frameKey(key) || 'idle'); },
     /** The desk-toy prop node (hidden unless the prize is owned). Read-only. */
@@ -3066,6 +3288,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       /* COUNTER STOCK: a probe in flight answers into a widget that is gone.
        * It owns no timer - closing its own gate is the whole cancellation. */
       if (varsityState === 'probing') varsityState = 'failed';
+      if (outfitState === 'probing') outfitState = 'failed';
       cancelTrip();                  // W2a: never leave a trip timer behind
       unmountAsk(false);             // ASKS: never leave a live chip behind
       dropHeldLine();                // ...nor a line waiting for one to end
@@ -3074,6 +3297,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       // clearBody() is the easy one to miss: `bodyTimer` outlives everything else
       // and its callback re-adds `.breath` to a node that is no longer in the page.
       cancelChain(); killTimers(); stopBlink(); stopSway(); disarmHold(); clearBody();
+      stopToyLoop();                 // COUNTER STOCK: the toy's is the newest timer
       clearApproachTimers();
       clearGazeNudge();               // HEARTBEAT: the one timer restGaze owns
       activitySubs.clear();
@@ -3088,6 +3312,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null; }
       if (typeof document !== 'undefined' && document.removeEventListener) {
         document.removeEventListener('pointermove', onDocMove);
+        document.removeEventListener('visibilitychange', onToyVisibility);
       }
       if (typeof window !== 'undefined' && window.removeEventListener) {
         window.removeEventListener('resize', onResize);
