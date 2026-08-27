@@ -652,6 +652,17 @@ namespace ConditioningControlPanel.Services
 
             var cut = MiddleCutSystemPrompt(original, cap);
             if (cut.Length >= original.Length) return null;
+            // MiddleCutSystemPrompt returns the two safety blocks joined when they alone bust the
+            // cap, which can still be over it. Shipping that would buy a third round trip that is
+            // guaranteed to 400 - and the safety blocks are not ours to shorten to avoid it.
+            if (cut.Length > cap)
+            {
+                App.Logger?.Warning(
+                    "AiService: cannot salvage the system message - the safety preamble and floor alone are " +
+                    "{Chars} chars against a {Cap}-char cap, and neither may be trimmed",
+                    cut.Length, cap);
+                return null;
+            }
 
             var salvaged = (ProxyChatMessage[])messages.Clone();
             salvaged[0] = new ProxyChatMessage { Role = messages[0].Role, Content = cut };

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.AIService;
@@ -72,15 +73,33 @@ public class PromptCharBudgetTests : IDisposable
     }
 
     /// <summary>Points App.Mods at the given built-in manifest and seeds its shipped pool.</summary>
-    private void UseMod(ModManifest manifest)
+    private void UseMod(ModManifest manifest, Dictionary<string, string>? poolOverride = null)
     {
         var mods = (ModService)RuntimeHelpers.GetUninitializedObject(typeof(ModService));
         SetPrivate(mods, "_activeMod", new ModPackage(manifest, null, isBuiltIn: true));
         SetStatic("Mods", mods);
 
-        var pool = manifest.Browser?.DefaultVideoLinks;
+        var pool = poolOverride ?? manifest.Browser?.DefaultVideoLinks;
         BambiSprite.VideoPoolProvider = () => pool;
         BambiSprite.InvalidateStablePrompt();
+    }
+
+    /// <summary>
+    /// The ANALYTIC worst case, not an observed one. The title sample is drawn once per app-session
+    /// from a per-launch seed, so a plain run measures ONE permutation out of many and the spread
+    /// between the cheapest and the dearest runs to hundreds of chars: wide enough to hide a
+    /// regression, or to red-fail CI on an unlucky seed. Handing the sprite a pool holding only the
+    /// longest <see cref="BambiSprite.BambiTitleSample"/> titles forces the sample to be exactly the
+    /// most expensive one that can ever occur, whatever the seed does.
+    /// </summary>
+    private static Dictionary<string, string> WorstCaseBambiPool()
+    {
+        var links = BuiltInMods.BambiSleep.Browser!.DefaultVideoLinks!;
+        return links
+            .Where(kvp => !string.Equals(kvp.Key, "Movies", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(kvp => kvp.Key.Length)
+            .Take(BambiSprite.BambiTitleSample)
+            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
     }
 
     private static readonly string[] BuiltInPresetIds =
@@ -109,7 +128,9 @@ public class PromptCharBudgetTests : IDisposable
     [InlineData(BuiltInMods.CCPDefaultId)]
     public void EveryBuiltInPreset_BuildsAPrefixUnderTheSoftCeiling(string modId)
     {
-        UseMod(modId == BuiltInMods.BambiSleepId ? BuiltInMods.BambiSleep : BuiltInMods.CCPDefault);
+        // Bambi runs against the worst-case title permutation, so this cannot pass on a lucky seed.
+        if (modId == BuiltInMods.BambiSleepId) UseMod(BuiltInMods.BambiSleep, WorstCaseBambiPool());
+        else UseMod(BuiltInMods.CCPDefault);
 
         var over = new List<string>();
         var report = new StringBuilder();
@@ -127,23 +148,42 @@ public class PromptCharBudgetTests : IDisposable
     }
 
     /// <summary>
-    /// The worst realistic Bambi config: the spiciest preset AND a taken quiz (which appends a
-    /// ~400-char profile block to the prefix). This is the exact shape that used to bust the
-    /// proxy's 10,000-char hard reject and pin the companion on canned phrases permanently.
+    /// The compound worst case: the longest preset (Slut Mode) AND a taken quiz (whose profile
+    /// block the settings setter caps at 200 chars) AND the most expensive title permutation. This
+    /// is the exact shape that used to bust the proxy's 10,000-char hard reject and pin the
+    /// companion on canned phrases permanently.
+    ///
+    /// <para>It lands ~280 chars OVER the 9,000-char soft ceiling and stays there on purpose. The
+    /// only lever left inside this block is the title count, and cutting the list back under the
+    /// ceiling means listing fewer titles than
+    /// <see cref="RecentRecommendations.MaxTracked"/> - a prompt that names N videos while the tail
+    /// forbids all N. Losing the tail on this one configuration is the cheaper failure than having
+    /// nothing legal to suggest, so the pin here is the hard cap plus a tight ceiling on the
+    /// overshoot: the request still succeeds, and the block cannot quietly regrow.</para>
     /// </summary>
     [Fact]
     public void BambiWithSlutModeAndAQuizResult_StaysUnderTheProxyHardRejectCap()
     {
-        UseMod(BuiltInMods.BambiSleep);
+        UseMod(BuiltInMods.BambiSleep, WorstCaseBambiPool());
         _settings.SlutModeEnabled = true;
         _settings.LatestQuizScorePercentage = 87;
         _settings.LatestQuizArchetype = "Eager Bimbo";
         _settings.LatestQuizProfileText = new string('x', 400);
 
         var length = PrefixLengthFor(PersonalityPresets.SlutModeId);
-        _out.WriteLine($"bambi + slutmode + quiz prefix = {length}");
+        _out.WriteLine($"bambi + slutmode + quiz prefix (worst-case titles) = {length}");
+        // 10,295 before this change, and every cloud call 400'd.
         Assert.True(length < PromptAssembler.ProxyHardRejectCap,
             $"prefix {length} chars is at or over the {PromptAssembler.ProxyHardRejectCap}-char proxy cap");
+
+        // Between the soft ceiling and the hard cap the request still goes through, but Compose can
+        // only shed the tail, so memory and the anti-repeat set are dropped. Bound how far into that
+        // band the compound worst case is allowed to reach; every other configuration, this preset
+        // included, stays fully under the ceiling.
+        const int OvershootAllowance = 400;
+        Assert.True(length < PromptAssembler.SystemMessageCharCeiling + OvershootAllowance,
+            $"prefix {length} chars is more than {OvershootAllowance} over the " +
+            $"{PromptAssembler.SystemMessageCharCeiling}-char soft ceiling");
     }
 
     /// <summary>
@@ -153,19 +193,48 @@ public class PromptCharBudgetTests : IDisposable
     [Fact]
     public void BambiMediaBlock_StaysUnderItsOwnBudget()
     {
-        UseMod(BuiltInMods.BambiSleep);
+        UseMod(BuiltInMods.BambiSleep, WorstCaseBambiPool());
         var block = InvokeCoreMediaLinks();
-        _out.WriteLine($"bambi media block = {block.Length} chars");
-        // 3,252 chars before this change; ~1,820 after. The floor is not lower because the eight
-        // BambiCloud playlist links are ~750 chars on their own and are not compressible - they
-        // must reach the model verbatim or it cannot emit a working markdown link. The budget is
-        // set above the worst-case title sample (the ten longest pool titles), not the average.
-        Assert.True(block.Length < 2000, $"Bambi media block is {block.Length} chars (budget 2000)");
+        _out.WriteLine($"bambi media block (worst-case titles) = {block.Length} chars");
+        // 3,252 chars before this change. The floor is not far below because the eight BambiCloud
+        // playlist links are ~750 chars on their own and are not compressible - they must reach the
+        // model verbatim or it cannot emit a working markdown link. Measured against the worst-case
+        // title permutation, not an average one.
+        Assert.True(block.Length < 2400, $"Bambi media block is {block.Length} chars (budget 2400)");
 
-        // Still load-bearing: the playlist markdown examples and the playlist URLs themselves.
+        // Still load-bearing: the playlist URLs, and a worked [Title](url) example whose SHAPE a
+        // small model can copy. Instructions without a demonstration are what produced invented
+        // URLs before, so the example is pinned by pattern rather than by prose.
         Assert.Contains("HOW TO LINK", block, StringComparison.Ordinal);
         Assert.Contains("bambicloud.com/playlist/", block, StringComparison.Ordinal);
         Assert.Contains("[IQ Programming]", block, StringComparison.Ordinal);
+        Assert.Matches(@"Example:[^\n]*\[[^\]]+\]\(https://bambicloud\.com/playlist/[0-9a-fA-F-]+\)", block);
+
+        // The one behaviour the deleted obsolete-audio paragraph carried, kept in a single line: an
+        // ask by a retired audio name is steered to the playlist that replaced it.
+        Assert.Contains("Bambi IQ Lock", block, StringComparison.Ordinal);
+        Assert.Contains("Programming playlist", block, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The sample has to stay wider than the anti-repeat window. The dynamic tail bans the last
+    /// <see cref="RecentRecommendations.MaxTracked"/> picks by name for 24h; if the media block
+    /// listed that many titles or fewer, a long session would arrive at a prompt that names N
+    /// videos and forbids all N in the same breath, leaving the model nothing legal to suggest.
+    /// The constant is written as MaxTracked + margin, so this pins the relationship, not a number.
+    /// </summary>
+    [Fact]
+    public void TheTitleSample_IsWiderThanTheAntiRepeatWindow()
+    {
+        Assert.True(BambiSprite.BambiTitleSample > RecentRecommendations.MaxTracked,
+            $"sample {BambiSprite.BambiTitleSample} does not exceed the {RecentRecommendations.MaxTracked}-pick " +
+            "exclusion window, so a long session can ban every title the model can see");
+
+        // And it has to be drawable from the shipped pool, or the margin is imaginary.
+        var pool = BuiltInMods.BambiSleep.Browser!.DefaultVideoLinks!.Keys
+            .Count(k => !string.Equals(k, "Movies", StringComparison.OrdinalIgnoreCase));
+        Assert.True(pool >= BambiSprite.BambiTitleSample,
+            $"pool has {pool} titles, sample wants {BambiSprite.BambiTitleSample}");
     }
 
     /// <summary>Other mods keep the generic branch they always had.</summary>
@@ -321,6 +390,28 @@ public class MiddleCutSystemPromptTests
         Assert.True(messages[0].Content!.Length > Cap);
     }
 
+    /// <summary>
+    /// When the two safety blocks alone bust the cap there is nothing left to cut - neither may be
+    /// trimmed - so the salvage declines rather than spending a third round trip on a request that
+    /// is certain to come back 400. The user gets the canned-phrase fallback either way; this only
+    /// decides whether they wait through another proxy call first.
+    /// </summary>
+    [Fact]
+    public void Salvage_ReturnsNull_WhenTheSafetyBlocksAloneBustTheCap()
+    {
+        var tinyCap = SafetyComposer.Preamble.Length + 10;
+        var messages = new[]
+        {
+            new ProxyChatMessage { Role = ChatMessage.RoleSystem, Content = Oversize(Cap + 2000) },
+            new ProxyChatMessage { Role = ChatMessage.RoleUser, Content = "hi" }
+        };
+
+        // The cut itself still refuses to trim either block, and so still exceeds the cap...
+        Assert.True(AiService.MiddleCutSystemPrompt(messages[0].Content!, tinyCap).Length > tinyCap);
+        // ...which is exactly why the salvage refuses to send it.
+        Assert.Null(AiService.SalvageOversizeSystemMessage(messages, tinyCap));
+    }
+
     [Fact]
     public void Salvage_ReturnsNull_WhenThereIsNoSystemMessage()
     {
@@ -386,7 +477,11 @@ public class OversizeNoticeTests : IDisposable
 {
     public OversizeNoticeTests() => PromptAssembler.ResetOversizeNoticeForTests();
 
-    public void Dispose() => PromptAssembler.ResetOversizeNoticeForTests();
+    public void Dispose()
+    {
+        PromptAssembler.NoticeDispatcherForTests = null;
+        PromptAssembler.ResetOversizeNoticeForTests();
+    }
 
     private static string OverCapPrefix() =>
         SafetyComposer.Preamble
@@ -403,24 +498,97 @@ public class OversizeNoticeTests : IDisposable
         Assert.False(PromptAssembler.OversizeNoticeRaised);
     }
 
+    /// <summary>
+    /// With no surface to show it on, the session's single notice must NOT be spent: an ambient
+    /// compose during startup happens before there is an Application, and burning the notice there
+    /// would leave the user with a degraded companion and no reason ever given. Composing has to
+    /// stay safe off the UI thread all the same, so this doubles as the assertion that an oversize
+    /// prompt on a background thread cannot throw.
+    /// </summary>
     [Fact]
-    public void APromptOverTheHardCap_RaisesTheNoticeExactlyOnce()
+    public void WithNoUiToShowItOn_TheNoticeIsNotSpent()
     {
+        PromptAssembler.NoticeDispatcherForTests = () => null;
         var prefix = OverCapPrefix();
-        Assert.False(PromptAssembler.OversizeNoticeRaised);
 
         for (int i = 0; i < 5; i++)
-        {
-            // No Application.Current in a test host, so the dispatch is a no-op - which is itself
-            // the assertion that composing a prompt off the UI thread cannot throw.
             PromptAssembler.Compose(prefix, PromptAssembler.TailHeader + "\nAnswer in one short bubble.",
                 "Answer in one short bubble.");
-        }
 
-        Assert.True(PromptAssembler.OversizeNoticeRaised);
+        Assert.False(PromptAssembler.OversizeNoticeRaised);
+        // Still unspent: the first compose that DOES have a surface gets to show it.
+        Assert.True(PromptAssembler.ClaimOversizeNotice());
     }
 
+    /// <summary>
+    /// And once a surface exists, an oversize prompt raises it - once, however many calls follow.
+    /// </summary>
     [Fact]
-    public void TheNoticeTextIsLocalized() =>
-        Assert.Equal("companion_prompt_too_long_notice", PromptAssembler.OversizeNoticeLocKey);
+    public void OnceThereIsAUi_TheNoticeIsRaisedExactlyOnce()
+    {
+        var dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+        PromptAssembler.NoticeDispatcherForTests = () => dispatcher;
+        var prefix = OverCapPrefix();
+
+        for (int i = 0; i < 5; i++)
+            PromptAssembler.Compose(prefix, PromptAssembler.TailHeader + "\nAnswer in one short bubble.",
+                "Answer in one short bubble.");
+
+        Assert.True(PromptAssembler.OversizeNoticeRaised);
+        // Spent exactly once: nothing is left for a sixth call to claim.
+        Assert.False(PromptAssembler.ClaimOversizeNotice());
+    }
+
+    /// <summary>
+    /// The once-per-session property itself, on the latch the raise takes after its guard passes.
+    /// Five hundred oversize calls in one session are worth exactly one toast.
+    /// </summary>
+    [Fact]
+    public void TheNotice_IsClaimableExactlyOncePerSession()
+    {
+        Assert.True(PromptAssembler.ClaimOversizeNotice());
+        Assert.True(PromptAssembler.OversizeNoticeRaised);
+
+        for (int i = 0; i < 500; i++) Assert.False(PromptAssembler.ClaimOversizeNotice());
+    }
+
+    /// <summary>
+    /// The key has to resolve to real English, or the toast reads "companion_prompt_too_long_notice"
+    /// at the one moment the user needs a sentence. Read from the shipped file rather than through
+    /// Loc, which wants an App behind it.
+    /// </summary>
+    [Fact]
+    public void TheNoticeKey_ResolvesToRealEnglishText()
+    {
+        var en = EnglishStrings();
+        Assert.True(en.TryGetValue(PromptAssembler.OversizeNoticeLocKey, out var text),
+            $"{PromptAssembler.OversizeNoticeLocKey} is missing from en.json");
+        Assert.False(string.IsNullOrWhiteSpace(text));
+        Assert.NotEqual(PromptAssembler.OversizeNoticeLocKey, text);
+        // It has to say what happened AND what to do about it, or it is only an alarm.
+        Assert.Contains("too long", text!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Trim", text!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static Dictionary<string, string> EnglishStrings()
+    {
+        var dir = AppContext.BaseDirectory;
+        for (int i = 0; i < 8 && !string.IsNullOrEmpty(dir); i++)
+        {
+            foreach (var relative in new[]
+                     {
+                         Path.Combine("Localization", "Languages", "en.json"),
+                         Path.Combine("ConditioningControlPanel", "Localization", "Languages", "en.json")
+                     })
+            {
+                var candidate = Path.Combine(dir, relative);
+                if (File.Exists(candidate))
+                    return JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(candidate))
+                           ?? new Dictionary<string, string>();
+            }
+            dir = Path.GetDirectoryName(dir);
+        }
+
+        throw new FileNotFoundException("en.json not found from " + AppContext.BaseDirectory);
+    }
 }

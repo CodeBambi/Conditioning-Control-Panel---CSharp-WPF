@@ -486,6 +486,20 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// <summary>True once the notice has been raised this session. Tests + diagnostics.</summary>
         internal static bool OversizeNoticeRaised => Volatile.Read(ref _oversizeNoticeRaised) != 0;
 
+        /// <summary>
+        /// Takes the session's single notice, or returns false because someone already has it.
+        /// Split out from the raise so the once-per-session property is testable on its own: the
+        /// raise itself is guarded on a live dispatcher, which a test host does not have.
+        /// </summary>
+        internal static bool ClaimOversizeNotice() => Interlocked.Exchange(ref _oversizeNoticeRaised, 1) == 0;
+
+        /// <summary>
+        /// Test seam for the surface the notice is raised on. Null in production, where the surface
+        /// is <c>Application.Current?.Dispatcher</c>. A test host has no Application, so without
+        /// this the guard-before-latch ordering below could only be observed as "nothing happened".
+        /// </summary>
+        internal static Func<System.Windows.Threading.Dispatcher?>? NoticeDispatcherForTests;
+
         private static string WarnIfOversize(string systemPrompt)
         {
             if (systemPrompt.Length > SystemMessageCharCeiling)
@@ -514,12 +528,17 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         private static void RaiseOversizeNoticeOnce()
         {
-            if (Interlocked.Exchange(ref _oversizeNoticeRaised, 1) != 0) return;
-
             try
             {
-                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                // The guard comes FIRST and the latch second. An oversize compose can happen before
+                // Application.Current exists (a startup ambient call) or after shutdown began;
+                // burning the session's single notice on one of those would leave the user with the
+                // degraded companion and no explanation at all.
+                var dispatcher = NoticeDispatcherForTests != null
+                    ? NoticeDispatcherForTests()
+                    : System.Windows.Application.Current?.Dispatcher;
                 if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                if (!ClaimOversizeNotice()) return;
 
                 dispatcher.BeginInvoke(new Action(() =>
                 {

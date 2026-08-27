@@ -21,6 +21,15 @@ namespace ConditioningControlPanel.Services
         /// passes so pool titles reach the model un-rewritten (see the call site).</summary>
         private const string MediaLinksToken = "{{MEDIA_LINKS}}";
 
+        /// <summary>
+        /// How many pool titles the Bambi media block lists. Deliberately LARGER than
+        /// <see cref="Companion.Brain.RecentRecommendations.MaxTracked"/>: that many recent picks
+        /// are banned for 24h by the exclusion line in the dynamic tail, so a sample of MaxTracked
+        /// or fewer would end a long session listing N videos and forbidding every one of them.
+        /// Expressed as a reference rather than a literal so the two cannot drift apart.
+        /// </summary>
+        internal const int BambiTitleSample = Companion.Brain.RecentRecommendations.MaxTracked + 4;
+
         // Core video/audio links that should ALWAYS be included in prompts
         // These exact names match AvatarTubeWindow.KnownVideoLinks for clickable links
         private string GetCoreMediaLinks()
@@ -36,14 +45,24 @@ namespace ConditioningControlPanel.Services
                 // keeps the same oversized system message, and the companion falls back to canned
                 // Idle phrases forever. That is the whole of the "the Bambi mod's AI doesn't work,
                 // she just repeats herself" report. Three things paid for the cut:
-                //   1. the obsolete-audio ban paragraph is gone: LinkFloorRule plus the verbatim
-                //      rule below already forbid naming anything that is not on these lists;
+                //   1. the obsolete-audio ban PARAGRAPH is gone, replaced by the one line below
+                //      carrying the only behaviour it had: an ask for old audio by name maps to
+                //      the matching Programming playlist. (LinkFloorRule does NOT cover this - it
+                //      says the opposite, "NAME it in words only" - and the verbatim rule below
+                //      governs titles only. The cover for audio is the explicit "never name audio
+                //      that is not a playlist below" sentence in HOW TO LINK.)
                 //   2. the video list is a SAMPLE of the pool, not all of it (the same helper the
                 //      example title already used, so it stays byte-stable within an app session);
                 //   3. the prose around the lists is stated once instead of three times.
                 // Anything added back here comes out of the tail: memory, time of day and the
                 // anti-repeat set are what get dropped first when this block grows.
-                const int BambiTitleSample = 10;
+                //
+                // The sample MUST stay LARGER than the anti-repeat window. RecentRecommendations
+                // bans its last MaxTracked picks for 24h through the exclusion line in the tail,
+                // so a sample of MaxTracked or fewer ends the session listing N videos and
+                // forbidding all N - a strictly worse prompt than the 3,250-char one this
+                // replaced. Referencing the constant (not copying the number) is what stops the
+                // two drifting apart. See <see cref="BambiTitleSample"/>.
 
                 // The pool: the Bambi mod's shipped DefaultVideoLinks, or the user's own curated
                 // override from Settings → Hypnotube Links. Falls back to the legacy hand-tuned
@@ -62,8 +81,9 @@ CLICKABLE MEDIA - name these often; the app turns them into real links.
 
 ==== HOW TO LINK ====
 PLAYLIST: copy its whole markdown line from the list below, brackets AND URL, exactly as printed.
+  Example: ""Listen to [IQ Programming](https://bambicloud.com/playlist/ff15f538-6e6b-433c-b68b-b4af5ee5d14d)""
 VIDEO: say the exact title and nothing else, e.g. ""Try {exampleTitle}"", in your own voice.
-Never write a URL of your own, and never name audio that is not a playlist below.
+Never write a URL of your own, and never name audio that is not a playlist below. Asked for old audio by name (""Bambi IQ Lock"", ""Bambi Cockslut""), give the matching Programming playlist instead.
 
 ==== BAMBICLOUD PLAYLISTS (the ONLY audio you can name) ====
 [IQ Programming](https://bambicloud.com/playlist/ff15f538-6e6b-433c-b68b-b4af5ee5d14d)
