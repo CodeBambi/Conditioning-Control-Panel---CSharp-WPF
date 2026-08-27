@@ -352,12 +352,26 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // The page already reported boot-error once this app session (WebView2 runtime
+                // missing, WebGL refused, the shell never answered its deadline). DtRH consumes its
+                // own BootFailedThisSession the same way at BtnStartChaos_Click - there it picks the
+                // native fallback, and here, where there is no fallback to pick, it stops us walking
+                // the user back into the identical black window. Relaunching the app clears the
+                // flag, which is exactly the advice the message gives.
+                if (Services.Arcademy.ArcademyHostService.BootFailedThisSession
+                    && !Services.Arcademy.ArcademyHostService.IsActive)
+                {
+                    MessageBox.Show(Loc.Get("arcademy_boot_failed_this_session"),
+                        Services.Arcademy.ArcademyHostService.ProductName, MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
                 Services.Arcademy.ArcademyHostService.Launch();
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "BtnStartArcademy_Click failed");
-                MessageBox.Show("Couldn't open the Arcademy:\n\n" + ex.Message,
+                MessageBox.Show(Loc.GetF("arcademy_open_failed_body", ex.Message),
                     Services.Arcademy.ArcademyHostService.ProductName, MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }

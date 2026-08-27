@@ -795,6 +795,13 @@ namespace ConditioningControlPanel.Services
             try { if (Chaos.DtrhHostService.IsActive) Chaos.DtrhHostService.CloseActive(); }
             catch (Exception ex) { _log?.Debug("ActivateMod: DTRH close failed: {E}", ex.Message); }
 
+            // The Arcademy snapshots the active mod the same way DTRH does - its mod root (the
+            // virtual-host mapping for skinned art) and its whole lexicon are resolved once at
+            // launch - so a mid-session switch would leave the campus wearing the old mod's name
+            // for every room. Same cure, same shape.
+            try { if (Arcademy.ArcademyHostService.IsActive) Arcademy.ArcademyHostService.CloseActive(); }
+            catch (Exception ex) { _log?.Debug("ActivateMod: Arcademy close failed: {E}", ex.Message); }
+
             // Save current pool customizations before switching
             SaveCurrentPoolsToSettings(oldModId);
 

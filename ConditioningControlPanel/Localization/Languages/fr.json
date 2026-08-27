@@ -4614,5 +4614,15 @@
   "lockdown_poss_safety_dose": "Rien ne tourne ? Le verrouillage choisit pour toi",
   "lockdown_poss_safety_dose_tip": "Un verrouillage refuse de tourner à vide. Moteur éteint au départ : il est lancé pour toi. Rien d'activé (ou tu coupes tout en cours de route) : la gardienne active des fonctions, une de plus à chaque fois, et rend tout à la fin du minuteur.",
   "st4_braindrain_audio_rate": "Fréquence audio",
-  "label_braindrain": "Drainage Cérébral"
+  "label_braindrain": "Drainage Cérébral",
+
+  "_comment_arcademy_door": "The Arcademy (Play wall card, Ctrl+K row, failure dialogs)",
+  "play_arcademy_title": "The Arcademy",
+  "play_arcademy_new": "NOUVEAU",
+  "play_arcademy_blurb": "trois cours par jour. de petits jeux simples que tout le reste de ton écran rend difficiles. présente-toi, fais-toi noter, garde la série.",
+  "play_arcademy_cta": "Assister",
+  "play_arcademy_tooltip": "l'emploi du temps du jour t'attend.",
+  "arcademy_boot_error_body": "{0} n'a pas pu démarrer sur cette machine.\n\n{1}",
+  "arcademy_open_failed_body": "Impossible d'ouvrir The Arcademy :\n\n{0}",
+  "arcademy_boot_failed_this_session": "The Arcademy n'a déjà pas réussi à démarrer pendant cette session. Redémarre l'application et réessaie."
 }

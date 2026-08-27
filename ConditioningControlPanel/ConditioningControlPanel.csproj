@@ -526,10 +526,17 @@
          DtRH browser game (Resources\web\dtrh). Served to a WebView2 via virtual hosts, so they
          must live on disk in the output. Remove from the default None glob first so a no-copy
          None item can never suppress the Content copy for new extensions (woff2/json/etc).
-         Audio listed in $(ContentPackWebExclude) ships as a downloadable pack instead. -->
+         Audio listed in $(ContentPackWebExclude) ships as a downloadable pack instead.
+         The four arcademy *demo.html pages are BROWSER HARNESSES - standalone proofs for the
+         annex, the VN layer, EMI and the Records room, opened straight from a checkout during
+         development. Nothing in the app or the page graph links them (only two comments name
+         them), so they are dead weight in the installer and a stray unversioned entry point in
+         the virtual host. Excluded, not deleted: they are how those layers get worked on. -->
     <None Remove="Resources\web\**\*" />
     <Content Include="Resources\web\**\*"
              Exclude="Resources\web\**\CLAUDE.md;Resources\web\**\CAPTCHA_*.md;Resources\web\**\BUILD_PLAN.md;
+                      Resources\web\arcademy\annex\demo.html;Resources\web\arcademy\vn\demo.html;
+                      Resources\web\arcademy\emi\demo.html;Resources\web\arcademy\shell\recordsroom.demo.html;
                       $(ContentPackWebExclude)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>

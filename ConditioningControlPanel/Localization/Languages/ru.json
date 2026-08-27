@@ -4612,5 +4612,15 @@
   "lockdown_poss_safety_dose": "Ничего не запущено? Локдаун выберет за тебя",
   "lockdown_poss_safety_dose_tip": "Локдаун не работает вхолостую. Движок выключен при старте: его запустят за тебя. Ничего не включено (или ты выключишь всё посреди локдауна): надзирательница включит функции, каждый раз на одну больше, и вернёт всё обратно, когда таймер закончится.",
   "st4_braindrain_audio_rate": "Частота аудиоклипов",
-  "label_braindrain": "Промывка мозгов"
+  "label_braindrain": "Промывка мозгов",
+
+  "_comment_arcademy_door": "The Arcademy (Play wall card, Ctrl+K row, failure dialogs)",
+  "play_arcademy_title": "The Arcademy",
+  "play_arcademy_new": "НОВОЕ",
+  "play_arcademy_blurb": "три занятия в день. простые маленькие игры, которые всё остальное на экране делает сложными. приходи, получай оценку, держи серию.",
+  "play_arcademy_cta": "Прийти",
+  "play_arcademy_tooltip": "сегодняшнее расписание ждёт.",
+  "arcademy_boot_error_body": "Не удалось запустить {0} на этом компьютере.\n\n{1}",
+  "arcademy_open_failed_body": "Не удалось открыть The Arcademy:\n\n{0}",
+  "arcademy_boot_failed_this_session": "The Arcademy уже не смогла запуститься в этой сессии. Перезапусти приложение и попробуй снова."
 }

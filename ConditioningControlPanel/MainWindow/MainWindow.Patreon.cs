@@ -191,6 +191,21 @@ namespace ConditioningControlPanel
                     App.Logger?.Information("Entitlement lapsed: Haptics switched off");
                 }
 
+                // The Arcademy. Not a setting at all - a live T2 window with its own WebView2, its
+                // own XP payouts and its own progression writes, which the veil pass cannot cover
+                // because it is not on a tab. So this rung closes the WINDOW instead of clearing a
+                // flag, and does not touch `changed`: nothing was persisted. HasLabAccess is the
+                // one truth for the T2 bar (tier >= 2, whitelist, and the 14-day offline grace),
+                // exactly as the launch gate reads it, so a subscriber whose validation is still
+                // in flight is never thrown out of a class. CloseActive is idempotent and asks the
+                // page to wind down first, so an in-progress class saves its meta on the way out.
+                if (App.Patreon?.HasLabAccess != true
+                    && Services.Arcademy.ArcademyHostService.IsActive)
+                {
+                    Services.Arcademy.ArcademyHostService.CloseActive();
+                    App.Logger?.Information("Entitlement lapsed: the Arcademy was closed");
+                }
+
                 if (changed)
                 {
                     App.Settings?.Save();

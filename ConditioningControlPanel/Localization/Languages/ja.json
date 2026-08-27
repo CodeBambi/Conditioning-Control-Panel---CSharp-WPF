@@ -4605,5 +4605,15 @@
   "lockdown_poss_safety_dose": "何も動いていない？ロックダウンが代わりに選ぶ",
   "lockdown_poss_safety_dose_tip": "ロックダウンは空のままでは動きません。開始時にエンジンが止まっていれば代わりに起動します。何もオンでなければ（途中で全部オフにしても）、看守が機能をオンにし、毎回ひとつずつ増やし、タイマーが終わると全部元に戻します。",
   "st4_braindrain_audio_rate": "音声クリップの頻度",
-  "label_braindrain": "ブレインドレイン"
+  "label_braindrain": "ブレインドレイン",
+
+  "_comment_arcademy_door": "The Arcademy (Play wall card, Ctrl+K row, failure dialogs)",
+  "play_arcademy_title": "The Arcademy",
+  "play_arcademy_new": "新着",
+  "play_arcademy_blurb": "一日に三つの授業。単純な小さいゲームを、画面の上のほかのすべてが難しくします。出席して、採点されて、連続記録を守りましょう。",
+  "play_arcademy_cta": "出席する",
+  "play_arcademy_tooltip": "今日の時間割が待っています。",
+  "arcademy_boot_error_body": "{0} はこのパソコンで起動できませんでした。\n\n{1}",
+  "arcademy_open_failed_body": "The Arcademy を開けませんでした:\n\n{0}",
+  "arcademy_boot_failed_this_session": "The Arcademy はこのセッションで一度起動に失敗しています。アプリを再起動してからもう一度お試しください。"
 }

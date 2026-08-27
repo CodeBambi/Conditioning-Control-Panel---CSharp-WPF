@@ -2596,8 +2596,29 @@ namespace ConditioningControlPanel
             // The Arcademy, dev shortcut: `--arcademy` opens the mini-game hub straight away,
             // bypassing the Play strip. Launch() applies the same T2 + AudioOnlySession gates the
             // card's click does, so this skips the UI and nothing else.
+            //
+            // The DEV DOOR (LaunchDev) is a different thing from the shortcut: it sets
+            // init.devDoor, which the campus reads as a dev pass - every room becomes playable
+            // out of timetable, still graded and still paying real XP. That must never be
+            // reachable from a shipped build, so it is compiled out of Release and, in a Release
+            // build, only honoured with a debugger attached. Without one, `--arcademy` still
+            // opens the Arcademy, just through the ordinary front door every player uses.
             if (e.Args.Contains("--arcademy"))
+            {
+#if DEBUG
                 Services.Arcademy.ArcademyHostService.LaunchDev();
+#else
+                if (System.Diagnostics.Debugger.IsAttached)
+                {
+                    Services.Arcademy.ArcademyHostService.LaunchDev();
+                }
+                else
+                {
+                    Logger?.Information("--arcademy: dev door ignored in a Release build without a debugger; opening the Arcademy normally");
+                    Services.Arcademy.ArcademyHostService.Launch();
+                }
+#endif
+            }
 
             // Arm the offline mic features (wake word / push-to-talk) at startup if the user left them
             // on. They're decoupled from Takeover ("She's Listening" owns them), so they no longer wait

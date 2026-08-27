@@ -1030,6 +1030,19 @@ internal sealed class ChaosWebViewHost : IDisposable
         try { _opts.OnProcessFailed?.Invoke(e.ProcessFailedKind); } catch { }
     }
 
+    /// <summary>
+    /// Map a page <c>{type:'log'}</c> envelope's <c>level</c> field onto a Serilog level.
+    /// Only 'error' and 'warn'/'warning' are loud; everything else (including the bridge's 'info'
+    /// default, an absent field and any junk) is Debug. Case- and whitespace-insensitive.
+    /// </summary>
+    internal static Serilog.Events.LogEventLevel PageLogLevel(string? level)
+        => (level ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "error" => Serilog.Events.LogEventLevel.Error,
+            "warn" or "warning" => Serilog.Events.LogEventLevel.Warning,
+            _ => Serilog.Events.LogEventLevel.Debug,
+        };
+
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
         try
@@ -1052,9 +1065,14 @@ internal sealed class ChaosWebViewHost : IDisposable
                     if (_opts.HostOwnedFullscreen && _isFullscreen) SetFullscreen(false);
                     break;
                 case "log":
-                    // Information, not Debug: the global logger floor is Information and page
-                    // logs are the only devtools-less window into the hosted page.
-                    App.Logger?.Information("{Tag}[page]: {Msg}", _opts.LogTag, (string?)o["msg"]);
+                    // Honour the page's own `level`. This used to write EVERY page log at
+                    // Information because that was the global logger floor and page logs were the
+                    // only devtools-less window into the page - fine for the tunnel's handful of
+                    // sites, ruinous once the Arcademy landed with ~700 of them and buried the
+                    // real log under class chatter. Errors and warnings still surface; ordinary
+                    // chatter drops to Debug, where a dev build's lower floor picks it up.
+                    App.Logger?.Write(PageLogLevel((string?)o["level"]),
+                        "{Tag}[page]: {Msg}", _opts.LogTag, (string?)o["msg"]);
                     break;
                 default:
                     _opts.OnMessage?.Invoke(o);

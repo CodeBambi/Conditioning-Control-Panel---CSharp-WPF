@@ -14,6 +14,7 @@ using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Chaos;
 using ConditioningControlPanel.Services.Fyp.Online;
 
@@ -106,18 +107,18 @@ internal static class ArcademyHostService
     /// opens the Arcademy asks this - the Play card's visibility in
     /// <c>MainWindow.RefreshPlayCards</c> and the refusal at the top of <see cref="Launch"/>.
     ///
-    /// <para><c>false</c> because the Arcademy is BUILT but not launched: Semester 1 landed on
-    /// main (PR #241) ahead of its public reveal, and 6.8.4 is an auth/stability patch that must
-    /// ship those fixes without also shipping an unannounced feature. A HIDE, not a lockband, for
-    /// the same reason Just Drop hides: a lockband advertises something the account could buy,
-    /// and a door we have not opened yet is not for sale.</para>
+    /// <para><c>true</c> since v6.8.5 "First Bell": the Arcademy is open. Semester 1 landed on
+    /// main (PR #241) ahead of its public reveal and stayed hidden through 6.8.4; this is the
+    /// release that reveals it. Flipping this back to <c>false</c> is still the whole hide - a
+    /// HIDE, not a lockband, for the same reason Just Drop hides: a lockband advertises something
+    /// the account could buy, and a door we have not opened is not for sale.</para>
     ///
-    /// <para>Flip to <c>true</c> to reveal it - that is the whole reveal. The T2 bar and the
-    /// AudioOnlySession rule below are untouched and still apply underneath it.</para>
+    /// <para>The T2 bar and the AudioOnlySession rule below are untouched and still apply
+    /// underneath it.</para>
     /// </summary>
     /// <remarks>static readonly, not const: a const would make the guard in <see cref="Launch"/>
     /// compile-time unreachable (CS0162), exactly as JustDropService.Withheld documents.</remarks>
-    public static readonly bool DoorAvailable = false;
+    public static readonly bool DoorAvailable = true;
     /// <summary>Whether the live instance was opened through the dev switch (recovery relaunch keeps it).</summary>
     private static bool _devDoor;
 
@@ -152,7 +153,7 @@ internal static class ArcademyHostService
         //    no announced feature to explain a refusal about yet.
         if (!DoorAvailable && !devDoor)
         {
-            App.Logger?.Information("ArcademyHost.Launch refused: the Arcademy door is not open yet (unreleased)");
+            App.Logger?.Information("ArcademyHost.Launch refused: the Arcademy door is closed in this build");
             return;
         }
 
@@ -5078,7 +5079,7 @@ internal static class ArcademyHostService
             try
             {
                 MessageBox.Show(
-                    $"{ProductName} could not start on this machine.\n\n{msg}",
+                    Loc.GetF("arcademy_boot_error_body", ProductName, msg ?? string.Empty),
                     ProductName, MessageBoxButton.OK, MessageBoxImage.Warning);
             }
             catch { }
