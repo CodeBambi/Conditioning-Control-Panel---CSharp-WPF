@@ -1148,16 +1148,43 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
   ask again after every reply, MAX_ASKS **per tag** 8, RETRY_MS 1500, batch cap 24.
 - **THE DOOR'S OTHER FOUR VERBS** hang off the same object and are how SORT's setup screen
   draws itself: `catalog()` (the sanitized `init.settings` projection - `remoteCatalog`
-  `[{id,label,subs}]`, `subLibrary` `[{name,ok,videoCount,stillOnly}]`, `localFolders`
+  `[{id,label,subs}]`, `subLibrary` `[{name,ok,videoCount,stillOnly,selected}]`, `localFolders`
   `[{path,gifs,stills,videos}]`, `assetPresets` `[{id,name}]`, plus `remoteConsent`,
-  `remoteMediaEnabled`, `offlineMode`, `mediaSource`), `probeSub(name)` ->
-  `probe-sub {reqId,name}` / `sub-probe {reqId,name,ok,videoCount,stillOnly}`,
+  `remoteMediaEnabled`, `offlineMode`, `mediaSource`), `probeSub(name, {scope, pile})` ->
+  `probe-sub {reqId,name,scope?,pile?}` / `sub-probe {reqId,name,ok,videoCount,stillOnly}`,
   `removeLibrarySub(name)` -> `library-remove {name}`, and `onLibrary(cb)` for the host's
   `library {subLibrary:[...]}` push (which any surface can cause - the Assets tab, the FYP
   popover, another probe). `shell.js` passes the six new init fields into `createAssets`
   beside `settings`; a host that predates them ships nothing and the catalog is simply empty.
   **Neither probe nor library is media**, so they ride `remote.js`'s `sendRaw`/`subscribe`
   rather than the reqId mailbox.
+- **THE SORT SCOPE: A DECOY PILE IS NOT A TASTE** (2026-08-28, tester report - "the noise
+  reddit feeds (cat and pokemon) I added for the sorting room game seem to have followed me
+  through to all the other games"). The LIBRARY (subs the player has KEPT) and the FEED
+  SELECTION (what the app-wide, untagged `claim()` is answered from) are two lists, and the
+  split is the whole point: SORT's door adds to the first and must never add to the second.
+  `probeSub` therefore names the surface - `{scope:'sort', pile:'noise'|'target'}`, both
+  optional, the frame byte-for-byte the old one without them (the Media counter's own add
+  box sends neither).
+  - **The C# host honours it by construction and acts on it nowhere.**
+    `AppSettings.TryAddLibrarySub` never touches `FypOnlineCustomSubs`, and `RemoteChannels()`
+    resolves the app-wide pull from the niches plus that selection alone - so the desktop
+    never leaked. `OnProbeSub` reads `scope`/`pile` and logs one line; a second rule there
+    would be a second place for the same law to drift.
+  - **The web host shim is the one that has to act**, because its library row IS its feed
+    selection (`selected` defaults true on a probe add, and its app-wide sub set is "the
+    picked niches plus every selected library row" - `scripts/arcademy-web-ext/host/provider.js`
+    in the site repo). Until it does, `provider/index.js` **fences the row itself**: on an OK
+    `sort`/`noise` verdict that actually grew the library, and ONLY where
+    `init.settings.mediaControls === true` (the web-only media counter), it posts one
+    `set-setting {key:'media.librarySelect', value:{name, selected:false}}` - the counter's
+    own key, so this parks the sub exactly as un-ticking its box would and the player can
+    tick it back on there. It fires once, at the moment of the add, because the door never
+    re-probes a name the library already holds.
+  - **"The noise turns itself off after the class" is NOT built** (owner may want it). It
+    would hang off `shell/shell.js finishClass` / SORT's own `end`, reaching back into this
+    seam with the pile the class dealt. The fence is the smaller, safer claim: the decoy
+    never got enrolled in the first place.
 - **`engine/index.js` `createEngine(opts)` / `provider/index.js` `createAssets(opts)`** are
   loaded *optionally* (intake's `loadOptional`). Missing or throwing → null object, and the
   class still runs, silent. Never make either a hard import.
@@ -3207,6 +3234,16 @@ probe/library round trip, and `claim()` proven untouched - and `test-setuphook.m
 drives the real shell through the setup door (false -> campus, true/throw/reject -> beginPlay,
 the clock never armed, Esc = the leave confirm, the enrollment intro first) plus the registry /
 campus / lexicon rows. Both are node:test; `run.sh` copies the web root the same way.
+`test-sortscope.mjs` (2026-08-28, 10 cases) is the third half, and its subject is THE SORT
+SCOPE above: it drives the real provider against a fake host shaped like the WEB shim (a
+library row that IS the feed selection) and proves a noise-tagged sub never reaches an
+untagged `claim()` - with the unscoped add kept as the RED control, so the harness is known
+to be able to see the leak. Plus the frame's optional `scope`/`pile`, the target pile left
+alone, the app host never sent a `media.*` key, an already-kept sub never re-parked (the
+settings toggle wins), and `selected` carried through `catalog()`. Three cases in the two
+older files were ALREADY red before this work (`prewarm is capped at 12` predates the
+on-deck rail; the two `test-setuphook.mjs` rows predate SORT's 180s budget and the campus
+side field) and are untouched.
 
 `test-punchcard.mjs` (2026-08-23) is the punch-card half: the store's refusal + self-heal,
 the 96-char cap on every one of the 30 flavour rows AND the 8 rotating card lines AND their

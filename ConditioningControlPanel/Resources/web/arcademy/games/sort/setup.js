@@ -754,7 +754,18 @@ export function createSetupDoor(o) {
 
   function runProbe(name, sideName, fromStarter) {
     let p = null;
-    try { p = assets.probeSub(name); } catch (e) { p = null; }
+    /* THE SCOPE (2026-08-28). This add is the SORTING ROOM's, and the side it
+     * lands on decides what it may become. A `noise` pick is the decoy heap:
+     * the provider keeps it on the library shelf so the door can offer it again
+     * tomorrow, and fences it out of the app-wide feed that every OTHER class's
+     * `claim()` draws from - "the cat and pokemon feeds I added for the sorting
+     * room followed me through to all the other games" is the bug that closes.
+     * A `target` pick is content the player chose, so it is added exactly the
+     * way the Media counter's own box adds one. Both fields are optional and a
+     * provider that predates them ignores them. */
+    try {
+      p = assets.probeSub(name, { scope: 'sort', pile: sideName === 'noise' ? 'noise' : 'target' });
+    } catch (e) { p = null; }
     Promise.resolve(p).then((res) => {
       if (destroyed) return;
       probingStarters.delete(lc(name));
