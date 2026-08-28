@@ -1291,6 +1291,123 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   /* ASKS: a06's session-only spot, {x,y} in viewport fractions. NEVER saved. */
   let askSpot = null;
 
+  /* ======================================================================
+   * EMI KEEPS OFF THE ALLEY (2026-08-28)
+   *
+   * Her body is the one `pointer-events:auto` thing on the mascot layer and
+   * that layer sits over the campus. Parked bottom-right - where the first-run
+   * default puts her, and where very nearly every stored spot already is - she
+   * lies flat across RM 004 and the bottom half of the Prize Counter, and a tap
+   * meant for a door lands on a mascot instead. Moving the default helps nobody
+   * who has ever seen the campus, so the fix has to happen at PLACE time, on
+   * every place, out of the spot the player actually owns.
+   *
+   * THE RULE, and it is a SESSION move in the exact shape of the ASKS spot
+   * above: `fx0`/`fy0` are never touched, so tomorrow she is back where she was
+   * left and a host that never calls `keepClear` sees none of this.
+   *   - the host hands over a GETTER answering the live boxes she may not stand
+   *     on. Null clears it; an empty list off-campus is the normal answer.
+   *   - her body misses all of them: nothing happens.
+   *   - otherwise she SLIDES. Four directions are tried - left, up, right,
+   *     down - and each one walks one door at a time, every step just far
+   *     enough to clear the NEAREST box still under her by KEEP_GAP, at most
+   *     KEEP_STEPS steps. A direction that would push her past the margin `m`
+   *     on its axis, or that is still not clear after the last step, is thrown
+   *     away. The shortest surviving slide wins; ties go left, then up.
+   *   - NOT ONE BOX AROUND THE LOT. The doors stack in a column down the alley
+   *     and a bounding box drawn round all of them has no way out at all on a
+   *     phone, where fixtures sit on three edges. One door at a time is also
+   *     what sends her LEFT past the alley (about 184px on a desktop) instead
+   *     of UP it, which would hop the locker, the counter, the office and
+   *     records for about 339.
+   *   - THE PLAYER OUT-RANKS THE RULE. The moment she is dragged the nudge is
+   *     off for the rest of the session: park her on a door and she stays on
+   *     the door. That is `keepHands`, set on the drop and never cleared.
+   * ==================================================================== */
+  const KEEP_GAP = 8;              // daylight left between her body and a door
+  const KEEP_STEPS = 8;            // how deep a stacked column may be walked
+  let keepRectsFn = null;          // the host's getter, or null
+  let keepHands = false;           // the player moved her: hands off till dawn
+
+  /** The live keep-off boxes, normalised and de-junked. Null is the answer for
+   *  "no rule today", which is every screen that is not the campus. */
+  function keepBoxes() {
+    if (!keepRectsFn || keepHands) return null;
+    let list = null;
+    try { list = keepRectsFn(); } catch (e) { return null; }
+    if (!Array.isArray(list) || !list.length) return null;
+    const out = [];
+    for (const r of list) { const n = rectNow(r); if (n) out.push(n); }
+    return out.length ? out : null;
+  }
+
+  /** Do these two boxes share any glass at all? */
+  function boxHits(b, r) {
+    return b.left < r.right && b.right > r.left && b.top < r.bottom && b.bottom > r.top;
+  }
+
+  /** Walk her one way until nothing is under her. Answers the landing spot and
+   *  the distance travelled, or null when this direction has no answer. */
+  function slideOut(box, boxes, dir, lo, hiX, hiY) {
+    let l = box.left;
+    let t = box.top;
+    const w = box.right - box.left;
+    const h = box.bottom - box.top;
+    for (let step = 0; step <= KEEP_STEPS; step++) {
+      const cur = { left: l, top: t, right: l + w, bottom: t + h };
+      /* The NEAREST thing under her in this direction is the one that asks for
+       * the smallest move; clearing it may uncover another, hence the walk. */
+      let d = null;
+      for (const r of boxes) {
+        if (!boxHits(cur, r)) continue;
+        let n;
+        if (dir === 'left') n = cur.right - (r.left - KEEP_GAP);
+        else if (dir === 'up') n = cur.bottom - (r.top - KEEP_GAP);
+        else if (dir === 'right') n = (r.right + KEEP_GAP) - cur.left;
+        else n = (r.bottom + KEEP_GAP) - cur.top;
+        if (n > 0 && (d === null || n < d)) d = n;
+      }
+      if (d === null) {
+        return { left: l, top: t, dist: Math.abs(l - box.left) + Math.abs(t - box.top) };
+      }
+      if (step === KEEP_STEPS) return null;   // eight rooms deep is not a column
+      if (dir === 'left') l -= d;
+      else if (dir === 'up') t -= d;
+      else if (dir === 'right') l += d;
+      else t += d;
+      /* Off the edge is not a place to stand, and a clamp here would only park
+       * her back on the very door the slide was for. */
+      if (l < lo || l > hiX || t < lo || t > hiY) return null;
+    }
+    return null;
+  }
+
+  /** The session nudge: her spot moved clear of the doors, or null for stay. */
+  function keepOff(left, top, s, m, hiX, hiY) {
+    const boxes = keepBoxes();
+    if (!boxes) return null;
+    const box = { left, top, right: left + s.w, bottom: top + s.h };
+    let any = false;
+    for (const r of boxes) { if (boxHits(box, r)) { any = true; break; } }
+    if (!any) return null;
+    let best = null;
+    // The order IS the tie-break: left, then up, then right, then down.
+    const dirs = ['left', 'up', 'right', 'down'];
+    for (const dir of dirs) {
+      const got = slideOut(box, boxes, dir, m, hiX, hiY);
+      if (got && (!best || got.dist < best.dist)) best = got;
+    }
+    return best;
+  }
+
+  /** THE KEEP-OFF SEAM. The shell hands over a getter answering the doors under
+   *  her (or null on the way out of the campus) and she re-places on the spot,
+   *  because the thing she is standing on is already up. */
+  function keepClear(getRects) {
+    keepRectsFn = typeof getRects === 'function' ? getRects : null;
+    if (built && !hidden && enabled) { try { place(); } catch (e) { /* noop */ } }
+  }
+
   /** Place EMI from the stored fractions, clamped inside the viewport. */
   function place() {
     const vp = viewport();
@@ -1326,8 +1443,15 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       fx0 = (vp.w - s.w - padX) / vp.w;
       fy0 = (vp.h - s.h - padY) / vp.h;
     }
-    const left = clamp(fx0 * vp.w, m, Math.max(m, vp.w - s.w - m));
-    const top = clamp(fy0 * vp.h, m, Math.max(m, vp.h - s.h - m));
+    const maxX = Math.max(m, vp.w - s.w - m);
+    const maxY = Math.max(m, vp.h - s.h - m);
+    let left = clamp(fx0 * vp.w, m, maxX);
+    let top = clamp(fy0 * vp.h, m, maxY);
+    /* EMI KEEPS OFF THE ALLEY (see the block above). A session slide off the
+     * doors, taken AFTER the stored spot has been read and clamped and without
+     * writing a thing back - those fractions are the player's, not ours. */
+    const off = keepOff(left, top, s, m, maxX, maxY);
+    if (off) { left = off.left; top = off.top; }
     el.style.width = s.w + 'px';
     el.style.left = Math.round(left) + 'px';
     el.style.top = Math.round(top) + 'px';
@@ -1988,6 +2112,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       clearDangle(false);
       const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { left: 0, top: 0 };
       commit(r.left, r.top);
+      keepHands = true;  // she was PUT here: the alley rule stands down till dawn
       remeasureAsk();   // a question survives a drag now; its clamp does not
       /* W3 P1-19: SHE LANDS. The body move here is already NAMED `thud` for a
        * throw and `bounce` for a set-down, so the ear gets the same two things:
@@ -2045,6 +2170,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     endPress();
     if (wasDragging) {
       commit(r ? r.left : 0, r ? r.top : 0);
+      keepHands = true;  // ...and the alley rule stands down on a cancel too
       remeasureAsk();   // same law as the ordinary drop
       save();
       if (!saying()) idle();
@@ -3320,6 +3446,9 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     /* W2a - the field trip. `apparate` takes a RECT-GETTER (trap 73), refuses
      * over any live verb, and answers a cancel function or null. */
     apparate, setPoiRects, tripping,
+    /** THE KEEP-OFF SEAM: a getter answering the boxes she may not stand on,
+     *  or null. Session only - see "EMI KEEPS OFF THE ALLEY" above place(). */
+    keepClear,
     /* ---- ASKS (2026-08-25): the strip, and the four seams an effect needs -
      * `emi/asks.js` is the only caller of any of them. `askState()` hands back
      * the LIVE ledger object and `askSave()` is this file's own debounced

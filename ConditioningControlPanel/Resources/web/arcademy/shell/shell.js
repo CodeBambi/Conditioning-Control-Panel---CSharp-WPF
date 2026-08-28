@@ -708,6 +708,44 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   initCorkboard({ state: postState.board, save: (s) => store.set('board', s), daySeed: utcDateSeed, log: say, when: postWhen,
     posters: () => ownsSku('poster_drop_1') });
   initBugle({ state: postState.bugle, save: (s) => store.set('bugle', s), log: say, when: postWhen });
+  /* ================== EMI KEEPS OFF THE DOORS ==========================
+   * Her layer sits OVER the quad and her body is the one thing on it that
+   * takes a pointer, so parked in the bottom-right corner she ate every tap
+   * meant for RM 004 and the bottom half of the Prize Counter. The widget owns
+   * the rule (see "EMI KEEPS OFF THE ALLEY" in emi/widget.js); the campus owns
+   * the boxes, and hands them over as a GETTER rather than a snapshot for the
+   * usual reason (trap 73): the stage is torn down and rebuilt on every visit,
+   * so a rect measured at mount is a rect from a campus that has gone.
+   * ==================================================================== */
+  /* The doors, AND the postbox. The envelope chip is the other 44px control on
+   * this screen she can sit on top of - on a phone it leaves the top-right
+   * cluster for the bottom-right corner, which is the exact corner she parks
+   * in (shell/mail.css, and the first-run standoff in widget.js is named after
+   * it). A tap eaten by a mascot is a tap eaten by a mascot either way. */
+  const KEEP_OFF_SEL = 'g.campus-room.facility, .arc-mailchip';
+  /** Everything on the quad she may not stand on, in viewport px. [] off-campus. */
+  function campusDoorRects() {
+    if (screen !== 'board' || !campus || !campus.root) return [];
+    const out = [];
+    try {
+      const nodes = campus.root.querySelectorAll(KEEP_OFF_SEL);
+      for (const n of nodes) {
+        const b = n.getBoundingClientRect ? n.getBoundingClientRect() : null;
+        if (b && b.width > 0 && b.height > 0) out.push(b);
+      }
+    } catch (e) { return []; }
+    return out;
+  }
+  /** Arm the rule on the campus, drop it on the way out. A host whose mascot
+   *  never built - or an older widget with no seam - simply never hears it. */
+  function keepEmiOffTheDoors(on) {
+    try {
+      const emi = getEmi();
+      if (!emi || typeof emi.keepClear !== 'function') return;
+      emi.keepClear(on ? campusDoorRects : null);
+    } catch (e) { /* noop */ }
+  }
+
   /** Repaint the campus post furniture after an overlay closes (fresh dots,
    *  unread pip) - a no-op anywhere but the board. */
   function refreshCampusPost() {
@@ -1309,6 +1347,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * bracket's discipline). */
     dismissIdCard(true);
     if (ghosts) { try { ghosts.destroy(); } catch (e) { /* noop */ } ghosts = null; }
+    /* The doors go with the campus, so the keep-off rule goes with them: off
+     * the quad she is back in the corner the player actually chose. */
+    keepEmiOffTheDoors(false);
     if (campus) {
       try { campus.destroy(); } catch (e) { /* noop */ }
       campus = null;
@@ -1913,6 +1954,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
             try { if (pa) pa.notify('campusReveal'); } catch (e) { /* noop */ }
             // FIRST BELL's second gate: the school has finished standing up.
             bellBoardRevealed = true;
+            /* ...and EMI measures the quad AGAIN now that it has finished
+             * standing up. The postbox chip is the reason: it is painted after
+             * the stage lands, so a keep-off set read at mount knows about the
+             * doors and not about the one control that shares her corner. */
+            keepEmiOffTheDoors(true);
             maybeFirstBell();
             maybeStartOrientation();
           },
@@ -2004,6 +2050,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       campus.boardMount.appendChild(board.root);
       renderBoardExtras(campus.footMount);
       dom.screen.appendChild(campus.root);
+      /* ...and the doors are measurable the instant they are in the document,
+       * so EMI steps off them now rather than at the next resize. The entry
+       * reveal is opacity only, which is why a mount-time rect is honest. */
+      keepEmiOffTheDoors(true);
       /* WARM TONIGHT'S ROOMS. The campus is up and the player is about to spend
        * a while looking at it; the plates behind tonight's painted doors are
        * ~1MB each and on a phone they arrive AFTER the room does, which is how

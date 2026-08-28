@@ -328,6 +328,12 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
     setEnabled(on) { widget.setEnabled(!!on); },
     get enabled() { return widget.enabled; },
 
+    /** EMI KEEPS OFF THE ALLEY. Hand her a GETTER answering the boxes she may
+     *  not stand on (the campus doors), or null on the way out. A session move
+     *  only - the corner the player chose is never rewritten. The rule itself
+     *  lives in widget.js, in the block above `place()`. */
+    keepClear(getRects) { return widget.keepClear(getRects); },
+
     /**
      * Set her width in px and REMEMBER it (clamped to DIALS.W_MIN..W_MAX). Until
      * this is called she follows the window: DIALS.W_DEFAULT on a viewport at
