@@ -51,6 +51,7 @@ import { getVoice, setVoiceDefault, onVoice, getLevel } from '../engine/audioLev
 import { createChaosField } from './chaosField.js';
 import { createFieldFx } from './fieldFx.js';
 import { createPayloadFx } from './payloadFx.js';
+import { createScreenShake } from './screenShake.js';
 import { createChaosHud } from './chaosHud.js';
 import { createOverlays } from './overlays.js';
 import { createWarren } from './warren.js';
@@ -102,7 +103,7 @@ const PLAIN_BUBBLE_CHANCE = 0.30;   // share of ordinary spawns that are plain, 
 const PLAIN_BUBBLE_CHANCE_EARLY = 0.80; // at the top of the run: mostly plain bubbles, effects rare - ramps down to PLAIN_BUBBLE_CHANCE as intensity peaks
 const MATERIAL_DROP_CAP = 8;        // crafting: max material drops per run (tube + pop combined)
 const MATERIAL_POP_CHANCE = 0.008;  // crafting: chance a popped treat sheds a raw ingredient
-const VIDEO_HEAVY_SEC = 17;         // the stuck POV video holds 15s (payloadFx VIDEO_HOLD_SEC) + slack
+const VIDEO_HEAVY_SLACK_SEC = 2;    // the stuck POV video holds S.spotSeconds (payloadFx videoHoldSec) + this slack
 const CASCADE_BASE_SEC = 6;         // GifCascadePayload.DURATION_SEC (+5 ride-out)
 const RANK = { Curious: 0, Tempted: 1, Slipping: 2, Entranced: 3, Devoted: 4, Claimed: 5 };
 
@@ -156,6 +157,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       sparkGainMult: rc.sparkGainMult ?? 1.0,
       spawnRateMult: clamp(rc.spawnRateMult ?? 1.0, 0.1, 10.0),
       colorFlashes: rc.colorFlashes !== false,
+      // The screen-shake dials (ChaosRunConfig.ScreenShakeEnabled/.ShakeIntensity).
+      // Off stands the jolt fully down; the intensity is the user's 0..1 amplitude.
+      screenShake: rc.screenShake !== false,
+      shakeIntensity: clamp(rc.shakeIntensity ?? 0.8, 0, 1),
       boonDraftEnabled: rc.boonDraftEnabled !== false,
       allowCurses: rc.allowCurses !== false,
       dartersEnabled: rc.dartersEnabled !== false,
@@ -192,6 +197,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     discovered.clear();
     (rc.discoveredCodexIds || []).forEach((id) => discovered.add(id));
     rippleCastCount = 0;
+    // the dials can change between descents (the Warren's options console)
+    shakeFx?.setEnabled(cfg.screenShake);
+    shakeFx?.setIntensity(cfg.shakeIntensity);
     bridge.log(`runcfg: diff=${cfg.difficulty} scripted=${cfg.scriptedFirstRun} runs=${cfg.runsCompleted}`
       + ` variants=${JSON.stringify(cfg.enabledVariants)} draft=${cfg.boonDraftEnabled} sin=${cfg.sinChance}`);
     // Seen-once flags: a local mutable mirror of chaos_meta (persisted one-way
@@ -207,6 +215,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
   let ctx = null;      // { nav, fx, director, hud, canvas } from scene.start
   let field = null, ffx = null, hudUi = null, overlays = null, payloadFx = null;
+  let shakeFx = null;  // the run-config screenShake consumer (game/screenShake.js), built in attach
   let bMech = null;    // the biome mechanic controller (game/biomeMech.js), built in attach
   let warren = null, lessons = null, happy = null, vn = null, lessonCardUi = null, hubGuide = null;
   let chesh = null, guide = null;   // the Cheshire VN engine + tutorial director (null when CHESHIRE_DISABLED)
@@ -572,9 +581,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         return;
       }
       heavyUntil = performance.now() + (kind === 'video'
-        ? VIDEO_HEAVY_SEC * 1000
+        ? ((payloadFx?.videoHoldSec() ?? 15) + VIDEO_HEAVY_SLACK_SEC) * 1000
         : (CASCADE_BASE_SEC * durationMult + 5) * 1000);
       sfx(kind === 'video' ? 'trigger' : 'fx_rain_start', 0.45);
+      // the heavies land like a hit: the tube rocks under the detonation
+      shakeFx?.shake(kind === 'video' ? 1.0 : 0.7, 380);
     }
     if (isDetonation && spec.variantId === 'braindrain') sfx('fx_drain', 0.45);
     // Hard cutover (2026-07): every effect renders IN-WORLD (payloadFx) instead
@@ -1328,6 +1339,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (ctx.spawner) ctx.spawner.setPickupTimeScale(0);
     ctx.director.setTimeFactor(0.06);   // P1: visible time dilation - the tunnel all but stops
     sfx('freeze_catch', 0.55);
+    shakeFx?.shake(0.6, 280);   // the world slamming to a stop
     hudUi.announce('❄ FREEZE', 'freeze', 1800, { artKey: 'freeze' });
     pulse('150,210,255', 0.30);
     // The world stops with the field: ask the host to pause any native voiceline +
@@ -2683,6 +2695,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         if (hit) {
           ctx.fx.strikeNow();
           sfx('estim_zap', 0.35);
+          shakeFx?.shake(0.35, 160);   // the bolt's kick (small - these repeat all storm long)
           if (hit.kind === 'life') hudUi.toast('⚡ static bit a fuse — it burns faster now');
         }
       }
@@ -3888,6 +3901,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // A mandatory-video card is an in-world DOM node (payloadFx front layer); the
     // field teardown doesn't touch it, so stop it here or it overlays the recap + hub.
     try { payloadFx?.cancelHeavy(); } catch (e) { /* ignore */ }
+    shakeFx?.stop();   // no jolt rides the surfacing into the recap
     // A run ending WHILE an in-tube boon draft is open would leave its card row in
     // the shared scene (junctions are torn down by setRunActive(false), but boonPick
     // is not) - force it closed so no phantom draft rides the idle crawl into the
@@ -4026,6 +4040,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       preloadRecipeArt();   // warm the ingredient photos so a deep-run recipe plaster draws them, not glyphs
       ffx = createFieldFx(ctx.hud);
       payloadFx = createPayloadFx({ hud: ctx.hud, fx: ctx.fx, media: ctx.media, flashBurst: ctx.flashBurst });
+      // The screen-shake consumer rocks the 3D canvas only (never the hud - see
+      // screenShake.js). Seeded from the live cfg when a run-config already landed.
+      shakeFx = createScreenShake({ el: ctx.canvas });
+      if (cfg) { shakeFx.setEnabled(cfg.screenShake); shakeFx.setIntensity(cfg.shakeIntensity); }
       try { window.__sfPayloadFx = payloadFx; } catch { /* diagnostics seam (m2test) */ }
       try { window.__sfFireJunction = () => fireJunction(); } catch { /* diagnostics seam: force a branch fork */ }
       try {
@@ -4479,11 +4497,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       field?.dispose();
       ffx?.dispose();
       payloadFx?.dispose();
+      shakeFx?.dispose();   // drops any jolt in flight and clears the canvas transform
       vn?.dispose();   // closes the VN AudioContext + removes its overlay/listeners (else it leaks per attach and hits Chromium's context ceiling)
       try { if (window.__sfPayloadFx === payloadFx) delete window.__sfPayloadFx; } catch { /* seam cleanup */ }
       try { delete window.__sfFireJunction; } catch { /* seam cleanup */ }
       try { delete window.__sfRegion; } catch { /* seam cleanup */ }
-      field = null; hudUi = null; overlays = null; ffx = null; payloadFx = null;
+      field = null; hudUi = null; overlays = null; ffx = null; payloadFx = null; shakeFx = null;
       warren = null; lessons = null; happy = null; vn = null;
     },
   };

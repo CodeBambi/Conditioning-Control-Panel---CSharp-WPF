@@ -20,7 +20,7 @@ dotnet run
 | `Services/Update/UpdateService.cs:~29` | `CurrentPatchNotes` |
 | `../installer.iss:16` | `MyAppVersion` |
 | `../build-installer.bat:10` | `VERSION` |
-| `MainWindow/MainWindow.xaml:~569` | `BtnUpdateAvailable` Content + ToolTip loc keys |
+| `MainWindow/MainWindow.xaml:~1985` | `BtnUpdateAvailable` Content + ToolTip loc keys |
 | `Localization/Languages/*.json` (9 files) | `btn_vX_Y_Z_is_out` + `tooltip_vX_Y_Z_*` keys |
 
 Use `/release X.Y.Z "Subtitle"` to automate this. Also write `../notes-vX.Y.Z.txt` (plain-text notes for the GitHub release; no em-dashes). After signing: push main, tag `vX.Y.Z`, create the GitHub release (mark Latest), POST server marquee + update-banner (`x-admin-token`), update download links + version badge in `C:\Projects\cclabs-site` (index.html + guide-getting-started.html, then commit+push and `vercel deploy --prod`), announce on Discord. The language files are strict-JSON clean as of 2026-07-29 - see **Localization** under Known Issues before editing them.

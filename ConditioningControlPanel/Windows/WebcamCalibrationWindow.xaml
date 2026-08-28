@@ -180,12 +180,30 @@
         <!-- Bubble accuracy test: optional post-calibration minigame launched
              from the verify panel. One bubble at a time; the user pops it by
              holding their gaze cursor on it (~0.7s dwell). Residuals feed a
-             drift fine-tune — see RunBubbleTestAsync. -->
+             drift fine-tune — see RunBubbleTestAsync.
+
+             The bubble and its ring are deliberately TALLER THAN WIDE. CHI
+             2025 gaze-target guidance says the target's shape should absorb
+             the axis carrying more error, and vertical gaze error runs
+             1.5-2x horizontal (half the eyeball rotation per screen unit,
+             plus eyelid occlusion of the iris top/bottom). Sizes are
+             ~3 degrees wide by ~4 tall: at 60cm on a 27" 1440p panel 1
+             degree is ~45 px, so 3 x 45 = 135 -> 136 wide and 4 x 45 = 180
+             tall. Rings sit 48 DIPs outside on each axis. UpdateRing() uses
+             a Ramanujan perimeter so the dwell arc stays correct on an
+             ellipse. -->
         <Grid x:Name="BubbleTestPanel" Visibility="Collapsed">
             <Canvas x:Name="BubbleTestCanvas">
-                <Ellipse x:Name="TestBubbleRingBg" Width="176" Height="176"
+                <Ellipse x:Name="TestBubbleRingBg" Width="184" Height="228"
                          Stroke="#33FFFFFF" StrokeThickness="4" Visibility="Collapsed"/>
-                <Ellipse x:Name="TestBubbleRingFg" Width="176" Height="176"
+                <!-- Width/Height are deliberately SWAPPED relative to TestBubbleRingBg.
+                     The RotateTransform below (-90, to start the dash at 12 o'clock) also
+                     rotates the ellipse's own axes, so an ellipse authored 228x184 RENDERS
+                     as 184x228 and matches the upright background ring. Authoring it
+                     184x228 like the bg makes the pink arc render as a WIDE oval crossing
+                     the grey tall oval at four points. Ramanujan's perimeter is symmetric
+                     in a/b, so UpdateRing is unaffected by the swap. -->
+                <Ellipse x:Name="TestBubbleRingFg" Width="228" Height="184"
                          Stroke="#FFFF69B4" StrokeThickness="5"
                          StrokeDashArray="0 10000" StrokeDashCap="Round"
                          RenderTransformOrigin="0.5,0.5" Visibility="Collapsed">
@@ -193,7 +211,7 @@
                         <RotateTransform Angle="-90"/>
                     </Ellipse.RenderTransform>
                 </Ellipse>
-                <Ellipse x:Name="TestBubble" Width="128" Height="128"
+                <Ellipse x:Name="TestBubble" Width="136" Height="180"
                          RenderTransformOrigin="0.5,0.5" Visibility="Collapsed">
                     <Ellipse.RenderTransform>
                         <ScaleTransform x:Name="TestBubbleScale" ScaleX="1" ScaleY="1"/>

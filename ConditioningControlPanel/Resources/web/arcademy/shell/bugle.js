@@ -576,6 +576,10 @@ export function openBugle(issueId, opts) {
       for (let i = 0; i < frames; i += 1) {
         const panel = el('div', 'arc-bugle-panel' + (single ? ' is-wide' : ''));
         if (!single) panel.appendChild(el('span', 'arc-bugle-panelnum', String(i + 1)));
+        /* The single panel is empty on purpose; without a printed reason a
+         * reader takes it for a picture that failed to load (T2, 08-27). */
+        if (single) panel.appendChild(el('span', 'arc-bugle-panelheld',
+          t('bugle_comics_held', 'Picture held at the printer. Described below.')));
         strip.appendChild(panel);
       }
       box.appendChild(strip);
