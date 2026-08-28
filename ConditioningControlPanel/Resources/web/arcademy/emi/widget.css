@@ -332,8 +332,8 @@
   animation: emi-toy-bob 3.4s ease-in-out infinite;
 }
 /* Trap 27 again: `[hidden]` is a user-agent rule and the block above is not,
-   so the prop hides itself rather than leaning on styles.css's reset - EMI
-   also ships standalone (demo.html) and a skin must hide its own node. */
+ * so the prop hides itself rather than leaning on styles.css's reset - EMI
+ * also ships standalone (demo.html) and a skin must hide its own node. */
 .arc-emi .emi .emi-toy[hidden] { display: none !important; }
 
 @keyframes emi-toy-bob {
