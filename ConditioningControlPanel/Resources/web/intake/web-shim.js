@@ -15,7 +15,9 @@
  *
  * Protocol (host <-> page), v1 (see contracts.PROTOCOL):
  *   Host -> Page:  init {config, ai} · manifest · payload-state · meta · ping
+ *                  speech-event {id, kind, ...}          (SPEECH BRIDGE, additive)
  *   Page -> Host:  ready · log · boot-error · heartbeat/pong · quiz-result · exit
+ *                  speech-start {id, phrase} · speech-stop {id}
  * ==========================================================================*/
 
 import { PROTOCOL, defaultBootConfig, DEFAULT_CAPS, NICHES, Niche } from './core/contracts.js';
@@ -123,6 +125,11 @@ function fireBoot(config) {
 function fromHostInit(m) {
   const c = (m && m.config) || {};
   const media = normalizeMedia(c.media, !!c.remoteMedia);
+  // SPEECH BRIDGE feature-detect (see the block below). Only the desktop host
+  // sends this; the website and the RN host leave it absent => browser path.
+  if (c.speech && typeof c.speech === 'object' && c.speech.bridge === true) {
+    speechCaps = { bridge: true, available: c.speech.available !== false, reason: c.speech.reason || null };
+  }
   return defaultBootConfig({
     niche: NICHES.includes(c.niche) ? c.niche : Niche.Bambi,
     caps: Object.assign({}, DEFAULT_CAPS, c.caps || {}),
@@ -248,6 +255,70 @@ on('assets-append', (m) => {
 on('online-status', (m) => {
   remoteInFlight = false;
   if (m && m.ok === false) log('remote media: ' + ((m && m.error) || 'unavailable'));
+});
+
+/* ----------------------------------------------------------------------------
+ * SPEECH BRIDGE — the say-it (Mantra) beat's microphone, when the host has one.
+ *
+ * WHY: the beat used to ask the browser for window.SpeechRecognition. Inside
+ * WebView2 that API errors ('network' / 'not-allowed' — the Edge runtime has no
+ * cloud recognizer to lean on), so a desktop player could never advance a
+ * "repeat after me" item by speaking; it looped "didn't catch that" until they
+ * typed or skipped. The desktop app already owns an OFFLINE recognizer (Vosk, the
+ * same engine spoken mantras and She's Listening use), so the host lends it to
+ * the page over the bridge. Match leniency is the host's (the mantra threshold +
+ * loudness gate), so a phrase that satisfies a spoken mantra satisfies this.
+ *
+ * FEATURE-DETECT FIRST. `hostSpeech.bridge` is true ONLY when the host's init
+ * carried `config.speech.bridge === true`. The public website (same file, no
+ * host) and the RN host never set it, and render/beats.js keeps its browser
+ * SpeechRecognition path for them. Nothing here throws at import.
+ *
+ * Wire (additive; PROTOCOL unchanged):
+ *   page -> host  speech-start {id, phrase}   open the mic for this phrase
+ *                 speech-stop  {id}           close it (beat unmounted / typed / skipped)
+ *   host -> page  speech-event {id, kind, transcript?, matched?, score?, loudEnough?, reason?}
+ *     kind: listening · partial · final · silence · idle · unavailable · stopped
+ *     reason (unavailable): consent · no-mic · no-model · model-failed · busy · error
+ *
+ * `id` is minted by the page per start (see hostSpeech.start) so a late event
+ * from a superseded session can be dropped by the beat that did not ask for it.
+ * -------------------------------------------------------------------------- */
+let speechCaps = { bridge: false, available: false, reason: null };
+let speechSeq = 0;
+const speechListeners = new Set();
+
+on('speech-event', (m) => {
+  for (const fn of Array.from(speechListeners)) {
+    try { fn(m); } catch (_e) { /* never break the bridge */ }
+  }
+});
+
+export const hostSpeech = Object.freeze({
+  /** True when the host lent us its offline recognizer (desktop only). */
+  get bridge() { return speechCaps.bridge; },
+  /** Boot-time snapshot; the host re-checks on every start and answers `unavailable` if not. */
+  get available() { return speechCaps.available; },
+  /** Boot-time reason when not available (one of the wire strings above), else null. */
+  get reason() { return speechCaps.reason; },
+  /** Open the mic for `phrase`. Returns the session id events will carry, or 0 when there is no bridge. */
+  start(phrase) {
+    if (!speechCaps.bridge) return 0;
+    const id = ++speechSeq;
+    send({ type: 'speech-start', id, phrase: String(phrase == null ? '' : phrase) });
+    return id;
+  },
+  /** Close the session `id` (no-op for 0 / without a bridge). */
+  stop(id) {
+    if (!speechCaps.bridge || !id) return;
+    send({ type: 'speech-stop', id });
+  },
+  /** Subscribe to speech-event frames. Returns the unsubscribe function. */
+  listen(fn) {
+    if (typeof fn !== 'function') return () => {};
+    speechListeners.add(fn);
+    return () => { speechListeners.delete(fn); };
+  },
 });
 
 /* ----------------------------------------------------------------------------

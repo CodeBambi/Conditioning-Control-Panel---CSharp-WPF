@@ -250,11 +250,26 @@ with DTRH, Loom and the Bureau — edits there hit four features).
 - **BootConfig** (`OnPageReady`): `niche` (mod-derived: Dronification→drone, SissyHypno→sissy,
   Locked→circe, else bambi; `SafeNiche` silently falls back to bambi if the bank is missing), `caps`
   (all 1.0 today), `endless:false`, `steerValve:1.0`, `priorRun:null` (the page's stats own continuity),
-  `micEnabled` (= `MicConsentGiven`), `media` (10 sampled gifs/images as `ccp.assets` URLs + a mod-aware
+  `micEnabled` (= `MicConsentGiven`), `speech` (`{bridge:true, available, reason}` — the say-it
+  speech bridge's feature-detect, see below), `media` (10 sampled gifs/images as `ccp.assets` URLs + a mod-aware
   `bubbleSprite` **data URI**), `subjectId` (4 digits persisted at `%APPDATA%/…/intake_subject.txt` —
   deliberately not a setting), `subliminals` (≤400 enabled phrases, whisper clips inlined as data URIs
   because the audio dirs are outside both vhosts; **gated on `SubAudioEnabled`**; 512 KB/clip, 6 MB total),
   and `ai {serverBase, authToken}` where the token is the **Patreon** bearer.
+- **Speech bridge** (`IntakeHostService.Speech.cs`, since v6.8.5): the Mantra ("say it") beat used to ask the
+  browser for `window.SpeechRecognition`, which errors inside WebView2 (`network` / `not-allowed` — no cloud
+  recognizer), so desktop players could never advance it by voice (T2 Ashley, 2026-08-28). The host now lends
+  the app's **offline Vosk** engine (`SpeechService`, the same engine + `SpeechMatchThreshold` + loudness gate
+  spoken mantras use): page `speech-start {id, phrase}` / `speech-stop {id}` → host `speech-event {id, kind,
+  transcript?, matched?, score?, loudEnough?, reason?}` with kinds `listening · partial · final · silence · idle ·
+  unavailable · stopped`. The page (`web-shim.hostSpeech` → `beats.js renderHostEar`) feature-detects
+  `init.config.speech.bridge === true` **first** and keeps its browser path otherwise (website / RN host), and
+  auto-opens the mic when the card mounts. Reasons for `unavailable` are wire strings in `IntakeSpeechPolicy.cs`
+  (`consent · no-mic · no-model · model-failed · busy · error`) and each maps to a note in beats.js. **The bridge
+  never evicts another mic owner** (wake word, push-to-talk, lock card, spoken mantra) — it reports `busy` and
+  the page drops to typed input. Either ear drops to typed input on any hard error; the host goes `idle` after
+  3 silent windows or 6 misses and a tap restarts it. `DisposeAll` closes the session. Pinned by
+  `Tests/.../IntakeSpeechBridgeTests.cs`.
 - **Watchdogs**: 5 s heartbeat timer, >20 s silence or `ProcessFailed` → `Recover()` — dispose + relaunch
   **once** per app session, always windowed.
 - **Run end** (`OnQuizResult`): XP `25 + 50×peakDepth + 5×min(mantras,5)`, hard-capped at 100 →
@@ -423,6 +438,10 @@ only, and breath tags cost 1–2 s each.
     `bin\Debug\net8.0-windows10.0.19041.0\win-x64\Resources\web\intake\` and a fresh run picks them up with
     no rebuild and no app restart. An incremental build does **not** reliably refresh web assets.
 15. **One build at a time** if two sessions share the checkout — a torn build reads exactly like a crash bug.
+16. **`window.SpeechRecognition` does not work inside WebView2.** It exists, `start()` succeeds, then `onerror`
+    fires `network` (or `not-allowed`). Never route a desktop feature through it — use the host speech bridge
+    (§6). The browser ear stays only for the website, and now drops to typed input on any hard error instead of
+    printing "didn't catch that" forever.
 
 ---
 

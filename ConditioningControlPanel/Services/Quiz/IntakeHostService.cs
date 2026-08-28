@@ -28,6 +28,8 @@ namespace ConditioningControlPanel.Services.Quiz
     ///                  quiz-result { result }         -&gt; C# QuizSessionGenerator drafts a session
     ///                  session-drafted { ok, name, path } &lt;- host's reply to quiz-result
     ///                  exit                           -&gt; graceful teardown
+    ///                  speech-start / speech-stop     -&gt; offline Vosk say-it bridge; the host
+    ///                  speech-event { id, kind, ... } &lt;- answers (IntakeHostService.Speech.cs)
     ///
     /// Unlike DtRH this is a windowed Lab tool, not a screen-owning game: it hosts nothing native
     /// (the effect layer is fully self-contained in-page) and needs no meta/loom/haptics plumbing.
@@ -37,7 +39,7 @@ namespace ConditioningControlPanel.Services.Quiz
     /// per-instance user-data folder, hardened settings (no devtools), navigation lockdown,
     /// queue-until-ready bridge, a heartbeat watchdog and a relaunch-once recovery ladder.
     /// </summary>
-    internal static class IntakeHostService
+    internal static partial class IntakeHostService
     {
         /// <summary>The fiction name — mirrors contracts.PRODUCT_NAME's single-constant intent
         /// so a rename is a one-line change on each side.</summary>
@@ -331,6 +333,12 @@ namespace ConditioningControlPanel.Services.Quiz
                         // see the WPF setting on its own. False => beats.js renders the
                         // button disabled rather than live (type-it stays available).
                         micEnabled = App.Settings?.Current?.MicConsentGiven == true,
+                        // SPEECH BRIDGE. `bridge:true` is the page's feature-detect: with it the
+                        // say-it beat routes through the app's offline Vosk engine over
+                        // speech-start / speech-event instead of the browser's SpeechRecognition,
+                        // which errors inside WebView2 (no cloud recognizer) and left the item
+                        // un-advanceable by voice. Absent (website / RN host) => browser path.
+                        speech = BuildSpeechCaps(),
                         // Reward media for the in-page effect layer (gif bursts / jackpot
                         // spotlights). Served through the ccp.assets virtual host mapped above;
                         // a small random sample per launch keeps the init message light.
@@ -408,6 +416,12 @@ namespace ConditioningControlPanel.Services.Quiz
                     break;
                 case "need-remote":    // the page's remote still pool is running low
                     ServeRemoteBatch();
+                    break;
+                case "speech-start":   // say-it beat mounted / re-tapped: open the offline mic for its phrase
+                    OnSpeechStart(o);
+                    break;
+                case "speech-stop":    // beat unmounted, typed instead, or skipped: close it
+                    OnSpeechStop(o);
                     break;
                 case "exit-done":
                     DisposeAll();
@@ -1335,6 +1349,7 @@ namespace ConditioningControlPanel.Services.Quiz
             {
                 CancelExitWatchdog();
                 StopHeartbeatWatch();
+                StopSpeechBridge("closed", notifyPage: false);   // never leave the mic open behind a closed window
                 try { _host?.Dispose(); } catch { }
                 _host = null;
                 _exiting = false;

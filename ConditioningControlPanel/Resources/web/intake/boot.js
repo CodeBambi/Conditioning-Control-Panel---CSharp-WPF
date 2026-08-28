@@ -233,7 +233,9 @@ shim.onBoot(async (config) => {
     const beats = createBeats
       // micEnabled: the host's MicConsentGiven. Absent (standalone/harness) => true,
       // where the browser's own permission prompt is the gate and no WPF setting exists.
-      ? tryMake('beats', () => createBeats({ root: dom.stage, effects, audio, steering, reward, caps: config.caps, background, theme, media: config.media || null, niche: config.niche, micEnabled: config.micEnabled !== false }), stubBeats)
+      // speech: the host's offline recognizer, when it lent us one (web-shim hostSpeech;
+      // bridge=false on the website / RN host, where beats.js keeps its browser path).
+      ? tryMake('beats', () => createBeats({ root: dom.stage, effects, audio, steering, reward, caps: config.caps, background, theme, media: config.media || null, niche: config.niche, micEnabled: config.micEnabled !== false, speech: shim.hostSpeech }), stubBeats)
       : stubBeats();
 
     // --- fiction identity + feed-forward ----------------------------------

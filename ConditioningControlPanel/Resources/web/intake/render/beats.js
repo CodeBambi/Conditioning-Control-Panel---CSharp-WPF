@@ -1,7 +1,7 @@
 /* ============================================================================
  * render/beats.js — RESPONSE MECHANICS for "Graded Intake"  (Agent C)
  *
- * createBeats({ root, effects, audio, steering, reward, caps, background, theme, media })
+ * createBeats({ root, effects, audio, steering, reward, caps, background, theme, media, niche, micEnabled, speech })
  *   -> { render(beat) }
  *   render(beat: BeatSpec) -> Promise<AnswerEvent>
  *
@@ -14,7 +14,9 @@
  *   own slow drift shortly after landing and commits by drifting fully
  *   offscreen
  *   after the answer window; climax pop-storm decoys; pop = reward chain of
- *   mini bubbles), Mantra (Web Speech -> type-it degrade), CheckIn
+ *   mini bubbles), Mantra (host's offline Vosk over the speech bridge when the
+ *   desktop lends it -> Web Speech -> type-it degrade; any hard error goes
+ *   straight to type-it), CheckIn
  *   (slider), Mono (single agree), Funnel (wrong -> respawns correct),
  *   Destruct (correct shatters but STILL registers), Interlude (non-question
  *   pacing valley: 'watch' spiral stare / 'breathe' cycle, auto-commits).
@@ -679,7 +681,7 @@ function fadeLayerOutRemove(node, outMs, removeMs) {
 /* ----------------------------------------------------------------------------
  * FACTORY
  * -------------------------------------------------------------------------- */
-export function createBeats({ root, effects, audio, steering, reward, caps, background, theme, media, niche, micEnabled } = {}) {
+export function createBeats({ root, effects, audio, steering, reward, caps, background, theme, media, niche, micEnabled, speech } = {}) {
   const stage = root;
   caps = caps || {};
   // Kick the guarded, one-time captcha-layer import (Verify* mechanics). Safe to
@@ -688,6 +690,11 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
   // Host's MicConsentGiven. Undefined (standalone/harness) => allowed, since there
   // the browser's permission prompt is the only gate that exists.
   const micAllowed = micEnabled !== false;
+  // The host's offline recognizer (web-shim hostSpeech), FEATURE-DETECTED: only the
+  // desktop host sets bridge=true. Everywhere else (website, harness, RN) this is
+  // null and the say-it beat keeps its browser SpeechRecognition path.
+  const speechBridge = (speech && typeof speech === 'object' && speech.bridge === true
+                        && typeof speech.start === 'function') ? speech : null;
 
   // NEW RUN: re-arm the once-per-run "are you sure?" jumpscare latch.
   _ixEventFired = false;
@@ -3661,7 +3668,17 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
         cleanups.push(() => clearTimeout(t));
       }
 
-      // Mantra — say-it via Web Speech; degrades to type-it. Commits the string.
+      // Mantra — say it. Two ears, one contract; commits the string.
+      //   HOST BRIDGE (desktop WebView2, feature-detected FIRST): the app lends its
+      //     OFFLINE Vosk recognizer over web-shim's hostSpeech (speech-start /
+      //     speech-event) — the same engine + leniency spoken mantras and She's
+      //     Listening use. The mic opens the moment the card mounts, the way those
+      //     do; the button is a live indicator and a re-tap after the host goes idle.
+      //   BROWSER (website, harness): window.SpeechRecognition, tap & say it. Inside
+      //     WebView2 this API errors ('network' / 'not-allowed' — no cloud recognizer),
+      //     which is why the bridge exists.
+      // EITHER EAR: any hard error drops the item to typed input AT ONCE. It must
+      // never loop "didn't catch that" with no way forward (T2 Ashley, 2026-08-28).
       function renderMantra() {
         const phrase = prompt.answer != null ? String(prompt.answer) : (prompt.text || '');
         const say = el('div', 'ib-mantra-say', '“' + phrase + '”');
@@ -3690,7 +3707,7 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
           if (target) { target.classList.remove('ib-shake'); void target.offsetWidth; target.classList.add('ib-shake'); }
         };
 
-        // --- type-it degrade path ---
+        // --- type-it path (the degrade target of BOTH ears) ---
         const buildTypeIt = (note) => {
           if (note) status.textContent = note;
           const row = el('div', 'ib-mantra-type');
@@ -3706,77 +3723,213 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
           setTimeout(() => { try { inp.focus(); } catch (_e) {} }, 40);
         };
 
-        // --- lazily probe Web Speech ONLY here (never at import) ---
-        let SR = null;
-        try { SR = (typeof window !== 'undefined') && (window.SpeechRecognition || window.webkitSpeechRecognition); } catch (_e) { SR = null; }
-
-        if (!SR) { buildTypeIt(''); card.appendChild(skip); installSteering([]); return; }
-
-        let rec = null;
-        try {
-          rec = new SR();
-          rec.lang = 'en-US';
-          rec.interimResults = false;
-          rec.maxAlternatives = 3;
-        } catch (_e) { buildTypeIt('type it'); card.appendChild(skip); installSteering([]); return; }
-
-        const mic = mkBtn('🎙 tap & say it', null, 'ib-opt ib-mic');
-        card.appendChild(mic);
-        // PILL RULE: mic off in the app => the affordance is shown DISABLED, not
-        // hidden and not live. Hiding it would silently remove a feature the user
-        // owns; leaving it live would offer a button that can only fail. Greyed
-        // says "this exists, turn the mic on" — and type-it is still right there.
-        if (!micAllowed) {
-          mic.disabled = true;
-          mic.classList.add('is-off');
-          mic.textContent = '🎙 mic is off';
-          mic.title = 'Microphone is disabled in settings.';
-          mic.setAttribute('aria-disabled', 'true');
-        }
+        // Shared degrade: show the typed input ONCE. keepMic=true leaves a working ear
+        // live beside it (after repeated misses); false closes the ear and removes its
+        // button (hard error / user chose to type). The skip stays under everything.
         let typeOffered = false;
-        const offerType = mkBtn('type instead', () => {
-          if (typeOffered) return; typeOffered = true;
-          mic.remove(); offerType.remove();
-          buildTypeIt('');
-        }, 'ib-alt');
-        card.appendChild(offerType);
-
-        rec.onresult = (e) => {
-          let best = '';
-          let ok = false;
-          try {
-            for (let i = 0; i < e.results.length; i++) {
-              for (let j = 0; j < e.results[i].length; j++) {
-                const tr = e.results[i][j].transcript;
-                if (!best) best = tr;
-                if (matchMantra(tr, phrase)) { ok = true; best = tr; break; }
-              }
-              if (ok) break;
-            }
-          } catch (_e) {}
-          if (ok || !phrase) commitSaid(best);
-          else reject(mic, 'almost — say it again');
-        };
-        rec.onerror = (ev) => {
-          mic.classList.remove('is-live');
-          const err = ev && ev.error;
-          if (err === 'not-allowed' || err === 'service-not-allowed') {
-            if (!typeOffered) { typeOffered = true; mic.remove(); offerType.remove(); buildTypeIt('mic unavailable — type it'); }
-          } else {
-            status.textContent = 'didn’t catch that';
+        let micEl = null, offerTypeEl = null;
+        let stopEars = () => {};   // set by whichever ear is live; closes the mic
+        const dropToTyped = (note, keepMic) => {
+          if (committed) return;
+          if (typeOffered) { if (note) status.textContent = note; return; }
+          typeOffered = true;
+          if (!keepMic) {
+            try { stopEars(); } catch (_e) {}
+            if (micEl) { try { micEl.remove(); } catch (_e) {} micEl = null; }
           }
+          if (offerTypeEl) { try { offerTypeEl.remove(); } catch (_e) {} offerTypeEl = null; }
+          buildTypeIt(note);
+          card.appendChild(skip);   // appendChild MOVES it back under the new row
         };
-        rec.onend = () => { mic.classList.remove('is-live'); };
-        mic.addEventListener('click', () => {
-          if (committed || !micAllowed) return;   // disabled is belt; this is braces
-          try { rec.start(); mic.classList.add('is-live'); status.textContent = 'listening…'; }
-          catch (_e) { /* start() throws if already running; ignore */ }
-        });
-        cleanups.push(() => {
-          try { if (rec) { rec.onresult = rec.onerror = rec.onend = null; if (rec.abort) rec.abort(); } } catch (_e) {}
-        });
-        card.appendChild(skip);
-        installSteering([]);
+
+        if (speechBridge) { renderHostEar(); return; }
+        renderBrowserEar();
+
+        // =================== HOST EAR (desktop: offline Vosk) ===================
+        function renderHostEar() {
+          const mic = mkBtn('🎙 listening…', null, 'ib-opt ib-mic');
+          micEl = mic;
+          card.appendChild(mic);
+          const offerType = mkBtn('type instead', () => dropToTyped('', false), 'ib-alt');
+          offerTypeEl = offerType;
+          card.appendChild(offerType);
+          card.appendChild(skip);
+          installSteering([]);
+
+          // PILL RULE: mic off in the app => the affordance is shown DISABLED, not
+          // hidden and not live (see the browser ear). Nothing to start.
+          if (!micAllowed) {
+            mic.disabled = true;
+            mic.classList.add('is-off');
+            mic.textContent = '🎙 mic is off';
+            mic.title = 'Microphone is disabled in settings.';
+            mic.setAttribute('aria-disabled', 'true');
+            return;
+          }
+
+          // What to print when the host says it cannot open the mic. Keys are the
+          // host's wire reasons (IntakeSpeechPolicy.cs); unknown => the generic line.
+          const REASON_NOTE = {
+            'consent':      'mic is off — type it',
+            'no-mic':       'no microphone — type it',
+            'no-model':     'speech model not installed — type it',
+            'model-failed': 'speech model failed to load — type it',
+            'busy':         'mic is busy elsewhere — type it',
+            'error':        'mic unavailable — type it',
+          };
+
+          let sid = 0;         // the host session id events must carry; 0 = none open
+          let misses = 0;
+          const setLive = (on) => {
+            mic.classList.toggle('is-live', !!on);
+            mic.textContent = on ? '🎙 listening…' : '🎙 tap & say it';
+          };
+          const onEvent = (m) => {
+            if (committed || !m || m.id !== sid) return;   // stale session: not ours
+            switch (m.kind) {
+              case 'listening':
+                setLive(true); status.textContent = 'listening…';
+                break;
+              case 'partial':
+                if (m.transcript) status.textContent = '…' + String(m.transcript);
+                break;
+              case 'final': {
+                const heard = String(m.transcript || '');
+                // The host's verdict carries the mantra threshold AND the loudness gate.
+                // The page's own tolerance is a second ear on the transcript — but never
+                // past that gate: a whisper the host judged too quiet stays a miss.
+                const ok = m.matched === true
+                        || (m.loudEnough !== false && !!phrase && matchMantra(heard, phrase));
+                if (ok || !phrase) { sid = 0; setLive(false); commitSaid(heard || phrase); return; }
+                misses++;
+                reject(mic, m.loudEnough === false ? 'louder — say it again' : 'almost — say it again');
+                // Three misses: keep listening, but put the keyboard right there too.
+                if (misses >= 3) dropToTyped('or just type it', true);
+                break;
+              }
+              case 'silence':
+                status.textContent = 'didn’t catch that — say it out loud';
+                break;
+              case 'idle':       // host stopped re-opening the mic; a tap starts it again
+                sid = 0; setLive(false); status.textContent = 'tap to listen again';
+                break;
+              case 'unavailable':
+                sid = 0; setLive(false);
+                dropToTyped(REASON_NOTE[m.reason] || REASON_NOTE.error, false);
+                break;
+              case 'stopped':
+                sid = 0; setLive(false);
+                break;
+            }
+          };
+          const unsub = speechBridge.listen(onEvent);
+          const stop = () => { const id = sid; sid = 0; if (id) { try { speechBridge.stop(id); } catch (_e) {} } };
+          stopEars = stop;
+          const start = () => {
+            if (committed || sid) return;
+            let id = 0;
+            try { id = speechBridge.start(phrase); } catch (_e) { id = 0; }
+            if (!id) { dropToTyped(REASON_NOTE.error, false); return; }
+            sid = id;
+            setLive(true); status.textContent = 'listening…';
+          };
+          mic.addEventListener('click', start);
+          cleanups.push(() => {
+            try { unsub(); } catch (_e) {}
+            try { stop(); } catch (_e) {}
+          });
+          // Auto-open, the way spoken mantras and the voice lock card do.
+          start();
+        }
+
+        // =================== BROWSER EAR (website / harness) ===================
+        function renderBrowserEar() {
+          // --- lazily probe Web Speech ONLY here (never at import) ---
+          let SR = null;
+          try { SR = (typeof window !== 'undefined') && (window.SpeechRecognition || window.webkitSpeechRecognition); } catch (_e) { SR = null; }
+
+          if (!SR) { buildTypeIt(''); card.appendChild(skip); installSteering([]); return; }
+
+          let rec = null;
+          try {
+            rec = new SR();
+            rec.lang = 'en-US';
+            rec.interimResults = false;
+            rec.maxAlternatives = 3;
+          } catch (_e) { buildTypeIt('type it'); card.appendChild(skip); installSteering([]); return; }
+
+          const mic = mkBtn('🎙 tap & say it', null, 'ib-opt ib-mic');
+          micEl = mic;
+          card.appendChild(mic);
+          // PILL RULE: mic off in the app => the affordance is shown DISABLED, not
+          // hidden and not live. Hiding it would silently remove a feature the user
+          // owns; leaving it live would offer a button that can only fail. Greyed
+          // says "this exists, turn the mic on" — and type-it is still right there.
+          if (!micAllowed) {
+            mic.disabled = true;
+            mic.classList.add('is-off');
+            mic.textContent = '🎙 mic is off';
+            mic.title = 'Microphone is disabled in settings.';
+            mic.setAttribute('aria-disabled', 'true');
+          }
+          const offerType = mkBtn('type instead', () => dropToTyped('', false), 'ib-alt');
+          offerTypeEl = offerType;
+          card.appendChild(offerType);
+
+          let misses = 0, softErrors = 0;
+          rec.onresult = (e) => {
+            let best = '';
+            let ok = false;
+            try {
+              for (let i = 0; i < e.results.length; i++) {
+                for (let j = 0; j < e.results[i].length; j++) {
+                  const tr = e.results[i][j].transcript;
+                  if (!best) best = tr;
+                  if (matchMantra(tr, phrase)) { ok = true; best = tr; break; }
+                }
+                if (ok) break;
+              }
+            } catch (_e) {}
+            if (ok || !phrase) { commitSaid(best); return; }
+            misses++;
+            reject(mic, 'almost — say it again');
+            if (misses >= 3) dropToTyped('or just type it', true);
+          };
+          rec.onerror = (ev) => {
+            mic.classList.remove('is-live');
+            const err = (ev && ev.error) || 'error';
+            // 'no-speech' (nothing said) and 'aborted' (we cancelled) are not failures
+            // of the ear — but even those must not loop forever.
+            if (err === 'no-speech' || err === 'aborted') {
+              softErrors++;
+              if (softErrors >= 3) { dropToTyped('didn’t catch that — type it', false); return; }
+              status.textContent = 'didn’t catch that — tap & try again';
+              return;
+            }
+            // network / not-allowed / service-not-allowed / audio-capture / anything
+            // else: this ear cannot work here. Typed input, now.
+            dropToTyped(
+              (err === 'not-allowed' || err === 'service-not-allowed') ? 'mic unavailable — type it'
+                                                                       : 'speech isn’t working here — type it',
+              false);
+          };
+          rec.onend = () => { mic.classList.remove('is-live'); };
+          mic.addEventListener('click', () => {
+            if (committed || !micAllowed) return;   // disabled is belt; this is braces
+            try { rec.start(); mic.classList.add('is-live'); status.textContent = 'listening…'; }
+            catch (e) {
+              // start() throws InvalidStateError when already running (ignore); anything
+              // else means the recognizer is dead — go typed.
+              if (!(e && e.name === 'InvalidStateError')) dropToTyped('speech isn’t working here — type it', false);
+            }
+          });
+          stopEars = () => { try { if (rec && rec.abort) rec.abort(); } catch (_e) {} };
+          cleanups.push(() => {
+            try { if (rec) { rec.onresult = rec.onerror = rec.onend = null; if (rec.abort) rec.abort(); } } catch (_e) {}
+          });
+          card.appendChild(skip);
+          installSteering([]);
+        }
       }
     });
   }
