@@ -75,7 +75,7 @@
  *     network, not the player's own disk (remote.js request(), trap 54).
  * ==========================================================================*/
 
-import { buildLocalPools, isLocalUrl, formatOk, kindOf, wantRemote } from './inventory.js';
+import { buildLocalPools, isLocalUrl, isOwnPageUrl, formatOk, kindOf, wantRemote } from './inventory.js';
 import { createRemoteChannel } from './remote.js';
 import { createTaggedPool, TAGGED } from './tagged.js';
 import { createVetter } from './vet.js';
@@ -587,30 +587,29 @@ export function createAssets(options = {}) {
     if (n < WARM_RETRY_MAX) prewarmed.delete(s);
   }
 
-  /** Only bytes that actually travel: remote http(s), not our own origin. */
+  /** Only bytes that actually travel: remote http(s), not our own PAGE. Our own
+   *  ORIGIN is not the test any more (trap 136): inside the Discord Activity a
+   *  remote row is '<frame origin>/scrolller-media/...' - same origin, proxied
+   *  CDN - and it warms like any other remote url. */
   function warmable(url) {
     const s = String(url || '');
     if (!s || prewarmed.has(s)) return false;
     if (isBrokenUrl(s)) return false;            // a dead url is never re-asked for
     if (isLocalUrl(s)) return false;             // ccp.* / relative / data: / blob:
     if (!/^https?:\/\//i.test(s)) return false;
-    try {
-      if (typeof location !== 'undefined' && location.origin && new URL(s).origin === location.origin) return false;
-    } catch { return false; }
+    try { new URL(s); } catch { return false; }  // an unparsable url warms nothing
+    if (isOwnPageUrl(s)) return false;           // the campus's own bundled files
     return true;
   }
 
-  /** A url whose warm cannot help: local disk, our own origin, data:/blob:.
+  /** A url whose warm cannot help: local disk, our own page, data:/blob:.
    *  These are ready the instant an element asks - ready() answers true NOW. */
   function instantUrl(url) {
     const s = String(url || '');
     if (!s) return false;
     if (isLocalUrl(s)) return true;
     if (!/^https?:\/\//i.test(s)) return true;
-    try {
-      if (typeof location !== 'undefined' && location.origin && new URL(s).origin === location.origin) return true;
-    } catch { /* an unparsable url is not instant */ }
-    return false;
+    return isOwnPageUrl(s);
   }
 
   /* Warm OUTCOMES, for ready(): which urls finished (bytes + decode for a
@@ -844,7 +843,7 @@ export function createAssets(options = {}) {
   /* THE VET (0827, see ./vet.js): liveness proof for a list of rows before a
    * game deals off them. Its dead verdicts land in the blacklist above as
    * PERMANENT strikes, so a tagged serve / a substitute pick skips them. */
-  const vetter = createVetter({ markBroken, isBroken: isBrokenUrl, isLocal: isLocalUrl, log });
+  const vetter = createVetter({ markBroken, isBroken: isBrokenUrl, isLocal: isLocalUrl, isOwnPage: isOwnPageUrl, log });
   const mediaSeam = {
     warmManifest: (entries, opts) => { void opts; return warmManifest(entries); },
     warmCursor: (i) => warmCursor(i),

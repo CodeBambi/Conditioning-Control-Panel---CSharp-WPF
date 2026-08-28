@@ -81,6 +81,12 @@ const verdicts = new Map();
  * @param {Function} o.markBroken (url, permanent) -> the provider's blacklist verb
  * @param {Function} o.isBroken   (url) -> boolean
  * @param {Function} o.isLocal    (url) -> boolean (inventory.js isLocalUrl)
+ * @param {Function} [o.isOwnPage] (url) -> boolean (inventory.js isOwnPageUrl): same
+ *                                origin AND under the document's directory. Absent,
+ *                                the old same-origin test stands. Injected because a
+ *                                same-origin url is NOT proof of life any more: inside
+ *                                the Discord Activity a remote row is
+ *                                '<frame origin>/scrolller-media/...' (trap 136).
  * @param {Function} [o.log]
  */
 export function createVetter(o = {}) {
@@ -88,6 +94,7 @@ export function createVetter(o = {}) {
   const markBroken = typeof o.markBroken === 'function' ? o.markBroken : () => {};
   const isBroken = typeof o.isBroken === 'function' ? o.isBroken : () => false;
   const isLocal = typeof o.isLocal === 'function' ? o.isLocal : () => false;
+  const isOwnPage = typeof o.isOwnPage === 'function' ? o.isOwnPage : null;
 
   const canProbe = (() => {
     try {
@@ -96,12 +103,15 @@ export function createVetter(o = {}) {
     } catch (e) { return false; }
   })();
 
-  /** Alive without asking: the host's own disk, our origin, inline data. */
+  /** Alive without asking: the host's own disk, our own page, inline data. */
   function instant(url) {
     const s = String(url || '');
     if (!s) return false;
     try { if (isLocal(s)) return true; } catch (e) { /* fall through */ }
     if (!/^https?:\/\//i.test(s)) return true;
+    if (isOwnPage) {
+      try { return !!isOwnPage(s); } catch (e) { return false; }
+    }
     try {
       if (typeof location !== 'undefined' && location.origin && new URL(s).origin === location.origin) return true;
     } catch (e) { /* an unparsable url is not instant */ }
