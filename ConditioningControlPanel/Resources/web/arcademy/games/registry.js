@@ -151,6 +151,42 @@ export const OPEN_SEMESTERS = new Set([1, 2, 3]);
  */
 export const RETIRED_GAMES = new Set(['misdirection']);
 
+/**
+ * SLASH COMMAND PER CLASS - THE TWO-REPO CONTRACT (Discord Activity, 2026-08-28).
+ *
+ * `/arcademy` opens the campus; one command per class opens THAT room directly,
+ * and only for a player whose punch card is complete. The command name is
+ * derived from the KEY and never from `gameName()` or a lexicon row - a mod
+ * that re-voices a class must not rename a Discord command.
+ *
+ * THIS TABLE IS HALF OF A CONTRACT. The other half is CCP-Server
+ * `bot/arcademy-activity.js` (`commandDefinitions()` / `handleCommand`), which
+ * registers exactly these names against exactly these keys. Change one side and
+ * you MUST change the other in the same wave, or a command opens the campus
+ * instead of the room the player asked for.
+ *
+ * RETIRED CLASSES ARE ABSENT (misdirection): no command, no launch, and the
+ * entitlement route answers complete=false for the key regardless. A key with
+ * no row here simply has no Discord line in the unlock ceremony.
+ */
+export const DISCORD_COMMAND = Object.freeze({
+  daily_trigger: '/dailytrigger',
+  lost_and_found: '/lostandfound',
+  deja_vu: '/dejavu',
+  impulse_control: '/impulsecontrol',
+  sort: '/sort',
+  echo: '/echo',
+  instant_recall: '/instantrecall',
+  anomaly: '/anomaly',
+  composure: '/composure',
+  the_deep_end: '/deepend',
+});
+
+/** The slash command that opens this class in Discord, or '' when it has none. */
+export function discordCommand(key) {
+  return DISCORD_COMMAND[key] || '';
+}
+
 /** True when a class's semester has opened (unknown keys are Semester I) AND
  *  the class has not been retired - this is the ONE gate the registry pool,
  *  the timetable and shell/campus.js all read, so they can never disagree. */

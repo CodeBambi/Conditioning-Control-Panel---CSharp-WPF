@@ -37,6 +37,7 @@
 import { t } from '../core/lexicon.js';
 import { exitBar, sign as signExit } from './exits.js';
 import { cardFace, thud, THUD_PITCH, HOLES, ENROLL_PUNCHES } from './punchcard.js';
+import { DISCORD_COMMAND } from '../games/registry.js';
 
 /* ----------------------------------------------------------------------------
  * THE FLAVOUR COPY
@@ -435,6 +436,21 @@ export function createPunchCeremony(o) {
   unlockBox.appendChild(el('p', 'arc-pc-unlock-line',
     t('punchcard_unlocked_line',
       'This room is now open even when the course is not in session.')));
+  /* THE DISCORD ROW (the Activity wave, 2026-08-28). A full card opens the room
+   * on EVERY host, and one of them is the CCP Discord: `/dailytrigger` and its
+   * nine siblings open that class as an Activity for a player whose card is
+   * complete. The command comes from games/registry.js DISCORD_COMMAND - the
+   * two-repo contract with CCP-Server `bot/arcademy-activity.js` - so it is
+   * derived from the KEY and never from the class's (mod-skinnable) name. A key
+   * with NO row there (a retired class) simply has no third line: the row is
+   * never appended, rather than printing an empty command. */
+  const cmd = DISCORD_COMMAND[s.gameKey] || '';
+  if (cmd) {
+    unlockBox.appendChild(el('p', 'arc-pc-unlock-discord',
+      String(t('punchcard_unlocked_discord',
+        'Even in Discord: type {cmd} in the CCP server to play it anytime.'))
+        .replace('{cmd}', cmd)));
+  }
   box.appendChild(unlockBox);
 
   const done = el('button', 'btn primary', t('done', 'Done'));
