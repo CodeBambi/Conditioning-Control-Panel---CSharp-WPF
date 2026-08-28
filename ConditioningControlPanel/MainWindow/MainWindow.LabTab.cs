@@ -417,6 +417,40 @@ namespace ConditioningControlPanel
 
             SyncBlinkRecalToggles(s.BlinkRecalibrateShortcutEnabled);
             UpdatePanicKeyButton();
+
+            RefreshQuickRecalHotkeyHint();
+        }
+
+        /// <summary>Base ToolTip text authored on BtnWebcamDebugQuickRecal in
+        /// DevicesSettingsSection.xaml, captured once so repeated refreshes append the hotkey
+        /// line to the original copy instead of to their own previous output.</summary>
+        private string? _quickRecalTooltipBase;
+
+        /// <summary>
+        /// Teaches the global Quick Recal chord on the webcam bar in Settings → Devices — the
+        /// gaze section people already visit when the cursor starts drifting. It rides the
+        /// existing Quick Recal button's ToolTip so the chord sits on the very control it
+        /// replaces, and it names the camera start/stop shortcut in the same breath so the two
+        /// webcam hotkeys can't be mistaken for each other.
+        /// </summary>
+        private void RefreshQuickRecalHotkeyHint()
+        {
+            try
+            {
+                var btn = AppSettingsTab?.BtnWebcamDebugQuickRecal;
+                if (btn == null) return;
+
+                _quickRecalTooltipBase ??= btn.ToolTip as string ?? "";
+
+                var hint = QuickRecalHotkeyHint();
+                btn.ToolTip = string.IsNullOrEmpty(_quickRecalTooltipBase)
+                    ? hint
+                    : _quickRecalTooltipBase + "\n\n" + hint;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("RefreshQuickRecalHotkeyHint failed: {Error}", ex.Message);
+            }
         }
 
         private void WebcamActivePill_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)

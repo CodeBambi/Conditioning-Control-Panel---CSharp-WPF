@@ -34,6 +34,14 @@ namespace ConditioningControlPanel
         public WebcamQuickRecalWindow()
         {
             InitializeComponent();
+
+            // Discoverability: this window is the one place every user of Quick Recal
+            // provably reaches, so it is where the global chord gets taught. Built here
+            // rather than in XAML because the line quotes the user's own (rebindable)
+            // camera shortcut alongside it — the two webcam hotkeys must never read as
+            // interchangeable.
+            try { TxtHotkeyHint.Text = MainWindow.QuickRecalHotkeyHint(); }
+            catch (Exception ex) { App.Logger?.Debug("Quick recal hotkey hint unavailable: {Error}", ex.Message); }
         }
 
         private async void Window_Loaded(object sender, RoutedEventArgs e)

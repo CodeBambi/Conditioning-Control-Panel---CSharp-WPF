@@ -17,7 +17,26 @@ namespace ConditioningControlPanel.Services
     {
         public const string FileName = "webcam-calibration.json";
 
-        /// <summary>"TwoPoint" (gaze-side only), "FivePoint" (legacy), "NinePoint" (3×3), "SixteenPoint" (4×4), or "TwentyFivePoint" (current, 5×5 with margin=40). The 5×5 grid puts dots at every edge midpoint and shrinks the corner-to-bezel extrapolation from ~90 DIPs to ~40 DIPs — directly addresses the top/bottom undershoot that 4×4 had to extrapolate. Earlier 5×5 attempts had jumpy cursor + drift, but those traced to issues in the regression / outlier rejection / head-pose comp / edge-pull, all since fixed.</summary>
+        /// <summary>
+        /// "TwoPoint" (gaze-side only), "FivePoint" (legacy), "NinePoint" (3×3),
+        /// or "SixteenPoint" (4×4) — <b>SixteenPoint is what the calibration
+        /// window actually writes today</b> (WebcamCalibrationWindow GridSize = 4).
+        /// <para>
+        /// CORRECTED 2026-08-27: this summary previously claimed "TwentyFivePoint
+        /// (current, 5×5)" and that the 5×5 grid "directly addresses the top/bottom
+        /// undershoot". No 5×5 mode is written by any current code path, and the
+        /// top/bottom undershoot was NOT solved — it was simply never measured,
+        /// because the bubble accuracy test only sampled the middle band
+        /// (h × {0.30, 0.72}) and never probed the top or bottom 25% of the
+        /// screen. That blind spot was fixed in the accuracy test itself (four
+        /// distinct y-levels at 0.15 / 0.38 / 0.62 / 0.85), not by a grid change.
+        /// Vertical error remains structurally ~1.5-2× horizontal: vertical
+        /// eyeball rotation for a full-screen sweep is roughly half the
+        /// horizontal, so the iris translates half as far per screen unit, and
+        /// the eyelid occludes the iris exactly where it matters. Do not read
+        /// this field as evidence that vertical is solved.
+        /// </para>
+        /// </summary>
         [JsonProperty] public string Mode { get; set; } = "";
 
         [JsonProperty] public DateTime Timestamp { get; set; }
@@ -33,7 +52,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Legacy. Iris vector at the top edge of the calibration grid, written
         /// by older builds that ran an iris-extreme edge-pull heuristic at
-        /// runtime. The edge-pull was retired once the 5×5 grid + Cerrolaza
+        /// runtime. The edge-pull was retired once the calibration grid + Cerrolaza
         /// polynomial reached the screen edges on its own; new calibrations
         /// don't populate this. Kept here so saves from older builds still
         /// deserialize.
@@ -60,15 +79,25 @@ namespace ConditioningControlPanel.Services
         [JsonProperty] public PolynomialFitData? Polynomial { get; set; }
 
         /// <summary>
-        /// Calibration-time average head pose ("looking forward" reference).
-        /// Paired with <see cref="HeadPoseComp"/> to correct the iris vector
-        /// when the live head pose leaves this baseline. History: an earlier
-        /// comp pipeline fit its coefficients from the NATURAL head variance
-        /// during dot sampling — users hold still, so the fit was noise and
-        /// got retired. It's now back with a well-conditioned source: a
-        /// guided head-motion step (eyes on a center dot, deliberate nod +
-        /// turn) — see WebcamCalibrationWindow.RunHeadMotionPhaseAsync. Null
-        /// when the guided fit was skipped or failed.
+        /// DEAD FIELD. Deserialized for back-compat with old saves; never
+        /// populated by current code and never read at runtime.
+        /// <para>
+        /// CORRECTED 2026-08-27: this summary previously described a "guided
+        /// head-motion step … see WebcamCalibrationWindow.RunHeadMotionPhaseAsync".
+        /// <b>That method no longer exists.</b> Head-pose compensation has now
+        /// been built and retired TWICE — first fit from natural head variance
+        /// during dot sampling (users hold still, so the fit was noise), then
+        /// again from a guided nod+turn phase (retired 2026-07-02). See the
+        /// tombstone in WebcamTrackingService near the head-pose block.
+        /// </para><para>
+        /// Do not resurrect this. Multiplying head pose into the projection is
+        /// a twice-failed design. Head pose IS used productively — but only as
+        /// a TRIGGER, never as a correction term: GazeDriftCorrectionService
+        /// watches LastYaw/LastPitch and, when it detects a settled reposition,
+        /// temporarily raises the residual-folding gain so the existing proven
+        /// drift machinery re-converges in seconds instead of minutes. That
+        /// baseline is held in memory only, deliberately not persisted here.
+        /// </para>
         /// </summary>
         [JsonProperty] public CalibrationHeadPose? BaselineHeadPose { get; set; }
 
@@ -83,7 +112,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Translational nudge in screen DIPs, applied after the polynomial
         /// projection. Set by the Quick Recal flow when the user wants to
-        /// correct overall drift without redoing the full 25-point calibration.
+        /// correct overall drift without redoing the full 16-point calibration.
         /// Null on calibrations from older app versions or when the user has
         /// never run quick-recal — projection path skips the nudge.
         /// </summary>
