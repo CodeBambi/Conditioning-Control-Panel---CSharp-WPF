@@ -570,7 +570,19 @@ namespace ConditioningControlPanel
             {
                 _clampScreenValid = false;   // monitor may have changed under the cached clamp bounds
                 CalculateScaleFactor();
-                if (_isAttached) UpdatePosition();
+                if (_isAttached)
+                {
+                    // CalculateScaleFactor only writes ContentViewbox.Width/Height; the WINDOW follows on the
+                    // NEXT layout pass (the ContentViewbox.SizeChanged handler wired in OnLoaded). UpdatePosition
+                    // measures the tube with GetWindowRect, so without forcing layout here it hangs the NEW
+                    // offsets off the OLD footprint and plants her (newW-oldW) px too far right and
+                    // (newH-oldH)/2 px too low: on top of main's left rail until the next parent move. A cold
+                    // boot on a mixed-DPI pair hits this every launch (born on the primary, the first
+                    // UpdatePosition carries her onto main's monitor, WM_DPICHANGED is swallowed, and this
+                    // refit runs 450 ms later). Same force-layout Attach() does, for the same reason.
+                    UpdateLayout();
+                    UpdatePosition();
+                }
                 App.Logger?.Information("AvatarTube DPI settle refit: scale {Scale:F2}", _scaleFactor);
             }
             catch (Exception ex)
