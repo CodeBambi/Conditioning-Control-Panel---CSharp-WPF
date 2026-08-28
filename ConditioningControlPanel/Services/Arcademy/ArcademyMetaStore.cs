@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Threading;
 using Newtonsoft.Json;
@@ -75,6 +76,10 @@ internal sealed class ArcademyMetaStore
     /// <summary>How many unpaid frames are kept. See <see cref="QueueMint"/> for why the cap drops
     /// the oldest rather than refusing the newest.</summary>
     private const int PendingMintCap = 60;
+
+    /// <summary>The shape the wallet routes demand of <c>deviceId</c>, spelled here so an id this
+    /// machine hands over can never be one the server will only ever answer with a 400.</summary>
+    private static readonly Regex DeviceIdShape = new("^[A-Za-z0-9_-]{8,64}$", RegexOptions.Compiled);
 
     /// <summary>Classes in a day — the timetable's fixed size (GROUND-RULES §4).</summary>
     private const int ClassesPerDay = 4;
@@ -569,7 +574,14 @@ internal sealed class ArcademyMetaStore
         lock (_lock)
         {
             var existing = (string?)_state[WalletDeviceKey];
-            if (!string.IsNullOrWhiteSpace(existing) && existing.Length is >= 8 and <= 64) return existing;
+            // THE WIRE'S SHAPE, NOT JUST A LENGTH. The server refuses anything outside
+            // `^[A-Za-z0-9_-]{8,64}$` with a 400, so an id that is the right length but the wrong
+            // alphabet - a hand-edited file, a braced GUID somebody pasted in - would fail on EVERY
+            // launch, for ever, with no way out. The import is the one call that cannot simply be
+            // skipped and retried later, because the balance it carries is real. Minting a fresh one
+            // costs nothing: the local `walletImported` flag is what stops a second import, and it
+            // is still absent on a machine that has never managed a first.
+            if (!string.IsNullOrWhiteSpace(existing) && DeviceIdShape.IsMatch(existing)) return existing;
             var minted = Guid.NewGuid().ToString("N");
             _state[WalletDeviceKey] = minted;
             Touch();
