@@ -3674,11 +3674,13 @@ internal static class ArcademyHostService
     /// checks the window generation the way every other async continuation here does - a reply that
     /// arrives after the Arcademy closed must not paint a payout into the NEXT session's report.
     ///
-    /// <para>THE THREE ENDINGS. Banked: adopt what came back and report it. Nobody answered: mint
-    /// locally so the debrief still has a number, park the frame under the same <c>mintId</c>, and
-    /// let the next launch carry it up - the server's answer will REPLACE this preview, so nothing
-    /// is ever counted twice. Refused (the tier gate, mostly): mint locally and park nothing,
-    /// because a frame this account can never bank is a queue that can never drain.</para>
+    /// <para>THE THREE ENDINGS. Banked: adopt what came back and report it. Nobody answered YET -
+    /// the wire, or the TIER GATE, which on this desk is a 14-day cached-entitlement grace the
+    /// server does not keep, so an account can legitimately be playing here and not yet bankable
+    /// there: mint locally so the debrief still has a number, park the frame under the same
+    /// <c>mintId</c>, and let the next launch carry it up - the server's answer will REPLACE this
+    /// preview, so nothing is ever counted twice. Refused: mint locally and park nothing, because a
+    /// frame this account can never bank is a queue that can never drain.</para>
     /// </summary>
     private static void SettleMint(int epoch, PayoutReport report, JObject frame, string lever,
         bool lateSlipUsed, bool zen, string localDate, ArcademyWalletSyncService.MintOutcome outcome)

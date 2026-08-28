@@ -44,6 +44,15 @@ namespace ConditioningControlPanel.Services.Arcademy;
 /// still mints locally so the debrief has a number to show, then parks the frame. The server's
 /// answer REPLACES the local wallet when the queue drains, so the preview is never added to
 /// anything - it is only ever the page's benefit.</para>
+///
+/// <para>THE TIER GATE IS PARKED, NOT DROPPED, AND THAT IS A DESKTOP RULE. The server reads the
+/// live tier on every call; this app grants a 14-day cached-entitlement grace it does not, so
+/// inside that grace an account playing here is answered <c>403 arcademy_locked</c> there. The
+/// import can only ever carry what was on this machine when it ran, never a night earned after it,
+/// so a dropped frame is the one way the grace could cost somebody money they watched themselves
+/// earn. Parked frames wait for the pledge, and the server pays a queued one even when its stamp
+/// falls outside the attendance wall. A 403 that names no tier is the identity door, which is a
+/// different refusal and keeps its own ending.</para>
 /// </summary>
 internal static class ArcademyWalletSyncService
 {
@@ -103,6 +112,11 @@ internal static class ArcademyWalletSyncService
     /// the credential door alike - either way it is the same launch-long condition. Reset per launch.</summary>
     private static bool _refusalLogged;
 
+    /// <summary>Set the first time the tier gate turns a mint away this launch. It changes nothing
+    /// about what happens to the frame (it parks, like any other unanswered one); it only stops the
+    /// replay reporting a wall as "the wire is down", which is the wrong thing to go looking for.</summary>
+    private static bool _tierWalled;
+
     /// <summary>One request at a time. The server takes a 5s account lock on every write, so two
     /// of ours racing would only 409 each other.</summary>
     private static readonly SemaphoreSlim InFlight = new(1, 1);
@@ -124,6 +138,7 @@ internal static class ArcademyWalletSyncService
             _onWalletChanged = onWalletChanged;
             _serverPayday = null;
             _refusalLogged = false;
+            _tierWalled = false;
         }
         int generation = Volatile.Read(ref _generation);
         Run(() => LaunchAsync(generation), "launch");
@@ -160,12 +175,13 @@ internal static class ArcademyWalletSyncService
         /// <summary>The server minted it. <c>Economy</c> is its answer and the wallet is adopted.</summary>
         Banked,
 
-        /// <summary>Nobody answered (network, 5xx, 409, 429, a timeout). Mint locally for the page
-        /// and park the frame.</summary>
+        /// <summary>Nobody answered, or nobody may answer YET (network, 5xx, 409, 429, a timeout,
+        /// and the tier gate). Mint locally for the page and park the frame.</summary>
         Queue,
 
-        /// <summary>The server said no and will say no again (403 tier, 400 body). Mint locally and
-        /// park nothing - a queue of frames that can never land is just a leak.</summary>
+        /// <summary>The server said no and will say no to this frame for ever (a malformed body, a
+        /// credential that names no account at all). Mint locally and park nothing - a queue of
+        /// frames that can never land is just a leak.</summary>
         Refused,
     }
 
@@ -390,19 +406,51 @@ internal static class ArcademyWalletSyncService
             {
                 int status = (int)response.StatusCode;
 
-                // 403 IS THE TIER GATE, and it is not a failure to retry. The desktop opens the
-                // Arcademy on a slightly wider bar than the server mints on (the 14-day offline
-                // grace, mainly), so an account can legitimately be playing here and unable to bank
-                // there. Its money simply stays on this machine, and it is worth exactly one line.
                 if (status == 403)
                 {
+                    var refusal = Parse(text);
+
+                    // THE TIER GATE IS THE ONE REFUSAL THIS LANE PARKS, and it is worth saying why
+                    // at length because the server's own contract advises the opposite.
+                    //
+                    // The desktop grants a 14-day CACHED-ENTITLEMENT GRACE that the server does not
+                    // keep: the proxy reads the live tier on every call, so inside that grace an
+                    // account that is legitimately playing here is answered 403 there. Dropping the
+                    // frame is the one way that grace could cost somebody real money, because the
+                    // once-per-device import can only ever carry what was on the machine when it
+                    // ran - never a night earned after it. The queue CAN carry that night, and the
+                    // server pays a queued frame even when its stamp falls outside the attendance
+                    // wall (it answers `<game>:queued_stamp_walled` and pays anyway).
+                    //
+                    // Replayed on the NEXT LAUNCH and no sooner, which is also the only cadence
+                    // that means anything: a pledge does not come back mid-session.
+                    if (IsTierRefusal(refusal))
+                    {
+                        lock (Gate)
+                        {
+                            _tierWalled = true;
+                            if (!_refusalLogged)
+                            {
+                                _refusalLogged = true;
+                                App.Logger?.Information(
+                                    "[ArcademyWallet] the server will not bank for this account yet: {Body}. Frames are being parked until it does.",
+                                    Truncate(text));
+                            }
+                        }
+                        return new MintOutcome(MintVerdict.Queue, null);
+                    }
+
+                    // THE OTHER 403 IS `arcademy_identity_unknown`, and it is a different animal:
+                    // this credential resolves to no account at all, so there is no wallet for a
+                    // queue to drain into and a parked frame would be waiting on something that is
+                    // not coming. The money stays on this machine, where it already is.
                     lock (Gate)
                     {
                         if (!_refusalLogged)
                         {
                             _refusalLogged = true;
                             App.Logger?.Information(
-                                "[ArcademyWallet] the server will not bank for this account: {Body}. Tickets stay on this machine.",
+                                "[ArcademyWallet] the server cannot name an account for this credential: {Body}. Tickets stay on this machine.",
                                 Truncate(text));
                         }
                     }
@@ -411,8 +459,25 @@ internal static class ArcademyWalletSyncService
 
                 // A 400 is this client speaking a contract the server has not learned (or a frame
                 // built out of something unreadable). Replaying it forever would never fix it.
+                //
+                // ONE REASON IS DIFFERENT AND IT IS WORTH THE EXTRA BRANCH. `local_day_out_of_range`
+                // on a frame that did NOT go up marked `queued` is the ATTENDANCE wall, which is
+                // deliberately the tighter of the server's two: it asks whether somebody really was
+                // at this desk on that day. The queue's wall is fourteen days wide, so the very same
+                // frame replayed as a queued one is a frame the server will pay. Parking it is
+                // therefore not a retry of a hopeless request, it is asking a different question.
                 if (status == 400)
                 {
+                    var refusal = Parse(text);
+                    if ((string?)refusal?["reason"] == "local_day_out_of_range"
+                        && (bool?)frame["queued"] != true)
+                    {
+                        App.Logger?.Information(
+                            "[ArcademyWallet] the attendance wall would not take {Day} - parking it for the queue's wider window",
+                            (string?)frame["localDay"]);
+                        return new MintOutcome(MintVerdict.Queue, null);
+                    }
+
                     App.Logger?.Warning("[ArcademyWallet] the server refused the frame: {Body}", Truncate(text));
                     return new MintOutcome(MintVerdict.Refused, null);
                 }
@@ -484,8 +549,13 @@ internal static class ArcademyWalletSyncService
     /// answer on the way back) is recognised and paid once.
     ///
     /// <para>Stops at the first frame nobody answers rather than working down the list: the wire is
-    /// down, and the rest of the queue would only be a row of timeouts. A frame the server actively
-    /// refuses is dropped instead, because a queue that can never drain is just a leak.</para>
+    /// down, and the rest of the queue would only be a row of timeouts. THE TIER GATE STOPS IT THE
+    /// SAME WAY and for a better reason - it is one condition for the whole launch, so the second
+    /// frame would only be told what the first one already was. A frame the server refuses outright
+    /// is dropped instead, because a queue that can never drain is just a leak.</para>
+    ///
+    /// <para>Called at launch, and again after any mint that landed (a mint landing is proof the
+    /// wire and the gate are both open). Nothing here retries inside a session on its own.</para>
     /// </summary>
     private static async Task ReplayAsync(int generation)
     {
@@ -509,7 +579,12 @@ internal static class ArcademyWalletSyncService
             var outcome = await PostMintAsync(frame, generation).ConfigureAwait(false);
             if (outcome.Verdict == MintVerdict.Queue)
             {
-                App.Logger?.Information("[ArcademyWallet] the wire is still down - {N} frame(s) stay parked",
+                bool walled;
+                lock (Gate) walled = _tierWalled;
+                App.Logger?.Information(
+                    walled
+                        ? "[ArcademyWallet] the account cannot bank yet - {N} frame(s) stay parked"
+                        : "[ArcademyWallet] the wire is still down - {N} frame(s) stay parked",
                     store.PendingMintCount());
                 return;
             }
@@ -590,6 +665,21 @@ internal static class ArcademyWalletSyncService
     }
 
     // ============================ small guards ============================
+
+    /// <summary>
+    /// Is this 403 the TIER gate rather than the identity door? The two send a player to two
+    /// different places and this lane treats them differently, so it reads the machine-readable
+    /// fields rather than the status code: the tier body is <c>code:'arcademy_locked'</c> and
+    /// carries <c>min_tier</c>, the identity body is <c>code:'arcademy_identity_unknown'</c> and
+    /// carries neither. An unreadable body is treated as the identity refusal, which is the side
+    /// that parks nothing - a queue is the thing to be careful about growing.
+    /// </summary>
+    private static bool IsTierRefusal(JObject? refusal)
+    {
+        if (refusal == null) return false;
+        if (string.Equals((string?)refusal["code"], "arcademy_locked", StringComparison.Ordinal)) return true;
+        return refusal["min_tier"] != null && refusal["min_tier"]!.Type != JTokenType.Null;
+    }
 
     /// <summary>Take the server's draw for tonight, when it sent one worth having.</summary>
     private static void NotePayday(JObject? payday)
