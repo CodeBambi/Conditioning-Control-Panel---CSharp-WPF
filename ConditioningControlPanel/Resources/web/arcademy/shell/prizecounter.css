@@ -638,3 +638,21 @@ html.arc-reduced .pc-buy.is-breath { animation:none; }
    The scrim lifts a little so the shelf stays legible behind a beat that is
    only passing through. */
 .pc-beat.is-compact { background:color-mix(in srgb, var(--ground) 48%, transparent); }
+
+/* ================= THE SHELF ON AN UPRIGHT PHONE ==========================
+ * PORTRAIT ONLY, so landscape and desktop keep every number they had. The
+ * `max-width:520px` query above already stacks `.pc-goods` into one column
+ * here, and the landscape compaction block is qualified away, so a portrait
+ * row is a wide row with room to spare - the only thing wrong with it is the
+ * size of the one control that spends money.
+ * ==========================================================================*/
+
+/* 74x28 IS NOT A THUMB TARGET, and Trade is the button this whole screen
+   exists for. It inherits `.btn`'s 28px box, which is a mouse number: the rig
+   read it at 74x28 on every viewport, against the 44px floor the back slab,
+   the exit bar and the locker tiles all clear. A `<button>` centres its own
+   label vertically, so the floor is the whole edit - the label does not move
+   and the row does not reflow, the hit box just grows to meet the thumb.
+   Landscape keeps 28 deliberately: its apron is 72px and its rows are 99px
+   tall in three columns, and 44 there costs a row of goods. */
+html.arc-mobile[data-arc-orient="portrait"] .pc-buy { min-height: 44px; }

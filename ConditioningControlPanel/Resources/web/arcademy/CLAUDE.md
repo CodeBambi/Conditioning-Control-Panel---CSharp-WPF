@@ -181,7 +181,17 @@ shell/scene.js     THE SCENE CHASSIS: a generalised point-and-click ROOM (the
                    time, the apron's back slab on <body>, the inward-out Esc
                    fold that answers FALSE at home). Dumb by construction - it
                    renders a table it was handed and calls back; it owns no
-                   store, no bridge, no key and no lexicon row. + scene.css
+                   store, no bridge, no key and no lexicon row.
+                   THREE AXES (portrait wave 0828): `phoneAxis()` answers
+                   '' | 'landscape' | 'portrait' and scene.css carries the
+                   SAME `[data-arc-orient]` qualifiers - box and origin must
+                   travel together or the scale walks off-axis. Portrait
+                   top-anchors the plate and the band becomes the painted
+                   FLOOR, so `apronWanted()` steps the carpet off for an open
+                   panel (an upright phone's panel IS a close-up) and the
+                   panel is sized off `--asc-art-line` rather than
+                   `--arm-band-h`; `publishBand()` writes 0 to <html> while it
+                   is away. Laws 138 + 139. + scene.css
                    THE ALIVE LAYER (W2 0825): a DECLARATIVE `fx` table, the
                    same grammar as `hotspots` and `patches` and the same stage
                    pixels - `[{kind, view, rect:[x,y,w,h] | circle:{cx,cy,r},
@@ -3206,6 +3216,31 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     The Locker WEAR tile composites it too. Do NOT reach for z-index on the body sprite: the face
     must stay over the body for every other outfit. Follow-up: the script should emit over-*.png
     itself.
+
+138. **A BAND SIZED FOR A 72px STRIP IS A BAND THAT EATS THE SCREEN WHEN IT BECOMES A FLOOR
+    (portrait facilities, 0828).** `.asc-panel` clears `--arm-band-h` because it rises out of
+    the carpet, which is honest while the carpet IS a 72px action strip. In portrait it is not:
+    fit() hangs the apron off the painting's floor line and runs it to the bottom of the glass,
+    so a 390x844 phone fitting the 1376x768 plate by WIDTH puts that line at y=181 and hands the
+    band 663px. `100% - var(--arm-band-h) - 16px` is then 165px of panel for a shop whose content
+    measures 1790px. The cure is not a shorter band (that leaves a 550px dark void on the wide
+    shot): on an upright phone **an open panel IS a close-up**, so `apronWanted()` in `scene.js`
+    steps the carpet off for it through the same `.asc-bar-away` the zoom already uses, and the
+    panel is sized off `--asc-art-line` - the floor line in SCREEN pixels, published by the same
+    fit() - instead of off the band. The catch that is easy to miss: `publishBand()` must write
+    **zero** to `<html>`'s `--arm-band-h` while the carpet is away, because `.arc-rs-stage`
+    (styles.css) pads its bottom by it and a body-level spotlight would otherwise reserve four
+    fifths of the phone for a carpet that is not on screen. Landscape and desktop publish the
+    real number in every state, which is what keeps their rects identical.
+139. **THE TWO CHASSIS SHARE `rooms.css`, SO HALF OF A PORTRAIT FIX ARRIVES FOR FREE AND THE
+    OTHER HALF NEVER DOES.** `.asc-bar` wears `.arm-bar`: PR #382's portrait apron block (the
+    grid, `align-content:start`, the 12px top padding, the 48px/11px ghost slab) applied itself
+    to the facilities the moment it merged, which is why the back slab was already at the top of
+    the band and reading `Back to campus` in full before this branch touched anything. What did
+    NOT come across is everything keyed on the chassis's own prefix - the stage anchor
+    (`.asc-stage` vs `.arm-stage`) and the overlay - because room.js has no `.asc-panel` and the
+    scene had no header card. Read the sibling's diff before writing the same fix twice, and
+    check which half is `.arm-`.
 
 ## 5. The game module contract (short version)
 

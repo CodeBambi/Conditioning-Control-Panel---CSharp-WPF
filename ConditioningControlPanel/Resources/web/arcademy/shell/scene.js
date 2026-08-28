@@ -120,13 +120,30 @@ import { t as lexT } from '../core/lexicon.js';
 import { isMobile, orientation } from '../core/device.js';
 
 /* THE ONE MOBILE DECISION (core/device.js), asked the way room.js asks it, and
- * LANDSCAPE ONLY for room.js's reason: portrait is behind the rotate gate, and
- * top-anchoring a 9:19.5 frame would hand the apron two thirds of the screen.
- * The apron floor and the stage anchor are computed here, the box they move is
- * styled from `html.arc-mobile[data-arc-orient="landscape"]` in scene.css, and
- * the two must not drift. The wrapper is for the DOM double, no matchMedia. */
-function onPhone() {
-  try { return !!isMobile() && orientation() === 'landscape'; } catch (e) { return false; }
+ * THREE-VALUED now for the reason room.js's is. It used to be
+ * `isMobile() && orientation() === 'landscape'`, because the campus asked for
+ * the phone sideways (`requireOrientation('landscape')`) and portrait was a
+ * screen nobody could reach. The upright wave (2026-08-28) took that gate down
+ * and room.js followed it; this is the SIBLING chassis and it was still
+ * answering "not a phone" in portrait, so the Prize Counter, the Records Office
+ * and the Locker each opened in the DESKTOP layout on 390px of glass.
+ *
+ * Every caller says which axis it means:
+ *   ''           desktop, untouched, and the whole mobile block is dead code
+ *   'landscape'  exactly what it did before, to the pixel
+ *   'portrait'   top-anchored painting, the apron at the painting's floor line,
+ *                and the band STEPS OFF for a panel (see apronWanted below)
+ * scene.css carries the SAME `[data-arc-orient]` qualifier on the rules that
+ * move with each value; the box and the origin must not drift or the scale
+ * walks the plane off-axis (this file's own header, lab.css's lesson).
+ *
+ * The wrapper is for the DOM double, which has no matchMedia and must get ''
+ * rather than a throw at fit() time. */
+function phoneAxis() {
+  try {
+    if (!isMobile()) return '';
+    return orientation() === 'portrait' ? 'portrait' : 'landscape';
+  } catch (e) { return ''; }
 }
 
 /** The plane the VN art was authored on. Overridable, rarely overridden. */
@@ -142,6 +159,17 @@ const APRON_MIN = 110;
 /** The phone's floor. room.js's number and room.js's reasons - the two chassis
  *  share rooms.css's slab sizing, so they must share the band it sizes off. */
 const APRON_MIN_MOBILE = 72;
+/* AND THE PORTRAIT FLOOR, its own number for the same reason room.js has one,
+ * and a much smaller one because a FACILITY apron is not a classroom apron.
+ * room.js needs 170: portrait stands its contents up in three rows (knobs,
+ * lever rail, then Back beside BEGIN CLASS). This chassis carries the back
+ * slab and nothing else - `.arm-bar-right` is built empty here - so the whole
+ * stack is rooms.css's 12px portrait top padding over the 6px route tape, a
+ * 48px slab, and 12px under it: 72, rounded to 80 for the 3px bottom border
+ * and the shadow it throws. It is a FLOOR and almost never binds - a 9:19.5
+ * frame fitting a 16:9 plate by WIDTH leaves ~660px under the painting's floor
+ * line - but a freak short portrait must not clip the one button it carries. */
+const APRON_MIN_PORTRAIT = 80;
 
 /** The zoom between slides. One number, mirrored in scene.css. */
 const ZOOM_MS = 320;
@@ -397,6 +425,10 @@ export function createScene(opts) {
     if (doc.body) doc.body.appendChild(bar); else root.appendChild(bar);
   }
 
+  /** Is the band on screen right now? Read by publishBand(), which has to tell
+   *  a body-level modal how much carpet it is actually clearing. */
+  let apronShown = true;
+
   /**
    * THE BAND STEPS OFF FOR A CLOSE-UP. One class, and the sheet owns both the
    * ~200ms fade and the `.arc-reduced` cut - the JS is one path, exactly the
@@ -409,6 +441,7 @@ export function createScene(opts) {
    * off-screen at the wide shot.
    */
   function apronVisible(show) {
+    apronShown = !!show;
     if (!bar) return;
     try {
       if (bar.classList && typeof bar.classList.toggle === 'function') { bar.classList.toggle('asc-bar-away', !show); return; }
@@ -419,6 +452,42 @@ export function createScene(opts) {
       if (!show && !has && bar.classList && bar.classList.add) bar.classList.add('asc-bar-away');
       else if (show && has && bar.classList && bar.classList.remove) bar.classList.remove('asc-bar-away');
     } catch (e) { /* noop */ }
+  }
+
+  /**
+   * WHO IS ALLOWED THE FRONT EDGE, and there are two claimants now.
+   *
+   * The old answer was the whole of "a zoom is a zoom": the band belongs to the
+   * WIDE shot and steps off for every close-up. That still stands on both other
+   * axes. PORTRAIT ADDS ONE MORE, and the arithmetic is the argument. On a
+   * 390x844 phone the plate fits by WIDTH at 0.283, so the painting's floor
+   * line lands at y=181 and the band under it is 663px - four fifths of the
+   * glass. `.asc-panel` clears the band (it rises out of the carpet, scene.css)
+   * so the shelf would get 844 - 663 - 16 = 165px to show a catalog in, which
+   * is one row of goods and an exit bar. Measured on origin/main: 479px before
+   * the painting was even top-anchored, and 165 after.
+   *
+   * So on an upright phone A PANEL IS THE ROOM: the carpet steps off for it the
+   * same way it steps off for a close-up, by the same class and the same 200ms,
+   * and the panel takes the glass under the painting. This file already says
+   * why - "a sheet of paper behind an opaque slab is a sheet of paper nobody
+   * can read" - it simply had never had to apply it to a band this tall.
+   *
+   * LANDSCAPE AND DESKTOP ARE UNTOUCHED and must stay so: their band is 72px
+   * and 110-152px, the panel clears it comfortably, and the carpet under an
+   * open panel is a big part of what makes the room a room.
+   */
+  function apronWanted() {
+    if (viewName && viewName !== 'wide') return false;
+    if (overlay && phoneAxis() === 'portrait') return false;
+    return true;
+  }
+
+  /** Write the level and republish the band, in that order - publishBand()
+   *  reads `apronShown`. Every caller that can move either one calls this. */
+  function syncApron() {
+    apronVisible(apronWanted());
+    publishBand();
   }
 
   /* ---------------------------------------------------- the step-back pill */
@@ -1078,8 +1147,10 @@ export function createScene(opts) {
     applyFlags();
     /* A ZOOM IS A ZOOM: the band belongs to the wide shot and steps off for
      * every close-up. Written on EVERY move, not just the ones that change it,
-     * so the level always matches the view that is actually up. */
-    apronVisible(name === 'wide');
+     * so the level always matches the view that is actually up. apronWanted()
+     * owns the rule now, because an upright phone has a second claimant on the
+     * front edge (an open panel) and the level is the AND of both. */
+    syncApron();
     /* ...and the pill is the other half of the same law: the band and the pill
      * are never both up, and never both away. */
     backVisible(name !== 'wide');
@@ -1178,6 +1249,10 @@ export function createScene(opts) {
     layer.appendChild(panel);
     root.appendChild(layer);
     overlay = { name: name, layer: layer, token: token };
+    /* AFTER `overlay` is set and BEFORE the panel is filled: apronWanted()
+     * reads `overlay`, and mountFn measures itself against a `--arm-band-h`
+     * that must already say what the carpet is about to do. */
+    syncApron();
     sfx('paper', 0.24);
     if (typeof mountFn === 'function') {
       try { mountFn(panel); } catch (e) { log('scene overlay mount threw: ' + ((e && e.message) || e)); }
@@ -1191,6 +1266,12 @@ export function createScene(opts) {
     const layer = overlay.layer;
     overlay = null;
     try { layer.remove(); } catch (e) { /* noop */ }
+    /* The carpet comes back the moment the panel is off the DOM, not one
+     * animation later: `overlay` is already null, so this is the whole of it.
+     * openOverlay() closes an existing panel before opening the next, which
+     * would flick the band on and off in portrait between two panels - the
+     * ~200ms fade is a transition, so a same-frame off/on is not painted. */
+    syncApron();
     sfx('paper', 0.18);
   }
 
@@ -1234,14 +1315,19 @@ export function createScene(opts) {
      * the plane off-axis (this file's own header). The ZOOM is untouched: it
      * lives on `.asc-slide`, one level down, and still turns about its own
      * centre. */
-    const phone = onPhone();
+    const axis = phoneAxis();
+    const phone = !!axis;
     stage.style.transform = 'translate(-50%,' + (phone ? '0' : '-50%') + ') scale(' + s + ')';
 
     let bandH = 0;
+    let apronTop = h;
     if (bar) {
-      const floor = phone ? APRON_MIN_MOBILE : APRON_MIN;
+      /* Three floors for three axes now, and the portrait one is its own
+       * number because portrait's apron is padded differently: 14px over the
+       * route tape, a 48px slab, 12px under it. See the constants up top. */
+      const floor = axis === 'portrait' ? APRON_MIN_PORTRAIT : (phone ? APRON_MIN_MOBILE : APRON_MIN);
       const artTop = phone ? 0 : (h - stageH * s) / 2;
-      let apronTop = artTop + apronStageTop * s;
+      apronTop = artTop + apronStageTop * s;
       if (h - apronTop < floor) apronTop = h - floor;
       if (apronTop < 0) apronTop = 0;
       bandH = h - apronTop;
@@ -1249,15 +1335,55 @@ export function createScene(opts) {
       bar.style.setProperty('--arm-band-h', bandH + 'px');
     }
     root.style.setProperty('--arm-band-h', bandH + 'px');
-    /* ...AND ON <html>, because a viewport-level modal cannot inherit it.
-     * `position:fixed` inside this room is contained by the room (root is
-     * fixed, and an overlay panel carries a transform), so anything that has
-     * to be measured against the WINDOW - the Records spotlight, a notice
-     * reader - is mounted on <body> and has no ancestor of ours to read the
-     * band off. One page-level custom property is the seam; destroy() clears
-     * it, so a screen after this one never inherits a carpet that left. */
-    setBandVar(bandH);
+    /* THE PAINTING'S FLOOR LINE, IN SCREEN PIXELS, and it is a SECOND fact
+     * because in portrait the panel can no longer be sized off the band. A
+     * 390x844 phone fits the 1376x768 plate by WIDTH at 0.283, so the floor
+     * line lands at y=181 and the carpet under it is 663px: the old ceiling,
+     * `100% - band - 16`, leaves 165px of shelf, which is one row of goods and
+     * an exit bar. Portrait sizes the panel off THIS instead (`100% - artLine
+     * - 16` = 647px) and lets the carpet step off underneath it, which is what
+     * apronWanted() is for. Landscape and desktop never read it: their band is
+     * 72px and 110-152px, the panel clears it, and nothing moves. */
+    lastBand = bandH;
+    lastArtLine = apronTop;
+    root.style.setProperty('--asc-art-line', apronTop + 'px');
+    if (bar) bar.style.setProperty('--asc-art-line', apronTop + 'px');
+    publishBand();
     return s;
+  }
+
+  /** What the last fit() worked out, in screen px, for publishBand() to echo
+   *  onto <html> whenever the carpet comes or goes without a resize. */
+  let lastBand = 0;
+  let lastArtLine = 0;
+
+  /**
+   * THE BAND AS A PAGE FACT, because a viewport-level modal cannot inherit it.
+   * `position:fixed` inside this room is contained by the room (root is fixed,
+   * and an overlay panel carries a transform), so anything that has to be
+   * measured against the WINDOW - the Records spotlight, a notice reader - is
+   * mounted on <body> and has no ancestor of ours to read the band off. One
+   * page-level custom property is the seam; destroy() clears it, so a screen
+   * after this one never inherits a carpet that left.
+   *
+   * AND IT PUBLISHES ZERO WHILE THE CARPET IS AWAY IN PORTRAIT, because away
+   * is a thing that only happens there and only for a panel. `.arc-rs-stage`
+   * pads its bottom by this number (styles.css); a spotlight opened over a
+   * stepped-off 663px band would reserve four fifths of a 844px phone for a
+   * carpet that is not on screen. Landscape and desktop publish the real
+   * number in every state, which is exactly what they did before this line
+   * existed: their carpet never steps off for a panel, so there is nothing to
+   * correct for and their measurements are unchanged to the pixel.
+   */
+  function publishBand() {
+    const away = !apronShown && phoneAxis() === 'portrait';
+    setBandVar(away ? 0 : lastBand);
+    try {
+      const de = doc.documentElement;
+      if (de && de.style && typeof de.style.setProperty === 'function') {
+        de.style.setProperty('--asc-art-line', lastArtLine + 'px');
+      }
+    } catch (e) { /* noop */ }
   }
 
   /** The band height as a page fact. Defensive: the node double has no
@@ -1309,8 +1435,13 @@ export function createScene(opts) {
     if (sheetRooms && sheetRooms.removeEventListener) { try { sheetRooms.removeEventListener('load', onResize); } catch (e) { /* noop */ } }
     if (overlay) { try { overlay.layer.remove(); } catch (e) { /* noop */ } overlay = null; }
     if (bar) { try { bar.remove(); } catch (e) { /* noop */ } }
-    /* The carpet goes with the room: the next screen has no band. */
+    /* The carpet goes with the room: the next screen has no band, and no
+     * painting either, so the floor line goes out with it. */
     setBandVar(0);
+    try {
+      const de = doc.documentElement;
+      if (de && de.style && typeof de.style.removeProperty === 'function') de.style.removeProperty('--asc-art-line');
+    } catch (e) { /* noop */ }
     try { root.remove(); } catch (e) { /* noop */ }
     live.length = 0;
     /* The props go with the room, but they are NOT ours to destroy - the

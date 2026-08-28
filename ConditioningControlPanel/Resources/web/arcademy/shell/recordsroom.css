@@ -470,3 +470,17 @@ html.arc-mobile .rr-cards .arc-records-docket { min-height: 0; }
 /* The cut: deskbook.js does not even arm the leaf under reduced motion, and
    this is the second floor under that decision. */
 .arc-reduced .rdb-flip { animation: none; opacity: 0; }
+
+/* ================ THE CARD WALL ON AN UPRIGHT PHONE =======================
+ * PORTRAIT ONLY. The four-up wall above was written for a phone in LANDSCAPE,
+ * where 774px of desk divides into four 186px columns and a card reads. The
+ * upright wave made portrait reachable and the same rule divides 338px into
+ * four 77px columns: `.arc-pc` is `--pc-w:100%` so the card obediently shrinks
+ * to 77px wide, and "NOT ENROLLED - ATTEND THE CLASS" wraps onto four lines
+ * inside it. Two columns at 164px is the nearest thing to landscape's 186 that
+ * an upright phone can hold, and it is the same number the 360px screen gets
+ * (150) rather than a third size. The desktop three-up is untouched.
+ * ==========================================================================*/
+html.arc-mobile[data-arc-orient="portrait"] .rr-cards .arc-records-wall {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
