@@ -270,10 +270,15 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
   // The in-world port of the mandatory video: the tape RUSHES UP AT THE POV and
   // STICKS there - dead center, way closer than the tube's seated clips - caged
   // in a red, electric, vibrating frame (styles.css .sf-pfx-vidframe). It cannot
-  // be clicked away: it holds the full VIDEO_HOLD_SEC and only lets go early
-  // when the fall reaches a room (the junction/draft antechamber calls
-  // cancelHeavy). Only one at a time; the game keeps running underneath.
-  const VIDEO_HOLD_SEC = 15;
+  // be clicked away: it holds for the player's 'video spotlight time' and only
+  // lets go early when the fall reaches a room (the junction/draft antechamber
+  // calls cancelHeavy). Only one at a time; the game keeps running underneath.
+  //
+  // The hold is the LIVE S.spotSeconds dial (10-30s - the same knob the tube's
+  // proximity spotlight reads in engine/spawner.js), clamped to its slider range;
+  // VIDEO_HOLD_FALLBACK_SEC is only reached if the setting goes missing.
+  const VIDEO_HOLD_FALLBACK_SEC = 15;
+  const videoHoldSec = () => clamp(S.spotSeconds || VIDEO_HOLD_FALLBACK_SEC, 10, 30);
   async function videoCard() {
     if (disposed || videoCardEl) return;   // one card at a time
     if (!media) return;
@@ -323,11 +328,12 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
     };
     // rush at the face on the next frame, stick, then recede
     requestAnimationFrame(() => { if (!disposed) card.classList.add('in'); });
-    const life = setTimeout(remove, VIDEO_HOLD_SEC * 1000);
+    const holdMs = videoHoldSec() * 1000;   // read once so both timers agree
+    const life = setTimeout(remove, holdMs);
     const handle = { cancel: () => { clearTimeout(life); remove(); } };
     videoCardCancel = handle.cancel;
     loops.add(handle);
-    setTimeout(() => loops.delete(handle), VIDEO_HOLD_SEC * 1000 + 900);
+    setTimeout(() => loops.delete(handle), holdMs + 900);
   }
 
   /** Room arrival cuts the heavies short: the stuck video card recedes and any
@@ -416,5 +422,7 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
     front.remove();
   }
 
-  return { applyPayload, cancelHeavy, showPinnedSpiral, refreshPinnedSpiral, hidePinnedSpiral, dispose };
+  // videoHoldSec is public so the run brain's heavy-busy window tracks the same
+  // live 'video spotlight time' dial the card holds for (chaosRun VIDEO_HEAVY_SLACK_SEC).
+  return { applyPayload, cancelHeavy, videoHoldSec, showPinnedSpiral, refreshPinnedSpiral, hidePinnedSpiral, dispose };
 }

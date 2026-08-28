@@ -1049,6 +1049,7 @@ internal static class DtrhHostService
                 spawnRateMult = cfg.SpawnRateMult,
                 colorFlashes = cfg.ColorFlashesEnabled,
                 screenShake = cfg.ScreenShakeEnabled,
+                shakeIntensity = cfg.ShakeIntensity,   // 0..1 amplitude for the page's shake (game/screenShake.js)
 
                 // ---- M4: run-shape knobs ----
                 boonDraftEnabled = cfg.BoonDraftEnabled,
