@@ -66,14 +66,18 @@ import { onDeviceChange } from '../core/device.js';
  * THE TABLE
  * -------------------------------------------------------------------------- */
 
-/** The painted set. 1376x768, chained off vn-17 under the house camera law. */
+/** The painted set. 1376x768, chained off vn-09 (the records office) under the
+ *  house camera law, redo of 2026-08-28: real room depth, side walls
+ *  converging. */
 export const PLATE = 'vn-21-locker-room.png';
 
-/** THE OPEN DOOR, measured off the plate: the lit bay with the jacket on the
- *  hanger plus the leaf swung out beside it. It is the only thing in the room
- *  you can press, so it is the only thing that breathes. Clear of the apron
- *  line (y 640) on its own. */
-export const HOT_LOCKER = Object.freeze([746, 150, 162, 418]);
+/** THE OPEN DOOR, measured off the new plate: the lit bay with the varsity
+ *  jacket on the hanger plus the door leaf swung out beside it (x 748-888),
+ *  the locker bank running y 251-545. The 004 plate sits on the closed door
+ *  just left of the bay. It is the only thing in the room you can press, so it
+ *  is the only thing that breathes. Still clear of the apron line (y 640) on
+ *  its own. */
+export const HOT_LOCKER = Object.freeze([744, 246, 150, 304]);
 
 /** The three page-owned meta keys. Page-owned needs no C# change - the theme
  *  picker's `campusTheme` is the precedent and this is the same road. */
