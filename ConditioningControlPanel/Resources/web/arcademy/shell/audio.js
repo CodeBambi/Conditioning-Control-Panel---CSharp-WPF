@@ -20,6 +20,18 @@
  * DUCKING: `detail.duck = {target, mult, ms}` is already scaled by the player's
  * duckDepth cap (engine/curves.js DUCK .4/.25/.15). We ramp the affected buses to
  * `mult` and back over ~200ms. A duck is never a snap.
+ * Three optional fields on top of that shape, all added for the PA (2026-08-28)
+ * and all no-ops for a caller that omits them - see the DUCKING block down in
+ * `createAudio` for the full reasoning:
+ *   `mults` {bus: mult}  per-bus depth; `mult` covers the buses it omits.
+ *   `key`   string       HOLD at depth until released, instead of scheduling
+ *                        the way back up at the same instant it ducks. The cue's
+ *                        own `onEnded` releases it, so a nine-second spoken line
+ *                        keeps the room down for nine seconds rather than for
+ *                        the two the old `ms` clamp allowed. `ms` becomes the
+ *                        dead man's handle: the longest it MAY hold.
+ *   (and while a keyed duck is held, an ordinary duck on the same bus returns
+ *    to the HELD depth, never over the top of it.)
  *
  * PITCH: `detail.pitch` (optional, 0.5-2, default 1) multiplies every frequency in
  * the recipe - oscillator sweeps, arpeggio steps, the noise band and the stamp's
@@ -88,6 +100,13 @@
  * the element one. It is deliberately NOT a change to CLIP_GAIN: the whisper
  * clips and every other url ride that number too, and they were never the ones
  * that were too loud.
+ * ...AND SOME SAMPLES ARE QUIETER. A trim ABOVE 1 is makeup gain, which is the
+ * PA pack's whole story (2026-08-28): those thirty-six files were recorded
+ * eleven decibels under the soundtrack, so the row is `PA_MAKEUP`. The rule the
+ * two directions share is that the correction lives on the NAME that is wrong,
+ * never on the bus (which carries other people's correctly mastered audio) and
+ * never on CLIP_GAIN. One consequence, stated plainly: a `pa_NN` clip IS louder
+ * than a recipe at the same level, and that is the point of it.
  *
  * CLIPS (2026-08-23, Echo's trigger bubbles). A cue may carry `detail.url` - a
  * SAME-ORIGIN `ccp.*` media file (the app's own whisper clips). It is then
@@ -442,9 +461,40 @@ const SAMPLE_TRIM = {
   door:   0.55,
   whoosh: 0.65,
 };
+
+/** THE OTHER DIRECTION (owner report, 2026-08-28: "the announcer should be
+ *  higher in volume, the soundtrack is super loud compared to the announcer").
+ *  A trim above 1 is MAKEUP GAIN, and the PA is the one family that needs it.
+ *  Measured on the round-3 files with ffmpeg (ebur128, integrated loudness):
+ *
+ *      pa_01..pa_36   -25.1 .. -29.0 LUFS   (mean about -26.4, peaks -8 to -12 dBFS)
+ *      ost_*          -15.2 .. -15.9 LUFS   (peaks -1.9 to -2.9 dBFS)
+ *
+ *  The announcements were simply RECORDED eleven decibels under the
+ *  soundtrack, so no level or duck the page could ask for was ever going to
+ *  put her on top of it: at the old `LINE_LEVEL` 0.5, through the sqrt curve,
+ *  CLIP_GAIN and the voice bus, a line landed near -37 LUFS against a -28.5
+ *  LUFS soundtrack. The tannoy was eight decibels QUIETER than the music it
+ *  was talking over, which is the whole of the complaint.
+ *  This is the correction where the correction belongs - on the files that are
+ *  quiet, not on the `voice` bus (which also carries EMI and the trigger
+ *  whispers, both mastered fine) and not on `CLIP_GAIN` (which every url clip
+ *  rides). +8.9 dB of makeup puts a spoken line at about -25 LUFS.
+ *
+ *  IT CANNOT CLIP. The hottest PA file peaks at -8.2 dBFS (0.389 linear), and
+ *  0.389 x CLIP_GAIN x PA_MAKEUP against a voice bus at its 1.0 ceiling is
+ *  0.545 - still half of full scale before master. The headroom is already in
+ *  the recordings; this only spends some of it. */
+const PA_MAKEUP = 2.8;
+for (let i = 1; i <= PA_COUNT; i += 1) SAMPLE_TRIM[paName(i)] = PA_MAKEUP;
+
+/** The ceiling exists so a fat-fingered row cannot blow the graph: a trim is a
+ *  correction, never a second volume control. 4 is +12 dB, more than anything
+ *  this school ships is under. */
+const TRIM_MAX = 4;
 const trimFor = (name) => {
   const t = SAMPLE_TRIM[name];
-  return (Number.isFinite(t) && t > 0) ? t : 1;
+  return (Number.isFinite(t) && t > 0) ? Math.min(t, TRIM_MAX) : 1;
 };
 
 /** Samples that are NEVER pre-decoded and always play from an element: the five
@@ -1235,22 +1285,137 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
     return true;
   }
 
-  function duck(spec) {
-    if (!ac || !spec) return;
-    const targets = DUCK_TARGETS[spec.target] || DUCK_TARGETS.voice;
-    const mult = clamp01(spec.mult == null ? 0.4 : spec.mult);
-    const ms = Math.max(60, Math.min(2000, Number(spec.ms) || 200));
-    const t = ac.currentTime;
-    for (const b of targets) {
+  /* ---- DUCKING ------------------------------------------------------------
+   * THREE THINGS A DUCK CAN NOW DO that it could not before this wave, and all
+   * three exist because of one report (owner, 2026-08-28: the PA is buried
+   * under the soundtrack). None of them changes what an existing caller gets.
+   *
+   *  1. PER-BUS DEPTH. `spec.mults = {music: .2, fx: .35}` gives named buses
+   *     their own multiplier and `spec.mult` covers the rest. A voice duck that
+   *     is deep enough to clear a soundtrack out of the way is far too deep for
+   *     the click the player just made, and one number could not say both.
+   *  2. A HELD DUCK. `spec.key` means "hold at depth until I let go" - no
+   *     scheduled release at all, and `releaseDuck(key)` is the only way back
+   *     up. The old shape scheduled the return the moment it ducked, with `ms`
+   *     clamped to TWO SECONDS, so the PA's request for 3600ms became 2000ms
+   *     and the soundtrack PUMPED back to full volume four seconds into a
+   *     nine-second announcement. A spoken line does not know how long it is
+   *     until it ends; now it does not have to.
+   *  3. A FLOOR UNDER A HELD DUCK. While something is held down, an ordinary
+   *     one-shot duck landing on the same bus returns to the HELD depth rather
+   *     than to 1 - so a bell rung during an announcement cannot lift the
+   *     soundtrack back over her. Unheld buses are untouched by this.
+   *
+   * EVERY HELD DUCK HAS A DEAD MAN'S HANDLE: `spec.ms` becomes the longest it
+   * may hold rather than how long it holds, and the timer releases it if the
+   * owner never does. A bus stuck at -14 dB for the rest of the night is a
+   * worse bug than any pump.
+   * ------------------------------------------------------------------------ */
+
+  /** How long an UNKEYED duck may schedule itself down for. Unchanged law. */
+  const DUCK_MAX_MS = 2000;
+  /** The dead man's handle's ceiling for a HELD duck. Longer than PA_REQ_MAX_MS
+   *  plus its tail, so the timer only ever fires when the owner has vanished. */
+  const DUCK_HOLD_MAX_MS = 15000;
+  /** The ramp back up. A duck is never a snap, in either direction. */
+  const DUCK_RELEASE_S = 0.2;
+  /** The pause between "the line ended" and the room coming back. A quarter of
+   *  a second of held air reads as the tannoy switching off; no pause at all
+   *  reads as the music barging in over her last word. */
+  const DUCK_TAIL_MS = 260;
+
+  /** key -> {targets, timer}. The buses one held duck is sitting on. */
+  const heldDucks = new Map();
+  /** bus -> the deepest mult any held duck has it at. The floor from note 3. */
+  const heldFloor = Object.create(null);
+
+  /** Recompute `heldFloor` from what is actually held. Cheap (at most one or
+   *  two entries) and it is the only writer, so a released duck can never
+   *  leave its floor behind. */
+  function recomputeFloor() {
+    for (const k of Object.keys(heldFloor)) delete heldFloor[k];
+    for (const [, h] of heldDucks) {
+      for (const b of Object.keys(h.at)) {
+        const v = h.at[b];
+        if (!(b in heldFloor) || v < heldFloor[b]) heldFloor[b] = v;
+      }
+    }
+  }
+
+  /**
+   * Let a held duck go. Idempotent: an unknown key is a no-op, which is what
+   * makes it safe to call from a cue that never actually ducked.
+   * @param {string} key
+   * @param {number=} tailMs  wait this long before the ramp starts, so the room
+   *   comes back AFTER her last word has settled rather than under it.
+   */
+  function releaseDuck(key, tailMs) {
+    const k = String(key == null ? '' : key);
+    const held = heldDucks.get(k);
+    if (!held) return;
+    heldDucks.delete(k);
+    try { if (held.timer) clearTimeout(held.timer); } catch { /* ignore */ }
+    recomputeFloor();
+    if (!ac) return;
+    const t = ac.currentTime + Math.max(0, Number(tailMs) || 0) / 1000;
+    for (const b of Object.keys(held.at)) {
       const g = busGain[b];
       if (!g) continue;
+      // Back to 1, or to whatever ANOTHER held duck still wants of this bus.
+      const to = (b in heldFloor) ? heldFloor[b] : 1;
       try {
         g.duck.gain.cancelScheduledValues(t);
         g.duck.gain.setValueAtTime(g.duck.gain.value, t);
-        g.duck.gain.linearRampToValueAtTime(mult, t + 0.05);
-        g.duck.gain.setValueAtTime(mult, t + ms / 1000);
-        g.duck.gain.linearRampToValueAtTime(1, t + ms / 1000 + 0.2);
+        g.duck.gain.linearRampToValueAtTime(to, t + DUCK_RELEASE_S);
       } catch { /* ignore */ }
+    }
+  }
+
+  /** Let go of everything at once. The mute echo and the class teardown both
+   *  take every clip down, and a duck that outlives the sound it was made for
+   *  is a bus stuck quiet with nothing to show for it. */
+  function releaseAllDucks() {
+    for (const k of Array.from(heldDucks.keys())) releaseDuck(k, 0);
+  }
+
+  function duck(spec) {
+    if (!ac || !spec) return;
+    const targets = DUCK_TARGETS[spec.target] || DUCK_TARGETS.voice;
+    const base = clamp01(spec.mult == null ? 0.4 : spec.mult);
+    const per = (spec.mults && typeof spec.mults === 'object') ? spec.mults : null;
+    const key = spec.key == null ? null : String(spec.key);
+    const ms = key
+      ? Math.max(60, Math.min(DUCK_HOLD_MAX_MS, Number(spec.ms) || DUCK_HOLD_MAX_MS))
+      : Math.max(60, Math.min(DUCK_MAX_MS, Number(spec.ms) || 200));
+    // A re-fire on the same key replaces its own duck rather than stacking one
+    // on top of it. No tail: the new depth is arriving in 50ms anyway.
+    if (key) releaseDuck(key, 0);
+    const t = ac.currentTime;
+    const at = Object.create(null);
+    for (const b of targets) {
+      const g = busGain[b];
+      if (!g) continue;
+      const m = clamp01(per && Number.isFinite(+per[b]) ? +per[b] : base);
+      at[b] = m;
+      try {
+        g.duck.gain.cancelScheduledValues(t);
+        g.duck.gain.setValueAtTime(g.duck.gain.value, t);
+        g.duck.gain.linearRampToValueAtTime(m, t + 0.05);
+        if (!key) {
+          // THE FLOOR (note 3): an ordinary duck returns to the depth a HELD
+          // duck still has this bus at, never over the top of it.
+          const to = (b in heldFloor) ? Math.min(1, heldFloor[b]) : 1;
+          g.duck.gain.setValueAtTime(m, t + ms / 1000);
+          g.duck.gain.linearRampToValueAtTime(to, t + ms / 1000 + DUCK_RELEASE_S);
+        }
+      } catch { /* ignore */ }
+    }
+    if (key) {
+      heldDucks.set(key, {
+        at,
+        timer: setTimeout(() => releaseDuck(key, 0), ms),
+      });
+      recomputeFloor();
     }
     stats.ducks += 1;
   }
@@ -1262,11 +1427,27 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
      * road out of this function - including the four early returns below, which
      * answer 'dropped' inside the dispatch so a caller waiting on the cue is
      * never left holding a timeout for a sound that was never going to happen. */
-    const settle = onceCb(d.onEnded);
+    /* A KEYED DUCK IS RELEASED BY THE CUE'S OWN ENDING, and this is the join.
+     * Every road out of a clip - `ended`, the maxMs governor, a re-fire on the
+     * key, the voice cap, `stop_clips`, teardown, a broken file - already pays
+     * the settle exactly once, so hanging the release off it means the
+     * soundtrack comes back when SHE STOPS TALKING and at no other moment. The
+     * tail keeps it from arriving under her last syllable.
+     * `duckHeld` is what says whether the duck was ever applied: the duck is
+     * asked for at the BOTTOM of this function, so a cue that drops before it
+     * gets there (muted, no context, a sample-only name with no file) must not
+     * leave a duck behind - see the guard at the bottom. */
+    const duckKey = (d.duck && d.duck.key != null) ? String(d.duck.key) : null;
+    let duckSettled = false;
+    const settle = onceCb(duckKey ? (reason) => {
+      duckSettled = true;
+      releaseDuck(duckKey, DUCK_TAIL_MS);
+      if (typeof d.onEnded === 'function') d.onEnded(reason);
+    } : d.onEnded);
     // The one CONTROL message on the sfx bus: the shell sends it when a class is
     // torn down so a trigger clip (<=1.2s) never leaks into the lobby. No audio
     // handle crosses into shell.js for this; the bus was already the seam.
-    if (d.name === 'stop_clips') { pendingHolds.clear(); stopAllClips(); settle('dropped'); return; }
+    if (d.name === 'stop_clips') { pendingHolds.clear(); stopAllClips(); releaseAllDucks(); settle('dropped'); return; }
     // The second control message (HOLD): leave a room. Honoured before the mute
     // check so a bed started before the mute echo can still be let go of.
     if (d.stop === true) {
@@ -1397,7 +1578,13 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
         } catch { /* a step must never break the bus */ }
       }
     }
-    if (d.duck) duck(d.duck);
+    /* A CUE THAT NEVER SOUNDED NEVER DUCKS. `duckSettled` is set by the settle
+     * wrapper above, which every drop road pays before it returns - so a
+     * SAMPLE_ONLY name with no file behind it, or a line that fell to the
+     * recipe, no longer pulls the soundtrack down for a sound nobody heard.
+     * (Only KEYED ducks can reach this state; an unkeyed one behaves exactly as
+     * it always did, because `duckSettled` is never written for it.) */
+    if (d.duck && !(duckKey && duckSettled)) duck(d.duck);
   }
 
   /** The host's echo is the ONLY thing that moves a level (settings.js trap 1). */
@@ -1409,7 +1596,7 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
       applyMaster();
       // A muted master silences the graph, but a clip that fell back to the
       // element's own volume is outside it - cut them rather than trust it.
-      if (mute) stopAllClips();
+      if (mute) { stopAllClips(); releaseAllDucks(); }
       return;
     }
     if (key === 'masterVolume') { master = clamp01(m.value); applyMaster(); return; }
@@ -1489,6 +1676,7 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
       }
       try { offSetting(); } catch { /* ignore */ }
       stopAllClips();
+      releaseAllDucks();
       if (ac && typeof ac.close === 'function') { try { ac.close(); } catch { /* ignore */ } }
       ac = null; out = null; noiseBuf = null;
       // An AudioBuffer belongs to the context that decoded it, so it dies with

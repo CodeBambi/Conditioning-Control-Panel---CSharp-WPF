@@ -391,6 +391,23 @@ shell/prizecounter.js THE PRIZE COUNTER (economy wave): the two-currency shop, a
                    line; an unknown one degrades to a generic. Node-double
                    convention throughout (findCls by children index, never
                    querySelector) + prizecounter.css
+shell/counterfx.js THE HOUSE MOVES, as one importable kit (counter/locker wave):
+                   THUD, SHIVER, GLOW (warm cut), the ALMOST's gold ghost, the
+                   bell's SWING, the reversed BANK, the till's COUNT-UP, the
+                   SPARKLE BURST and the CHARGE-HOLD. Presentation only: not one
+                   function in it reads or writes a balance, an inventory or a
+                   meta key, and every one of them is a no-op on a node double.
+                   `fxSheet()` links `counterfx.css` lazily the first time a room
+                   asks for a move. TWO RULES IT KEEPS FOR YOU: reduced motion
+                   takes the STATE and not the travel (trap 92 kills durations
+                   with !important, so a "faster" version of a move is a move
+                   that does not happen - the reduced cuts are declared classes),
+                   and `cue()` is the one audio door, `pitch` multiplying
+                   frequency and never duration. `armBoughtHold`/`boughtHoldMs`
+                   are the seam that keeps the buy ceremony ONE gesture: the
+                   counter arms the length of its bank and tray beat, and
+                   shell.js delays the `arcademy-bought` DISPATCH by exactly that
+                   (never the host's answer, never the store)
 shell/lever.js     THE EXTRA CREDIT LEVER, in ONE place: the words, the lock
                    lines and the rail painting for the three-way wager
                    (Standard / Extra Credit / Honors). It has TWO hosts - the

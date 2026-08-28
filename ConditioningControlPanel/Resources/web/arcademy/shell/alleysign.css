@@ -1,0 +1,220 @@
+/* ============================================================================
+ * THE ALLEY SIGNS. Skin for shell/alleysign.js, linked lazily by that module
+ * AFTER styles.css (so the tokens are on :root and the casino arrow board's own
+ * rules are already in the cascade) and BESIDE shell/scene.css, which has
+ * already pinned the node at the stage rect the room measured.
+ *
+ * WHAT THIS SHEET IS. shell/exits.js's `sign()` has hung the bulb mask, the
+ * travelling light and the arrow on the button; styles.css has skinned all
+ * three as the GOLD board that lives on a report card. Everything below re-cuts
+ * that same hardware as a NEON PLATE on a painted wall, borrowing the campus
+ * plan's own three-part vocabulary (`.campus-neon` in styles.css): a dark navy
+ * ground, a pink tube around it, and a pink bloom outside that. Nothing here
+ * invents a mechanism - the bulbs still do not move and the light still does.
+ *
+ * THE DOUBLED CLASS IS DELIBERATE, and it is styles.css's own lesson one floor
+ * down: `.arc-exitsign.arc-exitsign` is (0,2,0) and a single `.ally-sign` would
+ * lose to it and render as the gold report-card slab. `.arc-exitsign.ally-sign
+ * .ally-sign` is (0,3,0) and takes it without an !important. THE SAME TRICK IS
+ * WHY THE POSITION IS RE-DECLARED: the sign board is `position:relative` (it
+ * clips its own chase) and scene.css's `.asc-prop` is only (0,1,0), so a prop
+ * that did not say `absolute` here would ignore the left/top scene.js measured
+ * and land wherever the flow put it.
+ *
+ * DECORATION LAW, three rungs, and each one is written at a specificity that
+ * can actually reach the rules above:
+ *   `html.arc-reduced`  the sign is LIT AND STILL. Every bloom, chase and
+ *                       march stops; nothing dims, because a wayfinding sign
+ *                       that goes quiet in reduced motion is a wayfinding sign
+ *                       the player asked to have taken away.
+ *   `.arm-lite`         the same still frame. scene.js hangs `arm-lite` on the
+ *                       room root for a machine that asked for less, and three
+ *                       keyframes on a plate is exactly the kind of thing that
+ *                       cap exists to refuse.
+ *   the media query     the belt to `html.arc-reduced`'s brace, for a host that
+ *                       never sets the class.
+ * ==========================================================================*/
+
+/* ------------------------------------------------------------- THE PLATE */
+
+.arc-exitsign.ally-sign.ally-sign {
+  /* scene.js measured the rect and wrote left/top/width/height inline; this is
+     the half of the placement a stylesheet still owes it. */
+  position: absolute;
+  box-sizing: border-box;
+  overflow: hidden;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 16px;
+
+  font-family: var(--disp);
+  font-weight: 700;
+  letter-spacing: .13em;
+  line-height: 1.06;
+  text-transform: uppercase;
+  color: var(--pink, #FF69B4);
+  text-align: center;
+  text-shadow: 0 0 10px color-mix(in srgb, var(--pink, #FF69B4), transparent 44%),
+               0 2px 0 rgba(0, 0, 0, .55);
+
+  /* THE GROUND. The painted PRIZE COUNTER plate over the window and the painted
+     LOCKER sign over the bank are both a deep navy slab; this is that slab. */
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--navy, #1A1A2E), white 6%) 0%,
+    color-mix(in srgb, var(--navy, #1A1A2E), black 34%) 100%);
+  /* THE TUBE. `.campus-neon rect` is a 1-unit pink stroke on a 94-unit sign;
+     this is the same stroke at this sign's scale. */
+  border: 2px solid color-mix(in srgb, var(--pink, #FF69B4), transparent 42%);
+  border-radius: 9px;
+  cursor: pointer;
+
+  /* THE BLOOM, plus the drop that seats the plate on the wall rather than
+     leaving it floating in front of one. */
+  box-shadow: 0 0 16px color-mix(in srgb, var(--pink, #FF69B4), transparent 66%),
+              0 0 40px color-mix(in srgb, var(--pink, #FF69B4), transparent 84%),
+              inset 0 0 18px color-mix(in srgb, var(--pink, #FF69B4), transparent 88%),
+              0 5px 0 rgba(0, 0, 0, .38),
+              0 10px 22px rgba(0, 0, 0, .42);
+  animation: ally-bloom 4s ease-in-out infinite;
+}
+
+/* THE BREATH, at the alive layer's own tempo. scene.css's `asc-neon-breathe`
+   runs a sign's halo over 4s and the booth's painted marquee is already on it
+   (prizebooth.js's `boothFx` neon row), so a second rhythm on the same wall
+   would read as two signs on two circuits. Only the outer two shadows move -
+   the plate itself never changes weight, because a slab that pulses is a slab
+   coming loose. */
+@keyframes ally-bloom {
+  0%, 100% {
+    box-shadow: 0 0 14px color-mix(in srgb, var(--pink, #FF69B4), transparent 72%),
+                0 0 34px color-mix(in srgb, var(--pink, #FF69B4), transparent 88%),
+                inset 0 0 18px color-mix(in srgb, var(--pink, #FF69B4), transparent 88%),
+                0 5px 0 rgba(0, 0, 0, .38),
+                0 10px 22px rgba(0, 0, 0, .42);
+  }
+  50% {
+    box-shadow: 0 0 24px color-mix(in srgb, var(--pink, #FF69B4), transparent 52%),
+                0 0 56px color-mix(in srgb, var(--pink, #FF69B4), transparent 74%),
+                inset 0 0 24px color-mix(in srgb, var(--pink, #FF69B4), transparent 80%),
+                0 5px 0 rgba(0, 0, 0, .38),
+                0 10px 22px rgba(0, 0, 0, .42);
+  }
+}
+
+/* THE TWO MEASURES. Both are stage pixels on the 1376x768 plane, so both ride
+   the fit with the painting they hang on - a sign whose type was sized in vh
+   would grow while its own plate shrank. The words WRAP: "LOCKER ROOM" over two
+   short lines is how a corridor plate is actually set, and it leaves the arrow
+   the room it needs at the end of the board. */
+.arc-exitsign.ally-sign.ally-sign-booth { font-size: 27px; }
+.arc-exitsign.ally-sign.ally-sign-locker { font-size: 21px; letter-spacing: .1em; }
+
+.ally-sign .arc-sign-label {
+  position: relative;
+  z-index: 2;
+  white-space: normal;
+}
+
+/* -------------------------------------------------------------- THE ARROW */
+
+/* THE VERB OF THE SIGN, so it is the one thing on it that travels. styles.css
+   blinks the report card's arrow on the chase's own beat; a wayfinding arrow
+   wants to POINT instead, so it marches a few pixels the way it is aiming and
+   settles back. One animation on the node either way - never both. */
+.ally-sign .arc-sign-arrow {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  font-size: 1.15em;
+  line-height: 1;
+  color: color-mix(in srgb, var(--pink, #FF69B4), white 26%);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--pink, #FF69B4), transparent 30%);
+  animation: ally-march 1.6s ease-in-out infinite;
+}
+.ally-sign-locker .arc-sign-arrow { animation-name: ally-march-back; }
+
+@keyframes ally-march {
+  0%, 100% { transform: translateX(0); }
+  50%      { transform: translateX(5px); }
+}
+@keyframes ally-march-back {
+  0%, 100% { transform: translateX(0); }
+  50%      { transform: translateX(-5px); }
+}
+
+/* -------------------------------------------------------------- THE BULBS */
+
+/* styles.css owns the mask, the pitch and the 52px chase period, and none of
+   that changes here - only how bright the ring sits against a navy plate rather
+   than the report card's panel. Gold on navy is the marquee the whole school
+   already runs (rooms.css's `.arm-hero` bulb grids, the campus plan's
+   `rect.campus-marquee`), so the light stays warm and only the letters are
+   pink. */
+.ally-sign .arc-sign-lamps {
+  background: color-mix(in srgb, var(--gold, #F0C24B), transparent 56%);
+  opacity: .9;
+}
+
+/* ------------------------------------------------------- HOVER AND FOCUS */
+
+.arc-exitsign.ally-sign.ally-sign:hover:not(:disabled) {
+  color: #FFF;
+  border-color: var(--pink, #FF69B4);
+  box-shadow: 0 0 30px color-mix(in srgb, var(--pink, #FF69B4), transparent 44%),
+              0 0 66px color-mix(in srgb, var(--pink, #FF69B4), transparent 70%),
+              inset 0 0 26px color-mix(in srgb, var(--pink, #FF69B4), transparent 76%),
+              0 5px 0 rgba(0, 0, 0, .38),
+              0 10px 22px rgba(0, 0, 0, .42);
+  animation: none;
+}
+/* The rim the rest of the school uses for a keyboard, at the one specificity
+   that can beat the board's own focus rule in styles.css. */
+.arc-exitsign.ally-sign.ally-sign:focus-visible {
+  outline: 3px solid var(--ink, #EADFF2);
+  outline-offset: 3px;
+}
+.arc-exitsign.ally-sign.ally-sign:active { transform: translateY(2px); }
+
+/* ------------------------------------------------------- DECORATION LAW */
+
+/* LIT AND STILL. Both rungs land on the same frame - the mid-breath weight, the
+   full bulb ring, the arrow parked where it points - so the sign reads exactly
+   as loud as it does moving and simply stops. */
+html.arc-reduced .arc-exitsign.ally-sign.ally-sign,
+.arm-lite .arc-exitsign.ally-sign.ally-sign {
+  animation: none;
+  box-shadow: 0 0 20px color-mix(in srgb, var(--pink, #FF69B4), transparent 58%),
+              0 0 48px color-mix(in srgb, var(--pink, #FF69B4), transparent 80%),
+              inset 0 0 20px color-mix(in srgb, var(--pink, #FF69B4), transparent 84%),
+              0 5px 0 rgba(0, 0, 0, .38),
+              0 10px 22px rgba(0, 0, 0, .42);
+}
+html.arc-reduced .ally-sign .arc-sign-arrow,
+.arm-lite .ally-sign .arc-sign-arrow {
+  animation: none;
+  transform: none;
+}
+/* styles.css already stops the chase under `html.arc-reduced`; the lite cap is
+   this file's to answer, and it answers it the way styles.css does - every bulb
+   lit and none of them travelling. */
+.arm-lite .ally-sign .arc-sign-chase {
+  animation: none;
+  opacity: .55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arc-exitsign.ally-sign.ally-sign {
+    animation: none;
+    box-shadow: 0 0 20px color-mix(in srgb, var(--pink, #FF69B4), transparent 58%),
+                0 0 48px color-mix(in srgb, var(--pink, #FF69B4), transparent 80%),
+                inset 0 0 20px color-mix(in srgb, var(--pink, #FF69B4), transparent 84%),
+                0 5px 0 rgba(0, 0, 0, .38),
+                0 10px 22px rgba(0, 0, 0, .42);
+  }
+  .ally-sign .arc-sign-arrow { animation: none; transform: none; }
+  .ally-sign .arc-sign-chase { animation: none; opacity: .55; }
+}

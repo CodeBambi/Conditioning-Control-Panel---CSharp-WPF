@@ -59,9 +59,16 @@
   text-shadow: 0 2px 7px rgba(0, 0, 0, .92), 0 0 2px rgba(0, 0, 0, .8);
 }
 
+/* IT LANDS, IT DOES NOT ARRIVE. A steel shutter coming down is the one thing
+   on this screen that has weight, and it used to reach the bottom by fading.
+   The overshoot is small - 1.04 for a sixth of the fall - because the plate is
+   most of the screen and a shutter that bounces is a shutter made of tin. The
+   `door` cue lands on the last 60ms of it (prizebooth.js), so the thump and
+   the stop are one event rather than two. */
 @keyframes pb-shut-in {
-  from { opacity: 0; transform: translateY(-6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  0%   { opacity: 0; transform: translateY(-6px) scale(1.04); }
+  16%  { opacity: 1; }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* The cut: a player who asked for less motion still gets the sign, standing
@@ -115,7 +122,11 @@
   background: rgba(0, 0, 0, .22);
 }
 
+/* THE BANK, FORWARDS (prizebooth.js): these digits count up from zero when the
+   tray opens, so they are tabular - a proportional 1 is narrower than a
+   proportional 8 and the row would breathe its way through the count. */
 .pb-coin-n {
+  font-variant-numeric: tabular-nums;
   font-family: var(--mono);
   font-size: clamp(17px, 2.8vh, 24px);
   font-variant-numeric: tabular-nums;
@@ -247,3 +258,24 @@ html.arc-mobile .asc-panel.pb-shop {
   padding-left: var(--pc-panel-x, 16px);
   padding-right: var(--pc-panel-x, 16px);
 }
+
+/* ==========================================================================
+   THE SIGN IS SUB-ATTENTION NOW                              (wave 0828, F)
+
+   LAW III, and it is the audit's #11: one thing on a screen breathes, and on
+   this screen it is the service window's hotspot - the thing you are meant to
+   walk up to. The neon over the booth was running the scene kit's default
+   0.62 <-> 1, which at that size is a second foreground breather arguing with
+   the first. Narrowed here rather than in scene.css because every other room's
+   neon is fine as it is; this is the one sign standing next to a hotspot.
+
+   Opacity only, no scale, no colour: a tube that is lit and very slightly
+   uneven, which is what neon actually does.
+   ========================================================================== */
+.pb-room .asc-fx-neon { animation-name: pb-sign-flicker; }
+@keyframes pb-sign-flicker {
+  0%, 100% { opacity: .92; }
+  50%      { opacity: 1; }
+}
+/* The dip (a room shutting down) still wins: it is a state, not a breath. */
+.pb-room .asc-fx-neon.is-dip { animation: none; opacity: .16; }

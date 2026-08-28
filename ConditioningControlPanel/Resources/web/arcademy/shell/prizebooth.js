@@ -63,11 +63,38 @@
  * is nothing in either worth pressing. There is no painted door on this wall
  * either (it is a wall with a window cut into it), so the way out is the
  * apron's back slab, which is what every doorless room scene already does.
+ *
+ * THE SIGN ON THE RIGHT-HAND WALL (owner ask, 2026-08-28) is the THIRD thing
+ * you can touch, and it is deliberately not a fourth verb: it is the corridor
+ * carrying on. RM 004 is one window further down this same alley, and until now
+ * standing at the counter with a jacket you had just bought meant walking out
+ * to the quad, across it and back down here to put it on. The plate hangs at the
+ * service window's own eye line so the two read as one row of things at head
+ * height, it points RIGHT the way the alley runs, and it is mounted as a scene
+ * PROP - shell/alleysign.js owns what it looks like and this file owns only
+ * where on the painting it is screwed. `onLocker` is its whole contract; like
+ * every other consequence in here it leaves as a callback, and nothing under
+ * this line has ever heard of a locker.
+ *
+ * IT STAYS LIT WITH THE SHUTTER DOWN, and that is the one asymmetry with
+ * everything else on this wall. The `!closed` gate gets taken off the window,
+ * the tray and both fx rows because the power to THIS window has been cut - but
+ * nothing is sold in the Locker, so the Locker never shuts, and a player who
+ * walked down a dark alley to a dead counter is exactly the player who most
+ * needs the one door on this screen that still opens.
  * ==========================================================================*/
 
 import { t as lexT } from '../core/lexicon.js';
 import { createScene } from './scene.js';
 import { paydayParts, TOKEN_MARK } from './prizecounter.js';
+/* THE SIGN DOWN THE ALLEY. One module, two rooms: the Locker mounts the mirror
+ * of this at its own end, and shell/alleysign.js's header says why there are
+ * two of them. It imports the lexicon and exits.js and nothing else, so the
+ * narrow caps this file keeps are not spent by taking it. */
+import { alleySign, BOOTH_SIGN_RECT } from './alleysign.js';
+/* The counter's motion kit (shell/counterfx.js). `cue` is the one audio door
+ * this file has ever needed and `countUp` is THE BANK pointed forwards. */
+import { countUp, cue } from './counterfx.js';
 
 /* ----------------------------------------------------------------------------
  * THE TABLE
@@ -257,6 +284,10 @@ export function findCls(node, cls) {
  *              scrim, or the shutter coming down. The shell tears its counter
  *              down here, once, whichever road it was.
  *  onBack    - the apron's back slab: the shell walks out to the campus.
+ *  onLocker  - optional. The sign on the right-hand wall: one door further
+ *              down the same alley. Omit it and no sign is hung at all, which
+ *              is the honest thing for a host with no locker to point at, and
+ *              is also what the bare-Node tests take.
  * @returns {?Object} the handle
  */
 export function createPrizeBooth(caps) {
@@ -280,6 +311,7 @@ export function createPrizeBooth(caps) {
   let alleyUp = false;         // is the arrival beat on screen right now?
   let alleyTimer = null;       // its own hold, cleared from landWindow()
   let hintOff = null;          // the corridor's one line, its unmount
+  let signOff = null;          // the LOCKER ROOM plate on the wall, its unmount
 
   /** Does this arrival get the corridor? The caller's answer first, then the
    *  two decoration rungs: a lite machine and a player who asked for less
@@ -325,6 +357,7 @@ export function createPrizeBooth(caps) {
   try { scene.root.classList.add('pb-room'); } catch (e) { /* noop */ }
   scene.setFlag('closed', closed);
   paintShut();
+  hangLockerSign();
   /* SYNCHRONOUS, and that is the whole trick: the chassis has just mounted the
    * window plate and nothing has been painted yet, so the cut to the corridor
    * lands on the first frame the player ever sees. */
@@ -536,8 +569,21 @@ export function createPrizeBooth(caps) {
     const box = el('span', 'pb-coin pb-coin-' + cur);
     const ico = el('i', cur === 'k' ? 'arc-tok' : 'arc-tick', cur === 'k' ? TOKEN_MARK : null);
     attr(ico, 'aria-hidden', 'true');
-    box.appendChild(el('b', 'pb-coin-n', String(cur === 'k' ? b.k : b.t)));
+    const total = cur === 'k' ? b.k : b.t;
+    const num = el('b', 'pb-coin-n', String(total));
+    box.appendChild(num);
     box.appendChild(ico);
+    /* THE BANK, POINTED FORWARDS. A number that is simply THERE when the tray
+     * opens is a number nobody reads; a number that arrives is one you watch
+     * land. Half a second, tabular digits so the row cannot jitter while it
+     * runs, and once per open - the panel is built fresh every time the tray
+     * comes out, so there is no repaint to guard against.
+     *
+     * IT COUNTS TO THE HOST'S NUMBER AND STOPS THERE. The tray reads the
+     * wallet, it has never moved one, and this changes nothing about that: the
+     * last frame of the count is the same digit the panel would have painted
+     * flat. Reduced motion gets that digit and no count. */
+    countUp(num, total, { reduced: htmlReduced() || !!c.reduced });
     return box;
   }
 
@@ -572,6 +618,35 @@ export function createPrizeBooth(caps) {
    * It takes no pointer at all. There is no rect under it to swallow (they are
    * not built while `closed` is on) and nothing here for a keyboard to reach.
    */
+  /**
+   * THE SIGN ON THE RIGHT-HAND WALL, hung once at build and never touched
+   * again - it is painted furniture, not state. See the header for why it
+   * outlives the shutter.
+   *
+   * It goes on `wide` only. The corridor is a 700ms beat that ANY press cuts
+   * short (bindSkip), so a button mounted in it would be a button that can only
+   * ever be used to skip the thing it is mounted in - which is not a sign, it
+   * is a trap with a label on it.
+   *
+   * No `onLocker`, no sign: this file does not know the shell has a Locker and
+   * will not draw a door it has not been given.
+   */
+  function hangLockerSign() {
+    if (dead || typeof c.onLocker !== 'function') return;
+    let node = null;
+    try {
+      node = alleySign({
+        variant: 'booth',
+        t: t,
+        log: log,
+        onGo: function () { if (!dead) { try { c.onLocker(); } catch (e) { log('prize booth locker sign threw'); } } },
+      });
+    } catch (e) { log('prize booth could not build the locker sign'); return; }
+    if (!node) return;
+    try { signOff = scene.mountInView('wide', node, BOOTH_SIGN_RECT.slice()); }
+    catch (e) { signOff = null; }
+  }
+
   function paintShut() {
     if (dead) return;
     if (closed && !shutEl) {
@@ -587,6 +662,17 @@ export function createPrizeBooth(caps) {
        * the second one; the counter's front panel underneath is flat, dark and
        * empty, so the line sits there and reads. Above the apron either way. */
       shutOff = scene.mountInView('wide', shutEl, [400, 486, 576, 56]);
+      /* THE SHUTTER LANDS. It used to arrive by fade, which is the one thing a
+       * steel shutter does not do. The plate's own drop is in prizebooth.css
+       * (pb-shut-in now carries the 1.04 -> 1 settle); this is the sound
+       * catching it, on the last 60ms of the 420ms fall so the thump and the
+       * stop are the same event. Reduced motion has no fall to catch, so the
+       * cue lands at once and carries the beat on its own. */
+      const shutStill = htmlReduced() || !!c.reduced;
+      setTimeout(function () {
+        if (dead || !shutEl) return;
+        cue('door', 0.3);
+      }, shutStill ? 0 : 360);
     } else if (!closed && shutEl) {
       try { if (shutOff) shutOff(); } catch (e) { /* noop */ }
       shutEl = null;
@@ -656,6 +742,7 @@ export function createPrizeBooth(caps) {
     closeTill = null;
     closeShop = null;
     if (hintOff) { try { hintOff(); } catch (e) { /* noop */ } hintOff = null; }
+    if (signOff) { try { signOff(); } catch (e) { /* noop */ } signOff = null; }
     shutEl = null;
     shutOff = null;
     lineEl = null;
@@ -692,6 +779,8 @@ export function createPrizeBooth(caps) {
     windowHot: function () { return findCls(scene.root, 'arm-main'); },
     /** The CLOSED word over the shutter, or null. */
     shutWord: function () { return findCls(scene.root, 'pb-shut'); },
+    /** The LOCKER ROOM plate on the right-hand wall, or null if none was hung. */
+    lockerSign: function () { return findCls(scene.root, 'ally-sign'); },
     /** Is the shelf panel up? */
     shopUp: function () { return !!shopOn; },
     /** Is the arrival beat on screen? */

@@ -1,0 +1,255 @@
+/* ============================================================================
+ * shell/counterfx.css - the shared moves' one copy of each keyframe.
+ *
+ * Linked lazily by counterfx.js, so a sitting that never opens the counter
+ * never pays for it. Everything here is a NAMED MOVE from the House Book and
+ * nothing here is furniture: the rooms' own sheets keep their own looks and
+ * only borrow the motion.
+ *
+ * THE REDUCED-MOTION SHAPE, once, because it governs half this file:
+ * `html.arc-reduced *` in styles.css crushes every animation to .001s and
+ * every transition to none, with `!important`. So a class that has to still
+ * MEAN something at rest declares its look in the rule body and lets the
+ * animation only carry it in and out (`.cfx-confirm`, `.cfx-warm`). A class
+ * that is nothing but travel (`.cfx-thud`, `.cfx-shiver`, `.cfx-coin`) is
+ * simply never fired under reduced motion - counterfx.js checks first, and the
+ * cue carries the beat instead.
+ * ==========================================================================*/
+
+/* ----------------------------------------------------------------------------
+ * THE THUD - it happened, and it happened HERE
+ * -------------------------------------------------------------------------- */
+
+/* Furniture cut: the book's curve at a shelf row's amplitude. A row is three
+ * hundred pixels wide and cannot take scale(2.1) without shoving the grid. */
+@keyframes cfx-thud {
+  0%   { transform: scale(1.055); filter: brightness(1.5); }
+  46%  { transform: scale(0.982); filter: brightness(1.12); }
+  100% { transform: scale(1);     filter: brightness(1); }
+}
+
+/* Stamp cut: the recipe card verbatim, for a badge-sized mark that has room. */
+@keyframes cfx-thud-mark {
+  0%   { transform: scale(2.1);  filter: brightness(2.2); }
+  46%  { transform: scale(0.86); filter: brightness(1.3); }
+  100% { transform: scale(1);    filter: brightness(1); }
+}
+
+.cfx-thud {
+  animation: cfx-thud 340ms cubic-bezier(.2, 1.5, .4, 1) both;
+  will-change: transform;
+}
+
+.cfx-thud-mark {
+  animation: cfx-thud-mark 340ms cubic-bezier(.2, 1.5, .4, 1) both;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+/* THE THUD's reduced-motion stand-in. No travel: a declared gold edge that is
+ * simply ON for half a second. The rule body is the whole effect, which is why
+ * the blanket animation kill cannot take it away. */
+.cfx-confirm {
+  outline: 2px solid var(--gold, #E8C878);
+  outline-offset: 1px;
+  border-radius: inherit;
+}
+
+/* ----------------------------------------------------------------------------
+ * THE SHIVER - a no, with sympathy
+ * Four pixels, three cycles, 250ms. No scale. No colour. Never a buzzer.
+ * -------------------------------------------------------------------------- */
+@keyframes cfx-shiver {
+  0%, 100% { transform: translateX(0); }
+  16%      { transform: translateX(-4px); }
+  33%      { transform: translateX(4px); }
+  50%      { transform: translateX(-4px); }
+  66%      { transform: translateX(4px); }
+  83%      { transform: translateX(-2px); }
+}
+
+.cfx-shiver {
+  animation: cfx-shiver 250ms ease-in-out both;
+  will-change: transform;
+}
+
+/* ----------------------------------------------------------------------------
+ * THE GLOW, warm cut - LOOK AT THE NUMBER
+ * Gold rather than the hover pink, because this one is about money. In fast,
+ * out slow, on the wallet chip that came up short.
+ * -------------------------------------------------------------------------- */
+@keyframes cfx-warm {
+  0%   { box-shadow: 0 0 0 rgba(232, 200, 120, 0); }
+  22%  { box-shadow: 0 0 18px rgba(232, 200, 120, .55); }
+  100% { box-shadow: 0 0 0 rgba(232, 200, 120, 0); }
+}
+
+.cfx-warm {
+  /* Declared, so the still cut is a light that goes on and off. */
+  box-shadow: 0 0 18px rgba(232, 200, 120, .55);
+  animation: cfx-warm 480ms ease-out both;
+  border-radius: inherit;
+}
+
+/* ----------------------------------------------------------------------------
+ * THE ALMOST's ghost - the grade letter flickering to the better one
+ * -------------------------------------------------------------------------- */
+@keyframes cfx-ghost {
+  0%, 100% { background-color: transparent; }
+  40%      { background-color: rgba(232, 200, 120, .16); }
+}
+
+.cfx-ghost { animation: cfx-ghost 120ms linear both; }
+
+/* ----------------------------------------------------------------------------
+ * THE BELL'S SWING - one poke, one arc, damped back to rest
+ * -------------------------------------------------------------------------- */
+@keyframes cfx-swing {
+  0%   { transform: rotate(0deg); }
+  22%  { transform: rotate(-6deg); }
+  55%  { transform: rotate(6deg); }
+  78%  { transform: rotate(-2.5deg); }
+  100% { transform: rotate(0deg); }
+}
+
+.cfx-swing {
+  animation: cfx-swing 500ms cubic-bezier(.2, 1.35, .35, 1) both;
+  transform-origin: 50% 20%;
+}
+
+/* ----------------------------------------------------------------------------
+ * THE BANK, REVERSED - the cost visibly LEAVES the wallet
+ *
+ * Two nested spans per token so the path can bow: the outer carries X at a
+ * constant rate, the inner carries Y on an ease-in. One element cannot do both
+ * without a bespoke keyframe per destination, and the destination is measured
+ * at fire time.
+ * -------------------------------------------------------------------------- */
+.cfx-bank {
+  position: fixed;
+  inset: 0;
+  z-index: 41;          /* over the shelf (10) and the tray (40), under the card (62) */
+  pointer-events: none; /* LAW II: it is a picture, it is never a target */
+  overflow: hidden;
+  contain: strict;
+}
+
+.cfx-coin {
+  position: absolute;
+  display: block;
+  margin: -9px 0 0 -9px; /* the glyphs are 18px wide; sit them on their point */
+  animation: cfx-coin-x 560ms linear both;
+  will-change: transform;
+}
+
+.cfx-coin-i {
+  display: block;
+  animation: cfx-coin-y 560ms cubic-bezier(.42, 0, .82, .58) both;
+  will-change: transform, opacity;
+}
+
+@keyframes cfx-coin-x {
+  from { transform: translateX(0); }
+  to   { transform: translateX(var(--cfx-dx, 0px)); }
+}
+
+@keyframes cfx-coin-y {
+  0%   { transform: translateY(0) scale(1); opacity: 0; }
+  12%  { opacity: 1; }
+  86%  { opacity: 1; }
+  100% { transform: translateY(var(--cfx-dy, 0px)) scale(.72); opacity: 0; }
+}
+
+/* ----------------------------------------------------------------------------
+ * THE SPARKLE BURST - the garnish. Never the event.
+ * -------------------------------------------------------------------------- */
+.cfx-sparks {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.cfx-spark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 5px;
+  height: 5px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: var(--pink, #F49AC2);
+  animation: cfx-spark 480ms ease-out both;
+}
+
+.cfx-spark.is-gold { background: var(--gold, #E8C878); }
+
+@keyframes cfx-spark {
+  0%   { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--cfx-sx, 0px), var(--cfx-sy, 0px)) scale(.3); opacity: 0; }
+}
+
+/* ----------------------------------------------------------------------------
+ * THE CHARGE-HOLD - the ring that fills while you mean it
+ *
+ * Drawn INSIDE the button, `inset:0`, no pointer events at any depth: the
+ * target a player aims at is the same rectangle before, during and after the
+ * hold (Law II). The conic sweep is masked to a rim so the label underneath
+ * stays legible while it fills.
+ * -------------------------------------------------------------------------- */
+.cfx-holdable { position: relative; }
+
+.cfx-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: conic-gradient(var(--gold, #E8C878) calc(var(--cfx-fill, 0) * 1turn), transparent 0);
+  /* The rim trick: two masks, the inner one punched out, so the sweep is a
+   * 2px ring and the button's own label stays readable underneath it. */
+  padding: 2px;
+  box-sizing: border-box;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+}
+
+.cfx-holdable.is-charging .cfx-ring {
+  opacity: 1;
+  animation: cfx-fill 700ms linear both;
+}
+
+@keyframes cfx-fill {
+  from { --cfx-fill: 0; }
+  to   { --cfx-fill: 1; }
+}
+
+/* A custom property only animates when it has been registered with a type;
+ * without this the conic stop would jump from 0 to 1 at the halfway mark. */
+@property --cfx-fill {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+/* Reduced motion: the ring cannot sweep (the blanket kill takes it), so a held
+ * row shows a plain filled rim for its 120ms and the tone ladder is skipped by
+ * counterfx.js. The hold still works and still ends in a purchase. */
+html.arc-reduced .cfx-holdable.is-charging .cfx-ring {
+  opacity: 1;
+  background: var(--gold, #E8C878);
+}
+
+/* ----------------------------------------------------------------------------
+ * LITE - the machine that asked for less
+ * The moves stay (they are the meaning); the expensive paint goes.
+ * -------------------------------------------------------------------------- */
+.arm-lite .cfx-spark,
+.is-lite .cfx-spark { display: none; }
+
+.arm-lite .cfx-warm,
+.is-lite .cfx-warm { animation-duration: 300ms; }

@@ -405,3 +405,25 @@
 }
 
 .arc-reduced .lk-tile:hover { transform: none; }
+
+/* ==========================================================================
+   NEW SINCE YOU WERE LAST IN HERE                            (wave 0828, F)
+
+   A tile the previous paint did not have is something you bought since, and
+   shell/locker.js thuds it in as the panel opens. This is what is still there
+   a second later: a gold rim and one pip, gone on the next repaint because by
+   then you have seen it. It is deliberately NOT the pink "this one" - that
+   mark means worn, and a thing can be new without being on.
+   ========================================================================== */
+.lk-tile.is-new { border-color: color-mix(in srgb, var(--gold), transparent 34%); }
+.lk-tile.is-new::after {
+  content: '';
+  position: absolute;
+  top: -3px; right: -3px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--gold), transparent 40%);
+}
+/* Worn outranks new: if you put it on the moment it arrived, the rim is pink. */
+.lk-tile.is-new.is-on { border-color: var(--pink); }

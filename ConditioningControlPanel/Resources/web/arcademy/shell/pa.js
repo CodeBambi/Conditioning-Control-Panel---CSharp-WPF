@@ -44,12 +44,15 @@
  *                                exact defensive shape every other shell module
  *                                uses. Supplying it is for tests and for a host
  *                                that already owns a cue helper.
- *     t        (key, fallback)=>string   the lexicon. PA is AUDIO ONLY by
- *                                design - there is no caption surface and
- *                                inventing one would be a new render surface
- *                                (trap 36). `t` is held for `pa.caption()`,
- *                                which answers '' unless a host ships a key.
- *                                No lexicon key is required by this file.
+ *     t        (key, fallback)=>string   the lexicon. THE PA HAS A CAPTION NOW
+ *                                (owner, 2026-08-28), and the thirty-six lines
+ *                                live in `core/lexicon.js` DEFAULT_LEXICON as
+ *                                `pa_line_01`..`pa_line_36`, in FILE order. This
+ *                                file still renders NOTHING - it hands the text
+ *                                to whoever asks (`pa.caption(name)`) and seeds
+ *                                it onto the cue it already fires;
+ *                                `shell/pacaption.js` owns the surface, which is
+ *                                what keeps trap 36 satisfied.
  *     log      (msg)=>void       the shell's `say`.
  *     lite     bool | ()=>bool   the performance cap.
  *     reduced  bool | ()=>bool   prefers-reduced-motion.
@@ -59,6 +62,11 @@
  *                                is handed that answer it asks it as well as its
  *                                own notify-fed flag. Either one saying yes is a
  *                                no.
+ *     duckDepth number | ()=>number  the player's `caps.duckDepth`, 0..1. Scales
+ *                                LINE_DUCK the way engine/index.js scales every
+ *                                other duck, so the PA is not the one cue in the
+ *                                school that ignores the cap. Absent = 1
+ *                                (uncapped), which is caps.js's own default.
  *     daySeed  string            the UTC day seed the shell already computes.
  *
  *   pa.notify(kind)   'campusReveal' | 'classStart' | 'classEnd' (also spelled
@@ -66,9 +74,13 @@
  *                     word) | 'campusUnmount'. Unknown kinds are ignored.
  *   pa.plan()         a copy of tonight's two-entry plan.
  *   pa.spoken()       how many lines this session has actually sounded.
- *   pa.caption(name)  reserved text seam; '' unless the host ships the key.
- *   pa.debug()        {session, spoken, inClass, pending, plan, last}
- *   pa.destroy()      cancels the timers and forgets the plan.
+ *   pa.caption(name)  the line's TEXT ('' for a name that is not one of the 36).
+ *   pa.sayNow(reason) one line right now, OUTSIDE the two-a-session cap. Also
+ *                     reachable as the document event `arcademy-pa-request`
+ *                     with `detail.reason`, which is how the prize counter asks
+ *                     after a `pa_pack` purchase. Every other law still holds.
+ *   pa.debug()        {session, spoken, requests, inClass, pending, plan, last}
+ *   pa.destroy()      cancels the timers, drops the ear, forgets the plan.
  *
  * ---------------------------------------------------------------------------
  * THE SAMPLES
@@ -101,6 +113,25 @@ export const PA_COUNT = 36;
 export function paName(n) {
   const i = Math.max(1, Math.min(PA_COUNT, Math.round(Number(n) || 0)));
   return 'pa_' + String(i).padStart(2, '0');
+}
+
+/** THE CAPTION KEY for a line: `pa_03` (or `3`, or `'03'`) -> `pa_line_03`.
+ *  `null` for anything that is not one of the thirty-six, which is what stops
+ *  the caption surface answering a bell or a page turn with `humanize()`'s
+ *  best guess at a key it has never heard of.
+ *  THE NUMBER IS THE FILE'S, NOT THE SCRIPT'S. See THE FILES AS SHIPPED above:
+ *  the script's Closing block lives at 31-36 on disk and its "Mostly" block at
+ *  25-30, and `core/lexicon.js` carries the strings in FILE order so that this
+ *  function is the only place the two numberings ever have to meet - and it
+ *  does not have to know about the swap at all, because the lexicon already
+ *  did. Verified by `pa.test.mjs`. */
+export function captionKey(name) {
+  const s = String(name == null ? '' : name).trim();
+  const m = /^(?:pa_)?(\d{1,2})$/.exec(s);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!(n >= 1 && n <= PA_COUNT)) return null;
+  return 'pa_line_' + String(n).padStart(2, '0');
 }
 
 function range(from, to) {
@@ -162,15 +193,76 @@ export const REVEAL_JITTER_MS = 3000;
 export const CLASS_END_MS = 2600;
 export const CLASS_END_JITTER_MS = 1800;
 
-/** The voice bus, half level, and the longest a line may run. audio.js caps an
+/** The voice bus, FULL level, and the longest a line may run. audio.js caps an
  *  element clip at CLIP_MAX_MS (1200ms) unless the cue ASKS for more, and it
  *  sells a `pa_NN` name up to PA_REQ_MAX_MS (12000ms; everything else stops at
  *  8000). Every spoken line must ask, or it is cut off after a second and a
- *  fifth. The longest line on disk runs 10.9s under the tannoy's tail. */
-export const LINE_LEVEL = 0.5;
+ *  fifth. The longest line on disk runs 10.9s under the tannoy's tail.
+ *
+ *  WHY 1.0 (owner, 2026-08-28: "the announcer should be higher in volume").
+ *  Half level is 0.707 through the mixer's sqrt curve, i.e. three decibels
+ *  given away for nothing on the ONE cue in the school that is a person
+ *  speaking. It buys back three of the eleven the recordings were made under;
+ *  the other eight are `PA_MAKEUP` in audio.js, because they are a fact about
+ *  the FILES and belong next to the files. This number is a fact about the
+ *  MOMENT: she is the loudest thing in the building while she is talking. */
+export const LINE_LEVEL = 1.0;
 export const LINE_MAX_MS = 12000;
-/** She talks over the school, not under it. `voice` pulls fx/music/drops down. */
-export const LINE_DUCK = Object.freeze({ target: 'voice', mult: 0.45, ms: 3600 });
+
+/** THE DUCK, and it is not the duck it was.
+ *
+ *  Three faults, one report ("duck everything else more, rn the soundtrack is
+ *  super loud compared to the announcer"):
+ *
+ *   1. ONE DEPTH FOR EVERY BUS. `voice` pulls fx, music AND drops, and the old
+ *      0.45 was a compromise between two different jobs - clearing a 140-second
+ *      soundtrack out from under a spoken line, and not deafening the player's
+ *      own click. `mults` names them separately now. The soundtrack is the one
+ *      she is fighting, so the soundtrack takes the deep cut.
+ *   2. IT LET GO FOUR SECONDS IN. audio.js clamped an unkeyed duck's `ms` to
+ *      TWO SECONDS, silently, so the 3600 asked for here was never honoured and
+ *      the music PUMPED back to full volume in the middle of a nine-second
+ *      announcement. `key` makes it a HELD duck: it stays down until the cue's
+ *      own `onEnded` releases it, so the room comes back when she stops talking
+ *      and not one word before. `ms` is now the dead man's handle - the longest
+ *      it MAY hold if the mixer never answers - which is why it is LINE_MAX_MS.
+ *   3. IT DUCKED FOR LINES THAT NEVER PLAYED. A missing file is silence (the
+ *      lines are SAMPLE_ONLY), and audio.js used to pull the school down for it
+ *      anyway. A keyed duck is not applied to a cue that dropped.
+ *
+ *  These are the POLICY numbers - the depth at a full duckDepth cap. `duckFor`
+ *  below scales them by the player's cap the same way engine/index.js does, so
+ *  a player who has turned ducking down still gets a shallower duck and one who
+ *  has turned it off still gets none. The law is the law; the PA does not get
+ *  to be the one cue that ignores it. */
+export const LINE_DUCK = Object.freeze({
+  target: 'voice',
+  key: 'pa_line',
+  /** fx and drops: out of her way, still audible. A click is feedback. */
+  mult: 0.35,
+  mults: Object.freeze({ music: 0.20, fx: 0.35, drops: 0.35 }),
+  ms: LINE_MAX_MS,
+});
+
+/** THE duckDepth CAP, applied the way the engine applies it (engine/index.js:
+ *  `1 - (1 - policy) * clamp01(duckDepth)`). Depth 1 gives the policy exactly,
+ *  depth 0 gives no duck at all, and everything between is a straight line
+ *  between them. Returns a NEW spec; LINE_DUCK is frozen and stays the policy.
+ *  @param {number} depth 0..1, the player's cap. Junk reads as 1 (uncapped).
+ *  @returns {{target:string, key:string, mult:number, mults:Object, ms:number}} */
+export function duckFor(depth) {
+  const d = Number.isFinite(+depth) ? Math.max(0, Math.min(1, +depth)) : 1;
+  const scale = (p) => 1 - (1 - Math.max(0, Math.min(1, Number(p) || 0))) * d;
+  const mults = {};
+  for (const b of Object.keys(LINE_DUCK.mults)) mults[b] = scale(LINE_DUCK.mults[b]);
+  return {
+    target: LINE_DUCK.target,
+    key: LINE_DUCK.key,
+    mult: scale(LINE_DUCK.mult),
+    mults,
+    ms: LINE_DUCK.ms,
+  };
+}
 
 /** Category weights per slot. "Arrival lines early" is law, the rest is taste:
  *  the corridor after a class is where she stops reading the schedule. */
@@ -304,6 +396,7 @@ export function createPa(caps) {
   let timer = 0;
   let pending = null;     // the slot name the timer is holding, or null
   let last = null;        // {name, slot, at} of the last line that sounded
+  let cues = 0;           // every cue this handle has ever fired, numbered
   let dead = false;
 
   function ownedNow() { return flag(c.owned); }
@@ -316,7 +409,73 @@ export function createPa(caps) {
   /** Law 4 lives here and nowhere else. */
   function capNow() { return reducedNow() ? 1 : MAX_LINES_PER_SESSION; }
 
+  /** The player's duckDepth cap, read AT FIRE TIME like every other gate. A
+   *  host that hands over nothing is uncapped (1), which is the caps.js default
+   *  and the shape of the harness. */
+  function depthNow() {
+    const v = (typeof c.duckDepth === 'function') ? (() => {
+      try { return c.duckDepth(); } catch (e) { return 1; }
+    })() : c.duckDepth;
+    return Number.isFinite(+v) ? Math.max(0, Math.min(1, +v)) : 1;
+  }
+
   function clearTimer() { cancel(timer); timer = 0; pending = null; }
+
+  /** ONE LINE, OUT LOUD, NOW. Every road that speaks goes through here, so the
+   *  cue's shape - level, ceiling, duck, and the caption's own seed - is
+   *  written once. The GATES are the callers' business: `speak()` re-asks all
+   *  five, `sayNow()` re-asks four and skips the session cap on purpose. */
+  function utter(name, why) {
+    last = { name, slot: why, at: spoken };
+    speakingUntil = nowMs() + LINE_MAX_MS;
+    cues += 1;
+    const cueId = cues;
+    try {
+      fire(name, LINE_LEVEL, {
+        bus: 'voice',
+        maxMs: LINE_MAX_MS,
+        duck: duckFor(depthNow()),
+        /* THE CAPTION'S SEED. shell/pacaption.js listens on the SAME cue every
+         * line already sends (contract: `arcademy-sfx` with a `pa_NN` name) and
+         * needs no other channel; this only saves it a second lookup and lets a
+         * host with no lexicon at all still be told there is nothing to show.
+         * A consumer that has never heard of captions ignores an extra field,
+         * which is the whole reason it can ride here. */
+        caption: captionFor(name),
+        /* THE CUE'S OWN NUMBER. It exists for one reason and it is a hard one:
+         * audio.js's consumer is installed at BOOT and the caption's at SHELL
+         * BUILD, so on a shared `document` listener list the mixer always runs
+         * first - and a cue it drops answers 'dropped' SYNCHRONOUSLY, inside
+         * the dispatch, before the caption listener has even been reached. The
+         * end therefore arrives before the beginning, and a purely
+         * chronological caption would put a box on screen for a line that was
+         * already dead. The id lets the caption recognise the ending it has
+         * already been told about, deterministically, with no timing window. */
+        cueId,
+        /* THE END OF THE LINE, re-broadcast. audio.js answers this exactly once
+         * on every road out of a clip ('ended', the maxMs governor, a re-fire,
+         * the voice cap, teardown, a file that will not load), and it is the
+         * ONLY thing in the page that knows how long a given announcement
+         * actually was. pa.js does not consume it - it turns it back into a
+         * document event, because the caption surface is not the mixer's
+         * business and pa.js may hold a handle on neither of them. */
+        onEnded: (reason) => {
+          speakingUntil = 0;
+          const d2 = doc();
+          if (!d2 || typeof d2.dispatchEvent !== 'function') return;
+          const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+          if (!Ctor) return;
+          try {
+            d2.dispatchEvent(new Ctor('arcademy-pa-ended', {
+              detail: { name, cueId, reason: String(reason || 'ended') },
+            }));
+          } catch (e2) { /* an ending must never be the thing that throws */ }
+        },
+      });
+    } catch (e) { /* the mixer's problem, never the scheduler's */ }
+    try { say('[pa] ' + why + ' -> ' + name); }
+    catch (e) { /* noop */ }
+  }
 
   function speak(i) {
     const entry = plan[i];
@@ -331,12 +490,89 @@ export function createPa(caps) {
     if (classNow()) return;
     if (spoken >= capNow()) return;
     spoken += 1;
-    last = { name: entry.name, slot: entry.slot, at: spoken };
-    try {
-      fire(entry.name, LINE_LEVEL, { bus: 'voice', maxMs: LINE_MAX_MS, duck: LINE_DUCK });
-    } catch (e) { /* the mixer's problem, never the scheduler's */ }
-    try { say('[pa] ' + entry.slot + ' -> ' + entry.name + ' (' + entry.category + ')'); }
-    catch (e) { /* noop */ }
+    utter(entry.name, entry.slot + ' (' + entry.category + ')');
+  }
+
+  /* --------------------------------------------------------------------------
+   * THE ONE LINE THAT IS NOT ON THE PLAN (`arcademy-pa-request`, 2026-08-28)
+   *
+   * The player has just BOUGHT the pack at the counter. Law 1 says two lines a
+   * session and the reveal's slot is long spent by then, so the thing they paid
+   * three hundred tickets for would say nothing at all until the next campus
+   * mount - which is the one moment it most needs to speak. This is the door
+   * for that, and it is deliberately narrow:
+   *
+   *   - IT DOES NOT COUNT. `spoken` is not incremented and the session cap is
+   *     not consulted, because the cap exists to stop the school NAGGING and a
+   *     line the player just bought is not nagging. It also cannot spend one of
+   *     tonight's two: the plan is untouched, so both scheduled lines still get
+   *     their turn.
+   *   - EVERY OTHER LAW STILL HOLDS. Not under lite (law 3), not during a class
+   *     (law 2, both opinions), not without the pack (a preview of something you
+   *     do not own is a lie), and never while a line is already in the air.
+   *   - IT IS SEEDED, NOT ROLLED. Same day, same session, same request index =
+   *     the same line, so a reload does not re-roll the purchase moment. Draws
+   *     from arrival or schedule - the shelves that read as the school
+   *     acknowledging you, never a closing line and never an aside.
+   * ------------------------------------------------------------------------ */
+
+  /** How many requests this session has honoured. Seeds the roll; not a cap. */
+  let requests = 0;
+  /** Rough "she is still talking" guard - the only state pa.js keeps about the
+   *  mixer, and it is a clock, not a handle. */
+  let speakingUntil = 0;
+
+  function nowMs() { try { return Date.now(); } catch (e) { return 0; } }
+
+  /**
+   * @param {string=} reason 'purchase' | 'preview' (log only; the line is the same)
+   * @returns {string|null} the name spoken, or null if a law said no
+   */
+  function sayNow(reason) {
+    if (dead) return null;
+    if (!ownedNow()) return null;
+    if (liteNow()) return null;
+    if (classNow()) return null;
+    // Two announcements at once is a fault in the building, not a feature.
+    if (nowMs() < speakingUntil) return null;
+    requests += 1;
+    const roll = makeTaggedRoll(daySeed + '|pa-req|' + session + '|' + requests);
+    const cat = pickWeighted(SLOT_WEIGHTS.reveal, roll('cat')) || 'arrival';
+    const name = pickFrom(CATEGORIES[cat] || ARRIVAL, roll('line'));
+    if (!name) return null;
+    utter(name, 'request:' + String(reason || 'preview'));
+    return name;
+  }
+
+  /** The document ear for `arcademy-pa-request`. The ONLY thing pa.js listens
+   *  to; everything else still arrives through `notify()` (the module is a
+   *  scheduler and the shell is its clock). Detached by `destroy()`. */
+  function onRequest(e) {
+    const detail = (e && e.detail) || {};
+    try { sayNow(detail.reason); } catch (err) { /* an ear must never throw */ }
+  }
+  try {
+    const d0 = doc();
+    if (d0 && typeof d0.addEventListener === 'function') {
+      d0.addEventListener('arcademy-pa-request', onRequest);
+    }
+  } catch (e) { /* a host with no document simply never hears one */ }
+
+  /** The line's text, or ''. `t(key)` with NO fallback on purpose: a fallback
+   *  wins over DEFAULT_LEXICON in core/lexicon.js, so passing one here would
+   *  hide the very rows this feature ships. A name that is not one of the
+   *  thirty-six answers '' rather than letting `humanize()` invent a sentence
+   *  out of the key. */
+  function captionFor(name) {
+    const key = captionKey(name);
+    if (!key || !tr) return '';
+    let s = '';
+    try { s = String(tr(key) || ''); } catch (e) { return ''; }
+    /* THE LAST GUARD. `t()`'s floor is `humanize(key)`, so a row that has been
+     * deleted out of DEFAULT_LEXICON would come back as the sentence "Pa Line
+     * 03" and be rendered as if it were an announcement. Better nothing. */
+    if (/^Pa Line \d+$/.test(s)) return '';
+    return s;
   }
 
   function arm(i) {
@@ -407,15 +643,23 @@ export function createPa(caps) {
     notify,
     plan: () => plan.map((e) => Object.assign({}, e)),
     spoken: () => spoken,
-    /** Reserved text seam. Audio-only by design; '' unless a host ships a key. */
-    caption: (name) => (tr ? String(tr('pa_line_' + String(name || ''), '') || '') : ''),
+    /** The line's TEXT. `pa_03`, `3` and `'03'` all mean the same line; anything
+     *  else answers ''. shell/pacaption.js renders what comes out of here. */
+    caption: captionFor,
+    /** Speak one line right now, outside the session cap. The
+     *  `arcademy-pa-request` event is the road everything else takes; this is
+     *  the same door with a handle on the inside, for a caller that already
+     *  holds the handle (and for the test). */
+    sayNow,
     debug: () => ({
       session,
       spoken,
+      requests,
       inClass: classNow(),
       pending,
       cap: capNow(),
       owned: ownedNow(),
+      duckDepth: depthNow(),
       plan: plan.map((e) => Object.assign({}, e)),
       last: last ? Object.assign({}, last) : null,
     }),
@@ -423,6 +667,12 @@ export function createPa(caps) {
       dead = true;
       clearTimer();
       plan = [];
+      try {
+        const d1 = doc();
+        if (d1 && typeof d1.removeEventListener === 'function') {
+          d1.removeEventListener('arcademy-pa-request', onRequest);
+        }
+      } catch (e) { /* noop */ }
     },
   };
 }

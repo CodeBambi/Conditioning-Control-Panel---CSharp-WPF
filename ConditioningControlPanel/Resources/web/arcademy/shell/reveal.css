@@ -1,0 +1,551 @@
+/* ============================================================================
+   shell/reveal.css - THE PURCHASE REVEAL's skin.
+
+   Lazily linked by reveal.js on the first buy of a sitting (corkboard.css's
+   pattern), so a player who never spends a ticket never fetches this file.
+
+   THREE THINGS THIS SHEET IS NOT ALLOWED TO FORGET:
+
+   1. IT IS A BODY-LEVEL LAYER AT z62. The booth is a scene and `.asc-root` is
+      a stacking context at z10, so a ceremony mounted inside it would sit under
+      the mascot (z50) and under the toast that announced the buy (z60). The
+      apron band made the same move for the same reason one room over
+      (rooms.css `.arm-bar`, z55). 62 is the first number above the toast.
+
+   2. THE MOVES ARE THE HOUSE BOOK's, to the millisecond. THE REVEAL (scale 2.6
+      -> .9 -> 1, brightness 2.4 -> 1, 620ms, cubic-bezier(.2,1.35,.35,1)) for
+      the card; THE BOUNCE for the verbs; THE BREATH (1 <-> 1.015, 3.4s) on the
+      ONE breather; THE SPARKLE BURST at 5-9 particles, 400-550ms, dying before
+      they land. Nothing here invents a curve.
+
+   3. `.is-still` IS THE PICTURE WITH THE MOTION TAKEN OFF, NOT LESS PICTURE.
+      Same card, same art, same verbs - no travel, no loops, no particles. The
+      counter's tray beat ruled this and it rules here. `.is-lite` keeps the
+      travel and drops the particle work and the frame loops (the phone diet).
+   ==========================================================================*/
+
+.arv-root {
+  position: fixed;
+  inset: 0;
+  z-index: 62;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+/* --------------------------------- the scrim ----------------------------- */
+
+.arv-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 4, 14, 0.74);
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+  cursor: pointer;
+}
+.arv-root.is-up .arv-scrim { opacity: 1; }
+
+/* --------------------------------- the card ------------------------------ */
+
+.arv-card {
+  position: relative;
+  z-index: 1;
+  width: min(520px, 92vw);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  padding: 18px 22px 22px;
+  text-align: center;
+  background: linear-gradient(180deg, #1B1430 0%, #150F27 100%);
+  color: var(--ink, #F2EBDD);
+  border: 2px solid rgba(255, 105, 180, 0.4);
+  border-bottom-width: 4px;
+  border-radius: 16px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.66), 0 0 44px rgba(255, 105, 180, 0.16);
+
+  /* THE REVEAL, parked. The card is minted at rest and the `is-up` class is
+     what plays it, one frame later, so the browser has something to animate
+     FROM (a node that is inserted mid-animation just appears). */
+  opacity: 0;
+  transform: scale(2.6) rotate(-6deg);
+  filter: brightness(2.4);
+}
+.arv-root.is-up .arv-card {
+  animation: arv-reveal 620ms cubic-bezier(0.2, 1.35, 0.35, 1) both;
+}
+
+@keyframes arv-reveal {
+  0%   { opacity: 0; transform: scale(2.6) rotate(-6deg); filter: brightness(2.4); }
+  12%  { opacity: 1; }
+  62%  { transform: scale(0.9) rotate(1.5deg); filter: brightness(1.25); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); filter: brightness(1); }
+}
+
+/* ------------------------------- the wording ----------------------------- */
+
+.arv-kick {
+  margin: 0 0 6px;
+  font-family: var(--pix, monospace);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold, #F0C24B);
+}
+
+.arv-name {
+  margin: 12px 0 6px;
+  font-family: var(--disp, serif);
+  font-size: clamp(20px, 4.4vw, 28px);
+  letter-spacing: 0.04em;
+  color: var(--ink, #F2EBDD);
+}
+
+.arv-blurb {
+  margin: 0 auto 8px;
+  max-width: 42ch;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink-dim, #B9B3CE);
+}
+
+.arv-where {
+  margin: 0 auto 4px;
+  max-width: 40ch;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: rgba(184, 166, 232, 0.9);
+}
+
+/* -------------------------------- the verbs ------------------------------ */
+
+.arv-verbs {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+/* THE BOUNCE, the cheapest move in the book: if a thing is clickable, it
+   bounces. The buttons borrow `.btn` out of styles.css for everything else. */
+.arv-verbs .btn { transition: transform 220ms cubic-bezier(0.2, 1.5, 0.4, 1); }
+.arv-verbs .btn:active { transform: scale(0.96); transition-duration: 80ms; }
+
+/* THE BREATH, and there is exactly one of it on this screen (Law III). It is
+   armed by a class AFTER the arrival, so the celebration and the breath never
+   run together. */
+.arv-verb.is-breathing { animation: arv-breath 3400ms ease-in-out infinite; }
+@keyframes arv-breath {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.015); }
+}
+
+/* -------------------------------- the stage ------------------------------ */
+
+.arv-stage {
+  position: relative;
+  height: 208px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* THE PLATE: the sku's sprite on its glyph bed, exactly the counter's two
+   layers - the glyph is laid down first and the sprite covers it, so a png that
+   will not load leaves a thing on a shelf rather than a hole. */
+.arv-plate {
+  position: relative;
+  width: 128px;
+  height: 128px;
+  align-self: center;
+  display: grid;
+  place-items: center;
+}
+.arv-glyph {
+  font-size: 64px;
+  line-height: 1;
+  color: var(--lav, #B8A6E8);
+  opacity: 0.8;
+}
+.arv-sprite {
+  position: absolute;
+  inset: 0;
+  /* 128 is an exact integer divisor of the 192 the sprites are drawn at, so the
+     browser drops whole pixels instead of smearing them. */
+  width: 128px;
+  height: 128px;
+  image-rendering: pixelated;
+}
+
+/* -------------------------------- the sparks ----------------------------- */
+
+.arv-burst {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.arv-spark {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--gold, #F0C24B) 0%, var(--pink, #FF69B4) 70%, transparent 71%);
+  transform: rotate(var(--a, 0deg)) translateY(0) scale(1);
+  animation: arv-spark 480ms ease-out var(--d, 0ms) both;
+}
+@keyframes arv-spark {
+  0%   { transform: rotate(var(--a, 0deg)) translateY(0) scale(1); opacity: 1; }
+  100% { transform: rotate(var(--a, 0deg)) translateY(-76px) scale(0.3); opacity: 0; }
+}
+
+/* ------------------------------- THE OUTFIT ------------------------------ */
+
+/* THE ENTRANCE LIVES ON THE WRAP, not on the body, so a sheet that ships an
+   overlay (swim's goggles) travels as ONE picture instead of two that agree
+   most of the time. The wrap is a flex item with no width of its own, so it is
+   exactly as wide as the body inside it - which is what makes `inset: 0` on the
+   overlay land on the same pixels the body is drawn at. */
+.arv-emiwrap {
+  position: relative;
+  z-index: 1;
+  height: 200px;
+  transform-origin: 50% 100%;
+  animation: arv-strut-in 900ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+.arv-emi {
+  position: relative;
+  z-index: 1;
+  display: block;
+  height: 200px;
+  width: auto;
+  image-rendering: pixelated;
+  transform-origin: 50% 100%;
+}
+.arv-emiwrap .arv-emi { height: 100%; }
+/* Above her face, below nothing else: the overlay is the part of the prop that
+   crosses her glass, and behind it the goggles are not goggles. */
+.arv-over {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+@keyframes arv-strut-in {
+  0%   { opacity: 0; transform: translateX(-46%) scale(0.94); }
+  60%  { opacity: 1; }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+/* The light she stops under. It comes up ON THE IMPACT FRAME, not before: a
+   spotlight already lit is a stage, and this is an entrance. */
+.arv-spot {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 260px;
+  height: 200px;
+  margin-left: -130px;
+  background: radial-gradient(ellipse at 50% 100%,
+    rgba(255, 105, 180, 0.34) 0%, rgba(255, 105, 180, 0.1) 46%, transparent 72%);
+  opacity: 0;
+  transition: opacity 420ms ease-out;
+}
+.arv-spot.is-lit { opacity: 1; }
+
+/* --------------------------------- THE PA -------------------------------- */
+
+.arv-rings {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.arv-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 90px;
+  height: 90px;
+  margin: -45px 0 0 -45px;
+  border: 2px solid rgba(240, 194, 75, 0.5);
+  border-radius: 50%;
+  opacity: 0;
+}
+.arv-rings.is-on .arv-ring { animation: arv-ring 1400ms ease-out infinite; }
+.arv-rings.is-on .arv-ring:nth-child(2) { animation-delay: 300ms; }
+.arv-rings.is-on .arv-ring:nth-child(3) { animation-delay: 600ms; }
+@keyframes arv-ring {
+  0%   { opacity: 0.75; transform: scale(0.6); }
+  100% { opacity: 0; transform: scale(2.1); }
+}
+
+/* -------------------------------- THE BELL ------------------------------- */
+
+.arv-plate.is-bell { transform-origin: 50% 12%; }
+.arv-plate.is-bell.is-swinging { animation: arv-swing 1500ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+@keyframes arv-swing {
+  0%   { transform: rotate(0deg); }
+  14%  { transform: rotate(15deg); }
+  36%  { transform: rotate(-11deg); }
+  56%  { transform: rotate(7deg); }
+  74%  { transform: rotate(-4deg); }
+  88%  { transform: rotate(2deg); }
+  100% { transform: rotate(0deg); }
+}
+
+/* -------------------------------- THE THEME ------------------------------ */
+
+.arv-swatch {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--line, #3A3A5E);
+  border-radius: 8px;
+  background: rgba(10, 8, 20, 0.6);
+}
+.arv-chip {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+/* While the real palette is on the page, the strip says so by lifting. Two
+   seconds, and the shell puts the player's own look back. */
+.arv-stage.is-previewing .arv-swatch {
+  box-shadow: 0 0 18px rgba(255, 105, 180, 0.45);
+  transition: box-shadow 180ms ease-out;
+}
+
+/* ------------------------------- THE POSTER ------------------------------ */
+
+.arv-cork {
+  position: relative;
+  align-self: center;
+  width: 210px;
+  height: 180px;
+  border-radius: 8px;
+  border: 3px solid #4A3520;
+  background:
+    repeating-linear-gradient(48deg, rgba(0, 0, 0, 0.06) 0 3px, transparent 3px 6px),
+    #8A6338;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.arv-print {
+  position: relative;
+  width: 128px;
+  transform: translateY(-140%) rotate(-14deg);
+  opacity: 0;
+  transition: transform 340ms cubic-bezier(0.2, 1.5, 0.4, 1), opacity 160ms ease-out;
+}
+.arv-print.is-pinned { transform: translateY(0) rotate(-3deg); opacity: 1; }
+.arv-print-img {
+  display: block;
+  width: 128px;
+  height: auto;
+  image-rendering: pixelated;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5);
+}
+.arv-pin {
+  position: absolute;
+  left: 50%;
+  top: -5px;
+  width: 11px;
+  height: 11px;
+  margin-left: -5.5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #FF9ACD, var(--pink, #FF69B4) 60%, #8A2F5C);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.5);
+  transform: scale(0);
+}
+.arv-print.is-pinned .arv-pin { animation: arv-thunk 220ms cubic-bezier(0.2, 1.5, 0.4, 1) 180ms both; }
+@keyframes arv-thunk {
+  0%   { transform: scale(2.1); }
+  70%  { transform: scale(0.86); }
+  100% { transform: scale(1); }
+}
+
+/* -------------------------------- THE FRAME ------------------------------ */
+
+/* The flip is the only 3D move in the sheet, and a rotateY with no perspective
+   on the PARENT reads as a horizontal squash rather than as a card turning
+   over. It goes on the stage, which is the flip's containing block. */
+.arv-stage.is-frame { perspective: 700px; }
+
+.arv-flip {
+  position: relative;
+  align-self: center;
+  width: 196px;
+  height: 122px;
+  transform-style: preserve-3d;
+  transition: transform 520ms cubic-bezier(0.2, 1.1, 0.35, 1);
+}
+.arv-flip.is-flipped { transform: rotateY(180deg); }
+.arv-face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: linear-gradient(160deg, #23203E 0%, #191533 100%);
+  border: 2px solid var(--line, #3A3A5E);
+  backface-visibility: hidden;
+}
+.arv-face.is-back { transform: rotateY(180deg); }
+.arv-face.is-back[data-frame="gold"] { border-color: var(--gold, #F0C24B); box-shadow: inset 0 0 0 2px rgba(240, 194, 75, 0.35); }
+.arv-face.is-back[data-frame="navy"] { border-color: #6C8BE0; box-shadow: inset 0 0 0 2px rgba(108, 139, 224, 0.4); }
+/* THE LITTLE CARD. A photo well and three ruled lines, laid out the way the
+   real Student ID lays them out, so the flip reads as a card turning over. */
+.arv-mini {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  width: 100%;
+}
+.arv-well {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 58px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #3A3559, #262244);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.arv-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
+}
+.arv-lines i {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.16);
+}
+.arv-lines i:nth-child(1) { width: 100%; background: rgba(255, 255, 255, 0.26); }
+.arv-lines i:nth-child(2) { width: 74%; }
+.arv-lines i:nth-child(3) { width: 52%; }
+.arv-face.is-back[data-frame="gold"] .arv-lines i:nth-child(1) { background: rgba(240, 194, 75, 0.55); }
+.arv-face.is-back[data-frame="navy"] .arv-lines i:nth-child(1) { background: rgba(108, 139, 224, 0.6); }
+
+/* --------------------------------- THE TOY ------------------------------- */
+
+.arv-emi.is-holding { animation: none; opacity: 1; }
+/* HELD UP, not swallowed. Dead centre puts the prop on her screen and reads as
+   something happening INSIDE her rather than in her hands, so it sits out at
+   arm's length on her right and a little above the desk line. */
+.arv-toy {
+  position: absolute;
+  left: 50%;
+  bottom: 66px;
+  width: 56px;
+  height: 56px;
+  margin-left: 62px;
+  z-index: 2;
+  image-rendering: pixelated;
+  opacity: 0;
+  transform: translateY(28px) scale(0.7);
+  transition: transform 420ms cubic-bezier(0.2, 1.4, 0.35, 1), opacity 200ms ease-out;
+}
+.arv-toy.is-up { opacity: 1; transform: translateY(0) scale(1); }
+
+/* ============================== THE TWO CAPS =============================
+   `.is-lite` is the phone diet: the particles and the loops are what cost, so
+   they go and the travel stays. `.is-still` is reduced motion and it is the
+   PICTURE with the motion taken off - every element is present, at rest, in its
+   settled state. Both are also honoured in JS (reveal.js never starts a frame
+   loop under either), so this is the belt to that file's braces.
+   ======================================================================== */
+
+.arv-root.is-lite .arv-burst { display: none; }
+
+.arv-root.is-still .arv-scrim,
+.arv-root.is-still .arv-card { transition: none; }
+.arv-root.is-still .arv-card { opacity: 1; transform: none; filter: none; animation: none; }
+.arv-root.is-still .arv-burst { display: none; }
+.arv-root.is-still .arv-emi,
+.arv-root.is-still .arv-emiwrap { animation: none; opacity: 1; transform: none; }
+.arv-root.is-still .arv-spot { transition: none; opacity: 1; }
+.arv-root.is-still .arv-rings.is-on .arv-ring { animation: none; opacity: 0.4; transform: scale(1.5); }
+.arv-root.is-still .arv-plate.is-bell.is-swinging { animation: none; }
+.arv-root.is-still .arv-print { transition: none; }
+.arv-root.is-still .arv-print.is-pinned .arv-pin { animation: none; transform: scale(1); }
+.arv-root.is-still .arv-flip { transition: none; }
+.arv-root.is-still .arv-toy { transition: none; }
+.arv-root.is-still .arv-verb.is-breathing { animation: none; }
+.arv-root.is-still .arv-verbs .btn { transition: none; }
+
+/* The media query says the same thing for a player whose OS asked and whose
+   shell has not been told (styles.css's own pairing, everywhere). */
+@media (prefers-reduced-motion: reduce) {
+  .arv-scrim, .arv-card { transition: none !important; }
+  .arv-card { opacity: 1 !important; transform: none !important; filter: none !important; animation: none !important; }
+  .arv-burst { display: none !important; }
+  .arv-emi, .arv-emiwrap { animation: none !important; }
+  .arv-spot { transition: none !important; opacity: 1; }
+  .arv-rings.is-on .arv-ring { animation: none !important; }
+  .arv-plate.is-bell.is-swinging { animation: none !important; }
+  .arv-print, .arv-flip, .arv-toy { transition: none !important; }
+  .arv-print.is-pinned .arv-pin { animation: none !important; transform: scale(1); }
+  .arv-verb.is-breathing { animation: none !important; }
+}
+
+/* THE BREATH PAUSES WHILE A CELEBRATION RUNS (House Book Law III). The mascot
+   is the campus's one breather and the card is a celebration over the top of
+   her, so for the length of it she holds still. `animation-play-state` rather
+   than `none`: she picks her idle back up exactly where it was, and the rule
+   reverts by itself when reveal.js drops the class. */
+html.arc-reveal-on #arc-emi .emi,
+html.arc-reveal-on #arc-emi .emi * { animation-play-state: paused; }
+
+/* ---------------------------------- phones ------------------------------- */
+
+@media (max-width: 560px), (max-height: 460px) {
+  .arv-card { width: min(440px, 94vw); padding: 14px 16px 18px; }
+  .arv-stage { height: 168px; }
+  .arv-emi, .arv-emiwrap { height: 158px; }
+  .arv-plate, .arv-sprite { width: 96px; height: 96px; }
+  .arv-glyph { font-size: 48px; }
+  .arv-cork { width: 176px; height: 148px; }
+  .arv-print, .arv-print-img { width: 104px; }
+  .arv-flip { width: 160px; height: 100px; }
+}
+
+/* THE SHORT STAGE (phone landscape, 844x390). The card scrolls rather than
+   clips - but a celebration whose VERB is below the fold is a celebration the
+   player has to go looking for, which is the one thing a reveal must never be.
+   So on a short viewport the picture gives up the height instead: everything
+   is still here, smaller, and the whole card lands inside 390px. */
+@media (max-height: 460px) {
+  .arv-card { padding: 10px 16px 14px; }
+  .arv-stage { height: 96px; }
+  .arv-emi, .arv-emiwrap { height: 92px; }
+  .arv-plate, .arv-sprite { width: 72px; height: 72px; }
+  .arv-glyph { font-size: 36px; }
+  .arv-cork { width: 118px; height: 96px; }
+  .arv-print, .arv-print-img { width: 70px; }
+  .arv-flip { width: 128px; height: 80px; }
+  .arv-well { width: 30px; height: 38px; }
+  .arv-lines i { height: 5px; }
+  .arv-toy { width: 40px; height: 40px; bottom: 26px; margin-left: 40px; }
+  .arv-name { margin: 6px 0 4px; font-size: clamp(18px, 3.4vw, 22px); }
+  .arv-blurb { font-size: 12.5px; line-height: 1.35; margin-bottom: 4px; }
+  .arv-where { font-size: 11.5px; line-height: 1.3; }
+  .arv-verbs { margin-top: 10px; }
+}
