@@ -391,6 +391,28 @@ shell/prizecounter.js THE PRIZE COUNTER (economy wave): the two-currency shop, a
                    line; an unknown one degrades to a generic. Node-double
                    convention throughout (findCls by children index, never
                    querySelector) + prizecounter.css
+shell/alleysign.js LOCKER ROOM / PRIZE COUNTER neon wall plates (counter/locker
+                   wave): the booth's right wall walks to RM 004, the Locker's
+                   left wall walks back, on `exits.js` sign hardware. Chevron
+                   marches under motion, stands still under reduced/lite but is
+                   never dimmed + alleysign.css
+shell/reveal.js    THE REVEAL: the purchase ceremony that hangs off `arcademy-bought`
+                   (whoosh -> plinth -> per-kind stage -> chime ladder). `kindOf(sku,
+                   row)` is the CEREMONY kind (outfit|theme|frame|bell|poster|toy|pa|
+                   walk|consumable|other), NOT the host catalogue's coarse kind.
+                   Theme stage previews without persisting; PA stage asks pa.js via
+                   `arcademy-pa-request` outside the two-a-session cap; `html.arc-
+                   reveal-on` while up (EMI shop lines hold on it) + reveal.css
+shell/pacaption.js VN caption for every `pa_NN` cue (EMI bubble skin, Front Office
+                   nameplate, typewriter paced to the clip). Keyed by cueId so a
+                   DROPPED cue (answered synchronously, `arcademy-pa-ended` before
+                   the listener) never leaves a caption up; its rect rides
+                   `campusDoorRects` so EMI keeps off it + pacaption.css
+emi/shop.js        EMI's counter/Locker voice: `SHOP_POOLS` (barks.js shape, literal
+                   strings, widget law) + `createShopVoice`. One pool per sku
+                   (`shop.bought:<sku>`), wear/frame/theme/toy/bell/poor/browse/
+                   sentToLocker/locker.opened. Rides the voice ladder via
+                   `fire = voiceMoment`; new sku = new pool, nothing else to wire
 shell/counterfx.js THE HOUSE MOVES, as one importable kit (counter/locker wave):
                    THUD, SHIVER, GLOW (warm cut), the ALMOST's gold ghost, the
                    bell's SWING, the reversed BANK, the till's COUNT-UP, the
@@ -3173,6 +3195,17 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     (`/arcademy/` on the web, `/arcademy/v/<stamp>/` in the Activity) is ours; same origin
     elsewhere travels. `isLocalUrl` is unchanged on purpose - it is the canvas-taint law, and a
     proxied row must stay OUT of `canvasSafe` pools.
+
+137. **AN OUTFIT THAT DRAWS ON THE GLASS NEEDS AN `over-<pose>.png` OR THE FACE EATS IT (swim
+    goggles, 0828).** `install_outfits.py` pastes the ORIGINAL screen rect over every outfit frame,
+    so anything the generator drew across the tube's glass never reaches `body-*.png`; the widget
+    then paints the face canvas on top and the piece is gone twice over. The road: ship
+    `art/emi/<outfit>/over-<pose>.png` (same 192 box, transparent except the piece) and
+    `emi/widget.js` `overSetFor` paints it in `.emi-over` ABOVE the face canvas, BELOW the bubble,
+    mirrored with the body, probed once per outfit and cached (a missing file is a silent none).
+    The Locker WEAR tile composites it too. Do NOT reach for z-index on the body sprite: the face
+    must stay over the body for every other outfit. Follow-up: the script should emit over-*.png
+    itself.
 
 ## 5. The game module contract (short version)
 
