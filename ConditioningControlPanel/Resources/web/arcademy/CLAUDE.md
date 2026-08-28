@@ -3157,6 +3157,22 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     decoder caps: `MONTAGE.VIDEO_TILE_CAP_TOUCH = 1` (two playing tiles measured p95 33ms, the
     30Hz lock) and `PLAYTEST.VIDEO_TILE_CAP_TOUCH = 1` in Lost and Found (the LITE four were
     EIGHT playing players with the wrap reps).
+136. **A SAME-ORIGIN URL IS NOT OUR OWN FILE, AND A BARE PATH IS NOT REMOTE (Discord Activity,
+    2026-08-28).** Inside the E.M.I. Activity the frame lives on `<app_id>.discordsays.com` and
+    the web shim rewrites every Scrolller row to the portal mapping `/scrolller-media/<sub>/...`
+    - our origin on paper, a proxied CDN in fact. Two page laws misread that shape: (1)
+    `inventory.js isLocalUrl` calls a RELATIVE url local, so when the shim handed over the bare
+    path `absorbRemote()` `continue`d on every row, `absorbLocal()` (blob:/data: only) took none,
+    and every ordinary `claim()` - Anomaly, Impulse Control, Composure, Deja Vu, Echo, Instant
+    Recall - dealt the six `ae-ph-N.svg` tiles all class (the owner's striped Anomaly board).
+    Cure = the shim now hands ABSOLUTE same-origin urls (cclabs-web #112). (2) `warmable()`,
+    `instantUrl()` and `vet.js instant()` called anything on OUR ORIGIN "ready now", so inside
+    the Activity nothing was ever prefetched or probed: a LAN desktop never noticed, a phone on
+    5G met every card cold (striped back while it buffered, dead index posts dealt unvetted).
+    Cure = `inventory.js isOwnPageUrl`: same origin AND under the document's own directory
+    (`/arcademy/` on the web, `/arcademy/v/<stamp>/` in the Activity) is ours; same origin
+    elsewhere travels. `isLocalUrl` is unchanged on purpose - it is the canvas-taint law, and a
+    proxied row must stay OUT of `canvasSafe` pools.
 
 ## 5. The game module contract (short version)
 

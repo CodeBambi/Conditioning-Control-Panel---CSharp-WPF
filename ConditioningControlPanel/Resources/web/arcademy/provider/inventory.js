@@ -39,6 +39,33 @@ export function isLocalUrl(url) {
   return true;                    // relative -> our own document origin
 }
 
+/**
+ * OUR OWN PAGE, as opposed to our own ORIGIN (2026-08-28). Same origin AND under
+ * the document's own directory: the campus's bundled files (the ae-ph-N.svg
+ * floor, a game's ./assets), which no warm or probe can make any readier. A
+ * same-origin url OUTSIDE that directory is bytes that TRAVEL - inside the
+ * Discord Activity the web shim rewrites every Scrolller row to
+ * '<frame origin>/scrolller-media/<sub>/<path>', our origin on paper and a
+ * proxied CDN in fact - and the warm rail and the vet must treat it exactly as
+ * they treat images.scrolller.com. Local by isLocalUrl() is own-page by
+ * definition (ccp.*, relative, data:, blob:). Without a `location` (a node
+ * harness) nothing same-origin exists, so the answer is false and the callers
+ * fall back to their old http(s)-only tests.
+ */
+export function isOwnPageUrl(url) {
+  const s = String(url || '');
+  if (!s) return false;
+  if (isLocalUrl(s)) return true;
+  try {
+    if (typeof location === 'undefined' || !location || !location.origin) return false;
+    const u = new URL(s);
+    if (u.origin !== location.origin) return false;
+    const p = String(location.pathname || '/');
+    const dir = p.slice(0, p.lastIndexOf('/') + 1) || '/';
+    return u.pathname.indexOf(dir) === 0;
+  } catch (e) { return false; }
+}
+
 /** Turn a manifest entry into an absolute url. Accepts a bare relative path
  *  ("images/foo.gif"), an already-absolute url, or {url|path, kind, mime}. */
 export function toAssetUrl(entry) {
@@ -104,4 +131,4 @@ export function wantRemote(ratio, rand, haveRemote, canvasSafe) {
   return rand < Math.min(1, r);
 }
 
-export default { buildLocalPools, isLocalUrl, formatOk, kindOf, toAssetUrl, wantRemote };
+export default { buildLocalPools, isLocalUrl, isOwnPageUrl, formatOk, kindOf, toAssetUrl, wantRemote };

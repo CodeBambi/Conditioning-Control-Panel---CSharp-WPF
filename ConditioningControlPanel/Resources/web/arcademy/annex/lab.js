@@ -137,6 +137,10 @@ const SILS = Object.freeze({
   tiger: 'M22 30 Q14 12 30 14 Q40 4 50 12 Q60 4 70 14 Q86 12 78 30 Q88 46 80 64 Q70 86 50 86 Q30 86 20 64 Q12 46 22 30 Z',
   ghost: 'M50 8 Q20 8 20 44 L20 82 L30 72 L40 84 L50 72 L60 84 L70 72 L80 82 L80 44 Q80 8 50 8 Z',
   clip: 'M36 18 Q36 8 48 8 Q60 8 60 18 L60 66 Q60 78 48 78 Q36 78 36 66 L36 30 Q36 24 43 24 Q50 24 50 30 L50 62',
+  /* the unit: a rounded shell, a short antenna and its bulb. No redaction
+   * circles, because this one is not withheld. */
+  emi: 'M32 30 H68 Q78 30 78 40 V78 Q78 88 68 88 H32 Q22 88 22 78 V40 Q22 30 32 30 Z '
+    + 'M48 30 V18 H52 V30 Z M50 6 A6 6 0 1 1 49.9 6 Z',
 });
 
 export function createAnnexLab(caps) {
@@ -229,6 +233,14 @@ export function createAnnexLab(caps) {
       link.id = id;
       link.rel = 'stylesheet';
       link.href = new URL(rel, import.meta.url).href;
+      /* THE FIRST-VISIT SHRINK (0828). On the very first descent the shell
+       * measures the root for fitStage BEFORE this sheet has arrived, so
+       * `.al-root` is still an in-flow block the width of .arc-screen (about
+       * 1040x480 on a desktop window) and the stage gets scaled to THAT: a
+       * small painting in a big black frame until the next slide change
+       * re-measured it. Once the sheet lands the root snaps to the viewport
+       * and the stage has to be fitted again, right then. */
+      link.addEventListener('load', () => { try { fitStage(); } catch (e) { /* noop */ } });
       doc.head.appendChild(link);
     } catch (e) { log('annex sheet failed: ' + rel, 'warn'); }
   }
@@ -269,6 +281,17 @@ export function createAnnexLab(caps) {
   }
   const onResize = () => fitStage();
   window.addEventListener('resize', onResize);
+  /* And the root's OWN box, not just the window's: the sheet landing, the
+   * topbar hiding, a host that resizes its webview without a window event -
+   * anything that moves the root's size re-fits the stage. No loop: fitStage
+   * writes the stage's transform, which never changes the root's box. */
+  let rootWatch = null;
+  try {
+    if (typeof ResizeObserver === 'function') {
+      rootWatch = new ResizeObserver(() => fitStage());
+      rootWatch.observe(root);
+    }
+  } catch (e) { rootWatch = null; }
 
   /* --------------------------------------------------------------- views */
 
@@ -645,6 +668,15 @@ export function createAnnexLab(caps) {
     return row;
   }
 
+  /** THE RUBBER STAMP, one span, wherever it lands: the plate on a page with
+   *  no photograph, the photo card on a page that has one. A word longer than
+   *  REDACTED gets the tighter setting, or it covers the whole print instead
+   *  of landing on the corner of it. */
+  function stampSpan(text) {
+    const s = String(text);
+    return el('span', 'al-stamp' + (s.length > 8 ? ' is-long' : ''), s);
+  }
+
   /** The shared parse (os.js), painted in paper's own materials: a **run** is
    *  highlighter, a __run__ is pen underline. Nodes, never innerHTML. */
   function paintRuns(host, text, inline) {
@@ -677,7 +709,7 @@ export function createAnnexLab(caps) {
   /** 'clip': a photo card pinned by a drawn paperclip. The case photograph if
    *  the page filed one, else the silhouette printed SMALL and dark on a pale
    *  ground. Either way the caption is in the clerk's own hand. */
-  function clipPhoto(att) {
+  function clipPhoto(att, stamp) {
     const box = el('div', 'al-photo');
     box.appendChild(el('span', 'al-clip'));
     const im = el('div', 'al-photo-im');
@@ -685,6 +717,10 @@ export function createAnnexLab(caps) {
       ? caseImg(att.img, 'al-photo-img', () => silSvg(att.sil, 58))
       : silSvg(att.sil, 58);
     if (face) im.appendChild(face);
+    /* A NAMED PAGE HAS NO PLATE TO STAMP. Its one print is this card, so the
+     * rubber lands on the lower right of the PRINT here exactly the way it
+     * lands on the plate elsewhere, an overlay and never baked into the art. */
+    if (stamp) im.appendChild(stampSpan(stamp));
     box.appendChild(im);
     /* the caption is the same withholding as the plate's namebar, in the
      * clerk's hand and in miniature; the written caption is what a card
@@ -747,7 +783,7 @@ export function createAnnexLab(caps) {
    * are pinned to the SHEET, outside the text column, and get a nudge each so
    * a page with two of a kind cannot stack them on one spot.
    */
-  function mountAttachments(sheet, face, list) {
+  function mountAttachments(sheet, face, list, cardStamp) {
     const off = { sticky: 0, margin: 0, clip: 0 };
     (Array.isArray(list) ? list : []).forEach((att) => {
       if (!att) return;
@@ -762,7 +798,7 @@ export function createAnnexLab(caps) {
         return;
       }
       if (att.kind === 'image' && att.mount === 'clip') {
-        const photo = clipPhoto(att);
+        const photo = clipPhoto(att, cardStamp);
         if (off.clip) photo.style.top = (-14 + off.clip * 30) + 'px';
         off.clip += 1;
         /* the photo takes a column out of the first paragraph, the way it does
@@ -943,6 +979,11 @@ export function createAnnexLab(caps) {
 
       const atts = Array.isArray(pg.attachments) ? pg.attachments : [];
       const hasPhoto = atts.some((a) => a && a.kind === 'image' && a.mount === 'clip');
+      /* A PAGE THAT IS NOT WITHHELD SAYS SO ON ITS PRINT. A named page files
+       * no `red` and never wears REDACTED, and its own caption names it, so
+       * the only thing `name` buys is that the page's stamp follows the print
+       * onto the photo card on a page whose plate has stepped aside. */
+      const named = typeof pg.name === 'string' && pg.name.trim() !== '';
       /* a page WITHOUT its own photograph keeps the old centred plate; a page
        * that carries one is a photographed page and the plate steps aside */
       if (pg.sil && !hasPhoto) {
@@ -956,7 +997,7 @@ export function createAnnexLab(caps) {
              * room falls back to when the photograph is not there */
             const box = el('div', 'al-plate');
             box.appendChild(plate);
-            box.appendChild(el('span', 'al-stamp', String(pg.stamp)));
+            box.appendChild(stampSpan(pg.stamp));
             faceHost.appendChild(box);
           } else {
             faceHost.appendChild(plate);
@@ -969,7 +1010,7 @@ export function createAnnexLab(caps) {
       paintRuns(bodyEl, pg.body);
       faceHost.appendChild(bodyEl);
 
-      mountAttachments(page, faceHost, atts);
+      mountAttachments(page, faceHost, atts, named && pg.stamp ? pg.stamp : null);
       if (pg.back) armFlip(page, faceHost, pg.back);
 
       prev.disabled = idx === 0;
@@ -1118,6 +1159,7 @@ export function createAnnexLab(caps) {
     dead = true;
     timers.forEach((id) => clearTimeout(id));
     window.removeEventListener('resize', onResize);
+    if (rootWatch) { try { rootWatch.disconnect(); } catch (e) { /* noop */ } rootWatch = null; }
     if (os) { try { os.destroy(); } catch (e) { /* noop */ } os = null; }
     if (wall) { try { wall.destroy(); } catch (e) { /* noop */ } wall = null; }
     try { root.remove(); } catch (e) { /* noop */ }
@@ -1130,6 +1172,9 @@ export function createAnnexLab(caps) {
   showView('wide');
   playDescent(firstVisit);
   fitStage();
+  /* one more on the next frame, after the shell has appended the root and
+   * the document has had a layout pass with it in place */
+  try { requestAnimationFrame(() => fitStage()); } catch (e) { /* noop */ }
 
   return { root, escapeStep, destroy, fit: fitStage };
 }

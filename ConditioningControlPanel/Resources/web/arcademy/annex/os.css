@@ -750,6 +750,112 @@ button.aos-chip:hover, button.aos-chip:focus-visible {
 
 .aos-search-form { max-width: 300px; }
 
+/* THE CARD READER. Sunken Win9x panel bolted to the side of the form: a slit,
+   an LED and a button, for the players who never found the binder. The LED
+   idles a dull red and turns the lab phosphor when it has the card; that green
+   is the ONLY colour allowed to light up down here, and nothing in this panel
+   is warm. Clipped, because the card slides through it. */
+.aos-reader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 300px;
+  margin: 2px 0 12px;
+  padding: 7px 9px;
+  background: #26302F;
+  border: 2px solid;
+  border-color: #10201C #56645F #56645F #10201C; /* sunken, like the inputs */
+  overflow: hidden;
+}
+.aos-reader-slot {
+  position: relative;
+  flex: none;
+  width: 70px;
+  height: 44px;
+  background: #131E1D;
+  border: 2px solid;
+  border-color: #10201C #56645F #56645F #10201C;
+  overflow: hidden;
+}
+.aos-reader-slit {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 0;
+  height: 8px;
+  z-index: 2;
+  background: #04090A;
+  border: 1px solid;
+  border-color: #0A1211 #3E4A47 #3E4A47 #0A1211;
+}
+.aos-reader-led {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  z-index: 3;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #5E2A26;
+  box-shadow: 0 0 4px rgba(168, 62, 52, 0.55);
+}
+.aos-reader-led.is-on {
+  background: var(--annex-cold, #8FE0CE);
+  box-shadow: 0 0 6px var(--annex-cold, #8FE0CE);
+}
+.aos-reader-side { min-width: 0; }
+.aos-reader-lab {
+  display: block;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: #8FA39D;
+  margin-bottom: 4px;
+}
+.aos-reader-btn { max-width: 100%; }
+.aos-reader-btn[disabled] { color: #8FA39D; cursor: default; }
+
+/* the card. Navy stock, a pale photo square and two ruled lines - and NO
+   name: the OS was handed a code and a password, never a person, and it does
+   not draw one. It starts above the slit and travels down under it; the slot
+   clips the rest, so the card ends half in, the way a card reader holds one. */
+.aos-card {
+  position: absolute;
+  left: 7px;
+  top: 1px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 54px;
+  height: 34px;
+  padding: 5px;
+  background: linear-gradient(160deg, #24365C 0%, #1A2743 100%);
+  border: 1px solid #35507F;
+  transform: translateY(0);
+  transition: transform 320ms cubic-bezier(0.4, 0.1, 0.3, 1);
+}
+.aos-card.is-in { transform: translateY(19px); }
+.aos-card-photo {
+  flex: none;
+  width: 15px;
+  height: 20px;
+  background: #B9C6D6;
+  border: 1px solid #6E7F97;
+}
+.aos-card-lines {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.aos-card-line { display: block; height: 3px; background: #6E86AE; }
+.aos-card-line.is-short { width: 62%; }
+/* still mode never builds the card at all (os.js), but a stylesheet that
+   promises no motion has to keep the promise on its own. */
+.arc-reduced .aos-card, .aos-lite .aos-card { transition: none; }
+
 /* M's slip, lying on the form: the one thing in here that says where the code
    came from. Pale bone stock and the local hand, borrowed from the paper kit
    with literal fallbacks (lab.css may not be linked on a screen showing the
@@ -967,6 +1073,9 @@ button.aos-chip:hover, button.aos-chip:focus-visible {
 .aos-cramped .aos-btn { min-height: 44px; padding: 6px 18px; }
 .aos-cramped .aos-input { padding: 10px 8px; }
 .aos-cramped .aos-search-form { max-width: none; }
+.aos-cramped .aos-reader { max-width: none; gap: 14px; padding: 9px 11px; }
+.aos-cramped .aos-reader-lab { font-size: 12px; }
+.aos-cramped .aos-reader-btn { min-height: 40px; padding: 5px 14px; }
 .aos-cramped .aos-slip { max-width: none; font-size: 13px; }
 .aos-cramped .aos-file-row { flex-wrap: wrap; gap: 2px 12px; }
 .aos-cramped .aos-file-row dt { width: auto; flex: 1 0 100%; }
