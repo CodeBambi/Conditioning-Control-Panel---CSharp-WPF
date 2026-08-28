@@ -184,18 +184,16 @@ export function gifBurstSpec(intensity) {
 }
 
 /* ----------------------------------------------------------------------------
- * GIFBURST — in-browser CCP-flash REWARD (owner-directed). The kind string
- * mirrors a recommended contracts.js `RewardKind.GifBurst: 'gifburst'` (see the
- * FINAL REPORT contract-gap note); until that enum lands the literal is
- * duplicated here + in reward.js (same pattern as GARNISH_CUE_EVENT). Exported
- * so reward-roll / opacity tests can reference the shipped values.
+ * GIFBURST — in-browser CCP-flash REWARD (owner-directed). The kind is now a
+ * first-class `RewardKind.GifBurst` ('gifburst') in contracts.js — the literal
+ * lives there and nowhere else. Re-exported under the old name so reward-roll /
+ * opacity tests can still reference the shipped value.
  * -------------------------------------------------------------------------- */
-export const GIFBURST_KIND = 'gifburst';
+export const GIFBURST_KIND = RewardKind.GifBurst;
 
-/** GIF RAIN — the burst's rarer sibling (the DTRH gif-cascade port). Same
- *  contract-gap story as GIFBURST_KIND above: the literal is duplicated in
- *  core/reward.js, which is where the roll that fires it lives. */
-export const GIFRAIN_KIND = 'gifrain';
+/** GIF RAIN — the burst's rarer sibling (the DTRH gif-cascade port), likewise
+ *  `RewardKind.GifRain` ('gifrain'). core/reward.js owns the roll that fires it. */
+export const GIFRAIN_KIND = RewardKind.GifRain;
 
 /** Run-progress -> GifBurst opacity, HARDCODED per owner (no settings). The
  *  owner's ladder is BY BAND (Calibration .15 / Establishing .30 / Deepening

@@ -405,13 +405,16 @@ only, and breath tags cost 1–2 s each.
    window-mode key.
 9. **`is-correct` / `is-answer` must never gain visual styling** — they are DOM hooks. The pink-means-correct
    colour tell was the single biggest early play-test complaint.
-10. **Reward determinism has one hole**: `pickKind` uses `Math.random()` while the rest of `reward.js` runs
-    on the seeded `hash01` stream.
+10. **Reward determinism is whole**: `pickKind`'s gifburst/gifrain rolls now ride the same seeded
+    `hash01` stream as VariableRatio (own tag namespace + a per-`planFor` counter), so a fixed
+    `config.seed` replays an identical kind sequence. It used to call `Math.random()`.
 11. **Duplicated by design, no shared module**: `backdropRef` (beats + effects, ref-counted via
     `body.dataset.ixBackdrop`), `freshSpiralParams` + `window.__ixSpiralSig`, and the three CustomEvent name
     literals (`intake-sfx`, `intake-garnish`, `intake-log`). Effects and steering hold **no** audio handle —
     that is why the seams exist.
-12. **`'gifburst'` / `'gifrain'` are string literals**, not `RewardKind` members — a known contract gap.
+12. **`'gifburst'` / `'gifrain'` are `RewardKind.GifBurst` / `RewardKind.GifRain`** (contract gap closed).
+    The wire strings live in `core/contracts.js` only; `effects.js` re-exports `GIFBURST_KIND` /
+    `GIFRAIN_KIND` as aliases of the enum so older test references still resolve.
 13. **`quiz-result` is one-way.** The page mirrors C#'s session-naming rule to guess a name
     (`derived:true`), then the later `session-drafted` reply overwrites it. The certificate's exit is held
     shut until that reply lands (or 12 s), because clicking early tore the window down mid-draft and the

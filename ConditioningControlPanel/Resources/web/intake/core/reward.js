@@ -30,7 +30,9 @@
  * (or config.rewardSeed) for reproducible fires (tests/harness). With no seed a
  * per-instance random seed is chosen so production runs differ. hash01 (from
  * contracts.js) drives the stream, so a fixed seed yields an identical fire
- * sequence for a fixed sequence of VariableRatio resolves.
+ * sequence for a fixed sequence of VariableRatio resolves. The gifburst/gifrain
+ * KIND rolls ride the same stream under their own tag, so planFor is seeded too
+ * (it used to call Math.random(), the one determinism hole in this file).
  * ==========================================================================*/
 
 import {
@@ -70,12 +72,10 @@ const STREAK_STEP = 0.03;        // intensity multiplier step per streak beat
 /* GifBurst: an in-browser CCP-flash reward (owner-directed). It joins the kind
  * roll in pickKind at GIFBURST_CHANCE — a weight comparable to how often the
  * heavy Flash / gif-Drop payloads land (Flash is the deep-beat default, Drop the
- * hottest; ~18% keeps GifBurst a frequent-but-not-dominant reward). The kind
- * string mirrors a recommended contracts.js `RewardKind.GifBurst: 'gifburst'`
- * (see FINAL REPORT contract-gap note); until that enum lands the literal is
- * duplicated here + in effects.js (same pattern as the GARNISH_CUE_EVENT
- * literal). effects.js renders it; audio/stats ignore an unknown kind. */
-const GIFBURST_KIND = 'gifburst';
+ * hottest; ~18% keeps GifBurst a frequent-but-not-dominant reward). The kind is
+ * `RewardKind.GifBurst` ('gifburst') — the contract gap is closed, so the wire
+ * string lives in contracts.js and nowhere else. effects.js renders it;
+ * audio/stats ignore an unknown kind. */
 const GIFBURST_CHANCE = 0.18;
 
 /* GifRain: the burst's RARE sibling — a ~6s downpour of falling gifs (the DTRH
@@ -84,7 +84,6 @@ const GIFBURST_CHANCE = 0.18;
  * that survive the burst roll (~4% overall) a player meets it a couple of times
  * in a long descent and it stays a prize instead of becoming wallpaper. Rolled
  * AFTER the burst so the burst's existing 18% tuning is untouched. */
-const GIFRAIN_KIND = 'gifrain';
 const GIFRAIN_CHANCE = 0.05;
 
 function baseChanceFor(mode, band, depth) {
@@ -129,16 +128,20 @@ function rewardIntensity01(depth) {
  * bubble (the centerpiece: the effect bubble IS the reward). Hotter prompts pay
  * in the heavier payloads (drop/praise); deeper beats favour flash; the honest
  * warm-up favours a gentle chime.
+ *
+ * `roll(tag)` is the caller's SEEDED stream (createReward.kindRoll) — the burst /
+ * rain rolls stay on the same hash01 stream as VariableRatio so a fixed seed
+ * replays an identical kind sequence (this used to be Math.random()).
  * -------------------------------------------------------------------------- */
-function pickKind(band, depth, prompt) {
+function pickKind(band, depth, prompt, roll) {
   if (band === Band.Recovery) return RewardKind.None;
   const hints = (prompt && Array.isArray(prompt.mechanicHints)) ? prompt.mechanicHints : [];
   const heat = (prompt && typeof prompt.heat === 'number') ? prompt.heat : 0;
   if (hints.includes(Mechanic.BubblePop)) return RewardKind.Bubble;
   // GifBurst joins the roll as a random in-browser flash reward (BubblePop still
   // wins — its bubble IS the reward). Opacity ramps by band inside effects.js.
-  if (Math.random() < GIFBURST_CHANCE) return GIFBURST_KIND;
-  if (Math.random() < GIFRAIN_CHANCE) return GIFRAIN_KIND;
+  if (roll('burst') < GIFBURST_CHANCE) return RewardKind.GifBurst;
+  if (roll('rain') < GIFRAIN_CHANCE) return RewardKind.GifRain;
   if (heat >= 4) return RewardKind.Drop;    // hottest -> gif burst / subliminal drop
   if (heat >= 3) return RewardKind.Praise;  // voiced/subtitled affirmation
   if (depth >= 0.6) return RewardKind.Flash;
@@ -180,6 +183,13 @@ export function createReward({ config } = {}) {
   let runPeak  = 0;   // best single scoreDelta seen (proxy for per-beat max)
   let runBeats = 0;   // number of scored beats
   let vrCount  = 0;   // VariableRatio resolves so far (drives the seeded stream)
+  let kindCount = 0;  // planFor calls so far (drives the seeded KIND stream)
+
+  /** The seeded roll pickKind uses (its own tag namespace, so adding a kind roll
+   *  never shifts the VariableRatio fire sequence for a given seed). */
+  function kindRoll(tag) {
+    return hash01(seed + '|kind-' + tag + '|' + kindCount);
+  }
 
   /** Running 0..1 fraction of best-achievable score (ScaleWithScore magnitude). */
   function runningScoreRate() {
@@ -201,8 +211,9 @@ export function createReward({ config } = {}) {
       mode,
       baseChance: baseChanceFor(mode, band, d),
       baseIntensity: isRecovery ? 0 : rewardIntensity01(d),
-      kind: pickKind(band, d, prompt),
+      kind: pickKind(band, d, prompt, kindRoll),
     };
+    kindCount += 1;                    // advance the seeded kind stream one beat
     plan._heat = promptHeat01(prompt); // additive, ignored by non-reward consumers
     return plan;
   }

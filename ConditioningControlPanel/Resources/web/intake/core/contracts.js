@@ -382,12 +382,14 @@ export const RewardMode = Object.freeze({
 });
 
 export const RewardKind = Object.freeze({
-  Chime:   'chime',
-  Flash:   'flash',
-  Bubble:  'bubble',
-  Praise:  'praise',   // voiced/subtitled affirmation
-  Drop:    'drop',     // gif burst / subliminal drop
-  None:    'none',
+  Chime:    'chime',
+  Flash:    'flash',
+  Bubble:   'bubble',
+  Praise:   'praise',   // voiced/subtitled affirmation
+  Drop:     'drop',     // gif burst / subliminal drop
+  GifBurst: 'gifburst', // in-browser CCP-flash reward (render/effects.js showGifBurst)
+  GifRain:  'gifrain',  // the burst's rare sibling: the DTRH gif-cascade port
+  None:     'none',
 });
 
 /**
