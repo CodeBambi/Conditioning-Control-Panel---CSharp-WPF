@@ -22,7 +22,11 @@
  * `claim()` moves; every other class draws exactly the media it drew before.
  * Beside it ride the DOOR's four reads/writes: `catalog()` (the niches, the
  * player's sub library, their local folders and asset presets, projected on
- * init), `probeSub(name)`, `removeLibrarySub(name)` and `onLibrary(cb)`.
+ * init), `probeSub(name, {scope, pile})`, `removeLibrarySub(name)` and
+ * `onLibrary(cb)`. A `{scope:'sort', pile:'noise'}` probe is a DECOY pile pick:
+ * it joins the library and is fenced OUT of the app-wide feed, so it can never
+ * come back to the player through some other class's `claim()` - see THE SORT
+ * SCOPE below.
  *
  * LAWS
  *  - NEVER BLOCK A DRAW. A local candidate is always ready: the C#-supplied
@@ -893,6 +897,12 @@ export function createAssets(options = {}) {
         ok: e && typeof e === 'object' && e.ok != null ? !!e.ok : true,
         videoCount: Math.max(0, (e && e.videoCount) | 0),
         stillOnly: !!(e && e.stillOnly),
+        /* Whether the app-wide feed uses this row right now. The host has always
+         * shipped it (ArcademyHostService BuildSubLibrary, and the web shim's
+         * pushLibrary) and this sanitizer used to DROP it, which is why the door
+         * could not tell an enrolled sub from a parked one. Missing reads as
+         * enrolled, the same default `shell/settings.js cleanLibrary` uses. */
+        selected: e && typeof e === 'object' && e.selected != null ? !!e.selected : true,
       }));
     }
     return out;
@@ -938,6 +948,63 @@ export function createAssets(options = {}) {
   const PROBE_TIMEOUT_MS = 15000;    // a probe is a network round trip on the HOST
   const LIBRARY_ECHO_MS = 4000;      // how long a remove waits for the host's push
 
+  /* ==========================================================================
+   * THE SORT SCOPE (2026-08-28). Tester report: "the noise reddit feeds (cat
+   * and pokemon) I added for the sorting room game seem to have followed me
+   * through to all the other games".
+   *
+   * A sub picked at SORT's setup door is a PILE, not a taste. It belongs in the
+   * player's library - the door has to be able to offer it again tomorrow, and
+   * the X on its pill is the one way off - but the NOISE pile is the decoy
+   * heap, and a decoy heap has no business in the media every OTHER class
+   * draws. `claim()` names no subs (trap 54: that ask is byte-for-byte what it
+   * always was), so the host answers it from whatever it considers ENROLLED and
+   * the page cannot filter the leak out downstream. The only honest place to
+   * say so is the moment the sub is ADDED.
+   *
+   * Two halves, deliberately unequal, because the two hosts already differ:
+   *  - `scope`/`pile` ride the `probe-sub` frame. The C# host honours it BY
+   *    CONSTRUCTION - `AppSettings.TryAddLibrarySub` never touches
+   *    `FypOnlineCustomSubs`, the app-wide feed selection - so on the desktop
+   *    this is the contract catching up with the behaviour, and the host logs
+   *    it rather than acting on it.
+   *  - THE FENCE, for the WEB host, whose library row IS its feed selection: a
+   *    probe add there defaults `selected:true` and its app-wide sub set is
+   *    "the picked niches plus every selected library row", which is exactly
+   *    the leak. Where the media counter exists (`init.settings.mediaControls
+   *    === true`, the web-only flag - see settings.js MEDIA_KEYS) the page
+   *    posts ONE `media.librarySelect {name, selected:false}` for the row it
+   *    just caused. That key is the counter's own, so this parks the sub
+   *    exactly as un-ticking its box would, and the player can tick it back on
+   *    there whenever they like: nothing here ever un-ticks it twice, because
+   *    the door only probes a name the library does NOT already hold.
+   *
+   * NOT built, on purpose: "the noise turns itself off after the class". That
+   * would hang off `shell.js finishClass` (or SORT's own `end`) reaching back
+   * into this seam for the pile it dealt - the owner may want it, and the pile
+   * is knowable there. This fence is the smaller claim: it never got enrolled.
+   * ======================================================================= */
+  const mediaCounter = pickFirst(opts.mediaControls, bag.mediaControls) === true;
+  /** Lower-cased names this page asked for as a SORT noise pile. */
+  const sortNoiseScoped = new Set();
+
+  /**
+   * Park a library row so the app-wide feed does not draw it. A no-op on any
+   * host without the media counter - the C# host has no such key, and needs
+   * none. Returns whether the frame actually left.
+   */
+  function unenrolSub(name) {
+    if (!mediaCounter || !opts.bridge || disposed) return false;
+    const ok = channel.sendRaw('set-setting', {
+      key: 'media.librarySelect',
+      value: { name, selected: false },
+    });
+    log(ok
+      ? 'sort noise: r/' + name + ' kept out of the app-wide feed'
+      : 'sort noise: could not park r/' + name);
+    return ok;
+  }
+
   function emitLibrary() {
     const view = subLibrary.slice();
     for (const fn of [...libraryCbs]) { try { fn(view); } catch { /* a bad listener never kills the seam */ } }
@@ -969,9 +1036,15 @@ export function createAssets(options = {}) {
      * pushing the fresh list; folding it in here as well means the door can act
      * on the verdict without waiting for a second frame. */
     if (row.ok && !subLibrary.some((s) => s.name.toLowerCase() === row.name.toLowerCase())) {
-      subLibrary = subLibrary.concat([Object.freeze(row)]);
+      /* THE FENCE (see THE SORT SCOPE above). This add is the door's, and it is
+       * the noise pile: park it before the row is ever published, so no reader
+       * of the library sees an enrolled decoy even for a frame. */
+      const noise = sortNoiseScoped.has(row.name.toLowerCase());
+      if (noise) unenrolSub(row.name);
+      subLibrary = subLibrary.concat([Object.freeze(Object.assign({ selected: !noise }, row))]);
       emitLibrary();
     }
+    sortNoiseScoped.delete(row.name.toLowerCase());
     rec.resolve(row);
   }
 
@@ -1501,23 +1574,42 @@ export function createAssets(options = {}) {
      * Ask the host to verify a sub. NEVER rejects: a silent host resolves
      * `{ok:false, timeout:true}` after PROBE_TIMEOUT_MS, which the door shows as
      * "not found" - a spinner that never stops is worse than a wrong no.
+     *
+     * `opts2.scope` names the SURFACE that is adding it and `opts2.pile` the
+     * side it is being added to (SORT's door sends `{scope:'sort', pile:'noise'
+     * |'target'}`). Both are OPTIONAL and the frame stays byte-for-byte the old
+     * one without them - the Media counter's own add box sends neither. A
+     * `sort`/`noise` add is fenced out of the app-wide feed; see THE SORT SCOPE.
      */
-    probeSub(name) {
+    probeSub(name, opts2) {
       const clean = String(name == null ? '' : name).trim();
       if (!clean) return Promise.resolve({ name: '', ok: false, videoCount: 0, stillOnly: false });
       if (!opts.bridge || disposed) {
         return Promise.resolve({ name: clean, ok: false, videoCount: 0, stillOnly: false, offline: true });
       }
+      const o2 = (opts2 && typeof opts2 === 'object') ? opts2 : {};
+      const scope = typeof o2.scope === 'string' ? o2.scope : '';
+      const pile = typeof o2.pile === 'string' ? o2.pile : '';
+      const key = clean.toLowerCase();
+      /* Latched BEFORE the round trip: the verdict lands in onSubProbeFrame,
+       * which is the one place the fence is spent - and the only place that
+       * knows whether the library actually grew. */
+      if (scope === 'sort' && pile === 'noise') sortNoiseScoped.add(key);
       probeSeq += 1;
       const reqId = 'ae-probe-' + probeSeq + '-' + Math.floor(Date.now() % 1e7);
+      const frame = { reqId, name: clean };
+      if (scope) frame.scope = scope;
+      if (pile) frame.pile = pile;
       return new Promise((resolve) => {
         const timer = setTimeout(() => {
           probes.delete(reqId);
+          sortNoiseScoped.delete(key);
           resolve({ name: clean, ok: false, videoCount: 0, stillOnly: false, timeout: true });
         }, PROBE_TIMEOUT_MS);
         probes.set(reqId, { name: clean, resolve, timer });
-        if (!channel.sendRaw('probe-sub', { reqId, name: clean })) {
+        if (!channel.sendRaw('probe-sub', frame)) {
           probes.delete(reqId);
+          sortNoiseScoped.delete(key);
           try { clearTimeout(timer); } catch { /* noop */ }
           resolve({ name: clean, ok: false, videoCount: 0, stillOnly: false, offline: true });
         }

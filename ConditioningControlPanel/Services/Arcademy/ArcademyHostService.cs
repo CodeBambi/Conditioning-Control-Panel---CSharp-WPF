@@ -4686,6 +4686,10 @@ internal static class ArcademyHostService
 
     private static readonly HashSet<string> ProbesInFlight = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>One line a session about the probe frame's optional scope, the way
+    /// <c>_nichesIgnoredLogged</c> guards the assets-request one.</summary>
+    private static bool _probeScopeLogged;
+
     /// <summary>
     /// The SORT door's search box: is r/&lt;name&gt; real, and how much video does it hold. Same
     /// upstream question the two shipped pickers ask (<c>FypHostService.ProbeCustomSub</c>), with
@@ -4694,6 +4698,15 @@ internal static class ArcademyHostService
     ///
     /// <para>It never touches <c>FypOnlineCustomSubs</c>: noise the player picked to sort against
     /// must not start flashing on their desktop. That split is the whole point of the library.</para>
+    ///
+    /// <para>THE SCOPE (2026-08-28). The frame may carry <c>scope</c> (the surface making the add -
+    /// SORT's door sends <c>"sort"</c>) and <c>pile</c> (<c>"noise"</c> | <c>"target"</c>). Both are
+    /// OPTIONAL and this host acts on NEITHER, deliberately: the law above already holds for every
+    /// add, whatever surface made it, so honouring a scope here would be a second way of saying the
+    /// same thing and a second place for it to drift. They are read and logged so the contract is
+    /// visible on both sides - the web host shim, whose library row IS its feed selection, is the
+    /// one that has to act on them (a decoy pile enrolled there followed the player into every
+    /// other class, tester report 2026-08-28).</para>
     ///
     /// <para>BRIGHT LINE, as everywhere on this path: the probe goes straight from this machine to
     /// the provider. Nothing routes through CC Labs infrastructure.</para>
@@ -4707,6 +4720,17 @@ internal static class ArcademyHostService
         {
             PostSubProbe(reqId, (raw ?? "").Trim(), false, null, "invalid");
             return;
+        }
+
+        // Read, logged once, acted on nowhere - see the scope paragraph above.
+        var scope = ((string?)o["scope"] ?? "").Trim();
+        var pile = ((string?)o["pile"] ?? "").Trim();
+        if (scope.Length > 0 && !_probeScopeLogged)
+        {
+            _probeScopeLogged = true;
+            App.Logger?.Information(
+                "ArcademyHost: probe-sub carried scope '{Scope}' / pile '{Pile}' - the library add never "
+                + "enrols a sub in the app-wide feed on this host, so there is nothing to honour", scope, pile);
         }
 
         var s = App.Settings?.Current;
