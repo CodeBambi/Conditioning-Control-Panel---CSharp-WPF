@@ -3099,6 +3099,24 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
       than the one on the quad, whatever a host sends. The hosted shells wall on the
       server's `complete` before the page boots; the page's toast is the belt-and-braces
       half, and it lands the player on a campus rather than on a dead end.
+135. **iOS UNLOCKS AUDIO ELEMENTS ONE AT A TIME, IN THE GESTURE, SO THE ELEMENT PATH IS A
+    POOL** (owner report, 2026-08-28, iPhone: bells ring, the thirteen soundtracks never
+    do). Safari's autoplay rule is PER ELEMENT: an `Audio()` minted after the first tap
+    still refuses `play()` with NotAllowedError unless the call itself runs inside a
+    gesture handler, and `playClip` swallows that rejection ("a refused clip is not an
+    error"), so every NEVER_BUFFERED cue - the `ost_*` tracks, the five beds, the
+    thirty-six `pa_*` lines - was silence on a phone while the pre-decoded one-shots,
+    riding the already-unlocked AudioContext, were fine. `shell/audio.js` now builds
+    POOL_SIZE (CLIP_VOICES + 2 spares for fade-out overlap) elements in `onGesture`, each with a 2ms silent-WAV data url and a
+    `play()` fired right there, and `playClip` borrows one instead of minting. Three laws
+    come with it: a pooled element's `createMediaElementSource` is made ONCE and must
+    NEVER be re-created (a second call on the same element throws InvalidStateError -
+    that law is why the old path could not reuse anything), so teardown disconnects the
+    node and keeps it; nothing may be awaited between `ensureContext()` and those
+    `play()` calls, because a promise hop leaves the gesture task and iOS is counting;
+    and the listeners are added per fire, so `killClip` takes them off again or a reused
+    element ends up a hundred handlers deep. A clip that finds the pool dry still mints
+    and is still refused on a phone - accepted ceiling, six is the voice cap.
 
 ## 5. The game module contract (short version)
 
