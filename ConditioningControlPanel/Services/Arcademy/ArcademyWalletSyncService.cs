@@ -366,8 +366,13 @@ internal static class ArcademyWalletSyncService
             }
 
             store.MarkWalletImported();
-            App.Logger?.Information("[ArcademyWallet] this machine's wallet has been carried up ({Imported})",
-                (bool?)reply?["imported"] == true ? "merged" : "already known");
+            // THREE OUTCOMES, NOT TWO, and the third is the one that is easy to miss: `adopted`
+            // says the account had no wallet at all and this machine's became it. Worth telling
+            // apart in a support thread, because "adopted whole" and "merged" answer two different
+            // questions about where a balance came from.
+            App.Logger?.Information("[ArcademyWallet] this machine's wallet has been carried up ({How})",
+                (bool?)reply?["imported"] != true ? "already known"
+                    : (bool?)reply?["adopted"] == true ? "adopted whole" : "merged");
             return reply?["wallet"] as JObject;
         }
         catch (Exception ex)
@@ -524,6 +529,17 @@ internal static class ArcademyWalletSyncService
                     (string?)frame["mintId"]);
             }
 
+            // THE CLAMPS, AND ONE OF THEM IS WORTH FINDING IN A LOG. `<game>:queued_stamp_walled`
+            // says the money paid and the STAMP was dropped, because a replayed frame's local day
+            // fell outside the attendance wall. That answer carries `minted: 0`, and reading a 0
+            // there as "nothing happened" is exactly the mistake to avoid - the tickets are real,
+            // and this machine's own punch card already holds the hole the server declined to add.
+            if (reply?["clamps"] is JArray mintClamps && mintClamps.Count > 0)
+            {
+                App.Logger?.Information("[ArcademyWallet] the mint was clamped: {Clamps}",
+                    string.Join(", ", mintClamps.Select(c => (string?)c ?? "?")));
+            }
+
             if (!Retired(generation) && economy["wallet"] is JObject wallet)
             {
                 Store(generation)?.AdoptServerWallet(wallet);
@@ -612,7 +628,17 @@ internal static class ArcademyWalletSyncService
         using var cts = new CancellationTokenSource(PageWait);
         try
         {
-            var payload = JsonConvert.SerializeObject(new { unified_id = unifiedId, sku });
+            // THE PLAYER'S DAY, NOT THE SERVER'S. `localDay` is optional and an absent one falls
+            // back to the proxy's UTC day rather than being refused, which is why it is easy to
+            // leave off - but it is the date that lands on the receipt in the roll and on the
+            // inventory row, and both of those are read back on this desk. A player west of UTC
+            // buying after dinner would see tomorrow on a prize they bought tonight.
+            var payload = JsonConvert.SerializeObject(new
+            {
+                unified_id = unifiedId,
+                sku,
+                localDay = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            });
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}{PrizeBuyPath}")
             {
                 Content = new StringContent(payload, Encoding.UTF8, "application/json"),
