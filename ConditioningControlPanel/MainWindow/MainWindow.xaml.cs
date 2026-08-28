@@ -893,6 +893,9 @@ namespace ConditioningControlPanel
                     App.Settings?.Save();
                     App.Logger?.Information("Pause key changed to: {Key}",
                         string.IsNullOrEmpty(App.Settings.Current.PauseKey) ? "(unbound)" : App.Settings.Current.PauseKey);
+                    // The pause key rides the same modifier-blind hook as panic, so it is in the
+                    // Quick Recal clash set too: re-evaluate the chord exactly as the panic rebind does.
+                    ApplyGlobalQuickRecalHotkey();
                 });
                 return;
             }
@@ -1196,7 +1199,7 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Arms (or, when the setting is off or the panic key would clash, disarms) the
+        /// Arms (or, when the setting is off or a global-hook binding would clash, disarms) the
         /// system-wide Quick Recal hotkey. Failure is never fatal: any refusal leaves the three
         /// in-app entry points working and only costs a Warning line naming the reason.
         /// </summary>
@@ -1213,28 +1216,31 @@ namespace ConditioningControlPanel
                     return;
                 }
 
-                // Case (b) from the trap note, checked BEFORE we register. The panic key rides the
-                // WH_KEYBOARD_LL hook (GlobalKeyboardHook), which compares the bare key and ignores
-                // modifiers — and it does NOT consume the keystroke: HookCallback only returns
-                // handled inside the SuppressSystemKeys lockdown branch, so the panic path invokes
-                // KeyPressed and still falls through to CallNextHookEx. RegisterHotKey therefore
-                // fires too. With a panic key of "G" the chord would run Quick Recal AND tear the
-                // whole session down. That is destructive, not merely noisy, so refuse the binding
-                // rather than arm it with a warning. Quick Recal stays reachable from its three
-                // buttons. Fix the class here, on the binding side: the hook's event is
-                // Action<Key> and carries no modifier state, and making panic modifier-aware would
-                // be wrong anyway — someone reaching for panic with a stray Ctrl held must get panic.
+                // Case (b) from the trap note, checked BEFORE we register. The panic key AND the
+                // optional pause key ride the WH_KEYBOARD_LL hook (GlobalKeyboardHook), which
+                // compares the bare key and ignores modifiers — and it does NOT consume the
+                // keystroke: HookCallback only returns handled inside the SuppressSystemKeys
+                // lockdown branch, so the hook path invokes KeyPressed and still falls through to
+                // CallNextHookEx. RegisterHotKey therefore fires too. With a panic key of "G" the
+                // chord would run Quick Recal AND tear the whole session down. That is destructive,
+                // not merely noisy, so refuse the binding rather than arm it with a warning. Quick
+                // Recal stays reachable from its three buttons. Fix the class here, on the binding
+                // side: the hook's event is Action<Key> and carries no modifier state, and making
+                // the hook modifier-aware would be wrong anyway — someone reaching for panic with a
+                // stray Ctrl held must get panic. PanicPolicy.HookBoundBaseKeys is the one list of
+                // what is on that hook, so a future binding joins this guard by joining that set.
                 var s = App.Settings?.Current;
-                if (s?.PanicKeyEnabled == true &&
-                    string.Equals(s.PanicKey, QuickRecalHotkeyKey.ToString(), StringComparison.OrdinalIgnoreCase))
+                if (Services.Safety.PanicPolicy.FindHookClash(
+                        QuickRecalHotkeyKey.ToString(), Services.Safety.PanicPolicy.HookBoundBaseKeys(s)) is { } clash)
                 {
                     Services.GlobalHotkeyService.Unregister(Services.GlobalHotkeyService.QuickRecalHotkeyId);
                     App.Logger?.Warning(
-                        "Quick Recal hotkey {Chord} NOT armed: it shares its base key with the panic key ({PanicKey}), and the " +
-                        "panic hook ignores modifiers without consuming the press — arming it would trip panic and tear down the " +
-                        "session on every Quick Recal. Rebind the panic key to free {Key}. The Quick Recal buttons in " +
-                        "Settings → Devices, the Blink Trainer setup card and the Deeper setup card are unaffected.",
-                        chord, s.PanicKey, QuickRecalHotkeyKey);
+                        "Quick Recal hotkey {Chord} NOT armed: it shares its base key with the {Binding} binding ({BoundKey}), and the " +
+                        "global keyboard hook ignores modifiers without consuming the press — arming it would fire that binding " +
+                        "on every Quick Recal (panic tears the session down; pause parks the video). Rebind it to free {Key}. " +
+                        "The Quick Recal buttons in Settings → Devices, the Blink Trainer setup card and the Deeper setup card " +
+                        "are unaffected.",
+                        chord, clash.Name, clash.Key, QuickRecalHotkeyKey);
                     return;
                 }
 
@@ -1308,20 +1314,21 @@ namespace ConditioningControlPanel
                     return;
                 }
 
-                // Re-check the panic clash HERE and not only at registration. PanicKeyEnabled is
+                // Re-check the hook clash HERE and not only at registration. PanicKeyEnabled is
                 // written by LockdownService (:148/:189), RemoteControlService and preset loads —
                 // any of which can turn a chord that was safe to arm at Loaded into a live clash
-                // without passing through ApplyGlobalQuickRecalHotkey. We cannot stop panic from
-                // firing (it rides its own hook), but we can refuse to stack a calibration window
-                // on top of the teardown, which is the genuinely bad outcome.
+                // without passing through ApplyGlobalQuickRecalHotkey. Same set as the arm-time
+                // check (panic key + pause key). We cannot stop the hook binding from firing (it
+                // rides its own hook), but we can refuse to stack a calibration window on top of
+                // the teardown, which is the genuinely bad outcome.
                 var cfg = App.Settings?.Current;
-                if (cfg?.PanicKeyEnabled == true &&
-                    string.Equals(cfg.PanicKey, QuickRecalHotkeyKey.ToString(), StringComparison.OrdinalIgnoreCase))
+                if (Services.Safety.PanicPolicy.FindHookClash(
+                        QuickRecalHotkeyKey.ToString(), Services.Safety.PanicPolicy.HookBoundBaseKeys(cfg)) is { } live)
                 {
                     App.Logger?.Warning(
-                        "Quick Recal hotkey {Chord} suppressed at invocation: the panic key is now bound to {PanicKey}, so this " +
-                        "press is already tripping panic. Not opening Quick Recal on top of it.",
-                        QuickRecalHotkeyChord, cfg.PanicKey);
+                        "Quick Recal hotkey {Chord} suppressed at invocation: {Binding} is now bound to {BoundKey}, so this " +
+                        "press is already firing it on the global hook. Not opening Quick Recal on top of it.",
+                        QuickRecalHotkeyChord, live.Name, live.Key);
                     Services.GlobalHotkeyService.Unregister(Services.GlobalHotkeyService.QuickRecalHotkeyId);
                     return;
                 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services.Safety
@@ -144,6 +145,58 @@ namespace ConditioningControlPanel.Services.Safety
             if (!panicKeyEnabled) return false;
             if (string.IsNullOrWhiteSpace(panicKey) || string.IsNullOrWhiteSpace(pauseKey)) return false;
             return string.Equals(panicKey.Trim(), pauseKey.Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>One bare-key binding that rides the modifier-blind global keyboard hook.
+        /// <see cref="Name"/> is the owning setting (<c>PanicKey</c> / <c>PauseKey</c>), for logs.</summary>
+        internal readonly record struct HookBinding(string Name, string Key);
+
+        /// <summary>
+        /// The SET of bare keys currently bound on the WH_KEYBOARD_LL hook (GlobalKeyboardHook),
+        /// each with the setting that owns it. Every binding on that hook is compared MODIFIER-BLIND
+        /// and does not consume the keystroke, so a Win32 RegisterHotKey chord whose base key is in
+        /// this set fires BOTH handlers at once: Ctrl+Alt+G with panic on G runs Quick Recal and
+        /// tears the session down. The Quick Recal hotkey asks this set before it arms and again
+        /// when it fires, instead of checking the panic key alone, so the optional pause key (and
+        /// any binding added to the hook later) is covered by the same guard.
+        ///
+        /// <para>Membership: <c>PanicKey</c> while <c>PanicKeyEnabled</c>; <c>PauseKey</c> whenever
+        /// it is non-blank (it has no enable flag of its own - see <see cref="IsPauseKeyPress"/>).
+        /// The pause key is counted even while the panic key shadows it and even if the hook
+        /// happens not to be installed right now: hook state flips at runtime (lockdown, remote
+        /// control, preset loads), and the only cost of a false positive is the global chord.
+        /// Panic is listed first so a key bound to both is reported as the panic clash.</para>
+        /// </summary>
+        internal static IReadOnlyList<HookBinding> HookBoundBaseKeys(bool panicKeyEnabled, string? panicKey, string? pauseKey)
+        {
+            var bound = new List<HookBinding>(2);
+            if (panicKeyEnabled && !string.IsNullOrWhiteSpace(panicKey))
+                bound.Add(new HookBinding(nameof(AppSettings.PanicKey), panicKey.Trim()));
+            if (!string.IsNullOrWhiteSpace(pauseKey))
+                bound.Add(new HookBinding(nameof(AppSettings.PauseKey), pauseKey.Trim()));
+            return bound;
+        }
+
+        /// <summary>Settings-shaped overload for the MainWindow call sites. Missing settings bind nothing.</summary>
+        internal static IReadOnlyList<HookBinding> HookBoundBaseKeys(AppSettings? settings)
+            => settings == null
+                ? Array.Empty<HookBinding>()
+                : HookBoundBaseKeys(settings.PanicKeyEnabled, settings.PanicKey, settings.PauseKey);
+
+        /// <summary>
+        /// The hook binding whose bare key equals <paramref name="baseKey"/> (case- and
+        /// whitespace-insensitive, like every other key compare in here), or null when the chord's
+        /// base key is free. A blank base key never clashes.
+        /// </summary>
+        internal static HookBinding? FindHookClash(string? baseKey, IReadOnlyList<HookBinding> bound)
+        {
+            if (string.IsNullOrWhiteSpace(baseKey)) return null;
+            var wanted = baseKey.Trim();
+            foreach (var b in bound)
+            {
+                if (string.Equals(b.Key, wanted, StringComparison.OrdinalIgnoreCase)) return b;
+            }
+            return null;
         }
     }
 }

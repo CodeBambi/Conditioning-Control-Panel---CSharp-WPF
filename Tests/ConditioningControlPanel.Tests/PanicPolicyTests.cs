@@ -318,6 +318,84 @@ public class PanicPolicyTests
     public void UnboundPauseKey_IsNotShadowed()
         => Assert.False(PauseKeyIsShadowedByPanicKey("F9", panicKeyEnabled: true, pauseKey: ""));
 
+    // ---- 5b. the global-hook clash set (Quick Recal Ctrl+Alt+G vs every modifier-blind binding) ----
+    //
+    // The panic key and the pause key both ride the modifier-blind WH_KEYBOARD_LL hook, which does
+    // not consume the press, so a RegisterHotKey chord whose base key is bound there fires both.
+    // The Quick Recal guard used to ask "is the panic key G"; it now asks the SET, so the pause key
+    // (and anything bound to the hook later) is refused the same way.
+
+    private const string QuickRecalBaseKey = "G";
+
+    [Fact]
+    public void FreshInstall_BindsOnlyThePanicKey_AndDoesNotClashWithQuickRecal()
+    {
+        var bound = HookBoundBaseKeys(new AppSettings());
+        Assert.Single(bound);
+        Assert.Equal(new HookBinding("PanicKey", "Escape"), bound[0]);
+        Assert.Null(FindHookClash(QuickRecalBaseKey, bound));
+    }
+
+    [Fact]
+    public void PanicKeyOnG_ClashesAsPanicKey()
+    {
+        var hit = FindHookClash(QuickRecalBaseKey, HookBoundBaseKeys(panicKeyEnabled: true, panicKey: "G", pauseKey: ""));
+        Assert.Equal(new HookBinding("PanicKey", "G"), hit);
+    }
+
+    [Fact]
+    public void PauseKeyOnG_ClashesAsPauseKey_EvenWithPanicElsewhere()
+    {
+        var hit = FindHookClash(QuickRecalBaseKey, HookBoundBaseKeys(panicKeyEnabled: true, panicKey: "Escape", pauseKey: "G"));
+        Assert.Equal(new HookBinding("PauseKey", "G"), hit);
+    }
+
+    [Fact]
+    public void PauseKeyOnG_ClashesEvenWhenPanicIsDisabled()
+    {
+        // The pause key has no enable flag: non-blank means bound.
+        var hit = FindHookClash(QuickRecalBaseKey, HookBoundBaseKeys(panicKeyEnabled: false, panicKey: "G", pauseKey: "g"));
+        Assert.Equal(new HookBinding("PauseKey", "g"), hit);
+    }
+
+    [Fact]
+    public void DisabledPanicKeyOnG_WithNoPauseKey_IsFree()
+        => Assert.Null(FindHookClash(QuickRecalBaseKey, HookBoundBaseKeys(panicKeyEnabled: false, panicKey: "G", pauseKey: "")));
+
+    [Fact]
+    public void BothBoundToG_ReportsThePanicKey()
+    {
+        var hit = FindHookClash(QuickRecalBaseKey, HookBoundBaseKeys(panicKeyEnabled: true, panicKey: "G", pauseKey: "G"));
+        Assert.Equal("PanicKey", hit?.Name);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void BlankPauseKey_IsNotInTheSet(string? pauseKey)
+        => Assert.Single(HookBoundBaseKeys(panicKeyEnabled: true, panicKey: "Escape", pauseKey: pauseKey));
+
+    [Fact]
+    public void ClashCompare_IgnoresCaseAndStrayWhitespace()
+    {
+        var bound = HookBoundBaseKeys(panicKeyEnabled: true, panicKey: " g ", pauseKey: null);
+        Assert.NotNull(FindHookClash("G", bound));
+        Assert.NotNull(FindHookClash(" G ", bound));
+        Assert.Null(FindHookClash("H", bound));
+    }
+
+    [Fact]
+    public void MissingSettings_BindNothing()
+    {
+        Assert.Empty(HookBoundBaseKeys((AppSettings?)null));
+        Assert.Null(FindHookClash(QuickRecalBaseKey, HookBoundBaseKeys((AppSettings?)null)));
+    }
+
+    [Fact]
+    public void BlankBaseKey_NeverClashes()
+        => Assert.Null(FindHookClash("", HookBoundBaseKeys(panicKeyEnabled: true, panicKey: "G", pauseKey: "G")));
+
     // ---- 6. the stop-everything surface list ----
     //
     // PanicStopEverySurface is UI-thread WPF code, so it cannot be exercised from a unit test; what
