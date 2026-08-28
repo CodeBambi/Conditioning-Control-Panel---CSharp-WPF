@@ -58,6 +58,24 @@ internal sealed class ArcademyMetaStore
     /// could print it. Shape and every rule about it live in <see cref="ArcademyEconomy"/>.</summary>
     public const string WalletKey = "wallet";
 
+    /// <summary>Host-owned: this install's stable id, minted once and never changed. The server
+    /// keys its once-per-device wallet import on it (wallet contract §2).</summary>
+    public const string WalletDeviceKey = "walletDeviceId";
+
+    /// <summary>Host-owned: when this machine carried its wallet up to the account, absent until it
+    /// has. Present means the local <see cref="WalletKey"/> is a CACHE of the account's copy rather
+    /// than the record, and it is what decides whether an unpaid mint may be parked at all.</summary>
+    public const string WalletImportedKey = "walletImported";
+
+    /// <summary>Host-owned: class-ended frames the server never took, oldest first. Money the
+    /// player has earned and nobody has banked yet, so it is the one region here that is worth more
+    /// than the file it sits in.</summary>
+    public const string PendingMintsKey = "pendingMints";
+
+    /// <summary>How many unpaid frames are kept. See <see cref="QueueMint"/> for why the cap drops
+    /// the oldest rather than refusing the newest.</summary>
+    private const int PendingMintCap = 60;
+
     /// <summary>Classes in a day — the timetable's fixed size (GROUND-RULES §4).</summary>
     private const int ClassesPerDay = 4;
 
@@ -94,6 +112,7 @@ internal sealed class ArcademyMetaStore
     private static readonly HashSet<string> HostOwnedKeys = new(StringComparer.Ordinal)
     {
         AttendanceKey, StreakKey, PerfectKey, TodayClassesKey, XpPaidKey, PunchCardsKey, WalletKey,
+        WalletDeviceKey, WalletImportedKey, PendingMintsKey,
     };
 
     private readonly object _lock = new();
@@ -534,6 +553,153 @@ internal sealed class ArcademyMetaStore
                     result.Item?.Sku, result.Item?.Cost, result.Item?.Cur);
             }
             return result;
+        }
+    }
+
+    // ============================ the wallet, banked on the server ============================
+
+    /// <summary>
+    /// This install's stable id, minted once and kept forever. The server records which devices
+    /// have handed their wallet over (<c>imports[deviceId]</c>), so a second import from the same
+    /// machine is a no-op there as well as here - two independent guards on the one operation that
+    /// could ever add money twice.
+    /// </summary>
+    public string WalletDeviceId()
+    {
+        lock (_lock)
+        {
+            var existing = (string?)_state[WalletDeviceKey];
+            if (!string.IsNullOrWhiteSpace(existing) && existing.Length is >= 8 and <= 64) return existing;
+            var minted = Guid.NewGuid().ToString("N");
+            _state[WalletDeviceKey] = minted;
+            Touch();
+            App.Logger?.Information("ArcademyMetaStore: minted this install's wallet device id");
+            return minted;
+        }
+    }
+
+    /// <summary>When this machine carried its wallet up to the account, or null if it never has.
+    /// The flag lives out here rather than inside the wallet object because it is a fact about this
+    /// INSTALL, and the wallet object is about to become a cache of the account's copy.</summary>
+    public string? WalletImportedAt()
+    {
+        lock (_lock) return (string?)_state[WalletImportedKey];
+    }
+
+    /// <summary>Record the import. Written on any answer at all, the server's own no-op included:
+    /// what it records is "this device has been offered", not "this device paid in".</summary>
+    public void MarkWalletImported()
+    {
+        lock (_lock)
+        {
+            _state[WalletImportedKey] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
+            Touch();
+        }
+    }
+
+    /// <summary>Is there anything on this machine worth carrying up? Balances, what was ever
+    /// earned, the shelf and the two lever rungs - the same regions the contract's import rule
+    /// names.</summary>
+    public bool WalletHasEarnings()
+    {
+        lock (_lock)
+        {
+            var w = WalletUnlocked();
+            if (((int?)w["t"] ?? 0) > 0 || ((int?)w["k"] ?? 0) > 0) return true;
+            if (((int?)w["earnedT"] ?? 0) > 0 || ((int?)w["earnedK"] ?? 0) > 0) return true;
+            if (w["inv"] is JObject inv && inv.Count > 0) return true;
+            return ArcademyEconomy.ExtraUnlocked(w) || ArcademyEconomy.HonorsUnlocked(w);
+        }
+    }
+
+    /// <summary>
+    /// Take the account's wallet whole. REPLACE, never merge: the server is the authority once the
+    /// import has run, and a local merge here would be this machine quietly arguing with it - which
+    /// is exactly how a balance ends up different on two desks. Anything the server carries that
+    /// this build does not know about rides along untouched.
+    /// </summary>
+    public void AdoptServerWallet(JObject? wallet)
+    {
+        if (wallet == null) return;
+        lock (_lock)
+        {
+            _state[WalletKey] = ArcademyEconomy.EnsureShape((JObject)wallet.DeepClone());
+            Touch();
+        }
+    }
+
+    /// <summary>The parked mint frames, oldest first - a clone, and only the rows still carrying a
+    /// <c>mintId</c> (a frame without one cannot be paid idempotently, so it is not a frame).</summary>
+    public JArray PendingMints()
+    {
+        lock (_lock)
+        {
+            var queue = new JArray();
+            if (_state[PendingMintsKey] is not JArray parked) return queue;
+            foreach (var row in parked)
+            {
+                if (row is JObject f && !string.IsNullOrWhiteSpace((string?)f["mintId"]))
+                    queue.Add(f.DeepClone());
+            }
+            return queue;
+        }
+    }
+
+    /// <summary>How many frames are still waiting - the number the log line quotes.</summary>
+    public int PendingMintCount()
+    {
+        lock (_lock) return (_state[PendingMintsKey] as JArray)?.Count ?? 0;
+    }
+
+    /// <summary>
+    /// Park one frame the server never took. Idempotent on <c>mintId</c>, so a retry that queues
+    /// the same night twice still only owes one mint.
+    ///
+    /// <para>Capped, and the cap drops the OLDEST. A queue this long means months offline with an
+    /// account attached, and the server's own replay wall is fourteen days anyway - so the frames
+    /// falling off the front were already past being payable, and the alternative (refusing new
+    /// ones) would lose tonight instead of a night nobody can bank any more.</para>
+    /// </summary>
+    public void QueueMint(JObject frame)
+    {
+        var mintId = (string?)frame["mintId"];
+        if (string.IsNullOrWhiteSpace(mintId)) return;
+        lock (_lock)
+        {
+            if (_state[PendingMintsKey] is not JArray parked)
+            {
+                parked = new JArray();
+                _state[PendingMintsKey] = parked;
+            }
+            if (parked.Any(r => r is JObject f
+                                && string.Equals((string?)f["mintId"], mintId, StringComparison.Ordinal))) return;
+
+            parked.Add(frame.DeepClone());
+            while (parked.Count > PendingMintCap) parked.RemoveAt(0);
+            Touch();
+            App.Logger?.Information("ArcademyMetaStore: parked a mint for {Game} on {Day} ({N} waiting)",
+                (string?)frame["game"], (string?)frame["localDay"], parked.Count);
+        }
+    }
+
+    /// <summary>Drop one parked frame once the server has answered for it, one way or the other.
+    /// Anything malformed sharing the ride is swept out with it.</summary>
+    public void DropMint(string mintId)
+    {
+        lock (_lock)
+        {
+            if (_state[PendingMintsKey] is not JArray parked || parked.Count == 0) return;
+            var keep = new JArray();
+            foreach (var row in parked)
+            {
+                if (row is not JObject f) continue;
+                var id = (string?)f["mintId"];
+                if (string.IsNullOrWhiteSpace(id) || string.Equals(id, mintId, StringComparison.Ordinal)) continue;
+                keep.Add(f);
+            }
+            if (keep.Count == parked.Count) return;
+            _state[PendingMintsKey] = keep;
+            Touch();
         }
     }
 
