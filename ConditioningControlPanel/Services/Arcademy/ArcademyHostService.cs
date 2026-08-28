@@ -1848,6 +1848,10 @@ internal static class ArcademyHostService
         ["punchcard_unlocked_chip"] = "Unlocked",
         ["punchcard_unlocked_title"] = "Assignment complete",
         ["punchcard_unlocked_line"] = "This room is now open even when the course is not in session.",
+        // THE DISCORD LINE (the Activity wave, 2026-08-28). `{cmd}` is filled by
+        // the page from games/registry.js DISCORD_COMMAND, never by the host.
+        ["punchcard_unlocked_discord"] = "Even in Discord: type {cmd} in the CCP server to play it anytime.",
+        ["launch_card_locked"] = "That card is not complete yet. Fill it first.",
         ["enroll_kicker"] = "Enrollment",
         ["enroll_next"] = "Next",
         ["enroll_begin"] = "Begin class",

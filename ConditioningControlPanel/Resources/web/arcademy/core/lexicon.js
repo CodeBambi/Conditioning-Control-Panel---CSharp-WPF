@@ -299,6 +299,16 @@ export const DEFAULT_LEXICON = Object.freeze({
   punchcard_unlocked_chip: 'Unlocked',
   punchcard_unlocked_title: 'Assignment complete',
   punchcard_unlocked_line: 'This room is now open even when the course is not in session.',
+  /* THE DISCORD LINE (the Activity wave, 2026-08-28). Third row of the unlock
+     box, and the ONE place the page names a slash command. `{cmd}` is filled
+     from games/registry.js DISCORD_COMMAND - a key with no row there hides the
+     line rather than printing a hole. A mod may re-voice the sentence; it may
+     NOT rename the command, which is why the token is substituted and not
+     written into the copy. */
+  punchcard_unlocked_discord: 'Even in Discord: type {cmd} in the CCP server to play it anytime.',
+  /* An activity host asked for a room whose card is not full. The hosted shells
+     wall before the page ever boots, so this is the belt-and-braces toast. */
+  launch_card_locked: 'That card is not complete yet. Fill it first.',
   enroll_kicker: 'Enrollment',
   enroll_next: 'Next',
   enroll_begin: 'Begin class',
