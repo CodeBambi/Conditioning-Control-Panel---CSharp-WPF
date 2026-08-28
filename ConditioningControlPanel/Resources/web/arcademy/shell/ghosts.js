@@ -43,8 +43,9 @@
 import { t } from '../core/lexicon.js';
 import { makeRng, hash01 } from '../core/rng.js';
 import {
-  ROOMS, CAMPUS_GATE, stopAnchor, doorPoint, walkLegs, gateLegs,
+  ROOMS, CAMPUS_GATE, stopAnchor, doorPoint, walkLegs, gateLegs, spriteTurn,
 } from './campus.js';
+import { onDeviceChange } from '../core/device.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -773,7 +774,7 @@ function buildBubble(text, lift, dx) {
 
 /** A grade-S pop at a door, four strokes and gone. */
 function buildSpark(x, y) {
-  const g = svgNode('g', { transform: 'translate(' + x + ',' + y + ')' }, 'gh-spark');
+  const g = svgNode('g', { transform: 'translate(' + x + ',' + y + ')' + spriteTurn() }, 'gh-spark');
   if (!g) return null;
   [[0, -9, 0, -3], [0, 3, 0, 9], [-9, 0, -3, 0], [3, 0, 9, 0]].forEach(([x1, y1, x2, y2]) => {
     const l = svgNode('line', { x1, y1, x2, y2 });
@@ -842,6 +843,8 @@ export function createGhosts(o) {
   let live = null;             // the encounter currently on stage
   let looker = null;           // THE LOOKER (shell/seep.js tell 05), or null
   let sparkTimers = [];
+  /* the busyness chips' plan points, for the upright re-place (see reorient) */
+  let busyChips = [];
   let lastNearCue = -1e9;      // wall ms of the last pass-by cue (see NEAR_GAP_MS)
   /* W3 P1-20. Two more ambient floors, each on its own wall clock and each on
    * the same NEAR_GAP_MS budget as the pass-by above: the classmates SPEAKING,
@@ -905,6 +908,7 @@ export function createGhosts(o) {
   function clearLayer() {
     for (const id of sparkTimers) { try { clearTimeout(id); } catch (e) { /* noop */ } }
     sparkTimers = [];
+    busyChips = [];
     nodes.clear();
     live = null;
     looker = null;      // the node it pointed at has just gone
@@ -918,8 +922,25 @@ export function createGhosts(o) {
     mountBusy();
   }
 
+  /* THE UPRIGHT CAMPUS turns the whole plan a quarter turn on a phone held
+   * portrait, so every sprite on it takes the same turn BACK or it walks the
+   * corridor lying down. The turn is appended to the translate at every write
+   * site; this is the one that catches a phone rotated while the scene is
+   * already standing there. */
+  function reorient() {
+    const turn = spriteTurn();
+    for (const c of busyChips) {
+      try { c[0].setAttribute('transform', 'translate(' + c[1] + ',' + c[2] + ')' + turn); } catch (e) { /* noop */ }
+    }
+    for (const rec of nodes.values()) {
+      if (!rec || !rec.g || !rec.at) continue;
+      try { rec.g.setAttribute('transform', 'translate(' + rec.at[0] + ',' + rec.at[1] + ')' + turn); } catch (e) { /* noop */ }
+    }
+  }
+  const unorient = onDeviceChange(reorient);
+
   function mountGhost(s) {
-    const g = svgNode('g', { transform: 'translate(0,0)' }, 'campus-student');
+    const g = svgNode('g', { transform: 'translate(0,0)' + spriteTurn() }, 'campus-student');
     if (!g) return;
     g.setAttribute('data-tier', s.tier || 'faint');
     g.setAttribute('data-share', s.share);
@@ -969,8 +990,14 @@ export function createGhosts(o) {
        * A wing room pins its own stop mid-alley and keeps the level placement. */
       const a = stopAnchor(room);
       const cy = ROOMS[room].stop ? a[1] : a[1] + (ROOMS[room].side === 'n' ? -13 : 13);
-      const g = svgNode('g', { transform: 'translate(' + (a[0] + 24) + ',' + cy + ')' }, 'campus-busy');
+      const g = svgNode('g',
+        { transform: 'translate(' + (a[0] + 24) + ',' + cy + ')' + spriteTurn() }, 'campus-busy');
       if (!g) continue;
+      /* A chip is written ONCE and never again, so a phone turned mid-scene
+       * would leave it lying on its side. It keeps its plan point for the
+       * re-place below; the students do not need one, they are placed every
+       * frame by the walk clock anyway. */
+      busyChips.push([g, a[0] + 24, cy]);
       const box = rect(-11, -7, 22, 14, 'cb-box');
       if (box) { box.setAttribute('rx', '5'); g.appendChild(box); }
       const txt = svgNode('text', { x: 0, y: 3.6 }, 'cb-t');
@@ -1248,7 +1275,8 @@ export function createGhosts(o) {
     if (rec.hiddenNow) { try { g.removeAttribute('hidden'); } catch (e) { /* noop */ } rec.hiddenNow = false; }
     const x = Math.round(at.x * 10) / 10;
     const y = Math.round(at.y * 10) / 10;
-    try { g.setAttribute('transform', 'translate(' + x + ',' + y + ')'); } catch (e) { /* noop */ }
+    try { g.setAttribute('transform', 'translate(' + x + ',' + y + ')' + spriteTurn()); } catch (e) { /* noop */ }
+    rec.at = [x, y];
     if (!frozen && at.facing) rec.facing = at.facing;
     if (rec.inner && rec.facing !== rec.drawnFacing) {
       rec.drawnFacing = rec.facing;
@@ -1358,6 +1386,7 @@ export function createGhosts(o) {
     destroyed = true;
     stop();
     if (unsub) { try { unsub(); } catch (e) { /* noop */ } unsub = null; }
+    try { unorient(); } catch (e) { /* noop */ }
     if (docBound) {
       try { document.removeEventListener('visibilitychange', onVisibility); } catch (e) { /* noop */ }
       docBound = false;
