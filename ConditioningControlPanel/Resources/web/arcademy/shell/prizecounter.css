@@ -407,3 +407,117 @@
   .pc-beat-seat, .pc-beat-sprite { width:64px; height:64px; }  /* 192/3 */
   .pc-beat-glyph { font-size:36px; }
 }
+
+/* ============================================================================
+   THE COUNTER, FOLDED INTO THE BOOTH (Locker wave, 2026-08-28)
+
+   The shelf used to be a screen of its own, reached by leaving the window you
+   were standing at. It is a panel inside that window now - scene.js's overlay,
+   the Records Office's arrangement one alley over - and these rules are the
+   whole of the difference. Two of them matter and the rest are trim:
+
+    - THE ROOT COMES OFF `position:fixed`. A fixed box inside a panel is a box
+      the size of the screen laid over the room; in flow it is what it always
+      wanted to be, a column of surfaces, and the PANEL owns the scroll.
+    - THE EXIT BAR HAS TO BE A BAR, and it is the same lesson recordsroom.css
+      learned in the same box: `.arc-exitbar`'s backing is a gradient that
+      starts transparent, which reads as two buttons hanging in mid-air the
+      moment it floats over a grid of bright shelf art. In the panel it gets an
+      opaque band and a rule along its top edge.
+
+   Nothing above this line changed. A counter that owns its own screen (there is
+   no caller left that does, but the room is still capable of it) is byte for
+   byte the room it was.
+   ========================================================================== */
+
+.pc-root.is-embedded {
+  position: static; inset: auto; z-index: auto;
+  overflow: visible;
+  background: none;
+  padding: 0;
+  gap: clamp(10px, 1.8vh, 18px);
+  /* the panel is the scroller, so the column must be free to be as tall as it
+     is rather than shrinking itself into the box the way a flex item would */
+  min-height: 0;
+}
+
+/* The marquee is the booth's sign one plate back, so in here it is a header
+   rather than a hoarding: the title comes down and the frame comes off. */
+.pc-root.is-embedded .pc-marquee {
+  padding: 0 0 12px;
+  border: 0;
+  border-bottom: var(--hairline);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.pc-root.is-embedded .pc-title { font-size: clamp(18px, 3.4vh, 26px); }
+
+/* THE FLOOR OF THE BOX. Same shape as `.rr-cards .arc-exitbar`, same reason,
+   and the bleed follows the panel's own padding so the band is the floor on
+   every viewport instead of a slab hanging two pixels off each edge. */
+.pb-shop { --pc-barh: 58px; --pc-panel-x: 24px; }
+html.arc-mobile .pb-shop { --pc-panel-x: 16px; }
+.pc-root.is-embedded > .arc-exitbar {
+  min-height: var(--pc-barh, 58px);
+  margin: 14px calc(var(--pc-panel-x, 24px) * -1) 0;
+  padding-left: var(--pc-panel-x, 24px);
+  padding-right: var(--pc-panel-x, 24px);
+  border-top: 1px solid color-mix(in srgb, var(--pink), transparent 62%);
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--navy), black 6%) 0%,
+    color-mix(in srgb, var(--navy), black 26%) 100%);
+  box-shadow: 0 -10px 22px rgba(6, 4, 14, .55);
+}
+/* ...AND THE PHONE HAS TO BE TOLD TWICE, for scene.css's shorthand reason:
+   `html.arc-mobile .asc-panel` is `padding: 14px 16px 16px` at (0,2,1) and
+   outranks a bare `.asc-panel.pb-shop`, so the bottom padding comes straight
+   back and parks the band a bar-height off the floor. */
+.asc-panel.pb-shop,
+html.arc-mobile .asc-panel.pb-shop { padding-bottom: 0; }
+
+/* THE PHONE, LANDSCAPE. The panel is about 810x230 on an 844x390 handset, so
+   the shelf goes to one narrow column of rows and the parcel takes the 32px
+   box (192/32 = 6, still on the pixel grid). The price flag keeps its size for
+   the reason the 520px query keeps it: the price is the one thing that has to
+   stay legible at arm's length. */
+html.arc-mobile[data-arc-orient="landscape"] .pc-root.is-embedded {
+  gap: 8px;
+}
+html.arc-mobile[data-arc-orient="landscape"] .pc-root.is-embedded .pc-goods {
+  grid-template-columns: repeat(auto-fill, minmax(226px, 1fr));
+  gap: 8px;
+}
+html.arc-mobile[data-arc-orient="landscape"] .pc-root.is-embedded .pc-art {
+  width: 32px; height: 32px;
+}
+html.arc-mobile[data-arc-orient="landscape"] .pc-root.is-embedded .pc-glyph { font-size: 17px; }
+html.arc-mobile[data-arc-orient="landscape"] .pc-root.is-embedded .pc-sect {
+  padding: 9px 10px;
+}
+html.arc-mobile[data-arc-orient="landscape"] .pc-root.is-embedded .pc-marquee {
+  padding-bottom: 8px;
+}
+html.arc-mobile[data-arc-orient="landscape"] .pc-root.is-embedded .pc-sub { display: none; }
+
+/* ------------------------------------------------------------ THE VERB */
+
+/* "Put it on", in the note strip beside the line the counter just said. It is
+   the only button on this page that does not propose a purchase, so it is a
+   ghost rather than a primary: the receipt is the sentence, and this is the
+   small thing you may do about it. */
+.pc-verb {
+  margin-left: 10px;
+  vertical-align: middle;
+  font-size: 12px;
+  padding: 4px 12px;
+  min-height: 0;
+}
+html.arc-mobile .pc-verb { min-height: 34px; }
+
+/* The two savings the beat costs, reached through the beat's own class rather
+   than the root's - the beat hangs one layer out when the counter is a panel
+   (prizecounter.js, beatHost). The `.pc-root.is-lite` pair above still stands
+   for a counter that owns its screen. */
+.pc-beat.is-lite .pc-beat-plate { box-shadow: none; }
+.pc-beat.is-lite .pc-beat-sprite { filter: none; }

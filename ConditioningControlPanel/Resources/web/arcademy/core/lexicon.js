@@ -603,6 +603,15 @@ export const DEFAULT_LEXICON = Object.freeze({
   prize_closed: 'Closed',
   prize_closed_line: 'The shutter is down and the sign above it has been switched off at the wall.',
   prize_no_payday: 'No room is paying over the odds tonight. Every graded class still pays tickets.',
+  /* the arrival down the alley, and the one press the receipt offers (Locker
+   * wave, 2026-08-28). Two verbs rather than one, because two different things
+   * happen to a thing you just bought: you put an outfit or a frame ON, and you
+   * hang a campus look UP. The desk toy has no verb here on purpose - buying it
+   * turns the prop on by itself, so WHICH toy is pinned is a choice made in the
+   * Locker's desk group and never a consequence of the purchase. */
+  booth_alley_hint: 'The lit window is down at the end of the row.',
+  booth_put_it_on: 'Put it on',
+  booth_hang_it: 'Hang it up',
   settings_classes_head: 'Classes',
   campus_desc_prizes_shut: 'Shutter down over the window, parcels still stacked behind it. Back another night.',
   /* the Extra Credit lever, on the door card and in the painted room */
@@ -620,6 +629,59 @@ export const DEFAULT_LEXICON = Object.freeze({
   payout_tickets: 'Tickets',
   payout_token_minted: 'A token dropped in the tray. That is your one for today.',
   late_slip_used: 'A late slip covered you. Your streak never noticed.',
+
+  /* ------------------------------------------------------------------------
+   * THE LOCKER, RM 004 (the Locker wave, 2026-08-28).
+   *
+   * The counter's opposite number: the counter sells, the locker keeps. Same
+   * front-desk voice, one register lower - a locker is a private thing and it
+   * does not announce itself. Prize NAMES and blurbs are still not here; they
+   * ride init.economy.catalog from the host exactly as the shelf's do, and the
+   * locker reads the same rows. What IS here is everything the locker says in
+   * its own voice: the doors, the groups, and the four picks that are page
+   * state rather than shelf stock.
+   * ---------------------------------------------------------------------- */
+  campus_room_locker: 'The Locker',
+  locker_sign: 'Locker',
+  locker_status: 'Yours',
+  locker_tip: 'Your own door in the row. Everything you have won is behind it.',
+  locker_kicker: 'The Locker',
+  locker_hot: 'Your locker',
+  locker_title: 'The Locker',
+  locker_sub: 'Room 004. Nobody else has the combination.',
+  /* the six groups, in the order the doors open */
+  locker_wear: 'Wear',
+  locker_card: 'Card',
+  locker_campus: 'Campus',
+  locker_desk: 'Desk',
+  locker_bag: 'In your bag',
+  locker_always: 'Always on',
+  /* the picks. Each family's first row is the house answer, and the house
+     answer is never called "none" - it is what you were already wearing. */
+  locker_outfit_standard: 'The usual',
+  locker_outfit_varsity: 'Varsity jacket',
+  locker_outfit_labcoat: 'Lab coat',
+  locker_outfit_cheer: 'Cheer uniform',
+  locker_outfit_swim: 'Swim team',
+  locker_frame_plain: 'Plain',
+  locker_frame_gold: 'Gold',
+  locker_frame_navy: 'Navy',
+  locker_toy_auto: 'Let the desk choose',
+  locker_toy_spinner: 'Spinner',
+  locker_toy_globe: 'Snow globe',
+  locker_toy_lamp: 'Lava lamp',
+  locker_toy_beads: 'Beads',
+  /* the chrome */
+  locker_selected: 'On',
+  locker_held: 'x{n}',
+  locker_empty: 'Nothing in here yet. The counter is one window up.',
+  locker_more_at_counter: '{n} more at the counter',
+  locker_ring_bell: 'Ring it',
+  /* the two signposts, in Options and on the back of the ID card */
+  locker_signpost: 'Outfits, frames and campus looks live in The Locker now. RM 004.',
+  locker_signpost_go: 'Open The Locker',
+  locker_unlock_hint: '{tok}2 at the counter',
+  locker_open: 'Open Locker',
 });
 
 let table = Object.create(null);

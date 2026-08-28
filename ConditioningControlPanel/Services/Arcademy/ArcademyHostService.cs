@@ -1638,11 +1638,14 @@ internal static class ArcademyHostService
         ["prize_de_5x5_blurb"] = "Adds the roomy 5x5 board to The Deep End, for a gentler soak.",
         ["prize_jukebox"] = "Jukebox",
         ["prize_jukebox_blurb"] = "The slot is dressed and the case is empty. It is on the truck.",
-        // THE RESTOCK (2026-08-26). Eleven more rows over three waves - the shelf projection
-        // hides anything above ArcademyEconomy.CurrentWave, but the LEXICON carries all eleven
-        // regardless: a lexicon row costs nothing until something asks for it, and shipping the
-        // next wave should be one const bump, not a second trip through nine language files.
-        // Copy is the contract's, verbatim, and every row is inside the 96-char bar.
+        // THE RESTOCK (2026-08-26) plus THE LOCKER's three outfits (2026-08-28). Fourteen more
+        // rows over three waves - the shelf projection hides anything above
+        // ArcademyEconomy.CurrentWave, but the LEXICON carries all fourteen regardless: a lexicon
+        // row costs nothing until something asks for it, and shipping the next wave should be one
+        // const bump, not a second trip through nine language files.
+        // Copy is the contract's, verbatim. The restock's own rows all sit inside the 96-char
+        // bar; the lab coat's blurb runs to 106 because that is the line the owner signed off,
+        // and nothing measures a blurb - the card wraps it.
         ["prize_away_colors"] = "AWAY COLORS",
         ["prize_away_colors_blurb"] = "Alternate kit for your little walker. Same you, sharper stripes.",
         ["prize_sparkler_steps"] = "SPARKLER STEPS",
@@ -1657,6 +1660,12 @@ internal static class ArcademyHostService
         ["prize_pa_pack_blurb"] = "The morning announcements get a voice. She mostly reads the schedule, mostly.",
         ["prize_theme_drone"] = "DRONE PROTOCOL",
         ["prize_theme_drone_blurb"] = "Somebody left a strange cartridge in the AV room and now the campus runs green. We like it.",
+        ["prize_emi_labcoat"] = "LAB COAT",
+        ["prize_emi_labcoat_blurb"] = "White coat, pocket protector, the clipboard she never writes on. She looks like she is about to grade you.",
+        ["prize_emi_cheer"] = "CHEER UNIFORM",
+        ["prize_emi_cheer_blurb"] = "Navy and pink, pleats and all. The pom-poms are not optional and neither is the chant.",
+        ["prize_emi_swim"] = "SWIM TEAM",
+        ["prize_emi_swim_blurb"] = "Lane four, goggles up. Free Swim was always going to end up here.",
         ["prize_ghost_walk"] = "GHOST WALK",
         ["prize_ghost_walk_blurb"] = "Your walker goes see-through with a soft afterimage. Spooky in a fun way, we checked.",
         ["prize_theme_snowday"] = "SNOW DAY",
@@ -2984,6 +2993,48 @@ internal static class ArcademyHostService
         ["account_open_card"] = "Open my card",
         ["account_profile"] = "Profile",
         ["account_sign_out"] = "Sign out",
+
+        // THE LOCKER (2026-08-28): RM 004 + the booth arrival beat and the purchase toast verbs.
+        // Mirrors of the page EN strings in core/lexicon.js so a mod lexicon.json can override them.
+        ["booth_alley_hint"] = "The lit window is down at the end of the row.",
+        ["booth_put_it_on"] = "Put it on",
+        ["booth_hang_it"] = "Hang it up",
+        ["campus_room_locker"] = "The Locker",
+        ["locker_sign"] = "Locker",
+        ["locker_status"] = "Yours",
+        ["locker_tip"] = "Your own door in the row. Everything you have won is behind it.",
+        ["locker_kicker"] = "The Locker",
+        ["locker_hot"] = "Your locker",
+        ["locker_title"] = "The Locker",
+        ["locker_sub"] = "Room 004. Nobody else has the combination.",
+        ["locker_wear"] = "Wear",
+        ["locker_card"] = "Card",
+        ["locker_campus"] = "Campus",
+        ["locker_desk"] = "Desk",
+        ["locker_bag"] = "In your bag",
+        ["locker_always"] = "Always on",
+        ["locker_outfit_standard"] = "The usual",
+        ["locker_outfit_varsity"] = "Varsity jacket",
+        ["locker_outfit_labcoat"] = "Lab coat",
+        ["locker_outfit_cheer"] = "Cheer uniform",
+        ["locker_outfit_swim"] = "Swim team",
+        ["locker_frame_plain"] = "Plain",
+        ["locker_frame_gold"] = "Gold",
+        ["locker_frame_navy"] = "Navy",
+        ["locker_toy_auto"] = "Let the desk choose",
+        ["locker_toy_spinner"] = "Spinner",
+        ["locker_toy_globe"] = "Snow globe",
+        ["locker_toy_lamp"] = "Lava lamp",
+        ["locker_toy_beads"] = "Beads",
+        ["locker_selected"] = "On",
+        ["locker_held"] = "x{n}",
+        ["locker_empty"] = "Nothing in here yet. The counter is one window up.",
+        ["locker_more_at_counter"] = "{n} more at the counter",
+        ["locker_ring_bell"] = "Ring it",
+        ["locker_signpost"] = "Outfits, frames and campus looks live in The Locker now. RM 004.",
+        ["locker_signpost_go"] = "Open The Locker",
+        ["locker_unlock_hint"] = "{tok}2 at the counter",
+        ["locker_open"] = "Open Locker",
     };
 
     /// <summary>The mockup's owner-approved tokens (BUILD-CONTRACT §10). A mod overrides them via

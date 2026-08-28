@@ -152,3 +152,98 @@
   max-width: 34em;
   opacity: .78;
 }
+
+/* ============================================================================
+   THE ARRIVAL (Locker wave, 2026-08-28)
+
+   vn-17 is the row of service windows with this one lit at the end of it, and
+   prizebooth.js shows it as the booth's second view for about seven tenths of a
+   second before the camera walks in. Three rules hold that beat together and
+   every one of them is undoing a piece of chrome that belongs to the room you
+   have not reached yet.
+
+   `.pb-arrive` IS ON FOR THE CUT AND OFF FOR THE ZOOM. scene.js mounts `wide`
+   at build because it is the home shot and it is required, so the move to the
+   corridor would otherwise crossfade ACROSS the window plate we are holding
+   back. Pinning the incoming slide at full opacity with no transform turns that
+   first move into a cut; the class comes off before the move back, so the walk
+   in is the chassis's own zoom with its origin on the lit window. Scoped to the
+   corridor's own slide by `[data-view]` - the window plate must keep every
+   transition it has.
+   ========================================================================== */
+
+.pb-room.pb-arrive .asc-slide[data-view="alley"] {
+  opacity: 1 !important;
+  transform: none !important;
+  transition: none !important;
+}
+
+/* THE STEP-BACK PILL IS FOR A CLOSE-UP, and a corridor is not one. It would be
+   the only thing on screen offering to take you somewhere during a beat that
+   goes somewhere on its own. */
+.pb-room.pb-arrive .asc-back { display: none; }
+
+/* THE BAND STAYS, and it has to be told from <html> because the apron is a
+   body-level sibling of the room (scene.js mounts it there so nothing inside it
+   can rise over EMI). A ZOOM IS A ZOOM takes the band off for every close-up,
+   and the corridor reads as one to the chassis - but the player is standing in
+   a place, not looking into a drawer, and a band that flickers out and back
+   inside one second reads as a bug. It takes no pointer for the length of the
+   beat: a tap down there is a tap to walk in, not a walk back to the quad. */
+html.pb-arriving .arm-bar.asc-bar.asc-bar-away {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: none;
+  transition: none;
+}
+
+/* THE ONE LINE UNDER THE CORRIDOR. A prop (scene.js's mountInView), so it is
+   already placed at the rect prizebooth.js measured; this is what it looks like
+   once it is there. It sits in the plate's own dark lower band, takes no
+   pointer, and arrives fast enough to be read inside the beat it belongs to. */
+.pb-room .pb-alley-hint {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+  user-select: none;
+  font-family: var(--body);
+  font-size: clamp(11px, 1.7vh, 15px);
+  line-height: 1.4;
+  letter-spacing: .04em;
+  color: color-mix(in srgb, #EADFF2 70%, transparent);
+  text-shadow: 0 2px 7px rgba(0, 0, 0, .92), 0 0 2px rgba(0, 0, 0, .8);
+  animation: pb-alley-in 140ms ease-out both;
+}
+
+@keyframes pb-alley-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* A player who asked for less motion never sees the corridor at all
+   (prizebooth.js declines to mint it), and this is the belt under that. */
+.arc-reduced .pb-room .pb-alley-hint { animation: none; }
+
+/* ============================================================================
+   THE SHELF, IN THE WINDOW
+
+   shell/prizecounter.js, folded into the scene's panel. scene.css owns the box,
+   the scrim and the slide; prizecounter.css owns everything inside it (see THE
+   COUNTER, FOLDED INTO THE BOOTH in that sheet). What is left for here is the
+   panel's own measure: the shop is a wall of goods rather than three lines of
+   reading, so it takes more of the plate than the tray does.
+   ========================================================================== */
+
+.asc-panel.pb-shop {
+  width: min(1040px, 94%);
+  padding-left: var(--pc-panel-x, 24px);
+  padding-right: var(--pc-panel-x, 24px);
+}
+html.arc-mobile .asc-panel.pb-shop {
+  width: min(1040px, 97%);
+  padding-left: var(--pc-panel-x, 16px);
+  padding-right: var(--pc-panel-x, 16px);
+}

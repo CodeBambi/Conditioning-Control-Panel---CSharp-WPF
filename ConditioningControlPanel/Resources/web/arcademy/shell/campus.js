@@ -559,6 +559,15 @@ export const FACILITIES = Object.freeze({
   prizes: Object.freeze({
     rect: [1260, 572, 108, 84], side: 'w', door: 614, stop: [1250, 614], rm: '003',
   }),
+  /* THE LOCKER (the Locker wave, 2026-08-28). Fourth window down the same
+   * alley, under the counter, and it is under the counter on purpose: the
+   * counter is where a thing is bought and the locker is where it is kept, so
+   * walking past one to reach the other is the right way round. Same width,
+   * same west door, same three-step walk, 96 units down - which is the gap
+   * every other pair in this alley already keeps. */
+  locker: Object.freeze({
+    rect: [1260, 668, 108, 84], side: 'w', door: 710, stop: [1250, 710], rm: '004',
+  }),
 });
 
 /** ROOMS first, the two counters second. Pure; undefined for anything else. */
@@ -1657,6 +1666,43 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     }));
   }
   stag(prizesG, 860);
+
+  /* THE LOCKER. RM 004, FOURTH WINDOW IN THE ALLEY, AND IT NEVER SHUTS.
+   *
+   * The counter above it keeps opening hours because somebody has to be behind
+   * the glass to sell you something. Nothing is sold here: this is the room
+   * your own things are kept in, and a school that locked a student out of
+   * their own locker would be making a point nobody asked it to make. So there
+   * is no `is-shut`, no shutter and no sealed card - the door opens on a host
+   * with no economy too, and what the player finds inside is an honest empty
+   * bank of doors rather than a refusal.
+   *
+   * Drawn through the SAME facility() helper, with the counter's own alley
+   * grammar (compact plate, west door, neon over the name) and its offsets
+   * carried 96 units down. Nothing in the helper is touched for it. */
+  const lockerG = facility({
+    rect: FACILITIES.locker.rect, door: FACILITIES.locker.door,
+    side: FACILITIES.locker.side, compact: true,
+    neonY: 676, nameY: 714,
+    sign: t('locker_sign', 'Locker'),
+    name: t('campus_room_locker', 'The Locker'),
+    rm: FACILITIES.locker.rm,
+    onClick: () => { if (handlers.locker) handlers.locker(); },
+    tip: () => ({
+      name: t('campus_room_locker', 'The Locker'),
+      status: t('locker_status', 'Yours'),
+      desc: t('locker_tip', 'Your own door in the row. Everything you have won is behind it.'),
+    }),
+  });
+  lockerG.setAttribute('class', 'campus-room facility locker');
+  /* THE ROW OF DOORS behind the glass, the parcels' opposite number one window
+   * down: three tall lockers instead of three parcels, and a vent slot near the
+   * top of each so the shapes read as doors rather than as three more boxes. */
+  [1280, 1304, 1328].forEach((x) => {
+    lockerG.appendChild(svg('rect', { x, y: 740, width: 18, height: 13 }, 'campus-furnf'));
+    lockerG.appendChild(svg('line', { x1: x + 4, y1: 744, x2: x + 14, y2: 744 }, 'campus-furn'));
+  });
+  stag(lockerG, 900);
 
   /* Entrance hall dressing (notice board, trophy case, admissions desk, crest) */
   const hall = svg('g', null, 'campus-halldress');

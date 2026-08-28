@@ -409,7 +409,7 @@ const HOMEROOM_NO = '101';
  * @returns {{open, dismiss, isOpen, setProfile, setChipState, photoDay, root}}
  */
 export function createIdSpotlight({ t, reducedMotion, lite, isMobile, profile, stats,
-  frame, onChip, onRecords, onClose, onOpenCount, sfx, log } = {}) {
+  frame, onChip, onRecords, onLocker, onClose, onOpenCount, sfx, log } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const tr = typeof t === 'function' ? t : (k, fb) => fb;
   const still = typeof reducedMotion === 'function' ? reducedMotion : idReducedMotion;
@@ -757,6 +757,22 @@ export function createIdSpotlight({ t, reducedMotion, lite, isMobile, profile, s
       tr('id_records_line', 'Records: {n} of {m} cards mastered')
         .replace('{n}', String(mastered)).replace('{m}', String(cards))));
 
+    /* TWO DOORS OFF THE BACK OF THE CARD, and they are not the same errand.
+     * Records is where the card is READ - the stamps, the cards mastered, the
+     * line right above these buttons. The Locker is where it is DRESSED, and
+     * the frame it is wearing is the thing the player is looking at while they
+     * press it, which is the whole argument for the door being here rather than
+     * only on the quad.
+     *
+     * ONE CLASS FOR BOTH, plus a modifier. `arc-id-recordslink` is already the
+     * shape of "a link on the back of the ID"; the second button wants the same
+     * shape, and reusing the class means the FLIP GUARD further down (the
+     * `closest('.id-chip, .arc-id-recordslink')` that stops a press on a link
+     * from also turning the card over) covers the new one without being edited.
+     * A modifier class that no rule reads yet is not dead weight - it is the
+     * handle the day one of them wants to look different. */
+    const links = el('div', 'arc-id-links');
+
     const recordsBtn = el('button', 'arc-id-recordslink', tr('id_open_records', 'Open Records'));
     recordsBtn.type = 'button';
     recordsBtn.addEventListener('click', (ev) => {
@@ -765,7 +781,24 @@ export function createIdSpotlight({ t, reducedMotion, lite, isMobile, profile, s
       dismiss(true);
       try { if (typeof onRecords === 'function') onRecords(); } catch (e) { say('id records threw'); }
     });
-    bbody.appendChild(recordsBtn);
+    links.appendChild(recordsBtn);
+
+    /* Drawn only when the shell hands down a door. A host that predates the
+     * Locker gets exactly the back face it had, one button wide. */
+    if (typeof onLocker === 'function') {
+      const lockerBtn = el('button', 'arc-id-recordslink arc-id-lockerlink',
+        tr('locker_open', 'Open Locker'));
+      lockerBtn.type = 'button';
+      lockerBtn.addEventListener('click', (ev) => {
+        try { ev.stopPropagation(); } catch (e) { /* noop */ }
+        cue('pop', 0.1);
+        dismiss(true);
+        try { onLocker(); } catch (e) { say('id locker threw'); }
+      });
+      links.appendChild(lockerBtn);
+    }
+
+    bbody.appendChild(links);
 
     const sig = el('div', 'arc-id-sig');
     const sigLine = el('div', 'arc-id-sigline');

@@ -386,11 +386,40 @@ function ownedRow(v) {
   if (typeof x === 'function') { try { x = x(); } catch (e) { return false; } }
   return x === true;
 }
+/** `ownedRow` for a NAME rather than a flag. Junk, a throw and an empty string
+ *  all mean "the shell is not answering this one", which is not the same as
+ *  "no", and every caller below treats it as the absence of a pick. */
+function strRow(v) {
+  let x = v;
+  if (typeof x === 'function') { try { x = x(); } catch (e) { return null; } }
+  return (typeof x === 'string' && x) ? x : null;
+}
 export function readPrizes(src) {
   let v = src;
   if (typeof v === 'function') { try { v = v(); } catch (e) { v = null; } }
   const o = v && typeof v === 'object' ? v : {};
-  return { deskToy: ownedRow(o.deskToy), varsity: ownedRow(o.varsity) };
+  return {
+    deskToy: ownedRow(o.deskToy),
+    varsity: ownedRow(o.varsity),
+    /* ---- THE LOCKER WAVE (2026-08-28) ----------------------------------
+     * Three more rows, and every one of them is a QUESTION the shell answers,
+     * never a state this file keeps. The Locker owns the picks (they are meta
+     * keys it writes); the wallet owns the ownership; EMI owns the wardrobe.
+     *
+     * `outfitRoad` is the one that is easy to miss and expensive to get wrong.
+     * It records whether the bag CARRIES an outfit getter at all, because a
+     * host with no economy (the desktop dev host, the suite's double) hands
+     * down neither - and on those, `setOutfit('cheer')` typed at a console has
+     * always worked and must keep working. Without this flag the next apply
+     * would read "no outfit" out of an empty bag and undress her. */
+    outfitRoad: typeof o.outfit === 'function',
+    outfit: strRow(o.outfit),
+    toyPin: strRow(o.toyPin),
+    /* The ownership question for a sheet, kept as the FUNCTION so it is asked
+     * at the moment she is dressed rather than at the moment the bag was read.
+     * Absent on a host with no economy - see `ownsOutfit` for what that means. */
+    ownsOutfit: typeof o.outfitOwned === 'function' ? o.outfitOwned : null,
+  };
 }
 
 /**
@@ -880,10 +909,31 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   let toyBroken = false;
 
   /* ---------------------- the desk toy's loop --------------------------- */
-  /* TONIGHT'S TOY, picked ONCE at mount off the same UTC day the line is picked
-   * off. It does not re-roll mid-sitting: a prop that changed shape while a
-   * player was looking at it would read as a bug, not as a rotation. */
-  const toyPick = TOYS[toyIndex(isoDay() || '')] || TOYS[0] || null;
+  /**
+   * TONIGHT'S TOY. Two answers, and the order is the school's usual one:
+   * explicit pick > bag default.
+   *
+   * THE PIN COMES FIRST (the Locker wave). `prizes.toyPin()` is a name the
+   * player chose in RM 004, and a chosen thing outranks a dealt one everywhere
+   * else in this school, so it outranks the day seed here. No pin - which is
+   * "let the desk choose", and is also every host that has no Locker - and it
+   * is the seeded rotation exactly as it has always been.
+   *
+   * THE OLD RULE STILL HOLDS FOR THE ROTATION: a prop that changed shape while
+   * a player was looking at it reads as a bug rather than a rotation, so the
+   * seed is only re-asked when the pin actually moves (see applyPrizes), never
+   * on a clock.
+   */
+  function pickToy() {
+    const pin = prizeState.toyPin;
+    if (pin) {
+      for (let i = 0; i < TOYS.length; i += 1) {
+        if (TOYS[i] && TOYS[i].key === pin) return TOYS[i];
+      }
+    }
+    return TOYS[toyIndex(isoDay() || '')] || TOYS[0] || null;
+  }
+  let toyPick = pickToy();
   /* An empty table is not a crash: TOY_SRC is what the prop wore before any of
    * this landed and it is still a legal plate to stand on. */
   let toyPlan = toyFrames(toyPick);
@@ -955,6 +1005,13 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
    */
   function armVarsity() {
     if (outfitPick) return;          // a chosen sheet outranks the bag's default
+    /* ALREADY PROBED, AND SHE IS NOT WEARING IT. This is the walk back from a
+     * Locker pick: clearing the pick lays the STANDARD set, and the jacket's
+     * probe answered 'on' an hour ago so the line below would decline to do
+     * anything at all - leaving a jacket owner in the standard set with no way
+     * back but a reload. The sheet is already in the browser's cache; laying it
+     * again costs a src assignment. */
+    if (varsityState === 'on') { useFrameSet(VARSITY_FRAME_SRC); return; }
     if (!prizeState.varsity || varsityState !== 'off') return;
     if (typeof Image !== 'function') { varsityState = 'failed'; return; }
     let im = null;
@@ -989,19 +1046,51 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
    * gives at the top of this file: one probe on `body-idle.png`, and a sheet
    * that is not in the bundle leaves the standard set standing.
    *
-   * TODO (owner decision, unmade): nothing in the school CALLS this yet, because
-   * there is no surface for choosing an outfit. Deliberately not invented here -
-   * see the note at OUTFITS. */
+   * THE SURFACE EXISTS NOW (the Locker wave, 2026-08-28), and the paragraph
+   * above is no longer true of three of the four: labcoat, cheer and swim got
+   * skus of their own, so ALL FOUR sheets are bought and every one of them is
+   * gated. What has not changed is where the gate LIVES - `ownsOutfit` below
+   * asks the shell, because a wallet is the one thing this file has never seen
+   * and must never learn to read.
+   *
+   * IT STILL PERSISTS NOTHING. The player's choice is `lockerOutfit`, a meta
+   * key the Locker writes; this function is what that key does when it lands.
+   * A widget that also stored the pick would be a second copy of it, and the
+   * two would disagree the first night an entitlement lapsed. */
   let outfitPick = null;
   let outfitState = 'off';
 
+  /**
+   * MAY SHE WEAR IT. The shell's getter is the whole answer where there is one.
+   *
+   * WHERE THERE IS NOT ONE, the answer is the one this file gave before the
+   * Locker existed: the jacket is the bag's flag and the other three are just
+   * art in the bundle. That branch is not a nicety - it is the desktop dev host
+   * and the suite's DOM double, neither of which projects an economy, and on
+   * both of them `setOutfit('cheer')` has to keep dressing her.
+   */
+  function ownsOutfit(name) {
+    const want = String(name || '');
+    if (!want) return false;
+    if (typeof prizeState.ownsOutfit === 'function') {
+      try { return prizeState.ownsOutfit(want) === true; }
+      catch (e) { return false; }
+    }
+    return want === 'varsity' ? !!prizeState.varsity : true;
+  }
+
   function armOutfit(name) {
     const want = (typeof name === 'string' && OUTFITS.indexOf(name) >= 0) ? name : null;
-    if (want === 'varsity' && !prizeState.varsity) return outfitState;   // the one gate
+    if (want && !ownsOutfit(want)) return outfitState;   // the gate, all four sheets
     outfitPick = want;
     if (!want) {
       outfitState = 'off';
+      /* NO PICK IS NOT "STANDARD". It is "whatever she wore before a picker
+       * existed", which for a jacket owner is the jacket - explicit pick > bag
+       * default > standard, and this is the middle rung. Take it out and
+       * clearing a pick would quietly strip a prize the player still owns. */
       useFrameSet(BODY_FRAME_SRC);
+      armVarsity();
       return outfitState;
     }
     const map = frameSetFor(want);
@@ -1032,10 +1121,40 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   /** Re-read the bag and light (or unlight) what it says. Idempotent. */
   function applyPrizes() {
     prizeState = readPrizes(prizeSrc);
+    /* THE PIN MOVED. The only thing that re-deals the prop mid-sitting, and it
+     * is a thing the player did with their own thumb one frame ago, so it is a
+     * rotation they asked for rather than one that happened to them. A new loop
+     * gets a clean slate on both fallbacks: they are verdicts about a DIFFERENT
+     * set of frames and say nothing about these. */
+    const nextToy = pickToy();
+    if (nextToy !== toyPick) {
+      toyPick = nextToy;
+      toyFellBack = false;
+      toyBroken = false;
+      let plan = toyFrames(toyPick);
+      if (!plan.length) plan = [TOY_SRC];
+      toyPlan = plan;
+      toyStep = 0;
+      stopToyLoop();
+      showToyFrame(0);
+    }
     const wantToy = prizeState.deskToy && !toyBroken;
     if (wantToy && !toy.src) showToyFrame(0);
     toy.hidden = !wantToy;
     if (wantToy) startToyLoop(); else stopToyLoop();
+    /* THE WARDROBE, DRIVEN FROM THE SHELL'S KEY. This is what makes `setOutfit`
+     * the ONE road and still leaves the player's choice persistent: the Locker
+     * writes `lockerOutfit`, the shell answers `outfit()` off it, and every
+     * apply - boot, a purchase echo, a toy re-roll - lands the current answer.
+     * Guarded on `outfitRoad` so a host that projects no economy is untouched,
+     * and on a real CHANGE so an apply is not a re-probe of the sheet she is
+     * already standing in.
+     *
+     * BEFORE armVarsity, because a pick outranks the bag and armVarsity's first
+     * line is what enforces that. */
+    if (prizeState.outfitRoad && prizeState.outfit !== outfitPick) {
+      armOutfit(prizeState.outfit);
+    }
     armVarsity();
     return prizeState;
   }
@@ -3161,9 +3280,21 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     /** What she is wearing: 'off' | 'probing' | 'on' | 'failed'. Read-only. */
     get varsity() { return varsityState; },
     /**
-     * WEAR A SHEET. One of OUTFITS, or null/junk for the standard set. Returns
-     * the probe state. `varsity` is the only name that can be refused, because
-     * it is the only one that is bought; the other three are just art.
+     * WEAR A SHEET, and the ONE road into the wardrobe (the Locker wave). One of
+     * OUTFITS, or null/junk for no pick. Returns the probe state.
+     *
+     * EVERY name can be refused now: all four sheets are bought, and ownership
+     * is asked of the shell's `outfitOwned` getter at the press rather than
+     * remembered here. A refusal answers the state she is already in and leaves
+     * her dressed as she was - the caller is welcome to ignore it, because the
+     * honest outcome of "put on a thing you do not own" is that nothing happens.
+     *
+     * IT PERSISTS NOTHING. `lockerOutfit` is the player's choice and the Locker
+     * owns it; this is what that choice does when it arrives.
+     *
+     * NULL IS "NO PICK", NOT "STANDARD" - a jacket owner who clears their pick
+     * gets the jacket back, which is the bag's default and the rung below a
+     * pick. See armOutfit.
      * @param {?string} name
      */
     setOutfit(name) { return armOutfit(name); },

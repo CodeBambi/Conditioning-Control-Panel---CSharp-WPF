@@ -1,0 +1,407 @@
+/* ============================================================================
+ * shell/locker.css - THE LOCKER, RM 004.
+ *
+ * The sheet for shell/locker.js and nothing else. `.lk-*` is the whole
+ * namespace: `.pc-*` is the prize counter one window up and `--pc-*` is the
+ * punch card, and a rule of ours that reached either would repaint a room this
+ * file has never seen.
+ *
+ * THE CHROME IS NOT OURS. The panel sits inside scene.css's `.asc-panel` - the
+ * glass, the border, the slide-up, the apron clearance and the phone's margins
+ * all belong to the chassis and are already right. Everything below is the
+ * INSIDE of that box.
+ *
+ * FOUR HOUSE LAWS, in force here as everywhere:
+ *  - Tokens only. --panel --panel2 --line --ink --ink-dim --pink --gold --lav
+ *    off :root in styles.css. No hex in this file except the two rgba washes a
+ *    token cannot express (a tint OF a token, not a colour beside it).
+ *  - var(--disp) is for headings. var(--pix) is for MICRO-LABELS ONLY - a pixel
+ *    face at reading length is a wall, and the wardrobe is a page you read.
+ *  - Sprites at an exact integer divisor of 192 (96 / 64 / 48 / 32) with
+ *    `image-rendering: pixelated`, or the browser smears whole pixels.
+ *  - Rounded corners, and the currency glyph is .arc-tick / .arc-tok from
+ *    styles.css - never a character typed into this sheet.
+ * ==========================================================================*/
+
+/* ----------------------------------------------------------------------------
+ * THE PAGE
+ * -------------------------------------------------------------------------- */
+
+.lk-panel {
+  display: block;
+  text-align: left;
+}
+
+.lk-head { margin: 0 0 14px; }
+
+.lk-title {
+  margin: 0;
+  font-family: var(--disp);
+  font-size: 26px;
+  letter-spacing: .06em;
+  color: var(--ink);
+  text-transform: uppercase;
+}
+
+.lk-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+}
+
+/* THE RAIL IS ABSENT UNTIL THE PHONE TURNS. On every other viewport the six
+   groups are simply a page you scroll, which is what a wardrobe is. */
+.lk-rail { display: none; }
+
+.lk-body { display: block; }
+
+/* ----------------------------------------------------------------------------
+ * A GROUP
+ * -------------------------------------------------------------------------- */
+
+.lk-group + .lk-group {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+/* The micro-label, and the ONLY place the pixel face is allowed on this page.
+   Six of these are the whole table of contents, so they are read at a glance
+   rather than read. */
+.lk-gh {
+  margin: 0 0 10px;
+  font-family: var(--pix);
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--lav);
+}
+
+.lk-slot { display: block; }
+
+/* ----------------------------------------------------------------------------
+ * THE PICK TILES
+ *
+ * A wrapping row rather than a grid: the groups hold two things or six, and a
+ * fixed column count leaves one of those looking broken. 108px is a 96 sprite
+ * plus its air.
+ * -------------------------------------------------------------------------- */
+
+.lk-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.lk-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 108px;
+  padding: 10px 6px 8px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel2);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 140ms ease-out, transform 140ms ease-out, background 140ms ease-out;
+}
+
+.lk-tile:hover { border-color: var(--lav); transform: translateY(-2px); }
+.lk-tile:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+
+/* WORN. The pink rim is the school's "this one", and the wash under it is a
+   tint OF the accent rather than a second colour: a border alone reads as hover
+   on a touch screen, where there is no hover to tell it apart from. */
+.lk-tile.is-on {
+  border-color: var(--pink);
+  background:
+    linear-gradient(180deg, rgba(255, 105, 180, .14) 0%, rgba(255, 105, 180, .05) 100%),
+    var(--panel2);
+}
+
+.lk-tile.is-on:hover { border-color: var(--pink); }
+
+/* ------------------------------------------------------------- the sprite */
+
+.lk-art {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .22);
+  overflow: hidden;
+}
+
+/* Painted FIRST and covered by the image, so an `onerror` that takes the
+   picture off leaves a box that still reads as a thing on a shelf. */
+.lk-glyph {
+  font-size: 34px;
+  line-height: 1;
+  color: var(--lav);
+  opacity: .9;
+}
+
+.lk-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+/* The list groups take the 64 box: their rows are read down a column and a 96
+   would push the name off a phone. Still a divisor of 192. */
+.lk-art-sm { width: 64px; height: 64px; flex: 0 0 auto; }
+.lk-art-sm .lk-glyph { font-size: 24px; }
+
+/* -------------------------------------------------------- the swatch trio */
+
+/* The campus looks have no sprite: three dots off the theme's own palette,
+   which is the one place in the school a colour travels as a value because it
+   is DESCRIBING a palette rather than using one. */
+.lk-dots { gap: 6px; background: rgba(0, 0, 0, .3); }
+
+.lk-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, .45);
+  background: var(--dot, var(--panel));
+}
+
+/* ------------------------------------------------------------- the labels */
+
+.lk-name {
+  font-size: 12px;
+  line-height: 1.3;
+  text-align: center;
+  color: var(--ink);
+}
+
+/* "On". A micro-label, so the pixel face, and it sits ON the tile's top corner
+   rather than under the name: the name is the thing being read and a second
+   line under it would push every tile in the row taller. */
+.lk-on {
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  padding: 3px 6px;
+  border-radius: 8px;
+  background: var(--pink);
+  color: #17102A;
+  font-family: var(--pix);
+  font-size: 8px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+/* ----------------------------------------------------------------------------
+ * THE LIST ROWS (IN YOUR BAG, ALWAYS ON)
+ * -------------------------------------------------------------------------- */
+
+.lk-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.lk-row + .lk-row { margin-top: 8px; }
+
+.lk-rowtext {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.lk-rowtext .lk-name { text-align: left; font-size: 14px; }
+
+.lk-line {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+}
+
+/* The count. Gold because it is a quantity of a thing you hold, which is what
+   gold means everywhere else in this school. */
+.lk-count {
+  flex: 0 0 auto;
+  font-family: var(--pix);
+  font-size: 11px;
+  letter-spacing: .08em;
+  color: var(--gold);
+}
+
+/* The bell's one poke. Quiet on purpose: ALWAYS ON is a receipt and this is the
+   single row in it that answers back. */
+.lk-poke {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border: 1px solid var(--lav);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--lav);
+  font-family: var(--pix);
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 140ms ease-out, color 140ms ease-out;
+}
+
+.lk-poke:hover { background: var(--lav); color: #17102A; }
+.lk-poke:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+
+/* ----------------------------------------------------------------------------
+ * THE FOOTER, AND THE EMPTY LOCKER
+ * -------------------------------------------------------------------------- */
+
+.lk-note {
+  margin: 0;
+  padding: 18px 4px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  text-align: center;
+}
+
+.lk-foot {
+  margin: 16px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  text-align: center;
+}
+
+.lk-morelink {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--pink);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.lk-morelink:hover { color: var(--ink); }
+.lk-morelink:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+
+.lk-moreflat {
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+/* ============================================================================
+ * THE LANDSCAPE PHONE
+ *
+ * The Options rail, one room over: a short glass is not a page you scroll, it
+ * is a page you tab through, so the six group headings become the rail on the
+ * left and one group at a time takes the right. Keyed on `.lk-rail-on`, which
+ * locker.js hangs off `core/device.js` - never off a media query, because the
+ * mark on <html> is the one answer the whole school agrees on.
+ * ==========================================================================*/
+
+.lk-panel.lk-rail-on {
+  display: grid;
+  grid-template-columns: 128px 1fr;
+  grid-template-areas:
+    'head head'
+    'rail body'
+    'foot foot';
+  column-gap: 14px;
+  align-items: start;
+}
+
+.lk-panel.lk-rail-on .lk-head { grid-area: head; margin-bottom: 10px; }
+.lk-panel.lk-rail-on .lk-title { font-size: 20px; }
+.lk-panel.lk-rail-on .lk-sub { display: none; }
+.lk-panel.lk-rail-on .lk-foot { grid-area: foot; }
+
+.lk-panel.lk-rail-on .lk-rail {
+  grid-area: rail;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 10px;
+  border-right: 1px solid var(--line);
+}
+
+.lk-tab {
+  display: block;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-dim);
+  font-family: var(--pix);
+  font-size: 9px;
+  letter-spacing: .1em;
+  line-height: 1.4;
+  text-align: left;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.lk-tab:hover { color: var(--ink); }
+.lk-tab:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+
+.lk-tab[aria-selected='true'] {
+  border-color: var(--line);
+  background: var(--panel2);
+  color: var(--pink);
+}
+
+.lk-panel.lk-rail-on .lk-body { grid-area: body; }
+
+/* ONE GROUP AT A TIME, and the rules the stacked page needed go with it: no
+   heading (the lit tab already says it) and no rule above (there is nothing
+   above it any more). */
+.lk-panel.lk-rail-on .lk-group { display: none; }
+.lk-panel.lk-rail-on .lk-group.lk-active { display: block; }
+.lk-panel.lk-rail-on .lk-group {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.lk-panel.lk-rail-on .lk-gh { display: none; }
+
+/* The short glass takes the 64 box, one divisor down, and the rows lose their
+   air rather than their sprite. */
+.lk-panel.lk-rail-on .lk-tile { width: 78px; padding: 8px 4px 6px; }
+.lk-panel.lk-rail-on .lk-art { width: 64px; height: 64px; }
+.lk-panel.lk-rail-on .lk-art .lk-glyph { font-size: 24px; }
+.lk-panel.lk-rail-on .lk-art-sm { width: 48px; height: 48px; }
+.lk-panel.lk-rail-on .lk-art-sm .lk-glyph { font-size: 18px; }
+.lk-panel.lk-rail-on .lk-name { font-size: 11px; }
+.lk-panel.lk-rail-on .lk-dot { width: 15px; height: 15px; }
+
+/* ============================================================================
+ * REDUCED MOTION
+ * The chassis already stills the panel itself; these are the four transitions
+ * this sheet added on top of it.
+ * ==========================================================================*/
+
+.arc-reduced .lk-tile,
+.arc-reduced .lk-poke {
+  transition: none;
+}
+
+.arc-reduced .lk-tile:hover { transform: none; }

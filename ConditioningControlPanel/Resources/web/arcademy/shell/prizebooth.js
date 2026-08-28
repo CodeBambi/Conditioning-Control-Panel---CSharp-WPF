@@ -9,14 +9,37 @@
  *
  *   THE WINDOW   the lit service opening under the sign, and it is THE verb of
  *                the room. Pressing it opens shell/prizecounter.js exactly as
- *                it has always opened, unchanged, echo law and all. The booth
- *                is a way in, never a second till.
+ *                it has always opened, unchanged, echo law and all - but it
+ *                opens it HERE NOW, in a panel over this plate, instead of
+ *                walking the player off to a screen of their own. The booth is
+ *                a way in, never a second till.
  *   THE TRAY     the brass tray on the sill, which is where the money is
  *                actually counted. It answers the two questions a shopper asks
  *                before they shop: what is on them, and which room is paying
  *                over the odds tonight. The payday sentence is the SHOP'S, read
  *                through `paydayParts` so the counter and the sill can never
  *                end up saying it two different ways.
+ *
+ * THE ALLEY IS AN ARRIVAL, NOT A ROOM (Locker wave, 2026-08-28). vn-17 was a
+ * hover thumbnail on the campus plan and nothing else, which is a painted
+ * corridor nobody has ever stood in. It is the booth's second view now and it is
+ * the FIRST thing you see: about seven tenths of a second of the row of service
+ * windows with the lit one at the end, and then the camera pushes into that
+ * window and the plate is vn-18. Any press and any key cuts it short, because an
+ * arrival you cannot skip is a loading screen with a painting on it.
+ *
+ * THE CUT GOING IN, THE ZOOM COMING OUT, and both halves are deliberate. The
+ * chassis mounts `wide` at build - it is the home shot and it is required - so
+ * the walk to the alley would show one frame of the window plate before the
+ * corridor arrived. `.pb-arrive` (prizebooth.css) holds the incoming alley at
+ * full opacity with no transform, which turns that first move into a CUT that
+ * lands on the corridor; the class comes off before the move back, so the walk
+ * IN is the chassis's own zoom with its origin on the lit window. The band and
+ * the step-back pill sit the beat out - see `html.pb-arriving` in the sheet.
+ *
+ * LITE AND REDUCED SKIP THE ARRIVAL, NEVER THE PLATE. A machine that asked for
+ * less, or a player who did, still walks up to the same window; they simply
+ * start at it.
  *
  * THE SHUTTER IS ONE FLAG, NOT A SECOND ROOM. `closed` swaps a full-stage patch
  * (vn-19) over the wide plate, takes both rects off the wall with the `when`
@@ -69,6 +92,32 @@ export const RECTS = Object.freeze({
   tray: Object.freeze([604, 400, 168, 54]),
 });
 
+/* ----------------------------------------------------------------------------
+ * THE ARRIVAL'S TABLE
+ *
+ * Measured off `art/vn/vn-17-prize-alley.png`, which is the same 1376x768 plane
+ * as the window plate. The lit shelf under the PRIZES sign (window 003, the one
+ * this booth is) sits at x 484..626, y 265..455 on that plate, and that rect is
+ * the whole of what the arrival needs: it is where the camera pushes IN to.
+ * -------------------------------------------------------------------------- */
+
+/** How long the corridor holds before the camera walks in, in ms. Long enough
+ *  to read a lit window at the end of a row, short enough that nobody who has
+ *  seen it forty times ever reaches for the skip. */
+export const ALLEY_MS = 700;
+
+/** The lit service window inside the alley plate. */
+export const ALLEY_WINDOW = Object.freeze([484, 265, 142, 190]);
+
+/** How far the corridor shrinks on its way out. Not `kFor(ALLEY_WINDOW)` (which
+ *  would be 0.10 and reads as falling down a hole) - a step forward, not a dive. */
+export const ALLEY_K = 0.3;
+
+/** Where the one line under the corridor hangs. Above the apron floor (y 640)
+ *  and inside the plate's own dark lower band, which is where a caption on a VN
+ *  set has always gone. */
+export const ALLEY_HINT = Object.freeze([388, 578, 600, 48]);
+
 /** The shutter, laid over the whole wide plate while `closed` is on. Full
  *  stage: the plate is a redraw of the same camera with one thing changed, so
  *  a partial patch would leave the lit window burning through around it. */
@@ -112,6 +161,34 @@ function el(tag, cls, text) {
 function attr(node, name, value) {
   try { if (node && typeof node.setAttribute === 'function') node.setAttribute(name, value); }
   catch (e) { /* the DOM double may not carry attributes - never fatal */ }
+}
+
+function addCls(node, cls) {
+  try { if (node && node.classList && typeof node.classList.add === 'function') node.classList.add(cls); }
+  catch (e) { /* noop */ }
+}
+
+function dropCls(node, cls) {
+  try { if (node && node.classList && typeof node.classList.remove === 'function') node.classList.remove(cls); }
+  catch (e) { /* noop */ }
+}
+
+/** The page's own answer about motion, asked the way prizecounter.js asks it:
+ *  the shell's class on <html> first, then the media query. The caller's
+ *  `reduced` cap outranks neither - all three are ORs. */
+function htmlReduced() {
+  try {
+    const de = (typeof document !== 'undefined') ? document.documentElement : null;
+    if (de && de.classList && typeof de.classList.contains === 'function'
+      && de.classList.contains('arc-reduced')) return true;
+  } catch (e) { /* noop */ }
+  try {
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+      const m = window.matchMedia('(prefers-reduced-motion: reduce)');
+      if (m && m.matches) return true;
+    }
+  } catch (e) { /* noop */ }
+  return false;
 }
 
 function urlFor(rel, fallback) {
@@ -169,7 +246,16 @@ export function findCls(node, cls) {
  *  balance   - () -> {t, k}, read fresh every time the tray is opened.
  *  payday    - optional () -> {gameKey, mult} for tonight's hot room, or null.
  *  gameName  - optional (key) -> that room's display name.
- *  onShop    - the window's press: the shell shows shell/prizecounter.js.
+ *  alley     - play the arrival beat? Default true. The purse chip in the
+ *              chrome passes false: it did not walk anywhere, so it does not
+ *              arrive anywhere. Lite and reduced motion answer false for it.
+ *  onShop    - (panel, close) the window's press. The SHELL fills the panel
+ *              with shell/prizecounter.js and keeps `close` for the counter's
+ *              own Back button; this file owns the box and the lifecycle and
+ *              has never known what a catalog is.
+ *  onShopClosed - the panel went away, by any road: the Back button, Esc, the
+ *              scrim, or the shutter coming down. The shell tears its counter
+ *              down here, once, whichever road it was.
  *  onBack    - the apron's back slab: the shell walks out to the campus.
  * @returns {?Object} the handle
  */
@@ -186,9 +272,19 @@ export function createPrizeBooth(caps) {
   let dead = false;
   let closed = !!c.closed;
   let closeTill = null;        // the live tray panel's own close, or null
+  let closeShop = null;        // the live shelf panel's own close, or null
+  let shopOn = false;          // is the shelf panel up? (the handle can be stale)
   let shutEl = null;           // the CLOSED word over the shutter, or null
   let shutOff = null;          // its unmount
   let lineEl = null;           // the one hall line under a shut sign, or null
+  let alleyUp = false;         // is the arrival beat on screen right now?
+  let alleyTimer = null;       // its own hold, cleared from landWindow()
+  let hintOff = null;          // the corridor's one line, its unmount
+
+  /** Does this arrival get the corridor? The caller's answer first, then the
+   *  two decoration rungs: a lite machine and a player who asked for less
+   *  motion both start at the window. Neither loses the plate. */
+  const wantAlley = c.alley !== false && !c.lite && !htmlReduced() && !c.reduced;
 
   /* ------------------------------------------------------------- the scene */
 
@@ -200,6 +296,9 @@ export function createPrizeBooth(caps) {
     t: t,
     label: t('campus_room_prizes', 'Prize Counter'),
     views: {
+      /* THE CORRIDOR. No hotspots: it is a beat, not a room, and the one thing
+       * you can do with it is walk through it. See THE ALLEY IS AN ARRIVAL. */
+      alley: { art: 'vn-17-prize-alley.png', hotspots: [] },
       wide: {
         art: 'vn-18-prize-window.png',
         hotspots: [
@@ -226,16 +325,167 @@ export function createPrizeBooth(caps) {
   try { scene.root.classList.add('pb-room'); } catch (e) { /* noop */ }
   scene.setFlag('closed', closed);
   paintShut();
+  /* SYNCHRONOUS, and that is the whole trick: the chassis has just mounted the
+   * window plate and nothing has been painted yet, so the cut to the corridor
+   * lands on the first frame the player ever sees. */
+  if (wantAlley) enterAlley();
 
   /* --------------------------------------------------------- THE ACTIONS */
 
   function onAction(action) {
     if (dead || closed) return;
-    if (action === 'shop') {
-      try { if (c.onShop) c.onShop(); } catch (e) { log('prize booth shop threw: ' + ((e && e.message) || e)); }
+    /* A press during the arrival is a press to skip it, and nothing else. The
+     * corridor has no rects of its own, but a fast finger can land on a window
+     * rect one frame into the walk in, and opening the shop out of a beat the
+     * player was cutting short is not what they asked for. */
+    if (alleyUp) { landWindow(); return; }
+    if (action === 'shop') { openShop(); return; }
+    if (action === 'till') openTill();
+  }
+
+  /* ------------------------------------------------------- THE ARRIVAL */
+
+  /**
+   * Down the alley, and then in through the window. Two chassis moves with a
+   * hold between them, and the class on the root is what makes the first one a
+   * cut instead of a fade across the plate we are trying not to show yet.
+   */
+  function enterAlley() {
+    if (dead || alleyUp) return;
+    alleyUp = true;
+    addCls(scene.root, 'pb-arrive');
+    /* The band and the pill are chrome for a place you have arrived at. Held
+     * off the corridor from <html>, because the apron is a body-level sibling
+     * of the room and no class on the room can reach it. */
+    try { if (doc.documentElement) addCls(doc.documentElement, 'pb-arriving'); } catch (e) { /* noop */ }
+
+    const hint = el('p', 'pb-alley-hint', t('booth_alley_hint',
+      'The lit window is down at the end of the row.'));
+    attr(hint, 'aria-hidden', 'true');
+    /* Mounted BEFORE the move, so the corridor's slide is built with the line
+     * already in it. It rides out with the plate rather than being taken off a
+     * frame early, which is why nothing unmounts it at landWindow(). */
+    try { hintOff = scene.mountInView('alley', hint, ALLEY_HINT.slice()); }
+    catch (e) { hintOff = null; }
+
+    try {
+      scene.showView('alley', {
+        origin: [
+          ALLEY_WINDOW[0] + ALLEY_WINDOW[2] / 2,
+          ALLEY_WINDOW[1] + ALLEY_WINDOW[3] / 2,
+          ALLEY_K,
+        ],
+      });
+    } catch (e) {
+      log('prize booth arrival failed: ' + ((e && e.message) || e));
+      alleyUp = false;
+      dropCls(scene.root, 'pb-arrive');
+      try { if (doc.documentElement) dropCls(doc.documentElement, 'pb-arriving'); } catch (e2) { /* noop */ }
       return;
     }
-    if (action === 'till') openTill();
+
+    bindSkip();
+    try { alleyTimer = setTimeout(landWindow, ALLEY_MS); } catch (e) { alleyTimer = null; }
+  }
+
+  /**
+   * The walk in. Idempotent from every road that can reach it - the hold, a
+   * press, a key, the Esc fold, a teardown - because three of those can happen
+   * in the same tick and only one of them may move the camera.
+   *
+   * THE CLASS COMES OFF FIRST. It is what was holding the corridor at full
+   * opacity with no transform; taking it off before the move is what lets the
+   * chassis's own zoom run, and showView reads a reflow before it arms the
+   * transition, so the two never collapse into one frame.
+   */
+  function landWindow() {
+    if (dead || !alleyUp) return;
+    alleyUp = false;
+    if (alleyTimer) { try { clearTimeout(alleyTimer); } catch (e) { /* noop */ } alleyTimer = null; }
+    unbindSkip();
+    dropCls(scene.root, 'pb-arrive');
+    try { if (doc.documentElement) dropCls(doc.documentElement, 'pb-arriving'); } catch (e) { /* noop */ }
+    try { scene.showView('wide'); } catch (e) { log('prize booth walk-in failed'); }
+  }
+
+  function onSkipPointer() { landWindow(); }
+
+  /** Every key skips EXCEPT Esc, which is the fold's press and not ours: the
+   *  fold lands the window itself (escapeStep below) and answers TRUE, so one
+   *  Esc during the arrival puts you at the counter rather than back on the
+   *  quad. Nothing here calls preventDefault - a beat may not eat a key. */
+  function onSkipKey(ev) {
+    const k = ev && ev.key;
+    if (k === 'Escape' || k === 'Esc') return;
+    landWindow();
+  }
+
+  function bindSkip() {
+    try {
+      if (typeof doc.addEventListener !== 'function') return;
+      doc.addEventListener('pointerdown', onSkipPointer, true);
+      doc.addEventListener('keydown', onSkipKey, true);
+    } catch (e) { /* a beat that cannot be skipped is still a beat */ }
+  }
+
+  function unbindSkip() {
+    try {
+      if (typeof doc.removeEventListener !== 'function') return;
+      doc.removeEventListener('pointerdown', onSkipPointer, true);
+      doc.removeEventListener('keydown', onSkipKey, true);
+    } catch (e) { /* noop */ }
+  }
+
+  /* ---------------------------------------------------------- THE SHELF */
+
+  /**
+   * THE SHOP, IN THE WINDOW. shell/prizecounter.js, mounted in a scene panel
+   * over this plate: the Records Office's arrangement, and it exists for the
+   * Records Office's reason. A shop you reach by LEAVING the window you are
+   * standing at is a shop in a different building.
+   *
+   * THE PANEL IS OURS AND THE CONTENTS ARE THE SHELL'S. `onShop(panel, close)`
+   * hands over the box and the way out; nothing under this line has ever known
+   * what a catalog, a wallet or an echo is, and that does not change because
+   * the shop moved indoors.
+   */
+  function openShop() {
+    if (dead || closed || shopOn) return;
+    shopOn = true;
+    closeTill = null;              // the chassis takes any tray panel down for us
+    closeShop = scene.openOverlay('shop', function (panel) {
+      addCls(panel, 'pb-shop');
+      try { if (c.onShop) c.onShop(panel, shutShop); }
+      catch (e) { log('prize booth shop mount threw: ' + ((e && e.message) || e)); }
+    });
+    /* THE SCRIM IS A WAY OUT WE DID NOT WIRE. scene.js closes the overlay on a
+     * scrim press without telling anybody, so this is how we hear about it -
+     * our listener runs after the chassis's on the same node, by which time the
+     * panel is already off and all that is left is to say so. */
+    const scrim = findCls(scene.root, 'asc-scrim');
+    try {
+      if (scrim && typeof scrim.addEventListener === 'function') {
+        scrim.addEventListener('click', function () { noteShopGone(); });
+      }
+    } catch (e) { /* noop */ }
+  }
+
+  /** Take the panel down from this side. The shell's Back button lands here. */
+  function shutShop() {
+    if (!shopOn) return;
+    const off = closeShop;
+    noteShopGone();
+    if (off) { try { off(); } catch (e) { /* noop */ } }
+  }
+
+  /** The panel has gone, by whatever road. ONCE (trap 28's shape): the shell
+   *  destroys a counter here and a second call would destroy the next one. */
+  function noteShopGone() {
+    if (!shopOn) return;
+    shopOn = false;
+    closeShop = null;
+    try { if (c.onShopClosed) c.onShopClosed(); }
+    catch (e) { log('prize booth shop close threw: ' + ((e && e.message) || e)); }
   }
 
   /* ------------------------------------------------------------- THE TRAY */
@@ -252,6 +502,10 @@ export function createPrizeBooth(caps) {
    */
   function openTill() {
     if (dead) return;
+    /* ONE PANEL AT A TIME is the chassis's rule, not ours: opening this takes
+     * the shelf down without asking. Saying so first is what keeps the shell's
+     * counter from outliving the box it was mounted in. */
+    noteShopGone();
     closeTill = scene.openOverlay('till', function (panel) {
       try { panel.classList.add('pb-till'); } catch (e) { /* noop */ }
       panel.appendChild(el('h3', 'pb-till-head', t('prize_booth_tray', 'The ticket tray')));
@@ -348,24 +602,60 @@ export function createPrizeBooth(caps) {
     const next = !!on;
     if (closed === next) return;
     closed = next;
-    if (closed && closeTill) { try { closeTill(); } catch (e) { /* noop */ } closeTill = null; }
+    if (closed) {
+      if (closeTill) { try { closeTill(); } catch (e) { /* noop */ } closeTill = null; }
+      /* The shutter comes down over a shop somebody is standing in. The panel
+       * goes with it and the shell hears about it the same way it hears about
+       * every other close, so the counter is never left mounted in a box that
+       * is no longer on screen. */
+      shutShop();
+    }
     try { scene.setFlag('closed', closed); } catch (e) { /* noop */ }
     paintShut();
   }
 
   /* ------------------------------------------------------------- the fold */
 
-  /** ONE RUNG DEEP: the tray panel, then FALSE, at which point the shell's own
-   *  rung walks out to the campus. This module binds no key; the shell asks. */
+  /**
+   * ONE RUNG DEEP, and it is a panel: the shelf or the tray, whichever is up,
+   * and then FALSE so the shell's own rung walks out to the campus. This module
+   * binds no key for the fold; the shell asks.
+   *
+   * THE ARRIVAL IS THE ONE THING ABOVE THAT RUNG. A press of Esc while the
+   * corridor is on screen means "get on with it", not "let me out of a booth I
+   * have not reached yet", so it lands the window and spends the press. Every
+   * other key skips it without going through here (bindSkip above).
+   *
+   * The chassis's own fold would try to walk `alley` back to `wide` as if it
+   * were a close-up, which is why landWindow() runs FIRST and answers for it:
+   * the corridor is a beat, and a beat is never a place you can be sent back to.
+   */
   function escapeStep() {
     if (dead) return false;
-    try { return !!scene.escapeStep(); } catch (e) { return false; }
+    if (alleyUp) { landWindow(); return true; }
+    const wasShop = shopOn;
+    let took = false;
+    try { took = !!scene.escapeStep(); } catch (e) { took = false; }
+    if (wasShop && took) noteShopGone();
+    return took;
   }
 
   function destroy() {
     if (dead) return;
+    /* The arrival's own two holds go before the flag does, because both of them
+     * reach back into a scene that is about to stop existing. */
+    if (alleyTimer) { try { clearTimeout(alleyTimer); } catch (e) { /* noop */ } alleyTimer = null; }
+    unbindSkip();
+    alleyUp = false;
+    try { if (doc.documentElement) dropCls(doc.documentElement, 'pb-arriving'); } catch (e) { /* noop */ }
+    /* The shell is told the shelf has gone BEFORE the room does, so a counter
+     * mounted in the panel is torn down by its owner rather than left holding a
+     * watchdog timer over a detached node. */
+    noteShopGone();
     dead = true;
     closeTill = null;
+    closeShop = null;
+    if (hintOff) { try { hintOff(); } catch (e) { /* noop */ } hintOff = null; }
     shutEl = null;
     shutOff = null;
     lineEl = null;
@@ -378,6 +668,15 @@ export function createPrizeBooth(caps) {
     root: scene.root,
     escapeStep: escapeStep,
     setClosed: setClosed,
+    /** Open the shelf from outside - the purse chip in the chrome arrives with
+     *  this already asked for, which is the shortcut half of the same split the
+     *  gear and the Front Office door run. Safe on a shut counter (it declines)
+     *  and safe twice (it is a level, not a toggle). */
+    openShop: openShop,
+    /** Put the shelf away from outside. */
+    closeShop: shutShop,
+    /** Cut the arrival short from outside, if one is running. */
+    skipArrival: landWindow,
     fit: function () {
       try { return scene.fit(); } catch (e) { return null; }
     },
@@ -393,6 +692,10 @@ export function createPrizeBooth(caps) {
     windowHot: function () { return findCls(scene.root, 'arm-main'); },
     /** The CLOSED word over the shutter, or null. */
     shutWord: function () { return findCls(scene.root, 'pb-shut'); },
+    /** Is the shelf panel up? */
+    shopUp: function () { return !!shopOn; },
+    /** Is the arrival beat on screen? */
+    arriving: function () { return !!alleyUp; },
   };
 }
 
