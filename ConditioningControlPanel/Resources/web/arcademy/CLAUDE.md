@@ -3118,6 +3118,29 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     element ends up a hundred handlers deep. A clip that finds the pool dry still mints
     and is still refused on a phone - accepted ceiling, six is the voice cap.
 
+134. **AN ANIMATED GIF THAT COVERS THE STAGE IS THE ONE NODE A PHONE CANNOT PAY FOR (measured
+    2026-08-28).** Blink decodes every gif frame on the renderer main thread and then re-rasters
+    every device pixel the image covers, per frame advance; at DPR 3 the 150vmax spiral square is
+    ~14 Mpx and a full-bleed burst ~3 Mpx, PER FRAME. The 4x-throttled phone rig put ONE bundled
+    spiral gif painted as a url-string wash at 3.1s of GPU-process time per 8s (the CSS conic or
+    the live loom: 23-126ms), and Instant Recall at 33fps with three 500px spiral gifs animating
+    behind a SPIRAL question. The half-size-box-under-`transform:scale(2)` trick does NOT help
+    (Chrome rasters at the ideal scale). The cure is THE STILL PLATE (`engine/util.js plateEl`):
+    the gif's first frame drawn once into a small canvas (long side 640) that the stylesheet
+    stretches over the element, with an optional compositor-only spin (`.ae-wash-plate-spin`,
+    worn only while the hold is live and never under reduced motion). It is read by the touch
+    rung only - `sustained.js paintUrl` for a url-string spiral wash (IR gif-ring decoys, the
+    WebGL-lost floor), `oneshots.js` for a full-bleed .gif burst, `instant-recall/spirals.js
+    spiralStillThumb` for the SPIRAL option faces - and gates on `html.ae-touch` /
+    `ctx.platform.isTouch`, never UA. Desktop keeps the animated gif byte for byte (digest-
+    verified). Two rules that fall out of it: a url-string wash on touch must go through
+    `paintUrl`, never write `backgroundImage` itself (the plate would be orphaned under it);
+    and `plateMount` is idempotent per url because the decks re-trigger a held wash several
+    times a second and a re-decode per trigger is the bug it exists to cure. The related
+    decoder caps: `MONTAGE.VIDEO_TILE_CAP_TOUCH = 1` (two playing tiles measured p95 33ms, the
+    30Hz lock) and `PLAYTEST.VIDEO_TILE_CAP_TOUCH = 1` in Lost and Found (the LITE four were
+    EIGHT playing players with the wrap reps).
+
 ## 5. The game module contract (short version)
 
 ```js

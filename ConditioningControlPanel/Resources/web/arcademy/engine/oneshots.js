@@ -62,7 +62,7 @@ import {
   NODE_CAPS, DUCK, subFlashSpec, glitchSpec, gifBurstSpec,
   burstCountForHeat, burstOpacityForHeat,
 } from './curves.js';
-import { rand, pickFrom, hasDom, mediaEl, budgetedKind, isVideoUrl } from './util.js';
+import { rand, pickFrom, hasDom, mediaEl, budgetedKind, isVideoUrl, isGifUrl, plateEl } from './util.js';
 import { createEscapeGuard } from './escape.js';
 
 /** The ceiling on a lengthened sub_flash. A word that outlives this stops being
@@ -322,7 +322,17 @@ export function createOneshots(ctx) {
       }
       // mediaEl: <img>, or a muted looping <video> when the pool handed us a
       // webm/mp4 loop (the only animated shape a remote provider has)
-      const node = (url && mediaEl(url)) || document.createElement('div');
+      /* THE STILL PLATE (phone fx diet, measured 2026-08-28; util.js plateEl):
+       * a full-bleed GIF on touch is the plate of its first frame. touchStill
+       * pins the pool draw to a still, but an explicit opts.url, and a gif the
+       * still pool itself hands out (the mobile host's still pool and the web
+       * host's IMAGE_RE both admit .gif), still covered the stage with an
+       * animated <img>: ~3 Mpx re-rastered per gif frame, 700ms GPU + 340ms
+       * decode per 8s on the phone profile. A video keeps mediaEl (the
+       * decoder budget already owns it); a jpg/webp/png still is one raster
+       * and keeps its full resolution as an <img>. Desktop never comes here. */
+      const node = (url && (touchStill && isGifUrl(url) ? plateEl(url) : mediaEl(url)))
+        || document.createElement('div');
       node.className = 'ae-burst ae-burst-' + variant.name + (clickable ? ' ae-burst-clickable' : '')
         + (fullBleed ? ' ae-burst-cover' : '');
       node.style.setProperty('--ae-x', (atX == null ? Math.round(rand(ctx.rng, 12, 88)) : atX) + '%');

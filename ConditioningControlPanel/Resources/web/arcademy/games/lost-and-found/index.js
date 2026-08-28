@@ -1633,7 +1633,7 @@ export default {
         });
         board = createBoard({
           mount: hud.view, density, rng, drift: dials.drift,
-          lite: coarse, reduced, log: say, onTileClick, onTileHover,
+          lite: coarse, touch, reduced, log: say, onTileClick, onTileHover,
         });
         // Somebody has to be the target before any media exists, so the class is
         // playable even if the provider never answers.

@@ -41,7 +41,7 @@
 
 import { clamp01 } from '../core/caps.js';
 import { NODE_CAPS, washSpec, gifRainSpec, ambientSpec, driftSpec, bubbleSpec } from './curves.js';
-import { rand, hasDom, mediaEl, budgetedKind, isVideoUrl } from './util.js';
+import { rand, hasDom, mediaEl, budgetedKind, isVideoUrl, plateEl } from './util.js';
 import { createEscapeGuard } from './escape.js';
 import { createLoomWash } from './loomWash.js';
 
@@ -103,7 +103,7 @@ export function createSustained(ctx) {
         if (oldKind != null) {
           const o = washHolds.get(oldKind);
           if (o.hideTimer) { ctx.timers.cancel(o.hideTimer); o.hideTimer = 0; }
-          loomDrop(o);
+          loomDrop(o); plateDrop(o);
           ctx.timers.release(o.el);
           washHolds.delete(oldKind);
         }
@@ -128,6 +128,7 @@ export function createSustained(ctx) {
    *  the wrapper's id while the canvas is live, the fallback gif url when the
    *  WebGL floor caught it, or null (the CSS conic kept the element). */
   function loomMount(h, wrap) {
+    plateDrop(h);   // the loom canvas and the still plate never share an element
     try {
       if (!h.loom) h.loom = createLoomWash({ log: ctx.log });
       if (h.loom.supported()) {
@@ -139,7 +140,7 @@ export function createSustained(ctx) {
            * every NEXT trigger answers the gif url, honestly.) */
           onLost: () => {
             try {
-              if (wrap.href) h.el.style.backgroundImage = 'url("' + wrap.href + '")';
+              if (wrap.href) paintUrl(h, String(wrap.href));
             } catch (e) { /* ignore */ }
           },
         });
@@ -152,7 +153,7 @@ export function createSustained(ctx) {
     // THE FLOOR: no WebGL -> the bundled gif IS what is shown, so it IS the answer.
     loomDrop(h);
     if (wrap.href && typeof wrap.href === 'string') {
-      h.el.style.backgroundImage = 'url("' + wrap.href + '")';
+      paintUrl(h, wrap.href);
       return String(wrap.href);
     }
     return null;
@@ -160,11 +161,67 @@ export function createSustained(ctx) {
   /** Tear the loom canvas off a hold entirely (a url string took the element,
    *  or the hold is being released). Safe on a hold that never had one. */
   function loomDrop(h) {
-    if (h && h.loom) { try { h.loom.dispose(); } catch (e) { /* ignore */ } h.loom = null; }
+    if (h && h.loom) {
+      try { h.loom.dispose(); } catch (e) { /* ignore */ }
+      h.loom = null;
+      // dispose restored the element's own backing; a standing plate keeps it off
+      if (h.plate && h.el) { try { h.el.style.backgroundImage = 'none'; } catch (e) { /* ignore */ } }
+    }
   }
-  /** The hold's opacity was driven to 0 (or back up): idle the loom's rAF. */
+  /** The hold's opacity was driven to 0 (or back up): idle the loom's rAF
+   *  (and the plate's compositor spin, which rides the same switch). */
   function loomActive(h, on) {
     if (h && h.loom) { try { h.loom.setActive(!!on); } catch (e) { /* ignore */ } }
+    plateActive(h, on);
+  }
+
+  /* ---- the still plate (phone fx diet, measured 2026-08-28; util.js) ------ */
+  /** TOUCH ONLY. A url STRING on a wash - the IR gif-ring decoys, the
+   *  WebGL-lost floor, a desktop user's own spiral gif - used to paint an
+   *  animated gif across the 150vmax square as an UNPROMOTED background (the
+   *  touch rung sets will-change:auto), so every frame advance decoded on the
+   *  main thread and re-rastered the root layer at DPR: 3.1s of GPU per 8s for
+   *  one bundled spiral on the throttled phone profile. The plate is that
+   *  gif's first frame in a small canvas child (plateEl); the element's own
+   *  backing goes to none while it stands, exactly as the loom does.
+   *  Idempotent per url: the decks re-trigger a held wash several times a
+   *  second and must not re-decode. Returns true when the plate took it;
+   *  false on desktop and without a canvas, and the caller paints the
+   *  background-image byte for byte as before. */
+  function plateMount(h, url) {
+    if (!h || !h.el || !touchClass()) return false;
+    if (h.plate && h.plateUrl === url) return true;
+    plateDrop(h);
+    const c = plateEl(url, 'ae-wash-plate', { square: true });
+    if (!c) return false;
+    h.plate = c; h.plateUrl = url;
+    h.el.appendChild(c);
+    h.el.style.backgroundImage = 'none';
+    return true;
+  }
+  function plateDrop(h) {
+    if (!h || !h.plate) return;
+    try { h.plate.remove(); } catch (e) { /* ignore */ }
+    h.plate = null; h.plateUrl = null;
+    try { if (h.el && h.el.style.backgroundImage === 'none') h.el.style.backgroundImage = ''; } catch (e) { /* ignore */ }
+  }
+  /** The plate's slow spin (a transform on the canvas: compositor-only, no
+   *  decode, no raster - measured 0 decode / 0 raster, ~350ms GPU + ~360ms
+   *  main per 6s on the throttled phone profile against a static plate's
+   *  ~idle) rides the hold's activity like the loom's rAF: never while the
+   *  wash is parked at 0, never under reduced motion, and only on the FULL
+   *  motion rung - the motion knob is the phone's way to a still plate. */
+  function plateActive(h, on) {
+    if (!h || !h.plate) return;
+    const spin = !!on && !ctx.reduced() && ctx.motion() >= 2;
+    try { h.plate.classList.toggle('ae-wash-plate-spin', spin); } catch (e) { /* ignore */ }
+  }
+  /** Paint a url string on a hold: the plate on touch, the element's own
+   *  background-image everywhere else (the pre-diet path, unchanged). */
+  function paintUrl(h, url) {
+    if (plateMount(h, url)) return;
+    plateDrop(h);
+    h.el.style.backgroundImage = 'url("' + url + '")';
   }
 
   /**
@@ -233,7 +290,7 @@ export function createSustained(ctx) {
         loomTook = typeof wroteUrl === 'string' && wroteUrl.indexOf('loom:') === 0;
       } else if (url) {
         loomDrop(h);   // a url string takes the element back; no-op when no canvas
-        h.el.style.backgroundImage = 'url("' + url + '")'; wroteUrl = String(url);
+        paintUrl(h, String(url)); wroteUrl = String(url);
       }
     }
     /* Was this wash already on screen? Read BEFORE the opacity is written: it
@@ -242,6 +299,7 @@ export function createSustained(ctx) {
     const wasUp = parseFloat(h.el.style.opacity || '0') > 0.001;
     if (h.hideTimer) { ctx.timers.cancel(h.hideTimer); h.hideTimer = 0; }
     h.el.style.opacity = String(alpha);
+    plateActive(h, true);   // touch plate spin wakes with the wash (no-op elsewhere)
     /* THE HELD WASH. sustainForever HOLDS the element at alpha until a later
        trigger says otherwise. A later trigger that is NOT forever is one of
        two things: a FLARE (a higher alpha - a jackpot's forced garnish, a
@@ -611,7 +669,7 @@ export function createSustained(ctx) {
         h.forever = false; h.heldAlpha = 0;
         h.el.style.opacity = '0';
         loomActive(h, false);
-        if (immediate) { loomDrop(h); ctx.timers.release(h.el); }
+        if (immediate) { loomDrop(h); plateDrop(h); ctx.timers.release(h.el); }
       }
       if (immediate) washHolds.clear();
       return true;

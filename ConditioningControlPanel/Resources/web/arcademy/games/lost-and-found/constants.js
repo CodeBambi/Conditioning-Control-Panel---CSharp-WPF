@@ -144,6 +144,12 @@ export const PLAYTEST = Object.freeze({
    *  almost never reaches them (gifs win the draw). */
   VIDEO_TILE_CAP: 6,
   VIDEO_TILE_CAP_LITE: 4,
+  /** Touch (phone fx diet, measured 2026-08-28): the LITE four became EIGHT
+   *  playing <video> elements on the phone profile (x2 wrap reps), against an
+   *  iOS hardware-decode ceiling of three or four sessions and the school's
+   *  one-decoder rule for a phone (engine VIDEO_BUDGET_TOUCH). One distinct
+   *  url = two players with the wrap. Gifs keep the LITE live cap. */
+  VIDEO_TILE_CAP_TOUCH: 1,
   /** Simultaneous <video> ELEMENTS, wrap clones included. Chromium's per-page
    *  media-player budget is the wall we hit; stay well under it. */
   VIDEO_ELEMENT_CEIL: 32,
