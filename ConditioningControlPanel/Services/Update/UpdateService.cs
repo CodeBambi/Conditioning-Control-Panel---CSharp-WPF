@@ -20,15 +20,42 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.8.5";
+        public const string AppVersion = "6.8.6";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.8.5 - First Bell
+        public const string CurrentPatchNotes = @"v6.8.6 - Relapse (pt. 2)
 
-The repair run is over. This one opens a door we have been building behind for a month, and it still brings a stack of fixes from your reports.
+6.8.5 went out as a prerelease and never got promoted. This is the same release, rebuilt from the right tree, with a day of fixes on top. If you installed the prerelease, the first section is new to you, and so are the Locker, the upright campus and the EMI keep-off rule further down, because the prerelease build was cut before those merges landed.
+
+NEW SINCE THE 6.8.5 PRERELEASE
+
+THE ARCADEMY
+- The Locker (RM 004) opens. Outfits for EMI sold one by one at the Prize Counter (lab coat, cheer, swim), a frame and a desk toy of your choosing, and the campus look picker moved in here from Options. Buying an outfit dresses her on the spot. The room got a proper painted set instead of a flat wall of doors.
+- Buying something is a ceremony now. The counter banks your tickets off the chip, the tray beats, and a reveal card shows what you got: outfits strut through their poses, the brass bell rings, posters drop on the corkboard, the announcer pack speaks a line. Rows you can afford glow, and a near miss says so.
+- A lit LOCKER ROOM sign on the counter walks you to RM 004, and the Locker has a PRIZE COUNTER sign back, so the alley is a corridor, not a one-way trip.
+- EMI has shop voice: a reaction to every item, what she thinks of what you put on her, sympathy when you cannot afford it, and a line when she is sent down the hall.
+- The swim outfit's goggles are actually on her face now. They were never in the shipped sprite.
+- The Front Office announcer is audible. Her recordings shipped about 11 dB under the soundtrack, so the music was talking over her. She is mixed up, the music ducks properly for the whole line, and a caption across the bottom reads it with her.
+- Your Tickets and Tokens bank on your account. The PC, the website and your phone see the same balance, a class you finished offline gets paid the next time you are signed in, and nothing can pay you twice or take tickets away on a failed connection.
+- The campus works on a phone held upright. No more rotate gate. Rooms, signs, the clock and the timetable all turn to stay readable; classes themselves are still landscape.
+- EMI keeps off the doors. Parked bottom-right she was sitting on the Locker door and half the Prize Counter, so taps did nothing until you dragged her. She slides clear of doors, the mail chip and, on a phone, the hint line and the folded plaque.
+- The Prize Counter and the service alley are tappable again on short portrait phones, including inside the Discord Activity, where the top chips were eating every tap on the four windows.
+- The Pool's name and RETAKE pill no longer get cut off at the bottom of the floor plan in wide windows.
+- Letters in THE MAIL BOX with a two-line title no longer spill out of their card into the next one.
+- Noise feeds you add for the sorting room stay in the sorting room instead of following you into every other class.
+- Phones: fullscreen GIFs and spiral washes were decoding and re-drawing millions of pixels per frame. They are still plates on a phone now, one video decoder at a time, and the classes run at a real frame rate again.
+- Phones (iOS): class soundtracks, beds and announcer lines are no longer silent on Safari. Only bells and SFX used to get through.
+- Discord Activity: SORT cards arrive warmed and vetted instead of cold and unjudged, so it stops missing a beat on mobile.
+- Records Annex: the first descent no longer shows a small picture in a big black frame. The mascot dossier has a prototype page, and SUBJECT SEARCH has a card reader that takes your student ID.
+
+DESKTOP FIXES
+- The Descent fuse clock ticks every second at every range. It used to freeze its seconds digit for thirty seconds and then jump.
+- The companion tube no longer lands on top of the main window's rail at startup on a mixed-DPI two-monitor setup. Regression from the 6.8.5 mixed-DPI freeze fix.
+
+EVERYTHING FROM 6.8.5, IF YOU MISSED THE PRERELEASE
 
 THE ARCADEMY OPENS FOR TIER 2
 - There is a school now. Tier 2 gets a new door on the Play tab that opens onto a night-lit campus: ten classrooms down two wings, a timetable that deals you a fresh set of classes every single day, and a bell that rings you in.
@@ -37,10 +64,7 @@ THE ARCADEMY OPENS FOR TIER 2
 - The Records Office keeps your attendance. One punch card per class, one stamp for every day you show up, and a crest when you fill a card.
 - What you earn is spendable: classes pay out Tickets and Tokens, and the Prize Counter on the midway turns them into things.
 - It works on the website and on your phone too, at app.cclabs.app/arcademy, signed in as you.
-- Classes that deal online cards now check every card is alive before the round starts, so you no longer get a hand of striped placeholders where a picture should be.
 - The Arcademy can be opened from the Ctrl+K quick search.
-- The bell now counts down to the same day the timetable uses. It was counting to your local midnight while the school day rolls over on UTC, so a late evening session and the next morning could land on one school day and hand you the same Daily Trigger word twice.
-- The Bugle's comic panel now says why it is empty. It was always described rather than drawn, but a blank frame read as a picture that failed to load.
 - The Arcademy is English-only for now.
 - Losing your subscription now closes a live Arcademy session instead of leaving it running, and switching mods while it is open closes it cleanly, the same way it already did for Down the Rabbit Hole.
 - Fixed a failed Arcademy launch locking the door for the rest of the session. It offers to try again now.
@@ -75,16 +99,6 @@ MULTI-MONITOR MANDATORY VIDEO
 - Mixed-DPI setups: fullscreen video windows now cover each screen exactly instead of overshooting on scaled displays.
 - video-diag.log now records one line per screen with the engine used and how long the first frame took, so multi-monitor reports can finally be diagnosed from the log.
 
-EYE TRACKING
-- Calibrating on a second monitor now lands the gaze where you are actually looking. The overlay was drawing through the primary screen's origin and scale, so anyone who calibrated on another monitor was being judged, and re-running calibration, against a dot drawn somewhere the tracker never claimed.
-- The gaze follower settles about three times faster, dwell dropped from a second to 600ms, and a two-stage zoom refine turns one impossible tiny selection into two easy ones. The Accuracy test probes four heights instead of two.
-- New Quick Recal hotkey, Ctrl+Alt+G: nudges an existing calibration from wherever you are, no need to open the Blink Trainer. It steps aside if you bound that key to Panic or Pause, and refuses to register at all rather than double fire.
-- The chord is taught where you will look for it: the Quick Recal button in Settings, Devices names it in its tooltip, next to the camera start/stop shortcut.
-- The Accuracy test's bubble is taller so the top and bottom probes have somewhere to land.
-
-DOWN THE RABBIT HOLE
-- The screen shake setting finally does something. The dial has been sent to the game since it was added, but nothing in the tube listened. Now the heavies land like a hit and the world rocks under the detonation, the readouts hold still, it never stacks into a seizure, and it stands down when the dial is off or Windows asks for reduced motion.
-
 DEEPER
 - A spiral effect now uses the opacity the enhancement asks for instead of your own Spiral opacity setting. Before this, only a ramp looked right.
 - A pink or spiral band no longer gets torn off screen, or dimmed back to your saved setting, by a short overlay effect ending on top of it.
@@ -98,7 +112,6 @@ SPIRALS AND CORNER GIFS
 - Pausing a session hides its corner spiral, and resuming brings it back. It used to keep spinning through every pause.
 
 FIXES
-- Graded Intake's say it items hear you now. They were listening through the browser's speech engine, which never works inside the app, so the item looped 'didn't catch that' until you typed. They go through the same engine as your mantras now, and if speech is off or unavailable they drop straight to typing instead of looping.
 - Dragging the window between two monitors with different display scaling could hard-freeze the whole app, no crash log, Task Manager only. Found and fixed at the root after two months of near misses.
 - The program-day freeze, third attempt, this time at the actual cause. The corner spiral was decoding a 2400x1600 image on every frame forever. It now ships a small one and caps the decode. Presentation day 14 and Takeover day 28 should behave.
 - Randomize spiral could pull images out of your Desktop, Documents or Pictures folder if you had ever picked a spiral from one. It refuses personal folders now and falls back to the Spirals library, and a bad setting heals itself on the next launch.
@@ -126,7 +139,6 @@ IMPROVEMENTS
 - The For You feed got a volume slider instead of a mute button.
 - Resume Takeover On Startup moved next to the Takeover switch instead of hiding in the mantras card.
 - The nav rail marks premium features with a gold star, so a locked door tells you it is locked before you knock.
-- All three daily quests are dealt at once now and sit side by side, each with its own art, its own bar and its own reroll button, instead of arriving one at a time in a single seat.
 - The XP bar grew a quest strip: three daily stamps and a weekly, filling as you go, click to jump to Quests.
 - The XP banking flourish is saved for quests, sessions, lock cards and Bubble Count now, and it got bigger and quieter now that it is rare.
 - Daily quests can no longer deal you ""receive N remote commands"" when you have nobody to receive them from. There is a quest for the giving side instead.
@@ -134,7 +146,7 @@ IMPROVEMENTS
 - Your streak, your streak shields and your quest progress line up across desktop, web and phone.
 
 IN CASE YOU MISSED 6.8 ENTIRELY
-The 6.8 line landed fast, five updates inside three weeks, so if you have not opened CCP since 6.7:
+The 6.8 line landed fast, six updates inside three weeks, so if you have not opened CCP since 6.7:
 - A whole new layout. The tab strip is gone; six doors live on a rail down the left edge with Settings pinned at the bottom. Ctrl+K opens a command palette that jumps you to any setting by name.
 - One account across desktop, web and phone. XP earned on app.cclabs.app or on your phone lands in your level here automatically.
 - Online media everywhere, strictly opt-in. The For You feed goes endless, and flashes, mandatory videos and subliminals can pull fresh content too. Local files stay the default.
