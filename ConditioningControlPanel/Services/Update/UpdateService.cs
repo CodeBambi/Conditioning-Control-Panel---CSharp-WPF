@@ -20,32 +20,121 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.8.4";
+        public const string AppVersion = "6.8.5";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.8.4 - Relapse
+        public const string CurrentPatchNotes = @"v6.8.5 - First Bell
 
-Round three under the same banner. This one is about logins that would not stay logged in, and about an update that broke itself on the way in. Everything below comes from your reports.
+The repair run is over. This one opens a door we have been building behind for a month, and it still brings a stack of fixes from your reports.
 
-THE UPDATE THAT ATE ITSELF
-- If the app stopped opening after you updated to 6.8.3, that one was our fault, and this fixes it. Our own update cleanup was deleting the folder the running app lives out of. It now identifies the live folder exactly instead of guessing at it, and if a core file ever does go missing the app repairs itself and restarts instead of quietly dying with no window.
+THE ARCADEMY OPENS FOR TIER 2
+- There is a school now. Tier 2 gets a new door on the Play tab that opens onto a night-lit campus: ten classrooms down two wings, a timetable that deals you a fresh set of classes every single day, and a bell that rings you in.
+- Each class is a short mini-game built out of what CCP already does to you - sorting, matching, recall, obedience, sinking - and every one of them keeps the flashes, triggers and spirals running while you play it.
+- EMI is the school mascot. She is a little CRT face who follows you around campus, comments on how you are doing, asks you questions, and can be dragged, petted and told to go sit somewhere else.
+- The Records Office keeps your attendance. One punch card per class, one stamp for every day you show up, and a crest when you fill a card.
+- What you earn is spendable: classes pay out Tickets and Tokens, and the Prize Counter on the midway turns them into things.
+- It works on the website and on your phone too, at app.cclabs.app/arcademy, signed in as you.
+- Classes that deal online cards now check every card is alive before the round starts, so you no longer get a hand of striped placeholders where a picture should be.
+- The Arcademy can be opened from the Ctrl+K quick search.
+- The bell now counts down to the same day the timetable uses. It was counting to your local midnight while the school day rolls over on UTC, so a late evening session and the next morning could land on one school day and hand you the same Daily Trigger word twice.
+- The Bugle's comic panel now says why it is empty. It was always described rather than drawn, but a blank frame read as a picture that failed to load.
+- The Arcademy is English-only for now.
+- Losing your subscription now closes a live Arcademy session instead of leaving it running, and switching mods while it is open closes it cleanly, the same way it already did for Down the Rabbit Hole.
+- Fixed a failed Arcademy launch locking the door for the rest of the session. It offers to try again now.
 
-LOGINS THAT STAY LOGGED IN
-- Fixed the login loop behind ""Invalid or missing auth token"". If your Discord and your Patreon ended up as two separate accounts, the app kept swapping between their two logins, so Backup, Export, Remote Control and syncing would keep failing, and logging out only fixed it until the next time. It now refuses the mismatched login instead of adopting it.
-- Backup and Export now retry once after the app repairs your session, instead of showing you a failure for a problem that had just been fixed.
-- Remote Control now tells you when it was your login that got rejected, instead of blaming your internet connection.
+LOCKDOWN IS POSSESSED NOW
+- Lockdown used to be a timed cage and nothing else. The cage is still there as Safeties you control, but now, while a lockdown runs, the app itself starts to misbehave. Buttons drift. Labels melt. Windows dodge your cursor. The companion comes to see what you are going to do about it.
+- Three intensities, from a light touch to the full haunting, plus a photosensitive-safe option. Everything that moves warns you with an ember glow first, so you always know what is happening and why.
+- A lockdown will not run empty any more. If nothing is switched on when it starts, it switches things on for you, escalates, and puts it all back exactly as it was at the end.
+- New Emergency Exit: a way out, if you can clear the mini-game guarding it.
 
-QUESTS
-- Your daily and weekly quest progress no longer gets wiped when you log out and back in. Apologies to everyone who lost a day to this, doubly so because logging out is the advice we kept handing out.
+YOUR COMPANION ANSWERS AGAIN
+- Fixed the Bambi companion falling back to the same few canned lines instead of answering. Her instructions had grown past what the cloud AI accepts, so every request was being rejected before it ever reached her. If you have been getting stock phrases for weeks, this was why.
+- She keeps her memory, the time of day and your recent conversation on calls that used to silently lose all three, and she varies her video and playlist picks properly again.
+- If your companion setup is still too long for cloud AI, she says less instead of nothing, and the app tells you once so you can trim your knowledge base links or pick a shorter personality.
+- Fixed the AI companion quietly using the default mod's personality when a mod shipped none of its own.
+- Mods can carry their own AI personalities now, from the install or from their downloaded content pack. Bark lines, voice lines and personalities all resolve from the same place for every mod, bundled or downloaded.
 
-SMALL THINGS
-- The nav rail now points out the Ctrl+K search palette.
+THE PANIC KEY IS A PANIC KEY
+- One press now stops everything at once. Videos, flashes, bubbles, subliminals, spirals, pink filter, corner GIFs, the companion tube, the mini-game windows and all audio go down in the same press, then the session stops.
+- New setting: Panic stops everything, on by default. Turn it off to get the old step by step panic ladder back exactly as it was.
+- New optional Pause key, unbound by default. Bind it if you liked the old behaviour where the first panic press just parked the video behind a Paused card.
+- Panic no longer leaves your Spiral and Pink Filter switches turned off for later runs. It stops what is on screen, it does not reconfigure the app.
+- A press that closes a mini-game no longer counts toward the double press that quits the app, so a reflexive double tap inside the Arcademy or the Rabbit Hole cannot close CCP on you.
+- One exception, on purpose: if the Ctrl+K quick settings palette is open, Escape still just closes the palette, the way it always has. Press it again for a real panic.
+
+MULTI-MONITOR MANDATORY VIDEO
+- One screen failing no longer kills the clip on every other screen. The monitors that are decoding fine keep playing.
+- Fixed a case where a slow second, third or fourth screen could be shut down by mistake while it was still starting up. Nothing is judged until it has actually been asked to play.
+- A monitor whose video never comes up is now freed instead of holding a black fullscreen window for the rest of the clip. Under a Lock Card, Lockdown or Possession video it deliberately stays covered.
+- If the primary screen stalls it now gets one retry before the clip is skipped, instead of being dropped on the spot.
+- Overlays like the pink filter, spiral, Brain Drain and corner GIFs now sit under the video on their own monitor instead of only on the primary.
+- Mixed-DPI setups: fullscreen video windows now cover each screen exactly instead of overshooting on scaled displays.
+- video-diag.log now records one line per screen with the engine used and how long the first frame took, so multi-monitor reports can finally be diagnosed from the log.
+
+EYE TRACKING
+- Calibrating on a second monitor now lands the gaze where you are actually looking. The overlay was drawing through the primary screen's origin and scale, so anyone who calibrated on another monitor was being judged, and re-running calibration, against a dot drawn somewhere the tracker never claimed.
+- The gaze follower settles about three times faster, dwell dropped from a second to 600ms, and a two-stage zoom refine turns one impossible tiny selection into two easy ones. The Accuracy test probes four heights instead of two.
+- New Quick Recal hotkey, Ctrl+Alt+G: nudges an existing calibration from wherever you are, no need to open the Blink Trainer. It steps aside if you bound that key to Panic or Pause, and refuses to register at all rather than double fire.
+- The chord is taught where you will look for it: the Quick Recal button in Settings, Devices names it in its tooltip, next to the camera start/stop shortcut.
+- The Accuracy test's bubble is taller so the top and bottom probes have somewhere to land.
+
+DOWN THE RABBIT HOLE
+- The screen shake setting finally does something. The dial has been sent to the game since it was added, but nothing in the tube listened. Now the heavies land like a hit and the world rocks under the detonation, the readouts hold still, it never stacks into a seizure, and it stands down when the dial is off or Windows asks for reduced motion.
+
+DEEPER
+- A spiral effect now uses the opacity the enhancement asks for instead of your own Spiral opacity setting. Before this, only a ramp looked right.
+- A pink or spiral band no longer gets torn off screen, or dimmed back to your saved setting, by a short overlay effect ending on top of it.
+- Flashes, subliminal cards and Speak cue cards fired on the last second of a video no longer linger after the video is gone.
+- Fullscreen video in the Deeper player and the Settings browser no longer buries your effects for the rest of the run. Solid-mode flashes and shared-host bubbles are covered now too.
+- Subliminals are instant again when haptics are switched on but no toy is connected. The 1.3s head start is kept only for a device that is actually plugged in.
+
+SPIRALS AND CORNER GIFS
+- Sessions now respect your Corner GIF switch. New Allow session corner GIFs option on the Spiral card, on by default, and turning it off applies to program days too.
+- You can no longer end up with two spirals in the same corner. Whichever one is already there, the other stands down, and it now sorts itself out live in both directions.
+- Pausing a session hides its corner spiral, and resuming brings it back. It used to keep spinning through every pause.
+
+FIXES
+- Graded Intake's say it items hear you now. They were listening through the browser's speech engine, which never works inside the app, so the item looped 'didn't catch that' until you typed. They go through the same engine as your mantras now, and if speech is off or unavailable they drop straight to typing instead of looping.
+- Dragging the window between two monitors with different display scaling could hard-freeze the whole app, no crash log, Task Manager only. Found and fixed at the root after two months of near misses.
+- The program-day freeze, third attempt, this time at the actual cause. The corner spiral was decoding a 2400x1600 image on every frame forever. It now ships a small one and caps the decode. Presentation day 14 and Takeover day 28 should behave.
+- Randomize spiral could pull images out of your Desktop, Documents or Pictures folder if you had ever picked a spiral from one. It refuses personal folders now and falls back to the Spirals library, and a bad setting heals itself on the next launch.
+- Switching your media source back to local now takes effect immediately instead of at the next restart.
+- When premium access lapses, Awareness Mode, She's Listening and Mantra Chant actually stop, instead of running on with the off switch locked behind the paywall.
+- Right-click pops bubbles and dismisses flashes and video attention checks now, everywhere it makes sense. Your left hand can stay where it is.
+- Finishing a daily quest no longer leaves the finished one sitting on screen. The next one rolls in a second and a half later.
+- Media files with no file extension are repaired once per install instead of staying invisible forever.
+- The FREE TODAY box on your dashboard no longer prints the answer on the outside of the box it is about to open.
+- For You niches with only a few dozen clips no longer recycle the same clips at you in silence. The feed says when a niche is out, backs off instead of hammering, and there are 13 curated niche bundles on the picker.
+- Bubble Pop rain stays on the screens you chose instead of spilling onto the others.
+- The ambient bubble XP cap is visible now, so a day that stops paying out looks like a cap and not like a bug.
+- Remote GIFs animate when they arrive as flashes instead of freezing on the first frame.
+- The companion's Effect control switch stays on across restarts. It was being cleared at every launch by an entitlement check that ran before your subscription was known.
+- The chaos sidebar no longer folds itself away while your cursor is still on it, and a leftover auto-hide timer can no longer outlive a run.
+- Scheduler times accept the formats people actually type.
+- The Sissy Hypno clean-up of inherited BambiSleep trigger words could undo itself on the next launch, putting the old words back for good. It sticks the first time now, and the built-in sessions no longer feed BambiSleep trigger words to Sissy Hypno users.
+- Developer test pages no longer ship inside the installer.
+
+IMPROVEMENTS
+- Intensity Ramp got the overhaul the forum has been asking for since July. Beside the old multiplier there is a Range mode: pick a start percent and an end percent, pick a curve, watch the live preview. End below start ramps DOWN, for wind-downs.
+- Brain Drain's two sliders finally say what they do. ""Intensity"" was the audio clip rate the whole time, so it is now ""Audio clip rate"" and ""Screen blur strength"", and the blur no longer washes out at the bottom of its range. The ramp can drive the blur.
+- Do Not Disturb: name your own video players in Settings > Performance and CCP holds its scheduled videos and flashes while one of them is in front of you.
+- Bouncing Text and Subliminals can use any font installed on your machine.
+- The For You feed got a volume slider instead of a mute button.
+- Resume Takeover On Startup moved next to the Takeover switch instead of hiding in the mantras card.
+- The nav rail marks premium features with a gold star, so a locked door tells you it is locked before you knock.
+- All three daily quests are dealt at once now and sit side by side, each with its own art, its own bar and its own reroll button, instead of arriving one at a time in a single seat.
+- The XP bar grew a quest strip: three daily stamps and a weekly, filling as you go, click to jump to Quests.
+- The XP banking flourish is saved for quests, sessions, lock cards and Bubble Count now, and it got bigger and quieter now that it is rare.
+- Daily quests can no longer deal you ""receive N remote commands"" when you have nobody to receive them from. There is a quest for the giving side instead.
+- Pausing a session shows the XP warning with a ""Don't ask me again"" box on it.
+- Your streak, your streak shields and your quest progress line up across desktop, web and phone.
 
 IN CASE YOU MISSED 6.8 ENTIRELY
-The 6.8 line landed fast, four updates inside two weeks, so if you have not opened CCP since 6.7 here is what is waiting for you:
+The 6.8 line landed fast, five updates inside three weeks, so if you have not opened CCP since 6.7:
 - A whole new layout. The tab strip is gone; six doors live on a rail down the left edge with Settings pinned at the bottom. Ctrl+K opens a command palette that jumps you to any setting by name.
 - One account across desktop, web and phone. XP earned on app.cclabs.app or on your phone lands in your level here automatically.
 - Online media everywhere, strictly opt-in. The For You feed goes endless, and flashes, mandatory videos and subliminals can pull fresh content too. Local files stay the default.
@@ -53,12 +142,11 @@ The 6.8 line landed fast, four updates inside two weeks, so if you have not open
 - One premium feature is FREE every single day: the ? box on your dashboard. No trial, no nag, different feature tomorrow.
 - Sessions rebuilt into a color-coded rack with sort, filter and search. Programs got honest day crediting, feasible tasks and graduation badges.
 - Brain Drain is live on the rack, and mods now repaint the entire app the instant you switch.
-- Plus the 6.8.1, 6.8.2 and 6.8.3 hotfix rounds: 50+ community-reported bugs put down, the daily freebie opens at every gate, speech ships with its voice model again, sign-in can no longer die to a cosmetic glow, and Brain Drain finally renders on every machine.
+- Plus the four Relapse hotfix rounds: 60+ community-reported bugs put down, the daily freebie opens at every gate, speech ships with its voice model again, Brain Drain renders on every machine, and logins stay logged in.
 
 Season: Airhead August (The last season!)
 
-Something new is coming on September 1. 🌀
-Stay tuned... :3";
+Something new is coming on September 1. Stay tuned... :3";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
