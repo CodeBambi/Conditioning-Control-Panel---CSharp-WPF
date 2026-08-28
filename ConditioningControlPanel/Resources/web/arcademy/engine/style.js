@@ -269,6 +269,18 @@ img.ae-sub{width:min(38vw,38vh);aspect-ratio:1;object-fit:cover;border-radius:10
 .ae-touch .ae-glitch-rgbsplit{filter:none}
 .ae-touch .ae-glitch-vhsroll{animation:ae-shudder var(--ae-dur,600ms) steps(2,end) 1}
 .ae-touch .ae-burst{box-shadow:none}
+/* THE STILL PLATE (phone fx diet, measured 2026-08-28; util.js plateEl). On
+   touch a url-string spiral wash and a full-bleed gif burst paint the gif's
+   FIRST FRAME into a small canvas instead of running the animated gif, which
+   decoded every frame on the main thread and re-rastered every covered device
+   pixel per frame advance (3.1s of GPU per 8s for one bundled spiral). The
+   wash plate fills its element (the 150vmax square, held still by the rule
+   above) and takes over the slow spin the CSS conic gives up here: a transform
+   on the canvas is compositor-only - no decode, no raster - and it is only
+   worn while the hold is live (sustained.js plateActive), never parked at 0.
+   No will-change: the animation promotes on demand, like the wash opacity. */
+.ae-touch .ae-wash-plate{position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover;pointer-events:none}
+.ae-touch .ae-wash-plate-spin{animation:ae-spin 18s linear infinite}
 /* .ae-mote stays animated on touch ON PURPOSE: ae-float is transform-only
    (compositor-cheap, no re-raster), and the phone cost of the ambient field is
    its NODE COUNT, which the lite ladder now caps (curves.js ambientLite). */
@@ -277,7 +289,7 @@ img.ae-sub{width:min(38vw,38vh);aspect-ratio:1;object-fit:cover;border-radius:10
 @media (prefers-reduced-motion: reduce){
   .ae-layer *{animation-duration:.01ms !important;animation-iteration-count:1 !important;
     transition-duration:.12s !important}
-  .ae-wash-spiral,.ae-crt-live,.ae-mote,.ae-drift-breathe{animation:none !important}
+  .ae-wash-spiral,.ae-wash-plate,.ae-crt-live,.ae-mote,.ae-drift-breathe{animation:none !important}
   .ae-sub,.ae-burst,.ae-rain,.ae-bubble,.ae-stamp{animation:none !important;opacity:var(--ae-alpha,.5) !important}
   /* the seep's animated tells are already retired at the director; this is the
      brace that survives a director nobody wired */

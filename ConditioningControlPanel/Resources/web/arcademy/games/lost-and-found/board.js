@@ -243,6 +243,7 @@ export function signaturePool(rng) {
  * @param {Function} o.rng          the class's seeded rng
  * @param {number} o.drift          0..1 drift dial (period only - see header)
  * @param {boolean} o.lite          coarse pointer / low quality tier
+ * @param {boolean} o.touch         a phone (ctx.platform.isTouch / coarse probe): one video url
  * @param {boolean} o.reduced       reduced motion
  * @param {Function} o.onTileClick  (tile, event) => void
  * @param {Function=} o.onTileHover (tile, event) => void - THE HOVER TELL. The
@@ -257,6 +258,7 @@ export function createBoard(o) {
   const density = Math.max(4, opts.density | 0);
   const reduced = !!opts.reduced;
   const lite = !!opts.lite;
+  const touch = !!opts.touch;
   const say = typeof opts.log === 'function' ? opts.log : () => {};
 
   const mosaic = el('div', 'g-lf-mosaic');
@@ -337,7 +339,7 @@ export function createBoard(o) {
    *  scarcer page resource than an image decoder, and the wrap clones are real
    *  players too. (The 0821 "40% of density" rule shipped ~156 of them.) */
   const videoCap = Math.max(0, Math.min(
-    lite ? PLAYTEST.VIDEO_TILE_CAP_LITE : PLAYTEST.VIDEO_TILE_CAP,
+    touch ? PLAYTEST.VIDEO_TILE_CAP_TOUCH : (lite ? PLAYTEST.VIDEO_TILE_CAP_LITE : PLAYTEST.VIDEO_TILE_CAP),
     Math.floor(PLAYTEST.VIDEO_ELEMENT_CEIL / maxReps),
     liveCap,
   ));

@@ -1620,7 +1620,18 @@ export default {
       box.setAttribute('aria-hidden', 'true');
       if (kind) box.setAttribute('data-media', kind);
       try {
-        const m = mediaElFor(url);
+        /* THE STILL THUMB (phone fx diet, measured 2026-08-28): a spiral
+         * option's face on touch is the gif's first frame in a small canvas
+         * (spirals.js spiralStillThumb), not the animated <img> - three 500px
+         * gifs decoding behind the question were a third of what held the
+         * phone profile at 33fps. Same seam as the montage's coarse grid
+         * (ctx.platform.isTouch); the loom's data-url thumbs, every other
+         * face, and desktop keep mediaElFor byte for byte. */
+        const touch = !!(ctx.platform && ctx.platform.isTouch);
+        const still = (touch && kind === 'spiral' && typeof url === 'string' && url.indexOf('data:') !== 0
+          && spirals && typeof spirals.spiralStillThumb === 'function')
+          ? spirals.spiralStillThumb(url, 192) : null;
+        const m = still || mediaElFor(url);
         if (m) box.appendChild(m);
       } catch (e) { /* a broken preview is an empty box, never a dead class */ }
       return box;

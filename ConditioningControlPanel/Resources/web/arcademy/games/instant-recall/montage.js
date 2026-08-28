@@ -122,6 +122,12 @@ export const MONTAGE = Object.freeze({
   /** <video>: 2+ playing lock the page to 30Hz. Gifs carry this wall. */
   VIDEO_TILE_CAP: 4,
   VIDEO_TILE_CAP_LITE: 2,
+  /** Touch (phone fx diet, measured 2026-08-28): the LITE two held the
+   *  4x-throttled phone profile at p95 33ms - the 30Hz lock, in the numbers -
+   *  and a phone gets ONE decoration decoder everywhere else in the school
+   *  (engine VIDEO_BUDGET_TOUCH). Read on `coarse`, the same seam the grid
+   *  solves on; desktop keeps its two rungs untouched. */
+  VIDEO_TILE_CAP_TOUCH: 1,
 
   /** THE DWELL: how long a tile holds a face, band 0 (cold) -> band 1 (dense).
    *  Reduced motion gets a longer, plainer beat and never a live loop. */
@@ -466,7 +472,7 @@ export function createMontage(o = {}) {
       Math.max(MONTAGE.LIVE_LOOP_MIN, Math.round(count * MONTAGE.LIVE_LOOP_SHARE)),
     ));
   const videoCap = Math.max(0, Math.min(
-    lite ? MONTAGE.VIDEO_TILE_CAP_LITE : MONTAGE.VIDEO_TILE_CAP,
+    coarse ? MONTAGE.VIDEO_TILE_CAP_TOUCH : (lite ? MONTAGE.VIDEO_TILE_CAP_LITE : MONTAGE.VIDEO_TILE_CAP),
     liveCap,
   ));
 

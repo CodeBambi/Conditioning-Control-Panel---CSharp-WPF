@@ -82,6 +82,76 @@ function forgetVideo(node) {
   liveVideos = liveVideos > 0 ? liveVideos - 1 : 0;
 }
 
+/* ---- THE STILL PLATE (phone fx diet, measured 2026-08-28) -----------------
+ * An animated gif that covers the stage is the one node a phone cannot pay
+ * for. Blink decodes every gif frame on the renderer main thread at native
+ * size and then re-rasters every device pixel the image covers, per frame
+ * advance: at DPR 3 a 390x844 stage is ~3 Mpx of raster per gif frame and the
+ * 150vmax spiral square is ~14 Mpx. The 4x-throttled phone profile put one
+ * bundled spiral gif (sp5, 500x375, 60 frames) at 3.1s of GPU-process time per
+ * 8s where the CSS conic or the live loom cost 23-126ms, and a full-bleed gif
+ * burst at 700ms GPU + 340ms decode per 8s. The scale trick (a half-size box
+ * under transform:scale(2)) does NOT help - Chrome rasters at the ideal scale.
+ *
+ * The plate is the one technique that removes BOTH costs: the gif's FIRST
+ * FRAME drawn once into a small canvas (long side PLATE_BACK_LONG, or the
+ * gif's own size when smaller) that the stylesheet stretches over the stage.
+ * No decoder runs, no per-frame raster, one texture. Read by the touch rung
+ * only (sustained.js and oneshots.js branch on html.ae-touch, armed by
+ * core/device.js from the arc-mobile decision); desktop keeps the animated
+ * gif byte for byte. A plate that never loads is a transparent canvas over the
+ * element's own backing - a dimmer wash, never a hole. */
+export const PLATE_BACK_LONG = 640;
+/** A url the plate stands in for: a .gif is decoded frame by frame, still or not. */
+export const GIF_URL_RE = /\.gif(\?|#|$)/i;
+export const isGifUrl = (u) => typeof u === 'string' && GIF_URL_RE.test(u);
+/**
+ * @param {string} url
+ * @param {string} [cls]
+ * @param {{backLong?:number, square?:boolean, onReady?:Function}} [o]
+ *   square: a rotating plate must never bare a corner, so it is cover-cropped
+ *   to a square; otherwise the canvas keeps the image's aspect and the
+ *   stylesheet's object-fit does the covering.
+ * @returns {HTMLCanvasElement|null} null without a DOM (callers fall back to mediaEl)
+ */
+export function plateEl(url, cls, o = {}) {
+  if (!hasDom() || typeof Image !== 'function' || typeof url !== 'string' || !url) return null;
+  let c = null;
+  try {
+    c = document.createElement('canvas');
+    if (!c || typeof c.getContext !== 'function') return null;
+  } catch { return null; }
+  const cap = Math.max(64, (o.backLong | 0) || PLATE_BACK_LONG);
+  const square = o.square === true;
+  c.width = cap; c.height = cap;
+  if (cls) c.className = cls;
+  try { c.__aePlate = true; } catch { /* ignore */ }
+  const src = new Image();
+  try { src.decoding = 'async'; } catch { /* ignore */ }
+  src.onload = () => {
+    try {
+      const nw = src.naturalWidth || cap, nh = src.naturalHeight || cap;
+      const long = Math.min(cap, Math.max(nw, nh));
+      let w, h;
+      if (square) { w = long; h = long; }
+      else if (nw >= nh) { w = long; h = Math.max(1, Math.round(long * nh / nw)); }
+      else { h = long; w = Math.max(1, Math.round(long * nw / nh)); }
+      c.width = w; c.height = h;
+      const g = c.getContext('2d');
+      if (!g) return;
+      // a detached Image draws its FIRST frame; cover so nothing letterboxes
+      const s = Math.max(w / nw, h / nh);
+      const dw = nw * s, dh = nh * s;
+      g.drawImage(src, (w - dw) / 2, (h - dh) / 2, dw, dh);
+      try { c.__aePlateReady = true; } catch { /* ignore */ }
+      if (typeof o.onReady === 'function') o.onReady(c);
+    } catch { /* a plate that cannot draw stays transparent; never a throw */ }
+  };
+  src.src = url;
+  try { c.__aePlateSrc = src; } catch { /* ignore */ }
+  return c;
+}
+
 /** The media node for a pool url: <img> for stills/gifs, a muted, looping,
  *  inline-autoplaying <video> for mp4/webm. Same class, same `src`, same
  *  object-fit rules - callers never branch. Returns null with no DOM; never

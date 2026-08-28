@@ -246,6 +246,42 @@ export function preloadSpirals(urls) {
   return n;
 }
 
+/**
+ * THE STILL THUMB (phone fx diet, measured 2026-08-28). A spiral option's
+ * preview face on touch: the gif's FIRST FRAME drawn once into a small square
+ * canvas, in place of the animated <img> the montage mints. Three 500px spiral
+ * gifs decoding behind a SPIRAL question (frame by frame, on the main thread)
+ * were a third of what held the 4x-throttled phone profile at 33fps in this
+ * class; a still face reads the same spiral - the answer is the shape, not the
+ * motion. Desktop and the loom's data-url thumbs never come here.
+ * @param {string} url
+ * @param {number} [size=192]  canvas backing in px (a face is ~96-160 css px)
+ * @returns {HTMLCanvasElement|null} null without a DOM; the caller keeps its <img>
+ */
+export function spiralStillThumb(url, size = 192) {
+  if (typeof document === 'undefined' || typeof Image !== 'function') return null;
+  if (typeof url !== 'string' || !url) return null;
+  try {
+    const c = document.createElement('canvas');
+    if (!c || typeof c.getContext !== 'function') return null;
+    const s = Math.max(32, size | 0);
+    c.width = s; c.height = s; c.className = 'g-ir-media';
+    const img = new Image();
+    try { img.decoding = 'async'; } catch (e) { /* not everywhere */ }
+    img.onload = () => {
+      try {
+        const g = c.getContext('2d');
+        if (!g) return;
+        const nw = img.naturalWidth || s, nh = img.naturalHeight || s;
+        const k = Math.max(s / nw, s / nh);   // cover, centred - a detached Image draws frame 1
+        g.drawImage(img, (s - nw * k) / 2, (s - nh * k) / 2, nw * k, nh * k);
+      } catch (e) { /* a blank face, never a dead class */ }
+    };
+    img.src = url;
+    return c;
+  } catch (e) { return null; }
+}
+
 /* ============================================================================
  * THE GENERATED-LOOM HELPERS (2026-08-25)
  * ==========================================================================*/
@@ -354,6 +390,6 @@ export function loomThumbDataUrl(params, size = 96) {
 }
 
 export default {
-  SPIRAL_KIN, kinOf, buildSpiralSet, spiralDecoys, preloadSpirals,
+  SPIRAL_KIN, kinOf, buildSpiralSet, spiralDecoys, preloadSpirals, spiralStillThumb,
   loomRowsOf, loomDecoyParams, loomThumbDataUrl,
 };
