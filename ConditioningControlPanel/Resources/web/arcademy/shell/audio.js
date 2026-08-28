@@ -123,6 +123,33 @@
  * The hook is a courtesy, not a contract - a caller that waits on it must still
  * carry its own cap (boot.js does), because a host with no consumer at all on
  * the `arcademy-sfx` bus will never answer anything.
+ *
+ * THE POOL, iOS (owner report, 2026-08-28: the bells ring on the phone, the
+ * thirteen soundtracks never do). iOS Safari's autoplay rule is PER ELEMENT,
+ * not per page: an HTMLAudioElement minted after the first tap still refuses
+ * `play()` with NotAllowedError unless the call itself runs inside a gesture
+ * handler, and this file swallows that rejection (a refused clip is not an
+ * error). So every cue on the ELEMENT path - the soundtracks, the five beds,
+ * the thirty-six PA lines, everything in NEVER_BUFFERED - was silence on a
+ * phone, while the pre-decoded one-shots, riding the already-unlocked
+ * AudioContext, were fine. The only survivor was the campus theme, and only
+ * when the knock replayed its parked hold from inside pointerdown.
+ * So the elements are MINTED IN THE GESTURE instead: POOL_SIZE of them,
+ * built in `onGesture` with a two-millisecond silent WAV as their src and
+ * played once right there, which is what buys each one its unlock. `playClip`
+ * borrows one, `killClip` hands it back.
+ * TWO THINGS MAKE A POOLED ELEMENT DIFFERENT FROM A MINTED ONE. Its
+ * MediaElementSource is created ONCE and kept forever, because a second
+ * `createMediaElementSource` on the same element throws InvalidStateError -
+ * that one browser law is the whole reason the old path could never reuse
+ * anything - so teardown disconnects the node from the gain and leaves the
+ * element wired to the node. And nothing may be awaited between
+ * `ensureContext()` and those `play()` calls: a promise hop out of the gesture
+ * task is exactly the thing iOS is counting.
+ * A CLIP THAT FINDS THE POOL DRY falls back to `new Audio()`, and on a phone
+ * back to being refused. That is the accepted ceiling: six is already the
+ * mixer's own voice cap (the two spares only cover fade-out overlap), and a
+ * pool that grows on demand grows outside a gesture, which buys nothing.
  * ==========================================================================*/
 
 const BUSES = ['fx', 'voice', 'tutorial', 'drops', 'music'];
@@ -528,6 +555,18 @@ const PA_REQ_MAX_MS = 12000;
 const isPaName = (n) => /^pa_\d\d$/.test(String(n || ''));
 const CLIP_FADE_MS = 180;
 const CLIP_VOICES = 6;
+/** THE UNLOCKED ELEMENT POOL (header: THE POOL, iOS). One element per voice
+ *  plus two, because a killed clip keeps its element through its fade-out
+ *  (up to CLIP_FADE_MS) before handing it back, so a room change - the old
+ *  theme fading while the new one starts - or a voice-cap eviction has more
+ *  elements BORROWED than clips LIVE for a beat. Two spares cover that beat;
+ *  more would be elements nobody can reach. */
+const POOL_SIZE = CLIP_VOICES + 2;
+/** Sixteen samples of 8-bit silence at 8kHz: two milliseconds, a real decodable
+ *  WAV, and no fetch to wait on. Its whole job is to be `play()`ed once inside
+ *  the gesture so the element it belongs to is unlocked for the session; the
+ *  first real cue overwrites `src` and nobody ever hears this. */
+const SILENT_WAV = 'data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YRAAAACAgICAgICAgICAgICAgICA';
 /** The headroom a recipe gets from its own `gain`, given to clips too, so a
  *  clip at level L is never louder than an oscillator at level L. */
 const CLIP_GAIN = 0.5;
@@ -801,6 +840,49 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
    *  have stopped it. The desktop host promises autoplay and never lands here. */
   const pendingHolds = new Map();
 
+  /* ---- THE POOL (header: THE POOL, iOS) --------------------------------- */
+  /** `{el, node, busy}` per voice. Built once, in a gesture, never rebuilt. */
+  const pool = [];
+  let poolBuilt = false;
+
+  /** Called from `onGesture` and from nowhere else, SYNCHRONOUSLY inside the
+   *  gesture task: every `play()` below has to be reachable from the event the
+   *  browser is still dispatching, so there is no `await` and no promise hop
+   *  between `ensureContext()` and this. No context means no pool at all - an
+   *  element that cannot be routed through the graph is not worth unlocking. */
+  function buildPool() {
+    if (poolBuilt || !ac || typeof Audio !== 'function') return;
+    poolBuilt = true;
+    for (let i = 0; i < POOL_SIZE; i += 1) {
+      try {
+        const el = new Audio();
+        el.crossOrigin = 'anonymous';
+        el.preload = 'auto';
+        el.src = SILENT_WAV;
+        // ONCE PER ELEMENT, FOR THE LIFE OF THE ELEMENT. A second call on the
+        // same element throws InvalidStateError, which is why the old path
+        // minted a new one every fire. Left unconnected until a clip takes it.
+        const node = ac.createMediaElementSource(el);
+        const p = el.play();
+        if (p && typeof p.then === 'function') {
+          p.then(() => { try { el.pause(); } catch { /* ignore */ } }, () => {
+            /* A refusal here costs nothing: the element is simply an ordinary
+             * element, exactly as every element was before this wave. A host
+             * that promised autoplay may not even be in a gesture. */
+          });
+        }
+        pool.push({ el, node, busy: false });
+      } catch { /* a short pool is a working pool - it never throws */ }
+    }
+    say('[audio] element pool ' + pool.length + '/' + POOL_SIZE);
+  }
+
+  /** The first free element, marked busy, or null when every one is out. */
+  function takePooled() {
+    for (const pr of pool) { if (pr.busy === false) { pr.busy = true; return pr; } }
+    return null;
+  }
+
   function killClip(rec, fadeMs) {
     if (!rec) return;
     // Every teardown road passes through here, so this is the one place that can
@@ -821,8 +903,10 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
         return;
       }
       try { rec.el.pause(); } catch { /* ignore */ }
-      // Releasing the src lets the decoder go; a MediaElementSource cannot be
-      // re-created for the same element, so the element is never reused.
+      // Releasing the src lets the decoder go. A MediaElementSource cannot be
+      // re-created for the same element, so a MINTED element is never reused -
+      // but a POOLED one keeps the node it was born with and goes back to the
+      // pool at the bottom of this function (header: THE POOL, iOS).
       // REMOVE THE ATTRIBUTE, never `src = ''`: an EMPTY string is still a
       // resource the element goes and tries to select, so it fails and fires an
       // `error` at us on every ordinary teardown. Attribute gone + load() aborts
@@ -830,6 +914,22 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
       try { rec.el.removeAttribute('src'); rec.el.load(); } catch { /* ignore */ }
       try { if (rec.node) rec.node.disconnect(); } catch { /* ignore */ }
       try { if (rec.gain) rec.gain.disconnect(); } catch { /* ignore */ }
+      // HANDING A POOLED ELEMENT BACK. The node is NOT released - it belongs to
+      // the element for as long as the page lives - but the listeners are, and
+      // that is the only thing about a reused element that could pile up:
+      // `ended`/`error` are added per fire, so a hundred fires on one element
+      // would otherwise be a hundred handlers deep. (The `clips.get(key) !== rec`
+      // guards inside them stay, as belt and braces.) Loop is cleared because
+      // the next borrower may be a one-shot.
+      if (rec.pooled) {
+        try { rec.el.loop = false; } catch { /* ignore */ }
+        try { if (rec.onEnded) rec.el.removeEventListener('ended', rec.onEnded); } catch { /* ignore */ }
+        try { if (rec.onError) rec.el.removeEventListener('error', rec.onError); } catch { /* ignore */ }
+        rec.pooled.busy = false;
+        // Forgotten by the record as well, so a second teardown on the same
+        // record can never free an element a later clip has already borrowed.
+        rec.pooled = null;
+      }
     };
     if (fade > 0 && ac && rec.gain) {
       try {
@@ -870,15 +970,31 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
       killClip(rec, 60);
     }
 
-    let el;
-    try {
-      el = new Audio();
-      // The ccp.* origins are mapped CORS-clean, which is what lets the element
-      // feed a WebAudio graph at all; a tainted stream would only play direct.
-      el.crossOrigin = 'anonymous';
-      el.preload = 'auto';
-      el.src = url;
-    } catch { return false; }
+    // A POOLED ELEMENT FIRST (header: THE POOL, iOS). It was unlocked inside a
+    // gesture, so on a phone it is the only kind of element that will actually
+    // play; setting `src` starts the load exactly as a fresh one would.
+    let pooled = takePooled();
+    let el = null;
+    if (pooled) {
+      try {
+        el = pooled.el;
+        el.loop = hold;
+        el.src = url;
+      } catch { pooled.busy = false; pooled = null; el = null; }
+    }
+    if (!el) {
+      // THE POOL IS DRY: mint one, the way this path always did. On a phone
+      // that clip will be refused, and that is the accepted ceiling - six is
+      // the mixer's own voice cap and the pool carries two spares for fades.
+      try {
+        el = new Audio();
+        // The ccp.* origins are mapped CORS-clean, which is what lets the element
+        // feed a WebAudio graph at all; a tainted stream would only play direct.
+        el.crossOrigin = 'anonymous';
+        el.preload = 'auto';
+        el.src = url;
+      } catch { return false; }
+    }
 
     // Asked-for time is honoured up to CLIP_REQ_MAX_MS; silence means the
     // 1.2s default. (The old Math.min(CLIP_MAX_MS, asked) clamped every
@@ -887,7 +1003,12 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
     const reqCap = isPaName(sampleName) ? PA_REQ_MAX_MS : CLIP_REQ_MAX_MS;
     const maxMs = Math.max(80, askedMs > 0 ? Math.min(askedMs, reqCap) : CLIP_MAX_MS);
     const fadeMs = Math.max(0, Math.min(maxMs / 2, Number(d.fadeMs) || CLIP_FADE_MS));
-    const rec = { el, src: null, gain: null, node: null, timer: 0, settle: settle || null, hold };
+    const rec = {
+      el, src: null, gain: null, node: null, timer: 0, settle: settle || null, hold,
+      // The pool record this fire borrowed (null for a minted element) and the
+      // two listeners, kept so killClip can take both back off it.
+      pooled: pooled || null, onEnded: null, onError: null,
+    };
     if (hold) { try { el.loop = true; } catch { /* ignore */ } }
     // The per-name trim rides the element path too, so a build that cannot
     // pre-decode (or a bed, which never does) is not the loud one.
@@ -906,7 +1027,10 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
       } else {
         g.gain.value = target;
       }
-      const node = ac.createMediaElementSource(el);
+      // A POOLED ELEMENT ALREADY HAS ITS SOURCE NODE and asking for a second
+      // one would throw InvalidStateError, so we route the node it was born
+      // with; only a minted element mints a node.
+      const node = pooled ? pooled.node : ac.createMediaElementSource(el);
       node.connect(g);
       voiceOut(bus, g);
       rec.gain = g;
@@ -933,36 +1057,38 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
         killClip(rec, fadeMs);
       }, maxMs);
     }
-    try {
-      el.addEventListener('ended', () => {
-        if (clips.get(key) !== rec) return;
-        clips.delete(key);
-        if (rec.settle) rec.settle('ended');
-        killClip(rec, 0);
-      });
-    } catch { /* ignore */ }
-    try {
-      el.addEventListener('error', () => {
-        // STILL IN THE MAP IS WHAT MAKES THIS A VERDICT ON THE FILE. Every
-        // legitimate teardown - the maxMs timer, `ended`, a re-fire on the same
-        // key, the voice-cap eviction, stopAllClips - deletes the record BEFORE
-        // it calls killClip, and killClip releases the src; a release used to
-        // fire a spurious `error` here (and, once, struck a perfectly good
-        // sample off `available` a second after its one and only play). So that
-        // ORDERING is load-bearing: a teardown path that kills first and deletes
-        // after would look exactly like a broken file. Kill the event where it
-        // is not ours and the rest of this handler reads as it always did.
-        if (clips.get(key) !== rec) return;
-        clips.delete(key);
-        if (rec.settle) rec.settle('error');
-        killClip(rec, 0);
-        // The file the host promised is not playable. Take the name back rather
-        // than spending a decoder on it once a beat for the rest of the night;
-        // from the next cue on it is a recipe again (or, for the sample-only
-        // pair, honest silence).
-        strikeSample(sampleName);
-      });
-    } catch { /* ignore */ }
+    // NAMED, AND KEPT ON THE RECORD, because on a pooled element these are the
+    // one thing that would accumulate across fires (killClip takes them off).
+    rec.onEnded = () => {
+      if (clips.get(key) !== rec) return;
+      clips.delete(key);
+      if (rec.settle) rec.settle('ended');
+      killClip(rec, 0);
+    };
+    rec.onError = () => {
+      // STILL IN THE MAP IS WHAT MAKES THIS A VERDICT ON THE FILE. Every
+      // legitimate teardown - the maxMs timer, `ended`, a re-fire on the same
+      // key, the voice-cap eviction, stopAllClips - deletes the record BEFORE
+      // it calls killClip, and killClip releases the src; a release used to
+      // fire a spurious `error` here (and, once, struck a perfectly good
+      // sample off `available` a second after its one and only play). So that
+      // ORDERING is load-bearing: a teardown path that kills first and deletes
+      // after would look exactly like a broken file. Kill the event where it
+      // is not ours and the rest of this handler reads as it always did. (A
+      // pooled element that errors goes back to the pool like any other
+      // teardown - killClip is the only road out either way.)
+      if (clips.get(key) !== rec) return;
+      clips.delete(key);
+      if (rec.settle) rec.settle('error');
+      killClip(rec, 0);
+      // The file the host promised is not playable. Take the name back rather
+      // than spending a decoder on it once a beat for the rest of the night;
+      // from the next cue on it is a recipe again (or, for the sample-only
+      // pair, honest silence).
+      strikeSample(sampleName);
+    };
+    try { el.addEventListener('ended', rec.onEnded); } catch { /* ignore */ }
+    try { el.addEventListener('error', rec.onError); } catch { /* ignore */ }
 
     try {
       const p = el.play();
@@ -1302,6 +1428,12 @@ export function createAudio({ init, bridge, log, autoplayOk, brassBell } = {}) {
     gestured = true;
     if (first || !ac) ensureContext();
     if (ac && ac.state === 'suspended' && typeof ac.resume === 'function') { try { ac.resume(); } catch { /* ignore */ } }
+    // THE ELEMENTS ARE UNLOCKED HERE OR THEY ARE NEVER UNLOCKED (header: THE
+    // POOL, iOS). Inside this call, before the holds below replay through it -
+    // the campus theme is the first thing that borrows one - and with nothing
+    // awaited in between, because iOS only honours a `play()` the gesture task
+    // can still be seen from.
+    buildPool();
     // The rooms that were entered before the first touch start now, in the
     // order they were asked for. Cleared BEFORE replaying so a hold that
     // somehow lands back here cannot loop.
