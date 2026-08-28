@@ -723,12 +723,23 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * in (shell/mail.css, and the first-run standoff in widget.js is named after
    * it). A tap eaten by a mascot is a tap eaten by a mascot either way. */
   const KEEP_OFF_SEL = 'g.campus-room.facility, .arc-mailchip';
+  /* ...and on a PHONE, the two bits of campus chrome that share her band: the
+   * hint line (bottom, over the folded ID tag - upright campus re-homes it) and
+   * the folded plaque on the spine. Desktop keeps the doors-only list on purpose
+   * (the hint is inert there and folding it in only drags her over the Lecture
+   * Hall); on a 390px glass she covers the hint with her whole body. Only the
+   * COLLAPSED plaque: expanded, the wrap IS the full-screen scrim (styles.css
+   * UPRIGHT CAMPUS B) and a rect the size of the viewport has no way out, which
+   * the rule would answer by leaving her put - harmless, but a wasted turn. Read
+   * per call, never at mount: the plaque re-homes on every orientation flip. */
+  const KEEP_OFF_SEL_PHONE = KEEP_OFF_SEL + ', .campus-hint, .campus-boardwrap.collapsed';
+  const onPhone = () => { try { return document.documentElement.classList.contains('arc-mobile'); } catch (e) { return false; } };
   /** Everything on the quad she may not stand on, in viewport px. [] off-campus. */
   function campusDoorRects() {
     if (screen !== 'board' || !campus || !campus.root) return [];
     const out = [];
     try {
-      const nodes = campus.root.querySelectorAll(KEEP_OFF_SEL);
+      const nodes = campus.root.querySelectorAll(onPhone() ? KEEP_OFF_SEL_PHONE : KEEP_OFF_SEL);
       for (const n of nodes) {
         const b = n.getBoundingClientRect ? n.getBoundingClientRect() : null;
         if (b && b.width > 0 && b.height > 0) out.push(b);
