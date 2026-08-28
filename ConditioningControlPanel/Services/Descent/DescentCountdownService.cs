@@ -121,11 +121,14 @@ namespace ConditioningControlPanel.Services.Descent
         /// </summary>
         internal static readonly TimeSpan DimHoldPastZero = TimeSpan.FromHours(12);
 
-        /// <summary>Coarse cadence. Thirty seconds is invisible on a day counter and costs nothing.</summary>
-        private static readonly TimeSpan SlowTick = TimeSpan.FromSeconds(30);
-
-        /// <summary>Fine cadence, inside the final hour, where seconds are the whole point.</summary>
-        private static readonly TimeSpan FastTick = TimeSpan.FromSeconds(1);
+        /// <summary>
+        /// The one cadence, at every range. It has to be one second even out at the day counter,
+        /// because <see cref="DescentFuseCopy.TMinus"/> renders SECONDS in every one of its formats,
+        /// <c>2d 07:14:03</c> as much as <c>09:59</c>. A coarser cadence out there is not "free
+        /// on a day counter": it freezes the visible seconds digit and then jumps it, which is
+        /// exactly what the rail chip, the header tooltip and the corner readout were doing.
+        /// </summary>
+        private static readonly TimeSpan TickEvery = TimeSpan.FromSeconds(1);
 
         private const string ConfigEndpoint = "https://codebambi-proxy.vercel.app/config/descent-countdown";
 
@@ -136,7 +139,6 @@ namespace ConditioningControlPanel.Services.Descent
         private readonly HashSet<DescentFusePhase> _spokenPhases = new();
 
         private DispatcherTimer? _timer;
-        private bool _fastCadence;
         private bool _started;
         private bool _disposed;
         private bool _zeroRaised;
@@ -156,7 +158,7 @@ namespace ConditioningControlPanel.Services.Descent
         public event EventHandler<DescentFusePhaseChangedEventArgs>? PhaseChanged;
 
         /// <summary>
-        /// Every tick, with the time left. 30s cadence, 1s inside the final hour. Carries
+        /// Every tick, with the time left. One second, at every range. Carries
         /// <see cref="TimeSpan.Zero"/> at and after the instant — never a negative span, so a
         /// readout cannot render a minus sign by accident.
         /// </summary>
@@ -429,7 +431,6 @@ namespace ConditioningControlPanel.Services.Descent
             {
                 _timer?.Stop();
                 _timer = null;
-                _fastCadence = false;
                 VigilCount = null;
                 _lastConfigFetchUtc = DateTime.MinValue;
             }
@@ -444,22 +445,14 @@ namespace ConditioningControlPanel.Services.Descent
             var dispatcher = Application.Current?.Dispatcher;
             if (dispatcher is null || dispatcher.HasShutdownStarted) return;
 
-            var wantFast = (Remaining ?? TimeSpan.MaxValue) <= VigilAt;
+            if (_timer != null) return;   // one cadence at every range: nothing to re-arm
 
-            if (_timer != null)
-            {
-                if (_fastCadence == wantFast) return;   // already at the right cadence
-                _timer.Stop();
-                _timer = null;
-            }
-
-            _fastCadence = wantFast;
             // Normal, not Background (0825 F7): a running session's flash bursts and overlays
             // starve Background ticks, which stutters the one-second readout and lets zero land
             // seconds late. Normal is what the rest of the app's user-visible timers use.
             _timer = new DispatcherTimer(DispatcherPriority.Normal, dispatcher)
             {
-                Interval = wantFast ? FastTick : SlowTick
+                Interval = TickEvery
             };
             _timer.Tick += OnTimerTick;
             _timer.Start();
@@ -484,8 +477,17 @@ namespace ConditioningControlPanel.Services.Descent
 
                 var remaining = Remaining ?? TimeSpan.Zero;
 
-                // Cadence before events: crossing into the final hour should tighten the clock on
-                // the very tick that noticed, not one slow tick later.
+                // Re-align to the wall-clock second. TMinus TRUNCATES, so the digit turns over when
+                // `remaining` crosses an integer second; a fixed 1000 ms DispatcherTimer fires at >= its
+                // interval and slowly slides off that boundary until a second is visibly skipped.
+                if (_timer != null && remaining > TimeSpan.Zero)
+                {
+                    var ms = remaining.Milliseconds;
+                    _timer.Interval = TimeSpan.FromMilliseconds(ms <= 0 ? 1000 : ms);
+                }
+
+                // Keeps the clock armed across a re-entry that found it torn down. A no-op while the
+                // timer exists, which is the ordinary case.
                 ArmTimer();
 
                 AnnouncePhase(force: false);
