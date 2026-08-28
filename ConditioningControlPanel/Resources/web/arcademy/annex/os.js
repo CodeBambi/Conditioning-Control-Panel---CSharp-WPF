@@ -155,6 +155,18 @@ export function createAnnexOs(opts) {
     } catch (e) { /* sound is decoration */ }
   }
 
+  /** cams.js's rung, both tests, copied for the same reason sfx was: the OS
+   *  may not slide a card into a slot for a player who asked the campus to
+   *  hold still. `lite` is the host's own word for the same request. */
+  function stillMode() {
+    if (lite) return true;
+    try {
+      if (typeof matchMedia === 'function'
+        && matchMedia('(prefers-reduced-motion: reduce)').matches) return true;
+    } catch (e) { /* noop */ }
+    try { return doc.documentElement.classList.contains('arc-reduced'); } catch (e) { return false; }
+  }
+
   function el(tag, cls, text) {
     const n = doc.createElement(tag);
     if (cls) n.className = cls;
@@ -381,7 +393,7 @@ export function createAnnexOs(opts) {
   const SPAWN = Object.freeze({
     files: [90, 20, 730, 452],
     registry: [190, 46, 480, 424],   /* +the figure, so the notes still fit */
-    search: [220, 44, 440, 350],
+    search: [220, 30, 440, 448],   /* +the reader and M's longer slip, no scroll */
     term: [170, 90, 470, 290],
     bin: [220, 120, 430, 300],
   });
@@ -1079,6 +1091,115 @@ export function createAnnexOs(opts) {
     form.appendChild(f1); form.appendChild(f2); form.appendChild(go); form.appendChild(err);
     w.body.appendChild(form);
 
+    /* THE CARD READER. The pair is printed on the intake sheet in the FIELD
+     * DATA binder and some players never find the binder, so the reader takes
+     * the card they are already carrying: the SAME two values, typed into the
+     * SAME two fields, opening the file through the SAME attempt(). It reads
+     * nothing the page was not already handed - if the host sent no code and
+     * no password there is no card to insert and no reader on the panel. */
+    if (subject.code && subject.password) {
+      const reader = el('div', 'aos-reader');
+      reader.setAttribute('role', 'group');
+      reader.setAttribute('aria-label', t('annex_os_reader', 'card reader'));
+      const slot = el('div', 'aos-reader-slot');
+      slot.setAttribute('aria-hidden', 'true');
+      const led = el('span', 'aos-reader-led');
+      slot.appendChild(led);
+      slot.appendChild(el('span', 'aos-reader-slit'));
+      const side = el('div', 'aos-reader-side');
+      const cap = el('span', 'aos-reader-lab', t('annex_os_reader', 'card reader'));
+      cap.setAttribute('aria-hidden', 'true'); /* the group already says it */
+      const readerBtn = el('button', 'aos-btn aos-reader-btn',
+        t('annex_os_badge', 'insert student ID'));
+      side.appendChild(cap);
+      side.appendChild(readerBtn);
+      reader.appendChild(slot);
+      reader.appendChild(side);
+      form.insertBefore(reader, go);
+
+      const idleLabel = readerBtn.textContent;
+      let inserting = false;
+
+      /* the card: 54x34 of navy stock, a pale photo square, two ruled lines.
+       * NO NAME. The OS holds no profile and does not invent one. */
+      function buildCard() {
+        const c = el('div', 'aos-card');
+        c.appendChild(el('span', 'aos-card-photo'));
+        const lines = el('span', 'aos-card-lines');
+        lines.appendChild(el('span', 'aos-card-line'));
+        lines.appendChild(el('span', 'aos-card-line is-short'));
+        c.appendChild(lines);
+        return c;
+      }
+
+      /* every timer below asks this first. later() already refuses a dead OS;
+       * this catches the narrower case of the window closed mid-insert, whose
+       * form is detached but whose OS is very much alive. */
+      function alive() { return !dead && form.isConnected; }
+
+      function release() {
+        inserting = false;
+        readerBtn.disabled = false;
+        readerBtn.textContent = idleLabel;
+      }
+
+      /* attempt() is the manual path, unchanged: it punches p3 and paints the
+       * live file exactly as a hand-typed pair does. */
+      function finish() {
+        if (!alive()) return;
+        release();
+        attempt();
+      }
+
+      function insert() {
+        if (inserting) return;
+        inserting = true;
+        readerBtn.disabled = true;
+        readerBtn.textContent = t('annex_os_reading', 'reading card...');
+        code.value = '';
+        pw.value = '';
+        err.textContent = '';
+        sfx('paper', 0.2);
+
+        if (stillMode()) {
+          led.classList.add('is-on');
+          later(() => {
+            if (!alive()) return;
+            code.value = subject.code;
+            pw.value = subject.password;
+            finish();
+          }, 120);
+          return;
+        }
+
+        const card = buildCard();
+        slot.appendChild(card);
+        try { void card.offsetHeight; } catch (e) { /* layout flush */ }
+        card.classList.add('is-in');
+        later(() => { if (alive()) led.classList.add('is-on'); }, 300);
+
+        /* the code types itself, the password lands in one piece: it is a
+         * type=password field and a dot appearing per keystroke reads as
+         * noise, not as a machine reading a card. */
+        const typed = String(subject.code);
+        let i = 0;
+        function typeNext() {
+          if (!alive()) return;
+          i += 1;
+          code.value = typed.slice(0, i);
+          if (i < typed.length) { later(typeNext, 35); return; }
+          later(() => {
+            if (!alive()) return;
+            pw.value = subject.password;
+            later(finish, 160);
+          }, 130);
+        }
+        later(typeNext, 380);
+      }
+
+      readerBtn.addEventListener('click', insert);
+    }
+
     /* THE POINTER BACK TO THE PAPER. The code and the password are on the
      * intake sheet in the FIELD DATA binder, and until now the arrow only
      * pointed one way: the paper knew about this window, this window said
@@ -1089,7 +1210,8 @@ export function createAnnexOs(opts) {
      * done its job, so it stops asking. */
     if (!(safeObj(getPunches()).p3)) {
       const slip = el('div', 'aos-slip', t('annex_os_search_slip',
-        'codes are issued at intake. your sheet is in the FIELD DATA binder, on the shelf.'));
+        'codes are issued at intake. your sheet is in the FIELD DATA binder, on the shelf. '
+        + 'the reader on the side takes student cards too, if you have yours on you.'));
       slip.appendChild(el('span', 'aos-slip-sig', '-M'));
       w.body.appendChild(slip);
     }

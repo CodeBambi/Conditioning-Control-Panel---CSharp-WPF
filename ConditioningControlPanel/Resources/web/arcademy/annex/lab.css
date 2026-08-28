@@ -275,6 +275,7 @@
   z-index: 3;
 }
 .al-photo-im {
+  position: relative;
   height: 84px;
   display: flex;
   align-items: center;
@@ -643,6 +644,28 @@ button.al-row:hover, button.al-row:focus-visible {
   transform: rotate(-12deg);
   opacity: 0.82;
   pointer-events: none;
+}
+/* a longer word than REDACTED, set tighter so the rubber lands on the corner
+   of the print the way the short one does instead of covering all of it */
+.al-stamp.is-long {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+/* THE SAME RUBBER ON A PHOTO CARD. A page that is not withheld has no plate to
+   stamp - its one print is the clipped card - so the stamp lands on the lower
+   right of THAT print, in miniature because the card's print is a fraction of
+   the plate. Same form, same red, same lean. */
+.al-photo .al-stamp {
+  right: -12px;
+  bottom: -7px;
+  padding: 1px 5px;
+  border-width: 2px;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+}
+.al-photo .al-stamp.is-long {
+  font-size: 8px;
+  letter-spacing: 0.08em;
 }
 
 /* the dossier plate as a PHOTOGRAPH: the same block the drawn plate occupies

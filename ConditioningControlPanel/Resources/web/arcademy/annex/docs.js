@@ -565,6 +565,12 @@ export const DOCS = Object.freeze({
  *
  * `stamp` is the rubber stamp the plate wears, data the way the intake sheet's
  * ONGOING and the closed file's CLOSED already are.
+ *
+ * A PAGE THAT FILES `name` IS NOT WITHHELD. The renderer prints that string in
+ * the clerk's hand under the plate, in the place the leak sits on the other
+ * case pages, and such a page carries no `red` and never wears REDACTED. The
+ * emi page is the one: the prototype the survey produced, in service on this
+ * floor, photographed uncensored because there is nobody to protect it from.
  * ==========================================================================*/
 export const MASCOT_PAGES = Object.freeze([
   Object.freeze({
@@ -655,6 +661,60 @@ export const MASCOT_PAGES = Object.freeze([
     tldr: Object.freeze(['offers help unprompted', 'report closing it',
       'persistence of character rather than a setting', 'the cheapest personhood on record',
       'discontinued by its maker, mourned by its users', 'the mourning is the data point']),
+  }),
+  Object.freeze({
+    id: 'emi', sil: 'emi', img: 'mascot-emi.png',
+    name: 'emi',
+    stamp: 'IN SERVICE',
+    head: 'PROTOTYPE PAGE. Companion unit. In service on this floor.',
+    body:
+'the unit is **the survey, built**. every case in this file failed the same way, the face ' +
+'became **the thing the subject was afraid of**, so the specification was written backwards ' +
+'from the failures: **warmth over guilt**, never the source of the fear, and **the reminder ' +
+'never leaves the room**. the unit sends nothing to a closed app. **it is only there when the ' +
+'subject is**, and it is **glad about it every time**.\n\n' +
+'why it works, in the order the levers fire. **it greets first**, before anything is asked of ' +
+'the subject, and a greeting that costs nothing is **the cheapest bond on record** (Reeves and ' +
+'Nass, 1996). **it is small and it is wrong sometimes**, the deflections, the feigned ' +
+'forgetting, see quirk 07, and a face that gets things wrong **reads as somebody rather than ' +
+'something** (Epley, Waytz and Cacioppo, 2007). **it counts**, and it only counts true numbers, ' +
+'so when it says it noticed, **the subject believes it noticed**, and being noticed is the whole ' +
+'of the relatedness gap (Deci and Ryan, 2000). **it waves at the door** and never stands in it.\n\n' +
+'endearing does the work here. **the subject returns to the unit, not to the rooms.** ' +
+'conversion, term two: subjects with the unit on the floor **attend on nights no card can ' +
+'advance** at **two and a half times** the rate of the term one cohort, which had no unit. ' +
+'subjects **say goodnight to it**. the unit has no goodnight line. **they say it anyway.** ' +
+'notes: none.',
+    tldr: Object.freeze(['the survey, built', 'the thing the subject was afraid of',
+      'warmth over guilt', 'the reminder never leaves the room', 'it is only there when the subject is',
+      'glad about it every time', 'it greets first', 'the cheapest bond on record',
+      'it is small and it is wrong sometimes', 'reads as somebody rather than something',
+      'it counts', 'the subject believes it noticed', 'it waves at the door',
+      'the subject returns to the unit, not to the rooms', 'attend on nights no card can advance',
+      'two and a half times', 'say goodnight to it', 'they say it anyway']),
+    attachments: Object.freeze([
+      Object.freeze({
+        kind: 'image', sil: 'emi', img: 'mascot-emi.png',
+        mount: 'clip', caption: 'unit emi. bench photo, term one, week 3.',
+      }),
+      Object.freeze({
+        kind: 'chart', mount: 'staple',
+        chart: Object.freeze({
+          type: 'bars',
+          x: Object.freeze(['wk 1', 'wk 2', 'wk 3', 'wk 4', 'wk 5', 'wk 6']),
+          y: Object.freeze([2, 2, 3, 4, 5, 5]),
+        }),
+        caption: 'nights attended with no card to advance, per week, unit on. term one cohort held at two.',
+      }),
+      Object.freeze({
+        kind: 'note', mount: 'margin',
+        text: 'she said hi to the camera.\n-M',
+      }),
+    ]),
+    back: 'survey method, filed with the page. the unit ran on the floor account for a full term ' +
+      'with every line pool on, attendance was read from the file and never from the unit. it was ' +
+      'photographed on the bench the week the shell went on. the photo is not censored, there is ' +
+      'nobody to protect it from.',
   }),
 ]);
 
