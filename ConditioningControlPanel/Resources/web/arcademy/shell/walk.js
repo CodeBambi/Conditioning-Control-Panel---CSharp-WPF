@@ -68,7 +68,8 @@
  * a wallet or an inventory, and would not know what a sku was.
  * ==========================================================================*/
 
-import { CAMPUS_GATE, walkLegs, gateLegs, stopAnchor } from './campus.js';
+import { CAMPUS_GATE, walkLegs, gateLegs, stopAnchor, spriteTurn } from './campus.js';
+import { onDeviceChange } from '../core/device.js';
 import { buildStudentSprite, easeInOutSine } from './ghosts.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -424,7 +425,7 @@ export function createWalker(o) {
   /* ------------------------------------------------------------- the nodes */
   const residueLayer = svgNode('g', null, 'campus-walkresidue');
   const trace = svgNode('polyline', { points: '', fill: 'none' }, 'campus-trace');
-  const you = svgNode('g', { transform: 'translate(' + pos[0] + ',' + pos[1] + ')' }, 'gh-you');
+  const you = svgNode('g', { transform: 'translate(' + pos[0] + ',' + pos[1] + ')' + spriteTurn() }, 'gh-you');
   const youRing = svgNode('ellipse', { cx: 0, cy: 0.6, rx: 7, ry: 2.6 }, 'gh-youring');
   const youBody = svgNode('g',
     { transform: 'scale(' + YOU_SCALE + ',' + YOU_SCALE + ')' }, 'gh-youbody');
@@ -471,7 +472,7 @@ export function createWalker(o) {
   if (echoLayer) {
     for (let i = 0; i < ECHO_COUNT; i += 1) {
       const g = svgNode('g',
-        { transform: 'translate(' + pos[0] + ',' + pos[1] + ')' },
+        { transform: 'translate(' + pos[0] + ',' + pos[1] + ')' + spriteTurn() },
         /* `gh-you` as well, so an afterimage wears YOUR palette (and your away
          * colours) rather than a stranger's - one sprite, one wardrobe. The
          * drop-shadow that class carries is cancelled in styles.css: an
@@ -519,8 +520,12 @@ export function createWalker(o) {
 
   function place() {
     if (!you) return;
+    /* THE UPRIGHT CAMPUS turns the plan a quarter turn on a phone held
+     * portrait; the walker takes the same turn back or it crosses the quad
+     * lying on its side. One appended term, at every site that writes a
+     * position - see spriteTurn() in shell/campus.js. */
     setAttr(you, 'transform', 'translate('
-      + (Math.round(pos[0] * 10) / 10) + ',' + (Math.round(pos[1] * 10) / 10) + ')');
+      + (Math.round(pos[0] * 10) / 10) + ',' + (Math.round(pos[1] * 10) / 10) + ')' + spriteTurn());
   }
 
   function draw(bobMs) {
@@ -577,7 +582,7 @@ export function createWalker(o) {
     for (let i = 0; i < echoes.length; i += 1) {
       const at = walkAt(r.legs, t - ECHO_LAG_MS * (i + 1), r.total);
       setAttr(echoes[i].g, 'transform', 'translate('
-        + (Math.round(at.x * 10) / 10) + ',' + (Math.round(at.y * 10) / 10) + ')');
+        + (Math.round(at.x * 10) / 10) + ',' + (Math.round(at.y * 10) / 10) + ')' + spriteTurn());
       setAttr(echoes[i].body, 'transform', 'scale(' + sx + ',' + YOU_SCALE + ')');
     }
   }
@@ -842,8 +847,13 @@ export function createWalker(o) {
     return residueList.slice();
   }
 
+  /* A walker standing still is only ever written once, so a phone turned while
+   * it stands there needs the position re-written. draw() does exactly that. */
+  const unorient = onDeviceChange(() => { try { draw(null); } catch (e) { /* noop */ } });
+
   function destroy() {
     if (destroyed) return;
+    try { unorient(); } catch (e) { /* noop */ }
     /* A PENDING LAUNCH IS NEVER LOST. The screen is going away, but the class
      * on the other side of this walk was already committed to - finish() pays
      * the onDone before anything else is torn down. `destroyed` is set AFTER,

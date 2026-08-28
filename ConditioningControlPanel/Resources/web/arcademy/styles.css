@@ -5478,3 +5478,195 @@ html.ae-touch .arc-rs .arc-pc-hole:not(.is-punched) { animation:none; }
    the swatch buttons wore and vacated, so it inherits the sheet's one shape for
    a pressable thing; all it wants of its own is the air under the sentence. */
 .arc-lockergo { margin-top:10px; }
+
+/* ===== UPRIGHT CAMPUS (B: chrome) =====================================
+   THE PHONE STOPPED TURNING (2026-08-28). Held upright the floor plan turns
+   WITH the glass (campus.js, block A) and the HTML chrome re-homes itself into
+   the two bands the turned plan leaves behind. On a 390x844 phone the plan is
+   810x1440 `meet` at 0.481, so it occupies y 75..768 and the bands are the top
+   75px and the bottom 76px; the plan's own sky strip (viewBox y 55..210, the
+   band the board has always hung in) lands on the LEFT as screen x 0..75.
+
+   ONE SWITCH, and every rule below is keyed on it: `html.arc-mobile` AND
+   `[data-arc-orient="portrait"]`, both written by core/device.js. A desktop
+   never wears `arc-mobile`, so nothing in this block is even evaluated there,
+   and the landscape phone only takes the two fixes it is owed at the bottom.
+   ---------------------------------------------------------------------- */
+
+/* ---- the plaque hangs on the LEFT RAIL ---------------------------------
+   The same chains and the same plaque, turned -90deg as ONE object so it stays
+   pinned to the plan it hangs in: the chains come in horizontally from the left
+   edge, the plaque stands vertical, and TIMETABLE reads bottom-to-top up the
+   spine. The transform chain is deliberately percentage-only so it never has to
+   know the plaque's measured size: `translate(-50%,-50%)` puts the box's centre
+   on the anchor, `rotate(-90deg)` turns it, and the trailing `translate(0,50%)`
+   is in the TURNED frame (local +y is screen +x after a -90) which slides the
+   now-74px-wide box off the left edge and flush against it. Anchored at
+   `top:50%` because the plan is centred in the viewport and the board's plan-x
+   (720) is the plan's own centre line - the two are the same pixel. */
+html.arc-mobile[data-arc-orient="portrait"] .campus-boardwrap.collapsed {
+  top:50%; left:0; max-width:none;
+  transform-origin:50% 50%;
+  transform:translate(-50%, -50%) rotate(-90deg) translate(0, 50%);
+}
+/* The entry reveal drops the board out of the TOP of the window, which is a
+   translate that would fight the turn for its whole .7s. Upright it simply
+   fades in on the same beat. */
+html.arc-mobile[data-arc-orient="portrait"] .campus-stage.enter .campus-boardwrap.collapsed {
+  animation:campus-fadein .6s .5s both;
+}
+
+/* ---- the OPEN board is an upright panel, and the dark closes it ---------
+   Expanded, the wrap stops being a hung object and becomes the modal: it fills
+   the glass as the SCRIM (tap it to close - shell.js arms that, and only in
+   this mode), and the sway inside it is the panel, centred, `min(360px, 94vw)`
+   wide so 18 flap cells still fit across a 360px phone. z88 clears the plan and
+   the seep and sits under the door card's own scrim at z90. */
+html.arc-mobile[data-arc-orient="portrait"] .campus-boardwrap:not(.collapsed) {
+  position:fixed; inset:0; top:0; left:0; width:auto; max-width:none;
+  transform:none; z-index:88;
+  display:grid; place-items:center;
+  background:color-mix(in srgb, var(--campus-sky), transparent 30%);
+  animation:campus-scrimin .18s ease-out;
+}
+@keyframes campus-scrimin { from { opacity:0; } to { opacity:1; } }
+/* No chains on a modal, and no rocking either: a board you are reading is a
+   board that has been taken down off its hooks. */
+html.arc-mobile[data-arc-orient="portrait"] .campus-boardwrap:not(.collapsed) .campus-chains { display:none; }
+html.arc-mobile[data-arc-orient="portrait"] .campus-boardwrap:not(.collapsed) .campus-boardsway {
+  animation:none; transform:none;
+  width:min(360px, 94vw); max-width:100%;
+  max-height:calc(100% - 24px); overflow:auto;
+  -webkit-overflow-scrolling:touch;
+}
+html.arc-mobile[data-arc-orient="portrait"] .campus-boardwrap:not(.collapsed) .campus-boardfoot {
+  width:100%; margin-left:0; margin-right:0;
+}
+
+/* ---- TWO DECKS PER ROW -------------------------------------------------
+   A 360px panel cannot hold `09:15  IMPULSE CONTROL` on one line at any cell
+   size that is still readable, so the row wraps into two: the time strip (small
+   cells) with the row's chips pushed to the right of it, then the class name on
+   its own line at full size. SIZES AND WRAPPING ONLY - the split-flap cue
+   timings in shell/splitflap.js (ROW_STEP_MS / SETTLE_MS / FLAP_MS /
+   CHAR_STEP_MS) are hard-coupled to `arc-flap` and nothing here touches them,
+   and no class name is re-worded or truncated.
+   The row's children are [.bl time, .bl label, .meta] in that order (see
+   splitflap.js build()), which is what `:first-child` / `.bl + .bl` name. */
+html.arc-mobile[data-arc-orient="portrait"] .campus-board .brow {
+  flex-wrap:wrap; column-gap:8px; row-gap:2px; padding:3px 4px;
+}
+html.arc-mobile[data-arc-orient="portrait"] .campus-board .brow > .bl:first-child { order:0; }
+html.arc-mobile[data-arc-orient="portrait"] .campus-board .brow > .meta { order:1; margin-left:auto; }
+html.arc-mobile[data-arc-orient="portrait"] .campus-board .brow > .bl + .bl { order:2; flex:0 0 100%; }
+html.arc-mobile[data-arc-orient="portrait"] .campus-board .bl { gap:2px; }
+/* the name deck: 18 cells (splitflap's MAX_FLAPS) at 14+2 = 286px, inside the
+   300px a 360px phone leaves once the panel, the board and the row have taken
+   their padding. */
+html.arc-mobile[data-arc-orient="portrait"] .campus-board .fl {
+  width:14px; height:21px; font-size:11px; border-radius:3px;
+}
+html.arc-mobile[data-arc-orient="portrait"] .campus-board .fl.gap { width:6px; }
+/* the time deck, smaller because a departure board's clock always is */
+html.arc-mobile[data-arc-orient="portrait"] .campus-board .brow > .bl:first-child .fl {
+  width:12px; height:17px; font-size:9px; border-radius:2px;
+}
+html.arc-mobile[data-arc-orient="portrait"] .campus-board .brow > .bl:first-child .fl.gap { width:5px; }
+html.arc-mobile[data-arc-orient="portrait"] .campus-board .chip { font-size:8.5px; padding:2px 6px; }
+
+/* ---- the top band (y 0..75): the bell chip + the gear ------------------
+   The two-line phone chip and its `margin-right` both exist to step around the
+   bell tower's painted clock face at the top right of the LANDSCAPE plan. Up
+   here the band is empty sky, so the chip goes back to one row and drops the
+   NEXT BELL caption outright: the bell glyph says which clock it is and the
+   countdown is the only thing on it worth reading at this size. The GEAR keeps its
+   44px tap target; the envelope is not in this band in EITHER orientation -
+   shell/mail.css pins `.arc-mailchip` `position:fixed` into the BOTTOM-right corner
+   on the small-stage query, out of this cluster's flow entirely. */
+html.arc-mobile[data-arc-orient="portrait"] .campus-topright {
+  top:14px; right:12px; left:auto; gap:8px;
+  max-width:calc(100vw - 24px); flex-wrap:wrap; justify-content:flex-end;
+}
+/* The chip is also the widest thing in this band and the post-row is coming to
+   share it, so it is trimmed to ~126px: at 360x780 that leaves 14px of daylight
+   between the props' right edge (156) and the chip's left (170). */
+html.arc-mobile[data-arc-orient="portrait"] .campus-bellchip {
+  display:flex; align-items:center; column-gap:6px; row-gap:0;
+  margin-right:0; padding:6px 10px; border-radius:999px;
+}
+html.arc-mobile[data-arc-orient="portrait"] .campus-bellchip .cap { display:none; }
+html.arc-mobile[data-arc-orient="portrait"] .campus-bellchip .ic { font-size:13px; }
+html.arc-mobile[data-arc-orient="portrait"] .campus-bellchip .tm { font-size:10px; }
+
+/* ---- the two bands: props up top, hint down the bottom -----------------
+   THE BOTTOM BAND IS ALREADY FULL, and this is the one place this wave was
+   planned against a wrong measurement. The Student ID is NOT hidden on a phone:
+   the small-stage query FOLDS it (a 185x52 tag, bottom-left, measured at
+   390x844) and drops only the crest above it. To its right stand EMI at her
+   first-run spot (`x = vw - 86 - 72`, which is the middle of this same band on
+   every phone in range) and the envelope shell/mail.css pins into the corner
+   past her. Three things in a 76px band is already three things.
+
+   So the post-row keeps the TOP-LEFT corner the landscape phone gives it, which
+   in portrait is the plan's own empty sky band rather than a patch of
+   architecture - and that corner exists BECAUSE of the ID tag in the first
+   place (styles.css's post-row law, further up). Only the inset changes: 4px
+   seats the 70px props inside the 75px band instead of hanging 7px of them over
+   the plan.
+
+   THE HINT takes the line above the ID tag: left-aligned, small, ending at
+   ~182px - clear of the tag below it, clear of EMI's 232 beside it, clear of
+   the props above it. It is the only instruction on the screen and it may share
+   a corner with the furniture, never the pixels. */
+html.arc-mobile[data-arc-orient="portrait"] .campus-postrow {
+  left:12px; right:auto; bottom:auto;
+  top:calc(4px + env(safe-area-inset-top, 0px));
+}
+html.arc-mobile[data-arc-orient="portrait"] .campus-hint {
+  left:12px; right:auto;
+  bottom:calc(72px + env(safe-area-inset-bottom, 0px));
+  font-size:9px; letter-spacing:.14em;
+}
+
+/* ---- LANDSCAPE PHONE: the hint stops standing under EMI ----------------
+   Measured at 844x390: the hint ran x 558..767 and EMI's first-run spot is
+   x 686..772 - she stood on "STEP INSIDE" (owner-visible in the reference
+   shot). Her left edge is `100vw - 158px` at every landscape size in range, so
+   the hint is given a right inset that ends it clear of it. Landscape is
+   otherwise untouched, and this rule cannot reach a desktop: it is
+   `arc-mobile`-scoped, and the desktop hint keeps the corner it has always had.
+   (The post-row's old 48px clip below the bottom edge is already fixed on this
+   base - the props sit top-left at 21,12 and inside the glass.) */
+html.arc-mobile[data-arc-orient="landscape"] .campus-hint { right:170px; }
+
+/* ===== UPRIGHT CAMPUS (A: plan) =====
+   The plan turns a quarter turn counter-clockwise on a phone held portrait and
+   every label turns back. All of that is geometry and lives in shell/campus.js
+   as transform attributes - a stylesheet cannot know a room's pivot. What is
+   left here is the one thing the turn BROKE and the one thing it made
+   ambiguous. Nothing below adds a colour, a size or a position. */
+
+/* THE ENTRY REVEAL SURVIVES THE TURNTABLE. Every layer of the plan used to be
+   a direct `g` child of the <svg>, and the staggered fade keyed off exactly
+   that. They all hang off `g.campus-orient` now, so the old selector matches
+   one element - the turntable itself - and the whole campus would fade in as a
+   single block, losing the stagger the entry scene is built out of. The rule is
+   not edited (landscape must stay byte-exact): the wrapper is told not to fade
+   and its children are handed the same fade the plan's children always had. */
+.campus-stage.enter svg.campus-plan > g.campus-orient { animation:none; }
+.campus-stage.enter svg.campus-plan > g.campus-orient > g {
+  animation:campus-fadein .7s both;
+  animation-delay:var(--din, 0ms);
+}
+
+/* THE CLOCK HANDS PIVOT ON THEIR OWN PIN, in both orientations. `view-box` is a
+   reference box the two viewBoxes no longer share (landscape starts at y 55,
+   upright at y 0), so an origin written in absolute user units cannot mean the
+   same point in both. `fill-box` on a hand means its own 2-unit-wide box, and
+   the pin is that box's bottom edge in either world - the same point, stated in
+   a frame that cannot drift. Scoped to the upright phone so landscape and
+   desktop keep the exact rule they have always run. */
+html.arc-mobile[data-arc-orient="portrait"] .campus-clockhand {
+  transform-box:fill-box;
+  transform-origin:50% 100%;
+}

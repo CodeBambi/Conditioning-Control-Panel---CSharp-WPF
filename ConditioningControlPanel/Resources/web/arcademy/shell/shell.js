@@ -766,6 +766,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   let stageClear = false;
   let board = null;
   let campus = null;               // the night-campus hub (OPTIONAL - see showBoard)
+  let boardScrimArmed = false;     // the upright board's tap-out (armBoardScrim)
   /* WHICH FULL-BLEED STAGE IS UP, or null. setStage() is the one writer and
    * renderTopbar() is the one reader - a stage owns the window, so the bar
    * stays retired for as long as one is up, whoever asks for the repaint. */
@@ -1390,10 +1391,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     }
     extrasBox = null;
     /* THE ROTATE GATE BELONGS TO A SCREEN, NOT TO THE PAGE. Every screen change
-     * funnels through here, so dropping it here is what stops a gate the campus
+     * funnels through here, so dropping it here is what stops a gate one screen
      * asked for from hanging over the report card behind it. The screens that
-     * still want one (the campus, a class whose board has a shape) re-arm after
-     * they have built, which is also how the card knows which words to wear. */
+     * still want one (a class whose board has a shape - the campus stands
+     * upright now and asks for nothing) re-arm after they have built, which is
+     * also how the card knows which words to wear. */
     try { clearOrientation(); } catch (e) { /* noop */ }
     // Every screen switch funnels through here, so no throw path can strand
     // the immersive stage lock (the campus's arc-campus-on unwinds in its own
@@ -1637,6 +1639,47 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         games.failed.length + ' class(es) could not load and show as '
         + t('class_suspended', 'Class Suspended') + '.'));
     }
+  }
+
+  /* THE DARK BEHIND THE UPRIGHT TIMETABLE CLOSES IT.
+   *
+   * Held upright the open board is a modal: `.campus-boardwrap` stops being a
+   * hung object and becomes a full-glass scrim with the panel centred in it
+   * (styles.css, "UPRIGHT CAMPUS (B: chrome)"). A scrim you cannot tap out of
+   * is a trap, and the plaque is at the TOP of that panel with a whole board
+   * between it and the thumb, so the dark has to be a way out.
+   *
+   * One delegated listener, armed once, and it is deliberately narrow:
+   *   - it only ever fires when the click lands on the WRAP ITSELF, which in
+   *     this mode is only ever the scrim (the panel is `.campus-boardsway`, a
+   *     child, and every control inside it is a child of that);
+   *   - it is gated on the portrait-upright switch, so a landscape phone and a
+   *     desktop evaluate two `classList` reads and return - neither of them has
+   *     a scrim, and neither changes behaviour by a byte;
+   *   - it closes by CLICKING THE PLAQUE rather than by touching classes, so
+   *     `aria-expanded`, the pulse and the shell's `boardToggle` seam all stay
+   *     the plaque's business and there is still exactly one way to fold this
+   *     board (campus.js owns the toggle; this is a second finger on the same
+   *     button, not a second mechanism).
+   * The campus is rebuilt on every non-silent arrival, so this guards itself
+   * rather than stacking a listener per visit. */
+  function armBoardScrim() {
+    if (boardScrimArmed) return;
+    boardScrimArmed = true;
+    try {
+      document.addEventListener('click', (ev) => {
+        try {
+          const root = document.documentElement;
+          if (!root || !root.classList.contains('arc-mobile')) return;
+          if (root.getAttribute('data-arc-orient') !== 'portrait') return;
+          const hit = ev && ev.target;
+          if (!hit || !hit.classList || !hit.classList.contains('campus-boardwrap')) return;
+          if (hit.classList.contains('collapsed')) return;
+          const tab = hit.querySelector('.campus-boardtab');
+          if (tab && typeof tab.click === 'function') tab.click();
+        } catch (e) { /* a scrim must never be the thing that throws */ }
+      });
+    } catch (e) { say('board scrim arm failed: ' + ((e && e.message) || e)); }
   }
 
   function showBoard(opts) {
@@ -2068,14 +2111,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // (crest, student ID, Front Office/gear), so the bar itself steps aside.
       // Every other screen re-shows it through renderTopbar().
       if (dom.topbar) dom.topbar.hidden = true;
-      /* THE CAMPUS WANTS THE PHONE SIDEWAYS (owner bug A). The plan is a fixed
-       * 16:9 geography and `meet` now fits all of it, but "all of it" inside a
-       * 9:19.5 slot is a strip of architecture two rooms wide with the rest of
-       * the school as sky. There is nothing to pan, so there is nothing to fix
-       * by scrolling: the card asks for the turn and lifts itself on the way
-       * back. It is armed ONLY for the real campus - the plain-board fallback
-       * below is an ordinary scrolling panel and reads fine upright. */
-      requireOrientation('landscape', { reason: 'campus' });
+      /* THE CAMPUS STANDS UPRIGHT NOW (2026-08-28), so it no longer asks for
+       * the phone sideways. It used to: the plan was a fixed 16:9 geography and
+       * `meet` inside a 9:19.5 slot was a strip of architecture two rooms wide
+       * with the rest of the school as sky, so `requireOrientation('landscape',
+       * { reason: 'campus' })` stood here and put the turn-your-phone card up.
+       * Held upright the plan now TURNS WITH THE GLASS - same pixels, same fit -
+       * and everything a human reads turns back the right way up (shell/campus.js
+       * `planUpright()` / `applyOrientation()`), while the HTML chrome re-homes
+       * into the bands the turned plan leaves (styles.css, "UPRIGHT CAMPUS").
+       * The gate itself is untouched and still armed per class further down -
+       * a class with a landscape-only board is a different question from a
+       * floor plan, and orientgate.js keeps its `rotate_campus_*` copy. */
+      armBoardScrim();
       /* THE CAMPUS THEME, once the hub has actually built. Under the reveal,
        * under the PA (which ducks it), gone with the campus via clearScreen. */
       try { if (ost) ost.enter('campus'); } catch (e2) { /* noop */ }

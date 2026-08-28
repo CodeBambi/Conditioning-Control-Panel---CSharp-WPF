@@ -2977,6 +2977,68 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     (eight flash windows = Balanced), so the gate made the music vanish whenever the app
     was busy, with nothing in the log. `createOst({ lite })` is accepted and ignored.
 
+126. **THE UPRIGHT CAMPUS IS TWO TURNS AND ONE REGISTRY** (upright wave, 2026-08-28,
+    `shell/campus.js` + `styles.css` "UPRIGHT CAMPUS"). On a phone held portrait the PLAN
+    turns and the player does not: `planUpright()` (mobile AND `data-arc-orient="portrait"`,
+    cached, dropped on every `onDeviceChange`) swaps the viewBox `0 55 1440 810` ->
+    `0 0 810 1440` and hangs `translate(-55 1440) rotate(-90)` on ONE wrapper,
+    `g.campus-orient`, which every plan layer now lives inside. Everything a human READS
+    takes the opposite turn back through a registry of `{node, on, off}` rows built from the
+    FROZEN tables (never `getBBox` - the DOM double has no layout), stood up or laid down by
+    one `applyOrientation()` inside `fitPlan()`. Sprites are the exception: ghosts and the
+    walker append `spriteTurn()` at every write site instead, because their transform is
+    rewritten per frame. `showBoard()` no longer arms `requireOrientation('landscape')`;
+    per-class gates and `orientgate.js` are untouched.
+127. **A ROTATE ABOUT THE WRONG PIVOT SLIDES A THING SIDEWAYS, IT DOES NOT JUST TILT IT.**
+    `rotate(90 px py)` is a translate as well as a turn for every point that is not the
+    pivot, so a plate pivoted 12 units off its own centre lands 12 units OUT OF ITS ROOM,
+    and it reads as "the label moved", never as "the pivot is wrong". Every row in the
+    registry pivots on its own box centre (`boxCentre(textBox(...))` / `boxCentre(unionBox
+    (...))`) and re-places with `to:`, which is then a plain subtraction. The corollary: a
+    name and its RM number must turn as ONE wrapper - turned about separate pivots they
+    cross each other.
+128. **`transform-origin` IN USER UNITS IS MEANINGLESS ONCE A FILE HAS TWO viewBoxes.**
+    `.campus-clockhand` pinned its hands with `transform-box:view-box` +
+    `transform-origin:1310px 156px`, and the upright viewBox starts at y 0 where the
+    landscape one starts at y 55 - so the same declaration names two different points and
+    the minute hand orbited a point off the plan entirely. The cure is a reference box
+    that cannot drift: `transform-box:fill-box` + `transform-origin:50% 100%` is the
+    hand's own pin in either world. (A zero-AREA bbox falls back to view-box, so this
+    only works because the hands have height.)
+129. **AN `<svg>` CHILD WRAPPER SILENTLY KILLS EVERY `> g` RULE ABOVE IT.** The entry
+    reveal is `.campus-stage.enter svg.campus-plan > g { animation:campus-fadein }`, and
+    re-homing the layers under `g.campus-orient` left that selector matching exactly one
+    element - the wrapper - so the whole school faded in as one block with no stagger and
+    nothing in the console. FIX ADDITIVELY, never by editing the old rule (landscape and
+    desktop must stay byte-exact): `> g.campus-orient { animation:none; }` plus
+    `> g.campus-orient > g { ...the same fade... }`.
+130. **`.campus-idcard` IS NOT HIDDEN ON A PHONE, AND THE MAIL CHIP OWNS THE BOTTOM-RIGHT.**
+    The `@media (max-width:760px),(max-height:600px)` block FOLDS the ID into a 185x52 tag
+    at the bottom LEFT (trap 100); only `.campus-crest` is `display:none`. `shell/mail.css`
+    pins `.arc-mailchip` into the bottom-right on the same query, and EMI's first-run spot
+    (`vw - 158`) is the middle of that same band. Any wave that plans to "use the empty
+    bottom band" is planning against three things that are already standing in it.
+131. **THE OPEN PORTRAIT BOARD IS THE WRAP ITSELF, ACTING AS THE SCRIM.**
+    `.campus-boardwrap:not(.collapsed)` goes `position:fixed; inset:0` and centres
+    `.campus-boardsway` inside itself, so the wrap's rect is the WHOLE VIEWPORT and a test
+    that measures `.campus-boardwrap` for the panel gets 390x844 and "proves" an overlap
+    with everything. Assert on `.campus-boardsway`. `armBoardScrim()` (shell.js) reads the
+    same fact: it only acts when `ev.target` IS the wrap, and it closes by clicking
+    `.campus-boardtab` so `aria-expanded`, the pulse and `handlers.boardToggle` stay the
+    plaque's business.
+132. **THE TURNED PLAQUE IS 74px WIDE AND THE SKY RAIL IS 69px ON A 360px PHONE.** The
+    collapsed board is the chains plus the plaque turned -90deg into the plan's own sky
+    strip, and that strip is `viewBox` y 55..210 scaled by the `meet` fit - 74.6px at 390
+    wide, 68.9px at 360. It overhangs the architecture by 5px on the narrowest phone in
+    range. Known, cosmetic, NOT a regression: measure before "fixing" it into a different room.
+133. **EMI IS PLACED IN VIEWPORT FRACTIONS, SO A ROTATE CAN PARK HER ON THE HINT.**
+    `#arc-emi` is page-level and user-positioned, outside the stage and outside everything
+    the upright pass re-homes, so her remembered spot is re-read against the NEW viewport
+    and can land on `.campus-hint` (or on the props) after a turn. Landscape's own version
+    of this is fixed by hand (`html.arc-mobile[data-arc-orient="landscape"] .campus-hint
+    { right:170px }`). The general case is OPEN - it belongs to the widget, not to the
+    campus chrome.
+
 ## 5. The game module contract (short version)
 
 ```js

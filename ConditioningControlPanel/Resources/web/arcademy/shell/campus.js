@@ -32,7 +32,7 @@ import { t, tierLabel, familyLabel } from '../core/lexicon.js';
 import { makeRng } from '../core/rng.js';
 import { OPEN_SEMESTERS, isOpenSemester } from '../games/registry.js';
 import { fireMoment } from '../emi/moments.js';
-import { isMobile, onDeviceChange } from '../core/device.js';
+import { isMobile, orientation, onDeviceChange } from '../core/device.js';
 /* THE PHANTOM POST chrome: the envelope chip by the bell, the noticeboard and
  * the folded paper by the student ID. Campus mounts the furniture; the shell
  * owns the overlays, the engines and every byte of their state (Wave 4 law:
@@ -225,6 +225,13 @@ export const WINGS = Object.freeze({
     semester: 2, roman: 'II', rect: [1240, 360, 160, 220], office: true,
     alley: [1240, 360, 20, 220], mouthX: 1240, mouth: [434, 506],
     labelX: 1314, labelY: 602, sealedTone: 'pink', din: 180,
+    /* UPRIGHT: this caption has always stood UNDER the counters, inside the
+     * Prize Counter's floor, and the floor is drawn after it - so on the wide
+     * plan it is scenery nobody ever sees. Standing up, the 12 units it sits
+     * short of that room's centre become a SIDEWAYS 12 and one letter pokes out
+     * past the wall. It is re-centred on the room that covers it, so portrait
+     * hides exactly what landscape hides. */
+    upRect: [1260, 572, 108, 84], upTo: [1314, 614],
     nameKey: 'campus_east_wing', nameEn: 'East Wing',
     sealedKey: 'campus_opens_semester_2', sealedEn: 'Opens Semester II',
     sealedDescKey: 'campus_desc_east', sealedDescEn: 'You can hear hammering behind the tape.',
@@ -240,6 +247,11 @@ export const WINGS = Object.freeze({
     semester: 3, roman: 'III', rect: [40, 312, 160, 316],
     alley: [62, 450, 138, 40], mouthX: 200, mouth: [450, 490],
     labelX: 127, labelY: 288, sealedTone: 'dim', din: 210,
+    /* UPRIGHT: the caption turns into the wing it hangs over (its length runs
+     * across the block once it stands up), so it is fitted to the open sky
+     * NORTH of the wing and slid clear of the Darkroom's floor. The east wing
+     * needs no pair: its caption already stands in open ground. */
+    upRect: [40, 55, 160, 253], upTo: [127, 268],
     nameKey: 'campus_west_wing', nameEn: 'West Wing',
     sealedKey: 'campus_semester_3', sealedEn: 'Semester III',
     sealedDescKey: 'campus_desc_west', sealedDescEn: 'The boards are older here.',
@@ -340,6 +352,151 @@ const LOGO_BOX = Object.freeze({
   anomaly:         [72, 352, 110, 54],
   composure:       [72, 522, 110, 54],
 });
+
+/* ===========================================================================
+ * THE UPRIGHT CAMPUS - when the phone is held portrait the PLAN turns, not the
+ * player. A phone in the hand is 390 wide and 844 tall; the campus is 1440 wide
+ * and 810 tall. Laid down flat one of them has to give, and it is not going to
+ * be the player's wrist: the whole plan takes a quarter turn COUNTER-clockwise
+ * so its long side runs down the screen, and then every single thing a human
+ * READS takes the opposite quarter turn back so it stands up straight.
+ *
+ * Two turns, one law. The plan turns once, at the wrapper. Every label, plate,
+ * sign, logo and sprite turns back once, about a pivot in ITS OWN room, so the
+ * room keeps its dressing and the dressing keeps its reader. Nothing here moves
+ * a wall, a door, a corridor or a route: the geography is frozen and stays
+ * frozen - only what is written on it stands up.
+ * ========================================================================== */
+
+/** The plan's two viewBoxes. Landscape is the original and stays byte-exact;
+ *  portrait is the same 1440x810 world seen down its own long side. */
+const PLAN_VIEWBOX = '0 55 1440 810';
+const PLAN_VIEWBOX_UP = '0 0 810 1440';
+
+/** The one turn. Plan (x,y) lands at screen (y-55, 1440-x): room 202 ends at
+ *  the top of the screen, room 101 at the bottom, and the sky band above the
+ *  corridor becomes the left rail. Read it right-to-left like any SVG list. */
+const ORIENT_TURN = 'translate(-55 1440) rotate(-90)';
+
+/** No plate shrinks past this. Under three quarters a room name stops being a
+ *  name and becomes a smudge, and a smudge is worse than a plate that touches
+ *  its wall. The compact facilities get their own lower floor below - their
+ *  names are longer than their rooms are deep and there is nowhere else to go. */
+const UPRIGHT_MIN_SCALE = 0.75;
+const UPRIGHT_MIN_FACILITY = 0.6;
+
+/**
+ * TEXT WIDTH WITHOUT A LAYOUT. The fit maths below needs to know how wide a
+ * label is BEFORE anything has been laid out - the upright pass runs during the
+ * build, and the DOM double the node suites use has no layout engine at all, so
+ * getBBox() is either unavailable or a lie. So the width is arithmetic: glyph
+ * count times one advance, and the advance is the class's own size and tracking
+ * out of styles.css. The map faces are metric-stable (a pixel mono for every
+ * -rsub row, the body face for -rname), and these two constants were measured
+ * off the real page rather than guessed: 0.5854em per mono glyph, and a body
+ * advance picked to sit just over the average and just under the widest word.
+ * Returns [advance, lineHeight] in plan units.
+ */
+function textMetric(cls) {
+  const c = ' ' + String(cls == null ? '' : cls) + ' ';
+  if (c.indexOf(' campus-rname ') >= 0) {
+    return c.indexOf(' tight ') >= 0 ? [0.68 * 11.5 + 1.15, 15.75] : [0.68 * 13.5 + 1.89, 18];
+  }
+  if (c.indexOf(' campus-rsub ') >= 0) {
+    if (c.indexOf(' tiny ') >= 0) return [0.5854 * 8.5 + 1.7, 10.13];
+    if (c.indexOf(' wide ') >= 0) return [0.5854 * 10 + 3, 11.25];
+    return [0.5854 * 10 + 2, 11.25];
+  }
+  return [0.5854 * 10 + 3, 11.25];   /* campus-groundlbl and anything like it */
+}
+
+/** The plan-space box a single text row occupies. Every map row is centred -
+ *  `.campus-rsub` sets text-anchor in CSS and CSS beats the presentation
+ *  attribute, so even the rows built with text-anchor:start draw centred. The
+ *  baseline sits ~0.81 of the line box down from the top; measured, not felt. */
+function textBox(str, cls, x, y) {
+  const m = textMetric(cls);
+  const w = String(str == null ? '' : str).length * m[0];
+  return [x - w / 2, y - m[1] * 0.81, w, m[1]];
+}
+
+function unionBox(a, b) {
+  if (!a) return b ? b.slice() : null;
+  if (!b) return a.slice();
+  const x0 = Math.min(a[0], b[0]);
+  const y0 = Math.min(a[1], b[1]);
+  const x1 = Math.max(a[0] + a[2], b[0] + b[2]);
+  const y1 = Math.max(a[1] + a[3], b[1] + b[3]);
+  return [x0, y0, x1 - x0, y1 - y0];
+}
+
+function boxCentre(b) { return [b[0] + b[2] / 2, b[1] + b[3] / 2]; }
+
+/**
+ * HOW MUCH A TURNED THING HAS TO SHRINK. A quarter turn swaps a box's sides:
+ * a w-by-h label needs h of the room's width and w of its height once it is
+ * standing up. Where the room does not have them the thing scales - never past
+ * the floor, because an unreadable plate has already failed. Pure arithmetic on
+ * the frozen tables; it measures nothing and touches no DOM.
+ */
+function turnScale(box, rect, floor) {
+  const f = floor == null ? UPRIGHT_MIN_SCALE : floor;
+  let s = 1;
+  if (box[3] > 0 && box[3] > rect[2]) s = Math.min(s, rect[2] / box[3]);
+  if (box[2] > 0 && box[2] > rect[3]) s = Math.min(s, rect[3] / box[2]);
+  return Math.max(f, Math.min(1, s));
+}
+
+/**
+ * THE DRESSING'S FOOTPRINT, room by room, in plan units - read straight off
+ * furnitureFor()'s own drawing coordinates. Static because it has to be (see
+ * textBox above), and it is allowed to be: furnitureFor draws from literals, so
+ * these boxes cannot drift without someone editing the drawing right next to
+ * them. A room with no row here contributes only its logo box.
+ *
+ * THE POOL'S covered walk is deliberately NOT in its box - the walk is
+ * architecture, it stays pinned with the walls, and only the water turns.
+ */
+const FURN_BOX = Object.freeze({
+  daily_trigger:   [248, 216, 164, 102],
+  deja_vu:         [492, 248, 158, 36],
+  impulse_control: [737, 254, 118, 56],
+  lost_and_found:  [252, 524, 156, 160],
+  the_deep_end:    [306, 752, 304, 52],
+  sort:            [755, 591, 170, 77],
+  echo:            [1013, 220, 134, 20],
+  instant_recall:  [1019, 520, 142, 20],
+  anomaly:         [101, 368, 51, 20],
+  composure:       [109, 540, 36, 18],
+});
+
+/**
+ * IS THE PLAN STANDING UP? One switch, asked everywhere, answered here: a phone
+ * held portrait and nothing else. A tablet, a rotated desktop window and the
+ * app's own WebView all keep the plan lying down, because they have the width
+ * for it. Guarded because the node suites import this module with no window.
+ *
+ * AND THE ANSWER IS CACHED, because spriteTurn() below asks it from inside two
+ * rAF loops - once per ghost and once per echo, EVERY FRAME. Answering honestly
+ * is a regex over location.search, two matchMedia parses and two `innerWidth`
+ * reads, and innerWidth is a layout-forcing read landing right after a
+ * transform write: exactly the cost ATTRACT_COARSE above is probed once to
+ * avoid. The cache is DROPPED (never recomputed) on every device change, so the
+ * first caller after a rotate still asks the live question, whatever order the
+ * subscribers happen to run in.
+ */
+let uprightCache = null;
+try { onDeviceChange(() => { uprightCache = null; }); } catch (e) { /* no window: nothing to watch */ }
+export function planUpright() {
+  if (uprightCache === null) {
+    try { uprightCache = !!isMobile() && orientation() === 'portrait'; } catch (e) { uprightCache = false; }
+  }
+  return uprightCache;
+}
+
+/** The sprites' share of the counter-turn - appended to their translate so a
+ *  pixel student stands on the corridor floor instead of lying across it. */
+export function spriteTurn() { return planUpright() ? ' rotate(90)' : ''; }
 
 /**
  * THE ART BASE, resolved ONCE off this module - and it has to be, because a
@@ -961,10 +1118,87 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
    * stage's own dusk-sky gradient, so nothing looks broken. The attribute is
    * re-written on a rotate rather than set once, because a phone that crosses in
    * or out of the rule mid-scene must not be left wearing the other one. */
-  const plan = svg('svg', { viewBox: '0 55 1440 810' }, 'campus-plan');
+  const plan = svg('svg', { viewBox: PLAN_VIEWBOX }, 'campus-plan');
+
+  /* THE TURNTABLE. Everything drawn on the plan hangs off this one group and
+   * nothing else does, so the quarter turn is a single attribute write and the
+   * plan can stand up or lie down mid-scene without a rebuild, a reload or a
+   * replayed entry reveal. `defs` stays outside it - patterns and gradients are
+   * referenced, never drawn, and a turned <defs> would rotate every fill. */
+  const orient = svg('g', null, 'campus-orient');
+
+  /* THE COUNTER-TURN REGISTRY. One row per thing a human reads: the node, the
+   * transform it wears standing up, and the one it wears lying down (usually
+   * none). Registered during the build, applied on every rotate. It is a list
+   * and not a walk of the DOM because the pivots come from the frozen tables -
+   * asking the page where a label is would mean measuring, and measuring during
+   * a build is how the DOM double the node suites use gets left behind. */
+  const uprights = [];
+  /* The stop badges are re-minted on every update(), so they cannot live in the
+   * permanent registry - it would grow a row a night. Their own list, cleared
+   * with the layer they hang in. */
+  let stopUprights = [];
+
+  /**
+   * Register a counter-turn. `pivot` is the plan point the thing turns about -
+   * always its own box centre, so `to` (an optional new centre) is a plain
+   * subtraction. Returns the node so it can be registered inline.
+   *   upright(node, [px, py], { s, to:[tx,ty] })  - turn back, scale, re-place
+   *   upright(node, null, { on, off })            - a hand-written pair
+   */
+  function upright(node, pivot, opt) {
+    if (!node) return node;
+    const o = opt || {};
+    let on = o.on;
+    if (!on) {
+      const px = pivot[0], py = pivot[1];
+      const s = o.s == null ? 1 : o.s;
+      const dx = o.to ? o.to[0] - px : 0;
+      const dy = o.to ? o.to[1] - py : 0;
+      on = 'translate(' + rnd(px + dx) + ' ' + rnd(py + dy) + ') rotate(90)'
+        + (s === 1 ? '' : ' scale(' + (Math.round(s * 1000) / 1000) + ')')
+        + ' translate(' + rnd(-px) + ' ' + rnd(-py) + ')';
+    }
+    uprights.push({ node: node, on: on, off: o.off || '' });
+    return node;
+  }
+  function rnd(v) { return Math.round(v * 10) / 10; }
+
+  /** Write (or clear) one registry row. */
+  function wearTurn(row, up) {
+    try {
+      const tf = up ? row.on : row.off;
+      if (tf) row.node.setAttribute('transform', tf);
+      else row.node.removeAttribute('transform');
+    } catch (e) { /* the DOM double may not carry attributes - never fatal */ }
+  }
+
+  /** Stand every registered label up, or lay it back down. */
+  function applyOrientation() {
+    const up = planUpright();
+    for (let i = 0; i < uprights.length; i++) wearTurn(uprights[i], up);
+    for (let i = 0; i < stopUprights.length; i++) wearTurn(stopUprights[i], up);
+  }
+
+  /* THE PLAN'S FIT, and now its ORIENTATION - one function, because they answer
+   * the same question and must never disagree. `meet` on a phone (a phone is
+   * never close to 16:9 in either direction and slice eats The Pool), `slice`
+   * everywhere else. Portrait additionally turns the world: the viewBox swaps to
+   * the plan seen down its own long side, the turntable takes the quarter turn,
+   * and every registered label takes it back. Re-run on every device change, so
+   * a phone rotated mid-scene repaints without rebuilding anything. */
   function fitPlan() {
-    try { plan.setAttribute('preserveAspectRatio', isMobile() ? 'xMidYMid meet' : 'xMidYMid slice'); }
-    catch (e) { /* the DOM double may not carry attributes - never fatal */ }
+    const up = planUpright();
+    try {
+      plan.setAttribute('preserveAspectRatio', isMobile() ? 'xMidYMid meet' : 'xMidYMid slice');
+      plan.setAttribute('viewBox', up ? PLAN_VIEWBOX_UP : PLAN_VIEWBOX);
+      if (up) orient.setAttribute('transform', ORIENT_TURN);
+      else orient.removeAttribute('transform');
+      /* the chrome reads this, never the geometry */
+      if (up) root.setAttribute('data-upright', '1');
+      else root.removeAttribute('data-upright');
+    } catch (e) { /* the DOM double may not carry attributes - never fatal */ }
+    applyOrientation();
   }
   fitPlan();
   const unfit = onDeviceChange(fitPlan);
@@ -1021,6 +1255,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   });
 
   plan.appendChild(defs);
+  plan.appendChild(orient);
 
   /* grounds: trees, paths, lamps, fountain */
   const grounds = svg('g', null, 'campus-grounds');
@@ -1052,23 +1287,43 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   /* ONE glint, on a 17s cycle that is dark for sixteen and a half of them.
    * SPARKLE BURST IS SCARCE BY LAW - a second one would make it wallpaper. */
   grounds.appendChild(svg('path', { d: 'M1100,830 L1100,840 M1095,835 L1105,835' }, 'campus-sparkle'));
-  grounds.appendChild(svgText(1088, 806, 'campus-groundlbl', t('campus_the_quad', 'The Quad').toUpperCase()));
-  grounds.appendChild(svgText(756, 858, 'campus-groundlbl start', t('campus_front_path', 'Front Path').toUpperCase(),
-    { 'text-anchor': 'start' }));
-  plan.appendChild(stag(grounds, 0));
+  /* THE TWO GROUNDS CAPTIONS stand up with a nudge each. THE QUAD's turned row
+   * would lie across the fountain and FRONT PATH's would run off the plan's
+   * east edge (the plan is only 810 units deep and a turned caption spends its
+   * whole length in that direction), so each is re-placed a caption's width
+   * clear of what it names - still its own lawn, still reading left to right. */
+  const quadLbl = svgText(1088, 806, 'campus-groundlbl', t('campus_the_quad', 'The Quad').toUpperCase());
+  grounds.appendChild(quadLbl);
+  upright(quadLbl, boxCentre(textBox(quadLbl.textContent, 'campus-groundlbl', 1088, 806)),
+    { to: [1124, 803] });
+  const pathLbl = svgText(756, 858, 'campus-groundlbl start', t('campus_front_path', 'Front Path').toUpperCase(),
+    { 'text-anchor': 'start' });
+  grounds.appendChild(pathLbl);
+  upright(pathLbl, boxCentre(textBox(pathLbl.textContent, 'campus-groundlbl', 756, 858)),
+    { to: [855, 815] });
+  orient.appendChild(stag(grounds, 0));
 
   /* bell tower + clock */
   const tower = svg('g', null, 'campus-tower');
   tower.appendChild(svg('line', { x1: 1310, y1: 200, x2: 1310, y2: 346, 'stroke-dasharray': '2 7' }, 'campus-tower-tie'));
   tower.appendChild(svg('circle', { cx: 1310, cy: 156, r: 42 }, 'campus-gfloor'));
-  tower.appendChild(svg('circle', { cx: 1310, cy: 156, r: 33 }, 'campus-dial'));
+  /* THE FACE TURNS WITH THE READER. The dial is round and its four ticks are
+   * symmetric, so only the HANDS actually carry the lie - but the face is one
+   * instrument and it turns as one, about its own pin, or midnight ends up
+   * pointing at the east wing. */
+  const face = svg('g');
+  face.appendChild(svg('circle', { cx: 1310, cy: 156, r: 33 }, 'campus-dial'));
   [[1310, 126, 1310, 131], [1310, 181, 1310, 186], [1280, 156, 1285, 156], [1335, 156, 1340, 156]]
-    .forEach(([x1, y1, x2, y2]) => tower.appendChild(svg('line', { x1, y1, x2, y2 }, 'campus-tick')));
-  tower.appendChild(svg('line', { x1: 1310, y1: 156, x2: 1310, y2: 139 }, 'campus-clockhand hh'));
-  tower.appendChild(svg('line', { x1: 1310, y1: 156, x2: 1310, y2: 131 }, 'campus-clockhand mh'));
-  tower.appendChild(svg('circle', { cx: 1310, cy: 156, r: 2.6 }, 'campus-clockpin'));
-  tower.appendChild(svgText(1310, 236, 'campus-rsub', t('campus_bell_tower', 'Bell Tower').toUpperCase()));
-  plan.appendChild(stag(tower, 120));
+    .forEach(([x1, y1, x2, y2]) => face.appendChild(svg('line', { x1, y1, x2, y2 }, 'campus-tick')));
+  face.appendChild(svg('line', { x1: 1310, y1: 156, x2: 1310, y2: 139 }, 'campus-clockhand hh'));
+  face.appendChild(svg('line', { x1: 1310, y1: 156, x2: 1310, y2: 131 }, 'campus-clockhand mh'));
+  face.appendChild(svg('circle', { cx: 1310, cy: 156, r: 2.6 }, 'campus-clockpin'));
+  tower.appendChild(face);
+  upright(face, [1310, 156], {});
+  const bellLbl = svgText(1310, 236, 'campus-rsub', t('campus_bell_tower', 'Bell Tower').toUpperCase());
+  tower.appendChild(bellLbl);
+  upright(bellLbl, boxCentre(textBox(bellLbl.textContent, 'campus-rsub', 1310, 236)), {});
+  orient.appendChild(stag(tower, 120));
 
   /* corridor + entrance hall floors (+ paving texture overlays) */
   const floors = svg('g', null, 'campus-floors');
@@ -1082,7 +1337,16 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
    * ever ran west of x 330; the west wing's spur is on that line now, so a
    * night that deals a west class drew the marching pink dashes straight
    * through the words. y 452 is the same floor, one row up. */
-  floors.appendChild(svgText(252, 452, 'campus-rsub start wide', t('campus_main_hall', 'Main Hall').toUpperCase(), { 'text-anchor': 'start' }));
+  const hallLbl = svgText(252, 452, 'campus-rsub start wide', t('campus_main_hall', 'Main Hall').toUpperCase(), { 'text-anchor': 'start' });
+  floors.appendChild(hallLbl);
+  /* Standing up, the caption spends its length ACROSS the corridor - which is
+   * 80 units deep and no more - so it is fitted to the corridor and centred in
+   * it. It crosses the route's lane once, at right angles: a crossing reads,
+   * lying along the lane did not, and that was why the row moved to y 452. */
+  upright(hallLbl, boxCentre(textBox(hallLbl.textContent, 'campus-rsub wide', 252, 452)), {
+    s: turnScale(textBox(hallLbl.textContent, 'campus-rsub wide', 252, 452), [200, 434, 1040, 72], UPRIGHT_MIN_SCALE),
+    to: [252, 470],
+  });
   floors.appendChild(svg('rect', { x: 460, y: 510, width: 240, height: 220 }, 'campus-ghall'));
   floors.appendChild(svg('rect', { x: 460, y: 510, width: 240, height: 220, fill: 'url(#campusCarpet)' }, 'campus-carpet'));
   floors.appendChild(svg('rect', { x: 460, y: 510, width: 240, height: 220, fill: 'url(#campusPave)' }, 'campus-pave'));
@@ -1097,7 +1361,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
    * one run of the school a player is meant to walk THROUGH, never stand in. */
   floors.appendChild(svg('rect', { x: 700, y: 510, width: 40, height: 220 }, 'campus-ghall'));
   floors.appendChild(svg('rect', { x: 700, y: 510, width: 40, height: 220, fill: 'url(#campusPave)' }, 'campus-pave'));
-  plan.appendChild(stag(floors, 60));
+  orient.appendChild(stag(floors, 60));
 
   /* ------------------------------ wings ---------------------------------- */
   /* Built BEFORE the rooms so the wing floor paints under them. Two states and
@@ -1122,15 +1386,28 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       g.appendChild(svg('rect', { x: ax, y: ay, width: aw, height: ah, fill: 'url(#campusPave)' }, 'campus-pave'));
       /* TWO LINES, not one: "EAST WING · SEMESTER II" is 184px of tracked mono
        * and would run off the cropped edge of the plan (see THE SAFE BAND). */
-      g.appendChild(svgText(w.labelX, w.labelY, 'campus-rsub', t(w.nameKey, w.nameEn).toUpperCase()));
+      const wLbl = svg('g');
+      const wName = t(w.nameKey, w.nameEn).toUpperCase();
+      wLbl.appendChild(svgText(w.labelX, w.labelY, 'campus-rsub', wName));
+      let wBox = textBox(wName, 'campus-rsub', w.labelX, w.labelY);
       /* ONE LINE FOR THE OFFICE. A wing that holds CLASSES names its semester
        * under its own name; the front office would only be repeating the two
        * signs standing twenty units above it (RECORDS, FRONT OFFICE), so it says
        * what it is and stops. The pair is still the hover card's status line -
        * wingCaption() is the one source for both. */
       if (!w.office) {
-        g.appendChild(svgText(w.labelX, w.labelY + 15, 'campus-rsub tiny', wingCaption(w).toUpperCase()));
+        const cap = wingCaption(w).toUpperCase();
+        wLbl.appendChild(svgText(w.labelX, w.labelY + 15, 'campus-rsub tiny', cap));
+        wBox = unionBox(wBox, textBox(cap, 'campus-rsub tiny', w.labelX, w.labelY + 15));
       }
+      g.appendChild(wLbl);
+      /* THE WING'S CAPTION stands beside its wing, not on it. Standing up it
+       * spends its length across the wing's short side, and the west wing's
+       * would end up lying over the Darkroom's own art - so it is fitted to the
+       * open sky it already stood in (`w.upRect`) and slid back into it. */
+      upright(wLbl, boxCentre(wBox), w.upRect
+        ? { s: turnScale(wBox, w.upRect, UPRIGHT_MIN_SCALE), to: w.upTo }
+        : {});
       /* An open wing is scenery, not a door: the ROOMS take the clicks. It keeps
        * its hover card so the alley still says where you are. */
       attachTip(g, () => ({
@@ -1138,7 +1415,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
         status: wingCaption(w),
         desc: t(w.openDescKey, w.openDescEn),
       }));
-      plan.appendChild(stag(g, w.din));
+      orient.appendChild(stag(g, w.din));
       return g;
     }
 
@@ -1173,14 +1450,14 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       return { name: d.name, status: t('campus_sealed', 'Sealed') + ' — ' + d.status, desc: d.desc };
     });
     g.addEventListener('click', () => openFacilityCard(Object.assign(sealedCard(), { sealed: true })));
-    plan.appendChild(stag(g, w.din));
+    orient.appendChild(stag(g, w.din));
     return g;
   }
   Object.keys(WINGS).forEach(buildWing);
 
   /* route (under rooms so door arcs stay crisp) + stop badges (over, added last) */
   routePath = svg('path', { d: '' }, 'campus-route');
-  plan.appendChild(routePath);
+  orient.appendChild(routePath);
 
   /* THE STUDENT BODY'S LAYER - a SIBLING of the route, mounted here and nowhere
    * else (PRESENCE.md §4): above the floor and the carpet, UNDER the rooms and
@@ -1191,7 +1468,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
    * the plan that took clicks would eat every room). */
   const ghostLayer = svg('g', null, 'campus-students');
   ghostLayer.setAttribute('aria-hidden', 'true');
-  plan.appendChild(ghostLayer);
+  orient.appendChild(ghostLayer);
 
   /* THE WALKER'S LAYER (ORIENTATION.md §2.1) - the player miniature and its
    * gold trace. A SIBLING of the ghost layer and mounted immediately after it,
@@ -1204,7 +1481,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
    * fills it, and a campus built without a walker carries an empty group. */
   const walkLayer = svg('g', null, 'campus-walker');
   walkLayer.setAttribute('aria-hidden', 'true');
-  plan.appendChild(walkLayer);
+  orient.appendChild(walkLayer);
 
   /* ------------------------------ rooms ---------------------------------- */
   /* A door is the architect's symbol: a gap in the wall plus the leaf pivoting
@@ -1246,8 +1523,12 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   }
 
   /** Room furniture, per game - the mockup's dressing, condensed. */
-  function furnitureFor(key, g) {
+  function furnitureFor(key, g, room) {
     const put = (n) => g.appendChild(n);
+    /* A FEW MARKS ARE ARCHITECTURE, NOT DRESSING - they belong to the walls and
+     * must stay pinned when the room's dressing takes its counter-turn. Only
+     * The Pool has any (its covered walk runs up the alley to the hall). */
+    const putWall = (n) => (room || g).appendChild(n);
     if (key === 'daily_trigger') {
       put(svg('line', { x1: 248, y1: 216, x2: 412, y2: 216 }, 'campus-furn'));
       put(svg('rect', { x: 300, y: 232, width: 60, height: 16 }, 'campus-furnf'));
@@ -1267,8 +1548,8 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       put(svg('rect', { x: 300, y: 524, width: 64, height: 11 }, 'campus-furnf'));
     } else if (key === 'the_deep_end') {
       // covered walk down the alley between 104 and the hall (x 440..460)
-      put(svg('line', { x1: 443, y1: 512, x2: 443, y2: 738 }, 'campus-furn'));
-      put(svg('line', { x1: 457, y1: 512, x2: 457, y2: 738 }, 'campus-furn'));
+      putWall(svg('line', { x1: 443, y1: 512, x2: 443, y2: 738 }, 'campus-furn'));
+      putWall(svg('line', { x1: 457, y1: 512, x2: 457, y2: 738 }, 'campus-furn'));
       // basin + waterline
       put(svg('rect', { x: 330, y: 760, width: 280, height: 44 }, 'campus-furn'));
       put(svg('rect', { x: 336, y: 766, width: 268, height: 32, 'stroke-dasharray': '3 5' }, 'campus-furn'));
@@ -1312,6 +1593,86 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     }
   }
 
+  /**
+   * THE ROOM'S COUNTER-TURN. A quarter turn swaps every room's sides on screen:
+   * a 220x220 classroom is unchanged, but a 280-wide front becomes 220 wide and
+   * 280 tall. So the dressing is not merely turned back where it stood - it is
+   * re-stacked down the room the way the room now reads: THE SIGN AT THE HEAD,
+   * THE ART UNDER IT, THE PLATE AT THE FOOT. Same three things in the same
+   * order the eye already learned from the landscape plan, which is the whole
+   * point: turning the phone must not teach the player a new map.
+   *
+   * Every box here comes off the frozen tables (ROOMS, LOGO_BOX, FURN_BOX) and
+   * the stylesheet's own metrics. It measures nothing, so it works identically
+   * in a browser and in the DOM double the node suites build with.
+   */
+  function turnClassRoom(spec, parts) {
+    const [x, y, w, h] = spec.rect;
+    const rect = [x + 4, y + 4, w - 8, h - 8];   /* stay off the walls */
+    const cy = y + h / 2;                        /* every piece centres across the room */
+    if (parts.key === 'the_deep_end') { turnPool(spec, parts, rect, cy); return; }
+
+    /* 1. THE SIGN takes the head of the room - the top of it, once turned. */
+    const nBox = [parts.signX - 47, parts.neonY, 94, 16];
+    const nPiv = boxCentre(nBox);
+    const ns = turnScale(nBox, rect, UPRIGHT_MIN_SCALE);
+    upright(parts.neon, nPiv, { s: ns, to: [x + w - 4 - ns * nBox[3] / 2, cy] });
+
+    /* 2. THE PLATE takes the foot. */
+    const lBox = unionBox(parts.nameBox, parts.subBox);
+    const lPiv = boxCentre(lBox);
+    const ls = turnScale(lBox, rect, UPRIGHT_MIN_SCALE);
+    upright(parts.labelG, lPiv, { s: ls, to: [x + 4 + ls * lBox[3] / 2, cy] });
+
+    /* 3. THE ART takes what is left between them, and shrinks to it if it must.
+     *    Art that reached the plate would take the mod's own words off the map,
+     *    which is the one thing LOGO_BOX exists to prevent. */
+    const aBox = unionBox(FURN_BOX[parts.key] || null, LOGO_BOX[parts.key] || null);
+    if (!aBox) return;
+    const foot = x + 8 + ls * lBox[3];
+    const head = x + w - 8 - ns * nBox[3];
+    const band = Math.max(0, head - foot);
+    let as = turnScale(aBox, rect, UPRIGHT_MIN_SCALE);
+    if (aBox[3] > 0 && aBox[3] * as > band) as = Math.max(UPRIGHT_MIN_SCALE, band / aBox[3]);
+    const aTo = [(foot + head) / 2, cy];
+    const aPiv = boxCentre(aBox);
+    upright(parts.furn, aPiv, { s: as, to: aTo });
+    upright(parts.logo, aPiv, { s: as, to: aTo });
+  }
+
+  /**
+   * THE POOL IS ITS OWN CASE, and the build contract says so out loud. It is 336
+   * wide and 114 deep - turned, a 114-wide column - and the rule above would
+   * shrink its wordmark to a third of itself to fit. So the WATER stays exactly
+   * as drawn (lane lines along the lane read the same either way; a pool is not
+   * a sentence) and only what is WRITTEN stands up, re-stacked down the column:
+   * wordmark at the head, name and number under it, sign at the far end. Each
+   * row is fitted to the column on its own, so the short name never pays for the
+   * long number's length.
+   */
+  function turnPool(spec, parts, rect, cy) {
+    const [x, , w] = spec.rect;
+    const art = LOGO_BOX.the_deep_end;
+    if (parts.logo && art) {
+      upright(parts.logo, boxCentre(art), { s: turnScale(art, rect, 0.35), to: [x + w - 38, cy] });
+    }
+    upright(parts.name, boxCentre(parts.nameBox),
+      { s: turnScale(parts.nameBox, rect, UPRIGHT_MIN_SCALE), to: [x + 246, cy] });
+    /* THE LONGEST PLATE ON THE PLAN ("RM 105 - THE DEEP END") is fitted to a
+     * rect three units tighter at each end than the room's: fitted to the wall
+     * it lands ON the wall, because the mono advance below is an ESTIMATE and
+     * an estimate that runs two units short reads as a plate touching tile. */
+    const subRect = [rect[0], rect[1] + 3, rect[2], rect[3] - 6];
+    upright(parts.sub, boxCentre(parts.subBox),
+      { s: turnScale(parts.subBox, subRect, UPRIGHT_MIN_FACILITY), to: [x + 214, cy] });
+    /* The sign keeps the head EVEN HERE. The pool is the one room whose art is
+     * its own sign, but a reader coming down the plan reads status first in
+     * every other room and must not have to learn a second rule for one. */
+    const nBox = [parts.signX - 47, parts.neonY, 94, 16];
+    upright(parts.neon, boxCentre(nBox),
+      { s: turnScale(nBox, rect, UPRIGHT_MIN_SCALE), to: [x + w - 12, cy] });
+  }
+
   function buildClassRoom(key) {
     const spec = ROOMS[key];
     const [x, y, w, h] = spec.rect;
@@ -1334,12 +1695,20 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       x, y, width: w, height: h, fill: 'url(#' + roomGradientId(key) + ')',
     }, 'campus-cabinet'));
     g.appendChild(svg('rect', { x, y, width: w, height: h }, 'campus-lit'));
-    furnitureFor(key, g);
+    /* THE DRESSING TRAVELS AS ONE. Furniture and logo go in a wrapper so the
+     * upright pass can turn them with a single transform about a single pivot -
+     * turned separately they would drift apart, because a turn is only
+     * neighbourly when everything shares its centre. The wrapper is classless:
+     * every campus rule is a descendant selector, so it changes nothing. */
+    const gFurn = svg('g');
+    furnitureFor(key, gFurn, g);
+    g.appendChild(gFurn);
     /* THE LOGO - over the furniture, under every label. Optional: the art probe
      * below flips the stage to data-art="off" and CSS drops all of these. */
     const box = LOGO_BOX[key];
+    let logo = null;
     if (box) {
-      const logo = svg('image', {
+      logo = svg('image', {
         x: box[0], y: box[1], width: box[2], height: box[3],
         href: logoUrl(key),
         preserveAspectRatio: 'xMidYMid meet',
@@ -1365,7 +1734,14 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     // building (the Pool) and a WING room pin their own, because y + 46 would land
     // in the lawn or straight through the sign.
     const nameY = spec.nameY != null ? spec.nameY : (spec.side === 'n' ? y + 156 : y + 46);
-    g.appendChild(svgText(x + w / 2, nameY, 'campus-rname', t(spec.nameKey, spec.nameEn).toUpperCase()));
+    /* THE PLATE IS ONE BLOCK. Name and number live in a wrapper for the same
+     * reason the dressing does: turned about separate pivots they cross each
+     * other, and a room name lying across its own RM number is the one failure
+     * mode the upright pass exists to prevent. */
+    const labelG = svg('g');
+    const nameStr = t(spec.nameKey, spec.nameEn).toUpperCase();
+    const nameNode = svgText(x + w / 2, nameY, 'campus-rname', nameStr);
+    labelG.appendChild(nameNode);
     /* THE NUMBER ROW IS SIZED BY THE ROOM, not by which wing it is in. A wide
      * front carries "RM 202 · ECHO"; a deeper, narrower room carries the number
      * alone, because a mod may re-voice a class into something long and 22
@@ -1373,17 +1749,19 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
      * rooms. The neon sign, the hover card, the door card and the hanging board
      * all still name the class either way. */
     const tight = w < 170;
+    const subCls = tight ? 'campus-rsub tiny' : 'campus-rsub';
     /* THE SEEP READS THIS NODE (shell/seep.js, tell 02 "The File Name"): the
      * plate is what flashes the room's bare DEV KEY. It is kept on `roomRefs` so
      * the director never has to guess at a selector - and update() rewrites the
      * room's `class`, never this text, so a plate restored after a 90ms flash
      * cannot be stomped by a repaint. */
-    const sub = svgText(x + w / 2, nameY + (tight ? 16 : 18),
-      tight ? 'campus-rsub tiny' : 'campus-rsub',
-      (tight
-        ? t('campus_rm', 'RM') + ' ' + spec.rm
-        : t('campus_rm', 'RM') + ' ' + spec.rm + ' · ' + name(key)).toUpperCase());
-    g.appendChild(sub);
+    const subStr = (tight
+      ? t('campus_rm', 'RM') + ' ' + spec.rm
+      : t('campus_rm', 'RM') + ' ' + spec.rm + ' · ' + name(key)).toUpperCase();
+    const subY = nameY + (tight ? 16 : 18);
+    const sub = svgText(x + w / 2, subY, subCls, subStr);
+    labelG.appendChild(sub);
+    g.appendChild(labelG);
     doorFor(spec).forEach((n) => g.appendChild(n));
     const neonY = spec.neonY != null ? spec.neonY : (spec.side === 'n' ? 398 : 694);
     const neon = svg('g', null, 'campus-neon');
@@ -1400,13 +1778,21 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       x: signX - 47, y: neonY, width: 94, height: 16,
     }, 'campus-marquee'));
     g.appendChild(neon);
+    /* THE ROOM'S SHARE OF THE COUNTER-TURN, registered now and worn only while
+     * the plan is standing up. */
+    turnClassRoom(spec, {
+      furn: gFurn, logo, labelG, name: nameNode, sub, neon,
+      key, signX, neonY,
+      nameBox: textBox(nameStr, 'campus-rname', x + w / 2, nameY),
+      subBox: textBox(subStr, subCls, x + w / 2, subY),
+    });
     roomRefs[key] = { g, neon, neonText, ping, spec, sub };
     g.addEventListener('click', () => openClassCard(key));
     // EMI SEAM: the pointer SETTLED on this room (HOVER_DWELL_MS), not crossed it.
     attachTip(g, () => classTip(key), () => {
       try { fireMoment('campus.roomHover', { gameKey: key, inClass: false }); } catch (e) { /* noop */ }
     });
-    plan.appendChild(g);
+    orient.appendChild(g);
     return g;
   }
   /* A CLOSED semester has no rooms at all - not dark ones. Its games are absent
@@ -1432,6 +1818,11 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
    * @param {Object} o {rect, door, side, wallY, name, sub, sign, rm, compact,
    *   nameY, neonY, onClick, tip}
    */
+  /* A facility's dressing is hung by its CALLER (each counter draws its own),
+   * so the wrapper it has to go in is published here rather than returned. */
+  const facFurn = new Map();
+  function facPut(g, node) { const f = facFurn.get(g); (f || g).appendChild(node); return node; }
+
   function facility(o) {
     const [x, y, w, h] = o.rect;
     const g = svg('g', null, 'campus-room facility');
@@ -1439,6 +1830,14 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     g.appendChild(svg('rect', { x, y, width: w, height: h }, 'campus-gfloor'));
     g.appendChild(svg('rect', { x, y, width: w, height: h }, 'campus-lit'));
     const cx = x + w / 2;
+    /* THE UPRIGHT STACK, for a facility. Same law as a classroom - sign at the
+     * head, plate at the foot - on a room a third the size, so the floor is
+     * lower: a compact facility's NAME is longer than its room is deep ("PRIZE
+     * COUNTER" is 100 units in an 84-unit room), and the only alternative to a
+     * smaller plate is a plate lying across the counter next door. */
+    const fRect = [x + 4, y + 4, w - 8, h - 8];
+    const fcy = y + h / 2;
+    let signSpan = 0;
     if (o.sign) {
       const neonY = o.neonY != null ? o.neonY : y + 8;
       const neon = svg('g', null, 'campus-neon');
@@ -1458,6 +1857,10 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
         } catch (e) { /* noop */ }
       }
       g.appendChild(neon);
+      const nBox = [cx - 47, neonY, 94, 16];
+      const ns = turnScale(nBox, fRect, UPRIGHT_MIN_FACILITY);
+      signSpan = ns * 16;
+      upright(neon, boxCentre(nBox), { s: ns, to: [x + w - 4 - signSpan / 2, fcy] });
     }
     const nameY = o.nameY != null ? o.nameY : (o.side === 'n' ? y + 156 : y + 176);
     /* THE COMPACT PLATE FITS ITS ROOM. A compact facility is 108 units wide and
@@ -1468,19 +1871,43 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
      * the size, measured by name LENGTH so a mod-skinned name gets the same
      * treatment, keeps the whole plate inside the room. */
     const longName = !!o.compact && String(o.name || '').length > 10;
-    g.appendChild(svgText(cx, nameY, 'campus-rname' + (longName ? ' tight' : ''),
-      String(o.name || '').toUpperCase()));
+    const fLabel = svg('g');
+    const nameCls = 'campus-rname' + (longName ? ' tight' : '');
+    const nameStr = String(o.name || '').toUpperCase();
+    fLabel.appendChild(svgText(cx, nameY, nameCls, nameStr));
+    let fBox = textBox(nameStr, nameCls, cx, nameY);
     const sub = o.rm
       ? (t('campus_rm', 'RM') + ' ' + o.rm + (o.sub ? ' · ' + o.sub : ''))
       : (o.sub || '');
     if (sub) {
-      g.appendChild(svgText(cx, nameY + (o.compact ? 16 : 18),
-        o.compact ? 'campus-rsub tiny' : 'campus-rsub', sub.toUpperCase()));
+      const subCls = o.compact ? 'campus-rsub tiny' : 'campus-rsub';
+      const subY = nameY + (o.compact ? 16 : 18);
+      fLabel.appendChild(svgText(cx, subY, subCls, sub.toUpperCase()));
+      fBox = unionBox(fBox, textBox(sub.toUpperCase(), subCls, cx, subY));
+    }
+    g.appendChild(fLabel);
+    const fs = turnScale(fBox, fRect, UPRIGHT_MIN_FACILITY);
+    upright(fLabel, boxCentre(fBox), { s: fs, to: [x + 4 + fs * fBox[3] / 2, fcy] });
+    /* THE COUNTER'S OWN DRESSING - the drawers, the bell, the shutter - goes in
+     * a wrapper LAST, exactly where the call sites used to hang it, and takes
+     * the same turn into the band between the sign and the plate. Left pinned
+     * it would sit down on top of a plate that has moved, which is what the
+     * first pass did to RECORDS. */
+    const fFurn = svg('g');
+    g.appendChild(fFurn);
+    facFurn.set(g, fFurn);
+    if (o.furnBox) {
+      const foot = x + 8 + fs * fBox[3];
+      const head = x + w - 8 - signSpan;
+      const band = Math.max(0, head - foot);
+      let ds = turnScale(o.furnBox, fRect, UPRIGHT_MIN_FACILITY);
+      if (o.furnBox[3] > 0 && o.furnBox[3] * ds > band) ds = Math.max(UPRIGHT_MIN_FACILITY, band / o.furnBox[3]);
+      upright(fFurn, boxCentre(o.furnBox), { s: ds, to: [(foot + head) / 2, fcy] });
     }
     if (o.door != null) doorFor({ door: o.door, side: o.side, wallY: o.wallY, rect: o.rect }).forEach((n) => g.appendChild(n));
     if (o.onClick) g.addEventListener('click', o.onClick);
     if (o.tip) attachTip(g, o.tip);
-    plan.appendChild(g);
+    orient.appendChild(g);
     return g;
   }
 
@@ -1496,7 +1923,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   const recordsG = facility({
     rect: FACILITIES.records.rect, door: FACILITIES.records.door,
     side: FACILITIES.records.side, compact: true,
-    neonY: 388, nameY: 426,
+    neonY: 388, nameY: 426, furnBox: [1278, 448, 68, 12],
     sign: t('report_card', 'Report Card'),
     name: t('campus_records', 'Records'),
     rm: FACILITIES.records.rm,
@@ -1515,13 +1942,13 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
    * a facility's class - roomRefs holds game rooms only - so this is stable. */
   recordsG.setAttribute('class', 'campus-room facility records');
   /* a bank of drawers along the counter's own wall - the whole term, in ink */
-  [1278, 1302, 1326].forEach((x) => recordsG.appendChild(svg('rect', { x, y: 448, width: 20, height: 12 }, 'campus-furnf')));
+  [1278, 1302, 1326].forEach((x) => facPut(recordsG, svg('rect', { x, y: 448, width: 20, height: 12 }, 'campus-furnf')));
 
   /* Front Office (ex-Registrar; settings) - office, lower counter */
   const regG = facility({
     rect: FACILITIES.registrar.rect, door: FACILITIES.registrar.door,
     side: FACILITIES.registrar.side, compact: true,
-    neonY: 484, nameY: 522,
+    neonY: 484, nameY: 522, furnBox: [1276, 540, 76, 15],
     sign: t('settings', 'Settings'),
     name: t('campus_registrar', 'Front Office'),
     rm: FACILITIES.registrar.rm,
@@ -1541,9 +1968,9 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     }),
   });
   /* the counter, the bell and the stamp */
-  regG.appendChild(svg('rect', { x: 1276, y: 548, width: 76, height: 7 }, 'campus-furnf'));
-  regG.appendChild(svg('circle', { cx: 1282, cy: 543, r: 3 }, 'campus-furn'));
-  regG.appendChild(svg('rect', { x: 1338, y: 540, width: 10, height: 7 }, 'campus-furnf'));
+  facPut(regG, svg('rect', { x: 1276, y: 548, width: 76, height: 7 }, 'campus-furnf'));
+  facPut(regG, svg('circle', { cx: 1282, cy: 543, r: 3 }, 'campus-furn'));
+  facPut(regG, svg('rect', { x: 1338, y: 540, width: 10, height: 7 }, 'campus-furnf'));
   stag(recordsG, 700);
   stag(regG, 780);
 
@@ -1595,7 +2022,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   const prizesG = facility({
     rect: FACILITIES.prizes.rect, door: FACILITIES.prizes.door,
     side: FACILITIES.prizes.side, compact: true,
-    neonY: 580, nameY: 618,
+    neonY: 580, nameY: 618, furnBox: [1274, 637, 80, 22],
     sign: t('wallet_tickets', 'Tickets'),
     signOff: !prizesLit,
     name: t('campus_room_prizes', 'Prize Counter'),
@@ -1644,7 +2071,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
    * read as closed - the drawing below does that on its own. */
   prizesG.setAttribute('class', 'campus-room facility prizes' + (prizesLit ? '' : ' is-shut'));
   /* the shelf behind the glass - three parcels in a row on the back wall */
-  [1280, 1304, 1328].forEach((x) => prizesG.appendChild(
+  [1280, 1304, 1328].forEach((x) => facPut(prizesG,
     svg('rect', { x, y: 644, width: 18, height: 13 }, 'campus-furnf')));
   /* THE SHUTTER, and it goes on AFTER the parcels so the parcels are behind it,
    * which is exactly what the card claims ("parcels still stacked behind it").
@@ -1652,16 +2079,16 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
    * classed: it is one room's one state, and it should not cost a stylesheet
    * rule that a later sheet could fight over. */
   if (!prizesLit) {
-    prizesG.appendChild(svg('rect', {
+    facPut(prizesG, svg('rect', {
       x: 1274, y: 637, width: 80, height: 21, rx: 1.5,
       fill: '#0D0D1A', stroke: '#3B3455', 'stroke-width': 0.8,
     }));
     /* the slats, which are the thing that makes a dark box read as a shutter */
-    [641.5, 646, 650.5, 655].forEach((y) => prizesG.appendChild(svg('rect', {
+    [641.5, 646, 650.5, 655].forEach((y) => facPut(prizesG, svg('rect', {
       x: 1276, y, width: 76, height: 0.9, fill: '#3B3455', opacity: 0.55,
     })));
     /* and the pull handle along the bottom rail */
-    prizesG.appendChild(svg('rect', {
+    facPut(prizesG, svg('rect', {
       x: 1300, y: 657, width: 28, height: 1.6, fill: '#6A5F8C',
     }));
   }
@@ -1683,7 +2110,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   const lockerG = facility({
     rect: FACILITIES.locker.rect, door: FACILITIES.locker.door,
     side: FACILITIES.locker.side, compact: true,
-    neonY: 676, nameY: 714,
+    neonY: 676, nameY: 714, furnBox: [1276, 737, 76, 19],
     sign: t('locker_sign', 'Locker'),
     name: t('campus_room_locker', 'The Locker'),
     rm: FACILITIES.locker.rm,
@@ -1698,26 +2125,46 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   /* THE ROW OF DOORS behind the glass, the parcels' opposite number one window
    * down: three tall lockers instead of three parcels, and a vent slot near the
    * top of each so the shapes read as doors rather than as three more boxes. */
+  /* Through facPut(), like the parcels above: in portrait the furniture wrapper
+   * takes the same turn as the label, so the doors stay upright with the sign. */
   [1280, 1304, 1328].forEach((x) => {
-    lockerG.appendChild(svg('rect', { x, y: 740, width: 18, height: 13 }, 'campus-furnf'));
-    lockerG.appendChild(svg('line', { x1: x + 4, y1: 744, x2: x + 14, y2: 744 }, 'campus-furn'));
+    facPut(lockerG, svg('rect', { x, y: 740, width: 18, height: 13 }, 'campus-furnf'));
+    facPut(lockerG, svg('line', { x1: x + 4, y1: 744, x2: x + 14, y2: 744 }, 'campus-furn'));
   });
   stag(lockerG, 900);
 
   /* Entrance hall dressing (notice board, trophy case, admissions desk, crest) */
   const hall = svg('g', null, 'campus-halldress');
   hall.appendChild(svg('circle', { cx: 582, cy: 622, r: 46, 'stroke-dasharray': '4 6' }, 'campus-crestring'));
-  hall.appendChild(svgText(582, 638, 'campus-crestA', 'A'));
+  const crestA = svgText(582, 638, 'campus-crestA', 'A');
+  hall.appendChild(crestA);
+  /* The monogram is a LETTER, and a letter on its side is a shape. It turns
+   * about the ring's own centre, so the crest stays a crest. */
+  upright(crestA, [582, 621], {});
   /* THE NOTICE BOARD is corkboard under a lamp now: a felt backing behind the
    * existing board, and a gold plate instead of a chalk one. The board rect,
    * its four pins and their coordinates are untouched. */
   hall.appendChild(svg('rect', { x: 496, y: 512, width: 138, height: 18 }, 'campus-felt'));
   hall.appendChild(svg('rect', { x: 500, y: 516, width: 130, height: 10 }, 'campus-furnf'));
   [[516, 'p1'], [548, 'p2'], [583, 'p3'], [612, 'p4']].forEach(([cx, k]) => hall.appendChild(svg('circle', { cx, cy: 521, r: 1.6 }, 'campus-pin ' + k)));
-  hall.appendChild(svgText(565, 542, 'campus-rsub tiny gold', t('campus_notice_board', 'Notice Board').toUpperCase()));
+  /* THE HALL'S FOUR CAPTIONS are re-dealt around the turned room rather than
+   * spun in place: standing up they each spend their length across the hall,
+   * and left where they lay they would cross the board, the case, the desk and
+   * each other. Four clear bands, top to bottom of the turned hall: the room's
+   * own name, the case, the board, the desk. */
+  const noticeLbl = svgText(565, 542, 'campus-rsub tiny gold', t('campus_notice_board', 'Notice Board').toUpperCase());
+  hall.appendChild(noticeLbl);
+  upright(noticeLbl, boxCentre(textBox(noticeLbl.textContent, 'campus-rsub tiny', 565, 542)),
+    { to: [620, 550] });
   hall.appendChild(svg('rect', { x: 662, y: 548, width: 12, height: 150 }, 'campus-furnf'));
   [[566, 'gold'], [596, 'gold'], [626, 'lav'], [656, 'dim']].forEach(([cy, k]) => hall.appendChild(svg('circle', { cx: 668, cy, r: 2.4 }, 'campus-trophy ' + k)));
-  hall.appendChild(svgText(639, 628, 'campus-rsub tiny', t('campus_trophy_case', 'Trophy Case').toUpperCase(), { transform: 'rotate(-90 639 628)' }));
+  const trophyLbl = svgText(639, 628, 'campus-rsub tiny', t('campus_trophy_case', 'Trophy Case').toUpperCase(), { transform: 'rotate(-90 639 628)' });
+  hall.appendChild(trophyLbl);
+  /* THE TWO ROWS THAT WERE ALREADY ON THEIR SIDE get the OPPOSITE turn, not an
+   * extra one: composing +90 onto the -90 they wear would cancel to nothing and
+   * leave them lying down while the whole rest of the plan stood up. The pair
+   * is a replacement, and `off` puts the original back. */
+  upright(trophyLbl, null, { on: 'rotate(90 639 628)', off: 'rotate(-90 639 628)' });
   /* THE ADMISSIONS DESK, SHIFTED EIGHT UNITS EAST - and its rotated sign with
    * it. The label used to hang at x 452, twenty units clear of the desk and
    * twenty units OUTSIDE the hall, which the old 480-wide hall could afford
@@ -1729,13 +2176,17 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   hall.appendChild(svg('line', { x1: 488, y1: 616, x2: 518, y2: 616 }, 'campus-furn'));
   hall.appendChild(svg('line', { x1: 488, y1: 632, x2: 518, y2: 632 }, 'campus-furn'));
   hall.appendChild(svg('circle', { cx: 503, cy: 662, r: 3 }, 'campus-lamp'));
-  hall.appendChild(svgText(472, 644, 'campus-rsub tiny', t('campus_admissions', 'Admissions').toUpperCase(), { transform: 'rotate(-90 472 644)' }));
-  plan.appendChild(stag(hall, 600));
+  const admitLbl = svgText(472, 644, 'campus-rsub tiny', t('campus_admissions', 'Admissions').toUpperCase(), { transform: 'rotate(-90 472 644)' });
+  hall.appendChild(admitLbl);
+  upright(admitLbl, null, { on: 'rotate(90 472 644)', off: 'rotate(-90 472 644)' });
+  orient.appendChild(stag(hall, 600));
 
   /* Entrance hall as a facility hit-area (notices card) */
   const hallG = svg('g', null, 'campus-room facility');
   hallG.appendChild(svg('rect', { x: 460, y: 510, width: 240, height: 220, fill: 'transparent', stroke: 'none' }, 'campus-hit'));
-  hallG.appendChild(svgText(582, 704, 'campus-rname dim', t('campus_entrance_hall', 'Entrance Hall').toUpperCase()));
+  const entLbl = svgText(582, 704, 'campus-rname dim', t('campus_entrance_hall', 'Entrance Hall').toUpperCase());
+  hallG.appendChild(entLbl);
+  upright(entLbl, boxCentre(textBox(entLbl.textContent, 'campus-rname', 582, 704)), { to: [686, 620] });
   hallG.addEventListener('click', () => openFacilityCard({
     name: t('campus_entrance_hall', 'Entrance Hall'),
     status: t('campus_notice_board', 'Notice Board'),
@@ -1748,7 +2199,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     desc: banner || t('campus_desc_entrance',
       'The notice board carries announcements. The trophy case waits for your diplomas.'),
   }));
-  plan.appendChild(stag(hallG, 860));
+  orient.appendChild(stag(hallG, 860));
 
   /* corridor <-> entrance opening + main gate */
   /* THE OPENING NOW RUNS TO THE ALLEY'S FAR JAMB. It used to stop at 738 and
@@ -1757,12 +2208,14 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
    * units were a sliver of corridor wall left hanging across the mouth of the
    * gate alley. Flush with the jamb, the hall's own 38-unit doorway and the
    * alley's 40 read as the one wide opening they are. */
-  plan.appendChild(svg('line', { x1: 662, y1: 510, x2: 740, y2: 510 }, 'campus-gap'));
-  plan.appendChild(svg('line', { x1: 662, y1: 510, x2: 740, y2: 510, 'stroke-dasharray': '3 6' }, 'campus-opening'));
-  plan.appendChild(svg('line', { x1: 682, y1: 730, x2: 758, y2: 730 }, 'campus-gap'));
-  plan.appendChild(svg('path', { d: 'M682,730 A38,38 0 0 0 720,768' }, 'campus-door'));
-  plan.appendChild(svg('path', { d: 'M758,730 A38,38 0 0 1 720,768' }, 'campus-door'));
-  plan.appendChild(svgText(720, 788, 'campus-rsub wide', t('campus_main_gate', 'Main Gate').toUpperCase()));
+  orient.appendChild(svg('line', { x1: 662, y1: 510, x2: 740, y2: 510 }, 'campus-gap'));
+  orient.appendChild(svg('line', { x1: 662, y1: 510, x2: 740, y2: 510, 'stroke-dasharray': '3 6' }, 'campus-opening'));
+  orient.appendChild(svg('line', { x1: 682, y1: 730, x2: 758, y2: 730 }, 'campus-gap'));
+  orient.appendChild(svg('path', { d: 'M682,730 A38,38 0 0 0 720,768' }, 'campus-door'));
+  orient.appendChild(svg('path', { d: 'M758,730 A38,38 0 0 1 720,768' }, 'campus-door'));
+  const gateLbl = svgText(720, 788, 'campus-rsub wide', t('campus_main_gate', 'Main Gate').toUpperCase());
+  orient.appendChild(gateLbl);
+  upright(gateLbl, boxCentre(textBox(gateLbl.textContent, 'campus-rsub wide', 720, 788)), {});
 
   /* an OPEN wing's mouth: the corridor's end wall is cut away, same treatment as
    * the corridor <-> entrance opening above. A sealed wing keeps its wall (and
@@ -1774,13 +2227,13 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
      * the west wing's spur is 40 units of hall, and a 72-unit hole in the wall
      * in front of it would be a wall with nothing behind two thirds of it. */
     const [my1, my2] = mouthSpan(WINGS[id]);
-    plan.appendChild(svg('line', { x1: mx, y1: my1, x2: mx, y2: my2 }, 'campus-gap'));
-    plan.appendChild(svg('line', { x1: mx, y1: my1, x2: mx, y2: my2, 'stroke-dasharray': '3 6' }, 'campus-opening'));
+    orient.appendChild(svg('line', { x1: mx, y1: my1, x2: mx, y2: my2 }, 'campus-gap'));
+    orient.appendChild(svg('line', { x1: mx, y1: my1, x2: mx, y2: my2, 'stroke-dasharray': '3 6' }, 'campus-opening'));
   });
 
   /* stop badges live above everything in the plan */
   stopsLayer = svg('g', null, 'campus-stops');
-  plan.appendChild(stopsLayer);
+  orient.appendChild(stopsLayer);
 
   root.appendChild(plan);
 
@@ -2602,13 +3055,25 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
 
     /* stop badges + route */
     stopsLayer.textContent = '';
+    stopUprights = [];
+    const stopsUp = planUpright();
     st.stops.forEach((s, i) => {
       const [x, y] = stopAnchor(s.gameKey);
       const g = svg('g', null, 'campus-stopb' + ((st.rooms[s.gameKey] || {}).done ? ' done' : ''));
       try { g.style.setProperty('--dstop', (1300 + i * 160) + 'ms'); } catch (e) { /* noop */ }
       g.appendChild(svg('circle', { cx: x, cy: y, r: 11 }, 'halo'));
       g.appendChild(svg('circle', { cx: x, cy: y, r: 11 }));
-      g.appendChild(svgText(x, y + 4, null, String(s.n)));
+      const num = svgText(x, y + 4, null, String(s.n));
+      g.appendChild(num);
+      /* ONLY THE NUMBER TURNS, never the badge: the badge wears the entry pop,
+       * which is a CSS `transform` on that same element, and an attribute here
+       * would be overruled for the first half second and then snap into place.
+       * The disc and its ping ring are circles - they read the same either way.
+       * These rows are re-minted on every update(), so they keep their own list
+       * rather than growing the permanent registry a row a night. */
+      const row = { node: num, on: 'rotate(90 ' + x + ' ' + y + ')', off: '' };
+      stopUprights.push(row);
+      wearTurn(row, stopsUp);
       stopsLayer.appendChild(g);
     });
     routePath.setAttribute('d', routeFor(st.stops));
@@ -2734,7 +3199,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     g.setAttribute('pointer-events', 'none');
     g.setAttribute('opacity', '0');
     cursorG = g;
-    plan.appendChild(g);
+    orient.appendChild(g);
     return g;
   }
   function placeCursor(x, y) {
@@ -2742,7 +3207,12 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     if (!cursorG) return;
     const r1 = Math.round(x * 10) / 10;
     const r2 = Math.round(y * 10) / 10;
-    try { cursorG.setAttribute('transform', 'translate(' + r1 + ',' + r2 + ')'); } catch (e) { /* noop */ }
+    /* The demo hand is an ARROW, and an arrow lying on its side is pointing
+     * somewhere else. Its path is drawn from its own tip at (0,0), so it takes
+     * the sprites' counter-turn on the same seam and about the same anchor -
+     * written here rather than in the registry because this transform is
+     * rewritten every tick and would overwrite a registered one. */
+    try { cursorG.setAttribute('transform', 'translate(' + r1 + ',' + r2 + ')' + spriteTurn()); } catch (e) { /* noop */ }
   }
   function showCursor(on) {
     if (!cursorG) return;
@@ -2977,6 +3447,11 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   }
   tickBell();
 
+  /* THE LAST WORD ON ORIENTATION. fitPlan() ran at the top of the build, before
+   * a single label existed to register - so the registry is stood up once here,
+   * now that it is full. Every later rotate goes through fitPlan() alone. */
+  applyOrientation();
+
   update(st, stats);
 
   return {
@@ -3035,8 +3510,8 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     mapPoint(pt) {
       try {
         if (!pt || pt.length < 2) return null;
-        if (!plan || typeof plan.getScreenCTM !== 'function') return null;
-        const m = plan.getScreenCTM();
+        if (!orient || typeof orient.getScreenCTM !== 'function') return null;
+        const m = orient.getScreenCTM();
         if (!m) return null;
         const x = m.a * pt[0] + m.c * pt[1] + m.e;
         const y = m.b * pt[0] + m.d * pt[1] + m.f;
