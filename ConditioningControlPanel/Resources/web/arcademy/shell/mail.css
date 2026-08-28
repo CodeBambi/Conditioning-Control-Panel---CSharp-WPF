@@ -144,8 +144,26 @@
 .arc-mail-paper { min-height:0; overflow:auto; padding-right:4px; }
 .arc-mail-hint, .arc-mail-empty { margin:14px 2px; }
 
-/* ---- one envelope on the wall ----------------------------------------- */
+/* ---- one envelope on the wall -----------------------------------------
+   THE CARD NEVER SHRINKS, AND THAT IS THE WHOLE OF IT (owner bug, 2026-08-28:
+   a two-line heading painting over the bottom border and into the next
+   envelope). `.arc-mail-list` is a flex COLUMN with `overflow:auto`, so every
+   card is a flex ITEM, and a flex item's default `flex-shrink:1` means a pile
+   taller than the pane is SQUEEZED before it is scrolled. What normally holds
+   the line is the automatic minimum size (`min-height:auto` resolving to the
+   content), and that protection is only owed to a box whose overflow is
+   visible - a `<button>` is a form control the engine may treat otherwise, so
+   it is not a floor to build on. Measured with the full 24-letter catalog at
+   1600x900 and that protection off: every card collapsed to the SAME 21.7px
+   (which is what "fixed-height card" means here) and the clamped 32.5px title
+   hung 34px below its own border. The sender line survived because it is one
+   nowrap ellipsised row - it had nothing to spill.
+   `flex:none` rather than a tighter clamp: the pane already scrolls (list
+   529px, content 1739px), so the honest answer is a card that grows to its two
+   lines and a wall that scrolls past them. The clamp below still caps a heading
+   at two lines; this is what makes the CARD follow it. */
 .arc-mail-item {
+  flex:none;
   position:relative; cursor:pointer; text-align:left;
   display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:10px;
   padding:10px 12px 10px 10px;
