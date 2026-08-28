@@ -581,6 +581,11 @@ export function createVoice(o) {
     const data = isObj(d) ? d : {};
     BEATS = normalizeBeats(data.BEATS || data.beats);
     POOLS = normalizePools(data.POOLS || data.pools, 'bark')
+      /* THE SHOP (emi/shop.js, Locker wave 0828): the counter and the Locker
+       * pools, barks in every respect - same channel, same floors, same
+       * rations. Optional like the rest; a missing file costs her the shelf
+       * talk and nothing else. */
+      .concat(normalizePools(data.SHOP, 'bark'))
       .concat(normalizePools(data.RARE_DORK, 'rare'))
       .concat(normalizePools(data.TELEMETRY, 'telemetry'));
     if (isObj(data.CHAINS)) CHAINS = data.CHAINS;
@@ -597,11 +602,13 @@ export function createVoice(o) {
       import('./story.js').catch((e) => { say('emi voice: story.js unavailable (' + ((e && e.message) || e) + ')'); return null; }),
       import('./barks.js').catch((e) => { say('emi voice: barks.js unavailable (' + ((e && e.message) || e) + ')'); return null; }),
       import('./chains.js').catch(() => null),
-    ]).then(([s, b, c]) => {
+      import('./shop.js').catch((e) => { say('emi voice: shop.js unavailable (' + ((e && e.message) || e) + ')'); return null; }),
+    ]).then(([s, b, c, sh]) => {
       try {
         useData({
           BEATS: s && (s.BEATS || s.default),
           POOLS: b && (b.POOLS || (b.default && b.default.POOLS)),
+          SHOP: sh && (sh.SHOP_POOLS || (sh.default && sh.default.SHOP_POOLS)),
           RARE_DORK: b && (b.RARE_DORK || (b.default && b.default.RARE_DORK)),
           TELEMETRY: b && (b.TELEMETRY || (b.default && b.default.TELEMETRY)),
           CHAINS: c && (c.CHAINS || (c.default && c.default.CHAINS)),

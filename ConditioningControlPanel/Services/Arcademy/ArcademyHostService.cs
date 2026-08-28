@@ -1621,6 +1621,13 @@ internal static class ArcademyHostService
         ["prize_busy"] = "Somebody is already at the drawer. Give it a second and ask again.",
         ["prize_quiet"] = "The counter went quiet on that one. Try again in a moment.",
         ["prize_empty"] = "Shelf is bare tonight. Come back when the truck has been.",
+        // THE ALMOST and THE CHARGE-HOLD (shell/prizecounter.js, wave 0828). `prize_short` is a
+        // bare word: the page builds "Almost, 20 short" by concatenation the way it already builds
+        // "Holding 2/3", so no translated string has a number baked into it.
+        ["pc_verb_almost"] = "Almost",
+        ["prize_short"] = "short",
+        ["prize_hold_hint"] = "Hold it down to trade that one.",
+        ["prize_hold_aria"] = "Hold to trade",
         // Tonight's hot room, painted from the seeded draw `init` already handed down.
         ["prize_payday_label"] = "Hot room tonight",
         ["prize_payday_2"] = "is paying double",
@@ -3024,6 +3031,14 @@ internal static class ArcademyHostService
         ["booth_alley_hint"] = "The lit window is down at the end of the row.",
         ["booth_put_it_on"] = "Put it on",
         ["booth_hang_it"] = "Hang it up",
+        // The two wayfinding plates in the alley (shell/alleysign.js): the booth's
+        // right-hand wall points at RM 004 and the Locker's left wall points back.
+        // Rows of their own, not a re-use of the room cards, because a sign names a
+        // DIRECTION and a card names a room. The sheet sets both in block caps.
+        ["alley_sign_locker"] = "Locker room",
+        ["alley_sign_locker_aria"] = "Go to the Locker room",
+        ["alley_sign_counter"] = "Prize counter",
+        ["alley_sign_counter_aria"] = "Go back to the Prize Counter",
         ["campus_room_locker"] = "The Locker",
         ["locker_sign"] = "Locker",
         ["locker_status"] = "Yours",

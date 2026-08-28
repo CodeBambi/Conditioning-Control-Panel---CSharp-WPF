@@ -230,6 +230,56 @@ export function frameSetFor(name) {
     ? OUTFIT_FRAME_SRC[name] : BODY_FRAME_SRC;
 }
 
+/* ============================================================================
+ * THE OVERLAY SHEET (the swim goggles, 2026-08-28)
+ * ==========================================================================*/
+/* WHAT WENT WRONG, so nobody paints over the glass again. The Counter Stock art
+ * install pasted the ORIGINAL screen+bezel rect back over every generated outfit
+ * frame so the glass could never drift - and the swim sheet draws GOGGLES across
+ * the top of that rect, so the paste erased them. All ten shipped swim frames
+ * have a screen rect byte-identical to the standard art; the goggles were in the
+ * source and are gone from the sprite.
+ *
+ * WHY A LAYER AND NOT A REPAINT. The face is a canvas laid over the glass rect
+ * (emi.css `.emi-screen`), and takeover.js lays a SECOND canvas on the same rect.
+ * Anything an outfit draws inside that rect belongs IN FRONT of both or it is not
+ * drawn at all - goggles behind her own eyes are not goggles. So a sheet may ship
+ * a matching `over-<pose>.png`: the same 859x869 canvas, transparent everywhere
+ * except the part of the prop that overlaps the glass, rendered by a sibling img
+ * that sits above the face and below the bubble.
+ *
+ * IT IS OPTIONAL AND IT IS SILENT. Three of the four sheets have no overlay and
+ * never will; ONE probe per sheet answers that, the verdict is cached for the
+ * sitting, and a missing file leaves one hidden img and no further requests. */
+/** `./art/emi/body-idle.png` -> `./art/emi/<outfit>/over-body-idle.png`. PURE. */
+export function overSrc(name, std) {
+  const s = typeof std === 'string' ? std : '';
+  const i = s.lastIndexOf('/');
+  return outfitDir(name) + 'over-' + (i < 0 ? s : s.slice(i + 1));
+}
+/** outfit name -> its frozen ten-frame OVERLAY map. Same shape as the body map. */
+export const OVER_FRAME_SRC = Object.freeze((() => {
+  const all = {};
+  for (const name of OUTFITS) {
+    const out = {};
+    for (const k of Object.keys(BODY_FRAME_SRC)) out[k] = overSrc(name, BODY_FRAME_SRC[k]);
+    all[name] = Object.freeze(out);
+  }
+  return all;
+})());
+/**
+ * The overlay map that belongs to a BODY map, or null for a set that has none.
+ * Identity, not a name: `useFrameSet` is handed a map and this is the one seam
+ * that turns it back into a wardrobe. The standard set never has an overlay.
+ * PURE.
+ */
+export function overSetFor(map) {
+  for (const name of OUTFITS) {
+    if (OUTFIT_FRAME_SRC[name] === map) return OVER_FRAME_SRC[name];
+  }
+  return null;
+}
+
 /* THE POSE WALK. Out to one side and back through the centre, then out to the
  * other - `sway1` and `sway4` are the two extremes. The centre is HELD (see
  * DIALS.SWAY_CENTER_*); every other step is one SWAY_STEP_MS. */
@@ -752,6 +802,20 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   body.draggable = false;
   if (body.setAttribute) body.setAttribute('draggable', 'false');
 
+  /* THE OVERLAY SHEET (see the block by OVER_FRAME_SRC). The part of an outfit
+   * that is drawn ACROSS her glass - today that is the swim goggles and nothing
+   * else. Same node arrangement as the desk toy: minted at birth, hidden at rest,
+   * `src` left unset so a sheet without one never fetches anything. */
+  const over = document.createElement('img');
+  over.className = 'emi-over';
+  over.alt = '';
+  over.draggable = false;
+  over.hidden = true;
+  if (over.setAttribute) {
+    over.setAttribute('draggable', 'false');
+    over.setAttribute('aria-hidden', 'true');
+  }
+
   /* COUNTER STOCK: THE DESK TOY. One node, minted at birth and hidden at rest -
    * the ask strip's arrangement, for the ask strip's reason: a player who does
    * not own the prize carries one hidden img and no code path below ever runs.
@@ -810,6 +874,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   el.appendChild(body);
   el.appendChild(toy);           // COUNTER STOCK (z1: over the body, under the fx)
   el.appendChild(canvas);
+  el.appendChild(over);          // THE OVERLAY SHEET (z2: over the face canvas)
   el.appendChild(fxHost);
   el.appendChild(bubble);
   el.appendChild(askStrip);      // ASKS
@@ -849,6 +914,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     if (k === bodyFrame) return k;
     bodyFrame = k;
     try { body.src = frameUrl(k); } catch (e) { /* noop */ }
+    paintOver();                   // THE ONE SEAM: the overlay follows the pose here
     try { if (body.setAttribute) body.setAttribute('data-frame', k); } catch (e) { /* noop */ }
     return k;
   }
@@ -859,7 +925,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       if (!k || k === 'celebration' || frameFailed[k]) return;
       frameFailed[k] = true;
       say('emi: body frame "' + k + '" failed to load - falling back to body.png');
-      try { body.src = frameSet.celebration; } catch (e) { /* noop */ }
+      paintBody();                 // ...and the overlay falls back with it
     });
   }
 
@@ -881,7 +947,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
           if (map !== frameSet || frameFailed[k]) return;
           frameFailed[k] = true;
           say('emi: body frame "' + k + '" is missing - body.png stands in');
-          if (bodyFrame === k) { try { body.src = frameSet.celebration; } catch (e) { /* noop */ } }
+          if (bodyFrame === k) paintBody();
         };
         im.src = map[k];
         preloaded.push(im);
@@ -889,6 +955,112 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     }
   }
   preloadFrames(BODY_FRAME_SRC);
+
+  /* ---------------------- the overlay sheet ------------------------------ */
+  /* WHAT AN OUTFIT WEARS ON HER GLASS. The swim sheet draws goggles across the
+   * top of her screen and the face canvas sits on that exact rect, so the
+   * goggles were invisible from the day the sheet shipped. `over-<pose>.png`
+   * beside the body frames is that art alone, on the same 859x869 canvas, and
+   * `.emi-over` (widget.css, z2) lays it back over the face.
+   *
+   * IT IS THE BODY'S SHADOW, not a second animation. It has no timer, no pose
+   * logic and no geometry: it is repainted from `bodyFrame` by `paintOver`, and
+   * `paintOver` is called from the ONE place the body src changes plus the two
+   * fallback paths - so every sway step, every face-driven pose, the mirror,
+   * the scale and the reduced-motion path carry it for free.
+   *
+   * ONE PROBE PER OUTFIT AND THE ANSWER IS FINAL, exactly like the varsity
+   * jacket: an outfit with no overlay sheet (labcoat, cheer, varsity, the
+   * standard set) costs one 404 for the sitting and nothing after it. */
+  let overSet = null;                       // the live overlay map, or null
+  let overSrcNow = '';                      // what is actually on the node
+  const overState = Object.create(null);    // probe url -> 'probing'|'on'|'failed'
+  const overWant = Object.create(null);     // ...and the map it answers for
+
+  function overUrl(key) {
+    if (!overSet) return null;
+    /* A BROKEN BODY FRAME FELL BACK TO body.png, so the overlay has to fall the
+     * same way or the goggles would be the wrong pose's goggles. */
+    return overSet[frameFailed[key] ? 'celebration' : key] || null;
+  }
+
+  /** Lay the overlay for the pose that is up, or take it off. */
+  function paintOver() {
+    const u = overUrl(bodyFrame);
+    if (!u) { over.hidden = true; return; }
+    if (u !== overSrcNow) {
+      overSrcNow = u;
+      try { over.src = u; } catch (e) { /* noop */ }
+    }
+    over.hidden = false;
+  }
+
+  /** Repaint body AND overlay together (the two fallback paths and a wardrobe swap). */
+  function paintBody() {
+    try { body.src = frameUrl(bodyFrame); } catch (e) { /* noop */ }
+    paintOver();
+  }
+
+  /* Warming, and it MUST NOT touch `frameFailed`: these are a different ten
+   * files and a missing one says nothing about the body sheet. */
+  function preloadOver(map) {
+    if (typeof Image !== 'function' || !map) return;
+    for (const k of Object.keys(map)) {
+      try {
+        const im = new Image();
+        im.onerror = () => { /* the node's own error listener stands the layer down */ };
+        im.src = map[k];
+        preloaded.push(im);
+      } catch (e) { /* noop */ }
+    }
+  }
+
+  /** Does the wardrobe she just put on come with an overlay? Ask once, ever. */
+  function armOver(map) {
+    const want = overSetFor(map);
+    if (!want) { overSet = null; paintOver(); return; }
+    const probe = want.idle;
+    if (overState[probe] === 'on') { overSet = want; paintOver(); return; }
+    overSet = null;
+    paintOver();
+    if (overState[probe]) return;           // failed, or a probe already in the air
+    if (typeof Image !== 'function') { overState[probe] = 'failed'; return; }
+    let im = null;
+    try { im = new Image(); } catch (e) { overState[probe] = 'failed'; return; }
+    overState[probe] = 'probing';
+    overWant[probe] = map;
+    im.onload = () => {
+      if (overState[probe] !== 'probing') return;
+      overState[probe] = 'on';
+      /* SHE MAY HAVE CHANGED AGAIN while this was in the air. The verdict is
+       * cached either way; the layer only goes up if she is still wearing it. */
+      if (frameSet !== overWant[probe]) return;
+      overSet = want;
+      paintOver();
+      preloadOver(want);
+      say('emi: outfit overlay on - it rides over her face');
+    };
+    im.onerror = () => {
+      if (overState[probe] !== 'probing') return;
+      overState[probe] = 'failed';
+    };
+    try { im.src = probe; } catch (e) { overState[probe] = 'failed'; }
+    preloaded.push(im);
+  }
+
+  /* A HALF-PRESENT SHEET IS NO SHEET. If any one frame of an armed overlay
+   * fails to decode the whole layer stands down for the sitting rather than
+   * leaving her in one pose's goggles. */
+  if (over.addEventListener) {
+    over.addEventListener('error', () => {
+      if (!overSet) return;
+      overState[overSet.idle] = 'failed';
+      overSet = null;
+      overSrcNow = '';
+      over.hidden = true;
+      say('emi: an outfit overlay frame is missing - the layer stands down');
+    });
+  }
 
   /* ---------------------- the prizes (Counter Stock) --------------------- */
   /* TWO PRIZES REACH EMI and neither of them is a setting: EMI'S DESK TOY puts
@@ -992,7 +1164,11 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     frameSet = map;
     // A broken frame in the OLD set says nothing about the new one.
     for (const k of Object.keys(frameFailed)) delete frameFailed[k];
-    try { body.src = frameUrl(bodyFrame); } catch (e) { /* noop */ }
+    /* THE OVERLAY IS PART OF THE WARDROBE, so it moves in the same beat: the
+     * old outfit's glass art comes off before the new body is even decoded. */
+    overSet = null;
+    paintBody();
+    armOver(map);
     return true;
   }
 

@@ -521,3 +521,120 @@ html.arc-mobile .pc-verb { min-height: 34px; }
    for a counter that owns its screen. */
 .pc-beat.is-lite .pc-beat-plate { box-shadow: none; }
 .pc-beat.is-lite .pc-beat-sprite { filter: none; }
+
+/* ==========================================================================
+   THE MARQUEE, THE ALMOST, THE GLOW AND THE ONE BREATH        (wave 0828, F)
+
+   The audit's #3 and #4: a shelf whose sign is a title block, whose rows are
+   either lit or dim with nothing in between, and on which nothing at all
+   moves. Everything below is presentation over facts the room already had -
+   the price, the purse and the difference between them - and not one rule
+   here can change what a press does.
+   ========================================================================== */
+
+/* THE MARQUEE. The bulb ring is the school's own kit (styles.css owns the
+   mask, the 13px pitch and the 52px chase period, and none of it changes
+   here); what is local is how BRIGHT it burns. `--pc-heat` is written by
+   prizecounter.js on every render and runs .2 at a flat wallet to .55 at a
+   wallet that reaches the top of the shelf. A player walks in and the room is
+   already lit to the size of their night. */
+.pc-marquee { position:relative; overflow:hidden; }
+/* Everything that is not the bulbs rides above them: the lamps layer is
+   positioned and would otherwise paint over the unpositioned title. */
+.pc-marquee > :not(.arc-sign-lamps) { position:relative; z-index:2; }
+.pc-marquee .arc-sign-lamps {
+  background:color-mix(in srgb, var(--gold), transparent 58%);
+  opacity:var(--pc-heat, .3);
+}
+/* The light travels; the bulbs do not. Slower than an exit sign's 1.04s
+   because this is a room's own sign rather than a direction to walk in. */
+.pc-marquee .arc-sign-chase {
+  left:-52px; right:0;
+  animation:arc-sign-chase-r 1.9s linear infinite;
+}
+/* No ring at all on a machine that asked for less - the sign is the one piece
+   of this room that is pure decoration, so it is the first thing to go. */
+.pc-root.is-lite .pc-marquee .arc-sign-lamps,
+.arm-lite .pc-marquee .arc-sign-lamps { display:none; }
+
+/* TABULAR DIGITS ON THE PURSE. THE BANK ticks this number down one landing at
+   a time, and proportional digits would jitter the chip's width on every tick
+   - the number would appear to breathe while it is being counted. */
+.pc-chip-n { font-variant-numeric:tabular-nums; }
+
+/* --------------------------------------------------------------- THE ALMOST
+   A row inside the shortfall band. It is NOT a brighter `is-poor`: the dim
+   comes off the price, the shortfall is stated on the flag, and the row's
+   ticket glyph drifts at sub-attention so the eye keeps coming back to it. */
+.pc-item.is-almost {
+  border-color:color-mix(in srgb, var(--gold), transparent 62%);
+  background:color-mix(in srgb, var(--panel2), var(--gold) 3%);
+}
+.pc-item.is-almost .pc-price { opacity:.85; }
+/* The shortfall, in the micro-label register and stamped on the price flag
+   rather than floating beside it: it is a fact ABOUT this price. */
+.pc-short {
+  margin-left:6px;
+  font-family:var(--pix); font-size:9px; line-height:1;
+  color:color-mix(in srgb, var(--gold), var(--ink) 24%);
+  letter-spacing:.04em;
+}
+/* THE DRIFT, not the breath: half a second slower than a breath, no scale, and
+   it never crosses into the foreground. Law III is safe - a drift is ambience,
+   and the one breather on this screen is the cheapest affordable verb. */
+.pc-item.is-almost .pc-glyph { animation:pc-almost-drift 3.8s ease-in-out infinite; }
+@keyframes pc-almost-drift { 0%, 100% { opacity:1; } 50% { opacity:.6; } }
+/* The drift is the row's own idea, so it goes on a machine that asked for less
+   and the shortfall tag stays - the information was never the animation. */
+.pc-root.is-lite .pc-item.is-almost .pc-glyph,
+html.arc-reduced .pc-item.is-almost .pc-glyph { animation:none; opacity:1; }
+
+/* ----------------------------------------------------------------- THE GLOW
+   Affordable rows answer the pointer; the rest do not. In fast, out slow, and
+   the lift is the 2px the book asks for. `is-almost` glows GOLD because that
+   row is about money rather than about a verb you can press today. */
+.pc-item { transition:box-shadow .3s ease, border-color .3s ease, transform .3s ease; }
+.pc-item:not(.is-poor):not(.is-owned):not(.is-locked):not(.is-busy):hover,
+.pc-item:not(.is-poor):not(.is-owned):not(.is-locked):not(.is-busy):focus-within {
+  transform:translateY(-2px);
+  border-color:color-mix(in srgb, var(--pink), transparent 40%);
+  box-shadow:0 0 18px color-mix(in srgb, var(--pink), transparent 45%),
+             0 7px 18px rgba(0,0,0,.36);
+  transition-duration:.18s;
+}
+.pc-item.is-almost:hover,
+.pc-item.is-almost:focus-within {
+  transform:translateY(-2px);
+  border-color:color-mix(in srgb, var(--gold), transparent 40%);
+  box-shadow:0 0 18px color-mix(in srgb, var(--gold), transparent 45%),
+             0 7px 18px rgba(0,0,0,.36);
+  transition-duration:.18s;
+}
+/* The lift is the only part that is motion; under reduced motion the global
+   freeze takes the transition and this takes the travel, so the row still
+   lights and simply does not rise. */
+html.arc-reduced .pc-item:hover,
+html.arc-reduced .pc-item:focus-within { transform:none; }
+
+/* ----------------------------------------------------------- THE ONE BREATH
+   Law III: exactly one thing on a screen breathes, and here it is the cheapest
+   verb the player can actually press. 1 <-> 1.015 over 3.5s - at the size of a
+   button that is barely a pixel, which is the point: it is a room noticing you,
+   not a room waving. */
+.pc-buy.is-breath { animation:pc-breath 3.5s ease-in-out infinite; }
+@keyframes pc-breath { 0%, 100% { transform:scale(1); } 50% { transform:scale(1.015); } }
+/* NOTHING BECKONS DURING A CELEBRATION. While B's card is up, or while the
+   tray is at the sill, the shelf holds still and lets the moment have the
+   screen to itself. */
+html.arc-reveal-on .pc-buy.is-breath,
+.pc-root.is-beating .pc-buy.is-breath { animation:none; }
+html.arc-reduced .pc-buy.is-breath { animation:none; }
+
+/* ------------------------------------------------------- THE COMPACT BEAT
+   The cheap cut of the tray beat (LAW IX, and the repetition rule): the SAME
+   picture - a poster arrives in the same tray as a wide board, and pretending
+   otherwise would be the room sneering at a purchase - held a second instead
+   of a second and a half, with no sparks over it and a quieter chime under it.
+   The scrim lifts a little so the shelf stays legible behind a beat that is
+   only passing through. */
+.pc-beat.is-compact { background:color-mix(in srgb, var(--ground) 48%, transparent); }

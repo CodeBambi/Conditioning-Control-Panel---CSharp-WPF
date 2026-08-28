@@ -604,6 +604,15 @@ export const DEFAULT_LEXICON = Object.freeze({
   prize_busy: 'Somebody is already at the drawer. Give it a second and ask again.',
   prize_quiet: 'The counter went quiet on that one. Try again in a moment.',
   prize_empty: 'Shelf is bare tonight. Come back when the truck has been.',
+  /* THE ALMOST and THE CHARGE-HOLD (shell/prizecounter.js, wave 0828).
+   * `prize_short` is a bare word on purpose: the counter builds the sentence
+   * as "Almost, 20 short" by concatenation, the way `prize_held` is already
+   * spoken as "Holding 2/3". A number baked into a translated string is a
+   * number a translator has to be trusted to keep. */
+  pc_verb_almost: 'Almost',
+  prize_short: 'short',
+  prize_hold_hint: 'Hold it down to trade that one.',
+  prize_hold_aria: 'Hold to trade',
   prize_payday_label: 'Hot room tonight',
   prize_payday_2: 'is paying double',
   prize_payday_5: 'is paying five times over',
@@ -624,6 +633,21 @@ export const DEFAULT_LEXICON = Object.freeze({
   booth_alley_hint: 'The lit window is down at the end of the row.',
   booth_put_it_on: 'Put it on',
   booth_hang_it: 'Hang it up',
+  /* THE TWO SIGNS IN THE ALLEY (shell/alleysign.js). One pair, one alley: the
+   * plate on the booth's right-hand wall points at RM 004 and the plate on the
+   * Locker's left-hand wall points back at the counter, so neither room is a
+   * dead end that has to be left through the quad. They are rows of their OWN
+   * rather than a re-use of `campus_room_locker` / `campus_room_prizes`,
+   * because a wayfinding sign names a DIRECTION and a room card names a room -
+   * the campus plan already keeps that split ("Locker" on the neon, "The
+   * Locker" on the card, `locker_sign` vs `campus_room_locker`). The `_aria`
+   * rows are the same sentence for a screen reader, which needs the verb the
+   * arrow is drawing. Both are set in block caps by the sheet, so a mod writes
+   * them the way it would say them. */
+  alley_sign_locker: 'Locker room',
+  alley_sign_locker_aria: 'Go to the Locker room',
+  alley_sign_counter: 'Prize counter',
+  alley_sign_counter_aria: 'Go back to the Prize Counter',
   settings_classes_head: 'Classes',
   campus_desc_prizes_shut: 'Shutter down over the window, parcels still stacked behind it. Back another night.',
   /* the Extra Credit lever, on the door card and in the painted room */
@@ -694,6 +718,108 @@ export const DEFAULT_LEXICON = Object.freeze({
   locker_signpost_go: 'Open The Locker',
   locker_unlock_hint: '{tok}2 at the counter',
   locker_open: 'Open Locker',
+
+  /* ------------------------------------------------------------------------
+   * THE PUBLIC ADDRESS SYSTEM (Counter Stock `pa_pack`, captions 2026-08-28).
+   *
+   * Thirty-six announcements. The recordings shipped first and were audio only;
+   * the owner asked for the words on screen too, so this is the SAME script as
+   * the voice, transcribed, and `shell/pacaption.js` renders it under the
+   * campus while the line plays.
+   *
+   * THE NUMBERS ARE THE FILE'S, NOT THE SCRIPT'S. `assets/sfx/pa_NN.mp3` was
+   * cut against a six-group script and shelved as four (shell/pa.js, THE FILES
+   * AS SHIPPED), which cost exactly one swap: the script's CLOSING block sits
+   * at files 31-36 and its "mostly the schedule, mostly" block at 25-30.
+   * Everything else is one to one. The rows below are in FILE order, which is
+   * the order `pa.captionKey()` asks for them in and the only order anything in
+   * the running page ever uses. If you are diffing this against the script
+   * draft, that swap is why 25 and 31 look transposed. They are.
+   *
+   * A ROW HERE IS A PROMISE ABOUT AN MP3. Change a line and the caption stops
+   * matching the voice, which is worse than having no caption: the words are
+   * the same words in the same order, or they do not go on screen.
+   *
+   *   01-06 arrival   07-14 class calls   15-18 payday
+   *   19-24 streaks and grades   25-30 asides   31-36 closing (not in rotation)
+   * ---------------------------------------------------------------------- */
+  /* the speaker plate - who is talking, not what she says */
+  pa_speaker: 'Front Office',
+  /* 01-06 arrival / campus open */
+  pa_line_01: "Good evening, students. Doors are open, lights are on, you know the way.",
+  pa_line_02: "Welcome back. The hall smells like floor wax and ambition tonight.",
+  pa_line_03: "Evening classes are now in session. Walk, don't run. Or run a little, I'm not looking.",
+  pa_line_04: "You made it in. That's the hard part. The rest is just practice.",
+  pa_line_05: "Doors are open. Coats on the hooks, thoughts in a neat little row, please.",
+  pa_line_06: "Good evening. The school missed you. It told me so.",
+  /* 07-14 class calls */
+  pa_line_07: "Now seating for the next class. Bring a pencil, or don't, nobody's ever needed one.",
+  pa_line_08: "Class is starting down the hall. If you hurry you'll get the good seat. They're all the good seat.",
+  pa_line_09: "A reminder that every class tonight counts toward your record. No pressure. Some pressure.",
+  pa_line_10: "The pool is open for the Deep End. Towels are a myth, swim anyway.",
+  pa_line_11: "Whoever keeps acing the sorting drills, the machines have noticed and they're showing off for you now.",
+  pa_line_12: "Next period begins shortly. Please finish whatever you were doing with your hands.",
+  pa_line_13: "Front row seats are available in every room. They're always available. Think about that.",
+  pa_line_14: "One more class before you go? The lights stay on either way, but they're warmer with you here.",
+  /* 15-18 payday nights */
+  pa_line_15: "Tonight's featured class pays double at the counter. The bursar says it's fine. I didn't ask twice.",
+  pa_line_16: "Double tickets in one lucky room tonight. Check the board, follow the shine.",
+  pa_line_17: "It's a payday night, students. Somebody's walking home heavy.",
+  pa_line_18: "The featured room is paying out big tonight. This is not a drill. It's technically always a drill.",
+  /* 19-24 streaks, grades and honors */
+  pa_line_19: "Perfect attendance this week from some of you. The corkboard knows who you are.",
+  pa_line_20: "Another night on your streak. The registrar drew a little star next to your name. Don't tell anyone I said registrar.",
+  pa_line_21: "An S rank came through the office today. We rang the little bell. You didn't hear it, but we did.",
+  pa_line_22: "Someone pulled the honors lever tonight. Brave. The desk approves.",
+  pa_line_23: "Your report card is looking healthier every week. Keep chewing your vegetables, or whatever it is you do.",
+  pa_line_24: "Streak's still alive. The building runs a little brighter on nights like this.",
+  /* 25-30 mostly the schedule, mostly (the script's 31-36) */
+  pa_line_25: "Today's schedule is the same as yesterday's. Comforting, isn't it. The sameness.",
+  pa_line_26: "A found item was turned in at the office: one train of thought, slightly used. Claim it or don't.",
+  pa_line_27: "Reminder from administration: attendance is a habit, and habits are just doors you stop noticing you walk through.",
+  pa_line_28: "The vending machine is out of everything except the pink one. It's always the pink one.",
+  pa_line_29: "The clock in the main hall is a few minutes slow. We know. It's happier that way.",
+  pa_line_30: "If you can hear this announcement, you're paying attention. Lovely. Hold that.",
+  /* 31-36 closing time (the script's 25-30). NOT IN ROTATION - pa.js law 6 -
+     but the rows ship anyway: the shelf exists, and a caption surface that
+     could not caption a line the day the closing door opens is a caption
+     surface that has to be edited twice. */
+  pa_line_31: "That's the last bell, students. Take your things, leave the glow, it belongs to the school.",
+  pa_line_32: "Campus is closing up. Whatever you learned tonight, sleep on it. It settles in better that way.",
+  pa_line_33: "Good night, students. The doors lock behind you, gently.",
+  pa_line_34: "Closing time. The janitor waves goodbye. He never waves hello, we don't know why.",
+  pa_line_35: "School's out. Come back tomorrow and we'll pick up right where you left off. We always do.",
+  pa_line_36: "Lights out in five. Not your lights. You take yours with you.",
+
+  /* ------------------------------------------------------------------------
+   * THE PURCHASE REVEAL (shell/reveal.js, the Locker wave, 2026-08-28).
+   *
+   * Thirteen rows and not one of them is a NAME or a BLURB: what the thing is
+   * and what it does still ride init.economy.catalog from the host, and a
+   * second sentence about the late slip in here is a sentence that disagrees
+   * with the shelf one window up. What IS here is the school's own half - the
+   * word over the card, the two verbs, and one line per kind saying WHERE the
+   * player will meet the thing again, which is the half a receipt never
+   * answers and the whole reason the wave was asked for.
+   *
+   * `reveal_where_*` is keyed on reveal.js's kinds, and that file only asks for
+   * the kinds in its WHERE_KINDS list, so an unlisted kind can never print a
+   * de-snaked key on the card. That is the lexicon's ordinary worst case and it
+   * is a worse case here than usual, because this string sits under a name set
+   * in the display face.
+   * ---------------------------------------------------------------------- */
+  reveal_kicker: 'YOURS NOW',
+  reveal_later: 'Later',
+  reveal_good: 'Good',
+  reveal_where_outfit: 'She can wear it whenever you like. The Locker holds it either way.',
+  reveal_where_theme: 'Every look you own hangs in the Locker, and the campus takes it in one press.',
+  reveal_where_frame: 'Your student ID wears it. Swap it back in the Locker any night.',
+  reveal_where_bell: 'Nothing to switch on. The next bell of the day is already this one.',
+  reveal_where_poster: 'It goes up on the corkboard by the door.',
+  reveal_where_toy: 'It sits on her desk from now on. The Locker says which one.',
+  reveal_where_pa: 'The tannoy is live. She reads the schedule, mostly.',
+  reveal_where_walk: 'It shows up under you the next time you cross the quad.',
+  reveal_where_consumable: 'It is in your bag until the night you spend it.',
 });
 
 let table = Object.create(null);

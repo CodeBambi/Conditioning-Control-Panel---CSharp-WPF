@@ -61,6 +61,17 @@ import { spriteUrl, GLYPHS } from './prizecounter.js';
  * that quietly disagrees the night somebody adds the fifth toy. */
 import { OUTFITS, TOYS, toyFrames } from '../emi/widget.js';
 import { onDeviceChange } from '../core/device.js';
+/* THE OTHER END OF THE ALLEY. The Prize Counter mounts the mirror of this sign
+ * on its right-hand wall pointing here; this one points back. shell/alleysign.js
+ * says why there are two and why neither room owns the drawing of them. */
+import { alleySign, LOCKER_SIGN_RECT } from './alleysign.js';
+/* THE ANNOUNCEMENT: one function, and all it does is dispatch one document
+ * event when a pick sticks. The room still knows nothing about who listens
+ * (EMI has a line for it, a later wave may want a stamp) - it just says so out
+ * loud. The name lives in reveal.js so the page has one spelling of it. */
+import { fireEquipped } from './reveal.js';
+/* Two of the house moves, and motion is all they are (shell/counterfx.js). */
+import { thud, swing } from './counterfx.js';
 
 /* ----------------------------------------------------------------------------
  * THE TABLE
@@ -204,6 +215,26 @@ function fill(text, vars) {
   return out;
 }
 
+/**
+ * WHAT THIS LOCKER HAS ALREADY SHOWN YOU, for the length of the sitting.
+ *
+ * A tile that was not here last time is a tile you bought since, and it should
+ * land like one rather than simply BEING there when you open the door. The set
+ * is module-level and not per-instance on purpose: the panel is torn down and
+ * rebuilt every single visit, so an instance-level memory would call every tile
+ * new every time the door opened, which is the opposite of the point.
+ *
+ * `seeded` is the guard that stops the FIRST paint of a sitting - where every
+ * tile is technically new - from being a fireworks display. The first visit
+ * simply learns the shelf; from then on, only the things that arrived after it
+ * announce themselves.
+ */
+const seenTiles = new Set();
+let seeded = false;
+
+/** Not-a-pick, because `null` is a real pick here: it means "take it off". */
+const NO_PICK = Symbol('lk-no-pick');
+
 /** The shell's `<html class="arc-reduced">`, read defensively. */
 function htmlReduced() {
   try {
@@ -276,6 +307,14 @@ function norm(caps) {
     refreshIdCard: fn(c.refreshIdCard, () => {}),
     toast: fn(c.toast, () => {}),
     openCounter: fn(c.openCounter, null),
+    /* THE SIGN ON THE LEFT WALL, and it is deliberately NOT `openCounter`.
+     * That one is the footer's "3 more at the counter" and it is a SHOPPING
+     * verb: it lands with the shelf already open, because somebody who pressed
+     * it is going to buy. This one is a WAYFINDING verb: it lands you standing
+     * at the window, because somebody who pressed it is walking. Same room, two
+     * different arrivals. A host that supplies only the old one gets no sign
+     * rather than the wrong arrival. */
+    onCounter: fn(c.onCounter, null),
     onBack: fn(c.onBack, () => {}),
     mount: c.mount || null,
     isMobile: fn(c.isMobile, () => false),
@@ -353,6 +392,10 @@ export function equipOutfit(k, name) {
     const emi = k.emi();
     if (emi && typeof emi.setOutfit === 'function') emi.setOutfit(want);
   } catch (e) { k.log('locker: setOutfit threw'); }
+  /* SAID OUT LOUD, and only on the line that means it stuck. `id` is null when
+   * the pick was taken OFF, which is a real thing that happened and a listener
+   * is allowed to have a different line for it. */
+  fireEquipped('outfit', want);
   return true;
 }
 
@@ -364,6 +407,7 @@ export function equipFrame(k, id) {
   }
   try { k.metaSet(FRAME_KEY, want); } catch (e) { k.log('locker: frame write failed'); return false; }
   try { k.refreshIdCard(); } catch (e) { /* the card repaints on its next open anyway */ }
+  fireEquipped('frame', want);
   return true;
 }
 
@@ -383,14 +427,18 @@ export function equipToy(k, name) {
     const emi = k.emi();
     if (emi && typeof emi.setPrizes === 'function') emi.setPrizes();
   } catch (e) { k.log('locker: toy re-roll threw'); }
+  fireEquipped('toy', want);
   return true;
 }
 
 /** Lay a campus look. The shell owns the key and the palette; we call back. */
 export function equipTheme(k, id) {
   if (!k.themes || typeof k.themes.select !== 'function') return false;
-  try { k.themes.select(id); return true; }
-  catch (e) { k.log('locker: theme select threw'); return false; }
+  try {
+    k.themes.select(id);
+    fireEquipped('theme', typeof id === 'string' && id ? id : null);
+    return true;
+  } catch (e) { k.log('locker: theme select threw'); return false; }
 }
 
 /* ----------------------------------------------------------------------------
@@ -407,6 +455,24 @@ function outfitArt(name) {
 /** The standard sheet, one folder up. */
 function standardArt() {
   return urlFor('../art/emi/body-idle.png', 'art/emi/body-idle.png');
+}
+
+/* WHAT A SHEET WEARS ON HER GLASS. The swim goggles are drawn across EMI's
+ * screen, and the art install pasted the original screen rect back over every
+ * outfit frame, so `body-idle.png` alone shows a swimsuit and NO goggles - on
+ * the tube and, before this, on this tile. `over-body-idle.png` beside it is
+ * that missing art on the same canvas (widget.js, THE OVERLAY SHEET), so the
+ * tile composites the two and shows what she will actually look like.
+ *
+ * OPTIONAL, EXACTLY LIKE EVERY OTHER PLATE HERE: three of the four sheets have
+ * no overlay and the `onerror` in `artBox` takes the layer straight back off.
+ * `overDead` remembers that for the sitting so re-opening the room does not ask
+ * again. */
+const overDead = new Set();
+function outfitOverArt(name) {
+  const u = urlFor('../art/emi/' + String(name) + '/over-body-idle.png',
+    'art/emi/' + String(name) + '/over-body-idle.png');
+  return overDead.has(u) ? null : u;
 }
 
 /** A toy's first frame, module-relative. Falls to null when the table has no
@@ -426,8 +492,12 @@ function toyArt(toy) {
  * leaves what was under it standing. That is the counter's rule 1 and it is why
  * a plate the artist has not drawn yet is a tile that looks plain rather than a
  * broken picture - which is exactly the state this room shipped into.
+ *
+ * `over` is a SECOND plate on the same box, for art that belongs in front of
+ * the first (the swim goggles). Same rule, its own `onerror`: a sheet without
+ * one loses the layer and keeps the tile.
  */
-function artBox(src, glyph, cls) {
+function artBox(src, glyph, cls, over) {
   const box = el('span', 'lk-art' + (cls ? ' ' + cls : ''));
   attr(box, 'aria-hidden', 'true');
   if (glyph) box.appendChild(el('span', 'lk-glyph', glyph));
@@ -439,6 +509,20 @@ function artBox(src, glyph, cls) {
     img.addEventListener('error', () => { try { img.remove(); } catch (e) { /* noop */ } });
     try { img.src = src; } catch (e) { /* noop */ }
     box.appendChild(img);
+    /* Appended after, so it stacks over - `.lk-img` is `position:absolute;
+     * inset:0` already and needs no new rule. */
+    if (over) {
+      const top = el('img', 'lk-img');
+      top.alt = '';
+      top.decoding = 'async';
+      top.loading = 'lazy';
+      top.addEventListener('error', () => {
+        overDead.add(over);
+        try { top.remove(); } catch (e) { /* noop */ }
+      });
+      try { top.src = over; } catch (e) { /* noop */ }
+      box.appendChild(top);
+    }
   }
   return box;
 }
@@ -463,11 +547,16 @@ export function createLocker(caps) {
   ensureSheet(doc, log);
 
   let dead = false;
+  /** The id a press just made stick, waiting for the repaint to draw it.
+   *  Presentation only, consumed by the first tile that matches it. */
+  let justStuck = NO_PICK;
   let closePanel = null;        // the live overlay's own close, or null
   let panel = null;             // the panel node while it is up
   let railOn = false;
   let active = null;            // the lit group id, rail mode only
   let offDevice = null;
+  let signEl = null;            // the PRIZE COUNTER plate on the left wall
+  let signOff = null;           // its unmount
   const timers = [];
   const groupNodes = [];        // { id, node, tab }
 
@@ -505,6 +594,7 @@ export function createLocker(caps) {
 
   try { scene.root.classList.add('lk-room'); } catch (e) { /* noop */ }
   sfx('door', 0.18);
+  hangCounterSign();
 
   /* THE ARRIVAL. The panel opens on its own - the room IS the wardrobe and a
    * player who walked the length of a school to reach it did not come to look
@@ -512,6 +602,38 @@ export function createLocker(caps) {
    * build the panel is simply there, which is the contract's cut (skip the
    * beat, never the plate). */
   later(openPanel, (reduced() || k.lite) ? 0 : 380);
+
+  /**
+   * THE SIGN ON THE LEFT WALL, hung once at build. Furniture, not state.
+   *
+   * WHY THE ROOM NEEDED ONE. The apron's back slab walks out to the campus and
+   * the footer link is a shopping link that only exists while something is
+   * unowned, so a player who arrived here from the counter to put on the thing
+   * they just bought had no way back to it except the quad. This is that way,
+   * and it is the other half of the pair the Prize Counter now hangs.
+   *
+   * IT SITS BEHIND THE PANEL AND THAT IS CORRECT. The wardrobe opens over the
+   * room on arrival (the beat above), so the sign is not the first thing anyone
+   * sees - it is what is on the wall once the panel is shut, which is exactly
+   * when a player is looking for the door. The overlay layer is z20 and props
+   * are z3; nothing here fights it.
+   */
+  function hangCounterSign() {
+    if (dead || typeof k.onCounter !== 'function') return;
+    let node = null;
+    try {
+      node = alleySign({
+        variant: 'locker',
+        t,
+        log,
+        onGo: () => { if (!dead) { try { k.onCounter(); } catch (e) { log('locker counter sign threw'); } } },
+      });
+    } catch (e) { log('locker could not build the counter sign'); return; }
+    if (!node) return;
+    signEl = node;
+    try { signOff = scene.mountInView('wide', node, LOCKER_SIGN_RECT.slice()); }
+    catch (e) { signOff = null; }
+  }
 
   /* ============================ THE PANEL ============================== */
 
@@ -621,6 +743,9 @@ export function createLocker(caps) {
     }
 
     host.appendChild(panel);
+    /* Everything on the shelf has now been shown once. From here on, a tile
+     * this set has never heard of is a tile that arrived since. */
+    seeded = true;
     layout();
     if (railOn) selectGroup(active && built[active] ? active : (groupNodes[0] || {}).id);
   }
@@ -657,19 +782,42 @@ export function createLocker(caps) {
       attr(b, 'role', 'radio');
       attr(b, 'aria-checked', r.on ? 'true' : 'false');
       if (r.dots) b.appendChild(r.dots);
-      else b.appendChild(artBox(r.art, r.glyph));
+      else b.appendChild(artBox(r.art, r.glyph, null, r.over));
       b.appendChild(el('span', 'lk-name', r.name));
       if (r.on) {
         const badge = el('span', 'lk-on', t('locker_selected', 'On'));
         attr(badge, 'aria-hidden', 'true');
         b.appendChild(badge);
       }
+      /* THE PRESS THAT STUCK, landing on the tile the press PRODUCED rather
+       * than on the one it was aimed at: `repaint()` throws the whole panel
+       * away between the two, so a thud on the pressed node would be a thud on
+       * an element that has already left the document. The press hands the id
+       * forward and the rebuilt tile takes the hit. */
+      if (justStuck !== NO_PICK && r.on && r.id === justStuck) {
+        justStuck = NO_PICK;
+        later(() => thud(b, { reduced: reduced() }), 0);
+      }
+
+      /* THE NEW ARRIVAL. A tile the last paint did not have is something you
+       * bought since you were last in here, and it lands like one - once, on
+       * the paint that first shows it, and never again this sitting. */
+      if (r.id != null) {
+        const key = String(label) + '|' + String(r.id);
+        if (seeded && !seenTiles.has(key)) {
+          try { b.classList.add('is-new'); } catch (e) { /* the thud is the point */ }
+          later(() => thud(b, { reduced: reduced() }), 0);
+        }
+        seenTiles.add(key);
+      }
+
       b.addEventListener('click', () => {
         if (r.on) { sfx('blip', 0.1, { pitch: 0.9 }); return; }
         let took = false;
         try { took = onPick(r.id) === true; } catch (e) { took = false; }
         if (!took) { sfx('blip', 0.12, { pitch: 0.82 }); return; }
         sfx('tell', 0.22, { pitch: r.id == null ? 0.92 : 1.08 });
+        justStuck = r.id;
         repaint();
       });
       box.appendChild(b);
@@ -698,6 +846,7 @@ export function createLocker(caps) {
         id: n,
         name: t('locker_outfit_' + n),
         art: outfitArt(n),
+        over: outfitOverArt(n),
         glyph: null,
         on: pick === n,
       });
@@ -876,7 +1025,8 @@ export function createLocker(caps) {
     const g = group('always', t('locker_always', 'Always on'));
     for (const row of rows) {
       const line = el('div', 'lk-row');
-      line.appendChild(artBox(spriteUrl(row.sku), glyphOf(row.sku), 'lk-art-sm'));
+      const rowArt = artBox(spriteUrl(row.sku), glyphOf(row.sku), 'lk-art-sm');
+      line.appendChild(rowArt);
       const text = el('span', 'lk-rowtext');
       text.appendChild(el('b', 'lk-name', rowName(row)));
       const blurb = rowBlurb(row);
@@ -889,7 +1039,19 @@ export function createLocker(caps) {
       if (row.sku === 'brass_bell') {
         const b = el('button', 'lk-poke', t('locker_ring_bell', 'Ring it'));
         b.type = 'button';
-        b.addEventListener('click', () => sfx('bell', 0.32));
+        /* Said out loud as slot `bell`, and it is the ONE slot that is not a
+         * pick: the bell has no switch, so this announces the POKE rather than
+         * a change. `id` is the sound that just rang, which is brass for as
+         * long as the sku is owned - and it is only owned rows that draw. */
+        b.addEventListener('click', () => {
+          sfx('bell', 0.32);
+          /* THE BELL ANSWERS. It had a sound and an event and nothing at all to
+           * look at, which is the one shape the House Book will not have: a
+           * thing that rang and did not move. One swing, damped, back to rest -
+           * the bell is not a pick and must not read as one. */
+          swing(rowArt, { reduced: reduced() });
+          fireEquipped('bell', 'brass');
+        });
         line.appendChild(b);
       }
       g.slot.appendChild(line);
@@ -995,6 +1157,8 @@ export function createLocker(caps) {
     for (const id of timers) { try { clearTimeout(id); } catch (e) { /* noop */ } }
     timers.length = 0;
     if (offDevice) { try { offDevice(); } catch (e) { /* noop */ } offDevice = null; }
+    if (signOff) { try { signOff(); } catch (e) { /* noop */ } signOff = null; }
+    signEl = null;
     closePanel = null;
     panel = null;
     groupNodes.length = 0;
@@ -1013,6 +1177,10 @@ export function createLocker(caps) {
     panelUp,
     scene,
     groups: () => groupNodes.map((g) => g.id),
+    /** The PRIZE COUNTER plate on the left wall, or null if none was hung.
+     *  The node itself, not a search: this file keeps no tree walker and the
+     *  DOM double has no querySelector to borrow one from. */
+    counterSign: () => signEl,
     rail: () => ({ on: railOn, active }),
   };
 }

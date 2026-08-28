@@ -349,6 +349,42 @@
 }
 :root.arc-reduced .arc-emi .emi .emi-toy { animation: none; }
 
+/* ---- the outfit overlay -------------------------------------------------
+ * THE PART OF AN OUTFIT THAT IS WORN ON HER GLASS. Today that is exactly one
+ * thing: the swim goggles. The art draws them across the top of the screen,
+ * but the face is a CANVAS laid on that same rect (emi.css `.emi-screen`), so
+ * anything the body png paints there is buried the moment she has a face. This
+ * layer is that art, cut back out of the sheet and laid on top.
+ *
+ * SAME BOX AS THE BODY, ALWAYS. `inset:0` on the same 859x869 canvas means it
+ * needs no geometry of its own: it inherits every scale, every mirror and every
+ * sway from `.emi` exactly like `.emi-body` does, because both are the whole
+ * frame. Do not give this rule a transform - the body moves animate `.emi` (or
+ * the `.breath` wrapper) and a second one here would fight them.
+ *
+ * z2 is deliberate: OVER the takeover glass and the channels (`.emi-glass`, 1)
+ * and over the face canvas, UNDER the bubble (3) and the x (4). `.emi-fx` is
+ * also 2 and is appended AFTER this node, so her hands and sparks still come
+ * out in front of the goggles - which is what a hand over the face should do.
+ * ======================================================================== */
+.arc-emi .emi .emi-over {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  display: block;
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* Trap 27 once more: `[hidden]` is a user-agent rule, the block above is not.
+ * An outfit with no overlay sheet leaves this node hidden for the sitting. */
+.arc-emi .emi .emi-over[hidden] { display: none !important; }
+
 /* ---- the dock -----------------------------------------------------------
  * Where a dismissed EMI lives. Semi-transparent so it never competes with the
  * board, full strength the moment it is aimed at. */

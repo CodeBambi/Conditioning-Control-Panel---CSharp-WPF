@@ -64,6 +64,16 @@ import { createPrizeBooth } from './prizebooth.js';
  * offers one press and this is what answers it, so the shell never has to know
  * which key an outfit, a frame, a desk toy or a campus look is written to. */
 import { createLocker, showLocker, equipFromToast, installLocker } from './locker.js';
+/* THE PURCHASE REVEAL (Locker wave). The beat that answers "what did I just
+ * buy" rather than "did it go through". It hangs off the `arcademy-bought`
+ * event, which this file fires from the wallet echo and nowhere else, and it
+ * owns its own body-level overlay - the shell hands it narrow caps and asks for
+ * exactly one thing back, the top rung of the Esc ladder. */
+import { installReveal, revealEscape, fireBought, kindOf } from './reveal.js';
+/* Only the hand-over clock. counterfx.js is the counter's motion kit; this is
+ * the one number the page outside the counter needs from it - how long the
+ * money is still visibly in the air. */
+import { boughtHoldMs } from './counterfx.js';
 /* CAMPUS LOOK (COUNTER STOCK). themes.js is a pure TABLE (no DOM, no store);
  * themefx.js is the weather canvas and the school's newest render surface. The
  * shell owns the meta key, the ownership question and the order of application
@@ -80,6 +90,11 @@ import { setBellCosmetic } from './audio.js';
  * cue leaves by the one audio door. It dispatches its own cue (bus 'voice',
  * maxMs 8000, a duck) - the shell only builds it and feeds it moments. */
 import { createPa } from './pa.js';
+/* ...AND ITS CAPTION (owner, 2026-08-28: the announcer wants words on screen).
+ * A SEPARATE module because pa.js renders nothing by law. It hears the same
+ * `arcademy-sfx` cue the mixer hears, so the shell's whole job is to build it
+ * and to keep EMI off it (campusDoorRects, below). */
+import { installPaCaption } from './pacaption.js';
 /* THE SOUNDTRACK. ost.js is a table and two verbs; it holds one keyed slot on
  * the `music` bus through the same door the beds use. The shell tells it where
  * the player is (campus, records, a class) and clearScreen tells it they left. */
@@ -143,6 +158,18 @@ function sfx(name, level, extra) {
       ),
     }));
   } catch (e) { /* a cue must never be the thing that throws */ }
+}
+
+/** A plain document event, the glue of the Locker wave (0828): the counter
+ *  and the Locker say what happened and emi/shop.js listens. Same shape as
+ *  `sfx` above, same rule - a dropped event is not an error. */
+function docEvent(name, detail) {
+  try {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    document.dispatchEvent(new Ctor(String(name), { detail: detail || {} }));
+  } catch (e) { /* noop */ }
 }
 
 /** Screen depth, so a swap knows which way it went. An ORDER, not a router -
@@ -735,6 +762,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * per call, never at mount: the plaque re-homes on every orientation flip. */
   const KEEP_OFF_SEL_PHONE = KEEP_OFF_SEL + ', .campus-hint, .campus-boardwrap.collapsed';
   const onPhone = () => { try { return document.documentElement.classList.contains('arc-mobile'); } catch (e) { return false; } };
+  /** ...AND THE PA'S CAPTION, which is the one keep-off box that is NOT on the
+   *  campus. shell/pacaption.js hangs its bubble on <body> (it has to outlive a
+   *  screen change), so `campus.root.querySelectorAll` above can never see it
+   *  and folding the class into KEEP_OFF_SEL would silently do nothing. It is
+   *  also the only box in the list that COMES AND GOES mid-screen, which is
+   *  exactly why the rule takes a getter rather than a snapshot (trap 73): she
+   *  steps aside while the announcement is up and takes the corner back when it
+   *  is gone. `.is-on` and not just `.pa-cap` - the hidden layer is full-width
+   *  and would pin her off the bottom of the quad all night. */
+  const KEEP_OFF_SEL_CAPTION = '.pa-cap.is-on .pa-cap-box';
   /** Everything on the quad she may not stand on, in viewport px. [] off-campus. */
   function campusDoorRects() {
     if (screen !== 'board' || !campus || !campus.root) return [];
@@ -746,6 +783,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         if (b && b.width > 0 && b.height > 0) out.push(b);
       }
     } catch (e) { return []; }
+    try {
+      const cap = document.querySelector(KEEP_OFF_SEL_CAPTION);
+      const b = (cap && cap.getBoundingClientRect) ? cap.getBoundingClientRect() : null;
+      if (b && b.width > 0 && b.height > 0) out.push(b);
+    } catch (e) { /* no caption is not an error; the doors still stand */ }
     return out;
   }
   /** Arm the rule on the campus, drop it on the way out. A host whose mascot
@@ -2844,6 +2886,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    *  campus callbacks above can guard on it; built once, further down, after
    *  the wallet echo exists. */
   let pa = null;
+  /** The PA's caption surface (shell/pacaption.js). Built beside the PA and
+   *  declared up here for the same reason: `campusDoorRects` needs its box so
+   *  EMI does not park on the announcement. */
+  let paCaption = null;
   /** THE SOUNDTRACK (shell/ost.js). Built beside the PA, driven from three
    *  places (the campus stand-up, startClass, showRecords) and let go of in
    *  clearScreen. Null when the module fails to build; every call site guards. */
@@ -2948,6 +2994,41 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     catch (e) { /* noop */ }
   }
 
+  /**
+   * A CAMPUS LOOK, WORN FOR TWO SECONDS AND THEN GIVEN BACK (Locker wave).
+   *
+   * The purchase reveal wants to SHOW a theme rather than describe it, and the
+   * only honest preview of a palette is the palette, on the page. So this lays
+   * the bought theme's thirteen tokens and hands back the way out.
+   *
+   * IT WRITES NOTHING THE PLAYER OWNS. `campusTheme` is untouched, so a reload
+   * mid-preview lands on the pick that was already there; and the restore is
+   * `applyTheme()`, THE one writer, rather than a hand-rolled unset - which is
+   * why a preview can be cancelled twice, cancelled by a second preview, or
+   * simply left to its timer, and the page always ends up wearing the pick.
+   *
+   * @param {string} id   a theme id (junk answers false)
+   * @param {number=} ms  how long to hold it, clamped to 0.4s-4s
+   * @returns {(function()|boolean)} a canceller that restores immediately, or
+   *          false when there was nothing to lay
+   */
+  function previewThemeLook(id, ms) {
+    const th = themeById(String(id || ''));
+    if (!th || !th.palette) return false;
+    const back = () => {
+      try { applyTheme(); }
+      catch (e) { say('theme preview restore threw: ' + ((e && e.message) || e)); }
+    };
+    try { applyPalette(th.palette, say); }
+    catch (e) { say('theme preview threw: ' + ((e && e.message) || e)); return false; }
+    const hold = Math.max(400, Math.min(4000, Number(ms) || 2000));
+    const timer = setTimeout(() => { back(); }, hold);
+    return function cancelPreview() {
+      try { clearTimeout(timer); } catch (e) { /* noop */ }
+      back();
+    };
+  }
+
   /** The narrow caps the options row is handed. The settings page draws a list
    *  and calls back; it never reads a wallet and never touches the store. */
   function themeCaps() {
@@ -2996,6 +3077,38 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   try { installLocker({ open: () => showLockerScreen(), caps: () => lockerCaps() }); }
   catch (e) { say('locker install: ' + ((e && e.message) || e)); }
 
+  /* ---------------------------- THE PURCHASE REVEAL ----------------------
+   * The Locker's shape a third time, and for the third same reason: the module
+   * is driven by an EVENT (`arcademy-bought`) rather than by a call site, so
+   * there is nobody at the moment it runs to hand it a bag. Every cap is a
+   * getter and is re-asked when the card opens, which is what lets a jacket
+   * bought thirty seconds ago be wearable from the ceremony without a reload.
+   *
+   * IT CANNOT SPEND, PRICE OR PERSIST ANYTHING. `equip` is the Locker's own
+   * verb (the same one the counter's receipt offers) and `previewTheme` hands
+   * back a canceller rather than a setter - the shell stays the one writer of
+   * a palette exactly as it is the one writer of a pick.
+   * -------------------------------------------------------------------- */
+  try {
+    installReveal({
+      t,
+      log: say,
+      lite: () => !!src.performanceMode,
+      reduced: () => reducedMotion,
+      isMobile,
+      /* The same seed the corkboard deals tonight's poster from and the same
+       * one EMI's desk picks tonight's toy with, so the reveal shows the thing
+       * the school is actually about to put in front of the player. */
+      daySeed: () => utcDateSeed,
+      catalog: () => economyCatalog(),
+      equip: (sku) => {
+        try { return !!equipFromToast(sku); }
+        catch (e) { say('reveal equip threw: ' + ((e && e.message) || e)); return false; }
+      },
+      previewTheme: (id, ms) => previewThemeLook(id, ms),
+    });
+  } catch (e) { say('reveal install: ' + ((e && e.message) || e)); }
+
   /* ------------------------------- THE PA PACK ---------------------------
    * Built once, with narrow caps; pa.js dispatches its OWN cue (the line needs
    * bus 'voice', maxMs 8000 and a duck - the tutorial-bus path would cap it at
@@ -3011,9 +3124,37 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       lite: () => !!src.performanceMode,
       reduced: () => reducedMotion,
       inClass: () => !!active,
+      /* THE DUCK CAP. pa.js scales LINE_DUCK by this exactly the way
+       * engine/index.js scales an effect's duck, so the announcement is not the
+       * one cue in the school that ignores the player's ducking channel. The
+       * HOST's echo is the only thing that moves `src.caps` (settings.js trap
+       * 1), and a getter means a change lands on the next line without a
+       * rebuild. Absent = 1, which is caps.js's own default. */
+      duckDepth: () => {
+        const v = src.caps ? src.caps.duckDepth : null;
+        return Number.isFinite(+v) ? +v : 1;
+      },
       daySeed: utcDateSeed,
     });
   } catch (e) { say('pa unavailable (' + ((e && e.message) || e) + ')'); pa = null; }
+
+  /* ...AND THE WORDS UNDER IT. Built even when `pa` itself failed: the caption
+   * listens on the CUE bus, not on pa.js, so a host that fires a PA line some
+   * other way still gets its line captioned and the two can never disagree. */
+  try {
+    paCaption = installPaCaption({
+      t,
+      log: say,
+      lite: () => !!src.performanceMode,
+      reduced: () => reducedMotion,
+      /* SHE STEPS ASIDE WHILE THE SCHOOL TALKS. campusDoorRects() already hands
+       * the caption's box to her keep-off rule, but a rule is only read when
+       * she re-places - re-arming it with the same getter makes her do that on
+       * the spot (widget.js keepClear). Board only: off the campus the rule is
+       * not armed at all and this would be a place() for nothing. */
+      onChange: () => { if (screen === 'board') keepEmiOffTheDoors(true); },
+    });
+  } catch (e) { say('pa caption unavailable (' + ((e && e.message) || e) + ')'); paCaption = null; }
 
   try {
     ost = createOst({ log: say });
@@ -3094,6 +3235,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   function mountPrizeShelf(panel, close) {
     dropPrizeShelf();
     prizeShelfClose = (typeof close === 'function') ? close : null;
+    docEvent('arcademy-shelf', { open: true });        // emi/shop.js: only browsing?
     prizeRoom = createPrizeCounter({
       mount: panel,
       /* THE ONE LINE THE FOLD COSTS: in flow, in somebody else's box, and the
@@ -3145,6 +3287,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     if (!prizeRoom) return;
     const pr = prizeRoom;
     prizeRoom = null;
+    docEvent('arcademy-shelf', { open: false });
     try { pr.destroy(); } catch (e) { /* noop */ }
   }
 
@@ -3218,6 +3361,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       onShop: (panel, close) => mountPrizeShelf(panel, close),
       onShopClosed: () => dropPrizeShelf(),
       onBack: () => showBoard(),
+      /* ONE WINDOW FURTHER DOWN. `prizebooth` and `locker` are SIBLINGS in
+       * SCREEN_DEPTH, both depth 1, so this is a walk along the alley and not a
+       * step into anything: the Locker's own back slab still says campus and
+       * still means it, and the Locker's left-hand sign is the return leg. */
+      onLocker: () => showLocker(),
     });
     setStage('arc-report-on');
     if (prizeBooth && typeof prizeBooth.fit === 'function') prizeBooth.fit();
@@ -3272,6 +3420,64 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     catch (e) { say('EMI prize re-read threw: ' + ((e && e.message) || e)); }
     if (screen === 'board' && campus) {
       try { campus.update(buildCampusState(), campusStats()); } catch (e) { /* noop */ }
+    }
+
+    /* ------------------------- THE ANNOUNCEMENT --------------------------
+     * `arcademy-bought` on `document`, and this is the ONLY place in the page
+     * it is ever fired. Three things hang off it - the purchase reveal, EMI's
+     * line about what you just bought, and anything a later wave adds - and
+     * none of them has to know what a `wallet-result` frame looks like.
+     *
+     * IT IS THE LAST LINE OF THE ECHO ON PURPOSE. Everything above has already
+     * run: the wallet says the thing is owned, the theme is laid, EMI's props
+     * are re-read and the campus is repainted. So a ceremony that asks "do I
+     * own this" gets yes, and one that lays a palette for two seconds lays it
+     * OVER the settled look rather than under it.
+     *
+     * A REFUSAL OPENS NOTHING. `ok !== true` is a frame where nothing was
+     * bought and nothing was charged - there is no moment to celebrate, and
+     * the counter has already said the sentence that fits. It gets its OWN
+     * quieter event (`arcademy-refused`) rather than a ceremony: EMI has one
+     * sympathy line for `reason === 'poor'` and ignores every other reason,
+     * and a listener that cannot tell a yes from a no is a listener that will
+     * eventually congratulate somebody for being broke.
+     * ------------------------------------------------------------------ */
+    if (frame.ok !== true && frame.sku) {
+      docEvent('arcademy-refused', {
+        sku: String(frame.sku),
+        reason: String(frame.reason || ''),
+      });
+    }
+    if (frame.ok === true && frame.sku) {
+      const sku = String(frame.sku);
+      const row = catalogRow(sku);
+      const detail = {
+        sku,
+        kind: kindOf(sku, row),
+        name: row ? t(row.nameKey || '', row.nameEn || sku) : sku,
+        cost: row ? Number(row.cost) || 0 : 0,
+        cur: row && row.cur === 'k' ? 'k' : 't',
+      };
+      const send = () => {
+        try { fireBought(detail); }
+        catch (e) { say('bought announce threw: ' + ((e && e.message) || e)); }
+      };
+      /* ONE CEREMONY, NOT TWO (wave 0828, F). `prizeRoom.settle` ran at the top
+       * of this function and, on a yes, started THE BANK: the cost leaving the
+       * wallet chip and landing on the row, and then the tray at the sill. The
+       * card is the third stroke of that same gesture, so it waits for the
+       * first two - fired here and now it would whoosh up THROUGH the coins,
+       * and two celebrations at once cancel each other.
+       *
+       * IT IS A DELAY AND NEVER A GATE. `boughtHoldMs` answers 0 whenever there
+       * is no bank in the air - reduced motion, a counter that could not
+       * measure, a purchase settled from anywhere but the shelf - and it can
+       * never answer more than its own ceiling, so the worst a bug in the
+       * counter's motion kit can do is make the card late. The frame is already
+       * settled: the wallet, the inventory and the row moved before this line,
+       * and nothing below it can change what was bought. */
+      const wait = boughtHoldMs();
+      if (wait > 0) setTimeout(send, wait); else send();
     }
   }
 
@@ -3414,11 +3620,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       /* THE FOOTER'S ONE LINK. "N more at the counter" is the only place the
        * Locker admits an unowned thing exists, and it never names one. */
       openCounter: () => showPrizes(),
+      /* THE LEFT-HAND SIGN, and note it is NOT showPrizes(). That verb arrives
+       * with the shelf already open because it is the shortcut a shopper asked
+       * for; this one arrives standing at the window, because somebody who
+       * pressed a sign on a wall is WALKING. `skipWalk` for the same reason the
+       * purse chip takes it: a lateral bounce between two neighbours does not
+       * get to replay the corridor cutscene every time. */
+      onCounter: () => showPrizeBooth({ skipWalk: true }),
       onBack: () => showBoard(),
     };
   }
 
   function showLockerScreen() {
+    const from = screen;             // emi/shop.js: sent down the hall, or walked?
     screen = 'locker';
     dismissEndCard();
     dismissPunchStage();
@@ -3438,6 +3652,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     }
     setStage('arc-report-on');
     if (typeof lockerRoom.fit === 'function') lockerRoom.fit();
+    docEvent('arcademy-locker-opened', { from: from === 'prizebooth' ? 'counter' : from });
   }
 
   /**
@@ -6082,6 +6297,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // byte-for-byte the ladder it always was (trap 29's corollary).
       // dismissConfirm carries the undo: it unfreezes a class the pill froze,
       // and hands a class that was ALREADY paused its pause card back.
+      /* THE PURCHASE REVEAL sits above even the annex beat: it is a body-level
+       * overlay at z 62 (over the toast), and the player opened it zero presses
+       * ago by buying the thing. Nothing beneath it can hold a modal that is
+       * more recent, so it takes Esc first. revealEscape() answers false when
+       * no reveal is up, which is every other moment in the page, and then the
+       * ladder below runs byte-for-byte as it always did (trap 48). */
+      try { if (revealEscape()) return true; } catch (e) { /* noop */ }
       /* THE ANNEX REVEAL is the topmost thing that can possibly be up (z 48,
        * input-blocking): while it runs, nothing beneath it can hold a modal
        * the player opened more recently. One new rung, at the top (trap 48).
@@ -6303,6 +6525,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
        * off - the records room's reason, one layer up. */
       if (themeFx) { try { themeFx.destroy(); } catch (e) { /* noop */ } themeFx = null; }
       if (pa) { try { pa.destroy(); } catch (e) { /* noop */ } pa = null; }
+      if (paCaption) { try { paCaption.destroy(); } catch (e) { /* noop */ } paCaption = null; }
       try { ceremonies.destroy(); } catch (e) { /* noop */ }
       if (settingsPage) { try { settingsPage.destroy(); } catch (e) { /* noop */ } }
     },

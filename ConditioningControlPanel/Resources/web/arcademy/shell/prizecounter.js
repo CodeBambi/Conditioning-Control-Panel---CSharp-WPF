@@ -39,6 +39,14 @@
 
 import { t as lexT } from '../core/lexicon.js';
 import { exitBar, sign as signExit } from './exits.js';
+/* THE HOUSE MOVES, and motion is ALL they are. Nothing imported on this line
+ * can read a wallet, send a message or decide that a purchase happened - see
+ * counterfx.js's own header. The echo law lives above them: they are handed
+ * pictures of answers this file has already received. */
+import {
+  thud, shiver, warmGlow, ghostGold, bankSpend, armBoughtHold,
+  sparkBurst, chargeHold, onRevealOn,
+} from './counterfx.js';
 
 /* ----------------------------------------------------------------------------
  * THE TABLE
@@ -51,6 +59,112 @@ export const SURFACES = Object.freeze(['t', 'k']);
  *  host answers a prize-buy in the same tick it receives it, so six seconds is
  *  not a timeout, it is a promise that the room can never wedge. */
 export const ECHO_WAIT_MS = 6000;
+
+/**
+ * THE CHARGE-HOLD's floor, and its master switch.
+ *
+ * A sixty-ticket poster is a click, because a held verb on a poster is friction
+ * with no ceremony in it. A thousand and up is a week of good nights, and a
+ * week of good nights should not leave on one stray press - that row gets the
+ * ring. The switch is here rather than in a settings file because it governs
+ * the ONE path in this bundle that spends a player's money: if the hold ever
+ * misbehaves, this line turns it off and every row goes back to the plain click
+ * that shipped, with no other edit anywhere.
+ */
+export const HOLD_TO_BUY = true;
+/**
+ * The ticket floor, and it is the audit's own number: a thousand tickets.
+ *
+ * THE SHELF DOES NOT REACH IT YET. The dearest ticket row in the school today
+ * is the swim outfit at 340, so this floor is a promise about a shelf that has
+ * not arrived rather than a rule anybody will meet this week. It is left at the
+ * audited number on purpose - the day a four-figure row lands, it arrives with
+ * its ceremony already fitted and nobody has to remember this file exists.
+ */
+export const HOLD_FROM = 1000;
+/**
+ * The token floor, which is where the hold actually lives today.
+ *
+ * A TOKEN IS NOT A SMALL NUMBER. One token is the first S-rank of a day - you
+ * cannot grind them, you cannot buy them, and there is exactly one on offer per
+ * day however well the night goes. So the case's two-token rows are the
+ * dearest thing in the school by a wide margin: two perfect days, spent in one
+ * press, on a click with no way back. That is the purchase the House Book's
+ * held verb was written for, and pinning the hold to the ticket floor alone
+ * would have shipped the primitive with nothing on the shelf able to trigger
+ * it.
+ *
+ * ONE TOKEN STAYS A CLICK. The two lever unlocks cost one, they are the first
+ * thing a player spends a token on, and a hold on somebody's first purchase
+ * reads as the room not trusting them.
+ */
+export const HOLD_FROM_K = 2;
+
+/** The floor this row has to clear to be worth holding down. */
+export function holdFloor(cur) {
+  return (cur === 'k') ? HOLD_FROM_K : HOLD_FROM;
+}
+
+/**
+ * THE TRAY BEAT's three cuts and the line between a cheap row and a dear one.
+ *
+ * 200 tickets is the shelf's own waist: below it are the posters and the little
+ * consumables a good week pays for twice over, above it are the things a player
+ * saves toward. The token case is dear by definition - there is no cheap token.
+ */
+export const BEAT_DEAR_T = 200;
+export const BEAT_MS_SMALL = 1000;
+export const BEAT_MS_FULL = 1600;
+export const BEAT_MS_STILL = 1200;
+/** The full party this many times a sitting, then the compact cut. */
+export const BEAT_FULL_RUNS = 3;
+/**
+ * The gap between the tray withdrawing and B's card whooshing up. Long enough
+ * that they read as two strokes of one gesture rather than a collision, short
+ * enough that nobody wonders whether the room forgot.
+ */
+export const HANDOVER_MS = 200;
+
+/** THE ALMOST's band: within forty, or within a seventh of a dear row. */
+export function shortfallBand(cost) {
+  return Math.max(40, Math.round((Number(cost) || 0) * 0.15));
+}
+
+/**
+ * THE MARQUEE's heat, 0.2 at a flat wallet and 0.55 at a wallet that reaches
+ * the top of the shelf.
+ *
+ * READ THE PHRASE HONESTLY. "wallet / dearest affordable" is a ratio that is
+ * always >= 1 the moment you can afford anything at all, so the number that is
+ * actually wanted is the one that phrase is REACHING for: how far up the shelf
+ * your money reaches. Dearest row you can afford over dearest row there is. A
+ * player who can buy the cheapest poster and nothing else runs a dim ring; a
+ * player who can take the wide board home runs a hot one. Both currencies are
+ * measured and the warmer one wins, because a purse fat in tokens is not a cold
+ * night just because the ticket shelf is out of reach.
+ *
+ * @param {Array} catalog rows as the host sent them
+ * @param {{t:number,k:number}} purse
+ * @returns {number} 0.2 .. 0.55
+ */
+export function marqueeHeat(catalog, purse) {
+  const rows = Array.isArray(catalog) ? catalog : [];
+  const have = { t: Number(purse && purse.t) || 0, k: Number(purse && purse.k) || 0 };
+  let best = 0;
+  for (const cur of SURFACES) {
+    let top = 0;      // the dearest row on this surface
+    let reach = 0;    // the dearest one this purse covers
+    for (const r of rows) {
+      if (!r || (r.cur === 'k' ? 'k' : 't') !== cur) continue;
+      if (r.locked === true) continue;
+      const cost = Math.max(0, Math.round(Number(r.cost) || 0));
+      if (cost > top) top = cost;
+      if (cost <= have[cur] && cost > reach) reach = cost;
+    }
+    if (top > 0) best = Math.max(best, Math.min(1, reach / top));
+  }
+  return 0.2 + (0.35 * best);
+}
 
 /** Every refusal the host can send back, mapped to the line the counter says.
  *  An unknown reason falls through to the same shrug an unknown sku gets, so a
@@ -461,6 +575,8 @@ export function createPrizeCounter(caps) {
   /** The "put it on" button in the note strip, or null. ONE at a time, and any
    *  new line the counter says takes it off (see say()). */
   let verbEl = null;
+  /** The watch that takes the verb off when B's card puts its own on screen. */
+  let verbWatch = null;
 
   /* The mirrors. Seeded from caps, and thereafter moved ONLY by settle(). */
   let wallet = readBalance();
@@ -468,6 +584,21 @@ export function createPrizeCounter(caps) {
   let unlocks = readUnlocks();
 
   const rows = new Map();          // sku -> the item element currently painted
+
+  /* THE MOVES' OWN BOOKKEEPING, and every line of it is PRESENTATION. Not one
+   * of these is a fact about the player, not one of them outlives a destroy,
+   * and not one of them is ever read to decide what a purchase did. */
+  const chipEls = { t: null, k: null };   // the two wallet chips, re-seated each render
+  const chipNums = { t: null, k: null };  // the <b> inside each, for the bank's ticking
+  const holds = [];                       // live charge-hold handles, torn down each render
+  let refreshTimer = null;                // a repaint waiting for a finger to lift
+  let lastSig = '';                       // what the shelf on screen is painted FROM
+  /** Purchases the host has confirmed this sitting. THE REPETITION RULE: the
+   *  full party three times, and after that the room stays glad but stops
+   *  throwing itself at you. */
+  let buys = 0;
+  /** The one row allowed to breathe (Law III), chosen fresh every render. */
+  let breathSku = null;
 
   function readBalance() {
     try {
@@ -496,6 +627,52 @@ export function createPrizeCounter(caps) {
       const v = (typeof c.catalog === 'function') ? c.catalog() : null;
       return Array.isArray(v) ? v.filter((r) => r && r.sku) : [];
     } catch (e) { log('prize catalog read threw'); return []; }
+  }
+
+  /** One row out of the host's catalog by sku, or null. Read fresh: the
+   *  catalog is the host's, this file keeps no copy of it. */
+  function catalogRow(sku) {
+    if (!sku) return null;
+    try {
+      const all = readCatalog();
+      for (const r of all) if (r && r.sku === sku) return r;
+    } catch (e) { /* noop */ }
+    return null;
+  }
+
+  /**
+   * The cheapest row the player could put on the counter right now, or null -
+   * the one verb allowed to breathe (Law III).
+   *
+   * TICKETS BEFORE TOKENS, always, and not because a token row is dearer in
+   * arithmetic. The two currencies are not comparable: one token is a good
+   * night and sixty tickets is a good week, so a `1` on a token row is not
+   * "cheaper" than `60` on a ticket row in any sense a player would recognise.
+   * The shelf is the everyday surface, so the shelf is where the room beckons,
+   * and the case only gets the breath when nothing on the shelf is within
+   * reach at all.
+   */
+  function cheapestAffordable(catalog) {
+    let pick = null;
+    for (const cur of SURFACES) {
+      let best = Infinity;
+      for (const item of (catalog || [])) {
+        if (!item || !item.sku) continue;
+        if ((item.cur === 'k' ? 'k' : 't') !== cur) continue;
+        if (item.locked === true) continue;
+        if (isOwned(item)) continue;
+        const cost = Math.max(0, Math.round(Number(item.cost) || 0));
+        const purse = (cur === 'k') ? wallet.k : wallet.t;
+        if (purse < cost) continue;
+        if (item.kind === 'consumable') {
+          const cap = stackMaxFor(item.sku);
+          if (cap && heldCount(inv, item.sku) >= cap) continue;
+        }
+        if (cost < best) { best = cost; pick = item.sku; }
+      }
+      if (pick) return pick;
+    }
+    return pick;
   }
 
   function stackMaxFor(sku) {
@@ -539,10 +716,17 @@ export function createPrizeCounter(caps) {
     const ico = el('i', cur === 'k' ? 'arc-tok' : 'arc-tick', cur === 'k' ? TOKEN_MARK : null);
     attr(ico, 'aria-hidden', 'true');
     box.appendChild(ico);
-    box.appendChild(el('b', 'pc-chip-n', String(cur === 'k' ? wallet.k : wallet.t)));
+    const num = el('b', 'pc-chip-n', String(cur === 'k' ? wallet.k : wallet.t));
+    box.appendChild(num);
     box.appendChild(el('span', 'pc-chip-lbl', cur === 'k'
       ? t('wallet_tokens', 'Tokens')
       : t('wallet_tickets', 'Tickets')));
+    /* THE BANK spends FROM here, so the chip and its number are kept by hand.
+     * They are re-seated on every render and read through thunks, so a repaint
+     * landing mid-flight retargets the ticking instead of orphaning it. */
+    const key = (cur === 'k') ? 'k' : 't';
+    chipEls[key] = box;
+    chipNums[key] = num;
     return box;
   }
 
@@ -593,9 +777,14 @@ export function createPrizeCounter(caps) {
    * press - a verb you can hit twice is a verb that looks broken the second time.
    */
   function clearVerb() {
+    if (verbWatch) { try { verbWatch(); } catch (e) { /* noop */ } verbWatch = null; }
     if (!verbEl) return;
     try { verbEl.remove(); } catch (e) { /* noop */ }
     verbEl = null;
+    /* THE STRIP GOES DARK WITH IT when there is no sentence under the button.
+     * A receipt that is one word of furniture and no words at all is not a
+     * receipt, it is a gap where the shelf used to be. */
+    if (!note) dropCls(noteStrip, 'is-on');
   }
 
   function offerVerb(sku) {
@@ -619,6 +808,19 @@ export function createPrizeCounter(caps) {
     } catch (e) { /* the DOM double carries no listeners - never fatal */ }
     verbEl = btn;
     try { noteStrip.appendChild(btn); } catch (e) { verbEl = null; return null; }
+    /* The strip carries the verb even when it carries no sentence - which is
+     * every successful buy now, because the receipt is the row turning gold. */
+    addCls(noteStrip, 'is-on');
+    /* ONE VERB PER SCREEN. B's purchase card opens a beat after this and it
+     * carries its own "Put it on" - the same offer, twice, a centimetre apart,
+     * which is a room asking whether you heard it the first time. The CARD
+     * wins: it is the thing holding the thing. So the strip's copy stands down
+     * the moment `html.arc-reveal-on` appears, and if no card ever opens (a
+     * consumable, reduced motion, a kind the reveal declines) the strip's verb
+     * is the only one there is and it stays. */
+    verbWatch = onRevealOn(function () {
+      if (verbEl === btn) clearVerb();
+    }, 4000);
     return btn;
   }
 
@@ -648,11 +850,25 @@ export function createPrizeCounter(caps) {
     const purse = item.cur === 'k' ? wallet.k : wallet.t;
     const poor = !locked && !owned && purse < cost;
     const full = !!(cap && held >= cap);
+    const short = cost - purse;
+    /* THE ALMOST, and it is the oldest trick on any floor with a counter on it.
+     * Twenty tickets short of the swim outfit is not the same feeling as two
+     * thousand short, and until this line the row said it was: one flat
+     * `is-poor` dim for both. The band is the book's - within forty, or within
+     * a seventh on a dear row, whichever is kinder.
+     *
+     * LAW I IS UNTOUCHED and it is worth being exact about why. The price has
+     * not moved. The wallet has not moved. The host will refuse this press for
+     * the same reason it would have refused it before, and the row will take
+     * the same no. All that changes is WHICH TRUE SENTENCE the row tells while
+     * you look at it, and "you are twenty short" was always the truer one. */
+    const almost = poor && short > 0 && short <= shortfallBand(cost);
 
     let cls = 'pc-item pc-item-' + (item.cur === 'k' ? 'k' : 't');
     if (owned) cls += ' is-owned';
     if (locked) cls += ' is-locked';
     if (poor) cls += ' is-poor';
+    if (almost) cls += ' is-almost';
     if (full) cls += ' is-full';
     if (pending === item.sku) cls += ' is-busy';
     const box = el('article', cls);
@@ -693,7 +909,19 @@ export function createPrizeCounter(caps) {
     if (blurb) body.appendChild(el('p', 'pc-blurb', blurb));
 
     const foot = el('div', 'pc-foot');
-    foot.appendChild(priceTag(item));
+    const flag = priceTag(item);
+    if (almost) {
+      /* The shortfall rides the price flag rather than sitting beside it: the
+       * number you are short is a fact ABOUT the price, and a `-20` floating in
+       * the row's furniture is a `-20` about nothing. Micro-label register
+       * (`--pix`, 9px), so it reads as a stamp on the flag and never competes
+       * with the price itself. The button carries the same fact in words for a
+       * reader who is not looking at it. */
+      const tag = el('span', 'pc-short', '-' + String(short));
+      attr(tag, 'aria-hidden', 'true');
+      flag.appendChild(tag);
+    }
+    foot.appendChild(flag);
 
     if (owned) {
       foot.appendChild(el('span', 'pc-badge pc-badge-owned', t('prize_owned', 'Yours')));
@@ -704,11 +932,24 @@ export function createPrizeCounter(caps) {
         foot.appendChild(el('span', 'pc-badge pc-badge-held',
           t('prize_held', 'Holding') + ' ' + String(held) + (cap ? '/' + String(cap) : '')));
       }
-      const btn = el('button', 'btn primary pc-buy',
-        pending === item.sku ? t('prize_wait', 'Asking the counter') : t('prize_buy', 'Trade'));
+      const waiting = pending === item.sku;
+      const label = waiting
+        ? t('prize_wait', 'Asking the counter')
+        : (almost ? t('pc_verb_almost') : t('prize_buy', 'Trade'));
+      const btn = el('button', 'btn primary pc-buy', label);
       btn.type = 'button';
       if (pending) attr(btn, 'disabled', 'disabled');
-      btn.addEventListener('click', () => propose(item));
+      if (almost && !waiting) {
+        addCls(btn, 'is-almost');
+        attr(btn, 'aria-label', label + ', ' + String(short) + ' ' + t('prize_short'));
+      }
+      /* THE ONE BREATH (Law III). Exactly one thing on this screen may breathe,
+       * and it is the cheapest row the player can actually afford right now -
+       * the verb that is ready to be pressed, never the dearest one that is
+       * not. The sheet stops it while a celebration is up, because a room does
+       * not beckon and cheer at the same time. */
+      if (!pending && item.sku === breathSku) addCls(btn, 'is-breath');
+      wireBuy(btn, item, cost, almost);
       foot.appendChild(btn);
     }
 
@@ -716,6 +957,131 @@ export function createPrizeCounter(caps) {
     box.appendChild(body);
     rows.set(item.sku, box);
     return box;
+  }
+
+  /**
+   * THE PRESS, and there are two of them now.
+   *
+   * A cheap row keeps its click. A row over its currency's floor (see
+   * `holdFloor` - a thousand tickets, or two tokens) gets THE CHARGE-HOLD: a ring fills over 700ms with the tone climbing under it, and a
+   * release before it is full sends NOTHING - no message, no pending row, no
+   * wallet touched, just the shiver and the row exactly as it was.
+   *
+   * NOTE WHAT IS NOT WIRED on the held road: there is no click listener on a
+   * held row at all. One way in, one way to finish it, and no second path that
+   * could disagree with the ring about whether the player meant it. Both roads
+   * end at the same single line - `propose` - which is still the only thing in
+   * this file that says a word to the host.
+   *
+   * If HOLD_TO_BUY is ever turned off, or the primitive declines to mount
+   * (a DOM double, a browser without pointer events), the row silently falls
+   * back to the click that shipped. The expensive road is allowed to lose its
+   * ceremony; it is not allowed to lose its verb.
+   */
+  function wireBuy(btn, item, cost, almost) {
+    const press = () => {
+      /* THE ALMOST's ghost: the grade letter flickering to the better one, a
+       * beat before the counter says no. It goes on the ROW, not the button,
+       * because the row is what is about to be refused. */
+      if (almost) ghostGold(rows.get(item.sku) || btn, { reduced: reduced(), lite: !!c.lite });
+      propose(item);
+    };
+    if (HOLD_TO_BUY && cost >= holdFloor(item.cur === 'k' ? 'k' : 't')) {
+      let h = null;
+      try {
+        h = chargeHold(btn, {
+          reduced: reduced(),
+          log,
+          fire: press,
+          onShort() { say(t('prize_hold_hint')); },
+        });
+      } catch (e) { log('prize hold mount threw: ' + ((e && e.message) || e)); h = null; }
+      if (h) {
+        holds.push(h);
+        if (!almost) attr(btn, 'aria-label', t('prize_hold_aria'));
+        return;
+      }
+    }
+    try {
+      if (typeof btn.addEventListener === 'function') btn.addEventListener('click', press);
+    } catch (e) { /* the DOM double carries no listeners - never fatal */ }
+  }
+
+  /** Every charge-hold on the shelf, off. Called before a render tears the
+   *  rows down under them, and again on destroy. */
+  function dropHolds() {
+    while (holds.length) {
+      const h = holds.pop();
+      try { if (h && typeof h.destroy === 'function') h.destroy(); } catch (e) { /* noop */ }
+    }
+  }
+
+  /**
+   * WHAT THE PAINTED SHELF IS PAINTED FROM, as one string.
+   *
+   * Every pixel this room draws comes from four things: the purse, what is
+   * held, what is unlocked, and which row is waiting. If none of them moved,
+   * a repaint would draw the identical shelf - and destroy every one-shot mark
+   * standing on the old nodes to do it (the shiver on a row that was just
+   * refused, the thud on a row that was just bought, the charge under a finger).
+   *
+   * That is not a hypothetical either. The host answers `set-meta` with a
+   * `meta` frame, the shell answers a `meta` frame with `refresh()`, and plenty
+   * of things write meta for reasons that have nothing to do with the shelf.
+   * A no-op refresh landing inside a 250ms shiver is a room that flinched and
+   * then pretended it had not.
+   */
+  function shelfSig() {
+    let s = wallet.t + '/' + wallet.k + '|' + (pending || '');
+    try {
+      const keys = Object.keys(inv || {}).sort();
+      for (const k of keys) {
+        const v = inv[k];
+        s += ';' + k + ':' + ((v && Number(v.n)) || 0);
+      }
+    } catch (e) { s += ';?'; }
+    try {
+      const u = unlocks || {};
+      const uk = Object.keys(u).sort();
+      for (const k of uk) s += '|' + k + '=' + (u[k] ? 1 : 0);
+    } catch (e) { s += '|?'; }
+    return s;
+  }
+
+  /** Is a finger (or an Enter key) down on a charge right now? */
+  function anyCharging() {
+    for (const h of holds) {
+      try { if (h && h.charging) return true; } catch (e) { /* noop */ }
+    }
+    return false;
+  }
+
+  /**
+   * THE HELD REPAINT.
+   *
+   * A render tears every row down and builds new ones, which means it also
+   * destroys the charge-hold the player currently has their finger on - quietly,
+   * with no shiver and no bump, because a torn-down hold is not a short press.
+   * The press then dies in the player's hand: the ring stops, the tone stops,
+   * and releasing does nothing at all. That is the worst answer this room can
+   * give, and it is not hypothetical - the host pushes a `meta` snapshot for
+   * reasons that have nothing to do with the shelf (a payout, the seep writing
+   * its state, another window moving the theme), the shell answers it with
+   * `refresh`, and the odds of one landing inside a 700ms hold are not small.
+   *
+   * So a refresh that arrives mid-charge waits. It has already read the new
+   * wallet into `wallet`; only the paint is late, by at most a few hundred
+   * milliseconds, and it re-tries rather than being dropped. LAW I is untouched:
+   * nothing here decides what anything costs or who owns what.
+   */
+  function refreshSoon(tries) {
+    if (refreshTimer) { try { clearTimeout(refreshTimer); } catch (e) { /* noop */ } }
+    refreshTimer = setTimeout(function () {
+      refreshTimer = null;
+      if (dead) return;
+      if (anyCharging() && tries < 8) { refreshSoon(tries + 1); return; }
+      render();
+    }, 220);
   }
 
   function surface(cur, items) {
@@ -775,6 +1141,14 @@ export function createPrizeCounter(caps) {
     if (pendingTimer) { try { clearTimeout(pendingTimer); } catch (e) { /* noop */ } pendingTimer = null; }
     pending = null;
 
+    /* THE TWO NUMBERS THE BANK TRAVELS BETWEEN, taken before the host's frame
+     * lands on top of them. This is a snapshot of a PICTURE, not a ledger: a
+     * line below, `wallet` becomes whatever the frame says it is, and the
+     * bank's only use for this is knowing which digits to count down through on
+     * the way there. If the two ever disagree the frame wins and the next
+     * render says so. */
+    const before = { t: wallet.t, k: wallet.k };
+
     /* The host's numbers win outright. A missing bag means "unchanged", never
      * "empty" - a refusal frame is allowed to carry only the reason. */
     if (r.wallet && typeof r.wallet === 'object') {
@@ -789,8 +1163,13 @@ export function createPrizeCounter(caps) {
 
     let won = null;
     if (r.ok === true) {
-      say(t('prize_bought', 'Wrapped up and yours.'));
-      sfx('chime', 0.55);
+      /* THE RECEIPT IS THE ROW. The counter used to say "Wrapped up and yours."
+       * over a row that had just turned gold, which is one fact told twice
+       * before EMI arrives to tell it a third time. The row's thud and its
+       * `Yours` mark are the receipt now; the strip keeps nothing but the verb,
+       * so the one SENTENCE on the screen belongs to her. */
+      say('');
+      winChime(r.sku || was, r.cost);
       won = String(r.sku || was || '');
     } else {
       const row = REFUSALS[String(r.reason || '')] || REFUSALS.unknown;
@@ -802,8 +1181,121 @@ export function createPrizeCounter(caps) {
      * asks, and a tray that slid out when the player pressed Buy would be the
      * room promising a thing the host has not agreed to hand over yet. Nothing
      * below this line can reach a refusal or a timeout. */
-    if (won !== null) { offerVerb(won); trayBeat(won); }
+    if (won !== null) {
+      buys += 1;
+      offerVerb(won);
+      spendBank(won, before);
+    } else {
+      /* THE NO, WITH SYMPATHY. A shiver on the row that was refused and, when
+       * the wallet is what was wrong, a warm light on the number that was
+       * short - so the eye goes to the fact rather than to the sentence. No
+       * red, no buzzer, no second telling. */
+      const missed = String(r.sku || was || '');
+      const row = missed ? rows.get(missed) : null;
+      const red = reduced();
+      if (row) shiver(row, { reduced: red });
+      if (String(r.reason || '') === 'poor') {
+        const item = catalogRow(missed);
+        warmGlow(chipEls[(item && item.cur === 'k') ? 'k' : 't'], { reduced: red });
+      }
+    }
     return !!was && (!r.sku || r.sku === was);
+  }
+
+  /* ------------------------------------------------------------- THE BANK */
+
+  /**
+   * THE BANK, REVERSED, and then the whole hand-over that hangs off it.
+   *
+   * The House Book's floor map has had a row for this surface since the day it
+   * was written - "Shop / Vault purchase: reverse BANK -> THUD, cost visibly
+   * leaves the wallet, item thuds into inventory" - and it has been the one row
+   * on the map with nothing built under it. Until this function the entire
+   * felt experience of spending a week of tickets was a number being a
+   * different number in the next frame.
+   *
+   * THE ORDER OF THE THREE STROKES, which is the whole design decision here:
+   *
+   *   1. THE BANK      the money leaves the chip and flies to the row (~980ms)
+   *   2. THE TRAY      the thing is in the tray at the sill        (1.0-1.6s)
+   *   3. THE CARD      B's reveal, the thing in your hands          (its own)
+   *
+   * They do not overlap, and the reason they do not is the Brake: two
+   * celebrations at once cancel each other, and a tray sliding out UNDER a card
+   * whooshing up is two rooms talking over one another about the same purchase.
+   * So this arms a HOLD (counterfx.js) for the length of strokes one and two,
+   * and shell.js's `arcademy-bought` dispatch waits it out. One gesture, three
+   * strokes, in the order the exchange actually happens: it leaves you, it
+   * arrives at the sill, it is yours.
+   *
+   * NOTHING HERE IS LOAD-BEARING. The wallet, the inventory and the row all
+   * moved at `settle()` a beat ago, on the host's word. If the bank cannot
+   * measure (a node double, a shelf mid-repaint) it returns 0, nothing is
+   * armed, and the card opens exactly as it does today - a purchase that
+   * happened quietly is still a purchase.
+   */
+  function spendBank(sku, before) {
+    const item = catalogRow(sku);
+    const cur = (item && item.cur === 'k') ? 'k' : 't';
+    const cost = Math.max(0, Math.round(Number(item && item.cost) || 0));
+    const red = reduced();
+
+    const ms = bankSpend({
+      chipAt: () => chipEls[cur],
+      numAt: () => chipNums[cur],
+      landAt: () => findCls(rows.get(sku) || null, 'pc-art'),
+      rowAt: () => rows.get(sku) || null,
+      markAt: () => findCls(rows.get(sku) || null, 'pc-badge-owned'),
+      cur, cost, log,
+      from: before ? before[cur] : NaN,
+      to: wallet[cur],
+      reduced: red,
+      lite: !!c.lite,
+    });
+
+    /* REDUCED MOTION TAKES THE STATE AND KEEPS THE SOUND. No flight, no
+     * ticking - the chip already reads the new number - but the row still
+     * declares itself changed for half a second and the thud still lands, so
+     * the beat is intact and only the travel is gone. */
+    if (!ms) {
+      const row = rows.get(sku) || null;
+      if (row) thud(row, { reduced: red });
+      const mark = findCls(row, 'pc-badge-owned');
+      if (mark) thud(mark, { reduced: red, mark: true });
+      sfx('thud', 0.34);
+      trayBeat(sku);
+      armBoughtHold(BEAT_MS_STILL + HANDOVER_MS);
+      return 0;
+    }
+
+    /* The tray comes out AS THE LAST COIN LANDS, not before it: the money is
+     * gone, and that is the moment there is something to put in the tray. */
+    if (beatTimer) { try { clearTimeout(beatTimer); } catch (e) { /* noop */ } beatTimer = null; }
+    beatTimer = setTimeout(function () {
+      beatTimer = null;
+      if (dead) return;
+      trayBeat(sku);
+    }, ms);
+
+    armBoughtHold(ms + beatHold(cost, cur, red) + HANDOVER_MS);
+    return ms;
+  }
+
+  /**
+   * THE CHIME, TIERED, because a poster and a wide board should not sound the
+   * same. Tickets under the shelf's own threshold get the quieter ring; the
+   * dear half of the shelf keeps the full one; and a token buy climbs to the
+   * chime ladder's third rung, which is two semitones up - the pitch seam
+   * multiplies the frequency and leaves the length alone, so it reads as
+   * HIGHER rather than as faster (audio.js, one door, trap 18).
+   */
+  function winChime(sku, hintCost) {
+    const item = catalogRow(sku);
+    const cur = (item && item.cur === 'k') ? 'k' : 't';
+    const cost = Math.max(0, Math.round(Number(
+      (item && item.cost) != null ? item.cost : hintCost) || 0));
+    if (cur === 'k') { sfx('chime', 0.55, { pitch: 1.1225 }); return; }
+    sfx('chime', cost >= BEAT_DEAR_T ? 0.55 : 0.4);
   }
 
   /* -------------------------------------------------------- THE TRAY BEAT */
@@ -831,16 +1323,40 @@ export function createPrizeCounter(caps) {
    *
    * @param {string} sku the sku the host confirmed, for the sprite
    */
+  /**
+   * How long the plate stays at the sill, in the three cuts the audit asked
+   * for. LAW IX, celebrate small ON PURPOSE: a sixty-ticket poster that gets
+   * the same second and a half as a two-thousand-token board teaches a player
+   * that the room's enthusiasm means nothing.
+   *
+   * AND THE REPETITION RULE ON TOP OF IT. The full party three times; from the
+   * fourth purchase of a sitting the plate takes the compact cut whatever it
+   * cost. A player buying out the shelf in one sitting is a player who has
+   * stopped reading the ceremony, and a room that keeps throwing it is a room
+   * that has stopped noticing them.
+   */
+  function beatHold(cost, cur, still) {
+    if (still) return BEAT_MS_STILL;
+    const dear = (cur === 'k') || (Number(cost) || 0) >= BEAT_DEAR_T;
+    if (!dear || buys > BEAT_FULL_RUNS) return BEAT_MS_SMALL;
+    return BEAT_MS_FULL;
+  }
+
   function trayBeat(sku) {
     if (dead) return null;
     clearBeat();
     const still = reduced();
+    const item = catalogRow(sku);
+    const cur = (item && item.cur === 'k') ? 'k' : 't';
+    const cost = Math.max(0, Math.round(Number(item && item.cost) || 0));
     /* `is-lite` rides the BEAT rather than the root, because the beat does not
      * always hang off the root any more (see beatHost). The old
      * `.pc-root.is-lite .pc-beat-*` rules are still in the sheet and still
      * correct for a counter that owns its screen; this is the same two savings
      * reached through the node itself. */
-    const wrap = el('div', 'pc-beat' + (still ? ' is-still' : '') + (c.lite ? ' is-lite' : ''));
+    const hold = beatHold(cost, cur, still);
+    const wrap = el('div', 'pc-beat' + (still ? ' is-still' : '') + (c.lite ? ' is-lite' : '')
+      + (hold <= BEAT_MS_SMALL && !still ? ' is-compact' : ''));
     attr(wrap, 'aria-hidden', 'true');
 
     const plate = el('img', 'pc-beat-plate');
@@ -876,12 +1392,22 @@ export function createPrizeCounter(caps) {
     wrap.appendChild(seat);
 
     beatEl = wrap;
+    /* THE ROOM HOLDS ITS BREATH while the tray is out. The mark goes on the
+     * root rather than being inferred from the beat's own presence, because the
+     * beat does not always hang inside the root any more (see beatHost) and a
+     * sheet cannot reach across that. */
+    addCls(root, 'is-beating');
     try { beatHost().appendChild(wrap); } catch (e) { /* noop */ }
     sfx('paper', 0.3);
+    /* THE GARNISH, AND ONLY ON THE CASE. A token is the first S of a day; the
+     * shelf's own rows do not get sparks, so that when they do appear they
+     * still mean something. Never on lite, never on a still cut - the burst is
+     * the one move in this room that is decoration and nothing else. */
+    if (cur === 'k') sparkBurst(seat, { reduced: still, lite: !!c.lite });
     beatTimer = setTimeout(function () {
       beatTimer = null;
       clearBeat();
-    }, still ? 1200 : 1600);
+    }, hold);
     return wrap;
   }
 
@@ -889,6 +1415,7 @@ export function createPrizeCounter(caps) {
   function clearBeat() {
     if (beatTimer) { try { clearTimeout(beatTimer); } catch (e) { /* noop */ } beatTimer = null; }
     if (beatEl) { try { beatEl.remove(); } catch (e) { /* noop */ } beatEl = null; }
+    dropCls(root, 'is-beating');
   }
 
   /* ------------------------------------------------------------ the render */
@@ -896,11 +1423,43 @@ export function createPrizeCounter(caps) {
   function render() {
     if (dead) return root;
     rows.clear();
+    /* THE HOLDS COME OFF FIRST. Their buttons are about to be thrown away, and
+     * a charge-hold still holding a timer for a node that has left the document
+     * is a ring that fills in the dark and fires into nothing. */
+    dropHolds();
+    chipEls.t = null; chipEls.k = null;
+    chipNums.t = null; chipNums.k = null;
     try { root.textContent = ''; } catch (e) { /* noop */ }
 
+    /* THE SHELF IS READ FIRST NOW. Both of the room's new judgements - how hot
+     * the marquee burns and which single verb is allowed to breathe - are facts
+     * about the catalog measured against the purse, so the catalog has to be in
+     * hand before the sign goes up. Reading it is pure (`readCatalog` asks the
+     * cap and filters), so nothing has moved by asking early. */
+    const catalog = readCatalog();
+    breathSku = cheapestAffordable(catalog);
+
     /* THE MARQUEE. The room's own sign, and the wallet reading under it - a
-     * shop tells you what you can spend before it tells you what it sells. */
+     * shop tells you what you can spend before it tells you what it sells.
+     *
+     * AND IT IS A MARQUEE NOW. The bulb ring is the school's own kit out of
+     * styles.css, unchanged: `.arc-sign-lamps` carries the mask and the dim
+     * fill, its child `.arc-sign-chase` carries the oversized gradient and
+     * travels exactly one period, so the bulbs stand still and the LIGHT moves.
+     * What is local is the HEAT - how bright the ring burns is how far up this
+     * shelf the player's money currently reaches, so a fat night walks into a
+     * room that is visibly lit for them. No mount at all under `lite`; the
+     * chase stops of its own accord under reduced motion (styles.css). */
     const marquee = el('div', 'pc-marquee');
+    if (!c.lite) {
+      const lamps = el('i', 'arc-sign-lamps');
+      attr(lamps, 'aria-hidden', 'true');
+      lamps.appendChild(el('i', 'arc-sign-chase'));
+      marquee.appendChild(lamps);
+    }
+    try {
+      marquee.style.setProperty('--pc-heat', String(marqueeHeat(catalog, wallet).toFixed(3)));
+    } catch (e) { /* the sheet's own default is a fine dim ring */ }
     marquee.appendChild(el('h2', 'pc-title', t('prize_counter_title', 'Prize Counter')));
     marquee.appendChild(el('p', 'pc-sub', t('prize_counter_sub',
       'Tickets on the shelf, tokens in the case')));
@@ -919,7 +1478,6 @@ export function createPrizeCounter(caps) {
 
     root.appendChild(noteStrip);
 
-    const catalog = readCatalog();
     if (!catalog.length) {
       root.appendChild(el('p', 'arc-note pc-bare', t('prize_empty',
         'Shelf is bare tonight. Come back when the truck has been.')));
@@ -945,6 +1503,7 @@ export function createPrizeCounter(caps) {
      * off half a second in, so the beat is re-seated last and stays its second
      * and a half however many times the shelf is repainted under it. */
     if (beatEl) { try { beatHost().appendChild(beatEl); } catch (e) { /* noop */ } }
+    lastSig = shelfSig();
     return root;
   }
 
@@ -972,6 +1531,8 @@ export function createPrizeCounter(caps) {
     dead = true;
     if (pendingTimer) { try { clearTimeout(pendingTimer); } catch (e) { /* noop */ } pendingTimer = null; }
     pending = null;
+    dropHolds();
+    if (refreshTimer) { try { clearTimeout(refreshTimer); } catch (e) { /* noop */ } refreshTimer = null; }
     clearBeat();
     clearVerb();
     rows.clear();
@@ -988,6 +1549,12 @@ export function createPrizeCounter(caps) {
       wallet = readBalance();
       inv = readInv();
       unlocks = readUnlocks();
+      /* NOTHING MOVED, SO NOTHING IS REDRAWN. The cheapest and by far the most
+       * common case, and the one that used to sweep a shiver or a thud off the
+       * screen a few milliseconds after it landed. */
+      if (shelfSig() === lastSig) return;
+      // A finger is down on a charge: repaint the moment it lifts, not now.
+      if (anyCharging()) { refreshSoon(0); return; }
       render();
     },
     /** The sku this room is waiting on, or null (test seam). */

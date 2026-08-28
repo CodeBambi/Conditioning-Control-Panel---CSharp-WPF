@@ -1,0 +1,246 @@
+/* ============================================================================
+ * shell/pacaption.css - the PA's caption bubble. Owned by shell/pacaption.js.
+ *
+ * VISUAL NOVEL, ACROSS THE BOTTOM. The owner asked for "a speech bubble, like
+ * the EMI one, visual novel style", and the two halves of that are in tension:
+ * EMI's bubble is a 104px pixel box hanging off her ear in Press Start 2P, and
+ * a VN plate is a wide band of body copy under the scene. What is BORROWED from
+ * her is the SKIN - cream paper (#F5F0E1), navy ink (#1A1A2E), a 3px hard
+ * border and a hard offset shadow with no blur and no radius. What is not is
+ * the type: `--pix` is campus micro-label seasoning and may never carry body
+ * copy (styles.css, and Press Start 2P has no lowercase rhythm), so the line
+ * itself is `--body` and only the speaker plate is display-face.
+ *
+ * IT IS NOT EMI, AND IT MUST NOT READ AS EMI. She is a person the player is
+ * attached to; this is a building talking. So: no tail, no bounce, no pop, no
+ * pink. A tannoy plate in the corner, a horn drawn in CSS (never an emoji -
+ * house law), and a crackle rather than a squash.
+ *
+ * LAYERING (pacaption.js law 7). z-index 47: over the campus and over a game
+ * plate, UNDER the annex reveal (48) and under `.arc-emi` (50), so the mascot's
+ * own bubble is never covered by the school's. shell.js additionally hands this
+ * box's rect to EMI's keep-off rule, so she walks around it.
+ *
+ * IT NEVER EATS A TAP. `pointer-events: none` on the layer AND on the box, with
+ * no exception anywhere in this file - the input-trust law. The dismiss is a
+ * document-level listener in the js, which does not consume the event.
+ * ==========================================================================*/
+
+.pa-cap {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 47;
+  display: flex;
+  justify-content: center;
+  /* THE SAFE AREA IS PART OF THE BOX, not a margin on it: a notch phone in
+     landscape has an inset on the sides as well as the bottom, and a caption
+     that only cleared the bottom would run under the home indicator's rail. */
+  padding:
+    0
+    calc(18px + env(safe-area-inset-right, 0px))
+    calc(18px + env(safe-area-inset-bottom, 0px))
+    calc(18px + env(safe-area-inset-left, 0px));
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .22s ease-out;
+}
+.pa-cap[hidden] { display: none !important; }
+.pa-cap.is-on { opacity: 1; }
+
+/* ---- the plate ---------------------------------------------------------- */
+
+.pa-cap-box {
+  position: relative;
+  width: min(760px, 100%);
+  box-sizing: border-box;
+  background: #F5F0E1;
+  color: #1A1A2E;
+  border: 3px solid #1A1A2E;
+  /* HARD SHADOW, NO BLUR AND NO RADIUS - EMI's exact treatment. A softened box
+     here would read as a system toast rather than as a thing in the school. */
+  box-shadow: 5px 5px 0 #0E0E1C;
+  padding: 26px 18px 15px;
+  margin-top: 10px;
+  pointer-events: none;
+  /* The box RISES into place; the words fade in on top of it. Both are the same
+     .22s, so the bubble is settled by the time the first character lands. */
+  transform: translateY(10px);
+  transition: transform .22s cubic-bezier(.2, .9, .3, 1);
+}
+.pa-cap.is-on .pa-cap-box { transform: translateY(0); }
+
+/* ---- the speaker plate: who is talking ---------------------------------- */
+/* Straddles the top edge, VN nameplate style. Navy on cream is the inverse of
+   the box, which is what makes it read as a strip of tape rather than a title. */
+.pa-cap-plate {
+  position: absolute;
+  top: -14px;
+  left: 14px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: #1A1A2E;
+  color: #F5F0E1;
+  border: 3px solid #1A1A2E;
+  box-shadow: 3px 3px 0 #0E0E1C;
+  padding: 3px 10px 3px 8px;
+  height: 24px;
+  box-sizing: border-box;
+}
+.pa-cap-who {
+  font-family: var(--disp, 'Copperplate Gothic Bold', 'Bahnschrift Condensed', 'Arial Black', Impact, serif);
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* ---- the horn ----------------------------------------------------------- */
+/* CSS, NEVER AN EMOJI (house law: currency glyphs and chrome glyphs are drawn,
+   because an emoji is a different font's opinion of the school). A cone plus
+   one arc: clip-path does the horn, a quarter-ring of border does the sound. */
+.pa-cap-horn {
+  position: relative;
+  flex: 0 0 auto;
+  width: 15px;
+  height: 12px;
+  color: currentColor;
+}
+.pa-cap-horn::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 1px;
+  width: 9px;
+  height: 10px;
+  background: currentColor;
+  clip-path: polygon(0 30%, 42% 30%, 100% 0, 100% 100%, 42% 70%, 0 70%);
+}
+.pa-cap-horn::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 1px;
+  width: 5px;
+  height: 10px;
+  border: 2px solid currentColor;
+  border-left-color: transparent;
+  border-top-color: transparent;
+  border-bottom-color: transparent;
+  border-radius: 0 60% 60% 0 / 0 50% 50% 0;
+}
+
+/* ---- the line ----------------------------------------------------------- */
+
+.pa-cap-text {
+  margin: 0;
+  font-family: var(--body, 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif);
+  /* Fluid, but with a real floor: a 390px phone still has to be readable at
+     arm's length and the shortest PA line is a single sentence. */
+  font-size: clamp(14px, 1.55vw, 18px);
+  line-height: 1.45;
+  letter-spacing: .005em;
+  text-align: left;
+  overflow-wrap: break-word;
+}
+
+/* THE TYPEWRITER. Every character is laid out at full size from the first frame
+   and revealed by OPACITY, so the box never reflows mid-line and the campus
+   under it never jumps. `.pa-cap-w` keeps a word whole across a wrap. */
+.pa-cap-w { display: inline-block; white-space: nowrap; }
+.pa-cap-text.is-typing .pa-cap-c { opacity: 0; }
+.pa-cap-text.is-typing .pa-cap-c.on { opacity: 1; }
+.pa-cap-c { transition: opacity .09s linear; }
+/* A space between words must still be able to wrap, so it is NOT inline-block. */
+.pa-cap-sp { white-space: normal; }
+
+/* ---- the crackle -------------------------------------------------------- */
+/* The tannoy switching on: two fast flickers of the plate as it takes the line,
+   and nothing after that. It is on the BOX's own pseudo-element rather than on
+   the box, so it cannot interfere with the rise transform above. */
+.pa-cap-box::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #F5F0E1;
+  opacity: 0;
+  pointer-events: none;
+}
+.pa-cap.is-on .pa-cap-box::before { animation: pa-cap-crackle .34s steps(1, end) 1; }
+@keyframes pa-cap-crackle {
+  0%   { opacity: .85; }
+  22%  { opacity: 0; }
+  40%  { opacity: .5; }
+  58%  { opacity: 0; }
+  74%  { opacity: .25; }
+  100% { opacity: 0; }
+}
+
+/* ---- the calm rungs ----------------------------------------------------- */
+/* `.is-still` is written by the js for LITE **or** reduced motion; the media
+   query is the belt under that brace for a host that never told us. Both take
+   the same two things - the crackle and the rise - and NEITHER takes the words
+   (pacaption.js law 6: text is cheap, and a player who bought the announcer
+   still bought the announcements). */
+.pa-cap.is-still .pa-cap-box { transition: none; transform: none; }
+.pa-cap.is-still .pa-cap-box::before { animation: none; }
+.pa-cap.is-still .pa-cap-c { opacity: 1 !important; transition: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pa-cap { transition: opacity .12s linear; }
+  .pa-cap .pa-cap-box { transition: none; transform: none; }
+  .pa-cap .pa-cap-box::before { animation: none; }
+  .pa-cap .pa-cap-c { opacity: 1 !important; transition: none; }
+}
+html.arc-reduced .pa-cap .pa-cap-box { transition: none; transform: none; }
+html.arc-reduced .pa-cap .pa-cap-box::before { animation: none; }
+html.arc-reduced .pa-cap .pa-cap-c { opacity: 1 !important; transition: none; }
+
+/* ---- the phone ---------------------------------------------------------- */
+/* PORTRAIT has room and wants the band edge to edge; LANDSCAPE is 390px tall
+   with the campus in it, so the box gets tighter padding, a smaller line and a
+   ceiling on its own height - a caption that took a third of a landscape phone
+   would be covering the thing it is captioning. */
+:root.arc-mobile .pa-cap {
+  padding:
+    0
+    calc(10px + env(safe-area-inset-right, 0px))
+    calc(10px + env(safe-area-inset-bottom, 0px))
+    calc(10px + env(safe-area-inset-left, 0px));
+}
+:root.arc-mobile .pa-cap-box {
+  width: 100%;
+  padding: 22px 13px 11px;
+  border-width: 2px;
+  box-shadow: 4px 4px 0 #0E0E1C;
+}
+:root.arc-mobile .pa-cap-plate {
+  top: -12px;
+  left: 10px;
+  height: 21px;
+  border-width: 2px;
+  padding: 2px 8px 2px 6px;
+}
+:root.arc-mobile .pa-cap-who { font-size: 9px; letter-spacing: .12em; }
+:root.arc-mobile .pa-cap-text { font-size: 13px; line-height: 1.38; }
+
+@media (orientation: landscape) and (max-height: 500px) {
+  :root.arc-mobile .pa-cap-box {
+    width: min(680px, 100%);
+    padding: 19px 12px 9px;
+  }
+  :root.arc-mobile .pa-cap-text {
+    font-size: 12px;
+    line-height: 1.34;
+    /* Four lines is the ceiling. The longest announcement is 120 characters and
+       fits in three at this size; the clamp is here so a mod that skins a row
+       longer cannot annex the glass. */
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}

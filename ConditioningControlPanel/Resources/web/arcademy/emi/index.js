@@ -32,6 +32,8 @@ let trips = null;
 let asks = null;
 /** emi/heartbeat.js (THE METRONOME, 2026-08-25), on the same terms. */
 let heart = null;
+/** emi/shop.js (the counter's and the Locker's ears, 2026-08-28), on the same terms. */
+let shop = null;
 let voicePending = null;
 /** () => bool: can EMI actually PERFORM right now (is her face attached). */
 let voiceGate = null;
@@ -411,6 +413,8 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
        * interval, and a tick that landed between the widget's teardown and its
        * own would be a beat spent on a mascot that is no longer in the page. */
       try { if (heart) heart.destroy(); } catch (e) { /* noop */ }
+      try { if (shop) shop.destroy(); } catch (e) { /* noop */ }
+      shop = null;
       try { widget.destroy(); } catch (e) { /* noop */ }
       try { if (asks) asks.destroy(); } catch (e) { /* noop */ }
       try { if (trips) trips.destroy(); } catch (e) { /* noop */ }
@@ -500,6 +504,14 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
       });
       try { if (heart) heart.start(); } catch (e) { /* noop */ }
     }).catch((e) => { say('emi: heartbeat.js unavailable (' + ((e && e.message) || e) + ')'); });
+    /* THE SHOP'S EARS (emi/shop.js, Locker wave 0828). It turns the counter's
+     * and the Locker's document events into moments and hands them to
+     * `voiceMoment`, so a purchase line rides the same ladder as every bark.
+     * Optional on the same terms: a missing file costs her the shelf talk. */
+    import('./shop.js').then((sh) => {
+      if (singleton !== api || !sh || typeof sh.createShopVoice !== 'function') return;
+      shop = sh.createShopVoice({ emi: api, fire: (n, p) => voiceMoment(n, p), log: say });
+    }).catch((e) => { say('emi: shop.js unavailable (' + ((e && e.message) || e) + ')'); });
   }).catch((e) => { say('emi: voice.js unavailable (' + ((e && e.message) || e) + ')'); });
 
   return api;
