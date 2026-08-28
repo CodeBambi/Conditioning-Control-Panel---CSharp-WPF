@@ -206,6 +206,12 @@ internal static class ArcademyHostService
             // exactly the same, on the cards this machine already holds.
             ArcademySyncService.Attach(_meta, OnMirrorCardsChanged);
 
+            // THE SHARED WALLET (wallet contract, "Client behaviour"). Same posture, one shelf
+            // over: fetch the ACCOUNT's wallet, carry this machine's up if it never has been, and
+            // drain anything a night offline left unpaid. Signed out, this does nothing at all and
+            // the money path below stays exactly the local-authority one it has always been.
+            ArcademyWalletSyncService.Attach(_meta, OnWalletBanked);
+
             // CAMPUS PRESENCE (PRESENCE.md §3). Two independent halves behind one Attach: the
             // EMITTER announces `campus_enter` (only if the player has opted in - the rung is read
             // inside), and the SNAPSHOT PUSHER starts polling the public feed and handing it to
@@ -753,7 +759,12 @@ internal static class ArcademyHostService
     {
         try
         {
-            var payday = ArcademyEconomy.PickPayday(
+            // THE SERVER'S DRAW WINS WHEN THERE IS ONE. Both sides run the same seeded pick over
+            // the same roster, so they normally agree to the letter; where they can differ is a
+            // roster that has not finished mirroring, and on that night the account's answer is the
+            // one every OTHER device is also showing. The local pick is the fallback, and it is
+            // what a signed-out player (and an early `init` that beat the reply home) gets.
+            var payday = ArcademyWalletSyncService.ServerPayday ?? ArcademyEconomy.PickPayday(
                 DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 _meta?.EnrolledGameKeys());
             var (extra, honors) = _meta?.LeverUnlocks() ?? (false, false);
@@ -1592,15 +1603,22 @@ internal static class ArcademyHostService
         ["prize_buy"] = "Trade",
         ["prize_soon"] = "Arriving soon",
         ["prize_wait"] = "Asking the counter",
-        // What the counter says back. The five refusals line up one for one with the reason
-        // strings on `wallet-result` (unknown / poor / owned / full / locked); the last two are
-        // what the page says on its own when no answer came back at all.
+        // What the counter says back. The refusals line up one for one with the reason strings on
+        // `wallet-result` (unknown / poor / owned / full / locked, plus `offline` and `busy` since
+        // the wallet moved to the account); the last two are what the page says on its own when no
+        // answer came back at all.
         ["prize_bought"] = "Wrapped up and yours.",
         ["prize_poor"] = "Not quite enough on you for that one yet.",
         ["prize_owned_msg"] = "You have that one already.",
         ["prize_full"] = "Your pockets are full of those. Use one first.",
         ["prize_locked_msg"] = "That one stays in the case for now.",
         ["prize_unknown"] = "The counter does not know that one. Odd.",
+        // The shared wallet's two new refusals. The till is on the account now, so a purchase with
+        // no line out is a thing the counter cannot do rather than a thing you cannot afford, and
+        // the account lock is another of your own devices at the same drawer. Both are worded so
+        // they never sound like a scolding and never mention a network.
+        ["prize_offline"] = "The counter cannot reach the bank right now. Nothing was charged.",
+        ["prize_busy"] = "Somebody is already at the drawer. Give it a second and ask again.",
         ["prize_quiet"] = "The counter went quiet on that one. Try again in a moment.",
         ["prize_empty"] = "Shelf is bare tonight. Come back when the truck has been.",
         // Tonight's hot room, painted from the seeded draw `init` already handed down.
@@ -3504,7 +3522,18 @@ internal static class ArcademyHostService
             // Tickets and tokens, wrapped on their own: the attendance credit above is the thing we
             // must not lose, and the money must never become a second way to lose it. Everything
             // here is host-decided - the frame carries a grade and a room, and nothing else.
-            var till = MintCurrency(gameKey, grade, zen, streak, localDate, lever);
+            //
+            // AND SINCE THE SHARED WALLET, WHO DECIDES DEPENDS ON THE DOOR. With an account
+            // attached the money is the SERVER's to mint (one wallet, every device), so this frame
+            // goes up and the answer comes back on its own beat. Signed out, nothing has changed:
+            // MintCurrency runs here, in this order, exactly as it always has.
+            var mintFrame = ArcademyWalletSyncService.DoorOpen
+                ? ArcademyWalletSyncService.BuildMintFrame(
+                    gameKey, grade, zen, streak, localDate, lever, lateSlipUsed, dayUtc)
+                : null;
+            var till = mintFrame == null
+                ? MintCurrency(gameKey, grade, zen, streak, localDate, lever)
+                : default;
 
             // THE PUNCH CARD RIDES THE ATTENDANCE CREDIT (PUNCHCARD §2.1). Same frame, same local
             // date, same idempotence - a graded finish is exactly the event that stamps, so there
@@ -3541,46 +3570,32 @@ internal static class ArcademyHostService
             // letter. Own try/catch: nothing about company may cost the payout frame below.
             try { ArcademyPresenceService.NoteClassEnd(gameKey, grade); } catch { }
 
-            if (_meta != null) _host?.Post(_meta.SnapshotMessage());
+            // Everything the debrief needs that is NOT money, gathered once so both endings below
+            // send the same frame and there is only one place to change the wording of a payout.
+            var report = new PayoutReport(gameKey, tier, xp, levelAfter > levelBefore, streak,
+                perfect, classesToday, !firstToday, darePaid ? DareBonusXp : 0, grade,
+                darePaid ? dareWon : "", dayUtc);
 
-            _host?.Post(new
+            if (mintFrame == null)
             {
-                type = "payout-result",
-                gameKey,
-                xp,
-                levelUp = levelAfter > levelBefore,
-                streak,
-                perfectAttendance = perfect,
-                classesToday,
-                // Additive: the report card reads it to explain a 0 XP line. Older pages ignore it.
-                retake = !firstToday,
-                // Additive (EMI ASKS): what the dare bonus actually paid, so the page never has
-                // to guess. 0 on every class that carried no dare, and on a retake.
-                dareXp = darePaid ? DareBonusXp : 0,
-                // Additive (economy): the till, already counted. `tickets` is what was minted,
-                // `ticketBase`/`ticketMult` are its working so the debrief can show the lever and
-                // the payday doing their jobs, and `wallet` is the POST-mint balance, so the page
-                // never adds anything up itself.
-                grade,
-                tickets = till.Tickets,
-                ticketBase = till.Base,
-                ticketMult = till.Mult,
-                tokenMinted = till.TokenMinted,
-                payday = till.Payday,
-                lever = till.Lever,
-                lateSlipUsed,
-                wallet = till.Wallet,
-            });
+                // SIGNED OUT. Byte for byte the old ending: the snapshot, the payout, the card.
+                if (_meta != null) _host?.Post(_meta.SnapshotMessage());
+                PostPayout(report, till, lateSlipUsed);
+                PostPunchCard(gameKey, "daily", punch);
+                LogClassComplete(report, till, lever, banked: false);
+                return;
+            }
+
+            // BANKED. The punch card goes out NOW rather than behind the request: the ceremony is
+            // the page's own beat and it must never sit waiting on a network that might be down.
+            // The money follows on `payout-result` whenever the bank answers, which is exactly the
+            // fill-in-later the report card was already built for (it repaints on arrival).
+            if (_meta != null) _host?.Post(_meta.SnapshotMessage());
             PostPunchCard(gameKey, "daily", punch);
-            App.Logger?.Information(
-                "ArcademyHost: class complete ({Game}, tier {Tier}, grade {Grade}) = {Xp:0} XP{Dare}{Retake}, {Tickets} tickets (x{Mult}{Lever}){Token}, streak {Streak}, {Today}/4 today",
-                gameKey, tier, grade, xp,
-                darePaid ? " +" + DareBonusXp.ToString("0", CultureInfo.InvariantCulture) + " dare (" + dareWon + ")" : "",
-                firstToday ? "" : " (retake - already paid for " + dayUtc + ")",
-                till.Tickets, till.Mult.ToString("0.##", CultureInfo.InvariantCulture),
-                lever == "standard" ? "" : ", " + lever,
-                till.TokenMinted ? " +1 TOKEN" : "",
-                streak, classesToday);
+
+            int epoch = Volatile.Read(ref _generation);
+            ArcademyWalletSyncService.Bank(mintFrame,
+                outcome => SettleMint(epoch, report, mintFrame, lever, lateSlipUsed, zen, localDate, outcome));
         }
         catch (Exception ex) { App.Logger?.Warning("ArcademyHost.OnClassEnded: {E}", ex.Message); }
     }
@@ -3591,6 +3606,170 @@ internal static class ArcademyHostService
     private readonly record struct TillResult(
         int Tickets, int Base, double Mult, bool TokenMinted,
         int Payday, string Lever, JObject Wallet);
+
+    /// <summary>Everything on <c>payout-result</c> that is NOT money. Gathered once in
+    /// <see cref="OnClassEnded"/> so the local ending and the banked one send the same frame.</summary>
+    private readonly record struct PayoutReport(
+        string GameKey, int Tier, double Xp, bool LevelUp, int Streak, int Perfect,
+        int ClassesToday, bool Retake, double DareXp, string Grade, string DareWon, string DayUtc);
+
+    /// <summary>
+    /// The <c>payout-result</c> frame. Every field is what it always was; what changed is that the
+    /// money half can now arrive from the account's wallet instead of this machine's, and the page
+    /// cannot tell (and must not be able to tell) which.
+    /// </summary>
+    private static void PostPayout(in PayoutReport r, in TillResult till, bool lateSlipUsed)
+    {
+        _host?.Post(new
+        {
+            type = "payout-result",
+            gameKey = r.GameKey,
+            xp = r.Xp,
+            levelUp = r.LevelUp,
+            streak = r.Streak,
+            perfectAttendance = r.Perfect,
+            classesToday = r.ClassesToday,
+            // Additive: the report card reads it to explain a 0 XP line. Older pages ignore it.
+            retake = r.Retake,
+            // Additive (EMI ASKS): what the dare bonus actually paid, so the page never has
+            // to guess. 0 on every class that carried no dare, and on a retake.
+            dareXp = r.DareXp,
+            // Additive (economy): the till, already counted. `tickets` is what was minted,
+            // `ticketBase`/`ticketMult` are its working so the debrief can show the lever and
+            // the payday doing their jobs, and `wallet` is the POST-mint balance, so the page
+            // never adds anything up itself.
+            grade = r.Grade,
+            tickets = till.Tickets,
+            ticketBase = till.Base,
+            ticketMult = till.Mult,
+            tokenMinted = till.TokenMinted,
+            payday = till.Payday,
+            lever = till.Lever,
+            lateSlipUsed,
+            wallet = till.Wallet ?? new JObject { ["t"] = 0, ["k"] = 0 },
+        });
+    }
+
+    /// <summary>The owner's one line per class. <paramref name="banked"/> is the only new word in
+    /// it, and it is the word that tells a support thread apart: money on the account, or money
+    /// still sitting on this desk waiting for a wire.</summary>
+    private static void LogClassComplete(in PayoutReport r, in TillResult till, string lever, bool banked)
+    {
+        App.Logger?.Information(
+            "ArcademyHost: class complete ({Game}, tier {Tier}, grade {Grade}) = {Xp:0} XP{Dare}{Retake}, {Tickets} tickets (x{Mult}{Lever}){Token}, streak {Streak}, {Today}/4 today{Banked}",
+            r.GameKey, r.Tier, r.Grade, r.Xp,
+            r.DareWon.Length > 0
+                ? " +" + r.DareXp.ToString("0", CultureInfo.InvariantCulture) + " dare (" + r.DareWon + ")"
+                : "",
+            r.Retake ? " (retake - already paid for " + r.DayUtc + ")" : "",
+            till.Tickets, till.Mult.ToString("0.##", CultureInfo.InvariantCulture),
+            lever == "standard" ? "" : ", " + lever,
+            till.TokenMinted ? " +1 TOKEN" : "",
+            r.Streak, r.ClassesToday,
+            banked ? " (banked)" : "");
+    }
+
+    /// <summary>
+    /// The bank answered (or did not). Runs on a background thread, so it hops the dispatcher and
+    /// checks the window generation the way every other async continuation here does - a reply that
+    /// arrives after the Arcademy closed must not paint a payout into the NEXT session's report.
+    ///
+    /// <para>THE THREE ENDINGS. Banked: adopt what came back and report it. Nobody answered: mint
+    /// locally so the debrief still has a number, park the frame under the same <c>mintId</c>, and
+    /// let the next launch carry it up - the server's answer will REPLACE this preview, so nothing
+    /// is ever counted twice. Refused (the tier gate, mostly): mint locally and park nothing,
+    /// because a frame this account can never bank is a queue that can never drain.</para>
+    /// </summary>
+    private static void SettleMint(int epoch, PayoutReport report, JObject frame, string lever,
+        bool lateSlipUsed, bool zen, string localDate, ArcademyWalletSyncService.MintOutcome outcome)
+    {
+        try
+        {
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+            if (Volatile.Read(ref _generation) != epoch) return;
+            disp.BeginInvoke(() =>
+            {
+                try
+                {
+                    if (_meta == null || _host == null) return;
+                    if (Volatile.Read(ref _generation) != epoch) return;
+
+                    TillResult till;
+                    bool slip = lateSlipUsed;
+                    if (outcome.Verdict == ArcademyWalletSyncService.MintVerdict.Banked
+                        && outcome.Economy != null)
+                    {
+                        till = TillFromEconomy(outcome.Economy, lever);
+                        // The server consumes the late slip itself and echoes what actually
+                        // happened, so its word beats the local read that went up on the frame.
+                        slip = (bool?)outcome.Economy["lateSlipUsed"] ?? lateSlipUsed;
+                    }
+                    else
+                    {
+                        // THE PREVIEW. Worth saying plainly: this writes the local wallet, and the
+                        // next successful pull or replay overwrites it with the account's copy.
+                        till = MintCurrency(report.GameKey, report.Grade, zen, report.Streak,
+                            localDate, lever);
+                        if (outcome.Verdict == ArcademyWalletSyncService.MintVerdict.Queue)
+                            ArcademyWalletSyncService.Park(frame);
+                    }
+
+                    _host.Post(_meta.SnapshotMessage());
+                    PostPayout(report, till, slip);
+                    LogClassComplete(report, till, lever,
+                        banked: outcome.Verdict == ArcademyWalletSyncService.MintVerdict.Banked);
+                }
+                catch (Exception ex) { App.Logger?.Warning("ArcademyHost.SettleMint: {E}", ex.Message); }
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.SettleMint dispatch: {E}", ex.Message); }
+    }
+
+    /// <summary>
+    /// The server's <c>economy</c> block, read into the same shape the local till has. The page's
+    /// <c>payday</c> field is the MULTIPLIER (an int) and always has been; the wire carries the
+    /// draw as an object, so the room name is dropped here rather than changing a frame the shell
+    /// already reads.
+    /// </summary>
+    private static TillResult TillFromEconomy(JObject economy, string fallbackLever)
+    {
+        int tickets = Math.Max(0, (int?)economy["tickets"] ?? 0);
+        int b = Math.Max(0, (int?)economy["ticketBase"] ?? 0);
+        double mult = (double?)economy["ticketMult"] ?? 1.0;
+        if (!(mult > 0)) mult = 1.0;
+        bool token = (bool?)economy["tokenMinted"] ?? false;
+        int payday = Math.Max(1, (int?)economy["payday"]?["mult"] ?? 1);
+        var lever = (string?)economy["lever"];
+        if (string.IsNullOrWhiteSpace(lever)) lever = fallbackLever;
+        var wallet = economy["wallet"] as JObject;
+        return new TillResult(tickets, b, mult, token, payday, lever,
+            ArcademyEconomy.BalanceJson(ArcademyEconomy.EnsureShape(wallet)));
+    }
+
+    /// <summary>
+    /// The account's wallet landed (or a parked mint drained into it). Same shape as
+    /// <see cref="OnMirrorCardsChanged"/>: hop the dispatcher, push the whole-blob meta snapshot,
+    /// and let the shell repaint its chips off it. Nothing here decides anything.
+    /// </summary>
+    private static void OnWalletBanked()
+    {
+        try
+        {
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+            disp.BeginInvoke(() =>
+            {
+                try
+                {
+                    if (_meta == null || _host == null) return;
+                    _host.Post(_meta.SnapshotMessage());
+                }
+                catch (Exception ex) { App.Logger?.Debug("ArcademyHost.OnWalletBanked: {E}", ex.Message); }
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.OnWalletBanked dispatch: {E}", ex.Message); }
+    }
 
     /// <summary>
     /// TICKETS AND TOKENS for one graded finish. The whole sum lives in
@@ -3661,12 +3840,60 @@ internal static class ArcademyHostService
                 return;
             }
 
+            // WITH AN ACCOUNT ATTACHED, THE COUNTER IS ON THE SERVER. It has to be: the wallet is
+            // shared, so a spend settled here would be overwritten by the next pull and the player
+            // would watch a prize they bought turn back into tickets. ONLINE ONLY by contract - a
+            // press that cannot reach the till is a refusal, and the room says so.
+            if (ArcademyWalletSyncService.DoorOpen)
+            {
+                int epoch = Volatile.Read(ref _generation);
+                ArcademyWalletSyncService.Buy(sku, outcome => SettleBuy(epoch, sku, outcome));
+                return;
+            }
+
             var localDate = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             var result = _meta.Buy(sku, localDate);
             if (result.Ok) _host?.Post(_meta.SnapshotMessage());
             PostWalletResult(sku, result.Ok, result.Reason, _meta.WalletSnapshot());
         }
         catch (Exception ex) { App.Logger?.Warning("ArcademyHost.OnPrizeBuy: {E}", ex.Message); }
+    }
+
+    /// <summary>
+    /// The counter answered (or did not). Same dispatcher-and-generation hop <see cref="SettleMint"/>
+    /// takes, and the same rule about a stale reply.
+    ///
+    /// <para>A refusal the SERVER named rides back verbatim - the room already has a line for each
+    /// of them. Nobody answering is <c>offline</c>, which is the one new word on this frame, and it
+    /// carries the wallet UNCHANGED: the page treats a missing bag as "unchanged" but there is no
+    /// reason to make it guess, and no reason for a failed purchase to move a number.</para>
+    /// </summary>
+    private static void SettleBuy(int epoch, string sku, ArcademyWalletSyncService.BuyOutcome outcome)
+    {
+        try
+        {
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+            if (Volatile.Read(ref _generation) != epoch) return;
+            disp.BeginInvoke(() =>
+            {
+                try
+                {
+                    if (_meta == null || _host == null) return;
+                    if (Volatile.Read(ref _generation) != epoch) return;
+
+                    if (!outcome.Answered)
+                    {
+                        PostWalletResult(sku, false, "offline", _meta.WalletSnapshot());
+                        return;
+                    }
+                    if (outcome.Ok) _host.Post(_meta.SnapshotMessage());
+                    PostWalletResult(sku, outcome.Ok, outcome.Reason, _meta.WalletSnapshot());
+                }
+                catch (Exception ex) { App.Logger?.Warning("ArcademyHost.SettleBuy: {E}", ex.Message); }
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.SettleBuy dispatch: {E}", ex.Message); }
     }
 
     /// <summary>The <c>wallet-result</c> frame: same-frame truth for the counter, on the same
@@ -5390,6 +5617,9 @@ internal static class ArcademyHostService
             // sent now (payload taken first, so the request outlives this window without touching
             // anything being disposed) and every reply still in the air is dropped by generation.
             try { ArcademySyncService.Detach(); } catch { }
+            // And the wallet with it. Nothing to flush here: a frame the server never took is
+            // already on disk in `pendingMints`, and the next launch is what carries it up.
+            try { ArcademyWalletSyncService.Detach(); } catch { }
             // Stop the presence poll BEFORE the host goes: the timer must never outlive the window
             // that armed it, and Detach also sends this session's one best-effort `campus_leave`.
             try { ArcademyPresenceService.Detach(); } catch { }

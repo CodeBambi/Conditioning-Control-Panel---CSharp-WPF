@@ -600,6 +600,8 @@ export const DEFAULT_LEXICON = Object.freeze({
   prize_full: 'Your pockets are full of those. Use one first.',
   prize_locked_msg: 'That one stays in the case for now.',
   prize_unknown: 'The counter does not know that one. Odd.',
+  prize_offline: 'The counter cannot reach the bank right now. Nothing was charged.',
+  prize_busy: 'Somebody is already at the drawer. Give it a second and ask again.',
   prize_quiet: 'The counter went quiet on that one. Try again in a moment.',
   prize_empty: 'Shelf is bare tonight. Come back when the truck has been.',
   prize_payday_label: 'Hot room tonight',
