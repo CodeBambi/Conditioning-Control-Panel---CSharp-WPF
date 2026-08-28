@@ -58,6 +58,18 @@ const APRON_MIN = 110;
  * off --arm-band-h and clamps each one at 44) and hands the painting back the
  * 38px it was eating. Desktop keeps 110 exactly. */
 const APRON_MIN_MOBILE = 72;
+/* AND THE PORTRAIT FLOOR, which is a different number again because portrait
+ * stands the apron's contents up in THREE rows instead of one: the knobs, the
+ * lever rail, then Back beside the verb. Measured on the narrowest phone in
+ * range (360px): 48 + 34 + 60 for the rows, 8 + 8 between them, 12 + 12 of
+ * padding = 182. 170 is that with the knobs row allowed to sit on the tape,
+ * which is ugly but readable; below it the verb would leave the screen. It
+ * almost never binds - a 9:19.5 frame fitting a 16:9 plate by WIDTH leaves
+ * ~400px under the painting - but a freak short portrait must not clip the one
+ * button the room exists for. */
+const APRON_MIN_PORTRAIT = 170;
+/** Air between the portrait header card and the top of the painting (px). */
+const HEAD_GAP = 8;
 
 /**
  * The fan-out table. Rects are [x, y, w, h] in stage pixels. Rects must keep
@@ -165,18 +177,31 @@ const SCENES = Object.freeze({
  * both to agree: the apron's floor and the stage's anchor are computed here and
  * the box they move is styled there.
  *
- * LANDSCAPE ONLY, and that is the half that matters. Portrait is behind the
- * rotate gate (shell/orientgate.js), so it is not designed for - but a room
- * left standing while the phone is turned still has to render something sane,
- * and top-anchoring a 9:19.5 frame would hand the apron two thirds of the
- * screen. Portrait keeps the centred stage and the 110px floor it always had.
- * rooms.css carries the SAME `[data-arc-orient="landscape"]` qualifier on the
- * two rules that move with this flag; drift and the scale walks off-axis.
+ * BOTH AXES NOW, and the history is the reason it reads like this. This used to
+ * be `isMobile() && orientation() === 'landscape'`, because the campus asked for
+ * the phone sideways (`requireOrientation('landscape', { reason: 'campus' })`)
+ * and portrait was therefore a screen nobody could reach. The upright wave
+ * (2026-08-28) took that gate down - the plan turns with the glass now - so a
+ * portrait phone walks all the way to a painted door, and the room it opened
+ * was the DESKTOP layout on 390px of glass: the plate centred its letterbox, so
+ * a third of the frame above the painting was void, and the apron's one flex
+ * row put the lever rail down on top of the BEGIN slab (owner report, Lost &
+ * Found 104).
  *
- * Wrapped because a suite's DOM double has no matchMedia and must get `false`
- * rather than a throw at fit() time. */
-function onPhone() {
-  try { return !!isMobile() && orientation() === 'landscape'; } catch (e) { return false; }
+ * So the answer is now three-valued and every caller says which axis it means:
+ *   ''           desktop, untouched, and the whole mobile block is dead code
+ *   'landscape'  exactly what it did before, to the pixel
+ *   'portrait'   top-anchored UNDER the header card, three-row apron
+ * rooms.css carries the SAME `[data-arc-orient]` qualifiers on the rules that
+ * move with each value; drift and the scale walks off-axis (lab.css's lesson).
+ *
+ * Wrapped because a suite's DOM double has no matchMedia and must get '' rather
+ * than a throw at fit() time. */
+function phoneAxis() {
+  try {
+    if (!isMobile()) return '';
+    return orientation() === 'portrait' ? 'portrait' : 'landscape';
+  } catch (e) { return ''; }
 }
 
 /** Does this game have a painted room? The shell's decline test. */
@@ -486,17 +511,35 @@ export function createRoomScene(opts) {
      * letterbox above and below; above is the ceiling of the room, which is the
      * half a player reads the set from, and below is the calm floor the apron
      * was going to cover anyway. So on a phone the whole void goes to the
-     * bottom, under the band. rooms.css moves the box (`top:0`) and the origin
-     * (`50% 0`) under the same class - the two have to agree or the scale walks
-     * the plane off-axis (lab.css's lesson). Desktop is untouched. */
-    const phone = onPhone();
+     * bottom, under the band. rooms.css moves the box (`top`) and the origin
+     * (`50% 0`) under the same qualifier - the two have to agree or the scale
+     * walks the plane off-axis (lab.css's lesson). Desktop is untouched. */
+    const axis = phoneAxis();
+    const phone = axis !== '';
+    /* PORTRAIT PUTS THE HEADER ABOVE THE PAINTING RATHER THAN ON IT. Landscape
+     * can afford a room sign pinned into the corner of a 699x390 plate; the
+     * same card on a 390x218 one covers the furniture it is naming. So in
+     * portrait rooms.css runs the plate full width at the top of the frame and
+     * the plane starts under it - MEASURED, never guessed, because the card is
+     * two lines in English and four in German. Published as `--arm-head-h` and
+     * read back by the `[data-arc-orient="portrait"] .arm-stage` rule; it is 0
+     * everywhere else, which is what keeps `top:0` landscape's exact number. */
+    let headH = 0;
+    if (axis === 'portrait' && typeof plate.getBoundingClientRect === 'function') {
+      const pb = plate.getBoundingClientRect();
+      if (pb && pb.height) headH = Math.round(pb.bottom) + HEAD_GAP;
+    }
+    root.style.setProperty('--arm-head-h', headH + 'px');
     stage.style.transform = 'translate(-50%,' + (phone ? '0' : '-50%') + ') scale(' + s + ')';
     /* The apron hugs the painting's floor line and swallows the letterbox:
      * top = the APRON_STAGE_TOP row of the scaled stage; bottom = the viewport.
-     * Never thinner than the floor for this frame (APRON_MIN / _MOBILE). */
-    const artTop = phone ? 0 : (h - STAGE_H * s) / 2;
+     * Never thinner than the floor for this frame (APRON_MIN / _MOBILE /
+     * _PORTRAIT - portrait's is the tallest because its apron is three rows). */
+    const floor = axis === 'portrait' ? APRON_MIN_PORTRAIT
+      : (phone ? APRON_MIN_MOBILE : APRON_MIN);
+    const artTop = phone ? headH : (h - STAGE_H * s) / 2;
     let apronTop = artTop + APRON_STAGE_TOP * s;
-    if (h - apronTop < (phone ? APRON_MIN_MOBILE : APRON_MIN)) apronTop = h - (phone ? APRON_MIN_MOBILE : APRON_MIN);
+    if (h - apronTop < floor) apronTop = h - floor;
     if (apronTop < 0) apronTop = 0;
     bar.style.top = apronTop + 'px';
     /* Published on both: the bar is a body-level sibling, so it cannot
