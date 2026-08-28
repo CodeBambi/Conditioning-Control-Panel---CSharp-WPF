@@ -5655,6 +5655,33 @@ html.arc-mobile[data-arc-orient="portrait"] .campus-hint {
   font-size:9px; letter-spacing:.14em;
 }
 
+/* ---- SHORT PORTRAIT FRAMES: the band only exists while the frame is TALLER
+   than 9:16, because `meet` letterboxes then. At or below 9:16 the plan is
+   height limited, the band collapses to nothing and the service alley
+   (Records / Front Office / Prize Counter / The Locker, plan y 72..181) rises
+   under the bell cluster and the post-row, which are the two pointer-catching
+   slabs above it - so every tap on those four windows died. Discord's Activity
+   takes 44px plus both safe-area insets off the iframe, which is exactly what
+   drops most phones under the line (iPhone SE and every 16:9 Android in the
+   Activity; a 390x844 tab never hits it). Measured break: campus height below
+   ~663px at phone width.
+
+   Two rules. First, the two chrome containers stop catching pointers in the
+   gaps between their chips (each chip keeps its own tap target). Second, on a
+   frame short enough to lose the band, the plan is pushed down to reserve the
+   78px the rules above already assume (58px for the cluster, 74px for the
+   post-row), so the alley never rises under either. Tall phones are
+   untouched: the media query does not apply to them. */
+html.arc-mobile[data-arc-orient="portrait"] .campus-topright,
+html.arc-mobile[data-arc-orient="portrait"] .campus-postrow { pointer-events:none; }
+html.arc-mobile[data-arc-orient="portrait"] .campus-topright > *,
+html.arc-mobile[data-arc-orient="portrait"] .campus-postrow > * { pointer-events:auto; }
+@media (max-height:700px) {
+  html.arc-mobile[data-arc-orient="portrait"] svg.campus-plan {
+    top:78px; height:calc(100% - 78px);
+  }
+}
+
 /* ---- LANDSCAPE PHONE: the hint stops standing under EMI ----------------
    Measured at 844x390: the hint ran x 558..767 and EMI's first-run spot is
    x 686..772 - she stood on "STEP INSIDE" (owner-visible in the reference
