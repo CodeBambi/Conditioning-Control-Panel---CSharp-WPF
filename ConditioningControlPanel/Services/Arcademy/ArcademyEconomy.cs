@@ -291,11 +291,13 @@ internal static class ArcademyEconomy
             Locked: true),
 
         // ============================ THE RESTOCK (2026-08-26) ============================
-        // Eleven rows over three waves. Everything below is dressing: a walker's kit, a bell,
-        // a poster tube, a voice on the PA, two campus looks, EMI's desk and her jacket, and
-        // one darker pane of glass for the tube back home. Nothing here touches safety, nothing
-        // charges to play (the pitched retake ticket is CUT FOREVER - replays stay free), and
-        // every one of them is witnessed by `wallet.inv` alone: no new unlock flags.
+        // Fourteen rows over three waves - eleven the night the truck came, plus the three
+        // outfits THE LOCKER hung up on 2026-08-28. Everything below is dressing: a walker's
+        // kit, a bell, a poster tube, a voice on the PA, two campus looks, EMI's desk, her
+        // jacket, three more looks for her wardrobe, and one darker pane of glass for the tube
+        // back home. Nothing here touches safety, nothing charges to play (the pitched retake
+        // ticket is CUT FOREVER - replays stay free), and every one of them is witnessed by
+        // `wallet.inv` alone: no new unlock flags.
         //
         // WAVE 1 - ships with the restock.
         new("away_colors", CurTickets, 100, "cosmetic",
@@ -334,6 +336,25 @@ internal static class ArcademyEconomy
             "prize_theme_drone", "DRONE PROTOCOL",
             "prize_theme_drone_blurb",
             "Somebody left a strange cartridge in the AV room and now the campus runs green. We like it.",
+            Wave: 2),
+        // THE LOCKER (2026-08-28). Three outfits, sold one at a time rather than as a bundle so
+        // a player can buy the one they actually want. Plain cosmetics on tickets: no unlock
+        // flag, no StackMax, so a second press is answered `owned` like every other one-off.
+        // The jacket stays a wave-3 token row - these three are the ticket road to the wardrobe.
+        new("emi_labcoat", CurTickets, 180, "cosmetic",
+            "prize_emi_labcoat", "LAB COAT",
+            "prize_emi_labcoat_blurb",
+            "White coat, pocket protector, the clipboard she never writes on. She looks like she is about to grade you.",
+            Wave: 2),
+        new("emi_cheer", CurTickets, 260, "cosmetic",
+            "prize_emi_cheer", "CHEER UNIFORM",
+            "prize_emi_cheer_blurb",
+            "Navy and pink, pleats and all. The pom-poms are not optional and neither is the chant.",
+            Wave: 2),
+        new("emi_swim", CurTickets, 340, "cosmetic",
+            "prize_emi_swim", "SWIM TEAM",
+            "prize_emi_swim_blurb",
+            "Lane four, goggles up. Free Swim was always going to end up here.",
             Wave: 2),
 
         // WAVE 3 - built, tested, and NOT on the wire yet. One bump of CurrentWave ships it.

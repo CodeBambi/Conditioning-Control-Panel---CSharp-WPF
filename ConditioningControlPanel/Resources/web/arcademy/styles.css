@@ -5454,3 +5454,27 @@ html.ae-touch .arc-id-photo { animation:none; }
    frames; the entrance choreography (one-shot) is untouched. */
 html.ae-touch .arc-rs .arc-pc-hole.is-punched,
 html.ae-touch .arc-rs .arc-pc-hole:not(.is-punched) { animation:none; }
+/* ==========================================================================
+   THE LOCKER WAVE (RM 004, 2026-08-28). Appended, never woven in: another
+   session is rewriting the .campus-* rules above and an in-place edit would
+   land in the middle of its diff. Two rules, both of them consequences of a
+   button moving house rather than a new look.
+   ========================================================================== */
+
+/* THE BACK OF THE STUDENT ID now carries two doors instead of one - Records,
+   where the card is read, and the Locker, where it is dressed. They are a ROW
+   because they are siblings: stacking them would read as a primary action with
+   an afterthought under it, and neither of them is that. The buttons keep
+   .arc-id-recordslink (see the note in idcard.js: the flip guard reads that
+   class, and one shape for "a link on the back of the card" is the point), so
+   the only thing this rule owns is the line they sit on. `align-self` moves up
+   to the wrapper, which is where it has to be now that the buttons are no
+   longer direct children of the flex column. */
+.arc-id-links { display:flex; flex-wrap:wrap; gap:8px; align-self:flex-start; }
+.arc-id-links .arc-id-recordslink { align-self:auto; }
+
+/* THE OPTIONS SIGNPOST. The campus look is picked in the Locker now and what
+   Options keeps is a sentence and this door. It wears .arc-themepick, the pill
+   the swatch buttons wore and vacated, so it inherits the sheet's one shape for
+   a pressable thing; all it wants of its own is the air under the sentence. */
+.arc-lockergo { margin-top:10px; }

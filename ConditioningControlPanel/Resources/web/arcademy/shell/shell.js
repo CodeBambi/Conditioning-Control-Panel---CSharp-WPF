@@ -58,6 +58,11 @@ import { createFirstBell } from '../vn/index.js';
 import { createRecordsRoom } from './recordsroom.js';
 import { createPrizeCounter } from './prizecounter.js';
 import { createPrizeBooth } from './prizebooth.js';
+/* THE LOCKER (Locker wave). The room where a bought cosmetic is actually worn.
+ * `equipFromToast` is the second half of a purchase: the counter's receipt
+ * offers one press and this is what answers it, so the shell never has to know
+ * which key an outfit, a frame, a desk toy or a campus look is written to. */
+import { createLocker, showLocker, equipFromToast, installLocker } from './locker.js';
 /* CAMPUS LOOK (COUNTER STOCK). themes.js is a pure TABLE (no DOM, no store);
  * themefx.js is the weather canvas and the school's newest render surface. The
  * shell owns the meta key, the ownership question and the order of application
@@ -141,11 +146,12 @@ function sfx(name, level, extra) {
 
 /** Screen depth, so a swap knows which way it went. An ORDER, not a router -
  *  the router is `screen` and it stays exactly where it was. */
-/* `prizebooth` sits at the counter's own depth and the SHELF sits one deeper,
- * which is the annex's arrangement exactly: the office is a room off the quad
- * and the lab is a room off the office. The booth is the room you walk to and
- * the shop is what you opened while standing in it. */
-const SCREEN_DEPTH = Object.freeze({ board: 0, room: 1, records: 1, prizebooth: 1, prizes: 2, annex: 2, report: 2, settings: 3, class: 4 });
+/* `prizebooth` sits at the counter's own depth and there is no rung under it any
+ * more: the shelf used to be a screen one deeper and it is a PANEL inside the
+ * booth now (the Records Office's arrangement, one alley over), so `prizes` is
+ * not a screen this router can ever be on. A depth for a screen that cannot
+ * exist is a line that reads as a route somebody could still take. */
+const SCREEN_DEPTH = Object.freeze({ board: 0, room: 1, records: 1, prizebooth: 1, locker: 1, annex: 2, report: 2, settings: 3, class: 4 });
 
 /** Walk targets EMI never remarks on arriving at. The three office doors are
  *  voice.js's geofence read from the other end: she is silent on the Records
@@ -831,6 +837,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * two screens now, and because the booth hangs an apron band on <body>
    * that only its own destroy() can take off. */
   let prizeBooth = null;
+  /* THE LOCKER (shell/locker.js). RM 004, and the same lifecycle as the office
+   * and the booth for the same one reason: it is a scene, and the scene chassis
+   * hangs its apron band on <body> where `dom.screen.textContent = ''` cannot
+   * reach. Only its destroy() takes that band off, so the handle is held here
+   * purely so clearScreen has something to tear down. */
+  let lockerRoom = null;
   /** THE LEVER THIS CLASS WAS STARTED ON. Latched at the opening bracket rather
    *  than read again at the end, so a player who buys the Honors lever DURING a
    *  run does not retroactively promote the run they are already in - the host
@@ -1368,6 +1380,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       prizeBooth = null;
       try { pb.destroy(); } catch (e) { /* noop */ }
     }
+    /* AND THE LOCKER, third of the three scenes and torn down for the third
+     * time for the same reason: the apron on <body>. It also holds a device
+     * listener for the landscape rail, which destroy() drops. */
+    if (lockerRoom) {
+      const lr = lockerRoom;
+      lockerRoom = null;
+      try { lr.destroy(); } catch (e) { /* noop */ }
+    }
     extrasBox = null;
     /* THE ROTATE GATE BELONGS TO A SCREEN, NOT TO THE PAGE. Every screen change
      * funnels through here, so dropping it here is what stops a gate the campus
@@ -1886,12 +1906,23 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
            * itself shuttered and raises the sealed card otherwise), so nothing
            * here has to second-guess the plan. */
           prizes: () => walkThen('prizes', () => showPrizeBooth()),
+          /* THE LOCKER'S DOOR, one window further down the same alley, and it
+           * walks like every other door on the plan. It is UNDER the counter on
+           * purpose: the counter is where a thing is bought and the locker is
+           * where it is kept, so walking past the shop to reach your own door is
+           * the right way round. Never shuttered - nothing is sold in there, so
+           * there is no closing time to keep and no sealed card to raise. */
+          locker: () => walkThen('locker', () => showLockerScreen()),
           /* THE PURSE IN THE CHROME. The wallet chip is the shortcut half of
            * the same split the gear and the Front Office door already run: no
            * walk, no antechamber, straight to the shelf - because the chip is a
            * reading of your wallet and the thing you want after reading it is
            * the shelf. campus.js falls back to `prizes` when this is absent, so
-           * a caller that predates the booth is unchanged. */
+           * a caller that predates the booth is unchanged.
+           * IT LANDS AT THE WINDOW WITH THE SHELF ALREADY OPEN (Locker wave).
+           * The shop is a panel over the booth's plate now, so "straight to the
+           * shelf" means the plate is there under it - what the chip skips is
+           * the walk and the arrival down the alley, never the room. */
           prizesShelf: () => showPrizes(),
           annex: () => walkThen('annex', () => showAnnex()),
           /* THE DOOR walks; THE GEAR does not. campus.js calls `registrarRoom`
@@ -2126,6 +2157,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
        * surprise instead of a padlock. No `pending`, either: the pick is a
        * page-owned meta key, so there is no host echo to wait for. */
       themes: themeCaps(),
+      /* THE SIGNPOST. The campus look USED to be drawn here; it is a group in
+       * the Locker now, and what Options keeps is the sentence that says so
+       * plus the door. Two pages that both pick the palette is two places to
+       * find a stale one. */
+      openLocker: () => showLocker(),
+      /* WHICH OPTIONS A PRIZE OPENS. The 5x5 board is the first: the row is
+       * drawn either way, disabled until it is bought, because a knob that
+       * appears out of nowhere the night you buy something is a knob nobody
+       * knew they were shopping for. */
+      settingUnlocks,
       log: say,
       gameKey: gameKey || null,
       onClose: () => {
@@ -2283,13 +2324,56 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     };
   }
 
-  /** The frame the card wears tonight, if one was bought. Gold wins when both
-   *  are owned, because gold is the dearer of the two and nobody buys the dear
-   *  one to be shown the cheap one. */
+  /**
+   * The frame the card wears tonight. TWO ANSWERS, in the school's usual order:
+   * explicit pick > bag default.
+   *
+   * The ladder underneath is what this function was for two waves - gold wins
+   * when both are owned, because gold is the dearer of the two and nobody buys
+   * the dear one to be shown the cheap one - and it is still the whole answer
+   * for a player who has never opened the Locker. What sits above it now is
+   * `lockerFrame`, RM 004's pick, and it needs THREE values rather than two
+   * because "no pick" and "no frame" are different states: an unset key means
+   * the ladder decides, and the sentinel 'plain' is a frame owner deciding to
+   * wear none. A pick whose sku is not owned is ignored here and cleared by the
+   * Locker the next time it renders (the lapse is real - an entitlement can end
+   * while the key outlives it).
+   */
   function idFrame() {
+    let pick = '';
+    try { pick = String(store.get('lockerFrame') || ''); } catch (e) { pick = ''; }
+    if (pick === 'plain') return '';
+    if (pick === 'gold' && ownsSku('id_frame_gold')) return 'gold';
+    if (pick === 'navy' && ownsSku('id_frame_navy')) return 'navy';
     if (ownsSku('id_frame_gold')) return 'gold';
     if (ownsSku('id_frame_navy')) return 'navy';
     return '';
+  }
+
+  /* ------------------------ THE LOCKER'S THREE KEYS ----------------------
+   * `lockerOutfit` / `lockerFrame` / `lockerToy` are PAGE-OWNED meta, minted
+   * the way `campusTheme` was and needing no C# for the same reason. The Locker
+   * writes them; these two readers are what everything ELSE in the shell asks,
+   * because both answers are wanted somewhere the Locker is not on screen (EMI
+   * is mounted for the whole session and the ID card can be opened from the
+   * quad). Same law both times: a pick is only a pick, the wallet is the
+   * ownership witness, and an unowned pick reads as no pick at all.
+   * -------------------------------------------------------------------- */
+
+  /** The outfit EMI is wearing, or null for whatever the bag says. */
+  function lockerOutfit() {
+    let want = '';
+    try { want = String(store.get('lockerOutfit') || ''); } catch (e) { want = ''; }
+    if (!want) return null;
+    return ownsSku('emi_' + want) ? want : null;
+  }
+
+  /** The toy pinned to her desk, or null for tonight's rotation. */
+  function lockerToyPin() {
+    if (!ownsSku('emi_desk_toy')) return null;
+    let want = '';
+    try { want = String(store.get('lockerToy') || ''); } catch (e) { want = ''; }
+    return want || null;
   }
 
   /** What the card says about your ATTENDANCE. Every number is somebody else's
@@ -2414,6 +2498,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           frame: idFrame,
           onChip: onIdChip,
           onRecords: () => showRecords(),
+          /* THE SECOND DOOR ON THE BACK OF THE CARD. Records is where the card
+           * is READ; the Locker is where it is DRESSED, and the frame it wears
+           * is the thing you are looking at while you press it. */
+          onLocker: () => showLocker(),
           onClose: releaseIdCard,
           onOpenCount: idOpenCount,
           sfx: idSfx,
@@ -2548,6 +2636,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   function catalogRow(sku) {
     for (const r of economyCatalog()) if (r.sku === sku) return r;
     return null;
+  }
+
+  /** THE SETTINGS A PRIZE OPENS. The host projects one row per gated option
+   *  ({key, value, sku, owned}); the Options sheet reads it to render the rung
+   *  it cannot yet pick, with the counter named as the way to get it. The page
+   *  never decides ownership here - `owned` is the host's word and the wallet
+   *  behind it is the same wallet ownsSku reads. */
+  function settingUnlocks() {
+    const rows = src.economy && src.economy.settingUnlocks;
+    return Array.isArray(rows) ? rows.filter((r) => r && r.key) : [];
   }
 
   /** How many of a consumable may be held at once. Display only - the host is
@@ -2759,6 +2857,20 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   try { setBellCosmetic(() => ownsSku('brass_bell')); }
   catch (e) { say('bell cosmetic: ' + ((e && e.message) || e)); }
 
+  /* ------------------------------- THE LOCKER ----------------------------
+   * The bell's shape again, and for the same reason. Three callers want to open
+   * RM 004 (the campus door, the Options signpost, the back of the Student ID)
+   * and a fourth wants to EQUIP from a purchase toast, and not one of them is
+   * holding a caps bag - `walkThen` in particular calls its action with no
+   * arguments at all. So the shell hands locker.js its opener and its caps
+   * factory ONCE, here, and `showLocker()` / `equipFromToast(sku)` work from
+   * anywhere on the page afterwards. A FACTORY, not a bag: every cap inside it
+   * is re-asked at the press, so a jacket bought thirty seconds ago is wearable
+   * without a reload (the counter's rule for its own getters).
+   * -------------------------------------------------------------------- */
+  try { installLocker({ open: () => showLockerScreen(), caps: () => lockerCaps() }); }
+  catch (e) { say('locker install: ' + ((e && e.message) || e)); }
+
   /* ------------------------------- THE PA PACK ---------------------------
    * Built once, with narrow caps; pa.js dispatches its OWN cue (the line needs
    * bus 'voice', maxMs 8000 and a duck - the tutorial-bus path would cap it at
@@ -2828,36 +2940,44 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     };
   }
 
-  /* ============================ SCREEN: PRIZES ==========================
+  /* ============================ THE SHELF ===============================
    * The counter is a page under the annex's law (shell/prizecounter.js): it
    * takes readers and callbacks and it imports no store, no bridge and no EMI.
    * The one thing worth reading twice is `onBuy`: it SENDS and returns. There
    * is no optimistic paint anywhere in this screen, because the host owns every
    * balance in it and a page that spent its own money is a page that can be
    * lied to (trap 1, and the whole reason `wallet` is host-owned).
+   *
+   * IT IS NOT A SCREEN ANY MORE (Locker wave, 2026-08-28). The shelf used to be
+   * `screen = 'prizes'`, reached by LEAVING the window you were standing at,
+   * which is a shop in a different building from the booth that advertises it.
+   * It is a panel inside the booth's plate now - shell/prizebooth.js opens it
+   * through scene.js's overlay, the Records Office's arrangement one alley over
+   * - and the only thing that moved is where the counter's root is appended.
+   * Every cap below is the cap it was.
    * ==================================================================== */
 
-  /* WHICH SIDE THE SHELF WAS OPENED FROM, and therefore where Back goes. Two
-   * ways in, and they are the gear and the door again: the purse in the chrome
-   * (straight in, straight out to the quad) and the booth's lit window (in from
-   * the alley, and back out to the alley). Held on the shell rather than passed
-   * to the counter because it is the SHELL's question - the shop has one Back
-   * button and has never known what is behind it. */
-  let prizeShelfFrom = 'board';
+  /** The booth's own close for the panel the counter is sitting in, or null.
+   *  Handed down by prizebooth.js at mount and spent by the counter's Back. */
+  let prizeShelfClose = null;
 
-  function showPrizes(from) {
-    prizeShelfFrom = (from === 'booth') ? 'booth' : 'board';
-    screen = 'prizes';
-    dismissEndCard();
-    dismissPunchStage();
-    dismissAnnexStage();
-    clearScreen();
-    renderTopbar();
-    /* THE COUNTER'S TUNE rides from the booth window into the shop without a
-     * restart: same track name, ost.js defers the leave by one tick (law 5). */
-    try { if (ost) ost.enter('prizes'); } catch (e) { /* noop */ }
+  /**
+   * Fill the booth's panel with the shop. The BOOTH owns the box and the
+   * lifecycle; this owns the catalog, the wallet and the echo, which is the
+   * same split the Records Office runs with records.js.
+   */
+  function mountPrizeShelf(panel, close) {
+    dropPrizeShelf();
+    prizeShelfClose = (typeof close === 'function') ? close : null;
     prizeRoom = createPrizeCounter({
-      mount: dom && dom.screen,
+      mount: panel,
+      /* THE ONE LINE THE FOLD COSTS: in flow, in somebody else's box, and the
+       * box is the scroller. See THE COUNTER, FOLDED INTO THE BOOTH. */
+      embedded: true,
+      /* The tray beat is a full-viewport picture and the panel it is mounted in
+       * is transformed mid-slide, which would make the panel its containing
+       * block. It hangs off the room instead. */
+      beatMount: () => (prizeBooth && prizeBooth.root) || null,
       t,
       log: say,
       lite: !!src.performanceMode,
@@ -2876,14 +2996,40 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         try { bridge.send({ type: 'prize-buy', sku: String(sku) }); }
         catch (e) { say('prize-buy send failed: ' + ((e && e.message) || e)); }
       },
-      /* YOU LEAVE THE WAY YOU CAME IN (the annex's rule, one alley over). A
-       * shelf opened at the booth's window closes back onto the window, not out
-       * onto the quad two rooms away with no account of how you got there; a
-       * shelf opened from the purse in the chrome never went anywhere, so it
-       * comes back to the campus it was standing on. */
+      /* THE SECOND HALF OF A PURCHASE. The receipt offers one press for a thing
+       * that can be worn, and shell/locker.js answers it - which key an outfit,
+       * a frame, a desk toy or a campus look is written to is the Locker's
+       * business and has never been the counter's. A FALSE answer means there
+       * was nothing to put on and the counter takes the verb back off. */
+      equip: (sku) => {
+        try { return !!equipFromToast(sku); }
+        catch (e) { say('locker equip threw: ' + ((e && e.message) || e)); return false; }
+      },
+      /* YOU LEAVE THE WAY YOU CAME IN (the annex's rule, one alley over), and
+       * now there is only one way in: the panel closes onto the window it was
+       * opened over. The purse chip in the chrome arrives with the panel
+       * already up, so its Back lands on the same window and its second press
+       * walks out to the quad. */
       onBack: () => leavePrizeShelf(),
     });
-    setStage('arc-report-on');
+  }
+
+  /** Take the counter down, from any road, twice if you like. */
+  function dropPrizeShelf() {
+    prizeShelfClose = null;
+    if (!prizeRoom) return;
+    const pr = prizeRoom;
+    prizeRoom = null;
+    try { pr.destroy(); } catch (e) { /* noop */ }
+  }
+
+  /**
+   * COMPAT. `showPrizes()` was the shelf's own screen for two waves and every
+   * caller that predates the fold still asks for it by name. It is one line
+   * now: walk nowhere, stand at the window, and open the shelf over it.
+   */
+  function showPrizes() {
+    showPrizeBooth({ skipWalk: true, openShelf: true });
   }
 
   /* ========================= SCREEN: THE BOOTH =========================
@@ -2908,13 +3054,25 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     try { return !economyCatalog().length; } catch (e) { return true; }
   }
 
-  function showPrizeBooth() {
+  /**
+   * @param {Object=} o
+   *   skipWalk  - true when the player did not cross the quad to get here (the
+   *               purse chip in the chrome). The ARRIVAL BEAT is skipped with
+   *               the walk, because an arrival you did not travel to is a
+   *               cutscene. The plate is never skipped.
+   *   openShelf - true to land with the shop already open over the window.
+   */
+  function showPrizeBooth(o) {
+    const opt = o || {};
     screen = 'prizebooth';
     dismissEndCard();
     dismissPunchStage();
     dismissAnnexStage();
     clearScreen();
     renderTopbar();
+    /* THE COUNTER'S TUNE. One track for the whole place now: the shelf opens
+     * over this plate rather than replacing it, so there is no second enter to
+     * defer past (ost.js law 5 still holds, it simply has nothing to do). */
     try { if (ost) ost.enter('prizes'); } catch (e) { /* noop */ }
     prizeBooth = createPrizeBooth({
       mount: dom && dom.screen,
@@ -2923,22 +3081,38 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       lite: !!src.performanceMode,
       reduced: reducedMotion,
       closed: counterClosed(),
+      alley: !opt.skipWalk,
       /* The same two getters the shelf takes, and for the same reason: the tray
        * on the sill reads a wallet, it never moves one. */
       balance: () => walletBalance(),
       payday: () => economyPayday(),
       gameName,
-      onShop: () => showPrizes('booth'),
+      /* THE BOOTH OWNS THE BOX, THE SHELL OWNS WHAT IS IN IT. The room hands
+       * over a panel and the way out of it; the counter and every cap it reads
+       * are minted here, where the store and the bridge live. */
+      onShop: (panel, close) => mountPrizeShelf(panel, close),
+      onShopClosed: () => dropPrizeShelf(),
       onBack: () => showBoard(),
     });
     setStage('arc-report-on');
     if (prizeBooth && typeof prizeBooth.fit === 'function') prizeBooth.fit();
+    /* THE PURSE CHIP'S ARRIVAL. Asked AFTER the fit, so the panel opens over a
+     * plate that has already been measured to the window. */
+    if (opt.openShelf && prizeBooth && typeof prizeBooth.openShop === 'function') {
+      try { prizeBooth.openShop(); } catch (e) { say('prize shelf failed to open'); }
+    }
   }
 
-  /** The shelf's one way out, so the Back button and the Esc rung can never
-   *  disagree about where it goes. */
+  /** The shelf's one way out, so the counter's Back button and the Esc fold can
+   *  never disagree about where it goes: BOTH close the panel and leave the
+   *  player at the window. The second press is the booth's own rung, and that
+   *  one walks out to the quad. */
   function leavePrizeShelf() {
-    if (prizeShelfFrom === 'booth') { showPrizeBooth(); return; }
+    const off = prizeShelfClose;
+    prizeShelfClose = null;
+    if (off) { try { off(); return; } catch (e) { /* fall through to the quad */ } }
+    /* No panel to close means no booth either (the counter cannot be up without
+     * one), so the honest answer is the campus. */
     showBoard();
   }
 
@@ -3046,6 +3220,99 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     });
     setStage('arc-report-on');
     if (recordsRoom && typeof recordsRoom.fit === 'function') recordsRoom.fit();
+  }
+
+  /* ============================ SCREEN: THE LOCKER ======================
+   * RM 004, and the Records Office's arrangement one alley over: a painted room
+   * with the whole of its content folded into a scene overlay, so the shell
+   * owns the screen and shell/locker.js owns everything inside the plate.
+   *
+   * NARROW CAPS, the annex's law. The room is handed readers and callbacks and
+   * imports no store, no bridge and no wallet - which is what lets it be the
+   * page that decides what EMI wears without ever being the page that decides
+   * whether you own it.
+   * ==================================================================== */
+
+  /**
+   * The bag `installLocker` re-asks on every open and on every toast equip.
+   * Nothing in here is a value; they are all questions, because the Locker is
+   * the one screen in the school whose whole job is to be right about a wallet
+   * that moved while the player was looking at it.
+   */
+  function lockerCaps() {
+    return {
+      mount: dom && dom.screen,
+      t,
+      log: say,
+      lite: !!src.performanceMode,
+      reduced: reducedMotion,
+      isMobile,
+      /* THE OWNERSHIP WITNESS, and the only one. Law 1 in locker.js hangs off
+       * it: an unowned thing is ABSENT from that room, never padlocked. */
+      ownsSku,
+      catalog: economyCatalog,
+      inv: walletInv,
+      settingUnlocks,
+      /* THE THREE KEYS. Page-owned meta, the theme picker's road exactly. The
+       * write normalises "no pick" to an empty string rather than null so the
+       * store only ever holds strings for these three - a reader that finds ''
+       * and a reader that finds a missing key then agree without a special
+       * case, which is what `lockerOutfit()` above is counting on. */
+      meta: {
+        get: (key) => store.get(key),
+        set: (key, value) => {
+          const next = (typeof value === 'string' && value) ? value : '';
+          try { return store.set(key, next); }
+          catch (e) { say('locker meta write failed (' + key + ')'); return null; }
+        },
+      },
+      /* THE CAMPUS LOOK, moved house. The same four caps the Options sheet drew
+       * with for two waves, handed to the room the picker lives in now; the key
+       * and the palette are still the shell's and always were. */
+      themes: themeCaps(),
+      emi: () => { try { return getEmi(); } catch (e) { return null; } },
+      /* THE BELL'S PREVIEW is a plain `bell` cue through the one audio door -
+       * audio.js already resolves brass off the cosmetic getter installed
+       * above, so the room hears the real thing rather than a second copy of
+       * it, and the `set_bell` bus message stays unused (it writes the
+       * ownership slot, which a preview must never touch). */
+      bellOwned: () => ownsSku('brass_bell'),
+      /* A FRAME CHANGED WHILE THE CARD IS UP. setProfile() is the card's own
+       * repaint and it ends in paintFrame(), so this is the whole of it. In
+       * practice the spotlight is never up while the Locker is (clearScreen
+       * dismisses it), but the toast's equip verb can fire from anywhere. */
+      refreshIdCard: () => {
+        try { if (idSpotlight && idSpotlight.isOpen && idSpotlight.isOpen()) idSpotlight.setProfile(); }
+        catch (e) { /* the card repaints on its next open regardless */ }
+      },
+      toast: shout,
+      /* THE FOOTER'S ONE LINK. "N more at the counter" is the only place the
+       * Locker admits an unowned thing exists, and it never names one. */
+      openCounter: () => showPrizes(),
+      onBack: () => showBoard(),
+    };
+  }
+
+  function showLockerScreen() {
+    screen = 'locker';
+    dismissEndCard();
+    dismissPunchStage();
+    dismissAnnexStage();
+    clearScreen();
+    renderTopbar();
+    /* NO TUNE. clearScreen has already left whatever was playing, and silence
+     * is the default between places (the lab and Options take it too). The
+     * counter's track belongs to the counter; carrying it one window down would
+     * make the Locker sound like part of the shop, which is the exact reading
+     * the room was built to correct. */
+    lockerRoom = createLocker(lockerCaps());
+    if (!lockerRoom) {
+      say('the Locker would not mount');
+      showBoard();
+      return;
+    }
+    setStage('arc-report-on');
+    if (typeof lockerRoom.fit === 'function') lockerRoom.fit();
   }
 
   /* ---------------------- the graded launch ----------------------------
@@ -5726,21 +5993,30 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // A ROOM SCENE is a screen like records: Esc walks back to campus. Its
       // hotspots are buttons, not modals - the room owns no inner rungs.
       if (screen === 'room') { showBoard(); return true; }
-      // THE PRIZE COUNTER is a flat screen: one rung, and that rung is back to
-      // the window it was opened from - the annex's rule, you leave the way you
-      // came in. It owns no modal and no close-up, and a buy still in the air is
-      // not a rung either: the frame that answers it lands on a room that has
-      // gone, which is exactly what onWalletResult is written to survive (the
-      // counter is null by then and only the lever re-clamps).
-      if (screen === 'prizes') { leavePrizeShelf(); return true; }
-      // THE BOOTH FOLDS INWARD-OUT, the office's shape one alley over: the tray
-      // panel first (the thing opened one press ago), then FALSE at the wide
-      // shot, and the rung under it walks out to the quad. No key is bound down
-      // there; this asks.
+      // THE BOOTH FOLDS INWARD-OUT, the office's shape one alley over: the
+      // ARRIVAL first if the corridor is still up (one press means "get on with
+      // it"), then the panel that is open - the shelf or the ticket tray - and
+      // then FALSE at the window, so the rung under it walks out to the quad.
+      // The shelf's own rung used to be a screen of its own up here; it is the
+      // booth's first rung now, which is why there is nothing left above this
+      // line. A buy still in the air is not a rung either: the frame that
+      // answers it lands on a counter that has gone, which is exactly what
+      // onWalletResult is written to survive (prizeRoom is null by then and
+      // only the lever re-clamps). No key is bound down there; this asks.
       if (screen === 'prizebooth' && prizeBooth) {
         try { if (prizeBooth.escapeStep()) return true; } catch (e) { /* noop */ }
       }
       if (screen === 'prizebooth') { showBoard(); return true; }
+      /* THE LOCKER FOLDS INWARD-OUT, which by now is simply what a room does
+       * here: the wardrobe panel first (it is the thing the player opened one
+       * press ago, and on arrival it opened itself), then FALSE at the plate so
+       * the rung under this one walks out to the quad. The panel can also be
+       * closed by its own scrim, and locker.js asks the DOM rather than a flag
+       * so a scrim press cannot make this rung swallow the next Esc. */
+      if (screen === 'locker' && lockerRoom) {
+        try { if (lockerRoom.escapeStep()) return true; } catch (e) { /* noop */ }
+      }
+      if (screen === 'locker') { showBoard(); return true; }
       // THE ANNEX folds inward-out (trap 48's shape, one ladder both sides of
       // the seam): the lab's own rungs first - paper down, OS window shut,
       // laptop closed, close-up stepped back - then the stairs walk home to
@@ -5899,6 +6175,18 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         prizes: {
           deskToy: () => ownsSku('emi_desk_toy'),
           varsity: () => ownsSku('emi_varsity'),
+          /* THE LOCKER WAVE. Three more getters, and the split is the one
+           * above: she owns the wardrobe (which sheets exist, which pose she
+           * is in, which prop bobs on the tube) and the shell owns the two
+           * things she cannot see - what the player OWNS and what the player
+           * PICKED. `setOutfit` is the one road in, and it asks `outfitOwned`
+           * before it dresses her, so a lapsed entitlement takes the jacket
+           * off at the next paint without anybody writing a lapse handler.
+           * A host with no economy hands none of this down and she wears
+           * exactly what she wore before the Locker existed. */
+          outfitOwned: (name) => ownsSku('emi_' + String(name || '')),
+          outfit: () => lockerOutfit(),
+          toyPin: () => lockerToyPin(),
         },
       });
     }

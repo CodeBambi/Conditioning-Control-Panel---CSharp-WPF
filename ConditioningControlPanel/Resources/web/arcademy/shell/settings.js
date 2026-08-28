@@ -248,7 +248,7 @@ function mult(v) { return (Math.round((Number(v) || 0) * 100) / 100).toFixed(2) 
  *                              `init.words`, which is what any caller that
  *                              predates the floor already meant.
  */
-export function createSettingsPage({ init, bridge, games, keybinds, assets, store, onClose, log, gameKey, vocab, emi, themes } = {}) {
+export function createSettingsPage({ init, bridge, games, keybinds, assets, store, onClose, log, gameKey, vocab, emi, themes, openLocker, settingUnlocks } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const src = init || {};
   const root = el('div', 'arc-settings');
@@ -411,82 +411,26 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
     return row;
   }
 
-  /* ---------------------- THE CAMPUS LOOK ROW ---------------------------
-   * COUNTER STOCK. The one row on this sheet that is NOT a host setting: the
-   * pick is a page-owned meta key (`campusTheme`), the shell owns it, and this
-   * page is handed four narrow functions and nothing else (shell.js themeCaps).
+  /* ------------------------ THE LOCKER SIGNPOST -------------------------
+   * THE CAMPUS LOOK USED TO BE PICKED HERE (Counter Stock), as a radio row of
+   * swatches under its own fold. It is a group in THE LOCKER now, RM 004, with
+   * the outfits and the ID frames it always belonged beside - the three of them
+   * are one question ("what does my school look like") that was being asked in
+   * three different buildings.
    *
-   * THREE THINGS THAT MAKE IT DIFFERENT FROM selectRow, and each is deliberate:
-   *   - NO `pending`. There is no host echo to wait for; `select` returns what
-   *     stuck and the row repaints from that, so the look changes under your
-   *     thumb rather than a beat later.
-   *   - NO UNOWNED ROW. `list()` contains House Standard plus what the player
-   *     actually owns. A theme they have not bought is ABSENT - not dimmed, not
-   *     padlocked, not named. A restock should appear, not be spoiled.
-   *   - RADIO, NOT A <select>. Two or three options that each repaint the whole
-   *     school want to be visible at once, and the swatch is the point.
+   * WHAT STAYS IS A SIGN. Not a second picker: two pages that both set the
+   * palette is two places to find a stale one, and the day they disagree is the
+   * day nobody can say which is lying. So this group holds one sentence, the
+   * name of the look that is currently on, and a door.
+   *
+   * IT IS DRAWN WHETHER OR NOT A THEME IS OWNED, which is the one rule the old
+   * group had that this one drops. The old fold was hidden until you bought a
+   * look, because a picker with a single choice in it is a label; a SIGN has
+   * something to say either way, since the room behind it also holds what EMI
+   * wears, what the ID card wears and what is in your bag.
    * -------------------------------------------------------------------- */
-  function themeRow(caps) {
-    const row = el('div', 'arc-row arc-themerow');
-    const picks = el('div', 'arc-themepicks');
-    picks.setAttribute('role', 'radiogroup');
-    picks.setAttribute('aria-label', t('opt_theme_head', 'Campus look'));
 
-    let list = [];
-    try { list = caps.list() || []; } catch (e) { list = []; }
-    const buttons = [];
-
-    function paint(current) {
-      for (const b of buttons) {
-        b.setAttribute('aria-checked', b.__themeId === current ? 'true' : 'false');
-      }
-    }
-
-    for (const entry of list) {
-      if (!entry || !entry.id) continue;
-      const b = el('button', 'arc-themepick');
-      b.type = 'button';
-      b.setAttribute('role', 'radio');
-      b.__themeId = entry.id;
-      /* THE SWATCH. Three dots off the theme's OWN palette, so a button shows
-       * what it does before it is pressed. This is the one place in the school
-       * a colour is allowed to travel as a value: it is DESCRIBING a palette,
-       * not using one, and the row would otherwise be three identical words. */
-      let sw = null;
-      try { sw = caps.swatch ? caps.swatch(entry.id) : null; } catch (e) { sw = null; }
-      if (sw) {
-        const dots = el('span', 'arc-themedots');
-        dots.setAttribute('aria-hidden', 'true');
-        for (const hue of [sw.panel, sw.accent, sw.ink]) {
-          const d = el('span', 'arc-themedot');
-          if (typeof hue === 'string') d.style.setProperty('--dot', hue);
-          dots.appendChild(d);
-        }
-        b.appendChild(dots);
-      }
-      b.appendChild(el('span', null, t(entry.nameKey || '', entry.nameEn || entry.id)));
-      b.addEventListener('click', () => {
-        let landed = entry.id;
-        try { landed = caps.select(entry.id); } catch (e) { /* the pick is the shell's */ }
-        paint(landed);
-        refreshSummaries();
-        // Same one-per-press answer every other control on this sheet gives.
-        sfx('tell', 0.22, { pitch: landed === 'standard' ? 0.92 : 1.08 });
-      });
-      buttons.push(b);
-      picks.appendChild(b);
-    }
-
-    let current = 'standard';
-    try { current = caps.current() || 'standard'; } catch (e) { current = 'standard'; }
-    paint(current);
-
-    row.appendChild(picks);
-    return row;
-  }
-
-  /** Is there a look worth offering? House Standard alone is not a choice, so
-   *  the whole group stays away until the player owns at least one theme. */
+  /** Is there a look worth naming? House Standard alone is not a choice. */
   function hasThemeChoice() {
     if (!themes || typeof themes.list !== 'function') return false;
     try { return (themes.list() || []).length > 1; } catch (e) { return false; }
@@ -503,13 +447,91 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
     return '';
   }
 
-  /** THE GROUP. Its own fold, headed with the one key the contract mints
-   *  (`opt_theme_head`), so the row inside is nothing but the choices - a group
-   *  and a row both reading "Campus look" would be the same word twice. */
-  function buildLook() {
-    const g = group(t('opt_theme_head', 'Campus look'), 'look', themeSummary);
-    g.body.appendChild(themeRow(themes));
+  function buildLockerSign() {
+    /* The summary still names the current look when there is one to name -
+     * a fold you have to open to learn nothing is a fold that wasted a press. */
+    const g = group(t('locker_title', 'The Locker'), 'locker',
+      () => (hasThemeChoice() ? themeSummary() : ''));
+    g.body.appendChild(el('p', 'arc-note',
+      t('locker_signpost',
+        'Outfits, frames and campus looks live in The Locker now. RM 004.')));
+    /* `arc-themepick` is the pill the swatch buttons wore, and it is free now
+     * that they have moved out. Reusing it is not thrift: the sheet already has
+     * one shape for "a thing on this page you press", and minting a second one
+     * for a single button would be a new style nobody else can use. */
+    const go = el('button', 'arc-themepick arc-lockergo',
+      t('locker_signpost_go', 'Open The Locker'));
+    go.type = 'button';
+    go.addEventListener('click', () => {
+      sfx('tell', 0.22, { pitch: 1.08 });
+      if (typeof openLocker !== 'function') return;
+      try { openLocker(); } catch (e) { say('settings: the Locker would not open'); }
+    });
+    g.body.appendChild(go);
     return g;
+  }
+
+  /* ---------------------- THE RUNGS A PRIZE OPENS -----------------------
+   * `init.economy.settingUnlocks` is the host's list of options that are gated
+   * behind something at the counter: one row per gated VALUE, carrying the
+   * setting key, the value, the sku and the host's own word on whether it is
+   * owned. The 5x5 board in the Deep End is the first of them.
+   *
+   * THIS IS THE ONE PLACE THE SCHOOL SHOWS YOU SOMETHING YOU CANNOT HAVE, and
+   * it is deliberate, against the counter's law that an unowned thing is
+   * ABSENT. A shelf is a place you go to be surprised; a settings sheet is a
+   * place you go to find a knob you already know about, and a board size that
+   * silently appears the night you buy something is a knob nobody knew they
+   * were shopping for. So the rung is drawn, disabled, with the price beside
+   * it - and the price is the only reason it is legible to show it.
+   *
+   * THE HOST'S `owned` IS THE ANSWER, not a wallet read of our own. Same
+   * wallet, one witness, and the sheet has never been allowed to look at it.
+   * -------------------------------------------------------------------- */
+
+  /** The gated values for one setting key that the player does not own yet. */
+  function lockedValues(key) {
+    if (typeof settingUnlocks !== 'function') return [];
+    let rows = [];
+    try { rows = settingUnlocks() || []; } catch (e) { rows = []; }
+    if (!Array.isArray(rows)) return [];
+    return rows.filter((r) => r && String(r.key) === String(key) && r.owned !== true);
+  }
+
+  /**
+   * Grey out the options a prize would open, and say what opens them. The row
+   * arrives built (selectRow is untouched by this wave) and leaves with the
+   * same shape, so a key with nothing gated is byte-for-byte what it was.
+   */
+  function lockOptions(row, key) {
+    const locked = lockedValues(key);
+    if (!locked.length || !row || typeof row.querySelector !== 'function') return row;
+    let sel = null;
+    try { sel = row.querySelector('select'); } catch (e) { sel = null; }
+    if (!sel || !sel.options) return row;
+    let hit = false;
+    for (const r of locked) {
+      const want = String(r.value);
+      for (let i = 0; i < sel.options.length; i += 1) {
+        const opt = sel.options[i];
+        if (!opt || String(opt.value) !== want) continue;
+        opt.disabled = true;
+        hit = true;
+      }
+    }
+    if (!hit) return row;
+    const lab = row.firstChild;
+    if (!lab || typeof lab.appendChild !== 'function') return row;
+    const note = el('span', 'arc-hint arc-locknote');
+    /* THE COIN IS A NODE, NEVER A CHARACTER IN A STRING. `.arc-tok` is the
+     * shell's struck-coin primitive (campus.js and the report card draw the
+     * same one), so a translator is handed "{tok}2 at the counter" and never
+     * has to carry a glyph through nine language files. */
+    note.appendChild(el('i', 'arc-tok', '\u25c9'));
+    const line = t('locker_unlock_hint', '{tok}2 at the counter').split('{tok}').join('');
+    note.appendChild(document.createTextNode(' ' + line));
+    lab.appendChild(note);
+    return row;
   }
 
   function readonlyRow(label, value, hint) {
@@ -1572,14 +1594,14 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
       const value = gameValue(entry.key, boardSizeKey(entry.key), bs.values[0]);
       const par = bs.par || {};
       const parText = [1, 2, 3, 4].map((tier) => par[tier]).filter((v) => v != null).join(' / ');
-      g.body.appendChild(selectRow({
+      g.body.appendChild(lockOptions(selectRow({
         key,
         label: 'Board size',
         hint: 'Playing below your tier’s par caps the class at A.'
           + (parText ? ' Par by tier: ' + parText + '.' : ''),
         value,
         options: bs.values,
-      }));
+      }), key));
       any = true;
     }
 
@@ -1597,7 +1619,12 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
         g.body.appendChild(switchRow({ key, label, hint: s.hint_key ? t(s.hint_key, '') : null, value: !!value }));
         knobs.push({ key, kind: 'bool', label });
       } else if (s.kind === 'enum' && Array.isArray(s.values)) {
-        g.body.appendChild(selectRow({ key, label, value, options: s.values }));
+        /* THE RUNG A PRIZE OPENS lands HERE, not on the board-size row above:
+         * The Deep End's wide board is one of its own enum knobs (`de_board_size`,
+         * values 4x4 / 5x5), not a `boardSizes` mechanism, and the host's
+         * settingUnlocks row names that key. lockOptions is a no-op for every
+         * key with nothing gated, which is all of them but one. */
+        g.body.appendChild(lockOptions(selectRow({ key, label, value, options: s.values }), key));
         knobs.push({ key, kind: 'enum', label });
       } else if (s.kind === 'range') {
         const fmt = s.fmt === 'mult' ? mult : pct;
@@ -1699,12 +1726,14 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
       pane.appendChild(buildCeilings());
       if (mediaControls) pane.appendChild(buildMedia());
     }
-    /* CAMPUS LOOK sits under the ceilings and above Distraction: it is the one
-     * group on this sheet the player BOUGHT, and burying a prize at the bottom
-     * of a ten-class page is the same as not shipping it. Absent entirely until
-     * a theme is owned, and absent on the scoped (mid-class) sheet, which is
-     * about one game and not about the school. */
-    if (!scopedEntry && hasThemeChoice()) pane.appendChild(buildLook());
+    /* THE LOCKER'S SIGN sits where the Campus Look group used to, under the
+     * ceilings and above Distraction, and for the same reason it was put there:
+     * what the player BOUGHT should not be buried at the bottom of a ten-class
+     * page. Still absent on the scoped (mid-class) sheet, which is about one
+     * game and not about the school - and absent when the shell hands down no
+     * door, because a sign pointing at a room nobody can open is worse than no
+     * sign at all. */
+    if (!scopedEntry && typeof openLocker === 'function') pane.appendChild(buildLockerSign());
     pane.appendChild(buildGlobal());
     for (const entry of shown) {
       if (!entry || !entry.key) continue;

@@ -95,6 +95,14 @@ export const GLYPHS = Object.freeze({
   theme_snowday: '❄',
   emi_varsity: '✦',
   tube_midnight: '◗',
+  /* THE WARDROBE (Locker wave, 2026-08-28). Three outfits standing beside the
+   * varsity jacket, and the two rules above picked their characters the same
+   * way: an alembic for the lab coat, a pennant for the cheer squad, still
+   * water for the swim team. None of them is the parcel and none of them is
+   * already on the shelf. */
+  emi_labcoat: '⚗',
+  emi_cheer: '⚑',
+  emi_swim: '≋',
 });
 
 /* ----------------------------------------------------------------------------
@@ -136,10 +144,54 @@ export const ART = Object.freeze({
   theme_snowday: 'theme_snowday.png',
   emi_varsity: 'emi_varsity.png',
   tube_midnight: 'tube_midnight.png',
+  /* The wardrobe, drawn the way the varsity jacket is drawn: one garment on a
+   * clear field at 192 square, so the shelf box and the tray beat both take it
+   * at an exact divisor. Rule 1 above is the safety net while the artist is
+   * still working - a png that is not there yet leaves the glyph standing. */
+  emi_labcoat: 'emi_labcoat.png',
+  emi_cheer: 'emi_cheer.png',
+  emi_swim: 'emi_swim.png',
 });
 
 /** The token price glyph, straight out of the contract: ◉1 / ◉2 / ◉3. */
 export const TOKEN_MARK = '◉';
+
+/* ----------------------------------------------------------------------------
+ * THE WARDROBE VERB (Locker wave, 2026-08-28).
+ *
+ * A cosmetic you have just bought is a cosmetic you are not wearing, and the
+ * old counter's answer to that was a shrug: the row went gold, said "Yours",
+ * and left you to walk to the Locker and find it. This table is the second half
+ * of the purchase - the one press that puts the thing on where you are standing.
+ *
+ * IT IS A PROMISE, NOT AN AUTHORITY. A row here says "shell/locker.js can wear
+ * this one"; the `equip` cap is still asked at the press, and a FALSE answer
+ * takes the verb straight back off (the sku turned out not to be wearable, or
+ * the Locker is not there at all). A sku with no row gets the plain toast it has
+ * always got, which is the whole of what happens when the verb is not offered.
+ *
+ * TWO VERBS, because two different things happen. You PUT ON an outfit or a
+ * frame, and you HANG UP a campus look. One word for both would be the school
+ * talking like a form.
+ *
+ * THE DESK TOY HAS NO VERB ON PURPOSE. Buying it already switches the prop on
+ * and the nightly rotation is already turning, so there is no single toy here
+ * to put anywhere. WHICH one is pinned is a choice, and the Locker's desk group
+ * is where that choice is made. A verb that quietly pinned the spinner would be
+ * the toast deciding something the student walked to RM 004 to decide, so the
+ * sku is left off the table and gets the plain toast. `equipFromToast` answers
+ * it false from the other side too, which is the same ruling written twice.
+ * -------------------------------------------------------------------------- */
+export const EQUIP_VERBS = Object.freeze({
+  emi_labcoat: ['booth_put_it_on', 'Put it on'],
+  emi_cheer: ['booth_put_it_on', 'Put it on'],
+  emi_swim: ['booth_put_it_on', 'Put it on'],
+  emi_varsity: ['booth_put_it_on', 'Put it on'],
+  id_frame_gold: ['booth_put_it_on', 'Put it on'],
+  id_frame_navy: ['booth_put_it_on', 'Put it on'],
+  theme_drone: ['booth_hang_it', 'Hang it up'],
+  theme_snowday: ['booth_hang_it', 'Hang it up'],
+});
 
 /* ----------------------------------------------------------------------------
  * PLUMBING
@@ -344,7 +396,19 @@ export function heldCount(inv, sku) {
  * createPrizeCounter(caps) -> the handle, or null with no DOM.
  *
  * @param {Object} caps
- *  mount     - where the counter's root goes (the shell's screen).
+ *  mount     - where the counter's root goes. It was the shell's screen and it
+ *              is the booth's overlay panel now; this file has never cared, and
+ *              `embedded` is the only thing it has to be told about the change.
+ *  embedded  - true when the counter is folded into somebody else's box (the
+ *              booth's panel). It swaps the fixed full-page root for an in-flow
+ *              one; the SCROLLER is then the box, not the page.
+ *  beatMount - optional () -> the element the tray beat hangs off. The beat is
+ *              a full-viewport picture, and inside an overlay panel (which is
+ *              transformed, so it would be the containing block for a fixed
+ *              child) it has to hang one layer out. Defaults to the root.
+ *  equip     - optional (sku) -> boolean. The Locker's one press: "put it on",
+ *              offered after a confirmed buy of a sku in EQUIP_VERBS. A false
+ *              answer takes the verb off; see offerVerb below.
  *  t / log / lite / reduced
  *  catalog   - () -> [{sku, cur, cost, kind, nameKey, nameEn, blurbKey, blurbEn, locked}]
  *              exactly as the host projected it through init.economy. The page
@@ -386,6 +450,9 @@ export function createPrizeCounter(caps) {
    *  overlapping beats would be two trays, and there is one tray. */
   let beatEl = null;
   let beatTimer = null;
+  /** The "put it on" button in the note strip, or null. ONE at a time, and any
+   *  new line the counter says takes it off (see say()). */
+  let verbEl = null;
 
   /* The mirrors. Seeded from caps, and thereafter moved ONLY by settle(). */
   let wallet = readBalance();
@@ -435,6 +502,22 @@ export function createPrizeCounter(caps) {
   const root = el('div', 'pc-root');
   if (c.lite) addCls(root, 'is-lite');
   if (reduced()) addCls(root, 'is-reduced');
+  /* FOLDED INTO SOMEBODY ELSE'S BOX. One class, and prizecounter.css takes the
+   * root off `position:fixed` so the panel it is sitting in owns the scroll. */
+  if (c.embedded) addCls(root, 'is-embedded');
+
+  /** Where the tray beat hangs. The root when the counter owns the screen, and
+   *  one layer out (the booth's scene root) when it is a panel: `.pc-beat` is
+   *  `position:fixed`, and a transformed ancestor - which every overlay panel in
+   *  this school is, mid-slide - would become its containing block and shrink a
+   *  full-viewport picture to the size of the box that opened it. */
+  function beatHost() {
+    try {
+      const h = (typeof c.beatMount === 'function') ? c.beatMount() : c.beatMount;
+      if (h && typeof h.appendChild === 'function') return h;
+    } catch (e) { /* the room is a fine floor */ }
+    return root;
+  }
 
   /* ------------------------------------------------------------ the chrome */
 
@@ -477,9 +560,58 @@ export function createPrizeCounter(caps) {
   attr(noteStrip, 'aria-live', 'polite');
 
   function say(line) {
+    /* A NEW LINE SPENDS THE OLD VERB. `textContent` would take the button off
+     * anyway; this is what keeps the HANDLE honest, so nothing downstream is
+     * holding a button that is no longer in the document. */
+    clearVerb();
     note = String(line == null ? '' : line);
     try { noteStrip.textContent = note; } catch (e) { /* noop */ }
     if (note) addCls(noteStrip, 'is-on'); else dropCls(noteStrip, 'is-on');
+  }
+
+  /* ------------------------------------------------------------- THE VERB */
+
+  /**
+   * "Put it on", and it is the only button on this page that is not a purchase.
+   *
+   * IT HANGS OFF THE ECHO, exactly the way the tray beat does: the host has
+   * confirmed the buy, the thing is yours, and this is the one press that puts
+   * it on without a walk to the Locker. It sits in the note strip beside the
+   * line the counter just said, because that line IS the receipt.
+   *
+   * A FALSE ANSWER TAKES IT OFF. `equip` is the Locker's own reader: it knows
+   * what is wearable and what is not, and if it says no there was nothing to put
+   * on and a button that says otherwise is a lie. Either answer spends the
+   * press - a verb you can hit twice is a verb that looks broken the second time.
+   */
+  function clearVerb() {
+    if (!verbEl) return;
+    try { verbEl.remove(); } catch (e) { /* noop */ }
+    verbEl = null;
+  }
+
+  function offerVerb(sku) {
+    clearVerb();
+    if (dead || !sku) return null;
+    if (typeof c.equip !== 'function') return null;
+    const row = Object.prototype.hasOwnProperty.call(EQUIP_VERBS, sku) ? EQUIP_VERBS[sku] : null;
+    if (!row) return null;
+    const btn = el('button', 'btn ghost pc-verb', t(row[0], row[1]));
+    btn.type = 'button';
+    try {
+      if (typeof btn.addEventListener === 'function') {
+        btn.addEventListener('click', function () {
+          let ok = false;
+          try { ok = !!c.equip(sku); }
+          catch (e) { log('prize equip threw: ' + ((e && e.message) || e)); ok = false; }
+          clearVerb();
+          if (ok) sfx('chime', 0.3);
+        });
+      }
+    } catch (e) { /* the DOM double carries no listeners - never fatal */ }
+    verbEl = btn;
+    try { noteStrip.appendChild(btn); } catch (e) { verbEl = null; return null; }
+    return btn;
   }
 
   /* ------------------------------------------------------------- one shelf */
@@ -662,7 +794,7 @@ export function createPrizeCounter(caps) {
      * asks, and a tray that slid out when the player pressed Buy would be the
      * room promising a thing the host has not agreed to hand over yet. Nothing
      * below this line can reach a refusal or a timeout. */
-    if (won !== null) trayBeat(won);
+    if (won !== null) { offerVerb(won); trayBeat(won); }
     return !!was && (!r.sku || r.sku === was);
   }
 
@@ -695,7 +827,12 @@ export function createPrizeCounter(caps) {
     if (dead) return null;
     clearBeat();
     const still = reduced();
-    const wrap = el('div', 'pc-beat' + (still ? ' is-still' : ''));
+    /* `is-lite` rides the BEAT rather than the root, because the beat does not
+     * always hang off the root any more (see beatHost). The old
+     * `.pc-root.is-lite .pc-beat-*` rules are still in the sheet and still
+     * correct for a counter that owns its screen; this is the same two savings
+     * reached through the node itself. */
+    const wrap = el('div', 'pc-beat' + (still ? ' is-still' : '') + (c.lite ? ' is-lite' : ''));
     attr(wrap, 'aria-hidden', 'true');
 
     const plate = el('img', 'pc-beat-plate');
@@ -731,7 +868,7 @@ export function createPrizeCounter(caps) {
     wrap.appendChild(seat);
 
     beatEl = wrap;
-    try { root.appendChild(wrap); } catch (e) { /* noop */ }
+    try { beatHost().appendChild(wrap); } catch (e) { /* noop */ }
     sfx('paper', 0.3);
     beatTimer = setTimeout(function () {
       beatTimer = null;
@@ -799,7 +936,7 @@ export function createPrizeCounter(caps) {
      * A refresh landing mid-beat (a payout, say) would otherwise sweep the tray
      * off half a second in, so the beat is re-seated last and stays its second
      * and a half however many times the shelf is repainted under it. */
-    if (beatEl) { try { root.appendChild(beatEl); } catch (e) { /* noop */ } }
+    if (beatEl) { try { beatHost().appendChild(beatEl); } catch (e) { /* noop */ } }
     return root;
   }
 
@@ -828,6 +965,7 @@ export function createPrizeCounter(caps) {
     if (pendingTimer) { try { clearTimeout(pendingTimer); } catch (e) { /* noop */ } pendingTimer = null; }
     pending = null;
     clearBeat();
+    clearVerb();
     rows.clear();
     try { root.remove(); } catch (e) { /* noop */ }
   }
@@ -854,6 +992,8 @@ export function createPrizeCounter(caps) {
     rowFor(sku) { return rows.get(sku) || null; },
     /** The tray beat currently on screen, or null (test seam). */
     get beat() { return beatEl; },
+    /** The "put it on" button in the note strip, or null (test seam). */
+    get verb() { return verbEl; },
     destroy,
   };
 }
