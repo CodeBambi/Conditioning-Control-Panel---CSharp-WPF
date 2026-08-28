@@ -1411,6 +1411,30 @@ html.arc-campus-on body { overflow:hidden; }
 
 /* ---- SVG plan ---- */
 svg.campus-plan { position:absolute; inset:0; width:100%; height:100%; display:block; }
+/* THE PLAN STOPS GROWING AT 16:9 - THE VERTICAL SAFE BAND.
+   `slice` fills the frame and throws away whatever does not fit, and on a frame
+   WIDER than 16:9 what does not fit is the TOP AND THE BOTTOM of the plan: at
+   1920x900 that is 67 viewBox units off each edge, at 2560x1080 it is 105. That
+   was a fair trade for as long as the plan's bottom band was lawn - and it
+   stopped being true the night The Pool was built on the south lawn. The Deep
+   End is the one ROOM below the corridor's south wall (y 738..852 of an 810-unit
+   box, its plate on y 822/840), so a wide window ate the bottom half of its
+   wordmark, its room name and its RM number and left the IN SESSION sign
+   standing on its own over nothing - the exact shot a tester filed on
+   2026-08-28, and the exact bug the phone pass fixed for phones only.
+   So above 16:9 the plan keeps its ratio and PILLARBOXES into the stage's own
+   dusk sky instead: the same trade `meet` already makes on a phone, where the
+   bands read as sky and nothing looks broken. It is CONTINUOUS at the threshold
+   - at exactly 16:9 the box still fills the frame, so there is no jump - and it
+   is only ever the WIDE side. A frame TALLER than 16:9 still slices its left and
+   right edges into the horizontal SAFE BAND that campus.js's ROOMS table is
+   drawn against (x 72..1368); nothing about that changes. */
+@media (min-aspect-ratio:16/9) {
+  svg.campus-plan {
+    right:auto; width:auto; aspect-ratio:16/9;
+    left:50%; transform:translateX(-50%);
+  }
+}
 .campus-gfloor { fill:var(--campus-plan); stroke:var(--campus-line); stroke-width:2; }
 .campus-gfloor.striped { fill:var(--campus-hall); opacity:.6; }
 .campus-ghall { fill:var(--campus-hall); stroke:var(--campus-line); stroke-width:2; }

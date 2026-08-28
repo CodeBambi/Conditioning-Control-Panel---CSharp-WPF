@@ -107,11 +107,27 @@ export const ROOMS = Object.freeze({
    * runs down it to the water: `door` is still a corridor x, so doorFor(),
    * stopAnchor() and routeFor() need no change at all - the numbered stop lands in
    * the Main Hall like every other class. Because the building sits off the
-   * corridor, `neonY` / `nameY` pin the sign and the label inside it instead of
-   * taking the side-derived defaults (which assume a room bolted to the hall). */
+   * corridor, `neonX` / `neonY` / `nameY` pin the sign and the label inside it
+   * instead of taking the side-derived defaults (which assume a room bolted to
+   * the hall).
+   *
+   * THE SIGN IS ON THE ROOM'S OWN CENTRE LINE, NOT ON ITS DOOR. Every other room
+   * on the plan is entered through the middle of its own wall, so `door` IS the
+   * room's centre and the sign, the art and the plate all stack on one axis. The
+   * Pool is entered from the alley at x 450 and its centre is x 470, so taking
+   * the default left the status pill twenty units west of the wordmark and the
+   * plate under it - close enough to look like a mistake and far enough to read
+   * as a label belonging to something else. `neonX` puts it back on the stack.
+   *
+   * THE BOTTOM EDGE OF THE PLAN IS NOT SPARE. This is the ONE room below the
+   * corridor's south wall, which is why `styles.css` stops the plan growing past
+   * 16:9 (THE VERTICAL SAFE BAND, beside `svg.campus-plan`): under `slice` a
+   * window wider than 16:9 crops the top and the bottom, and everything it takes
+   * off the bottom is this room. A future room drawn below y 730 inherits the
+   * same dependency. */
   the_deep_end: {
     rect: [302, 738, 336, 114], side: 's', door: 450, rm: '105',
-    neonY: 742, nameY: 822,
+    neonX: 470, neonY: 742, nameY: 822,
     nameKey: 'campus_room_the_deep_end', nameEn: 'The Pool',
     descKey: 'campus_desc_the_deep_end',
     descEn: 'Sink tile into tile. The deeper you go, the harder the board is to read.',
@@ -1107,6 +1123,18 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
    * the plan always fills the frame, whatever the window - dead sky is cropped
    * instead of letterboxed. Content near the top/bottom edges is croppable
    * flavor only (tower cap, quad), never a room or a control.
+   *
+   * AND THAT SENTENCE STOPPED BEING TRUE WHEN THE POOL WAS BUILT. The Deep End
+   * sits on the south lawn at y 738..852, below every other room on the plan, so
+   * on a DESKTOP window wider than 16:9 the very first thing slice took was a
+   * room: at 1920x900 the crop is 67 units a side and the wordmark, the room
+   * name and the RM number all went under the bottom edge, leaving the sign
+   * hanging over nothing (tester shot, 2026-08-28). The cure is a CSS one and it
+   * is deliberately NOT here - `styles.css`'s VERTICAL SAFE BAND (beside
+   * `svg.campus-plan`) stops the plan growing past 16:9 and pillarboxes into the
+   * stage's own sky, which needs no measuring, no listener and no rebuild on a
+   * resize. This attribute keeps saying `slice`, because below 16:9 that is
+   * still exactly what the plan wants.
    *
    * ON A PHONE IT MEETS INSTEAD (the mobile pass, owner bugs A and B). Slice is
    * only ever right while the frame is CLOSE to 16:9, and a phone is not close
