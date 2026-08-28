@@ -2110,7 +2110,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   const lockerG = facility({
     rect: FACILITIES.locker.rect, door: FACILITIES.locker.door,
     side: FACILITIES.locker.side, compact: true,
-    neonY: 676, nameY: 714,
+    neonY: 676, nameY: 714, furnBox: [1276, 737, 76, 19],
     sign: t('locker_sign', 'Locker'),
     name: t('campus_room_locker', 'The Locker'),
     rm: FACILITIES.locker.rm,
@@ -2125,9 +2125,11 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   /* THE ROW OF DOORS behind the glass, the parcels' opposite number one window
    * down: three tall lockers instead of three parcels, and a vent slot near the
    * top of each so the shapes read as doors rather than as three more boxes. */
+  /* Through facPut(), like the parcels above: in portrait the furniture wrapper
+   * takes the same turn as the label, so the doors stay upright with the sign. */
   [1280, 1304, 1328].forEach((x) => {
-    lockerG.appendChild(svg('rect', { x, y: 740, width: 18, height: 13 }, 'campus-furnf'));
-    lockerG.appendChild(svg('line', { x1: x + 4, y1: 744, x2: x + 14, y2: 744 }, 'campus-furn'));
+    facPut(lockerG, svg('rect', { x, y: 740, width: 18, height: 13 }, 'campus-furnf'));
+    facPut(lockerG, svg('line', { x1: x + 4, y1: 744, x2: x + 14, y2: 744 }, 'campus-furn'));
   });
   stag(lockerG, 900);
 
