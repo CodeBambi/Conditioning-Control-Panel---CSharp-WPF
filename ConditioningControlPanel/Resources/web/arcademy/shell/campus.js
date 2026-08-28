@@ -484,8 +484,11 @@ export function campusState({ classes, records, suspended, endless, devPass, unl
 /** Seconds until the next local midnight - the next bell. Pure. */
 export function bellSecondsLeft(now) {
   const d = now instanceof Date ? now : new Date();
-  const next = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0);
-  return Math.max(0, Math.round((next.getTime() - d.getTime()) / 1000));
+  /* UTC midnight, NOT local: the timetable day key (`core/timetable.js fmtDay`)
+   * and the Daily Trigger seed are UTC days. Counting to local midnight let a
+   * 23:00 US session and the next morning land on ONE arcademy day. */
+  const next = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1, 0, 0, 0, 0);
+  return Math.max(0, Math.round((next - d.getTime()) / 1000));
 }
 
 /** 'HH:MM:SS' for the bell chip. Pure. */

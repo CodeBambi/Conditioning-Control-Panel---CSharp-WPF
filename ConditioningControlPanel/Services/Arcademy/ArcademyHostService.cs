@@ -2764,6 +2764,7 @@ internal static class ArcademyHostService
         ["bugle_prev"] = "Previous page",
         ["bugle_next"] = "Next page",
         ["bugle_comics"] = "Comics",
+        ["bugle_comics_held"] = "Picture held at the printer. Described below.",
         ["bugle_empty"] = "Nothing set for this page.",
         ["bugle_prop_label"] = "The paper",
         // ---- wet ink (THE SEEP, tell 09) -----------------------------------------------

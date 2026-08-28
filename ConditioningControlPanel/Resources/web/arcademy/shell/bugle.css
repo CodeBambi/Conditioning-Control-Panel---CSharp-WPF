@@ -392,3 +392,9 @@ html.arc-reduced .arc-bugleprop-new { transition:none; }
 }
 /* THE SINGLE PANEL: the season's comics form - one wide frame, caption below. */
 .arc-bugle-panel.is-wide { flex: 1 1 100%; min-height: 96px; }
+.arc-bugle-panelheld {
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  padding:8px 14px; text-align:center;
+  font-size:10px; letter-spacing:.12em; text-transform:uppercase;
+  color:color-mix(in srgb, var(--news-ink), transparent 45%);
+}
