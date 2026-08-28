@@ -948,6 +948,21 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     grades S is told 1. The whole-blob `meta` snapshot is pushed as well.
   - `complete:true` IS the permanent unlock: the shell offers Begin on that room every night
     through the same door path as `devDoor`. Nothing host-side gates which room may start.
+  - **AND IT IS THE DISCORD KEY TOO** (the Activity wave, 2026-08-28). A full card opens the
+    class as a Discord Activity: `/dailytrigger` and its nine siblings. `games/registry.js`
+    **`DISCORD_COMMAND`** is the key -> slash-command table and `discordCommand(key)` its
+    reader; `shell/enrollment.js` prints it as the unlock box's third row
+    (`punchcard_unlocked_discord`, `{cmd}` substituted) and `shell.js` appends the same
+    sentence to the quiet no-op-mint note. See trap 134 - that table is HALF of a contract.
+  - **`init.launchGame`** (string gameKey, or absent) is how a hosted shell says which room
+    it was opened for. `shell.js` reads it once beside `devDoor` (`launchRequest`), and
+    `maybeLaunchRequested()` fires ONCE per boot, immediately after the boot's `showBoard()`
+    - the campus has mounted and the cards have been known since `init.meta` reached the
+    store. Complete card -> `launchGraded(key)` (which starts tonight's board class if the
+    room is on it, else the free-swim twin); anything else -> stay on the campus and toast
+    `launch_card_locked`. **The C# host never sends it** and never should: the desktop opens
+    on a campus, so `BuildInit` has nothing to say here. The field is `cclabs-web`'s
+    (`scripts/arcademy-web-ext/host/index.js` reads the activity boot blob's `game`).
   - **The SHELL half** (2026-08-23): `core/store.js` lists the key in `HOST_OWNED_KEYS` and
     exposes `store.punchCard(gameKey)` / `store.unlockedGames()`, both of which RE-DERIVE
     `punches`, `house`, `complete` and `enrolled` off the two fields that are actually earned -
@@ -3038,6 +3053,25 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     of this is fixed by hand (`html.arc-mobile[data-arc-orient="landscape"] .campus-hint
     { right:170px }`). The general case is OPEN - it belongs to the widget, not to the
     campus chrome.
+134. **`DISCORD_COMMAND` IS HALF OF A TWO-REPO CONTRACT, AND THE OTHER HALF IS A BOT.**
+    `games/registry.js DISCORD_COMMAND` maps a game key to the slash command that opens
+    that class as a Discord Activity. CCP-Server `bot/arcademy-activity.js`
+    (`commandDefinitions()` / `handleCommand`) registers exactly those names against
+    exactly those keys, and the Activity link it hands back is
+    `custom_id=arcademy-<gameKey>`. Change one side alone and a command silently opens the
+    wrong room (or the campus): **both repos move in the same wave, or neither does.**
+    Three rules that fall out of it:
+    - **The command is derived from the KEY, never from `gameName()` or a lexicon row.** A
+      mod re-voices the SENTENCE (`punchcard_unlocked_discord`) and may never rename a
+      command, which is why `{cmd}` is a substituted token and not part of the copy.
+    - **A key with no row simply has no line.** `misdirection` is retired: no row, no
+      command, no launch, and the entitlement route answers `complete:false` for it anyway.
+      The ceremony omits the third row rather than printing an empty command.
+    - **`init.launchGame` is a request, not a grant.** It is gated by the page's own
+      `isUnlocked()` - the same read the campus door uses - so this door can never be wider
+      than the one on the quad, whatever a host sends. The hosted shells wall on the
+      server's `complete` before the page boots; the page's toast is the belt-and-braces
+      half, and it lands the player on a campus rather than on a dead end.
 
 ## 5. The game module contract (short version)
 

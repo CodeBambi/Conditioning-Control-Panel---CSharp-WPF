@@ -34,6 +34,7 @@ import { gradeClass, capsRaised, isSPlus, gradeKey } from '../core/grades.js';
 import { createStore } from '../core/store.js';
 import {
   loadGames, descriptors, tierFor, tierForPromotions, advance, suspendedStub, MAX_TIER,
+  DISCORD_COMMAND,
 } from '../games/registry.js';
 import { createBoard } from './splitflap.js';
 import { createCampus, campusState, currentSemester } from './campus.js';
@@ -1003,6 +1004,21 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * postman, and a delivered letter is persisted state a peek must not mint. */
   const annexPeek = src.devAnnex === true;
   if (annexPeek) say('ANNEX PEEK (owner dev): lab reachable, nothing stamped');
+
+  /* THE ACTIVITY LAUNCH (the Discord Activity wave, 2026-08-28). A hosted shell
+   * that was opened through one of the per-class slash commands names the room
+   * it was asked for; absent (the desktop host NEVER sends it, and does not
+   * need to - it has a campus) means "just open the campus".
+   *
+   * IT IS A REQUEST, NOT A GRANT. The gate is the player's own punch card, read
+   * from the SAME `isUnlocked` the campus door reads, so this door can never be
+   * wider than the one on the quad. The hosted shells wall on the server's
+   * `complete` before the page boots; this is the belt-and-braces half, and it
+   * refuses with a toast rather than a screen so the player lands on the campus
+   * they can actually use. Fired exactly ONCE per boot (see `launchFired`). */
+  const launchRequest = (typeof src.launchGame === 'string' && src.launchGame) ? src.launchGame : '';
+  let launchFired = false;
+  if (launchRequest) say('activity launch requested: ' + launchRequest);
 
   /* ---------------------- registry + timetable -------------------------- */
   const games = await loadGames(say);
@@ -3422,6 +3438,48 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     }
     setStage('arc-report-on');
     if (typeof lockerRoom.fit === 'function') lockerRoom.fit();
+  }
+
+  /**
+   * ONE SHOT, ONE BOOT. The host asked for a room by key (`init.launchGame`);
+   * open it if the card is full, otherwise stay on the campus and say why. An
+   * unknown or retired key has no card and therefore no grant, which is the
+   * same refusal by the same test - there is no second table to keep in step.
+   */
+  function maybeLaunchRequested() {
+    if (launchFired || destroyed) return;
+    launchFired = true;
+    if (!launchRequest) return;
+    if (isUnlocked(launchRequest)) {
+      say('activity launch: ' + launchRequest + ' - card complete, opening the room');
+      launchGraded(launchRequest);
+      return;
+    }
+    say('activity launch refused: ' + launchRequest + ' - card not complete');
+    try { shout(t('launch_card_locked', 'That card is not complete yet. Fill it first.')); }
+    catch (e) { /* a toast may never hold a door */ }
+  }
+
+  /**
+   * The unlock box's / end card's Discord sentence for a class, or '' when the
+   * class has no slash command (a retired key). `{cmd}` comes from the registry
+   * table - the two-repo contract with CCP-Server `bot/arcademy-activity.js` -
+   * so a mod may re-voice the sentence but can never rename the command.
+   */
+  function discordLine(gameKey) {
+    const cmd = DISCORD_COMMAND[gameKey] || '';
+    if (!cmd) return '';
+    return String(t('punchcard_unlocked_discord',
+      'Even in Discord: type {cmd} in the CCP server to play it anytime.'))
+      .replace('{cmd}', cmd);
+  }
+
+  /** Two sentences in one line, and one of them may be missing. */
+  function joinNote(a, b) {
+    const first = String(a || '').trim();
+    const second = String(b || '').trim();
+    if (!second) return first;
+    return first ? (first + ' ' + second) : second;
   }
 
   /* ---------------------- the graded launch ----------------------------
@@ -5931,8 +5989,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           const full = !!(norm && (norm.complete || Number(norm.punches) >= cap));
           try {
             endCard.setPunchNote(full
-              ? t('punchcard_unlocked_line',
-                'This room is now open even when the course is not in session.')
+              /* A FULL CARD GETS THE DISCORD SENTENCE TOO. The ceremony is the
+               * loud half of this and it does not run on a no-op mint, so the
+               * quiet note is the only place a player who filled the card on an
+               * earlier night is told the room travels. Two sentences in one
+               * line - setPunchNote paints ONE <p> - and the second is dropped
+               * whole when the class has no command (a retired key). */
+              ? joinNote(t('punchcard_unlocked_line',
+                'This room is now open even when the course is not in session.'),
+                discordLine(m.gameKey))
               : t('punchcard_next_hole', 'Come back tomorrow for the next stamp.'));
           } catch (e) { say('punch note failed: ' + ((e && e.message) || e)); }
         }
@@ -6325,6 +6390,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   } catch (e) { say('first bell unavailable (the shell is unaffected): ' + ((e && e.message) || e)); }
 
   showBoard();
+  /* THE ACTIVITY LAUNCH, fired here and nowhere else: the campus has mounted
+   * (showBoard above) and the punch cards have been known since `init.meta`
+   * reached the store at construction, which are the ceremony's two
+   * preconditions. `launchGraded` sorts the rest out - a room tonight's board
+   * already deals starts as THAT class, a room off the board starts as a free
+   * swim's graded twin - so this hook only decides WHETHER. */
+  maybeLaunchRequested();
   return api;
 }
 
