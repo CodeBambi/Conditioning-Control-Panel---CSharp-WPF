@@ -544,14 +544,16 @@
  *   `transform-origin` move together here or the scale walks the plane
  *   off-axis (rooms.css header, lab.css's lesson).
  *
- * PORTRAIT IS BEHIND THE ROTATE GATE (shell/orientgate.js) and is not designed
- * for - these rules simply must not throw or hide anything there, which they
- * cannot: they are three sizes and an anchor. */
+ * PORTRAIT HAS ITS OWN BLOCK NOW, at the bottom of this file. It used to be
+ * behind the rotate gate and got nothing but these three sizes and an anchor;
+ * the upright wave took the gate down and the anchor was landscape-only, which
+ * is the whole of the owner's Lost & Found report. Nothing in THIS block is
+ * qualified by axis unless it already was, so landscape keeps every number. */
 
-/* LANDSCAPE ONLY, and room.js's `onPhone()` carries the SAME qualifier - the
+/* LANDSCAPE ONLY, and room.js's `phoneAxis()` carries the SAME qualifier - the
    box and the origin move together with the JS that writes the transform, or
-   the scale walks the plane off-axis. Portrait is behind the rotate gate and
-   keeps the centred stage. */
+   the scale walks the plane off-axis. Portrait's own anchor is at the bottom of
+   this file; it differs only in starting under the header card. */
 html.arc-mobile[data-arc-orient="landscape"] .arm-stage { top: 0; transform-origin: 50% 0; }
 
 /* A HOVER-ONLY AFFORDANCE IS NOT AN AFFORDANCE ON A PHONE (owner report
@@ -662,3 +664,156 @@ html.arc-mobile .arm-plate-name { font-size: 15px; }
 html.arc-mobile .arm-plate-room { font-size: 9px; }
 html.arc-mobile .arm-plate-status { font-size: 10px; margin-top: 4px; }
 html.arc-mobile .arm-plate-xp { font-size: 10.5px; margin-top: 5px; }
+
+/* ======================= THE ROOM HELD UPRIGHT ===========================
+ * PORTRAIT, and every rule in here is qualified `[data-arc-orient="portrait"]`
+ * so landscape and desktop are byte-for-byte what they were. Prove it, do not
+ * trust it: the harness reads `.arm-bar`, `.arm-hero` and `.arm-slab-back` at
+ * 844x390 and 1600x900 before and after and the rects must be identical.
+ *
+ * WHY THIS BLOCK EXISTS. Until the upright wave (2026-08-28) the campus asked
+ * for the phone sideways, so a portrait phone could not reach a painted door at
+ * all and the room wore the DESKTOP layout by default. It does not survive
+ * 390px of glass:
+ *   - the plate centred its letterbox, so 313 of 844px was void ABOVE the
+ *     painting and the apron's contents sat 108px BELOW it;
+ *   - `.arm-bar` is one flex row and `.arm-hero-group` is `flex: 0 0 auto`, so
+ *     the two `flex: 1 1 0` sides shrank to nothing and the lever rail (208px,
+ *     `justify-content: flex-end`, which overflows towards the START) was drawn
+ *     straight over the BEGIN slab;
+ *   - `Back to campus` measured 127px into an 8px box and read "BACK TO...".
+ * Owner report, Lost & Found 104, phone held upright.
+ *
+ * THE SHAPE PORTRAIT WANTS is a column, so this is the one place the apron
+ * stops being a row: header, painting, then a THREE-ROW stack under the tape.
+ * `align-content: start` is what pins that stack to the top of the band - the
+ * band still runs to the bottom of the glass (it is the painted floor of the
+ * room, not a toolbar) but its furniture stands at the front edge, where the
+ * painting leaves it, instead of floating in the middle of 560px of carpet.
+ * ==========================================================================*/
+
+/* THE ANCHOR, portrait's own. Same origin as landscape - the box and the origin
+   must move together or the scale walks the plane off-axis - but the box starts
+   under the header rather than at 0. room.js publishes `--arm-head-h` from the
+   plate's MEASURED bottom (fit()); the 0px fallback is landscape's number, so a
+   frame that somehow gets here before the first fit is merely top-anchored. */
+html.arc-mobile[data-arc-orient="portrait"] .arm-stage {
+  top: var(--arm-head-h, 0px);
+  transform-origin: 50% 0;
+}
+
+/* THE ROOM SIGN BECOMES A HEADER. Landscape pins a card into the corner of a
+   699x390 plate and the painting is still legible around it; the same card on a
+   390x218 plate covers the furniture it is naming. So it runs the full width
+   and the painting starts below it - which is also why `max-width` has to go,
+   not just widen: `min(260px, 46vw)` would leave a 54vw hole beside a header. */
+html.arc-mobile[data-arc-orient="portrait"] .arm-plate {
+  right: calc(10px + env(safe-area-inset-right, 0px));
+  max-width: none;
+}
+
+/* ------------------------- the apron, stood up --------------------------- */
+
+/* TWO COLUMNS, TWO ROWS. `ctl` spans both so the knobs and the lever rail get a
+   full-width line of their own; `back` takes only the width its label needs and
+   `hero` takes the rest, which is what stops the verb from being the thing that
+   gets cut when a language spends more words on "Back to campus".
+   12px of top padding clears the 6px route tape without pushing the stack down
+   into the carpet; the bottom padding is the phone rule's safe-area, kept. */
+html.arc-mobile[data-arc-orient="portrait"] .arm-bar {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  grid-template-areas:
+    "ctl  ctl"
+    "back hero";
+  align-content: start;
+  align-items: center;
+  gap: 8px 10px;
+  padding-top: 12px;
+}
+
+/* THE CONTROL PLATE, first line. `flex-end` was the landscape justification and
+   it is what aimed the overflow at the hero; centred, the row cannot reach the
+   verb even when it is wider than the glass. The rail is forced onto its OWN
+   line (`flex: 0 0 100%`) rather than left to wrap: at 390px the knobs slab and
+   the rail together measure 370 against 370 of usable width, so wrapping would
+   be a coin toss between one line and two, and a layout that changes shape
+   between two phones 30px apart is a layout nobody can screenshot. */
+html.arc-mobile[data-arc-orient="portrait"] .arm-bar-right {
+  grid-area: ctl;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+html.arc-mobile[data-arc-orient="portrait"] .arm-lever {
+  flex: 0 0 100%;
+  align-items: center;
+  max-width: none;
+}
+
+/* THE WAY OUT AND THE VERB, second line. `align-self: start` keeps Back level
+   with the top of the hero in the pool, where the hero column is two slabs tall
+   (Begin over Free Swim) because the two cannot fit side by side at 360px. */
+html.arc-mobile[data-arc-orient="portrait"] .arm-bar-left {
+  grid-area: back;
+  align-self: start;
+}
+html.arc-mobile[data-arc-orient="portrait"] .arm-hero-group {
+  grid-area: hero;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ----------------------- what has to be restated ------------------------- */
+
+/* THE SIZES DO NOT RIDE `--arm-band-h` HERE, and that is the whole reason this
+   half of the block exists. Landscape's band IS the strip the slabs live in
+   (72px), so sizing off it is honest. Portrait's band is the painted floor -
+   ~560px on a 390x844 phone - and `calc(var(--arm-band-h) * 0.26)` off that is
+   a 24px BEGIN CLASS in a 175px face, which is the clipped verb again by a
+   different road. The band variable is still published (scene.css's overlay
+   reads it); it is simply not a type scale in portrait. */
+html.arc-mobile[data-arc-orient="portrait"] .arm-hero {
+  height: 60px;
+  min-width: 0;
+  width: 100%;
+  flex: 1 1 140px;
+}
+html.arc-mobile[data-arc-orient="portrait"] .arm-hero .arm-hero-face {
+  font-size: clamp(13px, 4vw, 18px);
+}
+html.arc-mobile[data-arc-orient="portrait"] .arm-hero-alt {
+  height: 52px;
+  min-width: 0;
+  flex: 1 1 104px;
+}
+html.arc-mobile[data-arc-orient="portrait"] .arm-hero-alt .arm-hero-face {
+  font-size: clamp(11px, 3.2vw, 14px);
+}
+
+/* 11px, not the phone block's 13px, and it buys 17px of the hero's column back
+   on a 360px screen: `Back to campus` is 14 characters of tracked display caps
+   and it is the widest label either slab can carry in English. */
+html.arc-mobile[data-arc-orient="portrait"] .arm-bar-ghost {
+  height: 48px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+/* THE RUNGS BECOME THUMB TARGETS, and the measurement is the argument. The
+   phone media query above sets `5px 8px` at 10px type for a LANDSCAPE apron
+   72px tall, where a taller rung would not fit; the rig read those rungs at
+   80x22 once portrait stopped wrapping `Extra Credit` onto a second line, and
+   22px is half the 44px floor every other slab in this room clears. Portrait
+   has 560px of band and no such excuse. 44 tall at 11px type measures the three
+   labels at 88 + 119 + 72 = 279px on one rail, which clears the narrowest phone
+   in range (360px, 340 usable) with 61px to spare - so the height is bought
+   without ever putting a label back on two lines. `inline-flex` is what centres
+   the word once the box is taller than the text. */
+html.arc-mobile[data-arc-orient="portrait"] .arm-lever .arc-lever-pos {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 11px;
+}
