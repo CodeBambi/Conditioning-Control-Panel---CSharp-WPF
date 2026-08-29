@@ -480,8 +480,14 @@ public class GazeFocusService : IDisposable
 
             if (hit.Value.Bubble is Bubble b)
             {
-                try { b.Pop(); GazePopped?.Invoke(); }
-                catch (Exception ex) { App.Logger?.Debug("Gaze blink-pop bubble failed: {Error}", ex.Message); }
+                // Same master gate as FindBestTarget/AdvanceBubbleDwell:
+                // bubbles only react to gaze while the Lab "Focus Gaze"
+                // toggle is armed.
+                if (_masterEnabled)
+                {
+                    try { b.Pop(); GazePopped?.Invoke(); }
+                    catch (Exception ex) { App.Logger?.Debug("Gaze blink-pop bubble failed: {Error}", ex.Message); }
+                }
             }
             else if (hit.Value.Flash is FlashWindow fw)
             {
@@ -950,7 +956,13 @@ public class GazeFocusService : IDisposable
             }
         }
 
-        var bubbles = App.Bubbles?.GetGazeTargets();
+        // Bubbles are gated on the Lab "Focus Gaze" master toggle. Unlike
+        // flashes (FlashGazePopEnabled) and video targets
+        // (VideoGazeClickEnabled), bubbles have no per-feature gaze flag, so
+        // when a consumer flag keeps the engine alive with the master off,
+        // enumerating them here would make gaze pop bubbles the user never
+        // opted into.
+        var bubbles = _masterEnabled ? App.Bubbles?.GetGazeTargets() : null;
         if (bubbles != null)
         {
             for (int i = bubbles.Count - 1; i >= 0; i--)
@@ -1143,6 +1155,16 @@ public class GazeFocusService : IDisposable
 
     private void AdvanceBubbleDwell(Bubble b)
     {
+        // Belt-and-braces gate: FindBestTarget already skips bubbles when the
+        // Focus Gaze master is off, but if one slips through (e.g. the toggle
+        // flips mid-tick) release any in-progress bubble dwell instead of
+        // popping something the user turned off.
+        if (!_masterEnabled)
+        {
+            ClearTarget();
+            return;
+        }
+
         if (!ReferenceEquals(_currentBubble, b))
         {
             ClearTarget();
