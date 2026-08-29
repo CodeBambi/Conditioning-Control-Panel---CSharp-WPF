@@ -87,12 +87,34 @@ public partial class EmiDeskWindow
     private Polygon? _bubbleTail;
     private StackPanel? _chips;
 
+    /// <summary>
+    /// The horizontal window the bubble was last clamped into, in window DIPs, so the CHIP ROW can
+    /// be clamped into exactly the same one. QA 2026-08-29: the bubble learned to stay on screen
+    /// and the chips did not, so parked at the right edge the offer read "ooh" and half of a "no".
+    /// </summary>
+    private double _bubbleClampLo = 2.0;
+    private double _bubbleClampRight = double.PositiveInfinity;
+
     private AskDraw? _ask;
     private LineDraw? _parked;          // ONE slot. A second line while an ask waits is dropped.
     private DispatcherTimer? _askTimer;
     private DispatcherTimer? _holdTimer;
     private int _askStage;
     private bool _bubbleHooked;
+
+    /// <summary>
+    /// BLIPESE. Created on the first bubble and never re-created: it owns a cache directory and a
+    /// handle, and nothing about it is worth building twice. Null only before her first word.
+    /// </summary>
+    private IEmiVox? _vox;
+
+    /// <summary>
+    /// The body-frame family the next landed line should sound like. Set by <c>Say</c> from the
+    /// line's own reaction face and by <c>PlayChain</c> from the chain's pose, because the bubble
+    /// seam is handed TEXT and nothing else: by the time a frame's words arrive, the face that
+    /// belongs to them has not been drawn yet (the player fires Bubble before Draw).
+    /// </summary>
+    private string _voxMood = "idle";
 
     /// <summary>True while an offer is on screen and still waiting for an answer.</summary>
     public bool AskLive => _ask != null;
@@ -115,6 +137,14 @@ public partial class EmiDeskWindow
     {
         try
         {
+            // THE OFFER OWNS THE BUBBLE. A question waits with no timer, so anything that starts a
+            // chain while it is up - a click reaction, a pet, an idle beat that slipped the stop -
+            // must not repaint the bubble and must absolutely not clear it. QA 2026-08-29 caught
+            // exactly that at the right edge: the two chips still sitting there under an empty
+            // crown, an offer with no question left in it. A line that arrives mid-question parks
+            // (ReleaseParked); a chain frame that arrives mid-question is simply not her voice.
+            if (_ask != null) return;
+
             if (string.IsNullOrEmpty(text)) { HideBubble(); return; }
             ShowBubble(text!);
         }
@@ -122,6 +152,42 @@ public partial class EmiDeskWindow
         {
             Log.Debug(ex, "[EmiDesk] bubble paint failed");
         }
+    }
+
+    /// <summary>
+    /// The voice, driven off the bubble rather than off the line: a cleared bubble is a cut, a
+    /// <c>.</c> / <c>..</c> / <c>...</c> frame is a typing tick, and anything else is a line to
+    /// babble. Hanging it here rather than in <c>SpeakLine</c> is what makes an ask, a chain's
+    /// own bubble and a raw <c>Say</c> all sound the same, and it means the sound cannot outlive
+    /// the words: the ONE place a bubble is cleared is the ONE place the voice is cut.
+    /// </summary>
+    private void Vox(string? text)
+    {
+        try
+        {
+            _vox ??= new EmiVox();
+            if (string.IsNullOrEmpty(text)) { _vox.Stop(); return; }
+
+            var t = text!.Trim();
+            if (t.Length is > 0 and <= 3 && t.All(c => c == '.')) { _vox.Tick(); return; }
+
+            _vox.Speak(t, _voxMood);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] vox seam threw");
+        }
+    }
+
+    /// <summary>Cut the voice and let it go. Called from the window's own teardown.</summary>
+    private void TearDownVox()
+    {
+        try
+        {
+            _vox?.Dispose();
+            _vox = null;
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] vox teardown failed"); }
     }
 
     private void EnsureBubble()
@@ -172,6 +238,12 @@ public partial class EmiDeskWindow
         BubbleHost.Children.Add(_bubble);
         BubbleHost.Children.Add(_chips);
 
+        // The box is not trustworthy until it has been arranged (see THE MEASURE TRAP in
+        // LayoutBubble), so re-place it the moment its real size is known. Setting Canvas.Left/Top
+        // cannot change a size, so this cannot feed itself.
+        _bubble.SizeChanged += (_, __) => LayoutBubble();
+        _chips.SizeChanged += (_, __) => LayoutBubble();
+
         if (!_bubbleHooked)
         {
             _bubbleHooked = true;
@@ -191,6 +263,10 @@ public partial class EmiDeskWindow
 
     private void ShowBubble(string text)
     {
+        // THE VOICE LIVES HERE, not in the chain seam, because the bubble has two authors: chain
+        // frames come through OnBubbleTextCore and the ask cadence calls this directly. Hanging the
+        // vox off the seam left every question silent, which is the one line she most wants read.
+        Vox(text);
         EnsureBubble();
         if (_bubble == null || _bubbleText == null) return;
 
@@ -202,6 +278,7 @@ public partial class EmiDeskWindow
 
     private void HideBubble()
     {
+        try { _vox?.Stop(); } catch { /* the voice is a nicety, never a failure */ }
         if (_bubble != null) _bubble.Visibility = Visibility.Collapsed;
         if (_bubbleTail != null) _bubbleTail.Visibility = Visibility.Collapsed;
     }
@@ -227,32 +304,76 @@ public partial class EmiDeskWindow
             _bubble.MaxWidth = Math.Max(BubbleMinWidth,
                 Math.Min(BubbleMaxWidth, bw * BubbleWidthOfBody));
 
+            // THE MEASURE TRAP (QA 2026-08-29). DesiredSize is what the bubble ASKED for on the
+            // last measure pass, and at the moment a line lands it can be a long way under the box
+            // that actually gets drawn: the pixel font arrives after the text does, and the wrap
+            // only resolves on the arrange. Position against whichever of the two is bigger, and
+            // (see EnsureBubble) run this again on SizeChanged, so the box that is finally on
+            // screen is the one that got clamped. Clamping an optimistic 91 DIPs is how a 370 DIP
+            // bubble ended up starting 90 DIPs from the right edge of the monitor.
             _bubble.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            var size = _bubble.DesiredSize;
+            var size = new Size(
+                Math.Max(_bubble.DesiredSize.Width, _bubble.ActualWidth),
+                Math.Max(_bubble.DesiredSize.Height, _bubble.ActualHeight));
 
-            // Body-local origin: BodyRoot is centred in a window OverlayPad DIPs bigger on each side.
-            double bodyX = OverlayPad, bodyY = OverlayPad;
+            // Body-local origin: BodyRoot is centred in a window that is OverlayPadX DIPs wider
+            // than she is on each side and OverlayPad DIPs taller above and below.
+            double bodyX = OverlayPadX, bodyY = OverlayPad;
 
             double left = bodyX + bw * BubbleLeftFrac;
             double bottom = bodyY + bh - bh * BubbleBottomFrac;   // css bottom: 96%
             double top = bottom - size.Height;
 
-            // Flip when her bubble would leave the monitor she is on. Measured in physical pixels
-            // against that monitor's work area, because Left/Top here are DIPs and the screens are
-            // not (THE COORDINATE TRAP).
+            // Flip when her bubble would leave the monitor she is on, and then CLAMP whatever is
+            // left. Both halves are needed, and the clamp is the one that was missing: a flip only
+            // helps when the OTHER side has room, and parked in a corner neither side does.
+            //
+            // Measured in physical pixels against that monitor's work area, because Left/Top here
+            // are DIPs and the screens are not (THE COORDINATE TRAP).
             bool flip = false;
+            double workLeftDip = double.NegativeInfinity, workRightDip = double.PositiveInfinity;
             try
             {
                 double s = DipScale;
+                if (s <= 0) s = 1.0;
                 var body = BodyScreenRect;
                 var screen = System.Windows.Forms.Screen.FromRectangle(new System.Drawing.Rectangle(
                     (int)body.X, (int)body.Y, Math.Max(1, (int)body.Width), Math.Max(1, (int)body.Height)));
+                workLeftDip = screen.WorkingArea.Left / s;
+                workRightDip = screen.WorkingArea.Right / s;
+
                 double rightPx = (Left + left + size.Width) * s;
                 flip = rightPx > screen.WorkingArea.Right;
+
+                if (flip)
+                {
+                    // ...unless the left has even less room than the right had. A flip that clips
+                    // worse than the thing it was fixing is not a flip.
+                    double flippedLeftPx = (Left + bodyX + bw * (1.0 - BubbleLeftFrac) - size.Width) * s;
+                    if (flippedLeftPx < screen.WorkingArea.Left
+                        && (screen.WorkingArea.Left - flippedLeftPx) > (rightPx - screen.WorkingArea.Right))
+                        flip = false;
+                }
             }
             catch { /* one monitor, or none enumerable: keep her on the right */ }
 
             if (flip) left = bodyX + bw * (1.0 - BubbleLeftFrac) - size.Width;
+
+            // THE CLIP GUARD. The window is only OverlayPadX wide either side of her and the work
+            // area is only so wide: a bubble that starts past either is a bubble cut off mid-word
+            // ("no hands." / "work.", owner screenshot 2026-08-29). Window first, screen second,
+            // and the LEFT edge wins when both cannot be honoured - a line whose start you can read
+            // is recoverable, one that starts off screen is not.
+            double lo = 2.0;
+            double hi = Math.Max(lo, Width - size.Width - 2.0);
+            if (!double.IsInfinity(workLeftDip)) lo = Math.Max(lo, workLeftDip - Left);
+            if (!double.IsInfinity(workRightDip)) hi = Math.Min(hi, workRightDip - Left - size.Width);
+            left = hi < lo ? lo : Math.Max(lo, Math.Min(hi, left));
+
+            _bubbleClampLo = lo;
+            _bubbleClampRight = Math.Max(lo, Width - 2.0);
+            if (!double.IsInfinity(workRightDip))
+                _bubbleClampRight = Math.Max(lo, Math.Min(_bubbleClampRight, workRightDip - Left));
 
             // Never let her talk off the top of her own window either: the pad is all the room the
             // bubble has, and a clipped first line reads as a bug, not as a style.
@@ -262,7 +383,7 @@ public partial class EmiDeskWindow
             Canvas.SetTop(_bubble, Math.Round(top));
 
             LayoutTail(left, top + size.Height, size.Width, flip);
-            LayoutChips(left, top + size.Height, flip);
+            LayoutChips(left, top + size.Height, size.Width, flip);
         }
         catch (Exception ex)
         {
@@ -422,7 +543,9 @@ public partial class EmiDeskWindow
                 _askTimer = NewTimer(AskDot3Ms, AskCadenceStep);
                 break;
             default:
-                DrawFace(string.IsNullOrEmpty(ask.Face) ? "^_^" : ask.Face);
+                var askFace = string.IsNullOrEmpty(ask.Face) ? "^_^" : ask.Face;
+                _voxMood = EmiChains.FrameForFace(askFace);
+                DrawFace(askFace);
                 ShowBubble(ask.Question);
                 BuildChips(ask);
                 Log.Information("[EmiDesk] offer {Id} is up, waiting", ask.Id);
@@ -510,12 +633,27 @@ public partial class EmiDeskWindow
         return t;
     }
 
-    private void LayoutChips(double bubbleLeft, double bubbleBottom, bool flip)
+    /// <summary>
+    /// Hang the chip row off the bubble it belongs to, and clamp it into the same window the
+    /// bubble was clamped into. The row follows the bubble's edge: left-aligned normally, RIGHT
+    /// aligned when the bubble flipped, so the chips stay under the words rather than sticking out
+    /// past her on the far side.
+    /// </summary>
+    private void LayoutChips(double bubbleLeft, double bubbleBottom, double bubbleWidth, bool flip)
     {
         if (_chips == null || _chips.Visibility != Visibility.Visible) return;
         _chips.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         double w = _chips.DesiredSize.Width;
-        double x = flip ? bubbleLeft : bubbleLeft;
+
+        double x = flip ? bubbleLeft + bubbleWidth - w : bubbleLeft;
+
+        // Same lo/hi as the bubble: a chip you cannot read is a chip you cannot click, and the
+        // right-hand one is always the "no" - losing it silently turns a two-way offer into a
+        // one-way one.
+        double lo = _bubbleClampLo;
+        double hi = double.IsInfinity(_bubbleClampRight) ? x : Math.Max(lo, _bubbleClampRight - w);
+        x = hi < lo ? lo : Math.Max(lo, Math.Min(hi, x));
+
         Canvas.SetLeft(_chips, Math.Round(x));
         Canvas.SetTop(_chips, Math.Round(bubbleBottom + 12));
     }

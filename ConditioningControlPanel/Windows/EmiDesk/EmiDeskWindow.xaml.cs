@@ -49,11 +49,29 @@ public partial class EmiDeskWindow : Window
     public const double BodyAspect = 869.0 / 859.0;
 
     /// <summary>
-    /// Transparent air around her, in DIPs. The window is bigger than the silhouette so the summon
-    /// smoke, the sparkle scatter and the speech bubble have somewhere to go. Padding is
-    /// Background-less, so it does not hit-test and clicks fall through to whatever is behind.
+    /// Transparent air ABOVE AND BELOW her, in DIPs. The window is bigger than the silhouette so
+    /// the summon smoke, the sparkle scatter and the speech bubble have somewhere to go. Padding is
+    /// Background-less, so WPF does not hit-test it and clicks fall through to whatever is behind.
     /// </summary>
     public const double OverlayPad = 120.0;
+
+    /// <summary>
+    /// Transparent air to her LEFT AND RIGHT, in DIPs, and it is deliberately much wider than
+    /// <see cref="OverlayPad"/>.
+    ///
+    /// <para>Her bubble hangs off her shoulder at <c>BubbleLeftFrac</c> (58 % of her width) and may
+    /// be <c>BubbleMaxWidth</c> (380) DIPs wide, so at her narrowest the bubble's right edge wants
+    /// to sit <c>0.58 x 152 + 380 = 468</c> DIPs from her left - 316 past her own 152. With a
+    /// symmetric 120 pad the bubble ran off the end of the window and WPF clipped it MID-WORD
+    /// ("no hands." / "work.", owner screenshot 2026-08-29). The pad is now the widest bubble that
+    /// can ever be built, on either side, so the flip has the same room as the rest position.</para>
+    ///
+    /// <para>Cost of the wider window: none that a user can see. The extra area is
+    /// <c>Background="{x:Null}"</c>, which is not hit-tested and not drawn, the window is placed by
+    /// her BODY rect (<see cref="ClampIntoWorkArea"/> clamps the silhouette, never the window), and
+    /// the pad is allowed to hang off the edge of the desktop.</para>
+    /// </summary>
+    public const double OverlayPadX = 330.0;
 
     // The glass rect as a fraction of the body image. Copied from Resources/web/arcademy/emi/emi.css
     // (.emi-screen / .emi-glass). Any change here has to be mirrored in that file, and vice versa.
@@ -91,7 +109,7 @@ public partial class EmiDeskWindow : Window
     /// The full-window FX layer, over her body and under the bubble. B1 fires the summon smoke and
     /// the dismiss sparkles in here; chunk B2 can hang the ring's own visuals off it. Not
     /// hit-testable: put interactive ring cards in their own window and anchor them with
-    /// <see cref="BodyScreenRect"/>, because this window is only OverlayPad DIPs wider than she is.
+    /// <see cref="BodyScreenRect"/>, because this window is only a pad wider than she is.
     /// </summary>
     public Panel OverlayHost => OverlayCanvas;
 
@@ -339,7 +357,7 @@ public partial class EmiDeskWindow : Window
 
             BodyRoot.Width = bw;
             BodyRoot.Height = bh;
-            Width = bw + OverlayPad * 2;
+            Width = bw + OverlayPadX * 2;
             Height = bh + OverlayPad * 2;
 
             double gl = bw * GlassLeftFrac;
@@ -356,6 +374,13 @@ public partial class EmiDeskWindow : Window
             GlassCanvas.Height = gh;
             Canvas.SetLeft(GlassCanvas, gl);
             Canvas.SetTop(GlassCanvas, gt);
+
+            // The drag wobble swings her from the HEAD, not from her middle: a mascot held by the
+            // scruff. BodyRoot's RenderTransformOrigin is 0.55 of her height, so a centre of
+            // -0.25 x height puts the pivot at 0.30 - the top of the bezel. It is set here because
+            // it is the only place that knows her current height.
+            WobbleRotate.CenterX = 0;
+            WobbleRotate.CenterY = -bh * 0.25;
 
             // The two affordances scale a little with her so they stay reachable but never eat the
             // face: 8 % of the body width, floored at their authored size.
@@ -405,9 +430,9 @@ public partial class EmiDeskWindow : Window
                 ? wa.Top + insetPx
                 : wa.Bottom - insetPx - body.Height;
 
-            // Left/Top are the WINDOW's, and the window is OverlayPad DIPs bigger than she is on
+            // Left/Top are the WINDOW's, and the window is a pad bigger than she is on
             // every side. Physical pixels in, DIPs out (THE COORDINATE TRAP).
-            Left = bodyLeftPx / s - OverlayPad;
+            Left = bodyLeftPx / s - OverlayPadX;
             Top = bodyTopPx / s - OverlayPad;
 
             ClampIntoWorkArea();
@@ -438,7 +463,7 @@ public partial class EmiDeskWindow : Window
         {
             double s = DipScale;
             double bw = _bodyWidth, bh = bw * BodyAspect;
-            return new Rect((Left + OverlayPad) * s, (Top + OverlayPad) * s, bw * s, bh * s);
+            return new Rect((Left + OverlayPadX) * s, (Top + OverlayPad) * s, bw * s, bh * s);
         }
     }
 
@@ -529,7 +554,7 @@ public partial class EmiDeskWindow : Window
     {
         double s = DipScale;
         if (s <= 0) s = 1.0;
-        Left = bodyLeftPx / s - OverlayPad;
+        Left = bodyLeftPx / s - OverlayPadX;
         Top = bodyTopPx / s - OverlayPad;
     }
 
@@ -714,6 +739,11 @@ public partial class EmiDeskWindow : Window
         if (chain == null) return;
         try
         {
+            // A chain with a pose of its own is also a chain with a MOOD of its own; one without
+            // keeps whatever the caller set (which is how Say's reaction face survives the trip).
+            var voice = EmiChains.FrameKey(bodyFrameOverride) ?? EmiChains.FrameKey(chain.BodyFrame);
+            if (voice != null) _voxMood = voice;
+
             StopIdleBeats();
             _player.Play(chain, BuildHooks(done), bodyFrameOverride);
         }
@@ -725,7 +755,13 @@ public partial class EmiDeskWindow : Window
 
     /// <summary>Say a line on the locked . / .. / ... cadence.</summary>
     public void Say(string? line, string reactionFace = "^_^", Action? done = null)
-        => PlayChain(EmiChains.MakeSay(line, reactionFace, EmiChains.SayHoldMs(line)), done);
+    {
+        // The say chain carries no pose of its own (the dots stay at idle and the reaction lands
+        // on the last frame), so its VOICE has to be resolved from the face here, before the
+        // chain starts handing the bubble seam text.
+        _voxMood = EmiChains.FrameForFace(reactionFace);
+        PlayChain(EmiChains.MakeSay(line, reactionFace, EmiChains.SayHoldMs(line)), done);
+    }
 
     /// <summary>Kill the running chain without firing its done hook.</summary>
     public void CancelChain()
@@ -967,6 +1003,7 @@ public partial class EmiDeskWindow : Window
             _dragStartScreen = PointToScreen(e.GetPosition(this));
             _dragStartLeft = Left;
             _dragStartTop = Top;
+            BeginWobble();
             BodyRoot.CaptureMouse();
             e.Handled = true;
         }
@@ -1013,6 +1050,7 @@ public partial class EmiDeskWindow : Window
             if (!_dragging) return;
             _dragging = false;
             BodyRoot.ReleaseMouseCapture();
+            EndWobble();
             e.Handled = true;
 
             if (_dragMoved)
@@ -1025,6 +1063,12 @@ public partial class EmiDeskWindow : Window
             }
 
             if (InputLocked || _transiting) return;
+
+            // FEEDBACK FIRST, and unconditionally. Whatever this click turns out to mean - the
+            // ring, the glass, a pet, or nothing at all because a chain is running - she visibly
+            // takes it. A reaction that depends on the outcome is a reaction that is missing
+            // exactly when the app is busy, which is when "she is dead" gets said.
+            PlayClickSquash();
 
             // A click inside the glass while a channel is up belongs to the glass. Resolved
             // geometrically, not with a hit-testable overlay, so the drag above still works.
@@ -1040,6 +1084,9 @@ public partial class EmiDeskWindow : Window
                 catch (Exception ex) { Log.Debug(ex, "[EmiDesk] glass-click seam threw"); }
                 if (handled) return;
             }
+
+            // Her HEAD is the pet, and a pet is never also a ring toggle.
+            if (TryHeadPet(p)) return;
 
             try { OnBodyClickedCore(ref handled); }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] body-click seam threw"); }
@@ -1209,6 +1256,8 @@ public partial class EmiDeskWindow : Window
             _closingForGood = true;
             StopIdleBeats();
             DisarmPet();
+            TearDownReactions();
+            TearDownVox();
             CancelChain();
             _player.Dispose();
             SweepFx(all: true);
@@ -1227,6 +1276,8 @@ public partial class EmiDeskWindow : Window
             _closingForGood = true;
             StopIdleBeats();
             DisarmPet();
+            TearDownReactions();
+            TearDownVox();
             if (_fxSweepTimer != null) { _fxSweepTimer.Stop(); _fxSweepTimer = null; }
             if (_dpiQuiesceTimer != null) { _dpiQuiesceTimer.Stop(); _dpiQuiesceTimer = null; }
             _player.Dispose();

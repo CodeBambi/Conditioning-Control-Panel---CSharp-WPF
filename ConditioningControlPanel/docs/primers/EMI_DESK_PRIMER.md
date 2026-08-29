@@ -560,8 +560,7 @@ resets someone's whole history with her, silently.
 Owner decisions and known gaps as of 2026-08-29. Check `docs/emi-desk/BRIEF.md` before assuming any of
 these still stand.
 
-- **No voice.** `IEmiVox` exists as a seam for the bleep/vox pass; nothing implements it. She is
-  silent audio-wise by design for v1 (BRIEF: stretch goal).
+- ~~**No voice.**~~ Done in wave 2: `Services/EmiDesk/EmiVox.cs` implements `IEmiVox`. See §12.
 - **No AI, no network, ever.** Preset lines only. There is no code path from EMI Desk to OpenRouter or
   to the server, and adding one would break the product's premise.
 - **No remote media.** Local assets only in `EmiChannels`/`EmiOffers` (§5).
@@ -577,3 +576,119 @@ these still stand.
   interaction.
 - **Multi-monitor position restore is honest but untested on >2 monitors.** She restores to the
   monitor named in `EmiState.Monitor` and re-clamps into its work area if that monitor is gone.
+
+---
+
+## 12. Wave 2 polish (2026-08-29)
+
+The owner's second live run. Seven items, all of them feel rather than function, plus the two things
+the QA lap turned up on its own. What changed, and what you now have to keep true.
+
+### 12.1 The ring frame and the fan
+
+`EmiRingWindow` only. The card frame is **3 DIP** of `#88FF69B4` at rest, the full `#FF69B4` on
+hover, **4 DIP** solid pink when the card is pinned, and there is a **1 DIP dark seam drawn inside**
+it as a sibling border (a `Border` has exactly one `BorderThickness`, so the seam cannot be part of
+the frame). The fan is `PopMs = 340`, `PopStaggerMs = 62`, `FadeMs = 210`, `PopFromScale = 0.55`,
+`PopBackAmplitude = 0.30`: **650 ms** from the click to the last card at rest, against 180/40/0.45
+before. Every transform is created with the card, never mid-animation, because minting a
+`ScaleTransform` inside a storyboard on a layered window is the stutter people report as "the
+animation is not smooth".
+
+### 12.2 The corner fan is a solver now, not a clamp
+
+`Services/EmiDesk/EmiRingLayout.cs` is a **pure function** of (centre, body, work area, count) and it
+is the only place the ring geometry lives. It grows the radius in 6 DIP steps over the longest
+feasible arc (720 half-degree samples) until every card is inside the work area AND every pair is
+`MinCardGap = 10` DIPs apart as **rectangles**, and falls back to a column when no radius works.
+The old code fanned on a fixed radius and then clamped each card into the work area, which honours
+"on screen" by breaking "not on top of each other" - parked bottom right it stacked three cards half
+under the taskbar. Because it is pure, `Tests/…/EmiRingLayoutTests.cs` walks every corner and edge of
+five desktops at one to six cards in a millisecond. **Keep it pure**: the moment it reads a window it
+stops being testable and the corner rots again.
+
+### 12.3 React: squash, pet, wobble
+
+`Windows/EmiDesk/EmiDeskWindow.React.cs`, with four named transforms authored together in the XAML
+(`CrtScale`, `SquashScale`, `WobbleRotate`, `MoveShift`) so no animation has to re-parent another.
+The rotate sits **above** the scales: a squash applied after a rotation shears her.
+
+- **Click** squashes to `SquashY 0.92 / SquashX 1.06` over `SquashDownMs 90` and settles back over
+  `SquashUpMs 260` with an elastic ease, alongside the ring toggle.
+- **Head click** (top `HeadBottomFrac = 0.30` of her body) is an immediate pet that honours the
+  existing pet cooldown and does **not** toggle the ring. Inside the cooldown it still squashes, and
+  it still eats the click: a deliberate trade, since a head click that opened the ring would make the
+  pet feel like a misfire.
+- **Drag** drives `WobbleRotate` from a low-passed horizontal velocity (`WobbleVelKeep 0.78`,
+  `WobbleFollow 0.35`, `WobbleDegPerVel 0.010`) clamped to `WobbleMaxDeg 9`, swaps the face to
+  `>_<` past `WobbleFaceVel 420` and `@_@` past `WobbleDizzyVel 1150`, and settles as a damped
+  pendulum over `WobbleSettleMs 720` on release.
+
+The **6 DIP click/drag threshold is untouched** and must stay untouched: it is what separates a
+click from a drag on a window with no chrome.
+
+### 12.4 The arcademy farewell
+
+`EmiDeskService.FarewellForArcademy()`, called from `ArcademyHostService.Launch` **before**
+`Fire("arcademyOpened")`. She draws the `arcademyBye` pool at priority 3, says it, and dismisses
+herself with the wink outro at `ArcademyByeDismissMs = 1360 + 1600` ms - the 1360 is the LOCKED dot
+cadence, so a flat 1.6 s would power her off mid-read. The farewell claims her voice for
+`ArcademyByeSuppressMs`, which is how the bye beats `arcademyFromRing`: the ring fires its own line
+*after* the target's `Open()` has already reached the host. There is a hardcoded fallback line, and
+the moment is fired through a **const, not a literal**, because `EmiMomentIdWiringTests` scans
+`Fire("...")` literals against the pool file and the pool is authored separately. That step around
+the typo guard is only safe because `EmiDeskFarewellTests` checks the id, the order in the host and
+the fallback instead.
+
+### 12.5 BLIPESE on the desktop
+
+`Services/EmiDesk/EmiVox.cs` behind `IEmiVox`, wired to the bubble seam in
+`EmiDeskWindow.Bubble.cs`. **The campus blips are WebAudio synthesis, not audio files** - there was
+nothing to copy - so the port brings the oscillator with it: `MakeScore` is a line-for-line port of
+`emi/vox.js` (seeded per line text by FNV-1a into mulberry32, so the same sentence always sounds like
+itself), and the score is rendered offline into one mono 16-bit 44.1 kHz WAV, cached by content hash
+under `%LOCALAPPDATA%\ConditioningControlPanel\emi\vox` (cap 96 files) and played through
+`App.Audio.PlayOneShot` with the tag `emi-vox`. Never mint a `WaveOutEvent` per cue.
+
+She always bleeps - the vox is **not** gated on the avatar-mute arbiter, because the arbiter is about
+her *voice actress*, not about her UI - but she is silenced by `IsOutputSuppressed`, by a
+`MasterVolume` of 0, and by `EmiLineEngine.Instance.HoldActive`, which covers panic and every safety
+moment. No new setting: the master volume already is one.
+
+The vox hangs off **`ShowBubble`**, not off the chain seam, because the bubble has two authors: a
+chain frame arrives through `OnBubbleTextCore`, and the ask cadence calls `ShowBubble` directly. On
+the seam alone every question was silent, which is the one line she most wants read. `HideBubble`
+cuts the burst. One to three dots route to `Tick()` rather than a burst, so the `.` `..` `...`
+cadence ticks and only the words sing.
+
+**The mood trap.** `EmiChains.Player.Step()` fires `hooks.Bubble` **before** `hooks.Draw`, and
+`MakeSay` carries no `BodyFrame` at all, so the voice cannot be read off the pose when the bubble
+asks for it. `_voxMood` is set in `Say` (from the reaction face) and in `PlayChain` (from the chain's
+own pose, and only when it has one, so `Say`'s value survives). If you ever make the say chain carry
+a frame, delete the `Say` half - not the other one.
+
+### 12.6 The bubble, and the two things QA found
+
+The window is `OverlayPadX = 330` DIPs wider than she is on each side and `OverlayPad = 120` taller,
+which is the room the bubble has; `LayoutBubble` flips it to her left when the right runs out, refuses
+a flip that clips worse than what it was fixing, and then **clamps** into the window and the work
+area both, left edge winning. That last clamp is the half that was missing.
+
+**THE MEASURE TRAP**, which is why the clamp looked broken when it was not. `DesiredSize` is what
+the bubble asked for on the last measure pass, and at the instant a line lands it can be a long way
+under the box that is actually drawn (the pixel font arrives after the text, the wrap resolves on
+the arrange). Clamping an optimistic 91 DIPs is how a 370 DIP bubble ended up starting 90 DIPs from
+the right edge of the monitor. `LayoutBubble` now positions against `max(DesiredSize, ActualSize)`
+**and** re-runs on the bubble's `SizeChanged`, so whatever box finally exists is the box that got
+clamped. Setting `Canvas.Left/Top` cannot change a size, so that hook cannot feed itself.
+
+Two more fell out of the live lap:
+
+- **The chips were not clamped.** Parked at the right edge, the offer read `ooh` and half of a `nah`.
+  `LayoutChips` now reuses the exact window the bubble was clamped into (`_bubbleClampLo` /
+  `_bubbleClampRight`) and right-aligns to the bubble on a flip. The right-hand chip is always the
+  "no": losing it turns a two-way offer into a one-way one.
+- **The offer owns the bubble.** Any chain that starts while a question is up - a click reaction, a
+  pet, an idle beat that slipped the stop - used to repaint the bubble, and a chain frame with no
+  text used to clear it, leaving the two chips sitting under an empty crown. `OnBubbleTextCore` now
+  returns early while `_ask != null`. The ask cadence is unaffected: it calls `ShowBubble` directly.

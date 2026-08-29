@@ -46,12 +46,20 @@
               HorizontalAlignment="Center" VerticalAlignment="Center"
               Background="Transparent"
               RenderTransformOrigin="0.5,0.55">
-            <!-- Two slots, authored together so neither animation has to re-parent the other:
-                 CrtScale is the summon / dismiss power-on and the bounce / thud pulses, MoveShift
-                 is the nod / droop / shiver offsets. -->
+            <!-- Four slots, authored together so no animation has to re-parent another and none of
+                 them can stamp on another's value:
+                   CrtScale     the summon / dismiss power-on and the bounce / thud pulses
+                   SquashScale  the click squash-and-stretch (EmiDeskWindow.React.cs)
+                   WobbleRotate the drag sway and its release pendulum. Its centre is set in
+                                ApplyBodyWidth so she swings from the HEAD, not the middle
+                   MoveShift    the nod / droop / shiver offsets
+                 The rotate sits above the scales on purpose: a squash applied after a rotation
+                 would shear her rather than squash her. -->
             <Grid.RenderTransform>
                 <TransformGroup>
                     <ScaleTransform x:Name="CrtScale" ScaleX="1" ScaleY="1"/>
+                    <ScaleTransform x:Name="SquashScale" ScaleX="1" ScaleY="1"/>
+                    <RotateTransform x:Name="WobbleRotate" Angle="0"/>
                     <TranslateTransform x:Name="MoveShift"/>
                 </TransformGroup>
             </Grid.RenderTransform>

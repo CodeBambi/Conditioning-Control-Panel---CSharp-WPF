@@ -408,6 +408,130 @@ public sealed class EmiDeskService : IDisposable
         }
     }
 
+    // ---------------------------------------------------------------- the arcademy farewell
+
+    /// <summary>
+    /// The pool id for the goodbye she says when the Arcademy takes the screen.
+    ///
+    /// <para>It is a CONST and not a literal at the call site on purpose. The typo guard in
+    /// <c>EmiMomentIdWiringTests</c> scans every <c>Fire("...")</c> literal in the tree and fails
+    /// when the id is not in <c>desk-lines.json</c>; the pool is authored separately from this
+    /// code, so a literal here would red the suite for as long as the two halves are out of step.
+    /// Drawing through the const keeps the guard honest about everything else while
+    /// <c>EmiDeskFarewellTests</c> pins this one id and its fallback instead.</para>
+    /// </summary>
+    public const string ArcademyByeMoment = "arcademyBye";
+
+    /// <summary>Her line when the pool has not landed yet. Owner text, BRIEF wave 2.</summary>
+    public const string ArcademyByeFallbackText = "bye bye. see you at school.";
+
+    /// <summary>Her face on the fallback line.</summary>
+    public const string ArcademyByeFallbackFace = "^_~";
+
+    /// <summary>
+    /// How long after the farewell she leaves. <c>MakeSay</c>'s dot cadence is LOCKED at
+    /// 420 + 420 + 520 ms, so the words themselves do not land until ~1360 ms; the owner's "about
+    /// 1.6 s to read it" is 1.6 s AFTER that, not after the fire.
+    /// </summary>
+    public const int ArcademyByeDismissMs = 1360 + 1600;
+
+    /// <summary>A little air past the outro, so a late moment cannot chase her off screen.</summary>
+    public const int ArcademyByeSuppressMs = ArcademyByeDismissMs + 250;
+
+    /// <summary>Nothing but the locked-silent moments may speak until this instant.</summary>
+    private DateTime _farewellUntilUtc = DateTime.MinValue;
+
+    private System.Windows.Threading.DispatcherTimer? _farewellTimer;
+
+    /// <summary>
+    /// The Arcademy is opening and she is out: say goodbye, then wink off by herself.
+    ///
+    /// <para>Called from every Arcademy launch path (they all funnel through
+    /// <c>ArcademyHostService.Launch</c>), so the rail button, the ring card and the dashboard all
+    /// get the same beat. A no-op when she is away, and safe to call twice: a second call inside
+    /// the same farewell is dropped rather than restarting the timer.</para>
+    /// </summary>
+    public void FarewellForArcademy()
+    {
+        try
+        {
+            if (_disposed || !IsOut) return;
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+            if (!disp.CheckAccess())
+            {
+                disp.BeginInvoke(new Action(FarewellForArcademy));
+                return;
+            }
+            if (DateTime.UtcNow < _farewellUntilUtc) return;
+
+            var win = _window;
+            if (win == null || win.Visibility != Visibility.Visible) return;
+
+            // Claim the silence BEFORE the line, so `arcademyOpened` cannot slip in between.
+            _farewellUntilUtc = DateTime.UtcNow.AddMilliseconds(ArcademyByeSuppressMs);
+            try { MomentFired?.Invoke(this, new EmiMoment(ArcademyByeMoment, null)); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] arcademyBye handler threw"); }
+
+            var line = DrawArcademyBye();
+            win.SpeakLine(line);
+
+            CancelFarewell();
+            _farewellTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(ArcademyByeDismissMs)
+            };
+            _farewellTimer.Tick += (_, _) =>
+            {
+                CancelFarewell();
+                try { Dismiss(); }
+                catch (Exception ex) { Log.Debug(ex, "[EmiDesk] farewell dismiss failed"); }
+            };
+            _farewellTimer.Start();
+
+            Log.Information("[EmiDesk] arcademy farewell: {Line}", line.Id);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[EmiDesk] FarewellForArcademy failed");
+        }
+    }
+
+    /// <summary>
+    /// Her goodbye, from the pool when it exists and from the hardcoded line when it does not. The
+    /// engine may also refuse the draw for its own reasons (a limit, a cooldown), and a farewell
+    /// that silently says nothing and then yanks her off screen would read as a crash, so ANY
+    /// empty result falls through to the fallback.
+    /// </summary>
+    public static LineDraw DrawArcademyBye()
+    {
+        try
+        {
+            var drawn = EmiLineEngine.Instance.Draw(ArcademyByeMoment);
+            if (drawn != null && !drawn.Hold && !string.IsNullOrWhiteSpace(drawn.Text)) return drawn;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] arcademyBye draw failed, using the fallback line");
+        }
+
+        return new LineDraw(
+            ArcademyByeMoment + ".fallback", ArcademyByeMoment,
+            ArcademyByeFallbackText, ArcademyByeFallbackFace,
+            null, 3, false, 0);
+    }
+
+    private void CancelFarewell()
+    {
+        try
+        {
+            if (_farewellTimer == null) return;
+            _farewellTimer.Stop();
+            _farewellTimer = null;
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] CancelFarewell failed"); }
+    }
+
     private EmiDeskWindow? EnsureWindow()
     {
         try
@@ -535,6 +659,17 @@ public sealed class EmiDeskService : IDisposable
             if (!IsOut) return;
             var win = _window;
             if (win == null || win.Visibility != Visibility.Visible) return;
+
+            // THE GOODBYE WINS. She has said her arcademy farewell and the outro is already
+            // scheduled; anything landing inside that window would talk over her last line and
+            // then be cut off mid-word by the power-off. `arcademyFromRing` is the one that would
+            // do it every single time, because the ring fires it AFTER the target's Open() has
+            // already reached ArcademyHostService and started the farewell.
+            if (DateTime.UtcNow < _farewellUntilUtc && !NeverSpeaks.Contains(momentId))
+            {
+                Log.Debug("[EmiDesk] {Moment} dropped: she is saying goodbye", momentId);
+                return;
+            }
 
             var engine = EmiLineEngine.Instance;
             var dict = EmiLineEngine.ToCtx(ctx);
@@ -1334,6 +1469,7 @@ public sealed class EmiDeskService : IDisposable
         if (_disposed) return;
         _disposed = true;
         UnwireAppEvents();
+        CancelFarewell();
         try
         {
             GlobalHotkeyService.Unregister(GlobalHotkeyService.EmiDeskHotkeyId);

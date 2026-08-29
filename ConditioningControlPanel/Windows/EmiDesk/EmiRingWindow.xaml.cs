@@ -20,12 +20,17 @@ namespace ConditioningControlPanel;
 /// <summary>
 /// The ring: six feature cards fanned around EMI, in their own sibling window.
 ///
-/// <para>Why a second window at all: <c>EmiDeskWindow</c> carries 120 DIPs of transparent pad, which
-/// is nowhere near enough for a fan around a 420 DIP body. This window is sized to the WORK AREA of
-/// the monitor she is standing on, so every card can be clamped onto that screen without resizing
-/// anything, and it is placed with the same physical-pixels-over-own-DPI arithmetic the widget uses.
-/// <c>BodyScreenRect</c> and <c>RingAnchorScreenPoint</c> are PHYSICAL PIXELS: converting them with
-/// an assumed scale of 1.0 is the coordinate trap that ate the gaze work.</para>
+/// <para>Why a second window at all: <c>EmiDeskWindow</c>'s transparent pad is nowhere near enough
+/// for a fan around a 420 DIP body. This window opens over the work area of the monitor she is
+/// standing on and is then sized down to the FAN'S OWN BOUNDING BOX by <c>Layout()</c> - a
+/// full-screen layered window repaints a whole per-pixel-alpha surface on every animation frame,
+/// which is most of what the fan-out stutter was. It is placed with the same
+/// physical-pixels-over-own-DPI arithmetic the widget uses. <c>BodyScreenRect</c> and
+/// <c>RingAnchorScreenPoint</c> are PHYSICAL PIXELS: converting them with an assumed scale of 1.0
+/// is the coordinate trap that ate the gaze work.</para>
+///
+/// <para>Where the cards actually go is <see cref="EmiRingLayout"/>, which is pure geometry and
+/// unit-tested: the corner case (two screen edges at once) is the one that broke.</para>
 ///
 /// <para>Closing on a click outside is done with a low-level mouse hook rather than a full-screen
 /// catcher window. The hook costs nothing while the ring is shut (it is installed on open and
@@ -52,14 +57,56 @@ public partial class EmiRingWindow : Window
     /// <summary>Air between her silhouette and a card's inner edge (owner call).</summary>
     private const double BodyGap = 14.0;
 
-    /// <summary>Air between two neighbouring cards. Drives the radius bump on a half fan.</summary>
-    private const double CardGap = 8.0;
+    /// <summary>
+    /// THE FAN-OUT, retuned on the owner's second live run ("the animations that spawns those is
+    /// too fast and not smooth at all", 2026-08-29). The first cut threw the cards out in 180 ms on
+    /// a 40 ms stagger with a 0.45 BackEase: the whole ring was on screen in a third of a second,
+    /// every card SNAPPED past its mark and came back, and on a layered per-pixel-alpha window that
+    /// reads as a stutter rather than as a bounce.
+    ///
+    /// <para>Now: nearly twice the travel, a longer gap between neighbours so the fan reads as a
+    /// deal rather than an explosion, a fade that outlives the first third of the move, and an
+    /// overshoot small enough to be a settle. Total <c>5 x 62 + 340 = 650 ms</c> from the click to
+    /// the last card at rest.</para>
+    /// </summary>
+    private const double PopStaggerMs = 62.0;
 
-    private const double PopStaggerMs = 40.0;
-    private const double PopMs = 180.0;
-    private const double FadeMs = 120.0;
+    /// <inheritdoc cref="PopStaggerMs"/>
+    private const double PopMs = 340.0;
+
+    /// <inheritdoc cref="PopStaggerMs"/>
+    private const double FadeMs = 210.0;
+
+    /// <summary>
+    /// Where a card starts. 0.4 was small enough that the GROWTH was the loudest thing in the
+    /// animation; from 0.55 the card is already a card and only the move reads.
+    /// </summary>
+    private const double PopFromScale = 0.55;
+
+    /// <summary>
+    /// BackEase amplitude. 0.45 overshot by about a tenth of the travel, which at 180 ms was a
+    /// snap. 0.3 is a settle you feel rather than watch.
+    /// </summary>
+    private const double PopBackAmplitude = 0.30;
+
     private const double HoverScale = 1.08;
-    private const double EdgeMargin = 6.0;
+
+    /// <summary>
+    /// The card frame, thickened on the owner's second live run ("the border of those images in the
+    /// circle of emi should be bolder, thicker"). A 1 DIP hairline read as a CSS outline on a dark
+    /// desktop; 3 DIP of pink with a 1 DIP dark seam inside it reads as a PIXEL frame, which is the
+    /// house look. Pinned goes to 4 and solid, so a pin is legible across the room.
+    /// </summary>
+    private const double CardBorder = 3.0;
+
+    /// <inheritdoc cref="CardBorder"/>
+    private const double CardBorderPinned = 4.0;
+
+    /// <summary>The dark seam drawn INSIDE the pink frame. Without it the frame is a line, not a frame.</summary>
+    private const double CardSeam = 1.0;
+
+    private static readonly Color FramePink = Color.FromRgb(0xFF, 0x69, 0xB4);
+    private static readonly Color FrameRest = Color.FromArgb(0x88, 0xFF, 0x69, 0xB4);
 
     // ---------------------------------------------------------------- state
 
@@ -222,7 +269,8 @@ public partial class EmiRingWindow : Window
         if (!_open) return;
         try
         {
-            PlaceWindow();
+            // No PlaceWindow: Layout owns the window rect now (it sizes it to the fan), and doing
+            // both means two resizes of a layered window per follow-the-widget tick.
             Layout();
         }
         catch (Exception ex)
@@ -309,91 +357,78 @@ public partial class EmiRingWindow : Window
         double s = DipScale;
         if (s <= 0) s = 1.0;
 
+        double workW = work.Width / s;
+        double workH = work.Height / s;
+
         var anchor = _owner.RingAnchorScreenPoint;      // PHYSICAL pixels
-        _cx = (anchor.X - work.Left) / s;
-        _cy = (anchor.Y - work.Top) / s;
+        double ax = (anchor.X - work.Left) / s;         // work-area DIPs
+        double ay = (anchor.Y - work.Top) / s;
 
-        double w = Width, h = Height;
-        int n = Math.Max(1, _cards.Count);
+        var bodyPx = _owner.BodyScreenRect;
+        double bodyW = bodyPx.Width / s;
+        double bodyH = bodyPx.Height / s;
 
-        // Two passes, because the radius and the span each depend on the other. Pass one uses the
-        // full-circle step to decide which edges she is up against; pass two re-solves the radius
-        // for the step the chosen span actually produces (a half fan packs the same six cards into
-        // 180 degrees, so it needs a bigger circle before they stop touching).
-        double r = FanRadius(360.0 / n);
+        // THE SOLVER OWNS THE GEOMETRY (EmiRingLayout). What used to be here fanned on a fixed
+        // radius and then clamped each card into the work area, which is why a bottom-right park
+        // stacked three cards on top of each other under the taskbar: clamping is not a layout, it
+        // is a way of hiding that the layout did not fit.
+        var plan = EmiRingLayout.Solve(ax, ay, bodyW, bodyH, workW, workH,
+                                       _cards.Count, CardW, CardH, BodyGap);
 
-        double start = -90, span = 360;
-        bool nearR = _cx > w - r - 70, nearL = _cx < r + 70;
-        bool nearT = _cy < r + 40, nearB = _cy > h - r - 40;
-
-        if (nearR && !nearL) { start = 90; span = 180; }
-        else if (nearL && !nearR) { start = -90; span = 180; }
-
-        if (nearB && !nearT && span >= 360) { start = 180; span = 180; }
-        else if (nearT && !nearB && span >= 360) { start = 0; span = 180; }
-
-        r = FanRadius(span >= 360 ? 360.0 / n : span / n);
-
-        var hot = new List<Rect>(n + 1);
-
-        for (int i = 0; i < _cards.Count; i++)
+        // The window is sized to the FAN, not to the desktop. A full-work-area layered window
+        // repaints a whole 1920 x 1080 per-pixel-alpha surface on every animation frame, and that
+        // is most of what the owner felt as a stutter in the fan-out.
+        double minX = ax, maxX = ax, minY = ay, maxY = ay;
+        foreach (var p in plan.Cards)
         {
-            double deg = span >= 360
-                ? start + i * (360.0 / n)
-                : start + (i + 0.5) * (span / n);
-            double a = deg * Math.PI / 180.0;
+            minX = Math.Min(minX, p.X);
+            minY = Math.Min(minY, p.Y);
+            maxX = Math.Max(maxX, p.X + CardW);
+            maxY = Math.Max(maxY, p.Y + CardH);
+        }
 
-            double x = _cx + Math.Cos(a) * r - CardW / 2.0;
-            double y = _cy + Math.Sin(a) * r - CardH / 2.0;
+        // Room for the hover's 8 % grow, and never wider than the work area itself.
+        const double Bleed = 12.0;
+        minX = Math.Max(0, minX - Bleed);
+        minY = Math.Max(0, minY - Bleed);
+        maxX = Math.Min(workW, maxX + Bleed);
+        maxY = Math.Min(workH, maxY + Bleed);
 
-            x = Math.Max(EdgeMargin, Math.Min(w - CardW - EdgeMargin, x));
-            y = Math.Max(EdgeMargin, Math.Min(h - CardH - EdgeMargin, y));
+        Left = work.Left / s + minX;
+        Top = work.Top / s + minY;
+        Width = Math.Max(1, maxX - minX);
+        Height = Math.Max(1, maxY - minY);
 
+        _cx = ax - minX;
+        _cy = ay - minY;
+
+        var hot = new List<Rect>(plan.Cards.Count + 1);
+
+        for (int i = 0; i < _cards.Count && i < plan.Cards.Count; i++)
+        {
             // Whole pixels: the pixel font goes to mush on a half-DIP offset.
-            x = Math.Round(x);
-            y = Math.Round(y);
+            double x = Math.Round(plan.Cards[i].X - minX);
+            double y = Math.Round(plan.Cards[i].Y - minY);
 
             Canvas.SetLeft(_cards[i], x);
             Canvas.SetTop(_cards[i], y);
 
-            hot.Add(new Rect(work.Left + x * s, work.Top + y * s, CardW * s, CardH * s));
+            hot.Add(new Rect(work.Left + (minX + x) * s, work.Top + (minY + y) * s,
+                             CardW * s, CardH * s));
         }
 
         try
         {
-            var body = _owner.BodyScreenRect;
-            hot.Add(body);   // a click on HER is her own toggle, not a dismissal
+            hot.Add(bodyPx);   // a click on HER is her own toggle, not a dismissal
         }
         catch (Exception ex) { Log.Debug(ex, "[EmiDesk] body rect probe failed"); }
 
         _hotPx = hot.ToArray();
+
+        Log.Debug("[EmiDesk] ring fan {Shape} r={R:F0} span={Span:F0} deg, window {W:F0}x{H:F0}",
+                  plan.Shape, plan.Radius, plan.SpanDeg, Width, Height);
     }
 
-    /// <summary>
-    /// The fan radius in DIPs for a given angular step between neighbours.
-    ///
-    /// <para>The baseline is the owner's rule: a card's INNER edge sits <see cref="BodyGap"/> off her
-    /// silhouette, so the centre-to-centre distance is half her width plus half a card plus that
-    /// gap. It scales with her, which is the point: at 420 DIPs the ring opens out with her instead
-    /// of burying her.</para>
-    ///
-    /// <para>Then the collision check. Six cards on a chord of <c>2 r sin(step/2)</c> must clear
-    /// <c>CardW + CardGap</c>; a full circle always does at these sizes, a half fan at 30 degrees a
-    /// card does not, so the radius is bumped to exactly what the chord needs and no further.</para>
-    /// </summary>
-    private double FanRadius(double stepDeg)
-    {
-        double r = _owner.BodyWidth * 0.5 + CardW * 0.5 + BodyGap;
-
-        double halfStep = stepDeg * Math.PI / 360.0;   // half the step, in radians
-        double sin = Math.Sin(halfStep);
-        if (sin > 1e-6)
-        {
-            double needed = (CardW + CardGap) / (2.0 * sin);
-            if (needed > r) r = needed;
-        }
-        return r;
-    }
 
     // ---------------------------------------------------------------- the cards
 
@@ -420,8 +455,11 @@ public partial class EmiRingWindow : Window
 
     private Border BuildCard(EmiRingSlot slot)
     {
-        var pinkBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4));
-        pinkBrush.Freeze();
+        // NOT frozen: the hover animates this brush's Colour from the rest pink to the full one, so
+        // the frame lights up with the card instead of only growing. A frozen brush cannot animate.
+        var frameBrush = new SolidColorBrush(slot.Pinned ? FramePink : FrameRest);
+
+        double thickness = slot.Pinned ? CardBorderPinned : CardBorder;
 
         var card = new Border
         {
@@ -429,8 +467,8 @@ public partial class EmiRingWindow : Window
             Height = CardH,
             CornerRadius = new CornerRadius(6),
             Background = new SolidColorBrush(Color.FromArgb(0xF2, 0x0E, 0x0E, 0x1C)),
-            BorderThickness = new Thickness(slot.Pinned ? 2 : 1),
-            BorderBrush = slot.Pinned ? pinkBrush : new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0x69, 0xB4)),
+            BorderThickness = new Thickness(thickness),
+            BorderBrush = frameBrush,
             Cursor = Cursors.Hand,
             SnapsToDevicePixels = true,
             UseLayoutRounding = true,
@@ -438,18 +476,40 @@ public partial class EmiRingWindow : Window
             Tag = slot,
             ToolTip = TipFor(slot),
         };
-        card.RenderTransform = new TransformGroup
+
+        // Pre-created, and pre-posed at the pop's starting values: BuildCards runs before the
+        // window is even shown, and a card that is added at scale 1 / opacity 1 gets ONE frame at
+        // its full size in the top-left corner before Layout() has placed it. That single frame is
+        // the flash the owner saw as "not smooth".
+        var sc0 = new ScaleTransform(PopFromScale, PopFromScale);
+        var tr0 = new TranslateTransform(0, 0);
+        card.RenderTransform = new TransformGroup { Children = { sc0, tr0 } };
+        card.Opacity = 0;
+
+        // The dark seam INSIDE the pink, which is what turns a 3 DIP line into a frame. It is a
+        // sibling border rather than a second BorderThickness because a Border has exactly one.
+        var frame = new Grid();
+        card.Child = frame;
+
+        var seam = new Border
         {
-            Children = { new ScaleTransform(1, 1), new TranslateTransform(0, 0) }
+            BorderThickness = new Thickness(CardSeam),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0xCC, 0x08, 0x08, 0x12)),
+            CornerRadius = new CornerRadius(4),
+            IsHitTestVisible = false,
         };
 
+        double inner = thickness + CardSeam;
         var grid = new Grid
         {
             // A Border never clips its child (the 2026-08-13 verdict), so the rounded corners are
             // done with an explicit clip geometry instead of hoping CornerRadius does it.
-            Clip = new RectangleGeometry(new Rect(0, 0, CardW, CardH), 6, 6),
+            Margin = new Thickness(CardSeam),
+            Clip = new RectangleGeometry(
+                new Rect(0, 0, Math.Max(1, CardW - 2 * inner), Math.Max(1, CardH - 2 * inner)), 4, 4),
         };
-        card.Child = grid;
+        frame.Children.Add(grid);
+        frame.Children.Add(seam);
 
         // ---- the face of the card: dashboard art, or a flat hue tile ----------
         var art = LoadThumb(slot.Target);
@@ -545,6 +605,14 @@ public partial class EmiRingWindow : Window
             sc.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(to, dur));
             sc.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(to, dur));
 
+            // The frame lights to FULL pink under the pointer. A pinned card is already full, so
+            // its own animation is a no-op rather than a special case.
+            if (card.BorderBrush is SolidColorBrush frame && !frame.IsFrozen)
+            {
+                var toColour = (on || slot.Pinned) ? FramePink : FrameRest;
+                frame.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(toColour, dur));
+            }
+
             double pinTo = slot.Pinned ? 0.95 : (on ? 0.55 : 0.0);
             pin.BeginAnimation(OpacityProperty, new DoubleAnimation(pinTo, dur));
         }
@@ -631,8 +699,14 @@ public partial class EmiRingWindow : Window
     {
         try
         {
-            var ease = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.45 };
+            // Two easings, not one. The MOVE keeps the (much gentler) overshoot, because that is
+            // where the life is; the SCALE is a plain cubic, because a card that overshoots its
+            // size as well as its position reads as two separate wobbles fighting.
+            var move = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = PopBackAmplitude };
+            var grow = new CubicEase { EasingMode = EasingMode.EaseOut };
+            var fadeEase = new QuadraticEase { EasingMode = EasingMode.EaseOut };
             var dur = new Duration(TimeSpan.FromMilliseconds(PopMs));
+            var fade = new Duration(TimeSpan.FromMilliseconds(FadeMs));
 
             for (int i = 0; i < _cards.Count; i++)
             {
@@ -648,19 +722,19 @@ public partial class EmiRingWindow : Window
                 // Base values first: during a delayed animation's BeginTime the property still shows
                 // its base value, so a card that starts at its final spot would flash there.
                 tr.X = dx; tr.Y = dy;
-                sc.ScaleX = 0.4; sc.ScaleY = 0.4;
+                sc.ScaleX = PopFromScale; sc.ScaleY = PopFromScale;
                 card.Opacity = 0;
 
                 tr.BeginAnimation(TranslateTransform.XProperty,
-                    new DoubleAnimation(dx, 0, dur) { BeginTime = begin, EasingFunction = ease });
+                    new DoubleAnimation(dx, 0, dur) { BeginTime = begin, EasingFunction = move });
                 tr.BeginAnimation(TranslateTransform.YProperty,
-                    new DoubleAnimation(dy, 0, dur) { BeginTime = begin, EasingFunction = ease });
+                    new DoubleAnimation(dy, 0, dur) { BeginTime = begin, EasingFunction = move });
                 sc.BeginAnimation(ScaleTransform.ScaleXProperty,
-                    new DoubleAnimation(0.4, 1.0, dur) { BeginTime = begin, EasingFunction = ease });
+                    new DoubleAnimation(PopFromScale, 1.0, dur) { BeginTime = begin, EasingFunction = grow });
                 sc.BeginAnimation(ScaleTransform.ScaleYProperty,
-                    new DoubleAnimation(0.4, 1.0, dur) { BeginTime = begin, EasingFunction = ease });
+                    new DoubleAnimation(PopFromScale, 1.0, dur) { BeginTime = begin, EasingFunction = grow });
                 card.BeginAnimation(OpacityProperty,
-                    new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(FadeMs))) { BeginTime = begin });
+                    new DoubleAnimation(0, 1, fade) { BeginTime = begin, EasingFunction = fadeEase });
             }
         }
         catch (Exception ex)

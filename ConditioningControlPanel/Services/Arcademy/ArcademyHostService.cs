@@ -179,6 +179,11 @@ internal static class ArcademyHostService
 
         // EMI Desk: the ring learns from every open, not just its own cards.
         try { App.EmiDesk?.NoteOpen("arcademy"); } catch { }
+        // She does not follow you to school. If she is out, she says goodbye here and winks
+        // herself off screen a couple of seconds later, BEFORE `arcademyOpened` and before the
+        // ring's own `arcademyFromRing` can land: the farewell claims her voice for that window,
+        // so whichever of the three paths opened the Arcademy, the last thing you get is the bye.
+        try { App.EmiDesk?.FarewellForArcademy(); } catch { }
         try { App.EmiDesk?.Fire("arcademyOpened", null); } catch { }
 
         _devDoor = devDoor;

@@ -50,6 +50,7 @@ public partial class EmiDeskWindow
             CancelChain();
             StopIdleBeats();
             OnBubbleTextCore(null);
+            TearDownReactions();
 
             // The window goes up first (the smoke has to be somewhere), but she does not.
             BodyRoot.Visibility = Visibility.Hidden;
@@ -120,6 +121,7 @@ public partial class EmiDeskWindow
             StopIdleBeats();
             DisarmPet();
             CancelChain();
+            TearDownReactions();
 
             try { OnTearDownCore(); }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] tear-down seam threw"); }
@@ -248,7 +250,7 @@ public partial class EmiDeskWindow
             double cy = (double.IsNaN(Height) ? ActualHeight : Height) / 2.0;
             if (cx <= 0 || cy <= 0)
             {
-                cx = OverlayPad + _bodyWidth / 2.0;
+                cx = OverlayPadX + _bodyWidth / 2.0;
                 cy = OverlayPad + _bodyWidth * BodyAspect / 2.0;
             }
 
