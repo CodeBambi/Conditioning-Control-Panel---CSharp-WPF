@@ -9,7 +9,7 @@ The full moment catalogue for the desktop EMI. Three audiences:
 - **hook agent**: section 4 only. Every fire site below was opened and verified unless marked
   `(UNVERIFIED)`.
 
-**Count: 130 moments catalogued. 90 are v1; the other 40 are marked **DEFER** - their fire sites and
+**Count: 133 moments catalogued. 93 are v1 (90 + the three onboarding nudges in 1.1b); the other 40 are marked **DEFER** - their fire sites and
 payloads are documented and verified, but they carry NO pool in the first wave and the hook agent
 should skip them. Nothing needs re-researching to turn one on later. 12 common pools.**
 
@@ -72,6 +72,43 @@ The ids marked LOCKED are named in `BRIEF.md` §Moments and must not be renamed.
 | `askIgnored3x` **DEFER** | three offers ignored in a row; she stops offering for the sitting | build lane: `EmiOffers` ignore-streak latch | none | 0.25 | 1/sitting | 1 | 8 | common.smallTalk | 0 |
 | `bedtimeSet` | the bedtime offer was accepted; glass offers mute till 06:00 | build lane: `EmiOffers` effect `bedtime` | none | 1.0 ceremony | - | 3 | 8 | common.lateNight | 0 |
 | `bedtimeBroken` | she is summoned again after a bedtime was set, before 06:00 | build lane: `EmiDeskService.Summon()` bedtime branch | `{n}` skips running | 0.40 | 1/night | 2 | 8 | common.lateNight | 2 |
+
+### 1.1b onboarding / teaching nudges (group `ui`, added 2026-08-29)
+
+The gestures changed (owner call 2026-08-29): **left click on her body = a pat/pet. Right click on her body,
+or the small pixel "doors" glyph that appears on hover = the ring of six cards. Right click on a card = pin
+it so it stays in the ring.** Nobody reads a manual for a mascot, so she teaches the three gestures herself:
+a handful of barks per track, then never again, always steering towards the petting. The pools are her first
+impressions, so they are written as fishing, dares and stumbles, never as instructions: she never says
+"click", "left click", "right click", "menu" or "button" the way a tooltip would ("the other button" is
+allowed because that is how she would say it). Each track is a normal `moments` entry drawing only its own
+pool (no common pool, `mix` 1.0), so a nudge is always on-message.
+
+| id | trigger (as the build lane implements it) | ctx | odds | prio | pool | common pools | spice | stop condition |
+|---|---|---|---|---|---|---|---|---|
+| `petNudge` | ~25s after a summon, then every ~4 min while she is out | `{name}` display name | 1.0 | 2 | 12 | - | 1 | stops for good once the user has petted her 3 times (lifetime) |
+| `ringNudge` | on the 2nd summon ever, then every ~6 min while she is out | none | 1.0 | 2 | 10 | - | 1 | stops for good once the ring has been opened twice (lifetime) |
+| `pinNudge` | once per summon, on ring open, while the ring is showing | none | 1.0 | 2 | 8 | - | 1 | stops for good after the first pin ever |
+
+Rules shared by all three tracks (the build lane owns the counters; they persist in the `emi` stats blob):
+
+- **Hard cap: 6 fires per track, ever** (`limit: {per: "ever", max: 6}` in `desk-lines.json`), even if the
+  stop condition is never met. After that the track is dead on this install.
+- **Never within 90s of another nudge**, whichever track fired it. The nudges share one spacing clock.
+- **Never during an ask**, and never while a full-screen feature is running (video, intake, lockdown,
+  emergency exit, the Arcademy, DtRH, Loom, a session's mandatory feature). The silence law in section 3
+  still applies on top: panic hold, attention checks and the avatar's voice all outrank a nudge.
+- A nudge is priority 2, so a priority-3 ceremony (`levelUp`, `sessionCompleted`, ...) wins the slot and
+  the nudge simply waits for its next tick; it is not rescheduled early.
+- `petNudge` and `ringNudge` do not fire on the same tick; if both are due, the pet nudge goes first (the
+  owner wants the petting learned before the cards) and the ring nudge takes the next slot.
+- `pinNudge` only fires when the ring is actually open. It never fires on a ring that opened from the
+  hover glyph less than 2s ago (give the cards time to fan) and never while a card is mid-press.
+- Wording lock for these three pools: "cards", "the six", "my other side", "the other button", "squeeze"
+  are her words. "doors" is NOT used in the lines: the checker's fence bans `door`/`doors` (the singular
+  "door" is the Arcademy story fence) and the desk corpus has zero door lines, so the glyph's name stays
+  in the code and the docs only.
+- All three pools are spice ceiling 1, majority spice 0. Nothing here guilts; she is fishing, not wounded.
 
 ### 1.2 group `companion` - the avatar arbiter
 

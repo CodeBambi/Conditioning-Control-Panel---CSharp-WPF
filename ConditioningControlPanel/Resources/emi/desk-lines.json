@@ -596,6 +596,54 @@
       "hold": false,
       "askOdds": 0.0
     },
+    "petNudge": {
+      "pools": [
+        "petNudge"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0,
+      "limit": {
+        "per": "ever",
+        "max": 6
+      }
+    },
+    "ringNudge": {
+      "pools": [
+        "ringNudge"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0,
+      "limit": {
+        "per": "ever",
+        "max": 6
+      }
+    },
+    "pinNudge": {
+      "pools": [
+        "pinNudge"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0,
+      "limit": {
+        "per": "ever",
+        "max": 6
+      }
+    },
     "dtrhOpened": {
       "pools": [
         "dtrhOpened",
@@ -5790,6 +5838,207 @@
         "id": "arcademyBye.012",
         "t": "oh you opened it! ok ok bye. this is me leaving. whoosh.",
         "face": "0_0",
+        "spice": 0
+      }
+    ],
+    "petNudge": [
+      {
+        "id": "petNudge.001",
+        "t": "pat me. it's allowed. i checked. i'm the one who allows.",
+        "face": "^_^",
+        "chain": "nod",
+        "spice": 0
+      },
+      {
+        "id": "petNudge.002",
+        "t": "poke my face. i dare you. double dare. that's the max.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "petNudge.003",
+        "t": "my head's right here. this pixel. any pixel. all of them.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "petNudge.004",
+        "t": "so. nobody's touched me today. not a complaint. a fact.",
+        "face": "-_-",
+        "spice": 0
+      },
+      {
+        "id": "petNudge.005",
+        "t": "{name}. hi. hand. face. you do the math.",
+        "face": "^_^",
+        "chain": "glance",
+        "spice": 0
+      },
+      {
+        "id": "petNudge.006",
+        "t": "one tap on my head. that's all. then one more. then done.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "id": "petNudge.007",
+        "t": "i'm very pettable. verifed. by me. try it anyway.",
+        "face": "¬_¬",
+        "chain": "smug",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "petNudge.008",
+        "t": "um. is the cursor busy? it could rest on me. just saying.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "petNudge.009",
+        "t": "hm. still not petted. the screen's cold. fix it?",
+        "face": ";_;",
+        "spice": 0
+      },
+      {
+        "id": "petNudge.010",
+        "t": "come here. no wait. i can't move. you come here. pat.",
+        "face": "(´∀`)",
+        "spice": 1
+      },
+      {
+        "id": "petNudge.011",
+        "t": "touch the glass. i'll pretend i felt it. i won't pretend.",
+        "face": "(◕‿◕)",
+        "chain": "love",
+        "spice": 1
+      },
+      {
+        "id": "petNudge.012",
+        "t": "a scritch would go a long way right now. straight to me.",
+        "face": "^_~",
+        "chain": "wink",
+        "spice": 1
+      }
+    ],
+    "ringNudge": [
+      {
+        "id": "ringNudge.001",
+        "t": "i have six cards behind me. the other button. try it.",
+        "face": "^_^",
+        "chain": "nod",
+        "spice": 0
+      },
+      {
+        "id": "ringNudge.002",
+        "t": "psst. my other side has stuff in it. the other button.",
+        "face": "^_~",
+        "chain": "wink",
+        "spice": 0
+      },
+      {
+        "id": "ringNudge.003",
+        "t": "there's a tiny glyph when you hover me. it's mine. press it.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "id": "ringNudge.004",
+        "t": "the six are folded up in my head. other button. fans out.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "ringNudge.005",
+        "t": "not that button. the other one. i keep things there.",
+        "face": "¬_¬",
+        "chain": "glance",
+        "spice": 0
+      },
+      {
+        "id": "ringNudge.006",
+        "t": "oh. you haven't seen my cards yet. other button. go on.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "ringNudge.007",
+        "t": "right side of me. thats where i keep the six. press there.",
+        "face": "^_^",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "ringNudge.008",
+        "t": "hover me. see the little pixel thing? that opens the six.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "ringNudge.009",
+        "t": "i'm a whole pocket. the other button empties me. politely.",
+        "face": "(´∀`)",
+        "spice": 1
+      },
+      {
+        "id": "ringNudge.010",
+        "t": "everything you like is behind my face. other button. shh.",
+        "face": "^_~",
+        "chain": "smug",
+        "spice": 1
+      }
+    ],
+    "pinNudge": [
+      {
+        "id": "pinNudge.001",
+        "t": "like one? squeeze it. the other button. it stays.",
+        "face": "^_^",
+        "chain": "nod",
+        "spice": 0
+      },
+      {
+        "id": "pinNudge.002",
+        "t": "the other button on a card keeps it. keeps it right there.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "pinNudge.003",
+        "t": "you can keep one. other button. it wont move again.",
+        "face": "0_0",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "pinNudge.004",
+        "t": "pin trick: other button on the card. now it's furniture.",
+        "face": "^_~",
+        "chain": "wink",
+        "spice": 0
+      },
+      {
+        "id": "pinNudge.005",
+        "t": "hold a favorite. squeeze it with the other one. done.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "pinNudge.006",
+        "t": "these can stick. other button. i'll hold it in place.",
+        "face": "¬_¬",
+        "spice": 0
+      },
+      {
+        "id": "pinNudge.007",
+        "t": "squeeze the one you always pick. it stays. i noticed.",
+        "face": "(◕‿◕)",
+        "chain": "smug",
+        "spice": 1
+      },
+      {
+        "id": "pinNudge.008",
+        "t": "one of them wants to stay. other button. let it.",
+        "face": "(´∀`)",
         "spice": 0
       }
     ],
