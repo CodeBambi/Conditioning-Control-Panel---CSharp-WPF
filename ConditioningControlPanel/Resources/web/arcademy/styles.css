@@ -713,6 +713,22 @@ html.arc-reduced .arc-timebar-fill::before { content:none; }
 }
 .arc-row .arc-hint { display:block; font-size:11px; color:var(--ink-faint); }
 .arc-row input[type=range] { flex:1 1 180px; accent-color:var(--pink); min-width:120px; }
+/* END CAPTIONS (player feedback, 2026-08-29). A range input is mute about
+   direction, so a row may hand sliderRow two words and get them under the ends
+   of its own track. The wrapper takes the track's flex line, which is why the
+   input inside it must drop the row-level basis: in a COLUMN, `flex:1 1 180px`
+   would be sizing its HEIGHT, not its width. Captions stay tiny and may shrink
+   to nothing on a narrow phone rather than push the track below its min-width. */
+.arc-row .arc-slider {
+  flex:1 1 180px; min-width:120px; display:flex; flex-direction:column; gap:3px;
+}
+.arc-row .arc-slider input[type=range] { flex:0 0 auto; width:100%; min-width:0; }
+.arc-row .arc-ends {
+  display:flex; justify-content:space-between; gap:8px;
+  font-size:10px; line-height:1.2; color:var(--ink-faint); letter-spacing:.05em;
+}
+.arc-row .arc-ends > span { min-width:0; overflow-wrap:anywhere; }
+.arc-row .arc-ends > span + span { text-align:right; }
 .arc-row select, .arc-row input[type=text] {
   background:var(--panel); color:var(--ink); border:var(--hairline);
   border-radius:8px; padding:5px 8px; font:inherit; font-size:13px;
