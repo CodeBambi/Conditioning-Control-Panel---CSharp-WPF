@@ -117,6 +117,9 @@ namespace ConditioningControlPanel.Services
             ScheduleNext();
             
             App.Logger?.Information("SubliminalService started");
+
+            // EMI Desk (MOMENTS 4.B).
+            try { App.EmiDesk?.Fire("subliminalsStarted", null); } catch { }
         }
 
         /// <summary>

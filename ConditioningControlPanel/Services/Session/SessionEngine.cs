@@ -31,6 +31,14 @@ namespace ConditioningControlPanel.Services
         private bool _isRunning;
         private bool _isPaused;
         private int _pauseCount;
+
+        // EMI Desk (MOMENTS 4.B). Her session beats are fired here rather than mirrored off the
+        // bark triggers because the bark contexts are lossy: SessionCompleted drops the XP, the
+        // elapsed time and the pause count, and SessionProgress carries only the elapsed seconds.
+        // These three latches make the once-per-session beats once-per-session.
+        private int _emiRampStep;
+        private bool _emiSaidHalfway;
+        private bool _emiSaidLastMinute;
         private TimeSpan _pausedElapsedTime; // Time accumulated before pause
         private DateTime _startTime;
         private DateTime _pauseStartTime;
@@ -234,6 +242,20 @@ namespace ConditioningControlPanel.Services
             // Fire started event
             SessionStarted?.Invoke(this, EventArgs.Empty);
 
+            // EMI Desk: reset the per-session latches, then announce.
+            _emiRampStep = 0;
+            _emiSaidHalfway = false;
+            _emiSaidLastMinute = false;
+            try
+            {
+                App.EmiDesk?.Fire("sessionStarted", new
+                {
+                    target = session.Name?.ToLowerInvariant(),
+                    minutes = (int)session.DurationMinutes,
+                });
+            }
+            catch { }
+
             // Update Discord presence with session name
             App.DiscordRpc?.SetSessionActivity(session.Name);
 
@@ -411,10 +433,29 @@ namespace ConditioningControlPanel.Services
 
                 App.Logger?.Information("Session completed: {Name}, XP: {XP} (base: {Base}, multiplier: {Mult:F2}x, paused {PauseCount}x, penalty: -{Penalty})",
                     _currentSession.Name, finalXP, baseXP, multiplier, _pauseCount, XPPenalty);
+
+                // EMI Desk (MOMENTS 4.B). THE branch that tells a finish from a walk-out: no
+                // elapsed-vs-planned heuristic is needed, because StopSession is already told which
+                // one this is and only this arm raises SessionCompleted.
+                try
+                {
+                    App.EmiDesk?.Fire("sessionCompleted", new
+                    {
+                        target = _currentSession.Name?.ToLowerInvariant(),
+                        minutes = (int)finalElapsedTime.TotalMinutes,
+                        n = finalXP,
+                    });
+                }
+                catch { }
             }
             else
             {
                 App.Logger?.Information("Session stopped early");
+
+                // EMI Desk (MOMENTS 4.B): the other arm of the same branch. common.encourage, so it
+                // is warm about it - never a scold for stopping.
+                try { App.EmiDesk?.Fire("sessionAbandoned", new { minutes = (int)finalElapsedTime.TotalMinutes }); }
+                catch { }
 
                 // Track panic button press for Relapse achievement
                 App.Achievements?.TrackPanicPressed();
@@ -441,6 +482,10 @@ namespace ConditioningControlPanel.Services
             _pausedElapsedTime = ElapsedTime;
             _isPaused = true;
             _pauseCount++;
+
+            // EMI Desk (MOMENTS 4.B): SessionEngine raises no pause or resume event, so this is the
+            // only seam. common.encourage - never a chaperone about stopping.
+            try { App.EmiDesk?.Fire("sessionPaused", new { n = _pauseCount }); } catch { }
             _pauseStartTime = DateTime.Now;
             _wallClockStopwatch.Stop();
 
@@ -526,6 +571,10 @@ namespace ConditioningControlPanel.Services
             }
 
             App.Logger?.Information("Session resumed");
+
+            // EMI Desk (MOMENTS 4.B).
+            try { App.EmiDesk?.Fire("sessionResumed", new { minutes = (int)Math.Round(RemainingTime.TotalMinutes) }); }
+            catch { }
         }
 
         private void MainTimer_Tick(object? sender, EventArgs e)
@@ -550,6 +599,25 @@ namespace ConditioningControlPanel.Services
                 RemainingTime,
                 ProgressPercent
             ));
+
+            // EMI Desk (MOMENTS 4.B): the two beats inside a run, each once. The bark's
+            // SessionProgress context never carries the remaining time, which is the only number
+            // either line wants, so they are fired here off the engine's own clock.
+            try
+            {
+                double leftMinutes = totalMinutes - elapsedMinutes;
+                if (!_emiSaidHalfway && elapsedMinutes >= totalMinutes / 2.0)
+                {
+                    _emiSaidHalfway = true;
+                    App.EmiDesk?.Fire("sessionHalfway", new { minutes = (int)Math.Round(leftMinutes) });
+                }
+                if (!_emiSaidLastMinute && leftMinutes <= 1.0)
+                {
+                    _emiSaidLastMinute = true;
+                    App.EmiDesk?.Fire("sessionLastMinute", null);
+                }
+            }
+            catch { }
             
             // Check for phase changes
             CheckPhaseTransition(elapsedMinutes);
@@ -585,6 +653,17 @@ namespace ConditioningControlPanel.Services
                 var phase = _currentSession.Phases[newPhaseIndex];
                 PhaseChanged?.Invoke(this, new SessionPhaseChangedEventArgs(phase, newPhaseIndex));
                 App.Logger?.Information("Phase changed: {Phase}", phase.Name);
+
+                // EMI Desk (MOMENTS 4.B).
+                try
+                {
+                    App.EmiDesk?.Fire("sessionPhaseChanged", new
+                    {
+                        target = phase.Name?.ToLowerInvariant(),
+                        n = newPhaseIndex + 1,
+                    });
+                }
+                catch { }
             }
         }
         
@@ -673,6 +752,15 @@ namespace ConditioningControlPanel.Services
                         App.Settings.Current.BubblesFrequency = currentBubbleFreq;
                         App.Bubbles?.RefreshFrequency();
                     }
+
+                    // EMI Desk (MOMENTS 4.B): the ONE genuine integer step in the whole ramp
+                    // machinery. Everything else that ramps is a per-second lerp with no step to
+                    // count, and MOMENTS 3 forbids her claiming a number that is not real.
+                    if (rampSteps > _emiRampStep)
+                    {
+                        _emiRampStep = rampSteps;
+                        try { App.EmiDesk?.Fire("rampStepUp", new { n = rampSteps }); } catch { }
+                    }
                 }
             }
 
@@ -704,6 +792,18 @@ namespace ConditioningControlPanel.Services
                     pending.Start();
                     App.Logger?.Information("Session: {Feature} started at {Minutes:F1} minutes (target was {Target})",
                         pending.Name, elapsedMinutes, pending.StartMinute);
+
+                    // EMI Desk (MOMENTS 4.B): pending.Name is already a human feature name
+                    // ("lock cards", "bubble count"), so it needs no key mapping.
+                    try
+                    {
+                        App.EmiDesk?.Fire("sessionFeatureArrived", new
+                        {
+                            target = pending.Name?.ToLowerInvariant(),
+                            n = (int)pending.StartMinute,
+                        });
+                    }
+                    catch { }
                 }
                 catch (Exception ex)
                 {

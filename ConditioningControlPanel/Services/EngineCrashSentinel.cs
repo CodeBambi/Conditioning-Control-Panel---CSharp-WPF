@@ -54,12 +54,17 @@ namespace ConditioningControlPanel.Services
         /// running when the process last died without a clean stop — log it loudly and consume
         /// the file so it only reports once.
         /// </summary>
-        public static void ConsumeAndReport(Serilog.ILogger? logger)
+        /// <returns>
+        /// True when a sentinel was actually found and consumed, i.e. the previous session really
+        /// did die with the engine running. The caller uses it to decide whether anything about the
+        /// last run is worth reacting to; ignoring it is fine and was the only behaviour before.
+        /// </returns>
+        public static bool ConsumeAndReport(Serilog.ILogger? logger)
         {
             try
             {
                 string path = FilePath;
-                if (!File.Exists(path)) return;
+                if (!File.Exists(path)) return false;
                 string ctx = "";
                 DateTime armed = DateTime.MinValue;
                 try { ctx = File.ReadAllText(path).Trim(); } catch { }
@@ -71,8 +76,10 @@ namespace ConditioningControlPanel.Services
                     armed == DateTime.MinValue ? "(unknown)" : armed.ToString("yyyy-MM-dd HH:mm:ss"),
                     string.IsNullOrWhiteSpace(ctx) ? "(unavailable)" : ctx);
                 Clear();
+                return true;
             }
             catch { }
+            return false;
         }
     }
 }

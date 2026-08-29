@@ -137,6 +137,11 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Debug("TierGate: denial toast failed: {E}", ex.Message);
             }
+
+            // EMI Desk (MOMENTS 4.B): the ONE refusal surface in the app, so the one place she can
+            // see a locked door being tried. verdict.Feature is already a localized display name.
+            try { App.EmiDesk?.Fire("premiumTeaseSeen", new { target = verdict.Feature?.ToLowerInvariant() }); }
+            catch { }
         }
     }
 }

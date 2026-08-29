@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -560,6 +560,20 @@
              Exclude="Resources\web\**\CLAUDE.md;Resources\web\**\CAPTCHA_*.md;Resources\web\**\BUILD_PLAN.md;
                       $(ArcademyHarnessExclude);
                       $(ContentPackWebExclude)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+    <!-- EMI desk lines (Resources\emi\desk-lines.json): read from disk at runtime by the desk
+         line engine, so it ships next to the exe like the web assets above. -->
+    <Content Include="Resources\emi\**\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+    <!-- EMI desk fonts (Resources\emi\fonts\*.ttf): loaded through a FontFamily base URI at
+         runtime, not as a WPF Resource, so they ship beside the exe exactly like the lines file. -->
+    <Content Include="Resources\emi\**\*.ttf">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>

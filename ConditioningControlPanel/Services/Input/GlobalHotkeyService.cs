@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -34,6 +34,13 @@ namespace ConditioningControlPanel.Services
         /// <c>MainWindow.ApplyGlobalQuickRecalHotkey</c>.
         /// </summary>
         public const int QuickRecalHotkeyId = 0xB1B3;
+
+        /// <summary>
+        /// EMI Desk's summon chord (default Ctrl+Alt+E). Toggles the widget: out, or away. See
+        /// <c>Services.EmiDesk.EmiDeskService.ApplyHotkey</c>, which refuses a bare key and checks
+        /// the same PanicPolicy hook clash the Quick Recal chord does.
+        /// </summary>
+        public const int EmiDeskHotkeyId = 0xB1B4;
 
         private const int WM_HOTKEY = 0x0312;
 

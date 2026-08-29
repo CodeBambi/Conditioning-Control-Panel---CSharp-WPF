@@ -286,6 +286,11 @@ namespace ConditioningControlPanel.Services
 
             // The arbiter records THIS delivery itself (cooldown ledger first, pacing state second),
             // so CommitFire must not also report it as an external bark — one line, one charge.
+            // EMI Desk (MOMENTS 4.B / 3.5): THE AVATAR OWNS VOICE. The arbiter has decided the tube
+            // is about to talk about the active window, so EMI goes to blink-only faces for the
+            // duration plus the moment's 20s tail. A HOLD, never a line.
+            try { App.EmiDesk?.NoteAwarenessReaction(); } catch { }
+
             _inAwarenessBark = true;
             try
             {
@@ -988,6 +993,13 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                // EMI Desk (MOMENTS 4.A): mirror the trigger onto her moment bus BEFORE the rule
+                // lookup below, which early-returns for any trigger no bark rule is keyed to - and
+                // most of the events she cares about have no rule in the shipped bark_rules.json.
+                // The mirror builds its own context, swallows everything, and is a no-op while she
+                // is away, so it can neither change nor delay the bark under it.
+                Services.EmiDesk.EmiBarkBridge.Mirror(trigger, fill);
+
                 var rules = _rules.ForTrigger(trigger);
                 if (rules.Count == 0) return false;
 
@@ -1523,6 +1535,13 @@ namespace ConditioningControlPanel.Services
             // Safety and guaranteed reactions bypass the timing/floor gates entirely.
             bool isSafety = rule.Class == BarkClass.Safety;
             bool bypass = isSafety || guaranteed;
+
+            // EMI Desk: while she is out and the user chose to mute the avatar, ordinary barks sit
+            // this one out. Deliberately ABOVE the `bypass` branch and exempting only safety: a
+            // `guaranteed` bark still gets muted (guaranteed means "ignore timing and floors", not
+            // "talk over EMI"), but a Safety bark never does - panic must always be able to speak.
+            if (!isSafety && App.EmiDesk?.AvatarMuted == true)
+                return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = "emi-desk-mute" };
 
             // One-shot (repeatable=false): fire once per scope. Session is in-memory; tier/lifetime
             // consult the persisted latch (AppSettings.BarkLifetimeFired). This dedup is NOT bypassed

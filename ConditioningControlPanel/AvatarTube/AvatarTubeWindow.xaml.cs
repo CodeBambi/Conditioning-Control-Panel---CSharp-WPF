@@ -653,6 +653,17 @@ namespace ConditioningControlPanel
         /// </summary>
         public bool IsSpeaking => _isGiggling;
 
+        /// <summary>
+        /// True while ANYTHING is in the tube's bubble slot: a spoken line, the listening dots, the
+        /// chat history view or an uninterruptible recorded clip. Broader than
+        /// <see cref="IsSpeaking"/> on purpose - EMI Desk asks this (via
+        /// <c>EmiDeskService.TubeBubbleLive</c>) to decide whether the tube is visually busy, and
+        /// the listening indicator counts as busy even though it is not speech.
+        /// </summary>
+        internal bool HasBubbleUp =>
+            _isGiggling || _isListeningBubble || _isShowingChatHistory
+            || _isShowingAiBubble || _isPlayingUninterruptibleClip;
+
         // =========================================================================================
         //  POSSESSION - the two things the haunted-UI layer is allowed to do to the tube.
         //  Read Services/Possession/POSSESSION.md ("Companion wave") first.

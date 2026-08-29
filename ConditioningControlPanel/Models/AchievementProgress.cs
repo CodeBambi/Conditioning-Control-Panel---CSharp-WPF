@@ -291,6 +291,10 @@ public class AchievementProgress
             // Launched yesterday, increment streak
             ConsecutiveDays++;
             PendingStreakBonus = true;
+
+            // EMI Desk (MOMENTS 4.B). The milestone days are the bark's StreakMilestone and reach
+            // her through the mirror; this is the ordinary day that kept it alive.
+            try { App.EmiDesk?.Fire("streakKept", new { streak = ConsecutiveDays }); } catch { }
         }
         else
         {
@@ -340,6 +344,9 @@ public class AchievementProgress
             App.Logger?.Information("Streak shield protected streak! Now at {Days} days", ConsecutiveDays);
             PendingStreakBonus = true;
 
+            // EMI Desk: the streak survived, which is a keep and not a break.
+            try { App.EmiDesk?.Fire("streakKept", new { streak = ConsecutiveDays }); } catch { }
+
             // Record the missed day(s) that were shielded
             var settings = App.Settings?.Current;
             if (settings != null)
@@ -355,12 +362,20 @@ public class AchievementProgress
         {
             // A streak fix charge was spent automatically — keep current streak
             App.Logger?.Information("Oopsie Insurance auto-spent a streak fix, saving streak at {Days} days", ConsecutiveDays);
+
+            // EMI Desk: same - a charge was spent, the number did not fall.
+            try { App.EmiDesk?.Fire("streakKept", new { streak = ConsecutiveDays }); } catch { }
         }
         else
         {
             // Streak broken, reset to 1
             App.Logger?.Warning("Login streak RESET from {OldStreak} to 1 — gap of {Days} day(s), no shield/insurance available (last launch: {LastDate})",
                 ConsecutiveDays, daysMissed, lastDate.ToString("yyyy-MM-dd"));
+
+            // EMI Desk (MOMENTS 4.B): the streak the user HAD, read before the reset below wipes
+            // it - a "you were on 40" line needs the 40, not the 1. common.encourage: never a scold.
+            try { App.EmiDesk?.Fire("streakBroken", new { streak = ConsecutiveDays }); } catch { }
+
             ConsecutiveDays = 1;
         }
     }

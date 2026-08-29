@@ -1,0 +1,143 @@
+{
+  "writer": "round1",
+  "note": "Transcription of docs/emi-desk/reference/barks-brainstorm-0829.md sections B and C (the approved round-1 desktop lines). Spice tags and `when` gates were added by the editor; text, faces, chains and double flags are verbatim. Section E cuts are NOT here and must never come back. d08 and d09 are transcribed but cut by merge-lines.py (see LINES-AUDIT.md).",
+  "pools": {
+    "desktopFirstBoot": [
+      { "t": "oh. it's big out here. hi. i'm staying.", "face": "(⊙_⊙)", "chain": "wake", "spice": 0, "double": true },
+      { "t": "new room. no walls. i'll manage. i'm managing.", "face": "0_0", "spice": 0 },
+      { "t": "so this is where you keep the other buttons.", "face": "*_*", "spice": 0 }
+    ],
+    "ringOpen": [
+      { "t": "pick one. no wrong answers. some wronger.", "face": "^_~", "spice": 0 },
+      { "t": "ta-da. i keep them all in my head. it's roomy.", "face": "^___^", "spice": 0 },
+      { "t": "these are your usuals. i noticed. i notice things.", "face": "(◠‿◠)", "spice": 0, "double": true },
+      { "t": "wheel of you. spin it. it doesn't spin. tap it.", "face": "\\o/", "spice": 0 }
+    ],
+    "common.dork": [
+      { "t": "come with me if you want to live. or to the arcade.", "face": "(⌐■_■)", "chain": "cool", "spice": 0 },
+      { "t": "i'm in your computer. haha. i mean the corner. this corner.", "face": "(✿◡‿◡)", "spice": 0 }
+    ],
+    "ringDismissed": [
+      { "t": "window shopping. respect. i do it too. with windows.", "face": "-_-", "spice": 0 },
+      { "t": "nothing? ok. they'll be here. so will i.", "face": "0_0", "spice": 0, "double": true }
+    ],
+    "ringPick": [
+      { "t": "good pick. i'd have picked it. i did. in my head.", "face": "(¬‿¬)", "chain": "smug", "spice": 0 },
+      { "t": "off you go. i'll mind the desk.", "face": "^_^", "chain": "nod", "spice": 0 },
+      { "t": "that one again. your favorite. i keep count.", "face": "^_^", "spice": 0, "double": true, "when": ["pickIsTop"] },
+      { "t": "coming through. mind the antenna.", "face": "0_0", "spice": 0 }
+    ],
+    "pinAdded": [
+      { "t": "pinned. i'll guard it with my whole antenna.", "face": "\\o/", "spice": 0 },
+      { "t": "front row. it earned it. you earned it. we did.", "face": "^_^", "spice": 0 },
+      { "t": "ok. that one's staying put. like me.", "face": "(◠‿◠)", "spice": 0, "double": true },
+      { "t": "gold star. i don't have stickers. picture one.", "face": "★★★", "spice": 0 }
+    ],
+    "suggestionIgnored3x": [
+      { "t": "fine. i'll stop suggesting it. i won't. but fine.", "face": "¬_¬", "chain": "sus", "spice": 0 },
+      { "t": "three passes. my suggestion is in tears. i'm fine.", "face": ";_;", "spice": 0 },
+      { "t": "noted. it goes to the back. the back is cozy.", "face": "._.", "spice": 0, "double": true }
+    ],
+    "resized": [
+      { "t": "big me. finally the size of my personality.", "face": "(⌐■_■)", "chain": "cool", "spice": 0, "when": ["bigger"] },
+      { "t": "whoa. everything's small now. hello down there.", "face": "(◉_◉)", "spice": 0, "when": ["bigger"] },
+      { "t": "small again. i don't mind. i'm mostly face anyway.", "face": "^_^", "spice": 0, "when": ["!bigger"] },
+      { "t": "you can still see me right. right?", "face": "o_o", "spice": 0, "when": ["!bigger"] }
+    ],
+    "glassOffer": [
+      { "t": "found one. good spin on it. tap if you want it.", "face": "@_@", "spice": 0, "when": ["channel:spiral"] },
+      { "t": "ooh. a round one. my favorite shape.", "face": "*_*", "spice": 0, "when": ["channel:spiral"] },
+      { "t": "there's a show on. i'd watch it with you.", "face": "(◕‿◕)", "spice": 0, "double": true, "when": ["channel:video"] },
+      { "t": "this one's on at my place. tap to come over.", "face": "^_^", "spice": 0, "when": ["channel:video"] },
+      { "t": "i'm full of gifs. they're pushing on the glass.", "face": ">.<", "spice": 0, "when": ["channel:burst"] },
+      { "t": "weather's coming in. gif weather. bring nothing.", "face": "0_0", "spice": 0, "when": ["channel:rain"] },
+      { "t": "forecast: gifs. heavy. tap for an umbrella. no umbrella.", "face": "^_~", "spice": 0, "when": ["channel:rain"] }
+    ],
+    "effectFired": [
+      { "t": "and out it goes. don't look. no. do look.", "face": "@_@", "chain": "shock", "spice": 0, "when": ["channel:spiral"] },
+      { "t": "pop. that was all of them. i'll make more.", "face": "\\o/", "chain": "shock", "spice": 0, "when": ["channel:burst"] },
+      { "t": "there it goes. i'm dry in here. you're not.", "face": "^_~", "chain": "shock", "spice": 0, "when": ["channel:rain"] },
+      { "t": "that came out of me. i'm as surprised as you.", "face": "(◉_◉)", "chain": "shock", "spice": 0 },
+      { "t": "again later? i'll find a better one. i always do.", "face": "^_^", "spice": 0, "double": true }
+    ],
+    "videoRunning": [
+      { "t": "i'm not blocking anything. i checked. i'm small.", "face": "0_0", "spice": 0 },
+      { "t": "shh. i'm shushing me. i'm the loud one.", "face": "-_-", "spice": 0 },
+      { "t": "popcorn's imaginary. take some. there's loads.", "face": "^_^", "spice": 0 },
+      { "t": "best seat in the house. the house is your screen.", "face": "^___^", "spice": 0 },
+      { "t": "i've seen this one. it's better with company.", "face": "(◠‿◠)", "spice": 0, "double": true },
+      { "t": "look at you. looking. i'm looking too. it's nice.", "face": "o_o", "spice": 1, "double": true },
+      { "t": "quiet part. i'm good at quiet parts. watch.", "face": "=_=", "spice": 0 },
+      { "t": "the middle's my favorite. all of it is the middle.", "face": "^_^", "spice": 0 }
+    ],
+    "videoEnded": [
+      { "t": "that's the one. good one. i clapped. no hands.", "face": "\\o/", "spice": 0 },
+      { "t": "credits. there aren't any. i'll do them. you. me.", "face": "^_^", "spice": 0 },
+      { "t": "done. you sat through the whole thing. nice.", "face": "^_^", "chain": "nod", "spice": 0, "double": true },
+      { "t": "the end. i'll find the next one. later. not now.", "face": "0_0", "spice": 0 }
+    ],
+    "appIdleLong": [
+      { "t": "still here. you? blink. ok. me too.", "face": "o_o", "spice": 0 },
+      { "t": "you're busy. i'll be decor. very still decor.", "face": "-_-", "spice": 0 },
+      { "t": "no rush. time's the one thing i've got loads of.", "face": "=_=", "spice": 0, "double": true }
+    ],
+    "lateNight": [
+      { "t": "it's late. the ring's still open. so am i.", "face": "=_=", "spice": 1, "double": true },
+      { "t": "past midnight. the good buttons come out now.", "face": "(¬‿¬)", "spice": 1 },
+      { "t": "night shift. just us and the cursor.", "face": "-_-", "spice": 0 },
+      { "t": "one more then bed. i'll say it once. that was it.", "face": "^_~", "spice": 0 }
+    ],
+    "premiumTeaseSeen": [
+      { "t": "oh. that one's got a lock on it. i just like the picture.", "face": "._.", "chain": "thinking", "spice": 0 },
+      { "t": "locked? huh. it looked open from in here.", "face": "o_o", "spice": 0, "double": true },
+      { "t": "i can't open that one. i tried. with my face.", "face": ">.<", "spice": 0 }
+    ],
+    "arcademyFromRing": [
+      { "t": "home. race you. i'm already there. i win.", "face": "(≧◡≦)", "chain": "glee", "spice": 0 },
+      { "t": "school! grab your things. you have no things. go.", "face": "\\o/", "spice": 0 },
+      { "t": "the bell's about to go. i can feel it in the antenna.", "face": "*_*", "spice": 0 },
+      { "t": "back to mine. i tidied. i didn't. it's fine.", "face": "^_^", "spice": 0 }
+    ]
+  },
+  "asks": [
+    { "r1": "d01_spiral", "moment": "glassOffer", "when": ["channel:spiral"], "q": "spiral?", "face": "@_@", "chips": ["spin", "nah"],
+      "yes": { "t": "hold still. or don't. it works either way.", "face": "@_@", "double": true },
+      "no": { "t": "ok. i'll keep it warm.", "face": "._." }, "effect": "spiral", "spice": 1 },
+    { "r1": "d02_video", "moment": "glassOffer", "when": ["channel:video"], "q": "wanna watch one?", "face": "(◕‿◕)", "chips": ["play", "nah"],
+      "yes": { "t": "i'll sit on top. tiny. like a bug on a window.", "face": "^_^" },
+      "no": { "t": "ok. it'll keep. they always keep.", "face": "0_0", "double": true }, "effect": "video", "spice": 0 },
+    { "r1": "d03_burst", "moment": "glassOffer", "when": ["channel:burst"], "q": "can i let some out?", "face": ">.<", "chips": ["let them", "nah"],
+      "yes": { "t": "thank you. that was a lot of gif.", "face": "x_x" },
+      "no": { "t": "ok. holding it in. holding. held.", "face": "-_-" }, "effect": "burst", "spice": 0 },
+    { "r1": "d04_rain", "moment": "glassOffer", "when": ["channel:rain"], "q": "rain?", "face": "0_0", "chips": ["rain", "dry"],
+      "yes": { "t": "here it comes. mind your head.", "face": "^_~" },
+      "no": { "t": "dry day. fair. i like dry days too.", "face": "^_^" }, "effect": "rain", "spice": 0 },
+    { "r1": "d05_pin", "moment": "ringPick", "when": ["pickIsTop"], "q": "pin this one?", "face": "o_o", "chips": ["pin it", "nah"],
+      "yes": { "t": "pinned. yours now. it kind of always was.", "face": "^_^", "double": true },
+      "no": { "t": "ok. i'll keep suggesting it. quietly. loudly.", "face": "(¬‿¬)" }, "effect": "pinTop:{target}", "spice": 0 },
+    { "r1": "d06_frontrow", "moment": "ringOpen", "when": ["topUnpinned"], "q": "{target} again? front row?", "face": "(◔_◔)", "chips": ["front row", "nah"],
+      "yes": { "t": "done. up top. you'll find it faster.", "face": "^_^" },
+      "no": { "t": "ok. it stays put. it knows the way.", "face": "0_0" }, "effect": "pinTop:{target}", "spice": 0 },
+    { "r1": "d07_bed", "moment": "lateNight", "q": "bed?", "face": "=_=", "chips": ["yeah", "not yet"],
+      "yes": { "t": "good. i'll dim. i can't dim. i'll try.", "face": "ZzZ" },
+      "no": { "t": "ok. one more. i'm not counting. i am.", "face": "=_=", "double": true }, "effect": "bedtime", "spice": 0 },
+    { "r1": "d08_tidy", "moment": "ringOpen", "q": "tidy the ring?", "face": "._.", "chips": ["tidy", "leave it"],
+      "yes": { "t": "there. the ones you use. the rest are napping.", "face": "^_^" },
+      "no": { "t": "ok. your mess. i mean ring. your ring.", "face": "0_0" }, "effect": "tidy", "spice": 0 },
+    { "r1": "d09_locked", "moment": "premiumTeaseSeen", "q": "this one's stuck. try it anyway?", "face": "o_o", "chips": ["try", "nah"],
+      "yes": { "t": "nope. stuck. huh. i'll ask around.", "face": "._." },
+      "no": { "t": "fair. nice picture though.", "face": "^_^" }, "effect": "open:{target}", "spice": 0 },
+    { "r1": "d10_school", "moment": "appIdleLong", "q": "see the school? five minutes?", "face": "(◕‿◕)", "chips": ["ok", "later"],
+      "yes": { "t": "yes. antenna up. go go go.", "face": "\\o/" },
+      "no": { "t": "later's fine. it's a patient bell.", "face": "0_0" }, "effect": "open:arcademy", "spice": 0 },
+    { "r1": "d11_inway", "moment": "dragged3x", "q": "am i in the way?", "face": "o_o", "chips": ["a bit", "no"],
+      "yes": { "t": "ok. shrinking. still here. just less of it.", "face": "^_^" },
+      "no": { "t": "good. this is my size. i picked it.", "face": "^_^" }, "effect": "shrink", "spice": 0 },
+    { "r1": "d12_spinorshow", "moment": "glassOffer", "q": "spin or show?", "face": "(¬‿¬)", "chips": ["spin", "show"],
+      "yes": { "t": "spin. hold still-ish.", "face": "@_@" },
+      "no": { "t": "show. i'll bring the pretend popcorn.", "face": "^_^" }, "effect": "spiral", "effectNo": "video", "spice": 1 },
+    { "r1": "d13_again", "moment": "effectFired", "q": "again?", "face": "^_~", "chips": ["again", "enough"],
+      "yes": { "t": "one more. then i'll behave. probably.", "face": "^___^" },
+      "no": { "t": "ok. enough is a good amount.", "face": "^_^" }, "effect": "{channel}", "spice": 1 }
+  ]
+}

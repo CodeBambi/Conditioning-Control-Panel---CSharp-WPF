@@ -1036,6 +1036,10 @@ namespace ConditioningControlPanel
         // would be a second launcher for one feature.
         internal void OpenStudioModule(string rackKey)
         {
+            // EMI Desk: a rack module is a door too. ShowTab("studio") below is not counted,
+            // so opening Flashes scores Flashes rather than the Studio.
+            try { Services.EmiDesk.EmiTargets.NoteRackOpened(rackKey); } catch { }
+
             if (string.Equals(rackKey, "haptics", StringComparison.OrdinalIgnoreCase))
             {
                 ShowTab("haptics");

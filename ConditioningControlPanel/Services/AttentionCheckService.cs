@@ -287,6 +287,11 @@ namespace ConditioningControlPanel.Services
 
                 _control.StartPulse();
 
+                // EMI Desk (MOMENTS 4.B): a HOLD, not a line. The ring is a timed task the user has
+                // to look at, so she goes blink-only until it resolves. Armed after Show() so a fire
+                // that bailed on one of the guards above never holds her.
+                try { App.EmiDesk?.Fire("attentionCheckShown", null); } catch { }
+
                 _fireStartedAt = DateTime.UtcNow;
                 _dwellMs = 0;
                 _lastGazePoint = null;
@@ -405,6 +410,10 @@ namespace ConditioningControlPanel.Services
 
         private void ResolveActive(bool passed, bool fireEvent = true)
         {
+            // EMI Desk: the single resolution chokepoint, so the single place the HOLD comes off.
+            // Releasing a hold that is not held is a no-op, so the error paths can call in freely.
+            try { App.EmiDesk?.ReleaseHold("attentionCheckShown"); } catch { }
+
             _tickTimer?.Stop();
             _tickTimer = null;
 

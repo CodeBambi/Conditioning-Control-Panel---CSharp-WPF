@@ -4966,6 +4966,8 @@ namespace ConditioningControlPanel.Services
                 }
                 catch (Exception ex) { App.Logger?.Warning("Error expiring targets: {Error}", ex.Message); }
             }
+
+            ReleaseEmiAttentionHoldIfClear();
         }
 
         /// <summary>
@@ -5019,6 +5021,22 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Warning("ATTENTION: in-window target build failed ({Error}) - using a floating window", ex.Message);
             }
             return new FloatingText(text, screen, size, onHit);
+        }
+
+        /// <summary>
+        /// EMI Desk: drop the <c>attentionCheckShown</c> HOLD once no attention target is on screen.
+        /// Called from every path that can empty the list - a hit, an expiry, a teardown - because
+        /// a hold that outlives its reason is silence with no end.
+        /// </summary>
+        private void ReleaseEmiAttentionHoldIfClear()
+        {
+            try
+            {
+                int left;
+                lock (_targets) { left = _targets.Count; }
+                if (left == 0) App.EmiDesk?.ReleaseHold("attentionCheckShown");
+            }
+            catch { }
         }
 
         private void SpawnTarget()
@@ -5102,6 +5120,8 @@ namespace ConditioningControlPanel.Services
 
                         App.Logger?.Information("ATTENTION: Hit {Hits}/{Spawned}, {Remaining} targets remaining", _hits, _spawned, remainingTargets.Count);
 
+                        ReleaseEmiAttentionHoldIfClear();
+
                         // Bring remaining targets to front AFTER the clicked target fully closes
                         if (remainingTargets.Count > 0)
                         {
@@ -5134,6 +5154,14 @@ namespace ConditioningControlPanel.Services
 
                 App.Logger?.Information("ATTENTION: Spawned {Count} targets on all screens, total now: {Total}",
                     spawnedTargets.Count, _targets.Count);
+
+                // EMI Desk (MOMENTS 4.B): the in-video half of the attention-check family, sharing
+                // the standalone check's moment id because it is the same demand on the user's eyes.
+                // A HOLD, not a line. Released the moment no target is left on the books.
+                if (spawnedTargets.Count > 0)
+                {
+                    try { App.EmiDesk?.Fire("attentionCheckShown", null); } catch { }
+                }
 
                 // PHASE F: arm the toy-button alternative for this spawn's lifetime.
                 if (spawnedTargets.Count > 0 &&
@@ -6712,6 +6740,7 @@ namespace ConditioningControlPanel.Services
                     _targets.Clear();
                 }
                 _spawnExpiries.Clear();
+                ReleaseEmiAttentionHoldIfClear();
 
                 App.Logger?.Debug("CloseAll: Closing {Count} video windows, {MsgCount} message windows",
                     _windows.Count, _messageWindows.Count);

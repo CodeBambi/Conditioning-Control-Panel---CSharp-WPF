@@ -392,6 +392,9 @@ namespace ConditioningControlPanel
                     App.Logger?.Information("Version changed from {OldVersion} to {NewVersion}, showing What's New",
                         string.IsNullOrEmpty(lastSeenVersion) ? "(none)" : lastSeenVersion, currentVersion);
 
+                    // EMI Desk (MOMENTS 4.B): read before the stamp below overwrites LastSeenVersion.
+                    try { App.EmiDesk?.Fire("afterUpdate", new { target = currentVersion }); } catch { }
+
                     // Claim the flag HERE, at queue time, not inside the lambda below: everything
                     // that waits on it (the mod picker, the update dialog, FeatureIntroPopup) can
                     // otherwise run in the gap between this method returning and the dispatcher

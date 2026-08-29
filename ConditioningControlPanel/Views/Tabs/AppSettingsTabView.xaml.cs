@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -48,7 +48,7 @@ namespace ConditioningControlPanel.Views.Tabs
         internal static readonly string[] SectionKeys =
         {
             "general", "audio", "devices", "performance",
-            "notifications", "account", "data", "updates",
+            "notifications", "emidesk", "account", "data", "updates",
         };
 
         /// <summary>Guards the scroll-spy against re-checking a pill that is mid-click.</summary>
@@ -70,6 +70,7 @@ namespace ConditioningControlPanel.Views.Tabs
             "devices" => SectionDevices,
             "performance" => SectionPerformance,
             "notifications" => SectionNotifications,
+            "emidesk" => SectionEmidesk,
             "account" => SectionAccount,
             "data" => SectionData,
             "updates" => SectionUpdates,
@@ -83,6 +84,7 @@ namespace ConditioningControlPanel.Views.Tabs
             "devices" => SectionPillDevices,
             "performance" => SectionPillPerformance,
             "notifications" => SectionPillNotifications,
+            "emidesk" => SectionPillEmidesk,
             "account" => SectionPillAccount,
             "data" => SectionPillData,
             "updates" => SectionPillUpdates,

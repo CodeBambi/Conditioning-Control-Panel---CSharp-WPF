@@ -1,0 +1,77 @@
+﻿<Window x:Class="ConditioningControlPanel.EmiMutePromptWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="EMI"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        SizeToContent="Height"
+        Width="420"
+        WindowStartupLocation="CenterOwner">
+
+    <!--
+        The summon-time mute question. Deliberately self-contained: every brush is a literal, so it
+        cannot take a BAML EndOfStream from a cross-dictionary StaticResource lookup the way the
+        Velvet Kit work did. Three answers, no default button: the user has to say which.
+    -->
+    <Window.Resources>
+        <Style x:Key="EmiPromptButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#FFF2FA"/>
+            <Setter Property="Background" Value="#252542"/>
+            <Setter Property="BorderBrush" Value="#4A3A63"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="Margin" Value="6,0,0,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#33294F"/>
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="#FF69B4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="#1A1A2E" BorderBrush="#FF69B4" BorderThickness="1" CornerRadius="10">
+        <StackPanel Margin="22,20,22,18">
+            <TextBlock x:Name="TxtTitle"
+                       Text="EMI is out"
+                       Foreground="#FF69B4"
+                       FontSize="15" FontWeight="SemiBold"
+                       Margin="0,0,0,8"/>
+            <TextBlock x:Name="TxtBody"
+                       Text="Mute the avatar while she is?"
+                       Foreground="#D8D2E8"
+                       FontSize="12.5"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,18"/>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="BtnDontAsk" Content="Don't ask again"
+                        Style="{StaticResource EmiPromptButton}"/>
+                <Button x:Name="BtnKeep" Content="Keep the avatar"
+                        Style="{StaticResource EmiPromptButton}"/>
+                <Button x:Name="BtnMute" Content="Mute"
+                        Style="{StaticResource EmiPromptButton}"
+                        Background="#3A2350" BorderBrush="#FF69B4"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

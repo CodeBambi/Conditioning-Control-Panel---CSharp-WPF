@@ -64,7 +64,12 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Gets the number of seconds since the last keyboard/mouse input.
         /// </summary>
-        private static int GetIdleSeconds()
+        /// <summary>
+        /// Seconds since the last keyboard or mouse input, system-wide. Public so EMI Desk's own
+        /// clock can read the same number this tracker's idle state is derived from, rather than
+        /// standing up a second GetLastInputInfo of its own. Read-only: it changes nothing here.
+        /// </summary>
+        public static int GetIdleSeconds()
         {
             var info = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf<LASTINPUTINFO>() };
             if (!GetLastInputInfo(ref info))

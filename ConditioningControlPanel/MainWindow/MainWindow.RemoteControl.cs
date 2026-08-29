@@ -1459,6 +1459,11 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // EMI Desk (MOMENTS 4.B): the second panic entry point. Nothing else hooks it - the
+                // bark's Panic trigger is raised from the key path only - so without this a remote
+                // panic would leave her chatting.
+                try { App.EmiDesk?.Fire("panicPressed", null); } catch { }
+
                 App.Logger?.Information("[RemoteControl] Panic triggered from remote");
 
                 // Track panic press for Relapse achievement

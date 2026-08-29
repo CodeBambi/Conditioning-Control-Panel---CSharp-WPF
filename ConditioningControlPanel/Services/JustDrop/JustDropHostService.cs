@@ -72,7 +72,13 @@ namespace ConditioningControlPanel.Services.JustDrop
         /// <para>And it STAYS windowed: opening an order used to drag the window borderless behind
         /// the page's back. Fullscreen is now a choice the user makes, from the strip.</para>
         /// </summary>
-        public static void LaunchShop() => Launch(ShopPath, fullscreen: false, duckMain: false);
+        public static void LaunchShop()
+        {
+            // EMI Desk: the ring learns from every open. ShowTab("justdrop") routes here, so
+            // this is the one hook that cannot double-count the shop.
+            try { App.EmiDesk?.NoteOpen("justdrop"); } catch { }
+            Launch(ShopPath, fullscreen: false, duckMain: false);
+        }
 
         /// <summary>
         /// Replay a delivered order. Fullscreen and ducking, because this one IS the experience -
