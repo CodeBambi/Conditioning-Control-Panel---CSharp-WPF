@@ -5676,6 +5676,39 @@ html.arc-mobile[data-arc-orient="portrait"] .campus-topright,
 html.arc-mobile[data-arc-orient="portrait"] .campus-postrow { pointer-events:none; }
 html.arc-mobile[data-arc-orient="portrait"] .campus-topright > *,
 html.arc-mobile[data-arc-orient="portrait"] .campus-postrow > * { pointer-events:auto; }
+
+/* ---- THE CLUSTER TAKES TWO ROWS (owner phone shot, 2026-08-29) -----------
+   The "~126px chip, 14px of daylight" sum two blocks up was measured before
+   the wallet chip (the economy wave) and the account ring (the ID card wave)
+   joined the cluster. Measured again at 390x844: bell 126 + wallet 94 + gear
+   44 + ring 44 + three gaps = 308px, right-aligned from x 378, so the bell chip
+   began at x 46 - UNDER the noticeboard and the folded Bugle (x 12..156). No
+   single row holds both sides on a 390 phone, and trimming padding buys ~30px
+   of the ~100 needed, so the cluster WRAPS instead: the wallet, the gear and
+   the ring keep the top row (their tap targets do not move), and the bell chip
+   drops to a second row, still right-aligned, still first thing under the
+   gear. The break is the container's own ::after - a pseudo-element IS a flex
+   item and honours `order`, so it sits between the ring (order 0) and the bell
+   (order 9) and takes the full width, which is what forces the wrap without
+   touching the chip's markup. Row one now ends at x 378 - 198 = 180 (390) /
+   150 (360), clear of the props' 156 once the row's gap tightens to 8; the
+   bell chip alone is 126 wide and never reaches them.
+
+   HEIGHT: 44 + 3 + 30 = 77 from top:14 puts the bell's bottom at 91px. The
+   plan's own sky (viewBox y 0..72) sits above the alley, so the Records row
+   starts at 110 (390x844), 102 (360x780 - the tightest phone in range, which
+   is why the row gap is 3 and the chip's padding 4, not the 6/6 first tried:
+   that pair ended at 104 and overhung the window by two pixels), 122 (430x932)
+   and 107 on a short frame (the max-height:700 rule below). Measured, not
+   eyeballed - every one of those numbers came off the CDP rig. */
+html.arc-mobile[data-arc-orient="portrait"] .campus-topright {
+  row-gap:3px; column-gap:8px; align-items:center;
+}
+html.arc-mobile[data-arc-orient="portrait"] .campus-topright::after {
+  content:''; display:block; flex:1 0 100%; height:0; order:5; pointer-events:none;
+}
+html.arc-mobile[data-arc-orient="portrait"] .campus-bellchip { order:9; padding:4px 10px; }
+html.arc-mobile[data-arc-orient="portrait"] .campus-postrow { gap:8px; }
 @media (max-height:700px) {
   html.arc-mobile[data-arc-orient="portrait"] svg.campus-plan {
     top:78px; height:calc(100% - 78px);
