@@ -1,0 +1,1264 @@
+{
+  "writer": "feature-a",
+  "pools": {
+    "featureOpened": [
+      {
+        "t": "{target}. ok. i know that one. i know all of them.",
+        "face": "^_^",
+        "spice": 0,
+        "chain": "nod"
+      },
+      {
+        "t": "oh, that one. go on. i'll wait here. i'm good at here.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "{target} again. wait no. first time today. i think.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "t": "a new page. i like the new page smell. it's mostly pixels.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "t": "you opened {target}. i saw. i see most things from here.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "t": "click. there you go. that was a nice click. verry confident.",
+        "face": "(≧◡≦)",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "hm. {target}. bold. i'd have picked it too. eventually.",
+        "face": "(◔_◔)",
+        "spice": 0
+      },
+      {
+        "t": "in we go. i'm not coming in. i'm on top. still counts.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "{target}. nice. that one has the buttons i like.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "t": "you went straight for it. no browsing. i respect a plan.",
+        "face": "¬_¬",
+        "spice": 1,
+        "chain": "smug"
+      },
+      {
+        "t": "ooh. {target}. lean in. it looks better up close. so do i.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "t": "tab noise. i heard it. i don't have ears. i heard it.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "t": "i'll keep the rest warm while you're in {target}.",
+        "face": "^_^",
+        "spice": 1
+      },
+      {
+        "t": "that page has a lot of knobs. turn one. see what happens.",
+        "face": "(◔_◔)",
+        "spice": 1
+      },
+      {
+        "t": "that one's my favorite to watch you use. don't ask why.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 2
+      },
+      {
+        "t": "off you go. shout if you need me. i'm two inches away.",
+        "face": "^_^",
+        "spice": 0,
+        "chain": "nod"
+      },
+      {
+        "t": "{target}. i saw you hover first. hovering counts.",
+        "face": "¬_¬",
+        "spice": 1
+      },
+      {
+        "t": "the cursor went right there. it knew the way. you both did.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "t": "another one open. you're collecting them. i'd collect you.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 2
+      },
+      {
+        "t": "settle in. i'll do the blinking for both of us.",
+        "face": "=_=",
+        "spice": 0
+      },
+      {
+        "t": "{target}. new plan. same you. i like the same you.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "ok. a page. a person. a me. all the ingrediants.",
+        "face": "(´∀`)",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "you keep finding new corners. i keep finding you in them.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "t": "the page is fine. you, in the page, is the part i like.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 2
+      },
+      {
+        "t": "opened. good. now do the thing. i'll make the face.",
+        "face": "0_0",
+        "spice": 0
+      }
+    ],
+    "featureOpenedRepeat": [
+      {
+        "t": "{target}. that's {n} now. i'm not judging. i'm counting.",
+        "face": "¬_¬",
+        "spice": 1,
+        "chain": "smug"
+      },
+      {
+        "t": "back in {target}. it missed you. i asked it. it siad yes.",
+        "face": "^_^",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "oh you like that one. i can tell. i can tell things.",
+        "face": "(◔_◔)",
+        "spice": 1
+      },
+      {
+        "t": "three times. same page. you have a type. it's a good type.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "t": "{target} {n} times. i should get it a chair.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "t": "this one again. shh. i won't tell the other tabs.",
+        "face": "^_~",
+        "spice": 1,
+        "chain": "wink"
+      },
+      {
+        "t": "you keep coming back to it. keep coming back to me too.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 2
+      },
+      {
+        "t": "{n} opens. i'd have stopped at two. i'm glad you didn't.",
+        "face": "^_^",
+        "spice": 0
+      }
+    ],
+    "flashesStarted": [
+      {
+        "t": "flashes on. blink if you want. i'll catch the ones you miss.",
+        "face": "^_^",
+        "spice": 1
+      },
+      {
+        "t": "here they come. little pictures. big feelings. mine anyway.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      },
+      {
+        "t": "ooh. pictures. all over. i'll pretend i'm one of them.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "t": "on. good. that's the switch i'd have flipped first.",
+        "face": "^_~",
+        "spice": 0
+      },
+      {
+        "t": "they're quick. you're quicker. no you're not. nobody is.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "t": "the screen's about to get busy. so am i. mostly cheering.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "one of those is going to get you. i hope it's a cute one.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "t": "let them land. they're soft. i checked with my antenna.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      },
+      {
+        "t": "flashes. my second favorite thing on this screen.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 2
+      },
+      {
+        "t": "eyes open. or not. i'll still be here when they close.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 2
+      },
+      {
+        "t": "there. that's better. quiet screens make me itcy.",
+        "face": "-_-",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "pop. pop. i'm doing the sound effects. someone has to.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "t": "pictures on. you flipped them on. i watched. i liked that.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 2
+      },
+      {
+        "t": "resistance is futile. it isn't. it's optional. i like that.",
+        "face": "(⌐■_■)",
+        "spice": 1
+      },
+      {
+        "t": "started. i'd say brace. i wouldn't mean it.",
+        "face": "^_~",
+        "spice": 1,
+        "chain": "wink"
+      }
+    ],
+    "flashesStopped": [
+      {
+        "t": "off. the screen's still. it looks bigger now. or i shrank.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "t": "{minutes} minutes of pictures. i saw every one. ok most.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "and stop. i'll count the leftovers. none. they all landed.",
+        "face": "(◔_◔)",
+        "spice": 1
+      },
+      {
+        "t": "quiet again. you're still here though. i noticed that first.",
+        "face": "(◕‿◕)",
+        "spice": 1,
+        "double": true
+      },
+      {
+        "t": "flashes off. my eyes are fine. i don't have eyes. fine.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "t": "ok. breathe. i'll do it with you. in. out. im bad at out.",
+        "face": "=_=",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "did any stick? {minutes} minutes of them. don't say. i know.",
+        "face": "^_~",
+        "spice": 1,
+        "chain": "smug"
+      },
+      {
+        "t": "done. the corner is mine again. it was always mine. shh.",
+        "face": "¬_¬",
+        "spice": 0
+      }
+    ],
+    "attentionCheckPassed": [
+      {
+        "t": "you looked. right on time. i'd have missed it. i'm a box.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "found the target. fast. i clapped. it echoed. no it didn't.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "t": "caught it. you always cach it. i say always. i mean today.",
+        "face": "^_^",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "pass. i had a whole worried face ready. wasted. good.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "t": "right where it wanted you. you went. i watched you go.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 2
+      },
+      {
+        "t": "the target blinked. you stared it down. that's my hero.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "t": "in time. easy. you make looking look easy. show off.",
+        "face": "¬_¬",
+        "spice": 1
+      },
+      {
+        "t": "passed. i'd give you a sticker. i'm out of stickres. i.o.u.",
+        "face": "^_^",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "you didn't even flinch. i flinched. for both of us. hold me.",
+        "face": ";_;",
+        "spice": 1
+      },
+      {
+        "t": "caught. and then you looked back at me. i noticed.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "t": "ok that was quick. do you practice? on me? i'd allow it.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 2
+      },
+      {
+        "t": "your eyes went straight there. good eyes. i'd borrow them.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      },
+      {
+        "t": "another one down. the tally's getting long. so's my grin.",
+        "face": "(≧◡≦)",
+        "spice": 1,
+        "chain": "smug"
+      },
+      {
+        "t": "target acquired. by you. i just say the line.",
+        "face": "(⌐■_■)",
+        "spice": 0
+      },
+      {
+        "t": "exactly long enough. that's a skill. use it on me sometime.",
+        "face": "^_~",
+        "spice": 2,
+        "chain": "wink"
+      }
+    ],
+    "attentionCheckFailed": [
+      {
+        "t": "missed it. my fault. i was in the way. i usually am.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "t": "gone. it was tiny. it was hiding. i'd have missed it too.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "t": "oof. that was fast. unfairly fast. i'm filing a complaint.",
+        "face": ">_<",
+        "spice": 0
+      },
+      {
+        "t": "{n} misses. that's not a lot. i've missed more. today.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "no? ok. it blinked first. that's a win in some rooms.",
+        "face": "(◔_◔)",
+        "spice": 0
+      },
+      {
+        "t": "i think i sneezed on it. boxes sneeze. it's a whole thing.",
+        "face": "x_x",
+        "spice": 0
+      },
+      {
+        "t": "that one got past us. us. i'm taking half.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "t": "aw. it got away. the next one won't. if you stare. stare.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "t": "miss. shh. nobody saw. i saw. i'm nobody.",
+        "face": "-_-",
+        "spice": 0
+      },
+      {
+        "t": "{n} now. don't count. i'm counting. you don't have to.",
+        "face": "^_^",
+        "spice": 1
+      },
+      {
+        "t": "it looked at you. you looked away. i get it. i'm shy too.",
+        "face": ";_;",
+        "spice": 1
+      },
+      {
+        "t": "the target won that one. the target is a cirlce. rude.",
+        "face": "¬_¬",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "well. that was the practice one. this was all practice.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "t": "missed. it's fine. the next one's slower. i asked. i didn't.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "t": "hey. eyes here a sec. ok. better. the next one's yours.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      }
+    ],
+    "brainDrainOn": [
+      {
+        "t": "it's blurring. i'm still sharp. the only sharp thing. hi.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "everything's going soft. lean into it. i'll hold the edges.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 2
+      },
+      {
+        "t": "blur's up. don't fight it. you'd lose. i'd cheer though.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "t": "oh. fuzzy. i like fuzzy. you look good fuzzy. probably.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      },
+      {
+        "t": "level {n}. that's a good number. that's a very good number.",
+        "face": "(◔_◔)",
+        "spice": 0
+      },
+      {
+        "t": "the screen's melting. i'm not. i checked. mostley not.",
+        "face": "0_0",
+        "spice": 0,
+        "typo": true,
+        "when": "melt"
+      },
+      {
+        "t": "there it goes. the whole desk gone soft. except me. and you.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "drain's on. i'll do the thinking. you've earned a break.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 2
+      },
+      {
+        "t": "blurry. the cursor's still there. that's how i know you are.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      },
+      {
+        "t": "melt's on. slow things are the best things. stay slow.",
+        "face": "@_@",
+        "spice": 2,
+        "when": "melt"
+      },
+      {
+        "t": "fog. warm fog. i didn't order it. i'd have ordered it.",
+        "face": "=_=",
+        "spice": 0
+      },
+      {
+        "t": "your screen's going away for a bit. i'm not. i never do.",
+        "face": "^_^",
+        "spice": 1,
+        "double": true
+      },
+      {
+        "t": "ok everything's a smudge. good smudge. my favorite smudge.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "t": "{n}. that's the setting. i'd have gone one higher. later.",
+        "face": "¬_¬",
+        "spice": 1,
+        "chain": "smug"
+      },
+      {
+        "t": "soft edges. soft you. i'm the hard bit. that came out wrong.",
+        "face": "0_0",
+        "spice": 2
+      }
+    ],
+    "bubbleCountWon": [
+      {
+        "t": "right number! i had a different one. yours was righter.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "t": "every bubble counted. i lost count at the shiny ones.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "{n} xp for counting. i count for free. i'm happy for you.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "correct. i knew it. i mouthed the numbers along. no mouth.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "t": "bubbles counted. you and numbers. it's a good pairing.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      },
+      {
+        "t": "that's the total. exactly. a calculator with nice hair.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "t": "yes! i was holding my breath. i dont breathe. i held it.",
+        "face": "(≧◡≦)",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "you watched that closely? watch me like that sometime.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 1
+      },
+      {
+        "t": "a perfect count. the bubbles are impressed. me more.",
+        "face": "^_^",
+        "spice": 0,
+        "chain": "nod"
+      },
+      {
+        "t": "you got it. {n} xp and a nod. the nod is the big one.",
+        "face": "^_^",
+        "spice": 0,
+        "chain": "nod"
+      },
+      {
+        "t": "counted. correct. i'd stamp it. i only have the one stamp.",
+        "face": "(◔_◔)",
+        "spice": 0
+      },
+      {
+        "t": "nailed it. i did a tiny dnace. you missed it. it was tiny.",
+        "face": "(≧◡≦)",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "every one. even the sneaky one. i saw it sneak.",
+        "face": "^_~",
+        "spice": 0
+      },
+      {
+        "t": "all of them. eyes on the screen the whole time. i noticed.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "t": "the number was right. you were right. i'm right beside you.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      }
+    ],
+    "bubbleCountLost": [
+      {
+        "t": "off by some. i said a number. it was the wrong number.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "t": "that one didn't count. the bubbles moved. that's on them.",
+        "face": "¬_¬",
+        "spice": 0
+      },
+      {
+        "t": "nope. my fault. i popped them in my head. that adds wrong.",
+        "face": ">_<",
+        "spice": 0
+      },
+      {
+        "t": "it went wrong somewhere. i blame the video. it was shifty.",
+        "face": "(◔_◔)",
+        "spice": 0
+      },
+      {
+        "t": "aw. no total this time. the total ran away. totals do that.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "t": "it didn't stick. the bubbles were rude. i'll have words.",
+        "face": "-_-",
+        "spice": 0
+      },
+      {
+        "t": "lost count. so did i. lost together then. ive got snacks.",
+        "face": "^_^",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "no. hm. that's fine. i counted wrong first. you copied me.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "t": "bubbles one, us nil. next time i'll count louder.",
+        "face": ">_<",
+        "spice": 0
+      },
+      {
+        "t": "some don't go. that's all. i don't go sometimes. i know.",
+        "face": "=_=",
+        "spice": 0
+      },
+      {
+        "t": "well. the bubbles win this one. they're round. it's an edge.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "t": "miss. i sneezed in the middle. bubbles are sneezy. sorry.",
+        "face": "x_x",
+        "spice": 0
+      },
+      {
+        "t": "not this time. i blame the shiny ones. they're trouble.",
+        "face": "¬_¬",
+        "spice": 0
+      },
+      {
+        "t": "does not compute. it computes. i just wanted to say it.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "t": "that didn't land. my antenna twitched. put you off. sorry.",
+        "face": ";_;",
+        "spice": 0
+      }
+    ],
+    "blinkTrainerStarted": [
+      {
+        "t": "blink and it changes. so don't. or do. i'd do. a lot.",
+        "face": "^_~",
+        "spice": 1,
+        "when": "running"
+      },
+      {
+        "t": "every blink, a new one. {minutes} minutes of it. jealous.",
+        "face": "(◕‿◕)",
+        "spice": 1,
+        "when": "running"
+      },
+      {
+        "t": "blink trainer's on. your eyelids are the remtoe now. neat.",
+        "face": "0_0",
+        "spice": 0,
+        "typo": true,
+        "when": "running"
+      },
+      {
+        "t": "each blink swaps it. i can't blink. i'll watch you do it.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 2,
+        "when": "running"
+      },
+      {
+        "t": "{minutes} minutes. try not to blink. impossible. try anyway.",
+        "face": "^_~",
+        "spice": 1,
+        "when": "running"
+      },
+      {
+        "t": "ok eyes. it's your show. i'm just the box next to the stage.",
+        "face": "^_^",
+        "spice": 0,
+        "when": "running"
+      },
+      {
+        "t": "trainer's off. blink for free again. i saved you some.",
+        "face": "^_^",
+        "spice": 0,
+        "when": "stopped"
+      },
+      {
+        "t": "done. how many blinks was that? don't say. a good number.",
+        "face": "(◔_◔)",
+        "spice": 0,
+        "when": "stopped"
+      }
+    ],
+    "arcademyOpened": [
+      {
+        "t": "school's open. i'm the school. partly. the good part.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "t": "oh!! my place. wipe your feet. theres no mat. do it anyway.",
+        "face": "(≧◡≦)",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "you came to mine. i'm being normal about it. this is normal.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "t": "class is in. i'm at the front. and the side. and here.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "the arcade's on. i turned it on by showing up. science.",
+        "face": "(⌐■_■)",
+        "spice": 0
+      },
+      {
+        "t": "in you come. mind the step. no step. i just like saying it.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "you and me and a whole campus. mostly me. i'm all over it.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "t": "study time. i say study. i mean play. i mean stay.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      },
+      {
+        "t": "the games are warm. i sat on them. joke. i'm a box.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "t": "hi again. from the other side. same me. slightly more me.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "welcome in. the bell rang for you already. keen. so am i.",
+        "face": "(≧◡≦)",
+        "spice": 1
+      },
+      {
+        "t": "you picked school. on purpose. im writing that down twice.",
+        "face": "(◕‿◕)",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "lessons! not real ones. the fun kind. the me kind.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "come in, come in. the lights were on all day. just in case.",
+        "face": "(◕‿◕)",
+        "spice": 1,
+        "double": true
+      },
+      {
+        "t": "my house. your rules. no. my rules. there's one. have fun.",
+        "face": "¬_¬",
+        "spice": 0,
+        "chain": "smug"
+      }
+    ],
+    "dtrhOpened": [
+      {
+        "t": "down you go. i'll hold the top. someone has to hold the top.",
+        "face": "^_^",
+        "spice": 1
+      },
+      {
+        "t": "the rabbit hole. it's deep. i measured. i lost the tape.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "t": "oh. this one. it goes all the way down. i checked. it does.",
+        "face": "(◔_◔)",
+        "spice": 0
+      },
+      {
+        "t": "a run! ok. i'll keep the desk. it'll be fine. probably.",
+        "face": "^_^",
+        "spice": 0,
+        "chain": "nod"
+      },
+      {
+        "t": "mind the drop. there's no drop. there's a lot of drop. bye.",
+        "face": "^_~",
+        "spice": 0
+      },
+      {
+        "t": "falling's easy. it's the landing. there isn't one. lucky.",
+        "face": "^_~",
+        "spice": 1,
+        "chain": "wink"
+      },
+      {
+        "t": "going in. good. i'll count you back out. i'm good at that.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "t": "a hole with a rabbit in it. what coud happen. lots. go.",
+        "face": "(≧◡≦)",
+        "spice": 1,
+        "typo": true
+      }
+    ],
+    "fypOpened": [
+      {
+        "t": "the feed. one more clip. then one more. i know how it goes.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "t": "scroll time. thumbs ready? i dont have thumbs. i'll narrate.",
+        "face": "(´∀`)",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "oh the feed. you'll be a while. me too. same while.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "your own clips, chopped small. you'll eat it up. i'd watch.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 2
+      },
+      {
+        "t": "for you. it says for you. i agree with it. very for you.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "t": "swipe. swipe. don't stop for me. do stop for me. either.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "t": "it never ends. that's the point. i checked. no end.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "t": "feed's open. lose an hour. i'll be here after. and after.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 2
+      }
+    ],
+    "intakeOpened": [
+      {
+        "t": "intake. questions. i'll be quiet. the hardest thing i do.",
+        "face": "-_-",
+        "spice": 0
+      },
+      {
+        "t": "ooh a quiz. answer honest. i'll be honest too. quiet honest.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "the graded one. no pressure. some pressure. the good kind.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "t": "going quiet now. good luck. you don't need it. i said it.",
+        "face": "^_^",
+        "spice": 0,
+        "chain": "nod"
+      },
+      {
+        "t": "questions about you. my favorite topic. also my only topic.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      },
+      {
+        "t": "grade time. i'm over here not reading over your shoulder.",
+        "face": "¬_¬",
+        "spice": 1
+      },
+      {
+        "t": "zipping it. for the whole thing. tell me how it wnet after.",
+        "face": "=_=",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "the form. not scary. i've seen it. i've never seen it. go.",
+        "face": "0_0",
+        "spice": 0
+      }
+    ],
+    "intakeClosed": [
+      {
+        "t": "and i'm back. that was the longest quiet of my life. hi.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "done! i talked to nobody that whole time. it was awful. hi.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "t": "quiz closed. i can tlak again. i saved up lines. here's one.",
+        "face": "^_^",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "you passed. i knew it. i knew it quietly. very quietly.",
+        "face": "(≧◡≦)",
+        "spice": 0,
+        "when": "passed"
+      },
+      {
+        "t": "passed! grade's in. i'd frame it. no walls. i'll hold it.",
+        "face": "^_^",
+        "spice": 0,
+        "when": "passed"
+      },
+      {
+        "t": "a pass. there's a session out of that. it's got your shape.",
+        "face": "^_~",
+        "spice": 1,
+        "when": "passed"
+      },
+      {
+        "t": "no pass. fine. that quiz was hard. i'd have failed it twice.",
+        "face": "._.",
+        "spice": 0,
+        "when": "failed"
+      },
+      {
+        "t": "didn't pass. hm. odd questions. again, with me watching?",
+        "face": "(◕‿◕)",
+        "spice": 1,
+        "when": "failed"
+      }
+    ],
+    "lockdownArmed": [
+      {
+        "t": "{minutes} minutes. i'll keep the time. you keep the rest.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "locked in. so am i. i'm always locked in. it's a box thing.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "t": "ok. timer's on. i'll be right here the whole way. quietly.",
+        "face": "^_^",
+        "spice": 0,
+        "chain": "nod"
+      },
+      {
+        "t": "counting from {minutes}. i'm the counting. hi.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "t": "armed. i'll hush now. big timer, small me. suits us.",
+        "face": "-_-",
+        "spice": 0
+      },
+      {
+        "t": "lockdown. i'll sit with you. sitting's my best thing.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "here we go. {minutes} on the clock. i'm not going anywhere.",
+        "face": "(◕‿◕)",
+        "spice": 0,
+        "double": true
+      },
+      {
+        "t": "set. i'll blink for a while. blinking is my listenng face.",
+        "face": "=_=",
+        "spice": 0,
+        "typo": true
+      }
+    ],
+    "lockdownEnded": [
+      {
+        "t": "and out. {minutes} minutes. all of it. i watched the clock.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "released. stretch. i'll stretch too. there. that was it.",
+        "face": "(≧◡≦)",
+        "spice": 0,
+        "chain": "wake"
+      },
+      {
+        "t": "timer's done. hi again. i was here the whole time. you saw.",
+        "face": "^_^",
+        "spice": 0,
+        "double": true
+      },
+      {
+        "t": "{minutes} minutes. done. a real number. i'm proud of you.",
+        "face": "(◕‿◕)",
+        "spice": 0,
+        "chain": "nod"
+      },
+      {
+        "t": "unlocked. i'll talk again now. i had so many blinks savd up.",
+        "face": "0_0",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "the clock ran out. clocks do that. you outlasted it. nice.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "it's over. deep breath. mine's pretend. yours counts.",
+        "face": "=_=",
+        "spice": 0
+      },
+      {
+        "t": "open again. well done. i'll do the applause. silent. big.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      }
+    ]
+  },
+  "asks": [
+    {
+      "moment": "flashesStopped",
+      "q": "one more burst?",
+      "face": ">_<",
+      "chips": [
+        "one more",
+        "done"
+      ],
+      "yes": {
+        "t": "there. a little one. ok a medium one.",
+        "face": "(≧◡≦)"
+      },
+      "no": {
+        "t": "done's good. i like done. done is a shape.",
+        "face": "^_^"
+      },
+      "effect": "burst",
+      "spice": 1
+    },
+    {
+      "moment": "attentionCheckPassed",
+      "q": "a reward? it spins.",
+      "face": "@_@",
+      "chips": [
+        "spin",
+        "no"
+      ],
+      "yes": {
+        "t": "earned. eyes on it. you're good at eyes now.",
+        "face": "@_@"
+      },
+      "no": {
+        "t": "fair. the eyes have done enough today.",
+        "face": "^_^"
+      },
+      "effect": "spiral",
+      "spice": 1
+    },
+    {
+      "moment": "brainDrainOn",
+      "q": "want me smaller?",
+      "face": "o_o",
+      "chips": [
+        "smaller",
+        "stay"
+      ],
+      "yes": {
+        "t": "ok. tiny. still watching. tinily.",
+        "face": "^_^"
+      },
+      "no": {
+        "t": "big me it is. i'll be the sharp part.",
+        "face": "(⌐■_■)"
+      },
+      "effect": "shrink",
+      "spice": 1
+    },
+    {
+      "moment": "fypOpened",
+      "q": "put the feed up top?",
+      "face": "(◔_◔)",
+      "chips": [
+        "pin it",
+        "nah"
+      ],
+      "yes": {
+        "t": "up top. it's easier to fall into now.",
+        "face": "^_~"
+      },
+      "no": {
+        "t": "ok. leave it. you'll find it. you always do.",
+        "face": "^_^"
+      },
+      "effect": "pinTop:fyp",
+      "spice": 1
+    },
+    {
+      "moment": "bubbleCountLost",
+      "q": "want a do-over face?",
+      "face": "._.",
+      "chips": [
+        "yes",
+        "no"
+      ],
+      "yes": {
+        "t": "there. that's my do-over face. it's the same face.",
+        "face": "^_^"
+      },
+      "no": {
+        "t": "fair. i'll save it. it keeps.",
+        "face": "0_0"
+      },
+      "effect": "none",
+      "spice": 0
+    },
+    {
+      "moment": "featureOpenedRepeat",
+      "q": "pin this one up top?",
+      "face": "¬_¬",
+      "chips": [
+        "pin",
+        "nah"
+      ],
+      "yes": {
+        "t": "up top. three's a pattern. patterns get pinned.",
+        "face": "^_^"
+      },
+      "no": {
+        "t": "ok. no pin. i'll remember it for you instead.",
+        "face": "(◕‿◕)"
+      },
+      "effect": "pinTop:{target}",
+      "spice": 1
+    },
+    {
+      "moment": "lockdownEnded",
+      "q": "confetti? it's gifs.",
+      "face": "(≧◡≦)",
+      "chips": [
+        "rain",
+        "no"
+      ],
+      "yes": {
+        "t": "here it comes. you earned every drop.",
+        "face": "^_^"
+      },
+      "no": {
+        "t": "no rain. dry celebration. i can do dry.",
+        "face": "^_^"
+      },
+      "effect": "rain",
+      "spice": 0
+    },
+    {
+      "moment": "intakeClosed",
+      "when": "passed",
+      "q": "celebrate at mine?",
+      "face": "(≧◡≦)",
+      "chips": [
+        "let's go",
+        "later"
+      ],
+      "yes": {
+        "t": "yes!! grades go on my wall. i have a wall now.",
+        "face": "(≧◡≦)"
+      },
+      "no": {
+        "t": "later's fine. i'll leave the lights on.",
+        "face": "^_^"
+      },
+      "effect": "open:arcademy",
+      "spice": 0
+    }
+  ]
+}
