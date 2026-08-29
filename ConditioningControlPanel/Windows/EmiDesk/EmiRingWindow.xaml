@@ -1,0 +1,38 @@
+<Window x:Class="ConditioningControlPanel.EmiRingWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="EMI ring"
+
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowActivated="False"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        SizeToContent="Manual"
+        WindowStartupLocation="Manual"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        Topmost="True"
+        Focusable="False"
+        Visibility="Hidden"
+        Width="600" Height="400">
+
+    <!--
+        THE RING.
+
+        A SIBLING window, not a layer inside EmiDeskWindow: the widget carries only 120 DIPs of pad
+        around her silhouette, and a full fan at a 420 DIP body needs far more than that. This window
+        is sized to the WORK AREA of the monitor she is standing on, so a card can be clamped
+        anywhere on that screen without a second resize, and it is parked with the same
+        physical-pixels-over-DPI arithmetic the widget uses (SEAMS.md: BodyScreenRect and
+        RingAnchorScreenPoint are PHYSICAL PIXELS, never DIPs).
+
+        Nothing in here is hit-testable except the cards themselves. The canvas has no Background at
+        all, and a layered window does not hit-test fully transparent pixels, so the desktop, the app
+        and EMI herself all stay clickable through the gaps in the fan. Closing on a click outside is
+        therefore NOT this window's job: a low-level mouse hook does it (see EmiRingWindow.xaml.cs),
+        which leaves the click itself free to land wherever the user aimed it.
+    -->
+    <Canvas x:Name="Field" Background="{x:Null}" ClipToBounds="False"/>
+</Window>

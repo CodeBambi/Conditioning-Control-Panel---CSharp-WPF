@@ -64,6 +64,23 @@ public sealed class EmiState
     /// <summary>Per-target last-open time (UTC ticks), the decay's clock.</summary>
     [JsonProperty("usageAt")] public Dictionary<string, long> UsageAt { get; set; } = new();
 
+    /// <summary>
+    /// Per-target DECAYED open score: the sum, over every open ever recorded, of
+    /// <c>0.5 ^ (ageInDays / 7)</c>. Kept in the incremental form
+    /// <c>score = score * 0.5^(age/7) + 1</c> on each open, which is algebraically the same sum
+    /// and costs one double per target instead of a list of timestamps. Read it back through
+    /// <c>EmiSuggester.ScoreOf</c>, which applies the remaining decay from <see cref="UsageAt"/>
+    /// to now; the number stored here is only current as of that target's last open.
+    /// </summary>
+    [JsonProperty("openScore")] public Dictionary<string, double> OpenScore { get; set; } = new();
+
+    /// <summary>
+    /// Consecutive ring opens that were closed again without picking a card. Three in a row and
+    /// the ring fires <c>suggestionIgnored3x</c>. Reset by any pick. Chunk B2 owns it; it is
+    /// deliberately NOT <see cref="IgnoreStreak"/>, which counts unanswered offers.
+    /// </summary>
+    [JsonProperty("ringIgnoreStreak")] public int RingIgnoreStreak { get; set; }
+
     // ---- lines -----------------------------------------------------------------
 
     /// <summary>
@@ -161,6 +178,7 @@ public sealed class EmiState
             // A hand-edited file can carry nulls where the ctor put collections.
             s.Pins ??= new List<string>();
             s.Usage ??= new Dictionary<string, int>();
+            s.OpenScore ??= new Dictionary<string, double>();
             s.UsageAt ??= new Dictionary<string, long>();
             s.SeenByPool ??= new Dictionary<string, List<string>>();
             s.RecentIds ??= new List<string>();
@@ -269,6 +287,19 @@ public sealed class EmiState
             var s = Current;
             s.Usage.TryGetValue(targetId, out int n);
             s.Usage[targetId] = n + 1;
+
+            // The decayed score, folded forward before the clock moves: an open worth 1.0 today
+            // is worth 0.5 in a week. Doing it here rather than in the ring means EVERY open
+            // counts, however the feature was reached.
+            s.OpenScore.TryGetValue(targetId, out double score);
+            if (score > 0 && s.UsageAt.TryGetValue(targetId, out long lastAt))
+            {
+                double days = (DateTime.UtcNow - new DateTime(lastAt, DateTimeKind.Utc)).TotalDays;
+                if (days > 0) score *= Math.Pow(0.5, days / 7.0);
+                if (double.IsNaN(score) || double.IsInfinity(score) || score < 0) score = 0;
+            }
+            s.OpenScore[targetId] = score + 1.0;
+
             s.UsageAt[targetId] = DateTime.UtcNow.Ticks;
             SaveSoon();
         }

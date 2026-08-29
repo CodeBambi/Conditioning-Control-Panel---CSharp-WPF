@@ -177,6 +177,9 @@ internal static class ArcademyHostService
             return;
         }
 
+        // EMI Desk: the ring learns from every open, not just its own cards.
+        try { App.EmiDesk?.NoteOpen("arcademy"); } catch { }
+
         _devDoor = devDoor;
         try
         {
