@@ -290,13 +290,15 @@ namespace ConditioningControlPanel.Controls
         /// deployed before v2 expects. A null-valued `descent` would be a third state
         /// nobody specified.
         ///
-        /// `lit_station_ids` remains DELIBERATELY ABSENT. The station registry lives in
-        /// cclabs-web (lib/descent/stations.ts); desktop has no copy and must not invent
-        /// one — a client-authored list of lit stations is a client deciding what it has
-        /// earned. The canvas treats the field as optional and lights nothing without it.
-        /// When `descent` IS present it supersedes the question entirely: the block
-        /// carries the server's own stations, so the canvas resolves what is lit from
-        /// the record instead of from a list this side would have had to make up.
+        /// `lit_station_ids` remains DELIBERATELY ABSENT. As of proxy descent block v3
+        /// (Spiral W2, 2026-08-29) the server emits `descent.stations[]` itself: personal
+        /// keepsakes lit by the day they were banked, world stations pinned to the first
+        /// banked day inside their window, and one personal teaser. Before v3 the key was
+        /// absent and every keepsake rendered dark. Desktop forwards the block RawJson
+        /// verbatim, so nothing here needed to change to carry it, and desktop still
+        /// authors no lit list of its own: the station registry lives in cclabs-web
+        /// (lib/descent/stations.ts) and the web parser ignores `lit_station_ids` outright
+        /// when `stations` is present.
         /// </summary>
         internal static JObject BuildState(DescentBlock? block)
         {
