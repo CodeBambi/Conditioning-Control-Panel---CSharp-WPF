@@ -4709,5 +4709,16 @@
   "emi_desk_target_settings": "Settings",
   "emi_desk_ring_tip_pinned": "Pinned here. Right-click to unpin.",
   "emi_desk_ring_tip_suggested": "Right-click to pin this to her ring.",
-  "emi_desk_ring_tip_locked": "Not open to you yet. Click to see what it takes."
+  "emi_desk_ring_tip_locked": "Not open to you yet. Click to see what it takes.",
+  "emi_desk_tip_close": "Send her away",
+  "emi_desk_tip_cards": "Open her cards",
+  "emi_desk_tip_grip": "Drag to resize",
+  "set2_emi_desk_gestures_hint": "Left-click her to pat her. Right-click her, or the dots by her shoulder, to open her cards.",
+  "label_emi_desk_ring": "Her ring",
+  "tooltip_emi_desk_ring": "Choose what EMI keeps on her ring. Up to six. Whatever you leave unchecked, she fills in from what you actually use.",
+  "set2_emi_desk_ring_hint": "Up to six. Checked stays pinned; the rest is hers to choose.",
+  "emi_desk_ring_reset": "Let her choose",
+  "emi_desk_ring_count": "{0} of {1} pinned. Whatever you leave off, she picks from what you use.",
+  "emi_desk_ring_full": "Six is the whole ring. Unpin one to swap it.",
+  "emi_desk_ring_tile_locked": "Not open to you yet."
 }

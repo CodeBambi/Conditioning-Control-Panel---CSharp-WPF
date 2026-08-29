@@ -1,0 +1,223 @@
+using System;
+using System.IO;
+using Xunit;
+
+namespace ConditioningControlPanel.Tests;
+
+/// <summary>
+/// WAVE 3'S TWO PROMISES, pinned as source tripwires.
+///
+/// <para><b>One:</b> left click pats her, right click opens her cards. The owner's report was "emi
+/// is not reacting to the pats (when u click it)" - wave 2 had put the pat on her head only and
+/// left the other 70% of her silhouette opening the ring. Neither gesture can be exercised in a
+/// headless test (a layered, click-through-free tool window, a global mouse hook and a sibling
+/// window), so what is checked is that the routing is still written the way it was decided.</para>
+///
+/// <para><b>Two:</b> the settings picker and the ring share ONE pin store. The picker is a second
+/// front end onto <c>EmiState.Pins</c>, and the failure it must never have is the obvious one: its
+/// own list, drifting out of step with the fan, so a target checked in settings is not on her ring
+/// and unpinning from the ring leaves the box ticked. Every write goes through
+/// <see cref="ConditioningControlPanel.Services.EmiDesk.EmiSuggester"/>, which is where the max-six
+/// rule and the ordering live.</para>
+///
+/// <para>Source text rather than behaviour for the pin half too, on the house rule the ring tests
+/// already state: <c>EmiState</c> is a disk-backed singleton pointed at the real user's
+/// <c>%LOCALAPPDATA%</c>, and a test that pinned something would edit the machine owner's ring.</para>
+/// </summary>
+public class EmiGestureAndPinWiringTests
+{
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
+            dir = dir.Parent;
+        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
+        return dir!.FullName;
+    }
+
+    private static string Read(params string[] parts) =>
+        File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", Path.Combine(parts)));
+
+    // ---------------------------------------------------------------- the gestures
+
+    [Fact]
+    public void The_left_click_pats_her_and_does_not_open_the_ring()
+    {
+        var body = Read("Windows", "EmiDesk", "EmiDeskWindow.xaml.cs");
+
+        // The pat is what a completed left click ends in...
+        Assert.Contains("PetFromClick();", body);
+
+        // ...and the head-only gate that caused the report is gone for clicks.
+        Assert.DoesNotContain("TryHeadPet", body);
+
+        // The ring is no longer reachable from the left-button path: the ONLY caller of the
+        // body-click seam is the shared gesture road, which the right click and the glyph use.
+        Assert.Contains("private void ToggleRingFromGesture()", body);
+        Assert.Equal(1, CountOf(body, "OnBodyClickedCore(ref handled)"));
+    }
+
+    [Fact]
+    public void The_right_click_and_the_cards_glyph_both_open_the_ring()
+    {
+        var body = Read("Windows", "EmiDesk", "EmiDeskWindow.xaml.cs");
+
+        Assert.Contains("BodyRoot.MouseRightButtonUp += OnBodyRightClick;", body);
+        Assert.Contains("BtnCards.Click += OnCardsClick;", body);
+
+        // Both go through the one road, so they cannot drift apart.
+        Assert.Contains("ToggleRingFromGesture();", body);
+    }
+
+    [Fact]
+    public void The_cards_glyph_exists_and_fades_with_the_x()
+    {
+        var xaml = Read("Windows", "EmiDesk", "EmiDeskWindow.xaml");
+        Assert.Contains("x:Name=\"BtnCards\"", xaml);
+
+        // Hover chrome: invisible at rest, faded in with the close button by FadeChrome.
+        var body = Read("Windows", "EmiDesk", "EmiDeskWindow.xaml.cs");
+        int fade = body.IndexOf("private void FadeChrome(", StringComparison.Ordinal);
+        Assert.True(fade > 0, "FadeChrome is gone; the hover chrome has been rewritten");
+        int end = body.IndexOf("private void OnBodyMouseDown(", fade, StringComparison.Ordinal);
+        var region = body.Substring(fade, end - fade);
+        Assert.Contains("BtnClose.BeginAnimation(OpacityProperty", region);
+        Assert.Contains("BtnCards.BeginAnimation(OpacityProperty", region);
+    }
+
+    [Fact]
+    public void A_click_always_reacts_even_inside_the_pet_cooldown()
+    {
+        var body = Read("Windows", "EmiDesk", "EmiDeskWindow.xaml.cs");
+        var react = Read("Windows", "EmiDesk", "EmiDeskWindow.React.cs");
+
+        // The squash is played BEFORE anything decides what the click meant, so there is no
+        // outcome - a cooldown, a chain in flight, a locked input - that swallows a click in
+        // silence. That silence was the other half of "she is not reacting".
+        int squash = body.IndexOf("PlayClickSquash();", StringComparison.Ordinal);
+        int route = body.IndexOf("PetFromClick();", StringComparison.Ordinal);
+        Assert.True(squash > 0 && route > squash,
+            "the click squash must still run before the click is routed");
+
+        // And inside the cooldown she flicks rather than going silent.
+        Assert.Contains("PetFlickChain", react);
+        Assert.Contains("PlayChain(PetFlickChain);", react);
+    }
+
+    [Fact]
+    public void No_user_facing_string_says_the_forbidden_word()
+    {
+        // EMI's absolute fence: "door" is an Arcademy story spoiler and VOICE.md hard-errors on it.
+        // The hover glyph is her CARDS everywhere a user can read it.
+        foreach (var lang in new[] { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" })
+        {
+            var json = Read("Localization", "Languages", lang + ".json");
+            foreach (var line in json.Split('\n'))
+            {
+                if (!line.Contains("emi_desk", StringComparison.Ordinal)) continue;
+                Assert.DoesNotContain("door", line, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        var xaml = Read("Windows", "EmiDesk", "EmiDeskWindow.xaml");
+        int tip = xaml.IndexOf("ToolTip=\"Open her cards\"", StringComparison.Ordinal);
+        Assert.True(tip > 0, "the cards glyph lost its fallback tooltip");
+    }
+
+    // ---------------------------------------------------------------- one pin store
+
+    [Fact]
+    public void The_settings_picker_writes_through_the_suggester_and_keeps_no_list_of_its_own()
+    {
+        var sec = Read("Views", "Controls", "AppSettings", "EmiDeskSettingsSection.xaml.cs");
+
+        Assert.Contains("EmiSuggester.IsPinned(", sec);
+        Assert.Contains("EmiSuggester.TogglePin(", sec);
+        Assert.Contains("EmiSuggester.ClearPins()", sec);
+
+        // A second store is the whole failure mode. The picker may READ the count, never write it.
+        Assert.DoesNotContain("EmiState.Current.Pins.Add", sec);
+        Assert.DoesNotContain("EmiState.Current.Pins.Remove", sec);
+        Assert.DoesNotContain("EmiState.Current.Pins.Clear", sec);
+        Assert.DoesNotContain("new List<string>", sec);
+    }
+
+    [Fact]
+    public void The_ring_pins_through_the_same_suggester()
+    {
+        var ring = Read("Windows", "EmiDesk", "EmiRingWindow.xaml.cs");
+
+        Assert.Contains("EmiSuggester.TogglePin(", ring);
+        Assert.DoesNotContain("EmiState.Current.Pins.Add", ring);
+        Assert.DoesNotContain("EmiState.Current.Pins.Remove", ring);
+    }
+
+    [Fact]
+    public void The_picker_obeys_the_same_six_and_refreshes_a_live_fan()
+    {
+        var sec = Read("Views", "Controls", "AppSettings", "EmiDeskSettingsSection.xaml.cs");
+
+        // Six comes from the suggester, not from a number typed into the picker.
+        Assert.Contains("EmiSuggester.MaxPins", sec);
+        Assert.DoesNotContain(">= 6", sec);
+
+        // The tile is put back to whatever the STORE ended up saying, so a refused seventh pin
+        // cannot leave a ticked box over an unpinned target.
+        Assert.Contains("bool nowPinned = EmiSuggester.TogglePin(id);", sec);
+        Assert.Contains("tb.IsChecked = nowPinned;", sec);
+
+        // A fan that is open under the pointer shows the change now, not on the next open.
+        Assert.Contains("App.EmiDesk?.RefreshRing()", sec);
+    }
+
+    [Fact]
+    public void The_picker_shows_locked_targets_and_hides_unavailable_ones()
+    {
+        var sec = Read("Views", "Controls", "AppSettings", "EmiDeskSettingsSection.xaml.cs");
+
+        // Same rule as the ring: unavailable is not part of this build or account (skip it),
+        // locked exists and the tier gate says no (show it, disabled, with the reason).
+        Assert.Contains("if (!t.Available) continue;", sec);
+        Assert.Contains("IsEnabled = !locked", sec);
+        Assert.Contains("emi_desk_ring_tile_locked", sec);
+
+        // A disabled control eats its own tooltip unless told otherwise, and the reason IS the
+        // point of drawing the tile at all.
+        Assert.Contains("ToolTipService.SetShowOnDisabled(tile, true);", sec);
+    }
+
+    // ---------------------------------------------------------------- the nudges are wired
+
+    [Fact]
+    public void The_gesture_counters_are_booked_where_the_gestures_happen()
+    {
+        Assert.Contains("EmiState.NotePet()", Read("Windows", "EmiDesk", "EmiDeskWindow.React.cs"));
+
+        var ring = Read("Windows", "EmiDesk", "EmiDeskWindow.Ring.cs");
+        Assert.Contains("App.EmiDesk?.NoteRingOpened()", ring);
+        Assert.Contains("EmiState.NotePinMade()", ring);
+    }
+
+    [Fact]
+    public void The_nudge_fallback_lines_never_say_the_forbidden_word()
+    {
+        var svc = Read("Services", "EmiDesk", "EmiDeskService.cs");
+
+        foreach (var name in new[] { "PetNudgeFallbackText", "RingNudgeFallbackText", "PinNudgeFallbackText" })
+        {
+            int i = svc.IndexOf("const string " + name, StringComparison.Ordinal);
+            Assert.True(i > 0, name + " is gone; the nudges have no line when the pools are missing");
+
+            int end = svc.IndexOf(';', i);
+            var decl = svc.Substring(i, end - i);
+            Assert.DoesNotContain("door", decl, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    private static int CountOf(string haystack, string needle)
+    {
+        int n = 0, i = 0;
+        while ((i = haystack.IndexOf(needle, i, StringComparison.Ordinal)) >= 0) { n++; i += needle.Length; }
+        return n;
+    }
+}

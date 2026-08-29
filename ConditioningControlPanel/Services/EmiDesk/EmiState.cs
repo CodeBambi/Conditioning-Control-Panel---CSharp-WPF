@@ -120,6 +120,41 @@ public sealed class EmiState
     /// <summary>True once she has been summoned at least once (gates the desktopFirstBoot moment).</summary>
     [JsonProperty("firstBootSeen")] public bool FirstBootSeen { get; set; }
 
+    // ---- onboarding (the nudge machine, wave 3) --------------------------------
+
+    /// <summary>
+    /// How many times she has EVER been patted, by any route: a left click on her body or the
+    /// 1.2 s hover on her head. It is the pet nudge's stop condition and the <c>{n}</c> the
+    /// <c>petted</c> pool counts out loud, so a gesture she visibly answered counts even when the
+    /// pet cooldown swallowed the performance - the user learned the gesture either way, which is
+    /// the only thing the nudge is trying to teach.
+    /// </summary>
+    [JsonProperty("petsTotal")] public int PetsTotal { get; set; }
+
+    /// <summary>
+    /// The pet nudge is DONE, forever. Latched once <see cref="PetsTotal"/> reaches
+    /// <c>EmiNudgeMachine.PetGistCount</c> and never cleared by anything but the QA reset: a
+    /// tutorial that comes back after you have learned the thing is the definition of nagging.
+    /// </summary>
+    [JsonProperty("petGistGot")] public bool PetGistGot { get; set; }
+
+    /// <summary>How many times the ring has ever been opened. The ring nudge's stop condition.</summary>
+    [JsonProperty("ringOpens")] public int RingOpens { get; set; }
+
+    /// <inheritdoc cref="PetGistGot"/>
+    [JsonProperty("ringGistGot")] public bool RingGistGot { get; set; }
+
+    /// <summary>True once the user has pinned anything at all, by the ring or by the settings picker.</summary>
+    [JsonProperty("pinGistGot")] public bool PinGistGot { get; set; }
+
+    /// <summary>
+    /// Lifetime fire count per nudge track. The hard cap
+    /// (<c>EmiNudgeMachine.LifetimeCap</c>) is enforced against this, on top of the lines file's
+    /// own <c>limit: {per:"ever"}</c>, so a pool that is re-authored without a limit still cannot
+    /// nag a user forever.
+    /// </summary>
+    [JsonProperty("nudgeFires")] public Dictionary<string, int> NudgeFires { get; set; } = new();
+
     // ============================================================================
     // load / save
     // ============================================================================
@@ -180,6 +215,7 @@ public sealed class EmiState
             s.SeenByPool ??= new Dictionary<string, List<string>>();
             s.RecentIds ??= new List<string>();
             s.Limits ??= new Dictionary<string, int>();
+            s.NudgeFires ??= new Dictionary<string, int>();
             Log.Information("[EmiDesk] state loaded ({Pins} pins, {Usage} tracked targets)",
                 s.Pins.Count, s.Usage.Count);
             return s;
@@ -321,6 +357,114 @@ public sealed class EmiState
         {
             Log.Debug(ex, "[EmiDesk] NoteSummon failed");
             return 0;
+        }
+    }
+
+    // ---- onboarding counters ---------------------------------------------------
+
+    /// <summary>
+    /// Count one pat and return the new total. Latches <see cref="PetGistGot"/> at the machine's
+    /// gist count, which is what makes the pet nudge stop for good.
+    /// </summary>
+    public static int NotePet()
+    {
+        try
+        {
+            var s = Current;
+            s.PetsTotal++;
+            if (!s.PetGistGot && s.PetsTotal >= EmiNudgeMachine.PetGistCount)
+            {
+                s.PetGistGot = true;
+                Log.Information("[EmiDesk] pet nudge retired: {N} pats", s.PetsTotal);
+            }
+            SaveSoon();
+            return s.PetsTotal;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] NotePet failed");
+            return 0;
+        }
+    }
+
+    /// <summary>Count one ring open and return the new total. Latches <see cref="RingGistGot"/>.</summary>
+    public static int NoteRingOpen()
+    {
+        try
+        {
+            var s = Current;
+            s.RingOpens++;
+            if (!s.RingGistGot && s.RingOpens >= EmiNudgeMachine.RingGistCount)
+            {
+                s.RingGistGot = true;
+                Log.Information("[EmiDesk] ring nudge retired: {N} opens", s.RingOpens);
+            }
+            SaveSoon();
+            return s.RingOpens;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] NoteRingOpen failed");
+            return 0;
+        }
+    }
+
+    /// <summary>The user pinned something, anywhere. Retires the pin nudge for good.</summary>
+    public static void NotePinMade()
+    {
+        try
+        {
+            var s = Current;
+            if (s.PinGistGot) return;
+            s.PinGistGot = true;
+            Log.Information("[EmiDesk] pin nudge retired: first pin made");
+            SaveSoon();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] NotePinMade failed");
+        }
+    }
+
+    /// <summary>One nudge landed on screen. Bumps that track's lifetime counter.</summary>
+    public static void NoteNudgeFired(string track)
+    {
+        if (string.IsNullOrWhiteSpace(track)) return;
+        try
+        {
+            var s = Current;
+            s.NudgeFires.TryGetValue(track, out int n);
+            s.NudgeFires[track] = n + 1;
+            SaveSoon();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] NoteNudgeFired({Track}) failed", track);
+        }
+    }
+
+    /// <summary>
+    /// QA ONLY: put the onboarding tracker back to a fresh install so the three nudges can be
+    /// replayed without deleting the whole ledger (which would also throw away the pins, the
+    /// usage scores and every shuffle bag). Reached through <see cref="EmiDebug"/>.
+    /// </summary>
+    public static void ResetOnboarding()
+    {
+        try
+        {
+            var s = Current;
+            s.PetsTotal = 0;
+            s.PetGistGot = false;
+            s.RingOpens = 0;
+            s.RingGistGot = false;
+            s.PinGistGot = false;
+            s.NudgeFires.Clear();
+            SaveNow();
+            Log.Information("[EmiDesk] onboarding tracker reset (QA)");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[EmiDesk] onboarding reset failed");
         }
     }
 

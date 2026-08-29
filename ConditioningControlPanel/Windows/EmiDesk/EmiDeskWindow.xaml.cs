@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.EmiDesk;
 using Serilog;
 
@@ -248,11 +249,23 @@ public partial class EmiDeskWindow : Window
         BodyRoot.MouseLeftButtonDown += OnBodyMouseDown;
         BodyRoot.MouseMove += OnBodyMouseMove;
         BodyRoot.MouseLeftButtonUp += OnBodyMouseUp;
+        BodyRoot.MouseRightButtonUp += OnBodyRightClick;
         BodyRoot.MouseEnter += OnBodyMouseEnter;
         BodyRoot.MouseLeave += OnBodyMouseLeave;
 
         BtnClose.Click += OnCloseClick;
         BtnClose.MouseLeftButtonDown += (_, e) => e.Handled = true;
+
+        BtnCards.Click += OnCardsClick;
+        BtnCards.MouseLeftButtonDown += (_, e) => e.Handled = true;
+
+        try
+        {
+            BtnClose.ToolTip = Loc.Get("emi_desk_tip_close");
+            BtnCards.ToolTip = Loc.Get("emi_desk_tip_cards");
+            ResizeGrip.ToolTip = Loc.Get("emi_desk_tip_grip");
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] chrome tooltips failed"); }
 
         ResizeGrip.MouseLeftButtonDown += OnGripMouseDown;
         ResizeGrip.MouseMove += OnGripMouseMove;
@@ -388,6 +401,11 @@ public partial class EmiDeskWindow : Window
             BtnClose.Width = chip;
             BtnClose.Height = chip;
             BtnClose.Margin = new Thickness(0, bh * 0.02, bw * 0.02, 0);
+
+            // The cards glyph is the x's mirror: same chip, same inset, other corner.
+            BtnCards.Width = chip;
+            BtnCards.Height = chip;
+            BtnCards.Margin = new Thickness(bw * 0.02, bh * 0.02, 0, 0);
 
             // The grip's HIT AREA, floored at 22 DIP so the cursor catches it at every body width
             // (owner call, QA 2026-08-29). The glyph inside it does not grow with it.
@@ -980,6 +998,11 @@ public partial class EmiDeskWindow : Window
             var a = new DoubleAnimation(to, TimeSpan.FromMilliseconds(140));
             BtnClose.BeginAnimation(OpacityProperty, a);
 
+            // The cards glyph rides the x exactly: same fade, same 140 ms, opposite corner. One
+            // animation object cannot drive two elements, so it gets its own with the same value.
+            var c = new DoubleAnimation(to, TimeSpan.FromMilliseconds(140));
+            BtnCards.BeginAnimation(OpacityProperty, c);
+
             // The x is hover-only; the grip is not. It rests faint and goes solid under the
             // pointer, so a user who has never dragged her still sees where the corner is.
             var g = new DoubleAnimation(to <= 0 ? GripRestOpacity : 1.0, TimeSpan.FromMilliseconds(140));
@@ -1085,11 +1108,17 @@ public partial class EmiDeskWindow : Window
                 if (handled) return;
             }
 
-            // Her HEAD is the pet, and a pet is never also a ring toggle.
-            if (TryHeadPet(p)) return;
+            // QA ONLY, and deliberately awkward to hit by accident: Ctrl+Shift+Alt+click replays
+            // the gesture tutorial. Checked BEFORE the pat so the pat cannot eat it.
+            if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift | ModifierKeys.Alt))
+            {
+                App.EmiDesk?.ResetOnboarding();
+                return;
+            }
 
-            try { OnBodyClickedCore(ref handled); }
-            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] body-click seam threw"); }
+            // LEFT CLICK IS THE PAT, everywhere on her. The ring is the RIGHT button now, or the
+            // cards glyph on hover. See PetFromClick for why.
+            PetFromClick();
         }
         catch (Exception ex)
         {
@@ -1097,21 +1126,74 @@ public partial class EmiDeskWindow : Window
         }
     }
 
+    /// <summary>
+    /// RIGHT CLICK ON HER BODY OPENS THE RING (owner, 2026-08-29). It used to be the left click,
+    /// which is now the pat.
+    ///
+    /// <para>No drag bookkeeping here on purpose: dragging is a left-button gesture, so a right
+    /// click can never be the tail of a move and never needs the 6 DIP threshold. The squash still
+    /// plays, so the button that does NOT pat her still visibly registers.</para>
+    /// </summary>
+    private void OnBodyRightClick(object sender, MouseButtonEventArgs e)
+    {
+        try
+        {
+            e.Handled = true;
+            if (InputLocked || _transiting) return;
+
+            RaiseActivity();
+            PlayClickSquash();
+            ToggleRingFromGesture();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] body right-click failed");
+        }
+    }
+
+    /// <summary>The hover glyph: a plain left click on it opens the same ring.</summary>
+    private void OnCardsClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (InputLocked || _transiting) return;
+            RaiseActivity();
+            ToggleRingFromGesture();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] cards glyph failed");
+        }
+    }
+
+    /// <summary>
+    /// The one road to the ring, so the right click and the glyph cannot drift apart. Goes through
+    /// the same partial seam the left click used to, which keeps the ring's own file the only place
+    /// that knows what a ring is.
+    /// </summary>
+    private void ToggleRingFromGesture()
+    {
+        bool handled = false;
+        try { OnBodyClickedCore(ref handled); }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] body-click seam threw"); }
+    }
+
     // ---- pet ------------------------------------------------------------------
 
     /// <summary>
-    /// The desk's pet gesture: rest the pointer on her HEAD for 1.2 s. The campus pets on a short
-    /// press, but a press on the desk is the ring click, so the gesture moved to a hover. The
-    /// cooldown and the pose are the campus ones (widget.js <c>pet()</c>): inside the cooldown she
-    /// only winks, so spam cannot loop the show.
+    /// The second way to pat her: rest the pointer on her HEAD for 1.2 s. Since wave 3 the LEFT
+    /// CLICK does it too, anywhere on her, and that is the gesture she teaches; this one survives
+    /// because it is how you pat her without meaning to open anything, and because it is the only
+    /// pat available while a card fan is up under the pointer.
+    ///
+    /// <para>The cooldown and the pose are the campus ones (widget.js <c>pet()</c>): inside the
+    /// cooldown she only winks, so spam cannot loop the show.</para>
     /// </summary>
     private void UpdatePetHover(Point p)
     {
         try
         {
-            double bh = _bodyWidth * BodyAspect;
-            bool onHead = p.Y >= 0 && p.Y <= bh * HeadBottomFrac && p.X >= 0 && p.X <= _bodyWidth;
-            if (!onHead) { DisarmPet(); return; }
+            if (!IsOnHead(p)) { DisarmPet(); return; }
             if (_petArmed || _petTimer != null) return;
 
             _petTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
@@ -1161,6 +1243,7 @@ public partial class EmiDeskWindow : Window
             {
                 _petCooldownUntil = DateTime.UtcNow.AddMilliseconds(PetCooldownMs);
                 PlayChain("pet");
+                CountPat();
             }
             App.EmiDesk?.Fire("petted");
         }

@@ -258,10 +258,18 @@ Six cards, ever. No scroll, no second page.
   has not already earned six unlocked ones.
 - **Every open counts, wherever it came from.** `App.EmiDesk.NoteOpen(id)` is called from
   `MainWindow.ShowTab`, `OpenStudioModule` and each host's `Launch` — not only from the ring.
-- **Interactions** — left-click opens (via `Pick`, which owns the usage counter and the moments),
-  right-click pins/unpins (max 6; pinning all six turns the suggester off, deliberately), Escape or a
-  click anywhere else folds it, dragging her folds it on the **first movement** rather than on the
-  drop.
+- **Opening it** (wave 3, and it changed) - **right-click her body**, or left-click the **cards
+  glyph**, the six-dot chip that fades in top-left on hover opposite the x. The **left click is the
+  pat now** and never opens the ring: see §13. Escape, a click anywhere else, a second right-click
+  or the glyph again folds it; dragging her folds it on the **first movement** rather than the drop.
+  A pat does **not** fold it (a pat is affection, not a dismissal, and folding on one would grow
+  `RingIgnoreStreak` on the friendliest thing the user does).
+- **Card interactions** - left-click a card opens it (via `Pick`, which owns the usage counter and
+  the moments), right-click a card pins/unpins it (max 6; pinning all six turns the suggester off,
+  deliberately). Unchanged by wave 3, and the ring window's own handlers must stay that way.
+- **Pinning from settings** - the Settings > EMI Desk > *Her ring* picker is a second front end onto
+  the SAME `EmiState.Pins`, always written through `EmiSuggester.TogglePin` / `ClearPins`. There is
+  no second store, and a source guard (`EmiGestureAndPinWiringTests`) keeps it that way.
 - **Layout** — a full circle when there is room, and a half fan pushed *away* from whichever screen
   edge she is parked against, then every card clamped into the work area regardless (which is what
   makes a corner park honest). Radius is `BodyWidth/2 + CardW/2 + 14` DIP, bumped just enough that
@@ -347,6 +355,9 @@ are a content backlog, not a bug.
 | `EmiDeskOffers` | `true` | Whether she may ask (offers). Off = the ask branch never fires. |
 | `EmiDeskGlass` | `true` | Whether the glass may flip to a channel. |
 | `EmiDeskWidth` | `220` | Her body width in DIPs (152 … 420). **The only home for the width** — `EmiState` keeps the rect and the monitor, not the size. `RestorePlacement()` re-reads this on every summon, so a change made while she was away (the shrink offer, the slider) is on her when she next comes out. |
+
+The section has a **seventh row** since wave 3, *Her ring*, which is not an `AppSettings` key at
+all: it writes `EmiState.Pins` through `EmiSuggester`. See 13.4.
 
 ### 7.2 The mute arbiter — the product's core rule
 
@@ -493,6 +504,7 @@ Two documented environment variables, absent in every normal launch:
 |---|---|
 | `EMI_DESK_IDLE_MS` | Overrides `EmiChannels.IdleBeforeFlip` (clamped 1 000 … 3 600 000 ms) so the glass is reachable inside a play-test instead of after 90 s. |
 | `EMI_DESK_DEBUG` | The **QA cadence**: skips the per-moment cooldown, the 45 s global floor, the odds roll, and the *two cadence* ask gates (the 10-minute gap and the 3-summon minimum). |
+| `EMI_DESK_RESET_ONBOARDING` | Puts the three gesture nudge tracks back to a fresh install at startup (pat count, ring opens, the three gist latches, the lifetime fire counts) so the tutorial can be play-tested more than once per machine. Only those five fields; the summon count and the streaks are untouched. **Ctrl+Shift+Alt+click her body** does the same thing live, without a restart. |
 
 `EMI_DESK_DEBUG` moves **nothing that protects the user**: holds, the panic silence, bedtime, limits,
 spice, feasibility and the ignore streak are all still in force. When either is set the launch logs
@@ -614,11 +626,10 @@ stops being testable and the corner rots again.
 The rotate sits **above** the scales: a squash applied after a rotation shears her.
 
 - **Click** squashes to `SquashY 0.92 / SquashX 1.06` over `SquashDownMs 90` and settles back over
-  `SquashUpMs 260` with an elastic ease, alongside the ring toggle.
-- **Head click** (top `HeadBottomFrac = 0.30` of her body) is an immediate pet that honours the
-  existing pet cooldown and does **not** toggle the ring. Inside the cooldown it still squashes, and
-  it still eats the click: a deliberate trade, since a head click that opened the ring would make the
-  pet feel like a misfire.
+  `SquashUpMs 260` with an elastic ease. It runs **before** the click is routed, so no outcome can
+  swallow a click in silence.
+- **Head click** was the wave-2 pet and is **gone as a special case**: wave 3 made the whole
+  silhouette the pat. `HeadBottomFrac = 0.30` now only arms the 1.2 s **hover** pet. See §13.
 - **Drag** drives `WobbleRotate` from a low-passed horizontal velocity (`WobbleVelKeep 0.78`,
   `WobbleFollow 0.35`, `WobbleDegPerVel 0.010`) clamped to `WobbleMaxDeg 9`, swaps the face to
   `>_<` past `WobbleFaceVel 420` and `@_@` past `WobbleDizzyVel 1150`, and settles as a damped
@@ -692,3 +703,115 @@ Two more fell out of the live lap:
   pet, an idle beat that slipped the stop - used to repaint the bubble, and a chain frame with no
   text used to clear it, leaving the two chips sitting under an empty crown. `OnBubbleTextCore` now
   returns early while `_ask != null`. The ask cadence is unaffected: it calls `ShowBubble` directly.
+
+---
+
+## 13. Wave 3: the gestures, the nudges and the ring picker (2026-08-29)
+
+Owner report, verbatim: *"I still see emi Not reacting to the pats (when u click it) we should have
+the left click pat emi. Make it know btw, some barks every so and often till the user gets the gist,
+then no more, nudging towards the petting. Also how can a user customize the bubbles with their
+favourite feat rn?"*
+
+### 13.1 The gesture table, as it now stands
+
+| Gesture | What it does |
+|---|---|
+| **Left-click anywhere on her body** | **Pat.** Squash + the `pet` chain + a line from the `petted` pool. |
+| Left-click inside a live glass channel | Belongs to the glass (unchanged, and still resolved geometrically). |
+| **Right-click her body** | **Open / fold the ring.** |
+| **Left-click the cards glyph** (top-left, hover) | Open / fold the ring. |
+| Hover her head for 1.2 s | Pat. The second trigger for the same gesture; it counts the same. |
+| Left-click the x (top-right, hover) | Send her away. |
+| Drag past 6 DIP | Move her. Folds the ring on the first movement. |
+| Drag the corner grip | Resize, 152..420 DIP, aspect locked. |
+| Right-click a ring CARD | Pin / unpin it. |
+| Escape, or a click anywhere else | Fold the ring. |
+| Ctrl+Shift+Alt+left-click her body | **QA only**: replay the gesture tutorial. |
+
+The **6 DIP click/drag threshold is still untouched** and must stay untouched: it is what separates
+a click from a drag on a window with no chrome.
+
+**Why the left click had to move.** Wave 2 put the pat on the top 30% of her and left the other 70%
+toggling the ring, so the obvious gesture - click the mascot - did the one thing that is not
+affection. `PetFromClick()` in `React.cs` now consumes **every** completed left click on her body,
+and returns true on all of its early exits (a chain in flight, input locked, mid-transit) because
+the caller has already played the squash: a click never goes nowhere.
+
+**Inside `PetCooldownMs` (6 s)** she plays `PetFlickChain` instead: `^_~` for 320 ms, rest for 180,
+with the pet pose and a bounce, and **no line**. Not the `wink` chain, which runs 1.28 s and reads
+as a whole beat. This is also what makes a **double click harmless** - the second click of the pair
+lands ~200 ms into a 6 s cooldown, so it can never draw a second line.
+
+**Only a pat that got past the cooldown counts** toward `EmiState.PetsTotal`. The flicks are
+acknowledgement, not affection she registered; counting them would let a mashed pointer reach the
+"gist" in one second.
+
+### 13.2 The cards glyph
+
+`BtnCards` in `EmiDeskWindow.xaml`: 18 DIP, top-LEFT, six pink pixel dots in a `#E60E0E1C` disc with
+a `#FF69B4` ring - the exact mirror of `BtnClose`, on the same 140 ms `FadeChrome` fade, scaled by
+the same `chip` in `ApplyBodyWidth`. It exists because **nothing on a desktop advertises a right
+click**, and the ring had just lost its only discoverable affordance.
+
+> **The word "door" is on EMI's absolute fence** (`docs/emi-desk/tools/check-lines.py`, `VOICE.md`):
+> it is an Arcademy story spoiler. Call this thing her **cards** in every string, tooltip and loc
+> key. Code identifiers are unconstrained; user-visible text is not.
+
+### 13.3 The nudge machine
+
+`Services/EmiDesk/EmiNudges.cs`. Three teaching tracks, each with a pool of the same name in
+`desk-lines.json` (priority 2, spice 0, `limit {per:"ever", max:6}`):
+
+| Track | First | Repeat | Stops forever when |
+|---|---|---|---|
+| `petNudge` | 25 s after a summon | 4 min | `PetsTotal >= 3` (latched as `PetGistGot`) |
+| `ringNudge` | 40 s, from the **2nd** summon | 6 min | `RingOpens >= 2` (latched as `RingGistGot`) |
+| `pinNudge` | on a ring open, 900 ms after the fan deals, at most once per summon | - | the first pin is made (`PinGistGot`) |
+
+Shared brakes: a **hard lifetime cap of 6 fires per track**, **never two nudges within 90 s**, and
+nothing at all unless `Quiet` - which reuses `EmiDeskService.AskSituationOk()` plus "she is visible,
+no chain is live, no engine hold", so the tutorial cannot develop its own idea of calm and drift
+away from the offers'.
+
+**`EmiNudgeMachine` is pure**: no timers, no dispatcher, no `App`, an injectable clock and the world
+behind `IEmiNudgeWorld`. That is what lets `EmiNudgeMachineTests` walk twenty summons and every
+stopping condition in a millisecond, and it is the property to protect - a teaching line that
+outlives the lesson is the single easiest way to make her the thing people turn off.
+
+**Attempt vs fire.** `Attempted(world, track, spoke)` is called whether or not a line reached the
+screen. The repeat clock and the 90 s floor move on the **attempt**, so an engine refusal costs a
+retry interval instead of turning the 5 s poll into a hot loop; only a line that really landed
+spends one of the six lifetime fires.
+
+**`DrawNudge` is deliberately two-path.** When `EmiLineEngine.Instance.MomentIds` knows the track,
+the engine's answer is final (a refusal is a refusal - faking a line past a cooldown would make the
+tutorial the loudest thing she owns). When it does **not** know the track at all - the pools have
+not landed in this tree - a hardcoded line stands in, behind nothing but the safety hold. That path
+never goes through `Fire`, which is why the track ids are consts: `EmiMomentIdWiringTests` scans
+`Fire("...")` literals, exactly as `ArcademyByeMoment` does.
+
+**QA:** `EMI_DESK_RESET_ONBOARDING=1` (see §10.6) or **Ctrl+Shift+Alt+click her body** replays the
+whole tutorial, re-arming against the current summon so the first pet nudge is 25 s away without a
+restart. It resets only the five onboarding fields; the summon count and the streaks are untouched.
+
+### 13.4 The ring picker in settings
+
+Row 7 of `EmiDeskSettingsSection`: a `WrapPanel` of 92x66 tiles, one per **available** target, art +
+name, pink frame and a dot when pinned. **Checked = pinned**, into the same `EmiState.Pins` the
+ring's own right-click writes, through `EmiSuggester.TogglePin` - never a list of its own. "Let her
+choose" is `EmiSuggester.ClearPins()`.
+
+Three details that are load-bearing:
+
+- At six pins every unchecked unlocked tile goes **disabled**, so `TogglePin`'s refusal of a seventh
+  is something the user sees coming rather than a click that silently does nothing. The tile is then
+  set to whatever the **store** ended up saying, not to what the click asked for.
+- **Locked targets are shown, disabled, with the gate reason**; unavailable ones are skipped
+  entirely. Same rule as the ring, and `ToolTipService.SetShowOnDisabled` is required or the reason
+  never appears.
+- The wall is **rebuilt on every Loaded**, not refreshed: a pledge landing or a mod uninstall changes
+  `Available` / `Locked` while the tab is closed, and both are delegates, not properties.
+
+`EmiDeskService.RefreshRing()` re-fans an open ring from any thread, so a pin made in settings shows
+in a fan that happens to be up rather than on the next open.

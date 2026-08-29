@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Serilog;
@@ -129,6 +129,31 @@ public static class EmiSuggester
         {
             Log.Warning(ex, "[EmiDesk] pin toggle failed for {Target}", id);
             return IsPinned(id);
+        }
+    }
+
+    /// <summary>
+    /// Drop every pin, which is the settings picker's "let her choose" button: the ring goes back
+    /// to being six scored suggestions. Returns how many pins were cleared, so the caller can skip
+    /// a save and a re-fan when there was nothing to clear.
+    /// </summary>
+    public static int ClearPins()
+    {
+        try
+        {
+            var st = EmiState.Current;
+            int n = st.Pins.Count;
+            if (n == 0) return 0;
+
+            st.Pins.Clear();
+            EmiState.SaveSoon();
+            Log.Information("[EmiDesk] pins cleared ({Count}), the ring is hers again", n);
+            return n;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[EmiDesk] ClearPins failed");
+            return 0;
         }
     }
 

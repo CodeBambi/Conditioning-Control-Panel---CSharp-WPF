@@ -105,6 +105,11 @@ public partial class EmiDeskWindow
         {
             try { App.EmiDesk?.Fire("ringOpen"); }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ringOpen moment failed"); }
+
+            // The onboarding side of the same event: count the open (two of them and she stops
+            // teaching the gesture) and let the machine decide whether to mention pinning.
+            try { App.EmiDesk?.NoteRingOpened(); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ring-open bookkeeping failed"); }
         }
     }
 
@@ -221,6 +226,11 @@ public partial class EmiDeskWindow
         try
         {
             if (!e.Pinned) return;
+
+            // One pin ever is the whole lesson: the pin nudge never speaks again after this.
+            try { EmiState.NotePinMade(); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] pin bookkeeping failed"); }
+
             App.EmiDesk?.Fire("pinAdded", new { target = e.Slot.Target.Id });
         }
         catch (Exception ex)

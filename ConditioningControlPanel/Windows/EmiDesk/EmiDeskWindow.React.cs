@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -78,9 +78,9 @@ public partial class EmiDeskWindow
         }
     }
 
-    // ---------------------------------------------------------------- the head click
+    // ---------------------------------------------------------------- the pat
 
-    /// <summary>Is this body-local point on her head? The same region the hover pet arms on.</summary>
+    /// <summary>Is this body-local point on her head? The region the HOVER pet arms on.</summary>
     private bool IsOnHead(Point p)
     {
         double bh = _bodyWidth * BodyAspect;
@@ -88,43 +88,83 @@ public partial class EmiDeskWindow
     }
 
     /// <summary>
-    /// A click on her HEAD is a pet, not a ring toggle (owner, 2026-08-29). The 1.2 s hover pet
-    /// stays - it is how you pet her without meaning to open anything - but waiting more than a
-    /// second for any acknowledgement at all is what made her feel like furniture.
+    /// The half-second acknowledgement she gives a pat that lands inside the cooldown: one wink and
+    /// back to rest, with the pet pose and a bounce, and no line.
     ///
-    /// <para>Returns true when the click was consumed, which is the whole contract: a head click
-    /// NEVER falls through to the ring. Inside the pet cooldown it is consumed too, and the squash
-    /// the caller already played is the entire answer - the alternative is a pet loop you can spam,
-    /// which is exactly what <c>widget.js</c>'s cooldown exists to prevent.</para>
+    /// <para>Not the <c>wink</c> chain, which runs 1.28 s and reads as a whole beat of its own. The
+    /// point of this one is that it is over before you can pat again, so mashing her reads as
+    /// "she keeps noticing" rather than as a queue of animations you have to sit through.</para>
     /// </summary>
-    private bool TryHeadPet(Point p)
+    private static readonly EmiChain PetFlickChain = new(
+        "petFlick", "PAT (cooling down)",
+        new[] { new EmiFrame("^_~", 320), new EmiFrame(EmiChains.RestFace, 180) },
+        Move: "bounce", BodyFrame: "pet");
+
+    /// <summary>
+    /// LEFT CLICK ANYWHERE ON HER BODY IS A PAT (owner, 2026-08-29). Wave 2 put the pat on her head
+    /// only and left the rest of her opening the ring, which meant the obvious gesture - click the
+    /// mascot - did the one thing that is not affection, and the report came back as "emi is not
+    /// reacting to the pats". Her whole silhouette is the pat now; the ring moved to the right
+    /// button and to the cards glyph.
+    ///
+    /// <para>Returns true whenever the click was consumed, which on this path is ALWAYS. The
+    /// caller has already played the squash, so every one of the early exits below still leaves a
+    /// visible reaction on screen: a click is never silently swallowed, which was the other half of
+    /// the same complaint.</para>
+    ///
+    /// <para>Inside <see cref="PetCooldownMs"/> she flicks instead of speaking. That is also what
+    /// makes a double click harmless: the second click of the pair lands about 200 ms into a 6 s
+    /// cooldown, so it can never draw a second line.</para>
+    /// </summary>
+    private bool PetFromClick()
     {
         try
         {
-            if (!IsOnHead(p)) return false;
             if (_transiting || InputLocked) return true;
 
-            // LAW 3: a line in flight is never cut for a head-pat. Still consumed - a click that
-            // opened the ring from her forehead because she happened to be mid-sentence would be
-            // the least predictable thing on the desktop.
+            // LAW 3: a line in flight is never cut for a pat. Consumed anyway - a click that opened
+            // the ring because she happened to be mid-sentence would be the least predictable
+            // thing on the desktop.
             if (_player.IsLive) return true;
 
+            // The hover pet and the click pat are one gesture with two triggers. Disarming here
+            // stops a pointer that is resting on her head from firing a second pat 1.2 s later.
             DisarmPet();
             _petArmed = true;
             RaiseActivity();
 
-            if (DateTime.UtcNow < _petCooldownUntil) return true;
+            if (DateTime.UtcNow < _petCooldownUntil)
+            {
+                PlayChain(PetFlickChain);
+                return true;
+            }
 
             _petCooldownUntil = DateTime.UtcNow.AddMilliseconds(PetCooldownMs);
             PlayChain("pet");
+            CountPat();
             App.EmiDesk?.Fire("petted");
             return true;
         }
         catch (Exception ex)
         {
-            Log.Debug(ex, "[EmiDesk] head pet failed");
-            return false;
+            Log.Debug(ex, "[EmiDesk] pat failed");
+            return true;
         }
+    }
+
+    /// <summary>
+    /// Book one pat. Shared by the click pat and the 1.2 s hover pet so the two cannot drift: this
+    /// count is what the pet nudge watches to decide the user has the gist, and a pat that did not
+    /// count would keep her teaching a lesson that was already learned.
+    ///
+    /// <para>Only a pat that got PAST the cooldown counts. The winks inside it are acknowledgement,
+    /// not affection she registered, and letting a mashed pointer reach the gist in one second
+    /// would defeat the point of teaching the gesture at all.</para>
+    /// </summary>
+    private void CountPat()
+    {
+        try { EmiState.NotePet(); }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] pat bookkeeping failed"); }
     }
 
     // ---------------------------------------------------------------- the drag wobble

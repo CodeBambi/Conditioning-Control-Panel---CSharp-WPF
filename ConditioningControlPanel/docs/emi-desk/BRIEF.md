@@ -24,6 +24,10 @@ Commit on `feat/emi-desk` when your chunk builds; never push, never open a PR, n
    chord: the WH_KEYBOARD_LL pause/panic hook shadows bare keys). Check it does not clash with the
    Ctrl+Alt+G Quick Recal chord or the panic/pause defaults. No double-click dismiss (it would delay
    the ring click).
+
+   > **AMENDED 2026-08-29 (wave 3, owner):** the LEFT CLICK PATS HER, anywhere on her body. The ring
+   > moved to the RIGHT CLICK plus a hover "cards" glyph top-left. See decision 5 and
+   > `docs/primers/EMI_DESK_PRIMER.md` 13.
 3. **Intro / outro ~1s.** Summon: pixel smoke bomb + sparkles, then CRT power-on (scale 0.02 ->
    flat line -> full, 4 steps), then the `wake` chain. Dismiss: `wink` chain, CRT power-off, sparkle
    scatter. `pitch-demo.js` `summon()` / `dismiss()` / `smoke()` are the reference.
@@ -35,14 +39,39 @@ Commit on `feat/emi-desk` when your chunk builds; never push, never open a PR, n
    answer when the prompt is dismissed = keep the avatar. Arbiter when NOT muted: avatar owns voice,
    EMI owns screen: while a tube bubble is live EMI holds to blink-only faces (+20s tail); an EMI reveal
    or fired effect counts against BarkService's min-gap.
-5. **The ring.** Click her body: 6 cards fan around her (away from screen edges), each a 76x58 card
+5. **The ring.** Right-click her body (wave 3; it was the left click, which now pats her), or
+   left-click the six-dot cards glyph that fades in top-left on hover: 6 cards fan around her (away from screen edges), each a 76x58 card
    with the feature's dashboard art (`Resources/features/*.png` where one exists, else a hue tile) and
    the name. Left-click a card = open the feature directly (tab / studio module / host launch). Right-click
    (or a pin glyph on hover) = pin; pinned cards stay in their slot; the rest are filled by the suggester:
    score = sum of opens decayed with a 7-day half-life, gate-aware (premium/lab cards the user cannot
    open are shown locked with a padlock and open the tier gate on click, at most one locked card in the
    ring), never the same card twice, and Arcademy only when `ArcademyHostService.DoorAvailable`.
-   Any click outside, Esc, or a second body click closes the ring.
+   Any click outside, Esc, a second right-click on her body or the glyph again closes the ring. A
+   PAT does not close it (a pat is affection, not a dismissal, and folding on one would count
+   against the ignore streak).
+
+   **The gesture table, wave 3:**
+
+   | Gesture | What it does |
+   |---|---|
+   | Left-click her body | Pat |
+   | Right-click her body | Open / fold the ring |
+   | Left-click the cards glyph (top-left, hover) | Open / fold the ring |
+   | Hover her head 1.2 s | Pat |
+   | Left-click the x (top-right, hover) | Send her away |
+   | Drag past 6 DIP | Move her; folds the ring on the first movement |
+   | Corner grip | Resize |
+   | Right-click a ring CARD | Pin / unpin |
+   | Esc, or a click anywhere else | Fold the ring |
+
+   **Pinning also lives in Settings** (wave 3, answering "how can a user customize the bubbles with
+   their favourite feat"): Settings > EMI Desk > *Her ring* is a 25-tile checklist writing the SAME
+   `EmiState.Pins` through `EmiSuggester`, max 6, with a "let her choose" reset.
+
+   **The tutorial that stops** (wave 3): three nudge tracks teach the pat, the ring and pinning, and
+   go permanently silent at 3 pats / 2 ring opens / 1 pin, with a hard cap of 6 lines each, never two
+   within 90 s. Never call the glyph a "door" in anything a user can read.
 6. **The glass.** Idle for 90s (no input on her, ring closed, no ask open, no line on screen): the glass
    glitch-flips to a channel for 10s: `spiral` (animated spiral; tap = `App.Overlay.ShowOverlayTimed("spiral", 6000, ...)`),
    `video` (a thumbnail of a random local video; tap = `App.Video.PlaySpecificVideo(path)`, EMI goes

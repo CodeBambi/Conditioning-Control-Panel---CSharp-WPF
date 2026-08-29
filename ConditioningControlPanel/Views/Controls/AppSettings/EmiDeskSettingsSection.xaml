@@ -6,6 +6,52 @@
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d" d:DesignWidth="760">
 
+    <UserControl.Resources>
+        <!-- One target in the ring picker: the card art, its name on a dark strip, and a pink
+             frame plus a dot when it is pinned. Deliberately the same shape as a ring card at a
+             third of the size, so "checked here" and "on her ring" read as the same object.
+
+             The triggers are ordered hover-then-checked on purpose: the other way round, moving
+             the pointer over a pinned tile would take its pink frame off. -->
+        <Style x:Key="EmiRingTile" TargetType="ToggleButton">
+            <Setter Property="Width" Value="92"/>
+            <Setter Property="Height" Value="66"/>
+            <Setter Property="Margin" Value="0,0,6,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Shell" CornerRadius="6" BorderThickness="2"
+                                BorderBrush="#33FFFFFF" Background="#FF1A1A2E"
+                                ClipToBounds="True">
+                            <Grid>
+                                <ContentPresenter/>
+                                <Ellipse x:Name="Dot" Width="9" Height="9" Margin="0,4,4,0"
+                                         HorizontalAlignment="Right" VerticalAlignment="Top"
+                                         Fill="#FFFF69B4" Stroke="#FF0E0E1C" StrokeThickness="1.5"
+                                         Visibility="Collapsed"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Shell" Property="BorderBrush" Value="#8CFF69B4"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Shell" Property="BorderBrush" Value="#FFFF69B4"/>
+                                <Setter TargetName="Dot" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.42"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
     <!-- ================================================================
          SETTINGS - EMI DESK
 
@@ -149,6 +195,42 @@
                     <TextBlock Text="{loc:Str set2_emi_desk_glass_hint}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,2,0,0"/>
+
+                    <!-- 7. her ring.
+
+                         The answer to "how do I customise the bubbles with my favourite feature"
+                         (owner, 2026-08-29). It is not a second store: the checkboxes ARE
+                         EmiState.Pins, the same list the ring's own right-click pin writes, so the
+                         two are always looking at one truth. Checked = pinned = a guaranteed slot;
+                         everything unchecked is hers to fill from what you actually use.
+
+                         Built in code rather than bound: the catalogue is a static record list with
+                         availability and lock DELEGATES on it, not an observable collection, and
+                         both answers can change between two openings of the settings tab. -->
+                    <Grid MinHeight="34" Margin="0,14,0,0" ToolTip="{loc:Str tooltip_emi_desk_ring}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Style="{StaticResource SettingLabel}"
+                                   Foreground="{StaticResource SectionHueEmiDeskBrush}"
+                                   Text="{loc:Str label_emi_desk_ring}"
+                                   Margin="0,0,12,0" TextTrimming="CharacterEllipsis"/>
+                        <Button Grid.Column="1" x:Name="BtnRingReset"
+                                Content="{loc:Str emi_desk_ring_reset}"
+                                Style="{StaticResource OutlineButton}"
+                                Padding="12,6" VerticalAlignment="Center"
+                                Click="BtnRingReset_Click"/>
+                    </Grid>
+                    <TextBlock x:Name="TxtRingHint"
+                               Text="{loc:Str set2_emi_desk_ring_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,2,0,6"/>
+                    <WrapPanel x:Name="PnlRing" Orientation="Horizontal" Margin="0,0,0,2"/>
+
+                    <TextBlock Text="{loc:Str set2_emi_desk_gestures_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,8,0,0"/>
 
                 </StackPanel>
             </Grid>

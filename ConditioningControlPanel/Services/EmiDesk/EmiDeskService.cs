@@ -315,6 +315,10 @@ public sealed class EmiDeskService : IDisposable
             Log.Information("[EmiDesk] summoned ({Why}), firstBoot={First}, summon #{N}",
                 why ?? "user", first, summons);
 
+            // THE NUDGE MACHINE (wave 3). Armed per summon, and it is the summon instant that
+            // every "how long since" inside it is measured from.
+            StartNudges(summons);
+
             // Her greeting rides AFTER the wake chain, not on top of it: RunSummon plays the CRT
             // power-on and then `wake`, and a bubble fired here would land while she is still a
             // flat line. The delay is the summon FX budget (BRIEF 3, ~1 s) plus the wake chain.
@@ -393,6 +397,7 @@ public sealed class EmiDeskService : IDisposable
             // it before it can reach a pool (see NeverSpeaks).
             Fire("dismissed", new { minutes = MinutesOut() });
             _lastDismissUtc = DateTime.UtcNow;
+            StopNudges();
             _window.RunDismiss(() =>
             {
                 IsOut = false;
@@ -812,6 +817,234 @@ public sealed class EmiDeskService : IDisposable
         }
     }
 
+    // ---------------------------------------------------------------- the nudge machine
+
+    /// <summary>
+    /// The onboarding tracker. Pure logic in <see cref="EmiNudgeMachine"/>; this service owns only
+    /// the clock that asks it and the path that speaks its answer.
+    /// </summary>
+    private readonly EmiNudgeMachine _nudges = new();
+
+    private readonly EmiNudgeWorld _nudgeWorld = new();
+
+    private System.Windows.Threading.DispatcherTimer? _nudgeTimer;
+
+    /// <summary>
+    /// How often the machine is asked. Five seconds is fine granularity against intervals measured
+    /// in minutes, and the poll only exists while she is on screen.
+    /// </summary>
+    private const int NudgePollMs = 5_000;
+
+    /// <summary>Her line when the pet pool has not landed yet.</summary>
+    private const string PetNudgeFallbackText = "pat me. it's allowed.";
+
+    /// <inheritdoc cref="PetNudgeFallbackText"/>
+    private const string RingNudgeFallbackText = "my other side has stuff in it. the other button.";
+
+    /// <inheritdoc cref="PetNudgeFallbackText"/>
+    private const string PinNudgeFallbackText = "like one? squeeze it. the other button. it stays.";
+
+    private void StartNudges(int summonCount)
+    {
+        try
+        {
+            _nudges.NoteSummon(summonCount);
+
+            StopNudgeTimer();
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+
+            _nudgeTimer = new System.Windows.Threading.DispatcherTimer(
+                System.Windows.Threading.DispatcherPriority.Background, disp)
+            {
+                Interval = TimeSpan.FromMilliseconds(NudgePollMs)
+            };
+            _nudgeTimer.Tick += OnNudgeTick;
+            _nudgeTimer.Start();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] nudge machine failed to arm");
+        }
+    }
+
+    private void StopNudges()
+    {
+        try { _nudges.NoteDismiss(); } catch (Exception ex) { Log.Debug(ex, "[EmiDesk] nudge disarm failed"); }
+        StopNudgeTimer();
+    }
+
+    private void StopNudgeTimer()
+    {
+        try
+        {
+            if (_nudgeTimer == null) return;
+            _nudgeTimer.Stop();
+            _nudgeTimer.Tick -= OnNudgeTick;
+            _nudgeTimer = null;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] nudge timer stop failed");
+        }
+    }
+
+    private void OnNudgeTick(object? sender, EventArgs e)
+    {
+        try
+        {
+            if (Application.Current?.Dispatcher?.HasShutdownStarted != false) return;
+            if (!IsOut) { StopNudges(); return; }
+
+            var track = _nudges.Tick(_nudgeWorld);
+            if (track == null) return;
+            SpeakNudge(track);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] nudge tick failed");
+        }
+    }
+
+    /// <summary>
+    /// The ring just opened: count it, and offer the pin nudge at most once a summon. Called from
+    /// the widget's ring partial rather than off the <c>ringOpen</c> moment, because that moment
+    /// already goes through the ordinary line path and firing both would put two bubbles in flight
+    /// for one event.
+    /// </summary>
+    internal void NoteRingOpened()
+    {
+        try
+        {
+            EmiState.NoteRingOpen();
+            var track = _nudges.OnRingOpened(_nudgeWorld);
+            if (track == null) return;
+
+            // Let the fan finish dealing before she narrates it: 650 ms is the last card at rest.
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+            var t = new System.Windows.Threading.DispatcherTimer(
+                System.Windows.Threading.DispatcherPriority.Background, disp)
+            { Interval = TimeSpan.FromMilliseconds(900) };
+            t.Tick += (_, _) =>
+            {
+                try { t.Stop(); SpeakNudge(track); }
+                catch (Exception ex) { Log.Debug(ex, "[EmiDesk] pin nudge failed"); }
+            };
+            t.Start();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] ring-open bookkeeping failed");
+        }
+    }
+
+    /// <summary>
+    /// Say one nudge, and tell the machine what happened. The attempt is always recorded, whether
+    /// or not a line reached the screen: see <see cref="EmiNudgeMachine.Attempted"/>.
+    /// </summary>
+    private void SpeakNudge(string track)
+    {
+        bool spoke = false;
+        try
+        {
+            if (!IsOut) return;
+            var win = _window;
+            if (win == null || win.Visibility != Visibility.Visible) return;
+
+            // The goodbye still wins: she is on her way to the Arcademy and must not be teaching
+            // anybody anything on the way out.
+            if (DateTime.UtcNow < _farewellUntilUtc) return;
+
+            var line = DrawNudge(track);
+            if (line != null)
+            {
+                win.SpeakLine(line);
+                spoke = true;
+                Log.Information("[EmiDesk] nudge {Track}: {Line}", track, line.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] nudge {Track} failed", track);
+        }
+        finally
+        {
+            try { _nudges.Attempted(_nudgeWorld, track, spoke); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] nudge bookkeeping failed"); }
+        }
+    }
+
+    /// <summary>
+    /// One nudge line, or null when she should stay quiet.
+    ///
+    /// <para>Defensive on purpose, and the pool file is the reason. The three pools are authored
+    /// on the content side, so this code has to be correct BEFORE they land and after: when the
+    /// engine knows the moment, the engine's answer is final (a refusal is a refusal, and faking a
+    /// line past a cooldown would make the tutorial the loudest thing she owns); when it does not
+    /// know the moment at all, a hardcoded line stands in, behind nothing but the safety hold.</para>
+    ///
+    /// <para>The track id is a CONST rather than a literal at the call site for the same reason
+    /// <see cref="ArcademyByeMoment"/> is: <c>EmiMomentIdWiringTests</c> scans <c>Fire("...")</c>
+    /// literals against the shipped pools, and this path does not go through <c>Fire</c> at all.</para>
+    /// </summary>
+    public static LineDraw? DrawNudge(string track)
+    {
+        try
+        {
+            var engine = EmiLineEngine.Instance;
+
+            bool known = false;
+            try { known = engine.MomentIds.Contains(track); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] nudge vocabulary probe failed"); }
+
+            if (known)
+            {
+                var drawn = engine.Draw(track);
+                if (drawn != null && !drawn.Hold && !string.IsNullOrWhiteSpace(drawn.Text)) return drawn;
+                return null;
+            }
+
+            if (engine.HoldActive) return null;
+
+            var (text, face) = track switch
+            {
+                EmiNudgeMachine.PetTrack => (PetNudgeFallbackText, "^_^"),
+                EmiNudgeMachine.RingTrack => (RingNudgeFallbackText, "^_~"),
+                EmiNudgeMachine.PinTrack => (PinNudgeFallbackText, "^_^"),
+                _ => (null, null)
+            };
+            if (text == null || face == null) return null;
+
+            return new LineDraw(track + ".fallback", track, text, face, null, 2, false, 0);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] nudge draw failed for {Track}", track);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// QA ONLY: replay onboarding. Wipes the three gist latches and the lifetime fire counts, then
+    /// re-arms the machine against the summon she is currently on, so the first pet nudge is due
+    /// 25 s later without a restart. Reached from <see cref="EmiDebug"/> and from the hidden
+    /// modifier click on her body.
+    /// </summary>
+    public void ResetOnboarding()
+    {
+        try
+        {
+            EmiState.ResetOnboarding();
+            if (IsOut) StartNudges(EmiState.Current.SummonCount);
+            Log.Information("[EmiDesk] onboarding replayed (QA)");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[EmiDesk] onboarding replay failed");
+        }
+    }
+
     // ---------------------------------------------------------------- the ring, from an offer
 
     /// <summary>
@@ -917,6 +1150,23 @@ public sealed class EmiDeskService : IDisposable
         {
             Log.Warning(ex, "[EmiDesk] PinTop({Target}) failed", targetId);
         }
+    }
+
+    /// <summary>
+    /// Re-fan an open ring in place, from anywhere. The settings picker calls it after a pin so a
+    /// fan that happens to be up under the user's pointer shows the change immediately rather than
+    /// on the next open.
+    /// </summary>
+    public void RefreshRing()
+    {
+        try
+        {
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+            if (disp.CheckAccess()) RebuildRingIfOpen();
+            else disp.BeginInvoke(new Action(RebuildRingIfOpen));
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] RefreshRing failed"); }
     }
 
     /// <summary>Re-fan an open ring in place. Nothing at all when it is shut or she is away.</summary>
@@ -1354,6 +1604,14 @@ public sealed class EmiDeskService : IDisposable
         }
         catch (Exception ex) { Log.Debug(ex, "[EmiDesk] clock start failed"); }
 
+        // QA: EMI_DESK_RESET_ONBOARDING=1 puts the three nudges back to a fresh install for this
+        // launch, so the tutorial can be play-tested without deleting the whole ledger.
+        try
+        {
+            if (EmiDebug.ResetOnboarding) EmiState.ResetOnboarding();
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] onboarding reset switch failed"); }
+
         Log.Information("[EmiDesk] app events wired");
     }
 
@@ -1469,6 +1727,7 @@ public sealed class EmiDeskService : IDisposable
         if (_disposed) return;
         _disposed = true;
         UnwireAppEvents();
+        StopNudges();
         CancelFarewell();
         try
         {

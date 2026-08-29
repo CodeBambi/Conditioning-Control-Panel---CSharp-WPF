@@ -1,7 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.EmiDesk;
 using Serilog;
@@ -9,7 +12,7 @@ using Serilog;
 namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
 {
     /// <summary>
-    /// SETTINGS - EMI DESK. Six live editors for the summoned desktop widget.
+    /// SETTINGS - EMI DESK. Seven live editors for the summoned desktop widget.
     ///
     /// <para><b>Self-contained, with no passthrough partial.</b> Every value here is read at the
     /// moment it matters rather than at launch (the hotkey re-arms on the spot, the widget asks for
@@ -76,6 +79,7 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
                     CmbSpice.SelectedIndex = Math.Max(0, Math.Min(2, s.EmiDeskSpice));
                 }
                 RefreshHotkeyButton();
+                BuildRingPicker();
             }
             catch (Exception ex)
             {
@@ -248,6 +252,218 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
             catch (Exception ex)
             {
                 Log.Debug(ex, "[EmiDesk] hotkey capture cancel failed");
+            }
+        }
+
+        // ------------------------------------------------------------------ her ring
+
+        /// <summary>Every tile in the picker, by target id, so a refresh does not rebuild the wall.</summary>
+        private readonly Dictionary<string, ToggleButton> _ringTiles = new(StringComparer.Ordinal);
+
+        /// <summary>The tiles that are gated. Kept beside the wall rather than re-probed, because a
+        /// lock probe that throws reads as locked and would flicker a tile in and out of reach.</summary>
+        private readonly HashSet<string> _ringLocked = new(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Build the 25-target wall once per Loaded.
+        ///
+        /// <para>Rebuilt rather than refreshed because both delegates on a target can change while
+        /// the settings tab is closed: a pledge lands and six locks come off, a mod is uninstalled
+        /// and a whole target stops existing. Unavailable targets are SKIPPED, exactly as the ring
+        /// skips them; locked ones are shown and disabled, because "this exists and you have not
+        /// got it yet" is information and an empty space is not.</para>
+        /// </summary>
+        private void BuildRingPicker()
+        {
+            try
+            {
+                PnlRing.Children.Clear();
+                _ringTiles.Clear();
+                _ringLocked.Clear();
+
+                foreach (var t in EmiTargets.All)
+                {
+                    if (!t.Available) continue;
+
+                    bool locked = t.Locked;
+                    var tile = new ToggleButton
+                    {
+                        Style = (Style)FindResource("EmiRingTile"),
+                        Content = BuildTileFace(t, locked),
+                        IsChecked = EmiSuggester.IsPinned(t.Id),
+                        IsEnabled = !locked,
+                        Tag = t.Id,
+                        ToolTip = locked ? Loc.Get("emi_desk_ring_tile_locked") : t.Label,
+                    };
+                    // A locked tile is disabled, and a disabled control eats its own tooltip
+                    // unless told not to. The reason IS the point of showing it at all.
+                    ToolTipService.SetShowOnDisabled(tile, true);
+
+                    tile.Checked += OnRingTileToggled;
+                    tile.Unchecked += OnRingTileToggled;
+
+                    PnlRing.Children.Add(tile);
+                    _ringTiles[t.Id] = tile;
+                    if (locked) _ringLocked.Add(t.Id);
+                }
+
+                RefreshRingPicker();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[EmiDesk] ring picker build failed");
+            }
+        }
+
+        /// <summary>The card art with its name on a strip, or the target's flat hue when it has no art.</summary>
+        private static UIElement BuildTileFace(EmiTarget t, bool locked)
+        {
+            var grid = new Grid();
+
+            ImageSource? art = null;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(t.ThumbPath))
+                    art = Services.ModResourceResolver.ResolveImageDecoded(t.ThumbPath!, 192);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] picker art missing for {Target}", t.Id);
+            }
+
+            if (art != null)
+            {
+                grid.Children.Add(new Image
+                {
+                    Source = art,
+                    Stretch = Stretch.UniformToFill,
+                    IsHitTestVisible = false,
+                    Opacity = locked ? 0.42 : 0.92,
+                });
+            }
+            else
+            {
+                grid.Children.Add(new System.Windows.Shapes.Rectangle
+                {
+                    Fill = new SolidColorBrush(t.Hue) { Opacity = locked ? 0.28 : 0.62 },
+                    IsHitTestVisible = false,
+                });
+            }
+
+            var strip = new Border
+            {
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Background = new SolidColorBrush(Color.FromArgb(0xD9, 0x0E, 0x0E, 0x1C)),
+                Padding = new Thickness(3, 2, 3, 2),
+                IsHitTestVisible = false,
+            };
+            strip.Child = new TextBlock
+            {
+                Text = (locked ? "\U0001F512 " : "") + t.Label,
+                FontSize = 9.5,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE1)),
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                TextAlignment = TextAlignment.Center,
+            };
+            grid.Children.Add(strip);
+
+            return grid;
+        }
+
+        /// <summary>
+        /// A tile flipped. The pin store is the arbiter, not the checkbox: <c>TogglePin</c> refuses
+        /// a seventh pin, so the tile is put back to whatever the store ended up saying rather than
+        /// to whatever the click asked for.
+        /// </summary>
+        private void OnRingTileToggled(object sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            try
+            {
+                if (sender is not ToggleButton tb || tb.Tag is not string id) return;
+
+                bool nowPinned = EmiSuggester.TogglePin(id);
+                if (tb.IsChecked != nowPinned)
+                {
+                    _loading = true;
+                    try { tb.IsChecked = nowPinned; }
+                    finally { _loading = false; }
+                }
+
+                // The ledger is debounced; a settings write is a deliberate act and should survive
+                // a hard kill on the next second.
+                EmiState.SaveNow();
+
+                // A fan that happens to be open under the pointer shows the change now.
+                try { App.EmiDesk?.RefreshRing(); }
+                catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ring refresh after pin failed"); }
+
+                RefreshRingPicker();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[EmiDesk] ring pin toggle failed");
+            }
+        }
+
+        /// <summary>"Let her choose": drop every pin and hand the six slots back to the scores.</summary>
+        private void BtnRingReset_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (EmiSuggester.ClearPins() > 0)
+                {
+                    EmiState.SaveNow();
+                    try { App.EmiDesk?.RefreshRing(); }
+                    catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ring refresh after clear failed"); }
+                }
+
+                _loading = true;
+                try
+                {
+                    foreach (var tb in _ringTiles.Values) tb.IsChecked = false;
+                }
+                finally { _loading = false; }
+
+                RefreshRingPicker();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[EmiDesk] ring reset failed");
+            }
+        }
+
+        /// <summary>
+        /// The count line and the "full" state. At six pins every UNCHECKED unlocked tile goes
+        /// disabled, so the refusal inside TogglePin is something the user sees coming rather than
+        /// a click that silently does nothing.
+        /// </summary>
+        private void RefreshRingPicker()
+        {
+            try
+            {
+                int pins = 0;
+                try { pins = EmiState.Current.Pins.Count; }
+                catch (Exception ex) { Log.Debug(ex, "[EmiDesk] pin count failed"); }
+
+                bool full = pins >= EmiSuggester.MaxPins;
+
+                TxtRingHint.Text = full
+                    ? Loc.Get("emi_desk_ring_full")
+                    : Loc.GetF("emi_desk_ring_count", pins, EmiSuggester.MaxPins);
+
+                BtnRingReset.IsEnabled = pins > 0;
+
+                foreach (var kv in _ringTiles)
+                {
+                    var tb = kv.Value;
+                    bool checkedNow = tb.IsChecked == true;
+                    tb.IsEnabled = !_ringLocked.Contains(kv.Key) && (checkedNow || !full);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] ring picker refresh failed");
             }
         }
 

@@ -33,6 +33,7 @@
             BodyImage the pose PNG
             FaceLayer the face canvas and, over it, the glass (chunk B3 paints into GlassHost)
             BtnClose  the hover x
+            BtnCards  the hover cards glyph (opens her ring)
             ResizeGrip the corner handle
           OverlayHost the summon/dismiss FX, and whatever chunk B2 wants over her
           BubbleHost  chunk B3's speech bubble
@@ -92,6 +93,30 @@
                             <Path Data="M 5,5 L 13,13 M 13,5 L 5,13"
                                   Stroke="#FF69B4" StrokeThickness="2"
                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+
+            <!-- Her CARDS glyph: 18 DIP, top LEFT, the mirror of the x and on the same hover
+                 fade. Wave 3 moved the ring off the left click (the left click pats her now), so
+                 the ring needs an affordance that is visible rather than a gesture you have to be
+                 told about: right-click works, but nothing on a desktop advertises a right click.
+                 Six pixel dots, because the thing it opens is six cards. -->
+            <Button x:Name="BtnCards"
+                    Width="18" Height="18"
+                    HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Opacity="0" Cursor="Hand"
+                    Focusable="False"
+                    ToolTip="Open her cards">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Grid Background="Transparent">
+                            <Ellipse Fill="#E60E0E1C" Stroke="#FF69B4" StrokeThickness="1.5"/>
+                            <Path Fill="#FF69B4" Stretch="Uniform" Margin="4.5"
+                                  Data="M 7,5 h2 v2 h-2 z M 11,5 h2 v2 h-2 z
+                                        M 7,9 h2 v2 h-2 z M 11,9 h2 v2 h-2 z
+                                        M 7,13 h2 v2 h-2 z M 11,13 h2 v2 h-2 z"/>
                         </Grid>
                     </ControlTemplate>
                 </Button.Template>
