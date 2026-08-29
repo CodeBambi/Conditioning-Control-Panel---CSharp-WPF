@@ -584,6 +584,18 @@
         "max": 1
       }
     },
+    "arcademyBye": {
+      "pools": [
+        "arcademyBye"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
     "dtrhOpened": {
       "pools": [
         "dtrhOpened",
@@ -5700,6 +5712,85 @@
         "face": "¬_¬",
         "spice": 0,
         "chain": "smug"
+      }
+    ],
+    "arcademyBye": [
+      {
+        "id": "arcademyBye.001",
+        "t": "gone to school? wait for me. don't. i'm faster.",
+        "face": "(≧◡≦)",
+        "chain": "glee",
+        "spice": 0
+      },
+      {
+        "id": "arcademyBye.002",
+        "t": "bye bye! see you at school. saving you a seat. mine.",
+        "face": "^_^",
+        "chain": "nod",
+        "spice": 0
+      },
+      {
+        "id": "arcademyBye.003",
+        "t": "last one in is a slow computer. that's you. probably.",
+        "face": "^_~",
+        "chain": "wink",
+        "spice": 0
+      },
+      {
+        "id": "arcademyBye.004",
+        "t": "i'm off. if i'm there first act surprised. i'm first.",
+        "face": "(⌐■_■)",
+        "spice": 0
+      },
+      {
+        "id": "arcademyBye.005",
+        "t": "you go the long way. i go the me way. see you inside.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "arcademyBye.006",
+        "t": "{name} is coming to school!! everyone act normal. bye.",
+        "face": "\\o/",
+        "spice": 0
+      },
+      {
+        "id": "arcademyBye.007",
+        "t": "desk closed. school open. same me. better lighting.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "arcademyBye.008",
+        "t": "meet you in there. i know a shortcut. i am the shortcut.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "arcademyBye.009",
+        "t": "hurry. i want to be watching when you walk in.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      },
+      {
+        "id": "arcademyBye.010",
+        "t": "go on in. i'll be everywhere in a second. lucky you.",
+        "face": "¬_¬",
+        "chain": "smug",
+        "spice": 1
+      },
+      {
+        "id": "arcademyBye.011",
+        "t": "see you on campus. first one there picks the musci.",
+        "face": "^_^",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "arcademyBye.012",
+        "t": "oh you opened it! ok ok bye. this is me leaving. whoosh.",
+        "face": "0_0",
+        "spice": 0
       }
     ],
     "dtrhOpened": [
