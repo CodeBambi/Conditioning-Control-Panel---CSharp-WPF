@@ -99,8 +99,16 @@ public partial class EmiDeskWindow
         }
     }
 
-    /// <summary>She is going away. Take the glass and anything she was saying with her.</summary>
-    partial void OnTearDownCore()
+    /// <summary>
+    /// She is going away. Take the glass and anything she was saying with her.
+    ///
+    /// <para>This is NOT the <c>OnTearDownCore</c> seam any more. Two chunks landed a body for that
+    /// one partial method (the ring folds its sibling window, the glass kills its channel), and a
+    /// partial method takes exactly one implementer. The ring's file owns the seam and calls this,
+    /// ring first, because a fan left hanging after she has poofed reads as a crash. Idempotent by
+    /// contract: it can be called with nothing open.</para>
+    /// </summary>
+    internal void TearDownGlass()
     {
         try
         {

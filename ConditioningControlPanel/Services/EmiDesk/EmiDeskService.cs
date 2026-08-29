@@ -516,37 +516,118 @@ public sealed class EmiDeskService : IDisposable
         }
     }
 
-    // ---------------------------------------------------------------- ring stubs (B2 fills these)
+    // ---------------------------------------------------------------- the ring, from an offer
 
     /// <summary>
-    /// RING SEAM, deliberately inert here. The ring, its target catalogue and its suggester live in
-    /// chunk B2 (EmiTargets / EmiSuggester / EmiRingWindow); the offers need to ask three questions
-    /// of them, and B3 must not build half a ring to get the answers.
+    /// RING SEAM (SEAMS 7.3). <c>EmiOffers.EffectFeasible</c> asks this for every <c>open:&lt;id&gt;</c>
+    /// and <c>pinTop:&lt;id&gt;</c> effect BEFORE the offer is drawn, so a chip that could not do what
+    /// it says is never put on the screen at all (LINES-SCHEMA 4).
     ///
-    /// Until B2 lands this reports every target UNKNOWN, which is the safe answer: an offer whose
-    /// effect is <c>open:</c> or <c>pinTop:</c> is then dropped at DRAW time and never shown, rather
-    /// than shown with a chip that does nothing (LINES-SCHEMA 4). B2 replaces the three bodies and
-    /// every call site is already correct.
+    /// <para>Available means all three: the catalogue knows the id, the door exists in this build and
+    /// on this account (<c>IsAvailable</c>), and the tier gate is not refusing it today
+    /// (<c>IsLocked</c>). A locked door is deliberately NOT offerable: she does not get to dangle a
+    /// padlock as a favour.</para>
     /// </summary>
     public bool IsTargetAvailable(string? targetId)
     {
         if (string.IsNullOrWhiteSpace(targetId)) return false;
-        Log.Debug("[EmiDesk] IsTargetAvailable({Target}): no ring yet, reporting unavailable", targetId);
-        return false;
+        try
+        {
+            var t = EmiTargets.Find(targetId);
+            if (t == null)
+            {
+                Log.Debug("[EmiDesk] IsTargetAvailable({Target}): not in the catalogue", targetId);
+                return false;
+            }
+
+            // Both probes are the wrapped properties, which swallow a throwing lambda and answer
+            // "hidden" / "locked" rather than taking the offer draw down with them.
+            return t.Available && !t.Locked;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] IsTargetAvailable({Target}) failed", targetId);
+            return false;
+        }
     }
 
-    /// <inheritdoc cref="IsTargetAvailable"/>
+    /// <summary>
+    /// The <c>open:&lt;id&gt;</c> offer effect: walk the user through a door she picked for them.
+    ///
+    /// <para>It goes through the catalogue entry's own <c>Open</c>, which is <c>EmiTargets.Pick</c>,
+    /// so an offer-driven open is bookkept exactly like a ring card: the tier gate owns the refusal,
+    /// the usage counter moves, and the <c>ringPick</c> / <c>arcademyFromRing</c> /
+    /// <c>lockedCardTapped</c> moment fires from one place. Navigation runs on the dispatcher because
+    /// every target ends in window work.</para>
+    /// </summary>
     public void OpenTarget(string? targetId)
     {
         if (string.IsNullOrWhiteSpace(targetId)) return;
-        Log.Information("[EmiDesk] OpenTarget({Target}) ignored: the ring is not wired yet", targetId);
+        try
+        {
+            var t = EmiTargets.Find(targetId);
+            if (t == null)
+            {
+                Log.Information("[EmiDesk] OpenTarget({Target}) ignored: not in the catalogue", targetId);
+                return;
+            }
+
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+
+            if (!disp.CheckAccess()) { disp.BeginInvoke(new Action(() => OpenTarget(targetId))); return; }
+
+            Log.Information("[EmiDesk] offer opened {Target}", targetId);
+            t.Open();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[EmiDesk] OpenTarget({Target}) failed", targetId);
+        }
     }
 
-    /// <inheritdoc cref="IsTargetAvailable"/>
+    /// <summary>
+    /// The <c>pinTop:&lt;id&gt;</c> offer effect: nail a card to the front row of the ring.
+    ///
+    /// <para>The target takes slot 0 and every existing pin slides down one; the sixth pin falls off
+    /// the end, because <see cref="EmiSuggester.MaxPins"/> slots is the whole fan. If the fan happens
+    /// to be open under the pointer it is re-composed in place rather than folded, and then
+    /// <c>pinAdded</c> fires so she can react to her own favour exactly once, through the same moment
+    /// a right-click pin raises.</para>
+    /// </summary>
     public void PinTop(string? targetId)
     {
         if (string.IsNullOrWhiteSpace(targetId)) return;
-        Log.Information("[EmiDesk] PinTop({Target}) ignored: the ring is not wired yet", targetId);
+        try
+        {
+            if (EmiTargets.Find(targetId) == null)
+            {
+                Log.Information("[EmiDesk] PinTop({Target}) ignored: not in the catalogue", targetId);
+                return;
+            }
+
+            EmiSuggester.PinToTop(targetId);
+
+            var disp = Application.Current?.Dispatcher;
+            if (disp != null && !disp.HasShutdownStarted)
+            {
+                if (disp.CheckAccess()) RebuildRingIfOpen();
+                else disp.BeginInvoke(new Action(RebuildRingIfOpen));
+            }
+
+            Fire("pinAdded", new { target = targetId });
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[EmiDesk] PinTop({Target}) failed", targetId);
+        }
+    }
+
+    /// <summary>Re-fan an open ring in place. Nothing at all when it is shut or she is away.</summary>
+    private void RebuildRingIfOpen()
+    {
+        try { _window?.RebuildRing(); }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ring rebuild after pin failed"); }
     }
 
     /// <summary>

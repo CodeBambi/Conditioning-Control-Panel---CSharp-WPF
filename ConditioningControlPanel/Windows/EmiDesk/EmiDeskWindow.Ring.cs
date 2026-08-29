@@ -49,13 +49,41 @@ public partial class EmiDeskWindow
     }
 
     /// <summary>
-    /// She is leaving (dismiss outro, or shutdown). Fold the ring first: a fan left hanging over the
+    /// She is leaving (dismiss outro, or shutdown). Fold the ring FIRST: a fan left hanging over the
     /// desktop after she has poofed out reads as a crash. Idempotent by contract.
+    ///
+    /// <para>MERGE NOTE: the glass chunk wants this seam too, and a partial method may only have one
+    /// implementing declaration. The ring's file owns it (ring state wins the seam) and hands the
+    /// rest of the tear-down straight on to <see cref="TearDownGlass"/>, so neither half is lost and
+    /// the order is the one the ring needs.</para>
     /// </summary>
     partial void OnTearDownCore()
     {
         try { _ring?.CloseRing(); }
         catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ring tear-down failed"); }
+
+        try { TearDownGlass(); }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] glass tear-down failed"); }
+    }
+
+    /// <summary>
+    /// The glass asks before it wanders off to a channel: an open ring is the loudest "the user is
+    /// mid-thought" signal there is, and a channel that flips up behind an open fan is a channel
+    /// nobody sees. SEAMS 7.1; the ring is the only implementer.
+    /// </summary>
+    partial void OnRingOpenQuery(ref bool open)
+    {
+        if (RingOpen) open = true;
+    }
+
+    /// <summary>
+    /// Re-compose the fan in place, without folding it. Used by the <c>pinTop:</c> offer effect,
+    /// which can move a card under the user's pointer while the ring is up. A no-op when it is shut.
+    /// </summary>
+    public void RebuildRing()
+    {
+        try { _ring?.Rebuild(); }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ring rebuild failed"); }
     }
 
     // ---------------------------------------------------------------- open / close
