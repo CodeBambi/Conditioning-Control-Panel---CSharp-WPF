@@ -346,6 +346,14 @@ export function createIcTrickster(o) {
   const reduced = !!opts.reduced || motionOff;
   const coarse = opts.coarse == null ? probeCoarse() : !!opts.coarse;
   const isHalted = typeof opts.isHalted === 'function' ? opts.isHalted : () => false;
+  /* THE HOUSE'S SHARED CADENCE LEDGER (index.js). Deck IV spends the same
+     budget of "moments the room lies to you" that this deck does, so the two
+     have to see each other or they will land on the same bubble. It is
+     OPTIONAL and it defaults to an open door: an older host that hands this
+     deck no ledger gets exactly the trickster it had before, and a deck never
+     blocks itself through it (index.js owns that exemption). */
+  const house = (opts.house && typeof opts.house.clearFor === 'function'
+    && typeof opts.house.mark === 'function') ? opts.house : null;
   const stats = typeof opts.stats === 'function' ? opts.stats : () => null;
   const capsFn = typeof opts.capsOk === 'function' ? opts.capsOk : () => opts.capsOk !== false;
   const capsOkNow = () => { try { return !!capsFn(); } catch (e) { return false; } };
@@ -535,6 +543,9 @@ export function createIcTrickster(o) {
     if (t - lastFireAt < IC_TRICKSTER.MIN_GAP_MS) return false;
     while (fires.length && t - fires[0] > IC_TRICKSTER.RATE_WINDOW_MS) fires.shift();
     if (fires.length >= IC_TRICKSTER.RATE_MAX) return false;
+    /* and last: somebody ELSE at the table just had a moment. Same MIN_GAP_IDX
+       this deck already keeps between its own cards, now kept across decks. */
+    if (house && s && !house.clearFor('trickster', s.idx)) return false;
     return true;
   }
 
@@ -552,6 +563,12 @@ export function createIcTrickster(o) {
     slot.used = true;
     lastFireAt = nowMs();
     fires.push(lastFireAt);
+    /* one writer per event, at the moment the card is really spent - never at
+       the moment it was merely considered. */
+    if (house) {
+      const s = stats();
+      house.mark('trickster', (s && isFinite(s.idx)) ? s.idx : -999);
+    }
   }
 
   /* ------------------------------------------------------------- THE TELL */

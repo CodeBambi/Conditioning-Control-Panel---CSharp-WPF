@@ -597,6 +597,197 @@ html.arc-reduced.ae-touch .g-ic-hw-go,html.arc-reduced.ae-touch .g-ic-bubble.hit
   html.ae-touch .g-ic-hw-go,html.ae-touch .g-ic-bubble.hit{animation:none}
 }
 
+/* ============================================================================
+ * DECK IV - THE CAMEO (cameo.js). The mascot walks into the basin.
+ *
+ * Two cards, one layer, and NOT ONE NEW POINTER TARGET. Everything below is
+ * pointer-events:none: the ring is a picture of a bubble, the folder is a
+ * picture of a folder, and the only thing a finger can land on is .emi,
+ * which was already one of the four live nodes on #arc-emi (trap 59/92).
+ * The layer sits at z 6 - over the stamp (5), under the ticket (7) - so the
+ * folder covers the dish and the debrief still covers the folder.
+ *
+ * THE FOLDER'S COLOURS ARE THE ANNEX DRAWER'S: body #E8E4CF, 14px lip
+ * #C9C3A2. Nothing here is a raster: manila, polaroid, pin, staple, wax and
+ * cracked halo are gradients, masks and two pseudo-elements.
+ *
+ * THE REDUCED EXIT IS A ROOT-LEVEL ANIMATION (trap 92). html.arc-reduced
+ * sets transition:none !important on everything, so "reduced motion is one
+ * quick fade" CANNOT be a transition - it has to be an animation, and it has
+ * to sit on .g-ic-file itself while .g-ic-file.is-reduced * is
+ * animation:none !important, because a root is not "inside" itself. The
+ * global freeze still owns the DURATION (a different longhand at a higher
+ * specificity); what matters is that the folder LEAVES instead of sticking.
+ * ==========================================================================*/
+.g-ic-cameo{position:absolute;inset:0;z-index:6;pointer-events:none;
+  --ic-cam-d:var(--ic-basin-d)}
+.g-ic-cameo *{pointer-events:none}
+
+/* ---- THE STOWAWAY'S RING ----
+   An ordinary-looking bubble with nobody in it: same dish, same specular, no
+   face, no X. It is never smaller than SHE is - cameo.js measures her and
+   writes --ic-cam-d as max(--ic-basin-d, her width + 24px), so the ring reads
+   as a bubble she is standing inside and never as a collar. */
+.g-ic-cameo-ring{position:absolute;left:var(--ic-basin-x,50%);top:var(--ic-basin-y,50%);
+  width:var(--ic-cam-d);height:var(--ic-cam-d);border-radius:50%;opacity:0;
+  transform:translate(-50%,-50%) scale(.24);
+  background:radial-gradient(circle at 34% 28%, rgba(255,255,255,.5) 0 5%,
+    rgba(255,105,180,.3) 30%, rgba(255,105,180,.11) 62%, rgba(255,105,180,.02) 100%);
+  border:1px solid rgba(255,255,255,.4);
+  box-shadow:inset 0 0 22px rgba(255,255,255,.26), 0 6px 26px rgba(255,105,180,.34)}
+.g-ic-cameo-ring.on{opacity:1;animation:g-ic-cam-in .16s cubic-bezier(.2,1.6,.4,1) forwards}
+@keyframes g-ic-cam-in{from{transform:translate(-50%,-50%) scale(.24)}
+  to{transform:translate(-50%,-50%) scale(1)}}
+/* Law III: the skin breathes while she waits to be noticed. */
+.g-ic-cameo-ring::after{content:"";position:absolute;inset:6%;border-radius:50%;
+  background:radial-gradient(circle at 32% 26%, rgba(255,255,255,.55) 0 8%, transparent 42%);
+  opacity:.7;animation:g-ic-cam-sheen 2.4s ease-in-out infinite alternate}
+@keyframes g-ic-cam-sheen{from{opacity:.45}to{opacity:.85}}
+/* the pat pops it, exactly like a real bubble */
+.g-ic-cameo-ring.pop{opacity:1;animation:g-ic-cam-pop .32s ease-out forwards}
+@keyframes g-ic-cam-pop{0%{transform:translate(-50%,-50%) scale(1);opacity:1}
+  45%{transform:translate(-50%,-50%) scale(1.28);opacity:.85}
+  100%{transform:translate(-50%,-50%) scale(1.55);opacity:0}}
+/* being ignored is NOT a pop: it sighs out */
+.g-ic-cameo-ring.deflate{opacity:1;animation:g-ic-cam-deflate .5s ease-in forwards}
+@keyframes g-ic-cam-deflate{to{transform:translate(-50%,-50%) scale(.58);opacity:0}}
+
+/* ---- THE FILE'S HALO ----
+   No ring on this card: she stands in the dish behind cracked glass. */
+.g-ic-cameo-halo{position:absolute;left:var(--ic-basin-x,50%);top:var(--ic-basin-y,50%);
+  width:calc(var(--ic-cam-d) * 1.34);height:calc(var(--ic-cam-d) * 1.34);border-radius:50%;
+  opacity:0;transform:translate(-50%,-50%) scale(.86);
+  background:
+    conic-gradient(from 12deg, rgba(184,166,232,0) 0 6%, rgba(184,166,232,.5) 7%,
+      rgba(184,166,232,0) 8% 24%, rgba(255,105,180,.45) 25%, rgba(255,105,180,0) 26% 47%,
+      rgba(184,166,232,.42) 48%, rgba(184,166,232,0) 49% 71%, rgba(255,105,180,.34) 72%,
+      rgba(255,105,180,0) 73% 100%),
+    radial-gradient(circle, transparent 52%, rgba(184,166,232,.2) 76%, transparent 100%)}
+.g-ic-cameo-halo.on{opacity:1;animation:g-ic-cam-crack .28s steps(3) forwards}
+@keyframes g-ic-cam-crack{from{opacity:0;transform:translate(-50%,-50%) scale(.86)}
+  to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+.g-ic-cameo-halo::after{content:"";position:absolute;inset:-4%;border-radius:50%;
+  box-shadow:0 0 28px rgba(184,166,232,.4);opacity:.5;
+  animation:g-ic-cam-sheen 1.8s ease-in-out infinite alternate}
+
+/* ---- THE FOLDER ---- */
+.g-ic-file{position:absolute;left:var(--ic-basin-x,50%);top:var(--ic-basin-y,50%);
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+  padding:26px 16px 16px;border-radius:4px 10px 10px 4px;
+  transform:translate(-50%,-50%) rotate(-1.2deg);
+  background:linear-gradient(170deg,#E8E4CF,#D9D4B8);
+  border:1px solid rgba(120,112,78,.5);
+  box-shadow:0 26px 70px rgba(0,0,0,.6);
+  animation:g-ic-file-in .45s cubic-bezier(.2,1.3,.4,1) both}
+@keyframes g-ic-file-in{from{transform:translate(-50%,-64%) rotate(-5deg) scale(.86);opacity:0}
+  to{transform:translate(-50%,-50%) rotate(-1.2deg) scale(1);opacity:1}}
+/* the 14px drawer lip, straight off the annex cabinet */
+.g-ic-file::before{content:"";position:absolute;left:0;right:0;top:0;height:14px;
+  background:#C9C3A2;border-radius:4px 10px 0 0}
+.g-ic-file-tab{position:absolute;left:14px;top:-15px;padding:3px 12px 4px;
+  background:#C9C3A2;color:#3A3524;border-radius:6px 6px 0 0;
+  font-size:11px;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
+.g-ic-file-stamp{position:absolute;right:12px;top:22px;padding:2px 8px;
+  transform:rotate(6deg);color:#9E4A6B;border:2px solid rgba(158,74,107,.55);
+  border-radius:4px;font-size:11px;letter-spacing:.18em;text-transform:uppercase;opacity:.85}
+/* AFTER THE LAB: the same folder, wearing the subject code and a bar. */
+.g-ic-file-stamp.redacted{color:transparent;border-color:#14120C;background:#14120C;opacity:1}
+
+/* ---- THE POLAROID ---- */
+.g-ic-polaroid{position:relative;padding:10px 10px 26px;border-radius:3px;
+  transform:rotate(.8deg);background:linear-gradient(178deg,#FBF7EC,#EDE7D6);
+  box-shadow:0 8px 22px rgba(0,0,0,.4)}
+/* the jackpot rider: a second print fanned out behind the first */
+.g-ic-polaroid.fan{position:absolute;left:50%;top:50%;z-index:-1;
+  transform:translate(-58%,-46%) rotate(-7deg)}
+.g-ic-polaroid-cap{position:absolute;left:50%;top:-8px;width:34px;height:14px;
+  transform:translateX(-50%) rotate(-3deg);border-radius:3px;
+  background:linear-gradient(180deg,#C9C3A2,#8E8867);box-shadow:0 2px 6px rgba(0,0,0,.4)}
+.g-ic-polaroid-well{position:relative;width:280px;height:240px;overflow:hidden;
+  border-radius:2px;background:#0E0A1C}
+.g-ic-polaroid-well.empty{background:linear-gradient(135deg,#5E2A55,#B84A8F)}
+/* the stand-in the spiral is born wearing: a CSS conic, so a rejected import
+   (an old webview, a stripped bundle) still shows a spiral and never a hole */
+.g-ic-polaroid-well.conic::before{content:"";position:absolute;inset:-30%;
+  background:conic-gradient(from 0deg,#ff69b4 0 12%,#14062b 12% 25%,#b8a6e8 25% 37%,
+    #14062b 37% 50%,#ff69b4 50% 62%,#14062b 62% 75%,#b8a6e8 75% 87%,#14062b 87% 100%);
+  animation:g-ic-cam-conic 8s linear infinite}
+@keyframes g-ic-cam-conic{to{transform:rotate(360deg)}}
+.g-ic-polaroid-media{position:absolute;inset:0;width:100%;height:100%;
+  object-fit:cover;display:block}
+/* allocated FLAT at 300px by cameo.js and stretched here: a DPR-scaled canvas
+   on a phone is four times the fill for a photo in a 280px frame */
+.g-ic-polaroid-canvas{position:relative;z-index:1;display:block;width:100%;height:100%}
+/* the print develops: the well fades up from paper white */
+.g-ic-polaroid-dev{position:absolute;inset:0;z-index:2;background:#FBF7EC;
+  animation:g-ic-cam-develop var(--ic-cam-dev,400ms) ease-out forwards}
+@keyframes g-ic-cam-develop{from{opacity:1}to{opacity:0}}
+
+/* ---- THE NOTE (the 5% roll: no photo, a stapled slip) ---- */
+.g-ic-file-note{position:relative;width:280px;padding:16px 16px 18px;border-radius:2px;
+  transform:rotate(-1.4deg);background:#FBF7EC;color:#3A3524;text-align:center;
+  box-shadow:0 8px 22px rgba(0,0,0,.35)}
+.g-ic-file-note::before{content:"";position:absolute;left:50%;top:-6px;width:22px;height:9px;
+  transform:translateX(-50%) rotate(4deg);border-radius:2px;
+  background:linear-gradient(180deg,#C9C3A2,#8E8867)}
+.g-ic-file-note-head{display:block;margin-bottom:6px;color:#8A7F5C;
+  font-size:11px;letter-spacing:.18em;text-transform:uppercase}
+.g-ic-file-note-line{display:block;font-size:14px;line-height:1.4}
+
+/* ---- THE MELT (Anomaly's wax, on phase only - nothing reforms here) ---- */
+.g-ic-cameo-wax{position:absolute;left:-2px;right:-2px;top:0;bottom:-2px;border-radius:4px;
+  opacity:0;overflow:visible;transform-origin:50% 0;
+  background:linear-gradient(180deg, rgba(90,20,60,0) 0%, rgba(120,26,74,.55) 30%,
+    rgba(150,32,92,.8) 100%)}
+.g-ic-cameo-wax.on{animation:g-ic-cam-wax 1.4s cubic-bezier(.5,.05,.7,1) forwards}
+@keyframes g-ic-cam-wax{0%{opacity:0;transform:scaleY(.2)}
+  25%{opacity:.85;transform:scaleY(.6)}100%{opacity:.95;transform:scaleY(1.08)}}
+.g-ic-cameo-wax::before,.g-ic-cameo-wax::after{content:"";position:absolute;top:100%;
+  width:14%;height:0;border-radius:0 0 50% 50%;background:rgba(150,32,92,.85);
+  box-shadow:0 2px 8px rgba(120,26,74,.6)}
+.g-ic-cameo-wax::before{left:22%}
+.g-ic-cameo-wax::after{left:61%;width:10%}
+.g-ic-cameo-wax.on::before{animation:g-ic-cam-drip 1.4s .3s ease-in forwards}
+.g-ic-cameo-wax.on::after{animation:g-ic-cam-drip 1.4s .55s ease-in forwards}
+@keyframes g-ic-cam-drip{from{height:0}to{height:46%}}
+
+/* ---- REDUCED MOTION (trap 92: the exit is an animation on the ROOT) ---- */
+.g-ic-file.is-reduced{animation:g-ic-file-in-r .2s ease-out both}
+.g-ic-file.is-reduced.melting{animation:g-ic-file-out-r .3s ease-out forwards}
+.g-ic-file.is-reduced *{animation:none !important}
+@keyframes g-ic-file-in-r{from{opacity:0}to{opacity:1}}
+@keyframes g-ic-file-out-r{from{opacity:1}to{opacity:0}}
+.g-ic-file.is-reduced .g-ic-cameo-wax{opacity:.7;transform:none}
+.g-ic-file.is-reduced .g-ic-cameo-wax::before,
+.g-ic-file.is-reduced .g-ic-cameo-wax::after{display:none}
+@media (prefers-reduced-motion: reduce){
+  .g-ic-cameo-ring::after,.g-ic-cameo-halo::after,.g-ic-polaroid-well.conic::before{animation:none}
+  .g-ic-cameo-ring.on{animation:none;transform:translate(-50%,-50%) scale(1)}
+  .g-ic-cameo-halo.on{animation:none;transform:translate(-50%,-50%) scale(1)}
+  .g-ic-cameo-wax.on{animation:none;opacity:.7;transform:none}
+  .g-ic-cameo-wax::before,.g-ic-cameo-wax::after{display:none}
+}
+html.arc-reduced .g-ic-cameo-ring::after,
+html.arc-reduced .g-ic-cameo-halo::after,
+html.arc-reduced .g-ic-polaroid-well.conic::before{animation:none}
+html.arc-reduced .g-ic-cameo-ring.on{animation:none;transform:translate(-50%,-50%) scale(1)}
+html.arc-reduced .g-ic-cameo-halo.on{animation:none;transform:translate(-50%,-50%) scale(1)}
+html.arc-reduced .g-ic-cameo-wax.on{animation:none;opacity:.7;transform:none}
+html.arc-reduced .g-ic-cameo-wax::before,
+html.arc-reduced .g-ic-cameo-wax::after{display:none}
+
+/* ---- THE PHONE CEILING (html.ae-touch / html.arc-mobile, trap 42) ----
+   The well shrinks to the narrow rule the plan sets (min(280px,70vw)) and the
+   fanned second print is dropped outright: two 280px polaroids on a 390px
+   screen is a pile, not a fan. The spiral canvas keeps its flat 300px. */
+html.ae-touch .g-ic-polaroid-well,html.arc-mobile .g-ic-polaroid-well,
+.g-ic-file.is-touch .g-ic-polaroid-well{width:min(280px,70vw);height:min(240px,60vw)}
+html.ae-touch .g-ic-file-note,html.arc-mobile .g-ic-file-note,
+.g-ic-file.is-touch .g-ic-file-note{width:min(280px,70vw)}
+html.ae-touch .g-ic-polaroid.fan,html.arc-mobile .g-ic-polaroid.fan,
+.g-ic-file.is-touch .g-ic-polaroid.fan{display:none}
+html.ae-touch .g-ic-file,html.arc-mobile .g-ic-file{box-shadow:0 14px 34px rgba(0,0,0,.55)}
+
 `;
 
 export function ensureStyle() {

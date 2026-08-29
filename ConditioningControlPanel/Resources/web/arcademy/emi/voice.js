@@ -58,6 +58,9 @@
  * perception    calendarDaysAtLeast:N  calendar days since her first day (the
  *               anniversary gate; `days` only counts days PLAYED)
  *               hidesAtLeast:N     lifetime x-dismissals
+ * ic cameos     visitsIgnoredAtLeast:N  lifetime cameo visits nobody patted
+ *               (the snub pool. The pat itself arrives as the ordinary moment
+ *               names `visitPat` + `visitPatStowaway` / `visitPatDossier`.)
  *               zoneCountAtLeast:N / zoneRowIs:top|mid|bottom   spot memory,
  *               off the dropAt payload (zone, zoneRow, zoneCount)
  * emi color     droppedOn:room|sealed|wing|none   what a dropAt landed on
@@ -860,6 +863,11 @@ export function createVoice(o) {
     calendarDaysAtLeast: (a) => !!blob.firstDayKey
       && daysBetween(blob.firstDayKey, dayKeyOf(new Date(now()))) >= (Number(a) || 0),
     hidesAtLeast: (a, c) => c.hides >= (Number(a) || 0),
+    /* --- IC EMI CAMEOS (2026-08-29) ------------------------------------ */
+    /** SHE REMEMBERS BEING IGNORED. A class stood her inside its own bubble
+     *  and nobody touched her - lifetime, off the same widget blob every
+     *  other counter here is read from. Same shape as `hidesAtLeast`. */
+    visitsIgnoredAtLeast: (a, c) => c.visitsIgnored >= (Number(a) || 0),
     /** Spot memory, read straight off the dropAt payload the widget builds. */
     zoneCountAtLeast: (a, c) => Math.round(Number(c.p.zoneCount) || 0) >= (Number(a) || 0),
     zoneRowIs: (a, c) => !!c.p.zoneRow && String(c.p.zoneRow) === String(a),
@@ -1300,6 +1308,7 @@ export function createVoice(o) {
       flings: Number(st.flings) || 0,
       bubbles: Number(st.bubblesSeen) || 0,
       hides: Number(st.hides) || 0,
+      visitsIgnored: Number(st.visitsIgnored) || 0,
       hours: (Number(st.msVisible) || 0) / 3600000,
       gradeUp: false,
     };

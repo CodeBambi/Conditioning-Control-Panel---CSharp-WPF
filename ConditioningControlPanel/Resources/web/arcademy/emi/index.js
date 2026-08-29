@@ -330,6 +330,27 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
     setEnabled(on) { widget.setEnabled(!!on); },
     get enabled() { return widget.enabled; },
 
+    /**
+     * IC EMI CAMEOS (2026-08-29): A CLASS BORROWS HER FOR ONE BUBBLE.
+     *
+     * The ONE new export of this wave, and the controller's only door onto the
+     * field-trip machinery (it re-exports neither `apparate` nor `onGesture`).
+     * A game never calls this: `shell/shell.js` wraps it as `ctx.emi.visit` and
+     * owns the floor (VISIT_FLOOR_MS), the one-in-flight rule and the cancel on
+     * class end, suspend and pause. See THE CAMEO VISIT in emi/widget.js.
+     *
+     * @param {Object} spec {kind:'stowaway'|'dossier', rect:()=>rect, face?,
+     *        phosphor?, line?, waitMs?, patChain?:'love'|'shock', stayMs?,
+     *        onArrive?, onPat?, onDone?}
+     * @returns {?{pat:Function, end:Function, cancel:Function}} null when she
+     *          refuses - SYNCHRONOUSLY, so the caller deals its ordinary bubble
+     *          on the same tick. A refusal is the normal answer, never an error.
+     */
+    visit(spec) {
+      try { return widget.visit(spec) || null; }
+      catch (e) { say('emi: visit threw - ' + ((e && e.message) || e)); return null; }
+    },
+
     /** EMI KEEPS OFF THE ALLEY. Hand her a GETTER answering the boxes she may
      *  not stand on (the campus doors), or null on the way out. A session move
      *  only - the corner the player chose is never rewritten. The rule itself

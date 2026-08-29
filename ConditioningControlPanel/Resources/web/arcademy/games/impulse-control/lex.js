@@ -94,6 +94,21 @@ export const IC_LEX = Object.freeze({
   ic_recalibrate_confirm: 'Tap again to confirm',
   ic_recalibrated: 'Baseline cleared - the next class recalibrates.',
 
+  /* --- the cameo deck's folder (cameo.js) --------------------------------
+     Seven rows and not one of them is a caption: the folder is a PROP, and
+     these are the words printed on it. The tab reads ic_file_tab until the
+     shell hands the game a subject code (post-reveal), and from then on the
+     tab wears the code and ic_file_stamp_after sits under a redaction bar.
+     The note is the 5% roll: a stapled slip instead of a photo, one line
+     picked from ic_file_note_1..3. Warm, short, and never a threat. */
+  ic_file_tab: 'field notes',
+  ic_file_stamp: 'for you',
+  ic_file_stamp_after: 'subject',
+  ic_file_note_head: 'note to file',
+  ic_file_note_1: "i'm not supposed to be in the tube so if anyone asks this note fell out of a bubble on its own",
+  ic_file_note_2: "hasta la vista, baby. i wrote it down so i'd get it right this time. did i get it right",
+  ic_file_note_3: "saved you the slow bubble again, the one that takes its time, so don't tell the others",
+
   /* --- settings + keybind labels (rendered by shell/settings.js) --------- */
   ic_go_key: 'POP key',
   ic_show_rt: 'Show reaction time',

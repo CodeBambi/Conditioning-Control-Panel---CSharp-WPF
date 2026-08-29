@@ -284,6 +284,48 @@ export const POOLS = Object.freeze({
     ]
   },
 
+  /* --- the tube visits (Impulse Control cameos, 2026-08-29) -------------
+   * She is IN the class when these land: visitPatStowaway fires at the pat,
+   * from inside the bubble; visitPatDossier fires once she is back home, so
+   * nothing talks over the three-second polaroid. visitSnub rides the next
+   * campus greet after three ignored visits (predicate in voice.js). */
+
+  /** V1 - patted inside the bubble. Caught sneaking, pleased about it. */
+  visitPatStowaway: {
+    on: 'gesture:visitPatStowaway', odds: 0.25, ceremony: false, priority: 10,
+    cooldownMs: 60000,
+    lines: [
+      { t: "caught. i was going to say hi from the bubble first.", face: '^_^' },
+      { t: "shh. the tube doesn't know i'm in here.", face: '^_~' },
+      { t: "you pop the good ones. i wanted to be one.", face: '(◕‿◕)',
+        double: true, maxPerSession: 1 }
+    ]
+  },
+
+  /** V2 - the folder has melted and she is home. Smug about the errand. Never
+   *  says what was in the frame. */
+  visitPatDossier: {
+    on: 'gesture:visitPatDossier', odds: 0.25, ceremony: false, priority: 10,
+    cooldownMs: 60000,
+    lines: [
+      { t: "brought you something. no peeking. ok peek. quick.", face: '(¬‿¬)', chain: 'smug' },
+      { t: "special delivery. i'm the delivery. and the special.", face: '^___^' },
+      { t: "i keep the nice ones. thought you'd want this one.", face: '(◕‿◕)',
+        double: true, maxPerSession: 1 }
+    ]
+  },
+
+  /** V3 - ignored in the tube three times; the next hello is a little dry. */
+  visitSnub: {
+    on: 'greet', when: ['visitsIgnoredAtLeast:3'], odds: 0.35, ceremony: false, priority: 20,
+    maxPerSession: 1,
+    lines: [
+      { t: "hi. no i'm not sulking. this is my resting screen.", face: '-_-' },
+      { t: "you were busy. the x's are very distracting. i get it.", face: '¬_¬', chain: 'sus' },
+      { t: "it's fine. i popped myself. it's not the same.", face: '._.', double: true, maxPerSession: 1 }
+    ]
+  },
+
   /* --- being handled --------------------------------------------------- */
 
   /** A6 - picked up and moved. Drags are constant; this pool stays quiet, and

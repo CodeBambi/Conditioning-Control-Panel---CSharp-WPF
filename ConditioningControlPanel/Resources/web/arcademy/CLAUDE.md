@@ -3206,6 +3206,51 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     The Locker WEAR tile composites it too. Do NOT reach for z-index on the body sprite: the face
     must stay over the body for every other outfit. Follow-up: the script should emit over-*.png
     itself.
+138. **A VISIT IS NOT A FIELD TRIP: DURING A CAMEO, `pointerdown` ON HER IS THE PAT (IC EMI
+    CAMEOS, 2026-08-29).** Trap 75's law is that a touch on EMI always wins, which on a trip
+    means `cancelTrip({stay:true})` - she stops what she is doing and you get her back. A
+    cameo is the opposite shape: the press IS the interaction the class asked for, and
+    cancelling would delete the one beat the game is waiting on. So `onDown` tests `cameo`
+    FIRST, above the trip branch, calls `visitPat('pointer')` and returns - no press latch,
+    no pointer capture, therefore no drag and no `dropAt` that would move her home spot to
+    wherever the bubble happened to be. Two consequences to keep: the go key
+    (`handle.pat('key')`) must stay indistinguishable from a finger apart from the `src`
+    string, and the cameo branch must never grow a second `preventDefault` call - both roads
+    share `stopNativeDrag(ev)`, which is what keeps trap 98's one-call grep honest.
+139. **A CAMEO REFUSAL IS A SYNCHRONOUS `null`, AND IT IS THE NORMAL ANSWER.** `visit()`
+    returns null on the same tick for a docked or disabled EMI, a live say, an ask or a
+    channel owning the glass, a visit already in flight, a global suspend, an off-screen
+    rect and an 8s floor since the last visit ENDED. It is never a promise, never a throw
+    and never a queued visit that lands later: a class that awaits it, or that draws its
+    bubble differently while it "waits", has already broken. Deal the ordinary bubble in the
+    same statement. The floor is measured from the END so two classes back to back cannot
+    stack her, and the ONLY place it is stamped is the shell's `finish()`, so every road out
+    (pat, timeout, cancel) pays it.
+140. **THE CAMEO COUNTERS LIVE IN THE ONE `emi` BLOB, NOT A NEW STORE KEY.** `visits`,
+    `visitPats`, `visitsIgnored` and `filesOpened` are ordinary `blankStats()` fields, so
+    they ride the same single writer as `pets` and `zones` (trap 96) and need no branch in
+    the reader. Bank them at the moment the player acts, never at the exit: a freeze or a
+    class teardown between the pat and the trip home must not un-count a real touch. The
+    GESTURES are the opposite - a pat emits `visitPat` plus a kind-keyed
+    `visitPatStowaway` / `visitPatDossier`, and the dossier pair is DEFERRED until she is
+    home and lit, because the shock chain and the polaroid own the glass and a line said
+    over them would be cut by the trip. `visitSnub` fires at the timeout with the running
+    `ignored` count, and `voice.js` reads it through `visitsIgnoredAtLeast:N`.
+141. **A CAMEO IS A DEBT, NOT A ROUND (IC, `games/impulse-control/cameo.js`, 2026-08-29).**
+    A cameo runs INSTEAD of the bubble at the cursor and the cursor does not move: `nextBubble()`
+    increments `S.idx`, so the deck latches `S.cameoOwed` and pays it at the TOP of `nextBubble()`
+    with `dealCurrent()` of the same index (the suite asserts reveal count == plan length on both
+    cards). Two more shapes the suite caught: (a) `teardown()` -> `handle.cancel()` ->
+    `onDone('cancel')` schedules the ring's removal on a deck timer that `teardown()` then
+    kills, stranding a dead ring in the dish - so every node she leaves behind goes in the
+    `parting` register and `sweepParting()` runs unconditionally in teardown; (b) a stowaway's
+    load+slide is NOT a round for the other decks: `dealCurrent(onLand)` withholds `decks('load')`
+    /`decks('slide')` on her trip and `stowawayLanding` fires the withheld load only on the
+    refusal fallthrough, so the trickster never tells on a bubble that will not reveal. The
+    trickster and the cameo share ONE cadence ledger (`S.houseLastIdx/Who`, `opts.house`)
+    with a self-exemption: a deck never blocks itself through it, so wiring the ledger cannot
+    lower the trickster's rate on a class with no cameo. `freeze()` tears the cameo down
+    ITSELF before `cam('pause')`, or `onDone('cancel')` would deal on top of `thaw()`'s re-deal.
 
 ## 5. The game module contract (short version)
 
@@ -3238,6 +3283,21 @@ neither call wires a handler or can move a screen: `exits.sign(btn, {dir, quiet}
 a button as the lit arrow board (TERMINAL screens only - a rules sheet, a debrief; a sign
 on a live board fights the board) and `exits.bar(nodes, {card:true})` returns a sticky
 footer row. The CSS is the shell's, so ten classes cannot drift apart (trap 46).
+`ctx.emi` is the SECOND mascot seam (IC EMI CAMEOS, 2026-08-29) and it obeys the same law
+as `ctx.mood`: a class may BORROW her, it may not drive her, and it never imports `emi/`.
+`ctx.emi.visit(spec)` walks her into a bubble the class is already showing and answers a
+handle `{pat(src), end(), cancel()}` or **`null`, synchronously** - null is the ordinary
+answer (one visit in flight page-wide, an 8s floor since the last one ENDED, an ask or a
+takeover or a suspend owning the glass), so deal your ordinary bubble on the same tick and
+roll nothing again for that slot. `spec = {kind:'stowaway'|'dossier', rect:()=>rect, face?,
+phosphor?, waitMs?, patChain?:'love'|'shock', stayMs?, onArrive?, onPat?, onDone?}`; the
+rect getter is called in the dark at fire time (trap 73's law), she lands CENTRED ON the
+rect rather than beside it, and `onDone(reason)` fires exactly once for `'pat'`,
+`'timeout'` or `'cancel'`. `ctx.emi.fileTag()` answers the seep's subject code once the
+page is post-reveal, else null. Both are opt-in and null-safe (`if (ctx.emi) ...`) because
+rigs stub ctx without them. The shell cancels a live visit from `clearScreen`,
+`teardownClass`, `applySuspend(true)` and `pauseClass(true)`, so a class never has to.
+
 `classSpec = { gradeTier 1..4, seed, timeBudgetSec, retake }` - `retake` is true when today
 already has a row for this class (trap 23). The seed is unchanged on a retake, on purpose:
 the day's script IS the day's script.
