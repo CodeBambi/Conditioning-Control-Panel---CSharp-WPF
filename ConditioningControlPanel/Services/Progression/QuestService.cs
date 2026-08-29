@@ -371,9 +371,14 @@ public class QuestService : IDisposable
         if (Progress.IsDailyExpired())
         {
             var carried = new List<ActiveQuest>();
+            var carriedIds = new HashSet<string>(StringComparer.Ordinal);
             foreach (var q in EnumerateDailySlotsIncludingLegacy())
             {
-                if (q.IsCompleted && q.CompletedAt?.Date == DateTime.Today) carried.Add(q);
+                if (!q.IsCompleted || q.CompletedAt?.Date != DateTime.Today) continue;
+                // One card per definition: a deserialized legacy twin must not be carried
+                // alongside the slot it mirrors.
+                if (!string.IsNullOrEmpty(q.DefinitionId) && !carriedIds.Add(q.DefinitionId)) continue;
+                carried.Add(q);
             }
 
             slots.Clear();
@@ -460,6 +465,30 @@ public class QuestService : IDisposable
             changed = true;
         }
 
+        // ---- 4b. DUPLICATE SELF-HEAL. A board written by a pre-fix build (or a rollover that
+        // carried a slot and its deserialized legacy twin) can seat the same definition twice.
+        // Reroll the later seat, but only when it is untouched - a finished slot is a record and
+        // a quest already worked on is never taken away, so at worst a duplicate stays visible.
+        // A null roll (pool drained) also leaves the seat alone: a repeated quest beats an empty
+        // seat, same call RollDailyQuest itself makes.
+        var seenIds = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < slots.Count; i++)
+        {
+            var slot = slots[i];
+            if (slot == null) continue;
+            if (string.IsNullOrEmpty(slot.DefinitionId) || seenIds.Add(slot.DefinitionId)) continue;
+            if (slot.IsCompleted || slot.CurrentProgress > 0) continue;
+
+            var replacement = RollDailyQuest(DailyBoardIds(skipIndex: i));
+            if (replacement == null) continue;
+
+            App.Logger?.Information("Daily slot {Slot}: '{QuestId}' duplicates an earlier seat, regenerating as '{NewId}'",
+                i + 1, slot.DefinitionId, replacement.DefinitionId);
+            slots[i] = replacement;
+            if (!string.IsNullOrEmpty(replacement.DefinitionId)) seenIds.Add(replacement.DefinitionId);
+            changed = true;
+        }
+
         // ---- 5. THE DEFERRED-ENTITLEMENT RE-ROLL (#889). A slot rolled before the Patreon answer
         // landed drew from the free-only pool. Now that the answer is in and it is "premium",
         // re-roll every slot that is still untouched - a quest already worked on is never taken
@@ -493,8 +522,19 @@ public class QuestService : IDisposable
     private IEnumerable<ActiveQuest> EnumerateDailySlotsIncludingLegacy()
     {
         foreach (var q in Progress.DailyQuests) if (q != null) yield return q;
-        if (Progress.DailyQuest != null && !Progress.DailyQuests.Contains(Progress.DailyQuest))
-            yield return Progress.DailyQuest;
+
+        // The mirror is rebound BY REFERENCE at runtime (SyncLegacyDailyMirror), but the JSON
+        // round-trip deserializes it as an independent copy of one slot, so after a load the
+        // reference Contains() below never matches. Dedupe by DefinitionId as well, or the
+        // rollover carry sees the slot AND its twin.
+        var legacy = Progress.DailyQuest;
+        if (legacy == null || Progress.DailyQuests.Contains(legacy)) yield break;
+        foreach (var q in Progress.DailyQuests)
+        {
+            if (q != null && string.Equals(q.DefinitionId, legacy.DefinitionId, StringComparison.Ordinal))
+                yield break;
+        }
+        yield return legacy;
     }
 
     /// <summary>The definition ids currently on the board - what a fresh roll must avoid so the
