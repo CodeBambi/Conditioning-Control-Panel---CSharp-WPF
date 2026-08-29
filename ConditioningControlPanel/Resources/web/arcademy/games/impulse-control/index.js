@@ -78,6 +78,7 @@ import { IC_LEX } from './lex.js';
 import { createIcCasino, IC_CASINO, isJust, isRecordPing } from './casino.js';
 import { createIcPressure } from './pressure.js';
 import { createIcTrickster } from './trickster.js';
+import { createIcCameo, IC_CAMEO } from './cameo.js';
 
 /* ----------------------------------------------------------------- clock -- */
 function now() {
@@ -261,6 +262,7 @@ export default {
     let casino = null;
     let pressure = null;
     let trickster = null;
+    let cameo = null;
 
     const settingOf = (key, dflt) => {
       try {
@@ -383,6 +385,41 @@ export default {
       deck('trickster', method, ...args);
     }
 
+    /* DECK IV IS NOT ON THE MOMENT BUS. The cameo does not decorate a round,
+       it REPLACES one, so it hears nothing that happens inside a round and is
+       called by name at the few places the loop hands it the wheel. Same
+       null-safe shape as deck(): a cameo that throws is a log line. */
+    function cam(method, ...args) {
+      if (!cameo || typeof cameo[method] !== 'function') return undefined;
+      try { return cameo[method](...args); }
+      catch (e) { say('cameo.' + method + ' threw: ' + ((e && e.message) || e)); return undefined; }
+    }
+
+    /* ---- THE HOUSE'S CADENCE LEDGER (shared by trickster + cameo) --------
+       Two decks now spend the SAME budget of "moments the room lies to you",
+       and neither may land on top of the other. One number on S, one writer
+       per event, and ONE exemption: a deck never blocks ITSELF through this
+       ledger, because each deck already owns its own spacing (the trickster's
+       MIN_GAP_MS plus its pre-spaced plan, the cameo's MIN_GAP_IDX). Without
+       that exemption a class with no cameo in it would fire fewer trickster
+       cards than it did yesterday, and this wave is additive or it is wrong. */
+    function markHouse(who, idx) {
+      if (!S) return;
+      S.houseLastIdx = idx;
+      S.houseLastWho = who;
+    }
+    function houseClearFor(who, idx) {
+      if (!S) return true;
+      if (S.houseLastWho === who || S.houseLastWho == null) return true;
+      return (Number(idx) - S.houseLastIdx) >= IC_CAMEO.MIN_GAP_IDX;
+    }
+    /** The ledger a deck is handed: two verbs and a reader, never the state. */
+    const house = {
+      mark: (who, idx) => markHouse(who, idx),
+      clearFor: (who, idx) => houseClearFor(who, idx),
+      lastIdx: () => (S ? S.houseLastIdx : -999),
+    };
+
     /* ---- HEAT: the one dial, and the owner's chain drives it ------------- */
     function progressNow() {
       if (!S) return 0;
@@ -400,6 +437,7 @@ export default {
       deck('casino', 'setHeat', h);
       deck('pressure', 'setHeat', h);
       deck('trickster', 'setHeat', h);
+      cam('setHeat', h);
       return h;
     }
 
@@ -464,6 +502,15 @@ export default {
         },
         swaps: 0,
         voided: false,           // a freeze voided the bubble at the cursor
+        /* DECK IV. houseLastIdx/houseLastWho are the shared cadence ledger
+           (see houseClearFor); cameoOwed is the debt a cameo leaves behind -
+           it ran INSTEAD of the bubble at the cursor, so the cursor does not
+           move and the class comes back to the same plan index; cameo is the
+           live visit handle while the mascot stands in the dish. */
+        houseLastIdx: -999,
+        houseLastWho: null,
+        cameoOwed: false,
+        cameo: null,
         howtoShown: false,
         debriefed: false,
         recalibrated: false,
@@ -516,6 +563,7 @@ export default {
           if (!S || destroyed) return;
           render.clearCard();
           decks('start');
+          cam('start');
           nextBubble();
         });
       });
@@ -570,6 +618,7 @@ export default {
       try {
         trickster = createIcTrickster(Object.assign({}, base, {
           isHalted: halted,
+          house,
           /* the HOST's answer outranks a media probe (CLAUDE.md §5): a coarse
              pointer gets no ghost cursor at all. */
           coarse: !!(ctx.platform && ctx.platform.isTouch),
@@ -583,6 +632,20 @@ export default {
           t,
         })) || null;
       } catch (e) { trickster = null; say('trickster refused: ' + ((e && e.message) || e)); }
+      try {
+        /* DECK IV - THE CAMEO. It reaches the shell's mascot seam through a
+           GETTER, never a snapshot: ctx.emi may be handed over late, taken
+           away mid-class, or never exist at all, and every one of those has
+           to read as "no cameos" and nothing else. Same for the pool: S is
+           rebuilt on every start(), so the deck asks for it at fire time. */
+        cameo = createIcCameo(Object.assign({}, base, {
+          isHalted: halted,
+          touch,
+          emiOf: () => ((ctx && ctx.emi) || null),
+          pool: () => (S ? S.pool : null),
+          t,
+        })) || null;
+      } catch (e) { cameo = null; say('cameo refused: ' + ((e && e.message) || e)); }
     }
 
     /* -------------------------------------------------------- rules sheet */
@@ -719,13 +782,113 @@ export default {
     /* ========================================================== THE LOOP */
     function nextBubble() {
       if (!S || destroyed || S.paused || S.suspended || S.debriefed) return;
+      /* THE CAMEO'S DEBT, PAID FIRST. A cameo is not a plan slot: it ran in
+         place of the bubble at the cursor, so the cursor does NOT move and
+         this comes straight back to the same index. Without this latch the
+         mascot would eat a bubble every time she walked in, and a 12-bubble
+         class with three cameos would quietly become a 9-bubble one. */
+      if (S.cameoOwed) { S.cameoOwed = false; dealCurrent(); return; }
       S.idx += 1;
       if (S.idx >= S.plan.bubbles.length) { debrief(); return; }
+      if (tryCameo()) return;
       dealCurrent();
     }
 
-    /** Deal the bubble at the cursor (also used to re-deal after a freeze). */
-    function dealCurrent() {
+    /* ------------------------------------------------------ DECK IV: THE DOOR
+     * The ONE place a cameo can start. It is asked after the cursor has moved
+     * and before the bubble is dealt, so the roll is a pure function of (seed,
+     * plan index, house ledger) and a retake replays the same cameos at the
+     * same slots. Answers TRUE when the mascot took the slot; on FALSE the
+     * class deals its ordinary bubble and rolls nothing again for it.
+     */
+    function tryCameo() {
+      if (!cameo || !S) return false;
+      const total = S.plan.counts.total;
+      const want = cam('rollFor', S.idx, total, S.houseLastIdx);
+      if (want !== 'stowaway' && want !== 'dossier') return false;
+      markHouse('cameo', S.idx);
+      S.cameoOwed = true;
+      S.cameo = null;
+
+      if (want === 'stowaway') {
+        /* SHE RIDES THE TUBE. Ordinary load, ordinary slide, and then nothing
+           reveals: the bubble that lands in the dish has her inside it. */
+        dealCurrent(stowawayLanding);
+        return true;
+      }
+
+      /* THE FILE. No slide at all - the load glow stutters and she is just
+         THERE, at the glitch's midpoint. */
+      S.bubble = null;
+      S.stagePhase = 'cameo';
+      hud();
+      S.render.showLoad();
+      heat();
+      cam('dealDossier', {
+        onHandle: (h) => { S.cameo = h; },
+        onDone: () => { S.cameo = null; endCameo(); },
+        onNull: () => {
+          /* she refused, or the room went dark between the roll and the
+             glitch: no slide has run, so this is an ordinary deal at the
+             same index and the debt is settled by dealing it. */
+          if (!S || destroyed) return;
+          S.cameo = null;
+          if (S.stagePhase !== 'cameo') return;
+          S.cameoOwed = false;
+          dealCurrent();
+        },
+      });
+      return true;
+    }
+
+    /** The stowaway's landing: the slide finished, and nobody reveals. */
+    function stowawayLanding(b) {
+      if (!S || destroyed || S.paused || S.suspended) return;
+      S.stagePhase = 'cameo';
+      stopDescend();
+      const took = cam('landStowaway', {
+        onHandle: (h) => { S.cameo = h; },
+        onDone: () => { S.cameo = null; endCameo(); },
+      });
+      if (took) return;
+      /* SHE REFUSED AT THE DOOR. The trip already happened, so the class does
+         the only honest thing with it: it tells the decks about the round it
+         was quietly holding back, and reveals the bubble the slide was
+         carrying, right now, exactly as an ordinary slide would have. */
+      S.cameo = null;
+      S.cameoOwed = false;
+      decks('load', {
+        idx: S.idx,
+        total: S.plan.counts.total,
+        progress: b.progress,
+        kind: b.kind,
+        flavor: b.flavor,
+        slideMs: b.slideMs,
+      });
+      reveal(b);
+    }
+
+    /** One door out of a cameo, whichever way it ended. */
+    function endCameo() {
+      if (!S || destroyed || S.debriefed) return;
+      /* a freeze already took the wheel and moved the phase: it owns the
+         re-deal now (S.voided), and a second one here would deal twice. */
+      if (S.stagePhase !== 'cameo') return;
+      S.stagePhase = 'gap';
+      S.phaseTimer = timers.after(IC_CAMEO.GAP_MS, nextBubble);
+    }
+
+    /**
+     * Deal the bubble at the cursor (also used to re-deal after a freeze).
+     * `onLand` is DECK IV's seam: when it is set the trip belongs to a cameo,
+     * so the landing goes there instead of to reveal() AND the decks are told
+     * nothing. A cameo trip is not a round - a load/slide pair here would be
+     * counted twice for one plan index once the class comes back to it, and
+     * the trickster's tell would be lying about a bubble that is not going to
+     * reveal. With no cameo built, `onLand` is always undefined and every line
+     * below runs exactly as it did before this wave.
+     */
+    function dealCurrent(onLand) {
       const b = S.plan.bubbles[S.idx];
       S.bubble = b;
       S.stagePhase = 'load';
@@ -737,15 +900,17 @@ export default {
       heat();
       /* the decks learn the KIND at the mouth - the trickster's tell needs it
          this early. The casino and the pressure deck must render no tell. */
-      decks('load', {
-        idx: S.idx,
-        total: S.plan.counts.total,
-        progress: b.progress,
-        kind: b.kind,
-        flavor: b.flavor,
-        slideMs: b.slideMs,
-      });
-      S.phaseTimer = timers.after(LOAD_MS, () => beginSlide(b));
+      if (!onLand) {
+        decks('load', {
+          idx: S.idx,
+          total: S.plan.counts.total,
+          progress: b.progress,
+          kind: b.kind,
+          flavor: b.flavor,
+          slideMs: b.slideMs,
+        });
+      }
+      S.phaseTimer = timers.after(LOAD_MS, () => beginSlide(b, onLand));
     }
 
     /* W3 P0-8: THE SLIDE RISER. The whole trip down the tube used to be dead
@@ -770,19 +935,19 @@ export default {
       deckEngine.audio('descend', 0.06 + 0.12 * k, { pitch: 1 + 0.1 * k });
       S.descendAt = now() + DESCEND_STEP_MS;
     }
-    function beginSlide(b) {
+    function beginSlide(b, onLand) {
       if (!S || S.paused || S.suspended) return;
       S.stagePhase = 'slide';
       S.slideStart = now();
       S.slideMs = b.slideMs;
       S.render.setTravel(0);
-      decks('slide', { idx: S.idx, slideMs: b.slideMs });
+      if (!onLand) decks('slide', { idx: S.idx, slideMs: b.slideMs });
       S.descendOn = true;
       S.descendAt = 0;
       const tick = () => {
         if (!S || S.stagePhase !== 'slide' || S.paused || S.suspended) return;
         const p = (now() - S.slideStart) / S.slideMs;
-        if (p >= 1) { reveal(b); return; }
+        if (p >= 1) { if (onLand) { onLand(b); return; } reveal(b); return; }
         S.render.setTravel(p);
         /* W3 P0-8: one strike per DESCEND_STEP_MS, never one per travel tick. */
         if (S.descendOn && now() >= S.descendAt
@@ -855,6 +1020,17 @@ export default {
 
     function press(source) {
       if (!S || destroyed || S.paused || S.suspended || S.debriefed) return;
+      /* THE CAMEO OWNS THE GO KEY, and it owns it BEFORE the dedupe clock and
+         BEFORE refused(). She is standing in the dish where a bubble would be,
+         so the pop key pets her - it is not a dead press, it must not bump,
+         and it must not write lastPressAt (a pet would then eat the real pop
+         that lands PRESS_DEDUPE_MS later, on the bubble she is holding up). */
+      if (S.stagePhase === 'cameo') {
+        if (S.cameo && typeof S.cameo.pat === 'function') {
+          try { S.cameo.pat('key'); } catch (e) { say('cameo pat: ' + ((e && e.message) || e)); }
+        }
+        return;
+      }
       const at = now();
       if (at - S.lastPressAt < PRESS_DEDUPE_MS) return;
       S.lastPressAt = at;
@@ -1173,6 +1349,23 @@ export default {
       /* pause / tab-away / mandatory video: any live window is void, so the
          word fence comes down here too - it must never outlive the bubble. */
       holdWords(false);
+      /* A CAMEO IS VOID TOO, and the ORDER HERE IS THE WHOLE TRICK: the phase
+         is moved off `cameo` and the debt is cleared BEFORE the handle is
+         cancelled, because cancel() answers with onDone('cancel') and
+         endCameo() has to find nothing left to do. Cancel first and the class
+         would schedule a deal here AND another one out of thaw(). The bubble
+         she stood in front of is still owed, so this leaves the ordinary
+         voided-bubble debt behind: same index, dealt from the mouth. */
+      if (S.stagePhase === 'cameo') {
+        S.stagePhase = 'gap';
+        S.cameoOwed = false;
+        S.cameo = null;
+        S.voided = S.idx >= 0;
+        cam('cancel');
+        S.render.fadeBubble();
+        S.render.setTravel(null);
+        return;
+      }
       /* a bubble in flight is void - hide it, it re-deals from the mouth */
       if (S.stagePhase === 'reveal' || S.stagePhase === 'slide' || S.stagePhase === 'load') {
         /* a voided REVEAL was already counted as shown; un-count it, or the
@@ -1223,7 +1416,8 @@ export default {
         if (!S || S.paused) return;
         S.paused = true;
         decks('pause');
-        freeze();
+        freeze();          // freeze() owns the cameo's cancel, in the right order
+        cam('pause');      // and the deck stays down until resume()
         S.render.suspend(true);
       },
 
@@ -1231,7 +1425,7 @@ export default {
         if (!S || !S.paused) return;
         S.paused = false;
         S.render.suspend(false);
-        if (!S.suspended) decks('resume');
+        if (!S.suspended) { decks('resume'); cam('resume'); }
         thaw();
       },
 
@@ -1243,12 +1437,13 @@ export default {
         if (want) {
           decks('pause');
           freeze();
+          cam('pause');
           S.render.suspend(true);
         } else {
           S.render.suspend(false);
           /* a class the player ALSO paused stays frozen: the pause outranks
              the host's thaw, and resume() is what wakes the decks then. */
-          if (!S.paused) { decks('resume'); thaw(); }
+          if (!S.paused) { decks('resume'); cam('resume'); thaw(); }
         }
       },
 
@@ -1256,7 +1451,8 @@ export default {
         destroyed = true;
         holdWords(false);               // teardown never leaves the fence up
         decks('destroy');
-        casino = null; pressure = null; trickster = null;
+        cam('destroy');
+        casino = null; pressure = null; trickster = null; cameo = null;
         timers.killAll();
         unbindInputs();
         if (S) {
@@ -1276,7 +1472,10 @@ export default {
         return {
           heat: S ? S.heat : 0,
           streak: S ? S.streak : 0,
-          decks: { casino: dg(casino), pressure: dg(pressure), trickster: dg(trickster) },
+          decks: {
+            casino: dg(casino), pressure: dg(pressure),
+            trickster: dg(trickster), cameo: dg(cameo),
+          },
         };
       },
       __state() { return S; },

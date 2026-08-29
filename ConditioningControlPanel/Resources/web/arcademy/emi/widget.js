@@ -123,6 +123,15 @@ export const DIALS = Object.freeze({
   TRIP_GAP_PX: 14,         // px she stands off the fixture she came to look at
   TRIP_BEAT_MS: 320,       // the pause after the line, before the tube goes dark again
 
+  /* --- the cameo visit (IC EMI CAMEOS, 2026-08-29) ---------------------- */
+  /* A VISIT IS NOT A FIELD TRIP. She travels the same CRT ladder, but she lands
+   * CENTRED ON the caller's rect instead of beside it (she is standing INSIDE
+   * a bubble ring, not looking at a poster), and a finger on her is THE PAT
+   * rather than trap 75's "touch always wins". See the VISIT block below. */
+  VISIT_WAIT_MS: 4500,     // no pat by then and she squints and goes home
+  VISIT_SNUB_MS: 800,      // ...how long the squint holds before the tube goes dark
+  VISIT_PHOSPHOR_MS: 120,  // the seep frame on arrival, for the dossier only
+
   /* --- persistence ----------------------------------------------------- */
   SAVE_DEBOUNCE_MS: 600,   // one write per interaction, never per pointermove
 });
@@ -537,6 +546,15 @@ function blankStats() {
      * caught on one, and how many times she actually showed you. Cooldowns and
      * the per-session cap are SESSION-LOCAL by design and are not here. */
     takeovers: 0, caught: 0, reveals: 0,
+    /* THE CAMEOS (IC EMI CAMEOS, 2026-08-29). A class may borrow her for one
+     * bubble; these four count what came of it. They ride the SAME blob and the
+     * SAME single writer as everything above (trap 96) - a game never persists
+     * anything of hers and never sees this object at all.
+     *   visits        she was borrowed
+     *   visitPats     ...and you touched her (either road: a finger or the go key)
+     *   visitsIgnored ...or you did not, and she squinted and left
+     *   filesOpened   dossier pats only - how many folders you have opened */
+    visits: 0, visitPats: 0, visitsIgnored: 0, filesOpened: 0,
     /* WHERE SHE GETS PUT DOWN: drop counts per ninth of the viewport (z0..z8,
      * row-major). The favourite-spot beats read the count off the dropAt
      * payload; nothing else looks in here. */
@@ -2153,8 +2171,28 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     return !!(askStrip.contains && askStrip.contains(tgt));
   }
 
+  /* THE ONE preventDefault IN THIS FILE, and it is a helper so that it stays
+   * one (trap 98's grep counts the calls). Inside `.emi` only, and it exists to
+   * stop the browser's native image-drag ghost - nothing else. */
+  function stopNativeDrag(ev) {
+    if (ev && ev.cancelable && typeof ev.preventDefault === 'function') ev.preventDefault();
+  }
+
   function onDown(ev) {
     if (!enabled || hidden) return;
+    /* A VISIT IS NOT A FIELD TRIP, AND THIS IS THE WHOLE DIFFERENCE. While a
+     * class has her, the finger that lands on her is THE PAT: not trap 75's
+     * `cancelTrip({stay:true})` (which would strand her in the middle of a
+     * board and commit that spot as her home), and not a press either - no
+     * capture, no drag threshold, no `armed` hold. A press that travelled 400px
+     * is still the pat. See THE CAMEO VISIT, law 3. */
+    if (cameo) {
+      if (inX(ev)) return;
+      if (inAsk(ev)) return;
+      visitPat('pointer');
+      stopNativeDrag(ev);
+      return;
+    }
     /* TOUCH ALWAYS WINS (W2a, trap 75). A finger on her at ANY point of a field
      * trip ends it on the spot - she stays where the trip had put her, upright,
      * and the press below carries on into a perfectly ordinary drag. */
@@ -2184,9 +2222,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     // reach the dismiss affordance with a finger.
     disarmHold();
     armTimer = setTimeout(() => { armTimer = null; el.classList.add('armed'); }, DIALS.HOLD_MS);
-    // Inside `.emi` only - this is the one place a preventDefault is legal here,
-    // and it exists to stop the browser's native image-drag ghost.
-    if (ev.cancelable && typeof ev.preventDefault === 'function') ev.preventDefault();
+    stopNativeDrag(ev);
   }
 
   function beginDrag() {
@@ -2425,7 +2461,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
    */
   function pokeToy() {
     if (!enabled || hidden || toy.hidden) return false;
-    if (saying() || askOwnsGlass() || tripping()) return false;
+    if (saying() || askOwnsGlass() || tripping() || visiting()) return false;
     touchSeen();
     /* Her own bus, over her blipese and under every game one-shot, exactly like
      * the pat's pop. A little higher, because it is a wind-up and not a hand. */
@@ -2464,6 +2500,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     // next pointerup commit a position read off a display:none element.
     endPress();
     cancelTrip();                    // W2a: dismissed mid-trip = home first, then the dock
+    visitFinish('cancel');           // CAMEO: ...and a class that had her is told
     /* ASKS: A DOCKED EMI IS A SCREEN CHANGE THAT LEGITIMATELY KILLS HER, and it
      * is the one such change a SILENT (API) hide can make without the ask
      * engine hearing a gesture - so the strip is taken down here rather than
@@ -2807,8 +2844,11 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   function onResize() {
     /* A RESIZE MOVED THE FIXTURE (W2a, trap 73). The anchor she is standing at
      * was solved against the old viewport, so the trip is over: she goes home
-     * and the scheduler may offer another one later. */
+     * and the scheduler may offer another one later. CAMEO: same law, harder -
+     * she is standing INSIDE a ring the game has just re-laid out, so the visit
+     * is cancelled and the class deals its ordinary bubble instead. */
     cancelTrip();
+    visitFinish('cancel');
     refitWidth();
     if (!hidden && enabled) place();
     // THE SQUISH: crossing into the narrow-window regime, once per crossing.
@@ -3084,7 +3124,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     const o = opts || {};
     if (!getRect) return null;
     // LAW 3: she never starts one over herself.
-    if (!enabled || hidden || trip || pressing || dragging || busy() || saying()) return null;
+    if (!enabled || hidden || trip || cameo || pressing || dragging || busy() || saying()) return null;
     if (!el || !el.classList) return null;
     // Nothing to travel TO is not a failure, it is a fixture that is not on
     // screen. Answer null and let the scheduler try again another night.
@@ -3178,6 +3218,358 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
 
     return () => cancelTrip();
   }
+
+
+  /* ==========================================================================
+   * THE CAMEO VISIT (IC EMI CAMEOS, 2026-08-29) - ONE BLOCK, DELIBERATELY.
+   *
+   * A CLASS MAY BORROW HER FOR ONE BUBBLE. Impulse Control deals a bubble that
+   * is not a bubble: EMI is standing in it. The seam a game actually holds is
+   * `ctx.emi.visit(spec)` in shell/shell.js - a game never imports emi/ and
+   * never reaches this file - and the shell owns the floor, the one-in-flight
+   * rule and the class-end cancel. This owns HOW, and the how is five laws:
+   *
+   *   1. SHE LANDS CENTRED ON THE RECT, NOT BESIDE IT. `anchorFor` solves for
+   *      "somewhere she can stand and look at this", which is exactly wrong for
+   *      a ring she is meant to be standing INSIDE. `centreOn` is the second
+   *      placement mode and the only thing that differs from apparate's ladder.
+   *   2. THE RECT IS RESOLVED AT FIRE TIME (apparate law 1, trap 73). Same
+   *      getter, same read in the dark, one frame before she lands.
+   *   3. A POINTERDOWN ON HER IS THE PAT - NOT trap 75's cancelTrip({stay:true}),
+   *      and not a drag either. For the visit's whole lifetime there is no
+   *      press, no pointer capture and no drag threshold: a press that travelled
+   *      400px is still the pat. That is the ONE behavioural difference between
+   *      a visit and a trip and it is the one this block exists for.
+   *   4. THE GO KEY IS THE SAME ROAD. `handle.pat('key')` runs `visitPat`, the
+   *      identical function the finger runs, so the two can never drift.
+   *   5. ONE EXIT. `visitFinish` is the only place `onDone` is called and the
+   *      only place `cameo` is dropped, so "exactly once" is a property of the
+   *      code rather than of the caller's care.
+   *
+   * THE GESTURE TIMING IS THE LINE PASS'S, NOT AN ACCIDENT. A stowaway pat
+   * emits at the pat (she is in the tube with nothing over her and may talk);
+   * a DOSSIER pat emits only once she is HOME, because the shock chain and the
+   * folder own the screen for seconds afterwards and a say landing over them
+   * would be cut off by the trip home. Both roads emit the same two names -
+   * `visitPat` plus a kind-keyed one - because a bark pool's `when` has no
+   * visitKind predicate and the pools split by gesture id.
+   * ======================================================================== */
+
+  /** The one visit in flight, or null. `{kind, spec, timer, patted, patSrc,
+   *  endWanted, homeward}` - the same shape of bookkeeping `trip` keeps, for
+   *  the same reason (a rect read mid-squish is a 1px line). */
+  let cameo = null;
+  /** Its own timer for the seep frame: `later()` dies to every `killTimers()`
+   *  and the pat's chain calls one. */
+  let phosphorTimer = null;
+
+  /** True while a class has her. `emi/asks.js` and the trip scheduler both ask. */
+  function visiting() { return !!cameo; }
+
+  /** LAW 1: her box centred on the caller's box, clamped into the viewport.
+   *  There is always an answer - a mascot with nowhere to stand would be a
+   *  visit that hangs half way through. */
+  function centreOn(rect) {
+    const vp = viewport();
+    const s = sizePx();
+    const lo = DIALS.MARGIN;
+    const maxX = Math.max(lo, vp.w - s.w - lo);
+    const maxY = Math.max(lo, vp.h - s.h - lo);
+    return {
+      left: Math.round(clamp(rect.left + rect.width / 2 - s.w / 2, lo, maxX)),
+      top: Math.round(clamp(rect.top + rect.height / 2 - s.h / 2, lo, maxY)),
+    };
+  }
+
+  /** One step at a time, on the timer this visit owns. NOT `later()`: the pat's
+   *  chain goes through `play()`, and `play()` calls `killTimers()`. */
+  function visitStep(ms, fn) {
+    if (!cameo) return;
+    if (cameo.timer !== null) clearTimeout(cameo.timer);
+    const mine = cameo;
+    cameo.timer = setTimeout(() => {
+      if (cameo !== mine) return;
+      cameo.timer = null;
+      try { fn(); }
+      catch (e) {
+        say('emi: visit step threw - ' + ((e && e.message) || e));
+        visitFinish('cancel');
+      }
+    }, Math.max(0, ms));
+  }
+
+  /** THE SEEP FRAME, for the dossier's arrival only. A CSS class on `.emi` and
+   *  nothing else; `styles.css` already retires it under reduced motion. */
+  function visitPhosphor(on) {
+    if (phosphorTimer !== null) { clearTimeout(phosphorTimer); phosphorTimer = null; }
+    try {
+      if (!on) { el.classList.remove('arc-seep-frame'); return; }
+      el.classList.add('arc-seep-frame');
+      phosphorTimer = setTimeout(() => {
+        phosphorTimer = null;
+        try { el.classList.remove('arc-seep-frame'); } catch (e2) { /* noop */ }
+      }, DIALS.VISIT_PHOSPHOR_MS);
+    } catch (e) { /* noop */ }
+  }
+
+  /** Move her for the VISIT only: style plus the bubble flip, never the
+   *  fractions (apparate law 4 - the saved spot is never written). */
+  function visitPlaceAt(left, top) {
+    const vp = viewport();
+    const s = sizePx();
+    if (cameo) { cameo.left = left; cameo.top = top; }
+    try {
+      el.style.left = Math.round(left) + 'px';
+      el.style.top = Math.round(top) + 'px';
+    } catch (e) { /* noop */ }
+    faceBubble(left, top, s.w, vp.w);
+  }
+
+  /**
+   * LAW 5: THE ONE EXIT. Every road out of a visit - the pat's home landing,
+   * the snub's, a cancel, a step that threw - lands here, and `onDone` is
+   * called from nowhere else. `place()` is unconditional so a cancel mid-ladder
+   * still puts her back on the player's own spot rather than leaving her parked
+   * in the middle of somebody's board.
+   * @param {'pat'|'timeout'|'cancel'} reason
+   */
+  function visitFinish(reason) {
+    const c = cameo;
+    if (!c) return false;
+    cameo = null;
+    if (c.timer !== null) { clearTimeout(c.timer); c.timer = null; }
+    /* THE FILL IS FORWARDS, SO TAKING THE CLASS OFF IS NOT OPTIONAL (trap 74). */
+    crtClear();
+    visitPhosphor(false);
+    cancelChain();
+    killTimers();
+    setBubble(null);
+    place();
+    idle();
+    /* THE DEFERRED HALF OF THE DOSSIER'S PAT (the line pass's rule). She is
+     * home, the folder is gone and the glass is hers again, so this is the
+     * first honest moment she could answer a pat she was given six seconds ago.
+     * It fires for EVERY reason, cancel included: you did pat her. */
+    if (c.patted && c.kind === 'dossier') {
+      emitGesture('visitPat', { kind: 'dossier', src: c.patSrc });
+      emitGesture('visitPatDossier', { kind: 'dossier', src: c.patSrc });
+    }
+    if (typeof c.onDone === 'function') {
+      try { c.onDone(reason); } catch (e) { /* noop */ }
+    }
+    return true;
+  }
+
+  /** The two beats home, then the one exit. */
+  function visitGoHome(reason) {
+    if (!cameo || cameo.homeward) return;
+    cameo.homeward = true;
+    visitPhosphor(false);
+    cancelChain();
+    killTimers();
+    setBubble(null);
+    crt('crt-off');
+    visitStep(crtMs(), () => {
+      crt('crt-blank');
+      // `place()` reads the fractions the visit never touched, which IS the
+      // player's saved spot. No arithmetic, so no drift.
+      const home = place();
+      if (cameo) { cameo.left = home.left; cameo.top = home.top; }
+      crt('crt-on');
+      visitStep(crtMs(), () => visitFinish(reason));
+    });
+  }
+
+  /**
+   * THE PAT. One function, two roads (a finger on `.emi`, or the class's go key
+   * through `handle.pat`), and they are deliberately indistinguishable past the
+   * `src` string that rides the gesture.
+   * @param {'pointer'|'key'} src
+   */
+  function visitPat(src) {
+    if (!cameo || cameo.patted || cameo.homeward) return false;
+    const c = cameo;
+    c.patted = true;
+    c.patSrc = src === 'key' ? 'key' : 'pointer';
+    if (c.timer !== null) { clearTimeout(c.timer); c.timer = null; }
+    visitPhosphor(false);
+    touchSeen();
+    /* Her own bus, exactly the pop an ordinary head-pat already earns - an
+     * input that makes no sound reads as an input the page did not get. */
+    sfx('pop', 0.08, 1);
+    const love = c.spec.patChain !== 'shock';
+    /* THE LEDGER, BANKED AT THE PAT and not at the exit: a freeze two frames
+     * later must not un-count a thing the player actually did. `pets` moves for
+     * LOVE only - a shock is a reaction to a file, not a cuddle. */
+    stats.visitPats += 1;
+    if (love) stats.pets += 1;
+    if (c.kind === 'dossier') stats.filesOpened += 1;
+    save();
+    if (typeof c.onPat === 'function') { try { c.onPat(c.patSrc); } catch (e) { /* noop */ } }
+    /* THE STOWAWAY TALKS FROM INSIDE THE TUBE; the dossier's pair waits for
+     * `visitFinish` (see the block header). */
+    if (c.kind === 'stowaway') {
+      emitGesture('visitPat', { kind: 'stowaway', src: c.patSrc });
+      emitGesture('visitPatStowaway', { kind: 'stowaway', src: c.patSrc });
+    }
+    const stayMs = Math.max(0, num(c.spec.stayMs) || 0);
+    const afterChain = () => {
+      if (cameo !== c || c.homeward) return;
+      if (c.endWanted) { visitGoHome('pat'); return; }
+      visitStep(stayMs, () => visitGoHome('pat'));
+    };
+    const chain = CHAINS && (love ? CHAINS.love : CHAINS.shock);
+    /* `force` because the arrival face may still be a held raw frame, and the
+     * pose override rides the CALL SITE the way every other pet does. */
+    const played = chain
+      ? play(chain, { bodyFrame: love ? 'pet' : 'shock', force: true, onDone: afterChain })
+      : false;
+    if (!played) {
+      // FACELESS STILL COUNTS. No painter, no chain - the pat is still a pat and
+      // the ladder still has to reach the exit.
+      raw(love ? '(。♥‿♥。)' : '(◉_◉)', {
+        hold: 1400, fx: love ? 'hearts' : 'bang', body: 'bounce',
+        bodyFrame: love ? 'pet' : 'shock', force: true,
+      });
+      visitStep(1400 + stayMs, () => visitGoHome('pat'));
+    }
+    return true;
+  }
+
+  /** Nobody touched her. One squint, then home. */
+  function visitSnub() {
+    if (!cameo || cameo.patted || cameo.homeward) return;
+    const kind = cameo.kind;
+    visitPhosphor(false);
+    stats.visitsIgnored += 1;
+    save();
+    raw('¬_¬', { hold: DIALS.VISIT_SNUB_MS, bodyFrame: 'smug', force: true });
+    emitGesture('visitSnub', { kind, ignored: stats.visitsIgnored });
+    visitStep(DIALS.VISIT_SNUB_MS, () => visitGoHome('timeout'));
+  }
+
+  /**
+   * VISIT: a class borrows her, as one call.
+   *
+   * @param {Object} spec
+   *   kind      'stowaway' | 'dossier' - REQUIRED, and the only thing that is.
+   *   rect      a RECT-GETTER, resolved in the dark one frame before she lands
+   *             (law 2 / trap 73). A bare rect is accepted and is a bug waiting
+   *             to happen.
+   *   face      a chain id from CHAINS ('glitch') or a raw face. Default '^_~'.
+   *   phosphor  true to wear the seep frame for VISIT_PHOSPHOR_MS on arrival.
+   *   line      an optional bubble line, through the ordinary say path.
+   *   waitMs    no pat by then and she leaves. Default VISIT_WAIT_MS.
+   *   patChain  'love' (default) or 'shock' - the reaction the pat buys.
+   *   stayMs    how long she stays after that chain, unless `end()` comes first.
+   *   onArrive  () after the CRT-on at the spot
+   *   onPat     (src) EXACTLY once
+   *   onDone    (reason) EXACTLY once, and only once she is HOME
+   * @returns {?{pat:Function, end:Function, cancel:Function}} null when she
+   *          refuses, and the refusal is SYNCHRONOUS - the caller deals its
+   *          ordinary bubble on the same tick and rolls nothing again.
+   */
+  function visit(spec) {
+    const o = spec || {};
+    const kind = o.kind === 'dossier' ? 'dossier' : (o.kind === 'stowaway' ? 'stowaway' : null);
+    if (!kind) return null;
+    const getRect = o.rect;
+    if (!getRect) return null;
+    /* SHE NEVER STARTS ONE OVER HERSELF (apparate law 3, plus the two fences
+     * this file has grown since): an ask owns the glass until it is answered
+     * (trap 104), and a channel that is up owns the second canvas. */
+    if (!enabled || hidden || trip || cameo || pressing || dragging || busy() || saying()) return null;
+    if (askOwnsGlass()) return null;
+    try { if (deck && typeof deck.live === 'function' && deck.live()) return null; }
+    catch (e) { /* a deck that cannot be asked is not a deck that is up */ }
+    if (!el || !el.classList) return null;
+    // Nothing to travel TO is not a failure, it is a ring that is not on screen.
+    if (!rectNow(getRect)) return null;
+
+    const line = typeof o.line === 'string' && o.line.trim() ? o.line : null;
+    const face = typeof o.face === 'string' && o.face ? o.face : '^_~';
+    const waitMs = num(o.waitMs) === null ? DIALS.VISIT_WAIT_MS : Math.max(0, num(o.waitMs));
+    cameo = {
+      kind, spec: o, timer: null, left: 0, top: 0,
+      patted: false, patSrc: null, endWanted: false, homeward: false,
+      onPat: typeof o.onPat === 'function' ? o.onPat : null,
+      onDone: typeof o.onDone === 'function' ? o.onDone : null,
+    };
+    stats.visits += 1;
+    save();
+    stampActivity('visit');
+
+    const start = place();
+    cameo.left = start.left;
+    cameo.top = start.top;
+
+    stopBlink();
+    stopSway();
+    clearBody();
+    restGaze();
+
+    /* 1. THE TUBE GOES OFF. */
+    crt('crt-off');
+    visitStep(crtMs(), () => {
+      /* 2. THE DARK. The rect is resolved HERE - law 2 - and a ring that has
+       *    gone since the roll sends her straight home with a cancel. */
+      crt('crt-blank');
+      const rect = rectNow(getRect);
+      if (!rect) { visitFinish('cancel'); return; }
+      const spot = centreOn(rect);          // law 1: CENTRED, not beside
+      visitPlaceAt(spot.left, spot.top);
+      crt('crt-on');
+      visitStep(crtMs(), () => {
+        /* 3. SHE IS THERE. */
+        crtClear();
+        if (o.phosphor) visitPhosphor(true);
+        const chain = CHAINS && Object.prototype.hasOwnProperty.call(CHAINS, face)
+          ? CHAINS[face] : null;
+        let spoke = false;
+        if (line && makeSay && painter) {
+          try { spoke = play(makeSay(line, chain ? '^_^' : face, sayHoldMs(line)), { protect: true, force: true }); }
+          catch (e) { spoke = false; }
+        }
+        if (!spoke && line) setBubble(line);
+        if (!spoke) {
+          // A CHAIN ID IS A PERFORMANCE; a raw face is HELD for the whole wait,
+          // because a face that fell back to 0_0 half way through would read as
+          // her losing interest in the thing she came for.
+          if (chain) play(chain, { force: true });
+          else raw(face, { hold: Math.max(DIALS.RAW_HOLD_MS, waitMs), force: true });
+        }
+        if (typeof o.onArrive === 'function') { try { o.onArrive(); } catch (e) { /* noop */ } }
+        /* 4. THE WAIT. The pat cancels this timer; nothing else does. */
+        visitStep(waitMs, () => visitSnub());
+      });
+    });
+
+    /* THE HANDLE IS BOUND TO THIS VISIT AND NO OTHER. A game that holds one
+     * past its `onDone` (a timer that outlived the tear-down) must not be able
+     * to reach into the NEXT class's cameo, so every verb re-checks identity. */
+    const mine = cameo;
+    return {
+      /** The class's go-key road. Identical to a finger on her (law 4). */
+      pat(src) {
+        if (cameo !== mine) return false;
+        return visitPat(src === 'key' ? 'key' : 'pointer');
+      },
+      /** The pat already happened and the game is done showing its prize. */
+      end() {
+        if (cameo !== mine || !mine.patted || mine.homeward) return false;
+        if (mine.timer !== null) { clearTimeout(mine.timer); mine.timer = null; }
+        mine.endWanted = true;
+        visitGoHome('pat');
+        return true;
+      },
+      /** Abort. Straight home, `onDone('cancel')`, no ladder. */
+      cancel() {
+        if (cameo !== mine) return false;
+        return visitFinish('cancel');
+      },
+    };
+  }
+  /* ===================== end of the cameo visit ========================= */
 
 
   /* ==========================================================================
@@ -3477,7 +3869,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
    *  channel, not dismissed, not disabled, and no strip already up. */
   function askReady() {
     if (!enabled || hidden || !built) return false;
-    if (askLive || trip || pressing || dragging) return false;
+    if (askLive || trip || cameo || pressing || dragging) return false;
     if (busy() || saying()) return false;
     try {
       if (deck && typeof deck.live === 'function' && deck.live()) return false;
@@ -3622,6 +4014,11 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     /* W2a - the field trip. `apparate` takes a RECT-GETTER (trap 73), refuses
      * over any live verb, and answers a cancel function or null. */
     apparate, setPoiRects, tripping,
+    /* IC EMI CAMEOS - a class borrows her for one bubble. Same rect-getter law
+     * as `apparate`, a CENTRED landing, and a pointerdown that is the pat.
+     * `emi/index.js` re-exports exactly this one verb; the shell wraps it as
+     * `ctx.emi.visit` and owns the floor and the class-end cancel. */
+    visit, visiting,
     /** THE KEEP-OFF SEAM: a getter answering the boxes she may not stand on,
      *  or null. Session only - see "EMI KEEPS OFF THE ALLEY" above place(). */
     keepClear,
@@ -3673,6 +4070,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
         accrueVisible();
         endPress();
         cancelTrip();                // W2a: switched off mid-trip = home first
+        visitFinish('cancel');       // CAMEO: ...and a class holding a handle is told
         emitGesture('gone', { reason: 'disabled' });   // ASKS: see hide()
         unmountAsk(false); dropHeldLine();
         cancelChain(); killTimers(); stopBlink(); stopSway(); clearBody();
@@ -3734,6 +4132,8 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       if (varsityState === 'probing') varsityState = 'failed';
       if (outfitState === 'probing') outfitState = 'failed';
       cancelTrip();                  // W2a: never leave a trip timer behind
+      visitFinish('cancel');         // CAMEO: ...nor a visit ladder
+      if (phosphorTimer !== null) { clearTimeout(phosphorTimer); phosphorTimer = null; }
       unmountAsk(false);             // ASKS: never leave a live chip behind
       dropHeldLine();                // ...nor a line waiting for one to end
       if (askDropTimer !== null) { clearTimeout(askDropTimer); askDropTimer = null; }

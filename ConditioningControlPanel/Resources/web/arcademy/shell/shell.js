@@ -1388,6 +1388,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
   function clearScreen() {
     screenCue();
+    /* A CAMEO IS STANDING IN SOMETHING THAT IS ABOUT TO BE REMOVED. Every
+     * screen change funnels through here, so this is the one place the visit
+     * has to be ended - the game's ring goes with the wipe and she must not
+     * be left parked in the middle of whatever comes next. */
+    cancelLiveVisit();
     /* THE TUNE LEAVES WITH THE SCREEN. Silence is the default between places:
      * the next screen that has a track asks for it, and one that does not
      * (the lab, the prize counter, settings) gets none. A campus rebuilt after
@@ -5074,6 +5079,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       ceremonies: classCeremonies,
       store,
       mood,
+      /* IC EMI CAMEOS (2026-08-29): the mascot seam, beside the mood one and
+       * under the same law - a class may borrow her, it may not drive her.
+       * `visit(spec)` answers a handle or NULL (synchronously; deal your
+       * ordinary bubble on the same tick). `fileTag()` answers the subject
+       * code once the seep is post-reveal, else null. Both are opt-in and
+       * null-safe: a rig stubs ctx without them, so `if (ctx.emi)` first. */
+      emi: Object.freeze({ visit: emiVisit, fileTag: emiFileTag }),
 
       /* ---- additive read-only projection (all from init) ----------------
        * A class that needs to know the shape of the machine it is running on
@@ -5655,6 +5667,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
   function pauseClass(on) {
     if (!active) return;
+    // THE PAGE PAUSE IS A CAMEO'S END TOO: the pause card lands over the
+    // board she is standing on, and there is no pat behind a scrim.
+    if (on) cancelLiveVisit();
     active.paused = !!on;
     // THE ONE FUNNEL every freeze walks through - the pause card, the settings
     // screen and applySuspend(true) all land here, so the class clock only has
@@ -5868,6 +5883,114 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     } catch (e) { return false; }
   }
 
+  /* ======================= ctx.emi - THE CAMEO SEAM =======================
+   * IC EMI CAMEOS (2026-08-29). A game may not call the widget: it holds
+   * `ctx.mood` and, from this wave, `ctx.emi` - the same shape and the same
+   * discipline. `ctx.mood` may TELL the mascot how the room feels; `ctx.emi`
+   * may BORROW her for one bubble. Neither is a door into emi/: a class never
+   * imports the mascot and never sees a widget handle.
+   *
+   * THE SHELL OWNS THE RATION, NOT THE GAME. Every throttle a cameo has lives
+   * here, exactly as the mood throttles do, so ten classes cannot each invent
+   * their own and one broken class cannot flood her:
+   *   - ONE visit in flight, page-wide. A second call answers null.
+   *   - VISIT_FLOOR_MS since the last visit ENDED (not started, and not per
+   *     class: two classes back to back must not stack).
+   *   - never while a takeover or an ask owns the glass, and never under a
+   *     global suspend. The widget re-checks all three of those for itself;
+   *     the copy here is what makes the refusal SYNCHRONOUS and cheap.
+   * A refusal is `null`, on the same tick, and it is the normal answer: the
+   * game deals its ordinary bubble and rolls nothing again for that slot.
+   *
+   * AND THE SHELL OWNS THE CANCEL. A visit is torn down from four funnels -
+   * `clearScreen()`, `teardownClass()`, `applySuspend(true)` and
+   * `pauseClass(true)` - because a mascot standing in a bubble that has just
+   * been removed is the one way this feature could strand her on a dead
+   * screen. The widget cancels on its OWN edges as well (hide,
+   * setEnabled(false), a resize, a destroy); these four are the shell's half.
+   * ==================================================================== */
+
+  /** At most one cameo anywhere in the page, and the floor between two. */
+  const VISIT_FLOOR_MS = 8000;
+  let liveVisit = null;
+  let lastVisitEndAt = 0;
+
+  /** Send her home from any of the shell's four funnels. Idempotent. */
+  function cancelLiveVisit() {
+    const v = liveVisit;
+    if (!v) return;
+    liveVisit = null;                 // FIRST: `cancel()` calls straight back in
+    try { v.cancel(); } catch (e) { /* a mascot may never break a teardown */ }
+  }
+
+  /**
+   * ctx.emi.visit(spec) -> handle | null. See emi/widget.js, THE CAMEO VISIT,
+   * for the spec and the handle; this adds the floor and nothing else.
+   */
+  function emiVisit(spec) {
+    const o = spec || {};
+    if (liveVisit) return null;
+    if (suspendedGlobally) return null;
+    if (Date.now() - lastVisitEndAt < VISIT_FLOOR_MS) return null;
+    let mascot = null;
+    try { mascot = getEmi(); } catch (e) { mascot = null; }
+    if (!mascot || typeof mascot.visit !== 'function') return null;
+    /* A QUESTION OUTRANKS A CAMEO (trap 104): she is waiting for an answer and
+     * a class may not walk her off mid-sentence. */
+    try { if (mascot.asks && mascot.asks.active && mascot.asks.active()) return null; }
+    catch (e) { /* no ask engine is not a live ask */ }
+    /* ...and so does a channel that is up: the second canvas owns her glass. */
+    try {
+      const deck = mascot.channels;
+      if (deck && typeof deck.live === 'function' && deck.live()) return null;
+    } catch (e) { /* a deck that cannot be asked is not a deck that is up */ }
+
+    let handle = null;
+    let settled = false;
+    /* ONE EXIT on this side too: the floor is stamped from here and nowhere
+     * else, so every road out of a visit - pat, timeout, cancel - pays it. */
+    const finish = (reason) => {
+      if (settled) return;
+      settled = true;
+      if (liveVisit === handle) liveVisit = null;
+      lastVisitEndAt = Date.now();
+      if (typeof o.onDone === 'function') {
+        try { o.onDone(reason); } catch (e) { /* a class may never break her */ }
+      }
+    };
+    let inner = null;
+    try { inner = mascot.visit(Object.assign({}, o, { onDone: finish })); }
+    catch (e) { say('emi visit threw: ' + ((e && e.message) || e)); inner = null; }
+    if (!inner) return null;
+    handle = Object.freeze({
+      pat(src) { try { return !!inner.pat(src); } catch (e) { return false; } },
+      end() { try { return !!inner.end(); } catch (e) { return false; } },
+      cancel() { try { return !!inner.cancel(); } catch (e) { return false; } },
+    });
+    liveVisit = handle;
+    return handle;
+  }
+
+  /**
+   * ctx.emi.fileTag() -> the Other Stamp's subject code, or null.
+   *
+   * THE FOLDER CURDLES AFTER THE REVEAL (owner ruling). Before it the dossier
+   * tab reads "field notes" and the stamp says "for you"; after it the tab
+   * carries the code the camera wall already writes on the player and the
+   * stamp goes under a redaction bar. The SHELL resolves it, because the
+   * director is the shell's - a game never learns that shell/seep.js exists,
+   * and a page with no director reads the same honest null.
+   */
+  function emiFileTag() {
+    try {
+      if (!seep || typeof seep.postReveal !== 'function') return null;
+      if (typeof seep.subjectCode !== 'function') return null;
+      if (!seep.postReveal()) return null;
+      const code = seep.subjectCode();
+      return (typeof code === 'string' && code) ? code : null;
+    } catch (e) { return null; }
+  }
+
   /**
    * The host says everything must stop NOW (mandatory video, audio-only session
    * starting mid-class, panic). Freeze the class, drop every effect, and show the
@@ -5877,6 +6000,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   function applySuspend(on, reason) {
     suspendedGlobally = !!on;
     suspendReason = on ? (reason || '') : null;
+    // NO CAMEO UNDER A MANDATORY VIDEO. One edge only: a lift re-deals
+    // nothing, because a visit is not a plan slot (the game re-rolls).
+    if (on) cancelLiveVisit();
     fireMoment(on ? 'suspend' : 'resume', { reason });   // EMI SEAM
     // NO GHOSTS UNDER A MANDATORY VIDEO. The layer rides the same one funnel the
     // pause card does, and it is a LEVEL (trap 28), so both edges are written.
@@ -5947,6 +6073,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * class cannot buy a second announcement. It sits after the `active`
      * guard and before `active` is dropped below. */
     try { if (pa) pa.notify('classEnded'); } catch (e) { /* noop */ }
+    // ...and a cameo dies with the class that borrowed her, from whichever
+    // road out this is (finished, abandoned, Esc). See ctx.emi above.
+    cancelLiveVisit();
     //
     // The question dies with the class it was asked about - a dialog that
     // outlived its stage would be a second, invisible Esc rung.
