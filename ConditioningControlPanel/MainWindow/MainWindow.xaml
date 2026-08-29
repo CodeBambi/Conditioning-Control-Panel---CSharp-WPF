@@ -1417,6 +1417,12 @@
                             </Grid>
                         </Grid>
                     </Button>
+                    <!-- EMI DESK's dock chip: the last thing in the pinned stack, under the
+                         Settings door. NOT a door - no NavDoorMap row, no "you are here" ring, and
+                         no 40px door Viewbox markup in THIS file (NavRailFlyoutTests counts eight
+                         of those). Self-wiring like the fuse chip: adding the element is the whole
+                         integration. See Controls/EmiDock.xaml. -->
+                    <controls:EmiDock x:Name="EmiDockChip"/>
                 </StackPanel>
             </Grid>
         </Border>

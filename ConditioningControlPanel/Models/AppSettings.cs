@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -7991,6 +7991,109 @@ namespace ConditioningControlPanel.Models
             }
 
             MigratedFlashClickableDecoupling = true;
+        }
+
+        #endregion
+
+        #region EMI Desk
+
+        // EMI Desk: the summoned desktop widget (Services/EmiDesk, Windows/EmiDesk). These are the
+        // switches the user flips. Everything the widget writes ABOUT ITSELF (where she was parked,
+        // pins, usage counts, which lines were dealt) lives in emi-desk.json via EmiState, NOT here:
+        // this file is settings, that file is state.
+
+        private bool _emiDeskEnabled = true;
+        /// <summary>Master switch. Off means no hotkey, no dock chip and no summon.</summary>
+        [JsonProperty]
+        public bool EmiDeskEnabled
+        {
+            get => _emiDeskEnabled;
+            set { _emiDeskEnabled = value; OnPropertyChanged(); }
+        }
+
+        private string _emiDeskHotkey = "Ctrl+Alt+E";
+        /// <summary>
+        /// The system-wide summon chord. A MODIFIER IS REQUIRED: a bare key registered globally
+        /// would swallow that letter in every other app on the machine. Blank or unparseable means
+        /// no hotkey, and the dock chip stays the way in.
+        /// </summary>
+        [JsonProperty]
+        public string EmiDeskHotkey
+        {
+            get => _emiDeskHotkey;
+            set { _emiDeskHotkey = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private bool _emiDeskMuteAvatar = true;
+        /// <summary>
+        /// Offer to mute the avatar while EMI is out. Two voices at once is the failure mode this
+        /// exists to avoid. Note that this only ARMS the offer: the mute itself needs the user's
+        /// answer at summon time (see EmiDeskService.AvatarMuted).
+        /// </summary>
+        [JsonProperty]
+        public bool EmiDeskMuteAvatar
+        {
+            get => _emiDeskMuteAvatar;
+            set { _emiDeskMuteAvatar = value; OnPropertyChanged(); }
+        }
+
+        private bool _emiDeskMuteDontAsk;
+        /// <summary>
+        /// The user picked "Don't ask again" ON the mute button, so it means mute from then on.
+        /// Cleared by turning <see cref="EmiDeskMuteAvatar"/> off and on again.
+        /// </summary>
+        [JsonProperty]
+        public bool EmiDeskMuteDontAsk
+        {
+            get => _emiDeskMuteDontAsk;
+            set { _emiDeskMuteDontAsk = value; OnPropertyChanged(); }
+        }
+
+        private int _emiDeskSpice = 2;
+        /// <summary>
+        /// How far her lines go: 1 Innocent, 2 Suggestive, 3 Anything. Clamped on write, because a
+        /// hand-edited settings file must never widen the band past what the pools were written for.
+        /// </summary>
+        [JsonProperty]
+        public int EmiDeskSpice
+        {
+            get => _emiDeskSpice;
+            set { _emiDeskSpice = Math.Max(1, Math.Min(3, value)); OnPropertyChanged(); }
+        }
+
+        private bool _emiDeskOffers = true;
+        /// <summary>Let her offer things (start a session, open a room). Off leaves her decorative and reactive.</summary>
+        [JsonProperty]
+        public bool EmiDeskOffers
+        {
+            get => _emiDeskOffers;
+            set { _emiDeskOffers = value; OnPropertyChanged(); }
+        }
+
+        private bool _emiDeskGlass = true;
+        /// <summary>Let the glass run its idle channels (spiral, video, burst, rain). Off keeps her face on it.</summary>
+        [JsonProperty]
+        public bool EmiDeskGlass
+        {
+            get => _emiDeskGlass;
+            set { _emiDeskGlass = value; OnPropertyChanged(); }
+        }
+
+        private double _emiDeskWidth = 220;
+        /// <summary>
+        /// Her body width in DIPs, mirrored from the widget's own resize handle. Clamped to the
+        /// window's 152..420 band on write so a bad file cannot park her at one pixel.
+        /// </summary>
+        [JsonProperty]
+        public double EmiDeskWidth
+        {
+            get => _emiDeskWidth;
+            set
+            {
+                double v = double.IsNaN(value) || double.IsInfinity(value) ? 220 : value;
+                _emiDeskWidth = Math.Max(152, Math.Min(420, v));
+                OnPropertyChanged();
+            }
         }
 
         #endregion

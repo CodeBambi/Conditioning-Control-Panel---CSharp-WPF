@@ -453,6 +453,12 @@ namespace ConditioningControlPanel
         public static AchievementService Achievements { get; private set; } = null!;
         public static GamificationBridge? Gamification { get; private set; }
         public static BarkService? Bark { get; private set; }
+
+        /// <summary>
+        /// EMI Desk: the summoned desktop widget (Services/EmiDesk). Null only if construction
+        /// threw. Nothing else in the app may assume she is out - ask <c>App.EmiDesk?.IsOut</c>.
+        /// </summary>
+        public static Services.EmiDesk.EmiDeskService? EmiDesk { get; private set; }
         public static QuestDefinitionService QuestDefinitions { get; private set; } = null!;
         public static QuestService Quests { get; private set; } = null!;
         /// <summary>Weekly free-tier pass for the Graded Intake (see IntakePassService).</summary>
@@ -1895,6 +1901,11 @@ namespace ConditioningControlPanel
             // Reactive companion-dialogue ("bark") seam. Like GamificationBridge it is
             // constructed here and Start()ed later once feature services exist.
             Bark = new BarkService();
+            // EMI Desk. Constructed here beside the other optional companions; her window is
+            // NOT built until the first summon, and her hotkey arms from MainWindow's Loaded
+            // (it needs an HWND to hang RegisterHotKey off).
+            try { EmiDesk = new Services.EmiDesk.EmiDeskService(); }
+            catch (Exception exDesk) { Logger?.Warning(exDesk, "[EmiDesk] service construction failed; EMI Desk is unavailable this run"); }
             QuestDefinitions = new QuestDefinitionService();
             _ = QuestDefinitions.InitializeAsync(); // Fire and forget - will load from cache first
             Quests = new QuestService();
@@ -4571,6 +4582,11 @@ Application State:
             // skips ProcessExit handlers by design.
             try { Haptics?.ShutdownStop(); }
             catch (Exception ex) { Logger?.Warning(ex, "Haptics shutdown stop failed"); }
+
+            // EMI Desk: unregister her chord, drop the widget window and flush emi-desk.json.
+            // Before the WebView2 teardown on purpose - she is cheap and her state file has a
+            // debounced write that must not be lost to a slow browser dispose.
+            try { EmiDesk?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "[EmiDesk] shutdown failed"); }
 
             // DtRH browser game: dispose the WebView2 window/process if it's up.
             try { Services.Chaos.DtrhHostService.CloseActive(); } catch { }

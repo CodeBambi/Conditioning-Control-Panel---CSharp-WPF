@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using ConditioningControlPanel.Localization;
@@ -368,6 +368,7 @@ namespace ConditioningControlPanel.Services
             Section("devices", "set2_section_devices", "🎛️", "devices webcam camera microphone mic panic hotkeys");
             Section("performance", "set2_section_performance", "⚡", "performance motion gpu rendering");
             Section("notifications", "set2_section_notifications", "🔔", "notifications reminders nudge");
+            Section("emidesk", "set2_section_emidesk", "📺", "emi desk widget companion mascot summon hotkey mute avatar spice glass offers");
             Section("account", "set2_section_account", "👤", "account login patreon discord subscribestar tier");
             Section("data", "set2_section_data", "💾", "data backup export import offline reset");
             Section("updates", "set2_section_updates", "⬆️", "updates version patch notes changelog");

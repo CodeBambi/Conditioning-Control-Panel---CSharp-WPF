@@ -1,0 +1,109 @@
+﻿<Window x:Class="ConditioningControlPanel.EmiDeskWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:emi="clr-namespace:ConditioningControlPanel.Services.EmiDesk"
+        Title="EMI"
+
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowActivated="False"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        SizeToContent="Manual"
+        WindowStartupLocation="Manual"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        Topmost="True"
+        Focusable="False"
+        Visibility="Hidden"
+        Width="460" Height="458">
+
+    <!--
+        THE WIDGET SURFACE.
+
+        The window is deliberately BIGGER than EMI: `OverlayPad` DIPs of fully transparent air on
+        every side, so the summon smoke, the sparkle scatter and (later) her speech bubble have
+        room to fly outside her silhouette without a second window. Empty air is `Background`-less
+        (`{x:Null}`), which WPF does not hit-test, so a click on the padding falls through to
+        whatever is behind her, exactly like the avatar tube's bubble region.
+
+        Layer order, bottom to top:
+          BodyRoot    her silhouette; the ONLY hit-testable region (Background="Transparent")
+            BodyImage the pose PNG
+            FaceLayer the face canvas and, over it, the glass (chunk B3 paints into GlassHost)
+            BtnClose  the hover x
+            ResizeGrip the corner handle
+          OverlayHost the summon/dismiss FX, and whatever chunk B2 wants over her
+          BubbleHost  chunk B3's speech bubble
+
+        Every size in here is a placeholder: EmiDeskWindow.ApplyWidth() drives the real numbers off
+        the body PNG's 859 x 869 aspect and the glass rect from emi.css.
+    -->
+    <Grid x:Name="Root" Background="{x:Null}">
+
+        <Grid x:Name="BodyRoot"
+              HorizontalAlignment="Center" VerticalAlignment="Center"
+              Background="Transparent"
+              RenderTransformOrigin="0.5,0.55">
+            <!-- Two slots, authored together so neither animation has to re-parent the other:
+                 CrtScale is the summon / dismiss power-on and the bounce / thud pulses, MoveShift
+                 is the nod / droop / shiver offsets. -->
+            <Grid.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform x:Name="CrtScale" ScaleX="1" ScaleY="1"/>
+                    <TranslateTransform x:Name="MoveShift"/>
+                </TransformGroup>
+            </Grid.RenderTransform>
+
+            <Image x:Name="BodyImage"
+                   Stretch="Fill"
+                   IsHitTestVisible="False"
+                   RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+
+            <!-- The glass. Positioned in code from the emi.css fractions; nothing in here is
+                 hit-testable, because a glass click is resolved geometrically in the body's own
+                 mouse-up handler (a hit-testable overlay would eat the drag). -->
+            <Canvas x:Name="FaceLayer" IsHitTestVisible="False" ClipToBounds="False">
+                <emi:EmiFace x:Name="FaceView"/>
+                <Canvas x:Name="GlassCanvas" IsHitTestVisible="False"/>
+            </Canvas>
+
+            <!-- The hover x. 18 DIP, top right of the silhouette, invisible until the pointer is
+                 on her. No double-click dismiss anywhere: it would delay the ring click. -->
+            <Button x:Name="BtnClose"
+                    Width="18" Height="18"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Opacity="0" Cursor="Hand"
+                    Focusable="False"
+                    ToolTip="Send her away">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Grid Background="Transparent">
+                            <Ellipse Fill="#E60E0E1C" Stroke="#FF69B4" StrokeThickness="1.5"/>
+                            <Path Data="M 5,5 L 13,13 M 13,5 L 5,13"
+                                  Stroke="#FF69B4" StrokeThickness="2"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+
+            <!-- The corner resize handle: 152 to 420 DIP, aspect locked. -->
+            <Border x:Name="ResizeGrip"
+                    Width="16" Height="16"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Background="Transparent"
+                    Opacity="0"
+                    Cursor="SizeNWSE"
+                    ToolTip="Drag to resize">
+                <Path Data="M 3,13 L 13,3 M 7,13 L 13,7 M 11,13 L 13,11"
+                      Stroke="#FF69B4" StrokeThickness="1.5"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+            </Border>
+        </Grid>
+
+        <Canvas x:Name="OverlayCanvas" IsHitTestVisible="False" ClipToBounds="False"/>
+        <Canvas x:Name="BubbleCanvas" IsHitTestVisible="False" ClipToBounds="False"/>
+    </Grid>
+</Window>

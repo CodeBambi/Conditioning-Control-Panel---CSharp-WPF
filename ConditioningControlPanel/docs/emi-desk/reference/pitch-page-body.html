@@ -1,0 +1,373 @@
+<div class="wrap">
+
+<section>
+  <p class="eyebrow">Pitch · Conditioning Control Panel · 2026-08-29</p>
+  <h1>EMI leaves the campus and becomes the front door.</h1>
+  <p class="lede">A summoned, draggable, resizable pixel CRT on the desktop. A little circle on the dashboard (or a hotkey) poofs her in; the same circle, a hover ×, or the hotkey poofs her out. Click her: a ring of six cards opens, your most-used features and your pins, one click to anywhere in the app. Leave her alone: her glass flips to a channel, a spiral, a video, a pile of gifs, and tapping the glass fires it on your real screen. Every so often she asks a yes/no. While she is out, the avatar can be muted. Everything below is clickable.</p>
+
+  <div class="stage-wrap">
+    <div id="stage" aria-label="Live demo of EMI on a mock desktop">
+      <div id="win">
+        <div class="tb"><i></i><i></i><i></i> Conditioning Control Panel</div>
+        <div class="rail"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="body"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="wt"></div>
+      </div>
+      <div id="mockvideo" hidden><div class="play"></div><div class="lab">MANDATORY VIDEO · 02:14</div></div>
+      <div class="hint">the circle in the rail (or the button below): summon / dismiss · click her: the ring · click her glass when it shows something: fires it<br>drag: moves · corner handle: resize · right-click a card: pin · hover ×: dismiss</div>
+      <button type="button" id="dock" class="dock" title="EMI (Ctrl+Alt+E)" aria-label="Summon or dismiss EMI"><canvas width="152" height="137"></canvas></button>
+      <div id="mute" class="mutepill" hidden>avatar muted while EMI is out</div>
+      <div id="stagelog" aria-live="polite"></div>
+      <div id="ring" hidden></div>
+      <div id="emi" role="button" tabindex="0" aria-label="EMI">
+        <div class="emi-move">
+          <img class="emi-body" alt="" draggable="false">
+          <canvas class="emi-screen" width="152" height="137" aria-hidden="true"></canvas>
+          <canvas class="emi-glass" width="152" height="137" hidden aria-label="EMI's glass, click to fire"></canvas>
+          <div class="emi-fx"></div>
+          <div class="emi-bubble" hidden></div>
+        </div>
+        <div class="emi-strip" hidden></div>
+        <div class="emi-resize" title="resize"></div>
+        <button type="button" class="emi-x" title="dismiss (Ctrl+Alt+E)" aria-label="Dismiss EMI">×</button>
+      </div>
+      <div id="overlay" class="ov" hidden><canvas></canvas><div class="tiles"></div></div>
+      <div class="taskbar"><span class="app">CCP</span><span>·</span><span>EMI Desk</span><span class="clock">23:41</span></div>
+    </div>
+    <div class="controls">
+      <span class="lab">try:</span>
+      <button type="button" data-act="toggle">summon / dismiss</button>
+      <button type="button" data-act="ring">open the ring</button>
+      <span class="sep"></span>
+      <button type="button" data-act="chan:spiral">glass: spiral</button>
+      <button type="button" data-act="chan:video">glass: video</button>
+      <button type="button" data-act="chan:burst">glass: gifs</button>
+      <button type="button" data-act="chan:rain">glass: rain</button>
+      <span class="sep"></span>
+      <button type="button" data-act="offer">an offer</button>
+      <button type="button" data-act="pet">pet</button>
+      <button type="button" data-act="dork">dork canon</button>
+      <span class="sep"></span>
+      <button type="button" data-act="reset">reset</button>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="grid2">
+    <div>
+      <p class="eyebrow">Why this works</p>
+      <h2>She gets a job, and the app gets a door that learns.</h2>
+      <p>Users have asked for a way to bring up their favourite features; the program has roughly thirty destinations across two card walls, a rail of premium chips, a Studio rack and a Ctrl+K palette. A radial launcher on a mascot is the smallest possible answer: one click, six things, no tab hunting. It is the Overwolf / PS5 control-centre pattern with a face on it.</p>
+      <p>The second half is what only EMI can do. She is a television. A spiral turning on her screen that you tap to put on <em>your</em> screen is a diegetic way to expose Spiral, Video, Burst and Rain, the Studio effects most people never open from the rack. And her yes/no chips are the friendliest possible shape for an app that wants to offer things without nagging.</p>
+      <p>Most of it exists. The face, chains, poses, drag, pet, the "wanna see?" glass channels and the ask strip all ship in <code>Resources/web/arcademy/emi/</code> today. The new work is the ring, the suggester, the desktop host and the content.</p>
+    </div>
+    <div class="aside">
+      <p class="eyebrow">Already built (campus EMI)</p>
+      <dl class="kv">
+        <dt>renderer</dt><dd>face.js + chains.js, 6 body poses + 4 sway frames, bubble, fx</dd>
+        <dt>widget</dt><dd>drag, fling, pet, dock, resize (<code>setWidth</code>), per-screen park, DPI-safe pixel bubble</dd>
+        <dt>glass</dt><dd>takeover.js + channels.js: idle wheel, "wanna see?" 5s, reveal 6s, any input cancels, media via host bridge with consent gate</dd>
+        <dt>asks</dt><dd>asks.js: question + two chips, 40s give-up, wordless ignore, cadence gates</dd>
+        <dt>voice</dt><dd>voice.js: 32 pools / 187 lines, odds + floor + no-repeat + one double per sitting</dd>
+        <dt>story</dt><dd>32 one-shot beats, the lab, the flinch. Untouched by this pitch.</dd>
+      </dl>
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat"><b class="num">10.3k</b><span>lines of EMI already shipping, reused as-is</span></div>
+    <div class="stat"><b class="num">6</b><span>ring slots, hard cap. More is a menu.</span></div>
+    <div class="stat"><b class="num">64 + 13</b><span>new desktop barks and offers drafted against the voice lock</span></div>
+    <div class="stat"><b class="num">1</b><span>new concept in settings: a pinned feature</span></div>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow">00 · Summon and dismiss</p>
+  <h2>She is called, not installed.</h2>
+  <div class="grid2">
+    <div>
+      <p>EMI is not a permanent widget. A small circle on the dashboard, with her face in it, summons her; clicking it again dismisses her. So does a hotkey from anywhere, and a small × that appears on her when you hover. This is the thing that settles the fight with the avatar: most of the time she is not there at all, and while she <em>is</em> there, the avatar can be muted with one switch.</p>
+      <h3>The circle</h3>
+      <p>A 40px round tile in the nav rail, her live face inside it (it blinks; it goes <code>ZzZ</code> when she is dismissed late at night, <code>-_-</code> while she is out and the avatar is muted). Left-click toggles her. Right-click opens a three-line menu: <b>Mute the avatar while EMI is out</b>, <b>Shortcut: Ctrl+Alt+E</b>, <b>Glass only / Full</b>. Same circle on the taskbar tray menu.</p>
+      <h3>The hotkey</h3>
+      <p>Default <code>Ctrl+Alt+E</code>, rebindable in Settings next to the pause and panic keys, and it must be a chord: the low-level pause/panic hook eats bare keys before <code>RegisterHotKey</code> ever sees them, silently. Press it once: she poofs in at her last parked spot on the monitor the cursor is on. Press it again: she poofs out. Holding it for a second while she is out opens the ring directly, so keyboard users get the launcher without the mouse.</p>
+      <h3>Muting the avatar</h3>
+      <p>The switch is one setting, <code>MuteAvatarWhileEmiOut</code>, and it means: no barks, no bubble, no TTS from the tube while EMI is on screen; the tube keeps its pose and its emotes. Recommend it <b>on by default</b>, because a summoned mascot is a deliberate act and the person just chose who they want to hear. Restoring is automatic on dismiss, with the tube's normal 20s quiet tail so it doesn't burst into speech the second she leaves.</p>
+      <p>The care point is features that <em>run through</em> the avatar. Takeover speaks through the tube; She's Listening answers through it; the AI chat input is the tube; Awareness and Remote Control emotes use it. Summoning EMI while one of those is live puts up one small prompt, once per session: <em>"Takeover is talking through the avatar. Mute it while EMI is out?"</em> with <b>Mute</b> / <b>Keep the avatar</b> / <b>Don't ask again</b>. Choosing keep leaves the tube on and the arbiter below handles the overlap. Nothing is muted silently underneath a feature the user is actively running.</p>
+    </div>
+    <div class="aside">
+      <p class="eyebrow">Intro / outro (~1s, fancy on purpose)</p>
+      <dl class="kv">
+        <dt>summon</dt><dd>a pixel smoke bomb where she'll stand (grey and pink pixels, 400ms), then CRT power-on: a dot, a horizontal line, the glass opens (200ms, the campus <code>emi-crt-on</code>), then the <code>wake</code> chain: <code>-_-</code> → <code>o_o</code> → <code>0_0</code> → <code>(⊙_⊙)</code>. Total ≈1.1s. The smoke lands on the desktop, not on the app, so it reads as her arriving in the room.</dd>
+        <dt>dismiss</dt><dd>a <code>wink</code> (she knows it's a goodbye), then CRT power-off: glass collapses to a line, to a dot (200ms), and a sparkle scatter where she was. ≈1s. Never a sad face on dismiss: dismissing her is not leaving her.</dd>
+        <dt>variants</dt><dd>1 in 6 summons she arrives mid-<code>sway</code> as if she was already walking; 1 in 6 dismissals the sparkles are hearts if she was petted this sitting. Rare, so the default stays the default.</dd>
+        <dt>rules</dt><dd>dismiss is instant to input: the ring, a channel, an ask all cancel first, then the outro plays. Reduced-motion: cut to the power-on/off frames, no smoke, no sparkles.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow">01 · The ring</p>
+  <h2>Six cards, some pinned, the rest earned.</h2>
+  <div class="grid2">
+    <div>
+      <p>Click her body and six cards fan out around her, on the side that has room (near an edge she fans the other way, see the demo). Each card is a feature: its dashboard art when the app has one, a flat hue tile with the name when it doesn't. A card with a pin stays for good. The other slots belong to the suggester, which ranks by what you actually open.</p>
+      <h3>Rules</h3>
+      <ul style="color:var(--muted);padding-left:18px;margin:0 0 12px">
+        <li><b style="color:var(--ink)">Six, ever.</b> No scroll, no second page. A 7th thing lives in the app, where it always did.</li>
+        <li><b style="color:var(--ink)">Pin</b> = right-click or long-press a card. Pinned cards keep their slot; a pin never moves because usage changed.</li>
+        <li><b style="color:var(--ink)">Pick is instant.</b> Navigation fires on the click; her reaction rides it and never delays it. Nine picks in ten are wordless (a glance, a wink).</li>
+        <li><b style="color:var(--ink)">Locked cards show, don't sell.</b> A premium feature you don't have is a striped card that opens the app's normal locked view. She doesn't know the word.</li>
+        <li><b style="color:var(--ink)">Esc or click-away closes.</b> Drag her while it's open and it folds.</li>
+      </ul>
+      <h3>The suggester (no ML, one formula)</h3>
+      <p>Score each launchable target by decayed opens: every open adds 1, halved every 7 days; unpinned slots go to the top scores; a target never shown before gets a small bonus so the ring rotates; a target the tier gate refuses is excluded unless it is free today. Same shape as the companion brain's existing <code>favoriteFeatures</code> signal (top 3, floor of 3 uses), widened to every door.</p>
+      <p>What counts an open: one seam on <code>MainWindow.ShowTab</code>, one on <code>OpenStudioModule</code>, one on each host <code>Launch()</code>. The counter already exists for seven effects (<code>MemoryStore.NoteFeatureUsed</code>); this adds tabs and hosts. Also feeds "you use loom a lot. front row?"</p>
+    </div>
+    <div class="aside">
+      <p class="eyebrow">A card, anatomised</p>
+      <dl class="kv">
+        <dt>art</dt><dd><code>Resources/features/*.png</code> exists for 20+ targets (loom, fyp, dtrh, spiral, video, vault, remote, awareness…). Hue tile fallback for the rest (Arcademy has no card yet).</dd>
+        <dt>name</dt><dd>the existing loc key, 8px pixel font, two lines max</dd>
+        <dt>badge</dt><dd><span class="chip pin">PIN</span> for a pin, <span class="chip">·</span> for a suggestion, <span class="chip warn">LOCK</span> for a gated tier</dd>
+        <dt>action</dt><dd>a <code>SettingsPaletteEntry</code>: the Ctrl+K palette index (<code>Services/SettingsPaletteIndex.cs</code>) already has Id, glyph, TabKey, aliases and <code>IsAvailable</code> for every door. The ring reuses it verbatim.</dd>
+        <dt>state</dt><dd>new <code>AppSettings.EmiPinnedTargets</code> (list of ids) + <code>EmiDeskMode</code></dd>
+      </dl>
+    </div>
+  </div>
+
+  <h3>Launchable targets (what a card can point at)</h3>
+  <div class="scroll"><table class="tbl">
+    <thead><tr><th>Target</th><th>Call</th><th>Art</th><th>Gate</th></tr></thead>
+    <tbody>
+      <tr><td>The Arcademy</td><td class="m">ArcademyHostService.Launch()</td><td><span class="dot no"></span>hue tile</td><td>Lab (T2); door currently dark</td></tr>
+      <tr><td>Loom</td><td class="m">LoomHostService.Launch()</td><td><span class="dot"></span>loom.png</td><td>free</td></tr>
+      <tr><td>For You</td><td class="m">MainWindow.OpenFypFeed()</td><td><span class="dot"></span>fyp.png</td><td>Premium, daily-free key <code>fyp</code></td></tr>
+      <tr><td>Down the Rabbit Hole</td><td class="m">DtrhHostService.Launch()</td><td><span class="dot"></span>dtrh.png</td><td>Lab, daily-free <code>dtrh</code></td></tr>
+      <tr><td>Just Drop</td><td class="m">ShowTab("justdrop")</td><td><span class="dot"></span>justdrop.png</td><td>DoorAvailable</td></tr>
+      <tr><td>Graded Intake</td><td class="m">IntakeHostService.Launch()</td><td><span class="dot"></span>lab_quiz_hero.png</td><td>Premium + weekly pass</td></tr>
+      <tr><td>Goon Game</td><td class="m">Play card handler</td><td><span class="dot"></span>goon_game.png</td><td>door shut</td></tr>
+      <tr><td>Sessions / Presets</td><td class="m">ShowTab("presets")</td><td><span class="dot"></span>deeper.png</td><td>free</td></tr>
+      <tr><td>Flashes · Video · Subliminals · Spiral · Pink · Bubbles · Lock Card · Mind Wipe · Brain Drain · Bouncing Text</td><td class="m">OpenStudioModule(rackKey)</td><td><span class="dot"></span>one png each</td><td>free</td></tr>
+      <tr><td>Awareness</td><td class="m">ShowTab("awareness")</td><td><span class="dot"></span>awareness.png</td><td>Premium, daily-free <code>awareness</code></td></tr>
+      <tr><td>Remote Control</td><td class="m">ShowTab("remotecontrol")</td><td><span class="dot"></span>remote_control.png</td><td>Premium, daily-free <code>remote</code></td></tr>
+      <tr><td>Takeover · Haptics · Voice · Lockdown · Blink Trainer</td><td class="m">PremiumChip_Click(PremiumFeature)</td><td><span class="dot"></span>takeover.png, blink_trainer.png…</td><td>Premium</td></tr>
+      <tr><td>The Vault</td><td class="m">ShowTab("exclusives")</td><td><span class="dot"></span>vault.png (per-mod variants)</td><td>free to view</td></tr>
+      <tr><td>Companion · Quests · Achievements · Leaderboard · Settings</td><td class="m">ShowTab(key)</td><td><span class="dot no"></span>nav door png (64px) or hue</td><td>free</td></tr>
+    </tbody>
+  </table></div>
+  <p style="color:var(--muted);font-size:13.5px">Gates go through <code>TierGate.RequiresPremium / RequiresLab</code> with the daily-free keys, so a locked card is free-today aware for nothing. The FX tiles carry no tag, as on the mosaic.</p>
+</section>
+
+<section>
+  <p class="eyebrow">02 · The glass</p>
+  <h2>A channel comes on. Tap it and it leaves the box.</h2>
+  <div class="grid2">
+    <div>
+      <p>This is the campus "off channel" mechanism (<code>takeover.js</code>) pointed at the app's own effects. When you've been quiet a while, her face glitches out and the glass shows a preview: a spiral turning, a video thumbnail with a timecode, a pile of gifs pushing on the screen, gif rain. It sits there for up to 25s with a faint glow on the bezel. Tap the glass: the effect fires on the real screen and she reacts. Ignore it: it blips off, no line, ever. Any other input cancels it instantly.</p>
+      <p>The previews are real material, not icons: the actual gif that will burst, the actual video's first frame, the app's spiral. Media comes through the same host bridge and the same remote-media consent gate the campus already uses; consent off means your own library; neither means the channel does not exist tonight.</p>
+      <h3>When the glass stays dark</h3>
+      <p>During a running session (the session engine owns the screen), while a video is up, while the avatar tube is talking (plus a 20s tail), while the app is minimized, in the first 10 minutes of a sitting, and whenever the effect itself would refuse (<code>VideoService</code> drops a trigger during cleanup or a gif rain; the panic/pause key clears everything, including her). The channel's <code>plan()</code> refuses rather than stubs, so nothing ever paints an apology on her face.</p>
+    </div>
+    <div class="aside">
+      <p class="eyebrow">Cadence dials</p>
+      <dl class="kv">
+        <dt>first</dt><dd>never before 10 min into a sitting</dd>
+        <dt>spacing</dt><dd>one preview per 20–40 min</dd>
+        <dt>hold</dt><dd>~25s, then blip off, wordless</dd>
+        <dt>per night</dt><dd>cap 6, deep-idle screensaver exempt</dd>
+        <dt>bark</dt><dd>0.10 over a finished preview; 0.20 on fire, max 2 a sitting</dd>
+        <dt>video</dt><dd>she goes topmost over the player, max 1 line per video, not before 8s in, never over the attention check</dd>
+      </dl>
+    </div>
+  </div>
+  <div class="scroll"><table class="tbl">
+    <thead><tr><th>On the glass</th><th>Tap fires</th><th>Existing call</th><th>Guard</th></tr></thead>
+    <tbody>
+      <tr><td><span class="chip glass">SPIRAL</span></td><td>the spiral overlay on the real screen for ~6s; her glass keeps spinning while it's up</td><td class="m">App.Overlay.ShowOverlayTimed("spiral", 6000, opacity)</td><td>no session running</td></tr>
+      <tr><td><span class="chip glass">VIDEO</span></td><td>a mandatory video; she rides on top and comments once, then <code>videoEnded</code></td><td class="m">App.Video.TriggerVideo() / PlaySpecificVideo(path)</td><td>not while a video/cleanup/rain is live; attention check untouched</td></tr>
+      <tr><td><span class="chip glass">GIFS</span></td><td>a gif burst outward from where she sits</td><td class="m">App.Flash.TriggerFlashOnce(amount, duration, size)</td><td>works without a running service, by design</td></tr>
+      <tr><td><span class="chip glass">RAIN</span></td><td>gif rain for ~10s</td><td class="m">new entry point: today rain is only a Chaos bubble payload (GifCascade)</td><td>needs a small <code>StartGifRain()</code> seam</td></tr>
+      <tr><td><span class="chip glass">CARD</span></td><td>a preview of a launchable (a class is ready, a quest at 2/3, a Discord night) that opens it</td><td class="m">same as a ring pick</td><td>diegetic only: no update banners, no marquee, no streak nags</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <p class="eyebrow">03 · Offers</p>
+  <h2>A question on the glass, two chips, forty seconds.</h2>
+  <div class="grid2">
+    <div>
+      <p>The ask engine ships already; the desktop adds a second table. She asks, waits, and if you do nothing she goes <code>-_-</code>, then <code>...</code>, then idle. No line, and a skipped question costs nothing. Any press that is not a chip cancels for free. One ask a sitting, never before the third desktop sitting, never during a session, never over a video, never while the tube is talking. Chip 1 is the yes side unless both chips are custom, in which case both do something.</p>
+      <p>Four of the yes/no reactions are marked <em>quirk</em> and share the one-double-a-sitting ration with the barks. The full table (13 offers) is in the writers' room file; these are the ones the demo runs.</p>
+    </div>
+    <div class="aside">
+      <p class="eyebrow">Sample</p>
+      <p><span class="bub">you use loom a lot. front row?</span></p>
+      <p style="margin-top:8px"><span class="chip pink">FRONT ROW</span><span class="chip">NAH</span></p>
+      <p style="margin-top:10px;font-size:13px">yes: <em>done. up top. you'll find it faster.</em> and the card is pinned in the top slot.<br>no: <em>ok. it stays put. it knows the way.</em></p>
+    </div>
+  </div>
+  <div class="scroll"><table class="tbl">
+    <thead><tr><th>Offer</th><th>When</th><th>Question · chips</th><th>A yes does</th></tr></thead>
+    <tbody>
+      <tr><td>spiral</td><td>first spiral preview of a sitting</td><td><em>spiral?</em> · spin / nah</td><td>spiral overlay ~6s</td></tr>
+      <tr><td>video</td><td>a video preview</td><td><em>wanna watch one?</em> · play / nah</td><td>mandatory video; she goes topmost</td></tr>
+      <tr><td>burst</td><td>a gif preview</td><td><em>can i let some out?</em> · let them / nah</td><td>gif burst from her position</td></tr>
+      <tr><td>rain</td><td>a rain preview</td><td><em>rain?</em> · rain / dry</td><td>gif rain ~10s</td></tr>
+      <tr><td>pin</td><td>5th pick of the same unpinned card</td><td><em>pin this one?</em> · pin it / nah</td><td>pins it</td></tr>
+      <tr><td>front row</td><td>ring opens, top card unpinned</td><td><em>you use {feature} a lot. front row?</em> · front row / nah</td><td>pins it top slot</td></tr>
+      <tr><td>bed</td><td>first ring after 1am</td><td><em>bed?</em> · yeah / not yet</td><td>closes the ring, mutes offers till 6am, she holds ZzZ. Never closes the app.</td></tr>
+      <tr><td>tidy</td><td>3+ suggestions each ignored 3x</td><td><em>tidy the ring?</em> · tidy / leave it</td><td>drops the ignored ones, re-ranks; pins untouched</td></tr>
+      <tr><td>locked</td><td>a locked card tapped</td><td><em>this one's stuck. try it anyway?</em> · try / nah</td><td>opens the app's own locked view. No pitch.</td></tr>
+      <tr><td>in the way?</td><td>third drag in a sitting</td><td><em>am i in the way?</em> · a bit / no</td><td>shrinks her, snaps to the nearest corner</td></tr>
+      <tr><td>spin or show</td><td>both a spiral and a video available (rare)</td><td><em>spin or show?</em> · spin / show</td><td>both chips fire; the answer is remembered</td></tr>
+      <tr><td>again?</td><td>5s after an effect ends</td><td><em>again?</em> · again / enough</td><td>repeats once; exempt from cadence, max once a sitting</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <p class="eyebrow">04 · Voice</p>
+  <h2>Rarer than on campus, and never over the avatar.</h2>
+  <div class="grid2">
+    <div>
+      <p>The one rule that makes this coexist with the avatar tube: <b>the avatar is the voice, EMI is the screen.</b> She never reacts to an event the tube reacts to, never mentions the tube, and holds completely still (blink only, every pool and every offer suppressed) while it is talking, plus a 20-second tail. Her bark odds on the desktop are about half the campus's, and the global floor doubles to 180s. The ring and the glass are her output; the bubble is the exception.</p>
+      <p>A writers' room pass drafted 17 desktop moments, 64 lines (15 doubles, 23%) and 13 offers against the voice lock, with a fence audit and seven cuts. Every face and chain below is a locked one. A few, by moment:</p>
+    </div>
+    <div class="aside">
+      <p class="eyebrow">Desktop moments</p>
+      <p style="font-size:13px;line-height:1.7"><code>desktopFirstBoot</code> <code>ringOpen</code> <code>ringDismissed</code> <code>ringPick</code> <code>arcademyFromRing</code> <code>pinAdded</code> <code>suggestionIgnored3x</code> <code>resized</code> <code>glassOffer</code> <code>effectFired</code> <code>effectDeclined</code> (hold) <code>videoRunning</code> <code>videoEnded</code> <code>appIdleLong</code> <code>lateNight</code> <code>premiumTeaseSeen</code> <code>avatarSpeaking</code> (hold)</p>
+      <p style="font-size:13px">No pool on app close, same as the campus. Only the wordless exit flinch may ride it.</p>
+    </div>
+  </div>
+  <ul class="lines">
+    <li><span class="f">first boot</span><span>oh. it's big out here. hi. i'm staying. <span class="d">DOUBLE</span></span></li>
+    <li><span class="f">first boot</span><span>so this is where you keep the other buttons.</span></li>
+    <li><span class="f">ring open</span><span>these are your usuals. i noticed. i notice things. <span class="d">DOUBLE</span></span></li>
+    <li><span class="f">ring open</span><span>come with me if you want to live. or to the arcade. <span class="d">DORK</span></span></li>
+    <li><span class="f">ring pick</span><span>off you go. i'll mind the desk.</span></li>
+    <li><span class="f">ring pick</span><span>that one again. your favorite. i keep count. <span class="d">DOUBLE</span></span></li>
+    <li><span class="f">pin added</span><span>pinned. i'll guard it with my whole antenna.</span></li>
+    <li><span class="f">ignored 3x</span><span>fine. i'll stop suggesting it. i won't. but fine.</span></li>
+    <li><span class="f">resized</span><span>big me. finally the size of my personality.</span></li>
+    <li><span class="f">resized</span><span>small again. i don't mind. i'm mostly face anyway.</span></li>
+    <li><span class="f">glass: video</span><span>there's a show on. i'd watch it with you. <span class="d">DOUBLE</span></span></li>
+    <li><span class="f">glass: rain</span><span>weather's coming in. gif weather. bring nothing.</span></li>
+    <li><span class="f">fired</span><span>that came out of me. i'm as surprised as you.</span></li>
+    <li><span class="f">on the video</span><span>i'm not blocking anything. i checked. i'm small.</span></li>
+    <li><span class="f">on the video</span><span>popcorn's imaginary. take some. there's loads.</span></li>
+    <li><span class="f">video ended</span><span>credits. there aren't any. i'll do them. you. me.</span></li>
+    <li><span class="f">idle 20m</span><span>you're busy. i'll be decor. very still decor.</span></li>
+    <li><span class="f">idle 20m</span><span>i'm in your computer. haha. i mean the corner. this corner. <span class="d">DORK · DOUBLE</span></span></li>
+    <li><span class="f">late night</span><span>past midnight. the good buttons come out now.</span></li>
+    <li><span class="f">locked card</span><span>locked? huh. it looked open from in here. <span class="d">DOUBLE</span></span></li>
+    <li><span class="f">arcademy</span><span>home. race you. i'm already there. i win.</span></li>
+    <li><span class="f">arcademy</span><span>school! grab your things. you have no things. go.</span></li>
+  </ul>
+  <p style="color:var(--muted);font-size:13.5px">Two to squint at, flagged by the room: "i'm in your computer" and "look at you. looking. i'm looking too. it's nice." Both read clown-first, both are the closest doubles to the first-read line. Cut already: a HAL bit (the word), "stay till the end" (a nudge on a mandatory video), and "your screen's the only light on" (she can't see the room).</p>
+</section>
+
+<section>
+  <p class="eyebrow">05 · Build</p>
+  <h2>JS brain, WPF body.</h2>
+  <div class="grid2">
+    <div>
+      <p>The one real technical trap: <b>WebView2 does not paint inside a layered (per-pixel transparent) window.</b> <code>ChaosWebViewHost</code> says so in its own comments and every WebView2 surface in the app is opaque. A free-floating pixel mascot with a ring around her needs exactly that transparency, and the avatar tube already has it: <code>AllowsTransparency="True"</code>, topmost, tool-window style, native owner link, and a 450ms DPI quiesce that took real pain to get right.</p>
+      <p>So: don't host EMI's page on the desktop. Split her. The <b>brain</b> (voice.js, story, asks, moments, ledger, channel planning: everything that decides) keeps running as the existing JS bundle in a hidden WebView2 with a <code>mode:'desktop'</code> host, so the campus, the web, the phone and the desk share one canon and one <code>emi</code> store key. The <b>body</b> (face, poses, bubble, chips, ring, glass painters) is a small WPF window built on the tube's windowing code. The renderer is 171 lines of face maths plus 145 lines of chain data plus PNGs; that is the whole port. Glass content is painted WPF-side from real media, which is better than shipping frames over the bridge anyway.</p>
+      <p>Two EMIs must never coexist: when the Arcademy opens, the desk EMI does her CRT power-off and the campus one takes over the same state; on close she powers back on.</p>
+    </div>
+    <div class="aside">
+      <p class="eyebrow">Bridge, both ways</p>
+      <dl class="kv">
+        <dt>brain → body</dt><dd><code>draw(face, opts)</code> <code>bubble(text)</code> <code>pose(frame)</code> <code>move(cls)</code> <code>fx(kind)</code> <code>glass(channel, spec)</code> <code>ask(q, chips)</code></dd>
+        <dt>body → brain</dt><dd>gestures (pet, drag, fling, drop, resize), ring events, chip answers, glass taps, the existing <code>fireMoment</code> seams from C# events</dd>
+        <dt>host → brain</dt><dd>tube speaking / session running / video live / minimized (the holds), tier verdicts, usage scores, catalog for channels</dd>
+        <dt>store</dt><dd>the page-owned <code>emi</code> + <code>emiVoice</code> blobs in the C# meta store, unchanged</dd>
+      </dl>
+      <p style="font-size:12.5px;margin-top:10px">Alternative if the hidden WebView2 (~80–100MB idle) is unwelcome: port the brain too. voice.js is 1.2k lines of dice and ledgers with an injectable rng and clock, so it ports cleanly, at the cost of two canons to keep in step.</p>
+    </div>
+  </div>
+  <div class="diagram">
+    <div class="box"><p class="eyebrow">Hidden WebView2 · the brain</p><ul><li>existing bundle, <code>mode:'desktop'</code></li><li>voice.js, story.js, asks.js, moments.js, channels.js plan()</li><li>desktop pools + offers as data (barks-desk.js, asks-desk.js)</li><li>suggester scoring (fed usage from the host)</li><li>no DOM painting</li></ul></div>
+    <div class="bridge">postMessage<br>↔<br>same seams the campus uses</div>
+    <div class="box"><p class="eyebrow">WPF window · the body</p><ul><li>tube's windowing: transparent, topmost, tool-window, DPI quiesce</li><li>face: WriteableBitmap, 152px, nearest-neighbour</li><li>poses, bubble (8px grid, whole px), chips</li><li>ring: 6 tiles from the palette index</li><li>glass: spiral / video frame / gifs / rain painted from real media</li></ul></div>
+  </div>
+  <div class="phases">
+    <div class="phase"><p class="eyebrow">Phase 1 · the door</p><b>Summon, desk window, ring, pins, suggester</b><ul><li>dashboard circle + tray entry + <code>Ctrl+Alt+E</code> (RegisterHotKey chord), hover ×</li><li>intro/outro: smoke bomb + CRT on, wink + CRT off + sparkles</li><li>mute switch + the Takeover / Listening / chat prompt</li><li>WPF body: face, poses, bubble, drag, resize, park per monitor</li><li>ring from <code>SettingsPaletteIndex</code>, hue fallback, tier stripes</li><li>usage seams on ShowTab / OpenStudioModule / host Launch</li><li>brain hosted headless, campus moments off, desk moments on</li></ul><div class="size">medium-large · the host window is the bulk</div></div>
+    <div class="phase"><p class="eyebrow">Phase 2 · the glass</p><b>Four channels + the holds</b><ul><li>spiral, video, burst channels on existing calls</li><li>rain: one new <code>StartGifRain()</code> seam off the chaos cascade</li><li>holds: session, video, tube speaking, minimized, panic key</li><li>video: topmost ride + <code>videoRunning/videoEnded</code></li><li>consent gate + own library, as on campus</li></ul><div class="size">medium · painters are the work</div></div>
+    <div class="phase"><p class="eyebrow">Phase 3 · the voice</p><b>Desk pools + offers wired</b><ul><li>17 moments, 64 lines, 13 offers through /emi-lines QA</li><li>desk cadence: half odds, 180s floor, one double</li><li>CARD channel (class ready, quest 2/3, Discord night)</li><li>lab line-items for the desk (ring picks by hour, offers taken by kind…)</li><li>Arcademy hand-off: power-off / power-on</li></ul><div class="size">small-medium · mostly content + gates</div></div>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow">06 · Defaults and the tube</p>
+  <h2>Nobody gets two talkers.</h2>
+  <div class="grid2">
+    <div>
+      <p>Three layers, in the order they apply. <b>First, she is summoned</b>: dismissed EMI costs nothing and says nothing, and that is her state most of the day. <b>Second, the mute switch</b>: while she is out, the avatar is muted unless the user turned that off or kept it for a live Takeover. <b>Third, the arbiter</b>, for the people who keep both on: the avatar is the voice, EMI is the screen, and each one counts the other's turn.</p>
+      <p>Her own volume has two positions, <b>Glass only / Full</b>, in the circle's menu. Glass only is the ring plus the channels with no bubble lines beyond pet reactions and the greet. Full adds the pools and the offers. Recommend Full by default now that she is summoned: if someone called her, they want her.</p>
+      <p>Placement: she poofs in at her last parked spot on the monitor the cursor is on, opposite side from the tube the first time, and parks per monitor like on campus. Resizable from 96px to 260px; the bubble and the ring cards stay on whole pixels at every size (the pixel-font trap is already documented).</p>
+    </div>
+    <div class="aside">
+      <p class="eyebrow">The arbiter, in two booleans (mute off)</p>
+      <dl class="kv">
+        <dt>tube live</dt><dd>bubble up, chat input open, AI thinking → EMI holds (blink only), 20s tail</dd>
+        <dt>EMI live</dt><dd>reveal card up or effect firing → <code>BarkService</code> global min-gap treats it as a recent bark</dd>
+      </dl>
+      <p style="font-size:12.5px;margin-top:10px">Both sides already have this shape: EMI's "a say outranks the glass" law and the bark service's min-gap. This just makes each one count the other. With mute on, the first boolean is simply always false.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow">07 · The after-read</p>
+  <h2>She still doesn't know.</h2>
+  <p>On campus she counted pets and hours in one room, and the lab's paper is unsettling because the room was small. On the desktop she is the same needy box, but now she opens a ring of your habits on request, notices which card you reach for, offers a spiral because it's been forty minutes, and sits on top of a video you agreed to because she asked nicely, all delivered exactly like "one more? for me?". The reveal needs no new dialogue: "these are your usuals. i noticed. i notice things." is a cute launcher line until you've read a paper on which hour of the night you say yes to a spiral, and "it looked open from in here" is a shrug until you learn the locked card was placed in the ring on purpose and she was never told. The yes/no chip is the friendliest shape for a thing that records the answer, and she genuinely keeps it warm when you say nah.</p>
+  <p style="color:var(--muted)">Lab line-items the desk adds, lab letterhead only: <code>ring picks, by hour</code> · <code>offers taken, by kind</code> · <code>glass taps per night</code> · <code>front row nudges</code> · <code>bed skips, running</code></p>
+</section>
+
+<section>
+  <p class="eyebrow">08 · Your calls</p>
+  <h2>Eight decisions before anyone builds.</h2>
+  <ol class="calls">
+    <li><div><b>Brain in a hidden WebView2, or port it too?</b><div class="rec">Recommend hidden WebView2 for v1: one canon across four platforms. Port later if the idle memory bothers you.</div></div></li>
+    <li><div><b>Mute the avatar while EMI is out: on or off by default?</b><div class="rec">Recommend on. Summoning is deliberate. The Takeover / She's Listening / chat prompt covers the case where muting would break something the user is running.</div></div></li>
+    <li><div><b>Hotkey default.</b><div class="rec">Recommend Ctrl+Alt+E, chord only (the low-level pause/panic hook shadows bare keys). Check it against the pause key default and the gaze Quick Recal chord before shipping.</div></div></li>
+    <li><div><b>Which dismiss gesture on her body?</b><div class="rec">Her left-click is the ring, so dismiss lives on the hover ×, the circle and the hotkey. If you want a click-on-her dismiss too, double-click is the free one.</div></div></li>
+    <li><div><b>Ring targets: everything launchable, or a curated allowlist?</b><div class="rec">Recommend the palette index minus Settings sub-sections; 6 slots keeps it honest regardless.</div></div></li>
+    <li><div><b>Does the glass ever show remote (Scrolller) media, or only the local library?</b><div class="rec">Recommend the campus rule exactly: consent on = remote, off = local, no filtering ever.</div></div></li>
+    <li><div><b>Does the exit flinch ride app close?</b><div class="rec">Recommend no for v1. App close is a far bigger exit than the campus's; keep her wave.</div></div></li>
+    <li><div><b>The two flagged doubles</b> ("i'm in your computer", "look at you. looking.")<div class="rec">Keep or cut; both are on the first-read edge. The room's full file has all 64 + 13 with the fence audit.</div></div></li>
+  </ol>
+  <p class="foot">Sources: Resources/web/arcademy/emi/* (index.js, widget.js, takeover.js, channels.js, asks.js, chains.js, face.js), AvatarTube/AvatarTubeWindow.Windowing.cs, Chaos/ChaosWebViewHost.cs, Services/SettingsPaletteIndex.cs, Services/Companion/Brain/MemoryStore.cs + MemorySignalWriter.cs, Services/TierGate.cs, MainWindow.TabNavigation.cs, writers' room file scratchpad/emi-desktop/barks-brainstorm.md. Nothing in the repo was touched.</p>
+</section>
+
+</div>
+<script>
+window.RING_CARDS = [
+  { id:'arcademy', name:'The Arcademy', hue:322, pinned:true },
+  { id:'loom', name:'Loom', hue:200, img:'loom', pinned:true },
+  { id:'fyp', name:'For You', hue:280, img:'fyp' },
+  { id:'dtrh', name:'Rabbit Hole', hue:150, img:'dtrh' },
+  { id:'spiral', name:'Spiral', hue:330, img:'spiral' },
+  { id:'awareness', name:'Awareness', hue:40, img:'awareness', locked:true, gate:'Premium, free today?' }
+];
+window.PICK_LINES = {
+  arcademy: { t:'home. race you. i\'m already there. i win.', face:'(≧◡≦)' },
+  loom: { t:'off you go. i\'ll mind the desk.', face:'^_^' },
+  awareness: { t:'locked? huh. it looked open from in here.', face:'o_o' }
+};
+window.FIRE_LINES = { video: { t:'i\'m not blocking anything. i checked. i\'m small.', face:'0_0' } };
+window.DORK_LINE = { t:'come with me if you want to live. or to the arcade.', face:'(⌐■_■)' };
+window.DEMO_ASKS = [
+  { q:'spiral?', face:'@_@', chips:['spin','nah'], yes:{ t:'hold still. or don\'t. it works either way.', face:'@_@' }, no:{ t:'ok. i\'ll keep it warm.', face:'._.' }, effect:'spiral overlay on the real screen ~6s', fire:'spiral' },
+  { q:'you use loom a lot. front row?', face:'(◔_◔)', chips:['front row','nah'], yes:{ t:'done. up top. you\'ll find it faster.', face:'^_^', chain:'nod' }, no:{ t:'ok. it stays put. it knows the way.', face:'0_0' }, effect:'pins Loom in the top slot' },
+  { q:'wanna watch one?', face:'(◕‿◕)', chips:['play','nah'], yes:{ t:'i\'ll sit on top. tiny. like a bug on a window.', face:'^_^' }, no:{ t:'ok. it\'ll keep. they always keep.', face:'0_0' }, effect:'starts a mandatory video; she goes topmost', fire:'video' },
+  { q:'bed?', face:'=_=', chips:['yeah','not yet'], yes:{ t:'good. i\'ll dim. i can\'t dim. i\'ll try.', face:'ZzZ' }, no:{ t:'ok. one more. i\'m not counting. i am.', face:'=_=' }, effect:'closes the ring, mutes offers till 6am. never closes the app.' },
+  { q:'rain?', face:'0_0', chips:['rain','dry'], yes:{ t:'here it comes. mind your head.', face:'^_~' }, no:{ t:'dry day. fair. i like dry days too.', face:'^_^' }, effect:'gif rain ~10s', fire:'rain' },
+  { q:'am i in the way?', face:'o_o', chips:['a bit','no'], yes:{ t:'ok. shrinking. still here. just less of it.', face:'^_^' }, no:{ t:'good. this is my size. i picked it.', face:'^_^' }, effect:'shrinks her, snaps to the nearest corner' }
+];
+</script>

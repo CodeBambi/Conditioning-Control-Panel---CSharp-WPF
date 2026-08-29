@@ -413,6 +413,10 @@ namespace ConditioningControlPanel
             // An uninterruptible recorded clip owns the bubble — only its own (bypassing) call may render.
             if (_isPlayingUninterruptibleClip && !bypassClipLock) return;
 
+            // EMI Desk hears every line the tube is about to say, muted or not, so she can keep out
+            // of the avatar's way. Cheap by contract: this runs on every bubble.
+            App.EmiDesk?.NoteAvatarSpeaking();
+
             // A real bubble is taking over the listening indicator (e.g. the command confirmation) —
             // stop the dots animation and release the listening flag so HideListeningBubble no-ops.
             if (_isListeningBubble)
@@ -447,7 +451,10 @@ namespace ConditioningControlPanel
             // Skip only when the avatar isn't on screen. Mute silences her VOICE (audio is gated
             // below), it must NOT suppress the text speech bubble — that made a muted companion look
             // completely broken (#445).
-            if (!IsAvatarVisibleOnScreen)
+            // EMI Desk's mute rides the SAME branch as "avatar not on screen" on purpose: that path
+            // is already the one that keeps the timing bookkeeping honest and drains the queue, so a
+            // muted line is skipped rather than stacked up to erupt the moment EMI leaves.
+            if (!IsAvatarVisibleOnScreen || App.EmiDesk?.AvatarMuted == true)
             {
                 _isGiggling = false;
                 // Track timing and properties even when hidden (for delay calculation)
@@ -1650,6 +1657,11 @@ namespace ConditioningControlPanel
                 if (!System.IO.File.Exists(filePath)) return;
                 StopSpokenAudio(); // cut off the previous line → no overlap
 
+                // EMI Desk: while she is out and the avatar is muted, the companion voice channel
+                // stays shut. Placed AFTER StopSpokenAudio so a line already in the air is cut, not
+                // left playing under her.
+                if (App.EmiDesk?.AvatarMuted == true) return;
+
                 // One-shot playback is owned by AudioService: it opens/closes the device on its own
                 // worker thread (never the dispatcher), caps concurrency, disposes deterministically
                 // from BOTH PlaybackStopped and a safety timer, and refuses to spin when the endpoint
@@ -1850,8 +1862,9 @@ namespace ConditioningControlPanel
             // ALWAYS trigger haptic, even when muted/off-screen
             _ = App.Haptics?.TriggerSubliminalPatternAsync(trigger);
 
-            // Skip visual and audio if muted OR avatar not visible on screen
-            if (_isMuted || !IsAvatarVisibleOnScreen)
+            // Skip visual and audio if muted OR avatar not visible on screen OR EMI is out with the
+            // avatar muted. The haptic above still fires in every case - the toy is not a second voice.
+            if (_isMuted || !IsAvatarVisibleOnScreen || App.EmiDesk?.AvatarMuted == true)
             {
                 _isGiggling = false;
                 // Track timing and properties even when hidden (for delay calculation)

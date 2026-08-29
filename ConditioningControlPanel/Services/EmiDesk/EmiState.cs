@@ -1,0 +1,283 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Windows;
+using System.Windows.Threading;
+using Newtonsoft.Json;
+using Serilog;
+
+namespace ConditioningControlPanel.Services.EmiDesk;
+
+/// <summary>
+/// EMI Desk's persisted state: <c>%LOCALAPPDATA%\ConditioningControlPanel\emi-desk.json</c>.
+///
+/// This is the runtime ledger, NOT settings. Settings (the switches the user flips) live in
+/// <see cref="Models.AppSettings"/>; everything here is state the widget writes about itself:
+/// where she was parked and on which monitor, which cards are pinned, how often each target has
+/// been opened, which lines each pool has already dealt, the global recent-id ring, the ignore
+/// streak, the bedtime cutoff and whether she has ever been summoned.
+///
+/// Load is lazy and never throws: a corrupt or half-written file is logged once and replaced by a
+/// fresh state, because losing "which line she told you last week" is not worth a crash dialog.
+/// Save is debounced 500 ms on the dispatcher so the ring's rapid-fire counter bumps collapse into
+/// one write.
+/// </summary>
+public sealed class EmiState
+{
+    /// <summary>Schema version. Bump when a field's meaning changes, not when one is added.</summary>
+    [JsonProperty("version")]
+    public int Version { get; set; } = 1;
+
+    // ---- window ----------------------------------------------------------------
+
+    /// <summary>
+    /// Her last window rect in PHYSICAL PIXELS, not DIPs. The DIPs-vs-pixels trap is the same one
+    /// the gaze audit documents: a rect stored in DIPs and restored on a differently scaled
+    /// monitor lands somewhere else entirely.
+    /// </summary>
+    [JsonProperty("winLeftPx")] public double WinLeftPx { get; set; } = double.NaN;
+
+    /// <inheritdoc cref="WinLeftPx"/>
+    [JsonProperty("winTopPx")] public double WinTopPx { get; set; } = double.NaN;
+
+    /// <summary>Her last width in DIPs (the setting <c>EmiDeskWidth</c> mirrors this).</summary>
+    [JsonProperty("winWidthDip")] public double WinWidthDip { get; set; } = double.NaN;
+
+    /// <summary>
+    /// The <c>Screen.DeviceName</c> she was parked on (e.g. <c>\\.\DISPLAY2</c>). On restore, a
+    /// monitor that is gone means "fall back to the main window's monitor", never "park her at a
+    /// coordinate nobody can see".
+    /// </summary>
+    [JsonProperty("monitor")] public string? Monitor { get; set; }
+
+    // ---- ring ------------------------------------------------------------------
+
+    /// <summary>Pinned ring target ids, in slot order. Chunk B2 owns the semantics.</summary>
+    [JsonProperty("pins")] public List<string> Pins { get; set; } = new();
+
+    /// <summary>
+    /// Per-target open counts, the suggester's raw input. Chunk B2 applies the 7-day half-life
+    /// decay; this file only ever holds the tally and the timestamps beside it.
+    /// </summary>
+    [JsonProperty("usage")] public Dictionary<string, int> Usage { get; set; } = new();
+
+    /// <summary>Per-target last-open time (UTC ticks), the decay's clock.</summary>
+    [JsonProperty("usageAt")] public Dictionary<string, long> UsageAt { get; set; } = new();
+
+    // ---- lines -----------------------------------------------------------------
+
+    /// <summary>
+    /// Line ids already dealt out of each pool's shuffle bag. A line is never re-proposed until
+    /// its pool is exhausted; when the bag empties the pool reshuffles and this list resets.
+    /// Chunk B3 owns the rotation; this file just remembers it across launches.
+    /// </summary>
+    [JsonProperty("seenByPool")] public Dictionary<string, List<string>> SeenByPool { get; set; } = new();
+
+    /// <summary>The global recent ring: the last 40 line ids, newest last.</summary>
+    [JsonProperty("recentIds")] public List<string> RecentIds { get; set; } = new();
+
+    // ---- offers ----------------------------------------------------------------
+
+    /// <summary>Consecutive ignored offers. Three in a row and she stops offering for the session.</summary>
+    [JsonProperty("ignoreStreak")] public int IgnoreStreak { get; set; }
+
+    /// <summary>
+    /// Offers are muted until this UTC time (the bedtime effect, which runs to 06:00 and never
+    /// closes the app). Default (<c>MinValue</c>) means no bedtime is set.
+    /// </summary>
+    [JsonProperty("bedtimeUntil")] public DateTime BedtimeUntil { get; set; } = DateTime.MinValue;
+
+    // ---- first boot ------------------------------------------------------------
+
+    /// <summary>True once she has been summoned at least once (gates the desktopFirstBoot moment).</summary>
+    [JsonProperty("firstBootSeen")] public bool FirstBootSeen { get; set; }
+
+    // ============================================================================
+    // load / save
+    // ============================================================================
+
+    private static readonly object Gate = new();
+    private static EmiState? _current;
+    private static DispatcherTimer? _saveTimer;
+    private static bool _dirty;
+    private static bool _loadWarned;
+
+    /// <summary>The state file's absolute path.</summary>
+    public static string FilePath
+    {
+        get
+        {
+            try { return Path.Combine(App.UserDataPath, "emi-desk.json"); }
+            catch { return Path.Combine(Path.GetTempPath(), "emi-desk.json"); }
+        }
+    }
+
+    /// <summary>
+    /// The live state, loaded on first touch. Never null and never throws: a missing or corrupt
+    /// file yields a fresh instance (logged once).
+    /// </summary>
+    public static EmiState Current
+    {
+        get
+        {
+            if (_current != null) return _current;
+            lock (Gate)
+            {
+                if (_current != null) return _current;
+                _current = Load();
+                return _current;
+            }
+        }
+    }
+
+    private static EmiState Load()
+    {
+        try
+        {
+            var path = FilePath;
+            if (!File.Exists(path))
+            {
+                Log.Information("[EmiDesk] no state file yet, starting fresh");
+                return new EmiState();
+            }
+            var json = File.ReadAllText(path);
+            if (string.IsNullOrWhiteSpace(json)) return new EmiState();
+            var s = JsonConvert.DeserializeObject<EmiState>(json);
+            if (s == null) return new EmiState();
+            // A hand-edited file can carry nulls where the ctor put collections.
+            s.Pins ??= new List<string>();
+            s.Usage ??= new Dictionary<string, int>();
+            s.UsageAt ??= new Dictionary<string, long>();
+            s.SeenByPool ??= new Dictionary<string, List<string>>();
+            s.RecentIds ??= new List<string>();
+            Log.Information("[EmiDesk] state loaded ({Pins} pins, {Usage} tracked targets)",
+                s.Pins.Count, s.Usage.Count);
+            return s;
+        }
+        catch (Exception ex)
+        {
+            if (!_loadWarned)
+            {
+                _loadWarned = true;
+                Log.Warning(ex, "[EmiDesk] state file unreadable, starting fresh");
+            }
+            return new EmiState();
+        }
+    }
+
+    /// <summary>
+    /// Mark the state dirty and schedule a write 500 ms out on the dispatcher. Rapid-fire callers
+    /// (a ring open bumping four counters) collapse into one write. Safe from any thread.
+    /// </summary>
+    public static void SaveSoon()
+    {
+        try
+        {
+            _dirty = true;
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted)
+            {
+                SaveNow();
+                return;
+            }
+            if (!disp.CheckAccess())
+            {
+                disp.BeginInvoke(new Action(SaveSoon));
+                return;
+            }
+            if (_saveTimer == null)
+            {
+                _saveTimer = new DispatcherTimer(DispatcherPriority.Background, disp)
+                {
+                    Interval = TimeSpan.FromMilliseconds(500)
+                };
+                _saveTimer.Tick += (_, _) =>
+                {
+                    try
+                    {
+                        _saveTimer?.Stop();
+                        SaveNow();
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Debug(ex, "[EmiDesk] debounced save failed");
+                    }
+                };
+            }
+            _saveTimer.Stop();
+            _saveTimer.Start();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] SaveSoon failed");
+        }
+    }
+
+    /// <summary>
+    /// Write the state now (app shutdown, or a caller that cannot wait for the debounce). Writes
+    /// to a temp file and moves it into place so a kill mid-write cannot leave a half file.
+    /// </summary>
+    public static void SaveNow()
+    {
+        if (!_dirty && _current == null) return;
+        lock (Gate)
+        {
+            try
+            {
+                _dirty = false;
+                var s = _current;
+                if (s == null) return;
+                var path = FilePath;
+                var dir = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                var json = JsonConvert.SerializeObject(s, Formatting.Indented);
+                var tmp = path + ".tmp";
+                File.WriteAllText(tmp, json);
+                if (File.Exists(path)) File.Delete(path);
+                File.Move(tmp, path);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[EmiDesk] state save failed");
+            }
+        }
+    }
+
+    // ---- small helpers the later chunks lean on --------------------------------
+
+    /// <summary>Bump a target's open counter and stamp its clock. Debounced save.</summary>
+    public static void NoteUsage(string targetId)
+    {
+        if (string.IsNullOrWhiteSpace(targetId)) return;
+        try
+        {
+            var s = Current;
+            s.Usage.TryGetValue(targetId, out int n);
+            s.Usage[targetId] = n + 1;
+            s.UsageAt[targetId] = DateTime.UtcNow.Ticks;
+            SaveSoon();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] NoteUsage failed for {Target}", targetId);
+        }
+    }
+
+    /// <summary>Push a line id onto the global recent ring, capped at 40. Debounced save.</summary>
+    public static void NoteLine(string lineId)
+    {
+        if (string.IsNullOrWhiteSpace(lineId)) return;
+        try
+        {
+            var s = Current;
+            s.RecentIds.Remove(lineId);
+            s.RecentIds.Add(lineId);
+            while (s.RecentIds.Count > 40) s.RecentIds.RemoveAt(0);
+            SaveSoon();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] NoteLine failed for {Line}", lineId);
+        }
+    }
+}

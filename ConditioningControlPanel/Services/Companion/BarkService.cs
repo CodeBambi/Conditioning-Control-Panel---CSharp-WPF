@@ -1524,6 +1524,13 @@ namespace ConditioningControlPanel.Services
             bool isSafety = rule.Class == BarkClass.Safety;
             bool bypass = isSafety || guaranteed;
 
+            // EMI Desk: while she is out and the user chose to mute the avatar, ordinary barks sit
+            // this one out. Deliberately ABOVE the `bypass` branch and exempting only safety: a
+            // `guaranteed` bark still gets muted (guaranteed means "ignore timing and floors", not
+            // "talk over EMI"), but a Safety bark never does - panic must always be able to speak.
+            if (!isSafety && App.EmiDesk?.AvatarMuted == true)
+                return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = "emi-desk-mute" };
+
             // One-shot (repeatable=false): fire once per scope. Session is in-memory; tier/lifetime
             // consult the persisted latch (AppSettings.BarkLifetimeFired). This dedup is NOT bypassed
             // by `guaranteed` — guaranteed means "ignore timing/floor", not "fire again". Otherwise a

@@ -1,4 +1,4 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- Brushes (derived from Colors — use DynamicResource so runtime color changes propagate) -->
@@ -149,6 +149,18 @@
     <SolidColorBrush x:Key="SectionHueUpdatesBorderBrush" Color="{StaticResource SectionHueUpdatesBorder}"/>
     <LinearGradientBrush x:Key="SectionHueUpdatesWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
         <GradientStop Color="{StaticResource SectionHueUpdatesWash}" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+
+    <!-- EMI Desk triad. LITERAL colors, for the same reason the Studio triad above is literal:
+         inserting cross-dictionary StaticResource refs mid-file trips WPF's deferred-BAML offset
+         bug and the whole dictionary dies at load with EndOfStreamException. The hue is EMI's own
+         #FF69B4 rather than the active mod's accent, because she is the app's mascot and her
+         section should not restyle itself with whatever skin is loaded. -->
+    <SolidColorBrush x:Key="SectionHueEmiDeskBrush" Color="#FFFF69B4"/>
+    <SolidColorBrush x:Key="SectionHueEmiDeskBorderBrush" Color="#40FF69B4"/>
+    <LinearGradientBrush x:Key="SectionHueEmiDeskWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="#14FF69B4" Offset="0"/>
         <GradientStop Color="#00000000" Offset="0.55"/>
     </LinearGradientBrush>
 

@@ -259,6 +259,10 @@ namespace ConditioningControlPanel
                 // shortcut on purpose - they are neighbours in the same feature but they
                 // are NOT the same action, and the labels say so.
                 ApplyGlobalQuickRecalHotkey();
+                // EMI Desk's summon chord (default Ctrl+Alt+E). Armed here and not at service
+                // construction because RegisterHotKey needs an HWND to hang off, and it refuses
+                // any chord whose base key is on the modifier-blind panic/pause hook.
+                App.EmiDesk?.ApplyHotkey();
                 // Ctrl+K settings palette (Windows/SettingsPaletteWindow.xaml.cs). Registered
                 // AFTER the camera shortcut on purpose: WPF executes the FIRST matching
                 // InputBinding, so a user who rebound the camera hotkey to Ctrl+K keeps their
