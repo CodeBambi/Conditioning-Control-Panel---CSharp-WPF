@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -71,6 +71,22 @@ public class EmiRingCatalogueTests
         // Six slots, and the ring has to survive whole families of doors going dark at once
         // (no Lab tier, Arcademy off, JustDrop withheld) without running out of cards.
         Assert.True(EmiTargets.All.Count >= EmiSuggester.Slots * 3, $"only {EmiTargets.All.Count} targets");
+    }
+
+    [Fact]
+    public void Every_card_that_declares_art_has_a_file_to_show()
+    {
+        // A ThumbPath is resolved at runtime by ModResourceResolver, which answers a miss with a
+        // logged null and a flat hue tile - the same silent failure this file exists to catch. The
+        // arcademy card shipped as that tile for a whole build before anyone noticed (QA
+        // 2026-08-29), so the paths are checked against the tree instead of against a play-test.
+        var res = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources");
+        foreach (var t in EmiTargets.All)
+        {
+            if (string.IsNullOrWhiteSpace(t.ThumbPath)) continue;
+            var file = Path.Combine(res, t.ThumbPath!.Replace('/', Path.DirectorySeparatorChar));
+            Assert.True(File.Exists(file), $"\"{t.Id}\" points at missing art: {t.ThumbPath}");
+        }
     }
 
     [Fact]

@@ -155,7 +155,8 @@ dangerous thing in the feature:
 | `BodyScreenRect` | **PHYSICAL screen pixels** |
 | `RingAnchorScreenPoint` | **PHYSICAL screen pixels** |
 | `EmiState.WinLeftPx` / `WinTopPx` | **PHYSICAL screen pixels** |
-| `EmiState.WinWidthDip`, `AppSettings.EmiDeskWidth` | **DIPs** |
+| `AppSettings.EmiDeskWidth` | **DIPs** |
+| `DragThresholdDip` (the click/drag line) | **DIPs**, both sides |
 
 See §10.1.
 
@@ -345,7 +346,7 @@ are a content backlog, not a bug.
 | `EmiDeskSpice` | `2` | 0 Innocent / 1 Suggestive / 2 Anything. Filters lines by `spiceCeiling`. |
 | `EmiDeskOffers` | `true` | Whether she may ask (offers). Off = the ask branch never fires. |
 | `EmiDeskGlass` | `true` | Whether the glass may flip to a channel. |
-| `EmiDeskWidth` | `220` | Her body width in DIPs (152 … 420), mirrored by `EmiState.WinWidthDip`. |
+| `EmiDeskWidth` | `220` | Her body width in DIPs (152 … 420). **The only home for the width** — `EmiState` keeps the rect and the monitor, not the size. `RestorePlacement()` re-reads this on every summon, so a change made while she was away (the shrink offer, the slider) is on her when she next comes out. |
 
 ### 7.2 The mute arbiter — the product's core rule
 
@@ -440,6 +441,14 @@ On a mixed-DPI desk (the dev rig is 125 % + 100 %) an assumed 1.0 puts the ring 
 restores her onto the wrong monitor. Anything crossing a seam is documented with its space in
 `SEAMS.md`; keep it that way.
 
+**This trap has already bitten once, and quietly.** The drag threshold — "how far may the mouse
+travel and still count as a click?" — was one constant read in *two* spaces: the body measured
+`PointToScreen` deltas (physical) while the ring's drag watch measured `GetPosition` deltas (DIPs).
+At 125 % they disagreed by a quarter, so a 7 px hand tremor was a click to the ring and a drag to
+the body: the ring refused to toggle *and* she crept across the desktop by exactly the tremor. It is
+now one name in one space (`DragThresholdDip`, `EmiDeskWindow.xaml.cs`), the body scales before it
+measures, and `EmiDeskLiveRunRegressionTests` fails if either half drifts back.
+
 ### 10.2 The hotkey arming trap
 
 `EmiDeskService.ApplyHotkey()` is called from **MainWindow's `Loaded`** handler, and WPF raises
@@ -502,6 +511,29 @@ WPF's automatic rescale of a layered window is a synchronous `CompleteRender` de
 drag's modal move loop, and it deadlocks against this surface's own writers (the chain timer, the FX
 sweep). She keeps her birth DPI and gets one controlled re-clamp on a 450 ms settle instead
 (`EmiDeskWindow.WndProc`). Do not "fix" this by letting WPF handle the message.
+
+### 10.8b The mute prompt runs a nested message pump
+
+`Summon()` sets `IsOut = true` and then **blocks** in `MaybeAskAboutMuting()` →
+`EmiMutePromptWindow.Ask()` → `ShowDialog()`. A modal runs a nested pump, and this app's global
+hotkey, dock chip and tray menu all keep working inside it — so a user can send her away *in the
+middle of her own summon*. Before the guard, the dialog returned and the summon carried on and
+`Show()`ed her anyway: **she came back on screen with `IsOut == false`**, and since `Dismiss()`, the
+hover x and the avatar mute arbiter all guard on `IsOut`, nothing could touch her again for the rest
+of the session. The x was dead, the chord re-summoned instead of dismissing, and the avatar talked
+straight over her.
+
+The invariant, and it is the one to hold on to if this code is ever reshaped:
+
+> **A summon that was overtaken must not finish, and a widget that is on screen must always be
+> dismissable.**
+
+Both halves are enforced in `EmiDeskService`: `_summonGen` is stamped before the prompt and checked
+after it (a stale generation returns without showing her), `Dismiss()` bumps the generation *first*
+so a summon parked in the pump is invalidated, and `Toggle()`/`Dismiss()` fall back to the window's
+real `Visibility` when the flag disagrees — a desync is logged at Warning and repaired rather than
+being allowed to strand her. Anything new that blocks inside `Summon()` (another dialog, a
+`DoEvents`, an `await` that pumps) must sit behind the same check.
 
 ### 10.9 The ring is a second window
 

@@ -164,7 +164,8 @@ Do not touch `EmiChains.Player` directly - the window owns exactly one and cance
 
 Fields already carried for B3: `Pins`, `Usage` / `UsageAt`, `SeenByPool`, `RecentIds`,
 `IgnoreStreak`, `BedtimeUntil`, `FirstBootSeen`, plus the window placement
-(`WinLeftPx` / `WinTopPx` in physical px, `WinWidthDip`, `Monitor` device name).
+(`WinLeftPx` / `WinTopPx` in physical px and the `Monitor` device name; the width is NOT here, it
+lives in `AppSettings.EmiDeskWidth` and only there).
 `NoteUsage(id)` and `NoteLine(pool, id)` are the two helpers.
 
 ---

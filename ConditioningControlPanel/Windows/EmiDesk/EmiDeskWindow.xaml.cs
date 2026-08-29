@@ -67,7 +67,12 @@ public partial class EmiDeskWindow : Window
     private const int PetHoverMs = 1200;
     private const int PetCooldownMs = 6000;   // widget.js DIALS.PET_COOLDOWN_MS
 
-    private const int DragThresholdPx = 6;    // widget.js DIALS.DRAG_PX
+    // Travel under this much is a CLICK, not a drag. In DIPs, and it has to stay that way: the
+    // ring's own drag watch (EmiDeskWindow.Ring.cs) measures in DIPs off the same constant, and
+    // when this side measured PHYSICAL pixels the two disagreed by the DPI scale - at the owner's
+    // 125% a 7 px hand tremor was under the ring's threshold but over this one, so the ring never
+    // toggled and she crept across the desktop instead (QA 2026-08-29). One constant, one space.
+    private const double DragThresholdDip = 6.0;   // widget.js DIALS.DRAG_PX
     private const int IdleBlinkMs = 4200;     // the pitch stage's idle blink tick
 
     // ---------------------------------------------------------------- seams (B2 / B3)
@@ -480,10 +485,12 @@ public partial class EmiDeskWindow : Window
             var st = EmiState.Current;
             double s = DipScale;
 
-            if (!double.IsNaN(st.WinWidthDip) && st.WinWidthDip > 0)
-            {
-                ApplyBodyWidth(st.WinWidthDip);
-            }
+            // Her width has ONE home and it is the setting (BRIEF 5: the rect, the pins and the
+            // usage counters live in EmiState, the width does not). Re-read it on every summon so a
+            // change made while she was away - the shrink offer, the settings slider - is on her
+            // the next time she comes out. ApplyBodyWidth clamps into 152..420 itself.
+            double wantW = App.Settings?.Current?.EmiDeskWidth ?? 220;
+            if (Math.Abs(wantW - _bodyWidth) > 0.5) ApplyBodyWidth(wantW);
 
             System.Drawing.Rectangle? work = null;
             if (!string.IsNullOrWhiteSpace(st.Monitor))
@@ -605,7 +612,6 @@ public partial class EmiDeskWindow : Window
             var st = EmiState.Current;
             st.WinLeftPx = body.X;
             st.WinTopPx = body.Y;
-            st.WinWidthDip = _bodyWidth;
 
             var screens = System.Windows.Forms.Screen.AllScreens;
             if (screens != null && screens.Length > 0)
@@ -980,16 +986,19 @@ public partial class EmiDeskWindow : Window
                 UpdatePetHover(e.GetPosition(BodyRoot));
                 return;
             }
+            // PointToScreen gives PHYSICAL pixels; Left/Top and the threshold are DIPs. Scale
+            // first, then measure, so the "is this a drag yet?" test is in the same space as the
+            // ring's.
             var now = PointToScreen(e.GetPosition(this));
-            double dx = now.X - _dragStartScreen.X;
-            double dy = now.Y - _dragStartScreen.Y;
-            if (!_dragMoved && Math.Abs(dx) + Math.Abs(dy) > DragThresholdPx) _dragMoved = true;
-            if (!_dragMoved) return;
-
             double s = DipScale;
             if (s <= 0) s = 1.0;
-            Left = _dragStartLeft + dx / s;
-            Top = _dragStartTop + dy / s;
+            double dx = (now.X - _dragStartScreen.X) / s;
+            double dy = (now.Y - _dragStartScreen.Y) / s;
+            if (!_dragMoved && Math.Abs(dx) + Math.Abs(dy) > DragThresholdDip) _dragMoved = true;
+            if (!_dragMoved) return;
+
+            Left = _dragStartLeft + dx;
+            Top = _dragStartTop + dy;
         }
         catch (Exception ex)
         {

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Windows;
@@ -39,9 +39,6 @@ public sealed class EmiState
 
     /// <inheritdoc cref="WinLeftPx"/>
     [JsonProperty("winTopPx")] public double WinTopPx { get; set; } = double.NaN;
-
-    /// <summary>Her last width in DIPs (the setting <c>EmiDeskWidth</c> mirrors this).</summary>
-    [JsonProperty("winWidthDip")] public double WinWidthDip { get; set; } = double.NaN;
 
     /// <summary>
     /// The <c>Screen.DeviceName</c> she was parked on (e.g. <c>\\.\DISPLAY2</c>). On restore, a

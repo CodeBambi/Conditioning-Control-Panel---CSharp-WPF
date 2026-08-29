@@ -34,6 +34,15 @@ public sealed class EmiDeskService : IDisposable
     private bool _hotkeyArmed;
     private bool _disposed;
 
+    /// <summary>
+    /// Bumped by every summon and every dismiss. It exists because <see cref="Summon"/> can BLOCK
+    /// half way through, inside <c>EmiMutePromptWindow.ShowDialog</c>, and a modal runs a NESTED
+    /// message pump: the chord, the dock chip and the tray all still fire while it is up. A summon
+    /// that comes back from that dialog holding a stale generation has been overtaken and must not
+    /// finish. See the trap note in <see cref="Summon"/>.
+    /// </summary>
+    private long _summonGen;
+
     // ---------------------------------------------------------------- state
 
     /// <summary>True while she is on screen (including her intro and outro).</summary>
@@ -226,8 +235,25 @@ public sealed class EmiDeskService : IDisposable
     /// <summary>Summon her if she is away, send her away if she is out.</summary>
     public void Toggle()
     {
-        if (IsOut) Dismiss();
+        // A widget that is ON SCREEN always wins over the flag. If the two ever disagree, the chord
+        // has to be the way OUT of that state and never a second summon stacked on top of her -
+        // which is exactly what the mute-prompt re-entry used to produce (QA 2026-08-29).
+        if (IsOut || WindowOnScreen) Dismiss();
         else Summon();
+    }
+
+    /// <summary>
+    /// Her window is realised and visible, whatever <see cref="IsOut"/> currently claims. The two
+    /// should never disagree; this is the check that makes a disagreement recoverable rather than
+    /// permanent.
+    /// </summary>
+    private bool WindowOnScreen
+    {
+        get
+        {
+            try { return _window != null && _window.Visibility == Visibility.Visible; }
+            catch { return false; }
+        }
     }
 
     /// <summary>
@@ -258,7 +284,24 @@ public sealed class EmiDeskService : IDisposable
             if (win == null) return;
 
             IsOut = true;
+            long gen = ++_summonGen;
+
+            // THE MODAL RE-ENTRY TRAP (found on the first live run, QA 2026-08-29).
+            // MaybeAskAboutMuting can block in EmiMutePromptWindow.ShowDialog, and a modal runs a
+            // NESTED message pump: the summon chord, the dock chip and the tray menu all keep
+            // working while the prompt is up. A dismiss inside that window set IsOut=false and hid
+            // her, then this method carried straight on and Show()ed her again - she came back on
+            // screen with IsOut=false. That STRANDS her: Dismiss(), the hover x and AvatarMuted all
+            // guard on IsOut, so the x did nothing, the chord re-summoned instead of dismissing,
+            // and the avatar talked over her for the rest of the session. If anything overtook us
+            // while that pump was running, this summon is stale and stops here.
             MaybeAskAboutMuting();
+            if (_disposed) return;
+            if (_summonGen != gen || !IsOut)
+            {
+                Log.Information("[EmiDesk] summon abandoned: she was sent away while the mute prompt was up");
+                return;
+            }
 
             win.RestorePlacement();
             win.Show();
@@ -328,7 +371,21 @@ public sealed class EmiDeskService : IDisposable
                 disp.BeginInvoke(new Action(Dismiss));
                 return;
             }
-            if (!IsOut || _window == null) return;
+            // Invalidate any summon parked in a nested message pump before anything else: without
+            // this, the mute prompt returns and puts her straight back on screen behind us.
+            _summonGen++;
+
+            if (_window == null) return;
+            if (!IsOut && !WindowOnScreen) return;
+
+            if (!IsOut)
+            {
+                // She is on screen with the flag down, so nothing else in the app believes she is
+                // out. Put the two back in agreement and take her off through the normal outro,
+                // rather than leaving a widget that nobody can dismiss.
+                Log.Warning("[EmiDesk] dismissing a desynced widget: visible while IsOut was false");
+                IsOut = true;
+            }
 
             CancelSummonMoment();
             // `dismissed` is a LOCKED silent moment: the wink chain and the CRT power-off are the

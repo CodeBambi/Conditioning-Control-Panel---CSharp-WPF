@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
@@ -564,7 +564,13 @@ public partial class EmiRingWindow : Window
         catch { return t.Id; }
     }
 
-    private static string TipFor(EmiRingSlot slot)
+    /// <summary>
+    /// The card's hint. Returned as a built <see cref="ToolTip"/> rather than a bare string on
+    /// purpose: a string gets the NATIVE Windows tooltip - beige, Segoe UI, square - which sat on
+    /// her pixel ring like a system error (QA 2026-08-29). Same palette and same face as the name
+    /// strip, so it reads as part of the card.
+    /// </summary>
+    private static object? TipFor(EmiRingSlot slot)
     {
         try
         {
@@ -572,9 +578,36 @@ public partial class EmiRingWindow : Window
                        : slot.Pinned ? "emi_desk_ring_tip_pinned"
                                      : "emi_desk_ring_tip_suggested";
             var s = Loc.Get(key);
-            return string.IsNullOrWhiteSpace(s) ? string.Empty : s;
+            if (string.IsNullOrWhiteSpace(s) || s == key) return null;
+
+            return new ToolTip
+            {
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(0),
+                HasDropShadow = false,
+                Content = new Border
+                {
+                    Background = new SolidColorBrush(Color.FromArgb(0xF2, 0x0E, 0x0E, 0x1C)),
+                    BorderThickness = new Thickness(1),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0x69, 0xB4)),
+                    CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(7, 5, 7, 5),
+                    Child = new TextBlock
+                    {
+                        Text = s,
+                        FontFamily = new FontFamily("Press Start 2P, Consolas, Global Monospace"),
+                        FontSize = 8.0,
+                        LineHeight = 13,
+                        LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+                        Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE1)),
+                        TextWrapping = TextWrapping.Wrap,
+                        MaxWidth = 200,
+                    },
+                },
+            };
         }
-        catch { return string.Empty; }
+        catch { return null; }
     }
 
     private static ImageSource? LoadThumb(EmiTarget t)

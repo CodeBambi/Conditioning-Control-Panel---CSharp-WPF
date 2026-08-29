@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -271,9 +271,12 @@ public static class EmiTargets
 
         // ---- the six she shows a brand new user, in this order ------------------
 
-        // The Arcademy has no dashboard art of its own yet, so it is a hue tile. The door is a
-        // build flag AND a Lab gate, and Launch owns both plus the audio-only refusal.
-        T("arcademy", null, Tile(0xFF, 0x69, 0xB4),
+        // The Arcademy is the one target with no Resources/features art - the dashboard falls back
+        // to a graduation-cap glyph for it (PlayTabView), which is far too fine to read at 112x84.
+        // Its own VN entrance plate is the same pixel palette as the other five cards and crops
+        // cleanly to the card, so the ring borrows that instead of rendering a flat hue tile.
+        // The door is a build flag AND a Lab gate, and Launch owns both plus the audio-only refusal.
+        T("arcademy", "web/arcademy/art/vn/vn-01-entrance-gates.png", Tile(0xFF, 0x69, 0xB4),
             () => Arcademy.ArcademyHostService.DoorAvailable,
             () => !LabOk("emi_desk_target_arcademy", null),
             () => Arcademy.ArcademyHostService.Launch());

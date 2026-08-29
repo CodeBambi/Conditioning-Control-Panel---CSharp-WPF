@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Input;
 using ConditioningControlPanel.Services.EmiDesk;
@@ -188,7 +188,7 @@ public partial class EmiDeskWindow
             if (_ring?.IsOpen != true) return;
 
             var p = e.GetPosition(this);
-            if (Math.Abs(p.X - _ringPressAt.X) + Math.Abs(p.Y - _ringPressAt.Y) <= DragThresholdPx) return;
+            if (Math.Abs(p.X - _ringPressAt.X) + Math.Abs(p.Y - _ringPressAt.Y) <= DragThresholdDip) return;
 
             _ringWatchDrag = false;
             _ring.CloseRing();
