@@ -170,14 +170,33 @@ public static class EmiOffers
             App.Video?.PlaySpecificVideo(path, false);
             ReassertTopmost();
             App.EmiDesk?.Fire("effectFired", new { channel = "video", fromAsk });
-            App.EmiDesk?.Fire("videoRunning", new
-            {
-                target = DisplayName(path),
-                minutes = 1,
-                fromAsk
-            });
+            App.EmiDesk?.Fire("videoRunning", VideoCtx(path, fromAsk));
         }
         catch (Exception ex) { Log.Warning(ex, "[EmiDesk] video effect failed"); }
+    }
+
+    /// <summary>
+    /// The ctx a videoRunning moment rides on.
+    ///
+    /// <c>minutes</c> is present ONLY when the duration is genuinely known (a warm metadata cache).
+    /// She never claims a fake number (MOMENTS 3): with the key missing, every line carrying the
+    /// <c>{minutes}</c> token is skipped at draw time and one of the pool's plain siblings speaks
+    /// instead. Rounded UP and floored at 1, because "0 minutes" is not a thing anyone says.
+    /// </summary>
+    internal static object VideoCtx(string? path, bool fromAsk)
+    {
+        int? minutes = null;
+        try
+        {
+            var secs = App.Video?.MetadataCache?.TryGetDuration(path ?? string.Empty);
+            if (secs is > 0) minutes = Math.Max(1, (int)Math.Ceiling(secs.Value / 60.0));
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] video duration probe failed"); }
+
+        var target = DisplayName(path);
+        return minutes.HasValue
+            ? new { target, minutes = minutes.Value, fromAsk }
+            : (object)new { target, fromAsk };
     }
 
     /// <summary>A short burst of flashes, the Flashes tab's own one-shot path.</summary>

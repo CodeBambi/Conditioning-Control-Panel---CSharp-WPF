@@ -153,7 +153,7 @@ public static class EmiChannels
         App.Video?.PlaySpecificVideo(path!, false);
         EmiOffers.ReassertTopmost();
         App.EmiDesk?.Fire("effectFired", new { channel = "video" });
-        App.EmiDesk?.Fire("videoRunning", new { target = EmiOffers.DisplayName(path), minutes = 1 });
+        App.EmiDesk?.Fire("videoRunning", EmiOffers.VideoCtx(path, fromAsk: false));
     }
 
     // ============================================================================================
