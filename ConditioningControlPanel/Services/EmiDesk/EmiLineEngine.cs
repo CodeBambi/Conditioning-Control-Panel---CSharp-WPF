@@ -535,23 +535,29 @@ public sealed class EmiLineEngine
         // 4. limits (a fire that loses the odds roll still counts as a fire)
         if (!TakeLimit(momentId, m, ctx)) return null;
 
+        // The QA cadence (EMI_DESK_DEBUG, absent in every normal launch): the three clocks that
+        // make a minutes-long play-test unable to reach most moments. Nothing that protects the
+        // USER moves - holds, the panic silence, bedtime, limits, spice and feasibility are all
+        // still ahead of or behind this line.
+        bool qa = EmiDebug.Enabled;
+
         // 5. cooldown
         var cdKey = string.IsNullOrEmpty(m.CooldownKey) ? momentId : m.CooldownKey!;
-        if (m.CooldownMs > 0 && _spokeAt.TryGetValue(cdKey, out var last)
+        if (!qa && m.CooldownMs > 0 && _spokeAt.TryGetValue(cdKey, out var last)
             && (now - last).TotalMilliseconds < m.CooldownMs) return null;
 
         bool ceremony = m.Priority >= 3;
 
         // 6. global floor
-        if (!ceremony && (now - _lastSpokeUtc).TotalMilliseconds < GlobalFloorMs) return null;
+        if (!ceremony && !qa && (now - _lastSpokeUtc).TotalMilliseconds < GlobalFloorMs) return null;
 
         // 7. odds
-        if (!ceremony && _rng.NextDouble() >= m.Odds) return null;
+        if (!ceremony && !qa && _rng.NextDouble() >= m.Odds) return null;
 
         int ceiling = Math.Min(m.SpiceCeiling, UserSpice());
 
         // 9. the ask branch
-        if (m.AskOdds > 0 && AskGatesPass(m) && _rng.NextDouble() < m.AskOdds)
+        if (m.AskOdds > 0 && AskGatesPass(m) && (qa || _rng.NextDouble() < m.AskOdds))
         {
             var ask = PickAsk(momentId, ctx, ceiling);
             if (ask != null)
@@ -951,8 +957,15 @@ public sealed class EmiLineEngine
             if (s != null && !s.EmiDeskOffers) return false;
             if (BedtimeSet) return false;
             if (_ignoredAsksThisLaunch >= AskIgnoreLimit) return false;
-            if ((DateTime.UtcNow - _lastAskUtc).TotalMilliseconds < AskGapMs) return false;
-            if (SummonCount < AskMinSummons) return false;
+
+            // The two CADENCE gates only. The QA switch (EMI_DESK_DEBUG) skips these so an offer is
+            // reachable inside a play-test; the ignore streak above and the situational half below
+            // are protections, not cadence, and stay in force either way.
+            if (!EmiDebug.Enabled)
+            {
+                if ((DateTime.UtcNow - _lastAskUtc).TotalMilliseconds < AskGapMs) return false;
+                if (SummonCount < AskMinSummons) return false;
+            }
 
             // The half only the app can see (LINES-SCHEMA 5.6): no session, no video, the avatar is
             // quiet, the app is not minimised, no offer already on the glass. No service, no offer.

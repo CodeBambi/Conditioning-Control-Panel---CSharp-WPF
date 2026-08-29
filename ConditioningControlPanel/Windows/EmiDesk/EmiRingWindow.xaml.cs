@@ -36,11 +36,24 @@ public partial class EmiRingWindow : Window
 {
     // ---------------------------------------------------------------- constants
 
-    /// <summary>Card size in DIPs, from the pitch demo.</summary>
-    public const double CardW = 76.0;
+    /// <summary>
+    /// Card size in DIPs. The pitch demo drew 76 x 58 on a browser stage a foot from your face;
+    /// on a real desktop at a 220 DIP body that read as six postage stamps thrown across the
+    /// screen, so the owner sized them up on the first live run (QA 2026-08-29).
+    /// </summary>
+    public const double CardW = 112.0;
 
     /// <inheritdoc cref="CardW"/>
-    public const double CardH = 58.0;
+    public const double CardH = 84.0;
+
+    /// <summary>The card label's font. Press Start 2P, one step up with the bigger card.</summary>
+    private const double CardLabelFont = 8.0;
+
+    /// <summary>Air between her silhouette and a card's inner edge (owner call).</summary>
+    private const double BodyGap = 14.0;
+
+    /// <summary>Air between two neighbouring cards. Drives the radius bump on a half fan.</summary>
+    private const double CardGap = 8.0;
 
     private const double PopStaggerMs = 40.0;
     private const double PopMs = 180.0;
@@ -301,7 +314,13 @@ public partial class EmiRingWindow : Window
         _cy = (anchor.Y - work.Top) / s;
 
         double w = Width, h = Height;
-        double r = Math.Max(96.0, _owner.BodyWidth * 0.85 + 60.0);
+        int n = Math.Max(1, _cards.Count);
+
+        // Two passes, because the radius and the span each depend on the other. Pass one uses the
+        // full-circle step to decide which edges she is up against; pass two re-solves the radius
+        // for the step the chosen span actually produces (a half fan packs the same six cards into
+        // 180 degrees, so it needs a bigger circle before they stop touching).
+        double r = FanRadius(360.0 / n);
 
         double start = -90, span = 360;
         bool nearR = _cx > w - r - 70, nearL = _cx < r + 70;
@@ -313,7 +332,8 @@ public partial class EmiRingWindow : Window
         if (nearB && !nearT && span >= 360) { start = 180; span = 180; }
         else if (nearT && !nearB && span >= 360) { start = 0; span = 180; }
 
-        int n = Math.Max(1, _cards.Count);
+        r = FanRadius(span >= 360 ? 360.0 / n : span / n);
+
         var hot = new List<Rect>(n + 1);
 
         for (int i = 0; i < _cards.Count; i++)
@@ -347,6 +367,32 @@ public partial class EmiRingWindow : Window
         catch (Exception ex) { Log.Debug(ex, "[EmiDesk] body rect probe failed"); }
 
         _hotPx = hot.ToArray();
+    }
+
+    /// <summary>
+    /// The fan radius in DIPs for a given angular step between neighbours.
+    ///
+    /// <para>The baseline is the owner's rule: a card's INNER edge sits <see cref="BodyGap"/> off her
+    /// silhouette, so the centre-to-centre distance is half her width plus half a card plus that
+    /// gap. It scales with her, which is the point: at 420 DIPs the ring opens out with her instead
+    /// of burying her.</para>
+    ///
+    /// <para>Then the collision check. Six cards on a chord of <c>2 r sin(step/2)</c> must clear
+    /// <c>CardW + CardGap</c>; a full circle always does at these sizes, a half fan at 30 degrees a
+    /// card does not, so the radius is bumped to exactly what the chord needs and no further.</para>
+    /// </summary>
+    private double FanRadius(double stepDeg)
+    {
+        double r = _owner.BodyWidth * 0.5 + CardW * 0.5 + BodyGap;
+
+        double halfStep = stepDeg * Math.PI / 360.0;   // half the step, in radians
+        double sin = Math.Sin(halfStep);
+        if (sin > 1e-6)
+        {
+            double needed = (CardW + CardGap) / (2.0 * sin);
+            if (needed > r) r = needed;
+        }
+        return r;
     }
 
     // ---------------------------------------------------------------- the cards
@@ -435,13 +481,13 @@ public partial class EmiRingWindow : Window
         {
             Text = SafeLabel(slot.Target),
             FontFamily = new FontFamily("Press Start 2P, Consolas, Global Monospace"),
-            FontSize = 7,
-            LineHeight = 10,
+            FontSize = CardLabelFont,
+            LineHeight = 12,
             LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
             Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE1)),
             TextWrapping = TextWrapping.Wrap,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            MaxHeight = 21,
+            MaxHeight = 26,
             TextAlignment = TextAlignment.Center,
         };
         grid.Children.Add(strip);

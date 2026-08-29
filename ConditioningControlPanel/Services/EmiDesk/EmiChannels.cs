@@ -33,8 +33,13 @@ public static class EmiChannels
     /// <summary>How long a channel sits on the glass before she gives up on it (BRIEF 6).</summary>
     public static readonly TimeSpan ChannelLife = TimeSpan.FromSeconds(10);
 
-    /// <summary>Idle time before the glass flips (BRIEF 6).</summary>
-    public static readonly TimeSpan IdleBeforeFlip = TimeSpan.FromSeconds(90);
+    /// <summary>
+    /// Idle time before the glass flips (BRIEF 6). Ninety seconds is the owner lock; the only thing
+    /// that can move it is the EMI_DESK_IDLE_MS QA override (see <see cref="EmiDebug"/>), which is
+    /// absent in every normal launch.
+    /// </summary>
+    public static TimeSpan IdleBeforeFlip =>
+        EmiDebug.IdleMs is int ms ? TimeSpan.FromMilliseconds(ms) : TimeSpan.FromSeconds(90);
 
     /// <summary>The glitch flip's length: three to four torn frames.</summary>
     public const int GlitchMs = 220;

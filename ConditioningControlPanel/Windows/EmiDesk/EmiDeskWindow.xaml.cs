@@ -359,7 +359,9 @@ public partial class EmiDeskWindow : Window
             BtnClose.Height = chip;
             BtnClose.Margin = new Thickness(0, bh * 0.02, bw * 0.02, 0);
 
-            double grip = Math.Max(16, bw * 0.07);
+            // The grip's HIT AREA, floored at 22 DIP so the cursor catches it at every body width
+            // (owner call, QA 2026-08-29). The glyph inside it does not grow with it.
+            double grip = Math.Max(GripHitSize, bw * 0.09);
             ResizeGrip.Width = grip;
             ResizeGrip.Height = grip;
             ResizeGrip.Margin = new Thickness(0, 0, bw * 0.01, bh * 0.01);
@@ -923,13 +925,23 @@ public partial class EmiDeskWindow : Window
         DisarmPet();
     }
 
+    /// <summary>The resize grip's resting opacity: faint, but never invisible (owner call).</summary>
+    private const double GripRestOpacity = 0.35;
+
+    /// <summary>The grip's minimum hit area in DIPs. The glyph drawn inside it stays 12.</summary>
+    private const double GripHitSize = 22;
+
     private void FadeChrome(double to)
     {
         try
         {
             var a = new DoubleAnimation(to, TimeSpan.FromMilliseconds(140));
             BtnClose.BeginAnimation(OpacityProperty, a);
-            ResizeGrip.BeginAnimation(OpacityProperty, a);
+
+            // The x is hover-only; the grip is not. It rests faint and goes solid under the
+            // pointer, so a user who has never dragged her still sees where the corner is.
+            var g = new DoubleAnimation(to <= 0 ? GripRestOpacity : 1.0, TimeSpan.FromMilliseconds(140));
+            ResizeGrip.BeginAnimation(OpacityProperty, g);
         }
         catch (Exception ex)
         {

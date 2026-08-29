@@ -854,7 +854,17 @@ public sealed class EmiDeskService : IDisposable
         try
         {
             var s = App.Settings?.Current;
-            var owner = App.MainWindowRef;
+
+            // THE ARMING TRAP (found on the first live run, QA 2026-08-29). The only caller is
+            // MainWindow's Loaded handler, and WPF raises Loaded from INSIDE `mainWindow.Show()`
+            // (App.xaml.cs:2466) - while `App.MainWindowRef` is not assigned until the line AFTER
+            // Show() returns (App.xaml.cs:2480). So this method saw a null owner on every launch,
+            // logged it at Debug (the file sink's minimum is Information, so the line was invisible
+            // too) and returned without ever retrying: Ctrl+Alt+E was dead in every build and only
+            // the dock chip summoned her. `Application.Current.MainWindow` is set by the Window
+            // constructor itself, so it is already there when Loaded runs - the same
+            // `MainWindowRef ?? Current.MainWindow` fallback the rest of App.xaml.cs uses.
+            Window? owner = App.MainWindowRef ?? Application.Current?.MainWindow;
 
             if (s == null || !s.EmiDeskEnabled)
             {
@@ -865,7 +875,10 @@ public sealed class EmiDeskService : IDisposable
             }
             if (owner == null)
             {
-                Log.Debug("[EmiDesk] summon hotkey deferred: no main window yet");
+                // Warning, not Debug: this is exactly the silent-failure shape above. If it ever
+                // prints again the chord is unarmed and something has to call ApplyHotkey again.
+                Log.Warning("[EmiDesk] summon hotkey NOT armed: no main window yet. " +
+                            "The dock chip in the nav rail still summons her.");
                 return;
             }
 

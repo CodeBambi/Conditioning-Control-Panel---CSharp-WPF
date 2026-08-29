@@ -45,9 +45,23 @@ public partial class EmiDeskWindow
     private const double BubbleLeftFrac = 0.58;
     private const double BubbleBottomFrac = 0.96;
 
-    /// <summary>emi.css font-size: 8. Held exactly at her default width and scaled with her from there.</summary>
-    private const double BubbleFontAtDefaultWidth = 8.0;
+    /// <summary>
+    /// The bubble's font size at her default width, scaled with her from there. emi.css says 8,
+    /// which is right for a browser page a foot from your face and far too small for a 220 DIP
+    /// widget on a 1440p desktop (owner call, QA 2026-08-29): 11 at the reference width, and never
+    /// below <see cref="BubbleFontFloor"/> however small she is shrunk.
+    /// </summary>
+    private const double BubbleFontAtDefaultWidth = 11.0;
+    private const double BubbleFontFloor = 10.0;
     private const double BubbleFontRefWidth = 220.0;
+
+    /// <summary>The bubble's width clamp in DIPs, and its share of her body width between them.</summary>
+    private const double BubbleMinWidth = 220.0;
+    private const double BubbleMaxWidth = 380.0;
+    private const double BubbleWidthOfBody = 1.5;
+
+    /// <summary>The chip font, same rule as the bubble: sized at the reference width, floored.</summary>
+    private const double ChipFontAtDefaultWidth = 9.0;
 
     private const int AskDot1Ms = 420;        // the locked . / .. / ... cadence, same as MakeSay
     private const int AskDot2Ms = 420;
@@ -129,7 +143,7 @@ public partial class EmiDeskWindow
             Background = BubbleFill,
             BorderBrush = BubbleInk,
             BorderThickness = new Thickness(1),
-            Padding = new Thickness(6, 6, 8, 6),
+            Padding = new Thickness(8, 8, 10, 8),
             SnapsToDevicePixels = true,
             IsHitTestVisible = false,
             Child = _bubbleText,
@@ -206,11 +220,12 @@ public partial class EmiDeskWindow
             double bw = BodyWidth;
             double bh = bw * BodyAspect;
 
-            double fs = Math.Max(BubbleFontAtDefaultWidth,
+            double fs = Math.Max(BubbleFontFloor,
                 Math.Round(BubbleFontAtDefaultWidth * bw / BubbleFontRefWidth));
             _bubbleText.FontSize = fs;
             _bubbleText.LineHeight = Math.Round(fs * 1.4);
-            _bubble.MaxWidth = Math.Max(150, Math.Min(280, bw * 0.95));
+            _bubble.MaxWidth = Math.Max(BubbleMinWidth,
+                Math.Min(BubbleMaxWidth, bw * BubbleWidthOfBody));
 
             _bubble.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             var size = _bubble.DesiredSize;
@@ -447,7 +462,8 @@ public partial class EmiDeskWindow
 
     private Button MakeChip(string? label)
     {
-        double fs = Math.Max(7, Math.Round(7.0 * BodyWidth / BubbleFontRefWidth));
+        double fs = Math.Max(ChipFontAtDefaultWidth,
+            Math.Round(ChipFontAtDefaultWidth * BodyWidth / BubbleFontRefWidth));
 
         var text = new TextBlock
         {

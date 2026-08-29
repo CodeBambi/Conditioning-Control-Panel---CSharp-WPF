@@ -1513,6 +1513,14 @@ namespace ConditioningControlPanel
                     flushToDiskInterval: TimeSpan.FromSeconds(1))
                 .CreateLogger();
 
+            // The STATIC Serilog sink. Around 350 call sites across the app (every EmiDesk file,
+            // plus Descent, Haptics, V2Auth, LocalizationManager) `using Serilog;` and write through
+            // `Log.Information(...)` rather than `App.Logger?.…`. Without this assignment Serilog
+            // hands all of them its SilentLogger and every one of those lines is thrown away, which
+            // is also why the `Log.CloseAndFlush()` at shutdown was a no-op. Found on the first live
+            // run of EMI Desk: the whole "[EmiDesk]" log stream was dark.
+            Log.Logger = Logger;
+
             // Log the RUNTIME version (not just the source constant) + memory baseline. A stale
             // publish can ship old code under a new label; this line is how we catch that, and the
             // working-set baseline anchors the chaos OOM telemetry.

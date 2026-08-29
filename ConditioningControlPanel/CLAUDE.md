@@ -31,6 +31,7 @@ Use `/release X.Y.Z "Subtitle"` to automate this. Also write `../notes-vX.Y.Z.tx
 | `logs/crash.log` | Crash logs with stack traces - CHECK THIS FIRST |
 | `%LOCALAPPDATA%/ConditioningControlPanel/` | User data, settings, tokens (`App.UserDataPath`) |
 | `%LOCALAPPDATA%/ConditioningControlPanel/assets/` | Default assets folder (`App.UserAssetsPath`) |
+| `%LOCALAPPDATA%/ConditioningControlPanel/emi-desk.json` | EMI Desk's runtime ledger (parked position, pins, usage scores, dealt lines) - real user state, back it up before testing |
 | `App.EffectiveAssetsPath` | User's chosen assets folder (or default) |
 | `../docs/` | GitHub Pages website |
 | `../releases/` | Velopack release output |
@@ -92,6 +93,7 @@ of truth.)
 - **UpdateService.cs** - Auto-update via GitHub Releases API + Inno Setup silent installer
 - **PatreonService.cs** - Patreon OAuth, subscription validation, whitelist (server-side)
 - **ContentPackService.cs** - Download/install encrypted content packs
+- **EmiDesk/** - EMI Desk, the summoned desktop widget (`App.EmiDesk`): ring, glass, preset-line engine, avatar-mute arbiter. See `docs/primers/EMI_DESK_PRIMER.md`
 
 ### Models (Models/)
 - **AppSettings.cs** - All application settings with INotifyPropertyChanged, auto-saves to JSON
