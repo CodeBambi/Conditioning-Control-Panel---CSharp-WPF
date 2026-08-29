@@ -382,10 +382,27 @@ namespace ConditioningControlPanel.Services
             App.Logger?.Information("FlashService: Images path refreshed to {Path}", _imagesPath);
         }
 
+        /// <summary>When this run started, for the "{minutes}" EMI reads out on stop. UTC on
+        /// purpose: a DST hop must not hand her a negative number.</summary>
+        private DateTime? _runStartedUtc;
+
+        /// <summary>Whole minutes this flash run has been going, 0 when it is not running.</summary>
+        private int RunMinutes
+        {
+            get
+            {
+                var s = _runStartedUtc;
+                if (s == null) return 0;
+                var m = (DateTime.UtcNow - s.Value).TotalMinutes;
+                return m <= 0 ? 0 : (int)m;
+            }
+        }
+
         public void Start()
         {
             if (_isRunning) return;
 
+            _runStartedUtc = DateTime.UtcNow;
             _isRunning = true;
             _cancellationSource?.Dispose();
             _cancellationSource = new CancellationTokenSource();
@@ -402,6 +419,9 @@ namespace ConditioningControlPanel.Services
             App.DiscordRpc?.SetFlashActivity();
 
             App.Logger.Information("FlashService started, images path: {Path}", _imagesPath);
+
+            // EMI Desk (MOMENTS 4.B). Fire last: nothing about her may sit in front of the start.
+            try { App.EmiDesk?.Fire("flashesStarted", null); } catch { }
         }
 
         public void Stop()
@@ -422,6 +442,10 @@ namespace ConditioningControlPanel.Services
 
             // Update Discord presence back to idle
             App.DiscordRpc?.SetIdleActivity();
+
+            // EMI Desk (MOMENTS 4.B): how long it ran, read before the start stamp is cleared.
+            try { App.EmiDesk?.Fire("flashesStopped", new { minutes = RunMinutes }); } catch { }
+            _runStartedUtc = null;
 
             App.Logger.Information("FlashService stopped");
         }

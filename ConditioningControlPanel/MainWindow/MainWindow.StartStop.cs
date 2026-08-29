@@ -285,6 +285,11 @@ namespace ConditioningControlPanel
             App.IsEngineRunning = true;
             UpdateStartButton();
 
+            // EMI Desk (MOMENTS 4.B). systemInitiated separates a lockdown's own restart from a
+            // deliberate press, which is the only thing her lines care about here.
+            _emiEngineStartedUtc = DateTime.UtcNow;
+            try { App.EmiDesk?.Fire("engineStarted", new { systemInitiated }); } catch { }
+
             // Arm the dirty-shutdown sentinel: if the process dies natively mid-session
             // (no crash.log — the flash-burst 0xc0000374 shape), the next launch reports
             // it with this context instead of the app just "vanishing".
@@ -309,6 +314,10 @@ namespace ConditioningControlPanel
         }
 
         private bool _stopInProgress;
+
+        /// <summary>When this engine run started, for the "{minutes}" EMI reads out on stop. UTC so
+        /// a DST hop cannot hand her a negative number.</summary>
+        private DateTime? _emiEngineStartedUtc;
 
         public void StopEngine()
         {
@@ -407,6 +416,19 @@ namespace ConditioningControlPanel
             _isRunning = false;
             App.IsEngineRunning = false;
             UpdateStartButton();
+
+            // EMI Desk (MOMENTS 4.B): how long the run lasted. Zero when nothing was running, and
+            // the stamp is cleared so a second stop cannot invent a duration.
+            try
+            {
+                var startedUtc = _emiEngineStartedUtc;
+                int ranMinutes = startedUtc == null
+                    ? 0
+                    : Math.Max(0, (int)(DateTime.UtcNow - startedUtc.Value).TotalMinutes);
+                App.EmiDesk?.Fire("engineStopped", new { minutes = ranMinutes });
+            }
+            catch { }
+            _emiEngineStartedUtc = null;
 
             // Clean stop — disarm the dirty-shutdown sentinel.
             Services.EngineCrashSentinel.Clear();

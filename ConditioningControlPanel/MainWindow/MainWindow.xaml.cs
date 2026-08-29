@@ -545,6 +545,10 @@ namespace ConditioningControlPanel
             // "choose a content folder" MessageBox; StartTutorial is launched from its last step.
             if (FirstRunWizard.ShouldRunAndClaim())
             {
+                // EMI Desk (MOMENTS 4.B): a HOLD, never a line. The wizard owns the screen on a
+                // first launch and she does not get to talk over someone's first thirty seconds.
+                try { App.EmiDesk?.Fire("firstLaunchEver", null); } catch { }
+
                 Dispatcher.BeginInvoke(new Action(async () =>
                 {
                     // Wait for any update dialog to be dismissed first
@@ -565,6 +569,9 @@ namespace ConditioningControlPanel
                     if (!App.IsUpdateDialogActive && IsLoaded)
                     {
                         FirstRunWizard.Run(this);
+                        // The wizard is modal, so this is the far side of it: the screen is the
+                        // user's again and the HOLD comes off.
+                        try { App.EmiDesk?.ReleaseHold("firstLaunchEver"); } catch { }
                     }
                     else
                     {
@@ -573,6 +580,8 @@ namespace ConditioningControlPanel
                         // first run nobody was shown - the next launch offers it properly.
                         FirstRunWizard.HandBackFirstRun(
                             App.IsUpdateDialogActive ? "update dialog still open" : "window never loaded");
+                        // Nothing was shown, so nothing is owed the screen.
+                        try { App.EmiDesk?.ReleaseHold("firstLaunchEver"); } catch { }
                     }
                     // Normal, NOT Loaded: this app keeps the dispatcher busy enough (compositor
                     // host + avatar animations) that Loaded-priority items are starved and never
@@ -1411,6 +1420,11 @@ namespace ConditioningControlPanel
 
         private void HandlePanicKeyPress()
         {
+            // EMI Desk (MOMENTS 4.B): FIRST LINE, before any of the ladder below. panicPressed is a
+            // HOLD with a five-minute silence tail, and it has to be armed even if something further
+            // down this method throws - the whole point is that she says nothing after a panic.
+            try { App.EmiDesk?.Fire("panicPressed", null); } catch { }
+
             VideoDiag.Log("PANIC", $"handling panic press (engineRunning={_isRunning}, uiStall={VideoDiag.UiStallMs}ms)");
 
             // #875: an open lock card outranks every hand-off below, so it is answered FIRST. A lock

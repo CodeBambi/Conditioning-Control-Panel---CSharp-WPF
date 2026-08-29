@@ -97,6 +97,11 @@ namespace ConditioningControlPanel.Services.Quiz
             {
                 // EMI Desk: the ring learns from every open, not just its own cards.
                 try { App.EmiDesk?.NoteOpen("intake"); } catch { }
+                try { App.EmiDesk?.Fire("intakeOpened", null); } catch { }
+                // ...and a HOLD for as long as the graded run is on screen: the intake is a test,
+                // and a companion talking over a test is the exact thing MOMENTS 3 forbids. Dropped
+                // in DisposeAll, which is the one teardown every close path lands in.
+                try { App.EmiDesk?.Fire("intakeRunning", null); } catch { }
 
                 // The intake's vo/sfx/music (plus the dtrh bubble sfx it borrows) ship as the lazy
                 // audio-web pack. Kicked here and still never awaited (see RequestAudioPack), but
@@ -1348,6 +1353,12 @@ namespace ConditioningControlPanel.Services.Quiz
         {
             if (_disposing) return;   // _host.Dispose() closes the window, re-raising Closed -> here
             _disposing = true;
+
+            // EMI Desk: the intake window is going, so the HOLD comes off. The RESULT beat
+            // (intakeClosed, with passed/perfect) rides the QuizCompleted bark instead - a run the
+            // user walked out of is not a result and she has nothing to say about it.
+            try { App.EmiDesk?.ReleaseHold("intakeRunning"); } catch { }
+
             try
             {
                 CancelExitWatchdog();

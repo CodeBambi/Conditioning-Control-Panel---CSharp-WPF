@@ -1662,6 +1662,12 @@ namespace ConditioningControlPanel
                 // left playing under her.
                 if (App.EmiDesk?.AvatarMuted == true) return;
 
+                // EMI Desk (MOMENTS 4.B): the OTHER half of "the avatar owns voice". ShowGiggle
+                // covers every bubble; this covers a line that is only audio (a wake ack, a voiced
+                // bark with no bubble), which would otherwise talk over her with nothing on screen
+                // for the hold's poll to see.
+                App.EmiDesk?.NoteAvatarSpeaking();
+
                 // One-shot playback is owned by AudioService: it opens/closes the device on its own
                 // worker thread (never the dispatcher), caps concurrency, disposes deterministically
                 // from BOTH PlaybackStopped and a safety timer, and refuses to spin when the endpoint

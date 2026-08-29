@@ -350,6 +350,33 @@ public sealed class EmiLineEngine
     public string? HeldBy { get { lock (_gate) { return _heldBy; } } }
 
     /// <summary>
+    /// Is this moment a HOLD (a face instead of a line)? Asked by <c>EmiDeskService.Fire</c>, which
+    /// routes holds to the engine even while she is away: a hold is safety, not decoration, and one
+    /// that was armed during her absence must still be running when she is summoned back into the
+    /// middle of it. Unknown and deferred ids answer false.
+    /// </summary>
+    public bool IsHoldMoment(string? momentId)
+    {
+        if (string.IsNullOrWhiteSpace(momentId)) return false;
+        lock (_gate)
+        {
+            try
+            {
+                EnsureLoaded();
+                return _file?.Moments != null
+                    && _file.Moments.TryGetValue(momentId!, out var m)
+                    && m != null
+                    && m.Hold;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] IsHoldMoment({Moment}) failed", momentId);
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
     /// Release a <c>holdUntilReleased</c> hold (the avatar stopped talking, the attention check
     /// resolved, intake closed). Applies the moment's <c>tailMs</c> silence afterwards. Releasing
     /// a hold that is not held is a no-op.

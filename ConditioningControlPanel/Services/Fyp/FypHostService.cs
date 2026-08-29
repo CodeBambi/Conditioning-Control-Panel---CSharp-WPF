@@ -71,6 +71,7 @@ internal static class FypHostService
         {
             // EMI Desk: the ring learns from every open, not just its own cards.
             try { App.EmiDesk?.NoteOpen("fyp"); } catch { }
+            try { App.EmiDesk?.Fire("fypOpened", null); } catch { }
 
             var webRoot = Path.Combine(AppContext.BaseDirectory, "Resources", "web");
             // A missing folder makes WebView2 SKIP the mapping entirely (host rule),

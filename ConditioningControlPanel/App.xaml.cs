@@ -459,6 +459,10 @@ namespace ConditioningControlPanel
         /// threw. Nothing else in the app may assume she is out - ask <c>App.EmiDesk?.IsOut</c>.
         /// </summary>
         public static Services.EmiDesk.EmiDeskService? EmiDesk { get; private set; }
+
+        /// <summary>The previous session died with the engine running (EngineCrashSentinel found a
+        /// file at startup). Latched because the sentinel is consumed long before EMI exists.</summary>
+        private static bool _engineCrashRecovered;
         public static QuestDefinitionService QuestDefinitions { get; private set; } = null!;
         public static QuestService Quests { get; private set; } = null!;
         /// <summary>Weekly free-tier pass for the Graded Intake (see IntakePassService).</summary>
@@ -1559,7 +1563,10 @@ namespace ConditioningControlPanel
             // in crash.log — but the chaos sentinel file is still on disk. Report+consume it so the
             // crash self-documents (with last-known context) in this session's log.
             Services.Chaos.ChaosCrashSentinel.ConsumeAndReport(Logger);
-            Services.EngineCrashSentinel.ConsumeAndReport(Logger);
+            // EMI Desk (MOMENTS 4.B): latched rather than fired. This runs long before EmiDesk is
+            // constructed (below, with the other companions), so the verdict is parked and the
+            // moment goes out the instant she exists.
+            _engineCrashRecovered = Services.EngineCrashSentinel.ConsumeAndReport(Logger);
 
             // Same idea for a UI FREEZE rather than a crash: if the last session wedged and the
             // user task-killed it (the only way out of a hard freeze), the watchdog's findings are
@@ -1906,6 +1913,10 @@ namespace ConditioningControlPanel
             // (it needs an HWND to hang RegisterHotKey off).
             try { EmiDesk = new Services.EmiDesk.EmiDeskService(); }
             catch (Exception exDesk) { Logger?.Warning(exDesk, "[EmiDesk] service construction failed; EMI Desk is unavailable this run"); }
+            if (_engineCrashRecovered)
+            {
+                try { EmiDesk?.Fire("crashRecovered", null); } catch { }
+            }
             QuestDefinitions = new QuestDefinitionService();
             _ = QuestDefinitions.InitializeAsync(); // Fire and forget - will load from cache first
             Quests = new QuestService();
@@ -2224,6 +2235,12 @@ namespace ConditioningControlPanel
             // IsAvailable=false until the KWS model is dropped into Resources\Models\sherpa-kws\,
             // in which case the wake loop prefers it over the Vosk free-recognizer path. No API key.
             WakeWord = new Services.Speech.SherpaWakeService();
+
+            // EMI Desk (MOMENTS 4.C): subscribe her to the app events nothing else was listening
+            // to. Deliberately here and not at construction - Progression, Bark, DailyFree, Autonomy
+            // and Speech all have to exist first, and this is the first point at which they all do.
+            try { EmiDesk?.WireAppEvents(); }
+            catch (Exception exWire) { Logger?.Debug(exWire, "[EmiDesk] app event wiring failed"); }
 
             // Initialize content packs service
             ContentPacks = new ContentPackService();
@@ -4562,6 +4579,10 @@ Application State:
         protected override void OnExit(ExitEventArgs e)
         {
             Logger?.Information("Application shutting down...");
+
+            // EMI Desk (MOMENTS 4.B / 3.8): the wordless flinch. appClosing is a HOLD with no pool
+            // and never gets one - she does not get a goodbye speech while the app is going away.
+            try { EmiDesk?.Fire("appClosing", null); } catch { }
 
             try { SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged; } catch { }
 

@@ -129,6 +129,10 @@ internal static class EmergencyExitHostService
             _game = forcedGame ?? PickGame();
             _lastGame = _game;
 
+            // EMI Desk (MOMENTS 4.B): a HOLD. Someone is trying to get out of a lockdown; she is
+            // not a commentator on that. Dropped in Close(), which every exit path lands in.
+            try { App.EmiDesk?.Fire("emergencyExitOpened", null); } catch { }
+
             var webRoot = Path.Combine(AppContext.BaseDirectory, "Resources", "web");
             var mappings = new List<(string, string, CoreWebView2HostResourceAccessKind)>
             {
@@ -530,6 +534,9 @@ internal static class EmergencyExitHostService
         }
         if (_closing) return;   // _host.Dispose() closes the window, re-raising Closed -> here
         _closing = true;
+
+        // EMI Desk: the escape game is over, so the HOLD comes off.
+        try { App.EmiDesk?.ReleaseHold("emergencyExitOpened"); } catch { }
         try
         {
             CancelOutroFailsafe();

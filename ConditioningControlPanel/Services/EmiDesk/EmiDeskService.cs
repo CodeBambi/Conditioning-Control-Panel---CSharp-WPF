@@ -94,6 +94,20 @@ public sealed class EmiDeskService : IDisposable
     }
 
     /// <summary>
+    /// True while the companion voice channel is actually playing a clip. Separate from
+    /// <see cref="TubeBubbleLive"/> because a voiced line can outlast its bubble, or have none at
+    /// all, and a hold that ends mid-sentence is worse than no hold.
+    /// </summary>
+    public bool TubeSpeakingAudio
+    {
+        get
+        {
+            try { return App.AvatarWindow?.IsSpeakingAudio == true; }
+            catch { return false; }
+        }
+    }
+
+    /// <summary>
     /// Called from the tube's speech chokepoints the instant before a bubble goes up, muted or not.
     /// Keep it cheap: this runs on every giggle.
     /// </summary>
@@ -106,28 +120,40 @@ public sealed class EmiDeskService : IDisposable
         // blink-only faces until its bubble comes down, plus the moment table's 20 s tail. The hold
         // is armed even when she is muted: the mute is about the tube's audio, not about who is
         // allowed to interrupt whom.
-        try { ArmAvatarHold(); }
+        try { ArmVoiceHold("avatarSpeaking"); }
         catch (Exception ex) { Log.Debug(ex, "[EmiDesk] avatar hold arm failed"); }
     }
 
+    /// <summary>
+    /// The awareness arbiter has decided the tube speaks about the active window (MOMENTS 1.x).
+    /// Same law as <see cref="NoteAvatarSpeaking"/> and the same release, under its own moment id
+    /// so the 20 s tail is the awareness moment's own.
+    /// </summary>
+    public void NoteAwarenessReaction()
+    {
+        try { ArmVoiceHold("awarenessReaction"); }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] awareness hold arm failed"); }
+    }
+
     private System.Windows.Threading.DispatcherTimer? _avatarHoldTimer;
-    private bool _avatarHeld;
+
+    /// <summary>Which voice holds this service has armed and still owes a release.</summary>
+    private readonly HashSet<string> _voiceHolds = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Hold her while the tube has a bubble up, and release it the moment the bubble goes away.
     /// A one-second poll, not an event: the tube exposes a state (<see cref="TubeBubbleLive"/>) and
     /// no "stopped speaking" signal, and a poll that only runs while a hold is live costs nothing.
     /// </summary>
-    private void ArmAvatarHold()
+    private void ArmVoiceHold(string momentId)
     {
         var disp = Application.Current?.Dispatcher;
         if (disp == null || disp.HasShutdownStarted) return;
-        if (!disp.CheckAccess()) { disp.BeginInvoke(new Action(ArmAvatarHold)); return; }
+        if (!disp.CheckAccess()) { disp.BeginInvoke(new Action(() => ArmVoiceHold(momentId))); return; }
 
-        if (!_avatarHeld)
+        if (_voiceHolds.Add(momentId))
         {
-            _avatarHeld = true;
-            Fire("avatarSpeaking");
+            Fire(momentId);
         }
 
         if (_avatarHoldTimer != null) return;
@@ -146,7 +172,7 @@ public sealed class EmiDeskService : IDisposable
         {
             if (Application.Current?.Dispatcher == null) return;
             if (Application.Current.Dispatcher.HasShutdownStarted) return;
-            if (TubeBubbleLive) return;
+            if (TubeBubbleLive || TubeSpeakingAudio) return;
 
             if (_avatarHoldTimer != null)
             {
@@ -154,9 +180,9 @@ public sealed class EmiDeskService : IDisposable
                 _avatarHoldTimer.Tick -= OnAvatarHoldTick;
                 _avatarHoldTimer = null;
             }
-            if (!_avatarHeld) return;
-            _avatarHeld = false;
-            EmiLineEngine.Instance.ReleaseHold("avatarSpeaking");
+            if (_voiceHolds.Count == 0) return;
+            foreach (var id in _voiceHolds) EmiLineEngine.Instance.ReleaseHold(id);
+            _voiceHolds.Clear();
         }
         catch (Exception ex)
         {
@@ -252,6 +278,36 @@ public sealed class EmiDeskService : IDisposable
             _summonMoment = first ? "desktopFirstBoot" : "summoned";
             _summonVia = string.Equals(why, "hotkey", StringComparison.OrdinalIgnoreCase) ? "hotkey" : "rail";
             ScheduleSummonMoment();
+
+            // She was sent away and called straight back (MOMENTS 1.x). Fired here rather than
+            // folded into the greeting: it is a different beat and the engine's floor decides which
+            // of the two actually lands.
+            try
+            {
+                if (_lastDismissUtc != DateTime.MinValue)
+                {
+                    var gone = DateTime.UtcNow - _lastDismissUtc;
+                    if (gone.TotalMinutes <= 5)
+                        Fire("backSoon", new { minutes = Math.Max(0, (int)gone.TotalMinutes) });
+                }
+            }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] backSoon probe failed"); }
+
+            // A bedtime is a promise she made about tonight, and being summoned through it is the
+            // user breaking it, not her. {n} is how many times, so the line can escalate honestly.
+            try
+            {
+                if (EmiLineEngine.BedtimeSet)
+                {
+                    _bedtimeSkips++;
+                    Fire("bedtimeBroken", new { n = _bedtimeSkips });
+                }
+                else
+                {
+                    _bedtimeSkips = 0;
+                }
+            }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] bedtimeBroken probe failed"); }
         }
         catch (Exception ex)
         {
@@ -279,6 +335,7 @@ public sealed class EmiDeskService : IDisposable
             // whole goodbye. It still fires so the hooks and the counters see it, and Fire() drops
             // it before it can reach a pool (see NeverSpeaks).
             Fire("dismissed", new { minutes = MinutesOut() });
+            _lastDismissUtc = DateTime.UtcNow;
             _window.RunDismiss(() =>
             {
                 IsOut = false;
@@ -361,7 +418,23 @@ public sealed class EmiDeskService : IDisposable
             Log.Debug(ex, "[EmiDesk] Fire({Moment}) handler threw", momentId);
         }
 
-        if (!IsOut) return;
+        // HOLDS ARE SAFETY, NOT DECORATION. A panic pressed, an attention check shown or a
+        // lockdown counting down while she is away must still arm the silence, so that a summon
+        // landing in the middle of one does not come with chatter. Everything else is skipped here:
+        // Fire has to stay cheap enough to sit in the bark funnel.
+        if (!IsOut)
+        {
+            try
+            {
+                if (!EmiLineEngine.Instance.IsHoldMoment(momentId)) return;
+                EmiLineEngine.Instance.Draw(momentId, EmiLineEngine.ToCtx(ctx));
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] hold arm for {Moment} while away failed", momentId);
+            }
+            return;
+        }
 
         try
         {
@@ -378,6 +451,19 @@ public sealed class EmiDeskService : IDisposable
         {
             Log.Debug(ex, "[EmiDesk] Fire({Moment}) failed", momentId);
         }
+    }
+
+    /// <summary>
+    /// Let a <c>holdUntilReleased</c> hold go: the attention check resolved, intake closed, the
+    /// emergency exit shut, the lockdown ended. The host services call this rather than reaching
+    /// into the engine, and releasing a hold nobody is holding is a no-op, so an error path may
+    /// call it freely.
+    /// </summary>
+    public void ReleaseHold(string momentId)
+    {
+        if (string.IsNullOrWhiteSpace(momentId)) return;
+        try { EmiLineEngine.Instance.ReleaseHold(momentId); }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ReleaseHold({Moment}) failed", momentId); }
     }
 
     /// <summary>
@@ -449,6 +535,16 @@ public sealed class EmiDeskService : IDisposable
     private string _summonVia = "rail";
     private DateTime _outSinceUtc = DateTime.MinValue;
 
+    /// <summary>When she was last sent away, for the "back already?" beat. MinValue = never.</summary>
+    private DateTime _lastDismissUtc = DateTime.MinValue;
+
+    /// <summary>How many times a set bedtime has been walked through tonight. Reset when there is
+    /// no bedtime, so the count is always about the promise currently standing.</summary>
+    private int _bedtimeSkips;
+
+    /// <summary>The mute prompt's verdict, waiting for the greeting to go first.</summary>
+    private string? _pendingMuteMoment;
+
     /// <summary>The CRT power-on plus the wake chain, plus a beat of air after it.</summary>
     private const int SummonGreetDelayMs = 2600;
 
@@ -492,6 +588,14 @@ public sealed class EmiDeskService : IDisposable
             if (!IsOut) return;
             var moment = _summonMoment;
             _summonMoment = null;
+
+            // The mute verdict rides here, behind the greeting: the answer to "should the avatar sit
+            // out?" is only interesting once she has actually said hello. The engine's floor decides
+            // which of the two lands - it will usually be the greeting, which is correct.
+            var mute = _pendingMuteMoment;
+            _pendingMuteMoment = null;
+            if (!string.IsNullOrEmpty(mute)) Fire(mute!, null);
+
             if (string.IsNullOrEmpty(moment)) return;
             Fire(moment!, new { via = _summonVia, minutes = MinutesOut() });
         }
@@ -701,6 +805,10 @@ public sealed class EmiDeskService : IDisposable
                     break;
             }
             Log.Information("[EmiDesk] mute prompt answered: {Choice}", choice);
+
+            // MOMENTS 4.D: the verdict is hers to react to, either way. Queued behind the summon
+            // greeting by the engine's own floor, not by a delay here.
+            _pendingMuteMoment = _muteAccepted ? "avatarMuted" : "avatarKept";
         }
         catch (Exception ex)
         {
@@ -896,6 +1004,258 @@ public sealed class EmiDeskService : IDisposable
         }
     }
 
+    // ---------------------------------------------------------------- app events + her own clock
+
+    /// <summary>How much XP in one award is worth reacting to. Below this she says nothing: a
+    /// running total of small awards is not an event, it is Tuesday.</summary>
+    private const int XpBigAwardFloor = 250;
+
+    /// <summary>When this process started, for <c>longSitting</c>. Falls back to service
+    /// construction if the process cannot be queried, which is close enough for a 2 h beat.</summary>
+    private static readonly DateTime _launchedUtc = ResolveLaunchUtc();
+
+    private static DateTime ResolveLaunchUtc()
+    {
+        try { return System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime(); }
+        catch { return DateTime.UtcNow; }
+    }
+
+    private bool _wired;
+    private System.Windows.Threading.DispatcherTimer? _clockTimer;
+
+    // Handlers are held so the unsubscribe in Dispose can be exact. A lambda that is not kept is a
+    // subscription that can never be removed.
+    private EventHandler<ProgressionService.XpAward>? _onXpAwarded;
+    private EventHandler<bool>? _onAutonomyEnabled;
+    private EventHandler<bool>? _onListeningChanged;
+    private Action? _onDailyFreeChanged;
+    private Action<Bark.BarkRule, string>? _onBarkSpoken;
+
+    private DateTime _takeoverSinceUtc = DateTime.MinValue;
+    private string? _lateNightNight;
+    private string? _smallHoursNight;
+    private string? _morningDay;
+    private bool _saidLongSitting;
+    private bool _saidIdleLong;
+
+    /// <summary>
+    /// MOMENTS 4.C: subscribe her to the app events no bark trigger already carries, and start her
+    /// own 60 s clock for the time beats. Called once from <c>App.OnStartup</c>, at the first point
+    /// where Progression, Autonomy, Speech, DailyFree and Bark all exist.
+    ///
+    /// <para>Idempotent, and every subscription is armed on its own: one service missing must not
+    /// cost the others, and nothing in here may throw back into startup.</para>
+    /// </summary>
+    public void WireAppEvents()
+    {
+        if (_wired || _disposed) return;
+        _wired = true;
+
+        // ---- a single award big enough to notice -------------------------------------------
+        try
+        {
+            _onXpAwarded = (_, award) =>
+            {
+                try
+                {
+                    // A level-up is its own, louder moment (mirrored off the LevelUp bark). She does
+                    // not narrate the XP over her own fanfare.
+                    if (award.LeveledUp) return;
+                    int amount = (int)Math.Round(award.Amount);
+                    if (amount < XpBigAwardFloor) return;
+                    Fire("xpBigAward", new { n = amount, target = EmiNames.XpSource(award.Source) });
+                }
+                catch (Exception ex) { Log.Debug(ex, "[EmiDesk] xpBigAward handler failed"); }
+            };
+            App.Progression.XPAwarded += _onXpAwarded;
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] XPAwarded subscribe failed"); }
+
+        // ---- takeover let go ------------------------------------------------------------------
+        try
+        {
+            _onAutonomyEnabled = (_, enabled) =>
+            {
+                try
+                {
+                    // The start is the bark's BambiTakeoverStarted; only the END needs a duration,
+                    // and nothing else in the app is counting it.
+                    if (enabled) { _takeoverSinceUtc = DateTime.UtcNow; return; }
+
+                    int minutes = _takeoverSinceUtc == DateTime.MinValue
+                        ? 0
+                        : Math.Max(0, (int)(DateTime.UtcNow - _takeoverSinceUtc).TotalMinutes);
+                    _takeoverSinceUtc = DateTime.MinValue;
+                    Fire("takeoverEnded", new { minutes });
+                }
+                catch (Exception ex) { Log.Debug(ex, "[EmiDesk] takeoverEnded handler failed"); }
+            };
+            App.Autonomy.EnabledChanged += _onAutonomyEnabled;
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] EnabledChanged subscribe failed"); }
+
+        // ---- the mic opened -------------------------------------------------------------------
+        try
+        {
+            _onListeningChanged = (_, on) =>
+            {
+                try { if (on) Fire("sheListeningOn", null); }
+                catch (Exception ex) { Log.Debug(ex, "[EmiDesk] sheListeningOn handler failed"); }
+            };
+            App.Speech.ListeningChanged += _onListeningChanged;
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ListeningChanged subscribe failed"); }
+
+        // ---- today's free feature -------------------------------------------------------------
+        try
+        {
+            _onDailyFreeChanged = () =>
+            {
+                try { Fire("dailyFreeToday", new { target = EmiNames.Feature(App.DailyFree?.TodayKey) }); }
+                catch (Exception ex) { Log.Debug(ex, "[EmiDesk] dailyFreeToday handler failed"); }
+            };
+            App.DailyFree!.TodayChanged += _onDailyFreeChanged;
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] TodayChanged subscribe failed"); }
+
+        // ---- the tube spoke -------------------------------------------------------------------
+        try
+        {
+            // The belt to ShowGiggle's braces: a bark that reaches the screen through any path at
+            // all still owes her the hold. Arming a hold twice is free; missing one is not.
+            _onBarkSpoken = (_, __) =>
+            {
+                try { NoteAvatarSpeaking(); }
+                catch (Exception ex) { Log.Debug(ex, "[EmiDesk] BarkSpoken handler failed"); }
+            };
+            App.Bark!.BarkSpoken += _onBarkSpoken;
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] BarkSpoken subscribe failed"); }
+
+        // ---- her clock ------------------------------------------------------------------------
+        try
+        {
+            var disp = Application.Current?.Dispatcher;
+            if (disp != null && !disp.HasShutdownStarted)
+            {
+                _clockTimer = new System.Windows.Threading.DispatcherTimer(
+                    System.Windows.Threading.DispatcherPriority.Background, disp)
+                {
+                    Interval = TimeSpan.FromSeconds(60)
+                };
+                _clockTimer.Tick += OnClockTick;
+                _clockTimer.Start();
+            }
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] clock start failed"); }
+
+        Log.Information("[EmiDesk] app events wired");
+    }
+
+    /// <summary>
+    /// The time group (MOMENTS 5). One minute is the coarsest tick that can still call an hour
+    /// boundary honestly, and every beat below is latched by night, day or launch so the tick is a
+    /// check and not a firehose.
+    /// </summary>
+    private void OnClockTick(object? sender, EventArgs e)
+    {
+        try
+        {
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+
+            // Everything here is something she SAYS. None of it is a hold, so none of it is worth
+            // computing while she is away.
+            if (!IsOut) return;
+
+            var now = DateTime.Now;
+
+            // A "night" runs to 06:00, so 00:30 and 03:30 are the same one and she cannot greet the
+            // small hours twice on either side of a date change.
+            string nightKey = now.AddHours(-6).ToString("yyyy-MM-dd");
+            string dayKey = now.ToString("yyyy-MM-dd");
+
+            if (now.Hour < 3 && _lateNightNight != nightKey)
+            {
+                _lateNightNight = nightKey;
+                Fire("lateNight", new { n = now.Hour });
+            }
+            else if (now.Hour >= 3 && now.Hour < 5 && _smallHoursNight != nightKey)
+            {
+                _smallHoursNight = nightKey;
+                Fire("smallHours", new { n = now.Hour });
+            }
+            else if (now.Hour >= 5 && now.Hour < 10 && _morningDay != dayKey)
+            {
+                _morningDay = dayKey;
+                Fire("morningFirst", null);
+            }
+
+            var open = DateTime.UtcNow - _launchedUtc;
+            if (!_saidLongSitting && open.TotalHours >= 2)
+            {
+                _saidLongSitting = true;
+                Fire("longSitting", new { minutes = (int)open.TotalMinutes });
+            }
+
+            int idleSeconds = 0;
+            try { idleSeconds = ActivityTracker.GetIdleSeconds(); } catch { }
+
+            if (idleSeconds >= 1200)
+            {
+                // Also mirrored off ActivityTracker's own IdleStateChanged edge, which fires first
+                // but cannot say how long. The moment's 1/launch limit keeps the pair to one line.
+                if (!_saidIdleLong)
+                {
+                    _saidIdleLong = true;
+                    Fire("appIdleLong", new { minutes = idleSeconds / 60 });
+                }
+            }
+            else if (idleSeconds >= 300)
+            {
+                // Deliberately unlatched: the ambient heartbeat. Its own 5 min cooldown and 0.06
+                // odds are the rate limit, so this is roughly one murmur an hour of sitting still.
+                Fire("idleShort", new { minutes = idleSeconds / 60 });
+            }
+            else
+            {
+                _saidIdleLong = false;   // input came back, so the long-idle beat may arm again
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] clock tick failed");
+        }
+    }
+
+    /// <summary>Drop everything <see cref="WireAppEvents"/> took. Safe to call unwired.</summary>
+    private void UnwireAppEvents()
+    {
+        try
+        {
+            if (_clockTimer != null)
+            {
+                _clockTimer.Stop();
+                _clockTimer.Tick -= OnClockTick;
+                _clockTimer = null;
+            }
+        }
+        catch { }
+
+        try { if (_onXpAwarded != null) App.Progression.XPAwarded -= _onXpAwarded; } catch { }
+        try { if (_onAutonomyEnabled != null) App.Autonomy.EnabledChanged -= _onAutonomyEnabled; } catch { }
+        try { if (_onListeningChanged != null) App.Speech.ListeningChanged -= _onListeningChanged; } catch { }
+        try { if (_onDailyFreeChanged != null && App.DailyFree != null) App.DailyFree.TodayChanged -= _onDailyFreeChanged; } catch { }
+        try { if (_onBarkSpoken != null && App.Bark != null) App.Bark.BarkSpoken -= _onBarkSpoken; } catch { }
+
+        _onXpAwarded = null;
+        _onAutonomyEnabled = null;
+        _onListeningChanged = null;
+        _onDailyFreeChanged = null;
+        _onBarkSpoken = null;
+        _wired = false;
+    }
+
     // ---------------------------------------------------------------- lifetime
 
     /// <summary>Tear her down at app shutdown. Idempotent.</summary>
@@ -903,6 +1263,7 @@ public sealed class EmiDeskService : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        UnwireAppEvents();
         try
         {
             GlobalHotkeyService.Unregister(GlobalHotkeyService.EmiDeskHotkeyId);

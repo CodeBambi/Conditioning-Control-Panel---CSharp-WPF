@@ -871,6 +871,15 @@ public class OverlayService : IDisposable
             return;
         }
 
+        // EMI Desk (MOMENTS 4.B): only the spiral. The two brain-drain kinds route through
+        // StartBrainDrainBlur, which fires its own moment with the intensity and the melt flag, and
+        // the pink filter has no moment of its own.
+        if (string.Equals(kind, "spiral", StringComparison.OrdinalIgnoreCase))
+        {
+            try { App.EmiDesk?.Fire("overlaySpiralUp", new { channel = kind, n = safeDurationMs / 1000 }); }
+            catch { }
+        }
+
         Action runShow = () =>
         {
             try
@@ -2133,6 +2142,10 @@ public class OverlayService : IDisposable
             App.Logger?.Debug("Brain Drain skipped (withheld while the effect is reworked); melt {Melt}", melt);
             return;
         }
+
+        // EMI Desk (MOMENTS 4.B). Below the withheld gate on purpose: she must never react to an
+        // effect the user did not get.
+        try { App.EmiDesk?.Fire("brainDrainOn", new { n = intensity, melt }); } catch { }
 
         // The whole decision moved INSIDE the dispatch (#975). It used to read BrainDrainShowing -
         // which touches WPF Window objects and the compositor layer - from whatever thread called
