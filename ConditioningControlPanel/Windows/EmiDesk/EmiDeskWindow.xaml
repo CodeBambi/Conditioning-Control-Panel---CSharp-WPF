@@ -74,7 +74,15 @@
                  hit-testable, because a glass click is resolved geometrically in the body's own
                  mouse-up handler (a hit-testable overlay would eat the drag). -->
             <Canvas x:Name="FaceLayer" IsHitTestVisible="False" ClipToBounds="False">
-                <emi:EmiFace x:Name="FaceView"/>
+                <!-- THE GAZE LEAN (ALIVE wave A). The face glyph slides up to three DIPs toward
+                     the cursor on its own transform, so the lean composes with the body's CRT
+                     scale, click squash and drag wobble instead of fighting them, and the locked
+                     renderer underneath is never touched. Driven by EmiDeskWindow.Alive.cs. -->
+                <emi:EmiFace x:Name="FaceView">
+                    <emi:EmiFace.RenderTransform>
+                        <TranslateTransform x:Name="GazeShift"/>
+                    </emi:EmiFace.RenderTransform>
+                </emi:EmiFace>
                 <Canvas x:Name="GlassCanvas" IsHitTestVisible="False"/>
             </Canvas>
 

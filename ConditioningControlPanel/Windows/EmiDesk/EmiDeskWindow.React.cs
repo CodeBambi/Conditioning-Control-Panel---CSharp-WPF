@@ -133,9 +133,16 @@ public partial class EmiDeskWindow
             _petArmed = true;
             RaiseActivity();
 
+            // THE POKE LADDER (ALIVE wave A) sits on top of this path, never beside it: it books
+            // the poke and says which face the FLICK should wear, and the cooldown below still
+            // decides whether this pat is a pat at all. Three pokes inside four seconds are all
+            // inside the six second cooldown by construction, so the ladder can only ever
+            // re-dress a flick - it can never eat a pat that was going to draw a line.
+            var poke = NotePoke();
+
             if (DateTime.UtcNow < _petCooldownUntil)
             {
-                PlayChain(PetFlickChain);
+                PlayPokeFlick(poke);
                 return true;
             }
 

@@ -138,24 +138,31 @@ campus assets can be reused as-is.
 
 ## 6. Build order
 
-| wave | item | effort | file |
-|---|---|---|---|
-| A (this week) | blink parity 5200/110 + jitter | S | EmiDeskWindow.xaml.cs |
-| A | cursor gaze lean, 10Hz poll | S | EmiDeskWindow.xaml.cs |
-| A | approach perk + glance | S | EmiDeskWindow.xaml.cs |
-| A | hover linger ^_^ then ¬_¬ | S | EmiDeskWindow.xaml.cs |
-| A | micro-fidgets + rare stretch | S | EmiDeskWindow.xaml.cs |
-| A | poke ladder + squish face | S | EmiDeskWindow.xaml.cs |
-| B | the shared spring (foundation) | M | EmiDeskWindow.xaml.cs + Fx.cs |
-| B | sleep ramp doze/ZzZ/wake | M | EmiDeskWindow.xaml.cs + EmiDeskService.cs |
-| B | shake dizzy + double-amp settle | S | EmiDeskWindow.xaml.cs |
-| B | edge lean + bottom dangle (after wave 2) | M | EmiDeskWindow.xaml.cs |
-| B | touch sfx, five one-shots | S | EmiDeskWindow.xaml.cs + AudioService |
-| B | ignored mid-sentence ._. | S | EmiDeskWindow.Bubble.cs |
-| C | glass wipe + morning ceremony | S | EmiDeskWindow.Fx.cs |
-| C | field trip | M | EmiDeskService.cs + Fx.cs |
-| C | the moth | M | EmiDeskWindow.Glass.cs |
+| wave | item | effort | file | status |
+|---|---|---|---|---|
+| A | blink parity 5200/110 + jitter | S | EmiDeskWindow.xaml.cs (OnIdleTick) + EmiDeskWindow.Alive.cs | DONE |
+| A | cursor gaze lean, 10Hz poll | S | EmiAlive.cs + EmiDeskWindow.Alive.cs | DONE |
+| A | approach perk + glance | S | EmiDeskWindow.Alive.cs | DONE |
+| A | hover linger ^_^ then ¬_¬ | S | EmiDeskWindow.Alive.cs | DONE |
+| A | micro-fidgets + rare stretch | S | EmiDeskWindow.Alive.cs | DONE |
+| A | poke ladder + squish face | S | EmiDeskWindow.Alive.cs + React.cs | DONE |
+| B | the shared spring (foundation) | M | EmiDeskWindow.xaml.cs + Fx.cs | |
+| B | sleep ramp doze/ZzZ/wake | M | EmiDeskWindow.xaml.cs + EmiDeskService.cs | |
+| B | shake dizzy + double-amp settle | S | EmiDeskWindow.xaml.cs | |
+| B | edge lean + bottom dangle (after wave 2) | M | EmiDeskWindow.xaml.cs | |
+| B | touch sfx, five one-shots | S | EmiDeskWindow.xaml.cs + AudioService | |
+| B | ignored mid-sentence ._. | S | EmiDeskWindow.Bubble.cs | |
+| C | glass wipe + morning ceremony | S | EmiDeskWindow.Fx.cs | |
+| C | field trip | M | EmiDeskService.cs + Fx.cs | |
+| C | the moth | M | EmiDeskWindow.Glass.cs | |
 
 Wave A is deliberately all watching and no physics: it needs one poll timer and a handful of face
 swaps, lands in a day or two, and on its own turns the stare into eye contact. Wave B gives her the
 body. Wave C gives people stories to tell each other about what she did.
+
+**Wave A landed 2026-08-29** on `feat/emi-desk`. It came in on the shape above with two notes for
+whoever picks up wave B. First, the numbers and the decisions live in a new pure file,
+`Services/EmiDesk/EmiAlive.cs`, so the whole wave is unit-testable without a window: the window half
+in `Windows/EmiDesk/EmiDeskWindow.Alive.cs` only reads the cursor, converts it, and asks. Second,
+there is exactly ONE 100ms poll for all six items, started and stopped by her visibility, so wave B's
+spring should ride that same tick rather than add a second clock. See EMI_DESK_PRIMER section 14.

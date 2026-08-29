@@ -99,9 +99,17 @@ public class EmiGestureAndPinWiringTests
         Assert.True(squash > 0 && route > squash,
             "the click squash must still run before the click is routed");
 
-        // And inside the cooldown she flicks rather than going silent.
+        // And inside the cooldown she flicks rather than going silent. Since ALIVE wave A the
+        // flick is DRESSED by the poke ladder - the plain wink, the annoyed look, or the glare on
+        // the third poke - so the click path asks PlayPokeFlick which one to wear. The guarantee
+        // is unchanged and is now asserted at both ends: the route here, the default there.
         Assert.Contains("PetFlickChain", react);
-        Assert.Contains("PlayChain(PetFlickChain);", react);
+        Assert.Contains("PlayPokeFlick(poke);", react);
+
+        var alive = Read("Windows", "EmiDesk", "EmiDeskWindow.Alive.cs");
+        int flick = alive.IndexOf("private void PlayPokeFlick(", StringComparison.Ordinal);
+        Assert.True(flick > 0, "the poke ladder's flick chooser is gone; a cooled-down click is silent again");
+        Assert.Contains("PlayChain(PetFlickChain);", alive.Substring(flick));
     }
 
     [Fact]

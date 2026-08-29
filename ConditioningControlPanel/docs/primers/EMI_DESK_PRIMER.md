@@ -815,3 +815,112 @@ Three details that are load-bearing:
 
 `EmiDeskService.RefreshRing()` re-fans an open ring from any thread, so a pin made in settings shows
 in a fan that happens to be up rather than on the next open.
+
+## 14. ALIVE wave A: the watching wave (2026-08-29)
+
+`docs/emi-desk/ALIVE-PLAN.md` is the pitch; this is what shipped of it. Wave A is the "she is
+looking at me" half: no physics, no new windows, no new packages. Six behaviours, one clock, and a
+priority rule that puts every one of them last.
+
+**The two files.** `Services/EmiDesk/EmiAlive.cs` holds the numbers and every decision as pure
+static functions and two clock-free state machines (`FidgetScheduler`, `PokeLadder`), so the wave is
+walked in milliseconds by `Tests/ConditioningControlPanel.Tests/EmiAliveTests.cs` with no window
+anywhere. `Windows/EmiDesk/EmiDeskWindow.Alive.cs` is the window half: it reads the cursor, converts
+it, asks `EmiAlive` what should happen, and plays it. If you are changing a number, it is in
+`EmiAlive`. If you are changing what a beat looks like, it is in `Alive.cs`.
+
+### 14.1 One clock, hung off her visibility
+
+A single `DispatcherTimer` at `EmiAlive.PollMs` (100 ms, `DispatcherPriority.Background`) drives all
+six items. It is started and stopped from `IsVisibleChanged`, NOT from the summon: every road that
+puts her on screen or takes her off it (summon, dismiss, a bare `Hide` in teardown) moves the timer
+with her and none of them has to remember to. `ShutDown()` and `OnClosedCleanup` also call
+`StopAlive()` so nothing survives her window.
+
+It deliberately does NOT ride `StopIdleBeats` / `RestartIdleBeats`, which every chain touches: the
+lean has to keep tracking while she talks, and the wave has to be able to see the moment she is free
+again.
+
+**The coordinate trap applies here in full (see 10.1).** `GetCursorPos` returns PHYSICAL pixels and
+so does `BodyScreenRect`; everything `EmiAlive` computes is in DIPs. The tick divides both by
+`DipScale` once and passes DIPs down. Do not add a step that mixes them.
+
+### 14.2 The priority rule
+
+`CanPerk()` is the only gate any wave-A beat passes through, and it says no while ANY of these is
+true: `Busy()`, a chain is live, an ask is up, the line engine holds, she is being dragged, she is
+being resized. A wave-A face is always the lowest priority thing on her face and yields instantly.
+`EmiAlive.CanPerk` is the pure half of that and is pinned by a test matrix.
+
+The blink is the one exception, and only because it claims nothing: it is a bare `DrawFace` lid swap
+that re-checks `Busy()` at every step (see 14.3).
+
+### 14.3 Blink parity
+
+The pitch stage rolled a coin on a 4.2 s tick and, when it won, played the 2.7 s `blink` CHAIN. That
+meant up to twelve seconds of stone stillness, then two blinks in a row, and every blink stopped and
+restarted the idle beats.
+
+It is now the campus blink (`Resources/web/arcademy/emi/widget.js`, `idle()`): a raw lid swap of
+`BlinkHoldMs` (110 ms) on a `BlinkEveryMs` (5200 ms) clock, plus `BlinkJitterMs` (600 ms) either way
+so it never becomes a metronome, and one blink in `DoubleBlinkOneIn` (7) doubled with a 120 ms gap.
+The idle timer re-jitters its own interval on every tick. Every step of the swap re-checks
+`BlinkStillOurs()`, because the lid is a bare `DrawFace`: if a chain took the face while her eyes
+were shut, the restore must not paint over it.
+
+### 14.4 The lean
+
+`GazeShift` is a `TranslateTransform` on the FaceView element in the XAML, under her body's own
+transform group, so the lean composes with the CRT scale, the click squash and the drag wobble for
+free and never touches the locked `EmiFace` renderer.
+
+`EmiAlive.GazeTarget` is the campus rule: `dx / GazeDiv` (60) clamped to `GazeMaxDip` (3) scaled by
+how big she is (`bodyWidth / 150`). **The cap scales and the divisor does not**, which is what keeps
+her saturating at the same RELATIVE distance (about 1.2 body widths) at every size; scaling both
+would make a big EMI notice you from four times further away. Easing is campus `0.15` per 60 Hz
+frame, converted once to a per-poll constant by `GazeEasePerPoll` so the 100 ms tick has the same
+time constant as the 16 ms one.
+
+Target is zero (and eases home, it does not snap) whenever the wave does not own her face, she is
+dragged, or motion is reduced.
+
+### 14.5 Approach, linger, fidgets, pokes
+
+- **Approach.** Crossing into `ApproachDip` (120) of her EDGE earns one beat: the canon `glance`
+  chain if you came at her faster than `GlanceSpeedDipPerMs` (1.2), the quiet `o_o` perk if you
+  walked. Then nothing for `ApproachCooldownMs` (30 s), so she is a mascot and not a bell you can keep ringing. It is
+  edge triggered on entry, so a pointer parked inside the radius costs nothing.
+- **Linger.** A pointer resting ON her for `LingerMs` (2 s) with no click gets `^_^`; still no pat at
+  `LingerAwayMs` (4 s) gets the flat look away. The episode ends the moment the pointer leaves, and
+  ANY touch cancels the look away: the point of that beat is that the pat never came. A stage
+  advances whether or not the face reached the screen (one attempt per stage), because retrying
+  every 100 ms would make her stare at a parked pointer.
+- **Fidgets.** Every 25 to 50 s of genuine idleness, one small wordless thing, never the same one
+  twice running (`FidgetScheduler`): a 2 DIP twitch, a 1 degree weight shift held 2 s, or a glance.
+  Every 20 to 40 minutes, a stretch (`1.04` scale up and settle, `>_<` into `^_^`). Both wait for a
+  quiet moment rather than forcing one.
+- **Pokes.** `PokeLadder` counts pats inside a 4 s window: the second earns the annoyed face, the
+  third the glare plus a shiver, then a 60 s truce during which pokes are simply forgiven. It does
+  NOT decide what a pat does, `PetCooldownMs` still does; it only says which face the cooldown's
+  flick wears, which is why the two cannot fight. Three pats inside four seconds are all inside the
+  six second pet cooldown by construction, so the ladder can only ever re-dress a flick and can
+  never eat a pat that was going to draw a line.
+
+### 14.6 Reduced motion
+
+`AliveMotionOk` is `MotionFx.Level == MotionLevel.Full`. At Reduced and Off the MOVING half goes
+away (the lean, the twitch, the weight shift, the stretch's scale) and the FACES still play, which
+is exactly what the campus does under `prefers-reduced-motion`. A look is not motion.
+
+### 14.7 QA notes
+
+There is no environment override for the wave. The blink (5.2 s) and the approach cooldown (30 s)
+are watchable in a single sitting; the fidget (25 to 50 s) needs a minute of patience with the
+pointer parked well away from her, and the stretch (20 to 40 minutes) is realistically only ever
+seen by accident. If wave B wants one, the cheap version is an `EmiDebug` switch read at the two
+places `_fidgetDue` and `_stretchDue` are set in `StepFidgets`; it was left out here because
+threading it into the pure scheduler is not the one-liner the rest of `EmiDebug` is.
+
+Measured on the live lap (2026-08-29, 2560x1440 at 125 percent): blink lid 110 ms measured as one to
+two sample frames at 31 ms, intervals landing inside the 4.6 to 5.8 s window, and the lean tracking
+the pointer smoothly with visible saturation at both ends of each axis and no jitter while parked.

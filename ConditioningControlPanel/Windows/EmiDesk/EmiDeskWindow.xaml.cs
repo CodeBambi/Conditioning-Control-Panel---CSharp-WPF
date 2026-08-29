@@ -92,7 +92,11 @@ public partial class EmiDeskWindow : Window
     // 125% a 7 px hand tremor was under the ring's threshold but over this one, so the ring never
     // toggled and she crept across the desktop instead (QA 2026-08-29). One constant, one space.
     private const double DragThresholdDip = 6.0;   // widget.js DIALS.DRAG_PX
-    private const int IdleBlinkMs = 4200;     // the pitch stage's idle blink tick
+
+    // The blink clock is EmiAlive.BlinkEveryMs (5200) jittered by EmiAlive.BlinkJitterMs, and the
+    // blink itself is a raw lid swap rather than the 2.7 s `blink` CHAIN the pitch stage played on
+    // a coin flip every 4200 ms. See PlayIdleBlink in EmiDeskWindow.Alive.cs for why that one read
+    // as dead.
 
     // ---------------------------------------------------------------- seams (B2 / B3)
 
@@ -245,6 +249,19 @@ public partial class EmiDeskWindow : Window
 
         SourceInitialized += OnSourceInitialized;
         Closed += OnClosedCleanup;
+
+        // ALIVE wave A rides ONE 100 ms poll, and it lives exactly as long as she is on screen.
+        // Hung off IsVisibleChanged rather than off the summon so every road that shows or hides
+        // her - the summon FX, the dismiss, a bare Hide during teardown - moves the clock with her.
+        IsVisibleChanged += (_, _) =>
+        {
+            try
+            {
+                if (IsVisible) StartAlive();
+                else StopAlive();
+            }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] alive visibility hook failed"); }
+        };
 
         BodyRoot.MouseLeftButtonDown += OnBodyMouseDown;
         BodyRoot.MouseMove += OnBodyMouseMove;
@@ -885,7 +902,7 @@ public partial class EmiDeskWindow : Window
         {
             _idleTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
             {
-                Interval = TimeSpan.FromMilliseconds(IdleBlinkMs)
+                Interval = TimeSpan.FromMilliseconds(EmiAlive.BlinkDelayMs(Rng))
             };
             _idleTimer.Tick += OnIdleTick;
             _idleTimer.Start();
@@ -924,9 +941,14 @@ public partial class EmiDeskWindow : Window
         {
             if (Application.Current?.Dispatcher == null) return;
             if (Application.Current.Dispatcher.HasShutdownStarted) return;
+
+            // THE CLOCK WANDERS, THE BLINK DOES NOT SKIP. The jitter is re-rolled every tick, so
+            // the cadence is 5200 +/- 600 ms and never a metronome - which is what the old coin
+            // flip was reaching for and missed, because a lost flip is twelve seconds of nothing.
+            if (_idleTimer != null) _idleTimer.Interval = TimeSpan.FromMilliseconds(EmiAlive.BlinkDelayMs(Rng));
+
             if (Busy()) return;
-            // The pitch stage's rule: half the ticks, so the blink never reads as a metronome.
-            if (Rng.NextDouble() < 0.5) PlayChain("blink");
+            PlayIdleBlink();
         }
         catch (Exception ex)
         {
@@ -1338,6 +1360,7 @@ public partial class EmiDeskWindow : Window
         {
             _closingForGood = true;
             StopIdleBeats();
+            StopAlive();
             DisarmPet();
             TearDownReactions();
             TearDownVox();
@@ -1358,6 +1381,7 @@ public partial class EmiDeskWindow : Window
         {
             _closingForGood = true;
             StopIdleBeats();
+            StopAlive();
             DisarmPet();
             TearDownReactions();
             TearDownVox();
