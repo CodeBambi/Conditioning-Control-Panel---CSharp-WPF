@@ -95,6 +95,9 @@ namespace ConditioningControlPanel.Services.Quiz
             if (_host != null) { _host.FocusWeb(); return; }
             try
             {
+                // EMI Desk: the ring learns from every open, not just its own cards.
+                try { App.EmiDesk?.NoteOpen("intake"); } catch { }
+
                 // The intake's vo/sfx/music (plus the dtrh bubble sfx it borrows) ship as the lazy
                 // audio-web pack. Kicked here and still never awaited (see RequestAudioPack), but
                 // the OUTCOME is observed now - dropping it on the floor is bug #1032.

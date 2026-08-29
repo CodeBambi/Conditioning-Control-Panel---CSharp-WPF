@@ -32,6 +32,9 @@ internal static class LoomHostService
         if (_host != null) { _host.FocusWeb(); return; }
         try
         {
+            // EMI Desk: the ring learns from every open, not just its own cards.
+            try { App.EmiDesk?.NoteOpen("loom"); } catch { }
+
             var webRoot = Path.Combine(AppContext.BaseDirectory, "Resources", "web");
             // A missing folder would make WebView2 SKIP the ccp.spirals mapping
             // entirely (same rule as the game host), so create it BEFORE Launch.

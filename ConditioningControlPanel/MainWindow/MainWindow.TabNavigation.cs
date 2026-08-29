@@ -162,6 +162,11 @@ namespace ConditioningControlPanel
             }
             catch { }
 
+            // EMI Desk: her ring ranks doors by decayed opens, and an open is an open however it
+            // was reached. The three keys intercepted above (patreon, fyp, justdrop) are counted
+            // at their own launchers instead, so no door is counted twice.
+            try { Services.EmiDesk.EmiTargets.NoteTabOpened(tab); } catch { }
+
             // Park the incoming key for the transition choreography. AnimateTabIn reads it, so the
             // ~25 call sites below stay a single argument and still get a slide direction.
             _pendingTabKey = tab;

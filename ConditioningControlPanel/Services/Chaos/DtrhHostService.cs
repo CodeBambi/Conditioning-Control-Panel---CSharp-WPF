@@ -72,6 +72,9 @@ internal static class DtrhHostService
         if (_host != null) { _host.FocusWeb(); return; }
         try
         {
+            // EMI Desk: the ring learns from every open, not just its own cards.
+            try { App.EmiDesk?.NoteOpen("dtrh"); } catch { }
+
             // The descent's audio (bubbles sfx, vn shared, drone bed) ships as the lazy audio-web
             // pack. Fire-and-forget: no-op once installed, on a full install, or offline.
             try { _ = App.ReleaseContent?.RequestPackAsync(ReleaseContentService.PackAudioWeb); }

@@ -130,6 +130,9 @@ namespace ConditioningControlPanel.Services.GoonGame
             if (_host != null) { _host.FocusWeb(); return; }
             try
             {
+                // EMI Desk: the ring learns from every open, not just its own cards.
+                try { App.EmiDesk?.NoteOpen("goon"); } catch { }
+
                 _exiting = false;
                 _duckPreference = duckMainWindow;
 
