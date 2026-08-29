@@ -739,6 +739,12 @@ export const DEFAULT_LEXICON = Object.freeze({
    * A ROW HERE IS A PROMISE ABOUT AN MP3. Change a line and the caption stops
    * matching the voice, which is worse than having no caption: the words are
    * the same words in the same order, or they do not go on screen.
+   * THE ROWS ARE THE RECORDING, NOT THE DRAFT (2026-08-29): the round-3 files
+   * were cut from a later pass of the script than the one that first landed
+   * here, and the owner heard the mismatch on a phone. Every row below was
+   * re-typed from the shipped pa_NN.mp3 (transcribed, then proof-listened
+   * for names and the ASR slips). Re-record = re-type. Never edit a row to
+   * read better than the voice does.
    *
    *   01-06 arrival   07-14 class calls   15-18 payday
    *   19-24 streaks and grades   25-30 asides   31-36 closing (not in rotation)
@@ -746,50 +752,50 @@ export const DEFAULT_LEXICON = Object.freeze({
   /* the speaker plate - who is talking, not what she says */
   pa_speaker: 'Front Office',
   /* 01-06 arrival / campus open */
-  pa_line_01: "Good evening, students. Doors are open, lights are on, you know the way.",
-  pa_line_02: "Welcome back. The hall smells like floor wax and ambition tonight.",
-  pa_line_03: "Evening classes are now in session. Walk, don't run. Or run a little, I'm not looking.",
-  pa_line_04: "You made it in. That's the hard part. The rest is just practice.",
-  pa_line_05: "Doors are open. Coats on the hooks, thoughts in a neat little row, please.",
-  pa_line_06: "Good evening. The school missed you. It told me so.",
+  pa_line_01: "Good evening, everyone. The gates are open, the lights are on, and the entrance hall's just been waxed. So take those first few steps like you mean them.",
+  pa_line_02: "Welcome back. This one was recorded earlier, but I mean every word of it. I always do.",
+  pa_line_03: "Attendance is taken at the gate, same as every night. And don't worry about the queue. It's never once taken longer than a second.",
+  pa_line_04: "There's post in the slot tonight, and the office does like it opened the same evening it arrives. They get funny about it otherwise.",
+  pa_line_05: "The Bugle's out, and it's a bumper one, so grab a copy on your way in before Mr. Baxter comes round to count them again.",
+  pa_line_06: "New this term: your card comes with the first few holes already punched. We start everyone a little way along. It's friendlier that way.",
   /* 07-14 class calls */
-  pa_line_07: "Now seating for the next class. Bring a pencil, or don't, nobody's ever needed one.",
-  pa_line_08: "Class is starting down the hall. If you hurry you'll get the good seat. They're all the good seat.",
-  pa_line_09: "A reminder that every class tonight counts toward your record. No pressure. Some pressure.",
-  pa_line_10: "The pool is open for the Deep End. Towels are a myth, swim anyway.",
-  pa_line_11: "Whoever keeps acing the sorting drills, the machines have noticed and they're showing off for you now.",
-  pa_line_12: "Next period begins shortly. Please finish whatever you were doing with your hands.",
-  pa_line_13: "Front row seats are available in every room. They're always available. Think about that.",
-  pa_line_14: "One more class before you go? The lights stay on either way, but they're warmer with you here.",
+  pa_line_07: "Next class is seating now, and if you need a minute first, take it. They'll hold the room for you.",
+  pa_line_08: "Homeroom's first up tonight. One word for the whole school, so bring a pencil, or don't. Nobody's ever needed one.",
+  pa_line_09: "Memory Lab says the last half second of the preview is the important bit. So keep your eyes on the board right up until it goes.",
+  pa_line_10: "The pool's open for the Deep End, and there's no lifeguard on tonight, so please swim where we can see you from the office.",
+  pa_line_11: "Discipline Hall times everyone against their own best, not against each other. So the only one you're ever up against in there is you from last week.",
+  pa_line_12: "Lecture Hall's running the full hour tonight, so please don't nod off in there. They do check.",
+  pa_line_13: "The Sorting Room's open. Two piles, and you decide. And yours go on the right. Don't ask me why, that's just the room.",
+  pa_line_14: "If your favourite room's not on the board tonight, don't sulk. It'll come round. They all do. About one night in four.",
   /* 15-18 payday nights */
-  pa_line_15: "Tonight's featured class pays double at the counter. The bursar says it's fine. I didn't ask twice.",
-  pa_line_16: "Double tickets in one lucky room tonight. Check the board, follow the shine.",
-  pa_line_17: "It's a payday night, students. Somebody's walking home heavy.",
-  pa_line_18: "The featured room is paying out big tonight. This is not a drill. It's technically always a drill.",
+  pa_line_15: "It's a payday night. Double tickets in one lucky room, so check the board and follow whichever room looks pleased with itself.",
+  pa_line_16: "The featured room's paying out big tonight, and even if the big one doesn't land, you'll go home with a little something. We never send anyone away with nothing.",
+  pa_line_17: "The featured room's paying out big tonight, and you should get in there before I talk myself into going instead.",
+  pa_line_18: "Payday night, everyone. Somebody's walking home heavy, and the Prize Counter's staying open late so it can be spent while it's still warm.",
   /* 19-24 streaks, grades and honors */
-  pa_line_19: "Perfect attendance this week from some of you. The corkboard knows who you are.",
-  pa_line_20: "Another night on your streak. The registrar drew a little star next to your name. Don't tell anyone I said registrar.",
-  pa_line_21: "An S rank came through the office today. We rang the little bell. You didn't hear it, but we did.",
-  pa_line_22: "Someone pulled the honors lever tonight. Brave. The desk approves.",
-  pa_line_23: "Your report card is looking healthier every week. Keep chewing your vegetables, or whatever it is you do.",
-  pa_line_24: "Streak's still alive. The building runs a little brighter on nights like this.",
+  pa_line_19: "Perfect attendance from a few of you this week, and it's up on the corkboard in the entrance hall. So go and admire yourselves.",
+  pa_line_20: "Streaks are still alive for a lot of you. And honestly, the whole building runs a little brighter on nights like this.",
+  pa_line_21: "An S came through the office today and we rang the little bell for it. And yes, the Music Room says it's flat. It isn't. It's just small.",
+  pa_line_22: "Somebody pulled the honors lever tonight, which takes a bit of nerve, and the desk approves.",
+  pa_line_23: "Report cards are looking healthier every week, so keep eating whatever it is you've all been eating.",
+  pa_line_24: "Records says everyone's file is up to date. They're very quick down there. They update it while you're still in the room.",
   /* 25-30 mostly the schedule, mostly (the script's 31-36) */
-  pa_line_25: "Today's schedule is the same as yesterday's. Comforting, isn't it. The sameness.",
-  pa_line_26: "A found item was turned in at the office: one train of thought, slightly used. Claim it or don't.",
-  pa_line_27: "Reminder from administration: attendance is a habit, and habits are just doors you stop noticing you walk through.",
-  pa_line_28: "The vending machine is out of everything except the pink one. It's always the pink one.",
-  pa_line_29: "The clock in the main hall is a few minutes slow. We know. It's happier that way.",
-  pa_line_30: "If you can hear this announcement, you're paying attention. Lovely. Hold that.",
+  pa_line_25: "The clock in the main hall and the clock in the tower still don't agree, and I'm staying out of it. I've been out of it for years.",
+  pa_line_26: "Somebody handed a train of thought in at Lost and Found, and it's been sitting there all evening. So come and claim it if it sounds like yours.",
+  pa_line_27: "If today's word keeps turning up in things you're reading outside of Homeroom, that's completely normal. It just means it's settling in.",
+  pa_line_28: "The vending machine's out of everything except the pink one again, and nobody's owned up to restocking it. So that's one for Mr. Petch's drawer.",
+  pa_line_29: "Quick one from Records. They file by number, not by name, so hang on to your number. They won't know you without it.",
+  pa_line_30: "And if you'd rather head off before the bell some night, that's fine. Nobody at the gate will stop you. The gate's mostly there so we know who came.",
   /* 31-36 closing time (the script's 25-30). NOT IN ROTATION - pa.js law 6 -
      but the rows ship anyway: the shelf exists, and a caption surface that
      could not caption a line the day the closing door opens is a caption
      surface that has to be edited twice. */
-  pa_line_31: "That's the last bell, students. Take your things, leave the glow, it belongs to the school.",
-  pa_line_32: "Campus is closing up. Whatever you learned tonight, sleep on it. It settles in better that way.",
-  pa_line_33: "Good night, students. The doors lock behind you, gently.",
-  pa_line_34: "Closing time. The janitor waves goodbye. He never waves hello, we don't know why.",
-  pa_line_35: "School's out. Come back tomorrow and we'll pick up right where you left off. We always do.",
-  pa_line_36: "Lights out in five. Not your lights. You take yours with you.",
+  pa_line_31: "That's the last bell. Take your things with you, but leave the glow. That one belongs to the school.",
+  pa_line_32: "We're closing up, so whatever you picked up tonight, sleep on it. It settles in better that way.",
+  pa_line_33: "Good night, everyone, and mind the step by the gate on the way out. It's been there for years and it still gets people.",
+  pa_line_34: "Closing time, and the cleaner will wave you off on your way out. He's never once waved hello, and I've decided not to ask.",
+  pa_line_35: "School's out, so come back tomorrow and we'll pick up right where you left off. We always do.",
+  pa_line_36: "Lights out in five. And not yours. You take yours with you.",
 
   /* ------------------------------------------------------------------------
    * THE PURCHASE REVEAL (shell/reveal.js, the Locker wave, 2026-08-28).
