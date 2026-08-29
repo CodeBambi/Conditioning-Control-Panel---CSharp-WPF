@@ -661,6 +661,23 @@ internal static class ArcademyWalletSyncService
                     return new BuyOutcome(true, false, "busy", null);
                 }
 
+                // THE TIER GATE. A 403 naming the tier wall is not the wire being down: the
+                // account cannot bank here, and the counter has its own line for that instead of
+                // the offline shrug - the same mapping the web host makes. Any other 403 (the
+                // identity door) and a 401 keep the offline answer, but the log tells them apart.
+                if (response.StatusCode == HttpStatusCode.Forbidden && IsTierRefusal(reply))
+                {
+                    App.Logger?.Information("[ArcademyWallet] buy refused by the tier gate: {Body}", Truncate(text));
+                    return new BuyOutcome(true, false, "tier", null);
+                }
+                if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                {
+                    App.Logger?.Information("[ArcademyWallet] buy refused at the {Door} door: {Status} {Body}",
+                        response.StatusCode == HttpStatusCode.Unauthorized ? "token" : "identity",
+                        (int)response.StatusCode, Truncate(text));
+                    return new BuyOutcome(false, false, "offline", null);
+                }
+
                 // Every refusal the counter has a line for arrives as a 200 with `ok:false`. A
                 // status code instead means the account, not the purchase, was the problem, and the
                 // room says the same thing it says when nobody answers.
