@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace ConditioningControlPanel.Models;
 
@@ -50,6 +52,16 @@ public class QuestProgress
 
     // Streak calendar - dates when daily quests were completed (last 30 days)
     public List<DateTime> DailyQuestCompletionDates { get; set; } = new();
+
+    // Spiral W1: which quests were finished on which day. DailyQuestCompletionDates above answers
+    // "was anything done that day"; this answers "what". Written only by QuestService.CompleteQuest
+    // (the one place that holds a quest id) and trimmed on the same 90 day window. Default
+    // initialised so a quests.json written before this list existed still loads.
+    // quests.json goes through System.Text.Json, so both attributes are here to keep the wire
+    // name identical whichever serializer touches this type.
+    [JsonProperty("quest_completion_log")]
+    [JsonPropertyName("quest_completion_log")]
+    public List<QuestLogEntry> QuestCompletionLog { get; set; } = new();
 
     // #889: a slot rolled while the Patreon/SubscribeStar entitlement was still unresolved drew
     // from the free-only pool and must be re-rolled once the answer lands. Persisted rather than
@@ -205,5 +217,29 @@ public class ActiveQuest
         CurrentProgress = 0;
         IsCompleted = false;
         CompletedAt = null;
+    }
+}
+
+/// <summary>
+/// One quest finished on one day. <c>D</c> is the day key (yyyy-MM-dd, invariant) for the same
+/// calendar day <see cref="QuestProgress.DailyQuestCompletionDates"/> records; <c>Q</c> is the
+/// quest definition id, which is also the name of its art file.
+/// </summary>
+public class QuestLogEntry
+{
+    [JsonProperty("d")]
+    [JsonPropertyName("d")]
+    public string D { get; set; } = "";
+
+    [JsonProperty("q")]
+    [JsonPropertyName("q")]
+    public string Q { get; set; } = "";
+
+    public QuestLogEntry() { }
+
+    public QuestLogEntry(string day, string questId)
+    {
+        D = day;
+        Q = questId;
     }
 }
