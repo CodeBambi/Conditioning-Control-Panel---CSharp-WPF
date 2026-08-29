@@ -1437,6 +1437,29 @@ public class QuestService : IDisposable
     public bool AreAllDailyQuestsCompleted() => Progress.AreAllDailyQuestsCompleted();
 
     /// <summary>
+    /// The day key used by the quest completion log: the same calendar day
+    /// <see cref="QuestProgress.DailyQuestCompletionDates"/> stores, as yyyy-MM-dd invariant
+    /// (the format the cloud sync already sends those dates in).
+    /// </summary>
+    private static string DayKey(DateTime day) =>
+        day.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Append (day, questId) to the quest completion log, de-duped on the pair. Only ever called
+    /// from <see cref="CompleteQuest"/>, which is the only path that knows a quest id: the streak
+    /// shield and the manual day fix stamp the calendar with no quest behind them and must not
+    /// invent one here.
+    /// </summary>
+    private void RecordQuestInLog(DateTime day, string questId)
+    {
+        if (string.IsNullOrWhiteSpace(questId)) return;
+        var key = DayKey(day);
+        Progress.QuestCompletionLog ??= new List<QuestLogEntry>();
+        if (Progress.QuestCompletionLog.Any(e => e.D == key && e.Q == questId)) return;
+        Progress.QuestCompletionLog.Add(new QuestLogEntry(key, questId));
+    }
+
+    /// <summary>
     /// Complete a quest and award rewards
     /// </summary>
     private void CompleteQuest(ActiveQuest quest, QuestDefinition def, QuestType type)
@@ -1445,6 +1468,11 @@ public class QuestService : IDisposable
 
         quest.IsCompleted = true;
         quest.CompletedAt = DateTime.Now;
+
+        // Spiral W1: remember WHICH quest was finished today, not just that one was. Daily and
+        // weekly both, and here at the top because this is the last place that still holds the
+        // definition id. Keyed on the same calendar day the streak calendar uses.
+        RecordQuestInLog(DateTime.Today, def.Id);
 
         // Update statistics
         if (type == QuestType.Daily)
@@ -1466,6 +1494,8 @@ public class QuestService : IDisposable
             // Trim entries older than 90 days (matches cloud sync window)
             var cutoff = today.AddDays(-90);
             Progress.DailyQuestCompletionDates.RemoveAll(d => d.Date < cutoff);
+            var logCutoff = DayKey(cutoff);
+            Progress.QuestCompletionLog.RemoveAll(e => string.CompareOrdinal(e.D, logCutoff) < 0);
             App.Settings?.Current?.StreakShieldUsedDates?.RemoveAll(d => d.Date < cutoff);
 
             // Apply streak shield if yesterday is missing (would break streak)

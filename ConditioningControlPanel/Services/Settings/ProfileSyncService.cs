@@ -1341,6 +1341,9 @@ namespace ConditioningControlPanel.Services
                             ["last_daily_quest_date"] = settings.LastDailyQuestDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? "",
                             ["quest_completion_dates"] = questProgress?.DailyQuestCompletionDates?
                                 .Select(d => d.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)).ToList() ?? new List<string>(),
+                            // Spiral W1: the same days, but with the quest ids that filled them.
+                            // Rides beside the dates and gets the same union merge coming back.
+                            ["quest_completion_log"] = BuildQuestCompletionLogPayload(questProgress),
                             ["total_daily_quests_completed"] = questProgress?.TotalDailyQuestsCompleted ?? 0,
                             ["total_weekly_quests_completed"] = questProgress?.TotalWeeklyQuestsCompleted ?? 0,
                             ["total_xp_from_quests"] = questProgress?.TotalXPFromQuests ?? 0,
@@ -2122,6 +2125,7 @@ namespace ConditioningControlPanel.Services
                         ["last_daily_quest_date"] = settings.LastDailyQuestDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? "",
                         ["quest_completion_dates"] = legacyQuestProgress?.DailyQuestCompletionDates?
                             .Select(d => d.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)).ToList() ?? new List<string>(),
+                        ["quest_completion_log"] = BuildQuestCompletionLogPayload(legacyQuestProgress),
                         ["total_daily_quests_completed"] = legacyQuestProgress?.TotalDailyQuestsCompleted ?? 0,
                         ["total_weekly_quests_completed"] = legacyQuestProgress?.TotalWeeklyQuestsCompleted ?? 0,
                         ["total_xp_from_quests"] = legacyQuestProgress?.TotalXPFromQuests ?? 0
@@ -2709,6 +2713,10 @@ namespace ConditioningControlPanel.Services
                     }
                 }
 
+                // Spiral W1: same union merge for the per-day quest ids.
+                if (questProgress != null && MergeCloudQuestLog(cloudProfile.Stats, questProgress))
+                    needsSave = true;
+
                 // Take higher quest totals
                 if (questProgress != null)
                 {
@@ -2975,6 +2983,73 @@ namespace ConditioningControlPanel.Services
             return date <= DateTime.Today.AddDays(1);
         }
 
+        /// <summary>Newest entries the quest completion log may carry over the wire.</summary>
+        private const int QuestCompletionLogWireCap = 400;
+
+        /// <summary>
+        /// Spiral W1: the outbound stats.quest_completion_log, newest 400 entries. The day key is
+        /// already yyyy-MM-dd in the local store, so this is a straight copy with a cap.
+        /// </summary>
+        private static List<Dictionary<string, string>> BuildQuestCompletionLogPayload(QuestProgress? questProgress)
+        {
+            var log = questProgress?.QuestCompletionLog;
+            if (log == null || log.Count == 0) return new List<Dictionary<string, string>>();
+            return log
+                .Where(e => e != null && !string.IsNullOrEmpty(e.D) && !string.IsNullOrEmpty(e.Q))
+                .OrderBy(e => e.D, StringComparer.Ordinal)
+                .Reverse()
+                .Take(QuestCompletionLogWireCap)
+                .Reverse()
+                .Select(e => new Dictionary<string, string> { ["d"] = e.D, ["q"] = e.Q })
+                .ToList();
+        }
+
+        /// <summary>
+        /// Union merge stats.quest_completion_log from the cloud into the local log, exactly the
+        /// way quest_completion_dates is merged: the server never removes an entry, it only adds
+        /// days another device knew about. De-duped on (d, q) and trimmed on the same 90 day
+        /// window the dates list uses. Returns true when something was added.
+        /// </summary>
+        private static bool MergeCloudQuestLog(Dictionary<string, object>? cloudStats, QuestProgress questProgress)
+        {
+            if (cloudStats == null) return false;
+            if (!cloudStats.TryGetValue("quest_completion_log", out var cloudLogObj)) return false;
+            try
+            {
+                var cloudLog = JsonConvert.DeserializeObject<List<QuestLogEntry>>(cloudLogObj?.ToString() ?? "[]");
+                if (cloudLog == null || cloudLog.Count == 0) return false;
+
+                questProgress.QuestCompletionLog ??= new List<QuestLogEntry>();
+                var seen = new HashSet<string>(questProgress.QuestCompletionLog
+                    .Where(e => e != null)
+                    .Select(e => e.D + "|" + e.Q), StringComparer.Ordinal);
+
+                var cutoff = DateTime.Today.AddDays(-90).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+                bool changed = false;
+                foreach (var entry in cloudLog)
+                {
+                    if (entry == null || string.IsNullOrEmpty(entry.D) || string.IsNullOrEmpty(entry.Q)) continue;
+                    if (string.CompareOrdinal(entry.D, cutoff) < 0) continue;
+                    if (!seen.Add(entry.D + "|" + entry.Q)) continue;
+                    questProgress.QuestCompletionLog.Add(new QuestLogEntry(entry.D, entry.Q));
+                    changed = true;
+                }
+
+                if (changed)
+                {
+                    questProgress.QuestCompletionLog.RemoveAll(e => e == null || string.CompareOrdinal(e.D, cutoff) < 0);
+                    App.Logger?.Debug("Quest sync: Merged quest completion log from cloud ({Count} total entries)",
+                        questProgress.QuestCompletionLog.Count);
+                }
+                return changed;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Quest sync: Failed to parse cloud quest completion log: {Error}", ex.Message);
+                return false;
+            }
+        }
+
         private bool MergeV2CloudStatsIntoLocalProgress(Dictionary<string, object>? cloudStats, bool forceStreakOverride)
         {
             if (cloudStats == null) return false;
@@ -3198,6 +3273,10 @@ namespace ConditioningControlPanel.Services
                         App.Logger?.Debug("V2 Quest sync: Failed to parse cloud completion dates: {Error}", ex.Message);
                     }
                 }
+
+                // Spiral W1: same union merge for the per-day quest ids.
+                if (questProgress != null && MergeCloudQuestLog(cloudStats, questProgress))
+                    needsSave = true;
 
                 if (questProgress != null)
                 {
