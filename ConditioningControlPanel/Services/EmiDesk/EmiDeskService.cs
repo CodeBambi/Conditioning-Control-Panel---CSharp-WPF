@@ -101,6 +101,98 @@ public sealed class EmiDeskService : IDisposable
     {
         try { AvatarSpeaking?.Invoke(this, EventArgs.Empty); }
         catch (Exception ex) { Log.Debug(ex, "[EmiDesk] AvatarSpeaking handler threw"); }
+
+        // THE AVATAR OWNS VOICE (BRIEF 4, MOMENTS 3.5). The tube is about to talk, so EMI holds to
+        // blink-only faces until its bubble comes down, plus the moment table's 20 s tail. The hold
+        // is armed even when she is muted: the mute is about the tube's audio, not about who is
+        // allowed to interrupt whom.
+        try { ArmAvatarHold(); }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] avatar hold arm failed"); }
+    }
+
+    private System.Windows.Threading.DispatcherTimer? _avatarHoldTimer;
+    private bool _avatarHeld;
+
+    /// <summary>
+    /// Hold her while the tube has a bubble up, and release it the moment the bubble goes away.
+    /// A one-second poll, not an event: the tube exposes a state (<see cref="TubeBubbleLive"/>) and
+    /// no "stopped speaking" signal, and a poll that only runs while a hold is live costs nothing.
+    /// </summary>
+    private void ArmAvatarHold()
+    {
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null || disp.HasShutdownStarted) return;
+        if (!disp.CheckAccess()) { disp.BeginInvoke(new Action(ArmAvatarHold)); return; }
+
+        if (!_avatarHeld)
+        {
+            _avatarHeld = true;
+            Fire("avatarSpeaking");
+        }
+
+        if (_avatarHoldTimer != null) return;
+        _avatarHoldTimer = new System.Windows.Threading.DispatcherTimer(
+            System.Windows.Threading.DispatcherPriority.Background, disp)
+        {
+            Interval = TimeSpan.FromSeconds(1)
+        };
+        _avatarHoldTimer.Tick += OnAvatarHoldTick;
+        _avatarHoldTimer.Start();
+    }
+
+    private void OnAvatarHoldTick(object? sender, EventArgs e)
+    {
+        try
+        {
+            if (Application.Current?.Dispatcher == null) return;
+            if (Application.Current.Dispatcher.HasShutdownStarted) return;
+            if (TubeBubbleLive) return;
+
+            if (_avatarHoldTimer != null)
+            {
+                _avatarHoldTimer.Stop();
+                _avatarHoldTimer.Tick -= OnAvatarHoldTick;
+                _avatarHoldTimer = null;
+            }
+            if (!_avatarHeld) return;
+            _avatarHeld = false;
+            EmiLineEngine.Instance.ReleaseHold("avatarSpeaking");
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] avatar hold tick failed");
+        }
+    }
+
+    /// <summary>
+    /// The situational half of the offer gates (LINES-SCHEMA 5.6): the ones only the app can see.
+    /// The engine owns the cadence (10 minutes, the third summon, the ignore streak, bedtime) and
+    /// asks this for the rest, so no chunk has to know both halves.
+    /// </summary>
+    internal bool AskSituationOk()
+    {
+        try
+        {
+            if (!IsOut) return false;
+            var win = _window;
+            if (win == null || win.Visibility != Visibility.Visible) return false;
+            if (win.InputLocked || win.Transiting) return false;
+            if (win.AskLive) return false;
+
+            if (App.Video?.IsPlaying == true) return false;
+            if (SessionEngine.Active?.IsRunning == true) return false;
+            if (TubeBubbleLive) return false;
+
+            var main = Application.Current?.MainWindow;
+            if (main != null && main.WindowState == WindowState.Minimized) return false;
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] ask situation probe failed");
+            return false;
+        }
     }
 
     // ---------------------------------------------------------------- summon / dismiss
@@ -148,15 +240,18 @@ public sealed class EmiDeskService : IDisposable
 
             var st = EmiState.Current;
             bool first = !st.FirstBootSeen;
-            if (first)
-            {
-                st.FirstBootSeen = true;
-                EmiState.SaveSoon();
-            }
+            int summons = EmiState.NoteSummon();
 
             RaiseOutChanged();
-            Log.Information("[EmiDesk] summoned ({Why}), firstBoot={First}", why ?? "user", first);
-            Fire(first ? "deskFirstBoot" : "deskSummon");
+            Log.Information("[EmiDesk] summoned ({Why}), firstBoot={First}, summon #{N}",
+                why ?? "user", first, summons);
+
+            // Her greeting rides AFTER the wake chain, not on top of it: RunSummon plays the CRT
+            // power-on and then `wake`, and a bubble fired here would land while she is still a
+            // flat line. The delay is the summon FX budget (BRIEF 3, ~1 s) plus the wake chain.
+            _summonMoment = first ? "desktopFirstBoot" : "summoned";
+            _summonVia = string.Equals(why, "hotkey", StringComparison.OrdinalIgnoreCase) ? "hotkey" : "rail";
+            ScheduleSummonMoment();
         }
         catch (Exception ex)
         {
@@ -179,7 +274,11 @@ public sealed class EmiDeskService : IDisposable
             }
             if (!IsOut || _window == null) return;
 
-            Fire("deskDismiss");
+            CancelSummonMoment();
+            // `dismissed` is a LOCKED silent moment: the wink chain and the CRT power-off are the
+            // whole goodbye. It still fires so the hooks and the counters see it, and Fire() drops
+            // it before it can reach a pool (see NeverSpeaks).
+            Fire("dismissed", new { minutes = MinutesOut() });
             _window.RunDismiss(() =>
             {
                 IsOut = false;
@@ -233,9 +332,21 @@ public sealed class EmiDeskService : IDisposable
     // ---------------------------------------------------------------- moments
 
     /// <summary>
-    /// Tell EMI something happened. A no-op in chunk B1 beyond the log line and the event: the
-    /// pools, the cooldowns and the picker are chunk B3's. Call sites can therefore land NOW and
-    /// stay unchanged when the voice arrives.
+    /// Moments that fire, count and stamp their clocks but must NEVER produce a bubble. Owner
+    /// locks, not tuning: <c>dismissed</c> is the wink and the power-off (BRIEF 3), and
+    /// <c>appClosing</c> has no pool and never will (MOMENTS 3.8).
+    /// </summary>
+    private static readonly HashSet<string> NeverSpeaks =
+        new(StringComparer.Ordinal) { "dismissed", "appClosing" };
+
+    /// <summary>
+    /// Tell EMI something happened. Cheap and safe from anywhere: a no-op while she is away, it
+    /// never throws, and it never does the drawing on the caller's thread.
+    ///
+    /// The pipeline is LINES-SCHEMA 5 and it runs in ONE place so a fire cannot half-happen: the
+    /// event goes out first (the ring's suggester and the dock listen whether or not she is out),
+    /// then, only when she is actually on screen, the engine is asked for a line OR an offer and
+    /// the winner is handed to the window.
     /// </summary>
     public void Fire(string momentId, object? ctx = null)
     {
@@ -247,8 +358,195 @@ public sealed class EmiDeskService : IDisposable
         }
         catch (Exception ex)
         {
+            Log.Debug(ex, "[EmiDesk] Fire({Moment}) handler threw", momentId);
+        }
+
+        if (!IsOut) return;
+
+        try
+        {
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+            if (!disp.CheckAccess())
+            {
+                disp.BeginInvoke(new Action(() => Speak(momentId, ctx)));
+                return;
+            }
+            Speak(momentId, ctx);
+        }
+        catch (Exception ex)
+        {
             Log.Debug(ex, "[EmiDesk] Fire({Moment}) failed", momentId);
         }
+    }
+
+    /// <summary>
+    /// The speaking half of <see cref="Fire"/>, always on the dispatcher. Draws once, hands the
+    /// result to the window, and lets the window acknowledge it only when it actually reached the
+    /// screen: the engine must not burn a cooldown on a line nobody saw.
+    /// </summary>
+    private void Speak(string momentId, object? ctx)
+    {
+        try
+        {
+            if (!IsOut) return;
+            var win = _window;
+            if (win == null || win.Visibility != Visibility.Visible) return;
+
+            var engine = EmiLineEngine.Instance;
+            var dict = EmiLineEngine.ToCtx(ctx);
+
+            var line = engine.Draw(momentId, dict);
+            var ask = engine.DrawAsk(momentId, dict);
+
+            if (ask != null)
+            {
+                if (NeverSpeaks.Contains(momentId)) return;
+                win.ShowAsk(ask);
+                return;
+            }
+            if (line == null) return;
+
+            // A hold is a face, never a bubble, so it plays even on a locked-silent moment.
+            if (line.Hold) { win.HoldFace(line); return; }
+
+            if (NeverSpeaks.Contains(momentId))
+            {
+                Log.Debug("[EmiDesk] {Moment} drew {Line} but is locked silent, dropped", momentId, line.Id);
+                return;
+            }
+
+            win.SpeakLine(line);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] Speak({Moment}) failed", momentId);
+        }
+    }
+
+    /// <summary>
+    /// Count an EMI line against the avatar's own min-gap. Only when she is NOT muting the avatar:
+    /// while the avatar is muted there is no second voice to stagger against and stamping the gap
+    /// would quietly shorten the avatar's next window for no reason (BRIEF 4).
+    /// </summary>
+    public void NoteEmiSpoke()
+    {
+        try
+        {
+            if (AvatarMuted) return;
+            App.Bark?.NotifyExternalLineSpoken();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] bark min-gap stamp failed");
+        }
+    }
+
+    // ---------------------------------------------------------------- the summon greeting
+
+    private System.Windows.Threading.DispatcherTimer? _summonTimer;
+    private string? _summonMoment;
+    private string _summonVia = "rail";
+    private DateTime _outSinceUtc = DateTime.MinValue;
+
+    /// <summary>The CRT power-on plus the wake chain, plus a beat of air after it.</summary>
+    private const int SummonGreetDelayMs = 2600;
+
+    /// <summary>How long she has been out this time, in whole minutes. Never negative.</summary>
+    private int MinutesOut()
+    {
+        if (_outSinceUtc == DateTime.MinValue) return 0;
+        return Math.Max(0, (int)(DateTime.UtcNow - _outSinceUtc).TotalMinutes);
+    }
+
+    private void ScheduleSummonMoment()
+    {
+        try
+        {
+            _outSinceUtc = DateTime.UtcNow;
+            CancelSummonMoment();
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+
+            _summonTimer = new System.Windows.Threading.DispatcherTimer(
+                System.Windows.Threading.DispatcherPriority.Background, disp)
+            {
+                Interval = TimeSpan.FromMilliseconds(SummonGreetDelayMs)
+            };
+            _summonTimer.Tick += OnSummonGreetTick;
+            _summonTimer.Start();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] summon greeting schedule failed");
+        }
+    }
+
+    private void OnSummonGreetTick(object? sender, EventArgs e)
+    {
+        try
+        {
+            CancelSummonMoment();
+            if (Application.Current?.Dispatcher == null) return;
+            if (Application.Current.Dispatcher.HasShutdownStarted) return;
+            if (!IsOut) return;
+            var moment = _summonMoment;
+            _summonMoment = null;
+            if (string.IsNullOrEmpty(moment)) return;
+            Fire(moment!, new { via = _summonVia, minutes = MinutesOut() });
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] summon greeting failed");
+        }
+    }
+
+    private void CancelSummonMoment()
+    {
+        try
+        {
+            if (_summonTimer == null) return;
+            _summonTimer.Stop();
+            _summonTimer.Tick -= OnSummonGreetTick;
+            _summonTimer = null;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] summon greeting cancel failed");
+        }
+    }
+
+    // ---------------------------------------------------------------- ring stubs (B2 fills these)
+
+    /// <summary>
+    /// RING SEAM, deliberately inert here. The ring, its target catalogue and its suggester live in
+    /// chunk B2 (EmiTargets / EmiSuggester / EmiRingWindow); the offers need to ask three questions
+    /// of them, and B3 must not build half a ring to get the answers.
+    ///
+    /// Until B2 lands this reports every target UNKNOWN, which is the safe answer: an offer whose
+    /// effect is <c>open:</c> or <c>pinTop:</c> is then dropped at DRAW time and never shown, rather
+    /// than shown with a chip that does nothing (LINES-SCHEMA 4). B2 replaces the three bodies and
+    /// every call site is already correct.
+    /// </summary>
+    public bool IsTargetAvailable(string? targetId)
+    {
+        if (string.IsNullOrWhiteSpace(targetId)) return false;
+        Log.Debug("[EmiDesk] IsTargetAvailable({Target}): no ring yet, reporting unavailable", targetId);
+        return false;
+    }
+
+    /// <inheritdoc cref="IsTargetAvailable"/>
+    public void OpenTarget(string? targetId)
+    {
+        if (string.IsNullOrWhiteSpace(targetId)) return;
+        Log.Information("[EmiDesk] OpenTarget({Target}) ignored: the ring is not wired yet", targetId);
+    }
+
+    /// <inheritdoc cref="IsTargetAvailable"/>
+    public void PinTop(string? targetId)
+    {
+        if (string.IsNullOrWhiteSpace(targetId)) return;
+        Log.Information("[EmiDesk] PinTop({Target}) ignored: the ring is not wired yet", targetId);
     }
 
     /// <summary>

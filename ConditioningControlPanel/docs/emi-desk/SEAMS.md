@@ -179,3 +179,66 @@ Fields already carried for B3: `Pins`, `Usage` / `UsageAt`, `SeenByPool`, `Recen
   there; if the web changes, port the change, do not reach across.
 - No em-dashes in anything the user can read.
 - Honour `InputLocked`, and honour `App.Settings.Current.EmiDeskGlass` before showing any glass.
+
+---
+
+## 7. Seams added by chunk B3 (the voice, the offers, the glass)
+
+B3 owns `EmiDeskWindow.Bubble.cs` and `EmiDeskWindow.Glass.cs`, plus `EmiLineEngine`, `EmiOffers`,
+`EmiChannels` and `EmiGifRain`. It added four things other chunks touch.
+
+### 7.1 `partial void OnRingOpenQuery(ref bool open)`  (B2 implements)
+
+Declared in `EmiDeskWindow.xaml.cs` next to `OnGlassLiveQuery`. B3 asks it before letting the glass
+wander off to a channel: an open ring is the loudest "the user is mid-thought" signal there is, and
+a channel that flips up behind an open ring is a channel nobody sees.
+
+Unimplemented it leaves `open` false, which is the correct default while there is no ring.
+
+### 7.2 `partial void OnReadyCore()`  (B3 implements, B2 may add to it)
+
+Called at the end of the window constructor, after the first `ApplyBodyWidth`. The counterpart to
+`OnTearDownCore`: start ambient loops here, never in a static initialiser, so a second widget can
+never inherit the first one's timers. B3 starts the glass idle watch from it.
+
+### 7.3 Ring stubs on `EmiDeskService`  (B2 fills the bodies)
+
+```csharp
+public bool IsTargetAvailable(string? targetId);   // currently always false + a Debug line
+public void OpenTarget(string? targetId);          // currently an Information line, no-op
+public void PinTop(string? targetId);              // currently an Information line, no-op
+```
+
+`EmiOffers.EffectFeasible` calls `IsTargetAvailable` for every `open:<id>` and `pinTop:<id>` effect,
+so with the stubs in place those offers are dropped at DRAW time and never shown. That is the safe
+failure: a chip that does nothing is worse than an offer that never appears. B2 replaces the three
+bodies and every call site is already correct. `pinTop:` additionally refuses a target already in
+`EmiState.Current.Pins`.
+
+### 7.4 The window's voice API  (B3 owns; call it, do not reimplement it)
+
+```csharp
+public void SpeakLine(LineDraw line);   // a drawn line, on the locked . / .. / ... cadence
+public void HoldFace(LineDraw line);    // a HOLD row: a face, held, no bubble
+public void ShowAsk(AskDraw ask);       // put a question up and WAIT
+public void CancelAsk(string why);      // any non-chip ending; counts as an ignore
+public bool AskLive { get; }            // a question is up and unanswered
+public void SnapToNearestCorner();      // used by the shrink effect
+```
+
+Nothing outside `EmiDeskService.Fire` should call the first three. `Fire(momentId, ctx)` is the only
+entry point: it raises `MomentFired` for everyone, and then, only while she is out, draws once and
+routes the result here. `dismissed` and `appClosing` fire and count but never reach a bubble.
+
+The engine's own surface is `EmiLineEngine.Instance.Draw(momentId, ctx)` /
+`DrawAsk(momentId, ctx)` / `Ack(id)`; `Ack` is called by the window when the line actually reaches
+the screen, so a line nobody saw never burns its cooldown.
+
+### 7.5 Two things B3 relies on that are easy to break
+
+- `GlassCanvas`, `OverlayCanvas` and `BubbleCanvas` are `IsHitTestVisible="False"`. Keep them that
+  way. The glass tap is resolved geometrically in `OnBodyMouseUp` against `GlassRect`, and the ask
+  chips open `BubbleHost.IsHitTestVisible` for exactly as long as there are chips to click. A
+  hit-testable overlay would eat her drag.
+- `EmiState.Limits` and `EmiState.SummonCount` (added by B3) back the lines file's `limit` blocks and
+  the "no offers before the third summon" rule. `EmiState.NoteSummon()` is what counts a summon.

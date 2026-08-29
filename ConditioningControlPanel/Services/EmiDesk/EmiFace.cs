@@ -150,29 +150,32 @@ public sealed class EmiFace : FrameworkElement
         "Noto Sans Mono, Cascadia Mono, Consolas, Noto Sans Symbols 2, Segoe UI Symbol, " +
         "Segoe UI Emoji, Nirmala UI, MS Gothic, Courier New, Global Monospace";
 
+    /// <summary>
+    /// The desk's OWN font folder, shipped as Content beside the exe: real ttf files, because WPF
+    /// cannot load the campus woff2. Probed first, ahead of the web folder, so the desk keeps
+    /// working when the arcademy assets are trimmed out of a build.
+    /// </summary>
+    private const string DeskFontDir = "Resources/emi/fonts";
+
+    /// <summary>The campus font folder, kept as a second probe so a dropped ttf there still wins.</summary>
+    private const string WebFontDir = "Resources/web/arcademy/emi/fonts";
+
+    private static readonly string[] FontDirs = { DeskFontDir, WebFontDir };
+
     private static FontFamily ResolveFaceFont()
     {
         try
         {
-            var dir = Path.Combine(AppContext.BaseDirectory,
-                "Resources", "web", "arcademy", "emi", "fonts");
-            if (Directory.Exists(dir))
+            var hit = FindFontDir("NotoSansMono");
+            if (hit != null)
             {
-                var file = Directory.EnumerateFiles(dir, "*.*")
-                    .FirstOrDefault(f =>
-                        f.EndsWith(".ttf", StringComparison.OrdinalIgnoreCase) ||
-                        f.EndsWith(".otf", StringComparison.OrdinalIgnoreCase));
-                if (file != null)
+                var ff = new FontFamily(hit.Value.BaseUri, "./#Noto Sans Mono, " + FallbackChain);
+                if (!_fontLogged)
                 {
-                    var baseUri = new Uri(dir.EndsWith(Path.DirectorySeparatorChar) ? dir : dir + Path.DirectorySeparatorChar);
-                    var ff = new FontFamily(baseUri, "./#Noto Sans Mono, " + FallbackChain);
-                    if (!_fontLogged)
-                    {
-                        _fontLogged = true;
-                        Log.Information("[EmiDesk] face font from {File}", Path.GetFileName(file));
-                    }
-                    return ff;
+                    _fontLogged = true;
+                    Log.Information("[EmiDesk] face font from {File}", hit.Value.File);
                 }
+                return ff;
             }
         }
         catch (Exception ex)
@@ -183,9 +186,99 @@ public sealed class EmiFace : FrameworkElement
         if (!_fontLogged)
         {
             _fontLogged = true;
-            Log.Information("[EmiDesk] face font: system chain (no ttf/otf beside the woff2)");
+            Log.Information("[EmiDesk] face font: system chain (no ttf/otf in the font folders)");
         }
         return new FontFamily(FallbackChain);
+    }
+
+    // ---------------------------------------------------------------- the pixel font
+
+    private static FontFamily? _pixelFont;
+    private static bool _pixelLogged;
+
+    private const string PixelFallbackChain =
+        "Press Start 2P, Noto Sans Mono, Cascadia Mono, Consolas, Courier New, Global Monospace";
+
+    /// <summary>
+    /// The pixel typeface for chrome that is NOT the face: the speech bubble, the offer chips, the
+    /// dock pill. Press Start 2P from <c>Resources/emi/fonts</c>, with the same system fallback
+    /// chain behind it so a trimmed build renders in a monospace rather than in nothing.
+    ///
+    /// Press Start 2P has ONE weight and an 8 x 8 cell: use it at whole pixel sizes (8 for the
+    /// bubble, 7 for a chip) and never ask WPF to synthesise bold, or the cells land between
+    /// device pixels and the whole strip smears.
+    /// </summary>
+    public static FontFamily PixelFont
+    {
+        get
+        {
+            if (_pixelFont != null) return _pixelFont;
+            lock (FontLock)
+            {
+                if (_pixelFont != null) return _pixelFont;
+                _pixelFont = ResolvePixelFont();
+                return _pixelFont;
+            }
+        }
+    }
+
+    private static FontFamily ResolvePixelFont()
+    {
+        try
+        {
+            var hit = FindFontDir("PressStart2P");
+            if (hit != null)
+            {
+                var ff = new FontFamily(hit.Value.BaseUri, "./#Press Start 2P, " + PixelFallbackChain);
+                if (!_pixelLogged)
+                {
+                    _pixelLogged = true;
+                    Log.Information("[EmiDesk] pixel font from {File}", hit.Value.File);
+                }
+                return ff;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[EmiDesk] pixel font probe failed, using the system chain");
+        }
+
+        if (!_pixelLogged)
+        {
+            _pixelLogged = true;
+            Log.Information("[EmiDesk] pixel font: system chain (no PressStart2P ttf shipped)");
+        }
+        return new FontFamily(PixelFallbackChain);
+    }
+
+    /// <summary>
+    /// Find the first shipped font folder that carries a ttf/otf whose file name starts with
+    /// <paramref name="prefix"/>. Returns the folder as a base URI (WPF wants a trailing
+    /// separator) plus the file name, for the log line.
+    /// </summary>
+    private static (Uri BaseUri, string File)? FindFontDir(string prefix)
+    {
+        foreach (var rel in FontDirs)
+        {
+            try
+            {
+                var dir = Path.Combine(AppContext.BaseDirectory, rel.Replace('/', Path.DirectorySeparatorChar));
+                if (!Directory.Exists(dir)) continue;
+                var file = Directory.EnumerateFiles(dir, "*.*")
+                    .FirstOrDefault(f =>
+                        (f.EndsWith(".ttf", StringComparison.OrdinalIgnoreCase) ||
+                         f.EndsWith(".otf", StringComparison.OrdinalIgnoreCase))
+                        && Path.GetFileName(f).StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+                if (file == null) continue;
+                var baseUri = new Uri(dir.EndsWith(Path.DirectorySeparatorChar) ? dir : dir + Path.DirectorySeparatorChar);
+                return (baseUri, Path.GetFileName(file));
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] font folder probe failed for {Dir}", rel);
+            }
+        }
+        return null;
     }
 
     // ---------------------------------------------------------------- properties

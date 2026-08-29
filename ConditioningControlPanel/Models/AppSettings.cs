@@ -8051,14 +8051,18 @@ namespace ConditioningControlPanel.Models
 
         private int _emiDeskSpice = 2;
         /// <summary>
-        /// How far her lines go: 1 Innocent, 2 Suggestive, 3 Anything. Clamped on write, because a
-        /// hand-edited settings file must never widen the band past what the pools were written for.
+        /// How far her lines go, on the SAME 0..2 scale the lines file uses: 0 Innocent,
+        /// 1 Suggestive, 2 Anything (default). Every line in
+        /// <c>Resources/emi/desk-lines.json</c> carries a <c>spice</c> of 0, 1 or 2 and the engine
+        /// filters on <c>spice &lt;= min(moment ceiling, this)</c>, so this number must stay on the
+        /// file's scale and not one above it. Clamped on write, because a hand-edited settings file
+        /// must never widen the band past what the pools were written for.
         /// </summary>
         [JsonProperty]
         public int EmiDeskSpice
         {
             get => _emiDeskSpice;
-            set { _emiDeskSpice = Math.Max(1, Math.Min(3, value)); OnPropertyChanged(); }
+            set { _emiDeskSpice = Math.Max(0, Math.Min(2, value)); OnPropertyChanged(); }
         }
 
         private bool _emiDeskOffers = true;

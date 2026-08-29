@@ -87,7 +87,21 @@ public sealed class EmiState
     /// </summary>
     [JsonProperty("bedtimeUntil")] public DateTime BedtimeUntil { get; set; } = DateTime.MinValue;
 
+    /// <summary>
+    /// Persisted line-engine limit buckets (LINES-SCHEMA 2.1): the <c>ever</c>, <c>day</c>,
+    /// <c>night</c>, <c>featureDay</c> and <c>version</c> counters. The volatile buckets (launch,
+    /// video, run, lockdown, rush, per-target) die with the process and never reach this file.
+    /// Yesterday's day / night / featureDay keys are pruned on the engine's first load.
+    /// </summary>
+    [JsonProperty("limits")] public Dictionary<string, int> Limits { get; set; } = new();
+
     // ---- first boot ------------------------------------------------------------
+
+    /// <summary>
+    /// How many times she has EVER been summoned. The offer cadence reads it: she never asks
+    /// anything before the third summon (BRIEF 7), across launches, not per launch.
+    /// </summary>
+    [JsonProperty("summonCount")] public int SummonCount { get; set; }
 
     /// <summary>True once she has been summoned at least once (gates the desktopFirstBoot moment).</summary>
     [JsonProperty("firstBootSeen")] public bool FirstBootSeen { get; set; }
@@ -150,6 +164,7 @@ public sealed class EmiState
             s.UsageAt ??= new Dictionary<string, long>();
             s.SeenByPool ??= new Dictionary<string, List<string>>();
             s.RecentIds ??= new List<string>();
+            s.Limits ??= new Dictionary<string, int>();
             Log.Information("[EmiDesk] state loaded ({Pins} pins, {Usage} tracked targets)",
                 s.Pins.Count, s.Usage.Count);
             return s;
@@ -260,6 +275,24 @@ public sealed class EmiState
         catch (Exception ex)
         {
             Log.Debug(ex, "[EmiDesk] NoteUsage failed for {Target}", targetId);
+        }
+    }
+
+    /// <summary>Count one summon and remember she has been out at least once. Debounced save.</summary>
+    public static int NoteSummon()
+    {
+        try
+        {
+            var s = Current;
+            s.SummonCount++;
+            s.FirstBootSeen = true;
+            SaveSoon();
+            return s.SummonCount;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] NoteSummon failed");
+            return 0;
         }
     }
 

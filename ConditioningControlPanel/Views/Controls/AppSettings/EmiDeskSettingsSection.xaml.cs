@@ -71,7 +71,9 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
                     ChkMuteAvatar.IsChecked = s.EmiDeskMuteAvatar;
                     ChkOffers.IsChecked = s.EmiDeskOffers;
                     ChkGlass.IsChecked = s.EmiDeskGlass;
-                    CmbSpice.SelectedIndex = Math.Max(0, Math.Min(2, s.EmiDeskSpice - 1));
+                    // The combo's three rows ARE the 0..2 spice scale the lines file uses:
+                    // 0 Innocent, 1 Suggestive, 2 Anything. No off-by-one translation.
+                    CmbSpice.SelectedIndex = Math.Max(0, Math.Min(2, s.EmiDeskSpice));
                 }
                 RefreshHotkeyButton();
             }
@@ -153,7 +155,7 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
         private void CmbSpice_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_loading) return;
-            int spice = Math.Max(1, Math.Min(3, CmbSpice.SelectedIndex + 1));
+            int spice = Math.Max(0, Math.Min(2, CmbSpice.SelectedIndex));
             Persist(() => App.Settings!.Current.EmiDeskSpice = spice);
         }
 

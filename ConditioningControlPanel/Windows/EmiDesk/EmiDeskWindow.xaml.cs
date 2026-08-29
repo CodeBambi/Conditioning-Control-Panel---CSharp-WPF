@@ -132,6 +132,23 @@ public partial class EmiDeskWindow : Window
     partial void OnGlassLiveQuery(ref bool live);
 
     /// <summary>
+    /// Chunk B2: is the ring open right now? Answered by setting <paramref name="open"/>.
+    ///
+    /// Added for chunk B3: the glass may only wander off to a channel while she is genuinely idle,
+    /// and an open ring is the loudest "the user is mid-thought" signal there is. Asked as a query
+    /// rather than tracked as a flag so B2 stays the only owner of the ring's state.
+    /// </summary>
+    partial void OnRingOpenQuery(ref bool open);
+
+    /// <summary>
+    /// Chunk B2 / B3: the widget has been built and its first layout applied. The counterpart to
+    /// <see cref="OnTearDownCore"/>: start the ambient loops here (chunk B3 starts the glass idle
+    /// watch), never in a static initialiser, so a second widget could never inherit the first
+    /// one's timers.
+    /// </summary>
+    partial void OnReadyCore();
+
+    /// <summary>
     /// Chunk B2 / B3: the widget is about to go away (dismiss, or the app is closing). Tear the
     /// ring, the glass and any open ask down here. Called before the outro chain starts.
     /// </summary>
@@ -224,6 +241,9 @@ public partial class EmiDeskWindow : Window
         ApplyBodyWidth(_bodyWidth);
         SetPose("idle");
         DrawFace(EmiChains.RestFace);
+
+        try { OnReadyCore(); }
+        catch (Exception ex) { Log.Warning(ex, "[EmiDesk] ready seam threw"); }
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
@@ -349,6 +369,48 @@ public partial class EmiDeskWindow : Window
         catch (Exception ex)
         {
             Log.Warning(ex, "[EmiDesk] ApplyBodyWidth failed");
+        }
+    }
+
+    /// <summary>
+    /// Put her in the nearest corner of the work area she is currently on, with a small inset.
+    /// Used by the shrink offer, where she makes herself small and tidies herself out of the way in
+    /// one move; a shrink that left her floating mid-screen would read as a glitch, not a favour.
+    /// </summary>
+    public void SnapToNearestCorner()
+    {
+        try
+        {
+            double s = DipScale;
+            var body = BodyScreenRect;
+            var screen = System.Windows.Forms.Screen.FromRectangle(new System.Drawing.Rectangle(
+                (int)body.X, (int)body.Y, Math.Max(1, (int)body.Width), Math.Max(1, (int)body.Height)));
+            var wa = screen.WorkingArea;
+
+            double insetPx = 12 * s;
+            double cx = body.X + body.Width / 2.0;
+            double cy = body.Y + body.Height / 2.0;
+
+            double bodyLeftPx = cx < wa.Left + wa.Width / 2.0
+                ? wa.Left + insetPx
+                : wa.Right - insetPx - body.Width;
+            double bodyTopPx = cy < wa.Top + wa.Height / 2.0
+                ? wa.Top + insetPx
+                : wa.Bottom - insetPx - body.Height;
+
+            // Left/Top are the WINDOW's, and the window is OverlayPad DIPs bigger than she is on
+            // every side. Physical pixels in, DIPs out (THE COORDINATE TRAP).
+            Left = bodyLeftPx / s - OverlayPad;
+            Top = bodyTopPx / s - OverlayPad;
+
+            ClampIntoWorkArea();
+            SavePlacement();
+            try { Moved?.Invoke(this, EventArgs.Empty); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] Moved handler threw"); }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[EmiDesk] SnapToNearestCorner failed");
         }
     }
 
