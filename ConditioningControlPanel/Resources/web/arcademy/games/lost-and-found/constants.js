@@ -271,6 +271,15 @@ export const DENSITY_HARD_CAP = 200;
 /** Coarse pointers stop being honest input well before the wall does. */
 export const DENSITY_COARSE_CAP = 72;
 
+/* THE TOUCH TILE FLOOR (0830 phone wave). A landscape phone is ~390 CSS px
+ * tall; t3 medium dealt 53 tiles into that and the rows came out ~38px - under
+ * every touch-target floor, so a fingertip covered two tiles and the drift
+ * decided which one the press meant. effectiveDensity() caps the deal so a row
+ * is never shorter than this (including the row gap), by asking rowsFor() in
+ * reverse. Shrink-only, touch-only; par follows density (grade.js
+ * PAR_PER_TILE_SEC), so a smaller deal grades exactly as fair. */
+export const TOUCH_MIN_TILE_H = 48;
+
 /** Within-class breathing: each find starts the band a little higher (DTRH). */
 export const HEAT_BAND = 0.10;
 /** The find-3 modifier: one step hotter for the rest of the class. */

@@ -460,6 +460,11 @@ export const CSS = [
      the sheet's two hint loops freeze at their LIT frame. Desktop untouched. */
   /* The hue skin: one filtered render surface per seat, x2-3 wrap clones. */
   'html.ae-touch .g-lf-skin { filter:none; }',
+  /* The sheen: one compositor animation per tile ELEMENT - 106 of them on a
+     t3 phone board (measured 0830). The dense wall already drops it past
+     SHEEN_MAX_DENSITY; a phone board is always the dense wall in spirit. */
+  'html.ae-touch .g-lf-tile::after { display:none; }',
+  'html.ae-touch .g-lf-tile { contain:paint; }',
   /* Frosted chrome turns solid - a live blur behind glass is the phone tax. */
   'html.ae-touch .g-lf-hud .chip { backdrop-filter:none; -webkit-backdrop-filter:none;',
   '  background:rgba(20,20,43,.94); }',
@@ -491,6 +496,7 @@ export const CSS = [
   '@media (prefers-reduced-motion: reduce) {',
   '  html.ae-touch .g-lf-ghost.g-lf-ghost-lure,',
   '  html.ae-touch .g-lf-mq.g-lf-mq-flash { animation:none !important; } }',
+
 ].join('\n');
 
 /** Inject once per document. Idempotent - re-entering the class is free. */
