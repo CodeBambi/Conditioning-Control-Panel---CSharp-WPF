@@ -50,22 +50,33 @@
  *
  *   away_colors    - CSS ONLY. One attribute on the group (`data-cos-away`),
  *                    styles.css does the rest. No JS at all past the attribute.
- *   sparkler_steps - 1x1 rects out of a FIXED pool (SPARK_MAX), spawned on the
- *                    footfall the walk already counts - never on a timer of its
- *                    own and never per frame - and faded by a CSS keyframe on
- *                    transform + opacity. The pool is allocated once and
+ *   sparkler_steps - 3-unit rects out of TWO FIXED pools (sparkPlan), spawned
+ *                    on the beat the walk already counts - never on a timer of
+ *                    its own and never per frame - and faded by a CSS keyframe
+ *                    on transform + opacity. Both pools are allocated once and
  *                    recycled; nothing here can grow the node count of a walk.
+ *                    The TRAIL pool rides the footfall and its half-step; the
+ *                    BEAT pool holds the departure puff and the arrival ring,
+ *                    and it is a second pool so that a burst can never evict a
+ *                    trail spark still in its fade. Plus `data-cos-spark`,
+ *                    which is CSS ONLY: a dotted gold grammar on the wake and
+ *                    on the night's residue. (Re-dialled 2026-08-30 - see the
+ *                    dials.)
  *   ghost_walk     - `data-cos-ghost` (CSS opacity) plus at most ECHO_COUNT
  *                    afterimages, which are the SAME sprite builder standing at
  *                    positions this file already knows how to compute (walkAt
  *                    at t - lag). No trail buffer, no filter, no blur: an
  *                    afterimage is a body a beat behind you, dimmed by CSS.
  *
- * The two ANIMATED halves are dead under reduced motion and under lite; the two
- * STATIC halves (a fill swap, a base opacity) are not animation and survive
- * both, exactly as the rest of the page treats a colour. Ownership is a plain
- * bag of booleans handed in at construction - this file never reads a store,
- * a wallet or an inventory, and would not know what a sku was.
+ * REDUCED MOTION deletes every animated half of all three. LITE does NOT, and
+ * that is the 2026-08-30 correction: it thins the sparkler to its old density
+ * (counterfx.js's law - lite keeps the move and drops the particle count)
+ * rather than deleting it, because `performanceMode` arrives from C# off an
+ * AUTO tier that a busy session trips on its own and `init` is built once. The
+ * STATIC halves (a fill swap, a base opacity, a dash pattern) are not animation
+ * and survive both, exactly as the rest of the page treats a colour. Ownership
+ * is a plain bag of booleans handed in at construction - this file never reads
+ * a store, a wallet or an inventory, and would not know what a sku was.
  * ==========================================================================*/
 
 import { CAMPUS_GATE, walkLegs, gateLegs, stopAnchor, spriteTurn } from './campus.js';
@@ -114,11 +125,116 @@ export const GATE_KEY = 'gate';
 
 /* ---- COSMETIC DIALS (Counter Stock). Budget caps, and they are caps and not
  * targets: every one of them is the number of NODES the effect may ever own. */
-/** Live sparks at once. The pool is minted once and recycled round robin. */
-export const SPARK_MAX = 8;
-/** How long one spark lives, ms. Must stay under SPARK_MAX x BOB_MS (the time
- *  it takes the pool to come round again) or a spark is recycled mid-fade. */
-export const SPARK_MS = 400;
+/* SPARKLER STEPS, RE-DIALLED 2026-08-30. OWNER ORDER: "the upgrade that gives a
+ * sparkly trail while we move does actually nothing or changes very little, we
+ * need more FX". It was never broken - it rendered, and it was simply an order
+ * of magnitude too small and too sparse to find. A 700-1800ms walk fired ONE
+ * 1x1 rect per 220ms footfall, so 3-8 marks for a whole crossing, each of them
+ * about 1.3 CSS px on a 1920 window - UNDER a free gold wake at stroke-width
+ * 2.5, next to a counter spark of 5px and an engine spark of 8px. The 250
+ * tickets bought the least visible mark on the plan.
+ *
+ * WHAT DID NOT MOVE: rects only, out of pools that are still FIXED and still
+ * minted once; struck off the footfall this file already counts and never off a
+ * clock of its own; faded by transform and opacity with no filter, no blend and
+ * no second surface; and not one live roll - every scatter below is a pure
+ * function of the emission index (see sparkScatter / sparkHue). */
+
+/** Live TRAIL sparks at once. The pool is minted once and recycled round robin. */
+export const SPARK_MAX = 28;
+/** The trail pool on a lite machine: today's density, at the new size. */
+export const SPARK_MAX_LITE = 10;
+/**
+ * How long one spark lives, ms.
+ *
+ * THIS NUMBER AND `campus-sparkfade`'s DURATION IN styles.css ARE THE SAME
+ * NUMBER, and they move together or not at all: a fade longer than the pool's
+ * turnaround is a rect yanked back to the walker's feet half lit. The
+ * turnaround is `pool / per-beat x beat`, and both profiles clear it:
+ *   full   28 / 3 x 110ms = 1027ms  >  900ms
+ *   lite   10 / 1 x 220ms = 2200ms  >  900ms
+ * The BEAT pool below is deliberately NOT in that sum - it is a second fixed
+ * pool precisely so a 10-spark arrival cannot evict a trail still fading.
+ */
+export const SPARK_MS = 900;
+/**
+ * THE BEAT POOL, and it is its own pool for arithmetic rather than taste: the
+ * departure puff and the arrival ring are BURSTS, and a burst drawn off the
+ * trail pool would recycle a third of that pool in a single turn and cut every
+ * spark still in the air. Fifteen nodes, and the two beats own DISJOINT index
+ * ranges inside them - puff at the head, arrival at the tail - so within one
+ * walk nothing in here is recycled at all. See burstRing().
+ */
+export const BURST_MAX = 15;
+/** ... and on a lite machine. Same disjoint layout, fewer nodes. */
+export const BURST_MAX_LITE = 8;
+
+/**
+ * THE SPARK BUDGET: one pure function, both profiles, every number a spark can
+ * cost. Node-safe and testable, and nothing downstream reads a flag twice.
+ *
+ * `beatMs` is the EMISSION cadence and it is not the footfall. At full fat it
+ * is HALF a footfall, so the trail is laid every 110ms rather than every 220
+ * and the walker drags a line of grit instead of a dotted line of single
+ * pixels. Under lite it IS the footfall: one strike per step, which is exactly
+ * what the whole effect used to be, and which is the house doctrine for lite
+ * (counterfx.js: "lite keeps the move and drops the particle count" - never
+ * "lite deletes the move").
+ *
+ * @param {boolean=} lite
+ * @returns {{pool:number, per:number, beatMs:number, burst:number,
+ *            puff:number, arrive:number, skip:number}}
+ */
+export function sparkPlan(lite) {
+  return lite === true
+    ? {
+      pool: SPARK_MAX_LITE, per: 1, beatMs: BOB_MS,
+      burst: BURST_MAX_LITE, puff: 3, arrive: 5, skip: 3,
+    }
+    : {
+      pool: SPARK_MAX, per: 3, beatMs: BOB_MS / 2,
+      burst: BURST_MAX, puff: 5, arrive: 10, skip: 5,
+    };
+}
+
+/**
+ * WHERE ONE SPARK GOES AS IT DIES, as CSS custom properties the keyframe reads.
+ * PURE, and pure is the point: nothing on this page rolls live where two
+ * players could compare it (ArcademyEconomy's law), and a walk is the map
+ * everybody sees. `n` is the emission ordinal, so the scatter is reproducible
+ * in a suite and identical on every machine on every night.
+ *
+ * dx / dy are viewBox units (a CSS transform on an SVG element reads `px` as
+ * user units), r is degrees, s is the per-node size multiplier that stops 28
+ * identical squares reading as a stencil.
+ *
+ * @param {number} n
+ * @returns {{dx:number, dy:number, r:number, s:number}}
+ */
+export function sparkScatter(n) {
+  const i = Math.max(0, Math.floor(Number(n) || 0));
+  return {
+    dx: ((i % 5) - 2) * 2.5,
+    dy: -6 - ((i % 3) * 2),
+    r: (i % 4) * 45,
+    s: [0.7, 1, 1.4][i % 3],
+  };
+}
+
+/**
+ * WHAT COLOUR ONE SPARK IS, as a class name - so the palette is CSS's and this
+ * file never names a colour (styles.css's law: NOT ONE HEX). Gold and pink
+ * alternate and every fifth is lavender, which is counterfx.css's `.is-gold`
+ * alternation with one more token in the rotation.
+ *
+ * @param {number} n
+ * @returns {string}
+ */
+export function sparkHue(n) {
+  const i = Math.max(0, Math.floor(Number(n) || 0));
+  if (i % 5 === 4) return 'is-lav';
+  return (i % 2) ? 'is-pink' : 'is-gold';
+}
 /** Afterimages behind the ghost walk. Two, and the second is nearly gone. */
 export const ECHO_COUNT = 2;
 /** How far behind the body each afterimage stands, ms per step. */
@@ -342,6 +458,19 @@ function dropAttr(node, k) {
   catch (e) { /* noop */ }
 }
 
+/* One CSS custom property, guarded like every other DOM touch in this file so
+ * the pure halves still import into node. Written ONCE PER STRIKE and never per
+ * frame - the keyframe reads them, so the scatter costs no JS while it plays
+ * (counterfx.js's setVar, same shape). */
+function setVar(node, k, v) {
+  if (!node) return;
+  try {
+    if (node.style && typeof node.style.setProperty === 'function') {
+      node.style.setProperty(k, String(v));
+    }
+  } catch (e) { /* noop */ }
+}
+
 /**
  * @param {Object} o
  * @param {Element=} o.mount        campus.walkMount - the group above the ghosts
@@ -352,7 +481,8 @@ function dropAttr(node, k) {
  *   Counter: {awayColors, sparklerSteps, ghostWalk}. See normaliseCosmetics -
  *   absent is the whole school's ordinary miniature, which is the default.
  * @param {boolean=} o.lite         performance mode. It gates the COSMETICS and
- *   nothing else (see the note beside it below): a lite machine keeps its walk.
+ *   nothing else (see the note beside it below): a lite machine keeps its walk,
+ *   keeps a thinner sparkler (sparkPlan) and loses only the afterimages.
  * @param {Function=} o.log
  * @param {Object=} o.clock         test seam {now(), raf(fn), caf(id)}
  * @returns {{mountAt, at, walkTo, skip, setResidue, residue, walking, destroy}}
@@ -401,6 +531,32 @@ export function createWalker(o) {
    */
   const cosMoves = !still && opts.lite !== true;
   /**
+   * THE SPARKLER'S OWN GATE, and it is deliberately one rung shorter than
+   * `cosMoves` above (2026-08-30).
+   *
+   * `cosMoves` DELETED the sparkler under lite, and lite is not the rare, opted
+   * -in state it reads as: `ArcademyHostService` sends `performanceMode` as
+   * `PerformanceProfile.CurrentTier != Quality`, that tier escalates off
+   * `AutoPerformanceMode` (which DEFAULTS TRUE) the moment flash windows plus
+   * ambient bubbles reach 8, and `init` is built ONCE per Arcademy open. So a
+   * player who opened the school during any busy session silently lost the
+   * thing they bought for the whole session, with no setting they could see and
+   * no way to get it back but a relaunch. That is the likeliest reading of
+   * "does actually nothing".
+   *
+   * The house answer is counterfx.js's, not a special case for this file: lite
+   * keeps the move and drops the particle count (engine/ceremonies.js halves
+   * rather than skips). So a lite machine mints the SMALL pools out of
+   * `sparkPlan(true)` - today's one-per-footfall density, at the new size - and
+   * a busy session costs the player a little glitter instead of all of it.
+   *
+   * REDUCED MOTION IS UNTOUCHED and stays inside `still`: that rung deletes the
+   * pool outright and it is correct.
+   */
+  const cosSparks = !still;
+  /** Every number this walker's sparks may cost, resolved once. */
+  const plan = sparkPlan(opts.lite === true);
+  /**
    * IS THIS A BROWSER AT ALL? ghosts.js's law, and it earns its keep twice
    * here. With no `requestAnimationFrame` and no injected clock (node, the DOM
    * double, a headless run) there is nothing to animate INTO - and, more
@@ -444,29 +600,39 @@ export function createWalker(o) {
    * why a restock may touch this file at all: the school that owns nothing pays
    * nothing, and the pools below are FIXED so the school that owns everything
    * pays a constant. */
-  const wantsSparks = cos.sparklerSteps && cosMoves;
+  const wantsSparks = cos.sparklerSteps && cosSparks;
   const wantsEchoes = cos.ghostWalk && cosMoves;
   const sparkLayer = wantsSparks ? svgNode('g', null, 'campus-sparks') : null;
   const echoLayer = wantsEchoes ? svgNode('g', null, 'campus-walkechoes') : null;
-  /** The spark pool, allocated once and recycled round robin. */
+  /** The TRAIL pool, allocated once and recycled round robin off the beat. */
   const sparks = [];
   let sparkAt = 0;
+  /** The BEAT pool: the departure puff and the arrival ring, fixed indices. */
+  const bursts = [];
   /** The afterimages, nearest first. Same sprite, same seed, same body. */
   const echoes = [];
 
+  /* THREE UNITS, not one. The old rect was a single viewBox unit - about 1.3
+   * CSS px on a 1920 window - and `shape-rendering:crispEdges` (now off in
+   * styles.css) then quantised what was left of it away. Three units with the
+   * per-node `--sp-s` of 0.7 / 1.0 / 1.4 lands the family between 2 and 4.2
+   * units, which is the counter's own 5px spark read at plan scale. */
+  function mintSpark(layer, into) {
+    const g = svgNode('g', { transform: 'translate(0,0)' }, 'campus-spark');
+    /* `opacity` starts at 0 as a presentation ATTRIBUTE, which the keyframe
+     * outranks the moment a spark is struck and which is what the rect falls
+     * back to when it is not. */
+    const r = svgNode('rect',
+      { x: -1.5, y: -1.5, width: 3, height: 3, opacity: 0 }, 'campus-spark-i');
+    if (!g || !r) return;
+    g.appendChild(r);
+    layer.appendChild(g);
+    into.push({ g, r, flip: false });
+  }
+
   if (sparkLayer) {
-    for (let i = 0; i < SPARK_MAX; i += 1) {
-      const g = svgNode('g', { transform: 'translate(0,0)' }, 'campus-spark');
-      /* One pixel. `opacity` starts at 0 as a presentation ATTRIBUTE, which the
-       * keyframe below outranks the moment a spark is struck and which is what
-       * the pixel falls back to when it is not. */
-      const r = svgNode('rect',
-        { x: -0.5, y: -0.5, width: 1, height: 1, opacity: 0 }, 'campus-spark-i');
-      if (!g || !r) continue;
-      g.appendChild(r);
-      sparkLayer.appendChild(g);
-      sparks.push({ g, r, flip: false });
-    }
+    for (let i = 0; i < plan.pool; i += 1) mintSpark(sparkLayer, sparks);
+    for (let i = 0; i < plan.burst; i += 1) mintSpark(sparkLayer, bursts);
   }
 
   if (echoLayer) {
@@ -500,6 +666,25 @@ export function createWalker(o) {
     /* An afterimage is you, so it wears your kit too. */
     for (const e of echoes) {
       if (cos.awayColors) setAttr(e.g, 'data-cos-away', '1'); else dropAttr(e.g, 'data-cos-away');
+    }
+    /* THE RESIDUE (2026-08-30). The wake and the night's old wakes go over to a
+     * dotted gold grammar when the sparkler is owned - the grit stays on the
+     * floor after the sparks have gone out, which is what makes the purchase
+     * legible on a plan you are only LOOKING at.
+     *
+     * THIS ONE IS NOT GATED ON MOTION, and that is the away_colors precedent
+     * followed exactly (styles.css's note beside the reduced-motion belts): a
+     * dash pattern and a fill are COLOUR, not animation, so they survive
+     * reduced motion and lite the way the away kit and the see-through body
+     * already do. The march that carries them was already switched off under
+     * `html.arc-reduced .campus-trace`, and it stays off.
+     *
+     * TWO NODES, because `renderResidue` re-mints its polylines on every call
+     * and would drop an attribute written to them: the flag lives on the LAYER
+     * and CSS descends from there. Neither is a new element. */
+    const spark = cos.sparklerSteps;
+    for (const node of [trace, residueLayer]) {
+      if (spark) setAttr(node, 'data-cos-spark', '1'); else dropAttr(node, 'data-cos-spark');
     }
   }
   paintCosmetics();
@@ -555,19 +740,73 @@ export function createWalker(o) {
    * `n` is the footfall index, which gives left / centre / right for free and
    * makes the whole effect reproducible in a suite.
    */
-  function strikeSpark(x, y, n) {
-    if (!sparks.length) return;
-    const s = sparks[sparkAt % sparks.length];
-    sparkAt += 1;
-    const jx = ((n % 3) - 1) * 1.1;
+  function fireSpark(pool, slot, x, y, n) {
+    if (!pool.length) return;
+    const s = pool[((slot % pool.length) + pool.length) % pool.length];
+    if (!s) return;
+    const sc = sparkScatter(n);
     setAttr(s.g, 'transform', 'translate('
-      + (Math.round((x + jx) * 10) / 10) + ',' + (Math.round(y * 10) / 10) + ')');
+      + (Math.round(x * 10) / 10) + ',' + (Math.round(y * 10) / 10) + ')');
+    /* WHERE IT DIES, handed to the keyframe as four custom properties. Written
+     * once, at the strike; the animation then plays with no JS behind it. */
+    setVar(s.r, '--sp-dx', sc.dx + 'px');
+    setVar(s.r, '--sp-dy', sc.dy + 'px');
+    setVar(s.r, '--sp-r', sc.r + 'deg');
+    setVar(s.r, '--sp-s', sc.s);
     /* TWO CLASSES, ALTERNATING, and they carry the same keyframe. Re-adding the
      * class a spark already wears does not restart a finished animation without
      * a forced reflow (which is a layout read per step); flipping between two
-     * identical names restarts it by definition and reads nothing. */
+     * identical names restarts it by definition and reads nothing. The hue
+     * class rides the same write, so the colour still costs zero extra work. */
     s.flip = !s.flip;
-    setAttr(s.r, 'class', 'campus-spark-i ' + (s.flip ? 'is-a' : 'is-b'));
+    setAttr(s.r, 'class',
+      'campus-spark-i ' + sparkHue(n) + ' ' + (s.flip ? 'is-a' : 'is-b'));
+  }
+
+  /**
+   * THE TRAIL, one beat's worth. Struck from the beat the walk already counts
+   * (frame() below) and never from a timer of its own: the sparkler IS the
+   * step, so a machine that drops frames drops sparks with them rather than
+   * dumping a backlog on the floor.
+   *
+   * THE SCATTER IS THE EMISSION NUMBER, NOT A ROLL - `sparkAt` doubles as the
+   * round-robin slot and as sparkScatter's / sparkHue's index, which is what
+   * keeps the whole effect reproducible in a suite and identical on every
+   * machine. The spawn jitter is the same pure `((n % 3) - 1)` it always was.
+   */
+  function strikeTrail(x, y, count) {
+    if (!sparks.length) return;
+    for (let i = 0; i < count; i += 1) {
+      const n = sparkAt;
+      sparkAt += 1;
+      fireSpark(sparks, n, x + (((n % 3) - 1) * 1.1), y, n);
+    }
+  }
+
+  /**
+   * THE TWO BEATS: a puff under the feet as you leave, a ring at the door when
+   * you land. Off the BEAT pool, at FIXED indices, so a burst can never evict a
+   * trail spark that is still fading.
+   *
+   * `base` is where in that pool the beat starts, and the two callers pick
+   * ranges that do not overlap: the puff takes `[0, puff)` and an arrival takes
+   * the tail `[burst - count, burst)`. `burst - count` is >= `puff` in both
+   * profiles (15-10=5 >= 5, and 8-5=3 >= 3), so inside one walk nothing here is
+   * recycled at all. Across two walks the only pair that can touch is puff to
+   * puff, which needs a whole crossing plus a click to have happened in under
+   * SPARK_MS, and what it would clip is five dots at a door already behind you.
+   *
+   * The ring is `2 pi i / count` - the same shape counterfx's sparkBurst draws,
+   * and just as seeded: no roll, no live randomness anywhere in it.
+   */
+  function burstRing(x, y, count, base, reach0) {
+    if (!bursts.length || !(count > 0)) return;
+    for (let i = 0; i < count; i += 1) {
+      const ang = (Math.PI * 2 * i) / count;
+      const reach = reach0 + ((i % 4) * 2);
+      const n = base + i;
+      fireSpark(bursts, n, x + Math.cos(ang) * reach, y + Math.sin(ang) * reach, n);
+    }
   }
 
   /**
@@ -697,9 +936,19 @@ export function createWalker(o) {
      * walk that was superseded, torn down or never animated says nothing at
      * all, because nobody arrived anywhere. One dispatch: the follow-ups ride
      * the mixer's own timeline, so this file owns no cue timer. */
+    /* THE ARRIVAL RING rides the same two branches (2026-08-30), because the
+     * sound was already saying the right thing and the picture was saying
+     * nothing. A SKIP is the case that mattered: LAW 4 above snaps the whole
+     * walk to its end on the first pointer or key press, so a player who clicks
+     * a door and then clicks anything else saw the entire sparkler - all three
+     * to eight pixels of it - never render. That player is the impatient one,
+     * which is to say most of them on most nights. Now the walk lands with a
+     * ring at the door whether it was watched or cut short. Off the BEAT pool
+     * at its tail indices, so nothing still fading behind us is evicted. */
     if (!still) {
       if (reason === 'skipped') {
         sfx('step', 0.05, { pitch: 0.92 });
+        burstRing(pos[0], pos[1], plan.skip, plan.burst - plan.skip, 8);
       } else if (reason === 'arrived') {
         sfx('step', 0.07, {
           pitch: 0.94,
@@ -708,6 +957,7 @@ export function createWalker(o) {
             { atMs: 320, name: 'pad', level: 0.08, pitch: 1 },
           ],
         });
+        burstRing(pos[0], pos[1], plan.arrive, plan.burst - plan.arrive, 8);
       }
     }
     retire(r);
@@ -743,10 +993,19 @@ export function createWalker(o) {
       if (feet > r.feet) {
         r.feet = feet;
         sfx('step', 0.06, { pitch: (feet % 2) ? 0.96 : 1.04 });
-        /* THE SPARKLER RIDES THE FOOTFALL. Same beat, same counter, no second
-         * clock - which is also the budget: one spark per step, never per
-         * frame, and the pool caps what a long walk can leave behind. */
-        strikeSpark(at.x, at.y, feet);
+      }
+      /* THE SPARKLER RIDES THE BEAT, which is the footfall AND its half-step
+       * (plan.beatMs; under lite it is the footfall itself). Still no second
+       * clock and still nothing per frame - the beat is read off the same `t`
+       * the bob is, and the pool is what caps what a long walk leaves behind.
+       * The FOOT sound is untouched above: the cadence of the ear did not
+       * change when the cadence of the eye did. */
+      if (sparks.length) {
+        const beat = Math.floor((t + BOB_MS / 2) / plan.beatMs);
+        if (beat > r.beat) {
+          r.beat = beat;
+          strikeTrail(at.x, at.y, plan.per);
+        }
       }
     }
     drawEchoes(r, t);
@@ -801,6 +1060,13 @@ export function createWalker(o) {
       fired: false,
       /** How many footfalls this walk has already sounded (W3 P0-30). */
       feet: 0,
+      /* THE BEAT INDEX AT t=0, so the first cluster lands one whole beat after
+       * the departure puff instead of on top of it. Full fat that is 1 (the
+       * beat is 110ms, so beat 1 is already behind us at t=0 and the trail
+       * starts at t=110); under lite it is 0, and the emission then falls on
+       * the footfalls themselves at 110, 330, 550 - exactly where the single
+       * spark used to fall. One expression, both profiles. */
+      beat: Math.floor((BOB_MS / 2) / plan.beatMs),
       to: Array.isArray(target) ? 'point' : String(target),
     };
 
@@ -823,6 +1089,11 @@ export function createWalker(o) {
     }
 
     draw(0);
+    /* THE DEPARTURE PUFF. The trail used to begin on the first footfall, 110ms
+     * and a body-length after the door was clicked, so the effect you bought
+     * had no opening beat at all - you were already moving before anything lit.
+     * Five off the beat pool, under the feet, at t=0. */
+    burstRing(legs[0][0], legs[0][1], plan.puff, 0, 4);
     drawEchoes(run, 0);
     showEchoes(true);
     paintTrace([legs[0], legs[0]]);
@@ -871,6 +1142,7 @@ export function createWalker(o) {
     try { if (sparkLayer) sparkLayer.remove(); } catch (e) { /* noop */ }
     try { if (echoLayer) echoLayer.remove(); } catch (e) { /* noop */ }
     sparks.length = 0;
+    bursts.length = 0;
     echoes.length = 0;
   }
 
@@ -889,15 +1161,19 @@ export function createWalker(o) {
     walking() { return !!run; },
     destroy,
     /** What the miniature is wearing, and what it actually built for it.
-     *  Test seam: `cosmetics` is what was asked for, the two counts are what
-     *  the budget allowed (both 0 under reduced motion and under lite). */
+     *  Test seam: `cosmetics` is what was asked for, the counts are what the
+     *  budget allowed. Reduced motion is 0 across the board; LITE is 0 echoes
+     *  but a THINNED sparkler (2026-08-30), so a suite can tell the two rungs
+     *  apart instead of reading one zero for both. */
     cosmetics() {
       return {
         awayColors: cos.awayColors,
         sparklerSteps: cos.sparklerSteps,
         ghostWalk: cos.ghostWalk,
         moves: cosMoves,
+        sparkMoves: cosSparks,
         sparks: sparks.length,
+        bursts: bursts.length,
         echoes: echoes.length,
       };
     },
@@ -905,7 +1181,10 @@ export function createWalker(o) {
       return {
         still, mounted: !!mount, walking: !!run, bound,
         at: pos.slice(), facing, residue: residueList.length,
-        cos: { away: cos.awayColors, spark: sparks.length, echo: echoes.length },
+        cos: {
+          away: cos.awayColors, spark: sparks.length,
+          burst: bursts.length, echo: echoes.length,
+        },
       };
     },
   };
