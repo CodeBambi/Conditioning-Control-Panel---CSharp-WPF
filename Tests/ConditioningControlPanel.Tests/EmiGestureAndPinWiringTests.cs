@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using Xunit;
 
@@ -58,31 +58,43 @@ public class EmiGestureAndPinWiringTests
     }
 
     [Fact]
-    public void The_right_click_and_the_cards_glyph_both_open_the_ring()
+    public void The_right_click_and_her_options_panel_both_open_the_ring()
     {
         var body = Read("Windows", "EmiDesk", "EmiDeskWindow.xaml.cs");
 
         Assert.Contains("BodyRoot.MouseRightButtonUp += OnBodyRightClick;", body);
-        Assert.Contains("BtnCards.Click += OnCardsClick;", body);
 
-        // Both go through the one road, so they cannot drift apart.
+        // The six-dot glyph became a gear (owner, 2026-08-30): it opens her options, and the ring
+        // is the panel's first action rather than this chip's job.
+        Assert.Contains("BtnGear.Click += OnGearClick;", body);
+        Assert.DoesNotContain("BtnCards", body);
+
+        // Both roads still end in the ONE road, so they cannot drift apart.
         Assert.Contains("ToggleRingFromGesture();", body);
+        Assert.Contains("CardsRequested += (_, _) => ToggleRingFromGesture();", body);
     }
 
     [Fact]
-    public void The_cards_glyph_exists_and_fades_with_the_x()
+    public void The_gear_exists_and_fades_with_the_x()
     {
         var xaml = Read("Windows", "EmiDesk", "EmiDeskWindow.xaml");
-        Assert.Contains("x:Name=\"BtnCards\"", xaml);
+        Assert.Contains("x:Name=\"BtnGear\"", xaml);
+        Assert.DoesNotContain("BtnCards", xaml);
 
         // Hover chrome: invisible at rest, faded in with the close button by FadeChrome.
         var body = Read("Windows", "EmiDesk", "EmiDeskWindow.xaml.cs");
         int fade = body.IndexOf("private void FadeChrome(", StringComparison.Ordinal);
         Assert.True(fade > 0, "FadeChrome is gone; the hover chrome has been rewritten");
         int end = body.IndexOf("private void OnBodyMouseDown(", fade, StringComparison.Ordinal);
+        Assert.True(end > fade, "FadeChrome moved; this region check needs a new end marker");
         var region = body.Substring(fade, end - fade);
         Assert.Contains("BtnClose.BeginAnimation(OpacityProperty", region);
-        Assert.Contains("BtnCards.BeginAnimation(OpacityProperty", region);
+        Assert.Contains("BtnGear.BeginAnimation(OpacityProperty", region);
+
+        // And the enlarged hit areas are only live WHILE lit: at rest her whole silhouette pats
+        // her, corners included, which is the gesture wave 3 exists to protect.
+        Assert.Contains("BtnClose.IsHitTestVisible = lit;", region);
+        Assert.Contains("BtnGear.IsHitTestVisible = lit;", region);
     }
 
     [Fact]
@@ -127,17 +139,23 @@ public class EmiGestureAndPinWiringTests
             }
         }
 
+        // The ring's only VISIBLE affordance moved into her options panel when the dots became a
+        // gear, so that is where the un-localised fallback wording lives now.
+        var panel = Read("Windows", "EmiDesk", "EmiOptionsWindow.xaml");
+        Assert.Contains("Content=\"Open her cards\"", panel);
+        Assert.DoesNotContain("door", panel, StringComparison.OrdinalIgnoreCase);
+
         var xaml = Read("Windows", "EmiDesk", "EmiDeskWindow.xaml");
-        int tip = xaml.IndexOf("ToolTip=\"Open her cards\"", StringComparison.Ordinal);
-        Assert.True(tip > 0, "the cards glyph lost its fallback tooltip");
+        int tip = xaml.IndexOf("ToolTip=\"Her options\"", StringComparison.Ordinal);
+        Assert.True(tip > 0, "the gear lost its fallback tooltip");
     }
 
     // ---------------------------------------------------------------- one pin store
 
     [Fact]
-    public void The_settings_picker_writes_through_the_suggester_and_keeps_no_list_of_its_own()
+    public void The_shared_picker_writes_through_the_suggester_and_keeps_no_list_of_its_own()
     {
-        var sec = Read("Views", "Controls", "AppSettings", "EmiDeskSettingsSection.xaml.cs");
+        var sec = Read("Views", "Controls", "EmiRingPicker.xaml.cs");
 
         Assert.Contains("EmiSuggester.IsPinned(", sec);
         Assert.Contains("EmiSuggester.TogglePin(", sec);
@@ -163,7 +181,7 @@ public class EmiGestureAndPinWiringTests
     [Fact]
     public void The_picker_obeys_the_same_six_and_refreshes_a_live_fan()
     {
-        var sec = Read("Views", "Controls", "AppSettings", "EmiDeskSettingsSection.xaml.cs");
+        var sec = Read("Views", "Controls", "EmiRingPicker.xaml.cs");
 
         // Six comes from the suggester, not from a number typed into the picker.
         Assert.Contains("EmiSuggester.MaxPins", sec);
@@ -181,7 +199,7 @@ public class EmiGestureAndPinWiringTests
     [Fact]
     public void The_picker_shows_locked_targets_and_hides_unavailable_ones()
     {
-        var sec = Read("Views", "Controls", "AppSettings", "EmiDeskSettingsSection.xaml.cs");
+        var sec = Read("Views", "Controls", "EmiRingPicker.xaml.cs");
 
         // Same rule as the ring: unavailable is not part of this build or account (skip it),
         // locked exists and the tier gate says no (show it, disabled, with the reason).
@@ -220,6 +238,54 @@ public class EmiGestureAndPinWiringTests
             var decl = svc.Substring(i, end - i);
             Assert.DoesNotContain("door", decl, StringComparison.OrdinalIgnoreCase);
         }
+    }
+
+    [Fact]
+    public void The_settings_tab_and_her_options_panel_host_the_same_picker()
+    {
+        // ONE pin wall, two hosts. The gear panel needed the identical 25 tiles, and a second copy
+        // of "build the tiles, respect the six, put the tile back to what the store said" is
+        // exactly how two front ends onto one store drift apart.
+        var sec = Read("Views", "Controls", "AppSettings", "EmiDeskSettingsSection.xaml");
+        var panel = Read("Windows", "EmiDesk", "EmiOptionsWindow.xaml");
+
+        Assert.Contains("EmiRingPicker", sec);
+        Assert.Contains("EmiRingPicker", panel);
+
+        // And the wall itself is gone from the settings section's own code.
+        var secCs = Read("Views", "Controls", "AppSettings", "EmiDeskSettingsSection.xaml.cs");
+        Assert.DoesNotContain("EmiSuggester.TogglePin(", secCs);
+    }
+
+    [Fact]
+    public void Her_options_panel_follows_the_widget_window_recipe()
+    {
+        var xaml = Read("Windows", "EmiDesk", "EmiOptionsWindow.xaml");
+
+        // She is a desktop ornament, not an application window: no focus theft, nothing in
+        // Alt-Tab. Every one of these is load-bearing and all three of her windows carry them.
+        Assert.Contains("WindowStyle=\"None\"", xaml);
+        Assert.Contains("AllowsTransparency=\"True\"", xaml);
+        Assert.Contains("ShowActivated=\"False\"", xaml);
+        Assert.Contains("ShowInTaskbar=\"False\"", xaml);
+        Assert.Contains("Topmost=\"True\"", xaml);
+
+        var cs = Read("Windows", "EmiDesk", "EmiOptionsWindow.xaml.cs");
+        Assert.Contains("WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE", cs);
+
+        // Non-modal on purpose: anything modal on a summon path needs the _summonGen guard, and
+        // the live-QA bug that rule came from stranded her on screen with IsOut false.
+        Assert.DoesNotContain("ShowDialog()", cs);
+
+        // Click-away closes it, and the hook NEVER swallows the click.
+        Assert.Contains("GlobalMouseHook", cs);
+        Assert.Contains("return false;", cs);
+
+        // Physical pixels over this window's OWN dpi, both sides of the sum. Assuming 1.0 is the
+        // coordinate trap that ate the gaze work.
+        Assert.Contains("BodyScreenRect", cs);
+        Assert.Contains("DipScale", cs);
+        Assert.DoesNotContain("BodyScreenRect.Left;", cs);
     }
 
     private static int CountOf(string haystack, string needle)

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -259,6 +260,17 @@ public partial class EmiDeskWindow : Window
             {
                 if (IsVisible) StartAlive();
                 else StopAlive();
+
+                // The chrome region has to forget her too. A hide takes the window out from under
+                // the pointer WITHOUT a MouseLeave, so the body would stay latched "hovered" and
+                // she would come back next summon with her x and her gear already lit and nobody
+                // near her. Her options panel goes with her for the same reason: it is anchored off
+                // a body that is no longer on screen.
+                if (!IsVisible)
+                {
+                    CloseOptionsPanel();
+                    ResetChrome();
+                }
             }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] alive visibility hook failed"); }
         };
@@ -267,19 +279,29 @@ public partial class EmiDeskWindow : Window
         BodyRoot.MouseMove += OnBodyMouseMove;
         BodyRoot.MouseLeftButtonUp += OnBodyMouseUp;
         BodyRoot.MouseRightButtonUp += OnBodyRightClick;
-        BodyRoot.MouseEnter += OnBodyMouseEnter;
-        BodyRoot.MouseLeave += OnBodyMouseLeave;
+
+        // THE HOVER REGION, not one element's hover. Her body and all three chips report in
+        // separately, so the chrome stays lit while the pointer is on ANY of them and the trip
+        // between two of them cannot start a fade. See EmiChromeHover.
+        WireChromePart(BodyRoot, EmiChromePart.Body);
+        WireChromePart(BtnClose, EmiChromePart.Close);
+        WireChromePart(BtnGear, EmiChromePart.Gear);
+        WireChromePart(ResizeGrip, EmiChromePart.Grip);
 
         BtnClose.Click += OnCloseClick;
-        BtnClose.MouseLeftButtonDown += (_, e) => e.Handled = true;
+        BtnGear.Click += OnGearClick;
 
-        BtnCards.Click += OnCardsClick;
-        BtnCards.MouseLeftButtonDown += (_, e) => e.Handled = true;
+        // A press on a chip is a HOLD: the button has capture, so a pointer that slides off it
+        // mid-press raises a leave the region would otherwise act on, and the chrome would fade
+        // out from under a button that is still held down. Cleared on the release and again on
+        // lost capture, because a press that ends outside the window never sees the up.
+        WireChromePress(BtnClose);
+        WireChromePress(BtnGear);
 
         try
         {
             BtnClose.ToolTip = Loc.Get("emi_desk_tip_close");
-            BtnCards.ToolTip = Loc.Get("emi_desk_tip_cards");
+            BtnGear.ToolTip = Loc.Get("emi_desk_tip_gear");
             ResizeGrip.ToolTip = Loc.Get("emi_desk_tip_grip");
         }
         catch (Exception ex) { Log.Debug(ex, "[EmiDesk] chrome tooltips failed"); }
@@ -287,6 +309,12 @@ public partial class EmiDeskWindow : Window
         ResizeGrip.MouseLeftButtonDown += OnGripMouseDown;
         ResizeGrip.MouseMove += OnGripMouseMove;
         ResizeGrip.MouseLeftButtonUp += OnGripMouseUp;
+        ResizeGrip.LostMouseCapture += (_, _) => EndResizeHold();
+
+        // At rest the chips are invisible AND inert (see FadeChrome). Set here rather than in the
+        // XAML so the two halves of "lit" are decided in one place.
+        BtnClose.IsHitTestVisible = false;
+        BtnGear.IsHitTestVisible = false;
 
         try { _bodyWidth = ClampWidth(App.Settings?.Current?.EmiDeskWidth ?? 220); }
         catch { _bodyWidth = 220; }
@@ -413,16 +441,36 @@ public partial class EmiDeskWindow : Window
             WobbleRotate.CenterY = -bh * 0.25;
 
             // The two affordances scale a little with her so they stay reachable but never eat the
-            // face: 8 % of the body width, floored at their authored size.
+            // face: 8 % of the body width, floored at their authored size. That is the DRAWN chip;
+            // the button around it is bigger.
             double chip = Math.Max(18, bw * 0.08);
-            BtnClose.Width = chip;
-            BtnClose.Height = chip;
-            BtnClose.Margin = new Thickness(0, bh * 0.02, bw * 0.02, 0);
+            double insetX = bw * 0.02;
+            double insetY = bh * 0.02;
 
-            // The cards glyph is the x's mirror: same chip, same inset, other corner.
-            BtnCards.Width = chip;
-            BtnCards.Height = chip;
-            BtnCards.Margin = new Thickness(bw * 0.02, bh * 0.02, 0, 0);
+            // THE FORGIVING RING (owner, 2026-08-30). Each button grows to chip + 2 x ChipPad of
+            // invisible hit area with the drawn chip held in place by the button's Padding, so a
+            // near miss still lands. The split is ASYMMETRIC because the pad must not overhang
+            // BodyRoot: the two OUTWARD sides can only take the inset that is really there
+            // (~4 DIPs at her default width), so whatever they cannot use is handed to the two
+            // inward sides, which have her whole silhouette behind them. The margins below are
+            // non-negative by construction, and the drawn chip does not move a pixel.
+            double closeTop = Math.Min(ChipPad, insetY);
+            double closeRight = Math.Min(ChipPad, insetX);
+            BtnClose.Padding = new Thickness(2 * ChipPad - closeRight, closeTop,
+                                            closeRight, 2 * ChipPad - closeTop);
+            BtnClose.Width = chip + 2 * ChipPad;
+            BtnClose.Height = chip + 2 * ChipPad;
+            BtnClose.Margin = new Thickness(0, insetY - closeTop, insetX - closeRight, 0);
+
+            // The gear is the x's mirror: same chip, same inset, other corner, outward sides
+            // swapped to top and left.
+            double gearTop = Math.Min(ChipPad, insetY);
+            double gearLeft = Math.Min(ChipPad, insetX);
+            BtnGear.Padding = new Thickness(gearLeft, gearTop,
+                                            2 * ChipPad - gearLeft, 2 * ChipPad - gearTop);
+            BtnGear.Width = chip + 2 * ChipPad;
+            BtnGear.Height = chip + 2 * ChipPad;
+            BtnGear.Margin = new Thickness(insetX - gearLeft, insetY - gearTop, 0, 0);
 
             // The grip's HIT AREA, floored at 22 DIP so the cursor catches it at every body width
             // (owner call, QA 2026-08-29). The glyph inside it does not grow with it.
@@ -996,16 +1044,29 @@ public partial class EmiDeskWindow : Window
         catch (Exception ex) { Log.Debug(ex, "[EmiDesk] PointerActivity handler threw"); }
     }
 
-    private void OnBodyMouseEnter(object sender, MouseEventArgs e)
-    {
-        FadeChrome(0.95);
-    }
+    // ---- the chrome region ----------------------------------------------------
 
-    private void OnBodyMouseLeave(object sender, MouseEventArgs e)
-    {
-        FadeChrome(0);
-        DisarmPet();
-    }
+    /// <summary>
+    /// WHEN HER CHROME IS LIT (owner, 2026-08-30: <i>"I gotta hover EMI and be fast enough to catch
+    /// those buttons before they disappear"</i>).
+    ///
+    /// <para>The decision is a pure state machine in <see cref="EmiChromeHover"/>; this half only
+    /// feeds it pointer events and paints the answer. What changed is the shape of the rule: it used
+    /// to be one element's enter/leave straight onto a 140 ms fade, so the moment the pointer left
+    /// her silhouette by a pixel the chips started going, and 140 ms is not enough time to come
+    /// back. Now her body and all three chips are ONE region, and leaving it starts a grace timer
+    /// instead of a fade.</para>
+    /// </summary>
+    private readonly EmiChromeHover _chrome = new();
+
+    /// <summary>
+    /// The one-shot that ends the grace. Never a poll: the region only changes on a pointer event,
+    /// so a timer that ticks when nothing has happened is a timer that has nothing to say.
+    /// </summary>
+    private DispatcherTimer? _chromeGrace;
+
+    /// <summary>What <see cref="FadeChrome"/> last painted, so a mouse-move cannot restart a fade.</summary>
+    private bool _chromeLit;
 
     /// <summary>The resize grip's resting opacity: faint, but never invisible (owner call).</summary>
     private const double GripRestOpacity = 0.35;
@@ -1013,21 +1074,157 @@ public partial class EmiDeskWindow : Window
     /// <summary>The grip's minimum hit area in DIPs. The glyph drawn inside it stays 12.</summary>
     private const double GripHitSize = 22;
 
+    /// <summary>
+    /// The invisible forgiveness around each 18 DIP corner chip, in DIPs, per side.
+    ///
+    /// <para>Applied ASYMMETRICALLY by <see cref="ApplyBodyWidth"/>: an outward side takes at most
+    /// the inset that is actually there and hands the remainder to the opposite side, so the hit
+    /// area grows to <c>chip + 2 x ChipPad</c> without one pixel of it hanging over the edge of
+    /// <c>BodyRoot</c> into the click-through air. Fixed rather than scaled with her: a comfortable
+    /// target is an absolute size in the hand, not a fraction of the thing it sits on.</para>
+    /// </summary>
+    private const double ChipPad = 8.0;
+
+    /// <summary>Report one element's enters and leaves into the region.</summary>
+    private void WireChromePart(FrameworkElement el, EmiChromePart part)
+    {
+        el.MouseEnter += (_, _) => ChromeEnter(part);
+        el.MouseLeave += (_, _) =>
+        {
+            ChromeLeave(part);
+            // The 1.2 s head-pat is armed off her BODY and nothing else, so it disarms with the
+            // body and not with a chip: sliding from her forehead onto the x is not "the pointer
+            // left her", but it is certainly not still a pat either.
+            if (part == EmiChromePart.Body) DisarmPet();
+        };
+    }
+
+    /// <summary>Hold the chrome open for as long as a chip is held down, however the press ends.</summary>
+    private void WireChromePress(ButtonBase btn)
+    {
+        btn.MouseLeftButtonDown += (_, e) =>
+        {
+            // Handled so the press cannot bubble on to BodyRoot and start a drag of her.
+            e.Handled = true;
+            ChromeHold(EmiChromeHold.Press, true);
+        };
+        btn.MouseLeftButtonUp += (_, _) => ChromeHold(EmiChromeHold.Press, false);
+        btn.LostMouseCapture += (_, _) => ChromeHold(EmiChromeHold.Press, false);
+    }
+
+    private void ChromeEnter(EmiChromePart part)
+    {
+        try { if (_chrome.Enter(part, DateTime.UtcNow)) ApplyChrome(); else ArmChromeGrace(); }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] chrome enter failed"); }
+    }
+
+    private void ChromeLeave(EmiChromePart part)
+    {
+        try { if (_chrome.Leave(part, DateTime.UtcNow)) ApplyChrome(); else ArmChromeGrace(); }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] chrome leave failed"); }
+    }
+
+    /// <summary>
+    /// Set or clear a sticky reason the chrome must stay lit. Public-in-spirit: her options panel
+    /// calls it through <see cref="HoldChromeForPanel"/> while it is open.
+    /// </summary>
+    private void ChromeHold(EmiChromeHold reason, bool on)
+    {
+        try { if (_chrome.Hold(reason, on, DateTime.UtcNow)) ApplyChrome(); else ArmChromeGrace(); }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] chrome hold failed"); }
+    }
+
+    /// <summary>Drop every latch. Used when she is hidden out from under the pointer.</summary>
+    private void ResetChrome()
+    {
+        try
+        {
+            bool changed = _chrome.Reset();
+            StopChromeGrace();
+            if (changed || _chromeLit) ApplyChrome();
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] chrome reset failed"); }
+    }
+
+    /// <summary>
+    /// Arm, re-arm or drop the one-shot that ends the grace. Re-armed on every event rather than
+    /// left running, because a leave-return-leave cycle moves the deadline and the old timer would
+    /// fire against a deadline that no longer exists.
+    /// </summary>
+    private void ArmChromeGrace()
+    {
+        try
+        {
+            if (!_chrome.GracePending) { StopChromeGrace(); return; }
+
+            double ms = _chrome.GraceRemainingMs(DateTime.UtcNow);
+            if (ms <= 0) { OnChromeGraceTick(null, EventArgs.Empty); return; }
+
+            if (_chromeGrace == null)
+            {
+                _chromeGrace = new DispatcherTimer(DispatcherPriority.Background, Dispatcher);
+                _chromeGrace.Tick += OnChromeGraceTick;
+            }
+            _chromeGrace.Stop();
+            _chromeGrace.Interval = TimeSpan.FromMilliseconds(ms);
+            _chromeGrace.Start();
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] chrome grace arm failed"); }
+    }
+
+    private void StopChromeGrace()
+    {
+        try { _chromeGrace?.Stop(); }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] chrome grace stop failed"); }
+    }
+
+    private void OnChromeGraceTick(object? sender, EventArgs e)
+    {
+        try
+        {
+            StopChromeGrace();
+            if (Application.Current?.Dispatcher?.HasShutdownStarted != false) return;
+            if (_chrome.Tick(DateTime.UtcNow)) ApplyChrome();
+            else ArmChromeGrace();
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] chrome grace tick failed"); }
+    }
+
+    /// <summary>Paint whatever the region decided, and re-arm the grace if one is now running.</summary>
+    private void ApplyChrome()
+    {
+        _chromeLit = _chrome.Lit;
+        FadeChrome(_chromeLit ? 0.95 : 0.0);
+        ArmChromeGrace();
+    }
+
     private void FadeChrome(double to)
     {
         try
         {
+            bool lit = to > 0;
+
             var a = new DoubleAnimation(to, TimeSpan.FromMilliseconds(140));
             BtnClose.BeginAnimation(OpacityProperty, a);
 
-            // The cards glyph rides the x exactly: same fade, same 140 ms, opposite corner. One
-            // animation object cannot drive two elements, so it gets its own with the same value.
+            // The gear rides the x exactly: same fade, same 140 ms, opposite corner. One animation
+            // object cannot drive two elements, so it gets its own with the same value.
             var c = new DoubleAnimation(to, TimeSpan.FromMilliseconds(140));
-            BtnCards.BeginAnimation(OpacityProperty, c);
+            BtnGear.BeginAnimation(OpacityProperty, c);
+
+            // BOTH CHIPS ARE ONLY HIT-TESTABLE WHILE THEY ARE LIT, and that is not cosmetic. Their
+            // hit areas are chip + 2 x ChipPad DIPs (see ChipPad), which is a 34 DIP square in each
+            // top corner of her at her default width; left permanently hit-testable, those squares
+            // would eat the left click that wave 3 made the pat, in the two corners of her the
+            // pointer arrives at most often. Lit follows the pointer being ON her, so a chip is
+            // reachable exactly when it is visible and inert the rest of the time.
+            BtnClose.IsHitTestVisible = lit;
+            BtnGear.IsHitTestVisible = lit;
 
             // The x is hover-only; the grip is not. It rests faint and goes solid under the
-            // pointer, so a user who has never dragged her still sees where the corner is.
-            var g = new DoubleAnimation(to <= 0 ? GripRestOpacity : 1.0, TimeSpan.FromMilliseconds(140));
+            // pointer, so a user who has never dragged her still sees where the corner is - and it
+            // stays hit-testable at rest for the same reason.
+            var g = new DoubleAnimation(lit ? 1.0 : GripRestOpacity, TimeSpan.FromMilliseconds(140));
             ResizeGrip.BeginAnimation(OpacityProperty, g);
         }
         catch (Exception ex)
@@ -1043,6 +1240,10 @@ public partial class EmiDeskWindow : Window
         {
             RaiseActivity();
             DisarmPet();
+            // Moving her walks the pointer off her silhouette in the first few pixels at any speed
+            // worth calling a drag. Hold the chrome open for the whole gesture, or the x and the
+            // gear vanish the instant she starts to move.
+            ChromeHold(EmiChromeHold.Drag, true);
             _dragging = true;
             _dragMoved = false;
             _dragStartScreen = PointToScreen(e.GetPosition(this));
@@ -1056,6 +1257,7 @@ public partial class EmiDeskWindow : Window
         {
             Log.Debug(ex, "[EmiDesk] body mouse down failed");
             _dragging = false;
+            ChromeHold(EmiChromeHold.Drag, false);
         }
     }
 
@@ -1094,6 +1296,7 @@ public partial class EmiDeskWindow : Window
         {
             if (!_dragging) return;
             _dragging = false;
+            ChromeHold(EmiChromeHold.Drag, false);
             BodyRoot.ReleaseMouseCapture();
             EndWobble();
             e.Handled = true;
@@ -1173,19 +1376,95 @@ public partial class EmiDeskWindow : Window
         }
     }
 
-    /// <summary>The hover glyph: a plain left click on it opens the same ring.</summary>
-    private void OnCardsClick(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// THE GEAR: a plain left click opens her options panel beside her.
+    ///
+    /// <para>It used to be the six-dot cards glyph, and a left click on it toggled the ring. The
+    /// owner read the dots as a move handle and asked for the gear (2026-08-30), so the ring's only
+    /// VISIBLE affordance moved inside the panel as its first action - a right click on her body
+    /// still opens the fan directly and that gesture is untouched.</para>
+    ///
+    /// <para>A ring that happens to be up is folded FIRST. Both surfaces are sibling windows
+    /// anchored on the same body, and two of them open at once is a fan drawn under a panel with
+    /// no way of telling which one a click belongs to.</para>
+    /// </summary>
+    private void OnGearClick(object sender, RoutedEventArgs e)
     {
         try
         {
             if (InputLocked || _transiting) return;
             RaiseActivity();
-            ToggleRingFromGesture();
+
+            if (_options != null && _options.IsOpen) { CloseOptionsPanel(); return; }
+
+            try { CloseRing(); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] fold before options failed"); }
+
+            OpenOptionsPanel();
         }
         catch (Exception ex)
         {
-            Log.Debug(ex, "[EmiDesk] cards glyph failed");
+            Log.Debug(ex, "[EmiDesk] gear failed");
         }
+    }
+
+    // ---- her options panel ----------------------------------------------------
+
+    private EmiOptionsWindow? _options;
+
+    /// <summary>True while her options panel is beside her. Read by the glass before it flips.</summary>
+    public bool OptionsOpen
+    {
+        get
+        {
+            try { return _options?.IsOpen == true; }
+            catch { return false; }
+        }
+    }
+
+    /// <summary>
+    /// Show her options beside her. Built lazily and kept, the way the ring window is: it carries a
+    /// 25-tile pin picker, and rebuilding that on every gear click is a wall of decoded thumbnails
+    /// per open.
+    /// </summary>
+    private void OpenOptionsPanel()
+    {
+        try
+        {
+            if (_options == null)
+            {
+                _options = new EmiOptionsWindow(this);
+                // While the panel is up the chrome stays lit, so the gear that opened it is still
+                // there to close it again after the round trip across the desktop.
+                _options.PanelClosed += (_, _) => ChromeHold(EmiChromeHold.Menu, false);
+                _options.CardsRequested += (_, _) => ToggleRingFromGesture();
+            }
+
+            ChromeHold(EmiChromeHold.Menu, true);
+            _options.OpenPanel();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[EmiDesk] options panel failed to open");
+            ChromeHold(EmiChromeHold.Menu, false);
+        }
+    }
+
+    /// <summary>Fold her options. Idempotent, and safe on a path where the panel was never built.</summary>
+    public void CloseOptionsPanel()
+    {
+        try { _options?.ClosePanel(); }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] options panel close failed"); }
+    }
+
+    /// <summary>Let the panel keep the chrome lit while the pointer is inside it.</summary>
+    internal void HoldChromeForPanel(bool on) => ChromeHold(EmiChromeHold.Menu, on);
+
+    /// <summary>Clear the resize hold, whichever way the drag ended.</summary>
+    private void EndResizeHold()
+    {
+        _resizing = false;
+        ChromeHold(EmiChromeHold.Resize, false);
     }
 
     /// <summary>
@@ -1283,6 +1562,11 @@ public partial class EmiDeskWindow : Window
         try
         {
             RaiseActivity();
+            // THE ONE THAT MADE THE GRIP UNUSABLE. Growing her means dragging the corner DOWN AND
+            // RIGHT, away from her, so the pointer is off BodyRoot within a few pixels and the old
+            // leave-then-fade dropped the handle the user was holding back to GripRestOpacity
+            // mid-gesture. The hold outlives the pointer.
+            ChromeHold(EmiChromeHold.Resize, true);
             _resizing = true;
             _resizeStartScreen = PointToScreen(e.GetPosition(this));
             _resizeStartWidth = _bodyWidth;
@@ -1293,6 +1577,7 @@ public partial class EmiDeskWindow : Window
         {
             Log.Debug(ex, "[EmiDesk] grip mouse down failed");
             _resizing = false;
+            ChromeHold(EmiChromeHold.Resize, false);
         }
     }
 
@@ -1318,7 +1603,7 @@ public partial class EmiDeskWindow : Window
         if (!_resizing) return;
         try
         {
-            _resizing = false;
+            EndResizeHold();
             ResizeGrip.ReleaseMouseCapture();
             e.Handled = true;
             ClampIntoWorkArea();
@@ -1359,6 +1644,11 @@ public partial class EmiDeskWindow : Window
         try
         {
             _closingForGood = true;
+            // Her options panel is a sibling window with two live hooks and a subscription to
+            // this window's own Moved/Resized. It has to go before she does.
+            try { _options?.Kill(); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] options kill failed"); }
+            _options = null;
             StopIdleBeats();
             StopAlive();
             DisarmPet();
@@ -1380,6 +1670,11 @@ public partial class EmiDeskWindow : Window
         try
         {
             _closingForGood = true;
+            // Her options panel is a sibling window with two live hooks and a subscription to
+            // this window's own Moved/Resized. It has to go before she does.
+            try { _options?.Kill(); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] options kill failed"); }
+            _options = null;
             StopIdleBeats();
             StopAlive();
             DisarmPet();
