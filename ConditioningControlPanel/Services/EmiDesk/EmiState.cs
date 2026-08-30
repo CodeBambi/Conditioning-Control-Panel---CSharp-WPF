@@ -150,6 +150,24 @@ public sealed class EmiState
     /// </summary>
     [JsonProperty("toursDone")] public List<string> ToursDone { get; set; } = new();
 
+    // ---- the book (Ask EMI, wave 2) --------------------------------------------
+
+    /// <summary>
+    /// THE BOOKMARK: the codex chapter she last had open, or null. Restored on open, so the book
+    /// falls open where it was left.
+    ///
+    /// <para>A chapter ID, never an index. The chapters are merged from two writers and volumes IV
+    /// to VI are still to come, so an index would silently point at a different chapter the day a
+    /// volume grew. An id that no longer exists is ignored by both readers.</para>
+    /// </summary>
+    [JsonProperty("codexChapter")] public string? CodexChapter { get; set; }
+
+    /// <summary>
+    /// How many times the book has EVER been opened, by any route. Read by
+    /// <see cref="EmiCodex.MaybeOffer"/>: she does not offer a book you have already been reading.
+    /// </summary>
+    [JsonProperty("codexOpens")] public int CodexOpens { get; set; }
+
     // ---- onboarding (the nudge machine, wave 3) --------------------------------
 
     /// <summary>
@@ -605,6 +623,30 @@ public sealed class EmiState
         catch (Exception ex)
         {
             Log.Warning(ex, "[EmiDesk] knock reset failed");
+        }
+    }
+
+    // ---- the book (Ask EMI, wave 2) -------------------------------------------
+
+    /// <summary>
+    /// The book was opened. Bumps the lifetime counter that retires her offer.
+    ///
+    /// <para>Counted at the OPEN, not at a chapter turn: somebody who opened the book and shut it
+    /// again has still seen that it exists, which is the only thing the offer was ever for.
+    /// Debounced - unlike the knock, nothing here re-fires when a launch is killed mid-write, and
+    /// the worst a lost write costs is one more offer.</para>
+    /// </summary>
+    public static void NoteCodexOpened()
+    {
+        try
+        {
+            var s = Current;
+            s.CodexOpens++;
+            SaveSoon();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] NoteCodexOpened failed");
         }
     }
 

@@ -1753,6 +1753,23 @@
         "per": "ever",
         "max": 1
       }
+    },
+    "bookOffer": {
+      "pools": [
+        "bookOffer"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 1.0,
+      "scripted": true,
+      "limit": {
+        "per": "ever",
+        "max": 1
+      }
     }
   },
   "pools": {

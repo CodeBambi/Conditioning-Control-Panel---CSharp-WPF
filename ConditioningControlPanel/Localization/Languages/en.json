@@ -5254,6 +5254,7 @@
   "emi_desk_target_sessions": "Sessions",
   "emi_desk_target_flashes": "Flashes",
   "emi_desk_target_videos": "Videos",
+  "emi_desk_target_codex": "The Book",
   "emi_desk_target_dtrh": "Rabbit Hole",
   "emi_desk_target_intake": "Intake",
   "emi_desk_target_subliminals": "Subliminals",
@@ -5286,5 +5287,18 @@
   "emi_desk_ring_reset": "Let her choose",
   "emi_desk_ring_count": "{0} of {1} pinned. Whatever you leave off, she picks from what you use.",
   "emi_desk_ring_full": "Six is the whole ring. Unpin one to swap it.",
-  "emi_desk_ring_tile_locked": "Not open to you yet."
+  "emi_desk_ring_tile_locked": "Not open to you yet.",
+  "_comment_emi_codex": "EMI's book: the codex window (Services/EmiDesk/EmiCodex.cs, Windows/EmiCodexWindow). English only for now, per owner call 3.",
+  "emi_codex_title": "The Book",
+  "emi_codex_plain_heading": "The plain copy",
+  "emi_codex_plain_note": "This is the book as plain text.",
+  "emi_codex_why_runtime": "The illustrated book needs the WebView2 runtime, and it is not installed here. This is the same text, plain.",
+  "emi_codex_why_bundle": "The illustrated book is not part of this build yet. This is the same text, plain.",
+  "emi_codex_why_navigation": "The illustrated book would not load. This is the same text, plain.",
+  "emi_codex_why_process": "The illustrated book stopped responding. This is the same text, plain.",
+  "emi_codex_empty": "The book is not in this build. Everything in it is on the website manual.",
+  "emi_codex_volume": "Volume {0}",
+  "emi_codex_limit_label": "Worth knowing",
+  "emi_codex_open_site": "Open the manual on the web",
+  "emi_codex_close": "Close"
 }
