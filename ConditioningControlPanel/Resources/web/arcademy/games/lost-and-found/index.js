@@ -1654,12 +1654,6 @@ export default {
           // the chrome vocabulary rides the game's clamped helper, never the engine
           cue,
         });
-        // The press-road diet (styles.js) is gated on a class THIS game arms -
-        // html.ae-touch's global arming belongs to the shell and is under
-        // audit (0830); a diet the phone may never wear is no diet.
-        try {
-          if (touch && hud.root && hud.root.classList) hud.root.classList.add('g-lf-touch');
-        } catch (e) { /* cosmetic only */ }
         // Deliberately AFTER createHud: on touch the deal is capped by the
         // view's real height (the touch tile floor), and only the mounted view
         // knows it. Nothing before this line reads density, and createHud

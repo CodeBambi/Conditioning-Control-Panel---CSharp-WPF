@@ -460,6 +460,11 @@ export const CSS = [
      the sheet's two hint loops freeze at their LIT frame. Desktop untouched. */
   /* The hue skin: one filtered render surface per seat, x2-3 wrap clones. */
   'html.ae-touch .g-lf-skin { filter:none; }',
+  /* The sheen: one compositor animation per tile ELEMENT - 106 of them on a
+     t3 phone board (measured 0830). The dense wall already drops it past
+     SHEEN_MAX_DENSITY; a phone board is always the dense wall in spirit. */
+  'html.ae-touch .g-lf-tile::after { display:none; }',
+  'html.ae-touch .g-lf-tile { contain:paint; }',
   /* Frosted chrome turns solid - a live blur behind glass is the phone tax. */
   'html.ae-touch .g-lf-hud .chip { backdrop-filter:none; -webkit-backdrop-filter:none;',
   '  background:rgba(20,20,43,.94); }',
@@ -492,30 +497,6 @@ export const CSS = [
   '  html.ae-touch .g-lf-ghost.g-lf-ghost-lure,',
   '  html.ae-touch .g-lf-mq.g-lf-mq-flash { animation:none !important; } }',
 
-  /* --------------- THE PRESS-ROAD DIET (.g-lf-touch, game-armed) -----------
-     Gated on OUR OWN class: index.js puts .g-lf-touch on the wrap from the
-     same `touch` probe the board's press road uses. The html.ae-touch ceiling
-     above stays as-is, but its GLOBAL arming belongs to the shell/device
-     layer and is under audit (0830) - a diet the phone may never wear is no
-     diet, so everything the phone must not pay for is said again on a class
-     this game provably arms. Desktop never carries it: nothing below exists
-     there, and the rules repeat the shipped ae-touch values verbatim wherever
-     both fire, so double-arming changes nothing. */
-  /* The sheen is one compositor animation per tile ELEMENT - 106 of them on a
-     t3 phone board (measured 0830). The dense wall already drops it past
-     SHEEN_MAX_DENSITY; a phone board is always the dense wall in spirit. */
-  '.g-lf-touch .g-lf-tile::after { display:none; }',
-  '.g-lf-touch .g-lf-tile { contain:paint; }',
-  /* Twins of the ae-touch ceiling, same values (see that block above). */
-  '.g-lf-touch .g-lf-skin { filter:none; }',
-  '.g-lf-touch .g-lf-hud .chip { backdrop-filter:none; -webkit-backdrop-filter:none;',
-  '  background:rgba(20,20,43,.94); }',
-  '.g-lf-touch .g-lf-foot .arc-peekbtn { backdrop-filter:none; -webkit-backdrop-filter:none;',
-  '  background:rgba(37,37,66,.97); }',
-  '.g-lf-touch .g-lf-foot .chip { backdrop-filter:none; -webkit-backdrop-filter:none;',
-  '  background:rgba(20,20,43,.94); }',
-  '.g-lf-touch .g-lf-dim { backdrop-filter:none; -webkit-backdrop-filter:none;',
-  '  background:rgba(20,20,43,.78); }',
 ].join('\n');
 
 /** Inject once per document. Idempotent - re-entering the class is free. */
