@@ -2182,8 +2182,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
            * is torn down and rebuilt on every visit, so a purchase settled at
            * the counter is wearing by the time the player is back on the quad.
            * `lite` gates the cosmetics ONLY (walk.js keeps walking under
-           * performance mode - it refuses to mint the spark pool and the
-           * afterimages, nothing more). */
+           * performance mode - it refuses to mint the afterimages, and it
+           * THINS the spark pool rather than dropping it, house doctrine:
+           * lite keeps the move and drops the particle count). Only
+           * reducedMotion deletes the sparks outright. */
           lite: !!src.performanceMode,
           cosmetics: {
             awayColors: ownsSku('away_colors'),
