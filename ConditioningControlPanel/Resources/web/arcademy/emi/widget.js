@@ -421,6 +421,54 @@ export function toyLineIndex(day) {
 }
 
 /* ============================================================================
+ * THE THINGS SHE HOLDS (idle beat)
+ * ==========================================================================*/
+/** THE PLATES ARE DRAWN FROM BEHIND, and that is the whole design. The first
+ *  pass drew them front-on, the way a shop icon is drawn, and they read as
+ *  props being SHOWN to the viewer. She is looking at them, not us (owner,
+ *  2026-08-30), so every plate is the back of a thing EMI is reading: a blank
+ *  phone shell, the back of a clipboard, the reverse of a card.
+ *
+ *  THERE IS NO HOLD POSE AND THERE IS NOT GOING TO BE ONE. Two body frames
+ *  (`body-hold`, `body-reach`) were generated for this and rejected as
+ *  off-model - her arms are four-pixel stubs and every attempt to bend one
+ *  into a grip changed the silhouette. The plate lands on top of the RIGHT
+ *  hand that is already there, hides it, and lets the eye do the gripping;
+ *  widget.css `.emi-prop` holds the anchor and the reason it can be one fixed
+ *  corner rather than a per-pose table.
+ *
+ *  Every number below is also in `Services/EmiDesk/EmiProps.cs`, the desk's
+ *  copy of this layer. Change one, change the other. */
+export const PROP_DIR = './art/emi/props/';
+/** `./art/emi/props/phone.png` ... PURE. */
+export function propSrc(key) { return PROP_DIR + String(key) + '.png'; }
+/** A plate is sized by ONE dimension and keeps its own aspect for the other.
+ *  `h` is a fraction of her HEIGHT, `w` a fraction of her WIDTH - the punch
+ *  card is wider than it is tall and a height fraction would run it off the
+ *  side of the frame. `tilt` is degrees clockwise about the hand. */
+export const PROPS = Object.freeze([
+  Object.freeze({ key: 'phone', h: 0.26, tilt: 7 }),
+  Object.freeze({ key: 'clipboard', h: 0.285, tilt: 6 }),
+  Object.freeze({ key: 'punchcard', w: 0.25, tilt: 4 }),
+]);
+/** One prop by name, or null for junk. PURE. */
+export function propFor(key) {
+  const k = typeof key === 'string' ? key : '';
+  for (let i = 0; i < PROPS.length; i += 1) if (PROPS[i].key === k) return PROPS[i];
+  return null;
+}
+/** How long she holds it. Deliberately longer than a blink: a plate that
+ *  flashes on and off reads as a glitch rather than as her checking
+ *  something. */
+export const PROP_HOLD_MS = 2600;
+/** How far apart the beats are. Rare on purpose - it is the biggest thing she
+ *  does at rest and the fifth time you notice it, it stops being alive. */
+export const PROP_EVERY_MS = 34000;
+/** Eyes down and half-lidded: she is not talking to you, she is looking at the
+ *  thing in her hand. */
+export const PROP_FACE = '-_-';
+
+/* ============================================================================
  * THE PRIZE BAG (Counter Stock)
  * ==========================================================================*/
 /**
@@ -853,6 +901,22 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     toy.setAttribute('aria-hidden', 'true');
   }
 
+  /* THE THING SHE IS HOLDING (see the PROPS block). Same arrangement as the
+   * desk toy and the overlay sheet: minted at birth, hidden at rest, `src`
+   * left unset so a sitting with no idle beat in it never fetches a plate. */
+  const prop = document.createElement('img');
+  prop.className = 'emi-prop';
+  prop.alt = '';
+  prop.draggable = false;
+  prop.hidden = true;
+  if (prop.setAttribute) {
+    prop.setAttribute('draggable', 'false');
+    /* IT IS A PROP, NOT A CONTROL - and unlike the desk toy it is not even
+     * pointer-reachable (widget.css gives it `pointer-events: none`), so it can
+     * never eat a click meant for her body. */
+    prop.setAttribute('aria-hidden', 'true');
+  }
+
   const canvas = document.createElement('canvas');
   canvas.className = 'emi-screen';
 
@@ -893,6 +957,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   el.appendChild(toy);           // COUNTER STOCK (z1: over the body, under the fx)
   el.appendChild(canvas);
   el.appendChild(over);          // THE OVERLAY SHEET (z2: over the face canvas)
+  el.appendChild(prop);          // THE HELD PROP (z2, after `over`: nearer the camera than a garment)
   el.appendChild(fxHost);
   el.appendChild(bubble);
   el.appendChild(askStrip);      // ASKS
@@ -1764,6 +1829,75 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     swayTimer = setTimeout(step, swayHold('idle'));
   }
 
+  /* ---------------------- the held prop ---------------------------------
+   * THE IDLE BEAT: she checks something. A plate comes up at her right hand,
+   * she wears the reading face for a couple of seconds, and it goes away. It
+   * is the biggest thing she does at rest, so it is also the rarest.
+   *
+   * It runs on the SAME terms as the sway: only at rest, stopped by anything
+   * that takes the glass, and it never speaks. `idle()` is the only thing that
+   * starts it, and `idle()` is also what tears it down - which is what makes
+   * "a chain cannot leave her holding a phone" true by construction, because
+   * every path that takes her face funnels back through `idle()`. */
+  let propTimer = null;
+  let propKey = null;
+  let lastProp = '';
+  function stopPropBeat() {
+    if (propTimer !== null) { clearInterval(propTimer); propTimer = null; }
+  }
+  /** Put a plate in her hand. Junk names and missing art are the same silent
+   *  no - art is allowed to arrive after the code does. */
+  function showProp(key) {
+    const p = propFor(key);
+    if (!p) return false;
+    propKey = p.key;
+    /* Size on ONE axis and let the plate keep its own aspect on the other. */
+    prop.style.height = p.h ? (p.h * 100) + '%' : 'auto';
+    prop.style.width = p.w ? (p.w * 100) + '%' : 'auto';
+    try {
+      if (prop.style && typeof prop.style.setProperty === 'function') {
+        prop.style.setProperty('--emi-prop-tilt', p.tilt + 'deg');
+      }
+    } catch (e) { /* noop */ }
+    if (prop.getAttribute('src') !== propSrc(p.key)) prop.src = propSrc(p.key);
+    prop.hidden = false;
+    /* One frame between "displayed" and "up" or the transition never runs: a
+     * node that is un-hidden and classed in the same tick has no start state
+     * to travel from. */
+    later(() => { if (propKey === p.key) prop.classList.add('up'); }, 16);
+    return true;
+  }
+  /** Take it away. Idempotent, and safe from any interruption. */
+  function hideProp() {
+    propKey = null;
+    prop.classList.remove('up');
+    prop.hidden = true;
+  }
+  /** Which one tonight is a plain roll, minus the one she did last: the same
+   *  object twice running reads as a loop rather than as a habit. */
+  function nextProp() {
+    if (!PROPS.length) return null;
+    let pick = lastProp;
+    for (let guard = 0; guard < 8 && pick === lastProp; guard += 1) {
+      pick = PROPS[Math.floor(Math.random() * PROPS.length)].key;
+    }
+    lastProp = pick;
+    return pick;
+  }
+  function startPropBeat() {
+    stopPropBeat();
+    if (hidden || !enabled) return;
+    propTimer = setInterval(() => {
+      if (busy() || hidden || !enabled || dragging) return;
+      if (!showProp(nextProp())) return;   // no art: never put the reading face on nothing
+      drawFace(PROP_FACE, {});
+      later(() => {
+        hideProp();
+        if (!busy() && !dragging && !hidden && enabled) drawFace(IDLE_FACE, {});
+      }, PROP_HOLD_MS);
+    }, PROP_EVERY_MS);
+  }
+
   function drawFace(text, o) {
     if (!painter || typeof painter.draw !== 'function') return;
     try { painter.draw(String(text == null ? '' : text), o || {}); }
@@ -2019,6 +2153,8 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     killTimers();
     stopBlink();
     stopSway();
+    stopPropBeat();
+    hideProp();
     setBubble(null);
     clearBody();
     // ARMS DOWN AT REST. This runs even faceless: the body png is the half of
@@ -2034,6 +2170,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       emitGesture('blinkIdle');
     }, DIALS.BLINK_EVERY_MS);
     startSway();
+    startPropBeat();
   }
 
   /* ---------------------- gestures (the voice's ear) --------------------
@@ -3991,6 +4128,13 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     setBodyFrame,
     /** Which pose is up right now. */
     get bodyFrame() { return bodyFrame; },
+    /** Put a plate in her hand (a key of PROPS), or take it off with null.
+     *  TEST/HOST SEAM ONLY: the idle beat drives this on its own and nothing
+     *  in the campus calls it. It is here so a proof rig can hold a prop still
+     *  for a screenshot instead of waiting 34 seconds for one. */
+    setProp(key) { return key == null ? (hideProp(), false) : showProp(key); },
+    /** Which prop is in her hand right now, or null. */
+    get prop() { return propKey; },
     /* ---- COUNTER STOCK: the two EMI prizes ----------------------------- */
     /**
      * WHAT THE PLAYER OWNS. The shell hands this down at mount and hands it

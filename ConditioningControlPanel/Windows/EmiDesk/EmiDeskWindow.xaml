@@ -33,6 +33,7 @@
             BodyImage the pose PNG
             FaceLayer the face canvas and, over it, the glass (chunk B3 paints into GlassHost)
             OutfitOverImage the garment's own art, ABOVE the face and the glass (THE SKIN LAW)
+            PropImage the thing she is holding, nearer the camera than the garment
             BtnClose  the hover x
             BtnGear   the hover gear (opens her options; her cards live in there too)
             ResizeGrip the corner handle
@@ -111,6 +112,36 @@
                    Visibility="Collapsed"
                    IsHitTestVisible="False"
                    RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+
+            <!-- THE THING SHE IS HOLDING (idle beat). One plate at her right hand - a phone, a
+                 clipboard, a punch card - shown for a couple of seconds by a fidget and taken
+                 straight back off. See Services/EmiDesk/EmiProps.cs for the anchor, the sizes and
+                 why the plates are drawn from BEHIND.
+
+                 IT DRAWS OVER THE GARMENT, and that is not a breach of THE SKIN LAW. The law says
+                 no face art may bury a skin; a held object is not face art and it is not a skin -
+                 it is nearer the camera than she is, so a clipboard held up in front of a labcoat
+                 covers the labcoat exactly as it should. The chrome below still draws over it.
+
+                 Sibling of BodyImage inside BodyRoot, so the CRT squash, the click squash, the drag
+                 wobble and the move offsets carry it for free. Its own two transforms are private
+                 to it: PropTilt is the few degrees of hold (about the bottom-right corner, which is
+                 the hand - hence RenderTransformOrigin="1,1"), PropRise is the slide up out from
+                 behind her. Geometry comes from EmiDeskWindow.LayoutProp; nothing here is real. -->
+            <Image x:Name="PropImage"
+                   HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                   Stretch="Fill"
+                   Visibility="Collapsed"
+                   IsHitTestVisible="False"
+                   RenderTransformOrigin="1,1"
+                   RenderOptions.BitmapScalingMode="NearestNeighbor">
+                <Image.RenderTransform>
+                    <TransformGroup>
+                        <RotateTransform x:Name="PropTilt" Angle="0"/>
+                        <TranslateTransform x:Name="PropRise"/>
+                    </TransformGroup>
+                </Image.RenderTransform>
+            </Image>
 
             <!-- THE TWO CHIPS, and why each one is now a chip inside a bigger button.
 

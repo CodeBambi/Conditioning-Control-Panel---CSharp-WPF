@@ -385,6 +385,76 @@
  * An outfit with no overlay sheet leaves this node hidden for the sitting. */
 .arc-emi .emi .emi-over[hidden] { display: none !important; }
 
+/* ---- the thing she is holding -------------------------------------------
+ * ONE PLATE AT HER RIGHT HAND, up for a couple of seconds during an idle beat
+ * and gone again: the phone, the clipboard, the punch card. The plates are
+ * drawn FROM BEHIND, because she is looking at them and we are not (owner,
+ * 2026-08-30) - what the viewer gets is the back of a thing EMI is reading.
+ *
+ * THERE IS NO HOLD POSE. Two body frames were drawn for this and rejected as
+ * off-model: her arms are four-pixel stubs and bending one into a grip changed
+ * her silhouette. So the plate lands ON TOP of the right hand that is already
+ * there, hides it, and lets the eye do the gripping. That is also why the
+ * anchor is one fixed corner and not a per-pose table - the RIGHT arm sits in
+ * the same place in all ten poses (the left arm and the antenna are the ones
+ * that move), so one anchor is honest for the whole set, sway included.
+ *
+ * THE ANCHOR IS THE RIGHT HAND AND THE DESK TOY OWNS THE LEFT. `.emi-toy`
+ * docks at `left:-6%`; a held prop on that side would sit on a prize the player
+ * paid for. The two never share a corner.
+ *
+ * z2, appended AFTER `.emi-over`: a thing in her hand is nearer the camera than
+ * the garment she is wearing, so a clipboard held up in front of a labcoat
+ * covers the labcoat. It is still UNDER `.emi-fx` (also 2, appended after this
+ * one), so her hands and sparks come out in front of it - which is what a hand
+ * reaching past a held object should do.
+ *
+ * THE INVARIANT, twin of the toy's: the plate's TOP stays below the glass,
+ * which emi.css pins to 29.46% + 37.63% = 67.09%. `bottom: 9.5%` puts the plate
+ * bottom at 90.5%, so the tallest of the three (the clipboard at 28.5% of her
+ * height) tops out at 62% - clear. Any retune of `bottom` or of a size in
+ * Services/EmiDesk/EmiProps.cs has to keep that sum under 67.09.
+ *
+ * EVERY NUMBER HERE IS ALSO IN EmiProps.cs, which is the desk's copy of this
+ * layer. Change one, change the other.
+ * ======================================================================== */
+.arc-emi .emi .emi-prop {
+  position: absolute;
+  right: 3.5%;
+  bottom: 9.5%;
+  z-index: 2;
+  pointer-events: none;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  display: block;
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+  /* The hand is the bottom-right corner, so that is what the tilt turns about.
+     A prop hanging dead vertical reads as pasted on; a few degrees reads as
+     held. widget.js sets the two custom properties per prop. */
+  transform-origin: 100% 100%;
+  transform: rotate(var(--emi-prop-tilt, 0deg)) translateY(var(--emi-prop-rise, 55%));
+  opacity: 0;
+  transition: transform 220ms cubic-bezier(.2,.7,.3,1), opacity 200ms linear;
+}
+/* SHE LIFTS IT OUT FROM BEHIND HERSELF rather than having it appear, which is
+   the whole difference between a prop and a popup. */
+.arc-emi .emi .emi-prop.up {
+  --emi-prop-rise: 0%;
+  opacity: 1;
+}
+/* Trap 27 once more: `[hidden]` is a user-agent rule and the block above is
+   not, so the plate hides its own node. */
+.arc-emi .emi .emi-prop[hidden] { display: none !important; }
+
+/* REDUCED MOTION: she still checks the thing, it simply does not slide up.
+   Both readings, like the toy's bob, because widget.js honours both. */
+@media (prefers-reduced-motion: reduce) {
+  .arc-emi .emi .emi-prop { transition: none; --emi-prop-rise: 0%; }
+}
+:root.arc-reduced .arc-emi .emi .emi-prop { transition: none; --emi-prop-rise: 0%; }
+
 /* ---- the dock -----------------------------------------------------------
  * Where a dismissed EMI lives. Semi-transparent so it never competes with the
  * board, full strength the moment it is aimed at. */
