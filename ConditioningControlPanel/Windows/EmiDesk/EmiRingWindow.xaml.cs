@@ -408,16 +408,15 @@ public partial class EmiRingWindow : Window
             _open = false;
             _hotPx = Array.Empty<Rect>();
 
+            // The bookkeeping IS the close, so it happens now rather than when the animation ends:
+            // a handler that counts dismissals and a caller that reads IsOpen straight after us
+            // can then never disagree about when the ring shut. (It also keeps the pick honest -
+            // the target's Open() is invoked by OnCardPicked the moment we return, and never waits
+            // for the fold.) Symmetrical with "ring open" at Information now: logging one half of
+            // every toggle at Debug meant the file sink showed opens with no closes (primer 9).
             if (!_closeAnnounced)
             {
-            _closeAnnounced = true;
-
-            // The bookkeeping IS the close, so it happens now rather than when the animation ends:
-            // a handler that counts dismissals and a caller that reads IsOpen straight after us can
-            // then never disagree about when the ring shut. (It also keeps the pick honest - the
-            // target's Open() is invoked by OnCardPicked the moment we return, and never waits for
-            // the fold.) Symmetrical with "ring open" at Information: logging one half of every
-            // toggle at Debug meant the file sink showed opens with no closes (primer 9).
+                _closeAnnounced = true;
                 Log.Information("[EmiDesk] ring closed (picked={Picked})", PickedThisOpening);
                 try { RingClosed?.Invoke(this, PickedThisOpening); }
                 catch (Exception ex) { Log.Debug(ex, "[EmiDesk] RingClosed handler threw"); }
