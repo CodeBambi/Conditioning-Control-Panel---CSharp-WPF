@@ -989,9 +989,15 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
    *
    * ONE PROBE PER OUTFIT AND THE ANSWER IS FINAL, exactly like the varsity
    * jacket: an outfit with no overlay sheet (labcoat, cheer, varsity, the
-   * standard set) costs one 404 for the sitting and nothing after it. */
+   * standard set) costs one 404 for the sitting and nothing after it.
+   *
+   * AND IT IS NOT A ONE-SHEET PATH, whatever the file list says today. Every
+   * verdict below is keyed by the PROBE URL, so four sheets can be armed, cached
+   * and refused independently - the only thing that was ever written for one
+   * wardrobe is the node's decoded frame, and `paintOver` now says so out loud. */
   let overSet = null;                       // the live overlay map, or null
   let overSrcNow = '';                      // what is actually on the node
+  let overSetNow = null;                    // ...and the SET that url came out of
   const overState = Object.create(null);    // probe url -> 'probing'|'on'|'failed'
   const overWant = Object.create(null);     // ...and the map it answers for
 
@@ -1005,10 +1011,28 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   /** Lay the overlay for the pose that is up, or take it off. */
   function paintOver() {
     const u = overUrl(bodyFrame);
-    if (!u) { over.hidden = true; return; }
+    if (!u) { over.hidden = true; overSetNow = null; return; }
     if (u !== overSrcNow) {
+      /* A WARDROBE SWAP MAY NOT FLASH THE SHEET SHE JUST TOOK OFF. An <img>
+       * keeps painting the frame it has already decoded until the new `src`
+       * decodes, and the line below un-hides the layer in the same statement -
+       * so going from one overlay sheet to another paints the OLD outfit's
+       * glass art over her face for a frame or two. That was unreachable while
+       * exactly ONE sheet existed (the other three had nothing to flash) and is
+       * a stranger's goggles the day a second one ships.
+       *
+       * A POSE STEP IS NOT A SWAP. `preloadOver` has all ten frames of the sheet
+       * she is wearing in the cache, so walking the sway inside one set decodes
+       * on the spot and must never blink; only a change of SET stands the layer
+       * down, and only until the new frame reports itself decoded. */
+      const swapped = overSet !== overSetNow;
       overSrcNow = u;
+      overSetNow = overSet;
       try { over.src = u; } catch (e) { /* noop */ }
+      if (swapped && !(over.complete && over.naturalWidth > 0)) {
+        over.hidden = true;                 // the `load` listener brings it back
+        return;
+      }
     }
     over.hidden = false;
   }
@@ -1075,8 +1099,18 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       overState[overSet.idle] = 'failed';
       overSet = null;
       overSrcNow = '';
+      overSetNow = null;
       over.hidden = true;
       say('emi: an outfit overlay frame is missing - the layer stands down');
+    });
+    /* THE OTHER HALF OF THE SWAP GUARD (see `paintOver`). The layer comes back
+     * up when the sheet she is wearing NOW has actually decoded - a `load` for
+     * a url she has already moved off is somebody else's frame and is ignored. */
+    over.addEventListener('load', () => {
+      if (!overSet || !overSrcNow) return;
+      const on = over.getAttribute ? over.getAttribute('src') : overSrcNow;
+      if (on !== overSrcNow) return;
+      over.hidden = false;
     });
   }
 

@@ -3338,6 +3338,41 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     lower the trickster's rate on a class with no cameo. `freeze()` tears the cameo down
     ITSELF before `cam('pause')`, or `onDone('cancel')` would deal on top of `thaw()`'s re-deal.
 
+142. **THE FACE IS THE FLOOR OF HER STACK, NOT ITS CEILING - AND THE OUTFIT ART INSIDE THE
+    BEZEL IS GONE, NOT BURIED (owner, 2026-08-30: "the coat behind the screen, it should be
+    over it").** Trap 137 ruled that an outfit which draws on the glass needs an
+    `over-<pose>.png`. This is how far that actually goes, measured. `install_outfits.py` did
+    not paste back the GLASS rect - it pasted back the screen AND THE BEZEL, a block running
+    about x271..679, y231..608 of the 859x869 canvas (per pose: `body` 272..679/231..607,
+    `idle` and the four sways 271..679/233..608, `pet` and `sad` 274..678/232..605, `shock`
+    274..677/233..604, `smug` 273..677/232..605). Inside it ALL FORTY shipped outfit frames -
+    varsity, labcoat, cheer, swim, ten poses each - are BYTE-IDENTICAL to `art/emi/body-*.png`,
+    and they already were at the install commit (`1ccb2012a`), so there is nothing to recover
+    from the sprite and no un-pasted original anywhere in history. Measured on labcoat
+    `body-idle`: the coat is a solid 72px white column at x=270 and again at x=679, and
+    EXACTLY ZERO white pixels across x271..678 - a shape cut dead flat at both edges of the
+    block. What the owner is seeing is a collar that was ERASED, not a collar that lost a
+    z-fight, and no amount of layering brings it back.
+    THE RULE HAS TWO HALVES. (a) The wardrobe is the topmost thing in her composition bar her
+    own hands (`.emi-fx`) and her words: `.emi-over` is z2, the takeover channels (`.emi-glass`)
+    are z1, and `.emi-screen` now carries an explicit `z-index: 0` so the FACE CANVAS SITS
+    UNDER THE GARMENT BY RULE rather than by `appendChild` order. Never raise the canvas, and
+    never cure a buried prop by re-ordering the DOM. (b) The only road back for the other three
+    sheets is NEW ART: one `over-<pose>.png` per pose, same 859x869 canvas, transparent
+    everywhere except the part of the garment that falls inside that block. The swim sheets are
+    the reference - RGBA, 10-12KB, and 100% of their opaque pixels land inside it. Do not trace
+    it out of the sprite; there is nothing there to trace.
+    AND THE OVERLAY PATH IS NOT A SWIM PATH, though swim is the only sheet that has ever run
+    it. Every verdict in `armOver` is keyed by the PROBE URL, so four wardrobes arm, cache and
+    refuse independently - but `paintOver` used to assign the new `src` and un-hide the node in
+    the same statement, and an `<img>` keeps painting the frame it has already decoded. Harmless
+    with one sheet in the bundle; the OLD outfit's prop on her face for a frame or two the day a
+    second one ships. A change of SET now stands the layer down until the new frame reports
+    itself decoded, while a pose step inside one set never blinks (`preloadOver` already holds
+    its ten frames). Proved in a real browser, because a DOM double cannot see a composite: the
+    swim goggles render as the GARMENT over a `0_0` face, and the swim bytes served at
+    labcoat's `over-` url light a SECOND outfit's layer end to end.
+
 ## 5. The game module contract (short version)
 
 ```js
