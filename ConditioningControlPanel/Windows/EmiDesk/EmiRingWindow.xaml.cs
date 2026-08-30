@@ -45,14 +45,57 @@ public partial class EmiRingWindow : Window
     /// Card size in DIPs. The pitch demo drew 76 x 58 on a browser stage a foot from your face;
     /// on a real desktop at a 220 DIP body that read as six postage stamps thrown across the
     /// screen, so the owner sized them up on the first live run (QA 2026-08-29).
+    ///
+    /// <para>Grown again on the third ("text on the EMI circle cards is too small"): the card is
+    /// sized off the LABEL now rather than the other way round. See <see cref="CardLabelFont"/>
+    /// for the arithmetic - 136 is the narrowest card that holds the longest word in the
+    /// catalogue on one line at the new size, at every DPI the app ships on.</para>
     /// </summary>
-    public const double CardW = 112.0;
+    public const double CardW = 136.0;
 
     /// <inheritdoc cref="CardW"/>
-    public const double CardH = 84.0;
+    public const double CardH = 102.0;
 
-    /// <summary>The card label's font. Press Start 2P, one step up with the bigger card.</summary>
-    private const double CardLabelFont = 8.0;
+    /// <summary>
+    /// The card label's font, in DIPs.
+    ///
+    /// <para>TWO THINGS WERE WRONG HERE, and only one of them was the number. The family was built
+    /// by NAME (<c>new FontFamily("Press Start 2P, Consolas, ...")</c>), and Press Start 2P is
+    /// SHIPPED, not installed - a name lookup only ever sees installed faces, so every label on
+    /// the ring was falling through to Consolas. Consolas advances 0.55 em per character against
+    /// Press Start 2P's 1.0, so the strip was drawing at barely half the width the 8 DIP was
+    /// chosen for, in the wrong typeface. It goes through <see cref="EmiFace.PixelFont"/> now,
+    /// which is the resolver the bubble, the offer chips and the dock pill already use.</para>
+    ///
+    /// <para>Then the size. Press Start 2P is drawn on an 8-unit em, so 8 DIP is the only size at
+    /// which one design pixel is exactly one DIP - and the next rung up that ladder is 16, which
+    /// wants a 250 DIP card. So this follows the house's own written practice instead (EmiFace:
+    /// "use it at whole pixel sizes", and the offer chips already ship at 7): a whole DIP size,
+    /// with <c>TextFormattingMode.Display</c> on the strip so the glyph advances are rounded to
+    /// whole DEVICE pixels instead of being sub-pixel positioned. That, and Layout()'s whole-pixel
+    /// card origins, is what keeps the cells on the grid at 125 % as well as at 100 %.</para>
+    ///
+    /// <para>THE FIT, which is what sets <see cref="CardW"/>. Every glyph advances exactly 1 em,
+    /// so an n-character label is n x CardLabelFont DIPs wide and the strip has
+    /// <c>CardW - 2*border - 2*CardSeam - 2*LabelPadX</c> to put it in. The longest WORD in the
+    /// catalogue is "Subliminals" (11) and the longest LABEL is "The Arcademy" (12, which breaks
+    /// at its space onto two lines - that is fine, a mid-WORD break is not); all 9 language files
+    /// carry the same English labels today. At 10 DIP, 11 characters want 110 DIPs and a PINNED
+    /// card - the 4 DIP frame, the worst case - offers 118. Rounded up to whole device pixels the
+    /// same word measures 143 px at 125 %, 165 at 150 %, 198 at 175 % and 200 at 200 %: 114, 110,
+    /// 113 and 100 DIPs. All four clear 118, so the longest word never breaks mid-word on any
+    /// scale the app ships on.</para>
+    /// </summary>
+    private const double CardLabelFont = 10.0;
+
+    /// <summary>The label's line box. The em IS the cell, so this is pure leading (2 DIP either side).</summary>
+    private const double CardLabelLine = 14.0;
+
+    /// <summary>Horizontal padding inside the name strip. Part of the fit arithmetic above.</summary>
+    private const double LabelPadX = 4.0;
+
+    /// <summary>The lock badge's glyph. It grew with the card: a padlock nobody can see is not a gate.</summary>
+    private const double BadgeFont = 12.0;
 
     /// <summary>Air between her silhouette and a card's inner edge (owner call).</summary>
     private const double BodyGap = 14.0;
@@ -88,6 +131,37 @@ public partial class EmiRingWindow : Window
     /// snap. 0.3 is a settle you feel rather than watch.
     /// </summary>
     private const double PopBackAmplitude = 0.30;
+
+    /// <summary>
+    /// THE FOLD, the mirror of the fan (owner, third live run: "we might need the reverse animation
+    /// when we close the circle"). The cards fly back into her, shrink to <see cref="PopFromScale"/>
+    /// and fade, LAST-DEALT FIRST, so the ring un-deals itself in the order it was dealt.
+    ///
+    /// <para>Deliberately about half the open: <c>5 x 26 + 190 = 320 ms</c> against the fan's 650.
+    /// An entrance is a presentation and can afford to be watched; an exit is an acknowledgement,
+    /// and one that takes as long as the entrance reads as the app being slow to let go. The ring
+    /// is functionally SHUT the instant the fold starts (hooks off, hit rects dropped,
+    /// <c>RingClosed</c> already fired) - what is left is only the picture catching up.</para>
+    ///
+    /// <para>No BackEase on the way out, and the easings are EaseIn rather than EaseOut: an
+    /// overshoot at the end of a fold is a bounce off her chest, and the cards should look pulled
+    /// home rather than thrown.</para>
+    /// </summary>
+    private const double FoldStaggerMs = 26.0;
+
+    /// <inheritdoc cref="FoldStaggerMs"/>
+    private const double FoldMs = 190.0;
+
+    /// <inheritdoc cref="FoldStaggerMs"/>
+    private const double FoldFadeMs = 150.0;
+
+    /// <summary>
+    /// Slack on the fold's finish timer. A DispatcherTimer fires no EARLIER than its interval but
+    /// can fire late, and hiding the window one frame before the last card has faded is the exact
+    /// blink this whole wave is about; a couple of frames of an already-invisible card cost
+    /// nothing.
+    /// </summary>
+    private const double FoldTailMs = 40.0;
 
     private const double HoverScale = 1.08;
 
@@ -128,6 +202,29 @@ public partial class EmiRingWindow : Window
     private bool _open;
     private bool _closingForGood;
 
+    /// <summary>
+    /// True between the first frame of the fold and the <see cref="Hide"/> at the end of it. The
+    /// ring is already SHUT here - this only says that the picture has not finished catching up,
+    /// and it is what makes a second <see cref="CloseRing"/> during the fold a no-op instead of a
+    /// second <c>RingClosed</c>.
+    /// </summary>
+    private bool _folding;
+
+    /// <summary>
+    /// Whether <see cref="RingClosed"/> has already been raised for the opening now ending. The
+    /// event fires at the START of the fold (that is when the ring is actually shut), so a close
+    /// that arrives again while the picture is still catching up - a Kill mid-fold, say - must
+    /// hide the window without announcing a second dismissal into the ignore streak.
+    /// </summary>
+    private bool _closeAnnounced = true;
+
+    /// <summary>The fold's finish. A timer rather than a Storyboard.Completed: there are five
+    /// animations per card and the last one to finish is not the last one to be started.</summary>
+    private System.Windows.Threading.DispatcherTimer? _foldEnd;
+
+    /// <summary>The DPI scale <see cref="Layout"/> last solved against. See <see cref="OpenRing"/>.</summary>
+    private double _laidOutAtScale;
+
     /// <summary>True while the fan is on screen.</summary>
     public bool IsOpen => _open;
 
@@ -137,7 +234,17 @@ public partial class EmiRingWindow : Window
     /// <summary>A card was left-clicked. The ring has already folded; the caller opens the target.</summary>
     public event EventHandler<EmiRingSlot>? CardPicked;
 
-    /// <summary>A card was right-clicked. The bool is the state it ended in (true = now pinned).</summary>
+    /// <summary>
+    /// A pin was made or removed. The bool is the state it ended in (true = now pinned).
+    ///
+    /// <para>THE RING NO LONGER RAISES THIS. The card's right-click pin came off on the owner's
+    /// third live run ("the Pin button is not usable right now, I propose we remove it from
+    /// there") and pinning lives in her options menu now. The event, its signature and its
+    /// subscriber in <c>EmiDeskWindow.Ring.cs</c> are all kept on purpose: they carry the
+    /// <c>pinAdded</c> moment and the pin-nudge latch, and that bookkeeping is the same wherever
+    /// the pin was made. The options menu reaches it through
+    /// <c>EmiDeskWindow.NotePinMadeElsewhere</c>.</para>
+    /// </summary>
     public event EventHandler<(EmiRingSlot Slot, bool Pinned)>? PinToggled;
 
     /// <summary>The ring folded. The bool says whether a card was picked on the way out.</summary>
@@ -210,25 +317,63 @@ public partial class EmiRingWindow : Window
             if (_slots.Count == 0)
             {
                 Log.Information("[EmiDesk] ring has nothing to show, staying shut");
+                // A fold from the last opening could still be on screen behind this. Nothing is
+                // going to replace it, so put it away rather than leaving it hanging.
+                if (_folding || IsVisible) { CancelFold(); HideNow(); }
                 return;
             }
+
+            // A fold from the PREVIOUS opening may still be in the air. Cancel it before anything
+            // else: its finish timer would otherwise land in the middle of this open and hide a
+            // ring that had just been dealt. (BuildCards below stops the old cards' animations and
+            // clears the canvas, so there is nothing else of the fold left to unwind.)
+            CancelFold();
 
             BuildCards();
             PlaceWindow();
 
-            if (!IsVisible)
-            {
-                Show();
-                // The window only has a DPI of its own once it has an HWND, so the first layout is
-                // always done twice: once to get it on screen, once with its real scale.
-                PlaceWindow();
-            }
+            // THE ONE-FRAME FLASH OF THE FINISHED RING (owner, third live run: "I see a frame of
+            // the full circle, then the fan animation").
+            //
+            // It is not a missing guard on the cards - BuildCard already pre-poses every one of
+            // them at PopFromScale/Opacity 0 and PlayPop re-asserts the base values - because the
+            // frame the owner sees is not drawn from this visual tree at all. It is the PREVIOUS
+            // opening's, still sitting in the window's layered surface: CloseRing used to clear
+            // the canvas and Hide() in the same synchronous block, so the render thread never got
+            // to compose the empty ring, and a hidden window is not rendered. The last thing
+            // UpdateLayeredWindow was ever handed was the finished, fully-opaque fan - and Win32
+            // shows exactly that the instant ShowWindow runs, until WPF pushes a new surface. She
+            // rarely moves between two opens, so the stale fan lands on top of where the new one
+            // is about to be dealt, which is what makes it read as "the ring, then the animation".
+            //
+            // Two changes, and the fold is the more important of them. (1) CloseRing now animates
+            // the cards out and only hides once they are invisible, so the surface left behind is
+            // an empty ring; the no-animation paths shrink the window to a pixel first (HideNow).
+            // (2) Here: the HWND is created WITHOUT being presented, so Layout() runs on the real
+            // per-monitor scale BEFORE the first present instead of after it. That kills the
+            // second half of it - the old order showed the window at the whole work area and then
+            // resized a VISIBLE layered window twice, once per PlaceWindow/Layout pair.
+            try { new WindowInteropHelper(this).EnsureHandle(); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ring handle could not be pre-created"); }
 
             Layout();
+
+            if (!IsVisible) Show();
+
+            // A window that was hidden on one monitor and shown on another only learns its new
+            // scale when it is shown. If that happened, the fan we just solved is in the wrong
+            // space - and every card is still invisible at this point, so re-solving is free.
+            if (Math.Abs(DipScale - _laidOutAtScale) > 0.001) Layout();
+
             PlayPop();
             InstallHooks();
             _open = true;
 
+            // Armed last, and only on the road that really opened: an opening that never happened
+            // (no slots, a throw before here) must not leave a dismissal owed to the ignore streak.
+            _closeAnnounced = false;
+
+            EmiSfx.RingOpen();
             Log.Information("[EmiDesk] ring open with {Count} cards", _slots.Count);
         }
         catch (Exception ex)
@@ -238,28 +383,123 @@ public partial class EmiRingWindow : Window
         }
     }
 
-    /// <summary>Fold the ring. Idempotent, and safe to call from a hook continuation.</summary>
+    /// <summary>
+    /// Fold the ring. Idempotent, and safe to call from a hook continuation - it is called
+    /// re-entrantly from the global mouse hook, from Escape, from the drag watch, from the pick
+    /// and from the tear-down seam, sometimes two of those inside one gesture.
+    ///
+    /// <para>The ring is SHUT when this returns, whether or not the fold is still playing: the
+    /// hooks are gone, <see cref="IsOpen"/> is false, the hit rects are dropped and
+    /// <see cref="RingClosed"/> has already fired. Everything after that point is a picture
+    /// catching up, and a card in flight is not clickable.</para>
+    /// </summary>
     public void CloseRing()
     {
         try
         {
+            // Unconditionally first, and in this order. The hooks are a GLOBAL low-level pair and
+            // must never outlive the gesture that armed them; the hit rects are read on the hook
+            // thread and are what would let a card that is already flying home be clicked.
             RemoveHooks();
+
+            // A fold already owns this closing. Not a second RingClosed, not a second fold.
+            if (_folding) return;
             if (!_open && !IsVisible) return;
+
             _open = false;
-
-            foreach (var c in _cards) StopCardAnimations(c);
-            _cards.Clear();
-            Field.Children.Clear();
             _hotPx = Array.Empty<Rect>();
-            Hide();
 
-            Log.Debug("[EmiDesk] ring closed (picked={Picked})", PickedThisOpening);
-            try { RingClosed?.Invoke(this, PickedThisOpening); }
-            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] RingClosed handler threw"); }
+            // The bookkeeping IS the close, so it happens now rather than when the animation ends:
+            // a handler that counts dismissals and a caller that reads IsOpen straight after us
+            // can then never disagree about when the ring shut. (It also keeps the pick honest -
+            // the target's Open() is invoked by OnCardPicked the moment we return, and never waits
+            // for the fold.) Symmetrical with "ring open" at Information now: logging one half of
+            // every toggle at Debug meant the file sink showed opens with no closes (primer 9).
+            if (!_closeAnnounced)
+            {
+                _closeAnnounced = true;
+                Log.Information("[EmiDesk] ring closed (picked={Picked})", PickedThisOpening);
+                try { RingClosed?.Invoke(this, PickedThisOpening); }
+                catch (Exception ex) { Log.Debug(ex, "[EmiDesk] RingClosed handler threw"); }
+            }
+
+            // No fold when there is nothing to fold, when the window is already gone, or when the
+            // app is on its way down: an animation racing a dispatcher shutdown is a hang, and a
+            // fan that lingers after she has poofed reads as a crash (SEAMS: the ring folds first).
+            if (_closingForGood || AppIsShuttingDown || !IsVisible || _cards.Count == 0)
+            {
+                HideNow();
+                return;
+            }
+
+            EmiSfx.RingClose();
+            PlayFold();
         }
         catch (Exception ex)
         {
             Log.Debug(ex, "[EmiDesk] ring close failed");
+            try { HideNow(); } catch { /* nothing else to try */ }
+        }
+    }
+
+    /// <summary>
+    /// The end of a close: drop the cards and put the window away. Called at the tail of the fold,
+    /// and directly on every path that must not animate.
+    /// </summary>
+    private void HideNow()
+    {
+        _folding = false;
+        StopFoldTimer();
+
+        foreach (var c in _cards) StopCardAnimations(c);
+        _cards.Clear();
+        Field.Children.Clear();
+        _hotPx = Array.Empty<Rect>();
+        Hide();
+
+        // A hidden layered window keeps whatever was last handed to UpdateLayeredWindow, and Win32
+        // puts that straight back on screen the moment ShowWindow runs (see the note in OpenRing).
+        // Shrinking to a pixel means the worst a stale surface can ever be is one transparent dot;
+        // OpenRing sizes the window from PlaceWindow/Layout before it is shown again, so nothing
+        // downstream reads this rect.
+        try { Width = 1; Height = 1; }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ring could not be parked small"); }
+    }
+
+    /// <summary>
+    /// Kill a fold in flight without hiding anything - a new opening is taking over the window.
+    /// The cards themselves are dealt with by <c>BuildCards</c>, which stops their animations and
+    /// clears the canvas; what must not survive is the finish timer.
+    /// </summary>
+    private void CancelFold()
+    {
+        if (!_folding && _foldEnd == null) return;
+        _folding = false;
+        StopFoldTimer();
+    }
+
+    private void StopFoldTimer()
+    {
+        try
+        {
+            if (_foldEnd == null) return;
+            _foldEnd.Stop();
+            _foldEnd = null;
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ring fold timer would not stop"); }
+    }
+
+    /// <summary>True once the app has started going down. An animation past this point is a hang.</summary>
+    private static bool AppIsShuttingDown
+    {
+        get
+        {
+            try
+            {
+                var d = Application.Current?.Dispatcher;
+                return d == null || d.HasShutdownStarted;
+            }
+            catch { return true; }
         }
     }
 
@@ -301,6 +541,11 @@ public partial class EmiRingWindow : Window
         try
         {
             _closingForGood = true;
+
+            // A fold in flight would otherwise hold the close off (CloseRing yields to it) and
+            // then fire its finish timer into a window that no longer exists.
+            CancelFold();
+
             CloseRing();
             Close();
         }
@@ -356,6 +601,7 @@ public partial class EmiRingWindow : Window
         var work = WorkArea();
         double s = DipScale;
         if (s <= 0) s = 1.0;
+        _laidOutAtScale = s;            // OpenRing re-solves if the window learns a different one
 
         double workW = work.Width / s;
         double workH = work.Height / s;
@@ -425,8 +671,18 @@ public partial class EmiRingWindow : Window
 
         _hotPx = hot.ToArray();
 
-        Log.Debug("[EmiDesk] ring fan {Shape} r={R:F0} span={Span:F0} deg, window {W:F0}x{H:F0}",
-                  plan.Shape, plan.Radius, plan.SpanDeg, Width, Height);
+        // Information, not Debug: the file sink's floor is Information, so a Debug line here is
+        // invisible in the log the owner actually sends back. Everything needed to reproduce a
+        // "the circle is offset" report by hand is on this one line - where the code believes she
+        // is, what it orbited, and what the solver did with it.
+        Log.Information("[EmiDesk] ring fan {Shape} r={R:F0} span={Span:F0} deg | anchor px ({AX:F0},{AY:F0}) " +
+                        "| body px {BX:F0},{BY:F0} {BW:F0}x{BH:F0} | work {WX},{WY} {WW}x{WH} | scale {S:F2} " +
+                        "| window {W:F0}x{H:F0} at {L:F0},{T:F0}",
+                        plan.Shape, plan.Radius, plan.SpanDeg,
+                        anchor.X, anchor.Y,
+                        bodyPx.X, bodyPx.Y, bodyPx.Width, bodyPx.Height,
+                        work.Left, work.Top, work.Width, work.Height, s,
+                        Width, Height, Left, Top);
     }
 
 
@@ -534,39 +790,51 @@ public partial class EmiRingWindow : Window
         {
             VerticalAlignment = VerticalAlignment.Bottom,
             Background = new SolidColorBrush(Color.FromArgb(0xD9, 0x0E, 0x0E, 0x1C)),
-            Padding = new Thickness(4, 3, 4, 3),
+            Padding = new Thickness(LabelPadX, 3, LabelPadX, 3),
             IsHitTestVisible = false,
         };
-        strip.Child = new TextBlock
+
+        var label = new TextBlock
         {
             Text = SafeLabel(slot.Target),
-            FontFamily = new FontFamily("Press Start 2P, Consolas, Global Monospace"),
+            // EmiFace.PixelFont, not a family built from a NAME: Press Start 2P is shipped under
+            // Resources/emi/fonts and never installed, so a name lookup silently landed on
+            // Consolas. See CardLabelFont.
+            FontFamily = EmiFace.PixelFont,
             FontSize = CardLabelFont,
-            LineHeight = 12,
+            LineHeight = CardLabelLine,
             LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
             Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE1)),
             TextWrapping = TextWrapping.Wrap,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            MaxHeight = 26,
+            MaxHeight = 2 * CardLabelLine + 2,     // two lines: "The Arcademy" breaks at its space
             TextAlignment = TextAlignment.Center,
         };
+
+        // GDI-compatible metrics: every glyph advance is rounded to a whole DEVICE pixel instead
+        // of being sub-pixel positioned. It is the same law Layout() keeps for the card origins -
+        // a pixel font goes to mush on a half-pixel offset - one level down, at the glyph.
+        TextOptions.SetTextFormattingMode(label, TextFormattingMode.Display);
+        strip.Child = label;
         grid.Children.Add(strip);
 
         // ---- the badges -------------------------------------------------------
+        // The pin badge came off here on the owner's third live run ("the Pin button is not usable
+        // right now, I propose we remove it from there"); pinning is in her options menu now. What
+        // stays is how a pinned card LOOKS - the thicker solid-pink frame above - so a pin made in
+        // the menu is still legible on the fan.
         if (slot.Locked)
         {
             grid.Children.Add(Badge("\U0001F512", HorizontalAlignment.Left, 0.65));
         }
 
-        var pin = Badge("\U0001F4CC", HorizontalAlignment.Right, slot.Pinned ? 0.95 : 0.0);
-        pin.Name = "PinGlyph";
-        grid.Children.Add(pin);
-
         // ---- input ------------------------------------------------------------
+        // Left click only. The right button is deliberately unhandled now: it bubbles to nothing
+        // here, and the global hook reads a right-click outside the hot rects as a dismissal,
+        // which is the behaviour a card without a gesture of its own should have.
         card.MouseLeftButtonUp += (_, e) => { e.Handled = true; OnCardPicked(slot); };
-        card.MouseRightButtonUp += (_, e) => { e.Handled = true; OnCardPinToggled(slot); };
-        card.MouseEnter += (_, _) => Hover(card, pin, slot, true);
-        card.MouseLeave += (_, _) => Hover(card, pin, slot, false);
+        card.MouseEnter += (_, _) => Hover(card, slot, true);
+        card.MouseLeave += (_, _) => Hover(card, slot, false);
 
         return card;
     }
@@ -586,14 +854,17 @@ public partial class EmiRingWindow : Window
             Child = new TextBlock
             {
                 Text = glyph,
+                // NOT the pixel font: this is an emoji glyph and Press Start 2P has none, so it
+                // would fall through to a system face anyway. Named explicitly so it falls
+                // somewhere chosen. 8 DIP was a padlock you had to look for; it grew with the card.
                 FontFamily = new FontFamily("Segoe UI Emoji, Segoe UI Symbol, Segoe UI"),
-                FontSize = 8,
+                FontSize = BadgeFont,
                 Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE1)),
             },
         };
     }
 
-    private void Hover(Border card, FrameworkElement pin, EmiRingSlot slot, bool on)
+    private void Hover(Border card, EmiRingSlot slot, bool on)
     {
         try
         {
@@ -612,9 +883,6 @@ public partial class EmiRingWindow : Window
                 var toColour = (on || slot.Pinned) ? FramePink : FrameRest;
                 frame.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(toColour, dur));
             }
-
-            double pinTo = slot.Pinned ? 0.95 : (on ? 0.55 : 0.0);
-            pin.BeginAnimation(OpacityProperty, new DoubleAnimation(pinTo, dur));
         }
         catch (Exception ex)
         {
@@ -648,6 +916,21 @@ public partial class EmiRingWindow : Window
             var s = Loc.Get(key);
             if (string.IsNullOrWhiteSpace(s) || s == key) return null;
 
+            // Same typeface and the same step up the cards got, through the shipped-font resolver
+            // rather than a family name (see CardLabelFont). 24 characters to a line at 10 DIP.
+            var tip = new TextBlock
+            {
+                Text = s,
+                FontFamily = EmiFace.PixelFont,
+                FontSize = CardLabelFont,
+                LineHeight = 16,
+                LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE1)),
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = 240,
+            };
+            TextOptions.SetTextFormattingMode(tip, TextFormattingMode.Display);
+
             return new ToolTip
             {
                 Background = Brushes.Transparent,
@@ -661,17 +944,7 @@ public partial class EmiRingWindow : Window
                     BorderBrush = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0x69, 0xB4)),
                     CornerRadius = new CornerRadius(4),
                     Padding = new Thickness(7, 5, 7, 5),
-                    Child = new TextBlock
-                    {
-                        Text = s,
-                        FontFamily = new FontFamily("Press Start 2P, Consolas, Global Monospace"),
-                        FontSize = 8.0,
-                        LineHeight = 13,
-                        LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
-                        Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE1)),
-                        TextWrapping = TextWrapping.Wrap,
-                        MaxWidth = 200,
-                    },
+                    Child = tip,
                 },
             };
         }
@@ -743,6 +1016,86 @@ public partial class EmiRingWindow : Window
         }
     }
 
+    /// <summary>
+    /// The fold: the pop run backwards, LAST-DEALT FIRST, and at about half its length. Started
+    /// only from <see cref="CloseRing"/>, which has already taken the hooks down, dropped the hit
+    /// rects and raised <see cref="RingClosed"/> - so nothing here is load-bearing and every early
+    /// return can simply hide.
+    /// </summary>
+    private void PlayFold()
+    {
+        try
+        {
+            _folding = true;
+
+            var move = new CubicEase { EasingMode = EasingMode.EaseIn };
+            var shrink = new CubicEase { EasingMode = EasingMode.EaseIn };
+            var fadeEase = new QuadraticEase { EasingMode = EasingMode.EaseIn };
+            var dur = new Duration(TimeSpan.FromMilliseconds(FoldMs));
+            var fade = new Duration(TimeSpan.FromMilliseconds(FoldFadeMs));
+
+            int n = _cards.Count;
+            for (int i = 0; i < n; i++)
+            {
+                var card = _cards[i];
+
+                // Belt as well as braces on "a card in flight is not clickable": _hotPx is already
+                // empty, which is what the global hook reads, and this is what WPF's own hit test
+                // reads. The two roads into OnCardPicked are now both shut.
+                card.IsHitTestVisible = false;
+
+                if (card.RenderTransform is not TransformGroup tg || tg.Children.Count < 2) continue;
+                if (tg.Children[0] is not ScaleTransform sc) continue;
+                if (tg.Children[1] is not TranslateTransform tr) continue;
+
+                // Where home is, from wherever the card is sitting NOW. Computed off the canvas
+                // position rather than off the pop's own dx/dy so that a fold arriving mid-pop
+                // (open, then Escape half a second later) still flies to her and not past her.
+                double dx = _cx - (Canvas.GetLeft(card) + CardW / 2.0);
+                double dy = _cy - (Canvas.GetTop(card) + CardH / 2.0);
+
+                // Reverse stagger: the card dealt last is the first one taken back.
+                var begin = TimeSpan.FromMilliseconds((n - 1 - i) * FoldStaggerMs);
+
+                // The base values matter here for the same reason they do in PlayPop - during a
+                // delayed animation's BeginTime the property shows its base - except that here the
+                // base is where the card already IS, so it is read rather than written. A card
+                // still travelling on the pop's clock has an animated value; BeginAnimation with a
+                // From makes that irrelevant, which is why every animation below carries one.
+                tr.BeginAnimation(TranslateTransform.XProperty,
+                    new DoubleAnimation(tr.X, dx, dur) { BeginTime = begin, EasingFunction = move });
+                tr.BeginAnimation(TranslateTransform.YProperty,
+                    new DoubleAnimation(tr.Y, dy, dur) { BeginTime = begin, EasingFunction = move });
+                sc.BeginAnimation(ScaleTransform.ScaleXProperty,
+                    new DoubleAnimation(sc.ScaleX, PopFromScale, dur) { BeginTime = begin, EasingFunction = shrink });
+                sc.BeginAnimation(ScaleTransform.ScaleYProperty,
+                    new DoubleAnimation(sc.ScaleY, PopFromScale, dur) { BeginTime = begin, EasingFunction = shrink });
+                card.BeginAnimation(OpacityProperty,
+                    new DoubleAnimation(card.Opacity, 0, fade) { BeginTime = begin, EasingFunction = fadeEase });
+            }
+
+            double total = (n <= 1 ? 0 : (n - 1) * FoldStaggerMs) + FoldMs + FoldTailMs;
+            _foldEnd = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Normal)
+            {
+                Interval = TimeSpan.FromMilliseconds(total),
+            };
+            _foldEnd.Tick += OnFoldFinished;
+            _foldEnd.Start();
+        }
+        catch (Exception ex)
+        {
+            // A fold that cannot be played is not a reason to leave the fan on the desktop.
+            Log.Debug(ex, "[EmiDesk] ring fold failed, hiding straight away");
+            try { HideNow(); } catch { /* nothing else to try */ }
+        }
+    }
+
+    private void OnFoldFinished(object? sender, EventArgs e)
+    {
+        try { HideNow(); }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ring fold finish failed"); }
+    }
+
     private static void StopCardAnimations(Border card)
     {
         try
@@ -784,19 +1137,10 @@ public partial class EmiRingWindow : Window
         }
     }
 
-    private void OnCardPinToggled(EmiRingSlot slot)
-    {
-        try
-        {
-            bool pinned = EmiSuggester.TogglePin(slot.Target.Id);
-            Rebuild();
-            PinToggled?.Invoke(this, (slot, pinned));
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "[EmiDesk] ring pin toggle failed for {Target}", slot.Target.Id);
-        }
-    }
+    // The card's own pin gesture lived here. It is gone (owner, third live run) and pinning is in
+    // her options menu; EmiSuggester.TogglePin, EmiState.Pins and the PinToggled event above are
+    // all untouched, because the menu writes through exactly those. The ONE pin store rule is
+    // unchanged - this window simply stopped being one of its front ends.
 
     // ---------------------------------------------------------------- the hooks
 

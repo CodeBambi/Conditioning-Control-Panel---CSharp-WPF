@@ -1,0 +1,127 @@
+﻿<UserControl x:Class="ConditioningControlPanel.Views.Controls.EmiRingPicker"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d" d:DesignWidth="380">
+
+    <!-- ================================================================
+         HER RING, THE PIN PICKER.
+
+         Extracted from EmiDeskSettingsSection (wave 3) so that her options
+         panel and the settings tab are ONE control rather than two copies
+         of the same wall. There is exactly one pin store - EmiState.Pins,
+         written through EmiSuggester - and the surest way to end up with
+         two was to write the picker twice.
+
+         SELF-CONTAINED BRUSHES AND STYLES on purpose. This control is
+         hosted in a settings tab (whose resources live in MainWindow's
+         dictionary) AND in EmiOptionsWindow (which has none of them). A
+         StaticResource that resolves in one host and not the other is the
+         cross-dictionary BAML EndOfStream the Velvet Kit work was bitten
+         by, so every brush in here is a literal.
+
+         The header row (count line + "let her choose") is optional: the
+         settings tab draws its own, in its own section hue, and sets
+         ShowHeader="False".
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <!-- One target in the picker: the card art, its name on a dark strip, and a pink frame
+             plus a dot when it is pinned. Deliberately the same shape as a ring card at a third of
+             the size, so "checked here" and "on her ring" read as the same object.
+
+             The triggers are ordered hover-then-checked on purpose: the other way round, moving
+             the pointer over a pinned tile would take its pink frame off. -->
+        <Style x:Key="EmiRingTile" TargetType="ToggleButton">
+            <Setter Property="Width" Value="92"/>
+            <Setter Property="Height" Value="66"/>
+            <Setter Property="Margin" Value="0,0,6,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Shell" CornerRadius="6" BorderThickness="2"
+                                BorderBrush="#33FFFFFF" Background="#FF1A1A2E"
+                                ClipToBounds="True">
+                            <Grid>
+                                <ContentPresenter/>
+                                <Ellipse x:Name="Dot" Width="9" Height="9" Margin="0,4,4,0"
+                                         HorizontalAlignment="Right" VerticalAlignment="Top"
+                                         Fill="#FFFF69B4" Stroke="#FF0E0E1C" StrokeThickness="1.5"
+                                         Visibility="Collapsed"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Shell" Property="BorderBrush" Value="#8CFF69B4"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Shell" Property="BorderBrush" Value="#FFFF69B4"/>
+                                <Setter TargetName="Dot" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.42"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="EmiPickerButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#FFF2FA"/>
+            <Setter Property="Background" Value="#252542"/>
+            <Setter Property="BorderBrush" Value="#4A3A63"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#33294F"/>
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="#FF69B4"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.42"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <StackPanel>
+        <Grid x:Name="HeaderRow" Margin="0,0,0,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="TxtHint" Grid.Column="0"
+                       Foreground="#9C93B8" FontSize="11"
+                       TextWrapping="Wrap" VerticalAlignment="Center"
+                       Margin="0,0,10,0"/>
+            <Button x:Name="BtnReset" Grid.Column="1"
+                    Style="{StaticResource EmiPickerButton}"
+                    VerticalAlignment="Center"
+                    Content="Let her choose"/>
+        </Grid>
+        <WrapPanel x:Name="PnlRing" Orientation="Horizontal"/>
+    </StackPanel>
+</UserControl>

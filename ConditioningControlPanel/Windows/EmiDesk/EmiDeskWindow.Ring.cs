@@ -221,17 +221,41 @@ public partial class EmiDeskWindow
         }
     }
 
+    /// <summary>
+    /// A pin was made or dropped somewhere OTHER than the fan - her options menu, since the card's
+    /// own right-click pin came off (owner, third live run: "the Pin button is not usable right
+    /// now, I propose we remove it from there").
+    ///
+    /// <para>It exists so the bookkeeping does not move house with the gesture: the
+    /// <c>pinAdded</c> moment and the pin-nudge latch belong to "a pin was made", not to "a card
+    /// was right-clicked", and the ring's own <c>PinToggled</c> road still lands here. The pin
+    /// STORE is untouched by this - the caller has already written it through
+    /// <c>EmiSuggester.TogglePin</c>, which stays the one arbiter.</para>
+    /// </summary>
+    /// <param name="targetId">The <c>EmiTarget.Id</c> that was pinned or unpinned.</param>
+    /// <param name="pinned">The state the STORE ended in, not the one the click asked for.</param>
+    public void NotePinMadeElsewhere(string targetId, bool pinned)
+    {
+        // A fan that happens to be up under the pointer shows the change now, not on the next open.
+        RebuildRing();
+        NotePin(targetId, pinned);
+    }
+
     private void OnRingPinToggled(object? sender, (EmiRingSlot Slot, bool Pinned) e)
+        => NotePin(e.Slot.Target.Id, e.Pinned);
+
+    /// <summary>The one place a pin turns into a moment, wherever the gesture happened.</summary>
+    private static void NotePin(string targetId, bool pinned)
     {
         try
         {
-            if (!e.Pinned) return;
+            if (!pinned || string.IsNullOrWhiteSpace(targetId)) return;
 
             // One pin ever is the whole lesson: the pin nudge never speaks again after this.
             try { EmiState.NotePinMade(); }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] pin bookkeeping failed"); }
 
-            App.EmiDesk?.Fire("pinAdded", new { target = e.Slot.Target.Id });
+            App.EmiDesk?.Fire("pinAdded", new { target = targetId });
         }
         catch (Exception ex)
         {
