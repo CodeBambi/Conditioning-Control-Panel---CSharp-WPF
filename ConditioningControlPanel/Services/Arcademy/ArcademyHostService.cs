@@ -3047,6 +3047,17 @@ internal static class ArcademyHostService
         ["booth_alley_hint"] = "The lit window is down at the end of the row.",
         ["booth_put_it_on"] = "Put it on",
         ["booth_hang_it"] = "Hang it up",
+        // THE HOLDINGS TRAY (counter shortcut wave, 2026-08-30). The tray on the booth's sill
+        // lists the consumables the player is carrying. There is no "2 of 3" row: the count is
+        // built as "2/3" by concatenation, the way prize_held and prize_short already are.
+        // The two passive lines are the honest half of the feature - the one consumable on the
+        // shelf, late_slip, has no manual verb at all (ArcademyEconomy.ConsumeLateSlip burns it
+        // inside the attendance credit), so the row says so instead of growing a dead button.
+        // All four are well inside MergeModTable's 96-char skin cap (trap 26).
+        ["booth_holdings"] = "What you are holding",
+        ["booth_hold_none"] = "Nothing in your pockets tonight. The shelf is through the window.",
+        ["booth_hold_late_slip"] = "It spends itself the night you miss one. Nothing to press.",
+        ["booth_hold_passive"] = "It spends itself the moment it is needed.",
         // The two wayfinding plates in the alley (shell/alleysign.js): the booth's
         // right-hand wall points at RM 004 and the Locker's left wall points back.
         // Rows of their own, not a re-use of the room cards, because a sign names a

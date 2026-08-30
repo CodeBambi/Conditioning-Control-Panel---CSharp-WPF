@@ -1222,7 +1222,35 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     try { return seep ? seep.misprintFor(rows) : null; } catch (e) { return null; }
   };
 
-  reportCard = createReportCard({ ceremonies, seep, toast: shout, log: say });
+  /* THE TILL IS A DOOR (counter shortcut wave, 2026-08-30). The report card is
+   * the one screen that TELLS you what you just earned and, until now, had no
+   * road to spend it on - the campus wallet chip is two screens back behind a
+   * Done. So the night's ticket chip presses through to the same place the
+   * campus chip does, and the card is handed the verb rather than the reason:
+   * the catalog, the shutter and the ceremonies are all the shell's business.
+   *
+   * OFFERED ONLY WHEN THERE IS A SHELF AT ALL. `init.economy.catalog` is fixed
+   * for the life of the page, so this is asked once here; a host that projects
+   * no economy gets the card it always got, with an inert <span> on the till.
+   *
+   * IT REFUSES, IT NEVER TRAVELS BADLY. Two rungs, and they are two different
+   * facts: a shut counter (a suspend, a lapsed entitlement) is answered with
+   * the shutter's own line exactly as the campus chip answers it, and a
+   * ceremony still on screen is answered with silence - `showPrizeBooth` calls
+   * dismissEndCard/dismissPunchStage/dismissAnnexStage on its way in, so a
+   * press mid-beat would stomp the beat that is doing the telling. */
+  const counterFromReport = economyCatalog().length ? () => {
+    if (endCard || punchStage || annexStage) return;
+    if (counterClosed()) {
+      shout(t('prize_closed_line',
+        'The shutter is down and the sign above it has been switched off at the wall.'));
+      return;
+    }
+    showPrizes();
+  } : null;
+  reportCard = createReportCard({
+    ceremonies, seep, toast: shout, log: say, onCounter: counterFromReport,
+  });
 
   /* ---------------------- helpers --------------------------------------- */
   function gameName(key) {
@@ -2085,8 +2113,25 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
            * IT LANDS AT THE WINDOW WITH THE SHELF ALREADY OPEN (Locker wave).
            * The shop is a panel over the booth's plate now, so "straight to the
            * shelf" means the plate is there under it - what the chip skips is
-           * the walk and the arrival down the alley, never the room. */
-          prizesShelf: () => showPrizes(),
+           * the walk and the arrival down the alley, never the room.
+           *
+           * IT REFUSES IN PLACE WHEN THE SHUTTER IS DOWN (counter shortcut
+           * wave, 2026-08-30). `applySuspend` re-shows the board and leaves
+           * this chip live and pressable, so a press during a suspend used to
+           * BUILD the booth with `closed:true` - the shelf no-ops on the way in
+           * (prizebooth.js openShop) and the player is left standing in an
+           * unusable dark room they then have to find their way back out of. A
+           * toast is the whole answer: `screen` never moves, no dialog is
+           * minted, and the sentence is the one the shutter itself is lettered
+           * with one screen further in, so the school says it in one voice. */
+          prizesShelf: () => {
+            if (counterClosed()) {
+              shout(t('prize_closed_line',
+                'The shutter is down and the sign above it has been switched off at the wall.'));
+              return;
+            }
+            showPrizes();
+          },
           annex: () => walkThen('annex', () => showAnnex()),
           /* THE DOOR walks; THE GEAR does not. campus.js calls `registrarRoom`
            * for the Front Office room and falls back to `registrar` for the
@@ -3362,10 +3407,21 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       reduced: reducedMotion,
       closed: counterClosed(),
       alley: !opt.skipWalk,
-      /* The same two getters the shelf takes, and for the same reason: the tray
-       * on the sill reads a wallet, it never moves one. */
+      /* The same getters the shelf takes, and for the same reason: the tray on
+       * the sill READS a wallet, it never moves one. `catalog`/`inv`/`stackMax`
+       * joined the list for the holdings tray (counter shortcut wave,
+       * 2026-08-30) - what you are holding is three reads of the same three
+       * facts the shelf already reads, and not one of them is a proposal.
+       *
+       * NO `onUse`. Nothing on this shelf can be spent by hand: the one
+       * consumable, `late_slip`, is burned by the HOST inside the attendance
+       * credit (ArcademyEconomy.ConsumeLateSlip), so there is no press to wire
+       * and the tray says so in words instead of growing a button that lies. */
       balance: () => walletBalance(),
       payday: () => economyPayday(),
+      catalog: () => economyCatalog(),
+      inv: () => walletInv(),
+      stackMax: (sku) => stackMaxFor(sku),
       gameName,
       /* THE BOOTH OWNS THE BOX, THE SHELL OWNS WHAT IS IN IT. The room hands
        * over a panel and the way out of it; the counter and every cap it reads

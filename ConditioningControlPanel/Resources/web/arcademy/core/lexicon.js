@@ -633,6 +633,21 @@ export const DEFAULT_LEXICON = Object.freeze({
   booth_alley_hint: 'The lit window is down at the end of the row.',
   booth_put_it_on: 'Put it on',
   booth_hang_it: 'Hang it up',
+  /* THE HOLDINGS TRAY (counter shortcut wave, 2026-08-30). The tray on the sill
+   * answered what is in your purse and which room is hot, and never the third
+   * thing a shopper wants to know: what am I already carrying. `booth_hold_n`
+   * is deliberately absent - the count reads `2/3` by concatenation, the way
+   * `prize_held` and `prize_short` already do, because a number baked into a
+   * translated string is a number a translator has to be trusted to keep.
+   *
+   * THE PASSIVE LINES ARE THE HONEST PART. There is exactly one consumable on
+   * this shelf and it has no press: a late slip is spent by the HOST, on the
+   * night you are not here, inside the attendance credit. So the row says so
+   * rather than growing a button that would have nowhere to send you. */
+  booth_holdings: 'What you are holding',
+  booth_hold_none: 'Nothing in your pockets tonight. The shelf is through the window.',
+  booth_hold_late_slip: 'It spends itself the night you miss one. Nothing to press.',
+  booth_hold_passive: 'It spends itself the moment it is needed.',
   /* THE TWO SIGNS IN THE ALLEY (shell/alleysign.js). One pair, one alley: the
    * plate on the booth's right-hand wall points at RM 004 and the plate on the
    * Locker's left-hand wall points back at the counter, so neither room is a
