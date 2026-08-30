@@ -1704,6 +1704,7 @@ namespace ConditioningControlPanel
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "images"));
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "videos"));
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "wallpapers"));
+            Directory.CreateDirectory(Path.Combine(UserAssetsPath, "mindwipe"));
             Directory.CreateDirectory(Path.Combine(UserDataPath, "Spirals"));
 
             // Create Resources directories (these are bundled with app, not user content)

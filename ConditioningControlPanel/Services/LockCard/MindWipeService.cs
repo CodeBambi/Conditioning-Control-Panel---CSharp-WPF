@@ -13,7 +13,7 @@ namespace ConditioningControlPanel.Services
 {
     /// <summary>
     /// Service for playing mind wipe audio effects at random intervals.
-    /// Unlockable at level 75. Does NOT duck other audio.
+    /// Does NOT duck other audio.
     /// </summary>
     public class MindWipeService : IDisposable
     {
@@ -133,6 +133,30 @@ namespace ConditioningControlPanel.Services
             LoadAudioFiles();
         }
         
+        /// <summary>
+        /// THE mind-wipe clip folder the UI advertises: <c>&lt;EffectiveAssetsPath&gt;\mindwipe</c>.
+        /// Until v6.8.7 the service read ONLY <see cref="LegacyAudioFolderPath"/>, so the
+        /// "assets/mindwipe/" hint in <c>mindwipe_no_audio_files</c> named a folder that was never
+        /// scanned. Same contract as Brain Drain now: new files go here, the legacy install folder
+        /// is still scanned so nobody's old files go silent, and nothing migrates, moves or deletes.
+        /// </summary>
+        public static string AudioFolderPath
+        {
+            get
+            {
+                try { return Path.Combine(App.EffectiveAssetsPath, "mindwipe"); }
+                catch { return LegacyAudioFolderPath; }   // pre-settings startup / test host
+            }
+        }
+
+        /// <summary>
+        /// The ORIGINAL clip folder under the install directory (<c>Resources\sounds\mindwipe</c>),
+        /// where the built-in clips ship. Still scanned; never advertised as the place to put new
+        /// ones, never written to, never emptied.
+        /// </summary>
+        public static string LegacyAudioFolderPath =>
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "mindwipe");
+
         private void LoadAudioFiles()
         {
             try
@@ -146,20 +170,20 @@ namespace ConditioningControlPanel.Services
                     return;
                 }
 
-                var audioFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "mindwipe");
+                var audioFolderPath = AudioFolderPath;
 
-                App.Logger?.Information("MindWipe: Looking for audio files in {Path}", audioFolderPath);
+                App.Logger?.Information("MindWipe: Looking for audio files in {Path} (and legacy {Legacy})",
+                    audioFolderPath, LegacyAudioFolderPath);
                 
-                if (!Directory.Exists(audioFolderPath))
-                {
-                    // Create the directory so user knows where to put files
-                    Directory.CreateDirectory(audioFolderPath);
-                    App.Logger?.Warning("MindWipe: Created empty folder at {Path} - add audio files here!", audioFolderPath);
-                    _audioFiles = Array.Empty<string>();
-                    return;
-                }
-                
-                _audioFiles = Directory.GetFiles(audioFolderPath, "*.*")
+                // Create the advertised folder so it exists to be found; the legacy folder is
+                // left exactly as the installer shipped it.
+                try { Directory.CreateDirectory(audioFolderPath); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "MindWipe: could not create {Path}", audioFolderPath); }
+
+                _audioFiles = new[] { audioFolderPath, LegacyAudioFolderPath }
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Where(Directory.Exists)
+                    .SelectMany(dir => Directory.GetFiles(dir, "*.*"))
                     .Where(f => f.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ||
                                f.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ||
                                f.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase))

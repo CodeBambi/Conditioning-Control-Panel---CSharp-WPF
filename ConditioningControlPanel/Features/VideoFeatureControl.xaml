@@ -191,11 +191,11 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str setting_duration}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <Slider Grid.Column="1" x:Name="SliderDuration" Minimum="1" Maximum="15" Value="5"
+                                <Slider Grid.Column="1" x:Name="SliderDuration" Minimum="1" Maximum="30" Value="12"
                                         feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
                                         ToolTip="{loc:Str tooltip_seconds_each_target_stays_visible}"
                                         ValueChanged="SliderDuration_Changed"/>
-                                <TextBlock Grid.Column="2" x:Name="TxtDuration" Text="5" HorizontalAlignment="Right"
+                                <TextBlock Grid.Column="2" x:Name="TxtDuration" Text="12" HorizontalAlignment="Right"
                                            VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
                                            FontSize="13" FontWeight="Bold"/>
                             </Grid>

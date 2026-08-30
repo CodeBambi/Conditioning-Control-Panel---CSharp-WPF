@@ -497,7 +497,7 @@ public class OverlayService : IDisposable
                 StartSpiral();
             }
 
-            if (settings.BrainDrainEnabled && settings.IsLevelUnlocked(70))
+            if (settings.BrainDrainEnabled)
             {
                 // Base feature: strength comes from the dedicated blur slider, NOT from
                 // BrainDrainIntensity (that is the AUDIO half's per-minute trigger probability).
@@ -704,7 +704,7 @@ public class OverlayService : IDisposable
             }
 
             // Stop and restart brain drain if enabled
-            if (settings.BrainDrainEnabled && settings.IsLevelUnlocked(70))
+            if (settings.BrainDrainEnabled)
             {
                 StopBrainDrainBlur();
                 StartBrainDrainBlur(settings.BrainDrainBlurStrength, settings.BrainDrainMeltEnabled);
@@ -3644,7 +3644,7 @@ public class OverlayService : IDisposable
             return;
         }
 
-        bool featureWantsIt = settings.BrainDrainEnabled && settings.IsLevelUnlocked(70); // Level 70 requirement for Brain Drain
+        bool featureWantsIt = settings.BrainDrainEnabled;
         if (featureWantsIt)
         {
             if (!BrainDrainShowing)

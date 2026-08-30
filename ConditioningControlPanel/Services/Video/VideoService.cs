@@ -1904,9 +1904,9 @@ namespace ConditioningControlPanel.Services
         /// </param>
         /// <param name="strictOverride">
         /// Per-call strictness: null reads the global StrictLockEnabled (normal scheduled /
-        /// manual videos); true/false forces it for this video only. Takeover passes the
-        /// TakeoverVideosStrict setting here instead of the old "flip the global setting off
-        /// for 3 seconds" hack, which made concurrently-scheduled videos come up non-strict.
+        /// manual videos); true/false forces it for this video only. Takeover passes null:
+        /// its videos follow the global setting like every other one (the TakeoverVideosStrict
+        /// override is retired - see AppSettings.TakeoverVideosStrict and AutonomyService).
         /// </param>
         public void TriggerVideo(bool silentIfEmpty = false, bool? strictOverride = null)
         {
