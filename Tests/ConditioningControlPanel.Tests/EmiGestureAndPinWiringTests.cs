@@ -168,14 +168,53 @@ public class EmiGestureAndPinWiringTests
         Assert.DoesNotContain("new List<string>", sec);
     }
 
+    /// <summary>
+    /// The ring is not a pin front end any more (owner, 2026-08-30: "the Pin button is not usable
+    /// right now, I propose we remove it from there") - pinning moved into her options menu. What
+    /// this now pins down is the shape of that removal: the card carries NO pin gesture and no pin
+    /// badge, it still never writes the store itself, and a pinned card is still legible on the fan
+    /// because the thicker solid frame stayed behind.
+    /// </summary>
     [Fact]
-    public void The_ring_pins_through_the_same_suggester()
+    public void The_ring_shows_a_pin_but_no_longer_makes_one()
     {
         var ring = Read("Windows", "EmiDesk", "EmiRingWindow.xaml.cs");
 
-        Assert.Contains("EmiSuggester.TogglePin(", ring);
+        // The gesture and its glyph are gone.
+        Assert.DoesNotContain("OnCardPinToggled", ring);
+        Assert.DoesNotContain("card.MouseRightButtonUp", ring);
+        Assert.DoesNotContain("PinGlyph", ring);
+        Assert.DoesNotContain("\\U0001F4CC", ring);
+
+        // The APPEARANCE stayed: a pin made in the menu still reads across the room.
+        Assert.Contains("CardBorderPinned", ring);
+        Assert.Contains("slot.Pinned ? CardBorderPinned : CardBorder", ring);
+
+        // And the store is still nobody's business but the suggester's.
         Assert.DoesNotContain("EmiState.Current.Pins.Add", ring);
         Assert.DoesNotContain("EmiState.Current.Pins.Remove", ring);
+    }
+
+    /// <summary>
+    /// The event and its bookkeeping outlived the gesture on purpose. <c>pinAdded</c> and the
+    /// pin-nudge latch belong to "a pin was made", wherever it was made, so the options menu has a
+    /// door-free way in that lands in exactly the same place the ring's own road did.
+    /// </summary>
+    [Fact]
+    public void The_pin_bookkeeping_survived_the_gesture_moving_out()
+    {
+        var ring = Read("Windows", "EmiDesk", "EmiRingWindow.xaml.cs");
+        var glue = Read("Windows", "EmiDesk", "EmiDeskWindow.Ring.cs");
+
+        // Declared, subscribed, and reachable from outside the fan.
+        Assert.Contains("PinToggled;", ring);
+        Assert.Contains("_ring.PinToggled += OnRingPinToggled;", glue);
+        Assert.Contains("public void NotePinMadeElsewhere(string targetId, bool pinned)", glue);
+
+        // Both roads end in the one place, so they cannot drift apart.
+        Assert.Contains("EmiState.NotePinMade();", glue);
+        Assert.Contains("Fire(\"pinAdded\"", glue);
+        Assert.Equal(1, CountOf(glue, "private static void NotePin("));
     }
 
     [Fact]
