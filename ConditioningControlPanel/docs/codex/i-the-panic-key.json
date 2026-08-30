@@ -1,0 +1,52 @@
+{
+  "id": "the-panic-key",
+  "volume": 1,
+  "order": 3,
+  "title": "the panic key",
+  "blurb": "one key, everything off.",
+  "target": "settings",
+  "tour": "Settings",
+  "margin": {
+    "t": "no hard feelings. i'll be here after.",
+    "face": "._."
+  },
+  "blocks": [
+    {
+      "type": "p",
+      "text": "The panic key is the emergency stop. It is Escape until you change it, and it is registered with Windows itself, so it works from any window: the app does not need focus, and it fires even with the app minimised to the tray. One key covers everything at once: flashes, videos, subliminals, overlays, sounds, all of it, so there is no hunting for switches one feature at a time. Learn it before you need it. Everything else in this manual assumes you can always stop."
+    },
+    {
+      "type": "figure",
+      "kind": "stack-drop",
+      "caption": "one press takes the whole stack down at once."
+    },
+    {
+      "type": "p",
+      "text": "Press it once and the engine stops: every flash clears, every overlay drops, the audio goes silent, and a running session pauses. Press it again within two seconds and the app closes completely. The second press only exits if the engine is already stopped, so in practice it is stop, then leave. Wait longer than two seconds between presses and the count resets; you just get the stop again."
+    },
+    {
+      "type": "p",
+      "text": "A few things on screen catch the first press for themselves instead of passing it along: a mandatory video uses it as pause, an open lock card holds it, and so do the settings palette and a couple of the full-screen web experiences. If the first press did not do what you expected, press again. Nothing swallows it permanently; it just costs one extra tap."
+    },
+    {
+      "type": "p",
+      "text": "Nothing in the app's normal running ever takes the key from you. Only the switches below can do that, and each one asks first. Changing the key itself takes three moves:"
+    },
+    {
+      "type": "steps",
+      "items": [
+        "Open the System settings and scroll to the bottom. The key button shows whatever your panic key currently is.",
+        "Click it, then press the key you want. The button confirms with a tick, and the new key is saved straight away.",
+        "Pick something you will not hit by accident but can find without looking. Escape is the default because your hand already knows where it is."
+      ]
+    },
+    {
+      "type": "callout",
+      "text": "No Panic is a separate switch that turns the panic key off entirely. With it on there is no keyboard way to stop the engine: the Exit button and Task Manager (Ctrl+Shift+Esc) are what is left. The app makes you confirm twice before it switches on. Do not use it until you know the app well, and never leave it on going into something you might need to leave. Combined with Strict Lock, the app has no stop button at all. Task Manager always works, and there is no penalty for using it."
+    },
+    {
+      "type": "limit",
+      "text": "The panic key stops the app, not the moment. A frame the OS is already drawing still lands, a playing video takes an extra press because the first one pauses it, and with No Panic on the key does nothing at all. It is an emergency stop, not an undo."
+    }
+  ]
+}

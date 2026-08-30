@@ -1,0 +1,48 @@
+{
+  "id": "videos",
+  "volume": 2,
+  "order": 2,
+  "title": "videos",
+  "blurb": "fullscreen, on top, a few times an hour.",
+  "target": "videos",
+  "tour": null,
+  "margin": {
+    "t": "strict lock scares me a little. in a fun way.",
+    "face": "0_0"
+  },
+  "blocks": [
+    {
+      "type": "p",
+      "text": "The app picks a video from your folder at random and plays it fullscreen, on top of everything, a few times an hour. Per Hour runs 1 to 20 and defaults to 2. The window is always on top with no title bar; you cannot move, resize or minimise it. By default the panic key still stops it. Min and Max length filters skip files outside the range you set, and both default to off."
+    },
+    {
+      "type": "p",
+      "text": "Videos play on your primary monitor. With Multi Mon on they fill every screen; three or more monitors also need Fill all monitors with video, which is off by default because the decoders stack up. If video only shows on one screen, keeps hopping between screens, or freezes at the start, try Force video GPU decode in System settings. It is off by default because it white-screens some PCs, so it is a fix to try, not a default."
+    },
+    {
+      "type": "p",
+      "text": "Strict Lock removes your exit. With it on, a video plays to the end whether you want it to or not, and the panic key is the only way out, if it is still enabled. The app makes you confirm twice, and it means it. Do not turn it on for the first time with a two-hour file in the folder; set Max length first, so you know the longest window you could be committing to. Stacked with No Panic, nothing in the app can stop the video. Task Manager can, always, without penalty."
+    },
+    {
+      "type": "figure",
+      "kind": "timeline",
+      "caption": "targets appear along the video. miss one and it starts over."
+    },
+    {
+      "type": "p",
+      "text": "The Mini-Game adds attention checks: buttons with phrases pop up at random spots while the video plays. Click one in time for a hit, worth 15 XP. Catch every target and the completion bonus is 200 XP, plus 50 more for each replay you sat through. Miss even one and the video starts over. With Mercy on in System settings the app lets you off after the third failure; leave it on until you know how the timing feels. XP for videos comes from this game, not from playback, though watch time still counts toward achievements and quests."
+    },
+    {
+      "type": "p",
+      "text": "While a video plays, the app turns down every other program individually through Windows' per-app mixer, by the Duck amount you set. Your system volume is untouched, and everything is put back when the video ends. Even after a crash, the old levels were written down first and are restored on the next launch."
+    },
+    {
+      "type": "callout",
+      "text": "The Phrases button edits the target wording, Style changes how the targets look, and Stare to click lets calibrated gaze hit a target by looking at it for about a second."
+    },
+    {
+      "type": "limit",
+      "text": "Playback runs on LibVLC, and it cannot repair a file. A codec it cannot decode gives you a black screen with sound, and audio sync problems are almost always baked into the source. The fix for both is re-encoding to MP4 (H.264), outside the app."
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "id": "spiral-and-filters",
+  "volume": 2,
+  "order": 4,
+  "title": "the spiral and the filters",
+  "blurb": "the room tint: a turning spiral and a pink wash.",
+  "target": "spiral",
+  "tour": null,
+  "margin": {
+    "t": "pink looks good on everything. especially you.",
+    "face": "(｡♥‿♥｡)"
+  },
+  "blocks": [
+    {
+      "type": "p",
+      "text": "Two overlays tint the room instead of interrupting it. The Spiral draws a turning animation over your screens; the Pink Filter washes everything in pink. Both are click-through, so your mouse goes straight to whatever is underneath, both cost almost nothing to run, and both unlock at Level 10."
+    },
+    {
+      "type": "p",
+      "text": "The spiral takes its animation from your Spirals folder, %LOCALAPPDATA%\\ConditioningControlPanel\\Spirals, alongside the built-in default. An animated GIF is the classic choice; short video clips work too, and spirals you weave in the Loom save into the same folder, so the overlay can wear anything you make there. Randomize picks a fresh spiral from the pool each time it starts; with fewer than two files there, it quietly falls back to your single chosen spiral. Opacity is the whole art: 10 to 20 percent is a background presence you stop noticing, 30 to 50 percent dominates the view. The default is 10."
+    },
+    {
+      "type": "figure",
+      "kind": "spiral",
+      "caption": "opacity is the only dial that matters. start low."
+    },
+    {
+      "type": "p",
+      "text": "The pink filter is simpler: one tint, one opacity. 5 to 15 percent is a whisper of pink that is easy to forget is on. 20 to 35 is noticeable and easy to live in. Above 40 it stops being for reading and starts being the point. They stack, and spiral over pink is the classic layered atmosphere."
+    },
+    {
+      "type": "p",
+      "text": "With Multi Mon on, both overlays cover every connected screen, and each can instead be pinned to one specific monitor in its own settings. Sessions and the Intensity Ramp can drive both: link a ramp and the opacity climbs on its own as the session runs. The spiral card also hosts Corner GIFs, two independent slots that park a small animation in a screen corner and run outside sessions entirely. A session can also fire either overlay on its own schedule, ramp or not, and the panic key drops both instantly along with everything else. If the spiral looks stretched or offset, check your monitor's DPI scaling."
+    },
+    {
+      "type": "p",
+      "text": "Two heavier cousins live further up the level curve. Brain Drain blurs and melts the screen itself and brings its own audio half; Mind Wipe is audio only, random wipe sounds on a dedicated channel that ducking does not touch. Both are their own cards. This chapter's pair is the gentle end of the family, and the pair you will leave running longest."
+    },
+    {
+      "type": "callout",
+      "text": "Like everything animated here, keep spiral files modest. A huge GIF turns a free effect into a stutter."
+    },
+    {
+      "type": "limit",
+      "text": "Neither overlay hides from anyone. Screenshots, recordings and screen shares show the spiral and the pink exactly as you see them; of all the overlays only Brain Drain ducks out of capture, and even that is a setting now. Assume anything on your screen is on your stream."
+    }
+  ]
+}
