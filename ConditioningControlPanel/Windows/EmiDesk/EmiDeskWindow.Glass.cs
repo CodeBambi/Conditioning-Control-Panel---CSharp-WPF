@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -45,6 +45,19 @@ public partial class EmiDeskWindow
     private DateTime _lastActivityUtc = DateTime.UtcNow;
     private DateTime _channelUpUtc;
     private bool _glassLive;
+
+    /// <summary>
+    /// SET WHILE A CHANNEL IS ANNOUNCING ITSELF, and the reason it has to exist:
+    /// <see cref="LandChannel"/> fires the <c>glassOffer</c> moment, the engine answers it
+    /// SYNCHRONOUSLY with an ask, and <see cref="ShowAsk"/> closes any live channel - correctly,
+    /// because an ask arriving from anywhere else must not leave a channel running behind it.
+    ///
+    /// <para>The channel's OWN offer is the one exception. Without this flag every channel tore
+    /// itself down 69 ms after it landed: one glitch, then her face again, then a question about a
+    /// thing nobody ever saw. It was invisible until the fidget wheel started flipping the glass
+    /// on a 30 s floor instead of only on an abandoned desk (found on the desk, 2026-08-30).</para>
+    /// </summary>
+    private bool _offering;
     private bool _channelTapped;
     private bool _emiOwnsTheVideo;
     private bool _glassHooked;
@@ -90,8 +103,9 @@ public partial class EmiDeskWindow
             CloseChannel(declined: false);
 
             // effectFired (with the channel) is raised by EmiChannels/EmiOffers, so there is one
-            // place a fired effect is announced no matter which door it came through.
-            EmiChannels.Fire(id, payload);
+            // place a fired effect is announced no matter which door it came through. A SAVER fires
+            // nothing: she was playing, you looked, and the glass goes back to her face.
+            if (!EmiChannels.IsSaver(id)) EmiChannels.Fire(id, payload);
         }
         catch (Exception ex)
         {
@@ -193,6 +207,35 @@ public partial class EmiDeskWindow
     }
 
     /// <summary>
+    /// Has the desk been left alone at least this long? The idle watch reads
+    /// <c>EmiChannels.IdleBeforeFlip</c> off the same clock; the fidget wheel's screen beat
+    /// (<c>EmiAlive.ScreenBeatRestMs</c>) reads a shorter one. Both are the same "nobody has
+    /// touched her" stamp, which <see cref="NoteGlassActivity"/> owns.
+    /// </summary>
+    internal bool GlassRestedFor(int ms)
+        => (DateTime.UtcNow - _lastActivityUtc).TotalMilliseconds >= ms;
+
+    /// <summary>
+    /// Put a channel on the glass RIGHT NOW if every gate allows it, and say whether one went up.
+    /// The fidget wheel's door to the flip: same gate, same painter, same ten second life as the
+    /// idle watch's, only reached from the rotation instead of from the 90 second clock.
+    /// </summary>
+    internal bool TryFlipGlassNow()
+    {
+        try
+        {
+            if (_glassLive) return false;
+            if (!GlassMayFlip()) return false;
+            return BeginFlip();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] glass beat failed");
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Every reason she must NOT wander off to a channel. All of them are "something is already
     /// happening": the glass is the quietest thing she does and it never goes first.
     /// </summary>
@@ -234,17 +277,18 @@ public partial class EmiDeskWindow
 
     // ---------------------------------------------------------------- the flip
 
-    private void BeginFlip()
+    /// <summary>Start the glitch into a channel. False when there was nothing to show.</summary>
+    private bool BeginFlip()
     {
         string? id = EmiChannels.Pick();
-        if (id == null) return;
+        if (id == null) return false;
 
         var rect = GlassRect;
         var painter = EmiChannels.Build(id, rect.Width, rect.Height);
         if (painter == null)
         {
             Log.Debug("[EmiDesk] channel {Channel} had nothing to draw, skipped", id);
-            return;
+            return false;
         }
 
         _channel = id;
@@ -254,7 +298,7 @@ public partial class EmiDeskWindow
         StopIdleBeats();
 
         EnsureGlassLayers();
-        if (_glitchLayer == null || _glassLayer == null) { CloseChannel(false, silent: true); return; }
+        if (_glitchLayer == null || _glassLayer == null) { CloseChannel(false, silent: true); return false; }
 
         _glitchLayer.Children.Clear();
         _glitchLayer.Visibility = Visibility.Visible;
@@ -282,6 +326,7 @@ public partial class EmiDeskWindow
             }
         };
         _glitch.Start();
+        return true;
     }
 
     /// <summary>
@@ -353,7 +398,10 @@ public partial class EmiDeskWindow
             () => CloseChannel(declined: true));
 
         Log.Information("[EmiDesk] glass channel up: {Channel}", _channel);
-        App.EmiDesk?.Fire("glassOffer", new { channel = _channel });
+
+        _offering = true;
+        try { App.EmiDesk?.Fire("glassOffer", new { channel = _channel }); }
+        finally { _offering = false; }
     }
 
     private void OnChannelFrame(object? sender, EventArgs e)
@@ -377,6 +425,9 @@ public partial class EmiDeskWindow
     /// </summary>
     private void CloseChannel(bool declined, bool silent = false)
     {
+        // Her own offer may not close the channel it is offering. See _offering.
+        if (_offering) return;
+
         bool wasLive = _glassLive;
         string? id = _channel;
 

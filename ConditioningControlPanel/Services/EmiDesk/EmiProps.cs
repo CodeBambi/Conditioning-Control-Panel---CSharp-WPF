@@ -61,8 +61,13 @@ public static class EmiProps
     // Her right hand, in body-box fractions. Both numbers were set by compositing all three plates
     // over body-idle and body-sway2 and looking at them; they are not derived from anything.
 
-    /// <summary>The prop's RIGHT edge, as a fraction of the body box width.</summary>
-    public const double RightFrac = 0.965;
+    /// <summary>
+    /// The prop's RIGHT edge, as a fraction of the body box width. Pulled in from 0.965 on the
+    /// owner's first look at it running (2026-08-30): flush against the edge of the box the plate
+    /// read as taped to the frame rather than held, and three percent buys the hand some air on
+    /// its outside without the plate starting to cover her sneaker.
+    /// </summary>
+    public const double RightFrac = 0.935;
 
     /// <summary>The prop's BOTTOM edge, as a fraction of the body box height.</summary>
     public const double BottomFrac = 0.905;

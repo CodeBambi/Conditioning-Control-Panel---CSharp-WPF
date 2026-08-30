@@ -91,11 +91,13 @@ public static class EmiDebug
 
             ResetKnock = IsOn(Environment.GetEnvironmentVariable("EMI_DESK_RESET_KNOCK"));
 
-            if (IdleMs != null || Enabled || ResetOnboarding || ResetKnock)
+            if (IdleMs != null || FidgetMs != null || Enabled || ResetOnboarding || ResetKnock)
             {
                 Log.Information(
-                    "[EmiDesk] DEBUG overrides active: idleMs={Idle}, qaCadence={Qa}, resetOnboarding={Reset}, resetKnock={Knock}",
-                    IdleMs?.ToString(CultureInfo.InvariantCulture) ?? "default", Enabled, ResetOnboarding, ResetKnock);
+                    "[EmiDesk] DEBUG overrides active: idleMs={Idle}, fidgetMs={Fidget}, qaCadence={Qa}, resetOnboarding={Reset}, resetKnock={Knock}",
+                    IdleMs?.ToString(CultureInfo.InvariantCulture) ?? "default",
+                    FidgetMs?.ToString(CultureInfo.InvariantCulture) ?? "default",
+                    Enabled, ResetOnboarding, ResetKnock);
             }
         }
         catch (Exception ex)
@@ -104,6 +106,7 @@ public static class EmiDebug
             // this one cannot be allowed to: a bad environment variable simply means no override.
             try { Log.Debug(ex, "[EmiDesk] debug override probe failed"); } catch { }
             IdleMs = null;
+            FidgetMs = null;
             Enabled = false;
             ResetOnboarding = false;
             ResetKnock = false;

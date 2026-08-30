@@ -291,12 +291,16 @@ public partial class EmiDeskWindow
     ///
     /// <para>Which prop is a plain roll, minus the one she did last, for the reason the fidget
     /// scheduler never repeats itself: the same object twice running reads as a loop.</para>
+    ///
+    /// <para>Returns FALSE when it could not run - no plates installed, or the chosen plate's art
+    /// is missing - so the fidget wheel can spend the slot on a different kind rather than leaving
+    /// the desk still.</para>
     /// </summary>
-    private void RunPropBeat()
+    private bool RunPropBeat()
     {
         try
         {
-            if (EmiProps.All.Count == 0) return;
+            if (EmiProps.All.Count == 0) return false;
 
             string key = _lastPropKey;
             for (int guard = 0; guard < 8 && key == _lastPropKey; guard++)
@@ -304,7 +308,7 @@ public partial class EmiDeskWindow
             _lastPropKey = key;
 
             ShowProp(key);
-            if (!PropUp) return;               // art missing: do not put the reading face on nothing
+            if (!PropUp) return false;         // art missing: do not put the reading face on nothing
 
             PlayChain(new EmiChain(
                 "prop", "IDLE BEAT (checks something)",
@@ -314,10 +318,13 @@ public partial class EmiDeskWindow
                     new EmiFrame(EmiProps.DoneFace, 420)
                 },
                 BodyFrame: "idle"), done: () => HideProp());
+            Log.Debug("[EmiDesk] prop beat: {Prop}", key);
+            return true;
         }
         catch (Exception ex)
         {
             Log.Debug(ex, "[EmiDesk] prop beat failed");
+            return false;
         }
     }
 
