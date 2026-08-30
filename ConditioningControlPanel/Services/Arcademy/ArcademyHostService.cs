@@ -3091,6 +3091,38 @@ internal static class ArcademyHostService
         ["locker_signpost_go"] = "Open The Locker",
         ["locker_unlock_hint"] = "{tok}2 at the counter",
         ["locker_open"] = "Open Locker",
+        // ---- EMI's stuck-hints (Daily Trigger, 2026-08-30) ----------------------------
+        // The owner amended the "no mid-class mascot speech" law (arcademy/CLAUDE.md traps
+        // 90 and 97) for one narrow channel: when the board says the player is beaten, EMI
+        // may ASK whether they want a hand. Two offers a class, never a hint she was not
+        // invited to give. Offer 1 names the band today's answer came out of (free); offer
+        // 2 places one letter and caps the class at A via the existing `stuck_rescue`
+        // assist, which the report card already explains without a row of its own.
+        //
+        // These are ordinary call-site keys. The CLASS resolves them and hands finished
+        // sentences to emi/asks.js, which has no lexicon - so `{cat}` below is substituted
+        // page-side with one of the dt_cat_* rows, never here.
+        ["dt_help_ask_cat"] = "psst. i might know this one.",
+        ["dt_help_chip_cat_yes"] = "spill",
+        ["dt_help_chip_no"] = "nah",
+        ["dt_help_yes_cat"] = "smells like a {cat} word to me.",
+        ["dt_help_no_cat"] = "respect. i'll just sit here knowing it.",
+        ["dt_help_ask_letter"] = "i could hold one letter for you.",
+        ["dt_help_chip_letter_yes"] = "ok",
+        ["dt_help_yes_letter"] = "boop. that one's yours now.",
+        ["dt_help_no_letter"] = "ok. my letter and i will practice waiting.",
+        // The nine band names. The KEY is the contract: it is `dt_cat_` plus the `cat` of a
+        // THEME_GROUPS band in games/daily-trigger/words-answers.js (plus `common` for the
+        // tiny ordinary-English band), so renaming a band there orphans its row here.
+        ["dt_cat_trance"] = "spirally",
+        ["dt_cat_training"] = "training arc",
+        ["dt_cat_submission"] = "yes ma'am",
+        ["dt_cat_denial"] = "not yet",
+        ["dt_cat_bimbo"] = "glittery",
+        ["dt_cat_arcade"] = "hometown",
+        ["dt_cat_school"] = "classroom",
+        ["dt_cat_melt"] = "melty",
+        ["dt_cat_common"] = "civilian",
     };
 
     /// <summary>The mockup's owner-approved tokens (BUILD-CONTRACT §10). A mod overrides them via

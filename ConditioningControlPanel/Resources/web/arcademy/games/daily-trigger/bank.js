@@ -18,7 +18,7 @@
  * ==========================================================================*/
 
 import { hash01, makeRng, shuffled } from '../../core/rng.js';
-import { THEME, COMMON, PHRASES } from './words-answers.js';
+import { THEME, THEME_GROUPS, COMMON, PHRASES } from './words-answers.js';
 import { ACCEPT } from './words-accept.js';
 
 /**
@@ -84,6 +84,53 @@ export function bank() {
   }
   cached = { answers, theme, common, accept, phrases };
   return cached;
+}
+
+/* ----------------------------------------------------------------------------
+ * CATEGORIES (EMI's first stuck-hint, 2026-08-30)
+ *
+ * THE FAIRNESS FIX, not a difficulty dial. The answer pool is niche by owner
+ * ruling and stays that way; what a non-native speaker is missing is not the
+ * word, it is the SHAPE OF THE SPACE the word came from. Naming the band drops
+ * 578 candidates to ~15-102, which is the whole hint.
+ *
+ * Derived from `THEME_GROUPS` - the same segments, in the same order, that
+ * `THEME` joins - so it can never disagree with the pool. A word outside every
+ * theme band (the tiny COMMON band) answers 'common', which is itself the
+ * informative answer: "it is just an ordinary word today".
+ * -------------------------------------------------------------------------- */
+let catCache = null;
+
+/** letter-word -> band key, memoised the same way `bank()` is. */
+function catIndex() {
+  if (catCache) return catCache;
+  const map = Object.create(null);
+  const groups = Array.isArray(THEME_GROUPS) ? THEME_GROUPS : [];
+  for (const g of groups) {
+    const key = g && typeof g.cat === 'string' ? g.cat : '';
+    if (!key) continue;
+    // FIRST BAND WINS, and the order is words-answers.js's own. As of 2026-08-30
+    // the eight bands are disjoint (532 = 84+44+80+79+101+102+27+15), so this is
+    // only a tie-break rule for a future editor who duplicates a word.
+    for (const w of fiveOnly(toks(g.words))) { if (!map[w]) map[w] = key; }
+  }
+  catCache = map;
+  return catCache;
+}
+
+/**
+ * Which band today's answer came out of.
+ * @param {string} word the 5-letter answer
+ * @returns {?string} a `THEME_GROUPS` key, 'common' for the ordinary band, or
+ *   NULL when there is no honest answer - a phrase day, whose two groups are not
+ *   pool words at all. A null means the category hint is simply not offered.
+ */
+export function categoryOf(word) {
+  const w = String(word || '').toLowerCase();
+  if (!FIVE.test(w)) return null;                 // phrase days and junk
+  const hit = catIndex()[w];
+  if (hit) return hit;
+  return bank().common.indexOf(w) >= 0 ? 'common' : null;
 }
 
 /** True when this word is in the theme (trigger/arcade) band. Flavour only. */

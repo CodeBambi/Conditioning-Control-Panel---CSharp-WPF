@@ -5014,9 +5014,18 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       const NOTE_CAP = 40;             // per class - a flood guard, nothing more
       let notes = 0, lastNoteAt = 0, held = false;
       const noteAt = Object.create(null);
+      /* THE HINT CHANNEL (2026-08-30) - see `askHelp` at the bottom of this
+       * object. Its ration is its own; the 15s spacing it shares. */
+      let helpAsks = 0;
+      const HELP_ASKS_PER_CLASS = 2;
+      /* IT RETURNS NOW. Every verb above ignores the answer (a face that did
+       * not land is not a class's problem), but `askHelp` has to know whether
+       * the QUESTION actually reached the glass, because a game that thinks it
+       * offered help when nobody was there would spend its one offer on
+       * nothing. `fireMoment` answers true only when EMI took the moment. */
       const fire = (name, extra) => {
-        try { fireMoment(name, Object.assign({ gameKey: cls.gameKey, midClass: true }, extra || {})); }
-        catch (e) { /* a mascot may never break a class */ }
+        try { return fireMoment(name, Object.assign({ gameKey: cls.gameKey, midClass: true }, extra || {})); }
+        catch (e) { return false; /* a mascot may never break a class */ }
       };
       return Object.freeze({
         tense() {
@@ -5062,6 +5071,52 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           if (next === held) return;
           held = next;
           fire('moodHold', { on: next });
+        },
+        /**
+         * SHE OFFERS A HAND, AND SHE ASKS FIRST (2026-08-30).
+         *
+         * THE OWNER'S AMENDMENT TO TRAPS 90 AND 97, and the whole of it:
+         * "im actually not oki with this law anymore, i think emi might wanna
+         * speak during the games and hoestly it alredy does. Lets not overdo it
+         * tho, have it speak somewhat during the games and the hints are an
+         * exception they trigger if they are having troubles". So a class that
+         * can SEE a player struggling may put ONE question on the glass - never
+         * a hint, never a dump, a question - and the player answers it.
+         *
+         * "Let's not overdo it" is the ration, and it is enforced here rather
+         * than in any game: two a class, the 15s mood spacing, and the ask
+         * engine's own gates on top (one strip at a time, EMI has to be
+         * reachable, and it leaves on its own after `STUCK_GIVE_UP_MS` because
+         * a chip strip may not camp over a live board - trap 59/97's rule
+         * survives the amendment intact).
+         *
+         * THIS IS THE ONE MOOD VERB THAT IS NOT FACE-ONLY, and it is a narrow
+         * channel, not a bus: a second kind of in-class question gets its own
+         * verb and its own ration rather than riding `stuck`.
+         *
+         * @param {Object} spec  the class's whole question, already localised -
+         *   {q, face, chips:[yes,no], yes:{say,face}, no:{say,face}, onYes}.
+         *   The words are the GAME's (its lexicon rows, its `{cat}`
+         *   substitution) because emi/asks.js has no `t()`; `onYes` is the
+         *   callback the ask engine holds and invokes if - and only if - the
+         *   player says yes.
+         * @returns {boolean} true when the question actually landed on the
+         *   glass. False is ordinary (no EMI, she is busy, the ration is spent)
+         *   and a class must treat it as "not offered", never as "declined".
+         */
+        askHelp(spec) {
+          if (!spec || typeof spec !== 'object') return false;
+          if (typeof spec.onYes !== 'function') return false;
+          if (helpAsks >= HELP_ASKS_PER_CLASS) return false;
+          const now = Date.now();
+          if (now - lastAt < MOOD_SPACING_MS) return false;
+          const landed = fire('stuck', spec) === true;
+          /* THE SPACING IS SPENT ON A LANDING, NOT ON AN ATTEMPT. A question
+           * that never reached the glass must not also mute the faces for the
+           * next fifteen seconds; the caller's own retry floor stops the
+           * flood. */
+          if (landed) { helpAsks += 1; lastAt = now; }
+          return landed;
         },
       });
     })();
