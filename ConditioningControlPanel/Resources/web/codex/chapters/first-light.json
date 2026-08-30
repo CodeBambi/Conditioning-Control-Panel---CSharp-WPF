@@ -1,0 +1,28 @@
+{
+  "_fixture": "FIXTURE PAGE. Not the written chapter. Ships so the renderer is demonstrably working and is meant to be overwritten by the orchestrator with F1's docs/codex/i-first-light.json. The `fixture` flag below paints a red slip at the top of the page so nobody mistakes this for finished prose.",
+  "fixture": true,
+  "id": "first-light",
+  "volume": 1,
+  "order": 1,
+  "title": "first light",
+  "blurb": "what happens the first time you open it.",
+  "target": "settings",
+  "tour": "ShortWalk",
+  "margin": { "t": "you already pressed something. i saw.", "face": "^_~" },
+  "blocks": [
+    { "type": "p", "text": "The app opens on the dashboard, and nothing is running. That is the first thing worth knowing about it. Nothing starts on its own, nothing was downloaded for you, and no feature is on until you turn it on. What you are looking at is a room full of switches with every switch down." },
+    { "type": "p", "text": "It runs on Windows 10 or 11, on one machine, offline apart from the parts that sign you in. It does not need a browser, a phone or an account to do the things in the first three volumes of this book." },
+    { "type": "steps", "items": [
+      "Run the installer and let it finish. It will offer to launch the app at the end.",
+      "Read the consent card. It is short and it is the only thing between you and a running app.",
+      "Set your panic key before you touch anything else. Escape is the default and it works from any window.",
+      "Point the app at a folder of your own pictures, or skip it and come back when you have one."
+    ] },
+    { "type": "figure", "kind": "checklist", "caption": "the four things worth doing before anything else" },
+    { "type": "p", "text": "The dashboard is a wall of cards, one per feature. A card tells you what the feature does and carries a question badge that opens the app's own description of it. Every card has a settings face behind it. You can spend a long time reading cards without ever starting anything, and that is a reasonable way to use the first evening." },
+    { "type": "callout", "text": "If you only remember one thing from this page, remember the panic key. It clears everything on screen and stops the scheduler, from any window, whatever has focus." },
+    { "type": "p", "text": "Progress, levels and achievements start counting from the moment the app first runs. They are cosmetic. Nothing in the app is gated behind them except the things that say they are." },
+    { "type": "figure", "kind": "grid-fill", "caption": "the dashboard: one card per feature, all of them off" },
+    { "type": "limit", "text": "The installer cannot tell you whether your machine will keep up. Everything here draws on top of other windows, and on an older graphics chip a heavy overlay plus a video plus flashes at full rate will stutter. There is no benchmark and no warning. You find out by turning things up until it does, then coming back down." }
+  ]
+}

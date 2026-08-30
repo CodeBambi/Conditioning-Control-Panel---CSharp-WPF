@@ -1,0 +1,30 @@
+{
+  "_fixture": "DEVELOPER FIXTURE, NOT A CHAPTER. Deliberately kept OUT of codex.json, so it is unreachable from the spine and never counts toward reading progress. Open it with ?chapter=_figures to see all ten figures of the closed vocabulary on one page. It exists so the drawings can be checked against each other after an edit, and so a writer can see what each kind actually depicts before choosing one. Delete it freely; nothing references it.",
+  "fixture": true,
+  "id": "_figures",
+  "volume": 1,
+  "order": 99,
+  "title": "the ten figures",
+  "blurb": "the closed vocabulary, all on one page.",
+  "target": null,
+  "tour": null,
+  "margin": { "t": "these are all the pictures there are.", "face": "._." },
+  "blocks": [
+    { "type": "p", "text": "Writers pick a figure from this list and never invent an eleventh. Every one of them is CSS or inline SVG on the same pixel grid, and none of them moves." },
+    { "type": "figure", "kind": "stack-drop", "caption": "stack-drop: things arriving on top of what you were doing" },
+    { "type": "figure", "kind": "pulse", "caption": "pulse: something that fires, waits, and fires again" },
+    { "type": "figure", "kind": "layers", "caption": "layers: planes stacked over the screen underneath" },
+    { "type": "figure", "kind": "timeline", "caption": "timeline: a run with a beginning, a middle and an end" },
+    { "type": "figure", "kind": "dial", "caption": "dial: an amount you choose between none and all of it" },
+    { "type": "figure", "kind": "checklist", "caption": "checklist: a short list you work down before you start" },
+    { "type": "figure", "kind": "spiral", "caption": "spiral: the spiral, drawn in squares like everything else" },
+    { "type": "figure", "kind": "wave", "caption": "wave: level around a centre line, stepped, never smooth" },
+    { "type": "figure", "kind": "grid-fill", "caption": "grid-fill: coverage filling in, cell by cell" },
+    { "type": "figure", "kind": "clock", "caption": "clock: a time something happens whether you watch or not" },
+    { "type": "figure", "kind": "not-a-real-kind", "caption": "and this is what an eleventh kind looks like" },
+    { "type": "steps", "items": ["steps look like this,", "one numbered line at a time,", "with the numeral stamped in her ink."] },
+    { "type": "callout", "text": "A callout is an aside the reader can skip without losing the thread." },
+    { "type": "limit", "text": "A limit is the chapter's one honest limitation, taped into the book on purpose. It is part of the design, not an error state, so it never turns red and never shouts." },
+    { "type": "nonsense", "text": "and this is an unknown block type, shown rather than swallowed." }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "_fixture": "FIXTURE PAGE. Not the written chapter. Ships so the renderer is demonstrably working and is meant to be overwritten by the orchestrator with F2's docs/codex/iii-sessions.json. This one deliberately declares NEITHER a tour NOR a target, so the footer's two buttons are demonstrably absent rather than dead.",
+  "fixture": true,
+  "id": "sessions",
+  "volume": 3,
+  "order": 1,
+  "title": "sessions",
+  "blurb": "a run with a start, a middle and an end.",
+  "target": null,
+  "tour": null,
+  "margin": { "t": "i like this floor. it does the thinking.", "face": "^_^" },
+  "blocks": [
+    { "type": "p", "text": "A session is a saved plan. Instead of turning six features on by hand and turning them off again an hour later, you write down what should be running, for how long, and how hard, and then press one button." },
+    { "type": "figure", "kind": "timeline", "caption": "one session: what starts when, and when it stops" },
+    { "type": "p", "text": "The engine underneath is a one second clock and nothing else. It reads the times you set, starts features when their moment arrives, ends them when it passes, and moves the intensity along the ramp you drew. It does not improvise, it does not learn, and it never asks anything of a server. The same session run twice does the same thing twice." },
+    { "type": "steps", "items": [
+      "Open the sessions rack and start from a preset rather than an empty page.",
+      "Set the length first. Everything else is measured against it.",
+      "Turn on the two or three features you actually want, and leave the rest alone.",
+      "Run it once at the shortest length the preset allows before you save your own version."
+    ] },
+    { "type": "figure", "kind": "dial", "caption": "intensity is one number, and everything reads from it" },
+    { "type": "callout", "text": "Pausing a session is allowed and costs you nothing except the experience for the time you were paused. The app asks once, and there is a checkbox to stop it asking." },
+    { "type": "p", "text": "A session owns the screen for as long as it runs. The panic key still works, and it ends the session rather than pausing it. There is no way to end a session quietly by closing a window; the engine outlives every window in the app except the app itself." },
+    { "type": "limit", "text": "The engine has no idea whether you are there. It cannot tell a person watching from an empty chair, and it will run the full length into an empty room. The webcam features are the only part of the app that knows the difference, and a session does not consult them." }
+  ]
+}
