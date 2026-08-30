@@ -7,8 +7,8 @@ namespace ConditioningControlPanel.Services.EmiDesk;
 /// <summary>
 /// The QA switches for EMI Desk, read ONCE from the environment at first touch.
 ///
-/// <para>EMI's cadence is deliberately slow: the glass waits 90 s of stillness before it flips to a
-/// channel, a line is gated behind a 45 s global floor and a per-moment cooldown that runs to
+/// <para>EMI's cadence is deliberately slow: the glass waits a stillness beat before it flips to a
+/// channel (10 s since the owner unlocked the rotation for the 2026-08-30 campus port), a line is gated behind a 45 s global floor and a per-moment cooldown that runs to
 /// minutes, and an offer needs a third summon plus 10 minutes since the last one. Those numbers are
 /// owner locks (BRIEF 6 / 7 / 8) and none of them are tunable from the UI, which makes the glass,
 /// the asks and most of the moments unreachable in a play-test that lasts minutes rather than

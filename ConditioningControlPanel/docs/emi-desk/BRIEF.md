@@ -72,7 +72,8 @@ Commit on `feat/emi-desk` when your chunk builds; never push, never open a PR, n
    **The tutorial that stops** (wave 3): three nudge tracks teach the pat, the ring and pinning, and
    go permanently silent at 3 pats / 2 ring opens / 1 pin, with a hard cap of 6 lines each, never two
    within 90 s. Never call the glyph a "door" in anything a user can read.
-6. **The glass.** Idle for 90s (no input on her, ring closed, no ask open, no line on screen): the glass
+6. **The glass.** Idle for 10s (shipped at 90s; the owner unlocked the rotation for the 2026-08-30
+   campus channel port; no input on her, ring closed, no ask open, no line on screen): the glass
    glitch-flips to a channel for 10s: `spiral` (animated spiral; tap = `App.Overlay.ShowOverlayTimed("spiral", 6000, ...)`),
    `video` (a thumbnail of a random local video; tap = `App.Video.PlaySpecificVideo(path)`, EMI goes
    Topmost over the video and says a `videoRunning` line), `burst` (3-4 random local gifs/images on her
