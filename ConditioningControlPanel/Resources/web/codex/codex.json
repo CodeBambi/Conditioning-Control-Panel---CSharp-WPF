@@ -1,0 +1,60 @@
+{
+  "_comment": [
+    "The book's index: which volumes exist, which chapters sit in them, and in what order.",
+    "Chapter ids and titles are taken from docs/emi-desk/WAVE2-CONTRACT.md and are load-bearing:",
+    "the id is the chapter's filename in ./chapters/ and the payload of the codex:open bridge",
+    "message, so renaming one breaks the bookmark the host stored for it.",
+    "",
+    "Volumes IV to VI are on the spine with no pages behind them, on purpose, so the shape of",
+    "the book is honest from day one. A volume with locked:true or an empty chapter list is drawn",
+    "as a padlocked tab and is skipped by reading progress.",
+    "",
+    "A chapter entry may be a plain id string or an object with id and title. The title here is",
+    "what the spine and the chapter strip show before the chapter file has been read; once it",
+    "loads, the file's own title wins."
+  ],
+  "version": 1,
+  "volumes": [
+    {
+      "n": 1,
+      "roman": "I",
+      "title": "first light",
+      "locked": false,
+      "chapters": [
+        { "id": "first-light",  "title": "first light" },
+        { "id": "your-folders", "title": "your folders" },
+        { "id": "the-panic-key", "title": "the panic key" },
+        { "id": "the-room",     "title": "the room" }
+      ]
+    },
+    {
+      "n": 2,
+      "roman": "II",
+      "title": "the instruments",
+      "locked": false,
+      "chapters": [
+        { "id": "flashes",             "title": "flashes" },
+        { "id": "videos",              "title": "videos" },
+        { "id": "subliminals",         "title": "subliminals" },
+        { "id": "spiral-and-filters",  "title": "the spiral and the filters" },
+        { "id": "sound",               "title": "sound" }
+      ]
+    },
+    {
+      "n": 3,
+      "roman": "III",
+      "title": "the session floor",
+      "locked": false,
+      "chapters": [
+        { "id": "sessions",      "title": "sessions" },
+        { "id": "the-scheduler", "title": "the scheduler" },
+        { "id": "ramps",         "title": "ramps" },
+        { "id": "takeover",      "title": "takeover" },
+        { "id": "lockdown",      "title": "lockdown" }
+      ]
+    },
+    { "n": 4, "roman": "IV", "title": "", "locked": true, "chapters": [] },
+    { "n": 5, "roman": "V",  "title": "", "locked": true, "chapters": [] },
+    { "n": 6, "roman": "VI", "title": "", "locked": true, "chapters": [] }
+  ]
+}

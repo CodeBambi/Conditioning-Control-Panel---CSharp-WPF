@@ -1,0 +1,771 @@
+/* ==========================================================================
+   codex.css - the whole look of EMI's field manual.
+
+   NO IMAGE ASSETS. Every rule, every figure, every ornament here is drawn
+   with gradients, borders and inline SVG. The only binaries in this bundle
+   are the two fonts below, which ship with the app already.
+
+   NO NETWORK. Nothing here is fetched from anywhere. The window maps this
+   folder with resource access set to Deny, so a remote url would not fail
+   with a broken-image icon, it would simply never resolve.
+
+   THE OBJECT. The website's manual is a CRT terminal, phosphor on black.
+   This is the other one: a dog-eared pixel paperback lying on EMI's desk.
+   Parchment page, plum desk, pink ink, pixel chrome. It commits to that one
+   look and deliberately does NOT follow the viewer's light/dark theme -
+   it is her book, not their browser.
+
+   THE TYPE RULE. Pixel type is chrome: spine, headings, buttons, labels,
+   captions. Prose is a real reading face at a real reading size, because a
+   chapter is 450 to 650 words that somebody actually reads. Press Start 2P
+   is unreadable past a few words and never touches a paragraph.
+
+   MOTION. Only on navigation: a 180ms dithered page turn, a 2px tab press,
+   a stamp landing on a finished volume. Nothing moves while somebody reads.
+   All of it is switched off under prefers-reduced-motion at the bottom.
+   ========================================================================== */
+
+/* -------------------------------------------------------------------------
+   fonts - local files, in this bundle, never a webfont service
+   ------------------------------------------------------------------------- */
+@font-face {
+  font-family: 'CodexPixel';
+  src: url('./fonts/PressStart2P-latin.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'CodexMono';
+  src: url('./fonts/NotoSansMono-latin.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* -------------------------------------------------------------------------
+   tokens
+   ------------------------------------------------------------------------- */
+:root {
+  /* her palette, the app's palette */
+  --pink:      #FF69B4;
+  --plum:      #252542;
+  --night:     #1A1A2E;
+
+  /* the paper. pulled a touch warm so pink reads as ink on it */
+  --paper:     #EDE3D6;
+  --paper-2:   #E2D5C4;
+  --paper-3:   #D4C4AE;
+  --paper-hot: #EBDBD5;   /* the limit slip, tinted toward rose */
+
+  /* inks */
+  --ink:       #241C2E;   /* body text. 12:1 on --paper */
+  --ink-soft:  #5C5069;
+  --ink-faint: #8A7E95;
+  --rose:      #A32463;   /* small pink that survives on parchment */
+  --rose-soft: #C4548A;
+
+  /* chrome */
+  --spine-w:   78px;
+  --margin-w:  238px;
+
+  --pixel: 'CodexPixel', ui-monospace, 'Courier New', monospace;
+  --mono:  'CodexMono', ui-monospace, 'Consolas', 'Courier New', monospace;
+  --body:  Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+}
+
+/* -------------------------------------------------------------------------
+   reset-ish
+   ------------------------------------------------------------------------- */
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--night);
+  color: var(--ink);
+  font-family: var(--body);
+  /* pixel art everywhere: never let the compositor smooth a hard edge */
+  image-rendering: pixelated;
+  overflow: hidden;
+  /* the book is furniture, not a document. selecting the chrome is noise;
+     the prose re-enables selection on .cdx-body below. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* -------------------------------------------------------------------------
+   the desk
+   ------------------------------------------------------------------------- */
+.cdx-desk {
+  height: 100%;
+  padding: 14px;
+  background:
+    radial-gradient(120% 90% at 50% 0%, #2C2C50 0%, var(--night) 68%),
+    var(--night);
+}
+
+.cdx-book {
+  height: 100%;
+  display: grid;
+  grid-template-columns: var(--spine-w) minmax(0, 1fr) var(--margin-w);
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "spine page   margin"
+    "spine footer footer";
+  position: relative;
+  /* the block of pages seen from below: three hard offsets, no blur */
+  filter: drop-shadow(0 6px 0 rgba(0, 0, 0, .34));
+}
+
+/* ==========================================================================
+   THE SPINE - volume tabs I to VI
+   ========================================================================== */
+.cdx-spine {
+  grid-area: spine;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0 10px 0;
+  background: linear-gradient(90deg, #1F1F38 0%, var(--plum) 62%, #2B2B4E 100%);
+  border: 3px solid #12121F;
+  border-right: none;
+  overflow: hidden;
+}
+
+.cdx-tab {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  margin-left: 6px;
+  padding: 8px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--paper-3);
+  background: linear-gradient(90deg, #2E2E54 0%, #262646 100%);
+  border: 2px solid #14142A;
+  border-right-width: 0;
+  font-family: var(--pixel);
+  transition: background 90ms linear, color 90ms linear;
+}
+
+.cdx-tab:hover:not(.is-locked) { color: var(--paper); background: linear-gradient(90deg, #3A3A66 0%, #2C2C52 100%); }
+
+/* the 2px press. the whole tab sinks toward the spine. */
+.cdx-tab:active:not(.is-locked) { transform: translateY(2px); }
+
+.cdx-tab .cdx-tab-num {
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: 1px;
+  color: var(--pink);
+  text-shadow: 2px 2px 0 #12121F;
+}
+
+.cdx-tab .cdx-tab-title {
+  writing-mode: vertical-rl;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .5px;
+  line-height: 1;
+  text-transform: lowercase;
+  white-space: nowrap;
+  opacity: .82;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A locked volume has no title to show, so it does not need a full-height
+   tab. Shrinking the three empty ones is what gives "the session floor"
+   enough spine to be spelled out instead of ellipsed. */
+.cdx-tab.is-locked {
+  flex: 0 0 auto;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* the open volume: the tab becomes the page, and reaches across the gutter */
+.cdx-tab.is-open {
+  background: var(--paper);
+  color: var(--ink);
+  border-color: #12121F;
+  margin-right: -3px;
+  z-index: 2;
+}
+.cdx-tab.is-open .cdx-tab-num { color: var(--rose); text-shadow: 2px 2px 0 var(--paper-3); }
+.cdx-tab.is-open .cdx-tab-title { opacity: 1; color: var(--ink-soft); }
+
+/* locked: IV to VI. hatched, padlocked, and honestly empty. */
+.cdx-tab.is-locked {
+  cursor: not-allowed;
+  color: #6B6B8C;
+  background:
+    repeating-linear-gradient(45deg, #232340 0 4px, #1D1D36 4px 8px);
+}
+.cdx-tab.is-locked .cdx-tab-num { color: #6B6B8C; text-shadow: 2px 2px 0 #14142A; }
+.cdx-tab .cdx-lock { width: 11px; height: 13px; display: block; opacity: .9; }
+
+/* the stamp: lands once, when every chapter in a volume has been read */
+.cdx-stamp {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%) rotate(-13deg);
+  padding: 3px 4px;
+  font-family: var(--pixel);
+  font-size: 7px;
+  letter-spacing: 1px;
+  color: var(--pink);
+  border: 2px solid var(--pink);
+  background: rgba(255, 105, 180, .10);
+  pointer-events: none;
+}
+.cdx-tab.is-open .cdx-stamp { color: var(--rose); border-color: var(--rose); background: rgba(163, 36, 99, .10); }
+
+/* it LANDS. big, then hard down onto the tab, then a single settle. */
+.cdx-stamp.is-landing { animation: cdx-stamp-land 260ms steps(6, end) 1; }
+@keyframes cdx-stamp-land {
+  0%   { transform: translateX(-50%) rotate(-13deg) scale(3.2); opacity: 0; }
+  60%  { transform: translateX(-50%) rotate(-13deg) scale(1);   opacity: 1; }
+  75%  { transform: translateX(-50%) rotate(-13deg) scale(1.14); }
+  100% { transform: translateX(-50%) rotate(-13deg) scale(1);   opacity: 1; }
+}
+
+/* ==========================================================================
+   THE PAGE
+   ========================================================================== */
+.cdx-page {
+  grid-area: page;
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 3px solid #12121F;
+  background:
+    /* foxing: three faint age spots, fixed so they never look generated */
+    radial-gradient(22px 16px at 18% 26%, rgba(150, 118, 74, .09), transparent 70%),
+    radial-gradient(30px 20px at 78% 64%, rgba(150, 118, 74, .07), transparent 70%),
+    radial-gradient(14px 12px at 62% 12%, rgba(150, 118, 74, .08), transparent 70%),
+    /* the tooth of the paper */
+    repeating-linear-gradient(0deg, rgba(90, 70, 40, .035) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(90, 70, 40, .025) 0 1px, transparent 1px 4px),
+    var(--paper);
+  overflow: hidden;
+}
+
+/* the gutter: where the page disappears into the binding */
+.cdx-gutter {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 26px;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(60, 40, 20, .22) 0%, rgba(60, 40, 20, .06) 45%, transparent 100%);
+  z-index: 3;
+}
+
+.cdx-head {
+  flex: 0 0 auto;
+  padding: 14px 26px 0 40px;
+}
+
+.cdx-runhead {
+  font-family: var(--pixel);
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: var(--ink-faint);
+  margin-bottom: 10px;
+}
+
+/* the chapter strip: which page of this volume you are on */
+.cdx-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--paper-3);
+}
+
+.cdx-chip {
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-family: var(--pixel);
+  font-size: 8px;
+  color: var(--ink-soft);
+  background: var(--paper-2);
+  border: 2px solid var(--paper-3);
+  transition: background 90ms linear, color 90ms linear;
+}
+.cdx-chip:hover { background: var(--paper-3); color: var(--ink); }
+.cdx-chip:active { transform: translateY(2px); }
+.cdx-chip.is-read { color: var(--rose); border-color: var(--rose-soft); }
+.cdx-chip.is-here {
+  color: var(--paper);
+  background: var(--rose);
+  border-color: var(--rose);
+}
+.cdx-chip.is-missing { color: var(--ink-faint); border-style: dashed; }
+
+/* ------------------------------------------------------------------ prose */
+.cdx-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* the right pad clears the turned-down corner, so the last line of a
+     long chapter never runs underneath the fold */
+  padding: 18px 44px 30px 40px;
+  /* prose is the one thing in the book you are allowed to select and copy */
+  user-select: text;
+  -webkit-user-select: text;
+  outline: none;
+}
+.cdx-body::-webkit-scrollbar { width: 10px; }
+.cdx-body::-webkit-scrollbar-track { background: var(--paper-2); }
+.cdx-body::-webkit-scrollbar-thumb { background: var(--paper-3); border: 2px solid var(--paper-2); }
+.cdx-body::-webkit-scrollbar-thumb:hover { background: var(--rose-soft); }
+
+.cdx-title {
+  margin: 0 0 4px;
+  font-family: var(--pixel);
+  font-size: 16px;
+  line-height: 1.5;
+  letter-spacing: 1px;
+  color: var(--rose);
+  text-transform: lowercase;
+  text-shadow: 2px 2px 0 var(--paper-2);
+}
+
+.cdx-blurb {
+  margin: 0 0 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* the rule under the title: dithered, 2px cells, never a smooth line */
+.cdx-rule {
+  height: 4px;
+  margin: 0 0 20px;
+  background:
+    repeating-linear-gradient(90deg, var(--rose) 0 2px, transparent 2px 4px) 0 0 / 100% 2px no-repeat,
+    repeating-linear-gradient(90deg, transparent 0 2px, var(--rose-soft) 2px 4px) 0 2px / 100% 2px no-repeat;
+}
+
+.cdx-p {
+  margin: 0 0 15px;
+  max-width: 64ch;
+  font-family: var(--body);
+  font-size: 15.5px;
+  line-height: 1.72;
+  color: var(--ink);
+}
+
+/* ------------------------------------------------------------------ steps */
+.cdx-steps {
+  margin: 0 0 18px;
+  padding: 0;
+  max-width: 64ch;
+  list-style: none;
+  counter-reset: cdxstep;
+}
+.cdx-steps li {
+  position: relative;
+  counter-increment: cdxstep;
+  margin: 0 0 10px;
+  padding-left: 34px;
+  font-family: var(--body);
+  font-size: 15.5px;
+  line-height: 1.65;
+}
+.cdx-steps li::before {
+  content: counter(cdxstep);
+  position: absolute;
+  left: 0;
+  top: 3px;
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  font-family: var(--pixel);
+  font-size: 8px;
+  color: var(--paper);
+  background: var(--rose);
+  box-shadow: 2px 2px 0 var(--paper-3);
+}
+
+/* ---------------------------------------------------------------- callout */
+.cdx-callout {
+  position: relative;
+  margin: 0 0 18px;
+  max-width: 64ch;
+  padding: 12px 14px 12px 16px;
+  background: var(--paper-2);
+  border-left: 5px solid var(--pink);
+  box-shadow: 3px 3px 0 var(--paper-3);
+}
+.cdx-callout .cdx-tag {
+  display: block;
+  margin-bottom: 7px;
+  font-family: var(--pixel);
+  font-size: 7px;
+  letter-spacing: 2px;
+  color: var(--rose);
+  text-transform: lowercase;
+}
+.cdx-callout p {
+  margin: 0;
+  font-family: var(--body);
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--ink);
+}
+
+/* ------------------------------------------------------------------ limit
+   Every chapter carries one honest limitation. It is a slip of paper taped
+   into the book on purpose - it must read as part of the design, never as
+   an error state. So: warm tint, hand-torn dashes, two bits of tape, and
+   its own name in her ink. Nothing red, nothing shouting.                  */
+.cdx-limit {
+  position: relative;
+  margin: 22px 0 18px;
+  max-width: 64ch;
+  padding: 15px 16px 14px;
+  background: var(--paper-hot);
+  border: 2px dashed var(--rose-soft);
+}
+.cdx-limit::before,
+.cdx-limit::after {
+  /* the tape */
+  content: "";
+  position: absolute;
+  top: -9px;
+  width: 42px;
+  height: 17px;
+  background: rgba(255, 105, 180, .20);
+  border-left: 1px solid rgba(163, 36, 99, .28);
+  border-right: 1px solid rgba(163, 36, 99, .28);
+}
+.cdx-limit::before { left: 16px;  transform: rotate(-4deg); }
+.cdx-limit::after  { right: 16px; transform: rotate(3deg); }
+
+.cdx-limit .cdx-tag {
+  display: block;
+  margin-bottom: 8px;
+  font-family: var(--pixel);
+  font-size: 7px;
+  letter-spacing: 2px;
+  color: var(--rose);
+  text-transform: lowercase;
+}
+.cdx-limit p {
+  margin: 0;
+  font-family: var(--body);
+  font-size: 15px;
+  line-height: 1.68;
+  color: var(--ink);
+}
+
+/* ----------------------------------------------------------------- figure */
+.cdx-fig {
+  margin: 4px 0 20px;
+  max-width: 64ch;
+  padding: 14px 12px 10px;
+  background: var(--paper-2);
+  border: 2px solid var(--paper-3);
+  text-align: center;
+}
+.cdx-fig svg {
+  width: 100%;
+  max-width: 340px;
+  height: auto;
+  display: block;
+  margin: 0 auto 10px;
+  /* every figure is drawn on the same pixel grid */
+  shape-rendering: crispEdges;
+}
+.cdx-fig figcaption {
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+/* figure ink, so the ten share one palette without repeating themselves */
+.cdx-fig .f-ink   { fill: var(--ink); }
+.cdx-fig .f-soft  { fill: var(--ink-faint); }
+.cdx-fig .f-rose  { fill: var(--rose); }
+.cdx-fig .f-pink  { fill: var(--rose-soft); }
+.cdx-fig .f-paper { fill: var(--paper); }
+.cdx-fig .s-ink   { stroke: var(--ink);   fill: none; stroke-width: 2; }
+.cdx-fig .s-soft  { stroke: var(--ink-faint); fill: none; stroke-width: 2; }
+.cdx-fig .s-rose  { stroke: var(--rose);  fill: none; stroke-width: 2; }
+
+/* ------------------------------------------------------------- fixture tag
+   Fixtures ship so the renderer is demonstrably working. They are labelled
+   loudly so nobody mistakes one for a written chapter, and they vanish the
+   moment the orchestrator merges the real file over the top.               */
+.cdx-fixture {
+  display: inline-block;
+  margin: 0 0 12px;
+  padding: 4px 7px;
+  font-family: var(--pixel);
+  font-size: 7px;
+  letter-spacing: 1.5px;
+  color: var(--paper);
+  background: #7A2E2E;
+  border: 2px solid #4E1C1C;
+  transform: rotate(-1.5deg);
+}
+
+/* ------------------------------------------------------------ page missing
+   A chapter file that is absent or malformed says so ON THE PAGE. There is
+   never a blank screen and never a silent swallow.                          */
+.cdx-missing { max-width: 60ch; }
+.cdx-missing .cdx-title { color: var(--ink-soft); }
+.cdx-missing pre {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  background: var(--paper-2);
+  border: 2px solid var(--paper-3);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+/* --------------------------------------------------------------- the fold */
+.cdx-dogear {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 32px;
+  height: 32px;
+  pointer-events: none;
+  z-index: 4;
+  background: linear-gradient(315deg,
+    var(--night)    0 44%,
+    #12121F         44% 46%,
+    var(--paper-3)  46% 50%,
+    transparent     50% 100%);
+}
+
+/* ==========================================================================
+   THE MARGIN - her face, her one line
+   ========================================================================== */
+.cdx-margin {
+  grid-area: margin;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 22px 16px 16px;
+  border: 3px solid #12121F;
+  border-left: none;
+  background:
+    /* the margin ruling, exactly like a school exercise book */
+    linear-gradient(90deg, transparent 0 13px, rgba(163, 36, 99, .34) 13px 15px, transparent 15px 100%),
+    repeating-linear-gradient(0deg, rgba(90, 70, 40, .03) 0 1px, transparent 1px 3px),
+    var(--paper-2);
+}
+
+.cdx-face {
+  width: 92px;
+  height: 66px;
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  font-size: 17px;
+  line-height: 1;
+  color: var(--rose);
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  box-shadow: 4px 4px 0 var(--paper-3);
+  /* she is drawn in the margin, so she sits a little crooked */
+  transform: rotate(-2deg);
+  white-space: nowrap;
+}
+
+.cdx-hand {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.62;
+  color: var(--rose);
+  text-align: left;
+  padding-left: 8px;
+  transform: rotate(-1.1deg);
+  word-break: break-word;
+}
+
+.cdx-arrow { width: 62px; height: 22px; opacity: .55; align-self: flex-start; margin-left: 4px; }
+.cdx-arrow path { stroke: var(--rose); fill: none; stroke-width: 2; }
+
+.cdx-margin-empty {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+
+/* ==========================================================================
+   THE FOOTER - progress, and the two buttons
+   ========================================================================== */
+.cdx-foot {
+  grid-area: footer;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, #2B2B4E 0%, var(--plum) 100%);
+  border: 3px solid #12121F;
+  border-top: none;
+}
+
+.cdx-progress { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+
+.cdx-progress-text {
+  font-family: var(--pixel);
+  font-size: 8px;
+  letter-spacing: 1.4px;
+  color: var(--paper-3);
+  text-transform: lowercase;
+  white-space: nowrap;
+}
+
+/* the meter: one hard cell per chapter in the book, no bar, no gradient */
+.cdx-meter { display: flex; gap: 2px; }
+.cdx-meter i {
+  width: 7px;
+  height: 12px;
+  background: #171730;
+  border: 1px solid #3A3A66;
+}
+.cdx-meter i.is-read { background: var(--pink); border-color: var(--pink); }
+.cdx-meter i.is-here { background: var(--paper); border-color: var(--paper); }
+
+.cdx-note {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--pink);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cdx-acts { display: flex; gap: 8px; flex: 0 0 auto; }
+
+.cdx-btn {
+  font-family: var(--pixel);
+  font-size: 8px;
+  letter-spacing: 1.2px;
+  text-transform: lowercase;
+  color: var(--paper);
+  background: #33335C;
+  border: 2px solid var(--pink);
+  padding: 9px 11px;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 #12121F;
+  transition: background 90ms linear;
+}
+.cdx-btn:hover { background: #41416F; }
+/* the same 2px press as the spine tabs: the button goes INTO the board */
+.cdx-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #12121F; }
+.cdx-btn-go { color: var(--night); background: var(--pink); border-color: var(--paper); }
+.cdx-btn-go:hover { background: #FF86C4; }
+.cdx-btn:focus-visible { outline: 2px solid var(--paper); outline-offset: 2px; }
+.cdx-tab:focus-visible,
+.cdx-chip:focus-visible { outline: 2px solid var(--pink); outline-offset: 1px; }
+
+/* ==========================================================================
+   THE PAGE TURN - 180ms, dithered, left to right
+   The curtain is a 4px checkerboard of the two paper tones. steps() makes
+   the sweep itself land in hard columns, so it reads as an 8-bit wipe and
+   not as a smooth CSS slide.
+   ========================================================================== */
+.cdx-wipe {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  opacity: 0;
+  pointer-events: none;
+  clip-path: inset(0 100% 0 0);
+  background:
+    repeating-conic-gradient(var(--paper) 0% 25%, var(--paper-3) 0% 50%) 0 0 / 4px 4px;
+}
+.cdx-wipe.is-turning { animation: cdx-turn 180ms steps(10, end) 1 forwards; }
+@keyframes cdx-turn {
+  0%   { opacity: 1; clip-path: inset(0 100% 0 0); }
+  50%  { opacity: 1; clip-path: inset(0 0 0 0); }
+  99%  { opacity: 1; clip-path: inset(0 0 0 100%); }
+  100% { opacity: 0; clip-path: inset(0 0 0 100%); }
+}
+
+/* ==========================================================================
+   NARROW - the margin stops being a column and becomes a slip above the
+   page. The book never drops her note; it just puts it somewhere else.
+   ========================================================================== */
+@media (max-width: 880px) {
+  .cdx-book {
+    grid-template-columns: var(--spine-w) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "spine margin"
+      "spine page"
+      "spine footer";
+  }
+  .cdx-margin {
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 14px;
+    border-left: none;
+    border-bottom: none;
+    background: var(--paper-2);
+  }
+  .cdx-face { width: 74px; height: 44px; font-size: 14px; box-shadow: 3px 3px 0 var(--paper-3); }
+  .cdx-hand { font-size: 12px; transform: none; }
+  .cdx-arrow { display: none; }
+  .cdx-page { border-top: none; }
+}
+
+@media (max-width: 620px) {
+  .cdx-note { display: none; }
+  .cdx-progress-text { display: none; }
+}
+
+/* ==========================================================================
+   REDUCED MOTION - everything dies. The book still turns pages, stamps
+   still appear, tabs still respond; nothing animates to get there.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .cdx-wipe,
+  .cdx-wipe.is-turning { display: none !important; animation: none !important; }
+  .cdx-stamp,
+  .cdx-stamp.is-landing { animation: none !important; }
+  .cdx-tab:active:not(.is-locked),
+  .cdx-chip:active,
+  .cdx-btn:active { transform: none; }
+  .cdx-btn:active { box-shadow: 3px 3px 0 #12121F; }
+  * { transition: none !important; }
+}

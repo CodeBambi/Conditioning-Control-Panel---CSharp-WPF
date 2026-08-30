@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>the field manual</title>
+<!-- The page is a webview, no favicon ships. The empty data: href stops the
+     browser's automatic /favicon.ico probe from logging ERR_FILE_NOT_FOUND. -->
+<link rel="icon" href="data:,">
+<!--
+  Ask EMI wave 2 - the codex. EMI's copy of the field manual.
+
+  OFFLINE AND LOCAL, ABSOLUTELY. The host maps this folder with
+  CoreWebView2HostResourceAccessKind.Deny, so an external request does not fail
+  politely, it never arrives at all. There is no CDN, no Google Fonts, no
+  analytics, no telemetry and no image asset anywhere in this bundle. Every
+  figure is CSS or inline SVG; the only binaries are the two fonts in ./fonts/,
+  copied from Resources/web/arcademy/emi/fonts/ so the bundle stays whole no
+  matter which folder the host chooses to map as root.
+
+  The WEBSITE's manual is a CRT terminal, phosphor on black. This is the other
+  object: the paperback EMI carries, dog-eared, with her scribbling in the
+  margin. Same knowledge, different thing. Do not converge them.
+
+  No build step, no framework, no modules that need a server beyond the host's
+  own. codex.js is a classic script on purpose so the page also opens straight
+  from a plain http server during development.
+-->
+<link rel="stylesheet" href="./codex.css">
+</head>
+<body>
+
+<!-- The desk the book lies on. Everything below is the book. -->
+<div id="cdx-desk" class="cdx-desk">
+
+  <div id="cdx-book" class="cdx-book" role="application" aria-label="the field manual">
+
+    <!-- ================================================================
+         THE SPINE. Six volume tabs, I to VI. IV to VI are locked: they
+         exist so the shape of the book is honest from day one, but there
+         are no pages behind them yet. Built by codex.js from codex.json.
+         ================================================================ -->
+    <nav id="cdx-spine" class="cdx-spine" aria-label="volumes"></nav>
+
+    <!-- ================================================================
+         THE PAGE. Running head, chapter strip, then the rendered blocks.
+         One chapter is one screen; there is no second screen anywhere in
+         this wave.
+         ================================================================ -->
+    <main id="cdx-page" class="cdx-page" role="main">
+
+      <div class="cdx-gutter" aria-hidden="true"></div>
+
+      <header class="cdx-head">
+        <div id="cdx-runhead" class="cdx-runhead"><!-- vol numeral . volume title --></div>
+        <nav id="cdx-strip" class="cdx-strip" aria-label="chapters in this volume"></nav>
+      </header>
+
+      <!-- Everything the writers wrote lands here, and only here. -->
+      <article id="cdx-body" class="cdx-body" tabindex="0"></article>
+
+      <!-- The turned-down corner. Decorative, and the only part of the book
+           that is a lie: it is always on the page you are reading. -->
+      <div class="cdx-dogear" aria-hidden="true"></div>
+    </main>
+
+    <!-- ================================================================
+         THE MARGIN. Her face and her one line. She never explains the
+         chapter, she reacts to it, at most sixty characters, once.
+         ================================================================ -->
+    <aside id="cdx-margin" class="cdx-margin" aria-label="a note in the margin"></aside>
+
+    <!-- ================================================================
+         THE FOOTER. Reading progress, then the two buttons. The buttons
+         are shown ONLY when the chapter declares a tour or a target -
+         a dead button is worse than no button.
+         ================================================================ -->
+    <footer id="cdx-foot" class="cdx-foot">
+      <div class="cdx-progress">
+        <span id="cdx-progress-text" class="cdx-progress-text"></span>
+        <span id="cdx-progress-meter" class="cdx-meter" aria-hidden="true"></span>
+      </div>
+      <div id="cdx-note" class="cdx-note" role="status" aria-live="polite"></div>
+      <div class="cdx-acts">
+        <button id="cdx-tour" class="cdx-btn" type="button" hidden>walk me through it</button>
+        <button id="cdx-target" class="cdx-btn cdx-btn-go" type="button" hidden>take me there</button>
+      </div>
+    </footer>
+
+    <!-- The page-turn wipe. A dithered curtain, 180ms, left to right. It is
+         the only thing in the book that moves, and it only moves when you
+         navigate. It dies entirely under prefers-reduced-motion. -->
+    <div id="cdx-wipe" class="cdx-wipe" aria-hidden="true"></div>
+
+  </div>
+</div>
+
+<script src="./codex.js"></script>
+</body>
+</html>
