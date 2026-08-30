@@ -573,13 +573,15 @@ public sealed class EmiState
 
     /// <summary>
     /// Has this <c>TutorialType</c> name been finished end to end? An unreadable ledger answers
-    /// TRUE, because the failure that costs nothing is a walk she does not offer.
+    /// NO: the cost of a false no is one walk offered twice, and the knock's own brakes cap
+    /// that at two offers ever. The cost of a false yes is a first-run user who is never
+    /// offered the walk at all and never learns there was one.
     /// </summary>
     public static bool HasTourDone(string? tour)
     {
         if (string.IsNullOrWhiteSpace(tour)) return false;
         try { return Current.ToursDone?.Contains(tour!, StringComparer.OrdinalIgnoreCase) == true; }
-        catch { return true; }
+        catch { return false; }
     }
 
     /// <summary>

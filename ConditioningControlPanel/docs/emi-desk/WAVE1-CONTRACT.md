@@ -77,10 +77,18 @@ as done.
 ## The four brakes (copied from `EmiNudgeMachine`, deliberately)
 
 The knock is onboarding, not nagging. Any one of these ends it forever:
-1. `knockState == 2` - they answered, either way.
-2. `knockOffers >= 2` - the knock plus one shrugged re-offer, and never again.
-3. The ask's own `limit: {per:"ever", max:1}` in the lines file.
-4. `toursDone` contains the tour she would offer.
+1. `knockState == 2` - they said YES. A **no** does not latch state 2; it spends one offer
+   and leaves the state at Knocked, which is what makes brake 2's single re-offer reachable
+   at all. (As first written, brakes 1 and 2 contradicted each other: if any answer latched
+   2, the second offer could never happen. This is the reading both lanes implement.)
+2. `knockOffers >= 2` - the knock plus one quieter re-offer, and never again. The offer is
+   counted **at the flash, not at the click**; counting on click lets somebody who never
+   touches the chip re-trigger the knock every launch forever.
+3. `limit: {per:"ever", max:1}` - which lives on the **moment definition**, not on the ask.
+   No shipped ask carries a `limit` key; the engine reads it off the moment.
+4. `toursDone` contains the tour she would offer. An unreadable ledger answers **no** (see
+   `EmiState.HasTourDone`): a false no costs one walk offered twice, which brakes 1 and 2
+   already cap; a false yes costs a first-run user the feature entirely, silently.
 
 ## Gates the knock must pass before it may flash
 
@@ -130,3 +138,7 @@ lowercase, one thought, **<= 60 characters**, no em/en dashes, no emoji in `t` (
 is on her fence in HER lines - the rail's doors are the app's word, not hers.
 
 Every new pool needs at least 8 lines so the shuffle bag has room; asks need 3+ variants each.
+
+A line whose `spice` is above its moment's `spiceCeiling` is **unreachable, not merely rare**:
+`EmiLineEngine` deals at `Math.Min(moment.SpiceCeiling, UserSpice())`. Check the ceiling of every
+moment a pool is wired to before tagging a line 2, or raise the ceiling deliberately.

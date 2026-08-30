@@ -583,39 +583,14 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private sealed class EmiStateTourStore : ITourCompletionStore
         {
+            // One ledger, one write path. EmiState.NoteTourDone is the idempotent,
+            // case-insensitive add that also SaveNow()s: a tour finished thirty seconds before
+            // the user quits is exactly the tour that would otherwise be re-offered next launch.
             public bool Has(string tutorialTypeName)
-            {
-                try
-                {
-                    var done = Services.EmiDesk.EmiState.Current.ToursDone;
-                    if (done == null) return false;
-                    foreach (var t in done)
-                    {
-                        if (string.Equals(t, tutorialTypeName, StringComparison.OrdinalIgnoreCase))
-                            return true;
-                    }
-                    return false;
-                }
-                // An unreadable ledger answers NO. The cost of a false no is one tour offered
-                // twice; the cost of a false yes is a first-run user who is never offered the
-                // walk at all, and never finds out there was one.
-                catch { return false; }
-            }
+                => Services.EmiDesk.EmiState.HasTourDone(tutorialTypeName);
 
             public void Latch(string tutorialTypeName)
-            {
-                try
-                {
-                    var state = Services.EmiDesk.EmiState.Current;
-                    state.ToursDone ??= new List<string>();
-                    if (Has(tutorialTypeName)) return;
-                    state.ToursDone.Add(tutorialTypeName);
-                    // NOW, not debounced: a tour finished thirty seconds before the user quits
-                    // is exactly the tour that would otherwise be re-offered on the next launch.
-                    Services.EmiDesk.EmiState.SaveNow();
-                }
-                catch { /* a tour never fails because its ledger did */ }
-            }
+                => Services.EmiDesk.EmiState.NoteTourDone(tutorialTypeName);
         }
 
         private static ITourCompletionStore _completionStore = new EmiStateTourStore();
