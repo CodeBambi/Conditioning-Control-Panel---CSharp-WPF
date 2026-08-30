@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -360,8 +360,14 @@ namespace ConditioningControlPanel
 
                 if (startTour)
                 {
-                    try { owner.StartTutorial(); }
-                    catch (Exception ex) { App.Logger?.Warning(ex, "[FirstRun] Could not start the doors tour"); }
+                    // The SHORT WALK, not the door-by-door tour (owner call 1,
+                    // docs/emi-desk/WAVE1-CONTRACT.md). Seven cards, about ninety seconds, and it
+                    // teaches the app rather than the furniture: somebody who has just been shown
+                    // all seven doors on the screen behind this button does not need them named
+                    // again. The full tour did not go anywhere - it is the first row in the ?
+                    // panel, which is what fr8_tour_outro now says.
+                    try { owner.StartTutorial(TutorialType.ShortWalk); }
+                    catch (Exception ex) { App.Logger?.Warning(ex, "[FirstRun] Could not start the short walk"); }
                 }
             }), DispatcherPriority.Normal);
         }
@@ -470,8 +476,9 @@ namespace ConditioningControlPanel
             // --- step 3 ---
             TxtTourHeading.Text = Str("fr8_tour_heading", "Seven doors");
             TxtTourOutro.Text = Str("fr8_tour_outro",
-                "The rail on the left is always there. Take the tour and she will point at each door in turn, " +
-                "or explore on your own - the ? button replays it whenever you want.");
+                "The rail on the left is always there. Take the tour for a ninety-second walk through the " +
+                "essentials, or explore on your own - the ? button replays it, and the full door-by-door " +
+                "tour is in there too.");
 
             // --- chrome ---
             BtnBack.Content = Str("fr8_wizard_back", "Back");

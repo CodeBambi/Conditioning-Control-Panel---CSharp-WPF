@@ -1,0 +1,362 @@
+﻿<Window x:Class="ConditioningControlPanel.EmiBookWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="EMI"
+
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowActivated="False"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        SizeToContent="Manual"
+        WindowStartupLocation="Manual"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        Topmost="True"
+        Width="364" Height="728">
+
+    <!--
+        HER BOOK, the flipbook.
+
+        A tall pixel panel that unfurls beside her, one feature per card, and every card is a little
+        8-bit demo that SHOWS the feature happening with about thirty words of directions under it.
+        It replaces the codex, which was a website in a window and which the owner rejected on
+        sight: "imagine you are explaining this to people with ADHD".
+
+        THE WINDOW RECIPE IS NOT OPTIONAL and is copied from her other three windows: WindowStyle
+        None + AllowsTransparency + ShowActivated False + ShowInTaskbar False + Topmost, and
+        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE stamped in OnSourceInitialized. She is a desktop
+        ornament, not an application window.
+
+        AllowsTransparency is also what makes the unfurl possible. The panel scales from a flat line
+        to full size INSIDE a window that is already its final size, so the animation needs
+        transparent air around it. It is also, separately, why this could never have been WebView2:
+        a browser cannot paint in a layered window at all.
+
+        WS_EX_NOACTIVATE means this window can never hold the keyboard, so everything in here is
+        mouse-driven. There is nothing to type and nothing to tab to.
+
+        NO Visibility="Hidden" HERE, and that is the one place this window must NOT copy her other
+        three. Setting a Window's Visibility in XAML does not just set a property: WPF cannot touch
+        an HWND that does not exist yet, so it QUEUES the hide as a dispatcher operation and applies
+        it once the window is up. Her other panels are built at startup and opened much later, so
+        that queued hide has long since drained by the time anybody calls Show. The book is built
+        and opened in the SAME dispatcher turn, so the queued hide was still in flight and landed
+        about 50 ms after Show: Window.ShowHelper called ShowWindow(SW_HIDE) on a window that had
+        just been shown. WS_VISIBLE went off the HWND while Window.IsVisible and Window.Visibility
+        both kept reading Visible, so nothing ever showed it again and every property WPF exposes
+        insisted the panel was on screen.
+
+        That is the whole of "i cant see the book, when i click the ? i just see emi say I read
+        everything twice". The window has no reason to exist hidden - it is constructed only when
+        it is about to be shown - so the property simply goes.
+
+        EVERY BRUSH IS A LITERAL. This window has no resource dictionary behind it, and a
+        StaticResource reaching for MainWindow's palette is the cross-dictionary BAML EndOfStream
+        the Velvet Kit work was bitten by.
+
+        FONTS ARE SET IN CODE, never by name here. Press Start 2P ships in Resources\emi\fonts and
+        is loaded through a FontFamily base URI (EmiFace.PixelFont); naming it in XAML resolves
+        against installed system fonts only, finds nothing, and silently falls back to the default
+        UI face - the exact trap EmiRingWindow documents.
+
+        GEOMETRY. 320 DIP wide: 2 of border each side leaves 316, less 12 of margin each side
+        leaves 292, and the demo stage is 2 of border plus a 288 x 216 image. 288 is exactly three
+        times the 96 x 72 buffer, so one buffer cell is nine screen pixels with no seam and no
+        filtering. Change the width and that integer multiple is the first thing to re-derive.
+    -->
+
+    <Window.Resources>
+        <!-- One tab chip. Lit chip is her pink with ink text; the rest are ink with a dull label. -->
+        <Style x:Key="TabChip" TargetType="Button">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="#FF6B6890"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="#FF0E0E1C" BorderBrush="#FF1C1C31" BorderThickness="0,0,2,0">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Tag" Value="on">
+                                <Setter TargetName="Bd" Property="Background" Value="#FFFF69B4"/>
+                                <Setter Property="Foreground" Value="#FF0E0E1C"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#FF3A3856"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- The pager arrows, and the close x. -->
+        <Style x:Key="ChromeChip" TargetType="Button">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="#FFF5F0E1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="#FF0E0E1C">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#FFFF69B4"/>
+                                <Setter Property="Foreground" Value="#FF0E0E1C"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#FF3A3856"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!--
+            ONE RAIL CHIP. The lit one wears her pink down its left edge and a raised ground; the
+            rest are flat and their icon is dimmed in code. No text: a 44 pixel column has no room
+            for a word, and the icon plus a tooltip is what the rail is for - somewhere to click AT
+            rather than step towards.
+        -->
+        <Style x:Key="RailChip" TargetType="Button">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent"
+                                BorderThickness="3,0,0,0">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#FF2E2A45"/>
+                            </Trigger>
+                            <Trigger Property="Tag" Value="on">
+                                <Setter TargetName="Bd" Property="Background" Value="#FF2E2A45"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#FFFF69B4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- TAKE ME THERE. Ghosted when the card has no detour, or when the door is locked. -->
+        <Style x:Key="GoChip" TargetType="Button">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="#FF0E0E1C"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="#FFFF69B4" BorderBrush="#FFA8386F" BorderThickness="0,0,0,3">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#FFFF87C4"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Background" Value="#FF34314F"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#FF242239"/>
+                                <Setter Property="Foreground" Value="#FF7E7BA4"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <!--
+            Two nested scale transforms, because the unfurl is two moves and they have different
+            origins: a flat line shoots out FROM HER EDGE (ScaleX about the near edge), then it
+            opens like a CRT coming on (ScaleY about the middle). One transform cannot do both.
+            SweepHost's origin is flipped to the right edge in code when the panel sits on her left.
+        -->
+        <Border x:Name="SweepHost" RenderTransformOrigin="0,0.5">
+            <Border.RenderTransform>
+                <ScaleTransform x:Name="SweepScale" ScaleX="1" ScaleY="1"/>
+            </Border.RenderTransform>
+
+            <Grid x:Name="OpenHost" RenderTransformOrigin="0.5,0.5">
+                <Grid.RenderTransform>
+                    <ScaleTransform x:Name="OpenScale" ScaleX="1" ScaleY="1"/>
+                </Grid.RenderTransform>
+
+                <!--
+                    THE SHADOW IS A HARD OFFSET BLOCK, not a DropShadowEffect.
+
+                    A hard shadow is the right shadow for an 8-bit panel: the blurred one was the
+                    only soft edge on the whole window, and it sat under a border drawn to land on
+                    exact pixels. It is also cheaper. This window is LAYERED, which means WPF
+                    composes it in software, and a 22 pixel gaussian over 320 x 668 was the most
+                    expensive thing in the unfurl by a wide margin - for an effect nobody would
+                    have described if asked what the book looks like.
+                -->
+                <Border Background="#B3000000" Margin="7,7,-7,-7" IsHitTestVisible="False"/>
+
+                <Border x:Name="Panel"
+                        Background="#FF252542"
+                        BorderBrush="#FFFF69B4"
+                        BorderThickness="2">
+
+                    <Grid>
+                    <DockPanel LastChildFill="True">
+
+                    <!-- the three tab chips, and the way out -->
+                    <Grid DockPanel.Dock="Top" Height="34" Background="#FF0E0E1C">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="34"/>
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="Tab0" Grid.Column="0" Style="{StaticResource TabChip}"/>
+                        <Button x:Name="Tab1" Grid.Column="1" Style="{StaticResource TabChip}"/>
+                        <Button x:Name="Tab2" Grid.Column="2" Style="{StaticResource TabChip}"/>
+                        <Button x:Name="BtnClose" Grid.Column="3" Style="{StaticResource ChromeChip}"
+                                Content="x"/>
+                        <Border Grid.ColumnSpan="4" VerticalAlignment="Bottom" Height="2"
+                                Background="#FF0E0E1C"/>
+                    </Grid>
+
+                    <!-- the pager -->
+                    <Grid DockPanel.Dock="Bottom" Height="44" Background="#FF1E1D34">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="44"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="44"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.ColumnSpan="3" VerticalAlignment="Top" Height="2" Background="#FF0E0E1C"/>
+                        <Button x:Name="BtnPrev" Grid.Column="0" Margin="6,8,2,8"
+                                Style="{StaticResource ChromeChip}" Content="&lt;"/>
+                        <WrapPanel x:Name="Dots" Grid.Column="1" Orientation="Horizontal"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Button x:Name="BtnNext" Grid.Column="2" Margin="2,8,6,8"
+                                Style="{StaticResource ChromeChip}" Content="&gt;"/>
+                    </Grid>
+
+                    <!--
+                        THE RAIL: one icon per card ON THIS TAB.
+
+                        The book was four cards and a row of dots. At twenty-two the dots stopped
+                        being navigation and became a progress bar - identical squares that say
+                        where you are and nothing about where you could go, so reaching a card you
+                        half remember meant flipping to it one page at a time.
+
+                        Scoped to the tab on purpose. Twenty-two icons in this column would not fit
+                        above the pager without shrinking them past reading size, and it would bury
+                        the chapter breaks. The tab strip picks the chapter, the rail picks the page,
+                        and the rail therefore never holds more than eight.
+
+                        It is docked left BEFORE the card so the card keeps the whole remaining
+                        width. The window grew by exactly this rail's 44, so the text column is the
+                        same 292 it was measured at and no card reflows.
+                    -->
+                    <Border DockPanel.Dock="Left" Width="44" Background="#FF1E1D34"
+                            BorderBrush="#FF0E0E1C" BorderThickness="0,0,2,0">
+                        <ScrollViewer VerticalScrollBarVisibility="Hidden"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      PanningMode="VerticalOnly">
+                            <StackPanel x:Name="Rail" VerticalAlignment="Center"/>
+                        </ScrollViewer>
+                    </Border>
+
+                    <!--
+                        THE CARD, and the row list is the whole layout argument.
+
+                        The nudge row is the STRETCHY one and everything else is Auto, which is the
+                        opposite of what it was: there used to be an air row between the bullets and
+                        the button, so a short card left a hole in the middle and a long one had
+                        nowhere to grow. Now the bullets take the slack (pinned to the top of their
+                        row, so they still hug the gist) and the catch and the button sit against
+                        the foot of the panel where the chrome belongs.
+
+                        The catch has its own strip rather than a fifth bullet. The owner's ceiling
+                        is four items per card, and the catch was spending one of them to say a
+                        thing that is not an action - see EmiBookCards.
+                    -->
+                    <Grid Margin="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>  <!-- the demo stage -->
+                            <RowDefinition Height="Auto"/>  <!-- title          -->
+                            <RowDefinition Height="Auto"/>  <!-- gist           -->
+                            <RowDefinition Height="*"/>     <!-- the four nudges, and the slack -->
+                            <RowDefinition Height="Auto"/>  <!-- the catch strip -->
+                            <RowDefinition Height="Auto"/>  <!-- the one button  -->
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" x:Name="StageFrame" BorderBrush="#FF3B3962" BorderThickness="2"
+                                Background="#FF0E0E1C" HorizontalAlignment="Left">
+                            <Grid>
+                                <Image x:Name="Stage" Width="288" Height="216"
+                                       RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                       SnapsToDevicePixels="True"/>
+                                <Border Background="#FF3B3962" HorizontalAlignment="Right"
+                                        VerticalAlignment="Top" Padding="4,3">
+                                    <TextBlock x:Name="StageLabel" Foreground="#FF0E0E1C"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <TextBlock Grid.Row="1" x:Name="CardTitle" Margin="0,12,0,0"
+                                   Foreground="#FFF5F0E1" TextWrapping="Wrap" LineHeight="22"/>
+
+                        <TextBlock Grid.Row="2" x:Name="CardGist" Margin="0,10,0,0"
+                                   Foreground="#FFFF69B4" TextWrapping="Wrap" LineHeight="16"/>
+
+                        <!--
+                            The bullets scroll rather than clip. They never need to on a desktop
+                            monitor - the longest card in the deck leaves about 30 pixels spare at
+                            full height - but the panel shrinks to fit a short screen and the rows
+                            around this one are all Auto, so an overflow would eat the bottom of
+                            the last bullet with nothing to say it had. The bar is Hidden rather
+                            than Auto because a scrollbar is the one piece of chrome on this window
+                            that Windows would draw instead of us.
+                        -->
+                        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Hidden"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      PanningMode="VerticalOnly" Margin="0,12,0,0">
+                            <StackPanel x:Name="Nudges" VerticalAlignment="Top"/>
+                        </ScrollViewer>
+
+                        <!-- The honest bit, in gold, with a rule down its left edge instead of a
+                             bullet. Same fixed place on every card, so it is somewhere you can
+                             look rather than something you have to find. -->
+                        <Border Grid.Row="4" x:Name="CatchStrip" Margin="0,10,0,0"
+                                Background="#FF2E2A45" BorderBrush="#FFF0C050"
+                                BorderThickness="3,0,0,0" Padding="8,6,8,7">
+                            <TextBlock x:Name="CardCatch" TextWrapping="Wrap" LineHeight="15"
+                                       Foreground="#FFE8C46A"/>
+                        </Border>
+
+                        <Button Grid.Row="5" x:Name="BtnGo" Height="36" Margin="0,12,0,0"
+                                Style="{StaticResource GoChip}"/>
+                    </Grid>
+
+                    </DockPanel>
+
+                    <!-- The CRT flash on the unfurl. Never hit-testable, and INSIDE the panel
+                         border: as a sibling of the panel it would paint over the transparent air
+                         the unfurl scales through, which reads as a white rectangle with no panel
+                         in it. -->
+                    <Border x:Name="Flash" Background="#FFF5F0E1" Opacity="0" IsHitTestVisible="False"/>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

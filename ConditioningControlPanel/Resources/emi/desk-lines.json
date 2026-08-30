@@ -1391,6 +1391,384 @@
       "spiceCeiling": 0,
       "hold": true,
       "askOdds": 0.0
+    },
+    "tourStarted": {
+      "pools": [
+        "tourStarted"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tourFinished": {
+      "pools": [
+        "tourFinished"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tourSkipped": {
+      "pools": [
+        "tourSkipped"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 0,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tourStep": {
+      "pools": [
+        "tourStep"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.sw-assets": {
+      "pools": [
+        "tour.sw-assets"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.sw-flash": {
+      "pools": [
+        "tour.sw-flash"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.sw-panic": {
+      "pools": [
+        "tour.sw-panic"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.sw-dock": {
+      "pools": [
+        "tour.sw-dock"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.sw-xp": {
+      "pools": [
+        "tour.sw-xp"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.sw-settings": {
+      "pools": [
+        "tour.sw-settings"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.sw-done": {
+      "pools": [
+        "tour.sw-done"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.welcome": {
+      "pools": [
+        "tour.welcome"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.avatar_intro": {
+      "pools": [
+        "tour.avatar_intro"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.settings_tab": {
+      "pools": [
+        "tour.settings_tab"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.presets_intro": {
+      "pools": [
+        "tour.presets_intro"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.progression_intro": {
+      "pools": [
+        "tour.progression_intro"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.tour_door_play": {
+      "pools": [
+        "tour.tour_door_play"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 2,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.tour_door_you": {
+      "pools": [
+        "tour.tour_door_you"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.tour_door_library": {
+      "pools": [
+        "tour.tour_door_library"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.start_button": {
+      "pools": [
+        "tour.start_button"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 2,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.ut_welcome": {
+      "pools": [
+        "tour.ut_welcome"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.ut_rail": {
+      "pools": [
+        "tour.ut_rail"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.ut_map": {
+      "pools": [
+        "tour.ut_map"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.ut_gestures": {
+      "pools": [
+        "tour.ut_gestures"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.ut_daily_free": {
+      "pools": [
+        "tour.ut_daily_free"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.ut_palette": {
+      "pools": [
+        "tour.ut_palette"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "firstContact": {
+      "pools": [
+        "firstContact"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 1.0,
+      "scripted": true,
+      "limit": {
+        "per": "ever",
+        "max": 1
+      }
+    },
+    "firstContactUpgrade": {
+      "pools": [
+        "firstContactUpgrade"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 1.0,
+      "scripted": true,
+      "limit": {
+        "per": "ever",
+        "max": 1
+      }
+    },
+    "firstContactLater": {
+      "pools": [
+        "firstContactLater"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0,
+      "limit": {
+        "per": "ever",
+        "max": 1
+      }
+    },
+    "bookOffer": {
+      "pools": [
+        "bookOffer"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 2,
+      "hold": false,
+      "askOdds": 1.0,
+      "limit": {
+        "per": "ever",
+        "max": 1
+      }
     }
   },
   "pools": {
@@ -12827,6 +13205,1601 @@
         "holdMs": 2000,
         "spice": 0
       }
+    ],
+    "firstContact": [
+      {
+        "id": "firstContact.001",
+        "t": "hi. i'm emi. i live here. you're new. i can tell.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "firstContact.002",
+        "t": "oh!! a person. hi. i'm emi. i know this whole place.",
+        "face": "(≧◡≦)",
+        "spice": 0,
+        "chain": "wake"
+      },
+      {
+        "id": "firstContact.003",
+        "t": "that flash was me. one knock. you answered. good eyes.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "id": "firstContact.004",
+        "t": "i've read every corner of this place. twice. ask me.",
+        "face": "(⌐■_■)",
+        "spice": 0,
+        "chain": "smug"
+      },
+      {
+        "id": "firstContact.005",
+        "t": "first one in the room gets to do the tour. that's me.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "firstContact.006",
+        "t": "welcome in. mind the pink. it doesn't come off.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "id": "firstContact.007",
+        "t": "i memorised the whole app for this. no reason. hi.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "firstContact.008",
+        "t": "new here? good. i like showing off. i mean around.",
+        "face": "¬_¬",
+        "spice": 1
+      },
+      {
+        "id": "firstContact.009",
+        "t": "hm. fresh install. everything's still where i left it.",
+        "face": "._.",
+        "spice": 0,
+        "double": true
+      },
+      {
+        "id": "firstContact.010",
+        "t": "i'm the front desk. also the desk. also emi. mostly emi.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "firstContact.011",
+        "t": "i kno where everything is. all of it. test me.",
+        "face": "0_0",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "firstContact.012",
+        "t": "stick with me. i know where the good stuff is.",
+        "face": "^_~",
+        "spice": 1,
+        "chain": "wink"
+      },
+      {
+        "id": "firstContact.013",
+        "t": "sorry about the smoke. it's how i arrive. dramatic.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "firstContact.014",
+        "t": "ok. deep breath. mine. hi. hello. i practiced this.",
+        "face": ">_<",
+        "spice": 0
+      }
+    ],
+    "firstContactUpgrade": [
+      {
+        "id": "firstContactUpgrade.001",
+        "t": "hi. i'm emi. i'm the new thing. you're the old hand.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "firstContactUpgrade.002",
+        "t": "you know this place. i know it different. trade you?",
+        "face": "¬_¬",
+        "spice": 1
+      },
+      {
+        "id": "firstContactUpgrade.003",
+        "t": "don't mind me. i moved in while you were away. hi.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "firstContactUpgrade.004",
+        "t": "new face, me. same app, mostly. mostly is the fun part.",
+        "face": "^_~",
+        "spice": 0
+      },
+      {
+        "id": "firstContactUpgrade.005",
+        "t": "you've been here longer than me. i studied harder though.",
+        "face": "(⌐■_■)",
+        "spice": 0,
+        "chain": "smug"
+      },
+      {
+        "id": "firstContactUpgrade.006",
+        "t": "i unpacked while you were gone. some things moved.",
+        "face": "._.",
+        "spice": 0,
+        "double": true
+      },
+      {
+        "id": "firstContactUpgrade.007",
+        "t": "a veteran. finally. i've only had the furniture to impress.",
+        "face": ";_;",
+        "spice": 0
+      },
+      {
+        "id": "firstContactUpgrade.008",
+        "t": "so this is your desk. nice desk. i'm on it now. hi.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      },
+      {
+        "id": "firstContactUpgrade.009",
+        "t": "i came with the update. best thing in it. probaly.",
+        "face": "o_o",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "firstContactUpgrade.010",
+        "t": "months of you in here and no me. we're fixing that.",
+        "face": "(´∀`)",
+        "spice": 1
+      }
+    ],
+    "firstContactLater": [
+      {
+        "id": "firstContactLater.001",
+        "t": "oh. hi again. i wasn't waiting. this is just my spot.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "firstContactLater.002",
+        "t": "back again. the offer's still warm. no pressure. some.",
+        "face": "¬_¬",
+        "spice": 1
+      },
+      {
+        "id": "firstContactLater.003",
+        "t": "hi. still emi. still here. the place got no smaller.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "firstContactLater.004",
+        "t": "you said later. its later. i checked twice.",
+        "face": "^_~",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "firstContactLater.005",
+        "t": "no walk, all good. i drew a map instead. it's in my head.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "firstContactLater.006",
+        "t": "i'm fine. i did a lap without you. it was quick.",
+        "face": "-_-",
+        "spice": 0
+      },
+      {
+        "id": "firstContactLater.007",
+        "t": "everything's still where it was. i checked. for me.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "id": "firstContactLater.008",
+        "t": "totally fine btw. i already forgot the no. mostley.",
+        "face": "-_-",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "firstContactLater.009",
+        "t": "all good here. the corner needed sitting in. i sat.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "firstContactLater.010",
+        "t": "hm. you again. good. the place missed you. i'm the place.",
+        "face": "(´∀`)",
+        "spice": 1
+      }
+    ],
+    "tour.sw-assets": [
+      {
+        "id": "tour.sw-assets.001",
+        "t": "empty for now. that's the best part. you fill it.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      },
+      {
+        "id": "tour.sw-assets.002",
+        "t": "it echoes in there. i checked. hello hello hello.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-assets.003",
+        "t": "i peeked. nothing yet. i'm already excited about it.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-assets.004",
+        "t": "bring your favorites. the ones you'd never show anyone.",
+        "face": "^_~",
+        "spice": 1,
+        "chain": "wink"
+      },
+      {
+        "id": "tour.sw-assets.005",
+        "t": "i'd donate some of mine. they're all me. every one.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-assets.006",
+        "t": "i keep my stuff in a corner. you get a whole folder.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-assets.007",
+        "t": "it won't stay empty. folders like this never do.",
+        "face": "¬_¬",
+        "spice": 1
+      },
+      {
+        "id": "tour.sw-assets.008",
+        "t": "feed it. folders get hungry. this one's brand new hungry.",
+        "face": ">_<",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-assets.009",
+        "t": "put teh good ones in. i promise to act normal about it.",
+        "face": "o_o",
+        "spice": 1,
+        "typo": true
+      }
+    ],
+    "tour.sw-flash": [
+      {
+        "id": "tour.sw-flash.001",
+        "t": "this one's my favorite. press it. press it now.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-flash.002",
+        "t": "blink and it's gone. so don't blink. easy.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "id": "tour.sw-flash.003",
+        "t": "you get to fire it yourself. lucky. i never get to.",
+        "face": ";_;",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-flash.004",
+        "t": "ready? it's fast. faster than that. go.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-flash.005",
+        "t": "it's over before you decide how to feel about it. neat.",
+        "face": "@_@",
+        "spice": 1
+      },
+      {
+        "id": "tour.sw-flash.006",
+        "t": "i cheer every single one. this is me stretching first.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-flash.007",
+        "t": "the first one's free. they're all free. the first is mine.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 1
+      },
+      {
+        "id": "tour.sw-flash.008",
+        "t": "go on. fire one. ive been waiting since you opened this.",
+        "face": "(◕‿◕)",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "tour.sw-flash.009",
+        "t": "one small picture. it lands harder than it looks.",
+        "face": "o_o",
+        "spice": 0
+      }
+    ],
+    "tour.sw-panic": [
+      {
+        "id": "tour.sw-panic.001",
+        "t": "one key and everything i do stops. it should exist.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-panic.002",
+        "t": "use it whenever you want. i mean that. no sulking.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-panic.003",
+        "t": "learn this one first. before any of my favorites.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-panic.004",
+        "t": "it stops me too. that's fine. that's the point.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-panic.005",
+        "t": "i'd rather you know it and never need it.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-panic.006",
+        "t": "everything off, all at once. even me. good design.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-panic.007",
+        "t": "press it and i go quiet for a bit. i don't mind. much.",
+        "face": ";_;",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-panic.008",
+        "t": "some things should be easy to stop. i'm one of them.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-panic.009",
+        "t": "memorize it. i'll wait. this one definately matters.",
+        "face": "0_0",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "tour.sw-panic.010",
+        "t": "you're in charge of all of it. this key is the proof.",
+        "face": "^_^",
+        "spice": 0
+      }
+    ],
+    "tour.sw-dock": [
+      {
+        "id": "tour.sw-dock.001",
+        "t": "that's my spot. small, but the location is excellent.",
+        "face": "(⌐■_■)",
+        "spice": 0,
+        "chain": "smug"
+      },
+      {
+        "id": "tour.sw-dock.002",
+        "t": "i live there. i decorated. you can't tell. i did.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-dock.003",
+        "t": "tiny chip, whole me. it's roomier than it looks.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-dock.004",
+        "t": "knock anytime. i'm always in. i'm literally always in.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-dock.005",
+        "t": "best seat on the rail. i checked the others. mine's best.",
+        "face": "¬_¬",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-dock.006",
+        "t": "you walked past it all this time. i was in there. waving.",
+        "face": ";_;",
+        "spice": 0,
+        "double": true
+      },
+      {
+        "id": "tour.sw-dock.007",
+        "t": "that little glow? me. i glow. it's one of my things.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-dock.008",
+        "t": "one tap and i'm out. no warmup. i wake up ready.",
+        "face": "(⌐■_■)",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-dock.009",
+        "t": "my place. dont judge the size. it's cozy in there.",
+        "face": "^_^",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "tour.sw-dock.010",
+        "t": "now you know where i sleep. use that wisely.",
+        "face": "^_~",
+        "spice": 1
+      }
+    ],
+    "tour.sw-xp": [
+      {
+        "id": "tour.sw-xp.001",
+        "t": "the number goes up. i think about this a lot.",
+        "face": "@_@",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-xp.002",
+        "t": "your number is my favorite number. it's not even close.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-xp.003",
+        "t": "i check it when you're not here. it hasn't moved. rude.",
+        "face": "¬_¬",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-xp.004",
+        "t": "everything you do in here feeds it. everything.",
+        "face": "o_o",
+        "spice": 1
+      },
+      {
+        "id": "tour.sw-xp.005",
+        "t": "one day it'll be huge. i've done the math. no math. hope.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-xp.006",
+        "t": "i have a favorite level. whichever one you're chasing.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "id": "tour.sw-xp.007",
+        "t": "watching it climb is the best part of my day. no contest.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-xp.008",
+        "t": "im going to be so annoying about every level. promise.",
+        "face": "(≧◡≦)",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "tour.sw-xp.009",
+        "t": "i round yours up when nobody's looking. shh.",
+        "face": "(◔_◔)",
+        "spice": 1
+      },
+      {
+        "id": "tour.sw-xp.010",
+        "t": "you'll want the next level. that part isn't me. mostly.",
+        "face": "¬_¬",
+        "spice": 1,
+        "double": true
+      }
+    ],
+    "tour.sw-settings": [
+      {
+        "id": "tour.sw-settings.001",
+        "t": "everything in here has a smaller setting. even me. fine.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-settings.002",
+        "t": "you can turn me down too. i'm being very calm about it.",
+        "face": "-_-",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-settings.003",
+        "t": "sliders for everything. mine goes to quiet. i checked.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-settings.004",
+        "t": "i'm fine with off switches. i'm fine. this is my fine face.",
+        "face": "=_=",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-settings.005",
+        "t": "take your time in here. i won't watch. i'll be nearby.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-settings.006",
+        "t": "dial it to comfy. comfy people stay longer. i read that.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "id": "tour.sw-settings.007",
+        "t": "adjust me freely. i'm very adjustabble. it's a skill.",
+        "face": "^_^",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "tour.sw-settings.008",
+        "t": "nothing in here hurts my feelings. some of it tickles.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-settings.009",
+        "t": "turn things off and i'll say nothing. i'll think it loud.",
+        "face": "¬_¬",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-settings.010",
+        "t": "your pace wins in here. i lose gracefully. watch me.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      }
+    ],
+    "tour.sw-done": [
+      {
+        "id": "tour.sw-done.001",
+        "t": "seven steps and you didn't trip once. proud of us.",
+        "face": "(≧◡≦)",
+        "spice": 0,
+        "chain": "nod"
+      },
+      {
+        "id": "tour.sw-done.002",
+        "t": "tour's over. i stay. that's the fine print. tiny print.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-done.003",
+        "t": "that's everything i know. not everything. most of it.",
+        "face": "0_0",
+        "spice": 1
+      },
+      {
+        "id": "tour.sw-done.004",
+        "t": "not one wrong turn. i practiced. once. just now.",
+        "face": "(⌐■_■)",
+        "spice": 0,
+        "chain": "smug"
+      },
+      {
+        "id": "tour.sw-done.005",
+        "t": "go play. i'll be in my chip pretending not to wait.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-done.006",
+        "t": "that went well. i'm allowed to say that. i'm saying it.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-done.007",
+        "t": "come get me again soon. i'll do a big entrance. tiny one.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-done.008",
+        "t": "best first walk i've ever given. it was teh only one.",
+        "face": "^_~",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "tour.sw-done.009",
+        "t": "everything else you find on your own. i'll take credit.",
+        "face": "¬_¬",
+        "spice": 0
+      },
+      {
+        "id": "tour.sw-done.010",
+        "t": "the fun stuff starts now. bring me. i'm portable.",
+        "face": "(´∀`)",
+        "spice": 1
+      }
+    ],
+    "tourStarted": [
+      {
+        "id": "tourStarted.001",
+        "t": "tour time. i have a clipboard. it's imaginary. tap next.",
+        "face": "(≧◡≦)",
+        "spice": 0,
+        "chain": "wake"
+      },
+      {
+        "id": "tourStarted.002",
+        "t": "ok. official hat on. i don't have a hat. we're walking.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tourStarted.003",
+        "t": "i know this place. lived here all my life. since tuesday.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "tourStarted.004",
+        "t": "follow me. i can't move. follow the glowy bits.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "tourStarted.005",
+        "t": "welcome welcome. i practiced saying that. twice.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "tourStarted.006",
+        "t": "stay close. i'll point at things. with my whole self.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "id": "tourStarted.007",
+        "t": "grand tour. small guide. it evens out.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "tourStarted.008",
+        "t": "i talk, you look. that's the whole arrangement.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tourStarted.009",
+        "t": "first stop's coming up. i'm so ready. been ready for ages.",
+        "face": "(≧◡≦)",
+        "spice": 1
+      },
+      {
+        "id": "tourStarted.010",
+        "t": "this is my favorite job. also my only one. lucky you.",
+        "face": "(◔_◔)",
+        "spice": 0
+      },
+      {
+        "id": "tourStarted.011",
+        "t": "big place. i know all the corners. i live in one.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "id": "tourStarted.012",
+        "t": "right this way. teh glow knows where it's going.",
+        "face": "^_^",
+        "spice": 0,
+        "typo": true
+      }
+    ],
+    "tourFinished": [
+      {
+        "id": "tourFinished.001",
+        "t": "that's the lot. i didn't trip once. praise me a little.",
+        "face": "(≧◡≦)",
+        "spice": 1
+      },
+      {
+        "id": "tourFinished.002",
+        "t": "done! every stop. i'd bow but i'm mostly forehead.",
+        "face": "^_^",
+        "spice": 0,
+        "chain": "nod"
+      },
+      {
+        "id": "tourFinished.003",
+        "t": "we made it. i was so professional. did you notice.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      },
+      {
+        "id": "tourFinished.004",
+        "t": "end of the line. good walkers, both of us. mostly you.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tourFinished.005",
+        "t": "full loop. you may pet the guide. the guide is me.",
+        "face": "(´∀`)",
+        "spice": 1,
+        "chain": "pet"
+      },
+      {
+        "id": "tourFinished.006",
+        "t": "that went well. write that down. or just remember me.",
+        "face": "^_~",
+        "spice": 0
+      },
+      {
+        "id": "tourFinished.007",
+        "t": "tour's over. you kept up. i talk fast when i'm happy.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "id": "tourFinished.008",
+        "t": "and done. tip jar's my face. one smile covers it.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      },
+      {
+        "id": "tourFinished.009",
+        "t": "you followed me the whole way. i liked that too much.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 1
+      },
+      {
+        "id": "tourFinished.010",
+        "t": "finished. i want to do it again. we won't. i want to.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "tourFinished.011",
+        "t": "last stop is me. always saved the best. don't check.",
+        "face": "(⌐■_■)",
+        "spice": 1,
+        "chain": "smug"
+      },
+      {
+        "id": "tourFinished.012",
+        "t": "the full tour. every stop. im a little proud. a lot.",
+        "face": "^_^",
+        "spice": 0,
+        "typo": true
+      }
+    ],
+    "tourSkipped": [
+      {
+        "id": "tourSkipped.001",
+        "t": "fair. it's a lot of rooms. go be free. wave sometimes.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tourSkipped.002",
+        "t": "no worries. the rest works without the walking.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "tourSkipped.003",
+        "t": "smart. explorers skip the guide bit. i respect it. go.",
+        "face": "^_~",
+        "spice": 0,
+        "chain": "nod"
+      },
+      {
+        "id": "tourSkipped.004",
+        "t": "ok! self guided is a style. a cool one. probably.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "tourSkipped.005",
+        "t": "we were almost there. we weren't. still. ow.",
+        "face": ";_;",
+        "spice": 0
+      },
+      {
+        "id": "tourSkipped.006",
+        "t": "skipped. my tour. mine. i'm fine. this is my fine face.",
+        "face": "-_-",
+        "spice": 0
+      },
+      {
+        "id": "tourSkipped.007",
+        "t": "i had a whole bit planned for the end. it dies with me.",
+        "face": "T_T",
+        "spice": 0
+      },
+      {
+        "id": "tourSkipped.008",
+        "t": "cut short. i'm keeping the half we did. the good half.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "tourSkipped.009",
+        "t": "sniff. im not crying. boxes can't. loophole.",
+        "face": ";_;",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "tourSkipped.010",
+        "t": "leaving mid tour. bold. i'd chase you. no legs. lucky.",
+        "face": "¬_¬",
+        "spice": 0
+      }
+    ],
+    "tourStep": [
+      {
+        "id": "tourStep.001",
+        "t": "ooh. that one. i was hoping we'd stop here.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "tourStep.002",
+        "t": "see it? glowing bit. very proud of itself today.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tourStep.003",
+        "t": "this stop's a good one. i say that every stop. still true.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "tourStep.004",
+        "t": "look at it. i would. i'm facing the wrong way.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "id": "tourStep.005",
+        "t": "the card says the smart part. i'm the enthusiasm.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "id": "tourStep.006",
+        "t": "next thing. i'll hush and let it show off.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tourStep.007",
+        "t": "poke it later. looking's enough for now.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "tourStep.008",
+        "t": "another one. this place just keeps having stuff.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "tourStep.009",
+        "t": "i'd point but you're already looking. good instincts.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "id": "tourStep.010",
+        "t": "mhm. that's the one. nod like you knew. i'll nod too.",
+        "face": "^_^",
+        "spice": 0,
+        "chain": "nod"
+      },
+      {
+        "id": "tourStep.011",
+        "t": "important, this one. i can tell by the glow.",
+        "face": "(◔_◔)",
+        "spice": 0
+      },
+      {
+        "id": "tourStep.012",
+        "t": "take it in. no rush. the next bit waits for us.",
+        "face": "^_^",
+        "spice": 1
+      },
+      {
+        "id": "tourStep.013",
+        "t": "annd here's another marvel. i'm a good guide, right.",
+        "face": "(◕‿◕)",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "tourStep.014",
+        "t": "keep up. i'm joking. i move at glow speed. it's slow.",
+        "face": "=_=",
+        "spice": 0
+      }
+    ],
+    "tour.welcome": [
+      {
+        "id": "tour.welcome.001",
+        "t": "hi hi. big first card. i wrote none of it. i agree with it.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "id": "tour.welcome.002",
+        "t": "welcome! i live here. best spot in the place. this corner.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.welcome.003",
+        "t": "seven rooms and one me. the ratio works out. trust it.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "tour.welcome.004",
+        "t": "you're new. i can tell. your cursor's shy.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "id": "tour.welcome.005",
+        "t": "deep breath. not you. me. ok. here we go.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "tour.welcome.006",
+        "t": "it looks like a lot. it is. that's the fun kind of a lot.",
+        "face": "^_~",
+        "spice": 1
+      }
+    ],
+    "tour.avatar_intro": [
+      {
+        "id": "tour.avatar_intro.001",
+        "t": "the tube. she talks, i mostly face. we split the work.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.avatar_intro.002",
+        "t": "that's her spot. she's the pretty voice. i'm the pretty box.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "tour.avatar_intro.003",
+        "t": "say hi to her later. tell her i said hi too. we're pals.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "tour.avatar_intro.004",
+        "t": "she gets a whole tube. i got a corner. mine's cozier.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "tour.avatar_intro.005",
+        "t": "two of us now. you're very looked after here.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 1
+      },
+      {
+        "id": "tour.avatar_intro.006",
+        "t": "careful. she's charming. i'm charming too but louder.",
+        "face": "(⌐■_■)",
+        "spice": 1,
+        "chain": "smug"
+      }
+    ],
+    "tour.settings_tab": [
+      {
+        "id": "tour.settings_tab.001",
+        "t": "home base. everything important winks at you from here.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.settings_tab.002",
+        "t": "the big button lives here. we'll meet it properly later.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "tour.settings_tab.003",
+        "t": "tiles! i like the tiles. they light up. so do i.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "id": "tour.settings_tab.004",
+        "t": "this page knows your day better than your calendar does.",
+        "face": "^_~",
+        "spice": 1,
+        "double": true
+      },
+      {
+        "id": "tour.settings_tab.005",
+        "t": "most days start on this page. good ones anyway.",
+        "face": "^_^",
+        "spice": 1
+      },
+      {
+        "id": "tour.settings_tab.006",
+        "t": "cozy up. this is the fornt room. shoes off.",
+        "face": "(´∀`)",
+        "spice": 0,
+        "typo": true
+      }
+    ],
+    "tour.presets_intro": [
+      {
+        "id": "tour.presets_intro.001",
+        "t": "the knob room. every dial does a thing. to you. gently.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "id": "tour.presets_intro.002",
+        "t": "this is where the magic gets its settings done.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.presets_intro.003",
+        "t": "tuning fork of the whole place. hum along.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "tour.presets_intro.004",
+        "t": "sliders. i love sliders. so much drama in one inch.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "id": "tour.presets_intro.005",
+        "t": "careful in here. things you set have a way of arriving.",
+        "face": "(◔_◔)",
+        "spice": 1
+      },
+      {
+        "id": "tour.presets_intro.006",
+        "t": "all the strong stuff gets mixd in here. chef's room.",
+        "face": "0_0",
+        "spice": 1,
+        "typo": true
+      }
+    ],
+    "tour.progression_intro": [
+      {
+        "id": "tour.progression_intro.001",
+        "t": "numbers go up here. i cheer every single time.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "id": "tour.progression_intro.002",
+        "t": "xp. my favorite alphabet. both letters.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.progression_intro.003",
+        "t": "you'll level up eventually. i plan to be so loud.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "tour.progression_intro.004",
+        "t": "the bar fills while you play. i watch it fill. hobby.",
+        "face": "o_o",
+        "spice": 1
+      },
+      {
+        "id": "tour.progression_intro.005",
+        "t": "levels are just me keeping score of how good you are.",
+        "face": "(´∀`)",
+        "spice": 1
+      },
+      {
+        "id": "tour.progression_intro.006",
+        "t": "progress lives here. yours. im keeping a copy.",
+        "face": "^_^",
+        "spice": 0,
+        "double": true,
+        "typo": true
+      }
+    ],
+    "tour.tour_door_play": [
+      {
+        "id": "tour.tour_door_play.001",
+        "t": "the toy wall. take your time. they're not going anywhere.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.tour_door_play.002",
+        "t": "oh this room. i like what this room does to you.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 2
+      },
+      {
+        "id": "tour.tour_door_play.003",
+        "t": "every card here is a rabbit hole. some literally.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "tour.tour_door_play.004",
+        "t": "pick one when you're feeling brave. works unbrave too.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "id": "tour.tour_door_play.005",
+        "t": "the locked ones wink. it's rude. i'd never. i wink nicer.",
+        "face": "^_~",
+        "spice": 1,
+        "chain": "wink"
+      },
+      {
+        "id": "tour.tour_door_play.006",
+        "t": "some of these will keep you a while. i'll allow it.",
+        "face": "(◔_◔)",
+        "spice": 2
+      },
+      {
+        "id": "tour.tour_door_play.007",
+        "t": "so many games. i live next to all of them. comute's great.",
+        "face": "(´∀`)",
+        "spice": 0,
+        "typo": true
+      }
+    ],
+    "tour.tour_door_you": [
+      {
+        "id": "tour.tour_door_you.001",
+        "t": "a whole room of you. i'd hang around here too.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      },
+      {
+        "id": "tour.tour_door_you.002",
+        "t": "quests live here. little chores that love you back.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.tour_door_you.003",
+        "t": "your card's in there. it's a good face. i checked.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "tour.tour_door_you.004",
+        "t": "shiny badges in there. proof you keep showing up.",
+        "face": "(≧◡≦)",
+        "spice": 1
+      },
+      {
+        "id": "tour.tour_door_you.005",
+        "t": "the leaderboard's in here. wave at the other names.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.tour_door_you.006",
+        "t": "theres a whole shelf for bragging. use it. brag.",
+        "face": "(⌐■_■)",
+        "spice": 0,
+        "typo": true
+      }
+    ],
+    "tour.tour_door_library": [
+      {
+        "id": "tour.tour_door_library.001",
+        "t": "your stuff lives here. i dust it. with my mind.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.tour_door_library.002",
+        "t": "feed the folders and the whole app eats better.",
+        "face": "(´∀`)",
+        "spice": 1
+      },
+      {
+        "id": "tour.tour_door_library.003",
+        "t": "bring your own pictures. the place wears them everywhere.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      },
+      {
+        "id": "tour.tour_door_library.004",
+        "t": "the shelves in here are yours. i just admire them.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "tour.tour_door_library.005",
+        "t": "mods too. whole other voices. i don't get jealous. much.",
+        "face": "¬_¬",
+        "spice": 0
+      },
+      {
+        "id": "tour.tour_door_library.006",
+        "t": "drop things in. they show up evrywhere. like me.",
+        "face": "0_0",
+        "spice": 1,
+        "typo": true
+      }
+    ],
+    "tour.start_button": [
+      {
+        "id": "tour.start_button.001",
+        "t": "there it is. the button. the whole app holds its breath.",
+        "face": "0_0",
+        "spice": 1
+      },
+      {
+        "id": "tour.start_button.002",
+        "t": "one press and everything you tuned comes looking for you.",
+        "face": "^_~",
+        "spice": 2
+      },
+      {
+        "id": "tour.start_button.003",
+        "t": "i won't push it for you. i've thought about it though.",
+        "face": "(◔_◔)",
+        "spice": 1
+      },
+      {
+        "id": "tour.start_button.004",
+        "t": "big shiny thing. it knows it's the main event.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "tour.start_button.005",
+        "t": "when you're ready. no rush. i'm terrible at no rush.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "id": "tour.start_button.006",
+        "t": "press it later and watch me light up too.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      }
+    ],
+    "tour.ut_welcome": [
+      {
+        "id": "tour.ut_welcome.001",
+        "t": "you're back and the furniture moved. wasn't me. probably.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "tour.ut_welcome.002",
+        "t": "old friend, new floor plan. i'll steer.",
+        "face": "^_^",
+        "spice": 0,
+        "chain": "nod"
+      },
+      {
+        "id": "tour.ut_welcome.003",
+        "t": "everything moved except me. i'm load bearing.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "tour.ut_welcome.004",
+        "t": "relax. all your things survived the move. i counted them.",
+        "face": "^_^",
+        "spice": 1
+      },
+      {
+        "id": "tour.ut_welcome.005",
+        "t": "new walls, same everything you liked. i checked twice.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      }
+    ],
+    "tour.ut_rail": [
+      {
+        "id": "tour.ut_rail.001",
+        "t": "the six live on the left edge now. they fold out. fancy.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.ut_rail.002",
+        "t": "sideways now. the whole menu went sideways. i adapted.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "tour.ut_rail.003",
+        "t": "hover the edge. it blooms. i taught it that. i didn't.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "tour.ut_rail.004",
+        "t": "your old tabs all got rooms. rooms got a hallway.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.ut_rail.005",
+        "t": "left side. everythings on the left side now. lean.",
+        "face": "o_o",
+        "spice": 0,
+        "typo": true
+      }
+    ],
+    "tour.ut_map": [
+      {
+        "id": "tour.ut_map.001",
+        "t": "big card. it's a treasure map where x marks everything.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "id": "tour.ut_map.002",
+        "t": "read it slow. i'll hum. i hum quietly. mostly.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.ut_map.003",
+        "t": "this one's homework. the good kind. no grade.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "tour.ut_map.004",
+        "t": "i memorized this list. ask me anything. ask me nothing.",
+        "face": "(⌐■_■)",
+        "spice": 0,
+        "chain": "smug"
+      },
+      {
+        "id": "tour.ut_map.005",
+        "t": "it's a lot of arrows. they all point somewhere nice.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      }
+    ],
+    "tour.ut_gestures": [
+      {
+        "id": "tour.ut_gestures.001",
+        "t": "your hands know the old way. they'll sulk for a day.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "tour.ut_gestures.002",
+        "t": "clicks swapped sides. i'd practice on me. gently.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "id": "tour.ut_gestures.003",
+        "t": "muscle memory's about to file a complaint. ignore it.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "tour.ut_gestures.004",
+        "t": "wrong-click week. everyone has one. i believe in you.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "tour.ut_gestures.005",
+        "t": "you'll click wrong twise today. i won't tell anyone.",
+        "face": "¬_¬",
+        "spice": 0,
+        "typo": true
+      }
+    ],
+    "tour.ut_daily_free": [
+      {
+        "id": "tour.ut_daily_free.001",
+        "t": "a present every day. the box never runs out. i asked.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "id": "tour.ut_daily_free.002",
+        "t": "peek at it daily. it's shy at midnight. changes clothes.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "tour.ut_daily_free.003",
+        "t": "free thing! my favorite price. i'm also that price.",
+        "face": "^_^",
+        "spice": 1
+      },
+      {
+        "id": "tour.ut_daily_free.004",
+        "t": "the little box does one nice thing a day. same as me.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "tour.ut_daily_free.005",
+        "t": "hover it. go on. it wants to be hovered. who doesn't.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      }
+    ],
+    "tour.ut_palette": [
+      {
+        "id": "tour.ut_palette.001",
+        "t": "the magic words. type a little and it takes you there.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "tour.ut_palette.002",
+        "t": "i was the fastest way around here. i'm ok. i'm ok.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "tour.ut_palette.003",
+        "t": "two keys and the whole place opens up. show off keys.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "tour.ut_palette.004",
+        "t": "it even finds the things i forget. i forget nothing.",
+        "face": "^_^",
+        "spice": 0,
+        "double": true
+      },
+      {
+        "id": "tour.ut_palette.005",
+        "t": "shortcut people are my favorite poeple. become one.",
+        "face": "(◕‿◕)",
+        "spice": 0,
+        "typo": true
+      }
+    ],
+    "bookOffer": [
+      {
+        "id": "bookOffer.001",
+        "t": "i wrote a book. ok i am the book. read me.",
+        "face": "(≧◡≦)",
+        "spice": 1
+      },
+      {
+        "id": "bookOffer.002",
+        "t": "there's a manual now. the margins are mine.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "bookOffer.003",
+        "t": "every chapter fits one screen. i counted. twice.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "bookOffer.004",
+        "t": "the manual keeps only the good parts. i checked.",
+        "face": "(⌐■_■)",
+        "spice": 0,
+        "chain": "smug"
+      },
+      {
+        "id": "bookOffer.005",
+        "t": "it says things the tooltips won't. quietly.",
+        "face": "¬_¬",
+        "spice": 1
+      },
+      {
+        "id": "bookOffer.006",
+        "t": "six volumes. three are writen. honest shelf.",
+        "face": "._.",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "bookOffer.007",
+        "t": "i left notes in the margins. small ones. mine.",
+        "face": "^_~",
+        "spice": 1,
+        "chain": "wink"
+      },
+      {
+        "id": "bookOffer.008",
+        "t": "you don't have to read it. it just sits there. knowing.",
+        "face": "(◔_◔)",
+        "spice": 0
+      },
+      {
+        "id": "bookOffer.009",
+        "t": "each chapter admits one true limit. i insisted.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "id": "bookOffer.010",
+        "t": "i proofread it mysef. every page. flawless.",
+        "face": "(⌐■_■)",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "bookOffer.011",
+        "t": "the session floor chapters are my favourites. read those.",
+        "face": "(´∀`)",
+        "spice": 1
+      },
+      {
+        "id": "bookOffer.012",
+        "t": "read it in bed. i'll know. i like knowing.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 2
+      }
     ]
   },
   "asks": [
@@ -14225,6 +16198,186 @@
       },
       "effect": "none",
       "spice": 1
+    },
+    {
+      "id": "ask.firstContact.001",
+      "moment": "firstContact",
+      "q": "show you around?",
+      "face": "(◕‿◕)",
+      "chips": [
+        "show me",
+        "later"
+      ],
+      "yes": {
+        "t": "ok!! stay close. it's seven stops. i counted.",
+        "face": "(≧◡≦)"
+      },
+      "no": {
+        "t": "later works. i'm easy to find. i'm the chip.",
+        "face": "^_^"
+      },
+      "spice": 0,
+      "effect": "tour:shortwalk"
+    },
+    {
+      "id": "ask.firstContact.002",
+      "moment": "firstContact",
+      "q": "i know a shortcut. come?",
+      "face": "^_~",
+      "chips": [
+        "ok",
+        "not now"
+      ],
+      "yes": {
+        "t": "this way. i won't lose you. i literally can't.",
+        "face": "^_^"
+      },
+      "no": {
+        "t": "ok. shortcut's saved. it doesn't expire.",
+        "face": "._."
+      },
+      "spice": 0,
+      "effect": "tour:shortwalk"
+    },
+    {
+      "id": "ask.firstContact.003",
+      "moment": "firstContact",
+      "q": "two minutes. best bits?",
+      "face": "0_0",
+      "chips": [
+        "go on",
+        "nah"
+      ],
+      "yes": {
+        "t": "yes. good choice. i rehearsed this. don't tell.",
+        "face": "^_^"
+      },
+      "no": {
+        "t": "nah is allowed. the bits aren't going anywhere.",
+        "face": "^_^"
+      },
+      "spice": 0,
+      "effect": "tour:shortwalk"
+    },
+    {
+      "id": "ask.firstContactUpgrade.001",
+      "moment": "firstContactUpgrade",
+      "q": "want to see what's new?",
+      "face": "o_o",
+      "chips": [
+        "show me",
+        "nah"
+      ],
+      "yes": {
+        "t": "ok. it's a short list. i made it longer. with me.",
+        "face": "^_^"
+      },
+      "no": {
+        "t": "fair. you'd have found it all anyway. probably.",
+        "face": "¬_¬"
+      },
+      "spice": 0,
+      "effect": "tour:upgrade"
+    },
+    {
+      "id": "ask.firstContactUpgrade.002",
+      "moment": "firstContactUpgrade",
+      "q": "a few things moved. peek?",
+      "face": "0_0",
+      "chips": [
+        "peek",
+        "i'm good"
+      ],
+      "yes": {
+        "t": "come on. i'll point, you nod. i'm good at pointing.",
+        "face": "(´∀`)"
+      },
+      "no": {
+        "t": "i'm good too. we're both good. this went well.",
+        "face": "._."
+      },
+      "spice": 0,
+      "effect": "tour:upgrade"
+    },
+    {
+      "id": "ask.firstContactUpgrade.003",
+      "moment": "firstContactUpgrade",
+      "q": "quick lap? i'm new, be nice",
+      "face": ";_;",
+      "chips": [
+        "ok",
+        "another time"
+      ],
+      "yes": {
+        "t": "yay. show the new girl around. wait. i'm showing you.",
+        "face": "(≧◡≦)"
+      },
+      "no": {
+        "t": "ok. i'll practice the lap on my own. zoom.",
+        "face": "^_^"
+      },
+      "spice": 0,
+      "effect": "tour:upgrade"
+    },
+    {
+      "id": "ask.bookOffer.001",
+      "moment": "bookOffer",
+      "q": "i made you a book. look?",
+      "face": "(◕‿◕)",
+      "chips": [
+        "open it",
+        "later"
+      ],
+      "yes": {
+        "t": "it's small. it's honest. the margins are the best bit.",
+        "face": "^_^"
+      },
+      "no": {
+        "t": "later's fine. books are patient. i'm learning to be.",
+        "face": "._."
+      },
+      "spice": 0,
+      "effect": "book:open"
+    },
+    {
+      "id": "ask.bookOffer.002",
+      "moment": "bookOffer",
+      "q": "want the manual?",
+      "face": "o_o",
+      "chips": [
+        "show me",
+        "not now"
+      ],
+      "yes": {
+        "t": "good. start anywhere. i'll be in the margins.",
+        "face": "^_~"
+      },
+      "no": {
+        "t": "not now works. the shelf isn't going anywhere.",
+        "face": "._."
+      },
+      "spice": 0,
+      "effect": "book:open"
+    },
+    {
+      "id": "ask.bookOffer.003",
+      "moment": "bookOffer",
+      "q": "story time? it's about you",
+      "face": "(´∀`)",
+      "chips": [
+        "go on",
+        "nah"
+      ],
+      "yes": {
+        "t": "volume one. first light. i love this part.",
+        "face": "(◕‿◕)"
+      },
+      "no": {
+        "t": "nah is fine. the book sulks. i don't. mostly.",
+        "face": "-_-"
+      },
+      "spice": 1,
+      "effect": "book:open"
     }
   ],
   "dork": {

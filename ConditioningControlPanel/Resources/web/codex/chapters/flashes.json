@@ -1,0 +1,48 @@
+{
+  "id": "flashes",
+  "volume": 2,
+  "order": 1,
+  "title": "flashes",
+  "blurb": "your images, thrown at your screen on a timer.",
+  "target": "flashes",
+  "tour": null,
+  "margin": {
+    "t": "blink and you miss one. so don't blink.",
+    "face": "0_0"
+  },
+  "blocks": [
+    {
+      "type": "p",
+      "text": "You drop pictures into a folder. Every few minutes the app throws a handful of them onto your screen at random spots, on top of whatever you are doing. They fade out on a timer, or you click them away. It only ever shows files you put there yourself, or a content pack you chose to install."
+    },
+    {
+      "type": "p",
+      "text": "Per Hour sets the pace, 1 to 180, default 10. The gap between events is 3600 divided by that number, shuffled up to 30 percent either way and never shorter than three seconds, so the default lands roughly every four to eight minutes. Images sets how many arrive at once, 1 to 20, default 5, and Max On Screen caps the pile, though the renderer holds itself to 10 visible at once in the default mode regardless of the slider. Avoid Screen Center keeps a clear zone in the middle so you can still work, and Glow puts a neon edge on each image."
+    },
+    {
+      "type": "figure",
+      "kind": "pulse",
+      "caption": "events fire on a shuffled timer. the pile caps itself."
+    },
+    {
+      "type": "p",
+      "text": "The Visuals card is a separate card that controls how they look: Size, Opacity, how long the Fade takes, and Duration, which is how long an image stays plus about a second. Link to Audio Trigger matches an image's stay to the length of the clip playing with it, and overrides Duration while it does."
+    },
+    {
+      "type": "p",
+      "text": "Click is on by default: clicking an image dismisses it. Hydra inverts that. The image you click closes and two more take its place, then four. It is designed to punish tidying up. If it gets loud, stop clicking: left alone, images fade on their own timers and the pile shrinks. Leave Linked on so spawns die with their parent, and lower Max On Screen if the ceiling feels too high."
+    },
+    {
+      "type": "p",
+      "text": "If you have calibrated webcam tracking, staring at an image for about a second pops it, and looking at one keeps it alive until you look away. XP is awarded per image shown, 4 each or 8 when audio plays with it, never per click, so there is nothing to farm; just leave it running. Turned up, this feature flashes hard and often. If you are photosensitive, keep Per Hour, Opacity and Fade gentle, and know that the panic key clears every flash at once, from any window."
+    },
+    {
+      "type": "callout",
+      "text": "Ambient: Opacity 30 to 50 percent, Fade 70, Per Hour 6 to 10, something at the corner of your eye. Impossible to ignore: full opacity, Size 150 percent and up, Per Hour 30 plus. Start near the defaults either way."
+    },
+    {
+      "type": "limit",
+      "text": "Over a fullscreen game, flashes often refuse to show. Solid mode fixes that and raises the cap to 30, but it makes every image click-through: no clicking, no Hydra. You can have game-proof or interactive, not both at once."
+    }
+  ]
+}

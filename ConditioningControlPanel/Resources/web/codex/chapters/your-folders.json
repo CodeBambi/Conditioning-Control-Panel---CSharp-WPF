@@ -1,0 +1,56 @@
+{
+  "id": "your-folders",
+  "volume": 1,
+  "order": 2,
+  "title": "your folders",
+  "blurb": "where your content lives and what the app can read.",
+  "target": "settings",
+  "tour": null,
+  "margin": {
+    "t": "i don't peek in your folders. much.",
+    "face": "¬_¬"
+  },
+  "blocks": [
+    {
+      "type": "p",
+      "text": "The app plays your files, not its own. Nothing is bundled for the flash pool and nothing is downloaded for you: it only ever shows what you put there yourself, or what arrived in a content pack you chose to install. Your content lives under %LOCALAPPDATA%\\ConditioningControlPanel\\ - images, videos and wallpapers in their own subfolders under assets\\, and the spiral overlay's files in Spirals\\."
+    },
+    {
+      "type": "figure",
+      "kind": "grid-fill",
+      "caption": "assets\\images, assets\\videos, assets\\wallpapers, and Spirals\\ for the overlay."
+    },
+    {
+      "type": "p",
+      "text": "Images can be .png, .jpg, .gif, .webp, .bmp, .tif, .heic, .avif or .ico, and animated GIF and animated WebP play by themselves. Videos can be .mp4, .webm, .mkv, .mov, .avi or .wmv; MP4 is the safest bet. The Spirals folder takes the same image types plus video clips. Wallpapers are ordinary images; that folder feeds the feature that swaps your desktop background. The sounds that play alongside flashes ship with the app, so you supply nothing there."
+    },
+    {
+      "type": "p",
+      "text": "You do not have to remember the path. The Assets tab has an Open Folder button that drops Windows Explorer exactly where your files go, lets you preview everything you have added, and untick anything you want out of the rotation without deleting it. Subfolders inside images\\ count too, so you can organise without hiding anything from the flash pool, and content packs installed from the same tab mix in beside your own files. If you would rather keep content somewhere else entirely, Pick Folder in the System settings points the app at any folder you like, and an update never touches any of it, because it all lives outside the install directory."
+    },
+    {
+      "type": "p",
+      "text": "Your settings, XP and level all live in one file, settings.json, next to those folders, and the app keeps three daily backups beside it, settings.bak-1.json through bak-3.json. Sessions you build yourself are the one exception: they save to %APPDATA%\\ConditioningControlPanel\\CustomSessions\\ instead. The bundled audio and art sit in a Resources folder inside the install directory, apart from your data; leave those alone unless you are modding. Before experimenting, copy settings.json somewhere safe: it is one small file, and it is your whole save."
+    },
+    {
+      "type": "p",
+      "text": "Starting over is three moves:"
+    },
+    {
+      "type": "steps",
+      "items": [
+        "Close the app.",
+        "Delete settings.json, and the browser_data folder too if you want the built-in browser wiped.",
+        "Start the app again. Everything comes back at its defaults."
+      ]
+    },
+    {
+      "type": "callout",
+      "text": "Deleting settings.json resets your progress as well as your preferences: Level 1, 0 XP, everything relocked. If you only want to fix a bad setting, fix the setting. If you deleted it by accident, rename yesterday's backup over it and you have lost at most a day."
+    },
+    {
+      "type": "limit",
+      "text": "There is no size guard on what you add. A folder of huge animated GIFs will make the whole app stutter; keep them under about 5 MB each, because nothing does it for you."
+    }
+  ]
+}

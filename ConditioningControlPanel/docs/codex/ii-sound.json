@@ -1,0 +1,57 @@
+{
+  "id": "sound",
+  "volume": 2,
+  "order": 5,
+  "title": "sound",
+  "blurb": "volume, whispers, and why other apps go quiet.",
+  "target": null,
+  "tour": null,
+  "margin": {
+    "t": "i hum along sometimes. you can't hear it.",
+    "face": "(´∀`)"
+  },
+  "blocks": [
+    {
+      "type": "p",
+      "text": "The Audio card on the Dashboard owns every volume in the app. Master, default 32 percent, scales everything the app plays. Video has its own slider at 50 percent, whispers have theirs, and Output picks which speakers or headphones the app uses, independent of the system default. Feature volumes ride under Master, so one slider pulls the whole app down evenly, and none of them touch your other programs; only Duck does that. The duck controls sit behind the advanced toggle on the same card, not in the video panel."
+    },
+    {
+      "type": "p",
+      "text": "Ducking is why your other apps go quiet during a video. It works through Windows' per-app mixer, one program at a time, and never touches your system volume."
+    },
+    {
+      "type": "steps",
+      "items": [
+        "A video starts.",
+        "The app turns every other program down by the Duck amount. At the default 80 percent, everything else drops to a fifth of its volume.",
+        "The video plays at its own Video volume. Programs that start mid-video get caught too, because the app rescans while ducking is active.",
+        "When the video ends, every level is put back exactly where it was."
+      ]
+    },
+    {
+      "type": "figure",
+      "kind": "dial",
+      "caption": "one master, then a dial per feature under it."
+    },
+    {
+      "type": "p",
+      "text": "The restore is written down before anything is touched. If the app is killed mid-video, the next launch reads that record and puts your levels back, and a watchdog undoes any ducking left hanging for more than five minutes. That covers a crash, a kill from Task Manager, and a video that never got to finish. Don't duck browser, on by default, keeps the app's own browser at full volume while everything else drops."
+    },
+    {
+      "type": "p",
+      "text": "A few features carry their own channels. Subliminal whispers have a volume slider and a separate mute that stays reachable even in a locked session; a whisper ducks the rest of your audio for its couple of seconds too, and hands it back half a second after the clip ends. Mind Wipe plays through a dedicated channel that normal ducking does not touch. The sounds that play alongside flashes ship with the app, several thousand files of them, so you supply nothing."
+    },
+    {
+      "type": "p",
+      "text": "Audio Layers is the quiet half of the card: a list of looping tracks you assemble yourself, each with its own volume, mixed together through one output and played as a bed under everything else. It has its own window, no timer, and it runs until you stop it. Audio-only sessions start it for you."
+    },
+    {
+      "type": "callout",
+      "text": "If something stayed quiet after a crash, open the Windows volume mixer. Whatever the app could not restore is one slider away."
+    },
+    {
+      "type": "limit",
+      "text": "Ducking can only move what the Windows per-app mixer shows it. A program using exclusive-mode audio, and anything else that bypasses the mixer, will not duck, and the app cannot make it."
+    }
+  ]
+}

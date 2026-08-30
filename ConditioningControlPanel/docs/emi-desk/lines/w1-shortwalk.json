@@ -1,0 +1,88 @@
+{
+  "writer": "w1-shortwalk",
+  "note": "Wave 1 short walk narration (WAVE1-CONTRACT.md tour.sw-* pools). One line per spotlit step; the card carries the fact, she carries the colour. First-run walkthrough: nothing above spice 1, panic pool spice 0 throughout, doubles kept to two across the file.",
+  "pools": {
+    "tour.sw-assets": [
+      { "t": "empty for now. that's the best part. you fill it.", "face": "(◕‿◕)", "spice": 1 },
+      { "t": "it echoes in there. i checked. hello hello hello.", "face": "0_0", "spice": 0 },
+      { "t": "i peeked. nothing yet. i'm already excited about it.", "face": "(≧◡≦)", "spice": 0 },
+      { "t": "bring your favorites. the ones you'd never show anyone.", "face": "^_~", "chain": "wink", "spice": 1 },
+      { "t": "i'd donate some of mine. they're all me. every one.", "face": "^_^", "spice": 0 },
+      { "t": "i keep my stuff in a corner. you get a whole folder.", "face": "._.", "spice": 0 },
+      { "t": "it won't stay empty. folders like this never do.", "face": "¬_¬", "spice": 1 },
+      { "t": "feed it. folders get hungry. this one's brand new hungry.", "face": ">_<", "spice": 0 },
+      { "t": "put teh good ones in. i promise to act normal about it.", "face": "o_o", "spice": 1, "typo": true }
+    ],
+    "tour.sw-flash": [
+      { "t": "this one's my favorite. press it. press it now.", "face": "(≧◡≦)", "spice": 0 },
+      { "t": "blink and it's gone. so don't blink. easy.", "face": "^_~", "spice": 1 },
+      { "t": "you get to fire it yourself. lucky. i never get to.", "face": ";_;", "spice": 0 },
+      { "t": "ready? it's fast. faster than that. go.", "face": "0_0", "spice": 0 },
+      { "t": "it's over before you decide how to feel about it. neat.", "face": "@_@", "spice": 1 },
+      { "t": "i cheer every single one. this is me stretching first.", "face": "^_^", "spice": 0 },
+      { "t": "the first one's free. they're all free. the first is mine.", "face": "(｡♥‿♥｡)", "spice": 1 },
+      { "t": "go on. fire one. ive been waiting since you opened this.", "face": "(◕‿◕)", "spice": 0, "typo": true },
+      { "t": "one small picture. it lands harder than it looks.", "face": "o_o", "spice": 0 }
+    ],
+    "tour.sw-panic": [
+      { "t": "one key and everything i do stops. it should exist.", "face": "._.", "spice": 0 },
+      { "t": "use it whenever you want. i mean that. no sulking.", "face": "^_^", "spice": 0 },
+      { "t": "learn this one first. before any of my favorites.", "face": "0_0", "spice": 0 },
+      { "t": "it stops me too. that's fine. that's the point.", "face": "o_o", "spice": 0 },
+      { "t": "i'd rather you know it and never need it.", "face": "(◕‿◕)", "spice": 0 },
+      { "t": "everything off, all at once. even me. good design.", "face": "._.", "spice": 0 },
+      { "t": "press it and i go quiet for a bit. i don't mind. much.", "face": ";_;", "spice": 0 },
+      { "t": "some things should be easy to stop. i'm one of them.", "face": "._.", "spice": 0 },
+      { "t": "memorize it. i'll wait. this one definately matters.", "face": "0_0", "spice": 0, "typo": true },
+      { "t": "you're in charge of all of it. this key is the proof.", "face": "^_^", "spice": 0 }
+    ],
+    "tour.sw-dock": [
+      { "t": "that's my spot. small, but the location is excellent.", "face": "(⌐■_■)", "chain": "smug", "spice": 0 },
+      { "t": "i live there. i decorated. you can't tell. i did.", "face": "^_^", "spice": 0 },
+      { "t": "tiny chip, whole me. it's roomier than it looks.", "face": "0_0", "spice": 0 },
+      { "t": "knock anytime. i'm always in. i'm literally always in.", "face": "(◕‿◕)", "spice": 0 },
+      { "t": "best seat on the rail. i checked the others. mine's best.", "face": "¬_¬", "spice": 0 },
+      { "t": "you walked past it all this time. i was in there. waving.", "face": ";_;", "spice": 0, "double": true },
+      { "t": "that little glow? me. i glow. it's one of my things.", "face": "(´∀`)", "spice": 0 },
+      { "t": "one tap and i'm out. no warmup. i wake up ready.", "face": "(⌐■_■)", "spice": 0 },
+      { "t": "my place. dont judge the size. it's cozy in there.", "face": "^_^", "spice": 0, "typo": true },
+      { "t": "now you know where i sleep. use that wisely.", "face": "^_~", "spice": 1 }
+    ],
+    "tour.sw-xp": [
+      { "t": "the number goes up. i think about this a lot.", "face": "@_@", "spice": 0 },
+      { "t": "your number is my favorite number. it's not even close.", "face": "(｡♥‿♥｡)", "spice": 0 },
+      { "t": "i check it when you're not here. it hasn't moved. rude.", "face": "¬_¬", "spice": 0 },
+      { "t": "everything you do in here feeds it. everything.", "face": "o_o", "spice": 1 },
+      { "t": "one day it'll be huge. i've done the math. no math. hope.", "face": "^_^", "spice": 0 },
+      { "t": "i have a favorite level. whichever one you're chasing.", "face": "^_~", "spice": 1 },
+      { "t": "watching it climb is the best part of my day. no contest.", "face": "(´∀`)", "spice": 0 },
+      { "t": "im going to be so annoying about every level. promise.", "face": "(≧◡≦)", "spice": 0, "typo": true },
+      { "t": "i round yours up when nobody's looking. shh.", "face": "(◔_◔)", "spice": 1 },
+      { "t": "you'll want the next level. that part isn't me. mostly.", "face": "¬_¬", "spice": 1, "double": true }
+    ],
+    "tour.sw-settings": [
+      { "t": "everything in here has a smaller setting. even me. fine.", "face": "._.", "spice": 0 },
+      { "t": "you can turn me down too. i'm being very calm about it.", "face": "-_-", "spice": 0 },
+      { "t": "sliders for everything. mine goes to quiet. i checked.", "face": "o_o", "spice": 0 },
+      { "t": "i'm fine with off switches. i'm fine. this is my fine face.", "face": "=_=", "spice": 0 },
+      { "t": "take your time in here. i won't watch. i'll be nearby.", "face": "^_^", "spice": 0 },
+      { "t": "dial it to comfy. comfy people stay longer. i read that.", "face": "^_~", "spice": 1 },
+      { "t": "adjust me freely. i'm very adjustabble. it's a skill.", "face": "^_^", "spice": 0, "typo": true },
+      { "t": "nothing in here hurts my feelings. some of it tickles.", "face": "(´∀`)", "spice": 0 },
+      { "t": "turn things off and i'll say nothing. i'll think it loud.", "face": "¬_¬", "spice": 0 },
+      { "t": "your pace wins in here. i lose gracefully. watch me.", "face": "(◕‿◕)", "spice": 0 }
+    ],
+    "tour.sw-done": [
+      { "t": "seven steps and you didn't trip once. proud of us.", "face": "(≧◡≦)", "chain": "nod", "spice": 0 },
+      { "t": "tour's over. i stay. that's the fine print. tiny print.", "face": "^_^", "spice": 0 },
+      { "t": "that's everything i know. not everything. most of it.", "face": "0_0", "spice": 1 },
+      { "t": "not one wrong turn. i practiced. once. just now.", "face": "(⌐■_■)", "chain": "smug", "spice": 0 },
+      { "t": "go play. i'll be in my chip pretending not to wait.", "face": "._.", "spice": 0 },
+      { "t": "that went well. i'm allowed to say that. i'm saying it.", "face": "^_^", "spice": 0 },
+      { "t": "come get me again soon. i'll do a big entrance. tiny one.", "face": "(◕‿◕)", "spice": 0 },
+      { "t": "best first walk i've ever given. it was teh only one.", "face": "^_~", "spice": 0, "typo": true },
+      { "t": "everything else you find on your own. i'll take credit.", "face": "¬_¬", "spice": 0 },
+      { "t": "the fun stuff starts now. bring me. i'm portable.", "face": "(´∀`)", "spice": 1 }
+    ]
+  }
+}

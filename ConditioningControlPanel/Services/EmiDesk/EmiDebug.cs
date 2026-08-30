@@ -34,6 +34,11 @@ namespace ConditioningControlPanel.Services.EmiDesk;
 /// lifetime fire counts), so the tutorial can be play-tested more than once per machine. It resets
 /// ONLY the onboarding fields; the rest of the ledger, including the summon count and the streaks,
 /// is left alone.</item>
+/// <item><b>EMI_DESK_RESET_KNOCK</b> - set to 1/true/yes/on to un-latch the one-time onboarding
+/// knock (the dock chip's single flash, its offer counter and the finished-tour list) at startup.
+/// Separate from the switch above on purpose: the knock is genuinely once-ever, so the nudge reset
+/// deliberately does not touch it and there would otherwise be no way to see the pulses twice on
+/// one machine.</item>
 /// </list>
 ///
 /// <para>Nothing here changes behaviour unless the variable is present, so a normal launch reads
@@ -59,6 +64,9 @@ public static class EmiDebug
     /// <summary>True when EMI_DESK_RESET_ONBOARDING asks for the gesture tutorial to replay.</summary>
     public static bool ResetOnboarding { get; }
 
+    /// <summary>True when EMI_DESK_RESET_KNOCK asks for the onboarding knock to replay.</summary>
+    public static bool ResetKnock { get; }
+
     static EmiDebug()
     {
         try
@@ -81,11 +89,13 @@ public static class EmiDebug
 
             ResetOnboarding = IsOn(Environment.GetEnvironmentVariable("EMI_DESK_RESET_ONBOARDING"));
 
-            if (IdleMs != null || Enabled || ResetOnboarding)
+            ResetKnock = IsOn(Environment.GetEnvironmentVariable("EMI_DESK_RESET_KNOCK"));
+
+            if (IdleMs != null || Enabled || ResetOnboarding || ResetKnock)
             {
                 Log.Information(
-                    "[EmiDesk] DEBUG overrides active: idleMs={Idle}, qaCadence={Qa}, resetOnboarding={Reset}",
-                    IdleMs?.ToString(CultureInfo.InvariantCulture) ?? "default", Enabled, ResetOnboarding);
+                    "[EmiDesk] DEBUG overrides active: idleMs={Idle}, qaCadence={Qa}, resetOnboarding={Reset}, resetKnock={Knock}",
+                    IdleMs?.ToString(CultureInfo.InvariantCulture) ?? "default", Enabled, ResetOnboarding, ResetKnock);
             }
         }
         catch (Exception ex)
@@ -96,6 +106,7 @@ public static class EmiDebug
             IdleMs = null;
             Enabled = false;
             ResetOnboarding = false;
+            ResetKnock = false;
         }
     }
 

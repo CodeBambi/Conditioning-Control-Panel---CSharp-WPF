@@ -1,7 +1,12 @@
 ﻿using System;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
+using System.Windows.Shapes;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.EmiDesk;
 using Serilog;
@@ -24,11 +29,20 @@ namespace ConditioningControlPanel.Controls;
 /// <para><b>It is not a door.</b> No NavDoorMap row, no medallion shape, no "you are here" ring:
 /// EMI is not a tab you can be inside. See the note in EmiDock.xaml about the markup
 /// NavRailFlyoutTests counts.</para>
+///
+/// <para><b>THE KNOCK.</b> Once, ever, on a settled first launch, the ring pulses pink three times
+/// over about six seconds and then is quiet forever. That is the entire discovery mechanism for a
+/// feature that otherwise ships switched on and completely silent. The decision to knock is not
+/// taken here - it belongs to <see cref="EmiKnockMachine"/>, which is pure and testable - and this
+/// control only ever paints the answer.</para>
 /// </summary>
 public partial class EmiDock : UserControl
 {
     private EmiDeskService? _svc;
     private bool _wired;
+
+    /// <summary>True only while the six seconds of pulses are running. See the knock section below.</summary>
+    private bool _knocking;
 
     /// <summary>Builds the chip. Everything live is wired on Loaded so a designer instance is inert.</summary>
     public EmiDock()
@@ -57,6 +71,7 @@ public partial class EmiDock : UserControl
             if (!_wired)
             {
                 _svc.OutChanged += OnOutChanged;
+                _svc.KnockRequested += OnKnockRequested;
                 _wired = true;
             }
             Refresh(_svc.IsOut);
@@ -74,8 +89,13 @@ public partial class EmiDock : UserControl
             if (_svc != null && _wired)
             {
                 _svc.OutChanged -= OnOutChanged;
+                _svc.KnockRequested -= OnKnockRequested;
                 _wired = false;
             }
+
+            // An animation left running against a control the rail has thrown away keeps the whole
+            // subtree alive and repainting.
+            StopKnock();
             // The rail rebuilds this control on some layout paths; a live binding onto a window
             // that may be torn down would keep it alive.
             BindingOperations.ClearBinding(MiniFace, EmiFace.FaceProperty);
@@ -120,6 +140,10 @@ public partial class EmiDock : UserControl
     {
         try
         {
+            // ANY route out - the chip, the chord, the tray, an automated summon - answers the
+            // knock, so the pulses stop here and not only in the click handler below.
+            if (isOut) StopKnock();
+
             var face = App.EmiDesk?.Window?.Face;
             if (isOut && face != null)
             {
@@ -160,6 +184,7 @@ public partial class EmiDock : UserControl
         try
         {
             e.Handled = true;
+            StopKnock();
             var svc = App.EmiDesk;
             if (svc == null)
             {
@@ -171,6 +196,156 @@ public partial class EmiDock : UserControl
         catch (Exception ex)
         {
             Log.Warning(ex, "[EmiDesk] dock chip click failed");
+        }
+    }
+
+    // ============================================================================================
+    //  THE KNOCK
+    // ============================================================================================
+
+    /// <summary>One pulse: a fast swell and a slow fall. Three of these is the whole knock.</summary>
+    private const int PulseMs = 2000;
+
+    /// <summary>Pulses. Three reads as deliberate; more reads as a notification badge.</summary>
+    private const int PulseCount = 3;
+
+    /// <summary>Her pink at rest.</summary>
+    private static readonly Color RestPink = Color.FromRgb(0xFF, 0x69, 0xB4);
+
+    /// <summary>...and the brighter pink each swell reaches.</summary>
+    private static readonly Color HotPink = Color.FromRgb(0xFF, 0xC4, 0xE8);
+
+    /// <summary>The ring's resting stroke, restored by hand when the pulses are taken off.</summary>
+    private const double RestThickness = 2.0;
+
+    private void OnKnockRequested(object? sender, EventArgs e)
+    {
+        try
+        {
+            if (Dispatcher.CheckAccess()) StartKnock();
+            else Dispatcher.BeginInvoke(new Action(StartKnock));
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] dock chip knock request failed");
+        }
+    }
+
+    /// <summary>
+    /// Three pink pulses over about six seconds, and then quiet forever.
+    ///
+    /// <para><b>The ring, never the face.</b> <c>MiniFace</c> draws a live kaomoji that is already
+    /// mirroring the widget's own chain frames; pulsing it on top of that reads as a rendering
+    /// fault rather than as her knocking. Everything below touches the ellipse's stroke colour, its
+    /// thickness and its glow, and nothing else.</para>
+    ///
+    /// <para><b>A designer instance is inert</b>, the same rule the rest of this control documents:
+    /// nothing starts unless the chip is really loaded into a real window.</para>
+    /// </summary>
+    private void StartKnock()
+    {
+        try
+        {
+            if (_knocking) return;
+            if (!IsLoaded) return;
+            if (DesignerProperties.GetIsInDesignMode(this)) return;
+
+            // A brush or an effect that WPF froze on the way in throws the instant an animation is
+            // applied to it. Inline XAML instances are not normally frozen, but a rail rebuild or a
+            // resource-sharing change upstream could make them so, and a decorative pulse must never
+            // be the thing that takes the nav rail down.
+            if (RingStroke.IsFrozen) Ring.Stroke = RingStroke.Clone();
+            if (RingGlow.IsFrozen) Ring.Effect = RingGlow.Clone();
+
+            if (Ring.Stroke is not SolidColorBrush stroke) return;
+            if (Ring.Effect is not DropShadowEffect glow) return;
+
+            _knocking = true;
+
+            var span = TimeSpan.FromMilliseconds(PulseMs);
+            var repeat = new RepeatBehavior(PulseCount);
+
+            // The swell is fast and the fall is slow: a pulse that decays reads as a knock, a pulse
+            // that is symmetrical reads as a warning light.
+            var colour = new ColorAnimationUsingKeyFrames { Duration = span, RepeatBehavior = repeat };
+            colour.KeyFrames.Add(new LinearColorKeyFrame(RestPink, KeyTime.FromPercent(0.0)));
+            colour.KeyFrames.Add(new LinearColorKeyFrame(HotPink, KeyTime.FromPercent(0.18)));
+            colour.KeyFrames.Add(new LinearColorKeyFrame(RestPink, KeyTime.FromPercent(0.55)));
+            colour.KeyFrames.Add(new LinearColorKeyFrame(RestPink, KeyTime.FromPercent(1.0)));
+
+            var glowOpacity = new DoubleAnimationUsingKeyFrames { Duration = span, RepeatBehavior = repeat };
+            glowOpacity.KeyFrames.Add(new LinearDoubleKeyFrame(0.0, KeyTime.FromPercent(0.0)));
+            glowOpacity.KeyFrames.Add(new LinearDoubleKeyFrame(0.95, KeyTime.FromPercent(0.18)));
+            glowOpacity.KeyFrames.Add(new LinearDoubleKeyFrame(0.0, KeyTime.FromPercent(0.55)));
+            glowOpacity.KeyFrames.Add(new LinearDoubleKeyFrame(0.0, KeyTime.FromPercent(1.0)));
+
+            var blur = new DoubleAnimationUsingKeyFrames { Duration = span, RepeatBehavior = repeat };
+            blur.KeyFrames.Add(new LinearDoubleKeyFrame(0.0, KeyTime.FromPercent(0.0)));
+            blur.KeyFrames.Add(new LinearDoubleKeyFrame(16.0, KeyTime.FromPercent(0.18)));
+            blur.KeyFrames.Add(new LinearDoubleKeyFrame(0.0, KeyTime.FromPercent(0.55)));
+            blur.KeyFrames.Add(new LinearDoubleKeyFrame(0.0, KeyTime.FromPercent(1.0)));
+
+            var thickness = new DoubleAnimationUsingKeyFrames { Duration = span, RepeatBehavior = repeat };
+            thickness.KeyFrames.Add(new LinearDoubleKeyFrame(RestThickness, KeyTime.FromPercent(0.0)));
+            thickness.KeyFrames.Add(new LinearDoubleKeyFrame(3.2, KeyTime.FromPercent(0.18)));
+            thickness.KeyFrames.Add(new LinearDoubleKeyFrame(RestThickness, KeyTime.FromPercent(0.55)));
+            thickness.KeyFrames.Add(new LinearDoubleKeyFrame(RestThickness, KeyTime.FromPercent(1.0)));
+
+            // ONE of the four carries the tidy-up. Completed fires once the whole repeat count is
+            // spent, and StopKnock is idempotent, so a click landing mid-pulse and the natural end
+            // both arrive at the same place.
+            colour.Completed += OnKnockFinished;
+
+            stroke.BeginAnimation(SolidColorBrush.ColorProperty, colour);
+            glow.BeginAnimation(DropShadowEffect.OpacityProperty, glowOpacity);
+            glow.BeginAnimation(DropShadowEffect.BlurRadiusProperty, blur);
+            Ring.BeginAnimation(Shape.StrokeThicknessProperty, thickness);
+
+            Log.Information("[EmiDesk] the dock chip is knocking");
+        }
+        catch (Exception ex)
+        {
+            _knocking = false;
+            Log.Warning(ex, "[EmiDesk] dock chip knock failed to start");
+        }
+    }
+
+    private void OnKnockFinished(object? sender, EventArgs e) => StopKnock();
+
+    /// <summary>
+    /// Put the ring back exactly as it was, and never knock again. Idempotent, and safe from the
+    /// click handler, the out-changed handler, the animation's own Completed and Unloaded.
+    ///
+    /// <para>Every animation is removed with a NULL timeline rather than left to hold its final
+    /// value: a finished-but-attached animation keeps the property under animation control, and any
+    /// later code that sets the stroke (a theme change, a rail rebuild) then silently does
+    /// nothing.</para>
+    /// </summary>
+    private void StopKnock()
+    {
+        try
+        {
+            if (!_knocking) return;
+            _knocking = false;
+
+            if (Ring.Stroke is SolidColorBrush stroke)
+            {
+                stroke.BeginAnimation(SolidColorBrush.ColorProperty, null);
+                stroke.Color = RestPink;
+            }
+            if (Ring.Effect is DropShadowEffect glow)
+            {
+                glow.BeginAnimation(DropShadowEffect.OpacityProperty, null);
+                glow.BeginAnimation(DropShadowEffect.BlurRadiusProperty, null);
+                glow.Opacity = 0;
+                glow.BlurRadius = 0;
+            }
+            Ring.BeginAnimation(Shape.StrokeThicknessProperty, null);
+            Ring.StrokeThickness = RestThickness;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] dock chip knock stop failed");
         }
     }
 }

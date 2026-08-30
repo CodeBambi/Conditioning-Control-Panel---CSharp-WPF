@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Threading;
 using Newtonsoft.Json;
@@ -120,6 +121,63 @@ public sealed class EmiState
     /// <summary>True once she has been summoned at least once (gates the desktopFirstBoot moment).</summary>
     [JsonProperty("firstBootSeen")] public bool FirstBootSeen { get; set; }
 
+    // ---- the knock (Ask EMI, wave 1) -------------------------------------------
+
+    /// <summary>
+    /// How far the one-time onboarding knock has got. <c>0</c> she has never flashed the dock chip,
+    /// <c>1</c> the chip has knocked and the offer is still owed, <c>2</c> spent - they answered,
+    /// either way, and nothing here ever fires again.
+    ///
+    /// <para>This is the first of the knock's four brakes (docs/emi-desk/WAVE1-CONTRACT.md) and the
+    /// only one that is a latch rather than a ceiling.</para>
+    /// </summary>
+    [JsonProperty("knockState")] public int KnockState { get; set; }
+
+    /// <summary>When the chip knocked, in UTC ticks. <c>0</c> means it never has. Read by the
+    /// next-launch re-offer, which is the only thing allowed to follow a knock.</summary>
+    [JsonProperty("knockAtUtc")] public long KnockAtUtc { get; set; }
+
+    /// <summary>
+    /// How many onboarding offers she has EVER made. Hard ceiling 2: the knock itself, and one
+    /// shrugged re-offer on a later launch. A third is nagging and the machine refuses it.
+    /// </summary>
+    [JsonProperty("knockOffers")] public int KnockOffers { get; set; }
+
+    /// <summary>
+    /// <c>TutorialType</c> names the user has finished end to end. <c>TutorialService</c> has never
+    /// persisted anything, so before this field a completed tour was re-offerable forever; she
+    /// reads it to avoid offering a walk you have already taken.
+    /// </summary>
+    [JsonProperty("toursDone")] public List<string> ToursDone { get; set; } = new();
+
+    // ---- the book (Ask EMI, wave 2) --------------------------------------------
+
+    /// <summary>
+    /// THE BOOKMARK: the codex chapter she last had open, or null. Restored on open, so the book
+    /// falls open where it was left.
+    ///
+    /// <para>A chapter ID, never an index. The chapters are merged from two writers and volumes IV
+    /// to VI are still to come, so an index would silently point at a different chapter the day a
+    /// volume grew. An id that no longer exists is ignored by both readers.</para>
+    /// </summary>
+    [JsonProperty("codexChapter")] public string? CodexChapter { get; set; }
+
+    /// <summary>
+    /// THE BOOKMARK, flipbook edition: the card she last had open, or null.
+    ///
+    /// <para>Its own field rather than a reuse of <see cref="CodexChapter"/>, because the two id
+    /// spaces only look alike. A codex chapter id and a card id can be the same word today and
+    /// diverge the moment a card is split, and a bookmark that silently points at the wrong thing
+    /// is worse than no bookmark. A card id that no longer exists is ignored, not repaired.</para>
+    /// </summary>
+    [JsonProperty("bookCard")] public string? BookCard { get; set; }
+
+    /// <summary>
+    /// How many times the book has EVER been opened, by any route. Read by
+    /// <see cref="EmiCodex.MaybeOffer"/>: she does not offer a book you have already been reading.
+    /// </summary>
+    [JsonProperty("codexOpens")] public int CodexOpens { get; set; }
+
     // ---- onboarding (the nudge machine, wave 3) --------------------------------
 
     /// <summary>
@@ -216,6 +274,7 @@ public sealed class EmiState
             s.RecentIds ??= new List<string>();
             s.Limits ??= new Dictionary<string, int>();
             s.NudgeFires ??= new Dictionary<string, int>();
+            s.ToursDone ??= new List<string>();
             Log.Information("[EmiDesk] state loaded ({Pins} pins, {Usage} tracked targets)",
                 s.Pins.Count, s.Usage.Count);
             return s;
@@ -465,6 +524,139 @@ public sealed class EmiState
         catch (Exception ex)
         {
             Log.Warning(ex, "[EmiDesk] onboarding reset failed");
+        }
+    }
+
+    // ---- the knock (Ask EMI, wave 1) -------------------------------------------
+
+    /// <summary>
+    /// THE CHIP JUST FLASHED. Latches <see cref="KnockState"/> to
+    /// <see cref="EmiKnockMachine.Knocked"/>, stamps the time and SPENDS one of the two offers.
+    ///
+    /// <para>The offer is spent here, at the flash, and not when they click: somebody who never
+    /// touches the chip has answered too, by ignoring it, and a counter that waited for a click
+    /// would re-flash on every launch forever. Written NOW rather than debounced, because a knock
+    /// that is not on disk when the app is killed is a knock that happens again.</para>
+    /// </summary>
+    public static void NoteKnocked()
+    {
+        try
+        {
+            var s = Current;
+            if (s.KnockState < EmiKnockMachine.Knocked) s.KnockState = EmiKnockMachine.Knocked;
+            s.KnockAtUtc = DateTime.UtcNow.Ticks;
+            s.KnockOffers = Math.Min(EmiKnockMachine.OfferCap, s.KnockOffers + 1);
+            SaveNow();
+            Log.Information("[EmiDesk] the chip knocked (offer {N} of {Cap})",
+                s.KnockOffers, EmiKnockMachine.OfferCap);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] NoteKnocked failed");
+        }
+    }
+
+    /// <summary>
+    /// They said YES. Brake 1: the knock is spent for good, whatever the offer counter says and
+    /// whether or not the tour they accepted is ever finished - she asked, they answered, done.
+    /// </summary>
+    public static void NoteKnockAnswered()
+    {
+        try
+        {
+            var s = Current;
+            if (s.KnockState >= EmiKnockMachine.Spent) return;
+            s.KnockState = EmiKnockMachine.Spent;
+            SaveNow();
+            Log.Information("[EmiDesk] the knock is spent: she was answered");
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] NoteKnockAnswered failed");
+        }
+    }
+
+    /// <summary>
+    /// A tour reached its last step. Latches the <c>TutorialType</c> NAME (never the ordinal - an
+    /// ordinal moves the day somebody inserts a value into the middle of the enum) so she never
+    /// offers a walk that has already been taken. Idempotent.
+    /// </summary>
+    public static void NoteTourDone(string? tour)
+    {
+        if (string.IsNullOrWhiteSpace(tour)) return;
+        try
+        {
+            var s = Current;
+            s.ToursDone ??= new List<string>();
+            if (s.ToursDone.Contains(tour!, StringComparer.OrdinalIgnoreCase)) return;
+            s.ToursDone.Add(tour!);
+            SaveNow();
+            Log.Information("[EmiDesk] tour {Tour} latched as done", tour);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] NoteTourDone({Tour}) failed", tour);
+        }
+    }
+
+    /// <summary>
+    /// Has this <c>TutorialType</c> name been finished end to end? An unreadable ledger answers
+    /// NO: the cost of a false no is one walk offered twice, and the knock's own brakes cap
+    /// that at two offers ever. The cost of a false yes is a first-run user who is never
+    /// offered the walk at all and never learns there was one.
+    /// </summary>
+    public static bool HasTourDone(string? tour)
+    {
+        if (string.IsNullOrWhiteSpace(tour)) return false;
+        try { return Current.ToursDone?.Contains(tour!, StringComparer.OrdinalIgnoreCase) == true; }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// QA ONLY: put the knock back to a fresh install so it can be replayed without deleting the
+    /// whole ledger. Reached through <see cref="EmiDebug"/>; deliberately also clears
+    /// <see cref="ToursDone"/>, because a knock replayed against a latched tour is stopped by
+    /// brake 4 before it can flash and would look like the reset did nothing.
+    /// </summary>
+    public static void ResetKnock()
+    {
+        try
+        {
+            var s = Current;
+            s.KnockState = EmiKnockMachine.Never;
+            s.KnockAtUtc = 0;
+            s.KnockOffers = 0;
+            s.ToursDone?.Clear();
+            SaveNow();
+            Log.Information("[EmiDesk] knock reset (QA)");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[EmiDesk] knock reset failed");
+        }
+    }
+
+    // ---- the book (Ask EMI, wave 2) -------------------------------------------
+
+    /// <summary>
+    /// The book was opened. Bumps the lifetime counter that retires her offer.
+    ///
+    /// <para>Counted at the OPEN, not at a chapter turn: somebody who opened the book and shut it
+    /// again has still seen that it exists, which is the only thing the offer was ever for.
+    /// Debounced - unlike the knock, nothing here re-fires when a launch is killed mid-write, and
+    /// the worst a lost write costs is one more offer.</para>
+    /// </summary>
+    public static void NoteCodexOpened()
+    {
+        try
+        {
+            var s = Current;
+            s.CodexOpens++;
+            SaveSoon();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] NoteCodexOpened failed");
         }
     }
 

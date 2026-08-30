@@ -1,0 +1,53 @@
+{
+  "id": "first-light",
+  "volume": 1,
+  "order": 1,
+  "title": "first light",
+  "blurb": "install it, open it, start gentle.",
+  "target": null,
+  "tour": "ShortWalk",
+  "margin": {
+    "t": "day one. i put the kettle on. metaphorically.",
+    "face": "^_^"
+  },
+  "blocks": [
+    {
+      "type": "p",
+      "text": "The app runs on Windows 10 or 11, 64-bit, and nowhere else. The installer is one big file, roughly 740 MB, because everything the app runs on ships inside it. You do not install .NET first, and you do not need administrator rights: it installs for your user account. If WebView2 or the Visual C++ runtime happen to be missing, the installer adds them quietly. There is nothing else to fetch afterwards."
+    },
+    {
+      "type": "p",
+      "text": "Some antivirus tools flag the installer. An app that draws images over the top of everything else looks a lot like something that should not be doing that. It is a false positive: the app and the installer are both code-signed, and the whole project is open source if you want to read exactly what it does."
+    },
+    {
+      "type": "p",
+      "text": "The first time it opens, the app sets itself up. It creates empty folders for your images, videos, wallpapers and spirals, loads gentle defaults, and starts you at Level 1 with 0 XP. The heavier features are locked until you level up, and that is deliberate: you meet them gradually, one unlock at a time. Your companion appears in a tube attached to the side of the window; you can drag her off on her own later."
+    },
+    {
+      "type": "figure",
+      "kind": "checklist",
+      "caption": "install, launch, add content, press START. four moves."
+    },
+    {
+      "type": "steps",
+      "items": [
+        "Add content. Your own images and videos go into the folders the app just made. The next chapter covers exactly where.",
+        "Set the dials. Open the Flash Images card and pick how often you want things to happen. The default is about one event every six minutes, and there is no rush to move it.",
+        "Press START. The engine begins.",
+        "Stop whenever you want. Press the panic key, Escape unless you change it, and everything stops at once."
+      ]
+    },
+    {
+      "type": "callout",
+      "text": "Several features work by flashing: images thrown onto your screen, text held for a fraction of a second, a spiral that turns continuously. Flashing and high-contrast motion can trigger symptoms in people with photosensitive epilepsy or related conditions. If that applies to you, or you do not know whether it does, keep rates and opacity low and learn the panic key before you turn anything up."
+    },
+    {
+      "type": "p",
+      "text": "Everything the app saves about you lives in %LOCALAPPDATA%\\ConditioningControlPanel\\ - settings, progress, content, all of it. The ? button at the top right opens short guides for the bigger features and an interactive tutorial that walks you around the real interface. Nothing intense is switched on for you, and nothing here needs to be turned up. Stopping, changing a setting, or closing the app is always a valid move."
+    },
+    {
+      "type": "limit",
+      "text": "The download is large and the installer is the only way in: no portable version, no Mac build, no Linux build. On a slow connection, give it time."
+    }
+  ]
+}

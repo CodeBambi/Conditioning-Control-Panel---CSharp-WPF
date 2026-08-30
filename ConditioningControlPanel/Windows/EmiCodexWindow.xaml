@@ -1,0 +1,126 @@
+<Window x:Class="ConditioningControlPanel.EmiCodexWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str emi_codex_title}"
+        Width="880" Height="700"
+        MinWidth="560" MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResizeWithGrip"
+        AllowsTransparency="False"
+        Background="#12121F"
+        Foreground="#E0E0E0"
+        FontSize="13">
+
+    <!--
+        THE PLAIN COPY. This is the fail-soft body of the book: it is what the user gets when the
+        WebView2 runtime is missing, when the bundle is not in the build, when the navigation
+        reports a failure or when the browser process dies. It reads the SAME chapters/*.json the
+        page does and lays them out as scrolling text.
+
+        Deliberately an ordinary opaque Window - AllowsTransparency stays false here for the same
+        reason it does on the hosted body, so that the two never diverge into "one of them paints".
+
+        Every brush is a literal. Nothing here reaches into App.Resources: this window's whole job
+        is to be the thing that still works, and a StaticResource lookup across dictionaries is a
+        documented way to lose a window to a BAML load error.
+    -->
+
+    <Window.Resources>
+        <Style x:Key="CodexButton" TargetType="Button">
+            <Setter Property="Background" Value="#26263F"/>
+            <Setter Property="Foreground" Value="#E8E8F4"/>
+            <Setter Property="BorderBrush" Value="#3D3D60"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="14,7"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#33334F"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#FF69B4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- header: what this is, and why it looks like this -->
+        <Border Grid.Row="0" Background="#1A1A2E" BorderBrush="#2D2D48" BorderThickness="0,0,0,1" Padding="18,14">
+            <StackPanel>
+                <TextBlock Text="{loc:Str emi_codex_plain_heading}"
+                           FontSize="17" FontWeight="SemiBold" Foreground="#FF9ECF"/>
+                <TextBlock x:Name="WhyText"
+                           Margin="0,5,0,0" TextWrapping="Wrap" Foreground="#A8A8C0"
+                           Text="{loc:Str emi_codex_plain_note}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- body: the contents list on the left, the chapter on the right -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="240" MinWidth="160"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*" MinWidth="240"/>
+            </Grid.ColumnDefinitions>
+
+            <ListBox x:Name="ChapterList"
+                     Grid.Column="0"
+                     Background="#15152A" BorderThickness="0"
+                     Foreground="#E0E0E0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     SelectionChanged="ChapterList_SelectionChanged">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Padding" Value="12,7"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+            </ListBox>
+
+            <GridSplitter Grid.Column="1" Width="3" Background="#2D2D48"
+                          HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+
+            <ScrollViewer x:Name="PageScroll" Grid.Column="2"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Padding="22,18,22,24">
+                <StackPanel x:Name="PageBody"/>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- footer: the way out to the website, and the way out of the window -->
+        <Border Grid.Row="2" Background="#1A1A2E" BorderBrush="#2D2D48" BorderThickness="0,1,0,0" Padding="18,12">
+            <Grid>
+                <Button x:Name="ManualButton"
+                        HorizontalAlignment="Left"
+                        Style="{StaticResource CodexButton}"
+                        Content="{loc:Str emi_codex_open_site}"
+                        Click="ManualButton_Click"/>
+                <Button x:Name="CloseButton"
+                        HorizontalAlignment="Right"
+                        Style="{StaticResource CodexButton}"
+                        Content="{loc:Str emi_codex_close}"
+                        Click="CloseButton_Click"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

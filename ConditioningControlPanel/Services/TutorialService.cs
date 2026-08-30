@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Windows;
 using ConditioningControlPanel.Localization;
@@ -131,7 +131,34 @@ namespace ConditioningControlPanel.Services
         DeeperEditorInteractiveLocalAudioPart2, // Part 2 - runs in DeeperEditorWindow (audio mode: waveform preview, audio-only triggers)
         DeeperEditorInteractiveLocalVideo, // Interactive on-rails Local Video walkthrough - Part 1
         DeeperEditorInteractiveLocalVideoPart2, // Part 2 - runs in DeeperEditorWindow (video mode: showcases AttentionLost gaze trigger)
-        UpgradeTour     // "What moved in 6.8" - the 6.7.4 -> 6.8 relocation map for upgraders
+        UpgradeTour,    // "What moved in 6.8" - the 6.7.4 -> 6.8 relocation map for upgraders
+
+        /// <summary>
+        /// Ask EMI wave 1's "short walk": seven cards, about ninety seconds, the smallest set of
+        /// facts that makes the app usable. It is what the first-run wizard's "Take the tour"
+        /// button starts and what EMI's knock offers. See docs/emi-desk/WAVE1-CONTRACT.md - the
+        /// seven step ids are load-bearing, because the narrator maps each one onto a line pool.
+        /// </summary>
+        ShortWalk
+    }
+
+    /// <summary>
+    /// How a tour ended. <c>Completed</c> is true ONLY for the last card advanced off the end;
+    /// Escape, the skip button, the host window closing and app shutdown all report false.
+    /// </summary>
+    public sealed class TutorialFinishedEventArgs : EventArgs
+    {
+        public TutorialFinishedEventArgs(TutorialType type, bool completed)
+        {
+            Type = type;
+            Completed = completed;
+        }
+
+        /// <summary>The tour that just ended.</summary>
+        public TutorialType Type { get; }
+
+        /// <summary>True = walked to the end. False = abandoned part way.</summary>
+        public bool Completed { get; }
     }
 
     public class TutorialService
@@ -215,7 +242,20 @@ namespace ConditioningControlPanel.Services
 
         public event EventHandler<TutorialStep>? StepChanged;
         public event EventHandler? TutorialStarted;
+
+        /// <summary>
+        /// A tour ENDED, by any route. Fires for a finish and for a skip alike, which is why
+        /// <see cref="TutorialFinished"/> exists beside it: the overlay only wants to know that
+        /// it is over, but the narrator and the completion ledger have to tell the two apart.
+        /// </summary>
         public event EventHandler? TutorialCompleted;
+
+        /// <summary>
+        /// The same ending, with the two facts a listener actually needs: WHICH tour, and
+        /// whether it was walked to the end or abandoned. Raised immediately after
+        /// <see cref="TutorialCompleted"/> so an existing subscriber never changes order.
+        /// </summary>
+        public event EventHandler<TutorialFinishedEventArgs>? TutorialFinished;
 
         public TutorialStep? CurrentStep =>
             _currentStepIndex >= 0 && _currentStepIndex < _currentSteps.Count
@@ -287,6 +327,7 @@ namespace ConditioningControlPanel.Services
                 TutorialType.DeeperEditorInteractiveLocalVideo => CreateDeeperEditorInteractiveLocalVideoSteps(),
                 TutorialType.DeeperEditorInteractiveLocalVideoPart2 => CreateDeeperEditorInteractiveLocalVideoPart2Steps(),
                 TutorialType.UpgradeTour => CreateUpgradeTourSteps(),
+                TutorialType.ShortWalk => CreateShortWalkSteps(),
                 _ => CreateFullTourSteps()
             };
         }
@@ -477,7 +518,8 @@ namespace ConditioningControlPanel.Services
             }
             else
             {
-                Complete();
+                // The ONLY genuine completion: the last card, advanced off the end.
+                Complete(completed: true);
             }
         }
 
@@ -490,15 +532,100 @@ namespace ConditioningControlPanel.Services
             StepChanged?.Invoke(this, CurrentStep!);
         }
 
+        /// <summary>
+        /// Abandon the tour. Escape, the card's skip button, the host window closing and the
+        /// app-shutdown teardown all land here, and NONE of them latch the tour as done - a walk
+        /// somebody bailed out of is a walk they have not had.
+        /// </summary>
         public void Skip()
         {
-            Complete();
+            Complete(completed: false);
         }
 
-        private void Complete()
+        private void Complete(bool completed)
         {
+            // Skip() is called defensively from several teardown paths (ForceShutdown, the
+            // target-closed check), so a second ending must not fire a second set of events or
+            // latch a tour that is already over.
+            if (!IsActive) return;
+
+            var type = _currentTutorialType;
             IsActive = false;
+
+            if (completed) LatchCompleted(type);
+
             TutorialCompleted?.Invoke(this, EventArgs.Empty);
+            try { TutorialFinished?.Invoke(this, new TutorialFinishedEventArgs(type, completed)); }
+            catch (Exception ex) { App.Logger?.Debug(ex, "Tutorial: a TutorialFinished handler threw"); }
+        }
+
+        // =================================================================================
+        //  the completion ledger
+        // =================================================================================
+
+        /// <summary>
+        /// Where a finished tour is remembered. One interface, one seam: the shipping
+        /// implementation writes EMI Desk's <c>toursDone</c> ledger, and a test can hand the
+        /// service a store that never touches disk.
+        /// </summary>
+        internal interface ITourCompletionStore
+        {
+            bool Has(string tutorialTypeName);
+            void Latch(string tutorialTypeName);
+        }
+
+        /// <summary>
+        /// The shipping ledger: <c>EmiState.ToursDone</c>, a list of <c>TutorialType</c> NAMES
+        /// (never ordinals - an ordinal moves the day somebody inserts a value into the middle
+        /// of the enum). It is EMI's state file only because that file already exists and is
+        /// already written safely; nothing here needs EMI Desk to be enabled, present or even
+        /// constructed, and every path swallows.
+        /// </summary>
+        private sealed class EmiStateTourStore : ITourCompletionStore
+        {
+            // One ledger, one write path. EmiState.NoteTourDone is the idempotent,
+            // case-insensitive add that also SaveNow()s: a tour finished thirty seconds before
+            // the user quits is exactly the tour that would otherwise be re-offered next launch.
+            public bool Has(string tutorialTypeName)
+                => Services.EmiDesk.EmiState.HasTourDone(tutorialTypeName);
+
+            public void Latch(string tutorialTypeName)
+                => Services.EmiDesk.EmiState.NoteTourDone(tutorialTypeName);
+        }
+
+        private static ITourCompletionStore _completionStore = new EmiStateTourStore();
+
+        /// <summary>Test seam. Null restores the shipping EMI-state-backed ledger.</summary>
+        internal static ITourCompletionStore CompletionStore
+        {
+            get => _completionStore;
+            set => _completionStore = value ?? new EmiStateTourStore();
+        }
+
+        /// <summary>
+        /// Has this tour been walked end to end, on this machine, ever? The first thing
+        /// <c>TutorialService</c> has ever remembered across a restart - before it, every tour
+        /// was re-offerable forever. EMI's knock reads it as brake 4
+        /// (docs/emi-desk/WAVE1-CONTRACT.md); anything else in the app may read it too.
+        /// Never throws.
+        /// </summary>
+        public bool HasCompleted(TutorialType type)
+        {
+            try { return _completionStore.Has(type.ToString()); }
+            catch { return false; }
+        }
+
+        private static void LatchCompleted(TutorialType type)
+        {
+            try
+            {
+                _completionStore.Latch(type.ToString());
+                App.Logger?.Information("Tutorial: {Tour} completed and latched", type);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug(ex, "Tutorial: could not latch {Tour} as completed", type);
+            }
         }
 
         #region Tutorial Step Definitions
@@ -733,6 +860,131 @@ namespace ConditioningControlPanel.Services
                     Description = "That's the basics! Open the seven doors on the left to discover the rest, " +
                                   "or click the ? button for detailed guides on each one.",
                     TextPosition = TutorialStepPosition.Center
+                }
+            };
+        }
+
+        /// <summary>
+        /// THE SHORT WALK (Ask EMI wave 1). Seven cards, about ninety seconds, and the smallest set
+        /// of facts that makes the app usable on its own: where content comes from, what an effect
+        /// looks like, how to stop everything, who the chip at the bottom of the rail is, what XP
+        /// is for, where the system settings live, and how to get this back.
+        ///
+        /// <para>The seven ids are API. <see cref="Services.EmiDesk.EmiTourNarrator"/> maps each one
+        /// onto the line pool <c>tour.&lt;stepId&gt;</c>, so renaming a step here silently mutes her
+        /// for that card (docs/emi-desk/WAVE1-CONTRACT.md).</para>
+        ///
+        /// <para>The descriptions are deliberately ONE LINE each - EMI carries the colour and the
+        /// card carries the fact. That split has to hold in both directions: with EMI Desk off,
+        /// missing or muted these seven cards are the entire tour, so no card may lean on a line
+        /// that might never be spoken.</para>
+        ///
+        /// <para>Same two mechanical rules as every other tour. A spotlight step is never
+        /// <c>Center</c> (UpdateSpotlight early-returns for centred cards before it measures
+        /// anything), and every TargetElementName below is a live x:Name - a name that does not
+        /// resolve degrades SILENTLY to an unspotlit centred card, which is how three steps of the
+        /// older tours rotted unnoticed.</para>
+        /// </summary>
+        private List<TutorialStep> CreateShortWalkSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "sw-assets",
+                    Icon = ">",
+                    Title = Loc.Get("tut_sw_assets_title"),
+                    Description = Loc.Get("tut_sw_assets_body"),
+                    // The Library door's assets entry - the same target CreateGettingStartedSteps
+                    // uses, and the only one in the rail that opens the folder itself. It is in
+                    // NavEntryDoorKeys, so DoorTabKeyFor opens the Library door for it while
+                    // RequiresTab keeps the page on Home.
+                    TargetElementName = "BtnOpenAssetsTop",
+                    RequiresTab = "settings",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "sw-flash",
+                    Icon = "⚡",
+                    Title = Loc.Get("tut_sw_flash_title"),
+                    Description = Loc.Get("tut_sw_flash_body"),
+                    // The Home mosaic's flash tile: the card the user will actually click later.
+                    TargetElementName = "CardFlash",
+                    RequiresTab = "settings",
+                    TextPosition = TutorialStepPosition.Right,
+                    // Show, do not tell. One image, on top of everything, gone again - the whole
+                    // app in a second and a half. Haptics suppressed: a demo must not buzz a toy.
+                    // Silent no-op when the assets folder is empty or the service never came up,
+                    // and the card's copy still reads correctly if nothing appears.
+                    OnActivate = () =>
+                    {
+                        try { App.Flash?.TriggerFlashOnce(amount: 1, duration: 1600, suppressHaptic: true); }
+                        catch { /* a tour never blocks on a demo */ }
+                    }
+                },
+                new TutorialStep
+                {
+                    Id = "sw-panic",
+                    Icon = "!",
+                    Title = Loc.Get("tut_sw_panic_title"),
+                    Description = Loc.Get("tut_sw_panic_body"),
+                    // THE rebind surface (Settings - Devices & Safety). The System popup shows the
+                    // key read-only, so this is the only place the card can point at.
+                    //
+                    // The copy deliberately does NOT invite a press: TutorialOverlay.OnKeyDown maps
+                    // Escape onto Skip(), so "try it now" would end the tour instead of teaching
+                    // the key. It is placed here, before anything has ever been started, so the one
+                    // moment the user learns the panic key is a moment with nothing to panic about.
+                    TargetElementName = "BtnPanicKey",
+                    RequiresTab = "appsettings",
+                    PrepareTargetWindowAction = AppSettingsTutorialPrep.Prepare("devices"),
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "sw-dock",
+                    Icon = "~",
+                    Title = Loc.Get("tut_sw_dock_title"),
+                    Description = Loc.Get("tut_sw_dock_body"),
+                    // Controls/EmiDock.xaml, pinned under the Settings door. NOT a door - it has no
+                    // NavDoorMap row and no RequiresTab, so DoorTabKeyFor returns null and the
+                    // overlay measures it where it stands. It is never Collapsed, so the spotlight
+                    // lands even on a run where EMI Desk is switched off - which is exactly the run
+                    // this card has to teach on its own.
+                    TargetElementName = "EmiDockChip",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "sw-xp",
+                    Icon = "⭐",
+                    Title = Loc.Get("tut_sw_xp_title"),
+                    Description = Loc.Get("tut_sw_xp_body"),
+                    // The XP bar row, window chrome rather than a page, so no RequiresTab: it is on
+                    // screen behind whatever door is open. The login overlay dims it to 0.3 opacity
+                    // but never collapses it, so it always measures.
+                    TargetElementName = "XPBarContent",
+                    TextPosition = TutorialStepPosition.Bottom
+                },
+                new TutorialStep
+                {
+                    Id = "sw-settings",
+                    Icon = "⚙",
+                    Title = Loc.Get("tut_sw_settings_title"),
+                    Description = Loc.Get("tut_sw_settings_body"),
+                    TargetElementName = "DoorSettings",
+                    RequiresTab = "appsettings",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "sw-done",
+                    Icon = "✓",
+                    Title = Loc.Get("tut_sw_done_title"),
+                    Description = Loc.Get("tut_sw_done_body"),
+                    TargetElementName = "BtnMainHelp",
+                    TextPosition = TutorialStepPosition.Left
                 }
             };
         }

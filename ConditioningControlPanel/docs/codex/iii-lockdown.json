@@ -1,0 +1,50 @@
+{
+  "id": "lockdown",
+  "volume": 3,
+  "order": 5,
+  "title": "lockdown",
+  "blurb": "the exits close. the clock decides.",
+  "target": "lockdown",
+  "tour": null,
+  "margin": { "t": "i don't follow you in there. i watch the clock instead.", "face": "._." },
+  "blocks": [
+    {
+      "type": "p",
+      "text": "Lockdown holds the app in a strict window until a timer runs out. Pick a duration, confirm twice, and the app forces Strict Lock on, disables the panic key, re-themes the whole window in crimson so the state is unmissable, and replaces the duration picker with a large countdown. Key handling is blocked app wide while the clock runs. At zero it deactivates cleanly: your previous Strict Lock and panic key values come back, the theme reverts, and the tab returns to the setup panel. It is a premium feature with its own tab under Exclusives."
+    },
+    {
+      "type": "p",
+      "text": "Durations run from five minutes to four hours; the default is ten minutes. Once you confirm there is no slider, no extension, and no early exit through normal channels. Start short the first few times so you learn what the window feels like, and pick honestly."
+    },
+    {
+      "type": "p",
+      "text": "Before overriding anything, lockdown writes your real Strict Lock and panic key values to a small recovery file. That file covers two failure paths. If the app crashes or is force killed mid window, the next launch reads it and restores your settings, so the panic key cannot stay stuck off forever. And because the app saves settings constantly while you use it, the file also makes sure the forced values written to disk during the window get replaced with your real ones when it ends. Lockdown itself never survives a restart: reboot mid window and it is simply over."
+    },
+    {
+      "type": "steps",
+      "items": [
+        "Click the countdown timer five times, quickly. The clicks have to land within about a second of each other, or the count resets.",
+        "A text input appears under the timer. Type let me out, in any casing, and press Enter.",
+        "Lockdown ends immediately and your real settings come back.",
+        "Type it exactly. A wrong phrase clears and hides the input, and the app takes note of the attempt."
+      ]
+    },
+    {
+      "type": "callout",
+      "text": "The exit phrase is a fire exit, not a back way around your own decision. It exists so nobody is genuinely trapped when life interrupts - illness, an emergency, someone knocking. Using it because you are bored defeats the point of the mode. If you want a shorter window, pick one next time."
+    },
+    {
+      "type": "p",
+      "text": "Pair it with a session of the same length: start the session first, then activate lockdown over the top. The two timers do not talk to each other, so line them up yourself, and do not activate lockdown while another timed feature is about to end - let it finish first, so you know exactly what window you are committing to."
+    },
+    {
+      "type": "figure",
+      "kind": "stack-drop",
+      "caption": "What confirming switches off: settings, panic key, exits."
+    },
+    {
+      "type": "limit",
+      "text": "Lockdown restrains the app, not the machine. If the phrase, the panic key and patience are all off the table, killing the process from Task Manager ends it, and the recovery file puts your settings right on the next launch. That edge is left open on purpose. Inside its own walls, though, it is total: while the window is open the panic key reaches nothing, including features you started before you confirmed."
+    }
+  ]
+}

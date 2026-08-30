@@ -1,0 +1,53 @@
+{
+  "note": "Chrome copy for the codex window. Flat keys, merged into en.json by the orchestrator. By rule, chrome only ever calls it the book, the manual, the shelf. {placeholders} are filled by codex.js.",
+  "strings": {
+    "book_title": "the field manual",
+    "book_subtitle": "what the panel does, one screen at a time.",
+
+    "vol1_title": "first light",
+    "vol1_sub": "getting in, your folders, the panic key, the room.",
+    "vol2_title": "the instruments",
+    "vol2_sub": "flashes, videos, subliminals, the spiral, sound.",
+    "vol3_title": "the session floor",
+    "vol3_sub": "runs that drive themselves, and two that take the wheel.",
+    "vol4_title": "the company",
+    "vol4_sub": "the parts of the app that talk back. pages to come.",
+    "vol5_title": "the deep end",
+    "vol5_sub": "the heavier rooms, written down once they hold still.",
+    "vol6_title": "the long game",
+    "vol6_sub": "what the app remembers, and what that earns you.",
+
+    "progress_none": "nothing read yet.",
+    "progress_some": "{read} of {total} chapters read.",
+    "progress_volume": "volume {volume}: {read} of {total} read.",
+    "progress_one_left": "one chapter left in this volume.",
+    "progress_volume_done": "this volume is read in full.",
+    "progress_book_done": "every written page, read.",
+
+    "stamp_text": "READ IN FULL",
+    "stamp_caption": "volume {volume}, finished.",
+
+    "btn_take_me_there": "take me there",
+    "btn_walk_me_through": "walk me through it",
+
+    "locked_tab_title": "bound, not written",
+    "locked_tab_body": "this volume has its place on the shelf and no pages behind it yet. a later printing fills it in.",
+
+    "failsoft_title": "the plain copy",
+    "failsoft_body": "this machine has no WebView2 runtime, so the manual cannot draw itself as a book here. the same chapters follow as plain text. nothing is missing except the paper.",
+    "failsoft_link": "read the full manual on the website",
+    "failsoft_hint": "installing the WebView2 runtime from Microsoft restores the bound copy.",
+
+    "btn_next": "next page",
+    "btn_prev": "back a page",
+    "btn_close": "close the book",
+    "page_of": "page {n} of {total}",
+    "contents_title": "contents",
+    "bookmark_note": "you left off here.",
+    "loading_text": "opening the book",
+    "target_locked_note": "that room is gated on this account. the chapter still reads.",
+    "margin_note_credit": "the margin notes are emi's.",
+    "chapter_unread_mark": "unread",
+    "chapter_read_mark": "read"
+  }
+}

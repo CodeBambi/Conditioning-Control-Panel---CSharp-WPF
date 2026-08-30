@@ -1,0 +1,47 @@
+{
+  "id": "sessions",
+  "volume": 3,
+  "order": 1,
+  "title": "sessions",
+  "blurb": "a timed plan that runs itself.",
+  "target": "sessions",
+  "tour": "Presets",
+  "margin": { "t": "an hour of not deciding. you'll like it. i can tell.", "face": "^_~" },
+  "blocks": [
+    {
+      "type": "p",
+      "text": "A session is a timed plan that runs itself. You pick one, press start, and the app changes its own settings as the clock runs down. It borrows your current setup for the duration and hands it back when the timer ends, whether you finished or not. Sessions live on the Presets tab, next to your saved presets. They are free for everyone, and there is no cap on how many you can make."
+    },
+    {
+      "type": "p",
+      "text": "Four come built in. Morning Drift is thirty minutes of gentle subliminals and bouncing text under a slow pink filter. Gamer Girl runs quiet conditioning behind a game for forty five minutes; run the game in borderless windowed mode. The Distant Doll is forty five minutes of large visuals for watching from the couch, with no audio ducking. Good Girls Don't Cum is an hour of hard denial. Each one is tuned for its own scenario, and what a session will actually do stays hidden until you ask to see it."
+    },
+    {
+      "type": "steps",
+      "items": [
+        "Open the Presets tab and click a session. Its details appear on the right.",
+        "Optional: click Reveal Details to see exactly what it will do. The app asks three times whether you are sure, because it is trying to protect the surprise.",
+        "Click Start Session and confirm. It runs for its full length, changing settings as it goes.",
+        "The start button becomes a countdown. The panic key pauses the session and stops everything on screen; press it again to resume. Each pause costs 100 XP off the bonus.",
+        "Stop ends the session for good. You get no bonus at all, and the app warns you how much you are giving up before it does it."
+      ]
+    },
+    {
+      "type": "figure",
+      "kind": "timeline",
+      "caption": "Features switch on and off at set points, so a session builds rather than sitting flat."
+    },
+    {
+      "type": "p",
+      "text": "The Session Editor builds your own. It is a timeline, not a settings form. Click Create New on the Presets tab, name it, give it a short vibe description, and set a length with the duration slider - five minutes up to three hours, in five minute steps. Drag features from the library onto the timeline; they are grouped as Audio, Video, Overlays, Interactive and Extras. Drag a block's edges to change when it starts and stops, and right click a block for that feature's own settings. You do not pick difficulty or XP. The editor reads the length and what you put on the timeline, then shows you both; add more, or make it longer, and both go up."
+    },
+    {
+      "type": "callout",
+      "text": "Sessions travel as .session.json files. Drag one anywhere onto the app window to import it. Export works on the built-in four too, and editing a built-in session gives you a copy of your own rather than overwriting it. Finishing pays a bonus by difficulty: 400 XP easy, 800 medium, 1,200 hard, 2,000 extreme, scaled by your level multiplier and docked 100 for each pause."
+    },
+    {
+      "type": "limit",
+      "text": "The bonus is all or nothing. A session that reaches its end pays out; one you stop early pays nothing, however far you got. Pausing is the only forgiveness on offer, and it is priced. If you suspect you will need out entirely, pick a shorter session and finish it."
+    }
+  ]
+}

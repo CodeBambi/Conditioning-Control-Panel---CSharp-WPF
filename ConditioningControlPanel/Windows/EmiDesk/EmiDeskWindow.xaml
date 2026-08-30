@@ -36,6 +36,7 @@
             PropImage the thing she is holding, nearer the camera than the garment
             BtnClose  the hover x
             BtnGear   the hover gear (opens her options; her cards live in there too)
+            BtnHelp   the hover ?, directly under the gear (opens her book)
             ResizeGrip the corner handle
           OverlayHost the summon/dismiss FX, and whatever chunk B2 wants over her
           BubbleHost  chunk B3's speech bubble
@@ -221,6 +222,45 @@
                                             M 2,6 h4 v4 h-4 z    M 10,6 h4 v4 h-4 z
                                             M 6,0 h4 v2 h-4 z    M 6,14 h4 v2 h-4 z
                                             M 0,6 h2 v4 h-2 z    M 14,6 h2 v4 h-2 z"/>
+                            </Grid>
+                        </Grid>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+
+            <!-- HER BOOK: the third chip, 18 DIP, top left and directly UNDER the gear.
+
+                 The owner could not find the book at all (2026-08-30): it existed only as the
+                 seventh entry on a ring nothing advertises and as an offer she makes once. A
+                 manual you cannot reach is not a manual, so it gets the one glyph every piece of
+                 software on earth has trained people to read as help.
+
+                 It sits UNDER the gear rather than beside it because both top corners are already
+                 spoken for and a third chip on a corner would crowd her face. Stacked down the
+                 left edge the column reads as one group of controls, and ApplyBodyWidth offsets it
+                 by exactly the gear's full hit height, so the two hit areas cannot overlap at any
+                 body width.
+
+                 The ? is a Path on the same 16 x 16 aliased grid as the gear, not a TextBlock: a
+                 glyph from whatever font resolved would be the one smooth anti-aliased shape on a
+                 pixel mascot. Five rectangles for the hook, a sixth for the dot, hard-edged at
+                 every scale. -->
+            <Button x:Name="BtnHelp"
+                    Width="18" Height="18" Padding="0"
+                    HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Opacity="0" Cursor="Hand"
+                    Focusable="False"
+                    ToolTip="Her book">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Grid Background="Transparent">
+                            <Grid Margin="{TemplateBinding Padding}">
+                                <Ellipse Fill="#E60E0E1C" Stroke="#FF69B4" StrokeThickness="1.5"/>
+                                <Path Fill="#FF69B4" Stretch="Uniform" Margin="4"
+                                      RenderOptions.EdgeMode="Aliased"
+                                      Data="M 4,0 h8 v2 h-8 z   M 4,2 h2 v2 h-2 z
+                                            M 10,2 h2 v4 h-2 z  M 6,6 h6 v2 h-6 z
+                                            M 6,8 h2 v3 h-2 z   M 6,13 h2 v2 h-2 z"/>
                             </Grid>
                         </Grid>
                     </ControlTemplate>

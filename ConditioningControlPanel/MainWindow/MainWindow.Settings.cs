@@ -560,11 +560,19 @@ namespace ConditioningControlPanel
                 showTab: key => ShowTab(key)
             );
 
+            // EMI narrates, from HERE rather than from inside the overlay: TutorialStarted fires
+            // during Start(), which is one line before the overlay exists, so an overlay-side
+            // subscription would miss the first moment and the first card of every tour. Attach is
+            // idempotent, and the Closed handler below is the matching detach - one pair, no leak.
+            // Narration is additive: if this whole block were deleted the tour would be identical.
+            Services.EmiDesk.EmiTourNarrator.Attach(App.Tutorial);
+
             App.Tutorial.Start(type);
             _tutorialOverlay = new TutorialOverlay(this, App.Tutorial);
             _tutorialOverlay.Closed += (s, e) =>
             {
                 _tutorialOverlay = null;
+                Services.EmiDesk.EmiTourNarrator.Detach();
                 if (SettingsTab.BrowserContainer != null) SettingsTab.BrowserContainer.Visibility = Visibility.Visible;
             };
             _tutorialOverlay.Show();

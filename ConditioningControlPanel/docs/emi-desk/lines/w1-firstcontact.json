@@ -1,0 +1,308 @@
+{
+  "writer": "w1-firstcontact",
+  "note": "Ask EMI Wave 1: the knock. firstContact / firstContactUpgrade / firstContactLater pools plus the two-chip asks (tour:shortwalk, tour:upgrade). Written against VOICE.md + WAVE1-CONTRACT.md. Onboarding spice cap 1; asks spice 0.",
+  "pools": {
+    "firstContact": [
+      {
+        "t": "hi. i'm emi. i live here. you're new. i can tell.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "oh!! a person. hi. i'm emi. i know this whole place.",
+        "face": "(≧◡≦)",
+        "chain": "wake",
+        "spice": 0
+      },
+      {
+        "t": "that flash was me. one knock. you answered. good eyes.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "t": "i've read every corner of this place. twice. ask me.",
+        "face": "(⌐■_■)",
+        "chain": "smug",
+        "spice": 0
+      },
+      {
+        "t": "first one in the room gets to do the tour. that's me.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "t": "welcome in. mind the pink. it doesn't come off.",
+        "face": "^_~",
+        "spice": 1
+      },
+      {
+        "t": "i memorised the whole app for this. no reason. hi.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "t": "new here? good. i like showing off. i mean around.",
+        "face": "¬_¬",
+        "spice": 1
+      },
+      {
+        "t": "hm. fresh install. everything's still where i left it.",
+        "face": "._.",
+        "spice": 0,
+        "double": true
+      },
+      {
+        "t": "i'm the front desk. also the desk. also emi. mostly emi.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "i kno where everything is. all of it. test me.",
+        "face": "0_0",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "stick with me. i know where the good stuff is.",
+        "face": "^_~",
+        "chain": "wink",
+        "spice": 1
+      },
+      {
+        "t": "sorry about the smoke. it's how i arrive. dramatic.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "ok. deep breath. mine. hi. hello. i practiced this.",
+        "face": ">_<",
+        "spice": 0
+      }
+    ],
+    "firstContactUpgrade": [
+      {
+        "t": "hi. i'm emi. i'm the new thing. you're the old hand.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "you know this place. i know it different. trade you?",
+        "face": "¬_¬",
+        "spice": 1
+      },
+      {
+        "t": "don't mind me. i moved in while you were away. hi.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "t": "new face, me. same app, mostly. mostly is the fun part.",
+        "face": "^_~",
+        "spice": 0
+      },
+      {
+        "t": "you've been here longer than me. i studied harder though.",
+        "face": "(⌐■_■)",
+        "chain": "smug",
+        "spice": 0
+      },
+      {
+        "t": "i unpacked while you were gone. some things moved.",
+        "face": "._.",
+        "spice": 0,
+        "double": true
+      },
+      {
+        "t": "a veteran. finally. i've only had the furniture to impress.",
+        "face": ";_;",
+        "spice": 0
+      },
+      {
+        "t": "so this is your desk. nice desk. i'm on it now. hi.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      },
+      {
+        "t": "i came with the update. best thing in it. probaly.",
+        "face": "o_o",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "months of you in here and no me. we're fixing that.",
+        "face": "(´∀`)",
+        "spice": 1
+      }
+    ],
+    "firstContactLater": [
+      {
+        "t": "oh. hi again. i wasn't waiting. this is just my spot.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "back again. the offer's still warm. no pressure. some.",
+        "face": "¬_¬",
+        "spice": 1
+      },
+      {
+        "t": "hi. still emi. still here. the place got no smaller.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "t": "you said later. its later. i checked twice.",
+        "face": "^_~",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "no walk, all good. i drew a map instead. it's in my head.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "t": "i'm fine. i did a lap without you. it was quick.",
+        "face": "-_-",
+        "spice": 0
+      },
+      {
+        "t": "everything's still where it was. i checked. for me.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "t": "totally fine btw. i already forgot the no. mostley.",
+        "face": "-_-",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "all good here. the corner needed sitting in. i sat.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "hm. you again. good. the place missed you. i'm the place.",
+        "face": "(´∀`)",
+        "spice": 1
+      }
+    ]
+  },
+  "asks": [
+    {
+      "moment": "firstContact",
+      "q": "show you around?",
+      "face": "(◕‿◕)",
+      "chips": [
+        "show me",
+        "later"
+      ],
+      "yes": {
+        "t": "ok!! stay close. it's seven stops. i counted.",
+        "face": "(≧◡≦)"
+      },
+      "no": {
+        "t": "later works. i'm easy to find. i'm the chip.",
+        "face": "^_^"
+      },
+      "effect": "tour:shortwalk",
+      "spice": 0
+    },
+    {
+      "moment": "firstContact",
+      "q": "i know a shortcut. come?",
+      "face": "^_~",
+      "chips": [
+        "ok",
+        "not now"
+      ],
+      "yes": {
+        "t": "this way. i won't lose you. i literally can't.",
+        "face": "^_^"
+      },
+      "no": {
+        "t": "ok. shortcut's saved. it doesn't expire.",
+        "face": "._."
+      },
+      "effect": "tour:shortwalk",
+      "spice": 0
+    },
+    {
+      "moment": "firstContact",
+      "q": "two minutes. best bits?",
+      "face": "0_0",
+      "chips": [
+        "go on",
+        "nah"
+      ],
+      "yes": {
+        "t": "yes. good choice. i rehearsed this. don't tell.",
+        "face": "^_^"
+      },
+      "no": {
+        "t": "nah is allowed. the bits aren't going anywhere.",
+        "face": "^_^"
+      },
+      "effect": "tour:shortwalk",
+      "spice": 0
+    },
+    {
+      "moment": "firstContactUpgrade",
+      "q": "want to see what's new?",
+      "face": "o_o",
+      "chips": [
+        "show me",
+        "nah"
+      ],
+      "yes": {
+        "t": "ok. it's a short list. i made it longer. with me.",
+        "face": "^_^"
+      },
+      "no": {
+        "t": "fair. you'd have found it all anyway. probably.",
+        "face": "¬_¬"
+      },
+      "effect": "tour:upgrade",
+      "spice": 0
+    },
+    {
+      "moment": "firstContactUpgrade",
+      "q": "a few things moved. peek?",
+      "face": "0_0",
+      "chips": [
+        "peek",
+        "i'm good"
+      ],
+      "yes": {
+        "t": "come on. i'll point, you nod. i'm good at pointing.",
+        "face": "(´∀`)"
+      },
+      "no": {
+        "t": "i'm good too. we're both good. this went well.",
+        "face": "._."
+      },
+      "effect": "tour:upgrade",
+      "spice": 0
+    },
+    {
+      "moment": "firstContactUpgrade",
+      "q": "quick lap? i'm new, be nice",
+      "face": ";_;",
+      "chips": [
+        "ok",
+        "another time"
+      ],
+      "yes": {
+        "t": "yay. show the new girl around. wait. i'm showing you.",
+        "face": "(≧◡≦)"
+      },
+      "no": {
+        "t": "ok. i'll practice the lap on my own. zoom.",
+        "face": "^_^"
+      },
+      "effect": "tour:upgrade",
+      "spice": 0
+    }
+  ]
+}

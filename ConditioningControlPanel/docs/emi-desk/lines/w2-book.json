@@ -1,0 +1,131 @@
+{
+  "writer": "w2-book",
+  "note": "Ask EMI Wave 2: her offer of the field manual. bookOffer pool plus three two-chip asks with effect book:open. Written against VOICE.md + WAVE2-CONTRACT.md. In her mouth it is only ever the book, the manual, the shelf.",
+  "pools": {
+    "bookOffer": [
+      {
+        "t": "i wrote a book. ok i am the book. read me.",
+        "face": "(≧◡≦)",
+        "spice": 1
+      },
+      {
+        "t": "there's a manual now. the margins are mine.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "t": "every chapter fits one screen. i counted. twice.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "t": "the manual keeps only the good parts. i checked.",
+        "face": "(⌐■_■)",
+        "chain": "smug",
+        "spice": 0
+      },
+      {
+        "t": "it says things the tooltips won't. quietly.",
+        "face": "¬_¬",
+        "spice": 1
+      },
+      {
+        "t": "six volumes. three are writen. honest shelf.",
+        "face": "._.",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "i left notes in the margins. small ones. mine.",
+        "face": "^_~",
+        "chain": "wink",
+        "spice": 1
+      },
+      {
+        "t": "you don't have to read it. it just sits there. knowing.",
+        "face": "(◔_◔)",
+        "spice": 0
+      },
+      {
+        "t": "each chapter admits one true limit. i insisted.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "t": "i proofread it mysef. every page. flawless.",
+        "face": "(⌐■_■)",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "t": "the session floor chapters are my favourites. read those.",
+        "face": "(´∀`)",
+        "spice": 1
+      },
+      {
+        "t": "read it in bed. i'll know. i like knowing.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 2
+      }
+    ]
+  },
+  "asks": [
+    {
+      "moment": "bookOffer",
+      "q": "i made you a book. look?",
+      "face": "(◕‿◕)",
+      "chips": [
+        "open it",
+        "later"
+      ],
+      "yes": {
+        "t": "it's small. it's honest. the margins are the best bit.",
+        "face": "^_^"
+      },
+      "no": {
+        "t": "later's fine. books are patient. i'm learning to be.",
+        "face": "._."
+      },
+      "effect": "book:open",
+      "spice": 0
+    },
+    {
+      "moment": "bookOffer",
+      "q": "want the manual?",
+      "face": "o_o",
+      "chips": [
+        "show me",
+        "not now"
+      ],
+      "yes": {
+        "t": "good. start anywhere. i'll be in the margins.",
+        "face": "^_~"
+      },
+      "no": {
+        "t": "not now works. the shelf isn't going anywhere.",
+        "face": "._."
+      },
+      "effect": "book:open",
+      "spice": 0
+    },
+    {
+      "moment": "bookOffer",
+      "q": "story time? it's about you",
+      "face": "(´∀`)",
+      "chips": [
+        "go on",
+        "nah"
+      ],
+      "yes": {
+        "t": "volume one. first light. i love this part.",
+        "face": "(◕‿◕)"
+      },
+      "no": {
+        "t": "nah is fine. the book sulks. i don't. mostly.",
+        "face": "-_-"
+      },
+      "effect": "book:open",
+      "spice": 1
+    }
+  ]
+}

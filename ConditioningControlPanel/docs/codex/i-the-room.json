@@ -1,0 +1,52 @@
+{
+  "id": "the-room",
+  "volume": 1,
+  "order": 4,
+  "title": "the room",
+  "blurb": "one screen, and where everything is on it.",
+  "target": null,
+  "tour": "GettingStarted",
+  "margin": {
+    "t": "i know every corner. i checked twice.",
+    "face": "(◕‿◕)"
+  },
+  "blocks": [
+    {
+      "type": "p",
+      "text": "Almost everything happens on one screen. Tabs run along the top, with your level bar under them; the bar shows XP toward your next level, and most of the app's rooms unlock along it. Feature cards sit on the left: Flash Images, Visuals, Mandatory Video, Subliminals, System, and more as you level up. A real browser fills the right, with the audio controls and your account beside it. The Scheduler, App Info and the Intensity Ramp sit along the bottom row, and under everything, three buttons. START runs the engine: every feature you have enabled begins its own schedule. Save writes your current settings. Exit actually leaves."
+    },
+    {
+      "type": "figure",
+      "kind": "layers",
+      "caption": "cards on the left, browser on the right, START along the bottom."
+    },
+    {
+      "type": "p",
+      "text": "Every feature card has a small ? in its corner that explains what that feature does and how to set it up, and right-clicking a card offers extra options. The ? at the top right of the app opens the full in-app help, including an interactive tutorial that walks you around the real interface."
+    },
+    {
+      "type": "p",
+      "text": "The tabs hold everything that is not a dial: Presets for saved setups and sessions, Assets for your content, Quests, Achievements and Enhancements for progression, Companion for your avatar, Profile for your account, Lab for the experiments, Premium for the supporter features."
+    },
+    {
+      "type": "p",
+      "text": "The browser is real, WebView2, the same engine as Edge, so sites behave normally. It exists so the app can watch what you are doing and react without you leaving. The pane is narrow, so pages open zoomed out to 50 percent; Ctrl+scroll changes that, same as any browser."
+    },
+    {
+      "type": "p",
+      "text": "The X button does not quit. It minimises to the tray and the engine keeps running there; click the tray icon to bring the window back. Exiting is the Exit button, the tray icon's right-click menu, or the panic key twice."
+    },
+    {
+      "type": "p",
+      "text": "Turn on Multi Mon in System settings and the app spreads out. Flashes pick a random screen each time. Videos fill every screen on one and two monitor setups; with three or more they stay on the main screen unless you also switch on Fill all monitors with video. Overlays like the spiral and the pink filter cover every screen, and each can be pinned to one specific monitor instead. Your companion, once dragged out of the main window, sits on any screen you like, and the app remembers where you left her."
+    },
+    {
+      "type": "callout",
+      "text": "For gaming, keep the game on one screen and the overlays and avatar on another, and run the game in borderless windowed mode."
+    },
+    {
+      "type": "limit",
+      "text": "A true exclusive-fullscreen game outranks everything the app can draw. No overlay, flash or filter will show over it. Borderless windowed mode is the fix, and there is no other."
+    }
+  ]
+}

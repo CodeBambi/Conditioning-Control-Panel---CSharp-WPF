@@ -26,6 +26,31 @@ namespace ConditioningControlPanel.Services.Descent
         private DescentMigrationOffer? _liveOffer;
         private bool _ceremonyOpen;
         private int _offerHold;
+        private bool _muteLogged;
+
+        /// <summary>
+        /// THE DEV MUTE. Set <c>CCP_DESCENT_CEREMONY=off</c> to stop the ceremony painting.
+        ///
+        /// <para>The ceremony is deliberately NOT dismissible: "Not tonight" defers it, and
+        /// <see cref="OfferReceived"/> is called again on every sync that still carries
+        /// <c>descent_migration.required</c>, so it returns on the next launch and the one after.
+        /// That is right for the single account-lifetime event this is, and it makes a tree you
+        /// launch twenty times an afternoon unusable - the only ways out are committing a door you
+        /// did not mean to commit, or closing the same fullscreen window on every run.</para>
+        ///
+        /// <para>What this mutes is the PAINT and nothing else. The offer is still taken,
+        /// <c>DescentMigrationOffered</c> is still written, and the spiral is still withheld, so a
+        /// muted run and a deferred run leave identical state behind. Muting the state machine
+        /// instead would make the mute itself the thing under test.</para>
+        ///
+        /// <para>Honoured in every configuration, not just DEBUG, because a local Release build is
+        /// still somebody's afternoon. It costs a deliberate environment variable to arm and says
+        /// so in the log the first time it bites, so a shipped install cannot skip the ceremony by
+        /// accident - and a user who sets it has only hidden a window they could already close.</para>
+        /// </summary>
+        internal static bool CeremonyMuted =>
+            string.Equals(Environment.GetEnvironmentVariable("CCP_DESCENT_CEREMONY"), "off",
+                          StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
         /// Raised when a queued stage ceremony comes due — one per login day, after a "Take it
@@ -262,6 +287,19 @@ namespace ConditioningControlPanel.Services.Descent
             try
             {
                 if (Application.Current?.Dispatcher?.HasShutdownStarted != false) return;
+
+                // Before the lock and before _ceremonyOpen: a mute that left the gate armed would
+                // suppress the ceremony for the rest of the process rather than for this open.
+                if (CeremonyMuted)
+                {
+                    bool first;
+                    lock (_gate) { first = !_muteLogged; _muteLogged = true; }
+                    if (first)
+                        Log.Warning("[Descent] Ceremony suppressed: CCP_DESCENT_CEREMONY=off. " +
+                                    "The offer was still taken and the spiral is still withheld. " +
+                                    "Unset the variable to see it again.");
+                    return;
+                }
 
                 DescentMigrationOffer? offer;
                 lock (_gate)

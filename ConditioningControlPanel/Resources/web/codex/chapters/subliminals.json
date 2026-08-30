@@ -1,0 +1,44 @@
+{
+  "id": "subliminals",
+  "volume": 2,
+  "order": 3,
+  "title": "subliminals",
+  "blurb": "short phrases, a fraction of a second, on a timer.",
+  "target": "subliminals",
+  "tour": null,
+  "margin": {
+    "t": "i read every one. twice. i'm fast.",
+    "face": "@_@"
+  },
+  "blocks": [
+    {
+      "type": "p",
+      "text": "A phrase appears in the centre of your screen in big magenta letters, holds for about a tenth of a second, and fades. That is the whole feature. It runs in the background while you do something else, and each phrase can carry a whispered voice clip. It is the lightest of the core tools: nothing is blocked, nothing is fullscreen, nothing has to be clicked. It ships switched off."
+    },
+    {
+      "type": "p",
+      "text": "Per Min is an average, 1 to 30, default 5: a flash roughly every eight to sixteen seconds. Frames sets how long each phrase holds, and Opacity how solid the text looks. Add the 50 ms fade in and out and a default flash is visible for about a fifth of a second in total. The text sits on a card with an outline so it stays readable over anything; the colours are editable under Advanced if magenta on black is too hard. With Multi Mon on, the same phrase hits every connected screen at once."
+    },
+    {
+      "type": "figure",
+      "kind": "wave",
+      "caption": "a blip above the noise floor, then gone. every twelve seconds or so."
+    },
+    {
+      "type": "p",
+      "text": "Click Messages to open the phrase list before you enable the feature, not after. The app ships with 21 phrases, all switched on, and they are explicit, written for one specific flavour of conditioning. A phrase you did not choose, repeated for an hour, is the thing most people wish they had checked first. Untick a phrase to bench it, delete to remove it, add to write your own; deleted defaults stay gone. Short phrases read best, one to three words, and a consistent theme beats a big scattered list."
+    },
+    {
+      "type": "p",
+      "text": "Audio Whispers plays a matching clip with each flash. The app looks for a file named after the phrase, GOOD GIRL.mp3 for GOOD GIRL, in Resources/sub_audio inside the install folder, and clips ship for every default phrase. If nothing matches, the text flashes alone, no error, no gap. Mute Whispers is a separate switch kept reachable even in locked sessions, the way a volume knob should be. If a toy is paired, every phrase can fire a pulse timed to land with the text."
+    },
+    {
+      "type": "callout",
+      "text": "The flashes are visible to screen recording and streaming software, and turned all the way up this is 30 bright flashes a minute on every monitor. If you stream, or if you are photosensitive, know both before you turn it on."
+    },
+    {
+      "type": "limit",
+      "text": "The name oversells it. The flashes are short but never invisible: the app will not show a phrase for less than 100 ms, which is why Frames settings 1 through 5 all look identical, and nothing here slips past your conscious mind. What the feature actually does is repetition in your peripheral vision. That is enough."
+    }
+  ]
+}
