@@ -145,7 +145,7 @@
          `connected` in ~0.85 s, an ordered/reliable channel opens at ~0.97 s, a 60 KB string
          round-trips intact (SCTP fragmentation works), and public STUN yields an srflx
          candidate. See docs/GOON_GAME_PLAN.md "Transport decisions". -->
-    <PackageReference Include="SIPSorcery" Version="10.0.13" />
+    <PackageReference Include="SIPSorcery" Version="10.0.14" />
 
     <!-- SVG rendering for color emoji (Twemoji) — WPF can't render Segoe UI Emoji
          in color, so we ship the Twemoji SVG set and render via SharpVectors.
