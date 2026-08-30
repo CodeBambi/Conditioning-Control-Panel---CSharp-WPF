@@ -24,7 +24,7 @@
         "common.attention",
         "common.smallTalk"
       ],
-      "odds": 0.25,
+      "odds": 0.5,
       "cooldownMs": 45000,
       "priority": 2,
       "mix": 0.65,
@@ -37,7 +37,7 @@
         "dismissed",
         "common.smallTalk"
       ],
-      "odds": 0.12,
+      "odds": 0.24,
       "cooldownMs": 60000,
       "priority": 1,
       "mix": 0.65,
@@ -50,7 +50,7 @@
         "ringOpen",
         "common.attention"
       ],
-      "odds": 0.08,
+      "odds": 0.16,
       "cooldownMs": 180000,
       "priority": 2,
       "mix": 0.65,
@@ -63,7 +63,7 @@
         "ringDismissed",
         "common.smallTalk"
       ],
-      "odds": 0.05,
+      "odds": 0.1,
       "cooldownMs": 180000,
       "priority": 1,
       "mix": 0.65,
@@ -77,7 +77,7 @@
         "ringPick",
         "common.encourage"
       ],
-      "odds": 0.06,
+      "odds": 0.12,
       "cooldownMs": 120000,
       "priority": 1,
       "mix": 0.65,
@@ -90,7 +90,7 @@
         "arcademyFromRing",
         "common.win"
       ],
-      "odds": 0.4,
+      "odds": 0.8,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.65,
@@ -107,7 +107,7 @@
         "pinAdded",
         "common.win"
       ],
-      "odds": 0.5,
+      "odds": 1.0,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.65,
@@ -124,7 +124,7 @@
         "suggestionIgnored3x",
         "common.tease"
       ],
-      "odds": 0.33,
+      "odds": 0.66,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.65,
@@ -142,7 +142,7 @@
         "resized",
         "common.smallTalk"
       ],
-      "odds": 0.15,
+      "odds": 0.3,
       "cooldownMs": 300000,
       "priority": 1,
       "mix": 0.65,
@@ -155,7 +155,7 @@
         "petted",
         "common.attention"
       ],
-      "odds": 0.45,
+      "odds": 0.9,
       "cooldownMs": 30000,
       "priority": 2,
       "mix": 0.65,
@@ -168,7 +168,7 @@
         "glassOffer",
         "common.tease"
       ],
-      "odds": 0.1,
+      "odds": 0.2,
       "cooldownMs": 1200000,
       "priority": 2,
       "mix": 0.65,
@@ -181,7 +181,7 @@
         "effectFired",
         "common.win"
       ],
-      "odds": 0.2,
+      "odds": 0.4,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.65,
@@ -247,7 +247,7 @@
         "bedtimeBroken",
         "common.lateNight"
       ],
-      "odds": 0.4,
+      "odds": 0.8,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.5,
@@ -295,7 +295,7 @@
         "avatarKept",
         "common.smallTalk"
       ],
-      "odds": 0.6,
+      "odds": 1.0,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.5,
@@ -312,7 +312,7 @@
         "takeoverEnded",
         "common.afterEffect"
       ],
-      "odds": 0.25,
+      "odds": 0.5,
       "cooldownMs": 300000,
       "priority": 1,
       "mix": 0.65,
@@ -325,7 +325,7 @@
         "sheListeningOn",
         "common.attention"
       ],
-      "odds": 0.2,
+      "odds": 0.4,
       "cooldownMs": 600000,
       "priority": 1,
       "mix": 0.65,
@@ -352,7 +352,7 @@
         "featureOpened",
         "common.attention"
       ],
-      "odds": 0.06,
+      "odds": 0.12,
       "cooldownMs": 90000,
       "priority": 1,
       "mix": 0.65,
@@ -365,7 +365,7 @@
         "featureOpenedRepeat",
         "common.tease"
       ],
-      "odds": 0.2,
+      "odds": 0.4,
       "cooldownMs": 0,
       "priority": 1,
       "mix": 0.5,
@@ -382,7 +382,7 @@
         "flashesStarted",
         "common.deeper"
       ],
-      "odds": 0.2,
+      "odds": 0.4,
       "cooldownMs": 180000,
       "priority": 2,
       "mix": 0.65,
@@ -395,7 +395,7 @@
         "flashesStopped",
         "common.afterEffect"
       ],
-      "odds": 0.12,
+      "odds": 0.24,
       "cooldownMs": 180000,
       "priority": 1,
       "mix": 0.5,
@@ -408,7 +408,7 @@
         "videoRunning",
         "common.attention"
       ],
-      "odds": 0.35,
+      "odds": 0.7,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.65,
@@ -425,7 +425,7 @@
         "videoEnded",
         "common.afterEffect"
       ],
-      "odds": 0.25,
+      "odds": 0.5,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.65,
@@ -455,7 +455,7 @@
         "attentionCheckPassed",
         "common.win"
       ],
-      "odds": 0.2,
+      "odds": 0.4,
       "cooldownMs": 120000,
       "priority": 1,
       "mix": 0.65,
@@ -468,7 +468,7 @@
         "attentionCheckFailed",
         "common.loss"
       ],
-      "odds": 0.15,
+      "odds": 0.3,
       "cooldownMs": 120000,
       "priority": 1,
       "mix": 0.65,
@@ -481,7 +481,7 @@
         "subliminalsStarted",
         "common.deeper"
       ],
-      "odds": 0.15,
+      "odds": 0.3,
       "cooldownMs": 180000,
       "priority": 1,
       "mix": 0.5,
@@ -494,7 +494,7 @@
         "overlaySpiralUp",
         "common.deeper"
       ],
-      "odds": 0.2,
+      "odds": 0.4,
       "cooldownMs": 120000,
       "priority": 2,
       "mix": 0.65,
@@ -507,7 +507,7 @@
         "brainDrainOn",
         "common.deeper"
       ],
-      "odds": 0.25,
+      "odds": 0.5,
       "cooldownMs": 180000,
       "priority": 2,
       "mix": 0.65,
@@ -520,7 +520,7 @@
         "bubbleCountWon",
         "common.win"
       ],
-      "odds": 0.3,
+      "odds": 0.6,
       "cooldownMs": 120000,
       "priority": 2,
       "mix": 0.65,
@@ -533,7 +533,7 @@
         "bubbleCountLost",
         "common.loss"
       ],
-      "odds": 0.25,
+      "odds": 0.5,
       "cooldownMs": 120000,
       "priority": 2,
       "mix": 0.65,
@@ -546,7 +546,7 @@
         "blinkTrainerStarted",
         "common.deeper"
       ],
-      "odds": 0.2,
+      "odds": 0.4,
       "cooldownMs": 300000,
       "priority": 1,
       "mix": 0.5,
@@ -559,7 +559,7 @@
         "mantraCompleted",
         "common.win"
       ],
-      "odds": 0.2,
+      "odds": 0.4,
       "cooldownMs": 180000,
       "priority": 1,
       "mix": 0.5,
@@ -572,7 +572,7 @@
         "arcademyOpened",
         "common.win"
       ],
-      "odds": 0.4,
+      "odds": 0.8,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.65,
@@ -649,7 +649,7 @@
         "dtrhOpened",
         "common.deeper"
       ],
-      "odds": 0.3,
+      "odds": 0.6,
       "cooldownMs": 0,
       "priority": 1,
       "mix": 0.5,
@@ -666,7 +666,7 @@
         "fypOpened",
         "common.tease"
       ],
-      "odds": 0.25,
+      "odds": 0.5,
       "cooldownMs": 0,
       "priority": 1,
       "mix": 0.5,
@@ -683,7 +683,7 @@
         "intakeOpened",
         "common.attention"
       ],
-      "odds": 0.2,
+      "odds": 0.4,
       "cooldownMs": 0,
       "priority": 1,
       "mix": 0.5,
@@ -714,7 +714,7 @@
         "common.win",
         "common.loss"
       ],
-      "odds": 0.25,
+      "odds": 0.5,
       "cooldownMs": 0,
       "priority": 1,
       "mix": 0.5,
@@ -751,7 +751,7 @@
       "pools": [
         "lockdownArmed"
       ],
-      "odds": 0.3,
+      "odds": 0.6,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 1.0,
@@ -781,7 +781,7 @@
         "lockdownEnded",
         "common.afterEffect"
       ],
-      "odds": 0.3,
+      "odds": 0.6,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.5,
@@ -811,7 +811,7 @@
         "engineStarted",
         "common.deeper"
       ],
-      "odds": 0.3,
+      "odds": 0.6,
       "cooldownMs": 180000,
       "priority": 2,
       "mix": 0.65,
@@ -824,7 +824,7 @@
         "engineStopped",
         "common.afterEffect"
       ],
-      "odds": 0.2,
+      "odds": 0.4,
       "cooldownMs": 180000,
       "priority": 1,
       "mix": 0.65,
@@ -837,7 +837,7 @@
         "rampStepUp",
         "common.deeper"
       ],
-      "odds": 0.15,
+      "odds": 0.3,
       "cooldownMs": 300000,
       "priority": 1,
       "mix": 0.5,
@@ -850,7 +850,7 @@
         "sessionFeatureArrived",
         "common.deeper"
       ],
-      "odds": 0.2,
+      "odds": 0.4,
       "cooldownMs": 120000,
       "priority": 1,
       "mix": 0.65,
@@ -863,7 +863,7 @@
         "sessionStarted",
         "common.deeper"
       ],
-      "odds": 0.4,
+      "odds": 0.8,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.65,
@@ -880,7 +880,7 @@
         "sessionPaused",
         "common.encourage"
       ],
-      "odds": 0.2,
+      "odds": 0.4,
       "cooldownMs": 120000,
       "priority": 1,
       "mix": 0.5,
@@ -893,7 +893,7 @@
         "sessionResumed",
         "common.encourage"
       ],
-      "odds": 0.25,
+      "odds": 0.5,
       "cooldownMs": 120000,
       "priority": 1,
       "mix": 0.5,
@@ -906,7 +906,7 @@
         "sessionPhaseChanged",
         "common.deeper"
       ],
-      "odds": 0.1,
+      "odds": 0.2,
       "cooldownMs": 120000,
       "priority": 1,
       "mix": 0.65,
@@ -919,7 +919,7 @@
         "sessionHalfway",
         "common.encourage"
       ],
-      "odds": 0.3,
+      "odds": 0.6,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.5,
@@ -936,7 +936,7 @@
         "sessionLastMinute",
         "common.encourage"
       ],
-      "odds": 0.3,
+      "odds": 0.6,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.5,
@@ -953,7 +953,7 @@
         "sessionCompleted",
         "common.win"
       ],
-      "odds": 0.5,
+      "odds": 1.0,
       "cooldownMs": 0,
       "priority": 3,
       "mix": 0.65,
@@ -966,7 +966,7 @@
         "sessionAbandoned",
         "common.loss"
       ],
-      "odds": 0.2,
+      "odds": 0.4,
       "cooldownMs": 0,
       "priority": 1,
       "mix": 0.5,
@@ -992,7 +992,7 @@
         "xpBigAward",
         "common.win"
       ],
-      "odds": 0.15,
+      "odds": 0.3,
       "cooldownMs": 300000,
       "priority": 1,
       "mix": 0.65,
@@ -1005,7 +1005,7 @@
         "achievementUnlocked",
         "common.win"
       ],
-      "odds": 0.5,
+      "odds": 1.0,
       "cooldownMs": 60000,
       "priority": 2,
       "mix": 0.65,
@@ -1018,7 +1018,7 @@
         "questCompleted",
         "common.win"
       ],
-      "odds": 0.3,
+      "odds": 0.6,
       "cooldownMs": 120000,
       "priority": 2,
       "mix": 0.65,
@@ -1031,7 +1031,7 @@
         "streakMilestone",
         "common.win"
       ],
-      "odds": 0.8,
+      "odds": 1.0,
       "cooldownMs": 0,
       "priority": 3,
       "mix": 0.65,
@@ -1044,7 +1044,7 @@
         "streakKept",
         "common.win"
       ],
-      "odds": 0.25,
+      "odds": 0.5,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.65,
@@ -1062,7 +1062,7 @@
         "common.loss",
         "common.encourage"
       ],
-      "odds": 0.3,
+      "odds": 0.6,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.65,
@@ -1079,7 +1079,7 @@
         "skillUnlocked",
         "common.win"
       ],
-      "odds": 0.3,
+      "odds": 0.6,
       "cooldownMs": 120000,
       "priority": 2,
       "mix": 0.5,
@@ -1092,7 +1092,7 @@
         "pinkRushStarted",
         "common.deeper"
       ],
-      "odds": 0.35,
+      "odds": 0.7,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.65,
@@ -1109,7 +1109,7 @@
         "lateNight",
         "common.lateNight"
       ],
-      "odds": 0.5,
+      "odds": 1.0,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.65,
@@ -1126,7 +1126,7 @@
         "smallHours",
         "common.lateNight"
       ],
-      "odds": 0.35,
+      "odds": 0.7,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.65,
@@ -1143,7 +1143,7 @@
         "morningFirst",
         "common.smallTalk"
       ],
-      "odds": 0.3,
+      "odds": 0.6,
       "cooldownMs": 0,
       "priority": 1,
       "mix": 0.65,
@@ -1160,7 +1160,7 @@
         "appIdleLong",
         "common.idle"
       ],
-      "odds": 0.15,
+      "odds": 0.3,
       "cooldownMs": 900000,
       "priority": 1,
       "mix": 0.65,
@@ -1177,8 +1177,22 @@
         "idleShort",
         "common.idle"
       ],
-      "odds": 0.06,
+      "odds": 0.12,
       "cooldownMs": 300000,
+      "priority": 1,
+      "mix": 0.65,
+      "spiceCeiling": 2,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "ambient": {
+      "pools": [
+        "common.smallTalk",
+        "common.idle",
+        "common.tease"
+      ],
+      "odds": 0.5,
+      "cooldownMs": 120000,
       "priority": 1,
       "mix": 0.65,
       "spiceCeiling": 2,
@@ -1190,7 +1204,7 @@
         "longSitting",
         "common.encourage"
       ],
-      "odds": 0.25,
+      "odds": 0.5,
       "cooldownMs": 0,
       "priority": 1,
       "mix": 0.65,
@@ -1207,7 +1221,7 @@
         "backSoon",
         "common.attention"
       ],
-      "odds": 0.35,
+      "odds": 0.7,
       "cooldownMs": 120000,
       "priority": 1,
       "mix": 0.5,
@@ -1220,7 +1234,7 @@
         "premiumTeaseSeen",
         "common.tease"
       ],
-      "odds": 0.33,
+      "odds": 0.66,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.65,
@@ -1237,7 +1251,7 @@
         "lockedCardTapped",
         "common.tease"
       ],
-      "odds": 0.33,
+      "odds": 0.66,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.5,
@@ -1254,7 +1268,7 @@
         "tierUp",
         "common.win"
       ],
-      "odds": 0.6,
+      "odds": 1.0,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.5,
@@ -1271,7 +1285,7 @@
         "tierLapse",
         "common.encourage"
       ],
-      "odds": 0.3,
+      "odds": 0.6,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.65,
@@ -1288,7 +1302,7 @@
         "dailyFreeToday",
         "common.tease"
       ],
-      "odds": 0.3,
+      "odds": 0.6,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.5,
@@ -1305,7 +1319,7 @@
         "appOpened",
         "common.attention"
       ],
-      "odds": 0.35,
+      "odds": 0.7,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.65,
@@ -1335,7 +1349,7 @@
         "updateAvailable",
         "common.smallTalk"
       ],
-      "odds": 0.4,
+      "odds": 0.8,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.5,
@@ -1352,7 +1366,7 @@
         "afterUpdate",
         "common.smallTalk"
       ],
-      "odds": 0.6,
+      "odds": 1.0,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 0.65,
@@ -1368,7 +1382,7 @@
       "pools": [
         "crashRecovered"
       ],
-      "odds": 0.4,
+      "odds": 0.8,
       "cooldownMs": 0,
       "priority": 2,
       "mix": 1.0,
