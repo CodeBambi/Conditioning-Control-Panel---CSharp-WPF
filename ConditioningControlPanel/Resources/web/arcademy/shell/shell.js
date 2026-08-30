@@ -1073,6 +1073,25 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     + timetable.classes.map((c) => c.gameKey).join(', ')
     + (timetable.relaxed.length ? ' (relaxed: ' + timetable.relaxed.join(',') + ')' : ''));
 
+  /* THE DIRECT LAUNCH (the Discord per-class commands, 2026-08-30). A request
+   * for a room this build actually HAS is opened without a campus: no board, no
+   * entry reveal, no ghosts, no walk and no Orientation Day - boot.js keeps its
+   * own splash up over the whole thing and letters the room's name on it, so the
+   * player who typed `/deepend` sees the school's opening and then the pool.
+   *
+   * IT IS STILL ONLY A REQUEST. The gate has not moved: `maybeLaunchRequested`
+   * is the one thing that ever fires a launch and it still asks `isUnlocked`.
+   * This flag decides whether the CAMPUS is built first, and nothing else.
+   *
+   * An unknown or retired key is NOT a direct launch (`games.byKey` is the same
+   * open-semester pool the board deals from): that boot opens the ordinary
+   * campus and the refusal lands on it as a toast, which is the answer the quad
+   * door would give. */
+  const directLaunch = !!launchRequest && !!games.byKey[launchRequest];
+  if (launchRequest && !directLaunch) {
+    say('activity launch: ' + launchRequest + ' is not a room in this build - campus');
+  }
+
   /* ---------------------- engine + provider ----------------------------- */
   /* THE CARD FACES. Optional, guarded, once: art/punchcard/faces.json says
    * where the stamps, the crest and the live text sit on each class's face
@@ -3730,11 +3749,46 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     docEvent('arcademy-locker-opened', { from: from === 'prizebooth' ? 'counter' : from });
   }
 
+  /* IS THE BOOT SPLASH STILL THE THING ON SCREEN? `#arc-toast` is z 60 and
+   * `.arc-loader` is z 70, so a toast fired during construction is a toast
+   * nobody ever sees - it expires (2.2s) under a splash whose own floor is
+   * longer than that. boot.js owns the loader, so this is a READ of its node
+   * and nothing more; a page without one (every headless suite) answers false
+   * and every toast is spoken the moment it is asked for, exactly as before. */
+  function splashUp() {
+    try {
+      if (typeof document === 'undefined' || !document.getElementById) return false;
+      const node = document.getElementById('arc-loader');
+      return !!(node && !node.hidden);
+    } catch (e) { return false; }
+  }
+  /** The one line parked behind the splash, or '' (see splashUp). */
+  let pendingShout = '';
+  /** Say it now, or on the splash edge - whichever the player can actually read. */
+  function shoutOnScreen(msg) {
+    const line = String(msg || '');
+    if (!line) return;
+    if (!splashUp()) { try { shout(line); } catch (e) { /* noop */ } return; }
+    pendingShout = line;
+  }
+  /** Called by `onSplashDone`, once, and only ever on the happy path. */
+  function flushPendingShout() {
+    if (!pendingShout) return;
+    const line = pendingShout;
+    pendingShout = '';
+    try { shout(line); } catch (e) { /* a toast may never hold a door */ }
+  }
+
   /**
    * ONE SHOT, ONE BOOT. The host asked for a room by key (`init.launchGame`);
    * open it if the card is full, otherwise stay on the campus and say why. An
    * unknown or retired key has no card and therefore no grant, which is the
    * same refusal by the same test - there is no second table to keep in step.
+   *
+   * STILL THE ONLY THING THAT FIRES A LAUNCH, and still exactly once per boot:
+   * the direct-launch road below does not launch anything itself, it decides
+   * WHEN this is called and whether a campus is built around it (see the tail
+   * of createShell). `launchFired` is the whole guard and it is spent here.
    */
   function maybeLaunchRequested() {
     if (launchFired || destroyed) return;
@@ -3743,11 +3797,61 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     if (isUnlocked(launchRequest)) {
       say('activity launch: ' + launchRequest + ' - card complete, opening the room');
       launchGraded(launchRequest);
+      /* THE SPLASH IS TOLD (boot.js listens). Fired AFTER `launchGraded` and
+       * read off `screen` rather than off the intent, so a class the suspend
+       * gate turned away is reported as the refusal it actually is and the
+       * splash takes the room's name back off. */
+      docEvent('arcademy-direct-launch', { gameKey: launchRequest, ok: screen === 'class' });
       return;
     }
     say('activity launch refused: ' + launchRequest + ' - card not complete');
-    try { shout(t('launch_card_locked', 'That card is not complete yet. Fill it first.')); }
-    catch (e) { /* a toast may never hold a door */ }
+    docEvent('arcademy-direct-launch', { gameKey: launchRequest, ok: false });
+    shoutOnScreen(t('launch_card_locked', 'That card is not complete yet. Fill it first.'));
+  }
+
+  /** How long a DIRECT LAUNCH waits for the host to say anything at all about
+   *  punch cards before it gives up and opens the campus instead. The hosted
+   *  shells send `meta` with `init`, so this is the never-arrives parachute and
+   *  not a step anybody is expected to stand on. */
+  const DIRECT_LAUNCH_WAIT_MS = 10000;
+
+  /** Has the host spoken about punch cards at all? `undefined` is "not yet";
+   *  an empty object is a real answer (a player who has never filled one). */
+  function cardsKnown() { return store.get('punchCards') !== undefined; }
+
+  /**
+   * THE DIRECT LAUNCH's ONE WAIT, and the only thing between a `/deepend` and
+   * the pool. It resolves as soon as the requested card reads complete, or as
+   * soon as the host has said anything about cards at all (a real "no"), or on
+   * the parachute above.
+   *
+   * `store.onChange` is the seam because the store subscribes to `meta` frames
+   * ITSELF, at construction - a snapshot that lands while the shell is still
+   * being built reaches the cache, where boot.js's own `if (shell)` handler
+   * would have dropped it.
+   */
+  function awaitDirectLaunchCards() {
+    if (isUnlocked(launchRequest) || cardsKnown()) return Promise.resolve();
+    say('direct launch: no punch cards yet - holding the splash for them');
+    return new Promise((resolve) => {
+      let spent = false;
+      let off = () => {};
+      const finish = (why) => {
+        if (spent) return;
+        spent = true;
+        clearTimeout(timer);
+        try { off(); } catch (e) { /* noop */ }
+        say('direct launch: ' + why);
+        resolve();
+      };
+      const timer = setTimeout(
+        () => finish('the cards never arrived - opening the campus'),
+        DIRECT_LAUNCH_WAIT_MS
+      );
+      off = store.onChange(() => {
+        if (isUnlocked(launchRequest) || cardsKnown()) finish('cards arrived');
+      });
+    });
   }
 
   /**
@@ -6510,6 +6614,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         bellSplashCleared = true; maybeFirstBell();
         stageClear = true; maybeStartOrientation();
       };
+      /* ...and anything said UNDER the splash is said again now that there is
+       * something to say it on (see shoutOnScreen). Before the continuation, so
+       * a parked refusal is already up as the campus finishes arriving. */
+      flushPendingShout();
       try { if (vn) { vn.splashDone(cleared); return; } }
       catch (e) { say('first bell cold open skipped (' + ((e && e.message) || e) + ')'); }
       cleared();
@@ -6866,14 +6974,46 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     if (vn) say('first bell: ' + (vn.armed ? 'armed' : 'nothing left to play'));
   } catch (e) { say('first bell unavailable (the shell is unaffected): ' + ((e && e.message) || e)); }
 
-  showBoard();
-  /* THE ACTIVITY LAUNCH, fired here and nowhere else: the campus has mounted
-   * (showBoard above) and the punch cards have been known since `init.meta`
-   * reached the store at construction, which are the ceremony's two
-   * preconditions. `launchGraded` sorts the rest out - a room tonight's board
-   * already deals starts as THAT class, a room off the board starts as a free
-   * swim's graded twin - so this hook only decides WHETHER. */
-  maybeLaunchRequested();
+  /* ================= THE OPENING, AND THERE ARE TWO OF THEM ==============
+   * THE ORDINARY BOOT builds the campus and then asks the activity hook whether
+   * a room was requested: the campus has mounted (showBoard) and the punch cards
+   * have been known since `init.meta` reached the store at construction, which
+   * are the launch's two preconditions. `launchGraded` sorts the rest out - a
+   * room tonight's board already deals starts as THAT class, a room off the
+   * board starts as a free swim's graded twin - so the hook only decides
+   * WHETHER.
+   *
+   * THE DIRECT LAUNCH turns that round. A `/deepend` boot is not a visit to a
+   * school, it is a visit to ONE ROOM, so the campus is not built at all:
+   * boot.js's splash (lettered with that room's name) is the only thing on
+   * screen, the cards are waited for when the host has not sent them yet, and
+   * the class starts straight into it. The quad's arrival rituals are not lost,
+   * they are DEFERRED - the greet, the postman, the streak reading and
+   * Orientation Day all belong to ARRIVING on the campus, and the player does
+   * that for real when the class ends and `showBoard()` runs its first time.
+   *
+   * THE REFUSAL NEVER STRANDS ANYBODY: a card that is not full (or a class the
+   * suspend gate turned away) falls through to exactly the ordinary opening one
+   * beat later, with the toast the quad door would have given.
+   * `maybeLaunchRequested` is spent exactly once on both roads.
+   * ==================================================================== */
+  if (directLaunch) {
+    await awaitDirectLaunchCards();
+    if (!destroyed) {
+      if (isUnlocked(launchRequest)) {
+        maybeLaunchRequested();
+        // startClass refuses under a global suspend: that boot is a campus after all.
+        if (screen !== 'class') showBoard();
+      } else {
+        // Campus FIRST, so the refusal has a screen to land on.
+        showBoard();
+        maybeLaunchRequested();
+      }
+    }
+  } else {
+    showBoard();
+    maybeLaunchRequested();
+  }
   return api;
 }
 

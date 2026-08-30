@@ -1365,6 +1365,31 @@ html.ae-touch .arc-intro-burst { animation:arc-intro-burst-in .6s ease-out .5s b
 .arc-intro-caption .arc-loader-name { font-family:inherit; color:var(--pink); letter-spacing:inherit; }
 @keyframes arc-intro-caption-in { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:none; } }
 
+/* ---- THE DIRECT LAUNCH's door plate (the Discord per-class commands) -------
+   A player who typed /deepend asked for ONE room, so the splash they are
+   already watching says which one: the school's own opening, and the class
+   name under it. House display face (never the pixel one - this is a plate on
+   a door, not a status line), house pink, and it lands with the caption rather
+   than on a beat of its own. `hidden` in the markup is the ground truth: an
+   ordinary boot never has this line at all.
+   THE TAIL IS TRADED FOR SPEED on `.is-direct`: the sparkle burst and its
+   flash are the 2.35-2.65s close of a ~3s beat and a direct launch leaves at
+   ~1.9s, so they would only ever be cut in half - hidden outright instead,
+   which is also six fewer animated nodes on a phone (the FX diet). */
+.arc-intro-class {
+  position:relative; z-index:1; margin-top:-8px;
+  animation:arc-intro-caption-in .3s ease-out .95s both;
+}
+.arc-intro-class-name {
+  font-family:var(--disp); font-size:21px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--ink);
+  text-shadow:0 0 16px color-mix(in srgb, var(--pink) 45%, transparent);
+}
+.arc-loader.is-direct .arc-intro-spark,
+.arc-loader.is-direct .arc-intro-flash { display:none; }
+.arc-loader.is-done .arc-intro-class { opacity:0; transition:opacity .16s ease-in; }
+html.arc-mobile .arc-intro-class-name { font-size:17px; letter-spacing:.1em; }
+
 /* ---- full-frame layers --------------------------------------------------- */
 .arc-intro-scan {
   position:absolute; inset:0; z-index:4; pointer-events:none; opacity:.4;
