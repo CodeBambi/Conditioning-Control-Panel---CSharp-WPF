@@ -641,12 +641,12 @@ namespace ConditioningControlPanel
                 Glyph = "🫙",
                 RailTitle = "The Vat",
                 Title = "🫙  The Vat",
-                Tagline = "Today's XP, poured into glass.",
+                Tagline = "Earn it anywhere. Pour it here.",
                 Accent = "#66E0C0",
                 Bullets = new[]
                 {
                     "Your portrait is inside a jar on the Trainer Card now, and how full that jar is, is what you have earned today.",
-                    "Earn while you are looking at it and the faucet swings in and pours. The percentage under the glass is the same number, said plainly.",
+                    "Everything you earn lands in the tap first, wherever you earned it. Press and hold the tap and it pours into the jar; the percentage under the glass is the same number, said plainly.",
                     "It fills against a daily cap that grows with your level, so a full jar always means the same thing: you are done for today.",
                     "Overnight it empties, and tomorrow you start pouring again."
                 },

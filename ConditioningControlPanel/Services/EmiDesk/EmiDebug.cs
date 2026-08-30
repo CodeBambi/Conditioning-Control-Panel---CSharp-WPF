@@ -23,6 +23,12 @@ namespace ConditioningControlPanel.Services.EmiDesk;
 /// 10 minute gap and "never before the third summon") are skipped. The gates that exist for the
 /// USER are untouched: holds, the panic silence, bedtime, the ignore streak, spice, feasibility and
 /// the situational half of the ask gate all still apply.</item>
+/// <item><b>EMI_DESK_FIDGET_MS</b> - milliseconds between micro-fidgets, in place of the authored
+/// 25-50 s jitter. There are four of them now (twitch, weight shift, glance, and the prop beat
+/// where she checks something), so seeing all four takes minutes of leaving her alone; this makes
+/// an idle-animation play-test a matter of seconds. Clamped to 1 000 .. 600 000. It replaces the
+/// DELAY only - the "never the same one twice running" rule and the quiet-moment gate are
+/// untouched, so what you see is still the real schedule, just faster.</item>
 /// <item><b>EMI_DESK_RESET_ONBOARDING</b> - set to 1/true/yes/on to wipe the three gesture nudge
 /// tracks back to a fresh install at startup (pet count, ring opens, the gist latches and the
 /// lifetime fire counts), so the tutorial can be play-tested more than once per machine. It resets
@@ -42,12 +48,18 @@ public static class EmiDebug
 {
     private const int IdleFloorMs = 1_000;
     private const int IdleCeilingMs = 3_600_000;
+    private const int FidgetFloorMs = 1_000;
+    private const int FidgetCeilingMs = 600_000;
 
     /// <summary>Glass idle override in ms, or null when EMI_DESK_IDLE_MS is unset or unusable.</summary>
     public static int? IdleMs { get; }
 
     /// <summary>True when EMI_DESK_DEBUG asks for the QA cadence.</summary>
     public static bool Enabled { get; }
+
+    /// <summary>Micro-fidget interval override in ms, or null when EMI_DESK_FIDGET_MS is unset or
+    /// unusable.</summary>
+    public static int? FidgetMs { get; }
 
     /// <summary>True when EMI_DESK_RESET_ONBOARDING asks for the gesture tutorial to replay.</summary>
     public static bool ResetOnboarding { get; }
@@ -64,6 +76,13 @@ public static class EmiDebug
                 && int.TryParse(raw.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var ms))
             {
                 IdleMs = Math.Clamp(ms, IdleFloorMs, IdleCeilingMs);
+            }
+
+            var fid = Environment.GetEnvironmentVariable("EMI_DESK_FIDGET_MS");
+            if (!string.IsNullOrWhiteSpace(fid)
+                && int.TryParse(fid.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var fms))
+            {
+                FidgetMs = Math.Clamp(fms, FidgetFloorMs, FidgetCeilingMs);
             }
 
             Enabled = IsOn(Environment.GetEnvironmentVariable("EMI_DESK_DEBUG"));

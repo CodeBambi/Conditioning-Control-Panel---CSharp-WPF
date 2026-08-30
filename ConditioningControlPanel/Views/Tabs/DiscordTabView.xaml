@@ -263,13 +263,25 @@
                                                  2026-08-13) — safe because the canvas is hit-test
                                                  invisible, so hover/click still reach the tap. -->
                                             <Grid x:Name="ProfileVatFaucet" x:FieldModifier="internal"
-                                                  Panel.ZIndex="-1"
+                                                  Panel.ZIndex="3" Focusable="True"
                                                   Width="40" Height="42" HorizontalAlignment="Left"
                                                   VerticalAlignment="Top" Visibility="Collapsed"
                                                   Cursor="Hand" Background="Transparent"
                                                   RenderTransformOrigin="0.30,0.88">
+                                                <!-- IN FRONT OF THE GLASS (pitch "The tap holds",
+                                                     2026-08-30), reversing the 2026-08-13 ZIndex -1.
+                                                     The tap is now the only way XP reaches the jar,
+                                                     so it may not read as scenery tucked behind it.
+                                                     Focusable so the CHARGE-HOLD has a keyboard: the
+                                                     press-and-hold is the whole gesture, and a
+                                                     gesture only a mouse can make is not an
+                                                     affordance, it is a wall. -->
                                                 <Grid.RenderTransform>
                                                     <TransformGroup>
+                                                        <!-- Shiver first: the x-jitter of a charge
+                                                             released early must not be rotated by
+                                                             the pour tilt. -->
+                                                        <TranslateTransform x:Name="ProfileVatFaucetShake" x:FieldModifier="internal"/>
                                                         <ScaleTransform x:Name="ProfileVatFaucetScale" x:FieldModifier="internal"/>
                                                         <RotateTransform x:Name="ProfileVatFaucetTilt" x:FieldModifier="internal"/>
                                                     </TransformGroup>
@@ -311,14 +323,25 @@
                                                      instead of staying pink under a blue one.
                                                      Its value is #FF69B4 by default (Colors.xaml),
                                                      so the CCP Default look is unchanged. -->
-                                                <Rectangle Width="4" Height="7" HorizontalAlignment="Left"
-                                                           VerticalAlignment="Top" Margin="13,4,0,0"
-                                                           Fill="{StaticResource FaucetMetal}"
-                                                           Stroke="#3A2A3E" StrokeThickness="0.5"/>
-                                                <Rectangle Width="13" Height="4.5" RadiusX="2" RadiusY="2"
-                                                           HorizontalAlignment="Left" VerticalAlignment="Top"
-                                                           Margin="8.5,1,0,0" Fill="{DynamicResource PinkBrush}"
-                                                           Stroke="#B44780" StrokeThickness="0.6"/>
+                                                <!-- THE THUD lands on the HANDLE, so both handle parts ride one
+                                                     scale together (house book: the thing you pressed
+                                                     is the thing that answers). Origin is the tee's
+                                                     centre inside this 40x14 strip. -->
+                                                <Grid x:Name="ProfileVatHandle" x:FieldModifier="internal"
+                                                      Width="40" Height="14" HorizontalAlignment="Left"
+                                                      VerticalAlignment="Top" RenderTransformOrigin="0.375,0.29">
+                                                    <Grid.RenderTransform>
+                                                        <ScaleTransform x:Name="ProfileVatHandleScale" x:FieldModifier="internal"/>
+                                                    </Grid.RenderTransform>
+                                                    <Rectangle Width="4" Height="7" HorizontalAlignment="Left"
+                                                               VerticalAlignment="Top" Margin="13,4,0,0"
+                                                               Fill="{StaticResource FaucetMetal}"
+                                                               Stroke="#3A2A3E" StrokeThickness="0.5"/>
+                                                    <Rectangle Width="13" Height="4.5" RadiusX="2" RadiusY="2"
+                                                               HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                               Margin="8.5,1,0,0" Fill="{DynamicResource PinkBrush}"
+                                                               Stroke="#B44780" StrokeThickness="0.6"/>
+                                                </Grid>
 
                                                 <!-- droplet sparkle at the spout while XP is waiting
                                                      (ambient — code gates it on AllowAmbientLoops +
@@ -341,21 +364,94 @@
                                                          Visibility="Collapsed"/>
                                             </Grid>
 
-                                            <!-- "?" explainer beside the faucet (owner ask 0813):
-                                                 the one place the vat gets words. Positioned by
-                                                 ArmFaucet next to the tap; the tooltip explains the
-                                                 daily jar and that the hold is VISUAL ONLY - XP is
-                                                 counted the moment it is earned, poured or not. -->
-                                            <Border x:Name="ProfileVatHelpBadge" x:FieldModifier="internal"
-                                                    Width="16" Height="16" CornerRadius="8"
+                                            <!-- THE CHARGE RING (pitch "The tap holds", 2026-08-30).
+                                                 Press-and-hold fills it around the tap head over
+                                                 700ms + held/4 (cap 1400ms) - the budget scales with
+                                                 what is waiting, so a big day is worth a longer
+                                                 press. Geometry is written per frame by
+                                                 MainWindow.ProfileFaucet.BuildChargeArc; under
+                                                 reduced motion the arc is replaced by a 120ms
+                                                 opacity fade of the full circle (house book law VI:
+                                                 collapse the motion, keep the beat). -->
+                                            <Grid x:Name="ProfileVatChargeRing" x:FieldModifier="internal"
+                                                  Width="34" Height="34" Opacity="0"
+                                                  HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                  Visibility="Collapsed" IsHitTestVisible="False">
+                                                <Ellipse Width="30" Height="30" Stroke="#40FFFFFF" StrokeThickness="2.2"/>
+                                                <Path x:Name="ProfileVatChargeArc" x:FieldModifier="internal"
+                                                      Stroke="{DynamicResource PinkBrush}" StrokeThickness="2.6"
+                                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                            </Grid>
+
+                                            <!-- THE SPARKLE BURST's host: 5-9 motes thrown from the
+                                                 spout within 50ms of the thud, then removed. Empty
+                                                 and hit-test invisible the rest of the time. -->
+                                            <Canvas x:Name="ProfileVatSparks" x:FieldModifier="internal"
                                                     HorizontalAlignment="Left" VerticalAlignment="Top"
-                                                    Visibility="Collapsed" Cursor="Help"
-                                                    Background="#CC252542" BorderBrush="#FF69B4" BorderThickness="1"
+                                                    IsHitTestVisible="False"/>
+
+                                            <!-- THE TICK LEGEND: three glyphs sitting on the meter's
+                                                 own tick lines, replacing the "?" badge that used to
+                                                 be the only words the vat had. A moon on the 20 line
+                                                 (the jar empties at midnight), a mortarboard on CAP
+                                                 (the cap grows with your level) and a crown on MAX
+                                                 (past the lip it is lifetime XP). Positioned by
+                                                 MainWindow.ProfileFaucet.PositionVatTickGlyphs from
+                                                 the canvas's OWN tick maths, so they cannot drift
+                                                 off the lines if the jar is ever retuned. -->
+                                            <Path x:Name="ProfileVatTickDrain" x:FieldModifier="internal"
+                                                  Width="11" Height="11" Visibility="Collapsed"
+                                                  HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                  Fill="#B3FFFFFF" Stretch="Uniform" Cursor="Help"
+                                                  ToolTipService.InitialShowDelay="150"
+                                                  ToolTip="{loc:Str profile_vat_tick_drain}"
+                                                  Data="M 7,0.6 A 5,5 0 1 0 7,9.4 A 4,4 0 1 1 7,0.6 Z"/>
+                                            <Path x:Name="ProfileVatTickCap" x:FieldModifier="internal"
+                                                  Width="12" Height="10" Visibility="Collapsed"
+                                                  HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                  Fill="#B3FFFFFF" Stretch="Uniform" Cursor="Help"
+                                                  ToolTipService.InitialShowDelay="150"
+                                                  ToolTip="{loc:Str profile_vat_tick_cap}"
+                                                  Data="M 0,3.4 L 6,0.7 L 12,3.4 L 6,6.1 Z M 2.8,4.9 L 2.8,8.2 L 9.2,8.2 L 9.2,4.9 L 6,6.4 Z"/>
+                                            <Path x:Name="ProfileVatTickMax" x:FieldModifier="internal"
+                                                  Width="12" Height="10" Visibility="Collapsed"
+                                                  HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                  Fill="#B3FFFFFF" Stretch="Uniform" Cursor="Help"
+                                                  ToolTipService.InitialShowDelay="150"
+                                                  ToolTip="{loc:Str profile_vat_tick_max}"
+                                                  Data="M 0,8.4 L 1,1.4 L 4,5 L 6,0.7 L 8,5 L 11,1.4 L 12,8.4 Z"/>
+
+                                            <!-- THE CHIP - the screen's ONE breather (house book law
+                                                 III) and the vat's primary explainer now that the
+                                                 "?" badge is gone. Gold, so it reads as "something is
+                                                 owed to you" rather than as chrome; it is on screen
+                                                 only while XP is actually waiting, which is what
+                                                 makes a slow 2.8s breath on it a signal instead of
+                                                 noise. Ambient-gated: under reduced motion it simply
+                                                 sits there, and it still says the number. -->
+                                            <Border x:Name="ProfileVatChip" x:FieldModifier="internal"
+                                                    Visibility="Collapsed" CornerRadius="8"
+                                                    HorizontalAlignment="Center" VerticalAlignment="Top"
+                                                    Padding="7,2,7,2.5" Cursor="Help"
+                                                    BorderBrush="#FFF3D0" BorderThickness="1"
+                                                    RenderTransformOrigin="0.5,0.5"
                                                     ToolTipService.InitialShowDelay="150"
                                                     ToolTipService.ShowDuration="60000">
-                                                <TextBlock Text="?" Foreground="#FFB3D6" FontSize="10" FontWeight="Bold"
-                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                           Margin="0,-1,0,0"/>
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                        <GradientStop Color="#FFE49A" Offset="0"/>
+                                                        <GradientStop Color="#E9A93B" Offset="1"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                                <Border.RenderTransform>
+                                                    <ScaleTransform x:Name="ProfileVatChipScale" x:FieldModifier="internal"/>
+                                                </Border.RenderTransform>
+                                                <Border.Effect>
+                                                    <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="1" Opacity="0.45"/>
+                                                </Border.Effect>
+                                                <TextBlock x:Name="ProfileVatChipText" x:FieldModifier="internal"
+                                                           Foreground="#3B2A08" FontSize="9.5" FontWeight="Bold"
+                                                           VerticalAlignment="Center"/>
                                                 <Border.ToolTip>
                                                     <ToolTip MaxWidth="340">
                                                         <TextBlock Text="{loc:Str profile_vat_help_tip}"

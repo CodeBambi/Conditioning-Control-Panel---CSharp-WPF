@@ -54,6 +54,15 @@
 }
 
 /* The glass. Locked rect, as a fraction of the body image. */
+/* THE FACE IS THE FLOOR OF THE STACK, NOT ITS CEILING (owner, 2026-08-30: "the
+ * face screen should never be on top of the costumes or the skins"). What an
+ * outfit wears on her tube - a collar, a pom-pom, goggles - is worn IN FRONT of
+ * the glass in the world, so it is worn in front of it here: `.emi-over`
+ * (widget.css, z2) is the topmost thing in her composition bar her own hands
+ * and her words. This `z-index: 0` is what makes that a RULE rather than a
+ * coincidence of `appendChild` order - without it the canvas is z-auto and the
+ * only thing keeping it under the garment is that widget.js happens to append
+ * `.emi-over` after it. Never raise it. */
 .emi-screen {
   position: absolute;
   left: 34.46%;
@@ -64,6 +73,7 @@
   image-rendering: crisp-edges;
   display: block;
   pointer-events: none;
+  z-index: 0;
 }
 
 /* THE OFF CHANNELS' GLASS (W3). A SECOND canvas on the EXACT rect above, laid

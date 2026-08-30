@@ -2137,6 +2137,12 @@ namespace ConditioningControlPanel
             // answer lands, instead of leaving a patron looking free until something else refreshes.
             IntakePass?.AttachEntitlementSources();
             ProfileSync = new ProfileSyncService();
+            // THE XP NUDGE (pitch "The tap holds", 2026-08-30): an earn outside a
+            // running session schedules one coalesced sync inside the existing 30s
+            // cooldown, so the vat's today_xp - and therefore what the tap is holding
+            // - moves within about a minute instead of whenever something unrelated
+            // next happens to sync.
+            ProfileSync.AttachXpNudge();
             // Constructing it costs nothing and issues no request: it fetches only when a
             // surface asks or its own background poll ticks. The poll started here is the
             // ungated 60s profile read that feeds the cross-device XP adopt

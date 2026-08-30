@@ -114,6 +114,23 @@ public static class EmiChains
 
     // ---------------------------------------------------------------- body poses
 
+    // ------------------------------------------------------------ THE SKIN LAW
+    //
+    // THE OUTFIT / SKIN LAYER IS THE TOPMOST THING IN EMI'S COMPOSITION. It is drawn above the
+    // face and above the glass. Face art may never paint over a garment.
+    //
+    // The bug that wrote the law down (owner, 2026-08-30): she wore the labcoat and the collar
+    // was BURIED under her screen. Her face is not part of the body PNG - it is a canvas laid
+    // over the glass rect, and the takeover glass is a second canvas on the same rect - so
+    // anything a garment draws across that rect is behind two layers of her own face unless the
+    // garment gets a layer of its own IN FRONT of them. A coat behind the screen is not a coat.
+    //
+    // The desk obeys it structurally rather than by convention: `OutfitOverImage` in
+    // EmiDeskWindow.xaml is authored AFTER `FaceLayer` inside `BodyRoot`, and
+    // EmiDeskLayerOrderTests pins that order, so a XAML edit that reorders them fails the suite
+    // instead of shipping a buried collar. The web twin is `.emi-over` at z-index 2 (widget.css)
+    // over the face canvas at z1; same law, same stack.
+
     /// <summary>
     /// The pose sheet. Every frame is the same 859x869 canvas with the same screen rect, so the
     /// face lands in exactly the same place whichever one is up. <c>body.png</c> keeps its name
@@ -233,6 +250,76 @@ public static class EmiChains
         catch (Exception ex)
         {
             Log.Debug(ex, "[EmiDesk] body path lookup failed for {Frame}", frame);
+            return null;
+        }
+    }
+
+    // ------------------------------------------------------- the outfit overlay
+
+    /// <summary>
+    /// THE WARDROBE SHEETS THAT EXIST AS ART, and the whole of what the desk knows about outfits.
+    ///
+    /// <para><b>The desk wears none of them today.</b> Nothing in <c>Services/EmiDesk/</c> or
+    /// <c>Windows/EmiDesk/</c> picks an outfit, prices one, unlocks one or draws one: the desk
+    /// paints the standard ten-pose set and nothing else. These four names are the campus's
+    /// (<c>OUTFITS</c> in <c>Resources/web/arcademy/emi/widget.js</c>), written down here so that
+    /// the day a sheet does reach the desk it resolves through the SAME contract the web already
+    /// uses rather than through a second one invented on the spot. Do not read a wardrobe, a
+    /// picker or a purchase into this list; there is none on this side.</para>
+    ///
+    /// <para><b>The ART, however, is already here.</b> The desk renders out of the campus's own
+    /// <c>Resources/web/arcademy/art/emi/</c> tree, which ships as Content, so all four sheets -
+    /// and the ten <c>swim/over-body-*.png</c> overlay frames - are sitting beside the exe right
+    /// now. <see cref="OverPath"/> finds them, which is why this layer is a real guarantee and not
+    /// a placeholder: hand <c>EmiDeskWindow.SetOutfit</c> the name "swim" and the goggles go up,
+    /// over her face, where they belong.</para>
+    /// </summary>
+    public static readonly IReadOnlyList<string> Outfits = new[] { "varsity", "labcoat", "cheer", "swim" };
+
+    /// <summary>
+    /// The naming contract, shared with the campus verbatim. A sheet is one folder down from the
+    /// standard art and keeps the standard file names - <c>&lt;outfit&gt;/body-idle.png</c> beside
+    /// <c>body-idle.png</c> - and the part of the garment that crosses her glass ships as a
+    /// sibling with an <c>over-</c> prefix: <c>&lt;outfit&gt;/over-body-idle.png</c>. That second
+    /// file is the same 859x869 canvas, transparent everywhere except the prop, and it is what THE
+    /// SKIN LAW above lays back over her face.
+    ///
+    /// <para><b>It is optional and it is silent.</b> Most sheets have no overlay and never will
+    /// (on the web only <c>swim</c> ships one, for the goggles). A missing file is not an error:
+    /// <see cref="OverPath"/> answers null, the layer stays collapsed, and the caller is expected
+    /// to ask ONCE per outfit and cache the verdict for the sitting - never per frame.</para>
+    /// </summary>
+    public static string OverFileName(string? frame)
+    {
+        var key = FrameKey(frame) ?? "idle";
+        return "over-" + BodyFrameFile[key];
+    }
+
+    /// <summary>Where a wardrobe sheet lives: one folder down from the standard art.</summary>
+    public static string OutfitDir(string? outfit) => outfit ?? string.Empty;
+
+    /// <summary>
+    /// Absolute path to a garment's OVERLAY frame - the art that rides over her face - or null when
+    /// there is no outfit, the name is junk, or the sheet simply has no overlay. Never throws.
+    ///
+    /// <para>Twin of <see cref="BodyPath"/> one folder down, and it deliberately does NOT fall back
+    /// to the standard art: there is no standard overlay, and half an overlay is worse than none.
+    /// The standard set answers null here for every pose, which is the correct answer.</para>
+    /// </summary>
+    public static string? OverPath(string? outfit, string? frame)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(outfit)) return null;
+            var dir = OutfitDir(outfit);
+            if (dir.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) return null;
+            var path = Path.Combine(AppContext.BaseDirectory,
+                "Resources", "web", "arcademy", "art", "emi", dir, OverFileName(frame));
+            return File.Exists(path) ? path : null;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] overlay path lookup failed for {Outfit}/{Frame}", outfit, frame);
             return null;
         }
     }
