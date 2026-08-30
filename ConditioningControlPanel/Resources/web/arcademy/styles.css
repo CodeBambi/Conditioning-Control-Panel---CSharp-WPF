@@ -5983,3 +5983,24 @@ html.arc-mobile[data-arc-orient="portrait"] .campus-clockhand {
   transform-box:fill-box;
   transform-origin:50% 100%;
 }
+
+/* ===================== THE FLAP'S TOUCH TWIN (2026-08-30) ====================
+   Phase 4b, the deliberately-deferred one: arc-flap repaints every vane's
+   BACKGROUND GRADIENT (and its ink) per frame, across a whole board of
+   characters, r/i-staggered - on a phone the timetable deal is a paint storm
+   right on the first screen. Same length, same delays, the same letter-reveal
+   color timing to the stop (splitflap.js's CHAR_STEP_MS math is coupled to the
+   .95s and reads nothing else), but the material never changes: the vane flips
+   on transform alone and keeps the resting face gradient it was born with.
+   Desktop keeps arc-flap byte for byte - this selector cannot win there. */
+html.ae-touch .board.play .fl { animation-name:arc-flap-touch; }
+@keyframes arc-flap-touch {
+  0%   { color:transparent; }
+  14%  { transform:rotateX(-72deg); }
+  28%  { transform:rotateX(0); color:transparent; }
+  42%  { transform:rotateX(-72deg); }
+  56%  { transform:rotateX(0); color:transparent; }
+  68%  { transform:rotateX(-40deg); color:var(--ink); }
+  80%  { transform:rotateX(0); }
+  100% { transform:rotateX(0); color:var(--ink); }
+}
