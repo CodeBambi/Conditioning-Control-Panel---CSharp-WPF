@@ -55,7 +55,7 @@ words is a website's budget, not a book somebody reads inside an app.
   "title": "the panic key",
   "blurb": "one key, everything off.",
   "target": "settings",
-  "tour": "SettingsTour",
+  "tour": "Settings",
   "margin": { "t": "press it once. i'm not offended.", "face": "-_-" },
   "blocks": [
     { "type": "p",        "text": "..." },
@@ -73,8 +73,10 @@ words is a website's budget, not a book somebody reads inside an app.
   thought, **<= 60 characters**, no em/en dashes, no emoji in `t`, `face` from the shipped set in
   `Resources/emi/desk-lines.json`. She never explains the chapter; she reacts to it.
 - `limit` - every chapter carries **one honest limitation**. A manual that admits nothing is not
-  trusted, and this app has real edges (overlays are excluded from capture, gaze needs light, the
-  panic key cannot stop a video the OS is still decoding).
+  trusted, and this app has real edges. Verify the edge before you write it. **Only Brain Drain
+  is excluded from screen capture** (`BrainDrainLayer.ExcludeFromCapture` overrides a `BaseLayer`
+  default of false), so the spiral, the pink filter, flashes and subliminals DO appear in a
+  recording. Gaze needs light. The panic key cannot un-decode a frame already in flight.
 
 ### Figure vocabulary - CSS and SVG only, pick from this list
 
