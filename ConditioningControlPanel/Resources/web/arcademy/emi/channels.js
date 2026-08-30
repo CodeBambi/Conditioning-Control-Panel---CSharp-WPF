@@ -664,6 +664,17 @@ export const saver = {
   uncapped: true,
   plan(ctx) {
     if (ctx.reducedMotion) return null;    // the deep-idle slot falls to OFF AIR
+    /* THE PHONE REFUSAL (perf/arcademy-mobile-dig): the one uncapped channel is
+     * a canvas repainting every column of every frame until input, and on a
+     * phone "deep idle" usually means the screen is burning in a pocket. The
+     * global GPU-ceiling marker (core/device.js - never set on desktop) sends
+     * the deep-idle slot to OFF AIR instead. pickDeepIdle consumed its seeded
+     * roll before asking, so the session stays deterministic either way. */
+    try {
+      const h = typeof document !== 'undefined' ? document.documentElement : null;
+      if (h && typeof h.getAttribute === 'function'
+        && h.getAttribute('data-ae-touch-global') === '1') return null;
+    } catch (e) { /* a probe must never cost the channel */ }
     return { seed: ctx.seed + '|rain' };
   },
   start(g, spec) {

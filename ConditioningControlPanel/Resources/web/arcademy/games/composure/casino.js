@@ -164,6 +164,13 @@ const STYLE_TEXT = `
 @keyframes g-cp-mqxr{to{background-position-x:-16px}}
 @keyframes g-cp-mqy{to{background-position-y:16px}}
 @keyframes g-cp-mqyr{to{background-position-y:-16px}}
+/* THE PHONE CEILING (html.ae-touch): the crawl repaints four dotted strips on
+   every frame for as long as the frame is up (background-position is a paint,
+   trap 36's whole point). steps() keeps the chase and pays for it three times
+   a second instead of sixty; the zen breathe rides the same clock. Desktop is
+   untouched - the class never lands there. */
+html.ae-touch .g-cp-mq .mq-t,html.ae-touch .g-cp-mq .mq-r,
+html.ae-touch .g-cp-mq .mq-b,html.ae-touch .g-cp-mq .mq-l{animation-timing-function:steps(6)}
 .g-cp-mq.g-cp-mq-zen i{animation:g-cp-mqbreathe calc(var(--cp-breath) * 1.2) ease-in-out infinite alternate}
 @keyframes g-cp-mqbreathe{from{opacity:.4;filter:none}to{opacity:1;filter:drop-shadow(0 0 4px var(--cp-n-mq, hsl(var(--cp-hue-a),80%,74%)))}}
 .g-cp-mq.g-cp-mq-bell{--cp-n-mq:var(--gold);filter:drop-shadow(0 0 6px rgba(240,194,75,.75))}

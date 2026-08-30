@@ -458,6 +458,10 @@ html.ae-touch .g-dt-neonbleed{filter:blur(12px);animation:none;opacity:1}
 /* the marquee's gold drop-shadow re-rasterised every frame of the crawl */
 html.ae-touch .g-dt-mq.g-dt-mq-gold{filter:none}
 html.ae-touch .g-dt-mq.g-dt-mq-flash{animation:g-dt-mqflash-t .6s ease-out 1}
+/* the crawl itself: background-position repaints all four strips every frame;
+   steps() keeps the chase at three paints a second on the phone */
+html.ae-touch .g-dt-mq .mq-t,html.ae-touch .g-dt-mq .mq-r,
+html.ae-touch .g-dt-mq .mq-b,html.ae-touch .g-dt-mq .mq-l{animation-timing-function:steps(6)}
 @keyframes g-dt-mqflash-t{0%{opacity:1}100%{opacity:var(--g-dt-mqa,.25)}}
 /* HUD chips: no live blur behind glass, so the glass turns solid instead */
 html.ae-touch .g-dt-hud .chip{backdrop-filter:none;-webkit-backdrop-filter:none;

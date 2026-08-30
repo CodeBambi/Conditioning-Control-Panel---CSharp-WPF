@@ -575,6 +575,13 @@ html.ae-touch .g-dv-almost{animation:g-dv-almost-t .62s ease-out both}
 html.ae-touch .g-dv-mq.g-dv-mq-bell{filter:none}
 html.ae-touch .g-dv-mq.g-dv-mq-flash{animation:g-dv-mqflash-t .6s ease-out 1}
 @keyframes g-dv-mqflash-t{0%{opacity:1}100%{opacity:var(--g-dv-mqa,.26)}}
+/* the crawl itself repaints four dotted strips every frame (background-position
+   is a paint); steps() keeps the chase at three paints a second on the phone */
+html.ae-touch .g-dv-mq .mq-t,html.ae-touch .g-dv-mq .mq-r,
+html.ae-touch .g-dv-mq .mq-b,html.ae-touch .g-dv-mq .mq-l{animation-timing-function:steps(6)}
+/* the preview beam: the sweep stays - it IS the telegraph - but its 18px+44px
+   glow smear was a grid-wide repaint riding every frame of it */
+html.ae-touch .g-dv-grid.scanning::after{box-shadow:none}
 /* the twins carry new names, so the reduced gate has to say its kills again */
 html.arc-reduced.ae-touch .g-dv-card.tell{animation:none;border-color:var(--gold);
   box-shadow:0 0 0 2px rgba(240,194,75,.55)}
