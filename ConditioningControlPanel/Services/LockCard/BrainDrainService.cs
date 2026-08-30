@@ -203,14 +203,8 @@ namespace ConditioningControlPanel.Services
             LoadAudioFiles();
         }
         
-        public void Start(bool bypassLevelCheck = false)
+        public void Start()
         {
-            if (!bypassLevelCheck && !App.Settings.Current.IsLevelUnlocked(70))
-            {
-                App.Logger?.Information("BrainDrain: Level {Level} is below 70, not available", App.Settings.Current.PlayerLevel);
-                return;
-            }
-
             if (!App.Settings.Current.BrainDrainEnabled)
             {
                 App.Logger?.Debug("BrainDrain: Not enabled in settings");

@@ -2915,7 +2915,7 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
-        #region Spiral Overlay (Unlocks Lv.10)
+        #region Spiral Overlay
 
         private bool _spiralEnabled = true;
         public bool SpiralEnabled
@@ -3008,7 +3008,7 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
-        #region Bubbles (Unlocks Lv.20)
+        #region Bubbles
         private bool _bubblesEnabled = false;
         public bool BubblesEnabled
         {
@@ -3941,7 +3941,7 @@ namespace ConditioningControlPanel.Models
         public bool HasRemoteMediaConsent => _remoteMediaConsented || _fypOnlineConsented;
         #endregion
 
-        #region Lock Card (Unlocks Lv.35)
+        #region Lock Card
         private bool _lockCardEnabled = false;
         public bool LockCardEnabled
         {
@@ -4175,7 +4175,7 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
-        #region Bubble Count Game (Unlocks Lv.50)
+        #region Bubble Count Game
 
         private bool _bubbleCountEnabled = false;
         public bool BubbleCountEnabled
@@ -4207,7 +4207,7 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
-        #region Bouncing Text (Unlocks Lv.60)
+        #region Bouncing Text
 
         private bool _bouncingTextEnabled = false;
         public bool BouncingTextEnabled
@@ -4345,7 +4345,7 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
-        #region Pink Filter (Unlocks Lv.10)
+        #region Pink Filter
 
         private bool _pinkFilterEnabled = false;
         public bool PinkFilterEnabled
@@ -4404,7 +4404,7 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
-        #region Mind Wipe (Unlocks Lv.75)
+        #region Mind Wipe
 
         private bool _mindWipeEnabled = false;
         public bool MindWipeEnabled
@@ -4435,8 +4435,8 @@ namespace ConditioningControlPanel.Models
         }
 
         // Custom mind-wipe audio clip. When set to an existing file, it overrides the
-        // built-in Resources/sounds/mindwipe folder (a short ~2s clip works best).
-        // Empty => fall back to the built-in audio folder.
+        // mind-wipe folders (assets\mindwipe, plus the built-in Resources\sounds\mindwipe
+        // clips; a short ~2s clip works best). Empty => fall back to those folders.
         private string _mindWipeAudioPath = "";
         public string MindWipeAudioPath
         {
@@ -4446,7 +4446,7 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
-        #region Brain Drain (Unlocks Lv.25)
+        #region Brain Drain
         private bool _brainDrainEnabled = false;
         public bool BrainDrainEnabled
         {
@@ -5312,7 +5312,7 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
-        #region Autonomy Mode (Unlocks Lv.100)
+        #region Autonomy Mode
 
         private bool _autonomyModeEnabled = false;
         /// <summary>

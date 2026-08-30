@@ -576,17 +576,6 @@ namespace ConditioningControlPanel.Services
             };
         }
 
-        public bool IsUnlocked(string feature, int currentLevel)
-        {
-            return feature switch
-            {
-                "spiral" => currentLevel >= 10,
-                "pink_filter" => currentLevel >= 10,
-                "bubbles" => currentLevel >= 20,
-                _ => true
-            };
-        }
-
         /// <summary>
         /// Check if a level is a milestone worth announcing (10, 25, 50, 100, 125, 150)
         /// </summary>

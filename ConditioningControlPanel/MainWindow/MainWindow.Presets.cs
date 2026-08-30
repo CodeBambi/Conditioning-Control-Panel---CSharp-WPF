@@ -2076,7 +2076,7 @@ namespace ConditioningControlPanel
 
             if (enabled)
             {
-                App.BrainDrain.Start(bypassLevelCheck: true);
+                App.BrainDrain.Start();
             }
             else
             {

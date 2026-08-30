@@ -121,8 +121,8 @@ namespace ConditioningControlPanel.Services
                 },
                 HowItWorks = "Messages display for the number of 'Frames' you set (1 frame is approximately " +
                              "16 milliseconds at 60fps). Position, font size, and colors can be customized " +
-                             "in the Settings popup. When Audio Whispers are enabled, a synthesized voice " +
-                             "speaks the message simultaneously with the visual flash."
+                             "in the Settings popup. When Audio Whispers are enabled and a message has a " +
+                             "matching whisper audio file, that recording plays alongside the visual flash."
             },
 
             ["System"] = new HelpContent
@@ -1000,12 +1000,12 @@ namespace ConditioningControlPanel.Services
                 Title = "Spiral Overlay",
                 WhatItDoes = "Displays a hypnotic spiral animation overlaid on all monitors. " +
                              "Choose from built-in spiral GIFs or your own, adjust the opacity for " +
-                             "subtle or intense effect. Unlocks at Level 10.",
+                             "subtle or intense effect.",
                 Tips = new List<string>
                 {
                     "Start with 10-20% opacity for a gentle background effect",
                     "Pick 30-50% opacity when you want the spiral to dominate the view",
-                    "Drop your own spiral GIFs into assets/spirals to expand the selection",
+                    "Add your own spiral GIFs through the Spiral Library popup to expand the selection",
                     "If the overlay looks wrong on your display, check your monitor's DPI scaling",
                     "Pair with Pink Filter for a soft, dreamy conditioning atmosphere"
                 },
@@ -1023,9 +1023,8 @@ namespace ConditioningControlPanel.Services
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83D\uDC97",
                 Title = "Pink Filter",
-                WhatItDoes = "Tints every screen with a soft pink overlay — subtle or intense, your choice. " +
-                             "Reinforces the pink aesthetic without blocking your view of what you're doing. " +
-                             "Unlocks at Level 10.",
+                WhatItDoes = "Tints every screen with a soft pink overlay - subtle or intense, your choice. " +
+                             "Reinforces the pink aesthetic without blocking your view of what you're doing.",
                 Tips = new List<string>
                 {
                     "5-15% opacity is a whisper of pink that's easy to forget is even on",
@@ -1049,8 +1048,7 @@ namespace ConditioningControlPanel.Services
                 Icon = "\uD83E\uDEE7",
                 Title = "Bubble Pop",
                 WhatItDoes = "A playful mini-game that spawns floating bubbles on your screen. Pop them " +
-                             "by clicking to earn XP — a lightweight distraction that rewards attention. " +
-                             "Unlocks at Level 20.",
+                             "by clicking to earn XP - a lightweight distraction that rewards attention.",
                 Tips = new List<string>
                 {
                     "Start with a low spawn rate and turn it up once you're comfortable",
@@ -1074,8 +1072,7 @@ namespace ConditioningControlPanel.Services
                 Icon = "\uD83D\uDD12",
                 Title = "Lock Card",
                 WhatItDoes = "Periodically locks your screen with a card that requires you to type a phrase " +
-                             "to dismiss. Reinforces conditioning through repetition and typed affirmation. " +
-                             "Unlocks at Level 35.",
+                             "to dismiss. Reinforces conditioning through repetition and typed affirmation.",
                 Tips = new List<string>
                 {
                     "Start at 1-2 cards per hour — they're more intrusive than flashes",
@@ -1099,7 +1096,7 @@ namespace ConditioningControlPanel.Services
                 Icon = "\uD83D\uDCFA",
                 Title = "Bouncing Text",
                 WhatItDoes = "DVD-screensaver-style text that bounces around your screen with customizable " +
-                             "phrases. Earns XP every time the text bounces off a corner. Unlocks at Level 60.",
+                             "phrases. Earns XP every time the text bounces off a corner.",
                 Tips = new List<string>
                 {
                     "Use Edit Phrases to load your own affirmations into the rotation",
@@ -1121,7 +1118,7 @@ namespace ConditioningControlPanel.Services
                 Title = "Mind Wipe",
                 WhatItDoes = "Random mind-wipe audio effects that escalate in frequency during sessions. " +
                              "A dedicated volume channel keeps wipe sounds independent from everything " +
-                             "else. Unlocks at Level 75.",
+                             "else.",
                 Tips = new List<string>
                 {
                     "Start at 6-12 per hour — the audio is disorienting on purpose",
@@ -1145,7 +1142,7 @@ namespace ConditioningControlPanel.Services
                 Icon = "\uD83E\uDEE7",
                 Title = "Bubble Count",
                 WhatItDoes = "A memory and attention challenge: bubbles appear on screen briefly, then you " +
-                             "must answer how many you saw. Answer correctly for bonus XP. Unlocks at Level 50.",
+                             "must answer how many you saw. Answer correctly for bonus XP.",
                 Tips = new List<string>
                 {
                     "Start on Easy and move up once you're consistently getting them right",

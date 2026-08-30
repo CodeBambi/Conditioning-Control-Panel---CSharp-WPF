@@ -20,11 +20,11 @@ namespace ConditioningControlPanel.Services.EmiDesk;
 /// <list type="bullet">
 /// <item><b>Levels do not unlock anything.</b> <c>AppSettings.IsLevelUnlocked</c> is a stub that
 /// returns <c>true</c> unconditionally ("Feature level gating has been removed - every feature is
-/// available from level 1"), so the "Unlocks Lv.NN" region headers all through
-/// <c>Models/AppSettings.cs</c>, the five surviving <c>IsLevelUnlocked(70)</c> Brain Drain checks
-/// and the existing THE CCP card's "levels open tools you do not have yet" are all describing a
-/// system that was taken out. The PROGRESSION card therefore says what a level actually pays -
-/// one skill point - and never promises a door.</item>
+/// available from level 1"). The "Unlocks Lv.NN" region headers, the dead Brain Drain
+/// <c>IsLevelUnlocked(70)</c> checks and the "Unlocks at Level N" tooltip strings were cleaned
+/// out in the v6.8.7 UI-truth pass, so the shipped UI now agrees with these cards. The
+/// PROGRESSION card says what a level actually pays - one skill point - and never promises a
+/// door.</item>
 /// <item><b>The session engine is a clock, not a mind.</b> The root <c>CLAUDE.md</c> still calls it
 /// "AI-powered session management with OpenRouter integration"; <c>SessionEngine.cs</c> is a
 /// one-second <c>DispatcherTimer</c> that lerps opacities and fires deferred starts, with no

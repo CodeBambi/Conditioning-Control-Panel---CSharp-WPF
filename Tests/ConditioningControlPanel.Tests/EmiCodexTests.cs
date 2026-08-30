@@ -53,15 +53,16 @@ public class EmiCodexTests
     // =====================================================================================
 
     /// <summary>
-    /// SEVENTH, and this is the whole reason the assertion is worth a test. Catalogue order IS the
-    /// ring before any usage exists, so the first six entries belong to a brand new user and moving
-    /// the book up would silently take one of them away. Sixth is an owner call; seventh is ours.
+    /// SIXTH, and this is the whole reason the assertion is worth a test. Catalogue order IS the
+    /// ring before any usage exists, so the first six entries belong to a brand new user. The book
+    /// shipped seventh because taking a ring slot is an owner call, not a build decision - and on
+    /// 2026-08-30 the owner made it: the manual belongs in a new user's ring, videos steps down.
     /// </summary>
     [Fact]
-    public void The_book_sits_seventh_in_the_catalogue()
+    public void The_book_sits_sixth_in_the_catalogue()
     {
-        Assert.Equal(6, EmiTargets.OrderOf(EmiCodex.TargetId));
-        Assert.Equal(EmiCodex.TargetId, EmiTargets.All[6].Id);
+        Assert.Equal(5, EmiTargets.OrderOf(EmiCodex.TargetId));
+        Assert.Equal(EmiCodex.TargetId, EmiTargets.All[5].Id);
     }
 
     /// <summary>

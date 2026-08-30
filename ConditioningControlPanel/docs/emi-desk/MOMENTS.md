@@ -32,7 +32,10 @@ Column notes:
 
 - `ctx` uses the payload token names already locked in `VOICE.md`: `{target}` `{n}` `{level}`
   `{minutes}` `{streak}` `{name}`, plus moment-local extras named in the cell.
-- `odds` are roughly HALF the Arcademy's (the desktop floor is 180s, `VOICE.md` / brainstorm §A).
+- `odds` in the tables below were AUTHORED at roughly half the Arcademy's, paying for a planned
+  180s floor. The floor shipped at 45s (`LINES-AUDIT.md`) and never moved, so v6.8.7 doubled the
+  spontaneous odds back (cap 1.0; holds and always-say ceremony untouched) and added the `ambient`
+  clock beat. The shipped `desk-lines.json` is the authority, not these draft columns.
 - `priority`: 1 = low ambient (drop it if anything else wants the bubble), 2 = normal, 3 = must-say
   (ceremony, exempt from the global floor).
 - `pool` = how many SPECIFIC lines the writers should produce for that moment's own pool. 0 = wordless
@@ -325,7 +328,8 @@ channel; the face and chain still play.
    is the only thing that may ride it. Same rule as the campus.
 9. **Video.** One bark per video maximum, never before 8s in, never in the last 5s, never over the
    attention check, never a comment on what is in the video, never a nudge to keep watching.
-10. **Global floor.** 180s between any two spontaneous lines (double the campus). Priority-3 ceremony
+10. **Global floor.** 45s between any two spontaneous lines (BRIEF §8; a 180s floor was drafted
+    here but never shipped, and the odds have been re-tuned to the 45s reality). Priority-3 ceremony
     moments (`desktopFirstBoot`, `levelUp`, `sessionCompleted`, `streakMilestone`, `bedtimeSet`) are
     exempt; nothing else is.
 11. **Doubles ration.** One `"double": true` line per session across ALL pools, `common.idle` and

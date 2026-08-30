@@ -23,7 +23,7 @@
                    FontWeight="SemiBold"/>
 
         <TextBlock Grid.Row="1"
-                   Text="Pin a looping GIF to a screen corner — on all the time, not just during a session. Turn on one or both slots and point each at a different corner (great for covering minimaps, HUD corners, or just decoration). Overlays are click-through."
+                   Text="Pin a looping GIF to a screen corner. Turn on one or both slots and point each at a different corner (great for covering minimaps, HUD corners, or just decoration). Overlays are click-through; a session that brings its own corner GIF borrows the slot and hands it back after."
                    Foreground="#A0A0B0"
                    FontSize="12"
                    TextWrapping="Wrap"

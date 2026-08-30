@@ -1818,13 +1818,23 @@ public sealed class EmiDeskService : IDisposable
             }
             else if (idleSeconds >= 300)
             {
-                // Deliberately unlatched: the ambient heartbeat. Its own 5 min cooldown and 0.06
-                // odds are the rate limit, so this is roughly one murmur an hour of sitting still.
+                // Deliberately unlatched: the away-from-keyboard murmur. Its own 5 min cooldown
+                // and 0.12 odds are the rate limit - a murmur or two an hour of sitting still.
                 Fire("idleShort", new { minutes = idleSeconds / 60 });
             }
             else
             {
                 _saidIdleLong = false;   // input came back, so the long-idle beat may arm again
+
+                // THE AMBIENT BEAT: somebody actively at the keyboard. This is the desktop's
+                // answer to the avatar's 120s chance-1.0 speech timer - without it she only ever
+                // spoke when something happened or when the user walked away, which measured out
+                // at roughly 2 lines per 10 minutes against the avatar's ~8 and the campus's
+                // 6.5-10.7. Odds 0.5 on this 60s tick with a 120s cooldown is ~2.5 lines per 10
+                // minutes from this beat alone; with the event moments back at full odds (the
+                // halving paid for a 180s floor that actually shipped at 45s) she lands near 7-9.
+                // The 45s global floor, the mute switch and the recent-line ring still govern.
+                Fire("ambient", null);
             }
         }
         catch (Exception ex)

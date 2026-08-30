@@ -146,7 +146,7 @@ namespace ConditioningControlPanel
             body.Children.Add(pickBtn);
             body.Children.Add(new TextBlock
             {
-                Text = "Leave unset to use your selected spiral (from the Spiral Library).",
+                Text = "Leave unset to use the built-in spiral (a mod pack can swap in its own).",
                 Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x90)),
                 FontSize = 10,
                 TextWrapping = TextWrapping.Wrap,

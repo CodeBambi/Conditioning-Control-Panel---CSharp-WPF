@@ -523,7 +523,7 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "deeper",
                 Aliases = new[] { "deeper", "go deeper", "take me deeper", "sink deeper", "drop deeper", "deeper now", "further down", "take me down", "drop me down", "make me go deeper", "i want to go deeper" },
-                Execute = () => App.BrainDrain?.Start(bypassLevelCheck: true),
+                Execute = () => App.BrainDrain?.Start(),
                 VoiceRuleId = "voicecmd_deeper",
                 Confirm = new()
                 {

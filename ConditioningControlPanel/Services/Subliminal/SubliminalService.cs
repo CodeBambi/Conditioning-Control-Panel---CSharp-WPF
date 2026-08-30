@@ -359,7 +359,9 @@ namespace ConditioningControlPanel.Services
             var text = App.Mods?.GetFreezeTriggerText() ?? "Freeze";
             string? audioPath = FindLinkedAudio(text);
 
-            if (audioPath != null)
+            // Same gate as the normal subliminal path above: "Mute Whispers" mutes this trigger
+            // too. Until v6.8.7 the freeze whisper played straight through the mute setting.
+            if (audioPath != null && App.Settings.Current.SubAudioAudible)
             {
                 // Duck other audio, play whisper, then show visual
                 if (App.Settings.Current.AudioDuckingEnabled)
@@ -392,9 +394,9 @@ namespace ConditioningControlPanel.Services
             }
             else
             {
-                // No audio file, just show visual with haptic
+                // No audio file, or whispers muted: just the visual with haptic
                 TriggerSubliminalWithHapticPattern(text);
-                App.Logger?.Information("Bambi Freeze triggered (no audio file found)");
+                App.Logger?.Information("Bambi Freeze triggered (no audio file, or whispers muted)");
             }
         }
 
