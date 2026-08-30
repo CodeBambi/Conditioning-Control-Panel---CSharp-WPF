@@ -22,8 +22,11 @@ public enum EmiChromePart
     /// <summary>The gear, top left. Her options.</summary>
     Gear = 1 << 2,
 
+    /// <summary>The ?, under the gear. Her book.</summary>
+    Help = 1 << 3,
+
     /// <summary>The corner resize handle, bottom right.</summary>
-    Grip = 1 << 3,
+    Grip = 1 << 4,
 }
 
 /// <summary>

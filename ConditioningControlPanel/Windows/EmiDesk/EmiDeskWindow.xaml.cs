@@ -286,10 +286,12 @@ public partial class EmiDeskWindow : Window
         WireChromePart(BodyRoot, EmiChromePart.Body);
         WireChromePart(BtnClose, EmiChromePart.Close);
         WireChromePart(BtnGear, EmiChromePart.Gear);
+        WireChromePart(BtnHelp, EmiChromePart.Help);
         WireChromePart(ResizeGrip, EmiChromePart.Grip);
 
         BtnClose.Click += OnCloseClick;
         BtnGear.Click += OnGearClick;
+        BtnHelp.Click += OnHelpClick;
 
         // A press on a chip is a HOLD: the button has capture, so a pointer that slides off it
         // mid-press raises a leave the region would otherwise act on, and the chrome would fade
@@ -297,11 +299,13 @@ public partial class EmiDeskWindow : Window
         // lost capture, because a press that ends outside the window never sees the up.
         WireChromePress(BtnClose);
         WireChromePress(BtnGear);
+        WireChromePress(BtnHelp);
 
         try
         {
             BtnClose.ToolTip = Loc.Get("emi_desk_tip_close");
             BtnGear.ToolTip = Loc.Get("emi_desk_tip_gear");
+            BtnHelp.ToolTip = Loc.Get("emi_desk_tip_help");
             ResizeGrip.ToolTip = Loc.Get("emi_desk_tip_grip");
         }
         catch (Exception ex) { Log.Debug(ex, "[EmiDesk] chrome tooltips failed"); }
@@ -315,6 +319,7 @@ public partial class EmiDeskWindow : Window
         // XAML so the two halves of "lit" are decided in one place.
         BtnClose.IsHitTestVisible = false;
         BtnGear.IsHitTestVisible = false;
+        BtnHelp.IsHitTestVisible = false;
 
         try { _bodyWidth = ClampWidth(App.Settings?.Current?.EmiDeskWidth ?? 220); }
         catch { _bodyWidth = 220; }
@@ -471,6 +476,17 @@ public partial class EmiDeskWindow : Window
             BtnGear.Width = chip + 2 * ChipPad;
             BtnGear.Height = chip + 2 * ChipPad;
             BtnGear.Margin = new Thickness(insetX - gearLeft, insetY - gearTop, 0, 0);
+
+            // The ? rides directly under the gear, same column, same drawn size. Its top margin is
+            // the gear's margin plus the gear's FULL height, which is the hit area and not the
+            // chip, so the two forgiving squares sit edge to edge and can never both claim a click.
+            // ChipGap is added on top of that as visible air between the two drawn chips: without
+            // it the hit areas would still be correct but the two circles would look welded.
+            BtnHelp.Padding = BtnGear.Padding;
+            BtnHelp.Width = BtnGear.Width;
+            BtnHelp.Height = BtnGear.Height;
+            BtnHelp.Margin = new Thickness(BtnGear.Margin.Left,
+                                           BtnGear.Margin.Top + BtnGear.Height + ChipGap, 0, 0);
 
             // The grip's HIT AREA, floored at 22 DIP so the cursor catches it at every body width
             // (owner call, QA 2026-08-29). The glyph inside it does not grow with it.
@@ -1092,6 +1108,13 @@ public partial class EmiDeskWindow : Window
     /// </summary>
     private const double ChipPad = 8.0;
 
+    /// <summary>
+    /// Visible air between the gear and the ? stacked under it, in DIPs. The hit areas already
+    /// abut without it (each button is <see cref="ChipPad"/>-padded on every side); this is purely
+    /// so the two drawn circles do not read as one welded pill.
+    /// </summary>
+    private const double ChipGap = 2.0;
+
     /// <summary>Report one element's enters and leaves into the region.</summary>
     private void WireChromePart(FrameworkElement el, EmiChromePart part)
     {
@@ -1219,6 +1242,10 @@ public partial class EmiDeskWindow : Window
             var c = new DoubleAnimation(to, TimeSpan.FromMilliseconds(140));
             BtnGear.BeginAnimation(OpacityProperty, c);
 
+            // And the ? rides the gear. Same reasoning, its own animation object.
+            var h = new DoubleAnimation(to, TimeSpan.FromMilliseconds(140));
+            BtnHelp.BeginAnimation(OpacityProperty, h);
+
             // BOTH CHIPS ARE ONLY HIT-TESTABLE WHILE THEY ARE LIT, and that is not cosmetic. Their
             // hit areas are chip + 2 x ChipPad DIPs (see ChipPad), which is a 34 DIP square in each
             // top corner of her at her default width; left permanently hit-testable, those squares
@@ -1227,6 +1254,7 @@ public partial class EmiDeskWindow : Window
             // reachable exactly when it is visible and inert the rest of the time.
             BtnClose.IsHitTestVisible = lit;
             BtnGear.IsHitTestVisible = lit;
+            BtnHelp.IsHitTestVisible = lit;
 
             // The x is hover-only; the grip is not. It rests faint and goes solid under the
             // pointer, so a user who has never dragged her still sees where the corner is - and it
@@ -1412,6 +1440,36 @@ public partial class EmiDeskWindow : Window
         catch (Exception ex)
         {
             Log.Debug(ex, "[EmiDesk] gear failed");
+        }
+    }
+
+    /// <summary>
+    /// HER BOOK. The ? under the gear opens the codex, and that is the whole of it.
+    ///
+    /// <para>It deliberately does NOT go through a moment. Everything else she opens, she is asked
+    /// about first and may decline; this is the user reaching for the manual, and a manual that
+    /// answers a direct request with a coin flip is not a manual. <see cref="EmiCodex.Open"/> is
+    /// already idempotent and already falls back to the plain reader when the illustrated bundle or
+    /// the WebView2 runtime is missing, so there is nothing to guard here beyond the panel and ring
+    /// tidy-up the gear does.</para>
+    /// </summary>
+    private void OnHelpClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (InputLocked || _transiting) return;
+            RaiseActivity();
+
+            // Her two panels are anchored on the same body as the book's own window, and three
+            // things fanned out around her is a mess nobody can aim at.
+            try { CloseOptionsPanel(); } catch (Exception ex) { Log.Debug(ex, "[EmiDesk] options tidy before the book failed"); }
+            try { CloseRing(); } catch (Exception ex) { Log.Debug(ex, "[EmiDesk] fold before the book failed"); }
+
+            EmiCodex.Open();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] the book chip failed");
         }
     }
 
