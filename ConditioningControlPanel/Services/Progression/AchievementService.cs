@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
@@ -19,6 +20,29 @@ public class AchievementService : IDisposable
     private readonly DispatcherTimer _saveTimer;
     private readonly DispatcherTimer _trackingTimer;
     private bool _isDirty;
+
+    /// <summary>
+    /// Serialises every writer of <see cref="_progressPath"/>. Before this existed the 30s autosave
+    /// timer's fire-and-forget <c>Task.Run</c> and the synchronous <see cref="Save"/> that
+    /// TryUnlock / lock cards / video minutes call could both be inside <c>File.WriteAllText</c> on
+    /// the SAME path at the same time. See <see cref="WriteProgress"/>.
+    /// </summary>
+    private readonly object _saveLock = new();
+
+    /// <summary>Identical for every write - build them once, not once per save.</summary>
+    private static readonly JsonSerializerOptions SaveOptions = new() { WriteIndented = true };
+
+    /// <summary>
+    /// Flush <see cref="TrackBubblePopped"/> to disk every this many pops (#1071).
+    ///
+    /// <para>Pops are a hot path - click-spam and a Rabbit Hole run fire them many times a second -
+    /// so they cannot call <see cref="Save"/> inline the way lock cards and video minutes do. But
+    /// leaving them to the 30s timer alone is what lost the count. 50 is the middle ground: the
+    /// worst case is losing the last 49 pops, and even at a sustained 10 pops/second it is one
+    /// small write every 5 seconds. It also divides 100, so every sparkle-point milestone is
+    /// banked by the same flush.</para>
+    /// </summary>
+    private const int BubbleSaveEveryNPops = 50;
     private DateTime _lastPinkFilterCheck = DateTime.Now;
     private DateTime _lastSpiralCheck = DateTime.Now;
     private DateTime _lastBrainDrainCheck = DateTime.Now;
@@ -92,26 +116,11 @@ public class AchievementService : IDisposable
         _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
         _saveTimer.Tick += (s, e) =>
         {
-            if (_isDirty)
-            {
-                _isDirty = false;
-                var json = JsonSerializer.Serialize(_progress, new JsonSerializerOptions { WriteIndented = true });
-                var path = _progressPath;
-                _ = Task.Run(() =>
-                {
-                    try
-                    {
-                        var dir = Path.GetDirectoryName(path);
-                        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                            Directory.CreateDirectory(dir);
-                        File.WriteAllText(path, json);
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Error(ex, "Failed to save achievement progress");
-                    }
-                });
-            }
+            if (!_isDirty) return;
+            _isDirty = false;
+            // Still off the UI thread, but through the one writer that holds _saveLock and lands
+            // the bytes atomically - this tick used to race the synchronous Save() below.
+            _ = Task.Run(WriteProgress);
         };
         _saveTimer.Start();
         
@@ -135,41 +144,134 @@ public class AchievementService : IDisposable
             _progress.UnlockedAchievements.Count);
     }
     
+    /// <summary>
+    /// Loads achievements.json, falling back to the <c>.bak</c> sibling
+    /// <see cref="WriteProgress"/> leaves behind.
+    ///
+    /// <para>A file that EXISTS but will not parse is now logged at Error, loudly and by name. The
+    /// old behaviour - swallow the JsonException and hand back a fresh, empty
+    /// <see cref="AchievementProgress"/> - is what turned a single truncated write into permanent,
+    /// unexplained total loss: every counter reset and, because <see cref="TryUnlock"/> early-returns
+    /// on <c>IsUnlocked</c>, every already-earned achievement popped again on the next launch
+    /// (#1071 / #1074). "No file yet" (a first launch) and "the file is corrupt" look like the same
+    /// silence to the user, so they must not be the same silence in the log.</para>
+    /// </summary>
     private AchievementProgress LoadProgress()
     {
-        try
+        var backupPath = _progressPath + ".bak";
+
+        foreach (var (path, label) in new[] { (_progressPath, "achievements.json"), (backupPath, "achievements.json.bak") })
         {
-            if (File.Exists(_progressPath))
+            if (!File.Exists(path)) continue;
+
+            try
             {
-                var json = File.ReadAllText(_progressPath);
-                return JsonSerializer.Deserialize<AchievementProgress>(json) ?? new AchievementProgress();
+                var json = File.ReadAllText(path);
+                var loaded = JsonSerializer.Deserialize<AchievementProgress>(json);
+                if (loaded == null)
+                {
+                    App.Logger?.Error("Achievement progress {File} parsed to null - treating it as corrupt", label);
+                    continue;
+                }
+
+                if (!string.Equals(path, _progressPath, StringComparison.Ordinal))
+                {
+                    App.Logger?.Warning(
+                        "RECOVERED achievement progress from {File} after the main file failed to load. {Count} unlock(s) preserved.",
+                        label, loaded.UnlockedAchievements?.Count ?? 0);
+                }
+
+                return loaded;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex,
+                    "Achievement progress {File} EXISTS but failed to parse - this is data loss unless the backup loads", label);
             }
         }
-        catch (Exception ex)
+
+        if (File.Exists(_progressPath) || File.Exists(backupPath))
         {
-            App.Logger?.Error(ex, "Failed to load achievement progress");
+            App.Logger?.Error(
+                "Achievement progress could not be read from achievements.json OR its backup - starting EMPTY. Cloud sync will restore what it holds.");
         }
-        
+
         return new AchievementProgress();
     }
-    
+
+    /// <summary>
+    /// The ONE writer of achievements.json: serialised under <see cref="_saveLock"/>, and the bytes
+    /// land atomically.
+    ///
+    /// <para>This is the #1071 / #1074 root cause. Every previous writer was a bare
+    /// <c>File.WriteAllText</c>, which opens <c>FileMode.Create</c> and truncates the file BEFORE the
+    /// new bytes land. Two of them ran unsynchronised - the 30s autosave timer's fire-and-forget
+    /// <c>Task.Run</c> and the synchronous <see cref="Save"/> that TryUnlock, lock cards and video
+    /// minutes call - and <c>App.OnExit</c> ends in <c>TerminateProcess</c>, which kills an
+    /// in-flight background write outright. Either way the document left on disk was truncated,
+    /// <see cref="LoadProgress"/> read it as "empty", and the user lost every counter and every
+    /// unlock: the bubble total fell back to whatever last reached the cloud (the sync merge is
+    /// take-higher, so the cloud value is a floor, not a repair) and the emptied unlocked set
+    /// stopped <see cref="TryUnlock"/> early-returning, so earned achievements popped all over
+    /// again on the next launch.</para>
+    ///
+    /// <para>Mirrors <see cref="Companion.Brain.MemoryStore.AtomicWrite"/> - temp file, then an
+    /// atomic replace - and additionally keeps the previous good document as a <c>.bak</c> sibling,
+    /// because this file is the only local record of progress that cannot be recomputed.
+    /// <c>File.Replace</c> does the swap and the backup in one atomic NTFS operation.</para>
+    /// </summary>
+    private void WriteProgress()
+    {
+        lock (_saveLock)
+        {
+            try
+            {
+                var dir = Path.GetDirectoryName(_progressPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+
+                // Serialise INSIDE the lock. _progress is mutated on the UI thread, so a background
+                // write that serialised outside it could capture a half-updated object graph.
+                var json = JsonSerializer.Serialize(_progress, SaveOptions);
+
+                var tmp = _progressPath + ".tmp";
+                File.WriteAllText(tmp, json, Encoding.UTF8);
+
+                if (File.Exists(_progressPath))
+                {
+                    try
+                    {
+                        File.Replace(tmp, _progressPath, _progressPath + ".bak", ignoreMetadataErrors: true);
+                    }
+                    catch (Exception ex) when (ex is PlatformNotSupportedException or IOException or UnauthorizedAccessException)
+                    {
+                        // File.Replace is not supported everywhere (FAT32 media, some network
+                        // redirectors). Losing the .bak is survivable; losing the save is not.
+                        App.Logger?.Debug(ex, "File.Replace unavailable for achievements.json, falling back to move");
+                        File.Move(tmp, _progressPath, overwrite: true);
+                    }
+                }
+                else
+                {
+                    File.Move(tmp, _progressPath, overwrite: true);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Re-arm the dirty flag so the next tick retries. The old timer cleared it BEFORE
+                // the write, so a failed write silently discarded everything since the last good one.
+                _isDirty = true;
+                App.Logger?.Error(ex, "Failed to save achievement progress");
+            }
+        }
+    }
+
     public void Save()
     {
-        try
-        {
-            var dir = Path.GetDirectoryName(_progressPath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-            {
-                Directory.CreateDirectory(dir);
-            }
-            
-            var json = JsonSerializer.Serialize(_progress, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_progressPath, json);
-        }
-        catch (Exception ex)
-        {
-            App.Logger?.Error(ex, "Failed to save achievement progress");
-        }
+        _isDirty = false;
+        WriteProgress();
     }
     
     /// <summary>
@@ -491,6 +593,17 @@ public class AchievementService : IDisposable
             }
         }
 
+        // #1071: a pop used to set _isDirty and nothing else, leaving the entire run's count to the
+        // 30s autosave timer - a DispatcherTimer running at DispatcherPriority.Background (its
+        // default), whose write App.OnExit's TerminateProcess can kill outright. Lock cards and
+        // video minutes have always called Save() inline for exactly this reason. Pops cannot: they
+        // are a hot path and a disk write per pop would be felt. So the flush is counted, not timed
+        // - bounded by POPS rather than by wall clock or by shutdown timing.
+        if (_progress.TotalBubblesPopped % BubbleSaveEveryNPops == 0)
+        {
+            Save();
+        }
+
         // Track for quests
         App.Quests?.TrackBubblePopped();
     }
@@ -532,6 +645,9 @@ public class AchievementService : IDisposable
                 ShowBubbleMilestoneNotification(after - after % 100);
             }
         }
+
+        // Called once at run-end, not per pop, so an inline flush costs nothing here (#1071).
+        Save();
 
         // Track for quests (advance by the full batch, not one)
         App.Quests?.TrackBubblesPopped(count);
@@ -1121,10 +1237,19 @@ public class AchievementService : IDisposable
         return TryUnlock(achievementId);
     }
     
+    /// <summary>
+    /// Last chance the process gets to persist progress: App.OnExit calls this and then ends in
+    /// <c>TerminateProcess</c>, which skips finalizers and ProcessExit handlers entirely. Each step
+    /// is guarded individually so a throw while stopping a timer cannot skip the flush that follows
+    /// it - that flush is the whole point of being here.
+    /// </summary>
     public void Dispose()
     {
-        _saveTimer.Stop();
-        _trackingTimer.Stop();
+        try { _saveTimer.Stop(); } catch (Exception ex) { App.Logger?.Debug(ex, "AchievementService: save timer stop failed"); }
+        try { _trackingTimer.Stop(); } catch (Exception ex) { App.Logger?.Debug(ex, "AchievementService: tracking timer stop failed"); }
+
+        // Synchronous by design: WriteProgress takes _saveLock, so this also waits out any autosave
+        // Task.Run still in flight instead of racing it into a truncated file.
         Save();
     }
 }
