@@ -2111,6 +2111,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           onOpenCard: () => showIdCard(),
           onAction: postAccountAction,
         },
+        /* THE FRAME, on the card in the corner of the quad. The SAME getter the
+         * spotlight takes, so the 560px card and the laminated one can never
+         * show different frames - and it is the getter and not a value because
+         * the campus outlives an equip made in the Locker. */
+        idFrame,
         log: say,
       });
       campus.noteDescriptors(campusDescriptors());
@@ -3613,11 +3618,18 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
        * it, and the `set_bell` bus message stays unused (it writes the
        * ownership slot, which a preview must never touch). */
       bellOwned: () => ownsSku('brass_bell'),
-      /* A FRAME CHANGED WHILE THE CARD IS UP. setProfile() is the card's own
-       * repaint and it ends in paintFrame(), so this is the whole of it. In
-       * practice the spotlight is never up while the Locker is (clearScreen
-       * dismisses it), but the toast's equip verb can fire from anywhere. */
+      /* A FRAME CHANGED. BOTH CARDS WEAR IT, and for two waves only one did -
+       * the spotlight's 560px card repainted and the laminated card in the
+       * corner of the quad never heard about it, so a 300-ticket frame read as
+       * "does nothing" to anyone who bought one and walked back outside.
+       * The spotlight is never up while the Locker is (clearScreen dismisses
+       * it) but the toast's equip verb can fire from anywhere, and the campus
+       * IS still mounted underneath - so it is the one that actually needs
+       * telling. setProfile() is the spotlight's own repaint and it ends in
+       * paintFrame(); refreshFrame() is the campus's. */
       refreshIdCard: () => {
+        try { if (campus && campus.refreshFrame) campus.refreshFrame(); }
+        catch (e) { /* the corner card repaints on the next update() regardless */ }
         try { if (idSpotlight && idSpotlight.isOpen && idSpotlight.isOpen()) idSpotlight.setProfile(); }
         catch (e) { /* the card repaints on its next open regardless */ }
       },

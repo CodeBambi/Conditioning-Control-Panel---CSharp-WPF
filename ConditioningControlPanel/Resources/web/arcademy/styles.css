@@ -57,6 +57,14 @@
   /* the student ID's chip LED on its unlinked rung - the ONE place a brand
      colour appears in this school, and it is a 6px dot (shell/idcard.js) */
   --discord:#5865F2;
+  /* THE NAVY VARSITY FRAME's edge (id_frame_navy). It is a token because the
+     purchase reveal PROMISES this exact blue - shell/reveal.css paints
+     `[data-frame="navy"]` #6C8BE0 the instant the frame is bought - and for two
+     waves the card it landed on only nudged its own lavender hairline instead,
+     which is most of why a 300-ticket frame read as "does nothing". The reveal
+     is the spec; this is the reveal's colour, named once so the two cards and
+     the reveal cannot drift. */
+  --varsity:#6C8BE0;
 
   /* --- semantic --- */
   --gS:var(--gold); --gA:var(--pink); --gB:var(--lav); --gC:var(--slate);
@@ -2014,7 +2022,15 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
   width:236px; transform:rotate(-2.6deg);
   background:linear-gradient(160deg, var(--panel), var(--navy));
   border:var(--hairline); border-radius:12px;
-  box-shadow:0 16px 44px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.08);
+  /* --id-ring IS THE BOUGHT FRAME'S INSET, and it is a custom property rather
+     than a fourth shadow in the frame rules because :hover below re-declares
+     the whole box-shadow. A frame that vanished the moment you pointed at your
+     own card would be a worse bug than the one this fixes. Transparent by
+     default, so an unframed card is byte-for-byte the card it always was. */
+  --id-ring:transparent;
+  box-shadow:0 16px 44px rgba(0,0,0,.7),
+    inset 0 0 0 2px var(--id-ring),
+    inset 0 1px 0 rgba(255,255,255,.08);
   padding:12px 14px; overflow:hidden; transition:transform .3s;
 }
 /* THE CARD IS A DOOR NOW: it lifts under the pointer AND under the keyboard,
@@ -2025,12 +2041,52 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
   transform:rotate(-1deg) translateY(-4px); outline:none;
   box-shadow:0 22px 54px rgba(0,0,0,.75),
     0 0 22px color-mix(in srgb, var(--pink), transparent 62%),
+    inset 0 0 0 2px var(--id-ring),
     inset 0 1px 0 rgba(255,255,255,.1);
 }
 .campus-idcard:active { transform:rotate(-1deg) translateY(-2px) scale(.985); }
 /* ATTENDANCE HEAT: the hairline warms from lavender to gold as the streak
    climbs past a week. A colour, not a bulb ring - and it survives motion 0. */
 .campus-idcard.is-warm { border-color:color-mix(in srgb, var(--gold), transparent 55%); }
+
+/* THE FRAMES THE COUNTER SELLS, ON THE CARD THE PLAYER ACTUALLY LOOKS AT.
+   ======================================================================
+   This block is the other half of owner bug "the reskins do nothing", and it is
+   the half that hurt: the frame classes were painted ONLY on `.arc-id-big`, the
+   560px card inside the Records spotlight. The laminated card leaning in the
+   corner of the quad - the one on screen the whole time you are walking around
+   the school - was pixel-identical before and after a 300-ticket purchase.
+   shell/campus.js now toggles the SAME class off the SAME exported map
+   (idcard.js's FRAMES, through `paintCardFrame`), so these rules are the
+   spotlight's rules at furniture scale: one stripe pitch down, one inset ring
+   instead of two, everything else the same idea.
+
+   AFTER `.is-warm` ON PURPOSE. Equal specificity, so source order decides, and
+   a frame the player chose and paid for outranks a streak the card is still
+   reporting in its own numbers two lines below.
+   Nothing here animates, so `html.arc-reduced` needs no opinion about it. */
+.campus-idcard.is-frame-gold {
+  background:
+    repeating-linear-gradient(115deg,
+      color-mix(in srgb, var(--gold), transparent 87%) 0 1px,
+      transparent 1px 7px),
+    linear-gradient(160deg, var(--panel), var(--navy));
+  border-color:color-mix(in srgb, var(--gold), transparent 34%);
+  --id-ring:color-mix(in srgb, var(--gold), transparent 66%);
+}
+/* the blurb's "around your ID photo", at 58px. An outline, so the well keeps
+   the pink rim that says the photo is real. */
+.campus-idcard.is-frame-gold .id-photo {
+  outline:1px solid color-mix(in srgb, var(--gold), transparent 45%);
+  outline-offset:2px;
+}
+.campus-idcard.is-frame-navy {
+  background:linear-gradient(160deg,
+    color-mix(in srgb, var(--varsity), var(--navy) 76%),
+    color-mix(in srgb, var(--navy), #000 28%));
+  border-color:var(--varsity);
+  --id-ring:color-mix(in srgb, var(--varsity), transparent 62%);
+}
 .campus-idcard::after {
   content:""; position:absolute; top:0; left:-70%; width:45%; height:100%;
   transform:skewX(-18deg);
@@ -4172,24 +4228,67 @@ html.ae-lite .arc-rs-name .arc-rs-l { animation-play-state:running, paused; }
 }
 .arc-id-face.is-back { transform:rotateY(180deg); }
 
-/* THE FRAMES THE COUNTER SELLS. Border and glow ONLY - the face keeps its own
-   gradient, its photo, its foil and every inset it had, because a frame is a
-   thing you put a card in, not a different card. Both faces take it so the
-   frame survives the flip, and nothing here touches layout, so a framed card
-   and a bare one are the same card at the same size on the same three-line
-   layout that the 330px note above spent so long earning. */
+/* THE FRAMES THE COUNTER SELLS.
+   ============================
+   THEY CHANGE THE GROUND, NOT JUST THE HAIRLINE, and that is the whole of owner
+   bug "the reskins do nothing". Border-and-glow was the old rule here, and it
+   left navy nudging the SAME lavender border from 28% to 58% alpha over one
+   pixel: the 2px inset resolved to roughly #504A6D painted onto the face's own
+   #2b2b52 gradient, which is inside the noise of the default card. Meanwhile
+   shell/reveal.css had already SHOWN the buyer an unmistakable blue at the
+   moment of purchase. The reveal is the spec (--varsity is its colour, in the
+   palette above), so navy now gets a navy GROUND and a varsity edge, and gold
+   gets the pinstripe its catalog name has promised since day one - the sku is
+   literally "Gold Pinstripe Frame" and there was not one stripe anywhere in
+   this sheet.
+
+   WHAT IS STILL TRUE: no layout moves. Every rule below paints `background`,
+   `border-color`, `box-shadow` and one photo-well outline, so a framed card and
+   a bare one are the same card at the same size on the same three-line layout
+   the 330px note above spent so long earning. Both faces take the frame so it
+   survives the flip, and nothing here animates, so `html.arc-reduced` needs no
+   opinion about any of it. */
+
+/* GOLD PINSTRIPE. A real repeating stripe, laid OVER the face's own gradient as
+   a second background layer rather than replacing it - the card is still the
+   card, wearing a pinstripe suit. 9px pitch at 115deg reads as cloth at 560px
+   and as a warm sheen at thumbnail size, which is the right way round. */
 .arc-id-big.is-frame-gold .arc-id-face {
-  border-color:color-mix(in srgb, var(--gold), transparent 30%);
+  background:
+    repeating-linear-gradient(115deg,
+      color-mix(in srgb, var(--gold), transparent 86%) 0 1px,
+      transparent 1px 9px),
+    linear-gradient(160deg, #342f45 0%, var(--panel) 40%, #1b1729 100%);
+  border-color:color-mix(in srgb, var(--gold), transparent 24%);
   box-shadow:0 34px 84px rgba(0,0,0,.72),
     0 0 52px color-mix(in srgb, var(--gold), transparent 70%),
-    inset 0 0 0 2px color-mix(in srgb, var(--gold), transparent 52%),
+    inset 0 0 0 2px color-mix(in srgb, var(--gold), transparent 46%),
+    inset 0 0 0 5px color-mix(in srgb, var(--gold), transparent 88%),
     inset 0 1px 0 rgba(255,255,255,.10);
 }
+/* "A thin gold pinstripe AROUND YOUR ID PHOTO" - the blurb's own words, and the
+   one place the old rules never went. An OUTLINE and not the border, so the
+   well keeps the pink rim that says the photo is real. */
+.arc-id-big.is-frame-gold .arc-id-photo {
+  outline:1px solid color-mix(in srgb, var(--gold), transparent 42%);
+  outline-offset:3px;
+}
+
+/* NAVY VARSITY. A deep navy GROUND (the default card is purple-lavender, so
+   this is the difference you can see across the room) and a varsity edge: the
+   letterman double stripe, drawn as two insets with the card's own dark between
+   them rather than as one thicker line. */
 .arc-id-big.is-frame-navy .arc-id-face {
-  border-color:color-mix(in srgb, var(--lav), transparent 42%);
+  background:linear-gradient(160deg,
+    color-mix(in srgb, var(--varsity), var(--navy) 76%) 0%,
+    var(--navy) 46%,
+    color-mix(in srgb, var(--navy), #000 34%) 100%);
+  border-color:var(--varsity);
   box-shadow:0 34px 84px rgba(0,0,0,.78),
-    0 0 40px color-mix(in srgb, var(--lav), transparent 74%),
-    inset 0 0 0 2px color-mix(in srgb, var(--navy), var(--lav) 34%),
+    0 0 46px color-mix(in srgb, var(--varsity), transparent 68%),
+    inset 0 0 0 2px color-mix(in srgb, var(--varsity), transparent 58%),
+    inset 0 0 0 5px color-mix(in srgb, var(--navy), #000 20%),
+    inset 0 0 0 6px color-mix(in srgb, var(--varsity), transparent 76%),
     inset 0 1px 0 rgba(255,255,255,.06);
 }
 

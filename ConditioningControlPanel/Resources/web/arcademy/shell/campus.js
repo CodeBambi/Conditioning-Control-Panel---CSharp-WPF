@@ -43,7 +43,7 @@ import { isMobile, orientation, onDeviceChange } from '../core/device.js';
  * furniture card and the big card can never disagree about what your card says
  * (shell/idcard.js's header). Nothing here mounts anything. */
 import { genericPortrait, portraitSrc, portraitLabel, chipRung, paintChip, runPhotoDay,
-  studentNumber } from './idcard.js';
+  studentNumber, paintCardFrame } from './idcard.js';
 import { thud as punchThud } from './punchcard.js';
 import { createAccountChip } from './accountchip.js';
 import { mountMailChip } from './mailbox.js';
@@ -985,12 +985,20 @@ function idCrestGlyph() {
  *   chip, the Prize Counter's window and the Extra Credit lever on the door
  *   card all live entirely on these getters. Absent = none of the three is
  *   mounted, and the campus is byte-for-byte the campus it was.
+ * @param {Function=} o.idFrame  THE FRAME THE CARD WEARS. A GETTER answering
+ *   'gold' | 'navy' | '' (shell.js's `idFrame()`), and a getter for the same
+ *   reason `seep` is one: the campus is torn down and rebuilt under it, and the
+ *   Locker can change the answer while neither card is on screen. The class map
+ *   itself is shell/idcard.js's `FRAMES`, imported - the corner card and the
+ *   spotlight's big card read ONE map, never two copies of it. Absent = a card
+ *   that wears no frame, which is exactly what it did before the counter sold
+ *   any.
  * @param {Function=} o.log
  * @returns {{root, boardMount, footMount, update, closeCard, destroy}}
  */
 export function createCampus({ state, gameName, banner, stats, reducedMotion, on, log,
   dateSeed, attractIdleMs, boardPulse, idCardMode, holdAttract, post, seep, annex,
-  account, economy } = {}) {
+  account, economy, idFrame } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const handlers = on || {};
   /* THE ACCOUNT CHIP (shell/accountchip.js): a host slot in the top-right
@@ -2526,6 +2534,11 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   idFoil.setAttribute('aria-hidden', 'true');
   id.appendChild(idFoil);
   paintIdChip('link');
+  /* THE FRAME, on the card the player is actually looking at. Painted at build
+   * because the campus is re-minted on every visit, and again on every repaint
+   * below - a frame equipped in the Locker has to be on this card by the time
+   * the player walks back out to the quad. */
+  paintIdFrame();
   /* THE CARD IS A DOOR NOW. It opens the ID spotlight (shell/idcard.js) through
    * the shell, which owns the overlay exactly as it owns the Records one. The
    * press is REFUSED while the card is withheld and while Orientation Day has
@@ -2555,6 +2568,20 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   }
 
   /**
+   * THE FRAME THE COUNTER SOLD, on the laminated corner card. The word comes
+   * from the `idFrame` getter (the shell owns the ownership ladder and the
+   * Locker's pick) and the CLASS comes from idcard.js's exported FRAMES through
+   * `paintCardFrame`, so this card and the spotlight's big card can never drift
+   * apart the way they did when only one of them knew about frames at all.
+   */
+  function paintIdFrame() {
+    let want = '';
+    try { want = String((typeof idFrame === 'function' ? idFrame() : '') || ''); }
+    catch (e) { want = ''; }
+    try { paintCardFrame(id, want); } catch (e) { /* a frame may never hold a card */ }
+  }
+
+  /**
    * THE PROFILE LANDED. Everything the card says about YOU repaints from this
    * one object and from nothing else: the photo, the name, the number and the
    * chip's resting rung. A host that has never heard of `profile` simply never
@@ -2580,6 +2607,10 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       idNum.textContent = t('id_no', 'Student no.').toUpperCase() + ' ' + num.no;
     }
     paintIdChip(chipRung(prof));
+    /* A frame equipped while the campus was off screen lands on the SAME
+     * repaint the profile echo takes - the spotlight's setProfile() ends in its
+     * own paintFrame() for exactly this reason. */
+    paintIdFrame();
   }
 
   /** PHOTO DAY on the furniture card: the shutter, the well-only flash and the
@@ -3129,6 +3160,9 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     idLastTier = tierNow;
     /* The card's edge warms as the streak climbs: a colour, never a bulb ring. */
     try { id.classList.toggle('is-warm', (stats2.streak | 0) >= 7); } catch (e) { /* noop */ }
+    /* ...and the frame rides the same update(), so a Locker equip is on the
+     * corner card by the next tick even on a host that sends no profile echo. */
+    paintIdFrame();
   }
 
   /* enrich class-card state with descriptor detail the shell passes on stops */
@@ -3499,6 +3533,10 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
      * the stand-in portrait and the unlinked chip it was built with.
      */
     setProfile: setIdProfile,
+    /** A FRAME WAS EQUIPPED OR SOLD BACK. The Locker's toast fires this from a
+     *  screen the quad is not on, so the corner card re-reads the `idFrame`
+     *  getter now rather than waiting for the next visit. */
+    refreshFrame: paintIdFrame,
     /** THE ACCOUNT CHIP's seam: a later `account` repaints the chip, or mints
      *  it when init shipped without one. Nothing on a host that sent none. */
     setAccount(a) {
