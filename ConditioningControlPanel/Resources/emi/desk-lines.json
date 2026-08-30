@@ -1703,6 +1703,56 @@
       "spiceCeiling": 1,
       "hold": false,
       "askOdds": 0.0
+    },
+    "firstContact": {
+      "pools": [
+        "firstContact"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 1.0,
+      "scripted": true,
+      "limit": {
+        "per": "ever",
+        "max": 1
+      }
+    },
+    "firstContactUpgrade": {
+      "pools": [
+        "firstContactUpgrade"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 1.0,
+      "scripted": true,
+      "limit": {
+        "per": "ever",
+        "max": 1
+      }
+    },
+    "firstContactLater": {
+      "pools": [
+        "firstContactLater"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0,
+      "limit": {
+        "per": "ever",
+        "max": 1
+      }
     }
   },
   "pools": {

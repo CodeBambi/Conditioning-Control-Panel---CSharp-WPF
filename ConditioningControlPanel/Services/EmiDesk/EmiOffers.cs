@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows;
+using ConditioningControlPanel.Services;
 using Serilog;
 
 namespace ConditioningControlPanel.Services.EmiDesk;
@@ -57,6 +58,9 @@ public static class EmiOffers
                 return true;
             }
 
+            if (e.StartsWith("tour:", StringComparison.OrdinalIgnoreCase))
+                return TourFeasible(e.Substring(5));
+
             return e.ToLowerInvariant() switch
             {
                 "none" => true,
@@ -73,6 +77,105 @@ public static class EmiOffers
         {
             Log.Debug(ex, "[EmiDesk] effect feasibility probe failed for {Effect}", effect);
             return false;
+        }
+    }
+
+    // ---------------------------------------------------------------- the tours (wave 1)
+
+    /// <summary>The <c>tour:</c> verb for the short walk, and the <c>TutorialType</c> behind it.</summary>
+    private const string ShortWalkVerb = "shortwalk";
+
+    /// <inheritdoc cref="ShortWalkVerb"/>
+    private const string UpgradeVerb = "upgrade";
+
+    /// <summary>
+    /// Can this tour actually run, right now, for this user?
+    ///
+    /// <para>Checked at DRAW time and failing SILENTLY (LINES-SCHEMA 4) is the whole point: an
+    /// infeasible tour means the ask is never put on the glass at all. The alternative - showing
+    /// "show me around?" and then doing nothing when it is pressed - is a dead chip, and a dead
+    /// chip on the very first thing she ever says is the worst possible first impression.</para>
+    ///
+    /// <para>Feasible means all four: the main window is alive, no session is running, no tutorial
+    /// overlay is already up, and this tour is not already latched in
+    /// <see cref="EmiState.ToursDone"/>. The last is brake 4 of the knock, stated a second time on
+    /// the effect side, because an ask can be authored against any moment and the ceiling has to
+    /// hold wherever it is reached from.</para>
+    /// </summary>
+    private static bool TourFeasible(string? verb)
+    {
+        try
+        {
+            var tour = TourNameOf(verb);
+            if (tour == null) return false;
+
+            if (Application.Current?.MainWindow is not MainWindow) return false;
+            if (SessionEngine.Active?.IsRunning == true) return false;
+            if (App.Tutorial?.IsActive == true) return false;
+            if (EmiState.HasTourDone(tour)) return false;
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] tour feasibility probe failed for {Verb}", verb);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The <c>TutorialType</c> NAME a verb maps to, or null for a verb nothing knows. A name
+    /// rather than the enum so the probe above and <see cref="EmiState.ToursDone"/> agree by
+    /// construction - the ledger persists names, and an ordinal would move the day somebody
+    /// inserted a value into the middle of the enum.
+    /// </summary>
+    private static string? TourNameOf(string? verb) => (verb ?? string.Empty).Trim().ToLowerInvariant() switch
+    {
+        ShortWalkVerb => EmiKnockMachine.ShortWalkTour,
+        UpgradeVerb => EmiKnockMachine.UpgradeTour,
+        _ => null
+    };
+
+    /// <summary>
+    /// Say yes: run the tour.
+    ///
+    /// <para>Also spends the knock. They answered - brake 1 - and whether or not they see it
+    /// through to the last card, she is not to ask again.</para>
+    /// </summary>
+    private static void StartTour(string? verb, bool fromAsk)
+    {
+        try
+        {
+            var v = (verb ?? string.Empty).Trim().ToLowerInvariant();
+            if (Application.Current?.MainWindow is not MainWindow main)
+            {
+                Log.Debug("[EmiDesk] tour effect skipped: no main window");
+                return;
+            }
+
+            // The knock is spent the moment they say yes, before the tour is even started: the
+            // tutorial overlay owns the screen from here and an exception on the way in must not
+            // leave the chip free to knock about it all over again next launch.
+            EmiState.NoteKnockAnswered();
+
+            switch (v)
+            {
+                case ShortWalkVerb:
+                    main.StartTutorial(TutorialType.ShortWalk);
+                    break;
+                case UpgradeVerb:
+                    main.StartTutorial(TutorialType.UpgradeTour);
+                    break;
+                default:
+                    Log.Debug("[EmiDesk] unknown tour verb {Verb}, ignored", v);
+                    return;
+            }
+
+            App.EmiDesk?.Fire("effectFired", new { channel = "tour", fromAsk });
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[EmiDesk] tour effect {Verb} failed", verb);
         }
     }
 
@@ -110,6 +213,11 @@ public static class EmiOffers
             if (e.StartsWith("pinTop:", StringComparison.OrdinalIgnoreCase))
             {
                 App.EmiDesk?.PinTop(e.Substring(7));
+                return;
+            }
+            if (e.StartsWith("tour:", StringComparison.OrdinalIgnoreCase))
+            {
+                StartTour(e.Substring(5), fromAsk);
                 return;
             }
 

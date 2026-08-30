@@ -947,6 +947,10 @@ public sealed class EmiLineEngine
     /// The cadence gates from BRIEF 7 that do not need the ctx: the 10 minute gap, the third
     /// summon, the ignore streak and bedtime. The situational half (no session, no video, not
     /// minimised) is the caller's, because only the caller can see the app.
+    ///
+    /// <para>A moment marked <c>scripted</c> in the lines file skips the two CADENCE gates and only
+    /// those - see the block below, and <see cref="ScriptedCadenceBypass"/>, which is the same
+    /// arithmetic in a form a headless test can drive.</para>
     /// </summary>
     private bool AskGatesPass(MomentDef m)
     {
@@ -958,13 +962,27 @@ public sealed class EmiLineEngine
             if (BedtimeSet) return false;
             if (_ignoredAsksThisLaunch >= AskIgnoreLimit) return false;
 
-            // The two CADENCE gates only. The QA switch (EMI_DESK_DEBUG) skips these so an offer is
-            // reachable inside a play-test; the ignore streak above and the situational half below
-            // are protections, not cadence, and stay in force either way.
-            if (!EmiDebug.Enabled)
+            // The two CADENCE gates only, and there are exactly TWO ways past them.
+            //
+            // The QA switch (EMI_DESK_DEBUG) skips them so an offer is reachable inside a
+            // play-test. A `scripted` moment skips them because it is not part of the ambient
+            // offer cadence at all: the knock's first contact is a beat the APP staged, once ever,
+            // in answer to a chip the user just clicked, and "never before your third summon" is a
+            // rule about her volunteering things unprompted. Applying it here would mean the one
+            // offer the whole onboarding wave exists to make could never be made.
+            //
+            // Everything above and below this block is a PROTECTION rather than a cadence and
+            // stays in force for both: the offers setting, bedtime, the ignore streak, and the
+            // situational half (no session, no video, not minimised, no ask already on the glass).
+            // Do not widen this past those two lines. The arithmetic itself lives in
+            // ScriptedCadenceBypass so a headless test can drive the one rule that matters here.
+            if (!ScriptedCadenceBypass(
+                    m.Scripted,
+                    EmiDebug.Enabled,
+                    (DateTime.UtcNow - _lastAskUtc).TotalMilliseconds,
+                    SummonCount))
             {
-                if ((DateTime.UtcNow - _lastAskUtc).TotalMilliseconds < AskGapMs) return false;
-                if (SummonCount < AskMinSummons) return false;
+                return false;
             }
 
             // The half only the app can see (LINES-SCHEMA 5.6): no session, no video, the avatar is
@@ -977,6 +995,26 @@ public sealed class EmiLineEngine
             Log.Debug(ex, "[EmiDesk] ask gate probe failed");
             return false;
         }
+    }
+
+    /// <summary>
+    /// THE CADENCE GATES, on their own, as arithmetic.
+    ///
+    /// <para><see cref="AskGatesPass"/> cannot be reached from a headless test: it asks
+    /// <c>App.Settings</c> and <c>App.EmiDesk.AskSituationOk()</c>, neither of which exists without
+    /// a running WPF app, a session engine and a live widget. This is the half that decides whether
+    /// the SCRIPTED bypass is honoured, lifted out so the one rule that matters - the bypass skips
+    /// the gap and the summon floor, and leaks into nothing else - can be checked in a
+    /// millisecond.</para>
+    ///
+    /// <para>Returns true when the two cadence gates are satisfied (or bypassed).</para>
+    /// </summary>
+    internal static bool ScriptedCadenceBypass(bool scripted, bool qa, double msSinceLastAsk, int summonCount)
+    {
+        if (qa || scripted) return true;
+        if (msSinceLastAsk < AskGapMs) return false;
+        if (summonCount < AskMinSummons) return false;
+        return true;
     }
 
     private string? _lastAskId;
@@ -1228,6 +1266,16 @@ public sealed class EmiLineEngine
         [JsonProperty("spiceCeiling")] public int SpiceCeiling { get; set; } = 2;
         [JsonProperty("hold")] public bool Hold { get; set; }
         [JsonProperty("askOdds")] public double AskOdds { get; set; }
+
+        /// <summary>
+        /// SCRIPTED BEAT (Ask EMI wave 1). A moment the app deliberately staged, rather than one
+        /// she happened upon: the knock's first contact is the only user of it today. Skips the two
+        /// CADENCE gates in <c>AskGatesPass</c> - the 10 minute inter-offer gap and "never before
+        /// the third summon" - and NOTHING else. Default false, and it must stay the exception:
+        /// the cadence is what stops her feeling like a salesman, and a second moment that sets
+        /// this without a scripted reason has just opted out of the whole design.
+        /// </summary>
+        [JsonProperty("scripted")] public bool Scripted { get; set; }
         [JsonProperty("limit")] public LimitDef? Limit { get; set; }
         [JsonProperty("cooldownKey")] public string? CooldownKey { get; set; }
         [JsonProperty("poolWhen")] public Dictionary<string, List<string>>? PoolWhen { get; set; }
