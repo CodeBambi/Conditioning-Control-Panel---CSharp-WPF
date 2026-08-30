@@ -68,14 +68,63 @@ export function videoBudget() {
   } catch { /* ignore */ }
   return budget;
 }
+/* ---- ADOPTED VIDEOS (the registration door, 2026-08-30) -------------------
+ * Games mint their own <video> nodes (SORT faces and ghost cards, Deja Vu
+ * card faces, Instant Recall's montage, EMI's television) and those decoders
+ * were invisible here - decoration could still claim its budget while a game
+ * already held the phone's whole decode capacity. `adoptVideo()` lets any
+ * owner report a node the moment it mints one; the count folds into
+ * `budgetedKind()` ON THE GLOBAL TOUCH ARM ONLY (`data-ae-touch-global`,
+ * core/device.js's mobile verdict - NOT the bare ae-touch class, which The
+ * Deep End arms per-class on desktop), so desktop arithmetic is untouched
+ * byte for byte, The Deep End's desktop runs included.
+ *
+ * Nobody owes a release call. A node is counted while it is CONNECTED and
+ * PLAYING; one that has lived in the DOM and left is dropped on the next ask,
+ * and one that never mounted at all (a probe that lost its race) is dropped
+ * after a grace window, so the map cannot grow without bound. */
+const ADOPT_ORPHAN_MS = 30000;
+const adoptedVideos = new Map(); // node -> { at, live }
+export function adoptVideo(node) {
+  if (!node || typeof node !== 'object') return node;
+  try { adoptedVideos.set(node, { at: nowMs(), live: false }); } catch { /* ignore */ }
+  return node;
+}
+/** Playing, connected, game-owned decoders right now. Prunes as it counts. */
+export function adoptedVideoCount() {
+  let n = 0;
+  const now = nowMs();
+  for (const [v, s] of adoptedVideos) {
+    let conn = false;
+    try { conn = v.isConnected === true; } catch { conn = false; }
+    if (conn) {
+      s.live = true;
+      try { if (v.paused !== true && !v.error) n += 1; } catch { n += 1; }
+      continue;
+    }
+    if (s.live || (now - s.at) > ADOPT_ORPHAN_MS) adoptedVideos.delete(v);
+  }
+  return n;
+}
+const touchArmIsGlobal = () => {
+  try {
+    const html = hasDom() ? document.documentElement : null;
+    return !!(html && typeof html.getAttribute === 'function'
+      && html.getAttribute('data-ae-touch-global') === '1');
+  } catch { return false; }
+};
+
 /** The asset kind decoration may actually ask for. 'loop' until the budget is
- *  spent, then 'still' - every other kind passes straight through. */
+ *  spent, then 'still' - every other kind passes straight through. On the
+ *  global touch arm the game's own adopted decoders spend the budget too. */
 export function budgetedKind(want) {
   if (want !== 'loop') return want;
-  return liveVideos >= videoBudget() ? 'still' : 'loop';
+  let held = liveVideos;
+  if (touchArmIsGlobal()) held += adoptedVideoCount();
+  return held >= videoBudget() ? 'still' : 'loop';
 }
 /** Test seam only: the harness runs many cases in one process. */
-export function resetVideoBudget() { liveVideos = 0; }
+export function resetVideoBudget() { liveVideos = 0; try { adoptedVideos.clear(); } catch { /* ignore */ } }
 function forgetVideo(node) {
   if (!node || node.__aeVideo !== true) return;
   try { node.__aeVideo = false; } catch { /* ignore */ }

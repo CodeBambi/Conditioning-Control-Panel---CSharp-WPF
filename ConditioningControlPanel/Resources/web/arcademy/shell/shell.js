@@ -545,6 +545,27 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   const shout = typeof toast === 'function' ? toast : () => {};
   const src = init || {};
 
+  /* THE LITE RUNG'S DEVICE HALF (mobile dig 2026-08-30). Every shell surface
+   * ships a diet twin (`.arm-lite`, `is-lite`, `asc-lite`: rooms.css holds the
+   * breath, alleysign.css stops the bloom and the chase, prizecounter.css
+   * drops the lamps, scene.js skips the dust canvas, reveal/walk thin their
+   * particles) - but `lite` only ever read `performanceMode`, a desktop dial
+   * the phone never sets, so every one of those twins was dead code exactly
+   * where it was written for. The device half reads core/device.js's GLOBAL
+   * arm marker (`data-ae-touch-global`), NOT the bare `ae-touch` class: The
+   * Deep End arms that class per-class on desktop too, and a desktop that
+   * enters The Deep End must not walk out into a lit-down school. The marker
+   * is stamped once, at boot, on the mobile verdict only - desktop WebView2
+   * never carries it, so this reads false there on every ask. */
+  const shellLite = () => {
+    if (src.performanceMode) return true;
+    try {
+      const html = typeof document !== 'undefined' ? document.documentElement : null;
+      return !!(html && typeof html.getAttribute === 'function'
+        && html.getAttribute('data-ae-touch-global') === '1');
+    } catch (e) { return false; }
+  };
+
   /* ---------------------- look & lexicon -------------------------------- */
   setLexicon(src.lexicon);
   applyPalette(src.palette, say);
@@ -2236,7 +2257,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
            * THINS the spark pool rather than dropping it, house doctrine:
            * lite keeps the move and drops the particle count). Only
            * reducedMotion deletes the sparks outright. */
-          lite: !!src.performanceMode,
+          lite: shellLite(),
           cosmetics: {
             awayColors: ownsSku('away_colors'),
             sparklerSteps: ownsSku('sparkler_steps'),
@@ -2715,7 +2736,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         idSpotlight = createIdSpotlight({
           t,
           reducedMotion: () => reducedMotion || idReducedMotion(),
-          lite: !!src.performanceMode,
+          lite: shellLite(),
           isMobile,
           profile: idProfile,
           stats: idStats,
@@ -3022,7 +3043,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    */
   function syncThemeFx(id) {
     const kind = themeFxFor(id == null ? themePick() : id, ownsSku);
-    if (!kind || reducedMotion || src.performanceMode) {
+    if (!kind || reducedMotion || shellLite()) {
       if (themeFx) { try { themeFx.destroy(); } catch (e) { /* noop */ } themeFx = null; }
       return;
     }
@@ -3030,7 +3051,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       try {
         themeFx = createThemeFx({
           reduced: reducedMotion,
-          lite: !!src.performanceMode,
+          lite: shellLite(),
           mobile: isMobile(),
           seed: utcDateSeed,
           log: say,
@@ -3150,7 +3171,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     installReveal({
       t,
       log: say,
-      lite: () => !!src.performanceMode,
+      lite: () => shellLite(),
       reduced: () => reducedMotion,
       isMobile,
       /* The same seed the corkboard deals tonight's poster from and the same
@@ -3178,7 +3199,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       owned: () => ownsSku('pa_pack'),
       t,
       log: say,
-      lite: () => !!src.performanceMode,
+      lite: () => shellLite(),
       reduced: () => reducedMotion,
       inClass: () => !!active,
       /* THE DUCK CAP. pa.js scales LINE_DUCK by this exactly the way
@@ -3202,7 +3223,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     paCaption = installPaCaption({
       t,
       log: say,
-      lite: () => !!src.performanceMode,
+      lite: () => shellLite(),
       reduced: () => reducedMotion,
       /* SHE STEPS ASIDE WHILE THE SCHOOL TALKS. campusDoorRects() already hands
        * the caption's box to her keep-off rule, but a rule is only read when
@@ -3304,7 +3325,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       beatMount: () => (prizeBooth && prizeBooth.root) || null,
       t,
       log: say,
-      lite: !!src.performanceMode,
+      lite: shellLite(),
       reduced: reducedMotion,
       catalog: () => economyCatalog(),
       balance: () => walletBalance(),
@@ -3403,7 +3424,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       mount: dom && dom.screen,
       t,
       log: say,
-      lite: !!src.performanceMode,
+      lite: shellLite(),
       reduced: reducedMotion,
       closed: counterClosed(),
       alley: !opt.skipWalk,
@@ -3588,7 +3609,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       mount: dom && dom.screen,
       t,
       log: say,
-      lite: !!src.performanceMode,
+      lite: shellLite(),
       reduced: reducedMotion,
       // Registry order, every registered class - including the ones never
       // played. An unattended card on the wall IS the advertisement (§6).
@@ -3643,7 +3664,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       mount: dom && dom.screen,
       t,
       log: say,
-      lite: !!src.performanceMode,
+      lite: shellLite(),
       reduced: reducedMotion,
       isMobile,
       /* THE OWNERSHIP WITNESS, and the only one. Law 1 in locker.js hangs off
@@ -3846,7 +3867,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     roomPage = createRoomScene({
       gameKey,
       t,
-      lite: !!src.performanceMode,
+      lite: shellLite(),
       log: say,
       name: gameName(gameKey),
       plate: (info && info.plate) || '',
@@ -3916,7 +3937,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     } catch (e) { /* noop */ }
     annexPage = createAnnexLab({
       t,
-      lite: !!src.performanceMode,
+      lite: shellLite(),
       log: say,
       subject: src.subject || {},
       gamesList: games.list.map((e) => e.key),

@@ -94,6 +94,7 @@
  * ==========================================================================*/
 
 import { makeTaggedRoll } from '../../core/rng.js';
+import { adoptVideo } from '../../engine/util.js';
 
 export const MONTAGE = Object.freeze({
   /** Target CELL count by tier, before the density multiplier and before the
@@ -225,6 +226,7 @@ export function mediaElFor(url) {
   if (isVideoUrl(url)) {
     const v = el('video', 'g-ir-media');
     if (!v) return null;
+    adoptVideo(v);
     v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true;
     try {
       v.setAttribute('muted', '');

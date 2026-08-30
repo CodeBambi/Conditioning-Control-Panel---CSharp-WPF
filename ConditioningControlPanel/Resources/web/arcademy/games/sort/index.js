@@ -62,6 +62,7 @@
  * ==========================================================================*/
 
 import { makeRng, hash01, shuffled } from '../../core/rng.js';
+import { adoptVideo } from '../../engine/util.js';
 import {
   buildDeck, deckFromRows, rowsFromCards, cacheUsable, wrapQuickPool,
   judge, DECK,
@@ -1299,6 +1300,7 @@ export default {
       if (wantVideo && videoCount < DECODER_CEILING) {
         const v = el('video', 'g-sort-face');
         if (!v) return null;
+        adoptVideo(v);
         videoCount += 1;
         v.muted = true; v.loop = true; v.autoplay = isTop; v.playsInline = true;
         try {
