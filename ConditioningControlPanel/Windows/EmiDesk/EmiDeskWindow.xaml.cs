@@ -556,7 +556,14 @@ public partial class EmiDeskWindow : Window
         get
         {
             var r = BodyScreenRect;
-            return new Point(r.X + r.Width / 2.0, r.Y + r.Height * 0.48);
+            // Orbit her SCREEN, not the PNG's midline. The art is not centred in its own canvas:
+            // the glass sits at 0.553 across and 0.483 down (GlassLeftFrac + half GlassWidthFrac,
+            // and the same for the vertical). The Y here was already the glass centre, rounded to
+            // 0.48 by hand; the X was left at the geometric middle, which pulled the whole fan
+            // about 5 % of her width to her left - ~10 px at her default size, and more the wider
+            // she is scaled. Both now come off the SAME rect so they cannot drift apart again.
+            return new Point(r.X + r.Width * (GlassLeftFrac + GlassWidthFrac / 2.0),
+                             r.Y + r.Height * (GlassTopFrac + GlassHeightFrac / 2.0));
         }
     }
 
@@ -1535,6 +1542,7 @@ public partial class EmiDeskWindow : Window
 
             _petArmed = true;
             RaiseActivity();
+            EmiSfx.Pat();          // the hover half of the one gesture - see PetFromClick
 
             if (DateTime.UtcNow < _petCooldownUntil)
             {

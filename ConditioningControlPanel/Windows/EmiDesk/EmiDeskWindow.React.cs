@@ -133,6 +133,12 @@ public partial class EmiDeskWindow
             _petArmed = true;
             RaiseActivity();
 
+            // Her texture, on the TOUCH rather than on the performance the touch earns: a pat
+            // that lands inside the pet cooldown still flicks, and a flick with no sound reads as
+            // a click that missed. EmiSfx's own 130 ms floor is what keeps a double click from
+            // machine-gunning it.
+            EmiSfx.Pat();
+
             // THE POKE LADDER (ALIVE wave A) sits on top of this path, never beside it: it books
             // the poke and says which face the FLICK should wear, and the cooldown below still
             // decides whether this pat is a pat at all. Three pokes inside four seconds are all

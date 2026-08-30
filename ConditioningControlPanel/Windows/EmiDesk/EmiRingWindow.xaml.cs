@@ -373,6 +373,7 @@ public partial class EmiRingWindow : Window
             // (no slots, a throw before here) must not leave a dismissal owed to the ignore streak.
             _closeAnnounced = false;
 
+            EmiSfx.RingOpen();
             Log.Information("[EmiDesk] ring open with {Count} cards", _slots.Count);
         }
         catch (Exception ex)
@@ -431,6 +432,7 @@ public partial class EmiRingWindow : Window
                 return;
             }
 
+            EmiSfx.RingClose();
             PlayFold();
         }
         catch (Exception ex)
@@ -669,8 +671,18 @@ public partial class EmiRingWindow : Window
 
         _hotPx = hot.ToArray();
 
-        Log.Debug("[EmiDesk] ring fan {Shape} r={R:F0} span={Span:F0} deg, window {W:F0}x{H:F0}",
-                  plan.Shape, plan.Radius, plan.SpanDeg, Width, Height);
+        // Information, not Debug: the file sink's floor is Information, so a Debug line here is
+        // invisible in the log the owner actually sends back. Everything needed to reproduce a
+        // "the circle is offset" report by hand is on this one line - where the code believes she
+        // is, what it orbited, and what the solver did with it.
+        Log.Information("[EmiDesk] ring fan {Shape} r={R:F0} span={Span:F0} deg | anchor px ({AX:F0},{AY:F0}) " +
+                        "| body px {BX:F0},{BY:F0} {BW:F0}x{BH:F0} | work {WX},{WY} {WW}x{WH} | scale {S:F2} " +
+                        "| window {W:F0}x{H:F0} at {L:F0},{T:F0}",
+                        plan.Shape, plan.Radius, plan.SpanDeg,
+                        anchor.X, anchor.Y,
+                        bodyPx.X, bodyPx.Y, bodyPx.Width, bodyPx.Height,
+                        work.Left, work.Top, work.Width, work.Height, s,
+                        Width, Height, Left, Top);
     }
 
 

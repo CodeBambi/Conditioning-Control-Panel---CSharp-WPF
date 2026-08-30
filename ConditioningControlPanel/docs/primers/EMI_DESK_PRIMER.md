@@ -674,6 +674,16 @@ her *voice actress*, not about her UI - but she is silenced by `IsOutputSuppress
 `MasterVolume` of 0, and by `EmiLineEngine.Instance.HoldActive`, which covers panic and every safety
 moment. No new setting: the master volume already is one.
 
+**Her texture is a separate service.** `Services/EmiDesk/EmiSfx.cs` owns the three one-shots the
+widget makes on its own - the pat, and the ring fanning open and folding shut - and keeps this exact
+gate, copied rather than shared: the vox is her VOICE and the sfx is her UI, and the day one grows a
+rule the other must not inherit, a shared helper is the thing that gets it wrong. Every cue is an
+override-then-fallback chain in the `ChaosSfx` shape (`emi/<cue>.mp3` wins if it exists, else a
+sound already in the repo), so bespoke art needs no code change - and `EmiSfxAssetTests` asserts each
+chain's LAST link exists, because a typo in a filename otherwise ships as "the pat has no sound"
+with nothing anywhere saying why. The trims are deliberately low (owner, 2026-08-30: "a bit too
+loud", twice) and the pat carries a 130 ms floor so a double click cannot machine-gun it.
+
 The vox hangs off **`ShowBubble`**, not off the chain seam, because the bubble has two authors: a
 chain frame arrives through `OnBubbleTextCore`, and the ask cadence calls `ShowBubble` directly. On
 the seam alone every question was silent, which is the one line she most wants read. `HideBubble`
@@ -728,12 +738,12 @@ favourite feat rn?"*
 | **Left-click anywhere on her body** | **Pat.** Squash + the `pet` chain + a line from the `petted` pool. |
 | Left-click inside a live glass channel | Belongs to the glass (unchanged, and still resolved geometrically). |
 | **Right-click her body** | **Open / fold the ring.** |
-| **Left-click the cards glyph** (top-left, hover) | Open / fold the ring. |
+| **Left-click the gear** (top-left, hover) | Open her options menu (cards, size, spice, offers, glass, pins). |
 | Hover her head for 1.2 s | Pat. The second trigger for the same gesture; it counts the same. |
 | Left-click the x (top-right, hover) | Send her away. |
 | Drag past 6 DIP | Move her. Folds the ring on the first movement. |
 | Drag the corner grip | Resize, 152..420 DIP, aspect locked. |
-| Right-click a ring CARD | Pin / unpin it. |
+| Right-click a ring CARD | ~~Pin / unpin it.~~ **Nothing.** The pin left the cards on 2026-08-30 - it was undiscoverable and the owner reported the button as unusable. Pinning is now the tile wall in `EmiRingPicker`, hosted by BOTH the settings tab and the gear menu. `PinToggled` survives as a seam with no raiser: see 13.2. |
 | Escape, or a click anywhere else | Fold the ring. |
 | Ctrl+Shift+Alt+left-click her body | **QA only**: replay the gesture tutorial. |
 
