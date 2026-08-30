@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace ConditioningControlPanel.Services.EmiDesk;
 
@@ -15,7 +15,14 @@ public enum EmiFidget
     WeightShift,
 
     /// <summary>The canon glance chain, plus a small lean to the side she looked at.</summary>
-    Glance
+    Glance,
+
+    /// <summary>
+    /// She checks something: a plate comes up at her right hand for a couple of seconds and goes
+    /// away again. The only fidget that puts ART on the screen rather than moving her, and so the
+    /// only one that can no-op because a file is missing (see <c>EmiProps</c>).
+    /// </summary>
+    Prop
 }
 
 /// <summary>What a completed pat on her body means once the poke ladder has looked at it.</summary>
@@ -278,14 +285,14 @@ public static class EmiAlive
         /// </summary>
         public EmiFidget Next()
         {
-            Span<EmiFidget> all = stackalloc EmiFidget[3]
+            Span<EmiFidget> all = stackalloc EmiFidget[4]
             {
-                EmiFidget.Twitch, EmiFidget.WeightShift, EmiFidget.Glance
+                EmiFidget.Twitch, EmiFidget.WeightShift, EmiFidget.Glance, EmiFidget.Prop
             };
 
             // Draw from the kinds that are NOT the last one, so the rule costs one roll, never a
             // retry loop that could in principle spin.
-            Span<EmiFidget> pool = stackalloc EmiFidget[3];
+            Span<EmiFidget> pool = stackalloc EmiFidget[4];
             int n = 0;
             for (int i = 0; i < all.Length; i++)
             {

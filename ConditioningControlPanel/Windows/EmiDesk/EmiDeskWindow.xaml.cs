@@ -489,6 +489,10 @@ public partial class EmiDeskWindow : Window
             ResizeGrip.Height = grip;
             ResizeGrip.Margin = new Thickness(0, 0, bw * 0.01, bh * 0.01);
 
+            // A plate in her hand mid-resize moves with her. No-ops when she is holding nothing,
+            // which is almost always (EmiDeskWindow.Props.cs).
+            LayoutProp();
+
             Resized?.Invoke(this, _bodyWidth);
         }
         catch (Exception ex)
@@ -958,6 +962,11 @@ public partial class EmiDeskWindow : Window
             // keeps whatever the caller set (which is how Say's reaction face survives the trip).
             var voice = EmiChains.FrameKey(bodyFrameOverride) ?? EmiChains.FrameKey(chain.BodyFrame);
             if (voice != null) _voxMood = voice;
+
+            // ANYTHING ELSE TAKING THE FACE TAKES THE PLATE WITH IT. A chain that is not the prop
+            // beat's own is a pat, an ask, a say or a reaction, and a widget still holding a phone
+            // through one of those reads as a stuck sprite rather than as a mascot.
+            if (PropUp && !string.Equals(chain.Id, "prop", StringComparison.Ordinal)) HideProp();
 
             StopIdleBeats();
             _player.Play(chain, BuildHooks(done), bodyFrameOverride);

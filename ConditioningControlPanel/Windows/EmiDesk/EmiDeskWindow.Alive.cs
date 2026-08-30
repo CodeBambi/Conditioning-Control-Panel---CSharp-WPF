@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Media;
@@ -194,6 +194,10 @@ public partial class EmiDeskWindow
                 _aliveTimer.Tick -= OnAliveTick;
                 _aliveTimer = null;
             }
+            // She is going off screen (dismissed, hidden, closed). Drop the plate WITHOUT the
+            // slide - there is nobody left to watch it - so she never comes back holding a phone
+            // from a sitting that ended.
+            HideProp(animate: false);
             ResetGaze();
         }
         catch (Exception ex)
@@ -459,20 +463,32 @@ public partial class EmiDeskWindow
             {
                 if (!CanPerk()) return;               // due, not forced: it waits for a quiet moment
                 _stretchDue = now.AddMilliseconds(_fidgets.NextStretchDelayMs());
-                _fidgetDue = now.AddMilliseconds(_fidgets.NextDelayMs());
+                _fidgetDue = now.AddMilliseconds(FidgetDelayMs());
                 RunStretch();
                 return;
             }
 
             if (now < _fidgetDue) return;
             if (!CanPerk()) return;
-            _fidgetDue = now.AddMilliseconds(_fidgets.NextDelayMs());
+            _fidgetDue = now.AddMilliseconds(FidgetDelayMs());
             RunFidget(_fidgets.Next());
         }
         catch (Exception ex)
         {
             Log.Debug(ex, "[EmiDesk] fidget step failed");
         }
+    }
+
+    /// <summary>
+    /// How long until the next micro-fidget. The scheduler's own 25-50 s jitter, unless QA asked
+    /// for a faster one (EMI_DESK_FIDGET_MS) - the override replaces the DELAY and nothing else, so
+    /// the pick, the no-repeat rule and the quiet-moment gate stay exactly as they ship. The
+    /// scheduler is still rolled either way, so its no-repeat state never goes stale.
+    /// </summary>
+    private int FidgetDelayMs()
+    {
+        int authored = _fidgets.NextDelayMs();
+        return EmiDebug.FidgetMs is int ms ? ms : authored;
     }
 
     private void RunFidget(EmiFidget kind)
@@ -499,6 +515,17 @@ public partial class EmiDeskWindow
                     // the two halves of "she looked over there" agree.
                     PlayChain("glance", bodyFrameOverride: "idle");
                     NudgeGaze(Rng.Next(2) == 0 ? -1 : 1, 0, 900);
+                    break;
+
+                case EmiFidget.Prop:
+                    // She checks something. The longest of the four by a distance, which is why it
+                    // is one of four rather than one of two: at 25-50 s apart a 3 s beat is rare.
+                    // EmiDeskWindow.Props.cs owns the plate and takes it off again.
+                    RunPropBeat();
+                    // She is looking DOWN at the thing in her hand, so the standing look goes with
+                    // it - a reading face over a level gaze reads as her reading the middle
+                    // distance. Right and down, because the prop is at her right hand.
+                    NudgeGaze(1, 1, EmiProps.HoldMs);
                     break;
             }
         }
