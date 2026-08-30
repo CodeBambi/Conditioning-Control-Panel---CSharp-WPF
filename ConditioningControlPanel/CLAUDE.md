@@ -138,6 +138,20 @@ of truth.)
 12. **A dead language file no longer empties the UI.** `LocalizationManager.LoadLanguageFile` returns an empty dictionary on failure; `SetLanguage` treats that as "fall back to English", and `EnsureFallbackLoaded` logs **Fatal** if `en.json` itself fails (the one case with nothing to fall back to - the UI then renders raw keys like `btn_start_flashes`). If you see that Fatal line, the language file is broken, not the UI.
 13. **Don't hand-flip language-file line endings.** All 9 `Localization/Languages/*.json` are LF in git; the worktree shows CRLF only because `core.autocrlf=true` converts on checkout. Let autocrlf do its job and never commit a whole-file line-ending diff.
 
+### EMI Desk
+14. **The outfit / skin layer is the TOPMOST thing in EMI's composition.** It is drawn above the
+    face and above the takeover glass; face art may never paint over a garment. Her face is not
+    part of the body PNG - it is a canvas laid over the glass rect, with the glass a second canvas
+    on the same rect - so anything a coat, a collar or a pair of goggles draws across that rect is
+    buried behind two layers of her own face unless the garment gets a layer of its own in front
+    of them (owner report, 2026-08-30: "the coat behind the screen, it should be over it"). On the
+    desk that is `OutfitOverImage`, authored AFTER `FaceLayer` inside `BodyRoot` in
+    `Windows/EmiDesk/EmiDeskWindow.xaml`; on the web it is `.emi-over` at `z-index: 2`. Sheets
+    follow one naming contract on both sides: `art/emi/<outfit>/over-<pose file>.png` beside
+    `art/emi/<outfit>/<pose file>.png`, optional, and silent when absent. `EmiDeskLayerOrderTests`
+    pins the desk's order, so a XAML edit that reorders those two nodes fails the suite instead of
+    shipping a buried collar.
+
 ## Crash Logging
 - Crashes are logged to `logs/crash.log` with full stack traces
 - Check this file first when debugging random crashes
