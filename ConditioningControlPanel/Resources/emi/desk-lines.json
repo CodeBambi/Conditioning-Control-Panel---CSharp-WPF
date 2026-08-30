@@ -1523,6 +1523,186 @@
       "spiceCeiling": 1,
       "hold": false,
       "askOdds": 0.0
+    },
+    "tour.welcome": {
+      "pools": [
+        "tour.welcome"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.avatar_intro": {
+      "pools": [
+        "tour.avatar_intro"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.settings_tab": {
+      "pools": [
+        "tour.settings_tab"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.presets_intro": {
+      "pools": [
+        "tour.presets_intro"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.progression_intro": {
+      "pools": [
+        "tour.progression_intro"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.tour_door_play": {
+      "pools": [
+        "tour.tour_door_play"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.tour_door_you": {
+      "pools": [
+        "tour.tour_door_you"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.tour_door_library": {
+      "pools": [
+        "tour.tour_door_library"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.start_button": {
+      "pools": [
+        "tour.start_button"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.ut_welcome": {
+      "pools": [
+        "tour.ut_welcome"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.ut_rail": {
+      "pools": [
+        "tour.ut_rail"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.ut_map": {
+      "pools": [
+        "tour.ut_map"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.ut_gestures": {
+      "pools": [
+        "tour.ut_gestures"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.ut_daily_free": {
+      "pools": [
+        "tour.ut_daily_free"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.ut_palette": {
+      "pools": [
+        "tour.ut_palette"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
     }
   },
   "pools": {
