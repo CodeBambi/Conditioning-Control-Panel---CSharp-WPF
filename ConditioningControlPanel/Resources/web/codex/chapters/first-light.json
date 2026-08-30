@@ -1,28 +1,53 @@
 {
-  "_fixture": "FIXTURE PAGE. Not the written chapter. Ships so the renderer is demonstrably working and is meant to be overwritten by the orchestrator with F1's docs/codex/i-first-light.json. The `fixture` flag below paints a red slip at the top of the page so nobody mistakes this for finished prose.",
-  "fixture": true,
   "id": "first-light",
   "volume": 1,
   "order": 1,
   "title": "first light",
-  "blurb": "what happens the first time you open it.",
-  "target": "settings",
+  "blurb": "install it, open it, start gentle.",
+  "target": null,
   "tour": "ShortWalk",
-  "margin": { "t": "you already pressed something. i saw.", "face": "^_~" },
+  "margin": {
+    "t": "day one. i put the kettle on. metaphorically.",
+    "face": "^_^"
+  },
   "blocks": [
-    { "type": "p", "text": "The app opens on the dashboard, and nothing is running. That is the first thing worth knowing about it. Nothing starts on its own, nothing was downloaded for you, and no feature is on until you turn it on. What you are looking at is a room full of switches with every switch down." },
-    { "type": "p", "text": "It runs on Windows 10 or 11, on one machine, offline apart from the parts that sign you in. It does not need a browser, a phone or an account to do the things in the first three volumes of this book." },
-    { "type": "steps", "items": [
-      "Run the installer and let it finish. It will offer to launch the app at the end.",
-      "Read the consent card. It is short and it is the only thing between you and a running app.",
-      "Set your panic key before you touch anything else. Escape is the default and it works from any window.",
-      "Point the app at a folder of your own pictures, or skip it and come back when you have one."
-    ] },
-    { "type": "figure", "kind": "checklist", "caption": "the four things worth doing before anything else" },
-    { "type": "p", "text": "The dashboard is a wall of cards, one per feature. A card tells you what the feature does and carries a question badge that opens the app's own description of it. Every card has a settings face behind it. You can spend a long time reading cards without ever starting anything, and that is a reasonable way to use the first evening." },
-    { "type": "callout", "text": "If you only remember one thing from this page, remember the panic key. It clears everything on screen and stops the scheduler, from any window, whatever has focus." },
-    { "type": "p", "text": "Progress, levels and achievements start counting from the moment the app first runs. They are cosmetic. Nothing in the app is gated behind them except the things that say they are." },
-    { "type": "figure", "kind": "grid-fill", "caption": "the dashboard: one card per feature, all of them off" },
-    { "type": "limit", "text": "The installer cannot tell you whether your machine will keep up. Everything here draws on top of other windows, and on an older graphics chip a heavy overlay plus a video plus flashes at full rate will stutter. There is no benchmark and no warning. You find out by turning things up until it does, then coming back down." }
+    {
+      "type": "p",
+      "text": "The app runs on Windows 10 or 11, 64-bit, and nowhere else. The installer is one big file, roughly 740 MB, because everything the app runs on ships inside it. You do not install .NET first, and you do not need administrator rights: it installs for your user account. If WebView2 or the Visual C++ runtime happen to be missing, the installer adds them quietly. There is nothing else to fetch afterwards."
+    },
+    {
+      "type": "p",
+      "text": "Some antivirus tools flag the installer. An app that draws images over the top of everything else looks a lot like something that should not be doing that. It is a false positive: the app and the installer are both code-signed, and the whole project is open source if you want to read exactly what it does."
+    },
+    {
+      "type": "p",
+      "text": "The first time it opens, the app sets itself up. It creates empty folders for your images, videos, wallpapers and spirals, loads gentle defaults, and starts you at Level 1 with 0 XP. The heavier features are locked until you level up, and that is deliberate: you meet them gradually, one unlock at a time. Your companion appears in a tube attached to the side of the window; you can drag her off on her own later."
+    },
+    {
+      "type": "figure",
+      "kind": "checklist",
+      "caption": "install, launch, add content, press START. four moves."
+    },
+    {
+      "type": "steps",
+      "items": [
+        "Add content. Your own images and videos go into the folders the app just made. The next chapter covers exactly where.",
+        "Set the dials. Open the Flash Images card and pick how often you want things to happen. The default is about one event every six minutes, and there is no rush to move it.",
+        "Press START. The engine begins.",
+        "Stop whenever you want. Press the panic key, Escape unless you change it, and everything stops at once."
+      ]
+    },
+    {
+      "type": "callout",
+      "text": "Several features work by flashing: images thrown onto your screen, text held for a fraction of a second, a spiral that turns continuously. Flashing and high-contrast motion can trigger symptoms in people with photosensitive epilepsy or related conditions. If that applies to you, or you do not know whether it does, keep rates and opacity low and learn the panic key before you turn anything up."
+    },
+    {
+      "type": "p",
+      "text": "Everything the app saves about you lives in %LOCALAPPDATA%\\ConditioningControlPanel\\ - settings, progress, content, all of it. The ? button at the top right opens short guides for the bigger features and an interactive tutorial that walks you around the real interface. Nothing intense is switched on for you, and nothing here needs to be turned up. Stopping, changing a setting, or closing the app is always a valid move."
+    },
+    {
+      "type": "limit",
+      "text": "The download is large and the installer is the only way in: no portable version, no Mac build, no Linux build. On a slow connection, give it time."
+    }
   ]
 }

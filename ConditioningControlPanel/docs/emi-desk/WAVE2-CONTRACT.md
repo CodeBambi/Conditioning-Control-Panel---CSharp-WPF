@@ -137,11 +137,16 @@ only ever appears in `margin`. House rules that apply to both:
 | `codex:ready` | - | log, stop the loading state |
 | `codex:open` | `{ chapter }` | store the bookmark |
 | `codex:target` | `{ id }` | `EmiTargets.Find(id)`; if `Locked`, say so and do not open |
-| `codex:tour` | `{ type }` | `MainWindow.StartTutorial(Enum.Parse<TutorialType>(...))`, close the book |
+| `codex:tour` | `{ tour }` | `MainWindow.StartTutorial(Enum.Parse<TutorialType>(...))`, close the book |
 | `codex:close` | - | close the window |
 
 Every handler validates its payload against the catalogue and swallows. A page that asks for an
 unknown target or an unparseable tour does nothing at all.
+
+**`type` is the envelope's key and nothing else's.** The dispatcher reads the message name from
+`type`, so no payload may carry a field of that name - it can only hold one value and dispatch has
+already claimed it. The tour name travels as `tour`. The first draft of this table said `{ type }`
+and cost the walk button its argument; if a future message needs a field, give it its own name.
 
 ### Entry points in Wave 2
 

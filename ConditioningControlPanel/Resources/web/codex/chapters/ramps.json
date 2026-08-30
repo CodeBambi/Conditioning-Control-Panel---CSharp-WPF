@@ -1,0 +1,44 @@
+{
+  "id": "ramps",
+  "volume": 3,
+  "order": 3,
+  "title": "ramps",
+  "blurb": "intensity that climbs while you settle in.",
+  "target": "progression",
+  "tour": null,
+  "margin": {
+    "t": "slow is sneakier than loud. don't tell the loud ones.",
+    "face": "¬_¬"
+  },
+  "blocks": [
+    {
+      "type": "p",
+      "text": "The intensity ramp raises your settings slowly over a set stretch of time, so a run builds instead of arriving at full strength. It is off by default, and it sits next to the scheduler in the Progression tab's right hand column. Pick a duration, ten minutes up to three hours, and a multiplier, 1.0x to 3.0x. Over that duration, every linked setting climbs from its normal value toward that value times the multiplier, and the sliders move on screen as it happens, so you can watch the climb. When the ramp stops, everything returns to the value you set. It does not leave your sliders cranked."
+    },
+    {
+      "type": "p",
+      "text": "The ramp only touches what you point it at. Link to Ramp is a set of channel toggles: Flash raises flash image opacity, Spiral the spiral overlay, Pink the pink filter, Master the master volume, Sub the subliminal whisper volume. Every channel has a ceiling and stops there even when the multiplier would push higher. Flash and the two volumes top out at 100 percent; spiral and pink both stop at 50, by design. Leave a channel unticked and the ramp leaves it alone completely."
+    },
+    {
+      "type": "p",
+      "text": "The curve decides the shape of the climb. Linear is a steady rise and the default. Ease In starts slow and picks up. Ease Out starts fast and flattens off. S-Curve is gentle at both ends and quickest through the middle. Exponential does almost nothing for a long while, then surges late. The dropdown lives only in the Settings tab's Scheduler + Intensity Ramp popup; the Progression tab copy of these controls does not have it."
+    },
+    {
+      "type": "figure",
+      "kind": "dial",
+      "caption": "Your value, times the multiplier, reached along the curve."
+    },
+    {
+      "type": "callout",
+      "text": "A worked example: flash opacity at 50 percent, multiplier 2.0x, duration 60 minutes, linear curve. Opacity climbs evenly from 50 to 100 over the hour - 62.5 at the quarter mark, 75 at the half - and lands back at 50 when the run ends."
+    },
+    {
+      "type": "p",
+      "text": "End at Complete stops the run the moment the ramp tops out, which turns a ramp into a session that ends itself. For a first setup: link Flash only at 1.5x for something subtle, Flash and Spiral at 2.0x for a middle weight, everything at 2.5x or above once you know how the top feels. Longer and heavier also reads as harder to the session editor, which is what raises a custom session's difficulty and its finishing XP."
+    },
+    {
+      "type": "limit",
+      "text": "A preset session outranks the ramp. While one is running, the visual links - Flash, Spiral, Pink - pause so the two cannot fight over the same sliders, and End at Complete will not cut a session short. The audio links keep working, and the Ramp Curve stays editable mid session because it also shapes the session's own built-in ramp."
+    }
+  ]
+}

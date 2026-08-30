@@ -1762,7 +1762,7 @@
       "cooldownMs": 0,
       "priority": 3,
       "mix": 1.0,
-      "spiceCeiling": 1,
+      "spiceCeiling": 2,
       "hold": false,
       "askOdds": 1.0,
       "limit": {
@@ -14722,6 +14722,84 @@
         "spice": 0,
         "typo": true
       }
+    ],
+    "bookOffer": [
+      {
+        "id": "bookOffer.001",
+        "t": "i wrote a book. ok i am the book. read me.",
+        "face": "(≧◡≦)",
+        "spice": 1
+      },
+      {
+        "id": "bookOffer.002",
+        "t": "there's a manual now. the margins are mine.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "bookOffer.003",
+        "t": "every chapter fits one screen. i counted. twice.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "bookOffer.004",
+        "t": "the manual keeps only the good parts. i checked.",
+        "face": "(⌐■_■)",
+        "spice": 0,
+        "chain": "smug"
+      },
+      {
+        "id": "bookOffer.005",
+        "t": "it says things the tooltips won't. quietly.",
+        "face": "¬_¬",
+        "spice": 1
+      },
+      {
+        "id": "bookOffer.006",
+        "t": "six volumes. three are writen. honest shelf.",
+        "face": "._.",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "bookOffer.007",
+        "t": "i left notes in the margins. small ones. mine.",
+        "face": "^_~",
+        "spice": 1,
+        "chain": "wink"
+      },
+      {
+        "id": "bookOffer.008",
+        "t": "you don't have to read it. it just sits there. knowing.",
+        "face": "(◔_◔)",
+        "spice": 0
+      },
+      {
+        "id": "bookOffer.009",
+        "t": "each chapter admits one true limit. i insisted.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "id": "bookOffer.010",
+        "t": "i proofread it mysef. every page. flawless.",
+        "face": "(⌐■_■)",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "bookOffer.011",
+        "t": "the session floor chapters are my favourites. read those.",
+        "face": "(´∀`)",
+        "spice": 1
+      },
+      {
+        "id": "bookOffer.012",
+        "t": "read it in bed. i'll know. i like knowing.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 2
+      }
     ]
   },
   "asks": [
@@ -16240,6 +16318,66 @@
       },
       "spice": 0,
       "effect": "tour:upgrade"
+    },
+    {
+      "id": "ask.bookOffer.001",
+      "moment": "bookOffer",
+      "q": "i made you a book. look?",
+      "face": "(◕‿◕)",
+      "chips": [
+        "open it",
+        "later"
+      ],
+      "yes": {
+        "t": "it's small. it's honest. the margins are the best bit.",
+        "face": "^_^"
+      },
+      "no": {
+        "t": "later's fine. books are patient. i'm learning to be.",
+        "face": "._."
+      },
+      "spice": 0,
+      "effect": "book:open"
+    },
+    {
+      "id": "ask.bookOffer.002",
+      "moment": "bookOffer",
+      "q": "want the manual?",
+      "face": "o_o",
+      "chips": [
+        "show me",
+        "not now"
+      ],
+      "yes": {
+        "t": "good. start anywhere. i'll be in the margins.",
+        "face": "^_~"
+      },
+      "no": {
+        "t": "not now works. the shelf isn't going anywhere.",
+        "face": "._."
+      },
+      "spice": 0,
+      "effect": "book:open"
+    },
+    {
+      "id": "ask.bookOffer.003",
+      "moment": "bookOffer",
+      "q": "story time? it's about you",
+      "face": "(´∀`)",
+      "chips": [
+        "go on",
+        "nah"
+      ],
+      "yes": {
+        "t": "volume one. first light. i love this part.",
+        "face": "(◕‿◕)"
+      },
+      "no": {
+        "t": "nah is fine. the book sulks. i don't. mostly.",
+        "face": "-_-"
+      },
+      "spice": 1,
+      "effect": "book:open"
     }
   ],
   "dork": {
