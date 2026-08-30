@@ -88,6 +88,16 @@ export function isAnimatedUrl(url) { return isVideoUrl(url) || isGifUrl(url); }
 
 /** Build the media element for a url. Never throws; broken media self-removes.
  *  `o.low` marks a wrap clone: same pixels, lower fetch priority. */
+/* THE SHARED VIDEO DOOR (0830 seam). The engine budgets its own <video>
+ * elements but could not see ours; engine/util.js adoptVideo() (perf wave,
+ * merge-order independent) registers a game-minted player with that budget.
+ * engine/ is an OPTIONAL layer by contract, so this is a dynamic import that
+ * may never resolve - and adoptVideo itself is a no-op off the touch arm. */
+let engUtil = null;
+try {
+  import('../../engine/util.js').then((m) => { engUtil = m; }).catch(() => {});
+} catch (e) { /* a missing engine costs the seam, never the class */ }
+
 export function mediaElFor(url, o) {
   if (!url) return null;
   const low = !!(o && o.low);
@@ -109,6 +119,7 @@ export function mediaElFor(url, o) {
       });
     }
     v.src = url;
+    try { if (engUtil && typeof engUtil.adoptVideo === 'function') engUtil.adoptVideo(v); } catch (e) { /* seam only */ }
     if (typeof v.play === 'function') {
       try { const p = v.play(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* autoplay policy */ }
     }
@@ -320,6 +331,98 @@ export function createBoard(o) {
     rows.push({ el: rowEl, strip, tiles: rowTiles, reps, durSec, dir: r % 2 ? 'r' : 'l' });
   });
 
+  /* ---------------------------------------------------------- press road */
+  /* TOUCH TAP RESOLUTION (0830). Two measured mis-tap mechanisms on phones:
+   *   1. `click` fires at finger-UP plus synthesis delay, and the strip keeps
+   *      drifting under the finger the whole time - a press that landed ON the
+   *      target resolved 200-350ms later on the neighbour (rig: 0/5 honest
+   *      presses survived a 320ms dwell).
+   *   2. Under jank the compositor-driven marquee runs ahead of the last
+   *      painted frame, so hit-testing resolves against a position the player
+   *      never saw.
+   * So on touch the MOSAIC resolves the gesture at pointerdown, and rewinds
+   * the hit-test by exactly the animation-timeline advance since the last rAF
+   * stamp. The timeline is the honest clock: it holds still while the wall is
+   * frozen (ceremony, pause) and while a stall stops the clock with us, so the
+   * rewind self-calibrates to zero everywhere except the one case it exists
+   * for. The resolved tile goes down the SAME onTileClick road - target, warm,
+   * miss and the ledger are untouched, and a press that resolves on a wrong
+   * tile is still a miss. Never a forgiveness radius, never a fake hit.
+   * Desktop (`touch` false) installs none of this and keeps the click road. */
+  let pressRafId = 0;
+  let pressStamp = null;   // animation-timeline ms at the last painted frame
+  let refStripAnim = null;
+
+  function refAnimTime() {
+    try {
+      if (refStripAnim && refStripAnim.playState !== 'idle') {
+        const ct = Number(refStripAnim.currentTime);
+        if (Number.isFinite(ct)) return ct;
+      }
+      refStripAnim = null;
+      for (const r of rows) {
+        if (!r.strip || typeof r.strip.getAnimations !== 'function') continue;
+        const list = r.strip.getAnimations();
+        if (list && list.length) {
+          refStripAnim = list[0];
+          const ct = Number(refStripAnim.currentTime);
+          if (Number.isFinite(ct)) return ct;
+        }
+      }
+    } catch (e) { /* no timeline, no rewind */ }
+    return null;
+  }
+  function pressStampLoop() {
+    if (destroyed || !touch) return;
+    pressStamp = { at: refAnimTime() };
+    pressRafId = requestAnimationFrame(pressStampLoop);
+  }
+  /** byEl only knows tile roots; a press usually lands on the skin or media. */
+  function tileFromNode(n) {
+    let node = n;
+    for (let hops = 0; node && hops < 6; hops++) {
+      const t = byEl.get(node);
+      if (t) return t;
+      node = node.parentNode || null;
+    }
+    return null;
+  }
+  function pressResolve(e) {
+    if (destroyed || !e || e.isPrimary === false) return;
+    const rawTile = tileFromNode(e.target);
+    if (!rawTile) return;                     // gaps stay dead, like the click road
+    let resolved = rawTile;
+    try {
+      const at = refAnimTime();
+      const dt = (pressStamp && Number.isFinite(pressStamp.at) && Number.isFinite(at))
+        ? at - pressStamp.at : 0;
+      if (dt > 24 && dt < 1200 && Number.isFinite(e.clientX)
+        && typeof document !== 'undefined' && document.elementFromPoint) {
+        const row = rows[rawTile.row];
+        const strip = row && row.strip;
+        if (strip) {
+          const dur = parseFloat(strip.style && strip.style.getPropertyValue
+            ? strip.style.getPropertyValue('--g-lf-dur') : '') || row.durSec || 30;
+          const reps = (row.reps | 0) || 2;
+          const w = strip.scrollWidth || 0;
+          if (w > 0 && dur > 0) {
+            // driftL translates -x, so content seen at clientX now sits at
+            // clientX - v*dt; the reversed strip mirrors the sign.
+            const v = (w / reps) / dur;
+            const shift = (row.dir === 'r' ? 1 : -1) * v * (dt / 1000);
+            const t2 = tileFromNode(document.elementFromPoint(e.clientX + shift, e.clientY));
+            if (t2 && t2.row === rawTile.row) resolved = t2;   // never jump rows
+          }
+        }
+      }
+    } catch (err) { /* the raw tile still stands */ }
+    try { if (opts.onTileClick) opts.onTileClick(resolved, e); } catch (err) { say('tile press: ' + ((err && err.message) || err)); }
+  }
+  if (touch && mosaic && mosaic.addEventListener) {
+    mosaic.addEventListener('pointerdown', pressResolve);
+    if (typeof requestAnimationFrame === 'function') pressRafId = requestAnimationFrame(pressStampLoop);
+  }
+
   /* ------------------------------------------------------------- budgets */
   /* Every budget here counts what Chromium actually pays for. `maxReps` is the
      multiplier the toroidal wrap applies to every live element, so it has to be
@@ -379,6 +482,9 @@ export function createBoard(o) {
     // click-precision board wants (engine bursts over it are pointer-events:none).
     node.addEventListener('click', (e) => {
       if (destroyed) return;
+      // On touch the press road below already resolved this gesture at
+      // pointerdown; letting the late click land too would double-count it.
+      if (touch) return;
       try { if (opts.onTileClick) opts.onTileClick(tile, e); } catch (err) { say('tile click: ' + ((err && err.message) || err)); }
     });
     // THE HOVER TELL rides the same per-element wiring as the click, and for
@@ -717,6 +823,10 @@ export function createBoard(o) {
 
     destroy() {
       destroyed = true;
+      if (pressRafId && typeof cancelAnimationFrame === 'function') {
+        try { cancelAnimationFrame(pressRafId); } catch (e) { /* ignore */ }
+      }
+      pressRafId = 0;
       byEl.clear();
       for (const t of desyncTimers) clearTimeout(t);
       desyncTimers.clear();
