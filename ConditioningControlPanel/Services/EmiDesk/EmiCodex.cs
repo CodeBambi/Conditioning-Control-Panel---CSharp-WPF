@@ -769,11 +769,81 @@ public static class EmiCodex
     /// empty window is the dead chip the whole feasibility law exists to prevent), it must not
     /// already be open, and she does not offer a book the user has already been reading.</para>
     ///
-    /// <para>NOTE FOR THE ORCHESTRATOR: nothing calls this yet. The wave 2 contract names her offer
-    /// as an entry point but assigns the moment BLOCK to this lane and no fire site to anybody, and
-    /// the two sensible triggers (the summon greeting, the end of the short walk) both live in
-    /// files this lane does not own. One call is all it wants.</para>
+    /// <para>WIRED FROM <c>EmiTourNarrator.OnFinished</c>, through <see cref="MaybeOfferSoon"/>, on
+    /// any tour ending - walked or skipped. Both are the right beat: somebody who took the walk has
+    /// just been shown the app and is the likeliest reader there will ever be, and somebody who
+    /// skipped it has just said they would rather not be walked, which is precisely what a book is
+    /// for. The summon greeting was the other candidate and is the wrong one: it already fires two
+    /// moments back to back and lets the floor arbitrate, and a ceremony-priority offer ignores
+    /// that floor, so it would take the greeting's place rather than follow it.</para>
     /// </summary>
+    /// <summary>
+    /// The gap between whatever just spoke and her offer of the book.
+    ///
+    /// <para>It cannot be zero, and that is the whole reason this method exists.
+    /// <c>bookOffer</c> is priority 3, which makes it a CEREMONY to the engine and therefore
+    /// exempt from the 45-second global floor (<c>EmiLineEngine.DrawCore</c> step 6). An offer
+    /// fired in the same breath as the line before it does not queue politely behind that line -
+    /// it lands on top of it, and the beat it was meant to follow is never read.</para>
+    /// </summary>
+    private const int OfferDelayMs = 20_000;
+
+    private static System.Windows.Threading.DispatcherTimer? _offerTimer;
+
+    /// <summary>
+    /// Offer the book one beat after something else has finished speaking. Additive by design:
+    /// the caller still fires its own moment first and this rides behind it, so a caller can never
+    /// trade a line it was already going to say for silence.
+    ///
+    /// <para>Deliberately NOT a suppress-and-replace. The engine takes a moment's limit at step 4
+    /// and applies the floor at step 6, so a fire the floor swallows still spends the budget - and
+    /// <c>bookOffer</c> is <c>limit: ever/1</c>, a budget of exactly one for the life of an
+    /// account. Anything that suppresses the surrounding line to make room has to be able to prove
+    /// the offer landed, and <c>Fire</c> returns void, so it cannot.</para>
+    ///
+    /// <para>Self-healing: <c>Fire</c> drops a moment outright when she is not out, BEFORE the
+    /// engine draws, so an offer that arrives while she is away costs nothing and the next caller
+    /// tries again. The re-arm is on purpose too - a second tour ending inside the window replaces
+    /// the pending offer rather than queueing a second one.</para>
+    /// </summary>
+    public static void MaybeOfferSoon(string? why = null, int delayMs = OfferDelayMs)
+    {
+        try
+        {
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+            if (!disp.CheckAccess())
+            {
+                disp.BeginInvoke(new Action(() => MaybeOfferSoon(why, delayMs)));
+                return;
+            }
+
+            // The only pre-check worth making here. Everything else that could stop the offer can
+            // still change during the delay, so it is asked at the tick instead - a book that is
+            // not in this build cannot arrive in twenty seconds.
+            if (!HasContent) return;
+
+            _offerTimer?.Stop();
+            var timer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(Math.Max(0, delayMs))
+            };
+            timer.Tick += (_, _) =>
+            {
+                try
+                {
+                    timer.Stop();
+                    if (ReferenceEquals(_offerTimer, timer)) _offerTimer = null;
+                    MaybeOffer(why);
+                }
+                catch (Exception ex) { Log.Debug(ex, "[{Tag}] the delayed offer failed", LogTag); }
+            };
+            _offerTimer = timer;
+            timer.Start();
+        }
+        catch (Exception ex) { Log.Debug(ex, "[{Tag}] could not schedule the offer", LogTag); }
+    }
+
     public static void MaybeOffer(string? why = null)
     {
         try

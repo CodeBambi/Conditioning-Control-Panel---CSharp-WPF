@@ -185,6 +185,14 @@ public sealed class EmiTourNarrator : IDisposable
 
             if (e.Completed) desk.Fire("tourFinished");
             else desk.Fire("tourSkipped");
+
+            // THE BOOK, one beat behind her ending line and never on top of it. Offered on both
+            // endings on purpose: a walker has just been shown the app and is the likeliest reader
+            // there will ever be, and a skipper has just said they would rather not be walked,
+            // which is what a manual is for. The moment carries limit ever/1, so this is once in
+            // the life of an account however many tours are run; EmiCodex holds the rest of the
+            // brakes (no book in the build, already open, already read).
+            EmiCodex.MaybeOfferSoon(e.Completed ? "tourFinished" : "tourSkipped");
         }
         catch (Exception ex)
         {

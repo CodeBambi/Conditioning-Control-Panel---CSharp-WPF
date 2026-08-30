@@ -646,6 +646,54 @@ public class EmiCodexTests
     // =====================================================================================
 
     /// <summary>
+    /// HER OFFER HAS A CALLER. <c>MaybeOffer</c> shipped with none, which is the quietest way for
+    /// a feature to not exist: twelve written lines, three asks, a moment declared, a verb wired,
+    /// and nothing on any code path that reaches them. Nothing throws and no test fails.
+    /// </summary>
+    [Fact]
+    public void The_offer_of_the_book_is_actually_fired_from_somewhere()
+    {
+        var narrator = File.ReadAllText(
+            Path.Combine(AppDir(), "Services", "EmiDesk", "EmiTourNarrator.cs"));
+        Assert.Contains("EmiCodex.MaybeOfferSoon(", narrator);
+    }
+
+    /// <summary>
+    /// <c>bookOffer</c> MUST STAY A CEREMONY (priority >= 3), and this is not a tone preference.
+    ///
+    /// <para><c>EmiLineEngine.DrawCore</c> takes a moment's limit at step 4 and applies the
+    /// 45-second global floor at step 6. A fire the floor swallows has therefore already spent the
+    /// budget - and this moment's budget is <c>ever/1</c>, one offer for the life of an account.
+    /// Priority 3 sets <c>ceremony</c>, which skips both the floor and the odds roll, so the offer
+    /// cannot be eaten by whatever happened to speak in the previous three quarters of a minute.
+    /// Drop this below 3 and the feature still builds, still tests green, and silently stops
+    /// happening for anyone who was spoken to recently.</para>
+    /// </summary>
+    [Fact]
+    public void The_book_offer_outranks_the_global_floor()
+    {
+        var priority = Moments().GetProperty("bookOffer").GetProperty("priority").GetInt32();
+        Assert.True(priority >= 3,
+            "bookOffer is priority " + priority + ". Below 3 the engine stops treating it as a " +
+            "ceremony, the global floor can swallow the fire, and the ever/1 limit is spent anyway.");
+    }
+
+    /// <summary>
+    /// The offer rides BEHIND the tour ending rather than replacing it. A suppress-and-replace
+    /// would have to prove the offer landed before dropping the line it stood in for, and
+    /// <c>EmiDeskService.Fire</c> returns void, so it cannot: the failure mode is a tour that ends
+    /// in silence, once, for good.
+    /// </summary>
+    [Fact]
+    public void The_tour_ending_still_speaks_for_itself()
+    {
+        var narrator = File.ReadAllText(
+            Path.Combine(AppDir(), "Services", "EmiDesk", "EmiTourNarrator.cs"));
+        Assert.Contains("desk.Fire(\"tourFinished\")", narrator);
+        Assert.Contains("desk.Fire(\"tourSkipped\")", narrator);
+    }
+
+    /// <summary>
     /// THE LAYERED-WINDOW TRAP, pinned in the source. A WebView2 child HWND does not paint inside
     /// <c>AllowsTransparency=true</c>, so a layered codex window renders nothing at all and reads
     /// as a dead panel rather than as a bug. Both bodies say it out loud.
