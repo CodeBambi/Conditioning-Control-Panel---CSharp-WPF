@@ -214,6 +214,16 @@ function el(tag, cls, text) {
 }
 function pct(v) { return Math.round((Number(v) || 0) * 100) + '%'; }
 function mult(v) { return (Math.round((Number(v) || 0) * 100) / 100).toFixed(2) + 'x'; }
+/* THE GUARD READS ITSELF (player feedback, 2026-08-29). "0.85x" alone never
+ * said which way was safer, so the readout carries the word too. 1.00x is the
+ * hinge - the strength the class was authored at - and 0.85x is only where the
+ * school starts you, which is why the word below is measured against 1, not
+ * against the default. */
+function guardMult(v) {
+  const n = Math.round((Number(v) || 0) * 100) / 100;
+  const side = n < 1 ? ' gentler' : n > 1 ? ' harsher' : ' as designed';
+  return n.toFixed(2) + 'x' + side;
+}
 
 /**
  * @param {Object} o
@@ -334,7 +344,16 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
   }
 
   /* ---------------------- row builders --------------------------------- */
-  function sliderRow({ key, label, hint, value, min, max, step, fmt }) {
+  /**
+   * `ends` is OPTIONAL and generic: two short words, painted under the two ends
+   * of this row's own track ("gentler" / "harsher"). A range input is mute about
+   * direction - a percentage carries its own, but a multiplier does not, and a
+   * player who cannot tell which way is safer leaves the row alone. The captions
+   * are decoration for the eye only (`aria-hidden`); the direction that a screen
+   * reader gets is the hint, which lives inside the label and is announced with
+   * it. Anything but a two-item array renders the row exactly as before.
+   */
+  function sliderRow({ key, label, hint, value, min, max, step, fmt, ends }) {
     const row = el('div', 'arc-row');
     const lab = el('label', null, label);
     const input = el('input');
@@ -345,12 +364,25 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
     lab.htmlFor = input.id = 'arc-' + String(key).replace(/[^\w]+/g, '-');
     if (hint) lab.appendChild(el('span', 'arc-hint', hint));
 
+    /* The wrapper takes the track's place on the row's flex line, so no other
+     * row on the page moves and no other row's layout is touched. */
+    let control = input;
+    if (Array.isArray(ends) && ends.length === 2) {
+      const wrap = el('div', 'arc-slider');
+      const caps = el('span', 'arc-ends');
+      caps.setAttribute('aria-hidden', 'true');
+      caps.appendChild(el('span', null, String(ends[0])));
+      caps.appendChild(el('span', null, String(ends[1])));
+      wrap.appendChild(input); wrap.appendChild(caps);
+      control = wrap;
+    }
+
     // Paint the drag live (an input that fights your thumb feels broken) but the
     // MODEL only moves on the echo - see applyEcho.
     input.addEventListener('input', () => { out.textContent = (fmt || pct)(input.value); });
     input.addEventListener('change', () => write(key, Number(input.value), row));
 
-    row.appendChild(lab); row.appendChild(input); row.appendChild(out);
+    row.appendChild(lab); row.appendChild(control); row.appendChild(out);
     rows.set(key, {
       node: row,
       value,
@@ -934,9 +966,12 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
     g.body.appendChild(sliderRow({
       key: SETTING_KEYS.effectIntensity,
       label: 'Flash strength guard',
-      hint: 'Photosensitivity guard - every strobe-class effect routes through it.',
+      hint: 'Photosensitivity guard - it scales every strobe-class flash. '
+        + 'Left is gentler (0.20x, nearly off), right is harsher (1.50x). '
+        + '1.00x is full designed strength. The school starts you at 0.85x.',
       value: src.effectIntensity == null ? 0.85 : src.effectIntensity,
-      min: 0.2, max: 1.5, step: 0.05, fmt: mult,
+      min: 0.2, max: 1.5, step: 0.05, fmt: guardMult,
+      ends: ['gentler', 'harsher'],
     }));
 
     const caps = (src.caps && typeof src.caps === 'object') ? src.caps : {};
