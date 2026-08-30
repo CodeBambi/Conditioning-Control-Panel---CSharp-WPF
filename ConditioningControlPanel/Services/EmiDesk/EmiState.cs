@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Threading;
 using Newtonsoft.Json;
@@ -245,6 +246,7 @@ public sealed class EmiState
             s.RecentIds ??= new List<string>();
             s.Limits ??= new Dictionary<string, int>();
             s.NudgeFires ??= new Dictionary<string, int>();
+            s.ToursDone ??= new List<string>();
             Log.Information("[EmiDesk] state loaded ({Pins} pins, {Usage} tracked targets)",
                 s.Pins.Count, s.Usage.Count);
             return s;
@@ -494,6 +496,113 @@ public sealed class EmiState
         catch (Exception ex)
         {
             Log.Warning(ex, "[EmiDesk] onboarding reset failed");
+        }
+    }
+
+    // ---- the knock (Ask EMI, wave 1) -------------------------------------------
+
+    /// <summary>
+    /// THE CHIP JUST FLASHED. Latches <see cref="KnockState"/> to
+    /// <see cref="EmiKnockMachine.Knocked"/>, stamps the time and SPENDS one of the two offers.
+    ///
+    /// <para>The offer is spent here, at the flash, and not when they click: somebody who never
+    /// touches the chip has answered too, by ignoring it, and a counter that waited for a click
+    /// would re-flash on every launch forever. Written NOW rather than debounced, because a knock
+    /// that is not on disk when the app is killed is a knock that happens again.</para>
+    /// </summary>
+    public static void NoteKnocked()
+    {
+        try
+        {
+            var s = Current;
+            if (s.KnockState < EmiKnockMachine.Knocked) s.KnockState = EmiKnockMachine.Knocked;
+            s.KnockAtUtc = DateTime.UtcNow.Ticks;
+            s.KnockOffers = Math.Min(EmiKnockMachine.OfferCap, s.KnockOffers + 1);
+            SaveNow();
+            Log.Information("[EmiDesk] the chip knocked (offer {N} of {Cap})",
+                s.KnockOffers, EmiKnockMachine.OfferCap);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] NoteKnocked failed");
+        }
+    }
+
+    /// <summary>
+    /// They said YES. Brake 1: the knock is spent for good, whatever the offer counter says and
+    /// whether or not the tour they accepted is ever finished - she asked, they answered, done.
+    /// </summary>
+    public static void NoteKnockAnswered()
+    {
+        try
+        {
+            var s = Current;
+            if (s.KnockState >= EmiKnockMachine.Spent) return;
+            s.KnockState = EmiKnockMachine.Spent;
+            SaveNow();
+            Log.Information("[EmiDesk] the knock is spent: she was answered");
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] NoteKnockAnswered failed");
+        }
+    }
+
+    /// <summary>
+    /// A tour reached its last step. Latches the <c>TutorialType</c> NAME (never the ordinal - an
+    /// ordinal moves the day somebody inserts a value into the middle of the enum) so she never
+    /// offers a walk that has already been taken. Idempotent.
+    /// </summary>
+    public static void NoteTourDone(string? tour)
+    {
+        if (string.IsNullOrWhiteSpace(tour)) return;
+        try
+        {
+            var s = Current;
+            s.ToursDone ??= new List<string>();
+            if (s.ToursDone.Contains(tour!, StringComparer.OrdinalIgnoreCase)) return;
+            s.ToursDone.Add(tour!);
+            SaveNow();
+            Log.Information("[EmiDesk] tour {Tour} latched as done", tour);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] NoteTourDone({Tour}) failed", tour);
+        }
+    }
+
+    /// <summary>
+    /// Has this <c>TutorialType</c> name been finished end to end? An unreadable ledger answers
+    /// TRUE, because the failure that costs nothing is a walk she does not offer.
+    /// </summary>
+    public static bool HasTourDone(string? tour)
+    {
+        if (string.IsNullOrWhiteSpace(tour)) return false;
+        try { return Current.ToursDone?.Contains(tour!, StringComparer.OrdinalIgnoreCase) == true; }
+        catch { return true; }
+    }
+
+    /// <summary>
+    /// QA ONLY: put the knock back to a fresh install so it can be replayed without deleting the
+    /// whole ledger. Reached through <see cref="EmiDebug"/>; deliberately also clears
+    /// <see cref="ToursDone"/>, because a knock replayed against a latched tour is stopped by
+    /// brake 4 before it can flash and would look like the reset did nothing.
+    /// </summary>
+    public static void ResetKnock()
+    {
+        try
+        {
+            var s = Current;
+            s.KnockState = EmiKnockMachine.Never;
+            s.KnockAtUtc = 0;
+            s.KnockOffers = 0;
+            s.ToursDone?.Clear();
+            SaveNow();
+            Log.Information("[EmiDesk] knock reset (QA)");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[EmiDesk] knock reset failed");
         }
     }
 
