@@ -22,7 +22,18 @@ public enum EmiFidget
     /// away again. The only fidget that puts ART on the screen rather than moving her, and so the
     /// only one that can no-op because a file is missing (see <c>EmiProps</c>).
     /// </summary>
-    Prop
+    Prop,
+
+    /// <summary>
+    /// She puts something on her own glass: pong, a spiral, a burst, gif rain, a film strip. The
+    /// channels already existed behind a 90 second stillness gate of their own
+    /// (<c>EmiChannels.IdleBeforeFlip</c>); this is the same flip, reached from the fidget wheel so
+    /// that the screen takes its turn among the small body moves instead of being a separate
+    /// clock. Like <see cref="Prop"/> it can no-op - a channel needs a library to draw from and the
+    /// desk has to have been left alone - which is why <c>RunFidget</c> reports whether it did
+    /// anything.
+    /// </summary>
+    Screen
 }
 
 /// <summary>What a completed pat on her body means once the poke ladder has looked at it.</summary>
@@ -225,6 +236,17 @@ public static class EmiAlive
     /// <summary>...and no later than this, in ms.</summary>
     public const int FidgetMaxMs = 50_000;
 
+    /// <summary>
+    /// How long the desk has to have gone untouched before the <see cref="EmiFidget.Screen"/> beat
+    /// will take its turn, in ms. The glass's own clock (<c>EmiChannels.IdleBeforeFlip</c>, 90 s)
+    /// is an owner lock and stays exactly where it is - it is what makes an ABANDONED desk drift
+    /// off to a channel. This is the shorter floor for the same flip arriving off the fidget
+    /// wheel, and it is deliberately longer than one fidget gap: she does not put a show on the
+    /// second you look away, but a minute of quiet is enough that a channel is one of the things
+    /// she might do next rather than something that only happens if you leave the room.
+    /// </summary>
+    public const int ScreenBeatRestMs = 30_000;
+
     /// <summary>The antenna twitch's travel, in DIPs.</summary>
     public const double TwitchDip = 2.0;
 
@@ -285,14 +307,15 @@ public static class EmiAlive
         /// </summary>
         public EmiFidget Next()
         {
-            Span<EmiFidget> all = stackalloc EmiFidget[4]
+            Span<EmiFidget> all = stackalloc EmiFidget[5]
             {
-                EmiFidget.Twitch, EmiFidget.WeightShift, EmiFidget.Glance, EmiFidget.Prop
+                EmiFidget.Twitch, EmiFidget.WeightShift, EmiFidget.Glance, EmiFidget.Prop,
+                EmiFidget.Screen
             };
 
             // Draw from the kinds that are NOT the last one, so the rule costs one roll, never a
             // retry loop that could in principle spin.
-            Span<EmiFidget> pool = stackalloc EmiFidget[4];
+            Span<EmiFidget> pool = stackalloc EmiFidget[5];
             int n = 0;
             for (int i = 0; i < all.Length; i++)
             {

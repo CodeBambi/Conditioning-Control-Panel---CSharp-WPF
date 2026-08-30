@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using ConditioningControlPanel.Models;
 using Serilog;
 
 namespace ConditioningControlPanel.Services.EmiDesk;
@@ -28,7 +29,22 @@ namespace ConditioningControlPanel.Services.EmiDesk;
 public static class EmiChannels
 {
     /// <summary>The channel ids, in the order the ambient rotation offers them.</summary>
-    public static readonly IReadOnlyList<string> All = new[] { "spiral", "video", "burst", "rain" };
+    public static readonly IReadOnlyList<string> All = new[] { "pong", "spiral", "video", "burst", "rain" };
+
+    /// <summary>
+    /// The channels that are a SCREEN SAVER rather than an offer: she is watching them and a tap
+    /// only puts her face back. Everything else on the glass is a thing she is holding out to you,
+    /// and <see cref="Fire"/> is what taking it does.
+    ///
+    /// <para>Pong is the first, and it is why this distinction had to exist: the campus has had a
+    /// whole deck of savers (<c>emi/channels.js</c>) since the takeover work and the desk had none,
+    /// so every flip of the desk's glass was an offer of an EFFECT. Now the wheel can also just
+    /// find her playing something.</para>
+    /// </summary>
+    private static readonly HashSet<string> Savers = new(StringComparer.Ordinal) { "pong" };
+
+    /// <summary>True when a tap on this channel fires nothing - see <see cref="Savers"/>.</summary>
+    public static bool IsSaver(string? id) => id != null && Savers.Contains(id);
 
     /// <summary>How long a channel sits on the glass before she gives up on it (BRIEF 6).</summary>
     public static readonly TimeSpan ChannelLife = TimeSpan.FromSeconds(10);
@@ -88,12 +104,23 @@ public static class EmiChannels
     /// <summary>Can this channel be painted and fired right now?</summary>
     public static bool Feasible(string? id) => id switch
     {
+        // The only channel with no library behind it: she can always play herself. A MOVING BALL
+        // IS THE WHOLE CHANNEL, so reduced motion refuses it outright rather than parking a still
+        // of a pong board on her face - the campus's plan() makes the same call.
+        "pong" => MotionOk(),
         "spiral" => App.Overlay != null,
         "video" => EmiOffers.HasVideos(),
         "burst" => EmiOffers.HasImages(),
         "rain" => EmiOffers.HasImages(),
         _ => false
     };
+
+    /// <summary>The app-wide motion setting, the same one the wave-A fidgets read. Never throws.</summary>
+    private static bool MotionOk()
+    {
+        try { return MotionFx.Level == MotionLevel.Full; }
+        catch { return true; }
+    }
 
     /// <summary>Build the painter for a channel, or null when the channel is unknown or unusable.</summary>
     public static EmiChannelPainter? Build(string? id, double w, double h)
@@ -103,6 +130,7 @@ public static class EmiChannels
             if (w <= 4 || h <= 4) return null;
             return id switch
             {
+                "pong" => new PongPainter(w, h),
                 "spiral" => new SpiralPainter(w, h),
                 "video" => VideoPainter.TryBuild(w, h),
                 "burst" => BurstPainter.TryBuild(w, h),
@@ -124,6 +152,9 @@ public static class EmiChannels
         {
             switch (id)
             {
+                case "pong":
+                    // A saver. She was playing; you looked; that is the whole transaction.
+                    return;
                 case "spiral":
                     EmiOffers.FireSpiral(fromAsk: false);
                     return;
@@ -164,6 +195,157 @@ public static class EmiChannels
     // ============================================================================================
     // the painters
     // ============================================================================================
+
+    /// <summary>
+    /// CHANNEL PONG. She plays both sides, imperfectly. A port of the campus saver
+    /// (<c>Resources/web/arcademy/emi/channels.js</c>, CH1) onto four rectangles and two numbers,
+    /// so the desk and the campus show the same game.
+    ///
+    /// <para>The campus's dials are quoted for a 60 px glass; the desk's glass is anywhere from
+    /// about 60 to 175 DIPs across as the user resizes her, so every length here is scaled by
+    /// <c>w / 60</c>. Scaling the SPEED too is deliberate: a ball that crosses a small screen in
+    /// two seconds and a big one in six is two different games.</para>
+    ///
+    /// <para>THE FUMBLE IS THE POINT. Both paddles track the ball, and at a seeded moment one of
+    /// them starts tracking it slackly and lets a point through. A pong board where nobody ever
+    /// misses is a screensaver; one where a side loses is her playing.</para>
+    /// </summary>
+    private sealed class PongPainter : EmiChannelPainter
+    {
+        private const double RefGlass = 60.0;   // the width the campus numbers are quoted at
+        private const double SpeedRef = 55.0;   // CAMPUS PONG_SPEED, virtual px/s
+        private const double PaddleHRef = 10.0; // CAMPUS PADDLE_H
+        private const double PaddleWRef = 2.0;  // CAMPUS PADDLE_W
+
+        private readonly double _w, _h, _k;
+        private readonly double _paddleH, _paddleW, _speed, _ballSize, _inset;
+        private readonly Random _rng = new();
+
+        private readonly Rectangle _padL = new();
+        private readonly Rectangle _padR = new();
+        private readonly Rectangle _ball = new();
+        private readonly TextBlock _scoreL = new();
+        private readonly TextBlock _scoreR = new();
+
+        private double _x, _y, _vx, _vy, _pl, _pr, _last;
+        private int _left, _right;              // the score, left side first
+        private readonly int _missSide;
+        private readonly double _missAtMs;
+
+        public PongPainter(double w, double h)
+        {
+            _w = w; _h = h;
+            _k = Math.Max(0.5, w / RefGlass);
+            _paddleH = PaddleHRef * _k;
+            _paddleW = Math.Max(1.0, PaddleWRef * _k);
+            _speed = SpeedRef * _k;
+            _ballSize = Math.Max(1.5, 3 * _k);
+            _inset = 6 * _k;
+
+            _missSide = _rng.Next(2);
+            _missAtMs = 3200 + _rng.NextDouble() * 4200;   // inside the ten second life, always
+
+            _x = _w / 2; _y = _h / 2;
+            _vx = _speed * (_rng.Next(2) == 0 ? 1 : -1);
+            _vy = _speed * (_rng.NextDouble() * 0.9 - 0.45);
+            _pl = _h / 2; _pr = _h / 2;
+        }
+
+        public override string Id => "pong";
+
+        public override void Attach(Panel host)
+        {
+            AddBackdrop(host, _w, _h);
+
+            // the dashed centre line, drawn once and never touched again
+            double dash = Math.Max(2, 4 * _k);
+            for (double y = 2 * _k; y < _h; y += dash * 2)
+            {
+                host.Children.Add(Box(Math.Round(_w / 2), y, Math.Max(1, _k), dash, PinkBrush, 0.45));
+            }
+
+            foreach (var pad in new[] { _padL, _padR })
+            {
+                pad.Width = _paddleW;
+                pad.Height = _paddleH;
+                pad.Fill = PinkBrush;
+                pad.IsHitTestVisible = false;
+                host.Children.Add(pad);
+            }
+            Canvas.SetLeft(_padL, _inset);
+            Canvas.SetLeft(_padR, _w - _inset - _paddleW);
+
+            _ball.Width = _ball.Height = _ballSize;
+            _ball.Fill = PinkBrush;
+            _ball.IsHitTestVisible = false;
+            host.Children.Add(_ball);
+
+            double size = Math.Max(5, _h * 0.14);
+            foreach (var (tb, leftEdge) in new[] { (_scoreL, _w / 2 - 14 * _k), (_scoreR, _w / 2 + 5 * _k) })
+            {
+                tb.Text = "0";
+                tb.FontFamily = EmiFace.PixelFont;
+                tb.FontSize = size;
+                tb.Foreground = PinkBrush;
+                tb.Opacity = 0.75;
+                tb.IsHitTestVisible = false;
+                Canvas.SetLeft(tb, leftEdge);
+                Canvas.SetTop(tb, 2 * _k);
+                host.Children.Add(tb);
+            }
+        }
+
+        public override void Tick(double tMs)
+        {
+            // Clamped, like the campus's: a dropped frame must not teleport the ball through a
+            // paddle, and the glass timer is a Background-priority DispatcherTimer that WILL be
+            // late under load.
+            double dt = Math.Min(80.0, tMs - _last) / 1000.0;
+            _last = tMs;
+
+            _x += _vx * dt;
+            _y += _vy * dt;
+            if (_y < _k) { _y = _k; _vy = Math.Abs(_vy); }
+            if (_y > _h - 4 * _k) { _y = _h - 4 * _k; _vy = -Math.Abs(_vy); }
+
+            double left = _inset, right = _w - _inset - _paddleW;
+            _pl = Track(_pl, Fumbling(0, tMs) ? 0.02 : 0.16);
+            _pr = Track(_pr, Fumbling(1, tMs) ? 0.02 : 0.16);
+            _pl = Math.Clamp(_pl, _paddleH / 2, _h - _paddleH / 2);
+            _pr = Math.Clamp(_pr, _paddleH / 2, _h - _paddleH / 2);
+
+            if (_vx < 0 && _x <= left + _paddleW && Math.Abs(_y - _pl) < _paddleH / 2 + 2 * _k)
+            {
+                _x = left + _paddleW; _vx = Math.Abs(_vx);
+                _vy += (_y - _pl) * 1.6;
+            }
+            if (_vx > 0 && _x + _ballSize >= right && Math.Abs(_y - _pr) < _paddleH / 2 + 2 * _k)
+            {
+                _x = right - _ballSize; _vx = -Math.Abs(_vx);
+                _vy += (_y - _pr) * 1.6;
+            }
+
+            if (_x < -4 * _k) { _right++; _scoreR.Text = _right.ToString(CultureInfo.InvariantCulture); Serve(1); }
+            if (_x > _w + 4 * _k) { _left++; _scoreL.Text = _left.ToString(CultureInfo.InvariantCulture); Serve(-1); }
+
+            Canvas.SetTop(_padL, _pl - _paddleH / 2);
+            Canvas.SetTop(_padR, _pr - _paddleH / 2);
+            Canvas.SetLeft(_ball, _x);
+            Canvas.SetTop(_ball, _y);
+        }
+
+        /// <summary>Is it this side's turn to be losing? One side, from one moment, for the rest.</summary>
+        private bool Fumbling(int side, double tMs) => tMs > _missAtMs && _missSide == side;
+
+        private double Track(double cur, double gain) => cur + (_y + 1.5 * _k - cur) * gain;
+
+        private void Serve(int dir)
+        {
+            _x = _w / 2; _y = _h / 2;
+            _vx = _speed * dir;
+            _vy = _speed * (_rng.NextDouble() * 0.9 - 0.45);
+        }
+    }
 
     /// <summary>
     /// A five-arm spiral, rotating. One <see cref="System.Windows.Shapes.Path"/> whose geometry is

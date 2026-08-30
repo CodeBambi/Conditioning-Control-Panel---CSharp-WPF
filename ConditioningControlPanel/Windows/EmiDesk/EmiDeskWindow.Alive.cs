@@ -471,12 +471,41 @@ public partial class EmiDeskWindow
             if (now < _fidgetDue) return;
             if (!CanPerk()) return;
             _fidgetDue = now.AddMilliseconds(FidgetDelayMs());
-            RunFidget(_fidgets.Next());
+
+            // Two of the five can decline: the prop beat when its art is missing, the screen beat
+            // when there is no library to draw from or the desk was touched a moment ago. A
+            // declined beat hands its slot straight to another kind rather than costing the user a
+            // whole quiet minute of nothing - one retry only, because the scheduler never repeats
+            // itself and a second refusal means the pool really has nothing to give right now.
+            var kind = _fidgets.Next();
+            if (RunFidget(kind)) { NoteFidget("[EmiDesk] fidget {Kind}", kind, null); return; }
+
+            var alt = _fidgets.Next();
+            NoteFidget("[EmiDesk] fidget {Kind} declined, {Alt} instead", kind, alt);
+            RunFidget(alt);
         }
         catch (Exception ex)
         {
             Log.Debug(ex, "[EmiDesk] fidget step failed");
         }
+    }
+
+    /// <summary>
+    /// Say which fidget just ran. DEBUG in a normal launch, because at 25-50 s apart this is a line
+    /// every half minute for the life of the process and it tells the user's log nothing; INFO
+    /// under the QA cadence (EMI_DESK_DEBUG), where reading the rotation back off the log IS the
+    /// play-test.
+    /// </summary>
+    private static void NoteFidget(string template, EmiFidget kind, EmiFidget? alt)
+    {
+        if (EmiDebug.Enabled)
+        {
+            if (alt is EmiFidget a) Log.Information(template, kind, a);
+            else Log.Information(template, kind);
+            return;
+        }
+        if (alt is EmiFidget b) Log.Debug(template, kind, b);
+        else Log.Debug(template, kind);
     }
 
     /// <summary>
@@ -491,48 +520,75 @@ public partial class EmiDeskWindow
         return EmiDebug.FidgetMs is int ms ? ms : authored;
     }
 
-    private void RunFidget(EmiFidget kind)
+    /// <summary>
+    /// Do one micro-fidget. Returns FALSE when the kind declined - reduced motion has taken the
+    /// two that move her, the prop beat found no art, the screen beat found nothing to show - so
+    /// that <see cref="StepFidgets"/> can spend the slot on something else instead of leaving the
+    /// desk still for another minute. Never throws.
+    /// </summary>
+    private bool RunFidget(EmiFidget kind)
     {
         try
         {
             switch (kind)
             {
                 case EmiFidget.Twitch:
-                    if (!AliveMotionOk) return;
+                    if (!AliveMotionOk) return false;
                     PlayChain(TwitchChain);
                     AnimateOffset(MoveShift, EmiAlive.TwitchDip, 0, 0.22, 1);
-                    break;
+                    return true;
 
                 case EmiFidget.WeightShift:
                     // No chain and no face: she just leans on the other foot for a moment. It is the
                     // one fidget that can happen without claiming the glass at all.
-                    if (!AliveMotionOk) return;
+                    if (!AliveMotionOk) return false;
                     RunWeightShift();
-                    break;
+                    return true;
 
                 case EmiFidget.Glance:
                     // The canon glance, plus a small standing look to the side she glanced at, so
                     // the two halves of "she looked over there" agree.
                     PlayChain("glance", bodyFrameOverride: "idle");
                     NudgeGaze(Rng.Next(2) == 0 ? -1 : 1, 0, 900);
-                    break;
+                    return true;
 
                 case EmiFidget.Prop:
-                    // She checks something. The longest of the four by a distance, which is why it
-                    // is one of four rather than one of two: at 25-50 s apart a 3 s beat is rare.
+                    // She checks something. The longest of the five by a distance, which is why it
+                    // is one of five rather than one of two: at 25-50 s apart a 3 s beat is rare.
                     // EmiDeskWindow.Props.cs owns the plate and takes it off again.
-                    RunPropBeat();
+                    if (!RunPropBeat()) return false;
                     // She is looking DOWN at the thing in her hand, so the standing look goes with
                     // it - a reading face over a level gaze reads as her reading the middle
                     // distance. Right and down, because the prop is at her right hand.
                     NudgeGaze(1, 1, EmiProps.HoldMs);
-                    break;
+                    return true;
+
+                case EmiFidget.Screen:
+                    // She puts something on her own glass. EmiDeskWindow.Glass.cs owns the flip and
+                    // its ten second life; all this does is reach the same door from the wheel.
+                    return RunScreenBeat();
             }
+
+            return false;
         }
         catch (Exception ex)
         {
             Log.Debug(ex, "[EmiDesk] fidget {Kind} failed", kind);
+            return false;
         }
+    }
+
+    /// <summary>
+    /// THE SCREEN'S TURN ON THE WHEEL. Everything that says "not now" about a channel already lives
+    /// in <c>GlassMayFlip</c> and is asked here unchanged, plus one floor of its own: the desk has
+    /// to have gone <see cref="EmiAlive.ScreenBeatRestMs"/> untouched. Without that the wheel would
+    /// hand her a channel while the user is still moving the mouse over her, and the first thing
+    /// <c>NoteGlassActivity</c> would do is tear it back down.
+    /// </summary>
+    private bool RunScreenBeat()
+    {
+        if (!GlassRestedFor(EmiAlive.ScreenBeatRestMs)) return false;
+        return TryFlipGlassNow();
     }
 
     /// <summary>

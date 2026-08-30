@@ -1,5 +1,6 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using ConditioningControlPanel.Services.EmiDesk;
 using Xunit;
@@ -197,7 +198,7 @@ public class EmiAliveTests
     }
 
     [Fact]
-    public void NoFidgetEverRepeatsItselfAndAllThreeGetUsed()
+    public void NoFidgetEverRepeatsItselfAndEveryKindGetsUsed()
     {
         var s = new EmiAlive.FidgetScheduler(new Random(99));
         var seen = new HashSet<EmiFidget>();
@@ -213,7 +214,12 @@ public class EmiAliveTests
             last = next;
         }
 
-        Assert.Equal(3, seen.Count);
+        // EVERY kind in the enum except None, counted from the enum rather than written down: the
+        // pool has grown twice already (the prop beat, then the screen beat) and a hard 3 here is
+        // what turned main red both times.
+        var kinds = Enum.GetValues<EmiFidget>().Where(k => k != EmiFidget.None).ToArray();
+        Assert.Equal(kinds.Length, seen.Count);
+        Assert.All(kinds, k => Assert.Contains(k, seen));
     }
 
     // ---------------------------------------------------------------- the poke ladder
