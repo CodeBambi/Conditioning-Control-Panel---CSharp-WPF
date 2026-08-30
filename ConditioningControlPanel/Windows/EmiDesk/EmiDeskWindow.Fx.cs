@@ -39,6 +39,24 @@ public partial class EmiDeskWindow
     /// Bring her in: smoke bomb, CRT power-on, then the <c>wake</c> chain. Input is locked for the
     /// whole transition so a click cannot land mid-CRT and open a ring onto a 2 percent tall EMI.
     /// </summary>
+    /// <summary>
+    /// End the summon exactly once, however it ended: the wake chain ran out, or a pat cut it.
+    /// Idempotent, because those two can arrive in either order and sometimes both.
+    /// </summary>
+    internal void FinishSummon()
+    {
+        if (!_summonChainLive) return;
+        _summonChainLive = false;
+        var done = _summonDone;
+        _summonDone = null;
+        try { RestartIdleBeats(); }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] idle beats failed to restart after the summon"); }
+        try { done?.Invoke(); }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] summon continuation threw"); }
+    }
+
+    private Action? _summonDone;
+
     public void RunSummon(Action? done = null)
     {
         try
@@ -74,11 +92,13 @@ public partial class EmiDeskWindow
                     if (_closingForGood) return;
                     _transiting = false;
                     InputLocked = false;
-                    PlayChain("wake", () =>
-                    {
-                        RestartIdleBeats();
-                        done?.Invoke();
-                    });
+
+                    // Her entrance is CUTTABLE from here on. A pat that lands during it ends it
+                    // through FinishSummon so the idle beats still start and the caller's
+                    // continuation still runs: the chain is interruptible, the bookkeeping is not.
+                    _summonDone = done;
+                    _summonChainLive = true;
+                    PlayChain("wake", FinishSummon);
                 });
             });
         }

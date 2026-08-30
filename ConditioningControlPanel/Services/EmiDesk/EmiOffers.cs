@@ -194,9 +194,8 @@ public static class EmiOffers
     /// <para>Same DRAW-TIME law as the tours (LINES-SCHEMA 4), for the same reason: the ask is
     /// dropped before it is ever put on the glass rather than shown and then fizzling. Two things
     /// make it infeasible, and they are both dead-chip cases - there is no book in this build
-    /// (<see cref="EmiCodex.HasContent"/> covers the hosted bundle AND the chapter files behind the
-    /// native reader, so it is only false when there is genuinely nothing to read), or the book is
-    /// already open and the chip would be an offer to do what is already done.</para>
+    /// (<see cref="EmiBook.HasContent"/> is false only when the build ships zero cards), or the
+    /// book is already open and the chip would be an offer to do what is already done.</para>
     ///
     /// <para>Note what is NOT checked. There is no tier gate here and no main-window check: the
     /// book is the manual, it is never locked, and it opens perfectly well with the control panel
@@ -208,8 +207,8 @@ public static class EmiOffers
         {
             if (!string.Equals((verb ?? string.Empty).Trim(), BookOpenVerb, StringComparison.OrdinalIgnoreCase))
                 return false;
-            if (EmiCodex.IsOpen) return false;
-            return EmiCodex.HasContent;
+            if (EmiBook.IsOpen) return false;
+            return EmiBook.HasContent;
         }
         catch (Exception ex)
         {
@@ -230,7 +229,7 @@ public static class EmiOffers
                 Log.Debug("[EmiDesk] unknown book verb {Verb}, ignored", v);
                 return;
             }
-            EmiCodex.Open();
+            EmiBook.Open();
             App.EmiDesk?.Fire("effectFired", new { channel = "book", fromAsk });
         }
         catch (Exception ex)

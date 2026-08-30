@@ -102,6 +102,10 @@ public partial class EmiDeskWindow
     private int _askStage;
     private bool _bubbleHooked;
 
+    /// <summary>One posted book-dodge relayout in flight at a time. A drag raises Moved per mouse
+    /// message and the answer can only change once per frame; see <see cref="PostBubbleRelayout"/>.</summary>
+    private bool _bookRelayoutPending;
+
     /// <summary>
     /// BLIPESE. Created on the first bubble and never re-created: it owns a cache directory and a
     /// handle, and nothing about it is worth building twice. Null only before her first word.
@@ -252,6 +256,14 @@ public partial class EmiDeskWindow
             // the user clicked a chip. No global hook, ever.
             PreviewKeyDown += OnBubbleKeyDown;
             Resized += (_, __) => LayoutBubble();
+
+            // THE BOOK DODGE, the other half (see LayoutBubble). The side is only re-read when
+            // something lays the bubble out, and until now nothing did that on a MOVE: the bubble is
+            // drawn in her own window in body-local coordinates, so dragging her carried it along
+            // for free. It does not carry the book's side along with it, so hook both.
+            Moved += (_, __) => RelayoutBubbleForBook();
+            EmiBook.SideChanged += OnBookSideChanged;
+
             try
             {
                 var svc = App.EmiDesk;
@@ -330,7 +342,25 @@ public partial class EmiDeskWindow
             //
             // Measured in physical pixels against that monitor's work area, because Left/Top here
             // are DIPs and the screens are not (THE COORDINATE TRAP).
-            bool flip = false;
+            //
+            // THE BOOK DODGE (owner, 2026-08-30). Her book is a sibling window, Topmost, built after
+            // her, so it paints straight OVER this one: with the panel on her right and the bubble
+            // on its default right, all you can read is the sliver of line between her ear and the
+            // panel edge. The bubble moves, NOT the book - the panel's placement and z-order are
+            // owner-approved as they stand, and shoving a 320 DIP window about to make room for a
+            // line that lives for four seconds trades a readable bubble for a jumping panel.
+            // So: the book gets a side, the bubble takes the other one, and the screen-edge
+            // arbitration below still has the final word. Asked through EmiBook, never off the
+            // window itself, and the book has no idea this code exists.
+            int bookSide = 0;
+            try { bookSide = EmiBook.SideOfHer; }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book side unreadable, bubble keeps its default"); }
+
+            double flippedLeft = bodyX + bw * (1.0 - BubbleLeftFrac) - size.Width;
+
+            // Her right unless the book is standing there. bookSide is +1 for her right, -1 for her
+            // left, 0 for no book, so a closed book leaves the old default untouched.
+            bool flip = bookSide > 0;
             double workLeftDip = double.NegativeInfinity, workRightDip = double.PositiveInfinity;
             try
             {
@@ -342,22 +372,30 @@ public partial class EmiDeskWindow
                 workLeftDip = screen.WorkingArea.Left / s;
                 workRightDip = screen.WorkingArea.Right / s;
 
+                // How far each side hangs off the work area, in physical pixels, 0 when it fits.
                 double rightPx = (Left + left + size.Width) * s;
-                flip = rightPx > screen.WorkingArea.Right;
+                double flippedLeftPx = (Left + flippedLeft) * s;
+                double spillRight = Math.Max(0, rightPx - screen.WorkingArea.Right);
+                double spillLeft = Math.Max(0, screen.WorkingArea.Left - flippedLeftPx);
 
-                if (flip)
-                {
-                    // ...unless the left has even less room than the right had. A flip that clips
-                    // worse than the thing it was fixing is not a flip.
-                    double flippedLeftPx = (Left + bodyX + bw * (1.0 - BubbleLeftFrac) - size.Width) * s;
-                    if (flippedLeftPx < screen.WorkingArea.Left
-                        && (screen.WorkingArea.Left - flippedLeftPx) > (rightPx - screen.WorkingArea.Right))
-                        flip = false;
-                }
+                // `flip` above is only the PREFERENCE - the old default with no book, the away side
+                // with one. The screen still overrules it: a preferred side that spills leaves for
+                // the other one, and it only stays there if the other one spills LESS. A flip that
+                // clips harder than the thing it was fixing is not a flip.
+                //
+                // With no book this is the old two-line rule exactly (stay right, flip when the
+                // right spills, un-flip when the left spills worse). With a book it is also the
+                // "no room on the away side" fallback: neither side fits, so the side that shows
+                // more of the line wins, even when that is the side the panel is standing on.
+                //
+                // The >= on the second line is not a typo: with no book, an exact tie used to flip,
+                // and this keeps that. Ties happen on a bubble wider than the whole work area.
+                if (flip && spillLeft > spillRight) flip = false;
+                else if (!flip && spillRight > 0 && spillRight >= spillLeft) flip = true;
             }
-            catch { /* one monitor, or none enumerable: keep her on the right */ }
+            catch { /* one monitor, or none enumerable: keep whichever side the book left her */ }
 
-            if (flip) left = bodyX + bw * (1.0 - BubbleLeftFrac) - size.Width;
+            if (flip) left = flippedLeft;
 
             // THE CLIP GUARD. The window is only OverlayPadX wide either side of her and the work
             // area is only so wide: a bubble that starts past either is a bubble cut off mid-word
@@ -389,6 +427,64 @@ public partial class EmiDeskWindow
         {
             Log.Debug(ex, "[EmiDesk] bubble layout failed");
         }
+    }
+
+    /// <summary>
+    /// She moved. Her bubble moves with her for free - it is drawn in her own window in body-local
+    /// coordinates - but the BOOK's answer travels with the desk, not with her, so a drag across
+    /// the middle of the screen can flip the panel out from under a bubble that never re-laid out.
+    /// Nothing to do when there is no book beside her.
+    /// </summary>
+    private void RelayoutBubbleForBook()
+    {
+        if (!EmiBook.IsOpen) return;
+        PostBubbleRelayout();
+    }
+
+    /// <summary>
+    /// The book opened, folded, or flipped to her other side. Re-place a live bubble so it dodges
+    /// the panel, or comes straight back to its normal side the moment the panel lets go.
+    ///
+    /// <para>This is a STATIC event and she can be dismissed and brought back out, so the handler
+    /// drops itself the first time it fires on a window that is going away. Cheaper than threading
+    /// an unhook through two teardown paths for a subscription that is silent unless a book moves.</para>
+    /// </summary>
+    private void OnBookSideChanged(object? sender, EventArgs e)
+    {
+        if (_closingForGood)
+        {
+            try { EmiBook.SideChanged -= OnBookSideChanged; }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book side unhook failed"); }
+            return;
+        }
+        PostBubbleRelayout();
+    }
+
+    /// <summary>
+    /// Lay the bubble out again, behind whatever raised this.
+    ///
+    /// <para>POSTED, never inline. Both callers can arrive from inside the book's own placement -
+    /// her Moved is the event the panel follows her on, and handler order there is registration
+    /// order, which is whichever of the bubble and the book happened to be built first. Coming back
+    /// at Background priority means the panel has finished deciding where it landed before the
+    /// bubble asks, and it collapses a drag's worth of Moved into one layout.</para>
+    /// </summary>
+    private void PostBubbleRelayout()
+    {
+        try
+        {
+            if (_closingForGood || _bookRelayoutPending) return;
+            if (_bubble == null || _bubble.Visibility != Visibility.Visible) return;
+
+            _bookRelayoutPending = true;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _bookRelayoutPending = false;
+                if (_closingForGood) return;
+                LayoutBubble();
+            }), DispatcherPriority.Background);
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] bubble book-dodge relayout failed"); }
     }
 
     private void LayoutTail(double left, double bubbleBottom, double bubbleWidth, bool flip)

@@ -309,7 +309,7 @@ public static class EmiTargets
         // reader, so a build with no bundle still puts something readable on screen.
         //
         // No art on purpose: no PNG ships in this wave, and the hue tile is the book's own colour.
-        T("codex", null, Tile(0xE6, 0xD3, 0xA8), Always, Never, () => EmiCodex.Open());
+        T("codex", null, Tile(0xE6, 0xD3, 0xA8), Always, Never, () => EmiBook.Open());
 
         // ---- the rest of the doors ----------------------------------------------
 

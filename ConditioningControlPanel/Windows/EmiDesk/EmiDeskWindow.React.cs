@@ -125,7 +125,18 @@ public partial class EmiDeskWindow
             // LAW 3: a line in flight is never cut for a pat. Consumed anyway - a click that opened
             // the ring because she happened to be mid-sentence would be the least predictable
             // thing on the desktop.
-            if (_player.IsLive) return true;
+            //
+            // HER OWN ENTRANCE IS NOT A LINE. The wake chain is 1.68 s long and nobody reads it as
+            // her talking, so for that stretch the law was firing where it was never aimed: she
+            // was on screen, unlocked, apparently touchable, and a pat bought nothing but a silent
+            // 2 percent squash. A pat during the entrance CUTS the entrance, which is the honest
+            // reading of "she noticed me".
+            if (_player.IsLive)
+            {
+                if (!_summonChainLive) return true;
+                FinishSummon();
+                CancelChain();
+            }
 
             // The hover pet and the click pat are one gesture with two triggers. Disarming here
             // stops a pointer that is resting on her head from firing a second pat 1.2 s later.

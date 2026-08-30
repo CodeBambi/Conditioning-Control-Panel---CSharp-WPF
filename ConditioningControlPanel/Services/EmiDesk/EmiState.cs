@@ -163,6 +163,16 @@ public sealed class EmiState
     [JsonProperty("codexChapter")] public string? CodexChapter { get; set; }
 
     /// <summary>
+    /// THE BOOKMARK, flipbook edition: the card she last had open, or null.
+    ///
+    /// <para>Its own field rather than a reuse of <see cref="CodexChapter"/>, because the two id
+    /// spaces only look alike. A codex chapter id and a card id can be the same word today and
+    /// diverge the moment a card is split, and a bookmark that silently points at the wrong thing
+    /// is worse than no bookmark. A card id that no longer exists is ignored, not repaired.</para>
+    /// </summary>
+    [JsonProperty("bookCard")] public string? BookCard { get; set; }
+
+    /// <summary>
     /// How many times the book has EVER been opened, by any route. Read by
     /// <see cref="EmiCodex.MaybeOffer"/>: she does not offer a book you have already been reading.
     /// </summary>

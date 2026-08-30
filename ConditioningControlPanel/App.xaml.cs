@@ -2543,6 +2543,37 @@ namespace ConditioningControlPanel
                 Services.Dev.DoorShooter.Run(mainWindow, outDir);
             }
 
+            // `--shoot-book [outDir]`: summon EMI, open her book, and render every card offscreen -
+            // the reduced-motion still plus a five-frame walk across each demo loop. The book is a
+            // DRAWN object (8-bit loops, an integer stage scale, a font loaded from a base URI) and
+            // every one of those fails visibly without failing loudly, so a design review needs
+            // pixels. See Services/Dev/BookShooter.cs. Dead code in every normal launch.
+            if (e.Args.Contains("--shoot-book"))
+            {
+                var bidx = Array.IndexOf(e.Args, "--shoot-book");
+                var bookDir = bidx >= 0 && bidx + 1 < e.Args.Length && !e.Args[bidx + 1].StartsWith("--")
+                    ? e.Args[bidx + 1]
+                    : Path.Combine(AppContext.BaseDirectory, "logs", "book-shots");
+                Services.Dev.BookShooter.Run(mainWindow, bookDir);
+            }
+
+            // `--dump-book-keys [path]`: write every emi_book_* key the deck needs, as a JSON
+            // fragment, and exit. The card records carry their English inline as the FALLBACK, and
+            // en.json has to carry the same string byte for byte or the localization test fails and
+            // no translator ever sees the copy. Hand-transcribing 150 of those out of six source
+            // files is a typo generator, so the deck emits them instead. Dead code in every normal
+            // launch. Writes UTF-8 with no BOM; splice it into en.json, do not paste over the file.
+            if (e.Args.Contains("--dump-book-keys"))
+            {
+                var kidx = Array.IndexOf(e.Args, "--dump-book-keys");
+                var keyPath = kidx >= 0 && kidx + 1 < e.Args.Length && !e.Args[kidx + 1].StartsWith("--")
+                    ? e.Args[kidx + 1]
+                    : Path.Combine(AppContext.BaseDirectory, "logs", "emi-book-keys.json");
+                Services.Dev.BookKeyDump.Run(keyPath);
+                Shutdown();
+                return;
+            }
+
             // `--possession-preview [outDir]`: offscreen verification rig for the Possession layer -
             // navigates to the Lockdown card, then applies EVERY effect in the catalog one at a time
             // against a real target, four shots each (before / charge / live / undone) plus a report on

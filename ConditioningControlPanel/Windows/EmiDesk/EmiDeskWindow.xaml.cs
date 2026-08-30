@@ -222,6 +222,15 @@ public partial class EmiDeskWindow : Window
     private bool _transiting;
     private bool _closingForGood;
 
+    /// <summary>
+    /// True from the moment the summon's <c>wake</c> chain starts until it ends or is cut. It
+    /// exists so LAW 3 in <c>PetFromClick</c> can tell a LINE in flight from her own ENTRANCE: the
+    /// law protects the first, and used to swallow every click during the second, which is 1.68 s
+    /// of her looking touchable and not answering (owner, 2026-08-30: "i cannot immediately click
+    /// with left click on emi").
+    /// </summary>
+    private bool _summonChainLive;
+
     private Point _dragStartScreen;
     private double _dragStartLeft, _dragStartTop;
     private bool _dragging, _dragMoved;
@@ -472,21 +481,31 @@ public partial class EmiDeskWindow : Window
             double gearTop = Math.Min(ChipPad, insetY);
             double gearLeft = Math.Min(ChipPad, insetX);
             BtnGear.Padding = new Thickness(gearLeft, gearTop,
-                                            2 * ChipPad - gearLeft, 2 * ChipPad - gearTop);
+                                            2 * ChipPad - gearLeft, ChipStackPad);
             BtnGear.Width = chip + 2 * ChipPad;
-            BtnGear.Height = chip + 2 * ChipPad;
+            BtnGear.Height = chip + gearTop + ChipStackPad;
             BtnGear.Margin = new Thickness(insetX - gearLeft, insetY - gearTop, 0, 0);
 
             // The ? rides directly under the gear, same column, same drawn size. Its top margin is
             // the gear's margin plus the gear's FULL height, which is the hit area and not the
             // chip, so the two forgiving squares sit edge to edge and can never both claim a click.
-            // ChipGap is added on top of that as visible air between the two drawn chips: without
-            // it the hit areas would still be correct but the two circles would look welded.
-            BtnHelp.Padding = BtnGear.Padding;
+            //
+            // THE FACING SIDES ARE THIN (owner, 2026-08-30: "raise a little bit that ? button,
+            // seems a bit too far away from the gear"). The first cut gave both chips the full
+            // 2 x ChipPad on every side, so between the two DRAWN circles sat the gear's 12 DIP of
+            // bottom pad, plus ChipGap, plus the top pad of the ?: eighteen DIPs of nothing, which
+            // reads as two unrelated buttons rather than one column. ChipStackPad is what the two
+            // sides that FACE EACH OTHER take instead, and it is the whole of the visible gap.
+            //
+            // No hit area is lost and ChipGap is not wanted here any more: the pair still tile the
+            // same column edge to edge, the boundary has simply moved to sit between the two drawn
+            // circles, so a low miss on the gear now lands on the ? instead of on nothing.
+            BtnHelp.Padding = new Thickness(gearLeft, ChipStackPad,
+                                            2 * ChipPad - gearLeft, 2 * ChipPad - ChipStackPad);
             BtnHelp.Width = BtnGear.Width;
-            BtnHelp.Height = BtnGear.Height;
+            BtnHelp.Height = chip + 2 * ChipPad;
             BtnHelp.Margin = new Thickness(BtnGear.Margin.Left,
-                                           BtnGear.Margin.Top + BtnGear.Height + ChipGap, 0, 0);
+                                           BtnGear.Margin.Top + BtnGear.Height, 0, 0);
 
             // The grip's HIT AREA, floored at 22 DIP so the cursor catches it at every body width
             // (owner call, QA 2026-08-29). The glyph inside it does not grow with it.
@@ -1115,6 +1134,13 @@ public partial class EmiDeskWindow : Window
     /// </summary>
     private const double ChipGap = 2.0;
 
+    /// <summary>
+    /// What the gear's BOTTOM edge and the top edge of the ? take of the forgiving pad, in DIPs.
+    /// Small, because those two sides face each other and the pad between them is the whole of what
+    /// the eye reads as the distance between the two chips. See ApplyBodyWidth.
+    /// </summary>
+    private const double ChipStackPad = 3.0;
+
     /// <summary>Report one element's enters and leaves into the region.</summary>
     private void WireChromePart(FrameworkElement el, EmiChromePart part)
     {
@@ -1401,6 +1427,10 @@ public partial class EmiDeskWindow : Window
             e.Handled = true;
             if (InputLocked || _transiting) return;
 
+            // The two buttons agree about the entrance: if the left one may cut it, so may this
+            // one, or the ring would open over a chain that is still animating her body.
+            if (_summonChainLive) { FinishSummon(); CancelChain(); }
+
             RaiseActivity();
             PlayClickSquash();
             ToggleRingFromGesture();
@@ -1448,7 +1478,7 @@ public partial class EmiDeskWindow : Window
     ///
     /// <para>It deliberately does NOT go through a moment. Everything else she opens, she is asked
     /// about first and may decline; this is the user reaching for the manual, and a manual that
-    /// answers a direct request with a coin flip is not a manual. <see cref="EmiCodex.Open"/> is
+    /// answers a direct request with a coin flip is not a manual. <see cref="EmiBook.Open"/> is
     /// already idempotent and already falls back to the plain reader when the illustrated bundle or
     /// the WebView2 runtime is missing, so there is nothing to guard here beyond the panel and ring
     /// tidy-up the gear does.</para>
@@ -1465,7 +1495,7 @@ public partial class EmiDeskWindow : Window
             try { CloseOptionsPanel(); } catch (Exception ex) { Log.Debug(ex, "[EmiDesk] options tidy before the book failed"); }
             try { CloseRing(); } catch (Exception ex) { Log.Debug(ex, "[EmiDesk] fold before the book failed"); }
 
-            EmiCodex.Open();
+            EmiBook.Open();
         }
         catch (Exception ex)
         {
