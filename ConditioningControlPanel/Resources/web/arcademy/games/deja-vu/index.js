@@ -60,6 +60,7 @@ import {
 import { createDvCasino } from './casino.js';
 import { createDvTrickster, DV_TRICKSTER } from './trickster.js';
 import { makeTaggedRoll, makeRng, shuffled } from '../../core/rng.js';
+import { adoptVideo } from '../../engine/util.js';
 
 /** Distinct glyphs so a class is fully playable with ZERO media (the floor
  *  under the poster-frame-only floor). Deliberately font-safe, no emoji.
@@ -582,6 +583,7 @@ export default {
       let node;
       if (url && isVideoUrl(url) && !posterOnly) {
         node = el('video', 'g-dv-face');
+        adoptVideo(node);
         node.muted = true; node.loop = true; node.autoplay = false;
         node.setAttribute('muted', 'true');
         node.setAttribute('playsinline', 'true');

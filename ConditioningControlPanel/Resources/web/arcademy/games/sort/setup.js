@@ -41,6 +41,7 @@
  * ==========================================================================*/
 
 import { SETUP_LEX } from './setup-lex.js';
+import { adoptVideo } from '../../engine/util.js';
 
 /* ---------------------------------------------------------------- data --- */
 
@@ -934,6 +935,7 @@ export function createSetupDoor(o) {
         let media;
         if (isVideoRow(row)) {
           media = el('video', 'g-sort-gmedia');
+          adoptVideo(media);
           media.muted = true; media.loop = true; media.autoplay = true;
           attr(media, 'muted', 'true'); attr(media, 'loop', 'true');
           attr(media, 'playsinline', 'true'); attr(media, 'autoplay', 'true');

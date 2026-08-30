@@ -38,6 +38,7 @@
  * ==========================================================================*/
 
 import { SL_DIALS, GLASS_W, GLASS_H, CHANNELS, rollChannel, pickDeepIdle, rollWrong, titleOf } from './channels.js';
+import { adoptVideo } from '../engine/util.js';
 
 const VIDEO_RE = /\.(mp4|webm|mov|m4v)(\?|#|$)/i;
 
@@ -124,6 +125,7 @@ export function createMediaBroker({ assets, settings, rand, doc, log } = {}) {
       try {
         if (VIDEO_RE.test(url)) {
           const v = d.createElement('video');
+          adoptVideo(v);
           v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true;
           if (v.setAttribute) { v.setAttribute('muted', ''); v.setAttribute('playsinline', ''); }
           v.addEventListener('loadeddata', () => { try { v.play(); } catch (e) { /* noop */ } settle(v); });
