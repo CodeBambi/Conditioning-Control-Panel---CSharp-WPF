@@ -755,7 +755,7 @@ lands ~200 ms into a 6 s cooldown, so it can never draw a second line.
 acknowledgement, not affection she registered; counting them would let a mashed pointer reach the
 "gist" in one second.
 
-### 13.2 The cards glyph
+### 13.2 The cards glyph  *(superseded by §15.2 — it is a gear now)*
 
 `BtnCards` in `EmiDeskWindow.xaml`: 18 DIP, top-LEFT, six pink pixel dots in a `#E60E0E1C` disc with
 a `#FF69B4` ring - the exact mirror of `BtnClose`, on the same 140 ms `FadeChrome` fade, scaled by
