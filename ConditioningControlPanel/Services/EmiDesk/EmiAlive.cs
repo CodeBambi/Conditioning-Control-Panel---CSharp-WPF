@@ -26,8 +26,8 @@ public enum EmiFidget
 
     /// <summary>
     /// She puts something on her own glass: pong, a spiral, a burst, gif rain, a film strip. The
-    /// channels already existed behind a 90 second stillness gate of their own
-    /// (<c>EmiChannels.IdleBeforeFlip</c>); this is the same flip, reached from the fidget wheel so
+    /// channels already existed behind a stillness gate of their own
+    /// (<c>EmiChannels.IdleBeforeFlip</c>, ~10 s since the 2026-08-30 campus port); this is the same flip, reached from the fidget wheel so
     /// that the screen takes its turn among the small body moves instead of being a separate
     /// clock. Like <see cref="Prop"/> it can no-op - a channel needs a library to draw from and the
     /// desk has to have been left alone - which is why <c>RunFidget</c> reports whether it did
@@ -238,14 +238,12 @@ public static class EmiAlive
 
     /// <summary>
     /// How long the desk has to have gone untouched before the <see cref="EmiFidget.Screen"/> beat
-    /// will take its turn, in ms. The glass's own clock (<c>EmiChannels.IdleBeforeFlip</c>, 90 s)
-    /// is an owner lock and stays exactly where it is - it is what makes an ABANDONED desk drift
-    /// off to a channel. This is the shorter floor for the same flip arriving off the fidget
-    /// wheel, and it is deliberately longer than one fidget gap: she does not put a show on the
-    /// second you look away, but a minute of quiet is enough that a channel is one of the things
-    /// she might do next rather than something that only happens if you leave the room.
+    /// will take its turn, in ms. This sat at 30 s against the glass's 90 s owner lock; on
+    /// 2026-08-30 the owner unlocked the rotation to ~10 s for the campus channel port, and the
+    /// wheel's floor drops with it - the two clocks are the same statement (an untouched desk
+    /// drifts off to a channel) arriving down different wires, and they should agree.
     /// </summary>
-    public const int ScreenBeatRestMs = 30_000;
+    public const int ScreenBeatRestMs = 10_000;
 
     /// <summary>The antenna twitch's travel, in DIPs.</summary>
     public const double TwitchDip = 2.0;

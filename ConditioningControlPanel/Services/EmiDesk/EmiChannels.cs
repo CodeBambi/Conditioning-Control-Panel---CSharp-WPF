@@ -26,22 +26,31 @@ namespace ConditioningControlPanel.Services.EmiDesk;
 /// underneath the whole time, so killing a channel is hiding one node and never touches the locked
 /// face renderer.
 /// </summary>
-public static class EmiChannels
+public static partial class EmiChannels
 {
     /// <summary>The channel ids, in the order the ambient rotation offers them.</summary>
-    public static readonly IReadOnlyList<string> All = new[] { "pong", "spiral", "video", "burst", "rain" };
+    public static readonly IReadOnlyList<string> All = new[]
+    {
+        "pong", "spiral", "video", "burst", "rain",
+        "browsing", "shop", "reruns", "coderain", "offair",
+    };
 
     /// <summary>
     /// The channels that are a SCREEN SAVER rather than an offer: she is watching them and a tap
     /// only puts her face back. Everything else on the glass is a thing she is holding out to you,
     /// and <see cref="Fire"/> is what taking it does.
     ///
-    /// <para>Pong is the first, and it is why this distinction had to exist: the campus has had a
-    /// whole deck of savers (<c>emi/channels.js</c>) since the takeover work and the desk had none,
-    /// so every flip of the desk's glass was an offer of an EFFECT. Now the wheel can also just
-    /// find her playing something.</para>
+    /// <para>Pong was the first, and it is why this distinction had to exist: the campus has had
+    /// a whole deck of savers (<c>emi/channels.js</c>) since the takeover work and the desk had
+    /// none, so every flip of the desk's glass was an offer of an EFFECT. The 2026-08-30 port
+    /// brought the rest of the campus deck across, so most of what the wheel finds now is her
+    /// just watching television. "wrong" is here too even though it never enters the rotation
+    /// (it rides another channel's exit): a tap on it must put her face back, not fire anything.</para>
     /// </summary>
-    private static readonly HashSet<string> Savers = new(StringComparer.Ordinal) { "pong" };
+    private static readonly HashSet<string> Savers = new(StringComparer.Ordinal)
+    {
+        "pong", "browsing", "shop", "reruns", "coderain", "offair", "wrong",
+    };
 
     /// <summary>True when a tap on this channel fires nothing - see <see cref="Savers"/>.</summary>
     public static bool IsSaver(string? id) => id != null && Savers.Contains(id);
@@ -50,12 +59,15 @@ public static class EmiChannels
     public static readonly TimeSpan ChannelLife = TimeSpan.FromSeconds(10);
 
     /// <summary>
-    /// Idle time before the glass flips (BRIEF 6). Ninety seconds is the owner lock; the only thing
-    /// that can move it is the EMI_DESK_IDLE_MS QA override (see <see cref="EmiDebug"/>), which is
-    /// absent in every normal launch.
+    /// Idle time before the glass flips. BRIEF 6 shipped this as a 90 s owner lock; on 2026-08-30
+    /// the owner unlocked it for the campus channel port ("one every 10 sec or so is fine"), so an
+    /// untouched desk now rotates like the campus TV. The glass resets its idle clock every time a
+    /// channel closes, so ten seconds here against <see cref="ChannelLife"/> reads as a natural
+    /// ~10 s on / ~10 s off rotation. The EMI_DESK_IDLE_MS QA override (see <see cref="EmiDebug"/>)
+    /// still wins when present.
     /// </summary>
     public static TimeSpan IdleBeforeFlip =>
-        EmiDebug.IdleMs is int ms ? TimeSpan.FromMilliseconds(ms) : TimeSpan.FromSeconds(90);
+        EmiDebug.IdleMs is int ms ? TimeSpan.FromMilliseconds(ms) : TimeSpan.FromSeconds(10);
 
     /// <summary>The glitch flip's length: three to four torn frames.</summary>
     public const int GlitchMs = 220;
@@ -112,8 +124,27 @@ public static class EmiChannels
         "video" => EmiOffers.HasVideos(),
         "burst" => EmiOffers.HasImages(),
         "rain" => EmiOffers.HasImages(),
+
+        // The campus deck (2026-08-30 port). The wireframe pages, the pedestal and the test card
+        // hold up fine as stills, so reduced motion keeps them; the code rain is refused for the
+        // same reason pong is - the falling glyphs ARE the channel.
+        "browsing" => true,
+        "shop" => true,
+        "reruns" => RerunsPainter.HasMaterial(),
+        "coderain" => MotionOk(),
+        "offair" => true,
+
+        // Never feasible by name on purpose: "wrong" is not in the rotation. It rides another
+        // channel's exit (the glass code rolls for it on close) and only ever lands there.
         _ => false
     };
+
+    /// <summary>
+    /// The exit roll for the WRONG CHANNEL intrusion (campus <c>rollWrong</c>): 1-in-40 on a
+    /// natural channel exit, full motion only - a glitch burst that cannot move is just a broken
+    /// screen. The once-per-session latch lives with the glass, which owns the session.
+    /// </summary>
+    public static bool RollWrong() => MotionOk() && Rng.Next(40) == 0;
 
     /// <summary>The app-wide motion setting, the same one the wave-A fidgets read. Never throws.</summary>
     private static bool MotionOk()
@@ -135,6 +166,12 @@ public static class EmiChannels
                 "video" => VideoPainter.TryBuild(w, h),
                 "burst" => BurstPainter.TryBuild(w, h),
                 "rain" => RainPainter.TryBuild(w, h),
+                "browsing" => new BrowsingPainter(w, h),
+                "shop" => new ShopPainter(w, h),
+                "reruns" => new RerunsPainter(w, h),
+                "coderain" => new CodeRainPainter(w, h),
+                "offair" => new OffAirPainter(w, h),
+                "wrong" => new WrongPainter(w, h),
                 _ => null
             };
         }

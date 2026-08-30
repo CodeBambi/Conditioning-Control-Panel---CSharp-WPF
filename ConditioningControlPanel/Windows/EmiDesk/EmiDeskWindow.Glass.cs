@@ -14,8 +14,9 @@ namespace ConditioningControlPanel;
 /// THE GLASS: what she puts on her own little screen when nobody has touched her for a while, and
 /// what a tap on it does.
 ///
-/// The whole feature is one offer with no words in it. After 90 s of real idle her glass glitches
-/// over to a channel for 10 s and then glitches back. Tap it and the thing on the screen happens.
+/// The whole feature is one offer with no words in it. After 10 s of real idle (the owner
+/// unlocked BRIEF 6's 90 s on 2026-08-30) her glass glitches over to a channel for 10 s and then
+/// glitches back: an untouched desk rolls like a little television. Tap it and the thing on the screen happens.
 /// Do not, and she never mentions it: the decline line is wordless by design (BRIEF 6), because the
 /// failure mode here is an ad break, and an ad break that also nags is unforgivable.
 ///
@@ -58,6 +59,13 @@ public partial class EmiDeskWindow
     /// on a 30 s floor instead of only on an abandoned desk (found on the desk, 2026-08-30).</para>
     /// </summary>
     private bool _offering;
+
+    /// <summary>The WRONG CHANNEL has aired. Once a session, exactly like the campus latch.</summary>
+    private bool _wrongAired;
+
+    /// <summary>How long the wrong channel holds the glass. The painter's whole arc is authored
+    /// to finish inside this - flash in, wrongness, cut - plus a dead beat for a late teardown.</summary>
+    private const int WrongLifeMs = 1400;
     private bool _channelTapped;
     private bool _emiOwnsTheVideo;
     private bool _glassHooked;
@@ -218,7 +226,7 @@ public partial class EmiDeskWindow
     /// <summary>
     /// Put a channel on the glass RIGHT NOW if every gate allows it, and say whether one went up.
     /// The fidget wheel's door to the flip: same gate, same painter, same ten second life as the
-    /// idle watch's, only reached from the rotation instead of from the 90 second clock.
+    /// idle watch's, only reached from the rotation instead of from the idle clock.
     /// </summary>
     internal bool TryFlipGlassNow()
     {
@@ -460,6 +468,65 @@ public partial class EmiDeskWindow
             // Wordless on purpose. effectDeclined is a HOLD row in the moments table, so the engine
             // hands back a face and no bubble, and she never mentions the thing you ignored.
             App.EmiDesk?.Fire("effectDeclined", new { channel = id });
+        }
+
+        // THE WRONG CHANNEL (campus CH6, ported 2026-08-30). Once a session, 1-in-40, a channel
+        // exit is not a clean cut: something that should not be on any feed flashes up for a
+        // second and a half and dies. It rides exits only - never offered, never in the rotation -
+        // and its own close (id == "wrong") may not roll again.
+        if (!_wrongAired && id != "wrong" && !_closingForGood
+            && Visibility == Visibility.Visible && !ChainLive && !AskLive
+            && EmiChannels.RollWrong())
+        {
+            _wrongAired = true;
+            LandWrong();
+        }
+    }
+
+    /// <summary>
+    /// Land the wrong-channel intrusion directly: no glitch lead-in (it IS the glitch), no
+    /// glassOffer, no life beyond <see cref="WrongLifeMs"/>. Any failure just leaves the glass
+    /// dark, which is exactly what a wrong channel cutting out looks like.
+    /// </summary>
+    private void LandWrong()
+    {
+        try
+        {
+            var rect = GlassRect;
+            var painter = EmiChannels.Build("wrong", rect.Width, rect.Height);
+            if (painter == null) return;
+
+            EnsureGlassLayers();
+            if (_glassLayer == null) return;
+
+            _channel = "wrong";
+            _painter = painter;
+            _channelTapped = false;
+            _glassLive = true;
+            StopIdleBeats();
+
+            _glassLayer.Children.Clear();
+            painter.Attach(_glassLayer);
+            _glassLayer.Visibility = Visibility.Visible;
+
+            _channelUpUtc = DateTime.UtcNow;
+            painter.Tick(0);
+
+            _frames = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+            {
+                Interval = TimeSpan.FromMilliseconds(FrameMs)
+            };
+            _frames.Tick += OnChannelFrame;
+            _frames.Start();
+
+            _channelLife = NewTimer(WrongLifeMs, () => CloseChannel(declined: false));
+
+            Log.Information("[EmiDesk] wrong channel rode the exit");
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] wrong channel failed to land");
+            CloseChannel(false, silent: true);
         }
     }
 
