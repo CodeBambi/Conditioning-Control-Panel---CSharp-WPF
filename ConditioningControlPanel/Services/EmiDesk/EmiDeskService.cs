@@ -1346,6 +1346,15 @@ public sealed class EmiDeskService : IDisposable
                 return;
             }
             if (_mutePromptShownThisSession) return;
+            if (App.IsUnattendedRig)
+            {
+                // A screenshot rig has no keyboard. Left to itself this dialog abandons the summon
+                // it interrupted and the rig photographs an empty desk - see App.OnStartup. "Keep"
+                // is what the prompt does on a dismiss anyway, so this is the no-op answer.
+                _muteAccepted = false;
+                Log.Information("[EmiDesk] mute prompt skipped: unattended rig");
+                return;
+            }
             if (!AnyTalkingFeatureLive())
             {
                 // Nothing is going to talk over her, so there is nothing to arbitrate. Do NOT burn

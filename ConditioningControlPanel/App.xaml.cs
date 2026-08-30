@@ -26,6 +26,15 @@ namespace ConditioningControlPanel
     public partial class App : Application
     {
         /// <summary>
+        /// True when this launch is an offscreen screenshot rig (<c>--shoot-book</c>,
+        /// <c>--shoot-doors</c>, <c>--possession-preview</c>) and there is nobody to answer a dialog.
+        ///
+        /// <para>Read it to skip a MODAL question, never to skip the thing being tested. A rig exists
+        /// to photograph the shipped behaviour, so anything that draws must still draw.</para>
+        /// </summary>
+        public static bool IsUnattendedRig { get; private set; }
+
+        /// <summary>
         /// Custom entry point. Originally added for Velopack's update hooks; kept after
         /// Velopack removal (v5.8.4) so we still control startup ordering explicitly.
         /// </summary>
@@ -2536,6 +2545,26 @@ namespace ConditioningControlPanel
                 catch (Exception ex) { Logger?.Error(ex, "Failed to open the Goon Game test cockpit"); }
             }
 
+            // THE RIGS RUN WITH NOBODY AT THE KEYBOARD, and this is the line that makes that true.
+            //
+            // Every offscreen rig drives the SHIPPED app: it summons her the way a user does and
+            // shoots what actually renders. That is the point of them - a private code path would
+            // only prove the private code path works. But it means anything modal on the way in
+            // stops them dead, and one thing is: the mute prompt. `MaybeAskAboutMuting` opens a
+            // dialog on the summon path, the summon is abandoned while it is up, and the rig then
+            // waits ten seconds for a companion who is never coming and writes "she never came out".
+            //
+            // It failed SILENTLY and it failed INTERMITTENTLY, which is the worst pair. The prompt
+            // only appears when something else in the app is talking, and it is once per session, so
+            // the same command wrote 132 shots one minute and zero the next. The run that worked
+            // worked because a person happened to click the dialog while it was going.
+            //
+            // So a rig launch declares itself, once, here. It suppresses NOTHING that gets drawn -
+            // it answers one modal question the way a keyboard would ("Keep") so the summon survives.
+            IsUnattendedRig = e.Args.Contains("--shoot-doors")
+                              || e.Args.Contains("--shoot-book")
+                              || e.Args.Contains("--possession-preview");
+
             // `--shoot-doors [outDir]`: render every nav door to a PNG offscreen, then exit. Exists
             // because screen capture returns a stale frame whenever the display is asleep or the
             // session is locked, which is precisely when the owner is reviewing the UI remotely.
@@ -2560,7 +2589,9 @@ namespace ConditioningControlPanel
                 var bookDir = bidx >= 0 && bidx + 1 < e.Args.Length && !e.Args[bidx + 1].StartsWith("--")
                     ? e.Args[bidx + 1]
                     : Path.Combine(AppContext.BaseDirectory, "logs", "book-shots");
-                Services.Dev.BookShooter.Run(mainWindow, bookDir);
+                // `--narrow` alongside it forces the book to the width it takes when it has no room
+                // beside her, which is the only way to review that reflow on a desk that has room.
+                Services.Dev.BookShooter.Run(mainWindow, bookDir, e.Args.Contains("--narrow"));
             }
 
             // `--dump-book-keys [path]`: write every emi_book_* key the deck needs, as a JSON

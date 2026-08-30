@@ -55,9 +55,6 @@ namespace ConditioningControlPanel;
 /// </summary>
 public partial class EmiBookWindow : Window
 {
-    /// <summary>Air between her silhouette and the book's near edge, in DIPs.</summary>
-    private const double BodyGap = 12.0;
-
     /// <summary>The book at its full drawn height, in DIPs. Matches the XAML.</summary>
     private const double FullHeight = 728.0;
 
@@ -76,6 +73,20 @@ public partial class EmiBookWindow : Window
     private readonly EmiDeskWindow _owner;
     private readonly EmiPixelCanvas _canvas = new(BufW, BufH);
     private readonly List<Border> _dots = new();
+
+    /// <summary>One log line per book, not one per move: <c>PlaceWindow</c> runs on every drag tick.</summary>
+    private bool _notedCover;
+
+    /// <summary>
+    /// QA ONLY: pretend there is no room, so the narrow book can be reviewed on a desk that has
+    /// plenty (<c>--shoot-book &lt;dir&gt; --narrow</c>).
+    ///
+    /// <para>The narrow book cuts the card column from 290 to 196, which reflows every card written
+    /// against the wide one. That is a copy review, and a copy review needs pixels - but the machines
+    /// the cards get written on are exactly the machines that never see the narrow book. Nothing in
+    /// a normal launch sets this.</para>
+    /// </summary>
+    internal static bool ForceNarrow;
 
     private DispatcherTimer? _clock;
     private readonly Stopwatch _since = new();
@@ -628,12 +639,38 @@ public partial class EmiBookWindow : Window
             }
 
             RenderButton(card);
+
+            // The card just changed height under the scroller. Ask at Loaded rather than now:
+            // ScrollableHeight is zero until this content has been arranged, so reading it here
+            // says "nothing to scroll" on every card, which is the failure that looks like success.
+            NudgeScroll.ScrollToTop();
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(UpdateMoreCue));
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "[EmiDesk] book card render failed for {Card}", card.Id);
         }
     }
+
+    /// <summary>
+    /// Show the chevron exactly while there is unread copy under the fold.
+    ///
+    /// <para>Both halves matter. It appears when a card overflows, which on a narrow or short desk is
+    /// the difference between a bullet that ends mid-sentence and one you know to scroll. And it goes
+    /// away at the bottom, so it is a statement about THIS card rather than a decoration that trains
+    /// the reader to ignore it.</para>
+    /// </summary>
+    private void UpdateMoreCue()
+    {
+        try
+        {
+            double left = NudgeScroll.ScrollableHeight - NudgeScroll.VerticalOffset;
+            MoreBelow.Visibility = left > 1.0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book more-cue failed"); }
+    }
+
+    private void OnNudgeScrollChanged(object sender, ScrollChangedEventArgs e) => UpdateMoreCue();
 
     /// <summary>
     /// Lay a line of card copy into a TextBlock as runs, with the <c>*asterisk*</c> key words drawn
@@ -971,6 +1008,12 @@ public partial class EmiBookWindow : Window
     /// and the near side of a widget that usually lives at the right of the desk is the left one.
     /// It flips when that side has no room.</para>
     ///
+    /// <para>The side and the width are both decided by <see cref="EmiBookLayout.Place"/>, which is
+    /// arithmetic and therefore testable at desk sizes nobody here owns. This method converts, asks,
+    /// and applies. On a narrow desk the answer comes back narrow and the stage drops to 2x with it,
+    /// so a book that will not fit beside her is read at a smaller size rather than parked on top of
+    /// her - which is exactly what the old clamp used to do, silently.</para>
+    ///
     /// <para>On a short desk the stage drops from 3x to 2x rather than the book scrolling. Nine
     /// screen pixels per cell down to four keeps the integer multiple, and a demo with a half-pixel
     /// seam in it is worse than a smaller demo.</para>
@@ -988,38 +1031,48 @@ public partial class EmiBookWindow : Window
             double workW = work.Width / s;
             double workH = work.Height / s;
 
-            double h = Math.Min(FullHeight, Math.Max(MinPanelHeight, workH - 24));
-            if (Math.Abs(Height - h) > 0.5) Height = h;
-            // The stage drops to 2x on a short desk, and the test is ROOM rather than "did we get
-            // the full height": a 1366 x 768 laptop lands at about 704, which is a hair under
-            // FullHeight and has ample room for the big stage. Measuring against FullHeight sent
-            // those machines to the small stage for a 8 pixel shortfall.
-            ApplyStageScale(h >= BigStageFloor ? 3 : 2);
-
-            UpdateLayout();
-
             var bodyPx = _owner.BodyScreenRect;
             double bodyL = bodyPx.Left / s;
             double bodyT = bodyPx.Top / s;
             double bodyR = bodyPx.Right / s;
             double bodyH = bodyPx.Height / s;
 
-            double w = ActualWidth > 1 ? ActualWidth : Width;
+            var place = EmiBookLayout.Place(workL, workW, bodyL, bodyR);
+            if (ForceNarrow) place = place with { Width = EmiBookLayout.NarrowWidth, Narrow = true };
+            if (Math.Abs(Width - place.Width) > 0.5) Width = place.Width;
+
+            double h = Math.Min(FullHeight, Math.Max(MinPanelHeight, workH - 24));
+            if (Math.Abs(Height - h) > 0.5) Height = h;
+            // The stage drops to 2x on a short desk, and the test is ROOM rather than "did we get
+            // the full height": a 1366 x 768 laptop lands at about 704, which is a hair under
+            // FullHeight and has ample room for the big stage. Measuring against FullHeight sent
+            // those machines to the small stage for a 8 pixel shortfall.
+            //
+            // The narrow book overrides it outright: at 270 DIP the card column is 196 wide and a
+            // 288 wide stage does not go in it at all.
+            ApplyStageScale(!place.Narrow && h >= BigStageFloor ? 3 : 2);
+
+            UpdateLayout();
 
             bool wasOnHerLeft = _onHerLeft;
-            double left = bodyR + BodyGap;
-            _onHerLeft = false;
-            if (left + w > workL + workW)
+            _onHerLeft = place.OnHerLeft;
+
+            // Worth a line in the log the first time a desk is this tight, because every visual
+            // symptom of it - the book over her body, her chips unreachable under it - looks like a
+            // z-order bug and is not one.
+            if (place.CoversHer && !_notedCover)
             {
-                double alt = bodyL - BodyGap - w;
-                if (alt >= workL) { left = alt; _onHerLeft = true; }
+                _notedCover = true;
+                Log.Information(
+                    "[EmiDesk] book has no room beside her (work {WorkW:F0}, body {BodyW:F0}); it overlaps",
+                    workW, bodyR - bodyL);
             }
 
             // Centred on her, not aligned to her head: the book is nearly three of her tall and a
             // top-aligned one hangs off the bottom of every desk she stands near the middle of.
             double top = bodyT + bodyH / 2 - h / 2;
 
-            Left = Math.Max(workL, Math.Min(workL + workW - w, left));
+            Left = place.Left;
             Top = Math.Max(workT, Math.Min(workT + workH - h, top));
 
             SweepHost.RenderTransformOrigin = new Point(_onHerLeft ? 1 : 0, 0.5);

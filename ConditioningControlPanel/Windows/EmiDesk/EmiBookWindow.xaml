@@ -263,8 +263,10 @@
                         and the rail therefore never holds more than eight.
 
                         It is docked left BEFORE the card so the card keeps the whole remaining
-                        width. The window grew by exactly this rail's 44, so the text column is the
-                        same 292 it was measured at and no card reflows.
+                        width. The window grew by exactly this rail's 44, so on a desk with room the
+                        text column is the same 290 it was measured at and no card reflows. The rail
+                        keeps this width in the narrow book too - an icon column you have to squint
+                        at is not navigation - so the narrow book pays for itself out of the card.
                     -->
                     <Border DockPanel.Dock="Left" Width="44" Background="#FF1E1D34"
                             BorderBrush="#FF0E0E1C" BorderThickness="0,0,2,0">
@@ -326,12 +328,47 @@
                             the last bullet with nothing to say it had. The bar is Hidden rather
                             than Auto because a scrollbar is the one piece of chrome on this window
                             that Windows would draw instead of us.
+
+                            SO WE DRAW THE CUE OURSELVES. Hidden means the content still scrolls, it
+                            just says nothing about it, and that was already a quiet way to lose the
+                            end of a bullet on a short desk. The narrow book made it reachable: at a
+                            196 wide column the densest card gains three lines, and the LOCKDOWN card
+                            lost the last word of "then type let me out" - which is the one sentence
+                            in the whole book somebody reads in a hurry. The chevron shows only when
+                            there is something below, and it goes away once you have scrolled to it.
                         -->
-                        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Hidden"
-                                      HorizontalScrollBarVisibility="Disabled"
-                                      PanningMode="VerticalOnly" Margin="0,12,0,0">
-                            <StackPanel x:Name="Nudges" VerticalAlignment="Top"/>
-                        </ScrollViewer>
+                        <Grid Grid.Row="3" Margin="0,12,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <ScrollViewer Grid.Row="0" x:Name="NudgeScroll"
+                                          VerticalScrollBarVisibility="Hidden"
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          PanningMode="VerticalOnly"
+                                          ScrollChanged="OnNudgeScrollChanged">
+                                <StackPanel x:Name="Nudges" VerticalAlignment="Top"/>
+                            </ScrollViewer>
+
+                            <!--
+                                ITS OWN BAND, not an overlay on the text. The first cut floated the
+                                chevron over the bottom right of the copy, and on the card that
+                                prompted all this it sat on the words: LOCKDOWN read "then type
+                                let m [v]". A cue that hides the sentence it is pointing at is worse
+                                than no cue, because the reader cannot even tell something is missing.
+
+                                A row cannot oscillate. Showing it shrinks the viewport, which can
+                                only ADD overflow, never remove it, so the cue never flickers itself
+                                out of existence. It is inside the bullets' own star row, so the
+                                catch strip and the button do not move when it appears.
+                            -->
+                            <Border Grid.Row="1" x:Name="MoreBelow" Visibility="Collapsed"
+                                    IsHitTestVisible="False" HorizontalAlignment="Right"
+                                    Margin="0,3,0,0" Padding="6,2">
+                                <Polygon Points="0,0 10,0 5,6" Fill="#FFFF69B4"/>
+                            </Border>
+                        </Grid>
 
                         <!-- The honest bit, in gold, with a rule down its left edge instead of a
                              bullet. Same fixed place on every card, so it is somewhere you can
