@@ -4,53 +4,9 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:ctl="clr-namespace:ConditioningControlPanel.Views.Controls"
              mc:Ignorable="d" d:DesignWidth="760">
 
-    <UserControl.Resources>
-        <!-- One target in the ring picker: the card art, its name on a dark strip, and a pink
-             frame plus a dot when it is pinned. Deliberately the same shape as a ring card at a
-             third of the size, so "checked here" and "on her ring" read as the same object.
-
-             The triggers are ordered hover-then-checked on purpose: the other way round, moving
-             the pointer over a pinned tile would take its pink frame off. -->
-        <Style x:Key="EmiRingTile" TargetType="ToggleButton">
-            <Setter Property="Width" Value="92"/>
-            <Setter Property="Height" Value="66"/>
-            <Setter Property="Margin" Value="0,0,6,6"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Focusable" Value="False"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ToggleButton">
-                        <Border x:Name="Shell" CornerRadius="6" BorderThickness="2"
-                                BorderBrush="#33FFFFFF" Background="#FF1A1A2E"
-                                ClipToBounds="True">
-                            <Grid>
-                                <ContentPresenter/>
-                                <Ellipse x:Name="Dot" Width="9" Height="9" Margin="0,4,4,0"
-                                         HorizontalAlignment="Right" VerticalAlignment="Top"
-                                         Fill="#FFFF69B4" Stroke="#FF0E0E1C" StrokeThickness="1.5"
-                                         Visibility="Collapsed"/>
-                            </Grid>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Shell" Property="BorderBrush" Value="#8CFF69B4"/>
-                            </Trigger>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Shell" Property="BorderBrush" Value="#FFFF69B4"/>
-                                <Setter TargetName="Dot" Property="Visibility" Value="Visible"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.42"/>
-                                <Setter Property="Cursor" Value="Arrow"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-    </UserControl.Resources>
 
     <!-- ================================================================
          SETTINGS - EMI DESK
@@ -226,7 +182,10 @@
                                Text="{loc:Str set2_emi_desk_ring_hint}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,2,0,6"/>
-                    <WrapPanel x:Name="PnlRing" Orientation="Horizontal" Margin="0,0,0,2"/>
+                    <!-- The wall itself is EmiRingPicker, shared verbatim with her options
+                         panel (Windows/EmiDesk/EmiOptionsWindow). Its own count line and reset
+                         button are hidden: this section draws both above, in the section hue. -->
+                    <ctl:EmiRingPicker x:Name="RingPicker" ShowHeader="False" Margin="0,0,0,2"/>
 
                     <TextBlock Text="{loc:Str set2_emi_desk_gestures_hint}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"

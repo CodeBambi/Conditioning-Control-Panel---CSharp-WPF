@@ -1222,7 +1222,35 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     try { return seep ? seep.misprintFor(rows) : null; } catch (e) { return null; }
   };
 
-  reportCard = createReportCard({ ceremonies, seep, toast: shout, log: say });
+  /* THE TILL IS A DOOR (counter shortcut wave, 2026-08-30). The report card is
+   * the one screen that TELLS you what you just earned and, until now, had no
+   * road to spend it on - the campus wallet chip is two screens back behind a
+   * Done. So the night's ticket chip presses through to the same place the
+   * campus chip does, and the card is handed the verb rather than the reason:
+   * the catalog, the shutter and the ceremonies are all the shell's business.
+   *
+   * OFFERED ONLY WHEN THERE IS A SHELF AT ALL. `init.economy.catalog` is fixed
+   * for the life of the page, so this is asked once here; a host that projects
+   * no economy gets the card it always got, with an inert <span> on the till.
+   *
+   * IT REFUSES, IT NEVER TRAVELS BADLY. Two rungs, and they are two different
+   * facts: a shut counter (a suspend, a lapsed entitlement) is answered with
+   * the shutter's own line exactly as the campus chip answers it, and a
+   * ceremony still on screen is answered with silence - `showPrizeBooth` calls
+   * dismissEndCard/dismissPunchStage/dismissAnnexStage on its way in, so a
+   * press mid-beat would stomp the beat that is doing the telling. */
+  const counterFromReport = economyCatalog().length ? () => {
+    if (endCard || punchStage || annexStage) return;
+    if (counterClosed()) {
+      shout(t('prize_closed_line',
+        'The shutter is down and the sign above it has been switched off at the wall.'));
+      return;
+    }
+    showPrizes();
+  } : null;
+  reportCard = createReportCard({
+    ceremonies, seep, toast: shout, log: say, onCounter: counterFromReport,
+  });
 
   /* ---------------------- helpers --------------------------------------- */
   function gameName(key) {
@@ -2085,8 +2113,25 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
            * IT LANDS AT THE WINDOW WITH THE SHELF ALREADY OPEN (Locker wave).
            * The shop is a panel over the booth's plate now, so "straight to the
            * shelf" means the plate is there under it - what the chip skips is
-           * the walk and the arrival down the alley, never the room. */
-          prizesShelf: () => showPrizes(),
+           * the walk and the arrival down the alley, never the room.
+           *
+           * IT REFUSES IN PLACE WHEN THE SHUTTER IS DOWN (counter shortcut
+           * wave, 2026-08-30). `applySuspend` re-shows the board and leaves
+           * this chip live and pressable, so a press during a suspend used to
+           * BUILD the booth with `closed:true` - the shelf no-ops on the way in
+           * (prizebooth.js openShop) and the player is left standing in an
+           * unusable dark room they then have to find their way back out of. A
+           * toast is the whole answer: `screen` never moves, no dialog is
+           * minted, and the sentence is the one the shutter itself is lettered
+           * with one screen further in, so the school says it in one voice. */
+          prizesShelf: () => {
+            if (counterClosed()) {
+              shout(t('prize_closed_line',
+                'The shutter is down and the sign above it has been switched off at the wall.'));
+              return;
+            }
+            showPrizes();
+          },
           annex: () => walkThen('annex', () => showAnnex()),
           /* THE DOOR walks; THE GEAR does not. campus.js calls `registrarRoom`
            * for the Front Office room and falls back to `registrar` for the
@@ -2187,8 +2232,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
            * is torn down and rebuilt on every visit, so a purchase settled at
            * the counter is wearing by the time the player is back on the quad.
            * `lite` gates the cosmetics ONLY (walk.js keeps walking under
-           * performance mode - it refuses to mint the spark pool and the
-           * afterimages, nothing more). */
+           * performance mode - it refuses to mint the afterimages, and it
+           * THINS the spark pool rather than dropping it, house doctrine:
+           * lite keeps the move and drops the particle count). Only
+           * reducedMotion deletes the sparks outright. */
           lite: !!src.performanceMode,
           cosmetics: {
             awayColors: ownsSku('away_colors'),
@@ -3360,10 +3407,21 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       reduced: reducedMotion,
       closed: counterClosed(),
       alley: !opt.skipWalk,
-      /* The same two getters the shelf takes, and for the same reason: the tray
-       * on the sill reads a wallet, it never moves one. */
+      /* The same getters the shelf takes, and for the same reason: the tray on
+       * the sill READS a wallet, it never moves one. `catalog`/`inv`/`stackMax`
+       * joined the list for the holdings tray (counter shortcut wave,
+       * 2026-08-30) - what you are holding is three reads of the same three
+       * facts the shelf already reads, and not one of them is a proposal.
+       *
+       * NO `onUse`. Nothing on this shelf can be spent by hand: the one
+       * consumable, `late_slip`, is burned by the HOST inside the attendance
+       * credit (ArcademyEconomy.ConsumeLateSlip), so there is no press to wire
+       * and the tray says so in words instead of growing a button that lies. */
       balance: () => walletBalance(),
       payday: () => economyPayday(),
+      catalog: () => economyCatalog(),
+      inv: () => walletInv(),
+      stackMax: (sku) => stackMaxFor(sku),
       gameName,
       /* THE BOOTH OWNS THE BOX, THE SHELL OWNS WHAT IS IN IT. The room hands
        * over a panel and the way out of it; the counter and every cap it reads
@@ -5026,9 +5084,18 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       const NOTE_CAP = 40;             // per class - a flood guard, nothing more
       let notes = 0, lastNoteAt = 0, held = false;
       const noteAt = Object.create(null);
+      /* THE HINT CHANNEL (2026-08-30) - see `askHelp` at the bottom of this
+       * object. Its ration is its own; the 15s spacing it shares. */
+      let helpAsks = 0;
+      const HELP_ASKS_PER_CLASS = 2;
+      /* IT RETURNS NOW. Every verb above ignores the answer (a face that did
+       * not land is not a class's problem), but `askHelp` has to know whether
+       * the QUESTION actually reached the glass, because a game that thinks it
+       * offered help when nobody was there would spend its one offer on
+       * nothing. `fireMoment` answers true only when EMI took the moment. */
       const fire = (name, extra) => {
-        try { fireMoment(name, Object.assign({ gameKey: cls.gameKey, midClass: true }, extra || {})); }
-        catch (e) { /* a mascot may never break a class */ }
+        try { return fireMoment(name, Object.assign({ gameKey: cls.gameKey, midClass: true }, extra || {})); }
+        catch (e) { return false; /* a mascot may never break a class */ }
       };
       return Object.freeze({
         tense() {
@@ -5074,6 +5141,52 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           if (next === held) return;
           held = next;
           fire('moodHold', { on: next });
+        },
+        /**
+         * SHE OFFERS A HAND, AND SHE ASKS FIRST (2026-08-30).
+         *
+         * THE OWNER'S AMENDMENT TO TRAPS 90 AND 97, and the whole of it:
+         * "im actually not oki with this law anymore, i think emi might wanna
+         * speak during the games and hoestly it alredy does. Lets not overdo it
+         * tho, have it speak somewhat during the games and the hints are an
+         * exception they trigger if they are having troubles". So a class that
+         * can SEE a player struggling may put ONE question on the glass - never
+         * a hint, never a dump, a question - and the player answers it.
+         *
+         * "Let's not overdo it" is the ration, and it is enforced here rather
+         * than in any game: two a class, the 15s mood spacing, and the ask
+         * engine's own gates on top (one strip at a time, EMI has to be
+         * reachable, and it leaves on its own after `STUCK_GIVE_UP_MS` because
+         * a chip strip may not camp over a live board - trap 59/97's rule
+         * survives the amendment intact).
+         *
+         * THIS IS THE ONE MOOD VERB THAT IS NOT FACE-ONLY, and it is a narrow
+         * channel, not a bus: a second kind of in-class question gets its own
+         * verb and its own ration rather than riding `stuck`.
+         *
+         * @param {Object} spec  the class's whole question, already localised -
+         *   {q, face, chips:[yes,no], yes:{say,face}, no:{say,face}, onYes}.
+         *   The words are the GAME's (its lexicon rows, its `{cat}`
+         *   substitution) because emi/asks.js has no `t()`; `onYes` is the
+         *   callback the ask engine holds and invokes if - and only if - the
+         *   player says yes.
+         * @returns {boolean} true when the question actually landed on the
+         *   glass. False is ordinary (no EMI, she is busy, the ration is spent)
+         *   and a class must treat it as "not offered", never as "declined".
+         */
+        askHelp(spec) {
+          if (!spec || typeof spec !== 'object') return false;
+          if (typeof spec.onYes !== 'function') return false;
+          if (helpAsks >= HELP_ASKS_PER_CLASS) return false;
+          const now = Date.now();
+          if (now - lastAt < MOOD_SPACING_MS) return false;
+          const landed = fire('stuck', spec) === true;
+          /* THE SPACING IS SPENT ON A LANDING, NOT ON AN ATTEMPT. A question
+           * that never reached the glass must not also mute the faces for the
+           * next fifteen seconds; the caller's own retry floor stops the
+           * flood. */
+          if (landed) { helpAsks += 1; lastAt = now; }
+          return landed;
         },
       });
     })();

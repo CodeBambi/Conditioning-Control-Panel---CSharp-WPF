@@ -264,6 +264,21 @@ namespace ConditioningControlPanel.Services.AIService
             var model = GetConfiguredModel();
             if (string.IsNullOrWhiteSpace(model)) return;
 
+            // #1079: the `ollama serve` we spawn is our child and gets killed on app exit, so a
+            // user who onboarded through the setup wizard starts every later session with
+            // nothing listening. Warm-up is the first thing that touches Ollama each session,
+            // which makes it the natural place to bring the server back. Best-effort and
+            // loopback-only; a false return just means we fall through to the warm-up attempt
+            // below and let the normal "can't reach Ollama" diagnostics speak.
+            try
+            {
+                await OllamaSetupService.EnsureServerRunningAsync(_activeHost).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Information("LocalAiService: ensure-server-running failed: {Error}", ex.Message);
+            }
+
             try
             {
                 var sw = System.Diagnostics.Stopwatch.StartNew();

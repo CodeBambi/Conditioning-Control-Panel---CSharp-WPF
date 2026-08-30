@@ -36,11 +36,18 @@
  * THE GATES (each one a different kind of no)
  *
  *   1. NEVER BEFORE THE THIRD SESSION - `voice.sessions`, read never minted,
- *      the same spine `sessionAtLeast` and the field trips hang off.
+ *      the same spine `sessionAtLeast` and the field trips hang off. WAIVED FOR
+ *      `stuck` ALONE (2026-08-30): the newest player is the likeliest to need a
+ *      hand, so the one ask that is help rather than conversation does not wait
+ *      three sittings to be allowed to offer it.
  *   2. NOT MID-CLASS. `classStart` is the one moment that fires INSIDE the
  *      gate (the dares live there) and it is evaluated BEFORE the latch is
  *      set, which is why `note()` runs the latches and `offer()` runs the
- *      asks - two entry points, one order.
+ *      asks - two entry points, one order. `stuck` is the SECOND (2026-08-30,
+ *      the owner's amendment to traps 90/97): it is offered on a fully live
+ *      board, rationed by shell.js to two a class, and it takes itself off the
+ *      glass after STUCK_GIVE_UP_MS because trap 59's "no strip over a live
+ *      board" survives the amendment.
  *   3. NOT OVER A LIVE VERB. A say, a chain, a press, a drag, a field trip, an
  *      off channel, a dismissed or disabled EMI: the widget owns that truth
  *      and answers it in one call (`askReady`).
@@ -99,6 +106,15 @@ export const ASK_DIALS = Object.freeze({
    * would be a pointer-active node over a live precision board (trap 59). So
    * the dares alone still leave, and they leave fast. */
   DARE_GIVE_UP_MS: 12000,
+  /* ...AND THE SECOND CARVE-OUT, WHICH IS THE SHARPER ONE (stuck-hints,
+   * 2026-08-30). The `stuck` ask is the only question in this file offered ON a
+   * live board, so the give-up is not a nicety here - it is the ONLY thing that
+   * takes the strip off a board the player is still typing into. It cannot be
+   * zero and it cannot be long: the ask engine's old any-press cancel was
+   * deleted on 2026-08-25 (trap 118), so the player has exactly three ways to
+   * end it (chip 1, chip 2, Esc) and none of them is "carry on playing". Eight
+   * seconds is one unhurried read of nine words plus a press. */
+  STUCK_GIVE_UP_MS: 8000,
   /* HOW LONG THE QUESTION ITSELF HOLDS. Not a timeout - widget.js's
    * ASK_HOLD_MS is an hour, and `releaseAskLine()` is what actually takes it
    * down. Read from the widget so there is one number, not two. */
@@ -136,6 +152,15 @@ export const ASK_TRIGGERS = Object.freeze([
    * `idlePlayer` edge, which on a quiet campus can be minutes away. Every gate
    * in this file still runs, and NO frequency dial moved. */
   'heartbeat',
+  /* THE HAND (stuck-hints, 2026-08-30). The owner amended traps 90 and 97 -
+   * "the hints are an exception they trigger if they are having troubles" - so
+   * for the first time a moment on this list fires while a BOARD is live. It is
+   * raised only by `ctx.mood.askHelp()` in shell.js, which rations it to two a
+   * class behind the 15s mood spacing, and it carries the whole question in its
+   * payload because this file has no `t()` and never will. Nothing else here
+   * changed: it still waits for `askReady`, it still cannot double up on a live
+   * strip, and it comes off the glass by itself (STUCK_GIVE_UP_MS). */
+  'stuck',
 ]);
 
 /** Which `on` rows a `heartbeat` may stand in for. The heartbeat IS campus
@@ -342,6 +367,58 @@ export const ASKS = Object.freeze([
      * is no "don't go" anywhere in it. She just asks, and the window goes. */
     exempt: true,
   }),
+
+  /* ---- the hand (stuck-hints, 2026-08-30) ------------------------------- */
+  Object.freeze({
+    id: 'a16_stuck', on: 'stuck',
+    /* THE ONE ROW WHOSE WORDS ARE NOT IN THIS FILE, and it is not a loophole in
+     * the "verbatim, or left out" law - it is that law kept. A hint has to name
+     * a thing on the BOARD ("smells like a spirally word to me"), which means
+     * the string is per-class, per-day and per-language; a copy frozen here
+     * would be an English-only duplicate of a lexicon row and trap 123's exact
+     * failure. So the CLASS resolves its own `dt_help_*` rows through `t()`,
+     * does its own `{cat}` substitution, and hands the finished question down
+     * on the payload. This module still never composes a sentence.
+     *
+     * `build(c)` is the seam, and `mount()` is its only caller: it answers a
+     * partial row (q / face / chips / yes / no) that is merged over this one,
+     * or NULL when the payload is not a whole question - which is a silent
+     * skip, never a half-mounted strip. */
+    build: (c) => {
+      const p = c && c.p;
+      if (!p || typeof p.onYes !== 'function') return null;
+      const q = typeof p.q === 'string' ? p.q.trim() : '';
+      const chips = Array.isArray(p.chips) && p.chips.length >= 2
+        && typeof p.chips[0] === 'string' && typeof p.chips[1] === 'string'
+        ? [p.chips[0], p.chips[1]] : null;
+      const y = isObj(p.yes) ? p.yes : null;
+      const n = isObj(p.no) ? p.no : null;
+      if (!q || !chips || !y || !n) return null;
+      return {
+        q,
+        face: typeof p.face === 'string' && p.face ? p.face : 'o_o',
+        chips,
+        /* `stuckHelp` is the effect name `runEffect` switches on; the callback
+         * itself is never copied onto the row, it is read off the live context
+         * at the moment the chip is pressed. */
+        yes: { say: typeof y.say === 'string' ? y.say : '', face: y.face || '^_^', effect: 'stuckHelp' },
+        no: { say: typeof n.say === 'string' ? n.say : '', face: n.face || '._.' },
+      };
+    },
+    /* Eligibility is the payload being a real question - the class already
+     * decided the player is struggling, and this module does not second-guess a
+     * board it cannot see. */
+    when: (c) => !!(c && c.p && typeof c.p.onYes === 'function'),
+    /* EXEMPT, AND THAT IS THE POINT. Help may not be rationed by the same
+     * counter that rations "spiral or flash?" - a player who spent the session's
+     * one ask on a check-in must still be able to get a hand two classes later,
+     * and a hint she gave must never make her go quiet for three sessions. The
+     * real ration is shell.js's: two a class, behind the mood spacing.
+     *
+     * `once: null` for the same reason. Struggling is not a thing you do once. */
+    once: null,
+    exempt: true,
+  }),
 ]);
 
 /** THE GROGGY GREET (a15's cost, three skips running). Verbatim. */
@@ -540,6 +617,11 @@ export function createAsks(o = {}) {
 
   /* ---------------------- the strip ------------------------------------- */
   function giveUpMsFor(a) {
+    /* THE HAND IS OFFERED OVER A LIVE BOARD, so it is the one question that has
+     * to leave FAST (stuck-hints, 2026-08-30). Checked first because it is the
+     * shortest window in the file, and because a `stuck` row will never carry a
+     * dare or ride `classStart`, so the order below can never reclaim it. */
+    if (a.on === 'stuck') return D.STUCK_GIVE_UP_MS;
     /* A DARE LIVES ON THE ROOM CARD, NOT ON THE BOARD. `classStart` fires
      * before the class chrome is built and long before a board takes input, so
      * a dare that has not been answered by the time the player is actually
@@ -567,11 +649,19 @@ export function createAsks(o = {}) {
    * board takes input (trap 97); an idle moment is the wrong side of it, and a
    * dare armed off a moment with no class behind it would resolve against
    * whatever the player happened to play next.
+   *
+   * NOR THE HAND, AND FOR A SHARPER VERSION OF THE SAME REASON (stuck-hints,
+   * 2026-08-30). A `stuck` question is about a BOARD - a row index, a keyboard,
+   * a callback that types a letter into a live grid - and the reask path lands
+   * it on the next quiet moment, which is the campus, minutes later, with that
+   * board torn down. "Want a letter?" over the quad would be nonsense, and a
+   * YES would fire a callback into a dead class. It is offered on the board or
+   * it is not offered.
    */
   function rememberReask(a) {
     if (!a || S.reask) return;
     if (S.reasks >= D.REASK_MAX) return;
-    if (a.on === 'classStart' || (a.yes && a.yes.dare)) return;
+    if (a.on === 'classStart' || a.on === 'stuck' || (a.yes && a.yes.dare)) return;
     S.reask = a.id;
   }
 
@@ -633,6 +723,18 @@ export function createAsks(o = {}) {
       if (kind === 'timetable') { openTimetable(); return; }
       if (kind === 'pet') { widget.creditPet(); return; }
       if (kind === 'bedYes') { blob.bedSkips = 0; widget.askSave(true); return; }
+      /* THE HAND (stuck-hints, 2026-08-30). Every other effect on this list is
+       * something EMI does; this one is something the CLASS does, and the class
+       * handed us the verb when it asked. Read off the live context rather than
+       * off the row, because the row is a per-offer build and the callback is
+       * the one thing on it that must not be frozen into the table. A callback
+       * that throws is swallowed by the catch below exactly like any other
+       * effect: a mascot may never break a class. */
+      if (kind === 'stuckHelp') {
+        const fn = c && c.p && c.p.onYes;
+        if (typeof fn === 'function') fn();
+        return;
+      }
     } catch (e) { say('emi asks: effect "' + kind + '" threw (ignored)'); }
   }
 
@@ -668,7 +770,21 @@ export function createAsks(o = {}) {
   }
 
   /* ---------------------- mounting -------------------------------------- */
-  function mount(a, c) {
+  /**
+   * @param {Object} row the TABLE row - or, for a row that carries `build`, the
+   *   template it is built from (see a16_stuck). A built row is merged OVER the
+   *   template, so `id`, `on`, `exempt` and `once` are still the table's and
+   *   only the words move; everything below this line, and everything the strip
+   *   hands back later, sees one ordinary ask.
+   */
+  function mount(row, c) {
+    let a = row;
+    if (typeof row.build === 'function') {
+      let made = null;
+      try { made = row.build(c); } catch (e) { made = null; }
+      if (!isObj(made)) { say('emi asks: ' + row.id + ' had no question to ask (skipped)'); return false; }
+      a = Object.freeze(Object.assign({}, row, made));
+    }
     const chips = Array.isArray(a.chips) ? a.chips.slice(0, 2) : ['ok', 'nah'];
     const giveUp = giveUpMsFor(a);
     /* THE LINE FIRST, AND IT DOES NOT COME DOWN ON ITS OWN. `ask: true` is the
@@ -826,6 +942,13 @@ export function createAsks(o = {}) {
       }
       if (name === 'win' || name === 'fail' || name === 'runLost') {
         S.midClass = false;
+        /* A HAND OFFERED TO A BOARD DIES WITH THE BOARD (stuck-hints,
+         * 2026-08-30). `stuck` is the only ask that can still be standing here,
+         * because it is the only one raised mid-class; its YES types into a
+         * grid that no longer exists, and "want a letter?" over a ceremony
+         * reads as a bug. Interrupted, not declined: no cadence, no ledger, and
+         * `rememberReask` already refuses to bank it. */
+        if (live && live.ask && live.ask.on === 'stuck') ignored(live.ask, live.ctx, { noSpend: true });
         try { widget.setGazeBias(0); } catch (e) { /* noop */ }
         return;
       }
@@ -897,10 +1020,29 @@ export function createAsks(o = {}) {
       if (live) return false;
       if (!pageVisible()) return false;
       if (!widget.askReady()) return false;
-      if (sessions() < D.ASK_FROM_SESSION) return false;
+      /* GATE 1, AND THE ONE THING IT MAY NOT DO IS GATE THE HAND (stuck-hints,
+       * 2026-08-30). "Never before the third session" is right for a question -
+       * she has not earned the familiarity to ask one yet. It is exactly WRONG
+       * for help: the player who cannot read today's word is likeliest to be
+       * the newest one, and a gate that waits three sittings denies the offer
+       * to precisely the people it was written for. This LOOSENS a gate, so it
+       * is worth being clear about what it does not loosen - `stuck` is raised
+       * by one call site (shell.js's `ctx.mood.askHelp`), it is rationed there
+       * to two a class, it is exempt from the cadence in both directions
+       * (spends none, waits on none), and a session-1 player is no more able to
+       * summon it than a session-100 one. The only thing that changed is that
+       * the answer is not "no" for the first three nights. */
+      if (name !== 'stuck' && sessions() < D.ASK_FROM_SESSION) return false;
       /* NOT MID-CLASS - and `classStart` is the one moment evaluated while the
-       * latch is still open, because the class has not started yet. */
-      if (S.midClass && name !== 'classStart') return false;
+       * latch is still open, because the class has not started yet.
+       *
+       * ...AND `stuck` IS THE SECOND, WHICH IS THE OWNER'S AMENDMENT ITSELF
+       * (2026-08-30, traps 90/97). It is not evaluated around the latch the way
+       * `classStart` is; it is evaluated THROUGH it, on a board that is fully
+       * live, which is the thing trap 97 said no ask would ever do. The fence
+       * that replaced the old blanket "no" is: one named moment, one call site,
+       * two a class, and an 8s give-up so the strip is never furniture. */
+      if (S.midClass && name !== 'classStart' && name !== 'stuck') return false;
 
       const c = context(name, payload);
       if (name === 'reportCard' && softLine()) return false;

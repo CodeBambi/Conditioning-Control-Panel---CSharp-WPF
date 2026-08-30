@@ -146,10 +146,24 @@ async function copyText(text) {
  *                                 shell always rendered.
  * @param {Function=} o.toast
  * @param {Function=} o.log
+ * @param {Function=} o.onCounter  THE TILL IS A DOOR (counter shortcut wave,
+ *                                 2026-08-30). Absent = the card the shell
+ *                                 always rendered, down to the byte: the
+ *                                 ticket chip stays the inert <span> it has
+ *                                 always been. Present = that same chip is a
+ *                                 <button> and this is what it presses. The
+ *                                 card never decides whether there IS a
+ *                                 counter to walk to - the shell owns the
+ *                                 catalog, the shutter and the walk, and this
+ *                                 is one callback out.
  */
-export function createReportCard({ ceremonies, seep, toast, log } = {}) {
+export function createReportCard({ ceremonies, seep, toast, log, onCounter } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const shout = typeof toast === 'function' ? toast : () => {};
+  /* THE ONE DOOR THIS CARD OFFERS BESIDES 'done'. Captured once, asked at
+   * render: a card built without it is not a card with a dead button on it,
+   * it is the card that has no button at all (see the chip below). */
+  const toCounter = typeof onCounter === 'function' ? onCounter : null;
   // The report is a fullscreen beat now (shell marks <html> arc-report-on):
   // the stage is the night ground under a desk lamp, and everything the card
   // used to box sits on one graded PAPER laid on it. Same DOM order, same
@@ -172,6 +186,19 @@ export function createReportCard({ ceremonies, seep, toast, log } = {}) {
   function sweep() {
     for (const id of Array.from(timers)) { try { clearTimeout(id); } catch (e) { /* noop */ } }
     timers.clear();
+  }
+
+  /** Shut a chip's door, or open it again. `disabled` is the real property on a
+   *  real <button> and the class is only what the sheet paints; both are
+   *  wrapped because the node double carries neither. */
+  function setBusy(node, on) {
+    if (!node) return;
+    try { node.disabled = !!on; } catch (e) { /* noop */ }
+    try {
+      if (node.classList && typeof node.classList.toggle === 'function') {
+        node.classList.toggle('is-busy', !!on);
+      }
+    } catch (e) { /* noop */ }
   }
 
   /**
@@ -287,7 +314,42 @@ export function createReportCard({ ceremonies, seep, toast, log } = {}) {
     }
     if (till.tickets > 0 || till.token) {
       const row = el('div', 'arc-classbar arc-till');
-      const tChip = el('span', 'chip arc-till-t');
+      /* THE TILL IS A DOOR (counter shortcut wave, 2026-08-30). This is the one
+       * screen in the school where you are TOLD you just earned tickets and had
+       * no road to spend them on: the campus chip is two screens back behind a
+       * Done. So the ticket chip is the same press the campus chip already is -
+       * `campus.js`'s pattern copied, not a second one invented. Same label off
+       * the same key, glyph still `aria-hidden`, and the count-up below writes
+       * `tNum.textContent` exactly as it did: the parent changing tag changes
+       * nothing about the number inside it.
+       *
+       * NO DOOR, NO BUTTON. Without `onCounter` the chip is emitted as the inert
+       * <span> it has always been, byte for byte, so every other caller of this
+       * card and every suite that reads it are untouched.
+       *
+       * NO `returnTo`. report -> prizebooth is a lateral swap `screenCue()`
+       * already knows how to sound; the card's Back and Esc still mean the
+       * campus, and a variable exit on a screen with three call sites is trap
+       * 48's warning with the serial numbers filed off. */
+      const tChip = toCounter
+        ? el('button', 'chip arc-till-t arc-till-go')
+        : el('span', 'chip arc-till-t');
+      if (toCounter) {
+        const lbl = t('campus_room_prizes', 'Prize Counter');
+        try {
+          tChip.setAttribute('type', 'button');
+          tChip.setAttribute('aria-label', lbl);
+          tChip.setAttribute('title', lbl);
+        } catch (e) { /* the node double may not carry attributes */ }
+        try {
+          if (typeof tChip.addEventListener === 'function') {
+            tChip.addEventListener('click', () => {
+              try { toCounter(); }
+              catch (e2) { say('the till door threw: ' + ((e2 && e2.message) || e2)); }
+            });
+          }
+        } catch (e) { /* a chip that cannot be wired is the chip it was */ }
+      }
       const tIco = el('i', 'arc-tick');
       try { tIco.setAttribute('aria-hidden', 'true'); } catch (e) { /* noop */ }
       tChip.appendChild(tIco);
@@ -343,6 +405,27 @@ export function createReportCard({ ceremonies, seep, toast, log } = {}) {
               });
             } catch (e) { say('token mint beat failed: ' + ((e && e.message) || e)); }
           }, till.tickets > 0 ? 820 : 120);
+        }
+      }
+
+      /* THE DOOR IS SHUT WHILE THE MONEY IS STILL BEING COUNTED. Walking to the
+       * counter tears this screen down (`showPrizeBooth` calls dismissEndCard,
+       * dismissPunchStage and dismissAnnexStage on its way in), so a press
+       * landing mid-beat stomps the very beat that is telling you what you have
+       * to spend. The count-up runs 720ms and the jackpot lands at 820; the
+       * chip wakes up on the far side of whichever of the two is playing. A
+       * REPAINT has no beats at all, so it never shuts.
+       *
+       * The shell keeps its own rung on the same question - a punch card or the
+       * annex reveal can still be up over this paper - and refuses there. Two
+       * guards because they are two different facts. */
+      if (toCounter && s.arrived) {
+        const ends = till.token
+          ? (till.tickets > 0 ? 820 : 120) + 1400
+          : (till.tickets > 0 ? 780 : 0);
+        if (ends > 0) {
+          setBusy(tChip, true);
+          later(() => setBusy(tChip, false), ends);
         }
       }
     }
