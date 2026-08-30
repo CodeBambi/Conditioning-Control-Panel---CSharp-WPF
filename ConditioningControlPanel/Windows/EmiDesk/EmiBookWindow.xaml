@@ -338,20 +338,34 @@
                             there is something below, and it goes away once you have scrolled to it.
                         -->
                         <Grid Grid.Row="3" Margin="0,12,0,0">
-                            <ScrollViewer x:Name="NudgeScroll" VerticalScrollBarVisibility="Hidden"
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <ScrollViewer Grid.Row="0" x:Name="NudgeScroll"
+                                          VerticalScrollBarVisibility="Hidden"
                                           HorizontalScrollBarVisibility="Disabled"
                                           PanningMode="VerticalOnly"
                                           ScrollChanged="OnNudgeScrollChanged">
                                 <StackPanel x:Name="Nudges" VerticalAlignment="Top"/>
                             </ScrollViewer>
 
-                            <!-- Hard edges and her pink, like everything else on this panel. It sits
-                                 OVER the text rather than taking a row, because a row would move the
-                                 catch strip on exactly the cards that have least room to spare. -->
-                            <Border x:Name="MoreBelow" Visibility="Collapsed" IsHitTestVisible="False"
-                                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                    Background="#FF252542" BorderBrush="#FF3B3962" BorderThickness="2"
-                                    Padding="5,3">
+                            <!--
+                                ITS OWN BAND, not an overlay on the text. The first cut floated the
+                                chevron over the bottom right of the copy, and on the card that
+                                prompted all this it sat on the words: LOCKDOWN read "then type
+                                let m [v]". A cue that hides the sentence it is pointing at is worse
+                                than no cue, because the reader cannot even tell something is missing.
+
+                                A row cannot oscillate. Showing it shrinks the viewport, which can
+                                only ADD overflow, never remove it, so the cue never flickers itself
+                                out of existence. It is inside the bullets' own star row, so the
+                                catch strip and the button do not move when it appears.
+                            -->
+                            <Border Grid.Row="1" x:Name="MoreBelow" Visibility="Collapsed"
+                                    IsHitTestVisible="False" HorizontalAlignment="Right"
+                                    Margin="0,3,0,0" Padding="6,2">
                                 <Polygon Points="0,0 10,0 5,6" Fill="#FFFF69B4"/>
                             </Border>
                         </Grid>
