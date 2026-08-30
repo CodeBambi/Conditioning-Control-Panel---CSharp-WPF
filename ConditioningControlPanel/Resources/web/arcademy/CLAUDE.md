@@ -3408,6 +3408,23 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     scene had no header card. Read the sibling's diff before writing the same fix twice, and
     check which half is `.arm-`.
 
+143. **A TOAST FIRED WHILE THE BOOT SPLASH IS UP IS A TOAST NOBODY EVER SEES.** `#arc-toast`
+    is z 60 and `.arc-loader` is z 70, and the toast's own life is 2.2s while the splash's
+    floor is longer than that - so `shout()` called from anywhere inside `createShell`'s
+    construction (the `launch_card_locked` refusal had done this since the day it was written)
+    plays out and expires behind the splash. The cure in shell.js is `shoutOnScreen()`: say it
+    now if `#arc-loader` is not on screen, otherwise park the one line in `pendingShout` and let
+    `onSplashDone`'s `flushPendingShout()` speak it when there is a screen to land on. A page
+    with no loader node (every headless suite) answers "not up" and behaves exactly as before.
+144. **`node --check` DOES NOT CATCH A BLOCK COMMENT YOU CLOSED EARLY, UNLESS THE FILE IS
+    CHECKED AS A MODULE.** A doc comment containing a literal `games/*/index.js` ends at that
+    `*/`; the rest of the sentence then parses as loose statements, which is legal script and
+    `node --check games/registry.js` in a plain directory says nothing. It only became
+    `SyntaxError: Unexpected identifier 'shell'` when the same file was checked from a directory
+    whose `package.json` carries `"type":"module"`. Run the §6 syntax pass against the rig's
+    COPY (which sits under a `module` package.json), never against a bare path, and never write
+    `*/` inside a comment - say "of every game module" instead.
+
 ## 5. The game module contract (short version)
 
 ```js

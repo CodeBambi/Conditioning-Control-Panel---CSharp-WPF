@@ -26,6 +26,11 @@
 
 import * as bridge from './bridge.js';
 import { installDeviceClass } from './core/device.js';
+/* THE DIRECT LAUNCH's two reads, and they are the only reason boot.js knows the
+ * registry exists. Both are STATIC data (a frozen table and two Sets) - the game
+ * modules themselves are dynamic imports inside `loadGames`, so this costs the
+ * boot nothing it was not already paying. */
+import { GAME_PATHS, isOpenSemester, gameTitle } from './games/registry.js';
 
 const doc = (typeof document !== 'undefined') ? document : null;
 const win = (typeof window !== 'undefined') ? window : null;
@@ -118,6 +123,78 @@ function armBootDeadline() {
 }
 
 /* ----------------------------------------------------------------------------
+ * THE DIRECT LAUNCH (the Discord per-class commands, 2026-08-30).
+ *
+ * `/deepend` and its nine siblings open this page with `init.launchGame` set to
+ * ONE room. The player asked for a game, not for a school, so the boot they get
+ * is the school's opening beat WITH THAT ROOM'S NAME UNDER IT and then the room
+ * itself - the campus is never built, never revealed and never walked (shell.js
+ * owns that half; see THE DIRECT LAUNCH there).
+ *
+ * boot.js owns the splash, so boot.js letters the plate, and it does it from
+ * `init` alone: the title comes off the registry's static table (or the mod's
+ * own `game_<key>` lexicon row), so the line is on screen from the first paint
+ * rather than whenever the ten game modules finish importing.
+ *
+ * THREE THINGS THE DIRECT SPLASH DOES DIFFERENTLY, and all three are "brief":
+ *   1. it leaves at DIRECT_MIN_MS instead of INTRO_MIN_MS,
+ *   2. it never holds for the knock (the jingle is the campus's welcome, and a
+ *      player who typed a command is not being welcomed; the mixer still arms
+ *      itself on the first pointer inside the class, as it always has), and
+ *   3. it never strikes the 4s intro bed for the same reason.
+ * An UNKNOWN or RETIRED key is not a direct launch at all: the page boots the
+ * ordinary campus and shell.js toasts the refusal, which is the same answer the
+ * campus door gives.
+ * -------------------------------------------------------------------------- */
+/** The class this boot was asked for, or '' - resolved once, in the init handler. */
+let directGame = '';
+
+/** The requested room, IF it is a room this build actually has. */
+function directLaunchKey(src) {
+  const key = (src && typeof src.launchGame === 'string') ? src.launchGame : '';
+  if (!key || !GAME_PATHS[key]) return '';
+  try { if (!isOpenSemester(key)) return ''; } catch (e) { return ''; }
+  return key;
+}
+
+/** Letter the plate. Idempotent, guarded, and never worth a boot. */
+function dressDirectLaunch() {
+  if (!directGame || !dom.loader || !doc) return;
+  try {
+    const line = dom.loader.querySelector('.arc-intro-class');
+    const name = line && line.querySelector('.arc-intro-class-name');
+    if (!line || !name) return;
+    name.textContent = gameTitle(directGame, initMsg && initMsg.lexicon);
+    line.hidden = false;
+    dom.loader.classList.add('is-direct');
+  } catch (e) { /* a plate may never cost the boot */ }
+}
+
+/** ...and take it off again when the shell refused the launch (a card that is
+ *  not full, or a suspend): the player is landing on the campus, so the splash
+ *  must not still be promising a room. shell.js fires the event; the ordinary
+ *  boot never does. */
+function undressDirectLaunch() {
+  directGame = '';
+  if (!dom.loader) return;
+  try {
+    dom.loader.classList.remove('is-direct');
+    const line = dom.loader.querySelector('.arc-intro-class');
+    if (line) line.hidden = true;
+  } catch (e) { /* noop */ }
+}
+
+if (doc && doc.addEventListener) {
+  doc.addEventListener('arcademy-direct-launch', (e) => {
+    try {
+      const d = (e && e.detail) || {};
+      log('direct launch: ' + (d.gameKey || '?') + ' ' + (d.ok ? 'opening the room' : 'refused - campus'));
+      if (!d.ok) undressDirectLaunch();
+    } catch (_e) { /* noop */ }
+  });
+}
+
+/* ----------------------------------------------------------------------------
  * THE SPLASH DISMISSAL. The loader doubles as the ~3s intro splash (see
  * index.html): a boot that lands early WAITS OUT the beat instead of cutting
  * it, a boot that lands late dismisses on arrival. `.is-done` plays the CSS
@@ -146,6 +223,10 @@ function armBootDeadline() {
  * loader comes down whatever the shell does with the news.
  * -------------------------------------------------------------------------- */
 const INTRO_MIN_MS = 2950;
+/** A DIRECT LAUNCH's floor. Short on purpose (the owner's word was "brief"):
+ *  past the CRT power-on, the wordmark thud and the glint, and out before the
+ *  sparkle tail - which `.is-direct` hides rather than cut in half. */
+const DIRECT_MIN_MS = 1900;
 const INTRO_EXIT_MS = 320;
 const introT0 = Date.now();
 
@@ -240,6 +321,7 @@ function onKnock() {
 
 function armKnockGate() {
   const src = initMsg || {};
+  if (directGame) return;                                    // a direct launch is not welcomed in
   if (src.autoplayOk === true) return;                       // the host's promise stands
   if (!!src.reducedMotion || src.motionLevel === 0) return;  // no cues, no hold (trap 66)
   if (!audio || typeof audio.hasSample !== 'function' || !audio.hasSample('intro_bed')) return;
@@ -518,6 +600,9 @@ let cancelSlate = null;
 
 function armFeedSlate() {
   if (cancelSlate || !dom.loader) return;
+  /* ...and never on a DIRECT LAUNCH: that splash leaves at 1.9s, which is half
+   * a slate, and half a haunting is a glitch rather than a beat. */
+  if (directGame) return;
   const src = initMsg || {};
   try {
     import('./shell/seep.js').then((m) => {
@@ -558,7 +643,7 @@ function scheduleIntroCues() {
     const elapsed = Date.now() - introT0;
     // hasSample is feature-detected: an older consumer simply stitches.
     const hasBed = !!(audio && typeof audio.hasSample === 'function' && audio.hasSample('intro_bed'));
-    if (hasBed && src.autoplayOk === true && elapsed < INTRO_BED_WINDOW_MS) {
+    if (hasBed && !directGame && src.autoplayOk === true && elapsed < INTRO_BED_WINDOW_MS) {
       strikeBed();
       return;
     }
@@ -598,7 +683,7 @@ function dismissLoader() {
   /* And the jingle outranks both: settleBed() re-calls us the moment the bed is
    * over, or the moment the cap says it is (THE SPLASH WAITS FOR THE JINGLE). */
   if (bedHolding) { bedDismissQueued = true; return; }
-  const wait = Math.max(0, INTRO_MIN_MS - (Date.now() - introT0));
+  const wait = Math.max(0, (directGame ? DIRECT_MIN_MS : INTRO_MIN_MS) - (Date.now() - introT0));
   const id = setTimeout(() => {
     exitTimers.delete(id);
     try {
@@ -720,6 +805,8 @@ bridge.on('init', guard('init', (m) => {
     return;
   }
   initMsg = m;
+  directGame = directLaunchKey(m);
+  dressDirectLaunch();            // THE DIRECT LAUNCH: name the room on the splash
   bridge.markInitialized();       // flush anything the page queued pre-init
   armBootDeadline();              // progress milestone
   armFeedSlate();                 // THE SEEP, tell 10 - fire and forget

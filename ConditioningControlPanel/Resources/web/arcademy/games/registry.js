@@ -152,6 +152,51 @@ export const OPEN_SEMESTERS = new Set([1, 2, 3]);
 export const RETIRED_GAMES = new Set(['misdirection']);
 
 /**
+ * THE PLATE ON THE DOOR, AND IT IS A PARACHUTE (the direct-launch wave, 2026-08-30).
+ *
+ * Every class module exports its own `title` and that module IS the source of
+ * truth - `shell.js gameName()` reads it, and a mod re-voices it through the
+ * `game_<key>` lexicon row. This table is the copy for the ONE reader that has
+ * neither: `boot.js`, which paints the class name onto the boot splash for a
+ * direct launch BEFORE a single game module has been imported (the whole point
+ * of that splash is that it is up from the first paint).
+ *
+ * KEEP IT IN STEP WITH THE MODULES. The direct-launch rig (CLAUDE.md §6 - it
+ * lives in the session scratchpad, not the repo) reads every `title:` line out
+ * of every game module and asserts this table agrees with all of them, so a
+ * drift is a failed case rather than a wrong plate. A key with no row falls back
+ * to the key with its underscores knocked out, which is a plate nobody wants to
+ * read - so add the row when a class ships.
+ */
+export const GAME_TITLE = Object.freeze({
+  daily_trigger: 'Daily Trigger',
+  lost_and_found: 'Lost & Found',
+  deja_vu: 'Deja Vu',
+  impulse_control: 'Impulse Control',
+  misdirection: 'Misdirection',
+  sort: 'Sort',
+  echo: 'Echo',
+  instant_recall: 'Instant Recall',
+  anomaly: 'Anomaly',
+  composure: 'Composure',
+  the_deep_end: 'The Deep End',
+});
+
+/**
+ * The display name for a class, resolved the way `shell.js gameName()` resolves
+ * it (lexicon row first, module title second) but WITHOUT the module - so a
+ * caller that has only `init.lexicon` can still letter a door plate.
+ * @param {string} key
+ * @param {Object=} lexicon  init.lexicon, or absent
+ */
+export function gameTitle(key, lexicon) {
+  const k = String(key || '');
+  const row = lexicon && typeof lexicon === 'object' ? lexicon['game_' + k] : null;
+  if (typeof row === 'string' && row) return row;
+  return GAME_TITLE[k] || k.replace(/_/g, ' ');
+}
+
+/**
  * SLASH COMMAND PER CLASS - THE TWO-REPO CONTRACT (Discord Activity, 2026-08-28).
  *
  * `/arcademy` opens the campus; one command per class opens THAT room directly,
