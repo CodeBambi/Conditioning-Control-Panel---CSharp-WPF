@@ -120,6 +120,35 @@ public sealed class EmiState
     /// <summary>True once she has been summoned at least once (gates the desktopFirstBoot moment).</summary>
     [JsonProperty("firstBootSeen")] public bool FirstBootSeen { get; set; }
 
+    // ---- the knock (Ask EMI, wave 1) -------------------------------------------
+
+    /// <summary>
+    /// How far the one-time onboarding knock has got. <c>0</c> she has never flashed the dock chip,
+    /// <c>1</c> the chip has knocked and the offer is still owed, <c>2</c> spent - they answered,
+    /// either way, and nothing here ever fires again.
+    ///
+    /// <para>This is the first of the knock's four brakes (docs/emi-desk/WAVE1-CONTRACT.md) and the
+    /// only one that is a latch rather than a ceiling.</para>
+    /// </summary>
+    [JsonProperty("knockState")] public int KnockState { get; set; }
+
+    /// <summary>When the chip knocked, in UTC ticks. <c>0</c> means it never has. Read by the
+    /// next-launch re-offer, which is the only thing allowed to follow a knock.</summary>
+    [JsonProperty("knockAtUtc")] public long KnockAtUtc { get; set; }
+
+    /// <summary>
+    /// How many onboarding offers she has EVER made. Hard ceiling 2: the knock itself, and one
+    /// shrugged re-offer on a later launch. A third is nagging and the machine refuses it.
+    /// </summary>
+    [JsonProperty("knockOffers")] public int KnockOffers { get; set; }
+
+    /// <summary>
+    /// <c>TutorialType</c> names the user has finished end to end. <c>TutorialService</c> has never
+    /// persisted anything, so before this field a completed tour was re-offerable forever; she
+    /// reads it to avoid offering a walk you have already taken.
+    /// </summary>
+    [JsonProperty("toursDone")] public List<string> ToursDone { get; set; } = new();
+
     // ---- onboarding (the nudge machine, wave 3) --------------------------------
 
     /// <summary>
