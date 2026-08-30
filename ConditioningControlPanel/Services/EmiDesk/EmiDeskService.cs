@@ -324,6 +324,27 @@ public sealed class EmiDeskService : IDisposable
             // flat line. The delay is the summon FX budget (BRIEF 3, ~1 s) plus the wake chain.
             _summonMoment = first ? "desktopFirstBoot" : "summoned";
             _summonVia = string.Equals(why, "hotkey", StringComparison.OrdinalIgnoreCase) ? "hotkey" : "rail";
+
+            // THE KNOCK WAS ANSWERED (Ask EMI wave 1). The chip flashed, and this is the summon
+            // that followed it - by the chip, the chord or the tray, because all three are the
+            // same answer to the same question. She opens with the scripted first-contact beat
+            // instead of the ambient greeting, and the pending flag is spent either way so a
+            // second summon this launch gets the ordinary hello.
+            try
+            {
+                if (_knockPending)
+                {
+                    _knockPending = false;
+                    var contact = _knockWorld == null ? null : _knock.ContactMoment(_knockWorld);
+                    if (!string.IsNullOrEmpty(contact))
+                    {
+                        _summonMoment = contact;
+                        Log.Information("[EmiDesk] the knock was answered: opening with {Moment}", contact);
+                    }
+                }
+            }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] knock hand-off failed"); }
+
             ScheduleSummonMoment();
 
             // She was sent away and called straight back (MOMENTS 1.x). Fired here rather than
@@ -814,6 +835,109 @@ public sealed class EmiDeskService : IDisposable
         catch (Exception ex)
         {
             Log.Debug(ex, "[EmiDesk] summon greeting cancel failed");
+        }
+    }
+
+    // ---------------------------------------------------------------- the knock (wave 1)
+
+    /// <summary>
+    /// The onboarding knock. Pure logic in <see cref="EmiKnockMachine"/>; this service owns only
+    /// the ledger writes and the event the dock chip listens to.
+    /// </summary>
+    private readonly EmiKnockMachine _knock = new();
+
+    /// <summary>
+    /// The world the knock was decided against, kept so the summon that follows can ask it which
+    /// contact moment is owed WITHOUT re-reading <c>LastSeenVersion</c> - which by then has been
+    /// stamped to this build by What's New and would classify every upgrader as owed nothing.
+    /// </summary>
+    private IEmiKnockWorld? _knockWorld;
+
+    private bool _knockPending;
+
+    /// <summary>
+    /// The chip should flash. Raised on the dispatcher; <see cref="Controls.EmiDock"/> is the only
+    /// listener and it is free to ignore it (a designer instance, a rail mid-rebuild).
+    /// </summary>
+    public event EventHandler? KnockRequested;
+
+    /// <summary>True between the flash and the summon that answers it.</summary>
+    public bool KnockPending => _knockPending;
+
+    /// <summary>
+    /// ASK THE KNOCK, ONCE, at the far side of the first-run flow.
+    ///
+    /// <para><paramref name="seenVersionSnapshot"/> must be <c>AppSettings.LastSeenVersion</c> as
+    /// it stood BEFORE this launch stamped it: <c>ShowWhatsNewIfNeeded</c> writes the current
+    /// version to that setting on the synchronous side of the first-run branch, long before this
+    /// runs, and a late read would see the stamp rather than the history. That is the same shape
+    /// as the bug that showed every fresh install a migration notice for a move it never
+    /// witnessed.</para>
+    ///
+    /// <para>Returns true only when the chip was actually asked to flash. Every refusal is
+    /// silent by design - this is asked once per launch and the answer is no almost every
+    /// time.</para>
+    /// </summary>
+    public bool TryKnock(string? seenVersionSnapshot)
+    {
+        try
+        {
+            if (_disposed) return false;
+
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return false;
+            if (!disp.CheckAccess())
+            {
+                disp.BeginInvoke(new Action(() => TryKnock(seenVersionSnapshot)));
+                return false;
+            }
+
+            var world = new EmiKnockWorld(seenVersionSnapshot);
+            if (!_knock.MayKnock(world))
+            {
+                Log.Debug("[EmiDesk] no knock: population={Pop}, state={State}, offers={Offers}",
+                    _knock.Population(world), world.KnockState, world.KnockOffers);
+                return false;
+            }
+
+            // Spend the offer BEFORE the pulse: the ledger has to survive a kill mid-animation,
+            // or "once, ever" becomes "once per launch you happen to close during".
+            EmiState.NoteKnocked();
+
+            _knockWorld = world;
+            _knockPending = true;
+
+            Log.Information("[EmiDesk] the chip knocks: population={Pop}, offer {N} of {Cap}",
+                _knock.Population(world), EmiState.Current.KnockOffers, EmiKnockMachine.OfferCap);
+
+            try { KnockRequested?.Invoke(this, EventArgs.Empty); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] knock handler threw"); }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[EmiDesk] TryKnock failed");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// QA ONLY: put the knock back to a fresh install and ask it again, so the six seconds of
+    /// pulses can be watched more than once per machine. Reached from <see cref="EmiDebug"/>.
+    /// </summary>
+    public void ResetKnock()
+    {
+        try
+        {
+            EmiState.ResetKnock();
+            _knockPending = false;
+            _knockWorld = null;
+            Log.Information("[EmiDesk] knock replayed (QA)");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[EmiDesk] knock replay failed");
         }
     }
 
@@ -1611,6 +1735,15 @@ public sealed class EmiDeskService : IDisposable
             if (EmiDebug.ResetOnboarding) EmiState.ResetOnboarding();
         }
         catch (Exception ex) { Log.Debug(ex, "[EmiDesk] onboarding reset switch failed"); }
+
+        // QA: EMI_DESK_RESET_KNOCK=1 un-latches the one-time onboarding knock for this launch. It
+        // is a separate switch because the knock is genuinely once-ever and the nudge reset above
+        // deliberately leaves it alone.
+        try
+        {
+            if (EmiDebug.ResetKnock) EmiState.ResetKnock();
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] knock reset switch failed"); }
 
         Log.Information("[EmiDesk] app events wired");
     }

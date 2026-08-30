@@ -1391,6 +1391,138 @@
       "spiceCeiling": 0,
       "hold": true,
       "askOdds": 0.0
+    },
+    "tourStarted": {
+      "pools": [
+        "tourStarted"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tourFinished": {
+      "pools": [
+        "tourFinished"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tourSkipped": {
+      "pools": [
+        "tourSkipped"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 0,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tourStep": {
+      "pools": [
+        "tourStep"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.sw-assets": {
+      "pools": [
+        "tour.sw-assets"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.sw-flash": {
+      "pools": [
+        "tour.sw-flash"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.sw-panic": {
+      "pools": [
+        "tour.sw-panic"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.sw-dock": {
+      "pools": [
+        "tour.sw-dock"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.sw-xp": {
+      "pools": [
+        "tour.sw-xp"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.sw-settings": {
+      "pools": [
+        "tour.sw-settings"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "tour.sw-done": {
+      "pools": [
+        "tour.sw-done"
+      ],
+      "odds": 1.0,
+      "cooldownMs": 0,
+      "priority": 3,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0.0
     }
   },
   "pools": {

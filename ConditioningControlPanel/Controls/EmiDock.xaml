@@ -41,9 +41,27 @@
                 </ControlTemplate>
             </Button.Template>
             <Grid>
+                <!--
+                    THE KNOCK'S RING. Stroke and glow are named, addressable objects rather than
+                    literal attribute values because the knock storyboard animates them, and a brush
+                    or an effect that WPF froze on the way in throws the instant an animation touches
+                    it. The face is NEVER animated: EmiFace draws a live kaomoji and pulsing it would
+                    read as a glitch, not a knock. See EmiDock.xaml.cs.
+                -->
                 <Ellipse x:Name="Ring"
                          Fill="#0E0E1C"
-                         Stroke="#FF69B4" StrokeThickness="2"/>
+                         StrokeThickness="2">
+                    <Ellipse.Stroke>
+                        <SolidColorBrush x:Name="RingStroke" Color="#FF69B4"/>
+                    </Ellipse.Stroke>
+                    <Ellipse.Effect>
+                        <DropShadowEffect x:Name="RingGlow"
+                                          Color="#FF69B4"
+                                          BlurRadius="0"
+                                          ShadowDepth="0"
+                                          Opacity="0"/>
+                    </Ellipse.Effect>
+                </Ellipse>
                 <!-- Her live face, inset so the kaomoji never touches the ring. -->
                 <emi:EmiFace x:Name="MiniFace" Margin="7,8,7,8"/>
             </Grid>

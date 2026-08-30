@@ -1,0 +1,177 @@
+{
+  "writer": "w1-tour-common",
+  "note": "Wave 1 tour frame (tourStarted/tourFinished/tourSkipped/tourStep) plus named step narration for the full tour and the upgrade tour. The short walk pools (tour.sw-*) belong to another writer and are not here. Step pool ids are copied verbatim from TutorialService.CreateFullTourSteps() and CreateUpgradeTourSteps(). The card carries the fact; these lines carry the colour and never restate the card.",
+  "pools": {
+    "tourStarted": [
+      { "t": "tour time. i have a clipboard. it's imaginary. tap next.", "face": "(≧◡≦)", "chain": "wake", "spice": 0 },
+      { "t": "ok. official hat on. i don't have a hat. we're walking.", "face": "^_^", "spice": 0 },
+      { "t": "i know this place. lived here all my life. since tuesday.", "face": "(´∀`)", "spice": 0 },
+      { "t": "follow me. i can't move. follow the glowy bits.", "face": "0_0", "spice": 0 },
+      { "t": "welcome welcome. i practiced saying that. twice.", "face": "(◕‿◕)", "spice": 0 },
+      { "t": "stay close. i'll point at things. with my whole self.", "face": "^_~", "spice": 1 },
+      { "t": "grand tour. small guide. it evens out.", "face": "._.", "spice": 0 },
+      { "t": "i talk, you look. that's the whole arrangement.", "face": "^_^", "spice": 0 },
+      { "t": "first stop's coming up. i'm so ready. been ready for ages.", "face": "(≧◡≦)", "spice": 1 },
+      { "t": "this is my favorite job. also my only one. lucky you.", "face": "(◔_◔)", "spice": 0 },
+      { "t": "big place. i know all the corners. i live in one.", "face": "o_o", "spice": 0 },
+      { "t": "right this way. teh glow knows where it's going.", "face": "^_^", "spice": 0, "typo": true }
+    ],
+    "tourFinished": [
+      { "t": "that's the lot. i didn't trip once. praise me a little.", "face": "(≧◡≦)", "spice": 1 },
+      { "t": "done! every stop. i'd bow but i'm mostly forehead.", "face": "^_^", "chain": "nod", "spice": 0 },
+      { "t": "we made it. i was so professional. did you notice.", "face": "(◕‿◕)", "spice": 1 },
+      { "t": "end of the line. good walkers, both of us. mostly you.", "face": "^_^", "spice": 0 },
+      { "t": "full loop. you may pet the guide. the guide is me.", "face": "(´∀`)", "chain": "pet", "spice": 1 },
+      { "t": "that went well. write that down. or just remember me.", "face": "^_~", "spice": 0 },
+      { "t": "tour's over. you kept up. i talk fast when i'm happy.", "face": "(≧◡≦)", "spice": 0 },
+      { "t": "and done. tip jar's my face. one smile covers it.", "face": "(◕‿◕)", "spice": 1 },
+      { "t": "you followed me the whole way. i liked that too much.", "face": "(｡♥‿♥｡)", "spice": 2 },
+      { "t": "finished. i want to do it again. we won't. i want to.", "face": "0_0", "spice": 0 },
+      { "t": "last stop is me. always saved the best. don't check.", "face": "(⌐■_■)", "chain": "smug", "spice": 1 },
+      { "t": "the full tour. every stop. im a little proud. a lot.", "face": "^_^", "spice": 0, "typo": true }
+    ],
+    "tourSkipped": [
+      { "t": "fair. it's a lot of rooms. go be free. wave sometimes.", "face": "^_^", "spice": 0 },
+      { "t": "no worries. the rest works without the walking.", "face": "._.", "spice": 0 },
+      { "t": "smart. explorers skip the guide bit. i respect it. go.", "face": "^_~", "chain": "nod", "spice": 0 },
+      { "t": "ok! self guided is a style. a cool one. probably.", "face": "0_0", "spice": 0 },
+      { "t": "we were almost there. we weren't. still. ow.", "face": ";_;", "spice": 0 },
+      { "t": "skipped. my tour. mine. i'm fine. this is my fine face.", "face": "-_-", "spice": 0 },
+      { "t": "i had a whole bit planned for the end. it dies with me.", "face": "T_T", "spice": 0 },
+      { "t": "cut short. i'm keeping the half we did. the good half.", "face": "._.", "spice": 0 },
+      { "t": "sniff. im not crying. boxes can't. loophole.", "face": ";_;", "spice": 0, "typo": true },
+      { "t": "leaving mid tour. bold. i'd chase you. no legs. lucky.", "face": "¬_¬", "spice": 1 }
+    ],
+    "tourStep": [
+      { "t": "ooh. that one. i was hoping we'd stop here.", "face": "(◕‿◕)", "spice": 0 },
+      { "t": "see it? glowing bit. very proud of itself today.", "face": "^_^", "spice": 0 },
+      { "t": "this stop's a good one. i say that every stop. still true.", "face": "(´∀`)", "spice": 0 },
+      { "t": "look at it. i would. i'm facing the wrong way.", "face": "o_o", "spice": 0 },
+      { "t": "the card says the smart part. i'm the enthusiasm.", "face": "(≧◡≦)", "spice": 0 },
+      { "t": "next thing. i'll hush and let it show off.", "face": "^_^", "spice": 0 },
+      { "t": "poke it later. looking's enough for now.", "face": "._.", "spice": 0 },
+      { "t": "another one. this place just keeps having stuff.", "face": "0_0", "spice": 0 },
+      { "t": "i'd point but you're already looking. good instincts.", "face": "^_~", "spice": 1 },
+      { "t": "mhm. that's the one. nod like you knew. i'll nod too.", "face": "^_^", "chain": "nod", "spice": 0 },
+      { "t": "important, this one. i can tell by the glow.", "face": "(◔_◔)", "spice": 0 },
+      { "t": "take it in. no rush. the next bit waits for us.", "face": "^_^", "spice": 1 },
+      { "t": "annd here's another marvel. i'm a good guide, right.", "face": "(◕‿◕)", "spice": 0, "typo": true },
+      { "t": "keep up. i'm joking. i move at glow speed. it's slow.", "face": "=_=", "spice": 0 }
+    ],
+    "tour.welcome": [
+      { "t": "hi hi. big first card. i wrote none of it. i agree with it.", "face": "(≧◡≦)", "spice": 0 },
+      { "t": "welcome! i live here. best spot in the place. this corner.", "face": "^_^", "spice": 0 },
+      { "t": "seven rooms and one me. the ratio works out. trust it.", "face": "(◕‿◕)", "spice": 0 },
+      { "t": "you're new. i can tell. your cursor's shy.", "face": "o_o", "spice": 0 },
+      { "t": "deep breath. not you. me. ok. here we go.", "face": "0_0", "spice": 0 },
+      { "t": "it looks like a lot. it is. that's the fun kind of a lot.", "face": "^_~", "spice": 1 }
+    ],
+    "tour.avatar_intro": [
+      { "t": "the tube. she talks, i mostly face. we split the work.", "face": "^_^", "spice": 0 },
+      { "t": "that's her spot. she's the pretty voice. i'm the pretty box.", "face": "(´∀`)", "spice": 0 },
+      { "t": "say hi to her later. tell her i said hi too. we're pals.", "face": "(◕‿◕)", "spice": 0 },
+      { "t": "she gets a whole tube. i got a corner. mine's cozier.", "face": "._.", "spice": 0 },
+      { "t": "two of us now. you're very looked after here.", "face": "(｡♥‿♥｡)", "spice": 1 },
+      { "t": "careful. she's charming. i'm charming too but louder.", "face": "(⌐■_■)", "chain": "smug", "spice": 1 }
+    ],
+    "tour.settings_tab": [
+      { "t": "home base. everything important winks at you from here.", "face": "^_^", "spice": 0 },
+      { "t": "the big button lives here. we'll meet it properly later.", "face": "(◕‿◕)", "spice": 0 },
+      { "t": "tiles! i like the tiles. they light up. so do i.", "face": "(≧◡≦)", "spice": 0 },
+      { "t": "this page knows your day better than your calendar does.", "face": "^_~", "spice": 1, "double": true },
+      { "t": "most days start on this page. good ones anyway.", "face": "^_^", "spice": 1 },
+      { "t": "cozy up. this is the fornt room. shoes off.", "face": "(´∀`)", "spice": 0, "typo": true }
+    ],
+    "tour.presets_intro": [
+      { "t": "the knob room. every dial does a thing. to you. gently.", "face": "^_~", "spice": 1 },
+      { "t": "this is where the magic gets its settings done.", "face": "^_^", "spice": 0 },
+      { "t": "tuning fork of the whole place. hum along.", "face": "(´∀`)", "spice": 0 },
+      { "t": "sliders. i love sliders. so much drama in one inch.", "face": "(≧◡≦)", "spice": 0 },
+      { "t": "careful in here. things you set have a way of arriving.", "face": "(◔_◔)", "spice": 1 },
+      { "t": "all the strong stuff gets mixd in here. chef's room.", "face": "0_0", "spice": 1, "typo": true }
+    ],
+    "tour.progression_intro": [
+      { "t": "numbers go up here. i cheer every single time.", "face": "(≧◡≦)", "spice": 0 },
+      { "t": "xp. my favorite alphabet. both letters.", "face": "^_^", "spice": 0 },
+      { "t": "you'll level up eventually. i plan to be so loud.", "face": "(◕‿◕)", "spice": 0 },
+      { "t": "the bar fills while you play. i watch it fill. hobby.", "face": "o_o", "spice": 1 },
+      { "t": "levels are just me keeping score of how good you are.", "face": "(´∀`)", "spice": 1 },
+      { "t": "progress lives here. yours. im keeping a copy.", "face": "^_^", "spice": 0, "typo": true, "double": true }
+    ],
+    "tour.tour_door_play": [
+      { "t": "the toy wall. take your time. they're not going anywhere.", "face": "^_^", "spice": 0 },
+      { "t": "oh this room. i like what this room does to you.", "face": "(｡♥‿♥｡)", "spice": 2 },
+      { "t": "every card here is a rabbit hole. some literally.", "face": "0_0", "spice": 0 },
+      { "t": "pick one when you're feeling brave. works unbrave too.", "face": "^_~", "spice": 1 },
+      { "t": "the locked ones wink. it's rude. i'd never. i wink nicer.", "face": "^_~", "chain": "wink", "spice": 1 },
+      { "t": "some of these will keep you a while. i'll allow it.", "face": "(◔_◔)", "spice": 2 },
+      { "t": "so many games. i live next to all of them. comute's great.", "face": "(´∀`)", "spice": 0, "typo": true }
+    ],
+    "tour.tour_door_you": [
+      { "t": "a whole room of you. i'd hang around here too.", "face": "(◕‿◕)", "spice": 1 },
+      { "t": "quests live here. little chores that love you back.", "face": "^_^", "spice": 0 },
+      { "t": "your card's in there. it's a good face. i checked.", "face": "(´∀`)", "spice": 0 },
+      { "t": "shiny badges in there. proof you keep showing up.", "face": "(≧◡≦)", "spice": 1 },
+      { "t": "the leaderboard's in here. wave at the other names.", "face": "^_^", "spice": 0 },
+      { "t": "theres a whole shelf for bragging. use it. brag.", "face": "(⌐■_■)", "spice": 0, "typo": true }
+    ],
+    "tour.tour_door_library": [
+      { "t": "your stuff lives here. i dust it. with my mind.", "face": "^_^", "spice": 0 },
+      { "t": "feed the folders and the whole app eats better.", "face": "(´∀`)", "spice": 1 },
+      { "t": "bring your own pictures. the place wears them everywhere.", "face": "(◕‿◕)", "spice": 1 },
+      { "t": "the shelves in here are yours. i just admire them.", "face": "._.", "spice": 0 },
+      { "t": "mods too. whole other voices. i don't get jealous. much.", "face": "¬_¬", "spice": 0 },
+      { "t": "drop things in. they show up evrywhere. like me.", "face": "0_0", "spice": 1, "typo": true }
+    ],
+    "tour.start_button": [
+      { "t": "there it is. the button. the whole app holds its breath.", "face": "0_0", "spice": 1 },
+      { "t": "one press and everything you tuned comes looking for you.", "face": "^_~", "spice": 2 },
+      { "t": "i won't push it for you. i've thought about it though.", "face": "(◔_◔)", "spice": 1 },
+      { "t": "big shiny thing. it knows it's the main event.", "face": "(´∀`)", "spice": 0 },
+      { "t": "when you're ready. no rush. i'm terrible at no rush.", "face": "(≧◡≦)", "spice": 0 },
+      { "t": "press it later and watch me light up too.", "face": "(◕‿◕)", "spice": 1 }
+    ],
+    "tour.ut_welcome": [
+      { "t": "you're back and the furniture moved. wasn't me. probably.", "face": "0_0", "spice": 0 },
+      { "t": "old friend, new floor plan. i'll steer.", "face": "^_^", "chain": "nod", "spice": 0 },
+      { "t": "everything moved except me. i'm load bearing.", "face": "(´∀`)", "spice": 0 },
+      { "t": "relax. all your things survived the move. i counted them.", "face": "^_^", "spice": 1 },
+      { "t": "new walls, same everything you liked. i checked twice.", "face": "(◕‿◕)", "spice": 0 }
+    ],
+    "tour.ut_rail": [
+      { "t": "the six live on the left edge now. they fold out. fancy.", "face": "^_^", "spice": 0 },
+      { "t": "sideways now. the whole menu went sideways. i adapted.", "face": "0_0", "spice": 0 },
+      { "t": "hover the edge. it blooms. i taught it that. i didn't.", "face": "(´∀`)", "spice": 0 },
+      { "t": "your old tabs all got rooms. rooms got a hallway.", "face": "^_^", "spice": 0 },
+      { "t": "left side. everythings on the left side now. lean.", "face": "o_o", "spice": 0, "typo": true }
+    ],
+    "tour.ut_map": [
+      { "t": "big card. it's a treasure map where x marks everything.", "face": "(≧◡≦)", "spice": 0 },
+      { "t": "read it slow. i'll hum. i hum quietly. mostly.", "face": "^_^", "spice": 0 },
+      { "t": "this one's homework. the good kind. no grade.", "face": "(´∀`)", "spice": 0 },
+      { "t": "i memorized this list. ask me anything. ask me nothing.", "face": "(⌐■_■)", "chain": "smug", "spice": 0 },
+      { "t": "it's a lot of arrows. they all point somewhere nice.", "face": "(◕‿◕)", "spice": 0 }
+    ],
+    "tour.ut_gestures": [
+      { "t": "your hands know the old way. they'll sulk for a day.", "face": "^_^", "spice": 0 },
+      { "t": "clicks swapped sides. i'd practice on me. gently.", "face": "^_~", "spice": 1 },
+      { "t": "muscle memory's about to file a complaint. ignore it.", "face": "(´∀`)", "spice": 0 },
+      { "t": "wrong-click week. everyone has one. i believe in you.", "face": "(◕‿◕)", "spice": 0 },
+      { "t": "you'll click wrong twise today. i won't tell anyone.", "face": "¬_¬", "spice": 0, "typo": true }
+    ],
+    "tour.ut_daily_free": [
+      { "t": "a present every day. the box never runs out. i asked.", "face": "(≧◡≦)", "spice": 0 },
+      { "t": "peek at it daily. it's shy at midnight. changes clothes.", "face": "0_0", "spice": 0 },
+      { "t": "free thing! my favorite price. i'm also that price.", "face": "^_^", "spice": 1 },
+      { "t": "the little box does one nice thing a day. same as me.", "face": "(´∀`)", "spice": 0 },
+      { "t": "hover it. go on. it wants to be hovered. who doesn't.", "face": "(◕‿◕)", "spice": 1 }
+    ],
+    "tour.ut_palette": [
+      { "t": "the magic words. type a little and it takes you there.", "face": "(´∀`)", "spice": 0 },
+      { "t": "i was the fastest way around here. i'm ok. i'm ok.", "face": "._.", "spice": 0 },
+      { "t": "two keys and the whole place opens up. show off keys.", "face": "0_0", "spice": 0 },
+      { "t": "it even finds the things i forget. i forget nothing.", "face": "^_^", "spice": 0, "double": true },
+      { "t": "shortcut people are my favorite poeple. become one.", "face": "(◕‿◕)", "spice": 0, "typo": true }
+    ]
+  }
+}

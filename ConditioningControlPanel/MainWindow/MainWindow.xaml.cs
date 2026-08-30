@@ -543,6 +543,15 @@ namespace ConditioningControlPanel
             // owns what used to be three separate modals: the welcome card, the first-run mod
             // picker (ModPickerDialog.ShowIfNeeded's one-shot + offline guards included) and the
             // "choose a content folder" MessageBox; StartTutorial is launched from its last step.
+            // ASK EMI WAVE 1: read LastSeenVersion HERE, before anything on this launch stamps it.
+            // ShowWhatsNewIfNeeded (the first statement of the else branch, a few lines down) writes
+            // the current version into that setting synchronously, minutes before the knock's own
+            // dispatcher item runs. A late read would therefore see this build's own stamp and
+            // classify every single upgrader as somebody who is owed nothing - which is the same
+            // shape as the bug that showed every fresh install a migration notice for a move it
+            // never witnessed. One string, captured once, handed to the knock at the far end.
+            var knockSeenVersion = App.Settings?.Current?.LastSeenVersion ?? string.Empty;
+
             if (FirstRunWizard.ShouldRunAndClaim())
             {
                 // EMI Desk (MOMENTS 4.B): a HOLD, never a line. The wizard owns the screen on a
@@ -583,6 +592,14 @@ namespace ConditioningControlPanel
                         // Nothing was shown, so nothing is owed the screen.
                         try { App.EmiDesk?.ReleaseHold("firstLaunchEver"); } catch { }
                     }
+
+                    // THE KNOCK (Ask EMI wave 1). The far side of the wizard, on both paths: the
+                    // population this is FOR is the one that pressed "explore on my own", and the
+                    // hand-back path is a launch where nothing was ever shown and she is exactly as
+                    // welcome. Every remaining gate - the wizard, an update dialog, a session, a
+                    // tutorial overlay, a minimised window, the setting, whether she is already out
+                    // - lives in EmiKnockMachine.MayKnock, so this is one call and no policy.
+                    QueueEmiKnock(knockSeenVersion);
                     // Normal, NOT Loaded: this app keeps the dispatcher busy enough (compositor
                     // host + avatar animations) that Loaded-priority items are starved and never
                     // run - the first-launch tour silently never started at Loaded priority.
@@ -644,6 +661,11 @@ namespace ConditioningControlPanel
                     {
                         App.Logger?.Warning(ex, "Failed to offer the mod picker to an upgrading install");
                     }
+
+                    // THE KNOCK (Ask EMI wave 1), the upgrader's half. Same call, same gates; the
+                    // snapshot taken before ShowWhatsNewIfNeeded ran is what makes this population
+                    // legible at all by the time we get here.
+                    QueueEmiKnock(knockSeenVersion);
                     // Normal, NOT Loaded - Loaded-priority work is starved in this app and silently
                     // never runs (same reason as the first-launch branch above).
                 }), System.Windows.Threading.DispatcherPriority.Normal);
@@ -3916,6 +3938,65 @@ namespace ConditioningControlPanel
 
 
 
+
+        /// <summary>
+        /// ASK EMI WAVE 1 - the trigger for the dock chip's one and only knock.
+        ///
+        /// <para>Called at the far side of BOTH first-run branches, once per launch. It decides
+        /// nothing: <see cref="Services.EmiDesk.EmiKnockMachine"/> owns the four brakes and every
+        /// gate, and refuses silently, which is the answer almost every time.</para>
+        ///
+        /// <para><b>DispatcherPriority.Normal, never Loaded.</b> This app keeps the dispatcher busy
+        /// enough (compositor host plus avatar animations) that Loaded-priority items are starved
+        /// and never run at all - that is precisely what silently killed the original first-launch
+        /// tour, and the comment in the wizard block above says so. The <c>IsLoaded</c> check is
+        /// what Loaded priority was being used for; it is cheap and it is honest.</para>
+        ///
+        /// <para><paramref name="seenVersion"/> is the pre-stamp snapshot of
+        /// <c>LastSeenVersion</c>. See where it is captured, above.</para>
+        /// </summary>
+        private void QueueEmiKnock(string seenVersion)
+        {
+            try
+            {
+                var disp = Application.Current?.Dispatcher;
+                if (disp == null || disp.HasShutdownStarted) return;
+
+                disp.BeginInvoke(new Action(async () =>
+                {
+                    try
+                    {
+                        // SETTLED, not merely "after". MayKnock reads the screen at one instant, and
+                        // the two things most likely to own it are queued rather than running: the
+                        // wizard's own tour starts a beat after its last step, and What's New posts
+                        // itself onto the dispatcher. So wait them out with the same idiom the mod
+                        // picker uses a few hundred lines up - a beat for the queue to fill, then up
+                        // to five minutes of somebody actually reading. Past that we simply do not
+                        // knock; the offer has not been spent, so the next launch offers it properly.
+                        await Task.Delay(1500);
+
+                        for (int i = 0; i < 600 && (App.IsUpdateDialogActive || IsStartupDialogShowing
+                                                    || App.Tutorial?.IsActive == true); i++)
+                        {
+                            await Task.Delay(500);
+                        }
+
+                        // The gates in MayKnock are all about "is anything else owning the screen".
+                        // This one is about whether there is a screen at all yet.
+                        if (!IsLoaded) return;
+                        App.EmiDesk?.TryKnock(seenVersion);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug(ex, "EMI knock attempt failed");
+                    }
+                }), System.Windows.Threading.DispatcherPriority.Normal);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug(ex, "EMI knock could not be queued");
+            }
+        }
     }
 
     /// <summary>Thin IWin32Window wrapper so WinForms dialogs get a proper owner handle.</summary>
