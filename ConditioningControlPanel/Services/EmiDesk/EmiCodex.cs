@@ -469,12 +469,22 @@ public static class EmiCodex
         bool reduced = false;
         try { reduced = App.Settings?.Current?.MotionLevel == Models.MotionLevel.Off; }
         catch { /* the default (full motion) is right when settings are not up yet */ }
+        return BuildBootScript(Bookmark, reduced);
+    }
 
+    /// <summary>
+    /// The pure half of <see cref="BootScript"/>, split out so the script can be asserted without
+    /// a settings singleton or a user state file behind it. Serialised through Newtonsoft rather
+    /// than concatenated: a chapter id is a merged writer's file name, and a quote or a backslash
+    /// in one must not be able to break the page's first script.
+    /// </summary>
+    internal static string BuildBootScript(string? bookmark, bool reducedMotion)
+    {
         var payload = JsonConvert.SerializeObject(new
         {
-            bookmark = Bookmark,
+            bookmark,
             manualUrl = ManualUrl,
-            reducedMotion = reduced,
+            reducedMotion,
         });
         return "window.CCP_CODEX = " + payload + ";";
     }

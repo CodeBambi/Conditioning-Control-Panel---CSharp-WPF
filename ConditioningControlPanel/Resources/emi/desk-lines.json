@@ -1765,7 +1765,6 @@
       "spiceCeiling": 1,
       "hold": false,
       "askOdds": 1.0,
-      "scripted": true,
       "limit": {
         "per": "ever",
         "max": 1
