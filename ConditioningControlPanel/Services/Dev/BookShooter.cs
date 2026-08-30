@@ -38,8 +38,11 @@ internal static class BookShooter
     /// last frame and the first is where a loop that does not actually loop shows itself.</summary>
     private static readonly double[] Walk = { 0.0, 0.2, 0.4, 0.6, 0.8 };
 
-    public static void Run(Window window, string outDir)
+    public static void Run(Window window, string outDir, bool narrow = false)
     {
+        // Set before the book is ever placed: PlaceWindow reads it on the way in.
+        EmiBookWindow.ForceNarrow = narrow;
+
         // Deferred to Loaded for the same reason DoorShooter defers: rendering an unarranged visual
         // yields an empty bitmap that reads exactly like a broken panel.
         if (window.IsLoaded) _ = Shoot(outDir);

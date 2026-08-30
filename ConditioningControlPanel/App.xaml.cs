@@ -2560,7 +2560,9 @@ namespace ConditioningControlPanel
                 var bookDir = bidx >= 0 && bidx + 1 < e.Args.Length && !e.Args[bidx + 1].StartsWith("--")
                     ? e.Args[bidx + 1]
                     : Path.Combine(AppContext.BaseDirectory, "logs", "book-shots");
-                Services.Dev.BookShooter.Run(mainWindow, bookDir);
+                // `--narrow` alongside it forces the book to the width it takes when it has no room
+                // beside her, which is the only way to review that reflow on a desk that has room.
+                Services.Dev.BookShooter.Run(mainWindow, bookDir, e.Args.Contains("--narrow"));
             }
 
             // `--dump-book-keys [path]`: write every emi_book_* key the deck needs, as a JSON
