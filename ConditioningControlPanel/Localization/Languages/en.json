@@ -5315,7 +5315,7 @@
   "emi_codex_limit_label": "Worth knowing",
   "emi_codex_open_site": "Open the manual on the web",
   "emi_codex_close": "Close",
-  "_comment_emi_book": "EMI's book, flipbook edition: one card per feature with a live 8-bit demo (Services/EmiDesk/EmiBook*.cs, Windows/EmiDesk/EmiBookWindow). English only for now, per owner call 3, same as the codex keys above.",
+  "_comment_emi_book": "EMI's book, flipbook edition: one card per feature with a live 8-bit demo (Services/EmiDesk/EmiBook*.cs, Windows/EmiDesk/EmiBookWindow). Translated into all 9 languages 2026-08-31, per owner call.",
   "emi_book_catch_label": "the catch:",
   "emi_book_go": "TAKE ME THERE",
   "emi_book_walk": "WALK ME THROUGH IT",

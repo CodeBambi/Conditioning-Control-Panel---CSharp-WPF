@@ -80,8 +80,7 @@ public sealed record EmiBookCard(
 /// false), so the flashes and subliminals cards both admit that they show up in a recording.</para>
 ///
 /// <para><b>Localization.</b> Card text is UI copy and goes through <c>emi_book_*</c> keys, English
-/// in <c>en.json</c> only for the first cut, which is the convention the <c>emi_codex_*</c> keys
-/// already set. Her margin lines are never localized, like every other line she says.</para>
+/// in <c>en.json</c>, translated into all nine language files (2026-08-31, owner call). Her margin lines are never localized, like every other line she says.</para>
 /// </summary>
 public static class EmiBookCards
 {
