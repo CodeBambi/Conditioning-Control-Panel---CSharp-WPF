@@ -32,6 +32,7 @@
           BodyRoot    her silhouette; the ONLY hit-testable region (Background="Transparent")
             BodyImage the pose PNG
             FaceLayer the face canvas and, over it, the glass (chunk B3 paints into GlassHost)
+            OutfitOverImage the garment's own art, ABOVE the face and the glass (THE SKIN LAW)
             BtnClose  the hover x
             BtnGear   the hover gear (opens her options; her cards live in there too)
             ResizeGrip the corner handle
@@ -85,6 +86,31 @@
                 </emi:EmiFace>
                 <Canvas x:Name="GlassCanvas" IsHitTestVisible="False"/>
             </Canvas>
+
+            <!-- THE OUTFIT OVERLAY. THE SKIN LAW, and the reason this node is HERE and not one
+                 line higher: the outfit/skin layer is the TOPMOST thing in EMI's composition,
+                 above the face canvas and above the glass. Face art may never paint over a
+                 garment - a collar buried under her screen is the bug this slot exists to make
+                 impossible (owner, 2026-08-30). The web twin is `.emi-over` at z-index 2 in
+                 Resources/web/arcademy/emi/widget.css; this is the same layer in WPF.
+
+                 It is a sibling of BodyImage inside BodyRoot on purpose, so it inherits every
+                 transform the body gets - the CRT squash, the click squash, the drag wobble, the
+                 move offsets - exactly as BodyImage does, and needs no geometry of its own
+                 (Stretch="Fill" over a Grid whose Width/Height ApplyBodyWidth already sets). The
+                 web gets the same inheritance from `inset:0` inside `.emi`.
+
+                 It costs NOTHING at rest: no Source, Collapsed, never hit-tested. Only
+                 EmiDeskWindow.SetOutfit puts art on it, and only after EmiChains has found the
+                 file on disk once. See the OUTFIT OVERLAY block in Services/EmiDesk/EmiChains.cs.
+
+                 The three chrome affordances below draw OVER it. They are window chrome, not art:
+                 a hover x hidden under a hat is a widget nobody can close. -->
+            <Image x:Name="OutfitOverImage"
+                   Stretch="Fill"
+                   Visibility="Collapsed"
+                   IsHitTestVisible="False"
+                   RenderOptions.BitmapScalingMode="NearestNeighbor"/>
 
             <!-- THE TWO CHIPS, and why each one is now a chip inside a bigger button.
 

@@ -208,6 +208,16 @@ public partial class EmiDeskWindow : Window
     private readonly EmiChains.Player _player;
     private readonly Dictionary<string, ImageSource> _bodyCache = new(StringComparer.Ordinal);
 
+    // THE OUTFIT OVERLAY (THE SKIN LAW; see the block in EmiChains.cs). `_outfit` is null on every
+    // road today - nothing on the desk picks a garment - so all of this rests at zero cost.
+    // `_overArmed` is the ONE probe per outfit: null means "not asked yet", and once it is a bool
+    // the answer is final for the sitting, so a sheet without an overlay costs one File.Exists and
+    // never touches the disk again however many times she sways.
+    private readonly Dictionary<string, ImageSource> _overCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, bool> _overArmed = new(StringComparer.Ordinal);
+    private string? _outfit;
+    private string? _overPose;
+
     private DispatcherTimer? _idleTimer;
     private DispatcherTimer? _swayTimer;
     private DispatcherTimer? _petTimer;
@@ -781,11 +791,126 @@ public partial class EmiDeskWindow : Window
                 _bodyCache[key] = img;
             }
             BodyImage.Source = img;
+            PaintOutfitOver();
         }
         catch (Exception ex)
         {
             Log.Debug(ex, "[EmiDesk] SetPose failed for {Frame}", frame);
         }
+    }
+
+    /// <summary>
+    /// The garment she is wearing, or null for the standard art. Null on every road today: nothing
+    /// on the desk chooses an outfit yet (see <see cref="EmiChains.Outfits"/>).
+    /// </summary>
+    public string? Outfit => _outfit;
+
+    /// <summary>
+    /// Put a wardrobe sheet's OVERLAY on her, or take it off with null. THE SKIN LAW's one seam.
+    ///
+    /// <para>This is the neutral setter the campus calls <c>setOutfit</c>. It is deliberately not
+    /// wired to anything: the desk has no outfit picker, no wardrobe and no outfit BODY sheets, and
+    /// this method invents none of them. What it guarantees is that when a sheet does arrive, the
+    /// part of it that crosses her glass resolves through
+    /// <see cref="EmiChains.OverPath"/> and lands in <c>OutfitOverImage</c> - which the XAML
+    /// authors ABOVE the face and the glass, so the garment is on top and stays there.</para>
+    ///
+    /// <para>Silent about missing art, exactly like the web: an outfit with no overlay sheet asks
+    /// once, is answered once, and leaves one collapsed Image behind.</para>
+    /// </summary>
+    /// <param name="outfit">A name from <see cref="EmiChains.Outfits"/>, or null for standard.</param>
+    public void SetOutfit(string? outfit)
+    {
+        try
+        {
+            var want = string.IsNullOrWhiteSpace(outfit) ? null : outfit!.Trim();
+            if (string.Equals(want, _outfit, StringComparison.Ordinal)) return;
+            _outfit = want;
+            _overPose = null;
+            PaintOutfitOver();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] SetOutfit failed for {Outfit}", outfit);
+        }
+    }
+
+    /// <summary>
+    /// Lay the overlay for the pose that is up, or take it off. The body's shadow: no timer, no
+    /// pose logic and no geometry of its own - it is repainted from <see cref="SetPose"/>, which is
+    /// the one place the body PNG changes, so every sway step and every face-driven pose carries it
+    /// for free.
+    /// </summary>
+    private void PaintOutfitOver()
+    {
+        try
+        {
+            var outfit = _outfit;
+            if (outfit == null || !ArmOutfitOver(outfit))
+            {
+                if (OutfitOverImage.Visibility != Visibility.Collapsed)
+                {
+                    OutfitOverImage.Visibility = Visibility.Collapsed;
+                    OutfitOverImage.Source = null;
+                }
+                _overPose = null;
+                return;
+            }
+
+            var key = outfit + "/" + _pose;
+            if (key == _overPose && OutfitOverImage.Source != null) return;
+
+            if (!_overCache.TryGetValue(key, out var img))
+            {
+                var path = EmiChains.OverPath(outfit, _pose);
+                if (path == null)
+                {
+                    // A HALF-PRESENT SHEET IS NO SHEET: one pose's goggles on every other pose read
+                    // as a broken sprite, so the whole layer stands down for the sitting.
+                    Log.Debug("[EmiDesk] outfit overlay incomplete for {Outfit}: {Pose} missing", outfit, _pose);
+                    _overArmed[outfit] = false;
+                    OutfitOverImage.Visibility = Visibility.Collapsed;
+                    OutfitOverImage.Source = null;
+                    _overPose = null;
+                    return;
+                }
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.UriSource = new Uri(path, UriKind.Absolute);
+                bmp.EndInit();
+                bmp.Freeze();
+                img = bmp;
+                _overCache[key] = img;
+            }
+
+            _overPose = key;
+            OutfitOverImage.Source = img;
+            OutfitOverImage.Visibility = Visibility.Visible;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] outfit overlay paint failed");
+            try
+            {
+                OutfitOverImage.Visibility = Visibility.Collapsed;
+                OutfitOverImage.Source = null;
+            }
+            catch (Exception inner) { Log.Debug(inner, "[EmiDesk] outfit overlay stand-down failed"); }
+        }
+    }
+
+    /// <summary>
+    /// Does this sheet come with an overlay at all? ONE probe per outfit, ever; the verdict is
+    /// cached for the sitting, so the three sheets that have no overlay cost one file check each
+    /// and nothing after it.
+    /// </summary>
+    private bool ArmOutfitOver(string outfit)
+    {
+        if (_overArmed.TryGetValue(outfit, out var armed)) return armed;
+        armed = EmiChains.OverPath(outfit, "idle") != null;
+        _overArmed[outfit] = armed;
+        return armed;
     }
 
     // ---------------------------------------------------------------- chains
