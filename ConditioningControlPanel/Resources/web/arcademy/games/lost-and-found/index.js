@@ -48,7 +48,7 @@ import {
   findsForTier, modifierFindForTier, finalBellFindForTier, PLAYTEST, TIERS,
   MOBILE_DENSITY, HEAT_BAND, MODIFIER_HEAT_STEP, BEAT_MS, TICK_MS,
   ASSEMBLE_STAGGER_MS, CLAIM_TIMEOUT_MS, POOL_OVERPROVISION, DISCRETE_STEP_MS,
-  DENSITY_LEVELS, DENSITY_HARD_CAP, DENSITY_COARSE_CAP,
+  DENSITY_LEVELS, DENSITY_HARD_CAP, DENSITY_COARSE_CAP, TOUCH_MIN_TILE_H,
 } from './constants.js';
 import { makeRng } from '../../core/rng.js';
 import { createBoard, paintLook, isVideoUrl, isAnimatedUrl } from './board.js';
@@ -273,11 +273,24 @@ export default {
 
     /** The board size we actually deal: tier density scaled by the player's
      *  lf_density level, then capped by device and player boardSize. */
-    function effectiveDensity() {
+    function effectiveDensity(viewH) {
       const lvl = String((ctx.settings && ctx.settings.lf_density) || 'medium');
       const mult = DENSITY_LEVELS[lvl] || DENSITY_LEVELS.medium;
       let d = Math.round(dials.density * mult);
       if (coarse) d = Math.min(DENSITY_COARSE_CAP, Math.min(d, Math.round((MOBILE_DENSITY[tier] || d) * mult)));
+      // THE TOUCH TILE FLOOR (constants.js TOUCH_MIN_TILE_H): cap the deal so
+      // a row is never shorter than a fingertip. rowsFor() is
+      // round(sqrt(d/1.75)) clamped 3..12, so the largest deal that still fits
+      // maxRows rows is 1.75*(maxRows+.5)^2 - 1. Shrink-only, touch-only, and
+      // par follows density (grade.js), so the grade stays exactly as fair.
+      if (touch && Number.isFinite(viewH) && viewH > 120) {
+        const gap = 5;                                   // styles.js --g-lf-gap
+        const maxRows = Math.floor((viewH + gap) / (TOUCH_MIN_TILE_H + gap));
+        if (maxRows < 12) {
+          const dMax = Math.ceil(1.75 * (maxRows + 0.5) * (maxRows + 0.5)) - 1;
+          d = Math.min(d, Math.max(8, dMax));
+        }
+      }
       const cap = Number(ctx.settings && ctx.settings.boardSize);
       if (Number.isFinite(cap) && cap > 0) d = Math.min(d, cap);
       return clamp(d, 8, DENSITY_HARD_CAP);
@@ -557,6 +570,7 @@ export default {
       shedVideos: 0, shedGifs: 0, regrown: 0,
     };
     const govGaps = [];
+    const govScratch = new Array(96);   // reused by govTick's median (no per-frame allocs)
     let govLast = 0;
 
     /** Rest a seat on something that costs no decoder and no player: a real
@@ -630,8 +644,18 @@ export default {
       }
       govLast = ts;
       if (govGaps.length < 48) return;
-      const s = govGaps.slice().sort((x, y) => x - y);
-      const med = s[s.length >> 1];
+      // Alloc-free median (0830 audit): slice().sort() here ran EVERY FRAME for
+      // the life of the class, feeding the GC on exactly the devices the
+      // governor exists to protect. Insertion into a reused scratch buffer
+      // yields the identical median with zero garbage (window is <= 90 wide).
+      const gn = govGaps.length;
+      for (let gi = 0; gi < gn; gi++) {
+        const gx = govGaps[gi];
+        let gj = gi - 1;
+        while (gj >= 0 && govScratch[gj] > gx) { govScratch[gj + 1] = govScratch[gj]; gj -= 1; }
+        govScratch[gj + 1] = gx;
+      }
+      const med = govScratch[gn >> 1];
       gov.med = med;
       if (med < gov.base) gov.base = med;
       const locked = med >= gov.base * PLAYTEST.GOV_LOCK_X;
@@ -1623,7 +1647,6 @@ export default {
         coarse = probeCoarse();
         touch = coarse || !!(ctx.platform && ctx.platform.isTouch);
         classSeed = String(spec.seed || 'lf');
-        density = effectiveDensity();
 
         injectStyles();
         hud = createHud({
@@ -1631,6 +1654,19 @@ export default {
           // the chrome vocabulary rides the game's clamped helper, never the engine
           cue,
         });
+        // The press-road diet (styles.js) is gated on a class THIS game arms -
+        // html.ae-touch's global arming belongs to the shell and is under
+        // audit (0830); a diet the phone may never wear is no diet.
+        try {
+          if (touch && hud.root && hud.root.classList) hud.root.classList.add('g-lf-touch');
+        } catch (e) { /* cosmetic only */ }
+        // Deliberately AFTER createHud: on touch the deal is capped by the
+        // view's real height (the touch tile floor), and only the mounted view
+        // knows it. Nothing before this line reads density, and createHud
+        // draws no rng, so the seeded stream is byte-identical either way.
+        density = effectiveDensity(hud.view && hud.view.clientHeight
+          ? hud.view.clientHeight
+          : (typeof window !== 'undefined' && window.innerHeight ? window.innerHeight - 100 : NaN));
         board = createBoard({
           mount: hud.view, density, rng, drift: dials.drift,
           lite: coarse, touch, reduced, log: say, onTileClick, onTileHover,
