@@ -1343,9 +1343,12 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     rung, so photo on means the campus ghost wears it too, and turning it off
     drops to `username` (the name stays). There is no second private flag.
   - **THE SNOWFLAKE RULE HOLDS** (PRESENCE.md §10): the Discord CDN url and the
-    Discord user id NEVER reach the page. Desktop caches a 128px PNG and ships
-    it as a `data:` URI inside init; the web build sends the first-party proxy
-    url. Anything else is a leak, and `<img>` onerror falls back to the drawn
+    Discord user id NEVER reach the page. Desktop caches a 128px still and ships
+    it as a `data:` URI inside init (JPEG since the photo-pending fix - WPF's
+    PNG encoder INFLATED every real avatar past the size cap, so the card had
+    never once worn a photo; the page was only ever promised a `data:` URI and
+    `<img>` does not care which codec is inside it); the web build sends the
+    first-party proxy url. Anything else is a leak, and `<img>` onerror falls back to the drawn
     portrait rather than retrying.
   - **ONE CLICK IS THE CONSENT** (owner ruling): when a link-up started from the
     chip succeeds, the HOST applies `presenceShare:'discord'` itself and pushes

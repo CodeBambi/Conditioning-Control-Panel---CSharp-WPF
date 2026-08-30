@@ -203,6 +203,41 @@ export function hasPhoto(profile) {
 }
 
 /* ----------------------------------------------------------------------------
+ * THE FRAME, and there is ONE of it.
+ *
+ * A frame the counter sold has to land on BOTH cards - the 560px card under the
+ * Records spotlight AND the laminated one leaning in the corner of the quad
+ * (campus.js's `.campus-idcard`). It landed on only the big one for two waves,
+ * which is why a 300-ticket frame read as "does nothing": the card the player
+ * actually looks at while walking around never changed.
+ *
+ * So the map and the painter live HERE, at module scope, exported, and campus.js
+ * imports them the way it already imports `genericPortrait` and `paintChip`.
+ * Two copies of this map is exactly the drift the parts helpers exist to stop.
+ * -------------------------------------------------------------------------- */
+
+/** The frames the counter stocks, sku word -> class. An unknown word paints
+ *  nothing rather than a broken class, so a catalog that grows a third frame
+ *  tomorrow cannot make either card render as a mystery. */
+export const FRAMES = { gold: 'is-frame-gold', navy: 'is-frame-navy' };
+
+/**
+ * Put the bought frame on a card node, or take a sold-back one off. Every class
+ * in FRAMES is toggled on every call, so this is also the way a frame is
+ * REMOVED - there is no separate clear verb to forget to call.
+ * @param {?Element} node  the card element (`.arc-id-big` or `.campus-idcard`)
+ * @param {?string} name   'gold' | 'navy' | '' (anything unknown reads as none)
+ */
+export function paintCardFrame(node, name) {
+  if (!node || !node.classList) return;
+  let want = '';
+  try { want = String(name || ''); } catch (e) { want = ''; }
+  for (const key of Object.keys(FRAMES)) {
+    try { node.classList.toggle(FRAMES[key], key === want); } catch (e) { /* noop */ }
+  }
+}
+
+/* ----------------------------------------------------------------------------
  * THE CHIP
  *
  * ONE switch with three resting rungs and one in-flight look. The rung is
@@ -471,23 +506,17 @@ export function createIdSpotlight({ t, reducedMotion, lite, isMobile, profile, s
 
   function nameFor(p) { return (p && p.name) ? String(p.name) : tr('student', 'Student'); }
 
-  /** The frames the counter stocks. An unknown word paints nothing rather than
-   *  a broken class, so a catalog that grows a third frame tomorrow cannot make
-   *  the card render as a mystery. */
-  const FRAMES = { gold: 'is-frame-gold', navy: 'is-frame-navy' };
-
   /** Put the bought frame on the card, or take a sold-back one off. The node
    *  arrives by hand at build time (`spot` does not exist yet) and is read off
-   *  the live refs on every repaint after that. */
+   *  the live refs on every repaint after that. The MAP and the class-toggling
+   *  are `paintCardFrame`'s, at module scope, because the corner card wears the
+   *  same frame off the same one map. */
   function paintFrame(node) {
     const big = node || (spot && spot.refs ? spot.refs.big : null);
-    if (!big || !big.classList) return;
     let want = '';
     try { want = String((typeof frame === 'function' ? frame() : '') || ''); }
     catch (e) { want = ''; }
-    for (const key of Object.keys(FRAMES)) {
-      try { big.classList.toggle(FRAMES[key], key === want); } catch (e) { /* noop */ }
-    }
+    paintCardFrame(big, want);
   }
 
   /** Repaint the parts a `profile` frame or a `setting` echo can move. */
