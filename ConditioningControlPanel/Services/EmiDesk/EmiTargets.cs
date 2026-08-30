@@ -292,15 +292,15 @@ public static class EmiTargets
 
         T("sessions", "features/deeper.png", Tile(0x8C, 0x9E, 0xFF), Always, Never, () => Nav("presets"));
         T("flashes", "features/flash.png", Tile(0xFF, 0x8F, 0xA3), Always, Never, () => Rack("flash"));
-        T("videos", "features/mandatory_videos.png", Tile(0x8B, 0x2C, 0x6A), Always, Never, () => Rack("video"));
 
-        // ---- seventh: the book (Ask EMI, wave 2) --------------------------------
+        // ---- sixth: the book (Ask EMI, wave 2) ----------------------------------
         //
-        // SEVENTH, deliberately, and never higher. The first six available entries ARE the ring
-        // for a brand new user, and displacing one of those is an owner call rather than a build
-        // decision (WAVE2-CONTRACT, "Entry points in Wave 2"). Seventh is the first slot the book
-        // can take without taking anything from anybody: it outranks the whole lower half of the
-        // catalogue on a tie, and it is one open away from the ring for whoever wants it there.
+        // SIXTH, by owner decision (2026-08-30). The book shipped SEVENTH - the first slot it
+        // could take without taking anything from anybody - because the first six available
+        // entries ARE the ring for a brand new user, and displacing one of those is an owner
+        // call rather than a build decision (WAVE2-CONTRACT, "Entry points in Wave 2"). The
+        // owner made that call: the manual belongs in a brand new user's ring, and videos is
+        // the card that steps down to seventh for it.
         //
         // ALWAYS AVAILABLE, NEVER LOCKED, and both halves of that carry weight. The book IS the
         // manual: a tier gate on it would lock a first-run user out of the explanation of the
@@ -310,6 +310,10 @@ public static class EmiTargets
         //
         // No art on purpose: no PNG ships in this wave, and the hue tile is the book's own colour.
         T("codex", null, Tile(0xE6, 0xD3, 0xA8), Always, Never, () => EmiBook.Open());
+
+        // Seventh since 2026-08-30: stepped out of the default ring to make room for the book.
+        // Still one open away from the ring for anybody who actually runs videos.
+        T("videos", "features/mandatory_videos.png", Tile(0x8B, 0x2C, 0x6A), Always, Never, () => Rack("video"));
 
         // ---- the rest of the doors ----------------------------------------------
 
