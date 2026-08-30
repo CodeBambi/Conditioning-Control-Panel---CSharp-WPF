@@ -294,6 +294,23 @@ public static class EmiTargets
         T("flashes", "features/flash.png", Tile(0xFF, 0x8F, 0xA3), Always, Never, () => Rack("flash"));
         T("videos", "features/mandatory_videos.png", Tile(0x8B, 0x2C, 0x6A), Always, Never, () => Rack("video"));
 
+        // ---- seventh: the book (Ask EMI, wave 2) --------------------------------
+        //
+        // SEVENTH, deliberately, and never higher. The first six available entries ARE the ring
+        // for a brand new user, and displacing one of those is an owner call rather than a build
+        // decision (WAVE2-CONTRACT, "Entry points in Wave 2"). Seventh is the first slot the book
+        // can take without taking anything from anybody: it outranks the whole lower half of the
+        // catalogue on a tie, and it is one open away from the ring for whoever wants it there.
+        //
+        // ALWAYS AVAILABLE, NEVER LOCKED, and both halves of that carry weight. The book IS the
+        // manual: a tier gate on it would lock a first-run user out of the explanation of the
+        // thing they cannot use yet, which is the exact opposite of what a manual is for. It is
+        // also the one door that opens with NOTHING on disk - EmiCodex fails soft to a native
+        // reader, so a build with no bundle still puts something readable on screen.
+        //
+        // No art on purpose: no PNG ships in this wave, and the hue tile is the book's own colour.
+        T("codex", null, Tile(0xE6, 0xD3, 0xA8), Always, Never, () => EmiCodex.Open());
+
         // ---- the rest of the doors ----------------------------------------------
 
         T("dtrh", "features/dtrh.png", Tile(0x8C, 0xF5, 0xC8), Always,

@@ -61,6 +61,9 @@ public static class EmiOffers
             if (e.StartsWith("tour:", StringComparison.OrdinalIgnoreCase))
                 return TourFeasible(e.Substring(5));
 
+            if (e.StartsWith("book:", StringComparison.OrdinalIgnoreCase))
+                return BookFeasible(e.Substring(5));
+
             return e.ToLowerInvariant() switch
             {
                 "none" => true,
@@ -179,6 +182,63 @@ public static class EmiOffers
         }
     }
 
+    // ---------------------------------------------------------------- the book (wave 2)
+
+    /// <summary>The <c>book:</c> verb that opens the codex. One verb, and there is only ever
+    /// going to be one: the book is a single window and every chapter route lives inside it.</summary>
+    private const string BookOpenVerb = "open";
+
+    /// <summary>
+    /// Can she offer the book right now?
+    ///
+    /// <para>Same DRAW-TIME law as the tours (LINES-SCHEMA 4), for the same reason: the ask is
+    /// dropped before it is ever put on the glass rather than shown and then fizzling. Two things
+    /// make it infeasible, and they are both dead-chip cases - there is no book in this build
+    /// (<see cref="EmiCodex.HasContent"/> covers the hosted bundle AND the chapter files behind the
+    /// native reader, so it is only false when there is genuinely nothing to read), or the book is
+    /// already open and the chip would be an offer to do what is already done.</para>
+    ///
+    /// <para>Note what is NOT checked. There is no tier gate here and no main-window check: the
+    /// book is the manual, it is never locked, and it opens perfectly well with the control panel
+    /// minimised. See the <c>codex</c> row in <see cref="EmiTargets"/>.</para>
+    /// </summary>
+    private static bool BookFeasible(string? verb)
+    {
+        try
+        {
+            if (!string.Equals((verb ?? string.Empty).Trim(), BookOpenVerb, StringComparison.OrdinalIgnoreCase))
+                return false;
+            if (EmiCodex.IsOpen) return false;
+            return EmiCodex.HasContent;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] book feasibility probe failed for {Verb}", verb);
+            return false;
+        }
+    }
+
+    /// <summary>Say yes: open the book. Never closes anything and never navigates - the book is a
+    /// window beside the app, not a place it takes you.</summary>
+    private static void OpenBook(string? verb, bool fromAsk)
+    {
+        try
+        {
+            var v = (verb ?? string.Empty).Trim().ToLowerInvariant();
+            if (!string.Equals(v, BookOpenVerb, StringComparison.Ordinal))
+            {
+                Log.Debug("[EmiDesk] unknown book verb {Verb}, ignored", v);
+                return;
+            }
+            EmiCodex.Open();
+            App.EmiDesk?.Fire("effectFired", new { channel = "book", fromAsk });
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[EmiDesk] book effect {Verb} failed", verb);
+        }
+    }
+
     private static bool CanShrink()
     {
         try
@@ -218,6 +278,11 @@ public static class EmiOffers
             if (e.StartsWith("tour:", StringComparison.OrdinalIgnoreCase))
             {
                 StartTour(e.Substring(5), fromAsk);
+                return;
+            }
+            if (e.StartsWith("book:", StringComparison.OrdinalIgnoreCase))
+            {
+                OpenBook(e.Substring(5), fromAsk);
                 return;
             }
 
