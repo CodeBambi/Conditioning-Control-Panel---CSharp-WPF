@@ -1,0 +1,45 @@
+{
+  "id": "takeover",
+  "volume": 3,
+  "order": 4,
+  "title": "takeover",
+  "blurb": "she picks the moment. you pick the limits.",
+  "target": "takeover",
+  "tour": null,
+  "margin": { "t": "not me btw. the other one. i'd never. probably.", "face": "0_0" },
+  "blocks": [
+    {
+      "type": "p",
+      "text": "Every other feature in the app waits for you. Takeover does not. Once you arm it, your companion runs her own timer, picks an effect from the list you allowed, and fires it: a flash, a video, a subliminal, a lock card, or just a comment. She becomes a participant instead of a tool. It is a premium feature, and the app also calls it Autonomy Mode in tooltips and logs; same thing."
+    },
+    {
+      "type": "p",
+      "text": "Nothing runs until you say yes. The first time you switch Takeover on, a consent dialog lists what she will be allowed to do, and nothing fires until you accept it. Your answer is remembered. After that, the toggle enables the feature and the green Start button arms her; nothing happens until you press it. Takeover always starts disarmed when the app launches, even if it was running when you closed it. Arming itself on launch is a separate opt-in, off by default."
+    },
+    {
+      "type": "p",
+      "text": "Three things set her off. Random fires around your Interval setting, with roughly a third of jitter either way so the beat is not predictable. Idle fires after your mouse and keyboard have been still for the timeout you set. Context reacts to the window you have focused, and needs Window Awareness switched on. When a trigger lands, she checks the moment first: she stands down if the cooldown has not elapsed, if a video or lock card is already on screen, or if you are watching something in your browser. Then she picks an action, weighted by what you allowed, her mood and your Intensity setting, may announce it with a teasing line, a banner and a two second pause, and fires. The cooldown starts, and nothing else happens until it is done."
+    },
+    {
+      "type": "figure",
+      "kind": "pulse",
+      "caption": "Her clock: interval with jitter, then a hard cooldown floor."
+    },
+    {
+      "type": "p",
+      "text": "Every action has its own switch, so start by turning off anything you would hate to be surprised by, then loosen up as you learn her pacing. The clock shifts her odds without unlocking or blocking anything: gentler mornings, playful evenings, more videos and subliminals late at night. Switch on Time-Aware and the clock also changes how often she acts, not only what she picks."
+    },
+    {
+      "type": "callout",
+      "text": "Two consents, not one. Takeover consent does not cover the microphone. Anything that listens - spoken mantras, the wake word, push to talk - needs its own mic consent dialog, and the mic never opens until you give it. Also worth knowing: a takeover video is an ordinary mandatory video and follows your global Strict Lock setting, so with Strict Lock off it stays skippable."
+    },
+    {
+      "type": "p",
+      "text": "Stopping her takes one press: the Stop button, the Takeover toggle, or the panic key, which also clears whatever is currently on screen."
+    },
+    {
+      "type": "limit",
+      "text": "One combination removes your brakes. If Lockdown is active while Takeover runs, you cannot stop Takeover until the lockdown timer expires - not with the button, not with the panic key, because lockdown switches the panic key off. That is lockdown doing its job, not a fault, and it is exactly why you should not stack the two unless you mean it."
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "id": "the-scheduler",
+  "volume": 3,
+  "order": 2,
+  "title": "the scheduler",
+  "blurb": "the app on your hours, not your willpower.",
+  "target": "progression",
+  "tour": "Progression",
+  "margin": { "t": "it runs while i nap. we have an arrangement.", "face": "ZzZ" },
+  "blocks": [
+    {
+      "type": "p",
+      "text": "You do not have to be the one who presses start. The scheduler exists for standing arrangements: the engine coming on at the same hours, on the same days, whether or not you felt like setting anything up that evening. Set it once and the app keeps the appointment. The engine here means the same thing the big START button runs - flashes, subliminals, overlays, whatever you have switched on. The scheduler decides when the engine runs, never what it runs; your feature setup stays yours."
+    },
+    {
+      "type": "p",
+      "text": "It is off by default, and the Enable switch is the master: with it off, the times and days are remembered but ignored. You give it a daily window - a start time and an end time in 24 hour format - and tick the days it applies to; all seven start ticked. If the end time is earlier than the start time, the window crosses midnight, so 22:00 to 02:00 does exactly what you expect."
+    },
+    {
+      "type": "p",
+      "text": "The controls sit in the right hand column of the Progression tab, next to the intensity ramp. The Settings tab also has a Scheduler + Intensity Ramp button that opens the pair together in one popup. That popup is worth knowing about: it is the only place in the app with the Ramp Curve dropdown."
+    },
+    {
+      "type": "steps",
+      "items": [
+        "Your start time arrives while the app is open: the window minimises to the system tray, the engine starts straight away, and a tray notification tells you so.",
+        "You open the app inside an active window: the same thing happens immediately.",
+        "The end time arrives: the engine stops and the tray notifies you again.",
+        "You stop the engine yourself mid window: the scheduler takes the hint and will not restart it for the rest of that window. The next scheduled window starts normally."
+      ]
+    },
+    {
+      "type": "figure",
+      "kind": "clock",
+      "caption": "A daily window on the days you tick. Overnight windows cross midnight."
+    },
+    {
+      "type": "p",
+      "text": "The scheduler pairs naturally with the intensity ramp. Turn the scheduler on and set your window, turn the ramp on and pick a duration and multiplier, then turn on End at Complete so the run finishes itself. Keep the ramp shorter than the scheduled window, or the scheduler will cut the ramp off before it reaches the top."
+    },
+    {
+      "type": "callout",
+      "text": "A stopped window stays stopped. Turning the engine off inside a scheduled window reads as a decision, not an accident, and the scheduler respects it until the next window opens. There is no way to re-arm it early other than starting the engine yourself."
+    },
+    {
+      "type": "limit",
+      "text": "The scheduler cannot launch the app. CCP has to be running when the window opens - minimised to the tray is fine, closed is not. If the app is shut at your start time, nothing happens then, and nothing catches up later. A standing arrangement only stands while the app does."
+    }
+  ]
+}
