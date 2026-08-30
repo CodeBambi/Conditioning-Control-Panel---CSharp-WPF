@@ -6163,6 +6163,48 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region The Descent — the vat faucet's persisted hold
+
+        // THE TAP HOLDS (pitch 2026-08-30). One display watermark, scoped exactly the
+        // way the XP watermark above is: the number, the account it belongs to, and
+        // the UTC day it describes. Held XP on the Trainer Card is
+        //     today_xp - VatPouredTodayXp
+        // recomputed from the SERVER's today_xp on every reading, which is what makes
+        // the hold survive tab switches, app launches and XP earned on another client.
+        //
+        // THIS IS NOT AN XP ACCOUNT. Nothing here is ever added to PlayerXP or
+        // reconciled against it; the server block stays the only ledger. Losing these
+        // three values costs the user one unnecessary pour animation and nothing else,
+        // which is why they carry no migration and no repair path — a mismatched
+        // account or a finished day simply reads as 0.
+        // See Services/Descent/VatPourLedger.cs.
+
+        private int _vatPouredTodayXp = 0;
+        /// <summary>today_xp as of the last completed faucet pour, for <see cref="VatPouredAccount"/> on <see cref="VatPouredDayUtc"/>.</summary>
+        public int VatPouredTodayXp
+        {
+            get => _vatPouredTodayXp;
+            set { _vatPouredTodayXp = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private string? _vatPouredDayUtc = null;
+        /// <summary>UTC day (yyyy-MM-dd) the watermark describes. A mismatch voids it — the vat rolls over on UTC midnight.</summary>
+        public string? VatPouredDayUtc
+        {
+            get => _vatPouredDayUtc;
+            set { _vatPouredDayUtc = value; OnPropertyChanged(); }
+        }
+
+        private string? _vatPouredAccount = null;
+        /// <summary>UnifiedId the watermark belongs to (empty for a legacy identity). A mismatch voids it.</summary>
+        public string? VatPouredAccount
+        {
+            get => _vatPouredAccount;
+            set { _vatPouredAccount = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region The Descent — Spiral rail
 
         private bool _descentSpiralRailEnabled = false;

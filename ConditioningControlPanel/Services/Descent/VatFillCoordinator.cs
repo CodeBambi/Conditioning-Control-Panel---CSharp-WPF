@@ -33,6 +33,16 @@ namespace ConditioningControlPanel.Services.Descent
         public int DeltaXp { get; init; }
 
         /// <summary>
+        /// The server's <c>today_xp</c> for this reading, carried verbatim.
+        ///
+        /// Added for the persisted hold (pitch "The tap holds", 2026-08-30): held XP
+        /// is <c>today_xp - lastPouredTodayXp</c>, so the display layer needs the
+        /// ABSOLUTE total and not only the delta. A delta-only hold has to accumulate,
+        /// and anything that accumulates can be lost — which was precisely the bug.
+        /// </summary>
+        public int TodayXp { get; init; }
+
+        /// <summary>
         /// The server's daily cap for this reading — the divisor that turns an XP
         /// amount back into a fill fraction. Carried so display-layer holds (the
         /// Trainer Card's interactive faucet) can re-scale a held XP delta without
@@ -174,6 +184,7 @@ namespace ConditioningControlPanel.Services.Descent
                 Fill = fill,
                 Lip = lip,
                 DeltaXp = delta,
+                TodayXp = vat.TodayXp,
                 Cap = vat.Cap,
                 ScaleChanged = scaleChanged,
             };
