@@ -427,3 +427,24 @@
 }
 /* Worn outranks new: if you put it on the moment it arrived, the rim is pink. */
 .lk-tile.is-new.is-on { border-color: var(--pink); }
+
+/* ================= THE LOCKER ON AN UPRIGHT PHONE =========================
+ * PORTRAIT ONLY. `isRailViewport()` in locker.js is already landscape-only, so
+ * portrait gets the stacked page rather than the rail and the tiles (108x140)
+ * wrap on their own. What is left is the two small controls the rig found
+ * under the 44px floor at every portrait width: "Ring it", the bell's one
+ * poke, at 95x23, and "4 more at the counter", the footer link out to the
+ * Prize Counter, at 145x32.
+ *
+ * `inline-flex` is what centres the label once the box is taller than the
+ * text - both are styled as pills, not as blocks, so a bare `min-height`
+ * would leave the word sitting on the top edge. Landscape keeps 23 and 32:
+ * its rail is 102px tall and a 44px poke would push the tiles off it.
+ * ==========================================================================*/
+html.arc-mobile[data-arc-orient="portrait"] .lk-poke,
+html.arc-mobile[data-arc-orient="portrait"] .lk-morelink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+}

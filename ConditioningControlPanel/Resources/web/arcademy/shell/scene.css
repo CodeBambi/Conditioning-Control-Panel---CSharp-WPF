@@ -447,3 +447,63 @@ html.arc-mobile .asc-panel {
   margin-bottom: calc(var(--arm-band-h, 72px) + 8px);
   max-height: calc(100% - var(--arm-band-h, 72px) - 16px);
 }
+
+/* ==================== THE FACILITY HELD UPRIGHT ==========================
+ * PORTRAIT, and every rule in here is qualified `[data-arc-orient="portrait"]`
+ * so landscape and desktop are byte-for-byte what they were. Prove it, do not
+ * trust it: the harness reads `.asc-art`, `.arm-bar`, `.arm-slab-back` and
+ * `.asc-panel` at 844x390 and 1600x900 before and after and every rect must be
+ * identical.
+ *
+ * WHY THIS BLOCK EXISTS. The upright wave (2026-08-28) took the rotate gate
+ * down and rooms.css grew a portrait block for the CLASSROOM chassis. This is
+ * the sibling: the same apron, a different stage, and it was still answering
+ * "not a phone" in portrait, so the Prize Counter, the Records Office and the
+ * Locker each opened in the DESKTOP layout on 390px of glass. Measured on
+ * origin/main at 390x844: the plate centred its letterbox so 313 of 844px was
+ * dead frame ABOVE the painting, the band under it was 349px, and the back
+ * slab floated 112px BELOW the painting in the middle of the carpet.
+ *
+ * The apron's own portrait rules are rooms.css's, as they have always been -
+ * `.asc-bar` wears `.arm-bar`, so the grid, `align-content: start`, the 12px
+ * top padding and the 48px/11px ghost slab all arrive from there for free.
+ * What is left is what only a SCENE has: the anchor, and the overlay.
+ * ==========================================================================*/
+
+/* THE ANCHOR, portrait's own, and it is deliberately the SAME pair of numbers
+   as landscape rather than a shared selector. room.js's portrait anchor starts
+   at `var(--arm-head-h)` because a classroom hangs a room-sign card over the
+   top of the plate and the card would cover the furniture it names. This
+   chassis has no header: the only chrome over the painting is `.asc-back`, a
+   44px pill in the top-left corner that is up ONLY on a close-up. So the
+   painting starts at 0 on both axes. Two rules, not one selector list, because
+   the day a facility grows a header this is the line that has to move and
+   landscape must not move with it. The box and the origin travel together or
+   the scale walks the plane off-axis (this file's header, lab.css's lesson). */
+html.arc-mobile[data-arc-orient="portrait"] .asc-stage { top: 0; transform-origin: 50% 0; }
+
+/* THE OVERLAY IS THE ROOM ON AN UPRIGHT PHONE, and the arithmetic is the whole
+   argument. `.asc-panel` clears the band (it rises out of the carpet, see the
+   overlay block above) and portrait's band is not a 72px strip - it is the
+   painted floor, running from the painting's floor line to the bottom of the
+   glass. A 390x844 phone fits the 1376x768 plate by WIDTH at 0.283, so that
+   line is at y=181 and the carpet under it is 663px. `100% - var(--arm-band-h)
+   - 16px` is then 165px of panel: one row of goods and an exit bar, for a shop
+   whose content measures 1790px tall.
+
+   So portrait sizes the panel off the PAINTING'S FLOOR LINE instead
+   (`--asc-art-line`, published by fit() in screen pixels) and scene.js steps
+   the carpet off underneath it for the duration - the same `.asc-bar-away`
+   class and the same ~200ms the band already uses for a close-up, because on
+   390px of glass an open panel IS a close-up. 844 - 181 - 20 = 643px of shelf
+   with the painting still readable above it, against 479 before. See
+   apronWanted() for the level and publishBand() for why `--arm-band-h` goes to
+   zero while the carpet is away.
+
+   The bottom margin is the safe-area only: there is no band left to clear. */
+html.arc-mobile[data-arc-orient="portrait"] .asc-panel {
+  width: min(920px, 96%);
+  padding: 14px 16px 16px;
+  margin-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  max-height: calc(100% - var(--asc-art-line, 0px) - 20px - env(safe-area-inset-bottom, 0px));
+}
