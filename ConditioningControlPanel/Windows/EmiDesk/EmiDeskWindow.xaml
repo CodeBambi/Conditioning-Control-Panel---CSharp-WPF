@@ -34,7 +34,7 @@
             FaceLayer the face canvas and, over it, the glass (chunk B3 paints into GlassHost)
             OutfitOverImage the garment's own art, ABOVE the face and the glass (THE SKIN LAW)
             BtnClose  the hover x
-            BtnCards  the hover cards glyph (opens her ring)
+            BtnGear   the hover gear (opens her options; her cards live in there too)
             ResizeGrip the corner handle
           OverlayHost the summon/dismiss FX, and whatever chunk B2 wants over her
           BubbleHost  chunk B3's speech bubble
@@ -112,10 +112,32 @@
                    IsHitTestVisible="False"
                    RenderOptions.BitmapScalingMode="NearestNeighbor"/>
 
-            <!-- The hover x. 18 DIP, top right of the silhouette, invisible until the pointer is
-                 on her. No double-click dismiss anywhere: it would delay the ring click. -->
+            <!-- THE TWO CHIPS, and why each one is now a chip inside a bigger button.
+
+                 Owner report, 2026-08-30: "I gotta hover EMI and be fast enough to catch those
+                 buttons before they disappear." Half of that is the fade, which is a hover REGION
+                 with a grace timer now (EmiChromeHover); the other half is that an 18 DIP round
+                 target tucked into a corner is a small thing to land on, and every miss costs a
+                 trip back across her.
+
+                 So each button is `chip + 2 x ChipPad` DIPs of Background="Transparent" HIT AREA
+                 with the drawn chip inset inside it by the button's Padding - exactly the split
+                 ResizeGrip already had between its 22 DIP handle and its 12 DIP glyph. THE DRAWN
+                 GLYPH DID NOT GROW; only the air around it did.
+
+                 ApplyBodyWidth computes that padding ASYMMETRICALLY so the hit area never sticks
+                 out past BodyRoot: the outward sides get at most the inset that is actually there
+                 and the inward sides get the rest. That is not tidiness - the pad around her is
+                 Background="{x:Null}" precisely so clicks fall THROUGH her to whatever is behind,
+                 and a chip overhanging into that air would turn her transparent corner into a click
+                 trap. For the same reason both buttons are hit-testable only while the chrome is
+                 lit (see FadeChrome): at rest the whole silhouette pats her, corners included,
+                 which is the gesture wave 3 exists to protect. -->
+
+            <!-- The hover x. 18 DIP of drawn chip, top right of the silhouette, invisible until the
+                 pointer is on her. No double-click dismiss anywhere: it would delay the ring click. -->
             <Button x:Name="BtnClose"
-                    Width="18" Height="18"
+                    Width="18" Height="18" Padding="0"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     Opacity="0" Cursor="Hand"
                     Focusable="False"
@@ -123,34 +145,52 @@
                 <Button.Template>
                     <ControlTemplate TargetType="Button">
                         <Grid Background="Transparent">
-                            <Ellipse Fill="#E60E0E1C" Stroke="#FF69B4" StrokeThickness="1.5"/>
-                            <Path Data="M 5,5 L 13,13 M 13,5 L 5,13"
-                                  Stroke="#FF69B4" StrokeThickness="2"
-                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                            <Grid Margin="{TemplateBinding Padding}">
+                                <Ellipse Fill="#E60E0E1C" Stroke="#FF69B4" StrokeThickness="1.5"/>
+                                <Path Data="M 5,5 L 13,13 M 13,5 L 5,13"
+                                      Stroke="#FF69B4" StrokeThickness="2"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                            </Grid>
                         </Grid>
                     </ControlTemplate>
                 </Button.Template>
             </Button>
 
-            <!-- Her CARDS glyph: 18 DIP, top LEFT, the mirror of the x and on the same hover
-                 fade. Wave 3 moved the ring off the left click (the left click pats her now), so
-                 the ring needs an affordance that is visible rather than a gesture you have to be
-                 told about: right-click works, but nothing on a desktop advertises a right click.
-                 Six pixel dots, because the thing it opens is six cards. -->
-            <Button x:Name="BtnCards"
-                    Width="18" Height="18"
+            <!-- HER GEAR: 18 DIP of drawn chip, top LEFT, the mirror of the x and on the same hover
+                 fade.
+
+                 It replaces the six-dot cards glyph wave 3 put here. The owner read the dots as a
+                 move handle ("the three dots to move emi - not needed, we drag her") and asked for
+                 a gear that opens her options instead, so this chip opens EmiOptionsWindow - which
+                 carries "Open her cards" as its first action, because the dots were the only
+                 VISIBLE way into the ring and nothing on a desktop advertises a right click.
+                 Right-click on her body still opens the ring directly; that gesture is unchanged.
+
+                 The gear is eight axis-aligned rectangles on a 16 x 16 grid - a hollow square hub
+                 and four teeth - and never a circle: she is a pixel CRT mascot and a smooth
+                 anti-aliased cog beside her reads as somebody else's icon set. EdgeMode Aliased
+                 keeps the rectangle edges hard when Stretch scales them, and it is set on the Path
+                 alone so the chip's Ellipse still draws round. The subpaths deliberately do not
+                 overlap, so the EvenOdd default leaves the hub's centre empty instead of filling it
+                 back in. -->
+            <Button x:Name="BtnGear"
+                    Width="18" Height="18" Padding="0"
                     HorizontalAlignment="Left" VerticalAlignment="Top"
                     Opacity="0" Cursor="Hand"
                     Focusable="False"
-                    ToolTip="Open her cards">
+                    ToolTip="Her options">
                 <Button.Template>
                     <ControlTemplate TargetType="Button">
                         <Grid Background="Transparent">
-                            <Ellipse Fill="#E60E0E1C" Stroke="#FF69B4" StrokeThickness="1.5"/>
-                            <Path Fill="#FF69B4" Stretch="Uniform" Margin="4.5"
-                                  Data="M 7,5 h2 v2 h-2 z M 11,5 h2 v2 h-2 z
-                                        M 7,9 h2 v2 h-2 z M 11,9 h2 v2 h-2 z
-                                        M 7,13 h2 v2 h-2 z M 11,13 h2 v2 h-2 z"/>
+                            <Grid Margin="{TemplateBinding Padding}">
+                                <Ellipse Fill="#E60E0E1C" Stroke="#FF69B4" StrokeThickness="1.5"/>
+                                <Path Fill="#FF69B4" Stretch="Uniform" Margin="4"
+                                      RenderOptions.EdgeMode="Aliased"
+                                      Data="M 2,2 h12 v4 h-12 z  M 2,10 h12 v4 h-12 z
+                                            M 2,6 h4 v4 h-4 z    M 10,6 h4 v4 h-4 z
+                                            M 6,0 h4 v2 h-4 z    M 6,14 h4 v2 h-4 z
+                                            M 0,6 h2 v4 h-2 z    M 14,6 h2 v4 h-2 z"/>
+                            </Grid>
                         </Grid>
                     </ControlTemplate>
                 </Button.Template>

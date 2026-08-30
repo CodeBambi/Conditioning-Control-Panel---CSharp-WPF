@@ -589,6 +589,40 @@ html.arc-reduced .arc-endcard-actions .arc-retake { animation:none; box-shadow:0
   background:color-mix(in srgb, var(--gold), transparent 90%);
 }
 
+/* THE TILL IS A DOOR (counter shortcut wave, 2026-08-30). When the shell hands
+   the report card a way to the counter, the ticket chip is emitted as a
+   <button> wearing this class as well as `.chip` - so everything below is one
+   job: undo what a user agent does to a <button> that `.chip` does not already
+   overwrite (its own font, its margin, its centred text, its native skin), and
+   then borrow `.campus-wallet`'s manners so the two presses that lead to the
+   same room feel like the same verb. Without the class the chip is a <span>
+   and none of this applies to anything. */
+.arc-till-go {
+  appearance:none; -webkit-appearance:none;
+  margin:0; text-align:left;
+  font-family:inherit; font-size:11px; font-weight:600; letter-spacing:.04em;
+  line-height:inherit;
+  border:var(--hairline); background:var(--panel); color:var(--ink-dim);
+  cursor:pointer;
+}
+/* `:not()` on both marks rather than a second rule undoing this one: a door
+   that is shut may not light up under the cursor. */
+.arc-till-go:not([disabled]):not(.is-busy):hover,
+.arc-till-go:not([disabled]):not(.is-busy):focus-visible {
+  border-color:var(--pink-deep);
+  color:var(--ink);
+}
+/* SHUT WHILE THE MONEY IS BEING COUNTED. reportcard.js holds the door for the
+   length of the count-up (and the token jackpot behind it) because walking to
+   the counter tears this screen down mid-beat. Both marks, because `disabled`
+   is the real one and the class is what the node double can be read for. */
+.arc-till-go[disabled], .arc-till-go.is-busy {
+  cursor:default; opacity:.5;
+}
+/* 44px is the floor for anything a thumb has to find, and this one sits in the
+   middle of a paper the player is already scrolling. */
+html.arc-mobile .arc-till-go { min-height:44px; padding:6px 14px; }
+
 /* THE CAMPUS WALLET CHIP. It rides the top-right cluster beside the account
    chip, it is READ-ONLY, and pressing it walks to the Prize Counter. */
 .campus-wallet {
@@ -2598,8 +2632,9 @@ g.campus-walker { pointer-events:none; }
      - NO NEW FILTER. The away kit RE-POINTS the miniature's existing
        drop-shadow pair at --pink; it does not add a third shadow, and the
        afterimages below cancel the filter outright.
-     - rects, transform and opacity. The spark is a 1x1 rect fading upward and
-       nothing else is animated anywhere in here.
+     - rects, transform and opacity. The spark is a 3-unit rect that drifts,
+       turns and shrinks out, and nothing else is animated anywhere in here.
+       No filter, no blend mode, no second surface at any size.
    ---------------------------------------------------------------------- */
 
 /* AWAY COLORS - navy kit, pink ring. Same body, sharper stripes. */
@@ -2614,18 +2649,91 @@ g.campus-walker { pointer-events:none; }
   stroke:var(--pink);
 }
 
-/* SPARKLER STEPS - one pixel per footfall, out of a pool of eight. The .4s
-   below IS walk.js's SPARK_MS: a fade longer than the pool's turnaround is a
-   spark recycled mid-fade, so the two numbers move together or not at all. */
+/* SPARKLER STEPS, THE RESIDUE (2026-08-30). The sparks themselves are gone in
+   under a second; this is the part that is still there when you are only
+   LOOKING at the plan, and it is what makes 250 tickets visible on a screen
+   nobody is walking across.
+
+   IT IS COLOUR, NOT MOTION, so it survives reduced motion and lite by exactly
+   the argument the away kit already makes two rules up and the belts below
+   restate: a dash pattern and a fill are not an animation. The march that
+   carries the live wake was ALREADY switched off under `html.arc-reduced
+   .campus-trace`, and it stays off - what survives here is a static dotted
+   line, which is a look and not a breath (House Book Law III).
+
+   walk.js puts `data-cos-spark` on the polyline and on the residue LAYER; the
+   layer carries it because renderResidue() re-mints its polylines on every
+   call and would drop an attribute written to them. No new element either way.
+
+   ONE HONEST LIMIT: a literal second stroke on one polyline is not a thing SVG
+   can do - it would need either a filter (this file's render rule forbids one
+   outright) or a duplicate polyline, and a duplicate would double the `points`
+   write paintTrace() already does EVERY FRAME, which is the most expensive
+   thing in the walk. So the two-tone read is made from the two elements that
+   already exist: a bright dotted wake over the night's faint dotted residue. */
+.campus-trace[data-cos-spark] {
+  /* dots, not dashes - grit off a sparkler rather than marching ants. The
+     period (0.9 + 5.1 = 6) divides campus-march's -12 offset, so the march
+     still loops seamlessly; `stroke-linecap:round` above rounds each dot. */
+  stroke-dasharray:.9 5.1; stroke-width:3; opacity:1;
+}
+/* the hand-off keeps the grammar; only the opacity moves (walk.js retire()) */
+.campus-trace[data-cos-spark].fading { opacity:.34; }
+/* WHERE YOU HAVE BEEN TONIGHT, dusted. Fainter than the wake and finer than
+   the ordinary residue, so it reads as settled grit rather than a second
+   route - and it never marches, because the residue never did. */
+.campus-walkresidue[data-cos-spark] .campus-trace.residue {
+  stroke-dasharray:.8 3.2; stroke-width:2.4; opacity:.34;
+}
+
+/* SPARKLER STEPS - a cluster of three per half-footfall out of a pool of 28,
+   plus a puff at the door you left and a ring at the door you reach out of a
+   second pool of 15. RE-DIALLED 2026-08-30 (owner: "does actually nothing or
+   changes very little, we need more FX"). It always rendered; it was one
+   viewBox unit, which is about 1.3 CSS px on a 1920 window, under a free wake
+   at stroke-width 2.5 - so it lost to the thing it was decorating.
+
+   THE .9s BELOW IS walk.js's SPARK_MS. A fade longer than the pool's turnaround
+   is a spark recycled mid-fade, so the two numbers move together or not at all;
+   the turnaround is 28 / 3 x 110ms = 1027ms at full fat and 10 / 1 x 220ms =
+   2200ms under lite, and both clear 900ms. The bursts are a SEPARATE pool for
+   exactly this reason - see walk.js's burstRing.
+
+   NO `shape-rendering:crispEdges` ANY MORE, and its removal is half of why this
+   is visible at all: crispEdges quantises a sub-2-unit rect to the device grid,
+   which on the shrinking half of the fade rounded the old spark straight out of
+   existence. The pixel students keep theirs (`.gh-sprite rect`, above) because
+   a BODY is a pixel-art grid; a spark is a mote and wants its subpixel. */
 .campus-spark-i {
-  fill:var(--gold); shape-rendering:crispEdges;
+  fill:var(--gold);
   transform-box:fill-box; transform-origin:center;
 }
+/* THE PALETTE, three tokens and NOT ONE HEX - gold and pink alternate and every
+   fifth is lavender, which is counterfx.css's `.is-gold` alternation with one
+   more token in the rotation. walk.js picks the class (sparkHue); nothing here
+   costs a frame of JS. */
+.campus-spark-i.is-gold { fill:var(--gold); }
+.campus-spark-i.is-pink { fill:var(--pink); }
+.campus-spark-i.is-lav  { fill:var(--lav); }
 .campus-spark-i.is-a,
-.campus-spark-i.is-b { animation:campus-sparkfade .4s linear both; }
+.campus-spark-i.is-b { animation:campus-sparkfade .9s linear both; }
+/* WHERE ONE SPARK GOES, per node, as four custom properties walk.js writes at
+   the strike and never touches again (sparkScatter - a pure function of the
+   emission index, never a roll). `px` on an SVG element's CSS transform is a
+   viewBox user unit, so these are plan units like every other number here.
+
+   THE 0-15% HOLD is not decoration: a linear fade from .95 means the brightest
+   frame is the FIRST one, which on a 60Hz panel is 16ms of a 900ms life. The
+   hold gives every spark an eighth of a second at full before it starts to go,
+   which is the difference between a sparkle and a suggestion of one. */
 @keyframes campus-sparkfade {
-  from { opacity:.95; transform:translateY(0) scale(1); }
-  to   { opacity:0;   transform:translateY(-3px) scale(.35); }
+  0%   { opacity:.95; transform:translate(0,0) rotate(0deg) scale(var(--sp-s,1)); }
+  15%  { opacity:.95; transform:translate(0,0) rotate(0deg) scale(var(--sp-s,1)); }
+  100% {
+    opacity:0;
+    transform:translate(var(--sp-dx,0px), var(--sp-dy,-6px))
+              rotate(var(--sp-r,0deg)) scale(calc(var(--sp-s,1) * .2));
+  }
 }
 
 /* GHOST WALK - you go see-through, and two of you trail a beat behind. The
@@ -2654,10 +2762,13 @@ html.arc-reduced .campus-student { transition:none; }
 html.arc-reduced .campus-trace { animation:none; }
 html.arc-reduced .campus-trace.fading { transition:none; opacity:.22; }
 /* THE COSMETICS under the same rung, and the split is deliberate: walk.js does
-   not even BUILD the spark pool or the afterimages when motion is reduced (or
-   on a lite machine), so these two rules are the belt on those braces for a
-   layer that was mounted before the rung was pulled. The away kit and the
-   see-through body are colour, not motion, and colour stays. */
+   not even BUILD the spark pools or the afterimages when motion is reduced, so
+   these two rules are the belt on those braces for a layer that was mounted
+   before the rung was pulled. LITE is a different rung and no longer this one
+   (2026-08-30): it thins the sparkler rather than deleting it, so the pool it
+   mints is small and it is still governed here if motion is ALSO reduced. The
+   away kit, the see-through body and the sparkler's dotted residue are colour,
+   not motion, and colour stays. */
 html.arc-reduced .campus-spark-i { animation:none; opacity:0; }
 html.arc-reduced .campus-walkechoes { transition:none; opacity:0; }
 @media (prefers-reduced-motion: reduce) {

@@ -2434,13 +2434,38 @@ namespace ConditioningControlPanel
             // Wire up achievement popup BEFORE checking any achievements
             Achievements.AchievementUnlocked += OnAchievementUnlocked;
             
-            // Now check initial achievements (so popup can show)
-            Achievements.CheckLevelAchievements(Settings.Current.PlayerLevel);
-            Logger.Information("Checked level achievements for level {Level}", Settings.Current.PlayerLevel);
-            
-            // Check daily maintenance achievement (7 days streak)
-            Achievements.CheckDailyMaintenance();
-            Logger.Information("Checked daily maintenance achievement");
+            // Both checks below REPAIR unlocks the user already earned - they reconstruct them from
+            // state that outlived achievements.json (PlayerLevel and the launch streak both live in
+            // settings.json) rather than witnessing a fresh earn - so they run SILENTLY, exactly as
+            // the post-login cloud restore and GamificationBridge's own retroactive pass do, and for
+            // the identical reason spelled out there.
+            //
+            // #1074: when a truncated achievements.json loaded as empty, TryUnlock stopped
+            // early-returning on IsUnlocked and EVERY level achievement the user had ever earned
+            // popped again, one after another, on the next launch - and re-posted to Discord with
+            // them. The cloud restore that refills the unlocked set lands asynchronously a few
+            // seconds later, far too late to stop a storm these synchronous lines already started.
+            // The unlocks are still recorded, saved and cloud-synced; only the popup/sound/webhook
+            // are skipped. A genuine level-up still celebrates: that fires through
+            // ProgressionService's own CheckLevelAchievements call, which is not suppressed.
+            //
+            // The prior flag value is saved rather than assumed false so an in-flight cloud restore
+            // that is already suppressing cannot be un-suppressed on the way out.
+            var achWasSuppressed = Achievements.SuppressPopups;
+            Achievements.SuppressPopups = true;
+            try
+            {
+                Achievements.CheckLevelAchievements(Settings.Current.PlayerLevel);
+                Logger.Information("Checked level achievements for level {Level} (retroactive, popups suppressed)", Settings.Current.PlayerLevel);
+
+                // Check daily maintenance achievement (7 days streak)
+                Achievements.CheckDailyMaintenance();
+                Logger.Information("Checked daily maintenance achievement (retroactive, popups suppressed)");
+            }
+            finally
+            {
+                Achievements.SuppressPopups = achWasSuppressed;
+            }
 
             // Start the gamification bridge now that all feature services it subscribes
             // to (Mods, Companion, KeywordTriggers, RemoteControl, Webcam, BlinkTrainer,
@@ -4697,14 +4722,18 @@ Application State:
             // as well as from MainWindow.Closing, since a Shutdown() that bypasses the main
             // window's close path would otherwise leave them alive.
             try { CornerGif?.StopAll(); } catch { }
-            Bubbles?.Dispose();
-            LockCard?.Dispose();
-            PopQuiz?.Dispose();
-            BubbleCount?.Dispose();
-            BouncingText?.Dispose();
-            MindWipe?.Dispose();
-            BrainDrain?.Dispose();
-            Achievements?.Dispose();
+            // Each guarded individually (#1071). These were a bare unguarded run of calls, so a
+            // throw in ANY of them skipped every line after it - including the achievement flush,
+            // which is the last write of the user's progress before OnExit reaches TerminateProcess.
+            // A minigame failing to tear down must not cost the session's XP, counters and unlocks.
+            try { Bubbles?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "Bubbles dispose failed"); }
+            try { LockCard?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "LockCard dispose failed"); }
+            try { PopQuiz?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "PopQuiz dispose failed"); }
+            try { BubbleCount?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "BubbleCount dispose failed"); }
+            try { BouncingText?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "BouncingText dispose failed"); }
+            try { MindWipe?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "MindWipe dispose failed"); }
+            try { BrainDrain?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "BrainDrain dispose failed"); }
+            try { Achievements?.Dispose(); } catch (Exception ex) { Logger?.Error(ex, "Achievement progress flush on shutdown FAILED"); }
             // Before WindowAwareness: its Dispose runs Stop(), which also stops the observer — and the
             // observer's own Stop is what closes the open visit and flushes the ledger to disk.
             // Detach first so nothing can route a line into a half-disposed arbiter on the way down.

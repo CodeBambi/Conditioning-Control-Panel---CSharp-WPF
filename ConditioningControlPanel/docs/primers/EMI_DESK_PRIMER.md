@@ -57,7 +57,7 @@ rail sits `EmiDock`, a 40×40 chip with a live mini-face that summons her.
 
 ### 1.1 The windows
 
-All three are `WindowStyle=None` + `AllowsTransparency=True` + `ShowActivated=False` +
+All four are `WindowStyle=None` + `AllowsTransparency=True` + `ShowActivated=False` +
 `ShowInTaskbar=False` + `Topmost=True`, and stamp `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE` in
 `OnSourceInitialized`. That combination is what makes her a desktop ornament rather than a window:
 she never steals focus, never appears in Alt-Tab, and never takes the foreground away from what you
@@ -78,7 +78,8 @@ Root                    (Background = null: click-through air)
     FaceLayer           (IsHitTestVisible=False)
       FaceView          the EmiFace renderer
       GlassCanvas       the glass channel painter's host
-    BtnClose            the hover x (18 DIP, opacity 0 until hover)
+    BtnClose            the hover x (18 DIP glyph in a 34 DIP hit area, opacity 0 until hover)
+    BtnGear             the hover gear, top left, same split (opens her options; §15)
     ResizeGrip          the corner handle (22+ DIP hit area, glyph always faintly lit)
   OverlayCanvas         summon / dismiss FX          (IsHitTestVisible=False)
   BubbleCanvas          the speech bubble + ask chips (IsHitTestVisible=False)
@@ -107,15 +108,18 @@ clicks must be resolved the same way.
 | `Services/EmiDesk/EmiNames.cs` | 227 | Machine key → a name she is allowed to say out loud. Returns **null**, never the raw key. |
 | `Services/EmiDesk/EmiGifRain.cs` | 91 | Calls the Chaos gif cascade for her. Not a fork of it. |
 | `Services/EmiDesk/EmiDebug.cs` | 73 | The two documented QA env overrides (§10.6). |
+| `Services/EmiDesk/EmiChrome.cs` | 196 | **When her chrome is lit.** Pure, clock-injected hover region + grace timer (§15.1). |
 | `Windows/EmiDesk/EmiDeskWindow.xaml(.cs)` | 120 + 1230 | The surface, drag, resize, placement, DPI, the pet gesture, the seams. |
 | `Windows/EmiDesk/EmiDeskWindow.Ring.cs` | 268 | Ring toggle + the sibling window's lifetime. |
 | `Windows/EmiDesk/EmiDeskWindow.Glass.cs` | 486 | The idle clock, the glitch flip, the channel painters' driver. |
 | `Windows/EmiDesk/EmiDeskWindow.Bubble.cs` | 719 | The speech bubble, the typed cadence, the ask chips. |
 | `Windows/EmiDesk/EmiDeskWindow.Fx.cs` | 385 | Summon smoke, CRT power-on/off, sparkle scatter, hearts/sparks/tears/storm/bang. |
 | `Windows/EmiDesk/EmiRingWindow.xaml(.cs)` | 38 + 798 | The fan: cards, layout, hooks, pin, pick. |
+| `Windows/EmiDesk/EmiOptionsWindow.xaml(.cs)` | 300 + 560 | **Her options**, opened by the gear: her cards, her settings, her ring (§15.2). |
 | `Windows/EmiDesk/EmiMutePromptWindow.xaml(.cs)` | 77 + 103 | Mute / Keep / Don't ask. |
 | `Controls/EmiDock.xaml(.cs)` | 70 + 176 | The nav-rail chip. Self-wiring; its face is a **binding**, not a poll. |
-| `Views/Controls/AppSettings/EmiDeskSettingsSection.xaml(.cs)` | — | The settings block. |
+| `Views/Controls/EmiRingPicker.xaml(.cs)` | 128 + 285 | The 25-tile pin wall. **One control, two hosts** (settings tab + options panel), one pin store. |
+| `Views/Controls/AppSettings/EmiDeskSettingsSection.xaml(.cs)` | — | The settings block. Hosts `EmiRingPicker` with `ShowHeader="False"`. |
 | `Resources/emi/desk-lines.json` | 357 KB | **90 moments, 90 pools, 67 asks, 1 dork pool, 40 deferred ids.** |
 | `Resources/emi/fonts/NotoSansMono-latin.ttf` | — | The **face** font. Bundled because a fallback font turns the kaomoji into tofu. |
 | `Resources/emi/fonts/PressStart2P-latin.ttf` | — | The **bubble/chip** font. |
@@ -399,6 +403,10 @@ public bool AvatarMuted =>
 | change the summon FX timing | `EmiDeskWindow.Fx.cs:29-32` |
 | change the idle-before-glass | `EmiChannels.IdleBeforeFlip` (90 s is an owner lock) |
 | change where she parks | `EmiDeskWindow` `SnapToNearestCorner` / `ClampIntoWorkArea` |
+| change how long her chrome lingers | `EmiChromeHover.DefaultGraceMs` (750 ms; §15.1) |
+| change the size of a chip's hit area | `EmiDeskWindow.ChipPad`, then `ApplyBodyWidth` — never the drawn glyph |
+| add a row to her options panel | `EmiOptionsWindow.xaml` + a handler; the setting must already exist in `AppSettings` |
+| change the pin wall | `Views/Controls/EmiRingPicker` — **both** hosts get it |
 | find out why she said nothing | `logs/app-*.log`, grep `[EmiDesk]` — then §3.2 in order |
 
 ---
@@ -666,6 +674,16 @@ her *voice actress*, not about her UI - but she is silenced by `IsOutputSuppress
 `MasterVolume` of 0, and by `EmiLineEngine.Instance.HoldActive`, which covers panic and every safety
 moment. No new setting: the master volume already is one.
 
+**Her texture is a separate service.** `Services/EmiDesk/EmiSfx.cs` owns the three one-shots the
+widget makes on its own - the pat, and the ring fanning open and folding shut - and keeps this exact
+gate, copied rather than shared: the vox is her VOICE and the sfx is her UI, and the day one grows a
+rule the other must not inherit, a shared helper is the thing that gets it wrong. Every cue is an
+override-then-fallback chain in the `ChaosSfx` shape (`emi/<cue>.mp3` wins if it exists, else a
+sound already in the repo), so bespoke art needs no code change - and `EmiSfxAssetTests` asserts each
+chain's LAST link exists, because a typo in a filename otherwise ships as "the pat has no sound"
+with nothing anywhere saying why. The trims are deliberately low (owner, 2026-08-30: "a bit too
+loud", twice) and the pat carries a 130 ms floor so a double click cannot machine-gun it.
+
 The vox hangs off **`ShowBubble`**, not off the chain seam, because the bubble has two authors: a
 chain frame arrives through `OnBubbleTextCore`, and the ask cadence calls `ShowBubble` directly. On
 the seam alone every question was silent, which is the one line she most wants read. `HideBubble`
@@ -720,12 +738,12 @@ favourite feat rn?"*
 | **Left-click anywhere on her body** | **Pat.** Squash + the `pet` chain + a line from the `petted` pool. |
 | Left-click inside a live glass channel | Belongs to the glass (unchanged, and still resolved geometrically). |
 | **Right-click her body** | **Open / fold the ring.** |
-| **Left-click the cards glyph** (top-left, hover) | Open / fold the ring. |
+| **Left-click the gear** (top-left, hover) | Open her options menu (cards, size, spice, offers, glass, pins). |
 | Hover her head for 1.2 s | Pat. The second trigger for the same gesture; it counts the same. |
 | Left-click the x (top-right, hover) | Send her away. |
 | Drag past 6 DIP | Move her. Folds the ring on the first movement. |
 | Drag the corner grip | Resize, 152..420 DIP, aspect locked. |
-| Right-click a ring CARD | Pin / unpin it. |
+| Right-click a ring CARD | ~~Pin / unpin it.~~ **Nothing.** The pin left the cards on 2026-08-30 - it was undiscoverable and the owner reported the button as unusable. Pinning is now the tile wall in `EmiRingPicker`, hosted by BOTH the settings tab and the gear menu. `PinToggled` survives as a seam with no raiser: see 13.2. |
 | Escape, or a click anywhere else | Fold the ring. |
 | Ctrl+Shift+Alt+left-click her body | **QA only**: replay the gesture tutorial. |
 
@@ -747,7 +765,7 @@ lands ~200 ms into a 6 s cooldown, so it can never draw a second line.
 acknowledgement, not affection she registered; counting them would let a mashed pointer reach the
 "gist" in one second.
 
-### 13.2 The cards glyph
+### 13.2 The cards glyph  *(superseded by §15.2 — it is a gear now)*
 
 `BtnCards` in `EmiDeskWindow.xaml`: 18 DIP, top-LEFT, six pink pixel dots in a `#E60E0E1C` disc with
 a `#FF69B4` ring - the exact mirror of `BtnClose`, on the same 140 ms `FadeChrome` fade, scaled by
@@ -924,3 +942,95 @@ threading it into the pure scheduler is not the one-liner the rest of `EmiDebug`
 Measured on the live lap (2026-08-29, 2560x1440 at 125 percent): blink lid 110 ms measured as one to
 two sample frames at 31 ms, intervals landing inside the 4.6 to 5.8 s window, and the lean tracking
 the pointer smoothly with visible saturation at both ends of each axis and no jitter while parked.
+
+---
+
+## 15. The chrome wave: the forgiving hover, and the gear (2026-08-30)
+
+Two owner reports off the live run, and they landed together because they are the same corner of her.
+
+### 15.1 Her chrome is a REGION now, with a grace
+
+> "when we hover the buttons next to emi (the drag buttons, the X to close her, or the arrow to
+> resize), they should show and be clickable. Right now I gotta hover EMI and be fast enough to
+> catch those buttons before they disappear."
+
+The old rule was one pair of handlers on `BodyRoot` straight onto a 140 ms fade. The brief blamed
+chips overhanging the transparent pad; that is **not** what it was. `BodyRoot` is exactly `bw x bh`
+and both chips sit inside it. The three real causes:
+
+1. the pointer **clips outside her outline** for a frame or two while arcing toward a corner;
+2. a **grip drag** walks the cursor down and right, off her, in the first ten pixels, so the handle
+   being actively held faded back to `GripRestOpacity`;
+3. the squash and wobble `RenderTransform`s momentarily **shrink the hit rect** under a stationary
+   pointer, which delivers a leave nobody asked for.
+
+Every one of those is "left for a moment", and 140 ms is not enough time to come back.
+
+`Services/EmiDesk/EmiChrome.cs` now owns the decision and none of the drawing:
+
+- `EmiChromePart` (Body / Close / Gear / Grip) is a **flag set**, not a single value: WPF can hand
+  out a child's enter before its parent's leave, so "which one is it?" is unanswerable and "how many
+  are holding it open?" is;
+- `EmiChromeHold` (Drag / Resize / Press / Menu) pins it lit through the gestures that take the
+  pointer off her as part of doing their job;
+- leaving the whole region arms a **750 ms grace**; re-entering any part cancels it. 750 is a travel
+  budget: a pointer crossing a 152 to 420 DIP silhouette to a corner is on the move for roughly 250
+  to 500 ms, and past about a second the chrome stops reading as forgiving and starts reading as
+  stuck.
+
+It is pure and clock-injected for the same reason `EmiNudges` and `EmiRingLayout` are, and
+`EmiChromeHoverTests` walks all of it, including the cases a play-test cannot reproduce reliably.
+The window drives it from `WireChromePart` / `WireChromePress` and a one-shot `DispatcherTimer`
+re-armed on every event, and calls `ResetChrome()` on hide - a leave that never arrives because the
+window was pulled out from under the pointer would otherwise latch `Body` forever.
+
+**The hit areas grew; the glyphs did not.** Each chip is now `chip + 2 x ChipPad` DIPs of
+`Background="Transparent"` with the drawn chip held in place by the button's `Padding` - the split
+`ResizeGrip` already had. `ApplyBodyWidth` computes that padding **asymmetrically** so the hit area
+never overhangs `BodyRoot`: the outward sides take only the inset that is really there (~4 DIPs at
+her default width) and hand the rest to the inward sides. That is not tidiness. The pad around her
+is `Background="{x:Null}"` precisely so clicks fall through, and a chip hanging into that air would
+turn her transparent corner into a click trap. For the same reason both buttons are
+`IsHitTestVisible` only **while lit**: at rest her whole silhouette pats her, corners included.
+
+### 15.2 The six dots are a gear, and the gear opens her options
+
+> "the Pin button is not usable right now, I propose we remove it from there and replace the three
+> dots to move emi (not needed, we drag her) with a little gear, that brings up the EMI option menu"
+
+The owner read the wave-3 ring glyph as a move handle. It never was one - she is dragged by her whole
+body - so the dots are gone and `BtnCards` is `BtnGear`: eight axis-aligned rectangles on a 16 x 16
+grid (a hollow hub and four teeth), `EdgeMode="Aliased"`, never a circle. A smooth anti-aliased cog
+beside a pixel CRT mascot reads as somebody else's icon set.
+
+`EmiOptionsWindow` is her fourth window and carries the same recipe as the other three, plus one
+consequence worth stating out loud: **`WS_EX_NOACTIVATE` means it can never hold the keyboard.**
+Everything in it is mouse-only, the summon chord is *shown* rather than captured, and the rebind
+stays in the settings tab, which can take focus. It is **non-modal** on purpose (§10.8b: anything
+modal on a summon path needs the `_summonGen` guard), placed with the same physical-pixels-over-own-
+DPI arithmetic as `EmiRingWindow.PlaceWindow`, and dismissed by the same scoped low-level mouse hook
+that never swallows the click. Her body is in the hook's hot list so a second gear click *toggles*
+instead of racing itself.
+
+It contains, in order:
+
+1. **Open her cards.** First, and full width. The dots were the ring's only visible affordance and
+   nothing on a desktop advertises a right click. Right-click on her body still opens the fan
+   directly; that gesture is untouched, and both roads still end in `ToggleRingFromGesture`.
+2. **Her options:** the chord (read-only), her size, the mute arbiter, the 0..2 spice ceiling, her
+   offers, her glass. Every row is an `AppSettings` key that already exists and is already read at
+   the moment it matters. **Nothing here invents a setting with no behaviour behind it.**
+3. **Her ring:** `EmiRingPicker`, the *same control* the settings tab hosts.
+
+### 15.3 One pin wall, two hosts
+
+The 25-tile picker moved out of `EmiDeskSettingsSection` into `Views/Controls/EmiRingPicker`. There
+is exactly one pin store - `EmiState.Pins`, written through `EmiSuggester` - and the surest way to
+end up with two was to write the picker twice. The settings tab sets `ShowHeader="False"` and draws
+the count line and the reset button in its own section hue; the panel uses the built-in header.
+
+**Every brush and style in that control is a literal.** One host has MainWindow's resource
+dictionary behind it and the other has nothing at all, so a `StaticResource` reaching out of the
+control would resolve in the settings tab and take a BAML `EndOfStream` in the panel. Same rule in
+`EmiOptionsWindow.xaml`.

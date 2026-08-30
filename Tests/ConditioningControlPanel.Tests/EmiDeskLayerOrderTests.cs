@@ -128,24 +128,56 @@ public class EmiDeskLayerOrderTests
     [Fact]
     public void An_outfit_with_no_overlay_sheet_stays_silent()
     {
+        // This used to say "three of the four have no overlay art and never will". They do now:
+        // the campus side of THE SKIN LAW drew the missing 30 sheets, so the outfit with no art
+        // is no longer one of hers - it is a name the art tree has never heard of. The seam must
+        // still take that quietly: no throw, no blank Image over her face, and the widget still
+        // reports what it was asked to wear.
+        foreach (var frame in EmiChains.BodyFrameFile.Keys)
+            Assert.Null(EmiChains.OverPath("no-such-outfit", frame));
+
         WithWidget(w =>
         {
             var over = (Image)w.FindName("OutfitOverImage")!;
 
-            // Three of the four sheets have no overlay art and never will. The seam must take that
-            // quietly - no throw, no blank Image over her face - and the widget must still report
-            // what it was asked to wear.
-            foreach (var name in EmiChains.Outfits.Where(n => n != "swim"))
-            {
-                w.SetOutfit(name);
-                Assert.Equal(name, w.Outfit);
-                Assert.Equal(Visibility.Collapsed, over.Visibility);
-                Assert.Null(over.Source);
-            }
+            w.SetOutfit("no-such-outfit");
+            Assert.Equal("no-such-outfit", w.Outfit);
+            Assert.Equal(Visibility.Collapsed, over.Visibility);
+            Assert.Null(over.Source);
 
             w.SetOutfit(null);
             Assert.Null(w.Outfit);
             Assert.Equal(Visibility.Collapsed, over.Visibility);
+        });
+    }
+
+    [Fact]
+    public void Every_shipped_outfit_now_carries_a_complete_overlay_set()
+    {
+        // The desk has no outfit picker, but it renders out of the campus's art tree, so the day
+        // the campus gained its sheets the desk could dress her fully too. A HALF-PRESENT SET IS
+        // NO SET (PaintOutfitOver stands the whole layer down rather than show one pose's collar
+        // on every other pose), so completeness is pinned per outfit, not per file: lose one PNG
+        // from any of the four and that outfit goes silent on the desk.
+        foreach (var outfit in EmiChains.Outfits)
+            foreach (var frame in EmiChains.BodyFrameFile.Keys)
+                Assert.NotNull(EmiChains.OverPath(outfit, frame));
+
+        WithWidget(w =>
+        {
+            var over = (Image)w.FindName("OutfitOverImage")!;
+
+            foreach (var outfit in EmiChains.Outfits)
+            {
+                w.SetOutfit(outfit);
+                Assert.Equal(outfit, w.Outfit);
+                Assert.Equal(Visibility.Visible, over.Visibility);
+                Assert.NotNull(over.Source);
+            }
+
+            w.SetOutfit(null);
+            Assert.Equal(Visibility.Collapsed, over.Visibility);
+            Assert.Null(over.Source);
         });
     }
 

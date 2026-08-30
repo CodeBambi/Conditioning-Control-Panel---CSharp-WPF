@@ -21,12 +21,20 @@ namespace ConditioningControlPanel.Tests;
 /// </summary>
 public class EmiRingLayoutTests
 {
-    // The real numbers from EmiRingWindow: a 132 x 44 card, 18 DIPs off a 152 DIP body.
-    private const double CardW = 132.0;
-    private const double CardH = 44.0;
+    // The real numbers from EmiRingWindow, and they have to STAY the real numbers: they had
+    // drifted to a 132 x 44 card off an 18 DIP gap while the window shipped 112 x 84 and 14, so
+    // the sweep below was walking a card shape that did not exist. The card grew again on
+    // 2026-08-30 (the label was too small to read, and the card is sized off the label), which is
+    // exactly what this file is for: a bigger card must still find a feasible radius everywhere.
+    private const double CardW = 136.0;
+    private const double CardH = 102.0;
+    private const double BodyGap = 14.0;
+
+    // Her body at the SMALL end of AppSettings.EmiDeskWidth (152 .. 420). The big end gets its own
+    // sweep below - a wide body pushes the fan outwards, which is the direction that runs out of
+    // desktop first.
     private const double BodyW = 152.0;
     private const double BodyH = 154.0;
-    private const double BodyGap = 18.0;
 
     private static void AssertLegal(EmiRingLayout.Plan plan, double workW, double workH, int count)
     {
@@ -94,6 +102,46 @@ public class EmiRingLayoutTests
                 for (int n = 1; n <= 6; n++)
                 {
                     var plan = Solve(spot.X, spot.Y, workW, workH, n);
+                    AssertLegal(plan, workW, workH, n);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// The same walk with her at the WIDE end of the size slider (420 DIP). The inner radius comes
+    /// off her body, so a big EMI is the case where a bigger card runs out of desktop first - and
+    /// the card grew on 2026-08-30. Two of the five desktops here cannot hold a 420 DIP body and a
+    /// six-card fan at all; the solver is allowed to give up on the circle, it is not allowed to
+    /// stack cards or put one under the taskbar.
+    /// </summary>
+    [Fact]
+    public void AWideBodyIsStillLegalInEveryCornerOfEveryDesktop()
+    {
+        const double bigW = 420.0, bigH = 425.0;
+
+        var areas = new (double W, double H)[]
+        {
+            (1920, 1032), (2560, 1392), (3840, 2112), (1366, 720), (1280, 984)
+        };
+
+        foreach (var (workW, workH) in areas)
+        {
+            var spots = new List<Point>
+            {
+                new(bigW * 0.5 + 4, bigH * 0.5 + 4),
+                new(workW - bigW * 0.5 - 4, bigH * 0.5 + 4),
+                new(bigW * 0.5 + 4, workH - bigH * 0.5 - 4),
+                new(workW - bigW * 0.5 - 4, workH - bigH * 0.5 - 4),
+                new(workW * 0.5, workH * 0.5),
+            };
+
+            foreach (var spot in spots)
+            {
+                for (int n = 1; n <= 6; n++)
+                {
+                    var plan = EmiRingLayout.Solve(spot.X, spot.Y, bigW, bigH, workW, workH,
+                                                   n, CardW, CardH, BodyGap);
                     AssertLegal(plan, workW, workH, n);
                 }
             }

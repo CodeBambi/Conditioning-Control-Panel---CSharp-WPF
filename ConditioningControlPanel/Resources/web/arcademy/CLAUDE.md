@@ -2295,7 +2295,9 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
 
 90. **`ctx.mood` IS THE TENSION MIRROR, AND IT IS FACE-ONLY BY LAW (EMI COLOR,
     2026-08-24).** **LAW (1) WAS REVERSED BY THE OWNER ON 2026-08-25 - READ TRAP
-    112 WITH THIS ONE.** A game may tell the mascot how the room feels -
+    112 WITH THIS ONE.** **AMENDED AGAIN 2026-08-30 (stuck-hints) - THE FACE-ONLY
+    HEADLINE NOW HAS EXACTLY ONE EXCEPTION; READ THE AMENDMENT AT THE BOTTOM OF
+    THIS TRAP BEFORE THE BODY.** A game may tell the mascot how the room feels -
     `ctx.mood.tense()`
     latches until `.calm()`, `.clutch()` is the one big moment, `.stumble()` is a small
     >_<, `.runLost()` the once-per-class K.O. - and every one of them is throttled in
@@ -2309,7 +2311,48 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     words a stumble can buy are still the `miss` pool's own (maxPerClass:1); (2) call sites
     are opt-in and null-safe (`if (ctx.mood) ...` inside try/catch) because rigs stub
     ctx without it; (3) ride the game's EXISTING beat (L&F calls it inside its own
-    `clutch()` ease) rather than inventing a parallel one. The `classStart` payload
+    `clutch()` ease) rather than inventing a parallel one.
+
+    **THE AMENDMENT (owner, 2026-08-30).** The clause "no bark pool may sit on
+    `tense` or `clutch`, and none may be added" - already half-reversed on
+    2026-08-25 - is now amended in full, and `ctx.mood` is no longer face-only
+    without qualification. The owner's words:
+
+    > "im actually not oki with this law anymore, i think emi might wanna speak
+    > during the games and hoestly it alredy does. Lets not overdo it tho, have
+    > it speak somewhat during the games and the hints are an exception they
+    > trigger if they are having troubles"
+
+    **THE NEW BOUNDARY, PRECISELY.** EMI may speak in-class only through a
+    sanctioned, rate-limited channel. Three things follow, and the third is the
+    one that is actually new:
+    1. ~~mid-class mascot speech is barred~~ **mid-class WORDS are rationed, not
+       barred** - by voice.js for commentary (a 20s floor, 8 a class, the
+       `mood.hold` danger gate), through `ctx.mood.note()`.
+    2. **`ctx.mood`'s existing verbs stay FACE-ONLY.** `tense`, `calm`,
+       `clutch`, `stumble`, `runLost` and `note` still only put a MOMENT on the
+       wire; whether it also buys a line is voice.js's decision and never the
+       game's. A game still cannot make her say a specific sentence with any of
+       them.
+    3. **ONE VERB IS THE EXCEPTION, AND IT IS THE ONLY ONE TODAY:
+       `ctx.mood.askHelp(spec)`.** It carries the class's own finished strings
+       and a callback, fires the `stuck` moment, and is the first ask in the
+       codebase offered ON a live board (see trap 97). Its ration is shell.js's,
+       not the caller's: **two a class**, behind the same 15s mood spacing, and
+       the ask engine's `STUCK_GIVE_UP_MS` (8s) takes the strip off the glass by
+       itself so trap 59's "no pointer-active node camping over a live board"
+       survives intact. It is the whole of "the hints are an exception".
+
+    **"LET'S NOT OVERDO IT" IS A CONSTRAINT, NOT A MOOD.** This amendment does
+    NOT open a general in-class bark system, and it is not a licence to widen
+    `askHelp` into a message bus. A second kind of in-class question gets its
+    own verb, its own moment name and its own ration - and it needs the owner,
+    the same way this one did. The one live consumer is Daily Trigger's
+    stuck-hint detector (`games/daily-trigger/index.js`), which exists because
+    the answer pool is niche by a separate owner ruling that still stands: the
+    words do not get easier, the player gets offered a hand.
+
+    The `classStart` payload
     also carries `family` now - moments.js varies the arrival face by room kind and an
     absent family falls back to the locked glance.
 91. **A SPOTLIGHT LETTER CARRIES EXACTLY TWO ANIMATIONS - [entrance, idle] - AND THE
@@ -2422,7 +2465,9 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     it. An IGNORED ask is deliberately NOT an answer to any of those predicates:
     she can never reference a conversation you declined to have.
 97. **`classStart` IS EVALUATED WHILE THE MID-CLASS LATCH IS STILL OPEN, AND A
-    DARE'S CLOCK IS THE SHORT ONE.** The dares (a09/a10/a11) have to be offered
+    DARE'S CLOCK IS THE SHORT ONE.** **AMENDED 2026-08-30 (stuck-hints): THE
+    LAST SENTENCE OF THIS TRAP NO LONGER HOLDS - SEE THE AMENDMENT BELOW.**
+    The dares (a09/a10/a11) have to be offered
     on `classStart`, which is also the moment that closes the "not mid-class"
     gate - so `offer()` runs first and `note()` sets the latch, which is the
     whole reason the module has two entry points instead of one. That places the
@@ -2432,9 +2477,47 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     the board goes live. Hence `DARE_GIVE_UP_MS` (12s, against the ordinary 40s)
     on every `classStart` ask, plus the `classStart` latch in `note()` closing
     any OTHER ask still standing (it had to move there when presses stopped
-    cancelling, trap 118). If a future ask wants to ride a moment that fires ON
+    cancelling, trap 118). ~~If a future ask wants to ride a moment that fires ON
     a live board, it does not - move the offer to the class-rules sheet
-    (trap 85) instead.
+    (trap 85) instead.~~
+
+    **THE AMENDMENT (owner, 2026-08-30).** The struck sentence above was
+    absolute and is no longer. The owner's words, quoted in full under trap 90:
+
+    > "im actually not oki with this law anymore, i think emi might wanna speak
+    > during the games and hoestly it alredy does. Lets not overdo it tho, have
+    > it speak somewhat during the games and the hints are an exception they
+    > trigger if they are having troubles"
+
+    So there is now exactly ONE ask that rides a moment fired ON a live board -
+    `a16_stuck`, on the `stuck` moment - and everything that made the old
+    sentence true is still true, which is why it needed a carve-out rather than
+    a deletion:
+    - **It still may not camp.** `STUCK_GIVE_UP_MS` (8s, against the dare's 12s
+      and the ordinary 0 = never) is the only thing that takes it down when the
+      player just keeps playing, because the any-press cancel was deleted on
+      2026-08-25 (trap 118) and the three remaining closers are chip 1, chip 2
+      and Esc. It is load-bearing, not a nicety.
+    - **The board must not be able to eat the answer.** Daily Trigger's
+      `onKeyDown` claims A-Z, Enter and Backspace only, so `1`, `2` and `Escape`
+      reach the ask and put no letter on the grid. **An ask may only be offered
+      over a board that leaves those three keys free** - check the game's key
+      handler before adding a second consumer.
+    - **It is never offered over a PRECISION board** (trap 59's families:
+      tracking, reflex). Homeroom is a keyboard word game; the strip is not over
+      anything the player is aiming at.
+    - **The reask ladder refuses it.** `rememberReask` bars `stuck` exactly as
+      it bars `classStart`: a banked board question would resurface on the
+      campus minutes later with the board torn down, and a YES would fire a
+      callback into a dead class. `note('win'|'fail'|'runLost')` also closes a
+      standing one.
+    - **It is not raised by a game directly.** The one road in is
+      `ctx.mood.askHelp()` (trap 90's amendment), which rations it to two a
+      class inside shell.js. A game may not fire `stuck` itself.
+
+    A future ask that wants this window has to satisfy all five, and it needs the
+    owner. The class-rules sheet (trap 85) is still the right home for anything
+    that is merely EARLY rather than genuinely mid-board.
 
 98. **THE STRIP LIVES INSIDE `.emi`, SO EVERY CHIP PRESS HAS TO BE HANDED BACK -
     AND ONLY A BROWSER CAN SEE THAT IT WAS NOT.** `.emi`'s `pointerdown` is the
@@ -3254,6 +3337,41 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     with a self-exemption: a deck never blocks itself through it, so wiring the ledger cannot
     lower the trickster's rate on a class with no cameo. `freeze()` tears the cameo down
     ITSELF before `cam('pause')`, or `onDone('cancel')` would deal on top of `thaw()`'s re-deal.
+
+142. **THE FACE IS THE FLOOR OF HER STACK, NOT ITS CEILING - AND THE OUTFIT ART INSIDE THE
+    BEZEL IS GONE, NOT BURIED (owner, 2026-08-30: "the coat behind the screen, it should be
+    over it").** Trap 137 ruled that an outfit which draws on the glass needs an
+    `over-<pose>.png`. This is how far that actually goes, measured. `install_outfits.py` did
+    not paste back the GLASS rect - it pasted back the screen AND THE BEZEL, a block running
+    about x271..679, y231..608 of the 859x869 canvas (per pose: `body` 272..679/231..607,
+    `idle` and the four sways 271..679/233..608, `pet` and `sad` 274..678/232..605, `shock`
+    274..677/233..604, `smug` 273..677/232..605). Inside it ALL FORTY shipped outfit frames -
+    varsity, labcoat, cheer, swim, ten poses each - are BYTE-IDENTICAL to `art/emi/body-*.png`,
+    and they already were at the install commit (`1ccb2012a`), so there is nothing to recover
+    from the sprite and no un-pasted original anywhere in history. Measured on labcoat
+    `body-idle`: the coat is a solid 72px white column at x=270 and again at x=679, and
+    EXACTLY ZERO white pixels across x271..678 - a shape cut dead flat at both edges of the
+    block. What the owner is seeing is a collar that was ERASED, not a collar that lost a
+    z-fight, and no amount of layering brings it back.
+    THE RULE HAS TWO HALVES. (a) The wardrobe is the topmost thing in her composition bar her
+    own hands (`.emi-fx`) and her words: `.emi-over` is z2, the takeover channels (`.emi-glass`)
+    are z1, and `.emi-screen` now carries an explicit `z-index: 0` so the FACE CANVAS SITS
+    UNDER THE GARMENT BY RULE rather than by `appendChild` order. Never raise the canvas, and
+    never cure a buried prop by re-ordering the DOM. (b) The only road back for the other three
+    sheets is NEW ART: one `over-<pose>.png` per pose, same 859x869 canvas, transparent
+    everywhere except the part of the garment that falls inside that block. The swim sheets are
+    the reference - RGBA, 10-12KB, and 100% of their opaque pixels land inside it. Do not trace
+    it out of the sprite; there is nothing there to trace.
+    AND THE OVERLAY PATH IS NOT A SWIM PATH, though swim is the only sheet that has ever run
+    it. Every verdict in `armOver` is keyed by the PROBE URL, so four wardrobes arm, cache and
+    refuse independently - but `paintOver` used to assign the new `src` and un-hide the node in
+    the same statement, and an `<img>` keeps painting the frame it has already decoded. Harmless
+    with one sheet in the bundle; the OLD outfit's prop on her face for a frame or two the day a
+    second one ships. A change of SET now stands the layer down until the new frame reports
+    itself decoded, while a pose step inside one set never blinks (`preloadOver` already holds
+    its ten frames). Proved in a real browser, because a DOM double cannot see a composite: the
+    swim goggles render as the GARMENT over a `0_0` face, and the swim bytes served at
+    labcoat's `over-` url light a SECOND outfit's layer end to end.
 
 ## 5. The game module contract (short version)
 

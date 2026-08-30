@@ -1038,9 +1038,16 @@ public class QuestService : IDisposable
             return false;
         }
 
-        // The whole board is excluded, not just this seat: spending a reroll to be handed a
-        // duplicate of the card next to it would be the worst possible outcome of pressing it.
-        var replacement = RollDailyQuest(DailyBoardIds(skipIndex: slot));
+        // The whole board is excluded, THIS SEAT INCLUDED (#1085 - it used to pass
+        // skipIndex: slot, which excluded the two cards the player did NOT touch and left the
+        // one they just rerolled as the only id that could come back). Being handed a duplicate
+        // of the card next to it, or the very card just paid to be rid of, are the two worst
+        // possible outcomes of pressing this button; neither is reachable from here.
+        //
+        // Costs nothing in reachability: RollDailyQuest's last-resort pass drops the exclusion
+        // set entirely, so it returns null only when the pool is empty with NO exclusions at
+        // all - one more excluded id cannot turn a successful reroll into a refused one.
+        var replacement = RollDailyQuest(DailyBoardIds());
         if (replacement == null)
         {
             App.Logger?.Warning("Daily reroll found no replacement quest - the pool is empty, keeping '{QuestId}' and NOT spending the reroll",

@@ -86,7 +86,7 @@
 
 import { t as lexT } from '../core/lexicon.js';
 import { createScene } from './scene.js';
-import { paydayParts, TOKEN_MARK } from './prizecounter.js';
+import { paydayParts, TOKEN_MARK, heldCount, spriteUrl } from './prizecounter.js';
 /* THE SIGN DOWN THE ALLEY. One module, two rooms: the Locker mounts the mirror
  * of this at its own end, and shell/alleysign.js's header says why there are
  * two of them. It imports the lexicon and exits.js and nothing else, so the
@@ -172,6 +172,66 @@ export function boothFx() {
     { kind: 'lamp', view: 'wide', rect: FX_LAMP, when: '!closed' },
     { kind: 'tilt', view: 'wide', amp: 2 },
   ];
+}
+
+/* ----------------------------------------------------------------------------
+ * THE HOLDINGS TRAY'S TWO TABLES (counter shortcut wave, 2026-08-30)
+ *
+ * The tray answered two questions - what is in your purse, and which room is
+ * paying over the odds - and never the third one a shopper actually asks at a
+ * counter: what am I already carrying. A consumable is invisible the moment it
+ * is bought; the shelf turns the row gold and nothing anywhere says you have
+ * two late slips in your pocket. That is what these rows are for.
+ *
+ * BE HONEST ABOUT THE STATE OF THE WORLD. There is exactly ONE consumable on
+ * this shelf and it has NO manual verb: `late_slip` is spent by the HOST, by
+ * itself, inside the attendance credit on the night a day is missed
+ * (ArcademyEconomy.ConsumeLateSlip). So the tray is a WHAT YOU HOLD view with
+ * room for a verb, not a verb pretending to have somewhere to go.
+ * -------------------------------------------------------------------------- */
+
+/**
+ * WHICH CONSUMABLES CAN BE SPENT BY HAND. Deliberately EMPTY, and it is empty
+ * because nothing in the school can be. The shape is EQUIP_VERBS's, one row per
+ * sku - `sku: ['lexicon_key', 'English']` - so the night a manually-spendable
+ * thing lands on the shelf it is one line here and one `onUse` cap in shell.js.
+ *
+ * A VERB WITH NO `onUse` BEHIND IT IS NOT A BUTTON. The cap is asked at render
+ * as well as the table, and a row that names a verb the host cannot answer
+ * falls back to the passive line: a control that cannot do the thing it is
+ * lettered with is a worse lie than no control at all.
+ */
+export const USE_VERBS = Object.freeze({});
+
+/** The stand-in for a sku whose sprite has not been drawn yet. A filled block,
+ *  not a picture of anything - prizecounter.js's GLYPHS make the same choice
+ *  for the same reason: a wrong picture is worse than an obvious placeholder. */
+export const HOLD_GLYPH = '▤';
+
+/**
+ * WHAT A THING YOU HOLD BUT CANNOT PRESS SAYS. Per sku where the school has
+ * something specific to say about how it spends itself, and one general line
+ * underneath for anything that arrives later without its own.
+ */
+export const PASSIVE_LINES = Object.freeze({
+  late_slip: ['booth_hold_late_slip', 'It spends itself the night you miss one. Nothing to press.'],
+});
+
+/** The floor under PASSIVE_LINES. */
+export const PASSIVE_DEFAULT = Object.freeze(
+  ['booth_hold_passive', 'It spends itself the moment it is needed.']
+);
+
+/** The verb pair for a sku, or null. Own-property only - a sku called
+ *  'constructor' may not inherit a verb off Object.prototype. */
+export function useVerbFor(sku) {
+  return Object.prototype.hasOwnProperty.call(USE_VERBS, sku) ? USE_VERBS[sku] : null;
+}
+
+/** The passive line for a sku - its own, or the floor. Never null. */
+export function passiveLineFor(sku) {
+  return Object.prototype.hasOwnProperty.call(PASSIVE_LINES, sku)
+    ? PASSIVE_LINES[sku] : PASSIVE_DEFAULT;
 }
 
 /* ----------------------------------------------------------------------------
@@ -272,6 +332,18 @@ export function findCls(node, cls) {
  *              file only draws the answer and re-draws it on setClosed().
  *  balance   - () -> {t, k}, read fresh every time the tray is opened.
  *  payday    - optional () -> {gameKey, mult} for tonight's hot room, or null.
+ *  catalog   - optional () -> the host's catalog rows. THE HOLDINGS TRAY reads
+ *              it for the consumable rows and their names; omit it and the
+ *              tray simply has nothing to list, which is the honest answer
+ *              for a host with no shelf.
+ *  inv       - optional () -> the wallet's `inv` bag, for how many are held.
+ *  stackMax  - optional (sku) -> how many may be held at once. Display only;
+ *              the host is what refuses the third late slip, reason `full`.
+ *  onUse     - optional (sku) -> spend one, by hand. THERE IS NO SUCH SKU
+ *              TODAY - the one consumable on the shelf burns itself in the
+ *              host's attendance path - so the shell does not pass this and
+ *              every row draws its passive line instead. It is named here so
+ *              the day one arrives the tray already knows what to do with it.
  *  gameName  - optional (key) -> that room's display name.
  *  alley     - play the arrival beat? Default true. The purse chip in the
  *              chrome passes false: it did not walk anywhere, so it does not
@@ -534,7 +606,12 @@ export function createPrizeBooth(caps) {
    * thing in this school that may move a balance is the shop's settle().
    */
   function openTill() {
-    if (dead) return;
+    /* THE SAME PAIR openShop() KEEPS. `onAction` already refuses while the
+     * shutter is down and the rects are not even built (scene.js's `when`
+     * gate), so this is the belt behind those braces: the tray is a reading
+     * of a wallet at a counter, and a counter that is shut is not reading
+     * anything out. */
+    if (dead || closed) return;
     /* ONE PANEL AT A TIME is the chassis's rule, not ours: opening this takes
      * the shelf down without asking. Saying so first is what keeps the shell's
      * counter from outliving the box it was mounted in. */
@@ -560,7 +637,140 @@ export function createPrizeBooth(caps) {
           'No room is paying over the odds tonight. Every graded class still pays tickets.')));
       }
       panel.appendChild(line);
+
+      /* WHAT YOU ARE CARRYING. The third question, answered under the other
+       * two and read at OPEN like both of them - the panel is built fresh
+       * every time the tray comes out, so there is nothing here to keep in
+       * step with a wallet that moved while it was shut. */
+      panel.appendChild(holdings());
     });
+  }
+
+  /* ------------------------------------------------------ THE HOLDINGS TRAY */
+
+  /**
+   * One row per consumable on you, and an honest sentence when there are none.
+   *
+   * STILL NOT A SECOND TILL. Every number in here is READ, nothing proposes a
+   * purchase, and the only press a row can ever grow is `onUse` - which the
+   * shell does not pass, because there is no sku in this school a player
+   * spends by hand. See the two tables at the top of the file.
+   */
+  function holdings() {
+    const box = el('section', 'pb-hold-tray');
+    box.appendChild(el('h4', 'pb-hold-head', t('booth_holdings', 'What you are holding')));
+    const rows = holdingRows();
+    if (!rows.length) {
+      /* AN EMPTY POCKET IS AN ANSWER. A blank panel reads as a thing that
+       * failed to load, exactly the way `prize_no_payday` reads above it. */
+      box.appendChild(el('p', 'pb-hold-none', t('booth_hold_none',
+        'Nothing in your pockets tonight. The shelf is through the window.')));
+      return box;
+    }
+    const list = el('ul', 'pb-hold-list');
+    for (const row of rows) list.appendChild(holdingNode(row));
+    box.appendChild(list);
+    return box;
+  }
+
+  /** The consumables the player actually holds, in the catalog's own order. */
+  function holdingRows() {
+    const inv = readInv();
+    const out = [];
+    for (const item of readCatalog()) {
+      if (!item || item.kind !== 'consumable') continue;
+      let n = 0;
+      try { n = heldCount(inv, item.sku); } catch (e) { n = 0; }
+      if (n <= 0) continue;
+      out.push({ item: item, n: n, cap: stackCapFor(item) });
+    }
+    return out;
+  }
+
+  function readInv() {
+    try {
+      const v = (typeof c.inv === 'function') ? c.inv() : null;
+      return (v && typeof v === 'object') ? v : {};
+    } catch (e) { return {}; }
+  }
+
+  function readCatalog() {
+    try {
+      const v = (typeof c.catalog === 'function') ? c.catalog() : null;
+      return Array.isArray(v) ? v.filter(function (r) { return r && r.sku; }) : [];
+    } catch (e) { log('prize booth catalog read threw'); return []; }
+  }
+
+  /** The shell's cap first, then the row's own `max` off the wire. Zero means
+   *  the tray shows a bare count instead of `n/max`. */
+  function stackCapFor(item) {
+    let n = NaN;
+    try { if (typeof c.stackMax === 'function') n = Number(c.stackMax(item.sku)); }
+    catch (e) { n = NaN; }
+    if (!Number.isFinite(n) || n <= 0) n = Number(item && item.max);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  }
+
+  /**
+   * ONE THING IN YOUR POCKET: the sprite the shelf sells it under, its name,
+   * how many of how many, and then either the one press that spends it or the
+   * sentence that says why there is no press.
+   */
+  function holdingNode(row) {
+    const item = row.item;
+    const li = el('li', 'pb-hold');
+    attr(li, 'data-sku', item.sku);
+
+    /* THE SHELF'S OWN ART, so a thing looks the same in your pocket as it did
+     * in the window. A sku with no png yet leaves the glyph standing, which is
+     * prizecounter.js's own rule for the same table. */
+    let art = null;
+    try { art = spriteUrl(item.sku); } catch (e) { art = null; }
+    if (art) {
+      const img = el('img', 'pb-hold-art');
+      try { img.src = art; img.alt = ''; } catch (e) { /* noop */ }
+      attr(img, 'aria-hidden', 'true');
+      attr(img, 'loading', 'lazy');
+      li.appendChild(img);
+    } else {
+      const glyph = el('i', 'pb-hold-glyph', HOLD_GLYPH);
+      attr(glyph, 'aria-hidden', 'true');
+      li.appendChild(glyph);
+    }
+
+    const text = el('div', 'pb-hold-text');
+    const head = el('p', 'pb-hold-line');
+    head.appendChild(el('b', 'pb-hold-name', t(item.nameKey, item.nameEn || item.sku)));
+    /* `2/3`, never a translated sentence with a number baked into it - the
+     * same ruling `prize_held` and `prize_short` are already built on. */
+    head.appendChild(el('span', 'pb-hold-n',
+      row.cap > 0 ? (row.n + '/' + row.cap) : String(row.n)));
+    text.appendChild(head);
+
+    const verb = useVerbFor(item.sku);
+    if (verb && typeof c.onUse === 'function') {
+      const btn = el('button', 'pb-hold-use', t(verb[0], verb[1]));
+      attr(btn, 'type', 'button');
+      try {
+        if (typeof btn.addEventListener === 'function') {
+          btn.addEventListener('click', function () {
+            try { c.onUse(item.sku); }
+            catch (e) { log('prize booth use threw: ' + ((e && e.message) || e)); }
+          });
+        }
+      } catch (e) { /* a verb that cannot be wired is not offered */ }
+      li.appendChild(text);
+      li.appendChild(btn);
+      return li;
+    }
+
+    /* NO VERB, SO SAY WHY. This is the whole of what a player is missing
+     * today: a late slip is not a thing you take out and hand over, it is a
+     * thing that gets handed over for you on the night you are not here. */
+    const passive = passiveLineFor(item.sku);
+    text.appendChild(el('p', 'pb-hold-passive', t(passive[0], passive[1])));
+    li.appendChild(text);
+    return li;
   }
 
   /** One currency reading, the counter's own two marks. `cur` is 't' or 'k'. */

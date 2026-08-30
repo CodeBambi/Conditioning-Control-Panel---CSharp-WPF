@@ -3047,6 +3047,17 @@ internal static class ArcademyHostService
         ["booth_alley_hint"] = "The lit window is down at the end of the row.",
         ["booth_put_it_on"] = "Put it on",
         ["booth_hang_it"] = "Hang it up",
+        // THE HOLDINGS TRAY (counter shortcut wave, 2026-08-30). The tray on the booth's sill
+        // lists the consumables the player is carrying. There is no "2 of 3" row: the count is
+        // built as "2/3" by concatenation, the way prize_held and prize_short already are.
+        // The two passive lines are the honest half of the feature - the one consumable on the
+        // shelf, late_slip, has no manual verb at all (ArcademyEconomy.ConsumeLateSlip burns it
+        // inside the attendance credit), so the row says so instead of growing a dead button.
+        // All four are well inside MergeModTable's 96-char skin cap (trap 26).
+        ["booth_holdings"] = "What you are holding",
+        ["booth_hold_none"] = "Nothing in your pockets tonight. The shelf is through the window.",
+        ["booth_hold_late_slip"] = "It spends itself the night you miss one. Nothing to press.",
+        ["booth_hold_passive"] = "It spends itself the moment it is needed.",
         // The two wayfinding plates in the alley (shell/alleysign.js): the booth's
         // right-hand wall points at RM 004 and the Locker's left wall points back.
         // Rows of their own, not a re-use of the room cards, because a sign names a
@@ -3091,6 +3102,38 @@ internal static class ArcademyHostService
         ["locker_signpost_go"] = "Open The Locker",
         ["locker_unlock_hint"] = "{tok}2 at the counter",
         ["locker_open"] = "Open Locker",
+        // ---- EMI's stuck-hints (Daily Trigger, 2026-08-30) ----------------------------
+        // The owner amended the "no mid-class mascot speech" law (arcademy/CLAUDE.md traps
+        // 90 and 97) for one narrow channel: when the board says the player is beaten, EMI
+        // may ASK whether they want a hand. Two offers a class, never a hint she was not
+        // invited to give. Offer 1 names the band today's answer came out of (free); offer
+        // 2 places one letter and caps the class at A via the existing `stuck_rescue`
+        // assist, which the report card already explains without a row of its own.
+        //
+        // These are ordinary call-site keys. The CLASS resolves them and hands finished
+        // sentences to emi/asks.js, which has no lexicon - so `{cat}` below is substituted
+        // page-side with one of the dt_cat_* rows, never here.
+        ["dt_help_ask_cat"] = "psst. i might know this one.",
+        ["dt_help_chip_cat_yes"] = "spill",
+        ["dt_help_chip_no"] = "nah",
+        ["dt_help_yes_cat"] = "smells like a {cat} word to me.",
+        ["dt_help_no_cat"] = "respect. i'll just sit here knowing it.",
+        ["dt_help_ask_letter"] = "i could hold one letter for you.",
+        ["dt_help_chip_letter_yes"] = "ok",
+        ["dt_help_yes_letter"] = "boop. that one's yours now.",
+        ["dt_help_no_letter"] = "ok. my letter and i will practice waiting.",
+        // The nine band names. The KEY is the contract: it is `dt_cat_` plus the `cat` of a
+        // THEME_GROUPS band in games/daily-trigger/words-answers.js (plus `common` for the
+        // tiny ordinary-English band), so renaming a band there orphans its row here.
+        ["dt_cat_trance"] = "spirally",
+        ["dt_cat_training"] = "training arc",
+        ["dt_cat_submission"] = "yes ma'am",
+        ["dt_cat_denial"] = "not yet",
+        ["dt_cat_bimbo"] = "glittery",
+        ["dt_cat_arcade"] = "hometown",
+        ["dt_cat_school"] = "classroom",
+        ["dt_cat_melt"] = "melty",
+        ["dt_cat_common"] = "civilian",
     };
 
     /// <summary>The mockup's owner-approved tokens (BUILD-CONTRACT §10). A mod overrides them via

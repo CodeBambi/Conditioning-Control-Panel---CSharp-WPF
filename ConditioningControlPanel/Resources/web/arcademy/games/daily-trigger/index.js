@@ -29,7 +29,7 @@
 
 import { injectStyles } from './styles.js';
 import {
-  dailyEntry, dateFromSeed, isAcceptable, pollutionWords, isThemeWord, REJECT,
+  dailyEntry, dateFromSeed, isAcceptable, pollutionWords, isThemeWord, categoryOf, REJECT,
 } from './bank.js';
 import {
   markGuess, isSolved, isNearMiss, hitCount, foldKeyboard, hardModeViolation,
@@ -165,6 +165,22 @@ export default {
       catch (e) { /* a mascot may never break a class */ }
     };
 
+    /**
+     * THE HAND (stuck-hints, 2026-08-30). The one seam on this class that puts
+     * WORDS on the glass mid-board, and it does it by asking rather than by
+     * telling. Guarded and optional the same way `note` is: an older shell has
+     * no `askHelp` and homeroom simply plays as it always did.
+     * @returns {boolean} true when the question actually landed on the glass.
+     *   False means "nobody was there" and must never be read as a refusal -
+     *   the offer is not spent and the detector may try again later.
+     */
+    const askHelp = (spec) => {
+      try {
+        if (!ctx.mood || typeof ctx.mood.askHelp !== 'function') return false;
+        return !!ctx.mood.askHelp(spec);
+      } catch (e) { return false; /* a mascot may never break a class */ }
+    };
+
     const reduced = probeReduced();
     const coarse = probeCoarse();
 
@@ -218,6 +234,45 @@ export default {
     let emiFirstLetterDone = false;
     let emiRowFilledAt = -1;
     let emiRejects = 0;
+
+    /* ---- EMI's stuck-hints (2026-08-30) ---------------------------------
+     * THE FAIRNESS FIX. The answer pool is niche by owner ruling and stays
+     * that way (words-answers.js); this class is therefore brutal for a player
+     * whose English is a second language, and "make the words easier" was
+     * refused. So instead she WATCHES, and when the board says the player is
+     * beaten she offers - twice at most, and never without asking first:
+     *
+     *   offer 1  THE CATEGORY. Free. Names the band today's word came out of,
+     *            which drops 578 candidates to somewhere between 15 and 102.
+     *            Costs nothing because knowing the shape of the space is not
+     *            knowing the word.
+     *   offer 2  ONE LETTER IN PLACE. Caps the class at A (`stuck_rescue`),
+     *            because a letter on the grid IS an answer, partly given.
+     *
+     * WHAT THE DETECTOR IS NOT: it is not a timer of its own. It rides the
+     * one-second clock `beginClass` already arms, which is also what makes it
+     * free of the pause/suspend problem - that clock stops measuring while the
+     * room is held and so does this.
+     *
+     * `stuckHintAt` is the LATCH, not a paint. `afterReveal` clears
+     * hintIndex/hintLetter on every row, so a letter bought on row 5 would
+     * evaporate for row 6 and the A-cap would have bought nothing; the latch
+     * re-arms it. It is also the one thing `finish()` reads: an offer she made
+     * and a category she gave cost nothing at all, and only a letter actually
+     * PLACED rides the payload. */
+    const DT_STUCK = Object.freeze({
+      ROW_FLOOR: 3,        // three rows spent is the earliest anyone is "stuck"
+      STALL_MS: 25000,     // ...or a row that has not moved in this long
+      MIN_ELAPSED_S: 30,   // never in the opening half-minute, whatever the board says
+      GREENS_MAX: 1,       // at most one letter nailed - two is a player with a plan
+      MAX_OFFERS: 2,       // "lets not overdo it" (owner) - the shell rations it too
+      RETRY_MS: 20000,     // a question that never landed may be re-attempted, slowly
+    });
+    let lastCommitMs = 0;      // when a row was last actually committed
+    let helpOffers = 0;        // questions that reached the glass
+    let helpTaken = 0;         // ...and the ones answered yes
+    let helpNextTryMs = 0;     // the flood floor for offers that never landed
+    let stuckHintAt = -1;      // the bought letter's position, or -1
 
     const timers = new Set();
     const later = (ms, fn) => {
@@ -573,6 +628,11 @@ export default {
       }
       const marks = markGuess(guess, entry.answer);
       committed.push({ guess, marks });
+      /* THE STALL CLOCK RESTARTS ON A COMMITTED ROW, not on a keystroke and not
+       * on a rejection: a player fighting the word list is still trying, and a
+       * player who has typed nothing for half a minute is the one the stuck
+       * detector is looking for. */
+      lastCommitMs = Date.now();
       msg('');
       /* W3 P0-6: the guess is ACCEPTED. Until now only the refusal had a
        * sound, so the room answered a bad word and ignored a good one. */
@@ -624,6 +684,12 @@ export default {
       rowIndex += 1;
       cur = new Array(entry.letters).fill('');
       hintIndex = -1; hintLetter = '';
+      /* A BOUGHT LETTER OUTLIVES THE ROW (stuck-hints, 2026-08-30). The two
+       * lines above are the per-row reset the study-hint primitive has always
+       * had - yesterday's free letter is a gift for ONE row. A letter that cost
+       * the class its S is not: without this re-arm it would evaporate on the
+       * very next reveal and the A-cap would have bought the player nothing. */
+      if (stuckHintAt >= 0) armStuckHint();
       if (ladder) ladder.miss();
       if (casino && ladder) casino.setHeat(ladder.heat);   // the marquee climbs with the storm
       /* EMI COLOR: row five is the lean-in, the last row the wide eyes; the
@@ -810,6 +876,152 @@ export default {
       });
     }
 
+    /* ---------------------- the hand (stuck-hints) ------------------------ */
+    /** English fallbacks for the eight bands plus the plain one. The KEY is the
+     *  contract (`dt_cat_<band>` off `THEME_GROUPS[].cat`); these strings only
+     *  matter on a host that ships no lexicon at all. */
+    const DT_CAT_FALLBACK = Object.freeze({
+      trance: 'spirally', training: 'training arc', submission: "yes ma'am",
+      denial: 'not yet', bimbo: 'glittery', arcade: 'hometown',
+      school: 'classroom', melt: 'melty', common: 'civilian',
+    });
+
+    /** Letters nailed in place so far. Two is a player closing in, not a player
+     *  drowning - which is why GREENS_MAX is 1. */
+    function greenCount() {
+      let n = 0;
+      for (const ch of Object.keys(kbState)) if (kbState[ch] === HIT) n += 1;
+      return n;
+    }
+
+    /**
+     * A position she may honestly hand over: one whose letter the player has
+     * NOT already nailed. Giving back a letter the keyboard is already painting
+     * green would spend an A-cap on nothing.
+     * @returns {number} the index, or -1 when there is nothing left to give.
+     */
+    function pickHintSpot() {
+      if (!entry || !entry.answer) return -1;
+      const pool = [];
+      for (let i = 0; i < entry.letters; i++) {
+        const ch = entry.answer[i];
+        if (!ch) continue;
+        if (kbState[ch] === HIT) continue;
+        pool.push(i);
+      }
+      if (!pool.length) return -1;
+      // its own tagged stream, so drawing it (or not) never shifts any other roll
+      return pool[Math.min(pool.length - 1, Math.floor(roll('stuckpos') * pool.length))];
+    }
+
+    /** Paint the bought letter into the current row. Idempotent, and called
+     *  again from `afterReveal` because that is where the row primitive resets. */
+    function armStuckHint() {
+      if (stuckHintAt < 0 || !entry || !entry.answer) return;
+      const ch = entry.answer[stuckHintAt] || '';
+      if (!ch) return;
+      hintIndex = stuckHintAt;
+      hintLetter = ch;
+      cur[hintIndex] = ch;
+    }
+
+    /** The YES of offer 2. Re-picks at ANSWER time, not at offer time: the
+     *  player keeps typing while the question stands, so the board may have
+     *  moved under it. */
+    function placeStuckHint() {
+      if (finished || solved || blocked()) return;
+      const i = pickHintSpot();
+      if (i < 0) return;
+      stuckHintAt = i;
+      helpTaken += 1;
+      armStuckHint();
+      tick('chime', 0.3, 1.15);
+      paintCurrentRow();
+      say('stuck hint: letter ' + String(hintLetter).toUpperCase() + ' at ' + i
+        + ' - class capped at A (stuck_rescue)');
+    }
+
+    /** Offer 1: the band. Free, and silently skipped when there is no honest
+     *  answer to give (a phrase day is in no band - see `categoryOf`). */
+    function offerCategory() {
+      const cat = entry ? categoryOf(entry.answer) : null;
+      if (!cat) { say('stuck: no category today (phrase day) - offer skipped, nothing spent'); return false; }
+      const label = t('dt_cat_' + cat, DT_CAT_FALLBACK[cat] || cat);
+      return askHelp({
+        q: t('dt_help_ask_cat', 'psst. i might know this one.'),
+        face: 'o_o',
+        chips: [t('dt_help_chip_cat_yes', 'spill'), t('dt_help_chip_no', 'nah')],
+        /* THE SUBSTITUTION IS OURS. emi/asks.js has no lexicon and does no
+         * interpolation - it is handed a finished sentence. */
+        yes: {
+          say: t('dt_help_yes_cat', 'smells like a {cat} word to me.').replace(/\{cat\}/g, label),
+          face: '(◔_◔)',
+        },
+        no: { say: t('dt_help_no_cat', "respect. i'll just sit here knowing it."), face: '(¬‿¬)' },
+        /* The hint IS her line, so the YES has nothing to place. It still needs
+         * a callback: the ask engine will not mount a question without one, and
+         * that is the fence keeping half-built asks off the glass. */
+        onYes: () => { helpTaken += 1; say('stuck hint: category "' + cat + '" given - free, no cap'); },
+      });
+    }
+
+    /** Offer 2: one letter, and it costs the A. */
+    function offerLetter() {
+      if (stuckHintAt >= 0) return false;              // she only holds one
+      if (pickHintSpot() < 0) return false;            // nothing honest left to give
+      return askHelp({
+        q: t('dt_help_ask_letter', 'i could hold one letter for you.'),
+        face: '._.',
+        chips: [t('dt_help_chip_letter_yes', 'ok'), t('dt_help_chip_no', 'nah')],
+        yes: { say: t('dt_help_yes_letter', "boop. that one's yours now."), face: '^___^' },
+        no: { say: t('dt_help_no_letter', 'ok. my letter and i will practice waiting.'), face: '._.' },
+        onYes: placeStuckHint,
+      });
+    }
+
+    /**
+     * THE DETECTOR, called once a second off the class's own clock.
+     *
+     * Every refusal below is deliberate:
+     *   retake        nothing is at stake on a free replay, so there is nothing
+     *                 to rescue and no grade to cap. The feature is simply off.
+     *   blocked()     a ceremony, a reveal, a pause or a mandatory video. She
+     *                 does not talk over the room, and the player cannot answer.
+     *   final row     the last row is the moment, not the time for a question.
+     *   MIN_ELAPSED_S nobody is stuck in the first half minute, whatever the
+     *                 row count says (a fast three rows is a player on a roll).
+     */
+    function pollStuck() {
+      if (retake) return;
+      if (finished || solved || blocked()) return;
+      if (helpOffers >= DT_STUCK.MAX_OFFERS) return;
+      if (rowIndex >= ROWS - 1) return;
+      if (elapsedSec < DT_STUCK.MIN_ELAPSED_S) return;
+      const now = Date.now();
+      if (now < helpNextTryMs) return;
+
+      let landed = false;
+      if (helpOffers === 0) {
+        const beaten = rowIndex >= DT_STUCK.ROW_FLOOR && greenCount() <= DT_STUCK.GREENS_MAX;
+        const stalled = lastCommitMs > 0 && (now - lastCommitMs) > DT_STUCK.STALL_MS;
+        if (!beaten && !stalled) return;
+        helpNextTryMs = now + DT_STUCK.RETRY_MS;
+        landed = offerCategory();
+        if (landed) say('stuck: offer 1 (category) - row ' + (rowIndex + 1)
+          + ' greens ' + greenCount() + (stalled ? ' stalled' : ''));
+      } else {
+        /* Offer 2's window is ONE ROW WIDE by design: `>= 4` opens it and the
+         * never-on-the-final-row rule closes it, which on a six-row board
+         * leaves row index 4 exactly. Five rows spent with a sixth to go is the
+         * last honest moment for a letter to still be worth buying. */
+        if (rowIndex < 4) return;
+        helpNextTryMs = now + DT_STUCK.RETRY_MS;
+        landed = offerLetter();
+        if (landed) say('stuck: offer 2 (letter) - row ' + (rowIndex + 1));
+      }
+      if (landed) helpOffers += 1;
+    }
+
     /* ---------------------- ceremony overlay ----------------------------- */
     function ceremony({ word, tone, line, stamp, ms, onDone }) {
       ceremonyOpen = true;
@@ -926,10 +1138,21 @@ export default {
         flavorXp: flavor,
         share: sharePayload(),
       };
+      /* THE COST, AND ONLY WHEN IT WAS ACTUALLY PAID (stuck-hints, 2026-08-30).
+       * `stuckHintAt >= 0` is a letter she PLACED on the grid. An offer she made
+       * and the player waved off, an offer that timed out, and the free category
+       * hint all leave this latch at -1 and cost the class nothing - the shell
+       * merges `assists` into the rubric and core/grades.js caps at A off the
+       * `stuck_rescue` reason, so a stray true here would quietly take an S off
+       * a player who was only spoken to. The report card explains it from the
+       * raw reason ("capped at A (stuck rescue)"), so there is no lexicon row
+       * behind this and no shell or host grading change either. */
+      if (stuckHintAt >= 0) payload.assists = { stuck_rescue: true };
       recordPlay();
       say('day ' + entry.dateUtc + ' #' + entry.puzzleNumber
         + ' ' + (solved ? committed.length + '/' + ROWS : 'X/' + ROWS)
         + ' rung ' + rungAtSolve + (hardMode ? ' hard' : '')
+        + (helpOffers ? ' help ' + helpTaken + '/' + helpOffers + (stuckHintAt >= 0 ? ' (letter)' : '') : '')
         + ' -> band ' + bandFor() + ' composite ' + payload.metrics.composite.toFixed(3));
       try { ctx.endClass(payload); }
       catch (e) { say('endClass threw: ' + ((e && e.message) || e)); }
@@ -1186,6 +1409,9 @@ export default {
           paintHud();                      // the opening rung, now that it exists
 
           startMs = Date.now();
+          /* The stall window measures from GO, so a player who never commits a
+           * first row is seen the same way as one who stops on row four. */
+          lastCommitMs = startMs;
           let budgetWarned = false;      // W3 P2-2: the warn chip lands once
           const clock = () => {
             if (finished) return;
@@ -1205,6 +1431,11 @@ export default {
                   clockChip.className = 'chip num warn';
                 }
               }
+              /* THE STUCK DETECTOR RIDES THIS CLOCK AND NO OTHER (2026-08-30).
+               * Inside the paused/suspended guard on purpose: a class held for
+               * a mandatory video is not a class the player is losing, and time
+               * spent under a pause must not read as a stall. */
+              pollStuck();
             }
             later(1000, clock);
           };
