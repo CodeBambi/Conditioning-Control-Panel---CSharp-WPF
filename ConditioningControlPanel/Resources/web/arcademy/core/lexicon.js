@@ -841,6 +841,41 @@ export const DEFAULT_LEXICON = Object.freeze({
   reveal_where_pa: 'The tannoy is live. She reads the schedule, mostly.',
   reveal_where_walk: 'It shows up under you the next time you cross the quad.',
   reveal_where_consumable: 'It is in your bag until the night you spend it.',
+
+  /* --------------------------------------------------------------------------
+   * EMI'S STUCK-HINTS (Daily Trigger, 2026-08-30)
+   *
+   * The owner amended the "no mid-class mascot speech" law (arcademy/CLAUDE.md
+   * traps 90 and 97) for exactly one channel: when the board says the player is
+   * beaten, EMI may ASK whether they want a hand. The class resolves these rows
+   * itself and hands the finished sentences to `emi/asks.js`, which has no `t()`
+   * and does no substitution - so these are call-site keys in the ordinary way,
+   * mirrored here as the offline fallback and shipped by
+   * `ArcademyHostService.NeutralLexicon` (trap 123: a key with no host row
+   * renders in English for ever and no play-test ever notices).
+   *
+   * `dt_help_yes_cat` carries `{cat}`, and the CLASS substitutes it with one of
+   * the `dt_cat_*` rows below. Those keys are the band names off
+   * `words-answers.js THEME_GROUPS[].cat`; renaming a band orphans its row.
+   * ------------------------------------------------------------------------ */
+  dt_help_ask_cat: 'psst. i might know this one.',
+  dt_help_chip_cat_yes: 'spill',
+  dt_help_chip_no: 'nah',
+  dt_help_yes_cat: 'smells like a {cat} word to me.',
+  dt_help_no_cat: "respect. i'll just sit here knowing it.",
+  dt_help_ask_letter: 'i could hold one letter for you.',
+  dt_help_chip_letter_yes: 'ok',
+  dt_help_yes_letter: "boop. that one's yours now.",
+  dt_help_no_letter: 'ok. my letter and i will practice waiting.',
+  dt_cat_trance: 'spirally',
+  dt_cat_training: 'training arc',
+  dt_cat_submission: "yes ma'am",
+  dt_cat_denial: 'not yet',
+  dt_cat_bimbo: 'glittery',
+  dt_cat_arcade: 'hometown',
+  dt_cat_school: 'classroom',
+  dt_cat_melt: 'melty',
+  dt_cat_common: 'civilian',
 });
 
 let table = Object.create(null);
