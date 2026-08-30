@@ -644,8 +644,14 @@ public static class EmiCodex
             case MsgTarget:
                 return TakeMeThere((string?)payload["id"]);
 
+            // `tour`, NOT `type`. WAVE2-CONTRACT's first bridge table said the tour name arrived as
+            // `type`, which is the ENVELOPE's own key - line 624 above already dispatched on it, so
+            // WalkMeThrough was handed the string "codex:tour" every time and the walk button was
+            // dead in a way no test caught (an envelope that never parses still swallows quietly,
+            // which is exactly what a "junk is ignored" test asserts). The contract is corrected:
+            // `type` names the message and nothing else, and the tour member travels as `tour`.
             case MsgTour:
-                return WalkMeThrough((string?)payload["type"]);
+                return WalkMeThrough(TourNameOf(payload));
 
             case MsgClose:
                 Close();
@@ -706,7 +712,18 @@ public static class EmiCodex
             Log.Debug("[{Tag}] page asked for unknown tour {Type}, ignored", LogTag, typeName);
             return false;
         }
-        if (Application.Current?.MainWindow is not MainWindow main)
+        // Application.MainWindow is dispatcher-affine and THROWS across threads rather than
+        // answering null. Bridge messages arrive on the UI thread today, so this is belt and
+        // braces - but this file's law is that no path throws into a caller, and an internal
+        // method the tests drive directly deserves the same promise the transport gets.
+        MainWindow? main = null;
+        try { main = Application.Current?.MainWindow as MainWindow; }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[{Tag}] tour {Type} skipped: no main window reachable from here", LogTag, type);
+            return false;
+        }
+        if (main is null)
         {
             Log.Debug("[{Tag}] tour {Type} skipped: no main window", LogTag, type);
             return false;
@@ -718,6 +735,13 @@ public static class EmiCodex
         Log.Information("[{Tag}] walk me through it: {Type}", LogTag, type);
         return true;
     }
+
+    /// <summary>
+    /// Reads the tour name out of a bridge envelope. Named and separate so the collision above
+    /// is pinnable: every other route to it returns false in a test either way (no main window),
+    /// so a test that only asserts "junk is ignored" passes whether the key is right or wrong.
+    /// </summary>
+    internal static string? TourNameOf(JObject payload) => (string?)payload["tour"];
 
     /// <summary>
     /// Strict, case-insensitive <c>TutorialType</c> name parsing. Strict about DIGITS on purpose:

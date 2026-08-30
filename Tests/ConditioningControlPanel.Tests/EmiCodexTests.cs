@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.EmiDesk;
 using Newtonsoft.Json.Linq;
 using Xunit;
@@ -202,11 +203,17 @@ public class EmiCodexTests
     //  the bridge
     // =====================================================================================
 
+    /// <summary>
+    /// Builds an envelope and dispatches it the way <c>OnPageMessage</c> does: the message name is
+    /// read back OUT of the object, never passed alongside it. Passing it alongside is what let the
+    /// `tour`/`type` collision live - a payload field named `type` overwrote the envelope key, and
+    /// the harness handed HandleMessage the right name anyway from its own argument.
+    /// </summary>
     private static bool Handle(string type, params (string Key, string? Value)[] fields)
     {
         var o = new JObject { ["type"] = type };
         foreach (var (k, v) in fields) o[k] = v;
-        return EmiCodex.HandleMessage(type, o);
+        return EmiCodex.HandleMessage((string?)o["type"], o);
     }
 
     [Fact]
@@ -261,7 +268,113 @@ public class EmiCodexTests
     public void Walk_me_through_it_refuses_an_unparseable_tour(string? name)
     {
         Assert.False(EmiCodex.WalkMeThrough(name));
-        Assert.False(Handle(EmiCodex.MsgTour, ("type", name)));
+        Assert.False(Handle(EmiCodex.MsgTour, ("tour", name)));
+    }
+
+    /// <summary>
+    /// The tour name travels as <c>tour</c>. <c>type</c> names the MESSAGE and nothing else, so an
+    /// envelope carrying the tour under <c>type</c> - the shape the first contract asked for - hands
+    /// the parser nothing at all rather than quietly starting the wrong walk.
+    /// </summary>
+    [Fact]
+    public void The_tour_name_is_read_from_tour_not_from_the_envelope()
+    {
+        var good = new JObject { ["type"] = EmiCodex.MsgTour, ["tour"] = "ShortWalk" };
+        Assert.Equal("ShortWalk", EmiCodex.TourNameOf(good));
+        Assert.True(EmiCodex.TryParseTour(EmiCodex.TourNameOf(good), out var parsed));
+        Assert.Equal(ConditioningControlPanel.Services.TutorialType.ShortWalk, parsed);
+
+        var collided = new JObject { ["type"] = "ShortWalk" };   // the old, wrong shape
+        Assert.Null(EmiCodex.TourNameOf(collided));
+    }
+
+    /// <summary>
+    /// The last link: <see cref="EmiCodex.HandleMessage"/> really does go through
+    /// <c>TourNameOf</c>. The test above pins the extractor, but the extractor being right does not
+    /// prove the DISPATCHER calls it - the old line read <c>payload["type"]</c> inline, and would
+    /// still pass every assertion above.
+    ///
+    /// <para>The assertion is on the LOG, and it has to be. Headless, <c>WalkMeThrough</c> returns
+    /// false whichever way it fails - there is no MainWindow to start a tour on - so a return value
+    /// cannot tell "the name parsed and there was nowhere to send it" from "the handler read the
+    /// wrong key". The two branches log differently, and that difference is the only observable
+    /// that separates them without a running app.</para>
+    /// </summary>
+    [Fact]
+    public void A_real_tour_member_survives_the_whole_envelope()
+    {
+        // Exactly what the shipped renderer posts: flat fields beside the mirrored payload, with
+        // the tour member under its own `tour` alias.
+        var envelope = new JObject
+        {
+            ["type"] = EmiCodex.MsgTour,
+            ["tour"] = "ShortWalk",
+            ["payload"] = new JObject { ["type"] = "ShortWalk" },
+        };
+
+        var events = CaptureLogs(() => EmiCodex.HandleMessage((string?)envelope["type"], envelope));
+
+        Assert.DoesNotContain(events, e => e.MessageTemplate.Text.Contains("unknown tour"));
+        var landed = Assert.Single(
+            events.Where(e => e.MessageTemplate.Text.Contains("no main window")));
+
+        // The enum, not the string: proof the name came out of the envelope AND through the parser.
+        Assert.Equal(TutorialType.ShortWalk.ToString(),
+            landed.Properties["Type"].ToString().Trim('"'));
+    }
+
+    /// <summary>
+    /// Serilog's global logger, swapped for a capturing sink and put back under a lock.
+    ///
+    /// <para><b>The sink is filtered, and that is not tidiness.</b> <c>Log.Logger</c> is
+    /// process-global and xUnit runs test CLASSES in parallel, so for the length of the swap this
+    /// sink receives EVERYTHING the suite logs. The phrase the caller matches on is not unique -
+    /// <c>EmiOffers</c> and <c>EmiTargets</c> log "no main window" too - so an unfiltered sink
+    /// turns an <c>Assert.Single</c> into a test that passes alone and fails in company, which is
+    /// worse than no test at all.</para>
+    ///
+    /// <para>The discriminator is the <c>Tag</c> property: everything in <c>EmiCodex</c> logs
+    /// through the <c>[{Tag}]</c> template, while the neighbours hard-code <c>[EmiDesk]</c> into
+    /// their text and carry no property at all.</para>
+    /// </summary>
+    private static readonly object LogSwap = new();
+
+    private const string CodexLogTag = "EmiCodex";
+
+    private static List<Serilog.Events.LogEvent> CaptureLogs(Action body)
+    {
+        var sink = new ListSink();
+        lock (LogSwap)
+        {
+            var previous = Serilog.Log.Logger;
+            Serilog.Log.Logger = new Serilog.LoggerConfiguration()
+                .MinimumLevel.Verbose()
+                .WriteTo.Sink(sink)
+                .CreateLogger();
+            try { body(); }
+            finally { Serilog.Log.Logger = previous; }
+        }
+
+        List<Serilog.Events.LogEvent> all;
+        lock (sink.Events) all = sink.Events.ToList();
+
+        var mine = all
+            .Where(e => e.Properties.TryGetValue("Tag", out var t) &&
+                        t.ToString().Trim('"') == CodexLogTag)
+            .ToList();
+
+        // If the tag ever stops being how this service marks its lines, say so here rather than
+        // letting an empty list quietly satisfy a DoesNotContain.
+        Assert.True(mine.Count > 0,
+            "no EmiCodex events were captured - has the [{Tag}] template changed? saw: " +
+            string.Join(" | ", all.Select(e => e.MessageTemplate.Text)));
+        return mine;
+    }
+
+    private sealed class ListSink : Serilog.Core.ILogEventSink
+    {
+        public List<Serilog.Events.LogEvent> Events { get; } = new();
+        public void Emit(Serilog.Events.LogEvent logEvent) { lock (Events) Events.Add(logEvent); }
     }
 
     // =====================================================================================
@@ -400,12 +513,16 @@ public class EmiCodexTests
     //  her offer, on the content side
     // =====================================================================================
 
-    private static JsonElement Moments()
+    /// <summary>The whole lines file, cloned off its document so the caller need not keep one
+    /// alive. Cheap enough at this size, and it keeps every reader below to one line.</summary>
+    private static JsonElement LinesFile()
     {
         var path = Path.Combine(AppDir(), "Resources", "emi", "desk-lines.json");
         Assert.True(File.Exists(path), path);
-        return JsonDocument.Parse(File.ReadAllText(path)).RootElement.GetProperty("moments").Clone();
+        return JsonDocument.Parse(File.ReadAllText(path)).RootElement.Clone();
     }
+
+    private static JsonElement Moments() => LinesFile().GetProperty("moments");
 
     [Fact]
     public void The_book_offer_moment_is_declared()
@@ -451,13 +568,65 @@ public class EmiCodexTests
     }
 
     /// <summary>
-    /// A line whose spice is above its moment's ceiling is UNREACHABLE, not merely rare. The
-    /// ceiling is pinned here so the writing lane can check one number rather than read the file.
+    /// A line whose spice is above its moment's ceiling is UNREACHABLE, not merely rare - it sits
+    /// in the file looking written and can never be drawn. The ceiling itself is the writing lane's
+    /// call (it is a tone dial, not a law); what is pinned here is that the two agree, in both
+    /// directions, so raising the ceiling or writing a hotter line can never silently orphan one.
     /// </summary>
     [Fact]
-    public void The_book_offer_keeps_the_first_contact_spice_ceiling()
+    public void Every_book_offer_line_is_reachable_at_the_ceiling()
     {
-        Assert.Equal(1, Moments().GetProperty("bookOffer").GetProperty("spiceCeiling").GetInt32());
+        var ceiling = Moments().GetProperty("bookOffer").GetProperty("spiceCeiling").GetInt32();
+        var root = LinesFile();
+
+        var orphans = new List<string>();
+        if (root.TryGetProperty("pools", out var pools) &&
+            pools.TryGetProperty("bookOffer", out var pool))
+        {
+            foreach (var line in pool.EnumerateArray())
+                if (Spice(line) > ceiling)
+                    orphans.Add(line.GetProperty("id").GetString() ?? "?");
+        }
+        foreach (var ask in Asks().Where(a =>
+                     a.TryGetProperty("moment", out var m) && m.GetString() == "bookOffer"))
+        {
+            if (Spice(ask) > ceiling) orphans.Add(ask.GetProperty("id").GetString() ?? "?");
+        }
+
+        Assert.True(orphans.Count == 0,
+            "these can never be drawn at bookOffer's ceiling of " + ceiling + ": " +
+            string.Join(", ", orphans));
+    }
+
+    /// <summary>
+    /// THE TWO-CHIP LAW (wave 1), on this wave's asks. <c>PickAsk</c> drops any ask whose chip
+    /// count is not exactly two, silently - so an ask with three chips is not a richer offer, it is
+    /// an offer that never appears. Index 0 is yes, and yes is what carries the verb.
+    /// </summary>
+    [Fact]
+    public void Every_book_ask_is_two_chips_and_opens_the_book()
+    {
+        var asks = Asks().Where(a =>
+            a.TryGetProperty("moment", out var m) && m.GetString() == "bookOffer").ToList();
+
+        Assert.NotEmpty(asks);
+        foreach (var a in asks)
+        {
+            var id = a.GetProperty("id").GetString();
+            Assert.Equal(2, a.GetProperty("chips").GetArrayLength());
+            Assert.Equal(EmiCodex.OpenEffect, a.GetProperty("effect").GetString());
+        }
+    }
+
+    private static int Spice(JsonElement e) =>
+        e.TryGetProperty("spice", out var s) && s.ValueKind == JsonValueKind.Number ? s.GetInt32() : 0;
+
+    private static IEnumerable<JsonElement> Asks()
+    {
+        var root = LinesFile();
+        return root.TryGetProperty("asks", out var a) && a.ValueKind == JsonValueKind.Array
+            ? a.EnumerateArray()
+            : Enumerable.Empty<JsonElement>();
     }
 
     /// <summary>Declared, not deferred. A deferred id that something already fires is caught by
