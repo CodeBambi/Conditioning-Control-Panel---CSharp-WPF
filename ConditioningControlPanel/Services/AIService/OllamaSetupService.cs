@@ -31,6 +31,29 @@ namespace ConditioningControlPanel.Services.AIService
         private static Process? _spawnedServer;
         private static readonly object _spawnedServerLock = new();
 
+        // #1079: `ollama serve` writes its startup banner, GPU discovery and one access-log
+        // line per HTTP request to stderr. We redirect both pipes (those logs are the single
+        // most useful artefact when local AI misbehaves), which means we MUST drain them —
+        // an undrained redirected pipe fills its ~4KB OS buffer, the child then blocks
+        // forever on its next write, and the server stops servicing HTTP mid-flight. That
+        // produced the exact reported symptom: /api/tags answers while the buffer is still
+        // short (the connection test goes green) and then the first real inference, which is
+        // by far the chattiest thing the server logs, wedges and never returns.
+        //
+        // The drain keeps a bounded tail for diagnostics. Both caps are hard: at most
+        // ServerLogTailMax lines of at most ServerLogLineMax chars, so the tail cannot grow
+        // past ~18KB no matter how long the server runs.
+        private static readonly Queue<string> _serverLogTail = new();
+        private static readonly object _serverLogLock = new();
+        private const int ServerLogTailMax = 60;
+        private const int ServerLogLineMax = 300;
+
+        // Only the first N lines of a given spawn reach Serilog. Startup output is what
+        // matters for triage; the per-request access log after that would bloat crash.log
+        // for every user who leaves the app open all day.
+        private const int ServerLogLinesToLog = 40;
+        private static int _serverLogLinesLogged;
+
         public enum InstallStatus
         {
             NotInstalled,
@@ -336,34 +359,63 @@ namespace ConditioningControlPanel.Services.AIService
             var cliPath = FindOllamaCli();
             if (string.IsNullOrEmpty(cliPath)) return false;
 
+            Process? started = null;
+            Process? candidate = null;
             try
             {
-                var proc = Process.Start(new ProcessStartInfo
+                var proc = new Process
                 {
-                    FileName = cliPath,
-                    Arguments = "serve",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    WindowStyle = ProcessWindowStyle.Hidden,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                });
-
-                if (proc != null)
-                {
-                    lock (_spawnedServerLock)
+                    StartInfo = new ProcessStartInfo
                     {
-                        // If we somehow already had one, drop the old handle —
-                        // the new spawn supersedes it. Don't kill the old; if it
-                        // was orphaned the new one will fail-bind anyway.
-                        _spawnedServer?.Dispose();
-                        _spawnedServer = proc;
-                    }
+                        FileName = cliPath,
+                        Arguments = "serve",
+                        // Redirection requires UseShellExecute=false; CreateNoWindow keeps the
+                        // console off screen. (WindowStyle is ignored once CreateNoWindow is set,
+                        // but is left in place as belt-and-braces for any future shell-exec path.)
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        WindowStyle = ProcessWindowStyle.Hidden,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true
+                    },
+                    EnableRaisingEvents = false
+                };
+                candidate = proc;
+
+                // Handlers must be attached BEFORE Start so no output is missed, and the
+                // Begin*ReadLine calls immediately after are what actually drain the pipes.
+                // Without them the redirection above is a deadlock (#1079).
+                proc.OutputDataReceived += OnServerOutput;
+                proc.ErrorDataReceived += OnServerOutput;
+
+                Interlocked.Exchange(ref _serverLogLinesLogged, 0);
+                ClearServerLogTail();
+
+                proc.Start();
+                proc.BeginOutputReadLine();
+                proc.BeginErrorReadLine();
+                started = proc;
+
+                Process? superseded = null;
+                lock (_spawnedServerLock)
+                {
+                    // We only get here when nothing was answering on the host, so any handle
+                    // we still hold is a dead or wedged server. Kill it rather than dropping
+                    // the handle: an abandoned-but-alive process would hold port 11434, make
+                    // this new spawn fail-bind, and then outlive the app as an orphan because
+                    // StopSpawnedServer no longer knows about it.
+                    superseded = _spawnedServer;
+                    _spawnedServer = proc;
                 }
+                KillQuietly(superseded, "superseded `ollama serve`");
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to spawn `ollama serve`");
+                // Start() (or a Begin*ReadLine) can throw after the Process object exists.
+                // If it never became the tracked server, tear it down here so we neither
+                // leak the handle nor orphan a process that did in fact start.
+                if (started == null) KillQuietly(candidate, "half-started `ollama serve`");
                 return false;
             }
 
@@ -371,11 +423,108 @@ namespace ConditioningControlPanel.Services.AIService
             while (DateTime.UtcNow < deadline)
             {
                 ct.ThrowIfCancellationRequested();
+
                 var (ok, _) = await TryListModelsAsync(host, ct);
                 if (ok) return true;
+
+                // A server that died (usually "address already in use", or a broken install)
+                // will never answer. Bail immediately with the reason instead of burning the
+                // full 30s and reporting a bare timeout.
+                try
+                {
+                    if (started.HasExited)
+                    {
+                        App.Logger?.Warning(
+                            "`ollama serve` exited with code {Code} before binding {Host}. Server output:{Nl}{Tail}",
+                            started.ExitCode, host, Environment.NewLine, GetServerLogTail());
+                        return false;
+                    }
+                }
+                catch { /* HasExited/ExitCode can throw on a disposed handle — keep waiting */ }
+
                 await Task.Delay(1000, ct);
             }
+
+            App.Logger?.Warning(
+                "`ollama serve` did not answer {Host} within 30s. Server output:{Nl}{Tail}",
+                host, Environment.NewLine, GetServerLogTail());
             return false;
+        }
+
+        /// <summary>
+        /// Drain handler for both of the spawned server's pipes. Runs on a thread-pool thread
+        /// that is actively emptying the pipe, so it must be cheap and must never throw —
+        /// a slow or throwing handler re-creates the very deadlock it exists to prevent.
+        /// </summary>
+        private static void OnServerOutput(object? sender, DataReceivedEventArgs e)
+        {
+            // e.Data is null when the stream closes; blank lines are not worth keeping.
+            var line = e.Data;
+            if (string.IsNullOrWhiteSpace(line)) return;
+
+            try
+            {
+                if (line.Length > ServerLogLineMax) line = line.Substring(0, ServerLogLineMax);
+
+                lock (_serverLogLock)
+                {
+                    _serverLogTail.Enqueue(line);
+                    while (_serverLogTail.Count > ServerLogTailMax) _serverLogTail.Dequeue();
+                }
+
+                if (Interlocked.Increment(ref _serverLogLinesLogged) <= ServerLogLinesToLog)
+                    App.Logger?.Debug("[ollama serve] {Line}", line);
+            }
+            catch
+            {
+                // Never let a logging failure propagate into the pipe reader.
+            }
+        }
+
+        private static void ClearServerLogTail()
+        {
+            lock (_serverLogLock) { _serverLogTail.Clear(); }
+        }
+
+        /// <summary>
+        /// The last few lines the spawned server wrote, newest last. Empty when we never
+        /// spawned one. Purely diagnostic — safe to call from anywhere.
+        /// </summary>
+        internal static string GetServerLogTail()
+        {
+            lock (_serverLogLock)
+            {
+                return _serverLogTail.Count == 0
+                    ? "(no output captured)"
+                    : string.Join(Environment.NewLine, _serverLogTail);
+            }
+        }
+
+        /// <summary>
+        /// Kill + dispose a process handle, tolerating every state it can be in (already
+        /// exited, never started, handle disposed). Used wherever we drop a server handle.
+        /// </summary>
+        private static void KillQuietly(Process? proc, string context = "spawned `ollama serve`")
+        {
+            if (proc == null) return;
+            try
+            {
+                if (!proc.HasExited)
+                {
+                    proc.Kill(entireProcessTree: true);
+                    proc.WaitForExit(2000);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Already gone, never started, or the handle is disposed — all expected.
+                // Logged rather than silent so a genuinely stuck process leaves a trace.
+                App.Logger?.Debug("Could not stop {Context}: {Error}", context, ex.Message);
+            }
+            finally
+            {
+                try { proc.Dispose(); } catch { }
+            }
         }
 
         /// <summary>
@@ -407,22 +556,61 @@ namespace ConditioningControlPanel.Services.AIService
 
             if (proc == null) return;
 
+            // Kills the tree and waits briefly so the OS releases port 11434 before we exit;
+            // tolerates a process that already died on its own.
+            KillQuietly(proc);
+        }
+
+        /// <summary>
+        /// Best-effort "is the local server actually there?" check used before we lean on it.
+        /// If <paramref name="host"/> already answers, does nothing. If it doesn't, and the
+        /// host is loopback, and the Ollama CLI is installed, brings the headless server back
+        /// up and waits for it to bind.
+        ///
+        /// <para>#1079 (second half): the server we spawn is our child and
+        /// <see cref="StopSpawnedServer"/> kills it on app exit, so the next launch starts with
+        /// nothing listening and nothing was restarting it. This closes that gap at the one
+        /// point where it matters — just before the first request of the session — without
+        /// standing up a supervisor.</para>
+        ///
+        /// <para>Deliberately refuses non-loopback hosts: if the user pointed the app at a
+        /// remote Ollama, spawning a local one would bind the wrong box's work to this
+        /// machine and mask the real connection problem.</para>
+        /// </summary>
+        public static async Task<bool> EnsureServerRunningAsync(string? host = null, CancellationToken ct = default)
+        {
+            host ??= DefaultHost;
+
+            var (reachable, _) = await TryListModelsAsync(host, ct);
+            if (reachable) return true;
+
+            if (!IsLoopbackHost(host))
+            {
+                App.Logger?.Information(
+                    "Ollama host {Host} is not reachable and is not local — not spawning a server for it", host);
+                return false;
+            }
+
+            if (FindOllamaCli() == null)
+            {
+                App.Logger?.Information("Ollama is not reachable at {Host} and no CLI is installed to start", host);
+                return false;
+            }
+
+            App.Logger?.Information("Ollama not reachable at {Host} — starting the headless server", host);
+            return await TryStartHeadlessServerAsync(host, ct);
+        }
+
+        private static bool IsLoopbackHost(string host)
+        {
             try
             {
-                if (!proc.HasExited)
-                {
-                    proc.Kill(entireProcessTree: true);
-                    // Brief wait so the OS can release the port before we exit.
-                    proc.WaitForExit(2000);
-                }
+                var uri = new Uri(NormalizeHost(host));
+                return uri.IsLoopback;
             }
-            catch (Exception ex)
+            catch
             {
-                App.Logger?.Warning(ex, "Failed to stop spawned `ollama serve`");
-            }
-            finally
-            {
-                try { proc.Dispose(); } catch { }
+                return false;
             }
         }
 
