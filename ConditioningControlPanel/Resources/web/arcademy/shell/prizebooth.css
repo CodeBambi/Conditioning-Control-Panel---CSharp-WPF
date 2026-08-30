@@ -8,8 +8,10 @@
  * here and nothing generic could know about either:
  *   .pb-shut   the word over a shutter that has come down, and the one hall
  *              line under it
- *   .pb-till   the ticket tray's little panel: what is on you, and which room
- *              is paying over the odds tonight
+ *   .pb-till   the ticket tray's little panel: what is on you, which room is
+ *              paying over the odds tonight, and - since the counter shortcut
+ *              wave, 2026-08-30 - .pb-hold-*, the third question a shopper
+ *              asks at a counter: what am I already carrying
  *
  * NO RULE BELOW MAY PAINT A HOTSPOT. When the counter is shut, prizebooth.js
  * does not build the rects at all (scene.js's `when` gate), which is the only
@@ -162,6 +164,147 @@
 .pb-payday-none {
   max-width: 34em;
   opacity: .78;
+}
+
+/* ---------------------------------------------------- THE HOLDINGS TRAY ----
+   What you are carrying, under the purse and the payday line (prizebooth.js,
+   counter shortcut wave 2026-08-30). Read left to right like a receipt: the
+   sprite the shelf sold it under, then its name and `2/3`, then either the one
+   press that spends it or the sentence saying why there is no press.
+
+   NOTHING HERE PAINTS A HOTSPOT and nothing here is a second till - the rows
+   are a reading of a wallet, exactly like the purse two rules up. */
+.pb-hold-tray {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: var(--hairline);
+  text-align: left;
+}
+
+.pb-hold-head {
+  margin: 0 0 10px;
+  text-align: center;
+  font-family: var(--disp);
+  font-size: clamp(11px, 1.8vh, 13px);
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  opacity: .78;
+}
+
+/* An empty pocket is a sentence, never a blank box - `.pb-payday-none`'s rule,
+   for the same reason it has one. */
+.pb-hold-none {
+  margin: 0 auto;
+  max-width: 34em;
+  text-align: center;
+  font-size: clamp(12px, 2vh, 14px);
+  line-height: 1.5;
+  opacity: .74;
+}
+
+.pb-hold-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pb-hold {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: var(--hairline);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, .22);
+}
+
+.pb-hold-art {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  image-rendering: auto;
+}
+
+/* The stand-in for a sku whose png has not been drawn yet. Same box as the
+   sprite so a row never changes height when the art lands. */
+.pb-hold-glyph {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  font-style: normal;
+  font-size: 22px;
+  line-height: 1;
+  opacity: .6;
+}
+
+.pb-hold-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pb-hold-line {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pb-hold-name {
+  font-size: clamp(12px, 2vh, 15px);
+  color: var(--ink);
+}
+
+/* `2/3`. Tabular so two rows of different counts line up, and never a
+   translated sentence with a number baked into it. */
+.pb-hold-n {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--pink);
+}
+
+/* WHY THERE IS NO PRESS. The one thing a player did not know about a late slip
+   before this tray existed, so it is the row's own line and not a tooltip. */
+.pb-hold-passive {
+  margin: 4px 0 0;
+  font-size: clamp(11px, 1.8vh, 13px);
+  line-height: 1.45;
+  opacity: .74;
+}
+
+/* THE VERB, for the day a sku declares one (prizebooth.js USE_VERBS is empty
+   today and the shell passes no `onUse`, so nothing renders this yet). Sized
+   at the thumb floor from the start: this panel is read on a phone. */
+.pb-hold-use {
+  flex: none;
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  min-height: 44px;
+  padding: 8px 16px;
+  border: var(--hairline);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  cursor: pointer;
+}
+
+.pb-hold-use:hover, .pb-hold-use:focus-visible {
+  border-color: var(--gold);
+  color: var(--gold);
 }
 
 /* ============================================================================

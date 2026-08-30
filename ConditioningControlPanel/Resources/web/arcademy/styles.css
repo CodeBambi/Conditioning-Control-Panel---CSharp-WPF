@@ -581,6 +581,40 @@ html.arc-reduced .arc-endcard-actions .arc-retake { animation:none; box-shadow:0
   background:color-mix(in srgb, var(--gold), transparent 90%);
 }
 
+/* THE TILL IS A DOOR (counter shortcut wave, 2026-08-30). When the shell hands
+   the report card a way to the counter, the ticket chip is emitted as a
+   <button> wearing this class as well as `.chip` - so everything below is one
+   job: undo what a user agent does to a <button> that `.chip` does not already
+   overwrite (its own font, its margin, its centred text, its native skin), and
+   then borrow `.campus-wallet`'s manners so the two presses that lead to the
+   same room feel like the same verb. Without the class the chip is a <span>
+   and none of this applies to anything. */
+.arc-till-go {
+  appearance:none; -webkit-appearance:none;
+  margin:0; text-align:left;
+  font-family:inherit; font-size:11px; font-weight:600; letter-spacing:.04em;
+  line-height:inherit;
+  border:var(--hairline); background:var(--panel); color:var(--ink-dim);
+  cursor:pointer;
+}
+/* `:not()` on both marks rather than a second rule undoing this one: a door
+   that is shut may not light up under the cursor. */
+.arc-till-go:not([disabled]):not(.is-busy):hover,
+.arc-till-go:not([disabled]):not(.is-busy):focus-visible {
+  border-color:var(--pink-deep);
+  color:var(--ink);
+}
+/* SHUT WHILE THE MONEY IS BEING COUNTED. reportcard.js holds the door for the
+   length of the count-up (and the token jackpot behind it) because walking to
+   the counter tears this screen down mid-beat. Both marks, because `disabled`
+   is the real one and the class is what the node double can be read for. */
+.arc-till-go[disabled], .arc-till-go.is-busy {
+  cursor:default; opacity:.5;
+}
+/* 44px is the floor for anything a thumb has to find, and this one sits in the
+   middle of a paper the player is already scrolling. */
+html.arc-mobile .arc-till-go { min-height:44px; padding:6px 14px; }
+
 /* THE CAMPUS WALLET CHIP. It rides the top-right cluster beside the account
    chip, it is READ-ONLY, and pressing it walks to the Prize Counter. */
 .campus-wallet {
