@@ -1134,6 +1134,125 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+
+        #region The XP nudge (pitch "The tap holds", 2026-08-30)
+
+        /// <summary>
+        /// How long after an earn the nudge fires when no cooldown is in the way.
+        /// Long enough for a burst of awards (a session end grants several in a row)
+        /// to coalesce into ONE sync, short enough that the tap is wobbling before
+        /// the user has finished walking to the Trainer Card.
+        /// </summary>
+        private static readonly TimeSpan NudgeSettle = TimeSpan.FromSeconds(3);
+
+        /// <summary>Slack added on top of a cooldown wait so the sync cannot land on the
+        /// exact millisecond the cooldown expires and be refused by its own check.</summary>
+        private static readonly TimeSpan NudgeCooldownSlack = TimeSpan.FromSeconds(2);
+
+        private DispatcherTimer? _nudgeTimer;
+        private string _nudgeReason = string.Empty;
+
+        /// <summary>
+        /// ASK FOR A SYNC SOON, COALESCED, WITHOUT TOUCHING THE COOLDOWN.
+        ///
+        /// WHY IT EXISTS: the vat is fed by the server's <c>today_xp</c> and nothing
+        /// else, so XP earned outside a running session used to sit invisible until
+        /// something unrelated happened to sync — which, for a user who earns a few
+        /// points and then opens the Trainer Card, could be minutes. The tap looked
+        /// empty when it was not. Now the earn schedules one sync and the meter moves
+        /// inside about a minute.
+        ///
+        /// IT DOES NOT SPAM, and that is the entire design:
+        ///   • Already-scheduled wins. A second call while a nudge is pending is
+        ///     dropped, so a session end granting six awards costs ONE sync.
+        ///   • The 30s cooldown is respected, not bypassed: if a sync just ran, the
+        ///     nudge is scheduled for when the cooldown lapses (plus slack) rather
+        ///     than fired now to be refused.
+        ///   • Offline, logged out, or disposed: nothing is scheduled at all.
+        /// </summary>
+        /// <param name="reason">Logged so a mystery sync in the log has an author.</param>
+        public void NudgeSyncSoon(string reason)
+        {
+            try
+            {
+                if (_disposed) return;
+                if (App.Settings?.Current?.OfflineMode == true) return;
+                if (!IsSyncEnabled) return;
+
+                // COALESCE. A pending nudge already covers whatever just happened —
+                // the sync it runs reads the CURRENT totals, not the ones that were
+                // true when it was scheduled.
+                if (_nudgeTimer?.IsEnabled == true) return;
+
+                var wait = NudgeSettle;
+                if (LastSyncTime.HasValue)
+                {
+                    var since = DateTime.Now - LastSyncTime.Value;
+                    if (since < SyncCooldown)
+                        wait = SyncCooldown - since + NudgeCooldownSlack;
+                }
+
+                _nudgeReason = reason;
+                if (_nudgeTimer == null)
+                {
+                    _nudgeTimer = new DispatcherTimer(DispatcherPriority.Background);
+                    _nudgeTimer.Tick += OnNudgeTick;
+                }
+                _nudgeTimer.Interval = wait;
+                _nudgeTimer.Start();
+
+                App.Logger?.Debug("[Sync] nudge scheduled in {Ms:F0}ms ({Reason})",
+                    wait.TotalMilliseconds, reason);
+            }
+            catch (Exception ex) { App.Logger?.Debug("NudgeSyncSoon: {E}", ex.Message); }
+        }
+
+        private void OnNudgeTick(object? sender, EventArgs e)
+        {
+            try
+            {
+                _nudgeTimer?.Stop();
+                if (_disposed || !IsSyncEnabled) return;
+                var reason = _nudgeReason;
+                _ = Task.Run(async () =>
+                {
+                    try { await SyncProfileAsync(); }
+                    catch (Exception ex) { App.Logger?.Debug("[Sync] nudge ({Reason}) failed: {E}", reason, ex.Message); }
+                });
+            }
+            catch (Exception ex) { App.Logger?.Debug("OnNudgeTick: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Hook the nudge to the XP path. Called once from App startup, after both
+        /// services exist.
+        ///
+        /// ONLY OUTSIDE A RUNNING SESSION (brief, 2026-08-30): a session already
+        /// syncs on its own schedule and at its end, so nudging inside one would add
+        /// traffic and change nothing anybody can see - the Trainer Card is not the
+        /// tab you are on mid-session.
+        /// </summary>
+        public void AttachXpNudge()
+        {
+            try
+            {
+                if (App.Progression == null) return;
+                App.Progression.XPAwarded += (_, award) =>
+                {
+                    try
+                    {
+                        if (App.IsSessionRunning) return;
+                        if (award.Amount <= 0) return;
+                        NudgeSyncSoon($"xp:{award.Source}");
+                    }
+                    catch (Exception ex) { App.Logger?.Debug("[Sync] XP nudge hook: {E}", ex.Message); }
+                };
+            }
+            catch (Exception ex) { App.Logger?.Debug("AttachXpNudge: {E}", ex.Message); }
+        }
+
+        #endregion
+
         /// <summary>
         /// Sync local progression to cloud.
         /// Called after sessions and periodically.
@@ -4408,6 +4527,7 @@ namespace ConditioningControlPanel.Services
         {
             if (_disposed) return;
             _disposed = true;
+            _nudgeTimer?.Stop();
             StopHeartbeat();
             _httpClient.Dispose();
         }

@@ -85,16 +85,16 @@ namespace ConditioningControlPanel
                     return;
                 }
 
-                // THE TAB-ENTRY ESCAPE VALVE (owner ruling 2026-08-13): entering the
-                // Profile tab fresh always shows the TRUE level — no pending hold is
-                // carried across visits, so a hold left behind by the last visit is
-                // dropped and the glass snapped to the last accepted server fill
-                // before the reading below can decide anything.
+                // TAB ENTRY SHOWS THE HOLD (pitch "The tap holds", owner-approved
+                // 2026-08-30, SUPERSEDING the 2026-08-13 escape valve that cleared it).
+                // Arriving at the card used to throw away everything waiting in the tap,
+                // which — since you cannot earn XP while staring at the jar — meant the
+                // hold was unreachable by construction. Now the glass snaps to
+                // (truth - held) so the tap is already wobbling with whatever you earned
+                // while you were somewhere else. It still never pours on its own: the
+                // first-read ruling of 2026-08-12 stands, only the CHARGE-HOLD pours.
                 if (_vatArmed && _faucetHold.HeldXp > 0)
-                {
-                    _faucetHold.ClearHeld();
-                    DiscordTab?.ProfileVatGlass?.SnapTo(_faucetHold.TruthFill);
-                }
+                    DiscordTab?.ProfileVatGlass?.SnapTo(_faucetHold.DisplayFill);
 
                 ApplyDescentToVat();                       // draw what we already know
 
@@ -271,6 +271,9 @@ namespace ConditioningControlPanel
             ArmVat(glass);
             glass.SetLip(read.Lip);
 
+            // The MAX tick moves with the lip, so its glyph has to follow it.
+            PositionVatTickGlyphs();
+
             // BEFORE the fold below, because Snap/Ease can raise FillPercentChanged
             // synchronously and the readout must already know this reading's divisor.
             // Guaranteed > 0 here: the only VatRead that carries no cap is the
@@ -291,14 +294,14 @@ namespace ConditioningControlPanel
             // consume its only chance to introduce itself.
             if (_vatOnScreen) MaybeShowFeatureIntro("descent-vat", "discord");
 
-            // THE HOLD (owner ruling 2026-08-13, desktop surface only): while the
-            // Profile tab is on screen, earned XP does not move the liquid — it
-            // accumulates in the faucet perched on the lip until the user clicks it.
+            // THE HOLD (pitch "The tap holds", 2026-08-30, desktop surface only): whether the
+            // Profile tab is on screen or not, earned XP does not move the liquid —
+            // it waits in the faucet perched on the lip until the user HOLDS the tap.
             // VatFaucetHold folds the coordinator's reading into that hold and
             // answers what the glass should actually do; the shared contract's
             // cases all survive inside it (seed snaps, cap retunes re-scale
             // silently, midnight drains silently, a mid-pour delta extends).
-            var step = _faucetHold.Fold(read, holdActive: _vatOnScreen, pouring: glass.IsPouring);
+            var step = _faucetHold.Fold(read, pouring: glass.IsPouring);
             switch (step.Action)
             {
                 case FaucetActionKind.Snap:
@@ -318,8 +321,10 @@ namespace ConditioningControlPanel
                         break;
                     }
                     // Only reachable mid-pour (the extension case): the stream keeps
-                    // running and simply lasts longer. Nothing restarts.
-                    glass.PourTo(step.Fill);
+                    // running and simply lasts longer. Nothing restarts. userGesture
+                    // because the stream it extends is one the user pressed for — the
+                    // ambient cap must not cut it short halfway.
+                    glass.PourTo(step.Fill, userGesture: true);
                     App.Logger?.Debug("[Descent] vat pour extended +{Xp} XP -> {Pct:F0}%", read.DeltaXp, step.Fill * 100);
                     break;
             }

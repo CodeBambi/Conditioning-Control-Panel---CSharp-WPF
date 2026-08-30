@@ -27,40 +27,71 @@ namespace ConditioningControlPanel.Services.Descent
 
     /// <summary>
     /// THE FAUCET'S HOLD — the desktop Trainer Card's display-only layer between
-    /// <see cref="VatFillCoordinator"/> and the glass (owner survey 2026-08-13,
-    /// which OVERRIDES the shared auto-pour contract FOR THIS SURFACE ONLY; the
-    /// web/mobile contract is untouched).
+    /// <see cref="VatFillCoordinator"/> and the glass.
     ///
-    /// THE RULE: while the Profile tab is on screen, earned XP does not move the
-    /// liquid. It accumulates here as a held delta — the faucet perched on the
-    /// jar's lip wobbles with it — until the user CLICKS the faucet, which pours
-    /// the whole held amount to the server truth in one stream.
+    /// THE RULE (pitch "The tap holds", owner-approved 2026-08-30, which SUPERSEDES
+    /// the 2026-08-13 in-memory hold): earned XP does not move the liquid. It waits
+    /// in the faucet until the user PRESSES AND HOLDS the tap, which pours the whole
+    /// held amount to the server truth in one stream.
+    ///
+    /// WHAT CHANGED, AND WHY IT MATTERS: the hold used to be a field that only
+    /// accrued while the Profile tab was the on-screen tab, and tab entry threw it
+    /// away. Between those two rules there was no reachable path from "I earned XP"
+    /// to "I poured it" — you cannot earn XP while staring at the jar, and arriving
+    /// at the jar cleared whatever you had. The hold is now DERIVED, not accrued:
+    ///
+    ///     held = today_xp - lastPouredTodayXp
+    ///
+    /// where <c>lastPouredTodayXp</c> is persisted (<see cref="IVatPourLedger"/>).
+    /// It is recomputed on every reading whether or not anybody is looking, so it
+    /// survives tab switches, app launches, and XP earned on web, mobile or Discord —
+    /// the server's <c>today_xp</c> already carries all of it.
     ///
     /// WHAT THIS CLASS IS NOT: it is not an XP account. ProgressionService and the
     /// server vat are completely untouched; <see cref="TruthFill"/> is always the
-    /// last accepted server fill and every escape valve lands the glass back on
-    /// it. Pure and UI-free so the hold/pour decisions can be pinned by tests,
-    /// exactly like the coordinator it sits behind.
+    /// last accepted server fill and every escape valve lands the glass back on it.
+    /// Pure and UI-free so the hold/pour decisions can be pinned by tests, exactly
+    /// like the coordinator it sits behind.
     ///
-    /// THE ESCAPE VALVES (display-only hold must never go stale):
-    ///   • Seed (app launch / vat re-arming) clears the hold — truth on screen.
-    ///   • Tab re-entry calls <see cref="ClearHeld"/> — truth on screen.
-    ///   • A cap retune (delta 0, scale changed) is NOT earned XP: the held
-    ///     amount is preserved and the DISPLAY is re-scaled silently.
-    ///   • A negative delta (UTC midnight, correction down) drains silently and
-    ///     clears the hold — pouring a held delta into a reset day is a lie.
-    ///   • A delta landing MID-POUR extends the pour (never restarts), the same
-    ///     rule the shared contract gives the glass.
+    /// THE ESCAPE VALVES (a display-only hold must never go stale):
+    ///   • A cap retune (delta 0, scale changed) is NOT earned XP: the held amount is
+    ///     preserved and the DISPLAY is re-scaled silently.
+    ///   • A negative delta (UTC midnight, correction down) re-stamps the watermark
+    ///     at the new today_xp, so the hold is 0 and the glass drains SILENTLY —
+    ///     pouring a held delta into a reset day is a lie, and performing the loss
+    ///     breaks the Brake. At a real midnight today_xp is 0, so both numbers land
+    ///     on 0, which is the ruling written literally.
+    ///   • A stale watermark can never invent a hold: it is clamped to today_xp, so
+    ///     the worst a wrong row can do is cost one pour animation.
+    ///   • A delta landing MID-POUR extends the pour (never restarts), the same rule
+    ///     the shared contract gives the glass.
+    ///   • A seed (app launch / vat re-arming) SHOWS the hold instead of clearing it,
+    ///     and still never auto-pours — the 2026-08-12 first-read ruling stands.
     /// </summary>
     public sealed class VatFaucetHold
     {
-        /// <summary>XP earned since the last poured/shown level. Never persisted.</summary>
-        public int HeldXp { get; private set; }
+        private readonly IVatPourLedger _ledger;
+
+        /// <param name="ledger">
+        /// Where <c>lastPouredTodayXp</c> lives. Null gets an in-memory one, which is
+        /// what the pure unit tests use and what a settings-less host degrades to.
+        /// </param>
+        public VatFaucetHold(IVatPourLedger? ledger = null)
+            => _ledger = ledger ?? new InMemoryVatPourLedger();
+
+        private bool _seeded;
+        private int _todayXp;
+        private int _cap;
+
+        /// <summary>
+        /// XP earned since the last pour. DERIVED, never accumulated: the persisted
+        /// watermark is clamped to today's total so a stale or foreign row can only
+        /// ever read as "nothing poured yet", never as a hold bigger than the day.
+        /// </summary>
+        public int HeldXp => Math.Max(0, _todayXp - Math.Min(_ledger.PouredTodayXp, _todayXp));
 
         /// <summary>The last accepted server fill — where every pour and valve lands.</summary>
         public double TruthFill { get; private set; }
-
-        private int _cap;
 
         /// <summary>
         /// The level the glass should show while holding: truth minus the held
@@ -69,51 +100,52 @@ namespace ConditioningControlPanel.Services.Descent
         public double DisplayFill =>
             _cap > 0 ? Math.Max(0, TruthFill - (double)HeldXp / _cap) : TruthFill;
 
-        /// <summary>Forget everything — vat disarmed / block withdrawn / logout.</summary>
+        /// <summary>Forget the in-flight reading — vat disarmed / block withdrawn / logout.
+        /// The PERSISTED watermark is deliberately left alone: it is account- and
+        /// day-scoped, so it cannot leak into the next account, and wiping it would
+        /// re-offer a pour the user already made.</summary>
         public void Reset()
         {
-            HeldXp = 0;
+            _seeded = false;
+            _todayXp = 0;
             TruthFill = 0;
             _cap = 0;
         }
-
-        /// <summary>
-        /// The tab-entry escape valve: drop the hold so the glass can show truth.
-        /// The caller snaps the glass to <see cref="TruthFill"/> after this.
-        /// </summary>
-        public void ClearHeld() => HeldXp = 0;
 
         /// <summary>
         /// Fold one coordinator reading into the hold and answer what the glass
         /// should do.
         /// </summary>
         /// <param name="read">The coordinator's decision for this server reading.</param>
-        /// <param name="holdActive">True while the Profile tab is the visible tab —
-        /// the only state in which earned XP is held instead of applied.</param>
         /// <param name="pouring">True while the glass is running a pour — a delta
         /// arriving now EXTENDS that pour instead of joining the hold.</param>
-        public FaucetStep Fold(VatRead read, bool holdActive, bool pouring)
+        public FaucetStep Fold(VatRead read, bool pouring)
         {
             if (read.Kind == VatReadKind.Ignored)
                 return new FaucetStep { Action = FaucetActionKind.None, Fill = DisplayFill };
 
-            if (read.Kind == VatReadKind.Seed)
-            {
-                // App launch / fresh arm: truth, no pending hold carried across sessions.
-                HeldXp = 0;
-                TruthFill = read.Fill;
-                _cap = read.Cap;
-                return new FaucetStep { Action = FaucetActionKind.Snap, Fill = read.Fill };
-            }
-
             TruthFill = read.Fill;
             _cap = read.Cap;
+            _todayXp = Math.Max(0, read.TodayXp);
+
+            if (read.Kind == VatReadKind.Seed)
+            {
+                // APP LAUNCH / FRESH ARM. The hold is whatever the persisted watermark
+                // says is still waiting, so the tap can already be wobbling with the
+                // class you finished before you opened the app. It is SNAPPED to, never
+                // poured: opening the card is not an earn (ruling 2026-08-12).
+                _seeded = true;
+                return new FaucetStep { Action = FaucetActionKind.Snap, Fill = DisplayFill };
+            }
 
             if (read.DeltaXp < 0)
             {
-                // Midnight reset or a downward correction: nothing was earned and the
-                // held delta no longer describes anything — drain silently, hold gone.
-                HeldXp = 0;
+                // MIDNIGHT RESET / DOWNWARD CORRECTION. Nothing was earned and the held
+                // delta no longer describes anything, so the watermark moves to the new
+                // total (held -> 0) and the glass drains silently. At a real midnight
+                // today_xp is 0 and both numbers are 0, exactly as ruled.
+                _ledger.Record(_todayXp);
+                _seeded = true;
                 return new FaucetStep
                 {
                     Action = read.ScaleChanged ? FaucetActionKind.Snap : FaucetActionKind.Ease,
@@ -121,32 +153,33 @@ namespace ConditioningControlPanel.Services.Descent
                 };
             }
 
+            bool first = !_seeded;
+            _seeded = true;
+
             if (read.DeltaXp > 0)
             {
-                if (!holdActive)
-                {
-                    // Tab not on screen: the hold does not engage. Behave exactly as the
-                    // pre-faucet host did — silently, since nobody is watching.
-                    HeldXp = 0;
-                    return new FaucetStep
-                    {
-                        Action = read.ScaleChanged ? FaucetActionKind.Snap : FaucetActionKind.Ease,
-                        Fill = read.Fill,
-                    };
-                }
-
                 if (pouring)
                 {
                     // MID-POUR DELTA EXTENDS THE POUR, never restarts it and never
-                    // re-enters the hold — the faucet is already across the glass.
-                    HeldXp = 0;
+                    // re-enters the hold — the faucet is already across the glass, so
+                    // the watermark moves with the stream.
+                    _ledger.Record(_todayXp);
                     return new FaucetStep { Action = FaucetActionKind.Pour, Fill = read.Fill };
                 }
 
-                // THE HOLD. Any positive amount joins it — the wobble has no minimum.
-                // With an unchanged cap the display value is mathematically unchanged
-                // (truth rose by exactly delta/cap), so the glass is not touched at all.
-                HeldXp += read.DeltaXp;
+                if (first)
+                {
+                    // A first reading that is not a Seed (this hold was built against a
+                    // coordinator that had already seeded — a re-armed vat). Show the
+                    // hold, never pour it.
+                    return new FaucetStep { Action = FaucetActionKind.Snap, Fill = DisplayFill };
+                }
+
+                // THE HOLD. Any positive amount joins it — the wobble has no minimum,
+                // and it accrues WHETHER OR NOT THE TAB IS ON SCREEN (that gate is the
+                // bug this rewrite removes). With an unchanged cap the display value is
+                // mathematically unchanged (truth rose by exactly delta/cap), so the
+                // glass is not touched at all.
                 return read.ScaleChanged
                     ? new FaucetStep { Action = FaucetActionKind.Snap, Fill = DisplayFill }
                     : new FaucetStep { Action = FaucetActionKind.None, Fill = DisplayFill };
@@ -154,21 +187,21 @@ namespace ConditioningControlPanel.Services.Descent
 
             // deltaXp == 0: a cap/lip retune or a fill correction — not earned XP.
             // The held amount survives; only the DISPLAY re-scales, silently.
-            double shown = holdActive ? DisplayFill : read.Fill;
             return new FaucetStep
             {
                 Action = read.ScaleChanged ? FaucetActionKind.Snap : FaucetActionKind.Ease,
-                Fill = shown,
+                Fill = DisplayFill,
             };
         }
 
         /// <summary>
-        /// THE CLICK. Drain the entire held delta into the vat: the glass pours to
-        /// truth and the hold is empty (the wobble stops until new XP accrues).
+        /// THE POUR (a completed CHARGE-HOLD). Drain the entire held delta into the
+        /// vat: the watermark moves up to today's total, the glass pours to truth, and
+        /// the hold is empty until new XP lands.
         /// </summary>
         public FaucetStep PourAll()
         {
-            HeldXp = 0;
+            _ledger.Record(_todayXp);
             return new FaucetStep { Action = FaucetActionKind.Pour, Fill = TruthFill };
         }
     }

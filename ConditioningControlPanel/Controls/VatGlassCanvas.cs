@@ -108,6 +108,34 @@ namespace ConditioningControlPanel.Controls
 
         private double _rawLip = BaseLip;
 
+        /// <summary>
+        /// True while the pour in flight was asked for by a USER GESTURE (the
+        /// CHARGE-HOLD on the Trainer Card's tap) rather than by an ambient reading.
+        ///
+        /// A user gesture OUTRANKS THE AMBIENT CAP (owner call 2026-08-30, House Book
+        /// Law VIII "answer in 100ms" and Deck IV "a verb press with no sensory echo
+        /// is a broken slot handle"). The vat's ambient clock is gated on
+        /// MotionFx.AllowAmbientLoops, which flips to false the moment sixteen flash
+        /// windows push the perf tier to Performance — i.e. exactly when XP is
+        /// flowing. Before this flag, the 2.1s pour therefore collapsed to a silent
+        /// snap precisely in the moment it was supposed to celebrate.
+        ///
+        /// It keeps the clock alive for the pour's own duration, and nothing else:
+        /// the wave, the bubbles, the foam and the wobble all still read
+        /// <see cref="Animated"/> and still drop out on a loaded machine.
+        /// </summary>
+        private bool _gesturePour;
+
+        /// <summary>
+        /// Reduced motion's pour: Law VI collapses every move to a &lt;=120ms change
+        /// and lets the SOUND carry the beat. It is still a pour and still lands on
+        /// the number — it just does not perform.
+        /// </summary>
+        private const double ReducedPourSeconds = 0.12;
+
+        /// <summary>Seconds of BRIGHTER spill remaining — see <see cref="PulseOverflow"/>.</summary>
+        private double _spillBoost;
+
         private bool HasLip => _rawLip > 1.0;
         private double Lip => HasLip ? Math.Max(1.02, _rawLip) : 1.0;
         private double Brim => HasLip ? Lip - 0.02 : 1.0;
@@ -229,10 +257,30 @@ namespace ConditioningControlPanel.Controls
         /// pouring and the stream simply lasts longer. The level is re-aimed at the
         /// new target and the per-frame rate is taken from the time REMAINING, so the
         /// liquid still lands on the number as the faucet leaves.
+        ///
+        /// <para><paramref name="userGesture"/> is the CHARGE-HOLD's pour and it
+        /// OUTRANKS THE AMBIENT CAP (see <see cref="_gesturePour"/>): it animates on
+        /// every performance tier, and only reduced motion shortens it — to
+        /// <see cref="ReducedPourSeconds"/>, never to a silent snap. Ambient pours
+        /// (the mid-pour extension, a reading that arrived on its own) keep the old
+        /// behaviour exactly.</para>
         /// </summary>
-        public void PourTo(double fill)
+        public void PourTo(double fill, bool userGesture = false)
         {
             _target = Clamp(fill);
+
+            if (userGesture)
+            {
+                // Law VI: reduced motion collapses the move, the sound still carries
+                // the beat (the host plays faucet_pour.wav either way).
+                bool full = MotionFx.Level == Models.MotionLevel.Full;
+                _pourT = full ? PourSeconds : ReducedPourSeconds;
+                _gesturePour = true;
+                _sk.InvalidateVisual();
+                Evaluate();
+                return;
+            }
+
             if (!Animated) { _fill = _target; NotifyPercent(); _sk.InvalidateVisual(); return; }
             _pourT = PourSeconds;
             _sk.InvalidateVisual();
@@ -263,6 +311,80 @@ namespace ConditioningControlPanel.Controls
                 _sk.InvalidateVisual();
             }
         }
+
+        /// <summary>
+        /// THE JACKPOT LADDER, minor rung: a pour that carries the level PAST THE
+        /// BRIM gets a thicker, brighter spill down the outside of the glass for a
+        /// couple of seconds. The host calls this on the same frame it layers the
+        /// extra chime (MainWindow.ProfileFaucet), so sight and sound land together
+        /// (Law X).
+        ///
+        /// Deliberately a PULSE and not a state: the overflow theater itself is
+        /// permanent while the level sits past the brim (an account parked at MAX
+        /// spills all day), and what this marks is the MOMENT of crossing.
+        /// </summary>
+        public void PulseOverflow(double seconds = 1.8)
+        {
+            if (!double.IsFinite(seconds) || seconds <= 0) return;
+            _spillBoost = Math.Max(_spillBoost, seconds);
+            _sk.InvalidateVisual();
+            Evaluate();
+        }
+
+        /// <summary>Is this level past the overflow brim? The host asks before pouring, so
+        /// it can tell a pour that CROSSES the lip from one that was already over it.</summary>
+        public bool IsPastBrim(double fill) => HasLip && fill >= Brim;
+
+        /// <summary>
+        /// The three marks the meter draws down its right wall, named so a host can
+        /// hang words on them.
+        /// </summary>
+        public enum VatTickMark
+        {
+            /// <summary>The 20% line - the "you have banked a day" mark.</summary>
+            Drain,
+
+            /// <summary>The daily cap.</summary>
+            Cap,
+
+            /// <summary>The overflow brim. Absent on a jar with no lip.</summary>
+            Max,
+        }
+
+        /// <summary>
+        /// Where a tick line sits, in this control's own coordinates, or null when
+        /// the mark is not drawn (MAX on a lipless jar) or the control has no size
+        /// yet.
+        ///
+        /// EXISTS SO THE LEGEND CANNOT DRIFT. The tick glyphs on the Trainer Card are
+        /// WPF elements (they carry tooltips; Skia text cannot), so they are
+        /// positioned by the host - and a host doing that arithmetic itself would be
+        /// a second copy of <see cref="YFor"/> to keep in step with the lip, the cap
+        /// and the 5px/3px insets. This answers from the one copy.
+        /// </summary>
+        public double? TickCenterY(VatTickMark mark)
+        {
+            double h = ActualHeight;
+            if (!(h > 0)) return null;
+
+            double f = mark switch
+            {
+                VatTickMark.Drain => 0.2,
+                VatTickMark.Cap => 1.0,
+                VatTickMark.Max => HasLip ? Brim : double.NaN,
+                _ => double.NaN,
+            };
+            if (double.IsNaN(f)) return null;
+
+            float yT = (float)(h * JarYTop), yB = (float)(h * JarYBottom);
+            return YFor(yT, yB, f);
+        }
+
+        /// <summary>
+        /// The x of the tick lines' INNER end (they are drawn from x1-7 to x1, with
+        /// their labels outside the wall). A legend glyph is hung just inside this.
+        /// </summary>
+        public double TickInnerX => ActualWidth * JarX1 - 7;
 
         /// <summary>How far the slide must be before the stream/splash turn on.</summary>
         private double StreamOnSlide => _externalSpoutX is double ? 0.55 : 0.88;
@@ -358,7 +480,10 @@ namespace ConditioningControlPanel.Controls
         private bool ShouldRun()
         {
             if (_faults >= FaultLimit) return false;
-            if (!Animated) return false;
+            // A USER-GESTURE POUR KEEPS ITS OWN CLOCK. Everything else in here is
+            // ambient and still yields to the tier; this one beat does not, because
+            // the user asked for it (owner call 2026-08-30).
+            if (!Animated && !(_gesturePour && _pourT > 0)) return false;
             return IsPresenting;
         }
 
@@ -405,6 +530,7 @@ namespace ConditioningControlPanel.Controls
         private void StopClock()
         {
             if (_timer.IsEnabled) _timer.Stop();
+            _gesturePour = false;
             if (_pourT <= 0 && _slide <= 0) return;
             _pourT = 0;
             _slide = 0;
@@ -430,6 +556,11 @@ namespace ConditioningControlPanel.Controls
 
                 Step(dt);
                 _sk.InvalidateVisual();
+
+                // The gesture's exemption lasts exactly as long as its pour. Dropped
+                // here rather than in Step so a paused/parked clock cannot leave the
+                // ambient cap permanently lifted.
+                if (_gesturePour && _pourT <= 0) { _gesturePour = false; Evaluate(); }
             }
             catch (Exception ex)
             {
@@ -477,9 +608,16 @@ namespace ConditioningControlPanel.Controls
 
             float ySurf = YFor(yT, yB, _fill);
 
-            // ---- bubbles
+            // The overflow's extra brightness burns down on the same clock as
+            // everything else, so a spill that started on a gesture pour cannot stay
+            // lit after the pour is over.
+            if (_spillBoost > 0) _spillBoost = Math.Max(0, _spillBoost - dt);
+
+            // ---- bubbles. Ambient garnish: skipped entirely when the clock is only
+            // running because a user gesture lifted the cap (see _gesturePour).
+            bool ambient = Animated;
             double rate = (_pourT > 0 ? 0.5 : 0.12) * (dt * 60.0);
-            if (_rng.NextDouble() < rate)
+            if (ambient && _rng.NextDouble() < rate)
             {
                 _bubbles.Add(new Bubble
                 {
@@ -519,7 +657,14 @@ namespace ConditioningControlPanel.Controls
             // ---- OVERFLOW THEATER IS NOT GATED BY THE POUR THRESHOLD. An account
             // parked past the brim spills down the outside of the glass whether or
             // not the last grant was big enough to swing the faucet in.
-            if (HasLip && _fill >= Brim && _rng.NextDouble() < 0.5 * (dt * 60.0))
+            //
+            // THE JACKPOT LADDER, minor rung (owner-approved 2026-08-30): while
+            // _spillBoost is lit — a pour that crossed the brim — the spill runs
+            // roughly twice as thick and brighter (see Draw), and the host layers one
+            // extra chime over the pour clip. Rarity tracks the ceremony: crossing
+            // the brim is a minor, and it costs one boolean.
+            double spillRate = (_spillBoost > 0 ? 1.1 : 0.5) * (dt * 60.0);
+            if (HasLip && _fill >= Brim && _rng.NextDouble() < spillRate)
             {
                 float side = _rng.NextDouble() < 0.5 ? x0 : x1;
                 _spill.Add(new Mote
@@ -584,7 +729,9 @@ namespace ConditioningControlPanel.Controls
             float yT = h * JarYTop, yB = h * JarYBottom;
             float ySurf = YFor(yT, yB, _fill);
             bool animated = Animated;
-            bool pouring = _pourT > 0 && animated;
+            // A user-gesture pour draws its stream on any tier: the ambient cap does
+            // not get to silence the one thing the user actually pressed for.
+            bool pouring = _pourT > 0 && (animated || _gesturePour);
 
             using var paint = new SKPaint { IsAntialias = true };
 
@@ -737,10 +884,12 @@ namespace ConditioningControlPanel.Controls
             // ---- spill running down the OUTSIDE of the glass ----------------------
             paint.Style = SKPaintStyle.Fill;
             paint.PathEffect = null;
+            float spillAlpha = _spillBoost > 0 ? 1.0f : 0.8f;   // the minor jackpot's brighter spill
+            float spillR = _spillBoost > 0 ? 1.8f : 1.4f;
             foreach (var s in _spill)
             {
-                paint.Color = _liquidEdge.WithAlpha((byte)(Math.Clamp(s.Life * 0.8, 0, 1) * 255));
-                canvas.DrawCircle(s.X, s.Y, 1.4f, paint);
+                paint.Color = _liquidEdge.WithAlpha((byte)(Math.Clamp(s.Life * spillAlpha, 0, 1) * 255));
+                canvas.DrawCircle(s.X, s.Y, spillR, paint);
             }
         }
 
