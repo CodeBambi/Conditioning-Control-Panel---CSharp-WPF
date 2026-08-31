@@ -1260,7 +1260,7 @@
   "tooltip_ducking_percentage_80_reduce_other_audio_to_2": "Ducking percentage (80% = reduce other audio to 20%)",
   "setting_don_t_duck_browser": "Don't duck browser",
   "setting_output": "Output",
-  "tooltip_audio_output_device": "Pick which playback device CCP audio is sent to. Useful for streaming - route to a private headset so viewers on the system default device don't hear the program.",
+  "tooltip_audio_output_device": "Pick which playback device CCP audio is sent to. Useful for streaming - route to a private headset so viewers on the system default device don't hear the program. The embedded browser tab is the one exception - it always follows the Windows default device (route it in Windows Sound settings > Volume mixer).",
   "btn_audio_layers": "🎧 Audio Layers",
   "tooltip_audio_layers": "Layer looping background audio tracks that play together during sessions. Also enables audio-only sessions.",
   "tooltip_when_enabled_audio_from_the_integrated_bambic": "When enabled, audio from the integrated BambiCloud browser won't be reduced during ducking",

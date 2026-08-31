@@ -481,7 +481,7 @@
   "tooltip_ducking_percentage_80_reduce_other_audio_to_2": "ダッキング率（80% = 他のオーディオを20%に低減）",
   "setting_don_t_duck_browser": "ブラウザを除外",
   "setting_output": "出力",
-  "tooltip_audio_output_device": "CCPの音声を送る再生デバイスを選択。配信時に便利 - プライベートなヘッドセットに振り分ければ、視聴者にはシステムの既定デバイスから聞こえません。",
+  "tooltip_audio_output_device": "CCPの音声を送る再生デバイスを選択。配信時に便利 - プライベートなヘッドセットに振り分ければ、視聴者にはシステムの既定デバイスから聞こえません。 内蔵ブラウザのタブだけは例外で、常にWindowsの既定デバイスに従います（Windowsのサウンド設定 > 音量ミキサーで振り分けてください）。",
   "btn_audio_layers": "🎧 オーディオレイヤー",
   "tooltip_audio_layers": "セッション中に一緒に再生されるループ背景オーディオトラックを重ねます。音声のみのセッションも有効にします。",
   "tooltip_when_enabled_audio_from_the_integrated_bambic": "有効時：内蔵BambiCloudブラウザのオーディオはダッキング中に低減されません",
