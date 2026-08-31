@@ -163,6 +163,11 @@ namespace ConditioningControlPanel.Services
                         // never re-enters this service, so calling it under _lock is safe. (It
                         // self-suppresses once the user has already switched off "local".)
                         App.OfferRemoteMediaSource("wallpaper");
+                        // EMI Desk (MOMENTS `noMediaYet`), mirroring the offer above rather than
+                        // replacing it. Fire is non-blocking and never re-enters this service, so
+                        // it is safe under _lock for the same reason the offer is; the moment's
+                        // launch/1 limit keeps this and the flash site to one line between them.
+                        try { EmiDesk.EmiOffers.AnnounceEmptyLibrary(); } catch { }
                         // If remote IS on, the fill above is in flight - come back to this ONCE
                         // (see _remoteRetryConsumed; a dead CDN must not spin activate/fetch).
                         _remoteActivationPending = RemoteMediaEnabled() && !_remoteRetryConsumed;

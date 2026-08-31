@@ -92,6 +92,10 @@ internal static class EmiBarkBridge
             // this trigger fires for both edges.
             Pick: c => c.TryGetBool("running", out var r) && r ? "blinkTrainerStarted" : null),
         ["MantraCompleted"] = new("mantraCompleted"),
+        // No {streak}: MantraService.BreakStreak() zeroes Streak BEFORE it invokes StreakBroken, so
+        // the number the line wants is already gone by the time anything downstream can read it.
+        // The one line that asks for it is skipped; the other seven carry the beat.
+        ["MantraStreakBroken"] = new("mantraStreakBroken"),
 
         // ---- lockdown ------------------------------------------------------------------
         // The countdown tick is a HOLD, so it fires on every tick and the engine collapses the
@@ -110,8 +114,21 @@ internal static class EmiBarkBridge
         ["QuestCompleted"] = new("questCompleted"),
         ["SkillUnlocked"] = new("skillUnlocked"),
         ["PinkRushStarted"] = new("pinkRushStarted"),
+        // No {minutes}: a rush is a flat 60 seconds (SkillTreeService.StartPinkRush), so the one
+        // line in the pool that asks for it would always read "1 minutes". Omitted ctx skips that
+        // line and keeps the other seven, which is the schema's own answer to a missing token.
+        ["PinkRushEnded"] = new("pinkRushEnded"),
+        ["LuckyProc"] = new("luckyProc"),
         ["StreakMilestone"] = new("streakMilestone",
             c => c.TryGetNumber("streak_days", out var d) ? new { streak = (int)d } : null),
+        ["CompanionLevelUp"] = new("companionLevelUp",
+            c => c.TryGetNumber("level", out var lvl) ? new { level = (int)lvl } : null),
+
+        // ---- the rest of the app (wave 3) ----------------------------------------------
+        ["EnhancementApplied"] = new("enhancementApplied",
+            c => new { target = c.GetString("enhancement_id")?.ToLowerInvariant() }),
+        ["ModChanged"] = new("modChanged",
+            c => new { target = c.GetString("mod")?.ToLowerInvariant() }),
 
         // ---- intake --------------------------------------------------------------------
         // The graded result, not the window closing: the close hook only drops the HOLD, because a

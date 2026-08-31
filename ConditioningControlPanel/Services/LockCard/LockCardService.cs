@@ -49,6 +49,23 @@ namespace ConditioningControlPanel.Services
                 Mistakes = mistakes,
                 Repeats = repeats
             });
+
+            // EMI Desk (MOMENTS `lockCardSolved`). Fired HERE and not through the bark bridge on
+            // purpose: BarkService only raises its LockCardCompleted trigger on the pool-bark
+            // fallback path (FireLockCardPoolBark), so on the coin-flip's AI branch — every user
+            // with the avatar and AI chat on — the trigger never happens at all and she would have
+            // been silent for exactly the people who use the app most. This is the one place a
+            // completed card is announced from, so it is the one place that cannot miss.
+            //
+            // {n} = tries, which is the mistakes plus the one that landed. A clean card has no
+            // number worth saying ("1 tries"), so the ctx is omitted and the single line in the
+            // pool that asks for {n} is skipped by the engine — the other seven still play.
+            try
+            {
+                App.EmiDesk?.Fire("lockCardSolved",
+                    mistakes > 0 ? (object?)new { n = mistakes + 1 } : null);
+            }
+            catch { /* a desk that throws never gets to break a lock card */ }
         }
 
         /// <param name="windowMinutes">

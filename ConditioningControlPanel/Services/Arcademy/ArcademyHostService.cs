@@ -65,6 +65,11 @@ internal static class ArcademyHostService
     private static DispatcherTimer? _bootWatch;
     private static DateTime _lastHeartbeatUtc;
     private static DateTime _lastProgressUtc;
+
+    /// <summary>When this visit to the Arcademy started, for EMI's <c>arcademyClosed</c> duration.
+    /// Nothing else in the service was timing a visit. MinValue means "not open", which is also
+    /// what keeps the idempotent close paths from announcing the same visit twice.</summary>
+    private static DateTime _emiOpenedUtc = DateTime.MinValue;
     private static bool _exiting;
     private static bool _relaunchedOnce;
     private static bool _disposing;          // reentrancy guard: Dispose closes the window -> Closed -> DisposeAll
@@ -185,6 +190,7 @@ internal static class ArcademyHostService
         // so whichever of the three paths opened the Arcademy, the last thing you get is the bye.
         try { App.EmiDesk?.FarewellForArcademy(); } catch { }
         try { App.EmiDesk?.Fire("arcademyOpened", null); } catch { }
+        _emiOpenedUtc = DateTime.UtcNow;
 
         _devDoor = devDoor;
         try
@@ -5681,6 +5687,19 @@ internal static class ArcademyHostService
     {
         if (_disposing) return;   // _host.Dispose() closes the window, re-raising Closed -> here
         _disposing = true;
+
+        // EMI Desk (MOMENTS `arcademyClosed`), the partner of the `arcademyOpened` fire in Launch.
+        // Here rather than in CloseActive because this is the ONE funnel every exit reaches - the
+        // graceful close, the watchdog, the window's own Closed event and app shutdown all land
+        // here, and CloseActive is only one of the four. The stamp is cleared as it is read, so the
+        // reentrant second pass says nothing.
+        if (_emiOpenedUtc != DateTime.MinValue)
+        {
+            int emiMinutes = Math.Max(0, (int)(DateTime.UtcNow - _emiOpenedUtc).TotalMinutes);
+            _emiOpenedUtc = DateTime.MinValue;
+            try { App.EmiDesk?.Fire("arcademyClosed", new { minutes = emiMinutes }); } catch { }
+        }
+
         try
         {
             // Retire this window's generation FIRST: every async continuation still in the air

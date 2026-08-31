@@ -38,7 +38,7 @@ namespace ConditioningControlPanel.Services.Bureau
         private const int BatchDecodeCap = 6;      // frames per bridge message (keeps postMessage light)
 
         /// <summary>Discord channel with the pack catalogue — the "requisition office".</summary>
-        private const string DiscordCatalogueUrl = "https://discord.com/channels/1456573221489999934/1511409848699584653";
+        private const string DiscordCatalogueUrl = DiscordLinks.PackCatalogue;
 
         private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(25) };
 

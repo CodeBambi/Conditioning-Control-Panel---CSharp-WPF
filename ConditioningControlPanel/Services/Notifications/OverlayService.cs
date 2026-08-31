@@ -2146,6 +2146,7 @@ public class OverlayService : IDisposable
         // EMI Desk (MOMENTS 4.B). Below the withheld gate on purpose: she must never react to an
         // effect the user did not get.
         try { App.EmiDesk?.Fire("brainDrainOn", new { n = intensity, melt }); } catch { }
+        if (_brainDrainOnSinceUtc == DateTime.MinValue) _brainDrainOnSinceUtc = DateTime.UtcNow;
 
         // The whole decision moved INSIDE the dispatch (#975). It used to read BrainDrainShowing -
         // which touches WPF Window objects and the compositor layer - from whatever thread called
@@ -2458,6 +2459,16 @@ public class OverlayService : IDisposable
     {
         try
         {
+            // EMI Desk (MOMENTS `brainDrainOff`), the partner of the `brainDrainOn` fire in
+            // StartBrainDrainBlur. Gated on the run stamp so the many no-op stops (panic, teardown,
+            // a stop that never had a start) stay silent, and so the duration is honest.
+            if (_brainDrainOnSinceUtc != DateTime.MinValue)
+            {
+                int minutes = Math.Max(0, (int)(DateTime.UtcNow - _brainDrainOnSinceUtc).TotalMinutes);
+                _brainDrainOnSinceUtc = DateTime.MinValue;
+                try { App.EmiDesk?.Fire("brainDrainOff", new { minutes }); } catch { }
+            }
+
             _rampBrainDrainOpacity = null; // release any Deeper ramp ownership
             _sustainedBrainDrainHeld = false; // overlay is gone (incl. force-stop / panic) — drop any stale sustained hold
             DisarmLegacyFirstFrameWatchdog();
@@ -3614,6 +3625,12 @@ public class OverlayService : IDisposable
     private static readonly TimeSpan BrainDrainStartRetryMax = TimeSpan.FromSeconds(60);
     private TimeSpan _brainDrainRetryDelay = BrainDrainStartRetryMin;
     private DateTime _brainDrainRetryAfterUtc = DateTime.MinValue;
+
+    /// <summary>When the current Brain Drain run started, for EMI's <c>brainDrainOff</c> duration.
+    /// MinValue means nothing is running, which is also how the stop hook knows the difference
+    /// between "the blur came down" and one of the many no-op stops (panic, teardown, a stop that
+    /// races a start that never happened) that must not make her say anything at all.</summary>
+    private DateTime _brainDrainOnSinceUtc = DateTime.MinValue;
 
     /// <summary>The "could not capture the screen" toast is worth showing once, not once per retry.
     /// Shared by every OverlayService path that reports a zero-render Brain Drain run.</summary>

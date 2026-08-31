@@ -73,6 +73,12 @@ public static class EmiOffers
                 "burst" => HasImages(),
                 "shrink" => CanShrink(),
                 "bedtime" => !EmiLineEngine.BedtimeSet,
+                // A link to the pack forum. Always feasible - the browser is not ours to doubt,
+                // and a user with no Discord account still lands on a joinable invite page.
+                "packs" => true,
+                // "let me fetch it for you" only makes sense while they are still on local media:
+                // once the source is online or mixed the offer is a chip that changes nothing.
+                "assets" => AssetsOfferFeasible(),
                 _ => false
             };
         }
@@ -294,6 +300,8 @@ public static class EmiOffers
                 case "rain": FireRain(fromAsk); return;
                 case "shrink": FireShrink(); return;
                 case "bedtime": SetBedtime(fromAsk); return;
+                case "packs": OpenPackCatalogue(); return;
+                case "assets": OpenAssetsTab(); return;
                 default:
                     Log.Debug("[EmiDesk] unknown effect {Effect}, ignored", e);
                     return;
@@ -302,6 +310,103 @@ public static class EmiOffers
         catch (Exception ex)
         {
             Log.Warning(ex, "[EmiDesk] effect {Effect} failed", e);
+        }
+    }
+
+    // ---------------------------------------------------------------- the new-user rescue (wave 3)
+
+    /// <summary>
+    /// Can the "let me fetch it for you" offer do anything? Only while the app is still on LOCAL
+    /// media: on "online" or "mixed" the remote pool is already switched on, and an offer to switch
+    /// it on is a chip that changes nothing. The Assets tab also has to be reachable - a tab behind
+    /// a dead main window is a dead chip, which is exactly what LINES-SCHEMA 4 exists to prevent.
+    /// </summary>
+    private static bool AssetsOfferFeasible()
+    {
+        try
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return false;
+            if (!string.Equals(s.MediaSource, "local", StringComparison.OrdinalIgnoreCase)) return false;
+            return MainWin != null;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] assets offer feasibility probe failed");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// THE EMPTY LIBRARY (MOMENTS `noMediaYet`) - the most common first-run dead end in the app.
+    /// True only when the app is still pointed at LOCAL media and there is no local media to point
+    /// at: on "online" or "mixed" the remote pool is the library and an empty folder is not a
+    /// problem to solve.
+    /// </summary>
+    public static bool LibraryIsEmpty()
+    {
+        try
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return false;
+            if (!string.Equals(s.MediaSource, "local", StringComparison.OrdinalIgnoreCase)) return false;
+            return !HasImages() && !HasVideos();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] empty-library probe failed");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Say it, if it is true. Every caller is a place the app has just failed to show the user
+    /// something because there was nothing to show; the moment's own <c>launch/1</c> limit is what
+    /// keeps three of them from becoming three lines.
+    /// </summary>
+    public static void AnnounceEmptyLibrary()
+    {
+        try { if (LibraryIsEmpty()) App.EmiDesk?.Fire("noMediaYet", null); }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] noMediaYet fire failed"); }
+    }
+
+    /// <summary>
+    /// The #asset-packs forum, in the user's own browser. <see cref="DiscordLinks.PackCatalogue"/>
+    /// is a deep link, so a non-member lands on Discord's join prompt rather than nowhere - which is
+    /// the right destination for somebody with an empty library either way.
+    /// </summary>
+    private static void OpenPackCatalogue()
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(DiscordLinks.PackCatalogue)
+            {
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex) { Log.Warning(ex, "[EmiDesk] could not open the pack catalogue"); }
+    }
+
+    /// <summary>
+    /// Bring the app forward and land on the Assets tab, where the media source lives. Same two
+    /// steps as <c>EmiTargets.Nav</c> - a tab switched behind a tray icon is not a tab the user was
+    /// shown - and deliberately NOT a settings write: she opens the door, the user walks through it.
+    /// </summary>
+    private static void OpenAssetsTab()
+    {
+        var mw = MainWin;
+        if (mw == null) { Log.Debug("[EmiDesk] no main window, cannot open the assets tab"); return; }
+        try { mw.ShowFromTray(); } catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ShowFromTray failed"); }
+        try { mw.ShowTab("assets"); }
+        catch (Exception ex) { Log.Warning(ex, "[EmiDesk] could not show the assets tab"); }
+    }
+
+    private static MainWindow? MainWin
+    {
+        get
+        {
+            try { return App.MainWindowRef ?? Application.Current?.MainWindow as MainWindow; }
+            catch { return null; }
         }
     }
 

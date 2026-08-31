@@ -150,7 +150,25 @@ namespace ConditioningControlPanel.Services
             _deviceManager = new HapticDeviceManager(settings);
             _mixer = new HapticMixer(_deviceManager, settings);
 
-            _deviceManager.ConnectionChanged += (s, connected) => { try { ConnectionChanged?.Invoke(this, connected); } catch { } };
+            _deviceManager.ConnectionChanged += (s, connected) =>
+            {
+                try { ConnectionChanged?.Invoke(this, connected); } catch { }
+
+                // EMI Desk (MOMENTS `hapticsConnected`). The CONNECTING edge only - the providers
+                // raise this event for both edges, and "it went away" is not a beat anybody wrote
+                // lines for. The name is whatever the device registry calls it (nickname first),
+                // lowercase like every other {target}; with none to hand the ctx is omitted and the
+                // one line in the pool that names a toy is skipped by the engine.
+                if (!connected) return;
+                try
+                {
+                    var devices = ConnectedDevices;
+                    var name = devices.Count > 0 ? devices[0]?.ToLowerInvariant() : null;
+                    App.EmiDesk?.Fire("hapticsConnected",
+                        string.IsNullOrWhiteSpace(name) ? null : new { target = name });
+                }
+                catch { }
+            };
             _deviceManager.DeviceDiscovered += (s, name) => { try { DeviceDiscovered?.Invoke(this, name); } catch { } };
             _deviceManager.Error += (s, error) => { try { Error?.Invoke(this, error); } catch { } };
             _mixer.Activity += (s, msg) => { try { HapticTriggered?.Invoke(this, msg); } catch { } };

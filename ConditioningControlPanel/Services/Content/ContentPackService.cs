@@ -583,6 +583,9 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("Pack installed successfully: {Name} ({FileCount} files encrypted)",
                     pack.Name, manifest.Files.Count);
                 PackDownloadCompleted?.Invoke(this, pack);
+                // EMI Desk (MOMENTS `contentPackInstalled`). A bare library just became a full one,
+                // which is the beat the whole new-user wave is built around.
+                try { App.EmiDesk?.Fire("contentPackInstalled", new { target = pack.Name?.ToLowerInvariant() }); } catch { }
             }
             catch (Exception ex)
             {
@@ -672,6 +675,9 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("Pack installed from local zip: {Name} ({FileCount} files encrypted)",
                     pack.Name, manifest.Files.Count);
                 PackDownloadCompleted?.Invoke(this, pack);
+                // EMI Desk (MOMENTS `contentPackInstalled`), same beat as the download path above.
+                // Both invoke sites carry it: a pack sideloaded from a zip is still a full shelf.
+                try { App.EmiDesk?.Fire("contentPackInstalled", new { target = pack.Name?.ToLowerInvariant() }); } catch { }
             }
             catch
             {

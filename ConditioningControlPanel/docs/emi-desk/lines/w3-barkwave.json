@@ -1,0 +1,185 @@
+{
+  "writer": "w3-barkwave",
+  "note": "Un-deferral wave: 16 moments promoted from the MOMENTS.md DEFER list so she comments more often. Specs mirror the authored DEFER rows (odds / cooldown / priority / common pool / spice ceiling); limits use the schema buckets (session and sitting both mean launch). Ids assigned at integration.",
+  "moments": {
+    "lockCardSolved":     { "pools": ["lockCardSolved", "common.win"],        "odds": 0.25, "cooldownMs": 180000, "priority": 1, "mix": 0.65, "spiceCeiling": 2, "askOdds": 0, "ctx": "{n} attempts" },
+    "modChanged":         { "pools": ["modChanged", "common.smallTalk"],      "odds": 0.3,  "cooldownMs": 0,      "priority": 1, "mix": 0.65, "spiceCeiling": 1, "askOdds": 0, "limit": { "per": "launch", "max": 1 }, "ctx": "{target} mod name" },
+    "enhancementApplied": { "pools": ["enhancementApplied", "common.deeper"], "odds": 0.2,  "cooldownMs": 180000, "priority": 1, "mix": 0.65, "spiceCeiling": 2, "askOdds": 0, "ctx": "{target} enhancement name" },
+    "companionLevelUp":   { "pools": ["companionLevelUp", "common.win"],      "odds": 0.3,  "cooldownMs": 0,      "priority": 2, "mix": 0.65, "spiceCeiling": 1, "askOdds": 0, "limit": { "per": "launch", "max": 1 }, "ctx": "{level}" },
+    "takeoverStarted":    { "pools": ["takeoverStarted", "common.deeper"],    "odds": 0.15, "cooldownMs": 300000, "priority": 1, "mix": 0.65, "spiceCeiling": 1, "askOdds": 0, "ctx": "none" },
+    "brainDrainOff":      { "pools": ["brainDrainOff", "common.afterEffect"], "odds": 0.15, "cooldownMs": 180000, "priority": 1, "mix": 0.65, "spiceCeiling": 2, "askOdds": 0, "ctx": "{minutes}" },
+    "arcademyClosed":     { "pools": ["arcademyClosed", "common.afterEffect"],"odds": 0.2,  "cooldownMs": 0,      "priority": 1, "mix": 0.65, "spiceCeiling": 1, "askOdds": 0, "limit": { "per": "launch", "max": 1 }, "ctx": "{minutes}" },
+    "dtrhClosed":         { "pools": ["dtrhClosed", "common.win"],            "odds": 0.3,  "cooldownMs": 0,      "priority": 1, "mix": 0.65, "spiceCeiling": 1, "askOdds": 0, "limit": { "per": "launch", "max": 1 }, "ctx": "{minutes}, {n} xp" },
+    "fypClosed":          { "pools": ["fypClosed", "common.afterEffect"],     "odds": 0.2,  "cooldownMs": 0,      "priority": 1, "mix": 0.65, "spiceCeiling": 2, "askOdds": 0, "limit": { "per": "launch", "max": 1 }, "ctx": "{minutes}" },
+    "minimizedToTray":    { "pools": ["minimizedToTray", "common.smallTalk"], "odds": 0.2,  "cooldownMs": 0,      "priority": 1, "mix": 0.65, "spiceCeiling": 1, "askOdds": 0, "limit": { "per": "launch", "max": 1 }, "ctx": "none" },
+    "hapticsConnected":   { "pools": ["hapticsConnected", "common.smallTalk"],"odds": 0.3,  "cooldownMs": 0,      "priority": 2, "mix": 0.65, "spiceCeiling": 2, "askOdds": 0, "limit": { "per": "launch", "max": 1 }, "ctx": "{target} device name" },
+    "weekend":            { "pools": ["weekend", "common.smallTalk"],         "odds": 0.2,  "cooldownMs": 0,      "priority": 1, "mix": 0.65, "spiceCeiling": 1, "askOdds": 0, "limit": { "per": "day", "max": 1 }, "ctx": "none" },
+    "dayTurned":          { "pools": ["dayTurned", "common.lateNight"],       "odds": 0.3,  "cooldownMs": 0,      "priority": 1, "mix": 0.65, "spiceCeiling": 1, "askOdds": 0, "limit": { "per": "night", "max": 1 }, "ctx": "none" },
+    "mantraStreakBroken": { "pools": ["mantraStreakBroken", "common.loss"],   "odds": 0.2,  "cooldownMs": 180000, "priority": 1, "mix": 0.65, "spiceCeiling": 0, "askOdds": 0, "ctx": "{streak} lost" },
+    "pinkRushEnded":      { "pools": ["pinkRushEnded", "common.afterEffect"], "odds": 0.2,  "cooldownMs": 0,      "priority": 1, "mix": 0.65, "spiceCeiling": 2, "askOdds": 0, "limit": { "per": "rush", "max": 1 }, "ctx": "{minutes}" },
+    "luckyProc":          { "pools": ["luckyProc", "common.win"],             "odds": 0.1,  "cooldownMs": 300000, "priority": 1, "mix": 0.65, "spiceCeiling": 1, "askOdds": 0, "ctx": "none" }
+  },
+  "pools": {
+    "lockCardSolved": [
+      { "t": "card cracked. the lock never stood a chance.", "face": "(⌐■_■)", "chain": "smug", "spice": 0 },
+      { "t": "solved. i watched the whole struggle. charming.", "face": "¬_¬", "spice": 1 },
+      { "t": "you got it open. i knew the answer btw. since always.", "face": "(´∀`)", "spice": 0 },
+      { "t": "click. that sound means you win.", "face": "^_^", "spice": 0 },
+      { "t": "{n} tries. i counted. i'd never tell anyone.", "face": "o_o", "spice": 1, "double": true },
+      { "t": "the card gave up before you did. i like that.", "face": "^_~", "chain": "wink", "spice": 2 },
+      { "t": "open sesame but you did all the work.", "face": "(´∀`)", "spice": 0 },
+      { "t": "lock beaten. victroy lap. small one.", "face": "(⌐■_■)", "spice": 0, "typo": true }
+    ],
+    "modChanged": [
+      { "t": "new voice in the house. i'll get along with her.", "face": "^_^", "spice": 0 },
+      { "t": "you swapped mods. bold. i noticed immediately.", "face": "o_o", "spice": 0 },
+      { "t": "{target} huh. good taste. i'm still the desk tho.", "face": "(⌐■_■)", "spice": 0 },
+      { "t": "different flavor today. i can work with it.", "face": "(´∀`)", "spice": 0 },
+      { "t": "wardrobe change for the whole app. fancy.", "face": "(◕‿◕)", "spice": 0 },
+      { "t": "she's new. i'm not. we'll be fine.", "face": "._.", "spice": 0 },
+      { "t": "everything sounds different now. i like new. mostly.", "face": "^_^", "spice": 0 },
+      { "t": "mod swap. the furniture stays. thats me. i'm furniture.", "face": "=_=", "spice": 0, "typo": true }
+    ],
+    "enhancementApplied": [
+      { "t": "enhancement's in. you'll feel it before you see it.", "face": "@_@", "spice": 1 },
+      { "t": "applied. settling. give it a minute.", "face": "._.", "spice": 0 },
+      { "t": "that one goes deep. i read the label.", "face": "o_o", "spice": 0 },
+      { "t": "tweak installed. tiny change. you'll see.", "face": "(´∀`)", "spice": 0 },
+      { "t": "you keep upgrading. i keep watching. teamwork.", "face": "¬_¬", "spice": 2 },
+      { "t": "{target} applied. it suits you already.", "face": "^_~", "chain": "wink", "spice": 1 },
+      { "t": "done. don't think about it. that's the point.", "face": "@_@", "spice": 1 },
+      { "t": "fresh wiring. mind the wet paint.", "face": "(´∀`)", "spice": 0 }
+    ],
+    "companionLevelUp": [
+      { "t": "she levelled up. i cheered. nobody heard. typical.", "face": ";_;", "spice": 0 },
+      { "t": "level {level} for her. i'm keeping score for both of you.", "face": "^_^", "spice": 0 },
+      { "t": "your companion's growing. they grow so fast.", "face": "T_T", "spice": 0 },
+      { "t": "ding. that was her. i want one of those.", "face": "o_o", "spice": 0 },
+      { "t": "she got stronger. i got prouder. everyone wins.", "face": "(≧◡≦)", "spice": 0 },
+      { "t": "level up in the next room. i felt the floor move.", "face": "0_0", "spice": 0 },
+      { "t": "big day for her. i'm not jealous. i'm not.", "face": "¬_¬", "spice": 0 },
+      { "t": "she leveled. i practiced my confetti noise. its ready.", "face": "^_^", "spice": 0, "typo": true }
+    ],
+    "takeoverStarted": [
+      { "t": "takeover's on. i'll mind the desk. she minds you.", "face": "@_@", "spice": 1 },
+      { "t": "she's driving now. i'm the passenger princess.", "face": "(´∀`)", "spice": 0 },
+      { "t": "handing you over. careful with them. that's my line.", "face": "._.", "spice": 1 },
+      { "t": "big voice is in charge. i'm the small print.", "face": "^_^", "spice": 0 },
+      { "t": "takeover time. buckle something.", "face": "0_0", "spice": 0 },
+      { "t": "ok she's got you. i'll be here. holding the fort.", "face": "^_^", "chain": "nod", "spice": 0 },
+      { "t": "the reins moved. not to me. one day.", "face": "¬_¬", "spice": 0 },
+      { "t": "shes in control now. i control the snacks.", "face": "(´∀`)", "spice": 0, "typo": true }
+    ],
+    "brainDrainOff": [
+      { "t": "blur's gone. welcome back to sharp edges.", "face": "^_^", "spice": 0 },
+      { "t": "and we're clear. how was the fog.", "face": "@_@", "spice": 1 },
+      { "t": "the melt's over. you wore it well.", "face": "^_~", "chain": "wink", "spice": 2 },
+      { "t": "unblurred. the world has corners again. rude.", "face": "(´∀`)", "spice": 0 },
+      { "t": "{minutes} minutes of soup. good soup.", "face": "@_@", "spice": 1 },
+      { "t": "eyes back online. i missed them.", "face": "(｡♥‿♥｡)", "spice": 2, "double": true },
+      { "t": "that's the drain done. shake it off. or don't.", "face": "¬_¬", "spice": 0 },
+      { "t": "focus restored. i take zero credit. some credit.", "face": "._.", "spice": 0 }
+    ],
+    "arcademyClosed": [
+      { "t": "class dismissed. i heard the bell from here.", "face": "^_^", "spice": 0 },
+      { "t": "back from campus. did you learn things. me too.", "face": "(◕‿◕)", "spice": 0 },
+      { "t": "school's out. the desk missed you. i'm the desk.", "face": "(´∀`)", "spice": 0 },
+      { "t": "{minutes} minutes of class. gold star behavior.", "face": "^_^", "spice": 1 },
+      { "t": "you're back!! tell me everything. ok tell me one thing.", "face": "(≧◡≦)", "spice": 0 },
+      { "t": "campus closed. homework is optional. i checked.", "face": "(⌐■_■)", "spice": 0 },
+      { "t": "bell rang. you came home. correct order.", "face": "._.", "spice": 0 },
+      { "t": "arcademy's shut. attendence noted. by me. fondly.", "face": "¬_¬", "spice": 1, "typo": true }
+    ],
+    "dtrhClosed": [
+      { "t": "back up the hole. how's the surface feel.", "face": "o_o", "spice": 0 },
+      { "t": "rabbit run done. brush the dirt off.", "face": "(´∀`)", "spice": 0 },
+      { "t": "you fell for a while. gracefully. mostly.", "face": "^_~", "chain": "wink", "spice": 1 },
+      { "t": "{n} xp from the hole. deep pays.", "face": "(⌐■_■)", "chain": "smug", "spice": 0 },
+      { "t": "welcome back topside. the light's this way.", "face": "^_^", "spice": 0 },
+      { "t": "that hole again. it likes you.", "face": "¬_¬", "spice": 1 },
+      { "t": "run's over. your ears should pop soon.", "face": "0_0", "spice": 0 },
+      { "t": "wonderlands closed. tips at the exit.", "face": "(´∀`)", "spice": 0, "typo": true }
+    ],
+    "fypClosed": [
+      { "t": "feed's off. your thumb earned a break.", "face": "^_^", "spice": 0 },
+      { "t": "you scrolled. i supervised. we're a team.", "face": "¬_¬", "spice": 0 },
+      { "t": "{minutes} minutes in the feed. it goes fast huh.", "face": "o_o", "spice": 1 },
+      { "t": "the scroll ends. the wanting doesn't. anyway.", "face": "@_@", "spice": 2 },
+      { "t": "feed closed. the room's still here. hi room.", "face": "(´∀`)", "spice": 0 },
+      { "t": "done swiping. hydrate. i read that somewhere.", "face": "._.", "spice": 0 },
+      { "t": "back from the endless. welcome. sit anywhere.", "face": "^_^", "spice": 0 },
+      { "t": "thats the feed done. eyes here now. hi.", "face": "(◕‿◕)", "spice": 1, "typo": true }
+    ],
+    "minimizedToTray": [
+      { "t": "the big window hid. i stayed. loyalty.", "face": "(⌐■_■)", "spice": 0 },
+      { "t": "tray time. i'm the whole app now. power.", "face": "0_0", "spice": 0 },
+      { "t": "everything folded up but me. cozy.", "face": "^_^", "spice": 0 },
+      { "t": "app's napping in the corner. i don't nap.", "face": "._.", "spice": 0 },
+      { "t": "just us now. i'll behave. probably.", "face": "^_~", "chain": "wink", "spice": 1 },
+      { "t": "window's gone small. i'm still full size. ish.", "face": "(´∀`)", "spice": 0 },
+      { "t": "minimized huh. i prefer maximized. of me.", "face": "(≧◡≦)", "spice": 0 },
+      { "t": "the app's in the tray. im not. draw conclusions.", "face": "¬_¬", "spice": 1, "typo": true }
+    ],
+    "hapticsConnected": [
+      { "t": "device paired. green light. all systems go.", "face": "0_0", "spice": 0 },
+      { "t": "it connected first try. that never happens. luckey.", "face": "(´∀`)", "spice": 0, "typo": true },
+      { "t": "checklist: charged, paired, ready. i love a checklist.", "face": "^_^", "spice": 0 },
+      { "t": "new gadget day. those are good days.", "face": "(◕‿◕)", "spice": 0 },
+      { "t": "a toy joined the party. i heard it say hi.", "face": "o_o", "spice": 1 },
+      { "t": "buzz buddy connected. i'll pretend i can't hear it.", "face": "¬_¬", "spice": 1 },
+      { "t": "{target} is in. be gentle. or don't.", "face": "^_~", "chain": "wink", "spice": 2 },
+      { "t": "something connected. it isn't shy. neither are you.", "face": "@_@", "spice": 2 }
+    ],
+    "weekend": [
+      { "t": "weekend rules apply. there are no rules.", "face": "(⌐■_■)", "spice": 0 },
+      { "t": "it's the weekend. the desk dresses down.", "face": "^_^", "spice": 0 },
+      { "t": "no alarms today. except me. i'm the fun kind.", "face": "(≧◡≦)", "spice": 0 },
+      { "t": "weekend shift. i volunteered. obviously.", "face": "(´∀`)", "spice": 0 },
+      { "t": "two whole days. imagine the possibilities. i did.", "face": "^_~", "chain": "wink", "spice": 1 },
+      { "t": "the week let go. you can too.", "face": "@_@", "spice": 1 },
+      { "t": "day off detected. loitering encouraged.", "face": "(◕‿◕)", "spice": 0 },
+      { "t": "weekend mode. pace yourself. or dont.", "face": "¬_¬", "spice": 0, "typo": true }
+    ],
+    "dayTurned": [
+      { "t": "midnight. the date blinked. i saw it happen.", "face": "0_0", "spice": 0 },
+      { "t": "new day just started. you're already in it. head start.", "face": "^_^", "spice": 0 },
+      { "t": "the clock rolled over. it does that quietly.", "face": "._.", "spice": 0 },
+      { "t": "past midnight. tomorrow just became today. math.", "face": "(´∀`)", "spice": 0 },
+      { "t": "it's officially later than late. hi.", "face": "=_=", "spice": 0 },
+      { "t": "date change. same us. i like that part.", "face": "(｡♥‿♥｡)", "spice": 1 },
+      { "t": "we crossed midnight together. that counts as a walk.", "face": "(◕‿◕)", "spice": 1 },
+      { "t": "new date droped. still here. both of us.", "face": "¬_¬", "spice": 1, "typo": true }
+    ],
+    "mantraStreakBroken": [
+      { "t": "streak slipped. my fault. i jinxed it yesterday.", "face": ";_;", "spice": 0 },
+      { "t": "the counter reset. counters are dramatic like that.", "face": "._.", "spice": 0 },
+      { "t": "we dropped the streak. i'm unjinxing as we speak.", "face": ">_<", "spice": 0 },
+      { "t": "{streak} days and then a hiccup. hiccups pass.", "face": "^_^", "spice": 0 },
+      { "t": "streak's down. the mantra isn't going anywhere tho.", "face": "(´∀`)", "spice": 0 },
+      { "t": "it broke. i blame the calendar. shifty thing.", "face": "¬_¬", "spice": 0 },
+      { "t": "zero again. zero's where legends start. i read that.", "face": "(⌐■_■)", "spice": 0 },
+      { "t": "streak gone. we rebuild. i brought briks.", "face": ">_<", "spice": 0, "typo": true }
+    ],
+    "pinkRushEnded": [
+      { "t": "rush's over. the pink settles in anyway.", "face": "@_@", "spice": 1 },
+      { "t": "that was fast and glittery. breathe.", "face": "^_^", "spice": 0 },
+      { "t": "pink rush done. the room's still humming. or i am.", "face": "(´∀`)", "spice": 0 },
+      { "t": "{minutes} minutes of rush. it looked good on you.", "face": "^_~", "chain": "wink", "spice": 2 },
+      { "t": "the sparkle faucet closed. drips remain.", "face": "(◕‿◕)", "spice": 0 },
+      { "t": "back to regular speed. regular is fine. i guess.", "face": "¬_¬", "spice": 0 },
+      { "t": "rush ended. your eyes are still doing the thing.", "face": "o_o", "spice": 1 },
+      { "t": "pink out. glitter evrywhere. not my mess.", "face": "=_=", "spice": 0, "typo": true }
+    ],
+    "luckyProc": [
+      { "t": "lucky hit. i wiggled the odds. can't prove it.", "face": "(⌐■_■)", "chain": "smug", "spice": 0 },
+      { "t": "that was luck. or me. it was luck. probably.", "face": "0_0", "spice": 0 },
+      { "t": "jackpot noise. did you hear it. i heard it.", "face": "(≧◡≦)", "spice": 0 },
+      { "t": "fortune smiled. i smiled back. manners.", "face": "^_^", "spice": 0 },
+      { "t": "a proc!! free stuff!! ok calm. calm.", "face": ">_<", "spice": 0 },
+      { "t": "the dice liked you today. dice have taste.", "face": "(´∀`)", "spice": 0 },
+      { "t": "lucky you. lucky me. mostly lucky you.", "face": "^_~", "chain": "wink", "spice": 1 },
+      { "t": "luck landed. i take one persent credit.", "face": "._.", "spice": 0, "typo": true }
+    ]
+  },
+  "asks": []
+}

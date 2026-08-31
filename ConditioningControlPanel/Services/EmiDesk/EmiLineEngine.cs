@@ -1116,6 +1116,24 @@ public sealed class EmiLineEngine
         return true;
     }
 
+    /// <summary>
+    /// Has this moment's once-ever limit already been spent? Reads the same persisted bucket
+    /// <see cref="TakeLimit"/> writes (<c>momentId|ever</c>), so "she has already said it" means
+    /// exactly what the limit means and there is no second ledger to drift.
+    ///
+    /// <para>The greeting order (wave 3) needs this: `firstContact` on the first-ever summon,
+    /// `desktopFirstBoot` on the next, `summoned` after that. The service only ORDERS the choice -
+    /// the limits themselves still live in the lines file and are still spent by the engine.</para>
+    /// </summary>
+    public bool EverSpent(string momentId)
+    {
+        if (string.IsNullOrWhiteSpace(momentId)) return false;
+        lock (_gate)
+        {
+            return Persisted(momentId + "|ever") >= 1;
+        }
+    }
+
     private int Persisted(string key)
     {
         try

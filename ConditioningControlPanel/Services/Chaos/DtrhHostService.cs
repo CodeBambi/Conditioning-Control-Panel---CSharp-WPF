@@ -32,6 +32,12 @@ internal static class DtrhHostService
     private static DispatcherTimer? _exitWatchdog;
     private static DispatcherTimer? _heartbeatWatch;
     private static DateTime _lastHeartbeatUtc;
+
+    /// <summary>When this trip down the hole started, for EMI's <c>dtrhClosed</c> duration. Nothing
+    /// else here was timing the visit. MinValue means "not open", which is also what keeps the
+    /// reentrant teardown from announcing the same visit twice.</summary>
+    private static DateTime _emiOpenedUtc = DateTime.MinValue;
+
     private static bool _exiting;
     private static bool _runActive;
     private static bool _minimizedMainWindow;   // we tucked the main window to the tray for this session
@@ -75,6 +81,7 @@ internal static class DtrhHostService
             // EMI Desk: the ring learns from every open, not just its own cards.
             try { App.EmiDesk?.NoteOpen("dtrh"); } catch { }
             try { App.EmiDesk?.Fire("dtrhOpened", null); } catch { }
+            _emiOpenedUtc = DateTime.UtcNow;
 
             // The descent's audio (bubbles sfx, vn shared, drone bed) ships as the lazy audio-web
             // pack. Fire-and-forget: no-op once installed, on a full install, or offline.
@@ -971,6 +978,19 @@ internal static class DtrhHostService
     {
         if (_disposing) return;   // _host.Dispose() closes the window, re-raising Closed -> here
         _disposing = true;
+
+        // EMI Desk (MOMENTS `dtrhClosed`), the partner of the `dtrhOpened` fire in Launch. Here
+        // rather than in CloseActive because this is the ONE funnel every exit reaches (graceful
+        // close, watchdog, the window's own Closed event, app shutdown). No {n} xp: the run's own
+        // total is reported to BarkService per run, not to the host, and nothing at teardown can
+        // see it - the one line in the pool that asks for it is skipped by the engine.
+        if (_emiOpenedUtc != DateTime.MinValue)
+        {
+            int emiMinutes = Math.Max(0, (int)(DateTime.UtcNow - _emiOpenedUtc).TotalMinutes);
+            _emiOpenedUtc = DateTime.MinValue;
+            try { App.EmiDesk?.Fire("dtrhClosed", new { minutes = emiMinutes }); } catch { }
+        }
+
         try
         {
         CancelExitWatchdog();

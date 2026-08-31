@@ -531,21 +531,25 @@ namespace ConditioningControlPanel.Services
                 SectionId = "ContentPacks",
                 Icon = "\uD83C\uDF81",
                 Title = "Community Content Packs",
-                WhatItDoes = "Download curated content packs created by the community. Packs contain themed " +
-                             "collections of images and videos ready to use. Install, activate, and enjoy " +
-                             "professionally assembled conditioning content.",
+                WhatItDoes = "Content packs are themed collections of images and videos, shared by the " +
+                             "community on our Discord. Grab one, drop it in, and you have a library " +
+                             "without assembling one yourself.",
                 Tips = new List<string>
                 {
-                    "Click a pack to download it — it opens in your browser via Mega",
-                    "After downloading, drag and drop the ZIP into this window to import!",
+                    "'Get Packs' on the Assets tab opens the #asset-packs channel on our Discord, where people share new packs daily",
+                    "After downloading a pack zip, drag and drop it into the app window to install it",
                     "Activate/Deactivate packs to include them in your rotation",
                     "Installed packs show in your asset browser",
                     "Use 'Delete Downloaded Packs' to remove all pack data at once",
-                    "Your own images and videos are never affected by pack deletion"
+                    "Your own images and videos are never affected by pack deletion",
+                    "No pack handy? The app can stream media straight from Reddit instead - Assets tab, 'Where your media comes from'"
                 },
-                HowItWorks = "Packs are hosted on Mega for fast, reliable downloads. After downloading a pack ZIP, " +
-                             "just drag and drop it into the app window — it will be imported automatically. " +
-                             "Deactivating a pack excludes its files from random selection without deleting them."
+                HowItWorks = "Packs live on our Discord, in the #asset-packs channel: community members post them " +
+                             "and the Get Packs button takes you there. Download a pack zip, then drag and drop it " +
+                             "into the app window and it is imported automatically. Deactivating a pack excludes its " +
+                             "files from random selection without deleting them. If you would rather not keep a " +
+                             "library at all, the app can stream images and clips from Reddit instead: pick that " +
+                             "under 'Where your media comes from' on the Assets tab."
             },
 
             ["AssetBrowser"] = new HelpContent

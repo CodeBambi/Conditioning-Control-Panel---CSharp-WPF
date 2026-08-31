@@ -1,0 +1,107 @@
+{
+  "writer": "w3-newuser",
+  "note": "New-user rescue wave: empty-library asks (packs on discord + reddit streaming), pack install celebration, and the three once-ever firsts. Moment specs for the integrator are in the moments block; ids are assigned at integration.",
+  "moments": {
+    "noMediaYet": {
+      "pools": ["noMediaYet", "common.encourage"],
+      "odds": 0.9, "cooldownMs": 1800000, "priority": 2, "mix": 0.8,
+      "spiceCeiling": 0, "askOdds": 0.65, "scripted": true,
+      "limit": { "per": "launch", "max": 1 },
+      "ctx": "none; fired when the library is empty and MediaSource is local"
+    },
+    "contentPackInstalled": {
+      "pools": ["contentPackInstalled", "common.win"],
+      "odds": 0.4, "cooldownMs": 0, "priority": 2, "mix": 0.65,
+      "spiceCeiling": 1, "askOdds": 0,
+      "limit": { "per": "launch", "max": 1 },
+      "ctx": "{target} = pack display name, lowercase"
+    },
+    "firstFlashEver": {
+      "pools": ["firstFlashEver"],
+      "odds": 0.8, "cooldownMs": 0, "priority": 2, "mix": 1.0,
+      "spiceCeiling": 1, "askOdds": 0,
+      "limit": { "per": "ever", "max": 1 },
+      "ctx": "none"
+    },
+    "firstVideoEver": {
+      "pools": ["firstVideoEver"],
+      "odds": 0.8, "cooldownMs": 0, "priority": 2, "mix": 1.0,
+      "spiceCeiling": 1, "askOdds": 0,
+      "limit": { "per": "ever", "max": 1 },
+      "ctx": "none"
+    },
+    "firstSessionEver": {
+      "pools": ["firstSessionEver"],
+      "odds": 0.9, "cooldownMs": 0, "priority": 2, "mix": 1.0,
+      "spiceCeiling": 1, "askOdds": 0,
+      "limit": { "per": "ever", "max": 1 },
+      "ctx": "none"
+    }
+  },
+  "pools": {
+    "noMediaYet": [
+      { "t": "your folders are empty. i checked twice. we can fix that.", "face": "o_o", "spice": 0 },
+      { "t": "no pics in the drawer yet. i know where people get them.", "face": "^_^", "chain": "nod", "spice": 0 },
+      { "t": "the shelf's bare. happens to everyone on day one.", "face": "._.", "spice": 0 },
+      { "t": "nothing to flash yet. the discord has packs for days.", "face": "(◕‿◕)", "spice": 0 },
+      { "t": "empty library. big dreams. i respect it.", "face": "(´∀`)", "spice": 0 },
+      { "t": "i looked for your stash. there isn't one. yet.", "face": "0_0", "spice": 0 },
+      { "t": "no media, no problem. i can pull from reddit. say when.", "face": "^_~", "chain": "wink", "spice": 0 },
+      { "t": "packs exist. people share them daily. i keep the map.", "face": "(⌐■_■)", "chain": "smug", "spice": 0 },
+      { "t": "your assets folder echoes. i yelled in it. nothing.", "face": "o_o", "spice": 0 },
+      { "t": "the folder's still emtpy. i peek sometimes. sue me.", "face": "¬_¬", "spice": 0, "typo": true }
+    ],
+    "contentPackInstalled": [
+      { "t": "pack's in. shelves full. i already peeked.", "face": "(◕‿◕)", "chain": "nod", "spice": 0 },
+      { "t": "new pack installed. smells like fresh pixels.", "face": "^_^", "spice": 0 },
+      { "t": "{target} is in. good pick. i would've picked it.", "face": "(´∀`)", "spice": 0 },
+      { "t": "unpacked and shelved. i did the heavy lifting. one file.", "face": "=_=", "spice": 0 },
+      { "t": "loot acquired. that's the fun kind of install.", "face": "(⌐■_■)", "spice": 0 },
+      { "t": "your library grew. i watered it.", "face": "(≧◡≦)", "spice": 0 },
+      { "t": "that's a lot of new stuff. flash night?", "face": "^_~", "chain": "wink", "spice": 1 },
+      { "t": "pack instaled. counted everything. its all there.", "face": "o_o", "spice": 0, "typo": true }
+    ],
+    "firstFlashEver": [
+      { "t": "first flash. there it was. there it went.", "face": "0_0", "spice": 0 },
+      { "t": "you saw that too right. ok good. more where that came from.", "face": "^_^", "spice": 0 },
+      { "t": "that was your first one. i clapped. quietly.", "face": "(≧◡≦)", "spice": 0 },
+      { "t": "one down. the rest are already lining up.", "face": "^_~", "chain": "wink", "spice": 1 },
+      { "t": "blink and you miss it. you didn't. proud of you.", "face": "^_^", "chain": "nod", "spice": 0 },
+      { "t": "so thats a flash. you get used to them. mostly.", "face": "(´∀`)", "spice": 1, "typo": true }
+    ],
+    "firstVideoEver": [
+      { "t": "first video. i'll be quiet. i'll try.", "face": "._.", "spice": 0 },
+      { "t": "movie night. i brought me.", "face": "(´∀`)", "spice": 0 },
+      { "t": "your first one. sit comfy. eyes forward.", "face": "@_@", "spice": 1 },
+      { "t": "i've seen this part. no spoilers. watch.", "face": "^_^", "spice": 0 },
+      { "t": "big screen energy. tiny me energy. balance.", "face": "(◕‿◕)", "spice": 0 },
+      { "t": "the room goes soft around these. you'll see.", "face": "@_@", "spice": 1 }
+    ],
+    "firstSessionEver": [
+      { "t": "your first session. i'll hold the desk. go under. i mean in.", "face": "@_@", "spice": 1 },
+      { "t": "first run. the timer's mine. you just be there.", "face": "^_^", "spice": 0 },
+      { "t": "oh!! a real session. ok. i've read about these.", "face": "0_0", "spice": 0 },
+      { "t": "i set a bookmark. it says you started today.", "face": "(｡♥‿♥｡)", "spice": 0 },
+      { "t": "session one. of many. i said what i said.", "face": "(⌐■_■)", "chain": "smug", "spice": 1 },
+      { "t": "deep breath. it's just time with the app. and me.", "face": "._.", "spice": 1 }
+    ]
+  },
+  "asks": [
+    { "moment": "noMediaYet", "q": "want the pack channel?", "face": "^_^", "chips": ["show me", "later"],
+      "yes": { "t": "sending you. people drop new ones daily. take two.", "face": "(≧◡≦)" },
+      "no":  { "t": "ok. the pile keeps growing tho. just saying.", "face": "._." },
+      "effect": "packs", "spice": 0 },
+    { "moment": "noMediaYet", "q": "no media yet. fix it?", "face": "o_o", "chips": ["fix it", "later"],
+      "yes": { "t": "the discord has a whole pack shelf. go shopping.", "face": "(◕‿◕)" },
+      "no":  { "t": "later's fine. the shelf isn't going anywhere.", "face": "^_^" },
+      "effect": "packs", "spice": 0 },
+    { "moment": "noMediaYet", "q": "want me to fetch from reddit?", "face": "^_~", "chips": ["do it", "not now"],
+      "yes": { "t": "on it. pick your niches and i do the rest.", "face": "(⌐■_■)" },
+      "no":  { "t": "ok. offer stands. i'm very patient.", "face": "._." },
+      "effect": "assets", "spice": 0 },
+    { "moment": "noMediaYet", "q": "i can stream media. try it?", "face": "(◕‿◕)", "chips": ["try it", "nah"],
+      "yes": { "t": "assets tab. top panel. i left it open for you.", "face": "^_^" },
+      "no":  { "t": "nah is fine. your app, your shelves.", "face": "(´∀`)" },
+      "effect": "assets", "spice": 0 }
+  ]
+}

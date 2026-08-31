@@ -337,6 +337,13 @@ namespace ConditioningControlPanel
                 _trayIcon?.MinimizeToTray();
                 HideAvatarTube();
 
+                // EMI Desk (MOMENTS `minimizedToTray`). Fired from the X -> tray branch and NOT
+                // from TrayIconService.MinimizeToTray, which is also the start-minimized and the
+                // Chaos-takeover path: neither of those is the user putting the app away, and she
+                // would have commented on both. Fire drops the moment outright when she is not out,
+                // so a tray trip taken without her on screen costs nothing.
+                try { App.EmiDesk?.Fire("minimizedToTray", null); } catch { }
+
                 // NOTE: bouncing/subliminal text is intentionally LEFT RUNNING while in the tray.
                 // It's an unowned, topmost, click-through overlay, so it keeps rendering over the
                 // desktop with MainWindow hidden — which is the point of a background conditioning

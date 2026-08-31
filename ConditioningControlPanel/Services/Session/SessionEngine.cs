@@ -262,6 +262,18 @@ namespace ConditioningControlPanel.Services
             // Track session start for achievements (e.g., Relapse)
             App.Achievements?.TrackSessionStart();
 
+            // EMI Desk (MOMENTS `firstSessionEver`). Read AFTER the tracker's increment, so "== 1"
+            // is this account's first session ever - and fired behind `sessionStarted` above on
+            // purpose: the engine's floor picks one of the two, and on a first session the
+            // once-ever line is the one worth having. The moment's own limit ever/1 is what keeps
+            // accounts whose counter was already past 1 out of it.
+            try
+            {
+                if (App.Achievements?.Progress?.TotalSessionsStarted == 1)
+                    App.EmiDesk?.Fire("firstSessionEver", null);
+            }
+            catch { }
+
             // Season Recap (local-only): count this season's session, and record which
             // features were engaged — once per session, from the enabled flags, so pause/
             // resume can't double-count. Drives the card's session count + badge row.

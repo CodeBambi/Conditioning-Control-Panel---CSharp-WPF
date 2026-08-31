@@ -161,6 +161,122 @@ namespace ConditioningControlPanel
             if (!_isRunning) StartEngine();
         }
 
+        // ==============================================================================
+        // Empty-library notices. A brand new user who presses START with nothing in their
+        // assets folder used to get a log line and a blank screen - the feature simply did
+        // not happen, and nothing on screen said why. These say it out loud and name the two
+        // ways out (a community pack, or Reddit media). Deliberately UI-layer: the services
+        // themselves are shared with autonomy/session/remote-control paths that must stay
+        // silent, and only a user-initiated start earns a toast.
+        // ==============================================================================
+
+        /// <summary>What a flash image can be. Mirrors the loader in FlashService.</summary>
+        private static readonly string[] FlashImageExtensions =
+            { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp" };
+
+        /// <summary>Wallpapers are set through Windows, which will not take a webp or a gif.</summary>
+        private static readonly string[] WallpaperImageExtensions =
+            { ".jpg", ".jpeg", ".png", ".bmp" };
+
+        /// <summary>
+        /// Cheap "is there anything at all in here" probe: stops at the first hit rather than
+        /// enumerating the folder, so it costs nothing on a full library and nothing on an
+        /// empty one. Any IO failure counts as "do not nag".
+        /// </summary>
+        private static bool FolderHasAnyMedia(string folder, string[] extensions)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) return false;
+                foreach (var file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories))
+                {
+                    var ext = Path.GetExtension(file);
+                    if (string.IsNullOrEmpty(ext)) continue;
+                    foreach (var wanted in extensions)
+                    {
+                        if (string.Equals(ext, wanted, StringComparison.OrdinalIgnoreCase)) return true;
+                    }
+                }
+                return false;
+            }
+            catch { return true; }
+        }
+
+        /// <summary>
+        /// True only when the media pool really is the local folder. With Reddit media on
+        /// ("online" or "mixed") an empty folder is not a problem to report.
+        /// </summary>
+        private static bool IsLocalOnlyMediaSource(AppSettings? s) =>
+            s != null && string.Equals(s.MediaSource, "local", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>The toast's one-tap way out: straight to the pack catalogue on Discord.</summary>
+        private static void OpenPackCatalogue()
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                    Services.DiscordLinks.PackCatalogue) { UseShellExecute = true });
+            }
+            catch (Exception ex) { App.Logger?.Debug(ex, "[empty-state] pack catalogue link failed"); }
+        }
+
+        /// <summary>Non-blocking notice when flashes were asked for and there is nothing to show.</summary>
+        private void WarnIfFlashLibraryEmpty()
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s == null || !s.FlashEnabled) return;
+                if (!IsLocalOnlyMediaSource(s)) return;
+
+                var imagesDir = Path.Combine(App.EffectiveAssetsPath ?? string.Empty, "images");
+                if (FolderHasAnyMedia(imagesDir, FlashImageExtensions)) return;
+
+                App.Notifications?.Show(
+                    LocOr("msg_no_flash_images",
+                        "No images yet. People share content packs daily on our Discord (Assets tab > Get Packs), "
+                        + "or turn on Reddit media under 'Where your media comes from'."),
+                    Services.NotificationType.Warning,
+                    TimeSpan.FromSeconds(12),
+                    actionLabel: LocOr("btn_get_packs", "🎁 Get Packs"),
+                    action: OpenPackCatalogue);
+                App.Logger?.Information("[empty-state] Flashes started with an empty local image library");
+            }
+            catch (Exception ex) { App.Logger?.Debug(ex, "[empty-state] flash library check failed"); }
+        }
+
+        /// <summary>
+        /// Same notice for the wallpaper takeover. Called when the user arms it, not when it
+        /// fires: the fire is the autonomy service's, minutes later, with the window gone.
+        /// </summary>
+        internal void WarnIfWallpaperLibraryEmpty()
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s == null) return;
+                if (!IsLocalOnlyMediaSource(s)) return;
+
+                var custom = s.WallpaperSourceFolder;
+                var dir = !string.IsNullOrWhiteSpace(custom) && Directory.Exists(custom)
+                    ? custom
+                    : Path.Combine(App.EffectiveAssetsPath ?? string.Empty, "wallpapers");
+                if (FolderHasAnyMedia(dir, WallpaperImageExtensions)) return;
+
+                App.Notifications?.Show(
+                    LocOr("msg_no_wallpaper_images",
+                        "No wallpapers yet. Drop images into your assets/wallpapers folder, grab a content pack "
+                        + "from our Discord (Assets tab > Get Packs), or turn on Reddit media under "
+                        + "'Where your media comes from'."),
+                    Services.NotificationType.Warning,
+                    TimeSpan.FromSeconds(12),
+                    actionLabel: LocOr("btn_get_packs", "🎁 Get Packs"),
+                    action: OpenPackCatalogue);
+                App.Logger?.Information("[empty-state] Wallpaper armed with an empty local wallpapers folder");
+            }
+            catch (Exception ex) { App.Logger?.Debug(ex, "[empty-state] wallpaper library check failed"); }
+        }
+
         /// <summary>
         /// Starts the engine.
         /// </summary>
@@ -194,7 +310,12 @@ namespace ConditioningControlPanel
             App.SkillTree?.TrackTimeOfDayUsage(); // For secret skill unlocks
 
             if (!audioOnly)
+            {
                 App.Flash.Start();
+                // Only for a start the user asked for: the lockdown keeper restarts the engine
+                // every few seconds and must not stack toasts.
+                if (!systemInitiated) WarnIfFlashLibraryEmpty();
+            }
 
             if (!audioOnly && settings.MandatoryVideosEnabled)
                 App.Video.Start();

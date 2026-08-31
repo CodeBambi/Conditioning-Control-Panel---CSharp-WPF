@@ -618,6 +618,10 @@ public class EmiKnockLinesFileTests
     /// NO SCRIPTED MOMENT SPRAWL. The bypass is narrow on purpose: it exists for the knock's one
     /// offer and it is not a general "let her ask sooner" switch. If a fourth moment ever wants it,
     /// that is a decision somebody should have to make deliberately, by editing this list.
+    ///
+    /// <para>Wave 3 made that decision once, for <c>noMediaYet</c>: an empty library is the app's
+    /// most common first-run dead end, its ask IS the fix, and a new user who hits it inside the
+    /// ten-minute inter-ask gap would otherwise be shown the problem and never the door.</para>
     /// </summary>
     [Fact]
     public void OnlyTheKnockIsScripted()
@@ -625,7 +629,8 @@ public class EmiKnockLinesFileTests
         var allowed = new HashSet<string>(StringComparer.Ordinal)
         {
             EmiKnockMachine.FreshMoment,
-            EmiKnockMachine.UpgradeMoment
+            EmiKnockMachine.UpgradeMoment,
+            "noMediaYet"
         };
 
         var strays = new List<string>();

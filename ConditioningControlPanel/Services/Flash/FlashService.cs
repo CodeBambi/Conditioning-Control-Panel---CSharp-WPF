@@ -768,6 +768,13 @@ namespace ConditioningControlPanel.Services
                     // if this one landed while a startup modal was up.
                     App.OfferRemoteMediaSource("flashes");
 
+                    // EMI Desk (MOMENTS `noMediaYet`), alongside the offer and not instead of it:
+                    // the dialog is the fix, she is the one who noticed. Her own asks carry the
+                    // same two destinations, and the moment's launch/1 limit is what keeps the
+                    // three sites that can reach this beat (here, the wallpaper, the summon) to
+                    // exactly one line.
+                    try { EmiDesk.EmiOffers.AnnounceEmptyLibrary(); } catch { }
+
                     _isBusy = false;
                     return;
                 }
@@ -1751,6 +1758,17 @@ namespace ConditioningControlPanel.Services
             if (settings.HydraLinkedTiming || hydraGeneration == 0)
             {
                 App.Achievements?.TrackFlashImage();
+
+                // EMI Desk (MOMENTS `firstFlashEver`). Read AFTER the tracker's increment, so "== 1"
+                // is literally the first image this account has ever been shown. The moment also
+                // carries limit ever/1, which is what covers accounts whose counter was already
+                // past 1 before this hook existed - they simply never satisfy the gate.
+                try
+                {
+                    if (App.Achievements?.Progress?.TotalFlashImages == 1)
+                        App.EmiDesk?.Fire("firstFlashEver", null);
+                }
+                catch { }
             }
         }
 
