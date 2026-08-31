@@ -423,10 +423,13 @@ namespace ConditioningControlPanel.Services.Video.Browser
             _failedRaised = false;
             _isHostPaused = req.IsHostPaused;
             _isHostStrict = req.IsHostStrict;
+            // Resolved once per session, not per window: the load posts below run in a loop and the
+            // settings could change between iterations, splitting one clip across two devices.
+            var sinkLabel = BrowserSinkLabel.Resolve();
 
             try
             {
-                _primary = CreateWindow(req, req.PrimaryScreen, primary: true, url);
+                _primary = CreateWindow(req, req.PrimaryScreen, primary: true, url, sinkLabel);
                 if (_primary == null)
                 {
                     App.Logger?.Warning("BrowserVideo: the audio-bearing window on {Screen} could not be created - handing the whole clip to LibVLC",
@@ -437,7 +440,7 @@ namespace ConditioningControlPanel.Services.Video.Browser
 
                 foreach (var scr in req.SecondaryScreens)
                 {
-                    var w = CreateWindow(req, scr, primary: false, url);
+                    var w = CreateWindow(req, scr, primary: false, url, sinkLabel);
                     if (w != null) _windows.Add(w);
                 }
             }
@@ -456,7 +459,7 @@ namespace ConditioningControlPanel.Services.Video.Browser
             return true;
         }
 
-        private BrowserVideoWindow? CreateWindow(BrowserVideoRequest req, Screen screen, bool primary, string url)
+        private BrowserVideoWindow? CreateWindow(BrowserVideoRequest req, Screen screen, bool primary, string url, string? sinkLabel)
         {
             BrowserVideoWindow? win = null;
             try
@@ -495,6 +498,10 @@ namespace ConditioningControlPanel.Services.Video.Browser
                     blurBackground = req.BlurBackground,
                     hideCursor = req.HideCursor,
                     startAtMs = req.StartAtMs,
+                    // Audio-output routing by device label (#938 plumbing). Null = leave the page on
+                    // the Windows default; the page treats every failure the same way and reports it
+                    // back as {type:'sink'}.
+                    sinkLabel = BrowserSinkLabel.ForWindow(primary, sinkLabel),
                 });
 
                 try { req.ConfigureBeforeShow?.Invoke(win, screen, primary); }
@@ -710,6 +717,19 @@ namespace ConditioningControlPanel.Services.Video.Browser
                         var msg = (string?)o["message"] ?? "";
                         App.Logger?.Warning("BrowserVideo: page error {Code}: {Msg}", code, msg);
                         RaiseFailed($"page error {code}: {msg}", blameFile: BlamesFile(code));
+                        break;
+                    }
+                    case "sink":
+                    {
+                        // The page's verdict on the requested audio-output routing (#938 plumbing).
+                        // Exactly one line each way; failure is deliberately only a Warning because
+                        // the fail-safe already happened page-side - audio stayed on the default.
+                        var label = (string?)o["label"] ?? "";
+                        if ((bool?)o["ok"] == true)
+                            App.Logger?.Information("BrowserVideo: audio routed to output device \"{Label}\" via setSinkId", label);
+                        else
+                            App.Logger?.Warning("BrowserVideo: could not route audio to \"{Label}\" ({Detail}) - staying on the Windows default output",
+                                label, (string?)o["detail"] ?? "");
                         break;
                     }
                     case "click":
