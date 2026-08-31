@@ -473,7 +473,7 @@
                 <TextBlock DockPanel.Dock="Right" x:Name="TxtMiniTimelineReadout"
                            Text="0:00 / 0:00"
                            Foreground="{DynamicResource TextMutedBrush}"
-                           FontSize="10" FontFamily="Consolas"
+                           FontSize="10" FontFamily="Consolas, Courier New"
                            VerticalAlignment="Center"/>
             </DockPanel>
             <Border x:Name="MiniTimelineHost"
@@ -515,13 +515,13 @@
                     FontSize="13"/>
             <TextBlock x:Name="TxtCurrent" DockPanel.Dock="Left"
                        Text="0:00" Foreground="{DynamicResource TextLightBrush}"
-                       FontSize="12" FontFamily="Consolas"
+                       FontSize="12" FontFamily="Consolas, Courier New"
                        VerticalAlignment="Center" Margin="14,0,4,0"/>
             <TextBlock DockPanel.Dock="Left" Text="/" Foreground="{DynamicResource TextDimBrush}"
                        FontSize="12" VerticalAlignment="Center"/>
             <TextBlock x:Name="TxtTotal" DockPanel.Dock="Left"
                        Text="0:00" Foreground="{DynamicResource TextMutedBrush}"
-                       FontSize="12" FontFamily="Consolas"
+                       FontSize="12" FontFamily="Consolas, Courier New"
                        VerticalAlignment="Center" Margin="4,0,0,0"/>
 
             <!-- Secondary cluster (right side) — PiP, eye-tracking, volume.
@@ -679,14 +679,14 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="{Binding TimestampDisplay}"
                                                    Foreground="{DynamicResource TextDimBrush}"
-                                                   FontFamily="Consolas" FontSize="9"
+                                                   FontFamily="Consolas, Courier New" FontSize="9"
                                                    VerticalAlignment="Center"/>
                                         <TextBlock Grid.Column="1" Text="{Binding IconGlyph}"
                                                    Foreground="{Binding IconBrush}"
                                                    FontSize="10" VerticalAlignment="Center"/>
                                         <TextBlock Grid.Column="2" TextWrapping="NoWrap"
                                                    TextTrimming="CharacterEllipsis"
-                                                   FontFamily="Consolas" FontSize="10"
+                                                   FontFamily="Consolas, Courier New" FontSize="10"
                                                    VerticalAlignment="Center" Margin="2,0,0,0">
                                             <Run Text="{Binding RuleLabel, Mode=OneWay}"
                                                  Foreground="{Binding RuleLabelBrush}"

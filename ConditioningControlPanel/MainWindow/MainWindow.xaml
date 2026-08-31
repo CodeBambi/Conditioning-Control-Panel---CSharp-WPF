@@ -785,7 +785,7 @@
                                         <Border Margin="4,0,0,0" VerticalAlignment="Center" CornerRadius="6"
                                                 Padding="3,0" Background="#33FF69B4"
                                                 BorderBrush="#FF69B4" BorderThickness="1">
-                                            <TextBlock Text="NEW" FontFamily="Consolas" FontSize="8"
+                                            <TextBlock Text="NEW" FontFamily="Consolas, Courier New" FontSize="8"
                                                        FontWeight="Bold" Foreground="#FF8FC7"/>
                                         </Border>
                                     </StackPanel>
@@ -1212,7 +1212,7 @@
                                             Margin="0,2,2,0" CornerRadius="6"
                                             Padding="3,0" Background="#33FF69B4"
                                             BorderBrush="#FF69B4" BorderThickness="1">
-                                        <TextBlock Text="NEW" FontFamily="Consolas" FontSize="8"
+                                        <TextBlock Text="NEW" FontFamily="Consolas, Courier New" FontSize="8"
                                                    FontWeight="Bold" Foreground="#FF8FC7"/>
                                     </Border>
                                 </Grid>
@@ -1272,7 +1272,7 @@
                                         <Border Margin="4,0,0,0" VerticalAlignment="Center" CornerRadius="6"
                                                 Padding="3,0" Background="#33FF69B4"
                                                 BorderBrush="#FF69B4" BorderThickness="1">
-                                            <TextBlock Text="NEW" FontFamily="Consolas" FontSize="8"
+                                            <TextBlock Text="NEW" FontFamily="Consolas, Courier New" FontSize="8"
                                                        FontWeight="Bold" Foreground="#FF8FC7"/>
                                         </Border>
                                     </StackPanel>
@@ -1295,7 +1295,7 @@
                                         <Border Margin="4,0,0,0" VerticalAlignment="Center" CornerRadius="6"
                                                 Padding="3,0" Background="#33FF69B4"
                                                 BorderBrush="#FF69B4" BorderThickness="1">
-                                            <TextBlock Text="NEW" FontFamily="Consolas" FontSize="8"
+                                            <TextBlock Text="NEW" FontFamily="Consolas, Courier New" FontSize="8"
                                                        FontWeight="Bold" Foreground="#FF8FC7"/>
                                         </Border>
                                     </StackPanel>
@@ -1616,7 +1616,7 @@
                                                    HorizontalAlignment="Center"
                                                    VerticalAlignment="Center"><Run Text="M"/><InlineUIContainer
                                                        BaselineAlignment="Baseline"><TextBlock
-                                                           Text="&#xE713;" FontFamily="Segoe MDL2 Assets"
+                                                           Text="&#xE713;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI"
                                                            FontSize="10" FontWeight="Normal"
                                                            Foreground="{DynamicResource PinkBrush}"
                                                            Margin="0.7,0,0.7,-1"/></InlineUIContainer><Run
@@ -2870,7 +2870,7 @@
                     <TextBlock Text="{loc:Str label_remote_controlled}" Foreground="#00FF88" FontSize="28" FontWeight="Bold"
                                HorizontalAlignment="Center" Margin="0,0,0,8"/>
                     <TextBlock x:Name="TxtOverlaySessionCode" Text="" Foreground="{DynamicResource TextMutedBrush}" FontSize="18"
-                               FontFamily="Consolas" HorizontalAlignment="Center" Margin="0,0,0,16"/>
+                               FontFamily="Consolas, Courier New" HorizontalAlignment="Center" Margin="0,0,0,16"/>
 
                     <TextBlock x:Name="TxtRemoteOverlaySubtitle" Text="{loc:Str label_someone_else_is_controlling_your_app}" Foreground="#A0A0A0" FontSize="14"
                                HorizontalAlignment="Center" Margin="0,0,0,24"/>
@@ -2891,7 +2891,7 @@
                                 <helpers:EmojiTextBlock x:Name="TxtRemoteSessionName" Text="" Foreground="{DynamicResource PinkBrush}" FontSize="20" FontWeight="Bold"
                                                         HorizontalAlignment="Center" Margin="0,0,0,8"/>
                                 <TextBlock x:Name="TxtRemoteSessionTime" Text="" Foreground="#FFFFFF" FontSize="28"
-                                           FontFamily="Consolas" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                                           FontFamily="Consolas, Courier New" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,6"/>
                                 <TextBlock x:Name="TxtRemoteSessionPhase" Text="" Foreground="#A0A0B0" FontSize="13"
                                            HorizontalAlignment="Center"/>
                             </StackPanel>
@@ -3440,7 +3440,7 @@
             Background="#B00A0514" BorderBrush="#40E0B052" BorderThickness="1">
         <StackPanel>
             <TextBlock x:Name="FuseCornerDigits" Text=""
-                       FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="15"
+                       FontFamily="{DynamicResource Font.Mono}" FontSize="15"
                        Foreground="#FFC9C4D6" HorizontalAlignment="Center"/>
             <TextBlock x:Name="FuseCornerPresence" Text="" Visibility="Collapsed"
                        FontSize="10" Margin="0,3,0,0" Foreground="#8AC9C4D6"

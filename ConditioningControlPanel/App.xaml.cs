@@ -1541,6 +1541,13 @@ namespace ConditioningControlPanel
             // ships them all (the last 120KB), burying the real failure and polluting triage.
             RotateCrashLogForVersion(logPath);
 
+            // Prove the font families we hardcode can actually be opened, BEFORE any window is
+            // built. A face that is present but corrupt throws from inside the layout pass, so it
+            // re-throws on every measure: the UI renders blank forever and crash.log grows without
+            // bound (a broken Cascadia install did exactly this in v6.8.6). The probe strikes any
+            // unreadable family out of the app's font chains and logs one line. See FontGuard.
+            Services.UI.FontGuard.Verify();
+
             // Before a single service starts: prove the bundled natives actually unpacked. A
             // truncated single-file extraction cache is never repaired by the .NET host on its
             // own, so it bricks every subsequent launch - and it surfaces as a XamlParseException
@@ -4300,8 +4307,48 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Per-signature write budget for <see cref="LogCrashDetails"/>. Counts THIS session only;
+        /// <see cref="RotateCrashLogForVersion"/> handles growth across sessions.
+        /// </summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _crashSignatureCounts = new();
+        private const int MaxReportsPerCrashSignature = 5;
+
+        /// <summary>
+        /// Collapse an exception to a stable identity: source + type + message + the top stack
+        /// frame. A layout-loop failure re-throws with the identical quadruple every pass, which is
+        /// exactly the storm we want to fold; two genuinely different bugs practically never share
+        /// all four.
+        /// </summary>
+        private static string CrashSignature(string source, Exception ex)
+        {
+            var topFrame = "";
+            try
+            {
+                var trace = ex.StackTrace;
+                if (!string.IsNullOrEmpty(trace))
+                {
+                    var newline = trace.IndexOf('\n');
+                    topFrame = (newline >= 0 ? trace.Substring(0, newline) : trace).Trim();
+                }
+            }
+            catch { }
+            return source + "|" + ex.GetType().FullName + "|" + ex.Message + "|" + topFrame;
+        }
+
+        /// <summary>
         /// Log detailed crash information to both main log and a dedicated crash log file.
         /// This helps debug random crashes by capturing full context.
+        ///
+        /// <para><b>Rate limited per signature.</b> Some exceptions fire from the layout loop, which
+        /// runs on every measure pass — so one broken thing throws thousands of times a minute and
+        /// each throw used to append a ~1KB report. A user with a corrupt Cascadia install
+        /// (<c>UnauthorizedAccessException</c> out of <c>FontFamily.GetFirstMatchingFont</c> during
+        /// <c>TextBlock.MeasureOverride</c>, v6.8.6) grew crash.log to roughly half a gigabyte in a
+        /// single session, which no bug report can carry and no triage can read. The startup
+        /// rotation above cannot help: it only runs at launch, and the storm is intra-session. So we
+        /// write the first <see cref="MaxReportsPerCrashSignature"/> occurrences of any one
+        /// signature in full, then one "suppressed" line, then nothing. The Serilog line is capped
+        /// the same way — the storm floods app-.log too.</para>
         /// </summary>
         private static void LogCrashDetails(string source, Exception? ex)
         {
@@ -4309,6 +4356,29 @@ namespace ConditioningControlPanel
 
             try
             {
+                var signature = CrashSignature(source, ex);
+                var seen = _crashSignatureCounts.AddOrUpdate(signature, 1, (_, n) => n + 1);
+                if (seen > MaxReportsPerCrashSignature)
+                {
+                    // Exactly one notice per signature, then silence for the rest of the session.
+                    if (seen == MaxReportsPerCrashSignature + 1)
+                    {
+                        try
+                        {
+                            Logger?.Error("UNHANDLED {Source} EXCEPTION repeated more than {Max} times and is now SUPPRESSED for this session (likely a layout/render loop): {Type}: {Message}",
+                                source, MaxReportsPerCrashSignature, ex.GetType().FullName, ex.Message);
+                        }
+                        catch { }
+                        try
+                        {
+                            File.AppendAllText(Path.Combine(UserDataPath, "logs", "crash.log"),
+                                $"\n[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] The crash above repeated more than {MaxReportsPerCrashSignature} times — further identical reports are suppressed for this session.\n");
+                        }
+                        catch { }
+                    }
+                    return;
+                }
+
                 // Log to main logger
                 Logger?.Error(ex, "UNHANDLED {Source} EXCEPTION: {Message}", source, ex.Message);
 
@@ -4320,6 +4390,7 @@ CRASH REPORT - {DateTime.Now:yyyy-MM-dd HH:mm:ss}
 ================================================================================
 App Version: {Services.UpdateService.AppVersion}
 Source: {source}
+Occurrence: {seen} of at most {MaxReportsPerCrashSignature} logged this session for this signature
 Exception Type: {ex.GetType().FullName}
 Message: {ex.Message}
 

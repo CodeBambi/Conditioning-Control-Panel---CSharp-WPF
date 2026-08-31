@@ -191,7 +191,7 @@
                              Background="#10FFFFFF" BorderBrush="#20FFFFFF" BorderThickness="1"
                              Padding="10,8" CaretBrush="White" TextWrapping="Wrap"
                              AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
-                             Height="160" FontFamily="Consolas">
+                             Height="160" FontFamily="Consolas, Courier New">
                         <TextBox.Resources>
                             <Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style>
                         </TextBox.Resources>
@@ -244,7 +244,7 @@
                             Margin="0,8,0,0" Padding="12,10"
                             Background="#10FFFFFF" BorderBrush="#209B59B6" BorderThickness="1">
                         <TextBlock x:Name="TxtPreviewResult" FontSize="12" Foreground="#A0A0B0"
-                                   TextWrapping="Wrap" FontFamily="Consolas"/>
+                                   TextWrapping="Wrap" FontFamily="Consolas, Courier New"/>
                     </Border>
                 </StackPanel>
             </ScrollViewer>

@@ -29,7 +29,7 @@
 
         <Style x:Key="SectionHdr" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource Pink}"/>
-            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Margin" Value="0,0,0,10"/>
@@ -204,13 +204,13 @@
                         <TextBlock Text="🐇 DOWN THE RABBIT HOLE" Foreground="White" FontSize="22" FontWeight="Bold">
                             <TextBlock.Effect><DropShadowEffect Color="#FFE84393" BlurRadius="20" ShadowDepth="0" Opacity="0.7"/></TextBlock.Effect>
                         </TextBlock>
-                        <TextBlock Text="the dollhouse" Foreground="{StaticResource Pink}" FontFamily="Consolas" FontWeight="Bold" FontSize="12" VerticalAlignment="Bottom" Margin="10,0,0,4"/>
+                        <TextBlock Text="the dollhouse" Foreground="{StaticResource Pink}" FontFamily="Consolas, Courier New" FontWeight="Bold" FontSize="12" VerticalAlignment="Bottom" Margin="10,0,0,4"/>
                     </StackPanel>
                     <!-- rank / drops / gold under the title, left side — the banner art owns the right -->
                     <StackPanel Orientation="Horizontal" Margin="2,10,0,0">
                         <Border Background="{StaticResource Card2}" CornerRadius="9" Padding="12,5" Margin="0,0,8,0">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="RANK" Foreground="{StaticResource TextMut}" FontFamily="Consolas" FontSize="10" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="RANK" Foreground="{StaticResource TextMut}" FontFamily="Consolas, Courier New" FontSize="10" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                 <TextBlock x:Name="TxtRank" Text="Curious" Foreground="White" FontWeight="Bold" FontSize="13" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Border>
@@ -553,7 +553,7 @@
                         <StackPanel>
                             <TextBlock x:Name="HdrDiary" Text="DIARY · what you've met down there · click to pop out ⤢"
                                        Cursor="Hand" MouseLeftButtonDown="Diary_PopOut" Foreground="{StaticResource Pink}"
-                                       FontFamily="Consolas" FontWeight="Bold" FontSize="12" Margin="0,0,0,10"/>
+                                       FontFamily="Consolas, Courier New" FontWeight="Bold" FontSize="12" Margin="0,0,0,10"/>
                             <StackPanel x:Name="DiaryHost"/>
                         </StackPanel>
                     </Border>
@@ -655,7 +655,7 @@
                     <skia:SKElement x:Name="MenuLogoFx" IsHitTestVisible="False"
                                     Width="314" Height="224" HorizontalAlignment="Center"
                                     Margin="0,48,0,0" PaintSurface="MenuLogoFx_PaintSurface"/>
-                    <TextBlock Text="· the dollhouse ·" Foreground="{StaticResource Pink}" FontFamily="Consolas"
+                    <TextBlock Text="· the dollhouse ·" Foreground="{StaticResource Pink}" FontFamily="Consolas, Courier New"
                                FontWeight="Bold" FontSize="12" HorizontalAlignment="Center" Margin="0,2,0,0"/>
                 </StackPanel>
 
@@ -684,7 +684,7 @@
                 <StackPanel Grid.Row="2" Orientation="Horizontal">
                     <Border Background="{StaticResource Card2}" CornerRadius="9" Padding="10,5" Margin="0,0,8,0">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="RANK" Foreground="{StaticResource TextMut}" FontFamily="Consolas" FontSize="10" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="RANK" Foreground="{StaticResource TextMut}" FontFamily="Consolas, Courier New" FontSize="10" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <TextBlock x:Name="MenuRank" Text="Curious" Foreground="White" FontWeight="Bold" FontSize="13" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
@@ -724,7 +724,7 @@
                     </Grid.RowDefinitions>
 
                     <StackPanel Grid.Row="0">
-                        <TextBlock Text="⚙  OPTIONS" Foreground="{StaticResource Pink}" FontFamily="Consolas" FontWeight="Bold" FontSize="28"/>
+                        <TextBlock Text="⚙  OPTIONS" Foreground="{StaticResource Pink}" FontFamily="Consolas, Courier New" FontWeight="Bold" FontSize="28"/>
                         <TextBlock Text="display &amp; comfort — these stick between descents." Foreground="{StaticResource TextMut}" FontSize="13" Margin="2,6,0,0"/>
                     </StackPanel>
 
@@ -748,7 +748,7 @@
 
                         <!-- right: intensity slider -->
                         <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,6,0">
-                            <TextBlock Text="EFFECT INTENSITY" Foreground="{StaticResource TextMut}" FontFamily="Consolas" FontSize="13" FontWeight="Bold" Margin="0,0,0,10"/>
+                            <TextBlock Text="EFFECT INTENSITY" Foreground="{StaticResource TextMut}" FontFamily="Consolas, Courier New" FontSize="13" FontWeight="Bold" Margin="0,0,0,10"/>
                             <Slider Minimum="0.2" Maximum="1.5" Value="{Binding Value, ElementName=SldEffect, Mode=TwoWay}" Height="30"/>
                             <TextBlock Text="lower = gentler bloom &amp; shake." Foreground="{StaticResource TextMut}" FontSize="12" Margin="0,10,0,0"/>
                         </StackPanel>
@@ -795,7 +795,7 @@
                         <!-- title -->
                         <StackPanel Grid.Row="1" Margin="32,18,32,0">
                             <TextBlock x:Name="HowToStep" Text="STEP 1 / 5" Foreground="{StaticResource Pink}"
-                                       FontFamily="Consolas" FontWeight="Bold" FontSize="11" Margin="0,0,0,4"/>
+                                       FontFamily="Consolas, Courier New" FontWeight="Bold" FontSize="11" Margin="0,0,0,4"/>
                             <TextBlock x:Name="HowToTitle" Text="" Foreground="White" FontSize="22" FontWeight="Bold" TextWrapping="Wrap"/>
                         </StackPanel>
 

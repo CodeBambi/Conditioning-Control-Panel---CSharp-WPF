@@ -61,7 +61,7 @@
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <Border Background="{DynamicResource TransparentPink20Brush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
                                         CornerRadius="6" Padding="6,1" Margin="10,0,0,0" VerticalAlignment="Center">
-                                    <TextBlock Text="{loc:Str label_beta_2}" Foreground="{DynamicResource PinkBrush}" FontFamily="Consolas" FontWeight="Bold" FontSize="9.5"/>
+                                    <TextBlock Text="{loc:Str label_beta_2}" Foreground="{DynamicResource PinkBrush}" FontFamily="Consolas, Courier New" FontWeight="Bold" FontSize="9.5"/>
                                 </Border>
                             </StackPanel>
                             <TextBlock Text="A banded descent that reads how you answer - and how long you take - and drafts a personalised session from it."

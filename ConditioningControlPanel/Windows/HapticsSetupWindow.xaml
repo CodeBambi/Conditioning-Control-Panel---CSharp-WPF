@@ -111,7 +111,7 @@
                             <TextBox x:Name="TxtWizardLovenseIp" Background="{DynamicResource DarkerBgBrush}"
                                      Foreground="White" CaretBrush="{DynamicResource PinkBrush}"
                                      BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
-                                     Padding="8,6" FontSize="14" FontFamily="Consolas"/>
+                                     Padding="8,6" FontSize="14" FontFamily="Consolas, Courier New"/>
                             <TextBlock Text="{loc:Str wizard_lovense_ip_hint}" TextWrapping="Wrap"
                                        Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,6,0,0"/>
                             <TextBlock Text="{loc:Str wizard_lovense_wifi_tip}" TextWrapping="Wrap"

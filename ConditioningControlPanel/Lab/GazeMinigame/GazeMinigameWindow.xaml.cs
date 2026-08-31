@@ -278,7 +278,7 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
             {
                 Text = $"{pack.ImageCount} img · {pack.VideoCount} vid",
                 Foreground = new SolidColorBrush(Color.FromRgb(0xAA, 0xAA, 0xAA)),
-                FontFamily = new FontFamily("Consolas"),
+                FontFamily = new FontFamily("Consolas, Courier New"),
                 FontSize = 10,
                 Margin = new Thickness(0, 2, 0, 0),
             });
@@ -1570,14 +1570,14 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
                 {
                     Text = $"#{i + 1,2}",
                     Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88)),
-                    FontFamily = new FontFamily("Consolas"),
+                    FontFamily = new FontFamily("Consolas, Courier New"),
                     Width = 40,
                 });
                 row.Children.Add(new TextBlock
                 {
                     Text = r.Type.ToString(),
                     Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
-                    FontFamily = new FontFamily("Consolas"),
+                    FontFamily = new FontFamily("Consolas, Courier New"),
                     Width = 60,
                 });
                 row.Children.Add(new TextBlock
@@ -1591,7 +1591,7 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
                 {
                     Text = $"correct {r.CorrectMs:F0}ms · wrong {r.WrongMs:F0}ms",
                     Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88)),
-                    FontFamily = new FontFamily("Consolas"),
+                    FontFamily = new FontFamily("Consolas, Courier New"),
                     FontSize = 11,
                 });
                 ResultsList.Children.Add(row);

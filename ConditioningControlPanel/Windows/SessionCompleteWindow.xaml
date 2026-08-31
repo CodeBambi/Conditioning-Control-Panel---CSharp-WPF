@@ -146,7 +146,7 @@
                                                 <TextBlock Grid.Column="0"
                                                            Text="{Binding TimeOffsetText}"
                                                            Foreground="#A0A0B0" FontSize="12"
-                                                           FontFamily="Consolas"
+                                                           FontFamily="Consolas, Courier New"
                                                            VerticalAlignment="Center"/>
                                                 <TextBlock Grid.Column="1"
                                                            Text="{Binding TypeLabel}"

@@ -266,7 +266,7 @@
 
     <!-- ============================ 4. text styles ============================ -->
     <Style x:Key="CmpPageTitleStyle" TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="/Fonts/#Fredoka"/>
+        <Setter Property="FontFamily" Value="/Fonts/#Fredoka, Segoe UI"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="FontSize" Value="27"/>
         <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
@@ -1269,7 +1269,7 @@
         <Setter Property="Padding" Value="13,10,13,10"/>
     </Style>
     <Style x:Key="CmpWireTextStyle" TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Courier New"/>
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Mono}"/>
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="Foreground" Value="#FF8FE3B0"/>
         <Setter Property="TextTrimming" Value="CharacterEllipsis"/>

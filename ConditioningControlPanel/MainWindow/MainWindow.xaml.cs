@@ -3051,7 +3051,7 @@ namespace ConditioningControlPanel
             var openBtn = new Button
             {
                 Content = "", // Segoe MDL2 'OpenInNewWindow'
-                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                FontFamily = new FontFamily("Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI"),
                 FontSize = 12,
                 Width = 28,
                 Height = 28,
@@ -3079,7 +3079,7 @@ namespace ConditioningControlPanel
             var removeBtn = new Button
             {
                 Content = "", // Segoe MDL2 'Delete' (trash can)
-                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                FontFamily = new FontFamily("Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI"),
                 FontSize = 13,
                 Width = 28,
                 Height = 28,
@@ -3117,7 +3117,7 @@ namespace ConditioningControlPanel
                 urlBox.BorderBrush = invalid
                     ? new SolidColorBrush(Color.FromRgb(0xFF, 0x8B, 0x5A))            // warning orange
                     : new SolidColorBrush(Color.FromArgb(0x55, 0x80, 0x80, 0x80));    // default
-                openBtn.FontFamily = invalid ? new FontFamily("Segoe UI Symbol") : new FontFamily("Segoe MDL2 Assets");
+                openBtn.FontFamily = invalid ? new FontFamily("Segoe UI Symbol") : new FontFamily("Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI");
                 openBtn.Content = invalid ? "⚠" : "";    // Warning sign U+26A0 : OpenInNewWindow U+E8A7
                 openBtn.Foreground = invalid
                     ? new SolidColorBrush(Color.FromRgb(0xFF, 0x8B, 0x5A))

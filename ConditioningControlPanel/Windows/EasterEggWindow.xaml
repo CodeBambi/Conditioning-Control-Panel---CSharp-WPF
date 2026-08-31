@@ -28,7 +28,7 @@
             <!-- Content -->
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="25,10,25,10">
                 <StackPanel>
-                    <TextBlock TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" LineHeight="20">
+                    <TextBlock TextWrapping="Wrap" FontFamily="Consolas, Courier New" FontSize="12" LineHeight="20">
                         <Run Foreground="{DynamicResource PinkBrush}" FontWeight="Bold">congrats.</Run>
                         <LineBreak/>
                         <Run Foreground="{DynamicResource TextMutedBrush}">Either you were rlly bored, or u r a coder and looked trough the code, either way doesnt rlly matter, had to write a cupple of lines down.</Run>
@@ -64,7 +64,7 @@
                         <Run Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontStyle="Italic">CodeBambi</Run>
                     </TextBlock>
                     <TextBlock x:Name="TxtReaderCount"
-                               FontFamily="Consolas" FontSize="11"
+                               FontFamily="Consolas, Courier New" FontSize="11"
                                Foreground="#FF4444"
                                Margin="0,15,0,5"
                                HorizontalAlignment="Center"

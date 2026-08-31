@@ -154,7 +154,7 @@
             </Style>
             <Style x:Key="PlayZoneTag" TargetType="TextBlock">
                 <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
-                <Setter Property="FontFamily" Value="Consolas"/>
+                <Setter Property="FontFamily" Value="Consolas, Courier New"/>
                 <Setter Property="FontWeight" Value="Bold"/>
                 <Setter Property="FontSize" Value="12"/>
                 <Setter Property="VerticalAlignment" Value="Center"/>
@@ -192,7 +192,7 @@
             </Style>
             <Style x:Key="PlayBadgePillText" TargetType="TextBlock">
                 <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
-                <Setter Property="FontFamily" Value="Consolas"/>
+                <Setter Property="FontFamily" Value="Consolas, Courier New"/>
                 <Setter Property="FontWeight" Value="Bold"/>
                 <Setter Property="FontSize" Value="9.5"/>
             </Style>
@@ -610,12 +610,12 @@
                                          enforced from this card. -->
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,16">
                                         <TextBlock Text="{loc:Str pl6_goon_free_to_join}" Foreground="{DynamicResource TextMutedBrush}"
-                                                   FontFamily="Consolas" FontSize="10.5" VerticalAlignment="Center"/>
+                                                   FontFamily="Consolas, Courier New" FontSize="10.5" VerticalAlignment="Center"/>
                                         <TextBlock x:Name="TxtPlayGoonPerkSend" x:FieldModifier="internal"
-                                                   Text="{loc:Str pl6_goon_perk_send_t1}" FontFamily="Consolas" FontSize="10.5"
+                                                   Text="{loc:Str pl6_goon_perk_send_t1}" FontFamily="Consolas, Courier New" FontSize="10.5"
                                                    Foreground="{StaticResource PlayLockT1Brush}" Margin="8,0,0,0" VerticalAlignment="Center"/>
                                         <TextBlock x:Name="TxtPlayGoonPerkHost" x:FieldModifier="internal"
-                                                   Text="{loc:Str pl6_goon_perk_host_t2}" FontFamily="Consolas" FontSize="10.5"
+                                                   Text="{loc:Str pl6_goon_perk_host_t2}" FontFamily="Consolas, Courier New" FontSize="10.5"
                                                    Foreground="{StaticResource PlayLockT2Brush}" Margin="8,0,0,0" VerticalAlignment="Center"/>
                                     </StackPanel>
 
@@ -745,7 +745,7 @@
                                 <TextBlock Text="{loc:Str set2_webcam_chip_label}" Foreground="{DynamicResource TextLightBrush}"
                                            FontWeight="Bold" FontSize="14"/>
                                 <TextBlock x:Name="TxtWebcamStatusChipPlay" x:FieldModifier="internal" Text="{loc:Str rf_webcam_stopped}"
-                                           Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas" FontSize="11"/>
+                                           Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas, Courier New" FontSize="11"/>
                             </StackPanel>
                             <Button Grid.Column="2" Content="{loc:Str set2_configure_in_settings}"
                                     Padding="12,6" VerticalAlignment="Center" Cursor="Hand"
@@ -818,7 +818,7 @@
                                                 Style="{StaticResource PlayStatusPill}" Margin="0,12,0,0">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                 <Ellipse Width="7" Height="7" Fill="{DynamicResource TextMutedBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                                <TextBlock Text="Start tracking to play" Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas" FontSize="11" VerticalAlignment="Center"/>
+                                                <TextBlock Text="Start tracking to play" Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas, Courier New" FontSize="11" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </Border>
                                     </StackPanel>
@@ -894,7 +894,7 @@
                                                 Style="{StaticResource PlayStatusPill}" Margin="0,12,0,0">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                 <Ellipse Width="7" Height="7" Fill="{DynamicResource TextMutedBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                                <TextBlock Text="Start tracking to enable" Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas" FontSize="11" VerticalAlignment="Center"/>
+                                                <TextBlock Text="Start tracking to enable" Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas, Courier New" FontSize="11" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </Border>
                                     </StackPanel>
@@ -1045,7 +1045,7 @@
                                              Premium sees nothing here at all - patrons must never learn
                                              the free weekly pass exists. -->
                                         <TextBlock x:Name="TxtPlayIntakeState" x:FieldModifier="internal" Text=""
-                                                   Foreground="{DynamicResource PinkBrush}" FontFamily="Consolas" FontSize="11"
+                                                   Foreground="{DynamicResource PinkBrush}" FontFamily="Consolas, Courier New" FontSize="11"
                                                    TextWrapping="Wrap" Margin="0,0,0,12" Visibility="Collapsed"/>
                                         <StackPanel Orientation="Horizontal">
                                             <!-- Every state navigates. A Spent user has to be able to

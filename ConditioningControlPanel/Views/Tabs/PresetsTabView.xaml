@@ -51,7 +51,7 @@
              not draw a box around content that is already in a panel. -->
         <Style x:Key="SdZoneTag" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
-            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="FontSize" Value="11.5"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
@@ -64,7 +64,7 @@
         </Style>
         <Style x:Key="SdZoneHint" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
-            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
             <Setter Property="FontSize" Value="10.5"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Margin" Value="0,0,10,0"/>
@@ -146,7 +146,7 @@
              jittering with the proportional widths of 5 / 45 / 120. -->
         <Style x:Key="SdRackMeta" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
-            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="TextAlignment" Value="Right"/>
@@ -182,7 +182,7 @@
         <!-- The provenance chip: BUILT-IN / YOURS / CAT. Consolas and uppercase because on this
              page mono means "structural label", never content. -->
         <Style x:Key="SdRackBadgeText" TargetType="TextBlock" BasedOn="{StaticResource SdPillText}">
-            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
             <Setter Property="FontSize" Value="9"/>
         </Style>
 
@@ -479,7 +479,7 @@
         </Style>
         <Style x:Key="SdTakeawayChipMeta" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
-            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
             <Setter Property="FontSize" Value="9.5"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Margin" Value="8,0,0,0"/>
@@ -539,7 +539,7 @@
              same reason SdRackMeta is mono on a rack row. -->
         <Style x:Key="SdTakeawayRowMeta" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
-            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
             <Setter Property="FontSize" Value="10.5"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="TextAlignment" Value="Right"/>
@@ -562,7 +562,7 @@
         </Style>
         <Style x:Key="SdMedLabel" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
-            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
             <Setter Property="FontSize" Value="9.5"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
         </Style>
@@ -724,7 +724,7 @@
                                                VerticalAlignment="Center" Margin="0,0,6,0"
                                                Foreground="{DynamicResource PinkBrush}"/>
                                     <TextBlock Text="{loc:Str label_new}" FontSize="10" FontWeight="Bold"
-                                               FontFamily="Consolas" VerticalAlignment="Center"
+                                               FontFamily="Consolas, Courier New" VerticalAlignment="Center"
                                                Foreground="{DynamicResource PinkBrush}"/>
                                 </StackPanel>
                             </Border>
@@ -949,7 +949,7 @@
                                  it is the drag-drop system's only feedback surface, so it moved
                                  here rather than being dropped with the banner. -->
                             <TextBlock DockPanel.Dock="Right" x:Name="DropZoneStatus" x:FieldModifier="internal" Text=""
-                                       FontSize="11" FontFamily="Consolas" VerticalAlignment="Center"
+                                       FontSize="11" FontFamily="Consolas, Courier New" VerticalAlignment="Center"
                                        MaxWidth="240" Margin="10,0,10,0" TextTrimming="CharacterEllipsis"
                                        Foreground="{DynamicResource PinkBrush}" Visibility="Collapsed"/>
 
@@ -1250,7 +1250,7 @@
                                         Background="{DynamicResource SurfaceBgBrush}"
                                         BorderThickness="1" BorderBrush="{DynamicResource DangerBrush}">
                                     <TextBlock Text="{loc:Str label_spoilers_below}" Foreground="{DynamicResource DangerBrush}"
-                                               FontFamily="Consolas" FontSize="11.5"
+                                               FontFamily="Consolas, Courier New" FontSize="11.5"
                                                FontWeight="Bold" HorizontalAlignment="Center"/>
                                 </Border>
 

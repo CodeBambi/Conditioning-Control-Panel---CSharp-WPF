@@ -85,7 +85,7 @@
                            VerticalAlignment="Center" Margin="0,0,16,0"/>
                 <TextBlock x:Name="TxtCoords" DockPanel.Dock="Left"
                            Foreground="{DynamicResource DeeperAccentSoftBrush}" FontSize="11"
-                           FontFamily="Consolas" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                           FontFamily="Consolas, Courier New" VerticalAlignment="Center" Margin="0,0,16,0"/>
                 <Button DockPanel.Dock="Right" Content="{loc:Str deeper_editor_gaze_pick_done}"
                         Click="BtnDone_Click" Margin="8,0,0,0"
                         Padding="14,6" Cursor="Hand" FontSize="11" FontWeight="SemiBold"

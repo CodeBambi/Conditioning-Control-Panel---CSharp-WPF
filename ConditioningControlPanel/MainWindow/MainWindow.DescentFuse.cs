@@ -255,7 +255,7 @@ namespace ConditioningControlPanel
                 Text = DescentFuseCopy.TMinus(App.DescentCountdown?.Remaining ?? TimeSpan.Zero),
                 // Cascadia first, Consolas behind it: the digits must not reflow as they count
                 // down, and a proportional fallback would jitter the whole readout every second.
-                FontFamily = new FontFamily("Cascadia Mono, Consolas, Courier New"),
+                FontFamily = Services.UI.FontGuard.Mono,
                 FontSize = 14,
                 Foreground = FuseNeutralDigits,
             };

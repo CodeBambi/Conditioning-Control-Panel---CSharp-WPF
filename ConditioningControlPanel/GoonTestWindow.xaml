@@ -95,7 +95,7 @@
             <Setter Property="Foreground" Value="{StaticResource GgText}" />
             <Setter Property="Background" Value="{StaticResource GgPanelDeep}" />
             <Setter Property="BorderBrush" Value="#FF3A3A68" />
-            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontFamily" Value="Consolas, Courier New" />
             <Setter Property="FontSize" Value="11" />
         </Style>
 

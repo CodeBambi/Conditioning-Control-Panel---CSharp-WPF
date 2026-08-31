@@ -2298,7 +2298,7 @@
             <Canvas x:Name="MarqueeCanvas" x:FieldModifier="internal" ClipToBounds="True">
                 <TextBlock x:Name="MarqueeText" x:FieldModifier="internal"
                            Text="{loc:Str label_v5_2_1_is_out_thanks_to_all_the_100_patreons}"
-                           FontFamily="Impact" FontSize="28" FontWeight="Bold"
+                           FontFamily="Impact, Arial Black, Segoe UI" FontSize="28" FontWeight="Bold"
                            Foreground="{DynamicResource PinkBrush}" Canvas.Top="8">
                     <TextBlock.Effect>
                         <DropShadowEffect Color="{DynamicResource DarkPink}" BlurRadius="8" ShadowDepth="0" Opacity="0.8"/>

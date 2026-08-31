@@ -62,7 +62,7 @@
                 <TextBlock Text="{loc:Str bug_report_metadata_label}" Style="{StaticResource FormLabel}"/>
                 <Border Background="#14142A" BorderBrush="#3D3D60" BorderThickness="1" CornerRadius="4" Padding="10,8">
                     <TextBlock x:Name="TxtMetadataSummary" Foreground="#B0B0C8" FontSize="11"
-                               FontFamily="Consolas" TextWrapping="Wrap"/>
+                               FontFamily="Consolas, Courier New" TextWrapping="Wrap"/>
                 </Border>
 
                 <CheckBox x:Name="ChkIncludeAppLog"
@@ -78,7 +78,7 @@
                 <Border Background="#0A0A18" BorderBrush="#3D3D60" BorderThickness="1" CornerRadius="4">
                     <TextBox x:Name="TxtPreview" IsReadOnly="True" TextWrapping="NoWrap"
                              Background="Transparent" Foreground="#B0B0C8" BorderThickness="0"
-                             FontFamily="Consolas" FontSize="11"
+                             FontFamily="Consolas, Courier New" FontSize="11"
                              Height="260"
                              VerticalScrollBarVisibility="Auto"
                              HorizontalScrollBarVisibility="Auto"/>
@@ -130,7 +130,7 @@
                                  IsReadOnly="True" IsReadOnlyCaretVisible="True"
                                  Background="#0A0A18" Foreground="#FFFFFF"
                                  BorderBrush="#3D3D60" BorderThickness="1"
-                                 FontFamily="Consolas" FontSize="16" FontWeight="Bold"
+                                 FontFamily="Consolas, Courier New" FontSize="16" FontWeight="Bold"
                                  Padding="10,8" VerticalContentAlignment="Center"
                                  TextWrapping="NoWrap" AcceptsReturn="False"/>
                         <Button x:Name="BtnCopyToken" Grid.Column="1"

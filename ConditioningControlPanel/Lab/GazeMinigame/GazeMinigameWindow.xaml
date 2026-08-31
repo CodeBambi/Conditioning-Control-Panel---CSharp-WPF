@@ -202,7 +202,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Text="Image count" Foreground="#CCCCCC" FontSize="12"/>
                                         <TextBlock Grid.Column="1" x:Name="TxtImageCountVal" Text="8"
-                                                   Foreground="#FF69B4" FontFamily="Consolas" FontSize="12"/>
+                                                   Foreground="#FF69B4" FontFamily="Consolas, Courier New" FontSize="12"/>
                                     </Grid>
                                     <Slider x:Name="SliderImageCount" Minimum="0" Maximum="20" Value="8"
                                             TickFrequency="1" IsSnapToTickEnabled="True"
@@ -215,7 +215,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Text="Video count" Foreground="#CCCCCC" FontSize="12"/>
                                         <TextBlock Grid.Column="1" x:Name="TxtVideoCountVal" Text="2"
-                                                   Foreground="#FF69B4" FontFamily="Consolas" FontSize="12"/>
+                                                   Foreground="#FF69B4" FontFamily="Consolas, Courier New" FontSize="12"/>
                                     </Grid>
                                     <Slider x:Name="SliderVideoCount" Minimum="0" Maximum="10" Value="2"
                                             TickFrequency="1" IsSnapToTickEnabled="True"
@@ -228,7 +228,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Text="Image duration (sec)" Foreground="#CCCCCC" FontSize="12"/>
                                         <TextBlock Grid.Column="1" x:Name="TxtImageDurVal" Text="5"
-                                                   Foreground="#FF69B4" FontFamily="Consolas" FontSize="12"/>
+                                                   Foreground="#FF69B4" FontFamily="Consolas, Courier New" FontSize="12"/>
                                     </Grid>
                                     <Slider x:Name="SliderImageDur" Minimum="2" Maximum="10" Value="5"
                                             TickFrequency="1" IsSnapToTickEnabled="True"
@@ -241,7 +241,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Text="Video max duration (sec)" Foreground="#CCCCCC" FontSize="12"/>
                                         <TextBlock Grid.Column="1" x:Name="TxtVideoDurVal" Text="30"
-                                                   Foreground="#FF69B4" FontFamily="Consolas" FontSize="12"/>
+                                                   Foreground="#FF69B4" FontFamily="Consolas, Courier New" FontSize="12"/>
                                     </Grid>
                                     <Slider x:Name="SliderVideoDur" Minimum="10" Maximum="120" Value="30"
                                             TickFrequency="5" IsSnapToTickEnabled="True"
@@ -254,7 +254,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Text="Pass time (sec)" Foreground="#CCCCCC" FontSize="12"/>
                                         <TextBlock Grid.Column="1" x:Name="TxtPassTimeVal" Text="3"
-                                                   Foreground="#FF69B4" FontFamily="Consolas" FontSize="12"/>
+                                                   Foreground="#FF69B4" FontFamily="Consolas, Courier New" FontSize="12"/>
                                     </Grid>
                                     <Slider x:Name="SliderPassTime" Minimum="3" Maximum="30" Value="3"
                                             TickFrequency="1" IsSnapToTickEnabled="True"
@@ -379,7 +379,7 @@
             <Border Background="#88000000" CornerRadius="4" Padding="10,4"
                     HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,12,0,0">
                 <TextBlock x:Name="TxtRoundInfo" Text="Round 1 / 10"
-                           Foreground="White" FontFamily="Consolas" FontSize="13"/>
+                           Foreground="White" FontFamily="Consolas, Courier New" FontSize="13"/>
             </Border>
 
             <!-- Inter-round feedback card. Shown ONLY after panes are cleared

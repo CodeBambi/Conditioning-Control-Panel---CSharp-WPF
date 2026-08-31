@@ -93,7 +93,7 @@
             <TextBlock x:Name="TxtStatus" Text="Look at the pink dot. Press ESC to cancel."
                        Foreground="{DynamicResource TextMutedBrush}" FontSize="14" Margin="0,8,0,0" HorizontalAlignment="Center"/>
             <TextBlock x:Name="TxtProgress" Text="" Foreground="#FF69B4" FontSize="13"
-                       Margin="0,4,0,0" HorizontalAlignment="Center" FontFamily="Consolas"/>
+                       Margin="0,4,0,0" HorizontalAlignment="Center" FontFamily="Consolas, Courier New"/>
         </StackPanel>
 
         <Border x:Name="IntroPanel" Visibility="Collapsed"
@@ -172,7 +172,7 @@
                 <TextBlock x:Name="TxtValidationDetail" Text="" Foreground="{DynamicResource TextMutedBrush}"
                            FontSize="16" HorizontalAlignment="Center" Margin="0,12,0,0"/>
                 <TextBlock x:Name="TxtValidationAttempt" Text="" Foreground="#FF69B4"
-                           FontSize="13" FontFamily="Consolas" HorizontalAlignment="Center"
+                           FontSize="13" FontFamily="Consolas, Courier New" HorizontalAlignment="Center"
                            Margin="0,16,0,0"/>
             </StackPanel>
         </Grid>

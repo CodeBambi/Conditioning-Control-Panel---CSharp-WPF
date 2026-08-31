@@ -169,7 +169,7 @@ public sealed class EmiFace : FrameworkElement
             var hit = FindFontDir("NotoSansMono");
             if (hit != null)
             {
-                var ff = new FontFamily(hit.Value.BaseUri, "./#Noto Sans Mono, " + FallbackChain);
+                var ff = new FontFamily(hit.Value.BaseUri, "./#Noto Sans Mono, " + Services.UI.FontGuard.Sanitize(FallbackChain));
                 if (!_fontLogged)
                 {
                     _fontLogged = true;
@@ -188,7 +188,7 @@ public sealed class EmiFace : FrameworkElement
             _fontLogged = true;
             Log.Information("[EmiDesk] face font: system chain (no ttf/otf in the font folders)");
         }
-        return new FontFamily(FallbackChain);
+        return Services.UI.FontGuard.Family(FallbackChain);
     }
 
     // ---------------------------------------------------------------- the pixel font
@@ -229,7 +229,7 @@ public sealed class EmiFace : FrameworkElement
             var hit = FindFontDir("PressStart2P");
             if (hit != null)
             {
-                var ff = new FontFamily(hit.Value.BaseUri, "./#Press Start 2P, " + PixelFallbackChain);
+                var ff = new FontFamily(hit.Value.BaseUri, "./#Press Start 2P, " + Services.UI.FontGuard.Sanitize(PixelFallbackChain));
                 if (!_pixelLogged)
                 {
                     _pixelLogged = true;
@@ -248,7 +248,7 @@ public sealed class EmiFace : FrameworkElement
             _pixelLogged = true;
             Log.Information("[EmiDesk] pixel font: system chain (no PressStart2P ttf shipped)");
         }
-        return new FontFamily(PixelFallbackChain);
+        return Services.UI.FontGuard.Family(PixelFallbackChain);
     }
 
     /// <summary>

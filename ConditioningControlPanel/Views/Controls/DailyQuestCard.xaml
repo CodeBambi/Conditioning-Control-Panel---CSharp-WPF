@@ -117,7 +117,7 @@
                                                     FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtXpBonus" Text="" Foreground="#FFB347"
                                        FontSize="10" FontWeight="Bold" Margin="4,0,0,0"
-                                       VerticalAlignment="Center" FontFamily="Segoe UI Emoji"
+                                       VerticalAlignment="Center" FontFamily="Segoe UI Emoji, Segoe UI Symbol, Segoe UI"
                                        Visibility="Collapsed"/>
                         </StackPanel>
                     </Border>
