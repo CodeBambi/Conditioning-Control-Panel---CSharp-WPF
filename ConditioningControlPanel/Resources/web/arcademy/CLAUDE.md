@@ -1195,6 +1195,21 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
   the same `assets {reqId, urls:[{url,kind,mime,tag,src}], done}` mailbox, keyed by reqId
   (`src` = `r/<sub>` | `<folder rel path>` | `preset:<id>`). The host contract is unchanged:
   ask again after every reply, MAX_ASKS **per tag** 8, RETRY_MS 1500, batch cap 24.
+- **AN ANIMATED `.webp` IS A LOOP, AND ONLY THE DESKTOP HOST CAN SAY SO** (ccp-bugs#1086). A webp
+  animates because of a flag in its VP8X container header, never because of its name, so the page
+  cannot tell one from a still and used to class every one of them `still`. That put them outside
+  every motion budget on the page - Lost & Found's live window (`liveCap`, board.js §4), its frame
+  governor's shed, and the same `/\.gif(\?|#|$)/` test in anomaly / deja-vu / instant-recall - and
+  a library of them dealt ONE main-thread decoder per seat instead of ~30. The wall fell to about
+  a frame a second, the row drifted under the pointer, and a click on the right tile scored a miss.
+  `ArcademyHostService` now header-probes a **sampled** local webp (never a whole library walk) and
+  stamps `#.gif` on its `ccp.assets` url (`AnimatedImageHint`), the same fragment-hint lane
+  `provider/index.js hintedPileUrl()` uses to give an extension-less `blob:` row a kind. The URL
+  Standard drops the fragment before the fetch, so the identical bytes load; `inventory.js`
+  `hintExtOf()` lets `kindOf()` read it ahead of the extension, and the rows the host builds carry
+  `kind:"loop"` to match. `.webp` therefore sits in **both** `LocalLoopExts` and `LocalStillExts` -
+  the probe, not the extension, decides which ask it answers. An **unhinted** webp is still a
+  still, which stays the only honest answer on the web port, where no host holds the file.
 - **THE DOOR'S OTHER FOUR VERBS** hang off the same object and are how SORT's setup screen
   draws itself: `catalog()` (the sanitized `init.settings` projection - `remoteCatalog`
   `[{id,label,subs}]`, `subLibrary` `[{name,ok,videoCount,stillOnly,selected}]`, `localFolders`

@@ -78,10 +78,33 @@ export function toAssetUrl(entry) {
   return ASSET_HOST + clean.split('/').map(encodeURIComponent).join('/');
 }
 
+/**
+ * A trailing `#.<ext>` FRAGMENT HINT, if the url carries one.
+ *
+ * The convention is already load-bearing here: `provider/index.js hintedPileUrl()` stamps
+ * `#.mp4` on an extension-less `blob:` pile row so the games' `<video>`-vs-`<img>` regexes can
+ * read its kind. The desktop host uses the same lane for a fact only IT can know - a `.webp`
+ * whose VP8X container flag says it ANIMATES (ccp-bugs#1086, ArcademyHostService
+ * AnimatedImageHint). The URL Standard drops the fragment before the fetch, so a hinted url
+ * loads the identical bytes.
+ *
+ * A hint is a HINT, never an origin claim: it can only say which pool an url belongs in, and
+ * `isLocalUrl` still decides local-vs-remote off the origin alone (see the header, rule 1).
+ */
+export function hintExtOf(url) {
+  const m = /#\.([a-z0-9]{1,5})$/i.exec(String(url || ''));
+  return m ? m[1].toLowerCase() : '';
+}
+
 /** Which pool kind an url belongs to. 'loop' = animated/video, 'still' = image. */
 export function kindOf(entry) {
   if (entry && typeof entry === 'object' && (entry.kind === 'loop' || entry.kind === 'still')) return entry.kind;
-  const ext = extOf(typeof entry === 'string' ? entry : (entry && (entry.url || entry.path)) || '');
+  const raw = typeof entry === 'string' ? entry : (entry && (entry.url || entry.path)) || '';
+  // The hint outranks the extension because it is the more specific fact: `a.webp` is a guess,
+  // `a.webp#.gif` is the host reporting a header it actually read.
+  const ext = hintExtOf(raw) || extOf(raw);
+  // `webp` sits in LOOP_EXTS but is excluded here: the NAME cannot tell an animated webp from a
+  // still one, so an unhinted webp is a still. A hinted one arrives as 'gif' above.
   if (LOOP_EXTS.includes(ext) && ext !== 'webp') return 'loop';
   if (ext === 'gif') return 'loop';
   return IMAGE_EXTS.includes(ext) ? 'still' : 'still';
@@ -131,4 +154,4 @@ export function wantRemote(ratio, rand, haveRemote, canvasSafe) {
   return rand < Math.min(1, r);
 }
 
-export default { buildLocalPools, isLocalUrl, isOwnPageUrl, formatOk, kindOf, toAssetUrl, wantRemote };
+export default { buildLocalPools, isLocalUrl, isOwnPageUrl, formatOk, hintExtOf, kindOf, toAssetUrl, wantRemote };

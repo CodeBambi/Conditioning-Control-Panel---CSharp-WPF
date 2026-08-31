@@ -1509,12 +1509,59 @@ internal static class ArcademyHostService
             return pool.GetRange(0, Math.Min(take, pool.Count));
         }
 
+        // An ANIMATED webp is a loop wearing a still's extension (ccp-bugs#1086): it is sampled
+        // out of `stills` above and moved over here, so the page's budgets meet it as what it
+        // costs. Only the SAMPLED files are probed - a header read per file across a whole
+        // library is exactly the boot cost this manifest exists to avoid.
+        var gifUrls = Sample(gifs, rng, LocalAssetSample).Select(ToAssetsUrl).ToList();
+        var stillUrls = new List<string>();
+        foreach (var file in Sample(stills, rng, LocalAssetSample))
+        {
+            // The hint travels with the URL, not with the bucket: provider/index.js
+            // resolveManifest() FLATTENS gifs+stills into one list and re-derives every entry's
+            // kind from its url, so a bucket move on its own would be silently undone.
+            if (IsAnimatedLocalImage(file)) gifUrls.Add(ToAssetsUrl(file) + AnimatedImageHint);
+            else stillUrls.Add(ToAssetsUrl(file));
+        }
+
         return new JObject
         {
-            ["gifs"] = new JArray(Sample(gifs, rng, LocalAssetSample).Select(ToAssetsUrl).Cast<object>().ToArray()),
-            ["stills"] = new JArray(Sample(stills, rng, LocalAssetSample).Select(ToAssetsUrl).Cast<object>().ToArray()),
+            ["gifs"] = new JArray(gifUrls.Cast<object>().ToArray()),
+            ["stills"] = new JArray(stillUrls.Cast<object>().ToArray()),
         };
     }
+
+    /// <summary>
+    /// THE ANIMATED-WEBP HINT (ccp-bugs#1086). Appended to a <c>ccp.assets</c> url whose file the
+    /// header probe says ANIMATES, and read by every page-side budget that decides "does this url
+    /// cost a decoder and an animation clock" with <c>/\.gif(\?|#|$)/</c> - Lost &amp; Found's live
+    /// window, its frame governor, and the same test in anomaly / deja-vu / instant-recall.
+    ///
+    /// <para>Why a fragment and not a query: the URL Standard drops the fragment before the fetch,
+    /// so <c>a.webp#.gif</c> loads byte-for-byte the same file out of the virtual-host mapping while
+    /// every one of those regexes reads it. That is not a new convention - it is the one
+    /// <c>provider/index.js hintedPileUrl()</c> already uses to tell an extension-less <c>blob:</c>
+    /// row's kind (<c>#.mp4</c>). The MIME the host puts on the wire stays the true one.</para>
+    ///
+    /// <para>WHY IT IS NEEDED AT ALL: the page cannot answer this question. Animation lives in a
+    /// webp's VP8X container flag, not in its name, so a url alone can only guess - which is why
+    /// the pre-fix code classed every webp as a still and a library of animated ones dealt ~170
+    /// simultaneous main-thread decoders onto one wall (the reported symptom: Lost &amp; Found
+    /// lagging so hard that a click landed on the tile that had drifted into place). Only the
+    /// desktop host has the bytes, so only the desktop host can say.</para>
+    /// </summary>
+    internal const string AnimatedImageHint = "#.gif";
+
+    /// <summary>
+    /// Does this local image ANIMATE despite carrying a still's extension? True only for a
+    /// <c>.webp</c> whose container header sets the animation flag; every other extension already
+    /// tells the truth (a <c>.gif</c> is dealt as a loop by name, a <c>.png</c>/<c>.jpg</c> cannot
+    /// animate). Cheap - <see cref="AnimatedWebp.IsAnimated"/> is a 21-byte header read - but still
+    /// a file open, so call it on a SAMPLED slice, never over a whole library walk.
+    /// </summary>
+    internal static bool IsAnimatedLocalImage(string file)
+        => Path.GetExtension(file).Equals(".webp", StringComparison.OrdinalIgnoreCase)
+           && AnimatedWebp.IsAnimated(file);
 
     private static string ToAssetsUrl(string file)
     {
@@ -4821,7 +4868,11 @@ internal static class ArcademyHostService
     // deselection blacklist the flash pool honours, and the same ccp.assets urls BuildLocalAssets
     // hands out - a row's src is the folder it really came from.
 
-    private static readonly string[] LocalLoopExts = { ".gif", ".mp4", ".webm" };
+    /// <summary>`.webp` is in BOTH lists on purpose (ccp-bugs#1086): the extension does not say
+    /// which one it belongs to, so it is admitted to either ask and the header probe in
+    /// <see cref="SampleLocalAssets"/> settles it - a still one is dropped from a `loop` ask, an
+    /// animated one is stamped with <see cref="AnimatedImageHint"/> and served as the loop it is.</summary>
+    private static readonly string[] LocalLoopExts = { ".gif", ".mp4", ".webm", ".webp" };
     private static readonly string[] LocalStillExts = { ".png", ".jpg", ".jpeg", ".webp" };
 
     private static async void OnLocalSampleRequest(JObject o)
@@ -4931,22 +4982,37 @@ internal static class ArcademyHostService
         if (pool.Count == 0) return rows;
 
         // Seeded off the reqId so a retake of the same ask deals the same slice; partial
-        // Fisher-Yates, the same random-slice trick BuildLocalAssets uses.
+        // Fisher-Yates, the same random-slice trick BuildLocalAssets uses - except the swap runs
+        // as the slice is CONSUMED, because a .webp only says whether it animates once its header
+        // is read (ccp-bugs#1086) and a `loop` ask may have to walk past a few still ones.
         var rng = new Random(StableSeed(reqId));
-        int take = Math.Min(count, pool.Count);
-        for (int i = 0; i < take; i++)
+        int probed = 0;
+        for (int i = 0; i < pool.Count && rows.Count < count; i++)
         {
             int j = rng.Next(i, pool.Count);
             (pool[i], pool[j]) = (pool[j], pool[i]);
-        }
-        for (int i = 0; i < take; i++)
-        {
+
             var file = pool[i];
-            var url = ToAssetsUrl(file);
-            rows.Add(new AssetUrl(url, kind, MimeFor(url, kind), tag, presetSrc ?? RelativeFolder(root, file)));
+            bool isWebp = Path.GetExtension(file).Equals(".webp", StringComparison.OrdinalIgnoreCase);
+            // Bounded: a library of nothing but STILL webps must not turn one `loop` ask into a
+            // header read per file. Past the budget an unprobed webp reads as "still" - the safe
+            // direction, since the failure this fixes is dealing animation nothing has counted.
+            bool animated = isWebp && probed++ < AnimatedProbeBudget && AnimatedWebp.IsAnimated(file);
+            // A still webp has no business in the loop lane - it is the one candidate here that
+            // was admitted on a maybe (see LocalLoopExts).
+            if (kind == "loop" && isWebp && !animated) continue;
+
+            var rowKind = animated ? "loop" : kind;
+            var url = ToAssetsUrl(file) + (animated ? AnimatedImageHint : "");
+            rows.Add(new AssetUrl(url, rowKind, MimeFor(url, rowKind), tag, presetSrc ?? RelativeFolder(root, file)));
         }
         return rows;
     }
+
+    /// <summary>Header probes one local-sample ask may spend (ccp-bugs#1086). Generous next to the
+    /// 24-row batch cap, so an honest ask never runs short, and small enough that a still-webp
+    /// library cannot turn a `loop` ask into a walk of the whole tree with a file open per entry.</summary>
+    private const int AnimatedProbeBudget = 200;
 
     /// <summary>A page-supplied folder resolved under the assets root, or null when it does not
     /// exist or tries to climb out of it. Never trust a path that arrived over the bridge.</summary>
