@@ -744,6 +744,22 @@ internal sealed class ChaosWebViewHost : IDisposable
         {
             ApplyNativeOwner(false);
             handled = true;   // swallow it: DefWindowProc is what would hide us
+            // The swallow keeps USER32 from hiding the window, but the message may already have
+            // been taken at face value elsewhere in the chain (WPF's own bookkeeping, the
+            // WebView2 wrapper) on its way here. When that happens the WINDOW stays on screen
+            // while CoreWebView2Controller.IsVisible drops underneath it: Chromium stops
+            // producing frames, the page freezes on its last composed frame with document.hidden
+            // stuck true (script and audio run on), and nothing ever flips it back because the
+            // window never gets a real re-show. That stuck state is what the For You ghost
+            // mirrored as a stale intro card (v6.9.0 report; main.js's re-mount in
+            // setClickThrough could only repair the DOM half). Re-sync once the storm passes.
+            try
+            {
+                _window?.Dispatcher.BeginInvoke(
+                    System.Windows.Threading.DispatcherPriority.Background,
+                    new Action(() => KickRenderVisibility("owner-minimize cascade vetoed")));
+            }
+            catch { }
         }
         return IntPtr.Zero;
     }
@@ -761,8 +777,84 @@ internal sealed class ChaosWebViewHost : IDisposable
             var hwnd = new WindowInteropHelper(_window).Handle;
             if (hwnd == IntPtr.Zero || IsWindowVisible(hwnd)) return;
             ShowWindow(hwnd, SW_SHOWNA);
+            // The native re-show does not necessarily reach the WebView2 controller (the hide
+            // may never have reached WPF either) — re-drive the render chain explicitly.
+            try
+            {
+                _window.Dispatcher.BeginInvoke(
+                    System.Windows.Threading.DispatcherPriority.Background,
+                    new Action(() => KickRenderVisibility("cascade hide healed")));
+            }
+            catch { }
         }
         catch (Exception ex) { App.Logger?.Debug("{Tag}.EnsureNativeVisible: {E}", _opts.LogTag, ex.Message); }
+    }
+
+    /// <summary>Re-assert the WebView2 RENDER visibility chain for a window that is supposed to
+    /// be composing — on screen, or parked-but-shown as the For You ghost's source window is.
+    ///
+    /// <para>Why it exists: a vetoed (or healed) owner-minimize cascade can leave the chain out
+    /// of sync. USER32 says the window is visible, WPF says Visible, yet the wrapper has taken
+    /// the WM_SHOWWINDOW hide at face value and dropped <c>CoreWebView2Controller.IsVisible</c>.
+    /// Chromium then stops producing frames: the page freezes on its last composed frame,
+    /// <c>document.hidden</c> sticks true, script and audio keep running — and because the window
+    /// never gets a real re-show, no event ever restores the state. Live signature (v6.9.0 ghost
+    /// report, 2026-08-31 log): the feed window frozen on the intro card from the moment main was
+    /// minimized, remote fetches and XP still ticking behind it, ghost diag healthy
+    /// (visible=true iconic=false cloaked=0).</para>
+    ///
+    /// <para>Two levers, belt and braces. First set the controller's IsVisible directly — the
+    /// WPF control does not expose the controller, so this goes through reflection and is allowed
+    /// to miss on a future SDK. Then bounce the ELEMENT's Visibility through a real
+    /// Hidden→Visible transition so the wrapper itself re-pushes visibility into the controller,
+    /// whichever direction it was stuck in. The bounce is synchronous (no frame is pumped between
+    /// the two sets) and a no-op visually.</para>
+    ///
+    /// <para>Only kicks a window that is meant to be visible: a deliberate <c>Hide()</c> (tray)
+    /// or a genuinely hidden native window is left alone.</para></summary>
+    public void KickRenderVisibility(string reason)
+    {
+        try
+        {
+            if (_disposed || _window == null || _web == null) return;
+            if (!_window.Dispatcher.CheckAccess())
+            {
+                try { _window.Dispatcher.BeginInvoke(new Action(() => KickRenderVisibility(reason))); } catch { }
+                return;
+            }
+            if (_window.Visibility != Visibility.Visible) return;   // hidden on purpose (tray)
+            var hwnd = new WindowInteropHelper(_window).Handle;
+            if (hwnd == IntPtr.Zero || !IsWindowVisible(hwnd)) return; // a real hide is not ours to undo
+
+            bool? controllerWas = null;
+            try
+            {
+                var t = _web.GetType();
+                object? ctrl = t.GetProperty("CoreWebView2Controller",
+                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic
+                        | System.Reflection.BindingFlags.Public)?.GetValue(_web)
+                    ?? t.GetField("_coreWebView2Controller",
+                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.GetValue(_web);
+                if (ctrl is Microsoft.Web.WebView2.Core.CoreWebView2Controller c)
+                {
+                    controllerWas = c.IsVisible;
+                    c.IsVisible = true;
+                }
+            }
+            catch { /* SDK internals moved — the element bounce below still re-drives the wrapper */ }
+
+            bool elementWas = _web.IsVisible;
+            _web.Visibility = Visibility.Hidden;
+            _web.Visibility = Visibility.Visible;
+
+            // Information on purpose: Serilog's floor is Information (App.xaml.cs), and this line
+            // in an activity log is what turns the next frozen-feed report into a diagnosis —
+            // controller=False here is the wedge caught red-handed.
+            App.Logger?.Information(
+                "{Tag}: render visibility kicked ({Reason}; controller={Ctrl}, element={El})",
+                _opts.LogTag, reason, controllerWas?.ToString() ?? "n/a", elementWas);
+        }
+        catch (Exception ex) { App.Logger?.Debug("{Tag}.KickRenderVisibility: {E}", _opts.LogTag, ex.Message); }
     }
 
     /// <summary>Unhook the state listener and clear the native owner before the window closes, so
