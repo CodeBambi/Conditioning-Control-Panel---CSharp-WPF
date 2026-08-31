@@ -164,6 +164,26 @@ namespace ConditioningControlPanel.Controls
             set => SetValue(TierProperty, value);
         }
 
+        /// <summary>
+        /// Per-host ceiling on the badge's rendered width, overriding <see cref="MaxBadgeWidth"/>.
+        /// NaN (the default) means "use the shared ceiling", which is what every card wants.
+        ///
+        /// It exists for a host that overlays the badge on its own text rather than on open art.
+        /// The DTRH hero on the Play tab is the one such surface: its title block is vertically
+        /// centred in a 200px band, so at the full 190px ceiling the sign hangs ~81px down the
+        /// left edge and lands squarely on "DOWN THE RABBIT HOLE" (user report, v6.8.6). Capping
+        /// the width there lifts the whole sign clear instead of hiding either element.
+        /// </summary>
+        public static readonly DependencyProperty MaxWidthOverrideProperty =
+            DependencyProperty.Register(nameof(MaxWidthOverride), typeof(double), typeof(TierBadge),
+                new PropertyMetadata(double.NaN, OnVisualChanged));
+
+        public double MaxWidthOverride
+        {
+            get => (double)GetValue(MaxWidthOverrideProperty);
+            set => SetValue(MaxWidthOverrideProperty, value);
+        }
+
         /// <summary>True on the day this card's feature is the daily free pick: the tier badge
         /// dims and the FREE TODAY stamp lands on top of it.</summary>
         public static readonly DependencyProperty FreeTodayProperty =
@@ -532,9 +552,15 @@ namespace ConditioningControlPanel.Controls
         protected override Size MeasureOverride(Size constraint)
         {
             double available = constraint.Width;
+            double ceiling = MaxWidthOverride;
+            if (double.IsNaN(ceiling) || ceiling <= 0) ceiling = MaxBadgeWidth;
+            // The floor gives way to a tighter ceiling: a host that asked for a smaller sign than
+            // MinBadgeWidth means it, and clamping back up would put the overlap straight back.
+            double floor = Math.Min(MinBadgeWidth, ceiling);
+
             double target = (double.IsInfinity(available) || double.IsNaN(available) || available <= 0)
-                ? FallbackWidth
-                : Math.Clamp(available * WidthFraction, MinBadgeWidth, MaxBadgeWidth);
+                ? Math.Clamp(FallbackWidth, floor, ceiling)
+                : Math.Clamp(available * WidthFraction, floor, ceiling);
 
             if (Math.Abs(target - _appliedWidth) > 0.5)
             {

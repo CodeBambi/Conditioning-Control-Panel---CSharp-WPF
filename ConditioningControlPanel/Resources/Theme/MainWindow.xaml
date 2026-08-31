@@ -6,7 +6,19 @@
         <!-- Note: BoolToVisibility and InverseBoolToVisibility converters are defined in
              Application.Resources (Converters.xaml) to ensure availability in all DataTemplates -->
 
-        <!-- Custom Tooltip Style -->
+        <!-- Custom Tooltip Style.
+             This is the app's ONLY implicit ToolTip style, and it must stay that way: declaring
+             another one directly in Application.Resources shadows this whole style (see the note
+             in App.xaml) and drops every tooltip back to the light Win32 default, which reads as
+             white-on-white wherever the content hardcodes pale text (AwarenessTabView).
+
+             HasDropShadow must stay False. A WPF ToolTip with HasDropShadow=True is hosted in an
+             AllowsTransparency popup; when that popup shows/hides it does a synchronous
+             HwndTarget.OnResize -> MediaContext.CompleteRender() that blocks on the render thread.
+             If the avatar tube (also a layered window) is rendering its emote GIFs at that moment,
+             the two deadlock and the app hangs. (Diagnosed 2026-06-10.) The Border.Effect drop
+             shadow went with it: on a non-transparent popup it has no room to fall outside the
+             tooltip bounds and just smudges the border. -->
         <Style TargetType="ToolTip">
             <Setter Property="Background" Value="{StaticResource DarkerBgBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
@@ -15,17 +27,14 @@
             <Setter Property="Padding" Value="10,6"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Placement" Value="Mouse"/>
-            <Setter Property="HasDropShadow" Value="True"/>
+            <Setter Property="HasDropShadow" Value="False"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToolTip">
-                        <Border Background="{TemplateBinding Background}" 
-                                BorderBrush="{TemplateBinding BorderBrush}" 
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="6" Padding="{TemplateBinding Padding}">
-                            <Border.Effect>
-                                <DropShadowEffect Color="Black" BlurRadius="8" Opacity="0.5" ShadowDepth="2"/>
-                            </Border.Effect>
                             <ContentPresenter/>
                         </Border>
                     </ControlTemplate>

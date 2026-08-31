@@ -399,8 +399,19 @@
                              card: the right side of this band is SlotDtrh's launch column, whose
                              FALL IN button is vertically centred and reaches within ~45px of the
                              top edge, so a right-hand badge would land on it at every hero height.
-                             The left corner is open art at any size (the title block is centred
-                             too), which is why the mirror is here and nowhere else. -->
+                             The left corner is the only open edge, which is why the mirror is here
+                             and nowhere else.
+
+                             MaxWidthOverride, because "the left corner is open art" was only true
+                             of the corner, not of the band below it. Unlike a card - where the
+                             badge hangs off the art plate and the title sits underneath - this
+                             sign shares one cell with SlotDtrh's centred title block. At the
+                             shared 190px ceiling the T2 art (aspect 0.427) came ~81px down the
+                             left edge while the title's own top lands near 53px, so the sign
+                             covered "DOWN THE RABBIT HOLE" (user report, v6.8.6). 112px holds it
+                             to ~48px tall, clearing the title with room to spare, and it stays a
+                             corner stamp rather than a billboard. Raising it puts the collision
+                             back; re-measure the title block first. -->
                         <!-- Named for the same reason as the Remote badge, with one difference:
                              "dtrh" is NOT on the wheel. It is an override-only key (the owner's
                              promo Saturdays), which is exactly why the lockband above already
@@ -408,6 +419,7 @@
                              the band clears and this sign gets the stamp, together. -->
                         <fx:TierBadge x:Name="PlayBadgeDtrh" x:FieldModifier="internal"
                                       Tier="2" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                      MaxWidthOverride="112"
                                       Margin="-2,-2,0,0" Panel.ZIndex="9"/>
 
                         <Grid x:Name="SlotDtrh" x:FieldModifier="internal" Margin="28,24,28,24">

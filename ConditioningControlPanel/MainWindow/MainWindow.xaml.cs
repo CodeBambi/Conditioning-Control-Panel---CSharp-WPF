@@ -779,6 +779,19 @@ namespace ConditioningControlPanel
                 // Also update avatar in case level changed significantly
                 _avatarTubeWindow?.UpdateAvatarForLevel(App.Settings.Current.PlayerLevel);
 
+                // THE VAT'S LATE KEY. Opening the Trainer Card fires exactly one ungated
+                // Descent request (MainWindow.ProfileVat.OnProfileVatVisibilityChanged), but
+                // DescentService.RefreshAsync returns false without a word when UnifiedId or
+                // AuthToken is not populated yet — and auth lands well after startup (the
+                // restore-session path alone sleeps 3s). Nothing then re-poked Descent: the
+                // post-sync hook in ProfileSyncService is gated on HasSeenBlock, which that
+                // silent miss left false, so the jar, its faucet tooltip and the XP readout
+                // all stayed dark until a sign-out/in or the 60s background poll happened to
+                // catch up. Profile-loaded is the app's "server data has landed" signal, so
+                // ask again here. RequestRefresh is fire-and-forget and self-throttling
+                // (MinFetchInterval + in-flight gate), so an already-lit vat costs nothing.
+                App.Descent?.RequestRefresh("profile loaded");
+
                 // Re-arm autonomy after profile load ONLY if the user opted into resume-on-startup
                 // (same gate as App.OnStartup — Takeover otherwise always starts OFF).
                 var s = App.Settings?.Current;
