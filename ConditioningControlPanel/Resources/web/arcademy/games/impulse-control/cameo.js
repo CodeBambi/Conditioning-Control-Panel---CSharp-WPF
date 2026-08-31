@@ -17,7 +17,7 @@
  *                  no slide at all. Pat her and a manila FOLDER slaps down
  *                  over the basin with a polaroid clipped to it: a live loop,
  *                  a live spiral, a burst, or a stapled note. It holds, then
- *                  a wax sheet melts the whole thing away.
+ *                  it fades away.
  *
  * WHAT A CAMEO IS NOT: A PLAN SLOT.  It is dealt BETWEEN plan bubbles, from
  * `nextBubble()`, and the cursor does not move while it runs. It never writes
@@ -40,7 +40,7 @@
  *       pointer-events:auto rules on that layer, and this feature adds none).
  *       The class's own bubble is never moved, resized, hidden or delayed.
  *   III never still   - the ring breathes, the halo cracks, the photo develops,
- *       the wax runs. All of it CSS, so `.suspended` freezes the lot.
+ *       the card fades out. All of it CSS, so `.suspended` freezes the lot.
  *   IV  images over text - one folder tab, one stamp, and the note card's two
  *       lines. Everything else is drawn.
  *   V   seeded        - three append-only streams off `seed|ic-cameo|`:
@@ -68,7 +68,7 @@
  *
  * THE STYLESHEET is style.js's (the class sheet, one document-level
  * singleton). No new image asset ships with this deck: the folder, the
- * polaroid, the halo, the ring and the wax are all gradients and masks.
+ * polaroid, the halo and the ring are all gradients and masks.
  * ==========================================================================*/
 
 import { makeRng } from '../../core/rng.js';
@@ -95,13 +95,13 @@ export const IC_CAMEO = Object.freeze({
   /** Both cards: no pat by then and she squints and goes home. */
   STOWAWAY_WAIT_MS: 4500,
   DOSSIER_WAIT_MS: 4500,
-  /** The photo holds this long before the wax (owner: about 3 s). */
+  /** The photo holds this long before it leaves (owner: about 3 s). */
   DOSSIER_HOLD_MS: 3000,
   /** How long she stays after the shock chain, so she is still there while
-   *  the folder is open. handle.end() cuts it short at the melt. */
+   *  the folder is open. handle.end() cuts it short at the exit. */
   DOSSIER_STAY_MS: 6000,
-  /** Anomaly's number, and the folder's exit rides it. */
-  MELT_MS: 1400,
+  /** The folder's exit: a plain fade, nothing to sit through. */
+  EXIT_MS: 240,
   /** The basin settle after she is home - the plan's own between-bubble beat
    *  (schedule.js GAP_MS), so a cameo hands the tube back on the same rhythm. */
   GAP_MS: 350,
@@ -255,7 +255,7 @@ export function createIcCameo(o) {
   let ring = null;
   let halo = null;
   let folder = null;
-  let melting = null;           // the folder mid-melt: still ours to remove
+  let leaving = null;           // the folder mid-fade: still ours to remove
   let handle = null;            // the live visit handle, or null
   let visiting = null;          // 'stowaway' | 'dossier' | null
   let rafId = 0;
@@ -658,7 +658,7 @@ export function createIcCameo(o) {
     if (kind === 'burst') burstAround();
 
     const holdMs = IC_CAMEO.DOSSIER_HOLD_MS * (jackpot ? 2 : 1);
-    after(holdMs, melt);
+    after(holdMs, dismiss);
   }
 
   /** One polaroid (or the stapled note), clipped to the folder. */
@@ -796,25 +796,23 @@ export function createIcCameo(o) {
     });
   }
 
-  /* --------------------------------------------------------------- THE MELT */
-  function melt() {
+  /* --------------------------------------------------------------- THE EXIT */
+  /** The card goes. It used to MELT - a wax sheet ran down it for 1.4s and
+   *  dripped - and the owner's verdict on 2026-08-31 was "it shows, it's bad,
+   *  remove it". It fades now, and that is the whole ceremony. */
+  function dismiss() {
     if (destroyed || !folder) return;
-    /* the photo stops being alive the moment the wax starts: one cancelled
-       frame loop, and she is sent home in the same breath. */
+    /* the photo stops being alive the moment the card starts leaving: one
+       cancelled frame loop, and she is sent home in the same breath. */
     stopFrames();
     const host = folder;
-    const wax = el('i', 'g-ic-cameo-wax', host);
-    if (wax) {
-      try { if (typeof wax.offsetWidth === 'number') void wax.offsetWidth; } catch (e) { /* noop */ }
-      setCls(wax, 'on', true);
-    }
-    setCls(host, 'melting', true);
-    melting = host;
+    setCls(host, 'leaving', true);
+    leaving = host;
     cue('whoosh', 0.4);
     try { if (handle && typeof handle.end === 'function') handle.end(); }
     catch (e) { /* noop */ }
     folder = null;
-    after(IC_CAMEO.MELT_MS + 120, () => { if (melting === host) melting = null; drop(host); });
+    after(IC_CAMEO.EXIT_MS + 120, () => { if (leaving === host) leaving = null; drop(host); });
   }
 
   /* ------------------------------------------------------------- TEARDOWN */
@@ -830,7 +828,7 @@ export function createIcCameo(o) {
     drop(ring); ring = null;
     drop(halo); halo = null;
     drop(folder); folder = null;
-    drop(melting); melting = null;
+    drop(leaving); leaving = null;
     sweepParting();
   }
 
