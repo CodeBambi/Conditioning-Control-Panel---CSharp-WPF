@@ -170,6 +170,23 @@ namespace ConditioningControlPanel.Services
         // Pure and static so both call sites - and the tests - reach the same answer.
 
         /// <summary>
+        /// Does a session's corner overlay draw a SPIRAL? True when the template names no usable art
+        /// of its own, because <c>SessionEngine.ShowCornerGif</c> then falls back to
+        /// <see cref="ResolveDefaultUriString"/> - the active mod's spiral, or the built-in
+        /// <c>spiral_corner.gif</c>. That is every 28-day program day: no program template sets
+        /// <c>CornerGifPath</c>.
+        ///
+        /// <para>Deliberately the SAME "set and on disk" test the overlay itself runs, so the
+        /// admission rule and the thing about to be drawn can never disagree.</para>
+        /// </summary>
+        internal static bool SessionCornerArtIsSpiral(string? cornerGifPath)
+        {
+            if (string.IsNullOrWhiteSpace(cornerGifPath)) return true;
+            try { return !File.Exists(cornerGifPath); }
+            catch { return true; }
+        }
+
+        /// <summary>
         /// May a SESSION (or a 28-day program day) raise its corner GIF right now?
         ///
         /// <para><paramref name="templateEnabled"/> is the session/program template's own
@@ -179,9 +196,28 @@ namespace ConditioningControlPanel.Services
         /// <paramref name="standaloneOverlayActive"/> is "a standalone corner overlay is already on
         /// screen (or queued)": the user's own app-wide choice wins, and the session does not stack
         /// a second spiral behind it.</para>
+        ///
+        /// <para>The last three answer the follow-up report on the same ticket. A session that draws
+        /// no art of its own draws a SPIRAL (<paramref name="artIsSpiral"/>), and a spiral is not
+        /// just any corner overlay: it is the thing the Spiral card's own master
+        /// (<c>AppSettings.SpiralEnabled</c>, <paramref name="userSpiralAllowed"/>) turns off, and
+        /// the thing already filling the screen when the fullscreen overlay is up
+        /// (<paramref name="spiralOverlayActive"/>). So a user-level spiral OFF vetoes it, and a
+        /// spiral already on screen makes it a second one. Both clauses are scoped to the spiral
+        /// case: a template carrying its own corner art is neither what the user switched off nor a
+        /// duplicate of anything.</para>
         /// </summary>
-        internal static bool AllowSessionCornerGif(bool templateEnabled, bool userAllowed, bool standaloneOverlayActive)
-            => templateEnabled && userAllowed && !standaloneOverlayActive;
+        internal static bool AllowSessionCornerGif(
+            bool templateEnabled,
+            bool userAllowed,
+            bool standaloneOverlayActive,
+            bool artIsSpiral,
+            bool userSpiralAllowed,
+            bool spiralOverlayActive)
+            => templateEnabled
+               && userAllowed
+               && !standaloneOverlayActive
+               && (!artIsSpiral || (userSpiralAllowed && !spiralOverlayActive));
 
         /// <summary>
         /// May a STANDALONE corner-GIF slot realize right now? The mirror of

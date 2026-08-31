@@ -2066,6 +2066,18 @@ public class OverlayService : IDisposable
         _sustainedSpiralHeld = false; // overlay is gone (incl. force-stop / panic) — drop any stale sustained hold
         _spiralWindows.Clear();
         App.Logger?.Debug("Spiral stopped");
+
+        // A running session's corner spiral stands down while this overlay is up (one spiral, not
+        // two - ticket 1539282547484139682). Nothing else would put it back: the per-second tick
+        // only re-raises corner GIFs with CornerGifStartMinute above zero, and every stock program
+        // day is a minute-0 one. Same shape as CornerGifService's own admission nudge; the policy
+        // guards its re-entrancy and refuses to raise anything on a paused session. Session end
+        // clears Active before it tears any overlay down, so this cannot resurrect a corner GIF.
+        try { SessionEngine.Active?.RefreshCornerGifPolicy(); }
+        catch (Exception ex)
+        {
+            try { App.Logger?.Warning(ex, "[Overlay] session corner-GIF policy refresh failed"); } catch { }
+        }
     }
 
     private void UpdateSpiralOpacity()
