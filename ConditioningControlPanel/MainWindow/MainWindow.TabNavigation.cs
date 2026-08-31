@@ -798,6 +798,26 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Debug("ExpandDoorForTab({Tab}): {E}", tabKey, ex.Message); }
         }
 
+        /// <summary>
+        /// Moves the accordion to <paramref name="door"/>.
+        ///
+        /// <para><b>A SHUT rail opens nothing.</b> Every panel this touches is gated on
+        /// <c>_navRailExpanded</c> as well as on the door key, exactly the way
+        /// <see cref="ApplyNavRailDoorState"/> gates it. ShowTab calls
+        /// <see cref="ExpandDoorForTab"/> on every navigation, and the rail is shut for most of
+        /// them - a door press whose Click lands after the pointer has already whipped off the
+        /// rail (MouseLeave collapses on the spot since 2026-08-13, so with a quick enough hand
+        /// the collapse beats the Click), a notification, the Ctrl+K palette, a tutorial step.
+        /// Without the gate each of those re-opened a panel underneath a 56px rail and left it
+        /// there: the entries paint as a run of unlabelled child icons wedged between the
+        /// medallions, which is the exact noise collapsing the rail exists to remove (see the
+        /// class remarks on MainWindow.NavRail.cs). Reported on Discord against v6.8.6 as the
+        /// submenu staying open after the menu collapsed, "mainly with rapid mouse movement".</para>
+        ///
+        /// <para><c>_expandedDoor</c> is still written whatever the rail is doing - it is the
+        /// user's choice of door, not a piece of the flyout's state, and the next hover restores
+        /// it through ApplyNavRailDoorState.</para>
+        /// </summary>
         private void SetExpandedDoor(string door)
         {
             if (string.Equals(_expandedDoor, door, StringComparison.Ordinal)) return;
@@ -815,9 +835,18 @@ namespace ConditioningControlPanel
                 var parts = NavDoorParts(d.Door);
                 if (parts.Panel == null) continue;
                 SetDoorPanelExpanded(d.Door, parts.Panel, parts.Entries,
-                                     string.Equals(d.Door, door, StringComparison.Ordinal), animate);
+                                     IsDoorPanelOpenFor(d.Door), animate);
             }
         }
+
+        /// <summary>
+        /// The one answer to "should this door's panel be open right now": the rail has to be out
+        /// AND the door has to be the chosen one. Both callers - <see cref="SetExpandedDoor"/> and
+        /// the tween completion in <see cref="SetDoorPanelExpanded"/> - ask this rather than
+        /// carrying their own half of it, because the two halves disagreeing is the bug.
+        /// </summary>
+        private bool IsDoorPanelOpenFor(string door)
+            => _navRailExpanded && string.Equals(_expandedDoor, door, StringComparison.Ordinal);
 
         /// <summary>
         /// The accordion itself: a 160ms Height tween on the door's panel, nothing else. No
@@ -858,9 +887,12 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    // A faster click already moved on: whoever owns the panel now finishes it.
-                    bool stillOpen = string.Equals(_expandedDoor, door, StringComparison.Ordinal);
-                    if (stillOpen != expand) return;
+                    // A faster click - or a faster POINTER - already moved on: whoever owns the
+                    // panel now finishes it. This asks the same question SetExpandedDoor asks, rail
+                    // state included: a 160ms open tween that started on a rail the pointer has
+                    // since left would otherwise land here and write Height=NaN, handing an open
+                    // panel back to layout underneath a rail that is already 56px wide.
+                    if (IsDoorPanelOpenFor(door) != expand) return;
                     panel.BeginAnimation(FrameworkElement.HeightProperty, null);
                     // Hand an open panel back to layout so a later Visibility change on one of
                     // its entries (BtnDeeper follows EnableDeeper) still resizes the door.

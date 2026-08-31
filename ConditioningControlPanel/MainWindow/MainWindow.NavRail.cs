@@ -1001,9 +1001,8 @@ namespace ConditioningControlPanel
                 var parts = NavDoorParts(d.Door);
                 if (parts.Panel == null) continue;   // pinned Settings door has no panel
 
-                bool open = _navRailExpanded &&
-                            string.Equals(d.Door, _expandedDoor, StringComparison.Ordinal);
-                SetDoorPanelExpanded(d.Door, parts.Panel, parts.Entries, open, animate);
+                SetDoorPanelExpanded(d.Door, parts.Panel, parts.Entries,
+                                     IsDoorPanelOpenFor(d.Door), animate);
             }
         }
 
