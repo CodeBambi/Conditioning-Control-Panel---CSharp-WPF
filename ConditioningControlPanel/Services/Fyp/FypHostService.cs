@@ -163,6 +163,18 @@ internal static class FypHostService
     {
         try
         {
+            // A page (re)init while ghosted means the page rebooted under the mirror (a
+            // navigation or renderer recreation). The fresh page comes up at the intro card with
+            // clickThrough deliberately reset (main.js: "never sticky across a reload") while the
+            // host still holds a parked window and a live mirror — which would mirror an intro
+            // card no mouse can ever reach. Give the window back instead; the user re-dives and
+            // re-ghosts from a surface that works.
+            if (_ghosted)
+            {
+                App.Logger?.Information("FypHostService: page re-init while ghosted - leaving ghost mode");
+                ExitGhost();
+            }
+
             var s = App.Settings?.Current;
             _meta ??= new FypMetaStore();
             _host?.Post(new
@@ -803,6 +815,15 @@ internal static class FypHostService
             // through Show Desktop live (2026-08-04).
             _host?.SuspendMainWindowGlue(true);
 
+            // The park keeps DWM composing the window — but the mirror also needs CHROMIUM to
+            // keep producing frames, and it may already have stopped before ghost was ever
+            // asked for: minimizing MAIN while the feed is glued to it can wedge the WebView2
+            // controller invisible even though the window stays on screen (the v6.9.0 report —
+            // the mirror faithfully showed a frame frozen minutes earlier, the intro card,
+            // while fetches and audio ran on behind it). Re-assert the render chain now, so the
+            // mirror starts from a window that is actually drawing.
+            _host?.KickRenderVisibility("ghost enter");
+
             // Show Desktop / Win+D also minimizes every restorable top-level window — the
             // parked source included. Veto SC_MINIMIZE while ghosted (the window is off-screen,
             // minimizing it means nothing), veto the owner-cascade hide, and if a minimize or a
@@ -910,6 +931,10 @@ internal static class FypHostService
         // Window is back on-screen: give it its owner link (and its z-order slot) back.
         try { _host?.SuspendMainWindowGlue(false); }
         catch (Exception ex) { App.Logger?.Debug("FypHost.ExitGhost glue resume: {E}", ex.Message); }
+        // If the render chain wedged while parked, the restored window would sit frozen on
+        // screen exactly the way the mirror was — same repair on the way out as on the way in.
+        try { _host?.KickRenderVisibility("ghost exit"); }
+        catch (Exception ex) { App.Logger?.Debug("FypHost.ExitGhost kick: {E}", ex.Message); }
         _ghostWasMaximized = false;
         _lastGhostExitUtc = DateTime.UtcNow;
         try { _host?.Post(new { type = "clickThrough", on = false }); }
@@ -964,6 +989,10 @@ internal static class FypHostService
                 ShowWindow(hwnd, SW_SHOWNA);
                 App.Logger?.Information("FypHostService: parked window was natively hidden — re-shown");
             }
+            // Whether the hide landed or was vetoed, the WebView2 controller may have taken it
+            // at face value and stopped producing frames — the one freeze the diag tick cannot
+            // see (visible/iconic/cloaked all stay healthy). Re-drive it.
+            _host?.KickRenderVisibility("ghost visibility heal");
             _ghost?.RefreshThumbnail();
         }
         catch (Exception ex) { App.Logger?.Debug("FypHost: ghost visibility heal failed: {E}", ex.Message); }
