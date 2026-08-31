@@ -2302,6 +2302,14 @@ namespace ConditioningControlPanel
 
             // Initialize webcam tracking + focus game services (Lab — gated by consent dialog).
             // Constructors are no-ops; the camera handle only opens after explicit user consent.
+            //
+            // NOT A BUG: the camera deliberately does not come back up on launch, however the
+            // user left it. Camera lifetime is runtime state and is never persisted, so there is
+            // nothing here to restore — see the rule at GazeFocusService.EvaluateDesiredState
+            // ("this NEVER powers the camera on ... would silently light the camera at startup
+            // for any calibrated user") and the privacy contract atop WebcamTrackingService.
+            // Reported as ccp-bugs#1083; answered by making a missing camera cost the user
+            // nothing (AttentionCheckService dismisses neutral) rather than by auto-starting it.
             Webcam = new WebcamTrackingService();
             FocusGame = new FocusGameService();
             // #912: a debug cursor must never be able to kill the launch. Its Skia resources are
