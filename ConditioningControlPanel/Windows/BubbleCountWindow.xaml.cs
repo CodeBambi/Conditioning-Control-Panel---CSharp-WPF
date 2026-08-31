@@ -863,6 +863,9 @@ namespace ConditioningControlPanel
                 // unplayable, so the page's cursor hiding stays off here.
                 hideCursor = false,
                 startAtMs = 0,
+                // Audio-output routing by device label (#938 plumbing), primary-only like the
+                // volume above; the page falls back to the Windows default on any failure.
+                sinkLabel = BrowserSinkLabel.ForWindow(_isPrimary, BrowserSinkLabel.Resolve()),
             });
 
             if (_isPrimary)
@@ -961,6 +964,15 @@ namespace ConditioningControlPanel
                         _browserPlayingSeen = true;
                         StopBrowserFirstFrameWatch();
                         VideoDiag.Log("BUBBLE", "browser PLAYING (page reported the first frame)");
+                        break;
+                    case "sink":
+                        // Same one-line-each-way contract as BrowserVideoEngine (#938 plumbing);
+                        // failure page-side already left the audio on the Windows default.
+                        if ((bool?)o["ok"] == true)
+                            App.Logger?.Information("BubbleCountWindow: audio routed to output device \"{Label}\" via setSinkId", (string?)o["label"] ?? "");
+                        else
+                            App.Logger?.Warning("BubbleCountWindow: could not route audio to \"{Label}\" ({Detail}) - staying on the Windows default output",
+                                (string?)o["label"] ?? "", (string?)o["detail"] ?? "");
                         break;
                     case "ended":
                         // Same completion path as EndReached.

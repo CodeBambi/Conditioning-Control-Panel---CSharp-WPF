@@ -130,6 +130,91 @@
     post({ type: 'error', code: code, message: String(message) });
   }
 
+  // ---------- audio output sink (#938 plumbing) ----------
+
+  // The host may name an output device by LABEL on the load message; deviceIds
+  // are per-origin salted hashes so the label string is the only stable key.
+  // FAIL-SAFE CONTRACT: every path out of here either applies the sink and
+  // posts {type:'sink', ok:true} or changes NOTHING (audio stays on the
+  // Windows default) and posts ok:false with a reason. Nothing here may ever
+  // pause, mute or delay the clip itself.
+  let sinkAppliedLabel = null;
+
+  function reportSink(ok, label, detail) {
+    post({ type: 'sink', ok: !!ok, label: String(label || ''), detail: String(detail || '') });
+  }
+
+  function normLabel(s) {
+    return String(s || '').trim().toLowerCase();
+  }
+
+  // Same tolerant match AudioService.ResolvePreferredWaveOutDeviceNumber uses:
+  // exact label first, then the bracketed driver name out of a friendly name
+  // like "Speakers (Realtek High Definition Audio)", matched by bidirectional
+  // prefix/contains because Windows truncates device names at 31 chars in some
+  // APIs and the two sides rarely agree on the full string.
+  function pickSink(devices, wanted) {
+    const w = normLabel(wanted);
+    if (!w) return null;
+    const outs = devices.filter((d) =>
+      d.kind === 'audiooutput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications');
+    let hit = outs.find((d) => normLabel(d.label) === w);
+    if (hit) return hit;
+    const open = w.indexOf('(');
+    const close = w.lastIndexOf(')');
+    const driver = open >= 0 && close > open ? w.substring(open + 1, close).trim() : w;
+    hit = outs.find((d) => {
+      const l = normLabel(d.label);
+      return !!l && (l.startsWith(driver) || driver.startsWith(l) || l.indexOf(driver) >= 0 || w.indexOf(l) >= 0);
+    });
+    return hit || null;
+  }
+
+  function applySink(label) {
+    const wanted = typeof label === 'string' ? label.trim() : '';
+    if (!wanted) {
+      // The elements outlive loads: a clip with no routing must not inherit the
+      // previous clip's sink. '' is the spec's name for the default device.
+      if (sinkAppliedLabel && typeof fg.setSinkId === 'function') {
+        try { fg.setSinkId('').catch(() => { /* stay wherever we are */ }); } catch (e) { /* ignore */ }
+        sinkAppliedLabel = null;
+      }
+      return;
+    }
+    if (sinkAppliedLabel === wanted) return; // already routed; re-report nothing
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.enumerateDevices !== 'function'
+        || typeof fg.setSinkId !== 'function') {
+      reportSink(false, wanted, 'setSinkId unsupported');
+      return;
+    }
+    // Labels are blank until the origin holds mic permission; the host grants
+    // it for this page alone (BrowserVideoSurface.OnPermissionRequested). Only
+    // run the getUserMedia probe when enumerate comes back label-less, and stop
+    // its tracks on the next line - nothing records anything.
+    navigator.mediaDevices.enumerateDevices()
+      .then((devices) => {
+        if (devices.some((d) => d.kind === 'audiooutput' && d.label)) return devices;
+        return navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+          stream.getTracks().forEach((t) => { try { t.stop(); } catch (e) { /* ignore */ } });
+          return navigator.mediaDevices.enumerateDevices();
+        });
+      })
+      .then((devices) => {
+        const hit = pickSink(devices, wanted);
+        if (!hit) {
+          reportSink(false, wanted, 'no audiooutput label matched');
+          return;
+        }
+        return fg.setSinkId(hit.deviceId).then(() => {
+          sinkAppliedLabel = wanted;
+          reportSink(true, wanted, hit.label);
+        });
+      })
+      .catch((err) => {
+        reportSink(false, wanted, (err && (err.name || err.message)) || 'error');
+      });
+  }
+
   // ---------- load ----------
 
   function startLoad(d) {
@@ -171,6 +256,7 @@
 
     document.body.classList.toggle('has-bg', cur.blur);
     applyVolume();
+    applySink(d.sinkLabel);
 
     // Backdrop first so it is never the thing that delays the real clip.
     if (cur.blur) {
