@@ -653,7 +653,20 @@ namespace ConditioningControlPanel.Services
                         // only exists when Escape is NOT the panic key, so PanicOverridesAll must
                         // not close it (see PanicPolicy.AllowGracePause).
                         if (TryGracePauseFromPanic(fromPanicKey: false))
+                        {
                             VideoDiag.Log("PANIC", "strict browser window: ESC consumed as video grace pause");
+                            return;
+                        }
+                    }
+
+                    // Parity with the strict LibVLC window: an ESC that was swallowed rather than
+                    // consumed leaves the screen completely still, which reads as a hung app. Fire the
+                    // existing Possession tripwire (no-ops outside a lockdown, throttled per kind) so
+                    // the user learns the lock is deliberate. See the twin comment in SetupStrictHandlers.
+                    if (isEscape)
+                    {
+                        try { App.Lockdown?.NotifyEscapeAttempt(Services.Possession.EscapeKinds.SystemKey); }
+                        catch { /* never let the haunt break key suppression */ }
                     }
                     return;
                 }

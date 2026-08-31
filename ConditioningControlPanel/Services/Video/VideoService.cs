@@ -4963,6 +4963,20 @@ namespace ConditioningControlPanel.Services
                         }
                     }
 
+                    // An ESC that reaches this line is swallowed — the grace pause was unavailable,
+                    // already spent, or (the reported case) suppressed because a lockdown is running.
+                    // Nothing on screen moves, which reads as a hung app rather than as a lock working
+                    // as intended: "i pressed the esc key and nothing happens". Fire the EXISTING
+                    // Possession tripwire the suppressed system keys already use — it self-no-ops when
+                    // no lockdown is active, is throttled to one per 2s for this kind (so key-repeat
+                    // cannot spam it), and drives the Warden's "that key does nothing. i do~" line. No
+                    // new UI, and the lock itself is unchanged.
+                    if (e.Key == Key.Escape)
+                    {
+                        try { App.Lockdown?.NotifyEscapeAttempt(Services.Possession.EscapeKinds.SystemKey); }
+                        catch { /* never let the haunt break key suppression */ }
+                    }
+
                     // In strict mode, block panic key, Alt+F4, and system keys
                     if (e.Key.ToString() == App.Settings.Current.PanicKey || e.Key == Key.System ||
                         (e.Key == Key.F4 && Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)))
@@ -5816,6 +5830,75 @@ namespace ConditioningControlPanel.Services
                 // A bug in here must never eat a panic press. Fall through to the normal ladder.
                 App.Logger?.Warning("VideoService.TryGracePauseFromPanic threw: {Error}", ex.Message);
                 VideoDiag.Log("PANIC", "grace pause THREW - falling through to the normal panic ladder: " + ex.Message);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Cheap, allocation-free pre-check for the global keyboard hook: is there a mandatory video
+        /// on screen that plain ESC is ALLOWED to dismiss? Read inside the WH_KEYBOARD_LL callback,
+        /// which must return well inside LowLevelHooksTimeout, so it is a handful of field reads and
+        /// nothing else. False here means the hook leaves the press alone entirely.
+        /// </summary>
+        public bool WantsGlobalEscape => _videoPlaying && _playbackStarted && !_isCleaningUp && !IsStrictActive;
+
+        /// <summary>
+        /// Focus-independent ESC door for a NON-strict mandatory video — the other half of the
+        /// "I pressed the esc key and nothing happens" reports.
+        ///
+        /// Both engines' ESC handlers are WINDOW-scoped: the LibVLC path needs WPF keyboard focus on
+        /// the video window (<c>SetupStrictHandlers</c>' PreviewKeyDown) and the browser path needs
+        /// the WebView2 page to see the keydown and report it back (<c>HandleBrowserKey</c>). A
+        /// fullscreen video that lost activation — a click on a second monitor, another topmost
+        /// window, a focus steal during the show delay, or the strict retry gap — therefore swallows
+        /// every ESC, and the only remaining way out is the panic key. The global hook has always
+        /// given the PANIC key that independence; this gives plain ESC the same, because ESC is
+        /// documented as the non-rebindable "dismiss this video" key and a user who cannot reach it
+        /// is stuck until a safety timer fires.
+        ///
+        /// Deliberately narrow, and that narrowness is the safety argument: <see cref="WantsGlobalEscape"/>
+        /// is false unless a mandatory video is genuinely on screen AND not strict-locked, so this can
+        /// never eat an ESC that belonged to another application and can never become a strict-lock or
+        /// lockdown bypass (a lockdown that forces strict lock on makes <c>IsStrictActive</c> true, and
+        /// one that does NOT force it leaves a video the window handler already dismisses on ESC).
+        ///
+        /// Must be called on the UI thread — the caller queues it on the dispatcher rather than running
+        /// teardown inside the hook callback. Returns true when the press was consumed.
+        /// </summary>
+        public bool TryEscapeFromGlobalKey()
+        {
+            try
+            {
+                // Re-checked HERE, not just at the hook: on a focused video window the window-level
+                // PreviewKeyDown runs during message dispatch, i.e. BEFORE this queued continuation
+                // drains, so by now the very same keystroke may already have dismissed the video.
+                if (!WantsGlobalEscape) return false;
+
+                // Same order as the window handler, so a press behaves identically whether or not the
+                // video happened to hold focus. If the window handler already turned this keystroke
+                // into a grace pause, EvaluateGraceRequest returns ConsumedDedup (true) and we stop —
+                // exactly the mechanism that keeps the queued panic handler from stopping the engine a
+                // few ms after a pause.
+                if (TryGracePauseFromPanic(fromPanicKey: Services.Safety.PanicPolicy.EscapeIsThePanicKey(
+                        App.Settings?.Current?.PanicKeyEnabled ?? false,
+                        App.Settings?.Current?.PanicKey)))
+                {
+                    VideoDiag.Log("PANIC", "ESC consumed as video grace pause (global hook, unfocused video)");
+                    return true;
+                }
+
+                // Guard the teardown itself the way the browser page's ESC door does: a second ESC
+                // that raced in behind this one must not run Cleanup twice and re-fire VideoEnded.
+                if (!_videoPlaying || _isCleaningUp) return false;
+
+                VideoDiag.Log("PANIC", "ESC received by the global hook - dismissing the unfocused video via Cleanup");
+                Cleanup();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                // A bug in here must never be the reason a user cannot leave a video.
+                App.Logger?.Warning("VideoService.TryEscapeFromGlobalKey threw: {Error}", ex.Message);
                 return false;
             }
         }
@@ -7736,6 +7819,17 @@ namespace ConditioningControlPanel.Services
             // CDN URL through MetadataCache would mean a network parse per candidate per refill.
             // The user's MAXIMUM still holds on screen (StartMaxLengthCapTimer is wall-clock, not
             // metadata), but their minimum does not apply to remote clips. See the Phase 4 region.
+            //
+            // CONTENT-PACK videos are in the same boat, and for the same reason (#584/#581/#484 keep
+            // coming back as "max video length ignored" on a pack clip). They are appended to their
+            // own queue BELOW this filter, and they cannot join it: PackFileEntry carries no duration,
+            // pack media is encrypted, and each play decrypts to a fresh ccp_temp_<GUID> path that
+            // MetadataCache — keyed on path+size+mtime — could never hit. Filtering them at selection
+            // would mean decrypting and parsing every pack candidate on every refill. The wall-clock
+            // StartMaxLengthCapTimer is therefore what enforces the maximum for pack videos, and it is
+            // armed for BOTH engines before the first frame (StartVideoPlayback / StartBrowserVideoPlayback),
+            // so a long pack clip is truncated on screen rather than never picked. Do not "fix" this by
+            // making the queue refill parse packs.
             var minSec = App.Settings?.Current?.VideoMinDurationSeconds ?? 0;
             var maxSec = App.Settings?.Current?.VideoMaxDurationSeconds ?? 0;
             if ((minSec > 0 || maxSec > 0) && MetadataCache != null)

@@ -883,6 +883,39 @@ namespace ConditioningControlPanel
 
         private void OnGlobalKeyPressed(Key key)
         {
+            // Plain ESC on a NON-strict mandatory video, before the lockdown early-out below.
+            //
+            // ESC is the hardcoded "dismiss this video" key, but both engines only handle it at the
+            // WINDOW level (the LibVLC window's PreviewKeyDown / the browser page's key report), so a
+            // fullscreen video that lost keyboard focus swallows it and the user is stuck until a
+            // safety timer fires — the "i pressed the esc key and nothing happens" reports. The panic
+            // key has always had this focus-independent route; ESC gets the same one here.
+            //
+            // Placed ABOVE the lockdown early-out deliberately, and it is not a lockdown bypass:
+            // WantsGlobalEscape is false whenever the video is strict-locked, which is exactly what a
+            // lockdown with the default LockdownForceStrictLock safety produces. A lockdown that does
+            // NOT force strict lock leaves a video the window handler already dismisses on ESC (that
+            // handler carries no lockdown check), so honouring it when unfocused only restores parity.
+            //
+            // A lock card or the settings palette outranks the video dismiss in the panic ladder
+            // (PanicPolicy.Decide) and both own ESC themselves, so leave the press to them. Both checks
+            // are side-effect free — deliberately NOT SettingsPaletteWindow.TryConsumeEscape(), which
+            // CLOSES the palette just by asking and would burn the grace window HandlePanicKeyPress
+            // depends on.
+            if (key == Key.Escape && App.Video?.WantsGlobalEscape == true
+                && !LockCardWindow.IsAnyOpen() && !SettingsPaletteWindow.IsOpen)
+            {
+                // Never run teardown inside the WH_KEYBOARD_LL callback — it is delivered on this
+                // thread's message pump and must return well inside LowLevelHooksTimeout. Same
+                // queue-and-return shape as the panic key below.
+                Dispatcher.BeginInvoke(() =>
+                {
+                    try { App.Video?.TryEscapeFromGlobalKey(); }
+                    catch (Exception ex) { App.Logger?.Warning("Global ESC: video dismiss failed: {Error}", ex.Message); }
+                });
+                return;
+            }
+
             // Lockdown mode: block all key handling (panic key, etc.)
             if (App.Lockdown?.IsActive == true)
                 return;
