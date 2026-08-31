@@ -307,9 +307,17 @@ function applyTrack(animated) {
  * half-swipe reveals, and the warm media a commit resumes with no black gap),
  * everything else OFF. Hidden window: everything off — decoders freed, dwell
  * reported — exactly what the old binary active flag did on minimize.
+ *
+ * ...unless GHOST MODE is on. Ghost parks the real window off every monitor on purpose and
+ * shows a live DWM mirror of it, so "hidden" there means the opposite of what it means on a
+ * minimize: the user is watching this page right now. Tearing every page down on that event
+ * is what made ghost mode a blank screen — the mirror faithfully showed an emptied feed
+ * (ccp-bugs #1091, and #864 before it). Whether Chromium calls a parked window hidden at all
+ * depends on its occlusion tracker, which is why it broke for some machines and not others;
+ * this guard makes ghost mode independent of that verdict.
  */
 function applyWindow() {
-  if (document.hidden) {
+  if (document.hidden && !clickThrough) {
     for (const p of pages.values()) p.setMode('off');
     return;
   }
@@ -904,6 +912,10 @@ function setClickThrough(on, fromHost) {
   clickThrough = !!on;
   document.body.classList.toggle('clickthrough', clickThrough);
   $('toggle-clickthrough').classList.toggle('on', clickThrough);
+  // Re-mount whatever a hidden event tore down before the mode flipped — a minimize of the
+  // main window (which owns this one) empties the feed, and going ghost from there would
+  // otherwise mirror that emptiness with no visibility event left to undo it.
+  if (feed) applyWindow();
   clearTimeout(ctNoteTimer);
   if (clickThrough) {
     $('options-scrim').classList.add('hidden'); // nothing is clickable from here on
@@ -955,7 +967,9 @@ function eyeStatusText() {
 /** True when a gesture must be ignored (a dialog is up, nothing to act on, or
  *  something is already animating). */
 function eyeBusy() {
-  if (!feed || feed.comps.length === 0 || document.hidden) return true;
+  // `hidden` is not idle in ghost mode — the parked window is exactly where eye control is the
+  // only input the user has left, so it may not be what disables it (see applyWindow).
+  if (!feed || feed.comps.length === 0 || (document.hidden && !clickThrough)) return true;
   if (!$('options-scrim').classList.contains('hidden')) return true;  // options open
   if (!$('crash').classList.contains('hidden')) return true;
   if (!$('empty').classList.contains('hidden')) return true;

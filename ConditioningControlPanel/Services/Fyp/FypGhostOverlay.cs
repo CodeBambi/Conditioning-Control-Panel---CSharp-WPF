@@ -314,10 +314,17 @@ internal sealed class FypGhostOverlay
             Region = new SD.Region(EllipsePath(bounds.Width, bounds.Height));
             new WF.ToolTip().SetToolTip(this, tooltip);
             Show();
-            // A see-through feed can sit at 1% — keep the buttons discoverable but quiet.
-            // Plain SLWA alpha is safe here: no DWM thumbnail rides this window.
-            Opacity = 0.82;
+            // Quiet until you reach for it (#1096: "sometimes they just get in the way"). The
+            // ghost-mode notice on the page already says the corner buttons stay clickable, so a
+            // faint disc is a reminder rather than the only clue. Plain SLWA alpha is safe here:
+            // no DWM thumbnail rides this window.
+            Opacity = IdleOpacity;
         }
+
+        /// <summary>Faint enough to stop being furniture over a see-through feed, solid enough
+        /// that the hand landing on it still finds a target.</summary>
+        private const double IdleOpacity = 0.14;
+        private const double HoverOpacity = 0.92;
 
         public void SetGlyph(string glyph)
         {
@@ -337,8 +344,8 @@ internal sealed class FypGhostOverlay
             }
         }
 
-        protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
-        protected override void OnMouseLeave(EventArgs e) { _hover = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnMouseEnter(EventArgs e) { _hover = true; Opacity = HoverOpacity; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { _hover = false; Opacity = IdleOpacity; Invalidate(); base.OnMouseLeave(e); }
         protected override void OnMouseUp(WF.MouseEventArgs e)
         {
             base.OnMouseUp(e);
