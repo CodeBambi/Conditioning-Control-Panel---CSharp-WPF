@@ -65,6 +65,24 @@ namespace ConditioningControlPanel
         private const double SeamOverlapOverMain = 0;     // <= 60 (owner decision #1)
         private const double BaseOffsetFromParent = -(TubeArtRightPadding - SeamOverlapOverMain);
 
+        // THE SEAM IS A HIT-TEST BUDGET, NOT JUST A LOOK. Everything right of the art in the
+        // attached tube is alpha-0, and a fully transparent pixel on a layered window is
+        // click-through - that is the whole reason main's left edge (the door rail since UX
+        // restructure Phase 1) works at all under a window whose RECT covers it by 353 canvas px.
+        // An OPAQUE pixel there is NOT click-through: it swallows the click, WPF hit-tests it
+        // against the tube's own tree, and main never hears about it.
+        //
+        // The speech bubble is the one part of her that can paint opaque pixels out there. Centred
+        // in the 780px canvas behind a 125px right margin, a full 380px bubble ran to canvas
+        // x = (780-125)/2 + 190 = 517 - ninety px past the art's edge at 427, i.e. squarely over
+        // main's 56px collapsed rail, which went dead for as long as she was talking (Discord,
+        // v6.8.6: the bubbles "block the You section"). So the attached bubble is anchored by its
+        // RIGHT edge on this margin and grows leftward, and this is where that budget lives.
+        // 12px of daylight so a short bubble does not read as glued to main's frame.
+        private const double AttachedBubbleSeamGap = 12;
+        private const double AttachedBubbleRightMargin =
+            TubeArtRightPadding - SeamOverlapOverMain + AttachedBubbleSeamGap;
+
         // Transparent LEFT margin of the tube frame, measured the same way as TubeArtRightPadding:
         // the opaque pixels start at 664/2048 of tube.png -> canvas x 252.9 -> 21.7 + 252.9*0.9444
         // = 260.5 px from the tube WINDOW's left edge. The drop-shadowed avatar layer and the pink

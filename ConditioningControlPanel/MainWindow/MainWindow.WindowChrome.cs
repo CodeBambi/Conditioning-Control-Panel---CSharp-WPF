@@ -391,6 +391,13 @@ namespace ConditioningControlPanel
         {
             base.OnStateChanged(e);
 
+            // The nav rail's flyout is driven purely by pointer EDGES (enter / leave / click
+            // elsewhere), and a minimise delivers none of them to this window - so the rail can
+            // come back from the taskbar holding a hover state that is no longer true, and then
+            // refuse to open until the pointer crosses out of it and back in. Re-read the truth on
+            // every state change instead. See MainWindow.NavRail.cs, SyncNavRailToPointer.
+            SyncNavRailToPointer();
+
             // Handle restoring from tray or maximizing
             if (WindowState == WindowState.Normal)
             {

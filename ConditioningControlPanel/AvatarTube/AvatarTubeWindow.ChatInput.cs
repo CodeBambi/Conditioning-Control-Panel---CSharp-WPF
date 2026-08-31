@@ -488,8 +488,12 @@ namespace ConditioningControlPanel
             // Hide the per-message AI badge when showing the chat history list (mixed AI + user lines).
             if (AiBadge != null) AiBadge.Visibility = Visibility.Collapsed;
 
-            // Enlarge bubble for the chat history layout.
+            // Enlarge bubble for the chat history layout. Re-place it afterwards: the attached
+            // placement is derived from MaxWidth (a 600px bubble does not fit left of the seam and
+            // is allowed to give the seam up rather than hang off the canvas), so the margin has
+            // to be recomputed before the layout pass below or the panel lands clipped.
             SpeechBubble.MaxWidth = 600;
+            ApplySpeechBubblePlacement();
 
             SpeechBubble.UpdateLayout();
             SpeechBubble.Visibility = Visibility.Visible;

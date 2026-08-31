@@ -283,6 +283,14 @@ namespace ConditioningControlPanel
 
                 NavSidebar.MouseEnter += (_, __) => SetNavRailExpanded(true);
 
+                // The same intent, LEVEL-triggered - see the dead-zone note on
+                // SyncNavRailToPointer. MouseEnter is an edge, and an edge can be missed;
+                // MouseMove is re-hit-tested from scratch on every WM_MOUSEMOVE, so the pointer
+                // being on the rail is enough to open it however the enter got lost.
+                // SetNavRailExpanded early-outs on the state it is already in, so this is one
+                // bool compare per move for as long as the rail is out.
+                NavSidebar.MouseMove += (_, __) => SetNavRailExpanded(true);
+
                 // No timer, by owner call (NavRailCollapseAnimMs): leaving the rail IS the
                 // collapse trigger. NavSidebar is the whole rail, so this does not fire while the
                 // pointer is travelling between doors or down into an open accordion.
@@ -299,6 +307,17 @@ namespace ConditioningControlPanel
                 {
                     if (NavSidebar.IsMouseOver) return;
                     if (_navRailHoldCount > 0) return;
+                    SetNavRailExpanded(false);
+                };
+
+                // The other half of the level trigger: a rail that is out while the pointer is
+                // demonstrably somewhere else shuts, whatever happened to its MouseLeave. Guarded
+                // on _navRailExpanded first so the normal case is one field read per move.
+                PreviewMouseMove += (_, __) =>
+                {
+                    if (!_navRailExpanded) return;
+                    if (_navRailHoldCount > 0) return;
+                    if (NavSidebar.IsMouseOver) return;
                     SetNavRailExpanded(false);
                 };
 
@@ -862,6 +881,14 @@ namespace ConditioningControlPanel
             foreach (var b in _navRailButtons)
                 b.HorizontalContentAlignment = expand ? HorizontalAlignment.Left : HorizontalAlignment.Center;
 
+            // The scrollbar is only allowed out while the rail is. Shut, it is ~17px of chrome
+            // laid over the right third of a 44px medallion (MainWindow.xaml authors Hidden and
+            // carries the arithmetic); open, 236px has room for it and an overflowing rail should
+            // say so. Flipped on both paths, animated or not - it is a Visibility, not a tween.
+            if (NavRailScroll != null)
+                NavRailScroll.VerticalScrollBarVisibility =
+                    expand ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden;
+
             ApplyNavDoorRows(expand, animate);
             ApplyNavRailDoorState(animate);
             ApplyNavRailAirspace(expand);
@@ -1001,10 +1028,41 @@ namespace ConditioningControlPanel
                 var parts = NavDoorParts(d.Door);
                 if (parts.Panel == null) continue;   // pinned Settings door has no panel
 
-                bool open = _navRailExpanded &&
-                            string.Equals(d.Door, _expandedDoor, StringComparison.Ordinal);
-                SetDoorPanelExpanded(d.Door, parts.Panel, parts.Entries, open, animate);
+                SetDoorPanelExpanded(d.Door, parts.Panel, parts.Entries,
+                                     IsDoorPanelOpenFor(d.Door), animate);
             }
+        }
+
+        /// <summary>
+        /// Re-seats the flyout on the pointer, ignoring every edge that may have been missed.
+        ///
+        /// <para><b>The dead zone (Discord, v6.8.6).</b> "After clicking in the side panel and
+        /// minimising the app, hover does not re-open the menu until the mouse crosses a line and
+        /// comes back." Until now the rail's ONLY way in was <c>NavSidebar.MouseEnter</c> and its
+        /// only ways out were <c>MouseLeave</c> and the click-elsewhere - three edges, and nothing
+        /// anywhere that re-reads the truth. A minimise taken with the pointer over the rail
+        /// delivers neither a leave nor a click to this window, so the rail comes back from the
+        /// taskbar still believing the pointer is on it: the next real MouseEnter is not raised
+        /// (WPF thinks it never left), and the rail sits inert until the pointer crosses out of
+        /// its subtree far enough to force a leave and then comes back in - which is precisely the
+        /// line the reporter drew on their screenshot.</para>
+        ///
+        /// <para>So the window's state changes now ask this instead, and it answers from
+        /// <c>IsMouseOver</c> rather than from anything remembered. Snapped, not tweened: nobody
+        /// is watching a rail animate while the window is coming back from the taskbar. A hold is
+        /// still a hold - a tutorial spotlight survives a minimise.</para>
+        /// </summary>
+        internal void SyncNavRailToPointer()
+        {
+            try
+            {
+                if (!_navRailReady || NavSidebar == null) return;
+                if (_navRailHoldCount > 0) return;
+
+                bool over = WindowState != WindowState.Minimized && NavSidebar.IsMouseOver;
+                SetNavRailExpanded(over, animate: false);
+            }
+            catch (Exception ex) { App.Logger?.Debug("SyncNavRailToPointer: {E}", ex.Message); }
         }
 
         /// <summary>

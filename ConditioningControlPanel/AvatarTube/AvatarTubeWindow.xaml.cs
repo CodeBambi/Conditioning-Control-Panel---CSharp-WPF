@@ -597,14 +597,10 @@ namespace ConditioningControlPanel
                     // Z-order: native ownership (seeded above) keeps the tube above main.
                 }
 
-                            // Reset bubble position to ensure correct placement after layout
-                            // Anchored at bottom, grows upward. Margin = left, top, right, bottom
-                            var initUseAttached = _isAttached || ModOverridesAttachedTubeOnly();
-                            var initDx = initUseAttached
-                                ? EffAvatarOffsetX()
-                                : EffAvatarDetachedOffsetX();
-                            var initRight = initUseAttached ? 125 - initDx : 425 - initDx;
-                            SpeechBubble.Margin = new Thickness(0, 0, initRight, 550);
+                            // Reset bubble position to ensure correct placement after layout.
+                            // Anchored at bottom, grows upward; attached it is also anchored by its
+                            // RIGHT edge on the hit-test seam - see ApplySpeechBubblePlacement.
+                            ApplySpeechBubblePlacement();
 
                             // Restore a saved detached placement (#669) after the initial attached layout
                             // and native-owner seeding have settled, so Detach/position land cleanly.
