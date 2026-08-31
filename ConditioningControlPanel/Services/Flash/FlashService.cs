@@ -1217,7 +1217,8 @@ namespace ConditioningControlPanel.Services
                 : settings.FlashDuration;
 
             // Play sound ONLY ONCE per flash event (not for hydra spawns) - only if audio enabled
-            if (settings.FlashAudioEnabled && !_soundPlayingForCurrentFlash && !isMultiplication && !string.IsNullOrEmpty(soundPath) && File.Exists(soundPath))
+            // AND the companion still has a voice (#1099 - see IsCompanionVoiceSilenced).
+            if (settings.FlashAudioEnabled && !IsCompanionVoiceSilenced(settings) && !_soundPlayingForCurrentFlash && !isMultiplication && !string.IsNullOrEmpty(soundPath) && File.Exists(soundPath))
             {
                 try
                 {
@@ -3799,6 +3800,29 @@ namespace ConditioningControlPanel.Services
 
         #region Audio
 
+        /// <summary>
+        /// True when the user has taken the companion's voice away, so a flash voiceline must not
+        /// speak either (#1099).
+        ///
+        /// <para>Flash "sounds" are not SFX: <see cref="SoundsPath"/> IS
+        /// <see cref="CompanionPhraseService.VoiceLineFolder"/>, the active mod's
+        /// <c>flashes_audio</c> folder, and <c>AvatarTubeWindow.OnFlashAudioPlaying</c> renders the
+        /// clip's text in HER speech bubble. They are her voice by content and by presentation, but
+        /// they used to obey none of her switches - two reporters had the companion dismissed and
+        /// every companion audio control off and still heard a clip on every single flash.</para>
+        ///
+        /// <para>The three checked here are exactly the ones the rest of her VO honours
+        /// (<c>PlayBarkVoice</c> / <c>ShowGiggle</c>): master mute, "mute avatar", and #846's
+        /// voiceline-only mute. <see cref="Models.AppSettings.AvatarEnabled"/> is deliberately NOT
+        /// among them - hiding the tube is a window decision (minimize takes the same path), not a
+        /// vow of silence, and killing flash audio on it would surprise anyone running voiced
+        /// flashes without the tube on screen. Silencing the voice leaves the flashes themselves
+        /// untouched; they simply fall back to the settings-driven duration, exactly as they do
+        /// with the "link to audio" toggle off.</para>
+        /// </summary>
+        private static bool IsCompanionVoiceSilenced(Models.AppSettings settings) =>
+            settings.MasterVolume <= 0 || settings.AvatarMuted || settings.CompanionVoiceLinesMuted;
+
         private double PlaySound(string path, int volumePercent)
         {
             StopCurrentSound();
@@ -3811,9 +3835,14 @@ namespace ConditioningControlPanel.Services
                 sound = new WaveOutEvent();
                 App.Audio?.ApplyPreferredDevice(sound);
 
-                // Apply volume curve (gentler, minimum 5%)
+                // Apply volume curve (gentler, minimum 5%). #1099: the 5% is a floor on the CURVE,
+                // never on the mute - it used to keep the clip plainly audible at MasterVolume 0,
+                // while every other voice path in the app (PlayBarkVoice, PlayPhraseAudio,
+                // PlayGiggleSound) returns early at <= 0. The 0.85 matches PlayBarkVoice: these are
+                // companion voicelines (see SoundsPath), and at raw master they were the loudest
+                // thing in the app while the duck sweep pushed everything else down under them.
                 var volume = volumePercent / 100.0f;
-                var curvedVolume = Math.Max(0.05f, (float)Math.Pow(volume, 1.5));
+                var curvedVolume = volume <= 0f ? 0f : Math.Max(0.05f, (float)Math.Pow(volume, 1.5)) * 0.85f;
                 audioFile.Volume = curvedVolume;
 
                 sound.Init(audioFile);

@@ -1550,6 +1550,15 @@ namespace ConditioningControlPanel.Services
             if (!isSafety && App.EmiDesk?.AvatarMuted == true)
                 return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = "emi-desk-mute" };
 
+            // Companion dismissed: the reactive layer goes with her (#1099). This gate never asked.
+            // The only thing that stopped a bark with the companion off was AvatarTubeWindow's
+            // render-side IsAvatarVisibleOnScreen check - which drops the line AFTER CommitFire has
+            // already spent the rule's variant rotation and, for a lifetime one-shot, written the
+            // persisted latch. A milestone bark could be burned forever without ever being heard.
+            // Safety (Panic) stays exempt for the same reason it bypasses every other floor.
+            if (!isSafety && App.Settings?.Current?.AvatarEnabled != true)
+                return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = "companion-off" };
+
             // One-shot (repeatable=false): fire once per scope. Session is in-memory; tier/lifetime
             // consult the persisted latch (AppSettings.BarkLifetimeFired). This dedup is NOT bypassed
             // by `guaranteed` — guaranteed means "ignore timing/floor", not "fire again". Otherwise a
