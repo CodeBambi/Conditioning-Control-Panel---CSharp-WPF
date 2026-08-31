@@ -38,7 +38,7 @@ THE DESCENT
 - If a stray reset order ever reaches the app after the Descent, the app refuses it. Your progress does not roll back because a server hiccup said so.
 
 NEW BUILT-IN MOD: INFECTION CONTROL
-- A sixth mod joins the shelf: Infection Control, created by Miss Jenny. Nurse Amber runs the ward with 178 freshly voiced lines: barks, mantra takeovers, and her own voice all the way down the Rabbit Hole.
+- A sixth mod joins the shelf: Infection Control, created by Miss Jenny. Nurse Amber runs the ward with over 330 freshly voiced lines: barks, mantra takeovers, her own flash voicelines, and her own voice all the way down the Rabbit Hole.
 - She brings her own spiral and her own color scheme, and she comments on nearly everything you do.
 - Like the other built-in mods, the audio arrives as a downloadable pack so the installer stays lean. Grab it from the mod shelf and the app fetches the rest.
 
@@ -46,6 +46,7 @@ EMI'S DESK
 - EMI got out of the school. Summon her onto your desktop: a small ring on the edge of your screen opens into her CRT glass, and she hangs out, deals commentary, and reacts to what the app is doing to you.
 - She has an idle life now: she picks up props, swaps what she is doing every so often, and the glass runs the campus channel deck with a 10 second rotation.
 - Ask EMI: her handbook answers questions about the app, now in all 9 languages.
+- The whole desk speaks all 9 languages now, ring tiles included.
 - Her wardrobe layers correctly, so a coat or goggles can never get buried behind her own face.
 - First open actually shows the ring (it used to arrive invisible until you poked it), and brand new users get a proper first contact from her instead of silence.
 
@@ -61,7 +62,7 @@ THE FIX WAVE
 - The updater upgrades the copy of the app you are actually running. No more updates that quietly install into a second folder while your shortcuts point at the old one.
 - The flash Fade slider works. It turns out it never did anything at all; now 0 is a hard cut, 100 is a long dissolve, and the old feel sits at 40.
 - Escape always escapes a mandatory video that is not strict-locked, even when the window lost focus. And when Strict Lock IS holding the door shut, she now tells you so instead of ignoring the key.
-- For You ghost mode is fixed: the parked feed no longer unloads itself into a blank mirror, the swap arrows respond again, and the cog and mute buttons fade out when idle.
+- For You ghost mode is fixed: the parked feed no longer unloads itself into a blank mirror, the swap arrows respond again, and the cog and mute buttons fade out when idle. And if a minimize ever froze the feed window, ghost mode now wakes it up instead of mirroring a stale picture.
 - A broken font install can no longer blank the entire app. The app probes fonts at startup and routes around a corrupt one, loudly, in the log, once.
 - Tooltips are readable again. A years-old style was quietly replacing the themed tooltip with the stock white one everywhere.
 - The side menu behaves: no more submenu stuck open under a collapsed rail, no more dead hover zone after minimizing, no scrollbar parked on top of the icons, and speech bubbles no longer eat clicks meant for the menu.
@@ -70,10 +71,12 @@ THE FIX WAVE
 - The session corner spiral answers your spiral switch and never doubles up with the overlay spiral.
 - Attention checks never fail you for a camera that is off or missing. No camera, no penalty.
 - Achievement completion is honest for free users: the four premium program badges moved out of the free count and wear a Patreon chip instead. 100 percent is reachable again.
+- A creator mod without its own flash voicelines used to borrow Bambi's voice on every flash image. Mods now stay quiet on flashes until they bring their own lines, instead of speaking someone else's.
+- Lost and Found no longer melts into a slideshow when your library is full of animated webp images.
 - From the wave before: quest rerolls stop dealing duplicates, corrupted achievement files recover from backup, local AI streams drain cleanly, and For You no longer swallows mandatory videos.
 - Gaze tracking got a precision pass with a Quick Recalibrate hotkey, and the pause XP warning grew a ""don't ask me again"" checkbox.
 
-Full technical changelog in the pull requests, numbers 380 through 435.";
+Full technical changelog in the pull requests, numbers 380 through 445.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
