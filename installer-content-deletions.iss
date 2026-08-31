@@ -7,9 +7,10 @@
 ; into a content pack, deleted from {app} by EXACT name on upgrade. No wildcards: files a
 ; user hand-dropped into these folders are never matched and survive. dirifempty removes
 ; only folders the sweep actually emptied.
-; 8429 files, 28 folder candidates.
+; 8430 files, 29 folder candidates.
 ; ============================================================================================
 Type: files;      Name: "{app}\DroneMod\drone-mode.ccpmod"
+Type: files;      Name: "{app}\InfectionMod\infection-control.ccpmod"
 Type: files;      Name: "{app}\LockedMod\locked-resources.ccpmod"
 Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-bambisleep\achievement_1.mp3"
 Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-bambisleep\achievement_2.mp3"
@@ -8465,4 +8466,5 @@ Type: dirifempty; Name: "{app}\Resources\web\intake\assets\sfx"
 Type: dirifempty; Name: "{app}\Resources\web\intake\assets\vo"
 Type: dirifempty; Name: "{app}\Resources\sounds\flashes_audio"
 Type: dirifempty; Name: "{app}\DroneMod"
+Type: dirifempty; Name: "{app}\InfectionMod"
 Type: dirifempty; Name: "{app}\LockedMod"
