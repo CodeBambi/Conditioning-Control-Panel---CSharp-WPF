@@ -765,7 +765,6 @@ namespace ConditioningControlPanel
                 AvatarBorder.Margin = new Thickness(5, 100, 126 - dx, 210 + dy);
                 TitleBox.Margin = new Thickness(0, 0, 121 - dx, 180);
                 InputPanel.Margin = new Thickness(0, 0, 126 - dx, 520);
-                SpeechBubble.Margin = new Thickness(0, 0, 125 - dx, 550);
                 TakeoverCountdownBar.Margin = new Thickness(0, 0, 116 - dx, 246);
             }
             else
@@ -777,12 +776,16 @@ namespace ConditioningControlPanel
                 AvatarBorder.Margin = new Thickness(5, 100, 436 - dx, 228 + dy);
                 TitleBox.Margin = new Thickness(0, 0, 416 - dx, 193);
                 InputPanel.Margin = new Thickness(0, 0, 426 - dx, 520);
-                SpeechBubble.Margin = new Thickness(0, 0, 425 - dx, 550);
                 // Keep the Takeover countdown bar glued to the pod; it isn't in the XAML's
                 // attached-only default, so without this it floats at the attached spot
                 // whenever the tube detaches (e.g. the bubble-pop easter egg, #464).
                 TakeoverCountdownBar.Margin = new Thickness(0, 0, 416 - dx, 264);
             }
+
+            // The bubble is placed from one method for both modes now: attached it is anchored on
+            // the hit-test seam rather than centred, so its margin is not simply "the attached
+            // constant minus dx" any more. See ApplySpeechBubblePlacement.
+            ApplySpeechBubblePlacement();
         }
 
         /// <summary>

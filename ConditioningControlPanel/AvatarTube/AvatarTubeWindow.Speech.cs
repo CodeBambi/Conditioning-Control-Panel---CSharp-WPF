@@ -868,12 +868,53 @@ namespace ConditioningControlPanel
             SpeechScroller?.ScrollToTop();
 
             // Position bubble next to avatar — align with tube position based on attach state.
-            var bubbleUseAttached = _isAttached || ModOverridesAttachedTubeOnly();
-            var bubbleDx = bubbleUseAttached
-                ? EffAvatarOffsetX()
-                : EffAvatarDetachedOffsetX();
-            var bubbleRight = bubbleUseAttached ? 125 - bubbleDx : 425 - bubbleDx;
-            SpeechBubble.Margin = new Thickness(0, 0, bubbleRight, 550);
+            ApplySpeechBubblePlacement();
+        }
+
+        /// <summary>
+        /// Where the speech bubble sits. One method for all three callers (this file's
+        /// <see cref="AdjustBubbleSize"/>, ApplyTubeLayoutOffsets, and the deferred placement reset
+        /// on the Loaded hop), which each carried their own copy of this arithmetic.
+        ///
+        /// <para><b>Attached, the bubble is right-anchored on the seam</b> - see
+        /// <c>AttachedBubbleRightMargin</c> in AvatarTubeWindow.Windowing.cs for why an opaque
+        /// pixel past that line goes on to eat every click aimed at main's nav rail underneath.
+        /// Right-anchored rather than re-centred: the bubble's right edge is the edge that has to
+        /// hold, so a short line barely moves from where it has always sat beside her and only a
+        /// long one grows further left, instead of every bubble sliding 90px off her mouth.</para>
+        ///
+        /// <para>A mod's avatar offset may pull the bubble LEFT with the art it belongs to, never
+        /// right - the seam is main's, not the mod's. And a bubble too wide to fit left of the
+        /// seam (chat-history mode widens MaxWidth to 600) gives the seam up rather than hang off
+        /// the canvas and get clipped by the window: an unreadable bubble is the worse bug, and
+        /// chat history is a panel the user opened and can close.</para>
+        ///
+        /// <para>Detached there is nothing underneath to protect, so that mode keeps the centred
+        /// placement it has always had, untouched.</para>
+        /// </summary>
+        private void ApplySpeechBubblePlacement()
+        {
+            var useAttached = _isAttached || ModOverridesAttachedTubeOnly();
+            var dx = useAttached ? EffAvatarOffsetX() : EffAvatarDetachedOffsetX();
+
+            double right;
+            if (useAttached)
+            {
+                right = Math.Max(AttachedBubbleRightMargin, AttachedBubbleRightMargin - dx);
+
+                var maxWidth = SpeechBubble.MaxWidth;
+                if (double.IsFinite(maxWidth) && maxWidth > 0)
+                    right = Math.Min(right, Math.Max(0, DesignWidth - maxWidth));
+            }
+            else
+            {
+                right = 425 - dx;
+            }
+
+            SpeechBubble.HorizontalAlignment = useAttached
+                ? HorizontalAlignment.Right
+                : HorizontalAlignment.Center;
+            SpeechBubble.Margin = new Thickness(0, 0, right, 550);
         }
 
         /// <summary>
