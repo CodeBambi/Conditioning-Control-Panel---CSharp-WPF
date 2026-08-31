@@ -462,6 +462,12 @@ body.clickthrough #top-left,
 body.clickthrough #top-right,
 body.clickthrough #attention { display: none !important; }
 
+/* The swap chevrons go with them (#1096: "persistent but noninteractive"). They are a
+   :hover affordance, and ghosting moves the window out from under the cursor without ever
+   sending a mouseleave — so the hover state STICKS and the arrows sit there for the rest of
+   the session on a surface no mouse can reach. Dead chrome; take it off the mirror. */
+body.clickthrough .chev { display: none !important; }
+
 /* Notice shown when ghost mode engages, so the vanished chrome reads as a
    mode, not a breakage. Never interactive; fades out on its own. */
 #ct-note {

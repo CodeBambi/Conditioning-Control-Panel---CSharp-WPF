@@ -873,6 +873,50 @@ internal sealed class ChaosWebViewHost : IDisposable
             ? "--force-prefers-reduced-motion"
             : "--force-prefers-no-reduced-motion";
 
+    /// <summary>
+    /// Join the host's own switches to a caller's <see cref="Options.ExtraBrowserArguments"/> so the
+    /// command line carries each Chromium FEATURE switch exactly once.
+    ///
+    /// <para>Chromium keys switches by NAME (base::CommandLine holds a map), so a command line that
+    /// names --disable-features twice keeps only the LAST occurrence and silently drops every value
+    /// in the others. The host and its callers both have a stake in that switch - the For You ghost
+    /// mirror lives or dies on CalculateNativeWinOcclusion being off, and a parked window Chromium
+    /// calls hidden takes the whole feed down with it - and appending a second copy costs nothing
+    /// today only because both copies happen to carry the same value. Merge instead: one
+    /// comma-joined switch per feature list, first-seen order, duplicates dropped.</para>
+    ///
+    /// <para>Everything else is passed through untouched (only exact repeats collapse), so a switch
+    /// Chromium already resolves last-wins keeps resolving exactly as it does today.</para>
+    /// </summary>
+    internal static string ComposeBrowserArguments(string? hostArgs, string? extra)
+    {
+        var featureNames = new List<string>();
+        var featureValues = new List<List<string>>();
+        var plain = new List<string>();
+        var tokens = $"{hostArgs} {extra}".Split(' ',
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var token in tokens)
+        {
+            int eq = token.IndexOf('=');
+            var name = eq > 0 ? token[..eq] : token;
+            if (eq > 0 && (name == "--disable-features" || name == "--enable-features"))
+            {
+                int slot = featureNames.IndexOf(name);
+                if (slot < 0) { featureNames.Add(name); featureValues.Add(new List<string>()); slot = featureNames.Count - 1; }
+                foreach (var feature in token[(eq + 1)..].Split(',',
+                             StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    if (!featureValues[slot].Contains(feature, StringComparer.Ordinal))
+                        featureValues[slot].Add(feature);
+                continue;
+            }
+            if (!plain.Contains(token, StringComparer.Ordinal)) plain.Add(token);
+        }
+        for (int i = 0; i < featureNames.Count; i++)
+            if (featureValues[i].Count > 0)
+                plain.Add($"{featureNames[i]}={string.Join(',', featureValues[i])}");
+        return string.Join(' ', plain);
+    }
+
     private async Task InitWebAsync()
     {
         if (_initStarted || _web == null) return;
@@ -886,10 +930,10 @@ internal sealed class ChaosWebViewHost : IDisposable
             // through DWM (the app's established anti-MPO flag). CalculateNativeWinOcclusion:
             // native payload windows stack over the page; Chromium's occlusion tracker would
             // decide the page is covered and throttle rAF — turn it off.
-            var args = "--disable-direct-composition-video-overlays --disable-features=CalculateNativeWinOcclusion";
-            args += " " + PrefersReducedMotionArgument();
-            if (!string.IsNullOrWhiteSpace(_opts.ExtraBrowserArguments))
-                args += " " + _opts.ExtraBrowserArguments;
+            var args = ComposeBrowserArguments(
+                "--disable-direct-composition-video-overlays --disable-features=CalculateNativeWinOcclusion "
+                + PrefersReducedMotionArgument(),
+                _opts.ExtraBrowserArguments);
             var options = new CoreWebView2EnvironmentOptions { AdditionalBrowserArguments = args };
             var env = await CoreWebView2Environment
                 .CreateAsync(browserExecutableFolder: null, userDataFolder: userDataFolder, options: options)
