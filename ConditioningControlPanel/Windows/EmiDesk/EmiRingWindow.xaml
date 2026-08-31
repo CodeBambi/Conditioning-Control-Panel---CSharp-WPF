@@ -15,11 +15,18 @@
         SnapsToDevicePixels="True"
         Topmost="True"
         Focusable="False"
-        Visibility="Hidden"
         Width="600" Height="400">
 
     <!--
         THE RING.
+
+        NO Visibility="Hidden" HERE (the book's lesson - see EmiBookWindow.xaml). This window is
+        built by EnsureRing and shown by OpenRing in the SAME dispatcher turn, so a XAML hide is
+        queued against an HWND that does not exist yet and lands ~50 ms AFTER Show: WS_VISIBLE
+        goes off the HWND while IsOpen and IsVisible keep reading true. That was the whole of
+        "I gotta click 2 or 3 times for the wheel to pop up" - the first open was real but
+        invisible, and the next click went to the global close hook and folded it. A Window is
+        not visible until Show() runs anyway, so the property simply goes.
 
         A SIBLING window, not a layer inside EmiDeskWindow: the widget carries only 120 DIPs of pad
         around her silhouette, and a full fan at a 420 DIP body needs far more than that. This window
