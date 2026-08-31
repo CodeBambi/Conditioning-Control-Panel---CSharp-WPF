@@ -109,6 +109,29 @@ public class AchievementCatalogTests
     }
 
     /// <summary>
+    /// <c>IsPremiumFeature</c> and <c>IsExclusive</c> are two different answers to "who can earn
+    /// this", and combining them on one entry double-counts it: exclusive already files a badge in
+    /// the patron section under its own denominator, so the premium flag would then subtract it
+    /// from a total it was never in. <c>IsHidden</c> is out of every denominator already, so
+    /// pairing those two is dead weight that reads like an intention.
+    ///
+    /// A premium-feature badge is by definition a FREE, VISIBLE card that says on its face how it
+    /// is earned. Nothing but the denominator moves.
+    /// </summary>
+    [Fact]
+    public void PremiumFeatureAchievementsAreFreeAndVisible()
+    {
+        foreach (var a in Achievement.All.Values)
+        {
+            if (!a.IsPremiumFeature) continue;
+            Assert.False(a.IsExclusive,
+                $"'{a.Id}' is both IsPremiumFeature and IsExclusive - pick one.");
+            Assert.False(a.IsHidden,
+                $"'{a.Id}' is both IsPremiumFeature and IsHidden - a parked badge needs neither.");
+        }
+    }
+
+    /// <summary>
     /// Dictionary key and entry Id must agree for every achievement - TryUnlock looks up by key
     /// but the popup, the Discord webhook and the loc keys all read Id.
     /// </summary>

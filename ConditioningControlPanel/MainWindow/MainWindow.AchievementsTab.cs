@@ -51,6 +51,15 @@ namespace ConditioningControlPanel
         private static readonly SolidColorBrush AchvTickBrush = FrozenBrush(0x5E, 0xC8, 0xF2);
         private static readonly SolidColorBrush AchvRuleBrush =
             FrozenBrush(0x33, 0xFF, 0xFF, 0xFF);
+        // The Patreon chip on a premium-program card, in the app's own accent (#FF69B4):
+        // a translucent fill, a half-strength edge, and a light-pink ink that still reads
+        // over the blurred locked art.
+        private static readonly SolidColorBrush AchvPatreonFillBrush =
+            FrozenBrush(0x3D, 0xFF, 0x69, 0xB4);
+        private static readonly SolidColorBrush AchvPatreonEdgeBrush =
+            FrozenBrush(0x8C, 0xFF, 0x69, 0xB4);
+        private static readonly SolidColorBrush AchvPatreonInkBrush =
+            FrozenBrush(0xFF, 0xC9, 0xE3);
 
         // ---- state ----------------------------------------------------------------------
 
@@ -353,6 +362,39 @@ namespace ConditioningControlPanel
             content.Children.Add(nameText);
             content.Children.Add(infoText);
             content.Children.Add(bandChrome);
+
+            // The Patreon chip. These four live in the FREE grid on purpose (an earned receipt
+            // must never vanish on a lapse), so the card has to say out loud how it is earned -
+            // otherwise it reads as a badge you simply have not got to yet. Corner of the art
+            // row, outside badgeHost so the hover tilt does not drag it around, and it sits over
+            // the art rather than stealing a row from the name or the requirement line.
+            if (achievement.IsPremiumFeature)
+            {
+                var chipText = new TextBlock
+                {
+                    Text = LocOr("achievement_badge_patreon", "Patreon"),
+                    FontSize = 9,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = AchvPatreonInkBrush,
+                    Margin = new Thickness(7, 2, 7, 3),
+                };
+                var chip = new Border
+                {
+                    Background = AchvPatreonFillBrush,
+                    BorderBrush = AchvPatreonEdgeBrush,
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(9),
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Top,
+                    Margin = new Thickness(0, 8, 8, 0),
+                    Child = chipText,
+                    ToolTip = LocOr("tooltip_achievement_premium_program",
+                                    "Earned by finishing a Patreon-exclusive program."),
+                };
+                Grid.SetRow(chip, 0);
+                content.Children.Add(chip);
+            }
+
             card.Content = content;
 
             var parts = new AchievementCardParts

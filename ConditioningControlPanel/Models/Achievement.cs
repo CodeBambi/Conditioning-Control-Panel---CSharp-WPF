@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using ConditioningControlPanel.Localization;
 
@@ -32,6 +32,17 @@ public class Achievement
     /// no user can ever clear. Remove the flag once the unlock path is reachable.
     /// </summary>
     public bool IsHidden { get; set; }
+
+    /// <summary>
+    /// When true, this achievement is earnable only through a Premium-tier feature (today:
+    /// the four paid programs' graduation badges). It is NOT exclusive - it stays in the free
+    /// gallery, wears a "Patreon" chip so the requirement is honest, and never vanishes once
+    /// earned. What the flag changes is the DENOMINATOR: while it is still locked it counts
+    /// only for a user who actually has premium access, so a free user's ceiling is a real
+    /// 100% instead of a permanent 50/54. An unlocked one always counts, for everyone, forever.
+    /// See AchievementService.GetTotalCount(bool).
+    /// </summary>
+    public bool IsPremiumFeature { get; set; }
 
     /// <summary>Localized achievement name (falls back to hardcoded Name)</summary>
     public string LocalizedName => Loc.Get($"achievement_{Id}_name");
@@ -129,6 +140,11 @@ public class Achievement
         // is Circe's ownership, Presentation is the mirror and the photographs, Takeover is Bambi's
         // protocol. Free and visible like first_week_graduate: the program is the paywall, the badge
         // is the receipt, and an IsExclusive receipt would vanish from the gallery on a lapse.
+        //
+        // All four carry IsPremiumFeature instead: the card stays in the free grid and wears a
+        // "Patreon" chip that says how it is earned, and while it is LOCKED it is left out of a
+        // free user's denominator - the four unearnable badges were pinning every non-patron at
+        // 50/54 (93%) forever. Earning one puts it back in the total for good, patron or not.
         ["firmware_install_graduate"] = new Achievement
         {
             Id = "firmware_install_graduate",
@@ -136,7 +152,8 @@ public class Achievement
             Requirement = "Finish the fourteen-cycle Firmware Install program",
             FlavorText = "[INSTALL COMPLETE] Fourteen cycles logged. No errors reported. The Unit did not ask once what it was for.",
             ImageName = "firmware_install_graduate.png",
-            Category = AchievementCategory.Progression
+            Category = AchievementCategory.Progression,
+            IsPremiumFeature = true
         },
         ["kept_graduate"] = new Achievement
         {
@@ -145,7 +162,8 @@ public class Achievement
             Requirement = "Finish the twenty-eight-day Kept program",
             FlavorText = "Twenty-eight days, and you handed her every one of them. She has decided. You'll notice she didn't ask.",
             ImageName = "kept_graduate.png",
-            Category = AchievementCategory.Progression
+            Category = AchievementCategory.Progression,
+            IsPremiumFeature = true
         },
         ["presentation_graduate"] = new Achievement
         {
@@ -154,7 +172,8 @@ public class Achievement
             Requirement = "Finish the fourteen-day Presentation program",
             FlavorText = "Seven photographs. Put day one beside day fourteen and try to tell yourself nothing happened.",
             ImageName = "presentation_graduate.png",
-            Category = AchievementCategory.Progression
+            Category = AchievementCategory.Progression,
+            IsPremiumFeature = true
         },
         ["takeover_graduate"] = new Achievement
         {
@@ -163,7 +182,8 @@ public class Achievement
             Requirement = "Finish the twenty-eight-day Takeover program",
             FlavorText = "Twenty-eight days and every trigger installed. Your own keyboard sets you off now. That was the schedule.",
             ImageName = "takeover_graduate.png",
-            Category = AchievementCategory.Progression
+            Category = AchievementCategory.Progression,
+            IsPremiumFeature = true
         },
 
         ["window_shopping"] = new Achievement

@@ -1949,9 +1949,14 @@ namespace ConditioningControlPanel
             if (DiscordTab.TxtProfileViewerGifs != null) DiscordTab.TxtProfileViewerGifs.Text = FormatNumber(progress?.TotalFlashImages ?? 0);
             if (DiscordTab.TxtProfileViewerLockCards != null) DiscordTab.TxtProfileViewerLockCards.Text = FormatNumber(progress?.TotalLockCardsCompleted ?? 0);
             // Free-only count so the patron-exclusive set is never folded into this number.
+            // The service also drops a still-locked premium-program badge for a user with no
+            // premium access; the no-service fallback matches it (nothing is unlocked without
+            // a service to have unlocked it) so the two paths can never print different totals.
             var unlockedCount = App.Achievements?.GetUnlockedCount(exclusive: false) ?? 0;
             var totalCount = App.Achievements?.GetTotalCount(exclusive: false)
-                        ?? System.Linq.Enumerable.Count(Models.Achievement.All.Values, a => !a.IsExclusive && !a.IsHidden);
+                        ?? System.Linq.Enumerable.Count(Models.Achievement.All.Values,
+                               a => !a.IsExclusive && !a.IsHidden
+                                    && !(a.IsPremiumFeature && App.Patreon?.HasPremiumAccess != true));
             if (DiscordTab.TxtProfileViewerAchievements != null)
             {
                 DiscordTab.TxtProfileViewerAchievements.Text = $"{unlockedCount} / {totalCount}";
@@ -2250,7 +2255,9 @@ namespace ConditioningControlPanel
             UpdateProfileShowcase(
                 entry.AchievementsCount,
                 App.Achievements?.GetTotalCount(exclusive: false)
-                    ?? System.Linq.Enumerable.Count(Models.Achievement.All.Values, a => !a.IsExclusive && !a.IsHidden),
+                    ?? System.Linq.Enumerable.Count(Models.Achievement.All.Values,
+                           a => !a.IsExclusive && !a.IsHidden
+                                && !(a.IsPremiumFeature && App.Patreon?.HasPremiumAccess != true)),
                 isOwnProfile ? App.Achievements?.Progress?.UnlockedAchievements : null);
 
             // Phase 2 cosmetics. The leaderboard entry carries none, so someone else's card starts
