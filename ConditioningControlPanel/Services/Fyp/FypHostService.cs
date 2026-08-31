@@ -63,6 +63,12 @@ internal static class FypHostService
     /// <summary>True while the For You window is open.</summary>
     public static bool IsActive => _host != null;
 
+    /// <summary>When this visit to the feed started, for EMI's <c>fypClosed</c> duration. Nothing
+    /// else here was timing it. MinValue means "not open", which is what keeps the idempotent
+    /// close (ProcessFailed, the window's Closed event and panic all route through it) silent on
+    /// the second pass.</summary>
+    private static DateTime _emiOpenedUtc = DateTime.MinValue;
+
     /// <summary>Open the feed window (idempotent - refocuses if already open).</summary>
     public static void Launch()
     {
@@ -72,6 +78,7 @@ internal static class FypHostService
             // EMI Desk: the ring learns from every open, not just its own cards.
             try { App.EmiDesk?.NoteOpen("fyp"); } catch { }
             try { App.EmiDesk?.Fire("fypOpened", null); } catch { }
+            _emiOpenedUtc = DateTime.UtcNow;
 
             var webRoot = Path.Combine(AppContext.BaseDirectory, "Resources", "web");
             // A missing folder makes WebView2 SKIP the mapping entirely (host rule),
@@ -133,6 +140,18 @@ internal static class FypHostService
         ExitGhost();
         var h = _host;
         _host = null;
+
+        // EMI Desk (MOMENTS `fypClosed`), the partner of the `fypOpened` fire in Launch. Close is
+        // the one teardown funnel here - the window's Closed event, OnProcessFailed and the panic
+        // path all land in it - and the stamp is cleared as it is read, so the idempotent second
+        // call says nothing.
+        if (_emiOpenedUtc != DateTime.MinValue)
+        {
+            int emiMinutes = Math.Max(0, (int)(DateTime.UtcNow - _emiOpenedUtc).TotalMinutes);
+            _emiOpenedUtc = DateTime.MinValue;
+            try { App.EmiDesk?.Fire("fypClosed", new { minutes = emiMinutes }); } catch { }
+        }
+
         try { _meta?.Save(); } catch { }
         try { FypOnlineCoordinator.SaveAll(); } catch { }
         try { h?.Dispose(); }

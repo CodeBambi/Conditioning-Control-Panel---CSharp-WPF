@@ -246,13 +246,13 @@ line is spice 0 anyway.
 
 ## 6. Ctx payload per moment
 
-Tokens a line may use and flags a gate may read, per v1 moment (MOMENTS.md tables; `-` = none).
+Tokens a line may use and flags a gate may read, per moment (MOMENTS.md tables; `-` = none).
 The checker's `CTX` table in `check-lines.py` is the machine copy of this list.
 
 | moment | tokens | flags |
 |---|---|---|
-| desktopFirstBoot, bedtimeSet, sheListeningOn, avatarMuted, avatarKept, flashesStarted, attentionCheckPassed, subliminalsStarted, bubbleCountLost, mantraCompleted, arcademyOpened, dtrhOpened, fypOpened, intakeOpened, sessionLastMinute, pinkRushStarted, morningFirst, crashRecovered | - | - |
-| summoned | via (rail/hotkey), minutes | - |
+| bedtimeSet, sheListeningOn, avatarMuted, avatarKept, flashesStarted, attentionCheckPassed, subliminalsStarted, bubbleCountLost, mantraCompleted, arcademyOpened, dtrhOpened, fypOpened, intakeOpened, sessionLastMinute, pinkRushStarted, morningFirst, crashRecovered | - | - |
+| summoned, firstContact, desktopFirstBoot - the three greets share one Fire, so they share one ctx | via (rail/hotkey/tour/knock/chip), minutes | `touring` - set only on the tour path. All three `ask.firstContact.*` gate on `!touring` so the tour never offers the walk it is already giving. A missing or falsy flag passes `!touring`, so no other caller has to set it. |
 | dismissed | minutes | - |
 | ringOpen | n (cards), target (top card) | topUnpinned |
 | ringDismissed | target (top card) | - |
@@ -299,6 +299,14 @@ The checker's `CTX` table in `check-lines.py` is the machine copy of this list.
 | premiumTeaseSeen, lockedCardTapped, tierUp, tierLapse, dailyFreeToday | target | - |
 | appOpened | target (away bucket; unused by lines) | - |
 | updateAvailable, afterUpdate | target (version) | - |
+| noMediaYet, firstFlashEver, firstVideoEver, firstSessionEver, takeoverStarted, luckyProc, weekend, dayTurned, minimizedToTray | - | - |
+| companionLevelUp | level | - |
+| lockCardSolved | n (tries = mistakes + 1; omitted on a clean card, which skips that one line) | - |
+| brainDrainOff, arcademyClosed, fypClosed | minutes | - |
+| dtrhClosed | minutes (passed, unread); the pool's tokened line wants n (run xp), which never reaches the host, so it is skipped | - |
+| pinkRushEnded | - (a rush is a flat 60s, so `{minutes}` would always read "1 minutes"; that line is skipped on purpose) | - |
+| mantraStreakBroken | - (`StreakBroken` zeroes `Streak` before it invokes, so `{streak}` cannot be read; that line is skipped) | - |
+| hapticsConnected, enhancementApplied, contentPackInstalled, modChanged | target (device name / enhancement id / pack name / mod id, lowercased) | - |
 | holds (avatarSpeaking, awarenessReaction, attentionCheckShown, intakeRunning, lockdownCountdown, panicPressed, effectDeclined, askIgnored, appClosing, firstLaunchEver, emergencyExitOpened) | - | - |
 
 ## 7. Settings the engine reads

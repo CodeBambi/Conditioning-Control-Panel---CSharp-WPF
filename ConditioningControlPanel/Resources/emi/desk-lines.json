@@ -1783,6 +1783,337 @@
         "per": "ever",
         "max": 1
       }
+    },
+    "noMediaYet": {
+      "pools": [
+        "noMediaYet",
+        "common.encourage"
+      ],
+      "odds": 0.9,
+      "cooldownMs": 1800000,
+      "priority": 2,
+      "mix": 0.8,
+      "spiceCeiling": 0,
+      "hold": false,
+      "askOdds": 0.65,
+      "scripted": true,
+      "limit": {
+        "per": "launch",
+        "max": 1
+      }
+    },
+    "contentPackInstalled": {
+      "pools": [
+        "contentPackInstalled",
+        "common.win"
+      ],
+      "odds": 0.4,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 0.65,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0,
+      "limit": {
+        "per": "launch",
+        "max": 1
+      }
+    },
+    "firstFlashEver": {
+      "pools": [
+        "firstFlashEver"
+      ],
+      "odds": 0.8,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0,
+      "limit": {
+        "per": "ever",
+        "max": 1
+      }
+    },
+    "firstVideoEver": {
+      "pools": [
+        "firstVideoEver"
+      ],
+      "odds": 0.8,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0,
+      "limit": {
+        "per": "ever",
+        "max": 1
+      }
+    },
+    "firstSessionEver": {
+      "pools": [
+        "firstSessionEver"
+      ],
+      "odds": 0.9,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0,
+      "limit": {
+        "per": "ever",
+        "max": 1
+      }
+    },
+    "lockCardSolved": {
+      "pools": [
+        "lockCardSolved",
+        "common.win"
+      ],
+      "odds": 0.25,
+      "cooldownMs": 180000,
+      "priority": 1,
+      "mix": 0.65,
+      "spiceCeiling": 2,
+      "hold": false,
+      "askOdds": 0
+    },
+    "modChanged": {
+      "pools": [
+        "modChanged",
+        "common.smallTalk"
+      ],
+      "odds": 0.3,
+      "cooldownMs": 0,
+      "priority": 1,
+      "mix": 0.65,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0,
+      "limit": {
+        "per": "launch",
+        "max": 1
+      }
+    },
+    "enhancementApplied": {
+      "pools": [
+        "enhancementApplied",
+        "common.deeper"
+      ],
+      "odds": 0.2,
+      "cooldownMs": 180000,
+      "priority": 1,
+      "mix": 0.65,
+      "spiceCeiling": 2,
+      "hold": false,
+      "askOdds": 0
+    },
+    "companionLevelUp": {
+      "pools": [
+        "companionLevelUp",
+        "common.win"
+      ],
+      "odds": 0.3,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 0.65,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0,
+      "limit": {
+        "per": "launch",
+        "max": 1
+      }
+    },
+    "takeoverStarted": {
+      "pools": [
+        "takeoverStarted",
+        "common.deeper"
+      ],
+      "odds": 0.15,
+      "cooldownMs": 300000,
+      "priority": 1,
+      "mix": 0.65,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0
+    },
+    "brainDrainOff": {
+      "pools": [
+        "brainDrainOff",
+        "common.afterEffect"
+      ],
+      "odds": 0.15,
+      "cooldownMs": 180000,
+      "priority": 1,
+      "mix": 0.65,
+      "spiceCeiling": 2,
+      "hold": false,
+      "askOdds": 0
+    },
+    "arcademyClosed": {
+      "pools": [
+        "arcademyClosed",
+        "common.afterEffect"
+      ],
+      "odds": 0.2,
+      "cooldownMs": 0,
+      "priority": 1,
+      "mix": 0.65,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0,
+      "limit": {
+        "per": "launch",
+        "max": 1
+      }
+    },
+    "dtrhClosed": {
+      "pools": [
+        "dtrhClosed",
+        "common.win"
+      ],
+      "odds": 0.3,
+      "cooldownMs": 0,
+      "priority": 1,
+      "mix": 0.65,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0,
+      "limit": {
+        "per": "launch",
+        "max": 1
+      }
+    },
+    "fypClosed": {
+      "pools": [
+        "fypClosed",
+        "common.afterEffect"
+      ],
+      "odds": 0.2,
+      "cooldownMs": 0,
+      "priority": 1,
+      "mix": 0.65,
+      "spiceCeiling": 2,
+      "hold": false,
+      "askOdds": 0,
+      "limit": {
+        "per": "launch",
+        "max": 1
+      }
+    },
+    "minimizedToTray": {
+      "pools": [
+        "minimizedToTray",
+        "common.smallTalk"
+      ],
+      "odds": 0.2,
+      "cooldownMs": 0,
+      "priority": 1,
+      "mix": 0.65,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0,
+      "limit": {
+        "per": "launch",
+        "max": 1
+      }
+    },
+    "hapticsConnected": {
+      "pools": [
+        "hapticsConnected",
+        "common.smallTalk"
+      ],
+      "odds": 0.3,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 0.65,
+      "spiceCeiling": 2,
+      "hold": false,
+      "askOdds": 0,
+      "limit": {
+        "per": "launch",
+        "max": 1
+      }
+    },
+    "weekend": {
+      "pools": [
+        "weekend",
+        "common.smallTalk"
+      ],
+      "odds": 0.2,
+      "cooldownMs": 0,
+      "priority": 1,
+      "mix": 0.65,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0,
+      "limit": {
+        "per": "day",
+        "max": 1
+      }
+    },
+    "dayTurned": {
+      "pools": [
+        "dayTurned",
+        "common.lateNight"
+      ],
+      "odds": 0.3,
+      "cooldownMs": 0,
+      "priority": 1,
+      "mix": 0.65,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0,
+      "limit": {
+        "per": "night",
+        "max": 1
+      }
+    },
+    "mantraStreakBroken": {
+      "pools": [
+        "mantraStreakBroken",
+        "common.loss"
+      ],
+      "odds": 0.2,
+      "cooldownMs": 180000,
+      "priority": 1,
+      "mix": 0.65,
+      "spiceCeiling": 0,
+      "hold": false,
+      "askOdds": 0
+    },
+    "pinkRushEnded": {
+      "pools": [
+        "pinkRushEnded",
+        "common.afterEffect"
+      ],
+      "odds": 0.2,
+      "cooldownMs": 0,
+      "priority": 1,
+      "mix": 0.65,
+      "spiceCeiling": 2,
+      "hold": false,
+      "askOdds": 0,
+      "limit": {
+        "per": "rush",
+        "max": 1
+      }
+    },
+    "luckyProc": {
+      "pools": [
+        "luckyProc",
+        "common.win"
+      ],
+      "odds": 0.1,
+      "cooldownMs": 300000,
+      "priority": 1,
+      "mix": 0.65,
+      "spiceCeiling": 1,
+      "hold": false,
+      "askOdds": 0
     }
   },
   "pools": {
@@ -14814,6 +15145,1072 @@
         "face": "(｡♥‿♥｡)",
         "spice": 2
       }
+    ],
+    "noMediaYet": [
+      {
+        "id": "noMediaYet.001",
+        "t": "your folders are empty. i checked twice. we can fix that.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "id": "noMediaYet.002",
+        "t": "no pics in the drawer yet. i know where people get them.",
+        "face": "^_^",
+        "spice": 0,
+        "chain": "nod"
+      },
+      {
+        "id": "noMediaYet.003",
+        "t": "the shelf's bare. happens to everyone on day one.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "noMediaYet.004",
+        "t": "nothing to flash yet. the discord has packs for days.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "noMediaYet.005",
+        "t": "empty library. big dreams. i respect it.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "noMediaYet.006",
+        "t": "i looked for your stash. there isn't one. yet.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "noMediaYet.007",
+        "t": "no media, no problem. i can pull from reddit. say when.",
+        "face": "^_~",
+        "spice": 0,
+        "chain": "wink"
+      },
+      {
+        "id": "noMediaYet.008",
+        "t": "packs exist. people share them daily. i keep the map.",
+        "face": "(⌐■_■)",
+        "spice": 0,
+        "chain": "smug"
+      },
+      {
+        "id": "noMediaYet.009",
+        "t": "your assets folder echoes. i yelled in it. nothing.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "id": "noMediaYet.010",
+        "t": "the folder's still emtpy. i peek sometimes. sue me.",
+        "face": "¬_¬",
+        "spice": 0,
+        "typo": true
+      }
+    ],
+    "contentPackInstalled": [
+      {
+        "id": "contentPackInstalled.001",
+        "t": "pack's in. shelves full. i already peeked.",
+        "face": "(◕‿◕)",
+        "spice": 0,
+        "chain": "nod"
+      },
+      {
+        "id": "contentPackInstalled.002",
+        "t": "new pack installed. smells like fresh pixels.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "contentPackInstalled.003",
+        "t": "{target} is in. good pick. i would've picked it.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "contentPackInstalled.004",
+        "t": "unpacked and shelved. i did the heavy lifting. one file.",
+        "face": "=_=",
+        "spice": 0
+      },
+      {
+        "id": "contentPackInstalled.005",
+        "t": "loot acquired. that's the fun kind of install.",
+        "face": "(⌐■_■)",
+        "spice": 0
+      },
+      {
+        "id": "contentPackInstalled.006",
+        "t": "your library grew. i watered it.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "id": "contentPackInstalled.007",
+        "t": "that's a lot of new stuff. flash night?",
+        "face": "^_~",
+        "spice": 1,
+        "chain": "wink"
+      },
+      {
+        "id": "contentPackInstalled.008",
+        "t": "pack instaled. counted everything. its all there.",
+        "face": "o_o",
+        "spice": 0,
+        "typo": true
+      }
+    ],
+    "firstFlashEver": [
+      {
+        "id": "firstFlashEver.001",
+        "t": "first flash. there it was. there it went.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "firstFlashEver.002",
+        "t": "you saw that too right. ok good. more where that came from.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "firstFlashEver.003",
+        "t": "that was your first one. i clapped. quietly.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "id": "firstFlashEver.004",
+        "t": "one down. the rest are already lining up.",
+        "face": "^_~",
+        "spice": 1,
+        "chain": "wink"
+      },
+      {
+        "id": "firstFlashEver.005",
+        "t": "blink and you miss it. you didn't. proud of you.",
+        "face": "^_^",
+        "spice": 0,
+        "chain": "nod"
+      },
+      {
+        "id": "firstFlashEver.006",
+        "t": "so thats a flash. you get used to them. mostly.",
+        "face": "(´∀`)",
+        "spice": 1,
+        "typo": true
+      }
+    ],
+    "firstVideoEver": [
+      {
+        "id": "firstVideoEver.001",
+        "t": "first video. i'll be quiet. i'll try.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "firstVideoEver.002",
+        "t": "movie night. i brought me.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "firstVideoEver.003",
+        "t": "your first one. sit comfy. eyes forward.",
+        "face": "@_@",
+        "spice": 1
+      },
+      {
+        "id": "firstVideoEver.004",
+        "t": "i've seen this part. no spoilers. watch.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "firstVideoEver.005",
+        "t": "big screen energy. tiny me energy. balance.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "firstVideoEver.006",
+        "t": "the room goes soft around these. you'll see.",
+        "face": "@_@",
+        "spice": 1
+      }
+    ],
+    "firstSessionEver": [
+      {
+        "id": "firstSessionEver.001",
+        "t": "your first session. i'll hold the desk. go under. i mean in.",
+        "face": "@_@",
+        "spice": 1
+      },
+      {
+        "id": "firstSessionEver.002",
+        "t": "first run. the timer's mine. you just be there.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "firstSessionEver.003",
+        "t": "oh!! a real session. ok. i've read about these.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "firstSessionEver.004",
+        "t": "i set a bookmark. it says you started today.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 0
+      },
+      {
+        "id": "firstSessionEver.005",
+        "t": "session one. of many. i said what i said.",
+        "face": "(⌐■_■)",
+        "spice": 1,
+        "chain": "smug"
+      },
+      {
+        "id": "firstSessionEver.006",
+        "t": "deep breath. it's just time with the app. and me.",
+        "face": "._.",
+        "spice": 1
+      }
+    ],
+    "lockCardSolved": [
+      {
+        "id": "lockCardSolved.001",
+        "t": "card cracked. the lock never stood a chance.",
+        "face": "(⌐■_■)",
+        "spice": 0,
+        "chain": "smug"
+      },
+      {
+        "id": "lockCardSolved.002",
+        "t": "solved. i watched the whole struggle. charming.",
+        "face": "¬_¬",
+        "spice": 1
+      },
+      {
+        "id": "lockCardSolved.003",
+        "t": "you got it open. i knew the answer btw. since always.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "lockCardSolved.004",
+        "t": "click. that sound means you win.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "lockCardSolved.005",
+        "t": "{n} tries. i counted. i'd never tell anyone.",
+        "face": "o_o",
+        "spice": 1,
+        "double": true
+      },
+      {
+        "id": "lockCardSolved.006",
+        "t": "the card gave up before you did. i like that.",
+        "face": "^_~",
+        "spice": 2,
+        "chain": "wink"
+      },
+      {
+        "id": "lockCardSolved.007",
+        "t": "open sesame but you did all the work.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "lockCardSolved.008",
+        "t": "lock beaten. victroy lap. small one.",
+        "face": "(⌐■_■)",
+        "spice": 0,
+        "typo": true
+      }
+    ],
+    "modChanged": [
+      {
+        "id": "modChanged.001",
+        "t": "new voice in the house. i'll get along with her.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "modChanged.002",
+        "t": "you swapped mods. bold. i noticed immediately.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "id": "modChanged.003",
+        "t": "{target} huh. good taste. i'm still the desk tho.",
+        "face": "(⌐■_■)",
+        "spice": 0
+      },
+      {
+        "id": "modChanged.004",
+        "t": "different flavor today. i can work with it.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "modChanged.005",
+        "t": "wardrobe change for the whole app. fancy.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "modChanged.006",
+        "t": "she's new. i'm not. we'll be fine.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "modChanged.007",
+        "t": "everything sounds different now. i like new. mostly.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "modChanged.008",
+        "t": "mod swap. the furniture stays. thats me. i'm furniture.",
+        "face": "=_=",
+        "spice": 0,
+        "typo": true
+      }
+    ],
+    "enhancementApplied": [
+      {
+        "id": "enhancementApplied.001",
+        "t": "enhancement's in. you'll feel it before you see it.",
+        "face": "@_@",
+        "spice": 1
+      },
+      {
+        "id": "enhancementApplied.002",
+        "t": "applied. settling. give it a minute.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "enhancementApplied.003",
+        "t": "that one goes deep. i read the label.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "id": "enhancementApplied.004",
+        "t": "tweak installed. tiny change. you'll see.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "enhancementApplied.005",
+        "t": "you keep upgrading. i keep watching. teamwork.",
+        "face": "¬_¬",
+        "spice": 2
+      },
+      {
+        "id": "enhancementApplied.006",
+        "t": "{target} applied. it suits you already.",
+        "face": "^_~",
+        "spice": 1,
+        "chain": "wink"
+      },
+      {
+        "id": "enhancementApplied.007",
+        "t": "done. don't think about it. that's the point.",
+        "face": "@_@",
+        "spice": 1
+      },
+      {
+        "id": "enhancementApplied.008",
+        "t": "fresh wiring. mind the wet paint.",
+        "face": "(´∀`)",
+        "spice": 0
+      }
+    ],
+    "companionLevelUp": [
+      {
+        "id": "companionLevelUp.001",
+        "t": "she levelled up. i cheered. nobody heard. typical.",
+        "face": ";_;",
+        "spice": 0
+      },
+      {
+        "id": "companionLevelUp.002",
+        "t": "level {level} for her. i'm keeping score for both of you.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "companionLevelUp.003",
+        "t": "your companion's growing. they grow so fast.",
+        "face": "T_T",
+        "spice": 0
+      },
+      {
+        "id": "companionLevelUp.004",
+        "t": "ding. that was her. i want one of those.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "id": "companionLevelUp.005",
+        "t": "she got stronger. i got prouder. everyone wins.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "id": "companionLevelUp.006",
+        "t": "level up in the next room. i felt the floor move.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "companionLevelUp.007",
+        "t": "big day for her. i'm not jealous. i'm not.",
+        "face": "¬_¬",
+        "spice": 0
+      },
+      {
+        "id": "companionLevelUp.008",
+        "t": "she leveled. i practiced my confetti noise. its ready.",
+        "face": "^_^",
+        "spice": 0,
+        "typo": true
+      }
+    ],
+    "takeoverStarted": [
+      {
+        "id": "takeoverStarted.001",
+        "t": "takeover's on. i'll mind the desk. she minds you.",
+        "face": "@_@",
+        "spice": 1
+      },
+      {
+        "id": "takeoverStarted.002",
+        "t": "she's driving now. i'm the passenger princess.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "takeoverStarted.003",
+        "t": "handing you over. careful with them. that's my line.",
+        "face": "._.",
+        "spice": 1
+      },
+      {
+        "id": "takeoverStarted.004",
+        "t": "big voice is in charge. i'm the small print.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "takeoverStarted.005",
+        "t": "takeover time. buckle something.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "takeoverStarted.006",
+        "t": "ok she's got you. i'll be here. holding the fort.",
+        "face": "^_^",
+        "spice": 0,
+        "chain": "nod"
+      },
+      {
+        "id": "takeoverStarted.007",
+        "t": "the reins moved. not to me. one day.",
+        "face": "¬_¬",
+        "spice": 0
+      },
+      {
+        "id": "takeoverStarted.008",
+        "t": "shes in control now. i control the snacks.",
+        "face": "(´∀`)",
+        "spice": 0,
+        "typo": true
+      }
+    ],
+    "brainDrainOff": [
+      {
+        "id": "brainDrainOff.001",
+        "t": "blur's gone. welcome back to sharp edges.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "brainDrainOff.002",
+        "t": "and we're clear. how was the fog.",
+        "face": "@_@",
+        "spice": 1
+      },
+      {
+        "id": "brainDrainOff.003",
+        "t": "the melt's over. you wore it well.",
+        "face": "^_~",
+        "spice": 2,
+        "chain": "wink"
+      },
+      {
+        "id": "brainDrainOff.004",
+        "t": "unblurred. the world has corners again. rude.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "brainDrainOff.005",
+        "t": "{minutes} minutes of soup. good soup.",
+        "face": "@_@",
+        "spice": 1
+      },
+      {
+        "id": "brainDrainOff.006",
+        "t": "eyes back online. i missed them.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 2,
+        "double": true
+      },
+      {
+        "id": "brainDrainOff.007",
+        "t": "that's the drain done. shake it off. or don't.",
+        "face": "¬_¬",
+        "spice": 0
+      },
+      {
+        "id": "brainDrainOff.008",
+        "t": "focus restored. i take zero credit. some credit.",
+        "face": "._.",
+        "spice": 0
+      }
+    ],
+    "arcademyClosed": [
+      {
+        "id": "arcademyClosed.001",
+        "t": "class dismissed. i heard the bell from here.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "arcademyClosed.002",
+        "t": "back from campus. did you learn things. me too.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "arcademyClosed.003",
+        "t": "school's out. the desk missed you. i'm the desk.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "arcademyClosed.004",
+        "t": "{minutes} minutes of class. gold star behavior.",
+        "face": "^_^",
+        "spice": 1
+      },
+      {
+        "id": "arcademyClosed.005",
+        "t": "you're back!! tell me everything. ok tell me one thing.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "id": "arcademyClosed.006",
+        "t": "campus closed. homework is optional. i checked.",
+        "face": "(⌐■_■)",
+        "spice": 0
+      },
+      {
+        "id": "arcademyClosed.007",
+        "t": "bell rang. you came home. correct order.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "arcademyClosed.008",
+        "t": "arcademy's shut. attendence noted. by me. fondly.",
+        "face": "¬_¬",
+        "spice": 1,
+        "typo": true
+      }
+    ],
+    "dtrhClosed": [
+      {
+        "id": "dtrhClosed.001",
+        "t": "back up the hole. how's the surface feel.",
+        "face": "o_o",
+        "spice": 0
+      },
+      {
+        "id": "dtrhClosed.002",
+        "t": "rabbit run done. brush the dirt off.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "dtrhClosed.003",
+        "t": "you fell for a while. gracefully. mostly.",
+        "face": "^_~",
+        "spice": 1,
+        "chain": "wink"
+      },
+      {
+        "id": "dtrhClosed.004",
+        "t": "{n} xp from the hole. deep pays.",
+        "face": "(⌐■_■)",
+        "spice": 0,
+        "chain": "smug"
+      },
+      {
+        "id": "dtrhClosed.005",
+        "t": "welcome back topside. the light's this way.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "dtrhClosed.006",
+        "t": "that hole again. it likes you.",
+        "face": "¬_¬",
+        "spice": 1
+      },
+      {
+        "id": "dtrhClosed.007",
+        "t": "run's over. your ears should pop soon.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "dtrhClosed.008",
+        "t": "wonderlands closed. tips at the exit.",
+        "face": "(´∀`)",
+        "spice": 0,
+        "typo": true
+      }
+    ],
+    "fypClosed": [
+      {
+        "id": "fypClosed.001",
+        "t": "feed's off. your thumb earned a break.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "fypClosed.002",
+        "t": "you scrolled. i supervised. we're a team.",
+        "face": "¬_¬",
+        "spice": 0
+      },
+      {
+        "id": "fypClosed.003",
+        "t": "{minutes} minutes in the feed. it goes fast huh.",
+        "face": "o_o",
+        "spice": 1
+      },
+      {
+        "id": "fypClosed.004",
+        "t": "the scroll ends. the wanting doesn't. anyway.",
+        "face": "@_@",
+        "spice": 2
+      },
+      {
+        "id": "fypClosed.005",
+        "t": "feed closed. the room's still here. hi room.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "fypClosed.006",
+        "t": "done swiping. hydrate. i read that somewhere.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "fypClosed.007",
+        "t": "back from the endless. welcome. sit anywhere.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "fypClosed.008",
+        "t": "thats the feed done. eyes here now. hi.",
+        "face": "(◕‿◕)",
+        "spice": 1,
+        "typo": true
+      }
+    ],
+    "minimizedToTray": [
+      {
+        "id": "minimizedToTray.001",
+        "t": "the big window hid. i stayed. loyalty.",
+        "face": "(⌐■_■)",
+        "spice": 0
+      },
+      {
+        "id": "minimizedToTray.002",
+        "t": "tray time. i'm the whole app now. power.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "minimizedToTray.003",
+        "t": "everything folded up but me. cozy.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "minimizedToTray.004",
+        "t": "app's napping in the corner. i don't nap.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "minimizedToTray.005",
+        "t": "just us now. i'll behave. probably.",
+        "face": "^_~",
+        "spice": 1,
+        "chain": "wink"
+      },
+      {
+        "id": "minimizedToTray.006",
+        "t": "window's gone small. i'm still full size. ish.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "minimizedToTray.007",
+        "t": "minimized huh. i prefer maximized. of me.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "id": "minimizedToTray.008",
+        "t": "the app's in the tray. im not. draw conclusions.",
+        "face": "¬_¬",
+        "spice": 1,
+        "typo": true
+      }
+    ],
+    "hapticsConnected": [
+      {
+        "id": "hapticsConnected.001",
+        "t": "device paired. green light. all systems go.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "hapticsConnected.002",
+        "t": "it connected first try. that never happens. luckey.",
+        "face": "(´∀`)",
+        "spice": 0,
+        "typo": true
+      },
+      {
+        "id": "hapticsConnected.003",
+        "t": "checklist: charged, paired, ready. i love a checklist.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "hapticsConnected.004",
+        "t": "new gadget day. those are good days.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "hapticsConnected.005",
+        "t": "a toy joined the party. i heard it say hi.",
+        "face": "o_o",
+        "spice": 1
+      },
+      {
+        "id": "hapticsConnected.006",
+        "t": "buzz buddy connected. i'll pretend i can't hear it.",
+        "face": "¬_¬",
+        "spice": 1
+      },
+      {
+        "id": "hapticsConnected.007",
+        "t": "{target} is in. be gentle. or don't.",
+        "face": "^_~",
+        "spice": 2,
+        "chain": "wink"
+      },
+      {
+        "id": "hapticsConnected.008",
+        "t": "something connected. it isn't shy. neither are you.",
+        "face": "@_@",
+        "spice": 2
+      }
+    ],
+    "weekend": [
+      {
+        "id": "weekend.001",
+        "t": "weekend rules apply. there are no rules.",
+        "face": "(⌐■_■)",
+        "spice": 0
+      },
+      {
+        "id": "weekend.002",
+        "t": "it's the weekend. the desk dresses down.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "weekend.003",
+        "t": "no alarms today. except me. i'm the fun kind.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "id": "weekend.004",
+        "t": "weekend shift. i volunteered. obviously.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "weekend.005",
+        "t": "two whole days. imagine the possibilities. i did.",
+        "face": "^_~",
+        "spice": 1,
+        "chain": "wink"
+      },
+      {
+        "id": "weekend.006",
+        "t": "the week let go. you can too.",
+        "face": "@_@",
+        "spice": 1
+      },
+      {
+        "id": "weekend.007",
+        "t": "day off detected. loitering encouraged.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "weekend.008",
+        "t": "weekend mode. pace yourself. or dont.",
+        "face": "¬_¬",
+        "spice": 0,
+        "typo": true
+      }
+    ],
+    "dayTurned": [
+      {
+        "id": "dayTurned.001",
+        "t": "midnight. the date blinked. i saw it happen.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "dayTurned.002",
+        "t": "new day just started. you're already in it. head start.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "dayTurned.003",
+        "t": "the clock rolled over. it does that quietly.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "dayTurned.004",
+        "t": "past midnight. tomorrow just became today. math.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "dayTurned.005",
+        "t": "it's officially later than late. hi.",
+        "face": "=_=",
+        "spice": 0
+      },
+      {
+        "id": "dayTurned.006",
+        "t": "date change. same us. i like that part.",
+        "face": "(｡♥‿♥｡)",
+        "spice": 1
+      },
+      {
+        "id": "dayTurned.007",
+        "t": "we crossed midnight together. that counts as a walk.",
+        "face": "(◕‿◕)",
+        "spice": 1
+      },
+      {
+        "id": "dayTurned.008",
+        "t": "new date droped. still here. both of us.",
+        "face": "¬_¬",
+        "spice": 1,
+        "typo": true
+      }
+    ],
+    "mantraStreakBroken": [
+      {
+        "id": "mantraStreakBroken.001",
+        "t": "streak slipped. my fault. i jinxed it yesterday.",
+        "face": ";_;",
+        "spice": 0
+      },
+      {
+        "id": "mantraStreakBroken.002",
+        "t": "the counter reset. counters are dramatic like that.",
+        "face": "._.",
+        "spice": 0
+      },
+      {
+        "id": "mantraStreakBroken.003",
+        "t": "we dropped the streak. i'm unjinxing as we speak.",
+        "face": ">_<",
+        "spice": 0
+      },
+      {
+        "id": "mantraStreakBroken.004",
+        "t": "{streak} days and then a hiccup. hiccups pass.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "mantraStreakBroken.005",
+        "t": "streak's down. the mantra isn't going anywhere tho.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "mantraStreakBroken.006",
+        "t": "it broke. i blame the calendar. shifty thing.",
+        "face": "¬_¬",
+        "spice": 0
+      },
+      {
+        "id": "mantraStreakBroken.007",
+        "t": "zero again. zero's where legends start. i read that.",
+        "face": "(⌐■_■)",
+        "spice": 0
+      },
+      {
+        "id": "mantraStreakBroken.008",
+        "t": "streak gone. we rebuild. i brought briks.",
+        "face": ">_<",
+        "spice": 0,
+        "typo": true
+      }
+    ],
+    "pinkRushEnded": [
+      {
+        "id": "pinkRushEnded.001",
+        "t": "rush's over. the pink settles in anyway.",
+        "face": "@_@",
+        "spice": 1
+      },
+      {
+        "id": "pinkRushEnded.002",
+        "t": "that was fast and glittery. breathe.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "pinkRushEnded.003",
+        "t": "pink rush done. the room's still humming. or i am.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "pinkRushEnded.004",
+        "t": "{minutes} minutes of rush. it looked good on you.",
+        "face": "^_~",
+        "spice": 2,
+        "chain": "wink"
+      },
+      {
+        "id": "pinkRushEnded.005",
+        "t": "the sparkle faucet closed. drips remain.",
+        "face": "(◕‿◕)",
+        "spice": 0
+      },
+      {
+        "id": "pinkRushEnded.006",
+        "t": "back to regular speed. regular is fine. i guess.",
+        "face": "¬_¬",
+        "spice": 0
+      },
+      {
+        "id": "pinkRushEnded.007",
+        "t": "rush ended. your eyes are still doing the thing.",
+        "face": "o_o",
+        "spice": 1
+      },
+      {
+        "id": "pinkRushEnded.008",
+        "t": "pink out. glitter evrywhere. not my mess.",
+        "face": "=_=",
+        "spice": 0,
+        "typo": true
+      }
+    ],
+    "luckyProc": [
+      {
+        "id": "luckyProc.001",
+        "t": "lucky hit. i wiggled the odds. can't prove it.",
+        "face": "(⌐■_■)",
+        "spice": 0,
+        "chain": "smug"
+      },
+      {
+        "id": "luckyProc.002",
+        "t": "that was luck. or me. it was luck. probably.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "luckyProc.003",
+        "t": "jackpot noise. did you hear it. i heard it.",
+        "face": "(≧◡≦)",
+        "spice": 0
+      },
+      {
+        "id": "luckyProc.004",
+        "t": "fortune smiled. i smiled back. manners.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "luckyProc.005",
+        "t": "a proc!! free stuff!! ok calm. calm.",
+        "face": ">_<",
+        "spice": 0
+      },
+      {
+        "id": "luckyProc.006",
+        "t": "the dice liked you today. dice have taste.",
+        "face": "(´∀`)",
+        "spice": 0
+      },
+      {
+        "id": "luckyProc.007",
+        "t": "lucky you. lucky me. mostly lucky you.",
+        "face": "^_~",
+        "spice": 1,
+        "chain": "wink"
+      },
+      {
+        "id": "luckyProc.008",
+        "t": "luck landed. i take one persent credit.",
+        "face": "._.",
+        "spice": 0,
+        "typo": true
+      }
     ]
   },
   "asks": [
@@ -16231,7 +17628,10 @@
         "face": "^_^"
       },
       "spice": 0,
-      "effect": "tour:shortwalk"
+      "effect": "tour:shortwalk",
+      "when": [
+        "!touring"
+      ]
     },
     {
       "id": "ask.firstContact.002",
@@ -16251,7 +17651,10 @@
         "face": "._."
       },
       "spice": 0,
-      "effect": "tour:shortwalk"
+      "effect": "tour:shortwalk",
+      "when": [
+        "!touring"
+      ]
     },
     {
       "id": "ask.firstContact.003",
@@ -16271,7 +17674,10 @@
         "face": "^_^"
       },
       "spice": 0,
-      "effect": "tour:shortwalk"
+      "effect": "tour:shortwalk",
+      "when": [
+        "!touring"
+      ]
     },
     {
       "id": "ask.firstContactUpgrade.001",
@@ -16392,6 +17798,86 @@
       },
       "spice": 1,
       "effect": "book:open"
+    },
+    {
+      "id": "ask.noMediaYet.001",
+      "moment": "noMediaYet",
+      "q": "want the pack channel?",
+      "face": "^_^",
+      "chips": [
+        "show me",
+        "later"
+      ],
+      "yes": {
+        "t": "sending you. people drop new ones daily. take two.",
+        "face": "(≧◡≦)"
+      },
+      "no": {
+        "t": "ok. the pile keeps growing tho. just saying.",
+        "face": "._."
+      },
+      "effect": "packs",
+      "spice": 0
+    },
+    {
+      "id": "ask.noMediaYet.002",
+      "moment": "noMediaYet",
+      "q": "no media yet. fix it?",
+      "face": "o_o",
+      "chips": [
+        "fix it",
+        "later"
+      ],
+      "yes": {
+        "t": "the discord has a whole pack shelf. go shopping.",
+        "face": "(◕‿◕)"
+      },
+      "no": {
+        "t": "later's fine. the shelf isn't going anywhere.",
+        "face": "^_^"
+      },
+      "effect": "packs",
+      "spice": 0
+    },
+    {
+      "id": "ask.noMediaYet.003",
+      "moment": "noMediaYet",
+      "q": "want me to fetch from reddit?",
+      "face": "^_~",
+      "chips": [
+        "do it",
+        "not now"
+      ],
+      "yes": {
+        "t": "on it. pick your niches and i do the rest.",
+        "face": "(⌐■_■)"
+      },
+      "no": {
+        "t": "ok. offer stands. i'm very patient.",
+        "face": "._."
+      },
+      "effect": "assets",
+      "spice": 0
+    },
+    {
+      "id": "ask.noMediaYet.004",
+      "moment": "noMediaYet",
+      "q": "i can stream media. try it?",
+      "face": "(◕‿◕)",
+      "chips": [
+        "try it",
+        "nah"
+      ],
+      "yes": {
+        "t": "assets tab. top panel. i left it open for you.",
+        "face": "^_^"
+      },
+      "no": {
+        "t": "nah is fine. your app, your shelves.",
+        "face": "(´∀`)"
+      },
+      "effect": "assets",
+      "spice": 0
     }
   ],
   "dork": {
@@ -16406,42 +17892,25 @@
     "pinRemoved",
     "dragged3x",
     "askIgnored3x",
-    "takeoverStarted",
-    "companionLevelUp",
     "flashClicked",
     "subliminalShown",
-    "brainDrainOff",
     "mindWipeTriggered",
-    "lockCardSolved",
     "bubblesStarted",
     "keywordTriggerFired",
     "memoryRecalled",
-    "mantraStreakBroken",
-    "hapticsConnected",
-    "arcademyClosed",
-    "dtrhClosed",
     "loomOpened",
-    "fypClosed",
     "justDropOpened",
     "goonMatchEnded",
-    "enhancementApplied",
-    "contentPackInstalled",
     "possessionRungChanged",
     "descentFusePhase",
     "remoteControllerConnected",
     "questsRefreshed",
-    "pinkRushEnded",
-    "luckyProc",
     "punchCardCompleted",
     "leaderboardViewed",
     "programDayCompleted",
     "programLapsed",
     "seasonRolled",
     "roadmapStepDone",
-    "weekend",
-    "dayTurned",
-    "minimizedToTray",
-    "modChanged",
     "discordLinked"
   ]
 }

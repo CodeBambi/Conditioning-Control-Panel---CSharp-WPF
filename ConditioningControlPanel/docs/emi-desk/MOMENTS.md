@@ -9,9 +9,11 @@ The full moment catalogue for the desktop EMI. Three audiences:
 - **hook agent**: section 4 only. Every fire site below was opened and verified unless marked
   `(UNVERIFIED)`.
 
-**Count: 133 moments catalogued. 93 are v1 (90 + the three onboarding nudges in 1.1b); the other 40 are marked **DEFER** - their fire sites and
+**Count: 137 moments catalogued. 114 are shipped (90 v1 + the three onboarding nudges in 1.1b + the 17 promoted and 4 new moments of the wave-3 new-user pass); the other 23 are marked **DEFER** - their fire sites and
 payloads are documented and verified, but they carry NO pool in the first wave and the hook agent
 should skip them. Nothing needs re-researching to turn one on later. 12 common pools.**
+
+> **Wave 3 (the new-user pass)** promoted 17 of the deferred rows and added 4 moments that did not exist before: `noMediaYet`, `firstFlashEver`, `firstVideoEver`, `firstSessionEver`. The promoted rows below now name the seam that actually ships, which is not always the one the DEFER row guessed at - `lockCardSolved` and the three host closes each moved.
 
 > The DEFER cut was made on line-economy, not on quality: each moment costs 8-25 written lines, and the
 > deferred 40 are the lowest-odds, most niche or most redundant of the set (secondary host open/close
@@ -120,11 +122,11 @@ Rules shared by all three tracks (the build lane owns the counters; they persist
 | `avatarSpeaking` | the tube bubble is live (or audio is playing) | `Services/Companion/BarkService.cs:143` `BarkSpoken` (raised in `Speak` `:1800`, i.e. BEFORE the audio starts) + `AvatarTube/AvatarTubeWindow.Speech.cs:238` `Giggle` / `:320` `GigglePriority`. **There is no speaking-started/stopped event anywhere** - only the poll `AvatarTubeWindow.Speech.cs:1638` `IsSpeakingAudio`. See 4.E | none | 0 HOLD | +20s tail | 3 | 0 | common.hold | 0 |
 | `avatarMuted` LOCKED | the summon prompt was answered "mute" (or `EmiDeskMuteAvatar` silently muted her) | build lane: `EmiDeskService` mute arbitration | none | 1.0 | 1/session | 2 | 15 | common.smallTalk | 1 |
 | `avatarKept` LOCKED | the summon prompt was answered "keep the avatar" | build lane: same | none | 0.6 | 1/session | 2 | 8 | common.smallTalk | 1 |
-| `takeoverStarted` **DEFER** | Bambi Takeover switched on | `Services/AutonomyService.cs:134` `EnabledChanged` (true) | none | 0.15 | 300000 | 1 | 8 | common.deeper | 1 |
+| `takeoverStarted` | Bambi Takeover switched on | `Services/EmiDesk/EmiDeskService.cs` `EnabledChanged` handler, the `enabled` branch (partner of `takeoverEnded`) | none | 0.15 | 300000 | 1 | 8 | common.deeper | 1 |
 | `takeoverEnded` | Takeover switched off | same, false | `{minutes}` | 0.25 | 300000 | 1 | 8 | common.afterEffect | 2 |
 | `sheListeningOn` | the mic starts listening | `Services/Speech/SpeechService.cs:105` `ListeningChanged` (true); wake variant `Services/Speech/SherpaWakeService.cs:49` | none | 0.20 | 600000 | 1 | 8 | common.attention | 2 |
 | `awarenessReaction` | the awareness arbiter decided the avatar speaks about the active window | `Services/Awareness/AwarenessReactionService.cs` -> `BarkService` awareness entry point (:~250) | none | 0 HOLD | +20s tail | 3 | 0 | common.hold | 0 |
-| `companionLevelUp` **DEFER** | the AI companion levelled | `Services/Companion/CompanionService.cs:81` `CompanionLevelUp` | `{level}` | 0.30 | 1/session | 2 | 8 | common.win | 1 |
+| `companionLevelUp` | the AI companion levelled | bridge row `CompanionLevelUp` (`Services/Companion/BarkService.cs:755`) | `{level}` | 0.30 | 1/launch | 2 | 8 | common.win | 1 |
 
 ### 1.3 group `feature` - a feature was opened, started or finished
 
@@ -144,9 +146,9 @@ Rules shared by all three tracks (the build lane owns the counters; they persist
 | `subliminalShown` **DEFER** | a subliminal card was displayed | `Services/Subliminal/SubliminalService.cs:91` `SubliminalDisplayed` | `{n}` count | 0.02 | 300000 | 1 | 8 | common.deeper | 2 |
 | `overlaySpiralUp` | a spiral overlay went up (any source, hers or the app's) | `Services/Notifications/OverlayService.cs:842` `ShowOverlayTimed(kind,...)` / `:1038` `ShowOverlaySustained` when `kind=="spiral"` | `{channel}` kind, `{n}` seconds | 0.20 | 120000 | 2 | 15 | common.deeper | 2 |
 | `brainDrainOn` | brain drain blur came up | `Services/Notifications/OverlayService.cs:2129` `StartBrainDrainBlur(intensity, melt)`; trigger event `Services/LockCard/BrainDrainService.cs:120` `BrainDrainTriggered` | `{n}` intensity, `melt` bool | 0.25 | 180000 | 2 | 15 | common.deeper | 2 |
-| `brainDrainOff` **DEFER** | the blur came down | `Services/Notifications/OverlayService.cs:2444` `StopBrainDrainBlur()` | `{minutes}` | 0.15 | 180000 | 1 | 8 | common.afterEffect | 2 |
+| `brainDrainOff` | the blur came down | `Services/Notifications/OverlayService.cs` `StopBrainDrainBlur()`, gated on the run stamp set beside the `brainDrainOn` fire so the no-op stops stay silent | `{minutes}` | 0.15 | 180000 | 1 | 8 | common.afterEffect | 2 |
 | `mindWipeTriggered` **DEFER** | a mind wipe fired | `Services/LockCard/MindWipeService.cs:95` `MindWipeTriggered` | none | 0.25 | 300000 | 2 | 8 | common.afterEffect | 2 |
-| `lockCardSolved` **DEFER** | a lock card was completed | `Services/LockCard/LockCardService.cs:42` `LockCardCompleted` | `{n}` attempts | 0.25 | 180000 | 1 | 8 | common.win | 2 |
+| `lockCardSolved` | a lock card was completed | `Services/LockCard/LockCardService.cs` `NotifyCompleted()` - NOT the bark trigger, which only fires on the pool-bark fallback branch | `{n}` tries (mistakes + 1; omitted on a clean card) | 0.25 | 180000 | 1 | 8 | common.win | 2 |
 | `bubblesStarted` **DEFER** | the bubble minigame turned on | `Services/BubbleService.cs:195` `Start(bypassLevelCheck, frequency)` | `{n}` frequency | 0.15 | 300000 | 1 | 8 | common.smallTalk | 1 |
 | `bubbleCountWon` | the counting minigame was passed | `Services/BubbleCountService.cs:50` `GameCompleted` | `{n}` xp | 0.30 | 120000 | 2 | 15 | common.win | 1 |
 | `bubbleCountLost` | the counting minigame was failed | `Services/BubbleCountService.cs:51` `GameFailed` (six raise sites, all bare `EventArgs.Empty`) | none | 0.25 | 120000 | 2 | 15 | common.loss | 0 |
@@ -154,22 +156,25 @@ Rules shared by all three tracks (the build lane owns the counters; they persist
 | `keywordTriggerFired` **DEFER** | a keyword trigger fired | `Services/KeywordTriggerService.cs:55` `TriggerFired` | `{target}` keyword | 0.10 | 240000 | 1 | 8 | common.tease | 2 |
 | `memoryRecalled` **DEFER** | the companion surfaced something she remembers about you | `Services/Companion/BarkService.cs` trigger `PersistentMemoryRecalled` | none | 0.15 | 300000 | 1 | 8 | common.attention | 2 |
 | `mantraCompleted` | a mantra was completed | `Services/MantraService.cs:23` `MantraCompleted` | none | 0.20 | 180000 | 1 | 8 | common.win | 2 |
-| `mantraStreakBroken` **DEFER** | the mantra streak broke | `Services/MantraService.cs:22` `StreakBroken` | `{streak}` lost | 0.20 | 180000 | 1 | 8 | common.loss | 0 |
-| `hapticsConnected` **DEFER** | a toy connected | `Services/Haptics/HapticService.cs:59` `ConnectionChanged` (true) | `{target}` device name (from `:60 DeviceDiscovered`) | 0.30 | 1/session | 2 | 8 | common.smallTalk | 2 |
+| `mantraStreakBroken` | the mantra streak broke | bridge row `MantraStreakBroken` (`Services/Companion/BarkService.cs:834`) | none - `MantraService.BreakStreak()` zeroes `Streak` before it invokes, so `{streak}` cannot be read and its one line is skipped | 0.20 | 180000 | 1 | 8 | common.loss | 0 |
+| `hapticsConnected` | a toy connected | `Services/Haptics/HapticService.cs` `ConnectionChanged` relay, the true edge only | `{target}` device name (`ConnectedDevices[0]`, nickname first) | 0.30 | 1/launch | 2 | 8 | common.smallTalk | 2 |
 | `arcademyOpened` | the Arcademy launched | `Services/Arcademy/ArcademyHostService.cs:146` `Launch()` (gate `:127 DoorAvailable`) | none | 0.40 | 1/sitting | 2 | 15 | common.win | 1 |
-| `arcademyClosed` **DEFER** | the Arcademy closed | `Services/Arcademy/ArcademyHostService.cs:322` `CloseActive()` | `{minutes}` | 0.20 | 1/sitting | 1 | 8 | common.afterEffect | 1 |
+| `arcademyClosed` | the Arcademy closed | `Services/Arcademy/ArcademyHostService.cs` `DisposeAll()` - the one funnel all four exits reach, not `CloseActive()` | `{minutes}` (stamp set beside the `arcademyOpened` fire) | 0.20 | 1/launch | 1 | 8 | common.afterEffect | 1 |
 | `dtrhOpened` | Down the Rabbit Hole launched | `Services/Chaos/DtrhHostService.cs:70` `Launch(testMode)` | none | 0.30 | 1/sitting | 1 | 8 | common.deeper | 1 |
-| `dtrhClosed` **DEFER** | Down the Rabbit Hole closed (a run ended or the host was shut) | `Services/Chaos/DtrhHostService.cs:172` `CloseActive()`; per-run detail already at `BarkService.NotifyChaosRunCompleted` (:483) | `{minutes}`, `{n}` xp | 0.30 | 1/sitting | 1 | 8 | common.win | 1 |
+| `dtrhClosed` | Down the Rabbit Hole closed (a run ended or the host was shut) | `Services/Chaos/DtrhHostService.cs` `DisposeAll()` - the one funnel all four exits reach, not `CloseActive()` | `{minutes}` is passed but no line reads it; the pool's one tokened line wants `{n}` xp, and the run total goes to BarkService and never reaches the host, so that line is skipped | 0.30 | 1/launch | 1 | 8 | common.win | 1 |
 | `loomOpened` **DEFER** | the Loom launched | `Services/Chaos/LoomHostService.cs:30` `Launch()` | none | 0.25 | 1/sitting | 1 | 8 | common.smallTalk | 1 |
 | `fypOpened` | the For You feed opened | `Services/Fyp/FypHostService.cs:67` `Launch()` (routed via `ShowTab("fyp")`) | none | 0.25 | 1/sitting | 1 | 8 | common.tease | 2 |
-| `fypClosed` **DEFER** | the feed closed | `Services/Fyp/FypHostService.cs:121` `Close()` | `{minutes}` | 0.20 | 1/sitting | 1 | 8 | common.afterEffect | 2 |
+| `fypClosed` | the feed closed | `Services/Fyp/FypHostService.cs` `Close()` (also the ProcessFailed, window-Closed and panic path) | `{minutes}` (stamp set beside the `fypOpened` fire) | 0.20 | 1/launch | 1 | 8 | common.afterEffect | 2 |
 | `intakeOpened` | Graded Intake launched | `Services/Quiz/IntakeHostService.cs:93` `Launch(testMode, duckMainWindow)` | none | 0.20 | 1/sitting | 1 | 8 | common.attention | 1 |
 | `intakeRunning` | intake is up and a question may be on screen | `Services/Quiz/IntakeHostService.cs:83` `IsActive` | none | 0 HOLD | until `CloseActive` | 3 | 0 | common.hold | 0 |
 | `intakeClosed` | intake closed | `Services/Quiz/IntakeHostService.cs:164` `CloseActive()`; result detail at `BarkService` `"QuizCompleted"` (:817, has `passed`/`perfect`) | `passed` bool | 0.25 | 1/sitting | 1 | 8 | common.win + common.loss | 1 |
 | `justDropOpened` **DEFER** | the JustDrop shop opened | `Services/JustDrop/JustDropHostService.cs:75` `LaunchShop()` | none | 0.25 | 1/sitting | 1 | 8 | common.smallTalk | 1 |
 | `goonMatchEnded` **DEFER** | a Goon Game match finished | `Services/GoonGame/GoonMatchService.cs:264` `MatchEnded` (phases at `:235 PhaseChanged`) | `won` bool | 0.25 | 1/sitting | 1 | 8 | common.win + common.loss | 2 |
-| `enhancementApplied` **DEFER** | a Deeper enhancement was applied | `Services/Deeper/EnhancementHostService.cs:38` `EnhancementCompleted`; existing entry `BarkService.NotifyEnhancementApplied` (:371) | `{target}` enhancement id | 0.20 | 180000 | 1 | 8 | common.deeper | 2 |
-| `contentPackInstalled` **DEFER** | a content pack finished installing | `Services/Content/ContentPackService.cs:78` `PackDownloadCompleted` (start `:77`, fail `:81`) | `{target}` pack name | 0.40 | 1/session | 2 | 8 | common.win | 1 |
+| `enhancementApplied` | a Deeper enhancement was applied | bridge row `EnhancementApplied` (`Services/Companion/BarkService.cs:379`) | `{target}` enhancement id, lowercased | 0.20 | 180000 | 1 | 8 | common.deeper | 2 |
+| `contentPackInstalled` | a content pack finished installing | `Services/Content/ContentPackService.cs`, BOTH `PackDownloadCompleted` invoke sites (download and local zip) | `{target}` pack display name, lowercased | 0.40 | 1/launch | 2 | 8 | common.win | 1 |
+| `noMediaYet` | the library is empty and the app is still on local media | `Services/Flash/FlashService.cs` + `Services/Video/WallpaperService.cs`, beside each `App.OfferRemoteMediaSource` call; and `EmiDeskService` 7s behind the summon greeting. Probe: `EmiOffers.LibraryIsEmpty()` | none | 0.90 | 1800000 + 1/launch | 2 | 10 | common.encourage | **0** |
+| `firstFlashEver` | the first flash image this account has ever been shown | `Services/Flash/FlashService.cs`, after `App.Achievements?.TrackFlashImage()`, gated `TotalFlashImages == 1` | none | 0.80 | 1/ever | 2 | 6 | - | 1 |
+| `firstVideoEver` | the first video this account has ever started | `Services/Video/VideoService.cs` `StartVideoPlayback()`, at the top so both engines carry it, gated `TotalVideoMinutes <= 0` | none | 0.80 | 1/ever | 2 | 6 | - | 1 |
 | `emergencyExitOpened` | the emergency-exit game opened | `Services/EmergencyExit/EmergencyExitHostService.cs:87` `Open()`; existing entry `BarkService.NotifyEmergencyExitOpened` (:418) | `{target}` game, `{n}` attempt | 0 HOLD | - | 3 | 0 | common.hold | 0 |
 | `lockdownArmed` | lockdown activated | `Services/Haptics/LockdownService.cs:45` `LockdownActivated` | `{minutes}` | 0.30 one line at arm only | 1/lockdown | 2 | 8 | - | **0** |
 | `lockdownCountdown` | the lockdown countdown is running | `Services/Haptics/LockdownService.cs:47` `CountdownTick` | - | 0 HOLD | whole countdown | 3 | 0 | common.hold | **0** |
@@ -188,6 +193,7 @@ Rules shared by all three tracks (the build lane owns the counters; they persist
 | `rampStepUp` | the ramp stepped the intensity up | `Services/Session/SessionEngine.cs:591` `UpdateRampingValues(elapsedMinutes, totalMinutes)` - the only genuinely STEPPED value is the bubble frequency ramp at `:663-677` (`rampSteps = timeSinceBubbleStart / 5`); everything else is a per-second lerp, so hook the bubble step only. Engine-mode equivalent: `MainWindow/MainWindow.StartStop.cs:501` `RampTimer_Tick` | `{n}` step | 0.15 | 300000 | 1 | 8 | common.deeper | 2 |
 | `sessionFeatureArrived` | the session turned a feature on by itself at its scheduled minute | `Services/Session/SessionEngine.cs:690` `CheckDelayedFeatures(elapsedMinutes)` - generic queue fires `pending.Start()` at `:704`; hardcoded arrivals at `:715` pink filter, `:727` spiral, `:758` bubbles, `:779` corner gif | `{target}` `pending.Name` (mind wipe, flash, lock cards, bouncing text, mandatory videos), `{n}` start minute | 0.20 | 120000 | 1 | 15 | common.deeper | 2 |
 | `sessionStarted` | a Session preset started | `Services/Session/SessionEngine.cs:147` `StartSessionAsync(Session)` / event `:26 SessionStarted` | `{target}` session name, `{minutes}` total | 0.40 | 1/session | 2 | 25 | common.deeper | 2 |
+| `firstSessionEver` | the first session this account has ever started | `Services/Session/SessionEngine.cs`, after `App.Achievements?.TrackSessionStart()`, gated `TotalSessionsStarted == 1` | none | 0.90 | 1/ever | 2 | 6 | - | 1 |
 | `sessionPaused` | the session was paused | `Services/Session/SessionEngine.cs:435` `PauseSession()` - **no event, inline hook** | `{n}` pause count, `{n}` xp penalty | 0.20 | 120000 | 1 | 8 | common.encourage | **0** |
 | `sessionResumed` | the session was resumed | `Services/Session/SessionEngine.cs:485` `ResumeSession()` - **no event, inline hook** | `{minutes}` remaining | 0.25 | 120000 | 1 | 8 | common.encourage | 2 |
 | `sessionPhaseChanged` | the session moved to the next phase | `Services/Session/SessionEngine.cs:23` `PhaseChanged` (`SessionPhaseChangedEventArgs.Phase/PhaseIndex`) | `{target}` phase name, `{n}` index | 0.10 | 120000 | 1 | 15 | common.deeper | 2 |
@@ -210,8 +216,8 @@ Rules shared by all three tracks (the build lane owns the counters; they persist
 | `streakBroken` | the daily streak was lost | `Models/AchievementProgress.cs:407` `ResolveDeferredStreakBreak(reason)` | `{streak}` lost, `{target}` reason | 0.30 | 1/day | 2 | 15 | common.loss, common.encourage | **0** |
 | `skillUnlocked` | a skill-tree node was unlocked | `Services/Progression/SkillTreeService.cs:32` `SkillUnlocked` (string id) | `{target}` skill id | 0.30 | 120000 | 2 | 8 | common.win | 1 |
 | `pinkRushStarted` | Pink Rush began | `Services/Progression/SkillTreeService.cs:37` `PinkRushStarted` | none | 0.35 | 1/rush | 2 | 8 | common.deeper | 2 |
-| `pinkRushEnded` **DEFER** | Pink Rush ended | `Services/Progression/SkillTreeService.cs:42` `PinkRushEnded` | `{minutes}` | 0.20 | 1/rush | 1 | 8 | common.afterEffect | 2 |
-| `luckyProc` **DEFER** | a lucky proc landed | `Services/Progression/SkillTreeService.cs:47` `LuckyProc` | none | 0.10 | 300000 | 1 | 8 | common.win | 1 |
+| `pinkRushEnded` | Pink Rush ended | bridge row `PinkRushEnded` (`Services/Companion/BarkService.cs:768`) | none - a rush is a flat 60s, so `{minutes}` would always read "1 minutes" and its one line is skipped | 0.20 | 1/rush | 1 | 8 | common.afterEffect | 2 |
+| `luckyProc` | a lucky proc landed | bridge row `LuckyProc` (`Services/Companion/BarkService.cs:764`) | none | 0.10 | 300000 | 1 | 8 | common.win | 1 |
 | `punchCardCompleted` **DEFER** | an intake punch card filled | `Services/Progression/IntakePunchCardService.cs:81` `PunchCardCompleted` | none | 0.40 | 1/card | 2 | 8 | common.win | 1 |
 | `leaderboardViewed` **DEFER** | the leaderboard was opened | `Services/Companion/BarkService.cs:427` `NotifyLeaderboardViewed(rank, total)`; source `Services/Progression/LeaderboardService.cs:59` `LeaderboardUpdated` | `{n}` rank, `{n}` total | 0.20 | 1/sitting | 1 | 8 | common.smallTalk | 1 |
 | `programDayCompleted` **DEFER** | a Program day was completed | `Services/Program/ProgramService.cs:139` `DayCompleted` (`ProgramDayEventArgs`) | `{n}` day | 0.30 | 1/day | 2 | 8 | common.win | 1 |
@@ -237,12 +243,12 @@ time-of-day event anywhere in the app. `BarkService` exposes the raw value as th
 | `lateNight` LOCKED-ish | first summon or ring open after local midnight | build lane: `EmiDeskService` clock tick | `{n}` hour | 0.50 | 1/night, outranks `ringOpen` | 2 | 25 | common.lateNight | 2 |
 | `smallHours` | still up past 03:00 | build lane: same | `{n}` hour | 0.35 | 1/night | 2 | 15 | common.lateNight | 2 |
 | `morningFirst` | first summon of the day before 10:00 | build lane: same | none | 0.30 | 1/day | 1 | 15 | common.smallTalk | 1 |
-| `weekend` **DEFER** | first summon on a Saturday or Sunday | build lane: same | none | 0.20 | 1/day | 1 | 8 | common.smallTalk | 1 |
+| `weekend` | a summon on a Saturday or Sunday | build lane: `EmiDeskService.Summon()`, fired on every weekend summon and left to the moment's own day/1 limit to make it the first | none | 0.20 | 1/day | 1 | 8 | common.smallTalk | 1 |
 | `appIdleLong` LOCKED | no input to the app for 20+ min while she is out | `Services/Tracking/ActivityTracker.cs:38` `IdleStateChanged` (true) + EmiDesk timer | `{minutes}` | 0.15 | 1/sitting, 15 min from any bark | 1 | 25 | common.idle | 2 |
 | `idleShort` | 5 min of no input on her (the ambient heartbeat) | build lane: `EmiDeskService` idle timer | `{minutes}` | 0.06 | 300000 | 1 | 25 | common.idle | 2 |
 | `longSitting` | the app has been open 2h+ this launch | build lane: same, from process start | `{minutes}` | 0.25 | 1/sitting | 1 | 15 | common.encourage | 2 |
 | `backSoon` | she was dismissed and re-summoned within 5 min | build lane: `EmiDeskService.Summon()` | `{minutes}` | 0.35 | 120000 | 1 | 8 | common.attention | 2 |
-| `dayTurned` **DEFER** | midnight rolled over while she was out | build lane: clock tick | none | 0.30 | 1/night | 1 | 8 | common.lateNight | 1 |
+| `dayTurned` | the calendar date turned over while she was out | build lane: `EmiDeskService.OnClockTick`, `_clockDay` latch (the first tick of a sitting only records the date it found) | none | 0.30 | 1/night | 1 | 8 | common.lateNight | 1 |
 
 ### 1.7 group `tier`
 
@@ -263,9 +269,9 @@ time-of-day event anywhere in the app. `BarkService` exposes the raw value as th
 | `updateAvailable` | a newer release was found | `Services/Update/UpdateService.cs:193` `UpdateAvailable` (`AppUpdateInfo`); dialog at `App.xaml.cs:3702` / `:3976` | `{target}` version | 0.40 | 1/launch | 2 | 8 | common.smallTalk | 1 (never nag, never promise) |
 | `afterUpdate` | this launch is the first on a new version | `MainWindow/MainWindow.Marquee.cs:366` (the `LastSeenVersion` gate; stamp at `:383` / `:440`) | `{target}` version | 0.60 | 1 ever per version | 2 | 15 | common.smallTalk | 1 |
 | `crashRecovered` | the previous run ended badly | `App.xaml.cs:1555` `ChaosCrashSentinel.ConsumeAndReport` / `:1556` `EngineCrashSentinel.ConsumeAndReport` / `:1562` `UiHangWatchdog.ConsumeAndReportPreviousHang` | none | 0.40 | 1/launch | 2 | 8 | - | **0** (kind, never blame the user, never claim she fixed it) |
-| `minimizedToTray` **DEFER** | the window was minimized to tray while she is out | `MainWindow/MainWindow.xaml.cs:291` (the title-bar X -> tray path) | none | 0.20 | 1/sitting | 1 | 8 | common.smallTalk | 1 |
+| `minimizedToTray` | the window was minimized to tray while she is out | `MainWindow/MainWindow.WindowChrome.cs` `OnClosing`, the X -> tray branch - NOT `TrayIconService.MinimizeToTray`, which is also start-minimized and the Chaos takeover | none | 0.20 | 1/launch | 1 | 8 | common.smallTalk | 1 |
 | `appClosing` | the app is really exiting | `App.xaml.cs:4551` `OnExit(ExitEventArgs)` | none | 0 - **there is NO pool on app close, by the fence** | - | 3 | 0 | common.hold (the wordless exit flinch only) | **0** |
-| `modChanged` **DEFER** | the active mod / persona changed | `Services/ModService.cs:42` `ModChanged`, `:48 ModInstalled` | `{target}` mod name | 0.30 | 1/session | 1 | 8 | common.smallTalk | 1 |
+| `modChanged` | the active mod / persona changed | bridge row `ModChanged` (`Services/Companion/BarkService.cs:863`) | `{target}` mod id, lowercased | 0.30 | 1/launch | 1 | 8 | common.smallTalk | 1 |
 | `discordLinked` **DEFER** | the Discord account linked or unlinked | `Services/Account/DiscordService.cs:38` `AuthenticationChanged` | `linked` bool | 0.25 | 1/session | 1 | 8 | common.smallTalk | 1 |
 
 ---

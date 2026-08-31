@@ -322,8 +322,9 @@ public sealed class EmiDeskService : IDisposable
             // Her greeting rides AFTER the wake chain, not on top of it: RunSummon plays the CRT
             // power-on and then `wake`, and a bubble fired here would land while she is still a
             // flat line. The delay is the summon FX budget (BRIEF 3, ~1 s) plus the wake chain.
-            _summonMoment = first ? "desktopFirstBoot" : "summoned";
+            _summonMoment = ChooseGreetMoment();
             _summonVia = string.Equals(why, "hotkey", StringComparison.OrdinalIgnoreCase) ? "hotkey" : "rail";
+            _summonTouring = string.Equals(why, "tour", StringComparison.OrdinalIgnoreCase);
 
             // THE KNOCK WAS ANSWERED (Ask EMI wave 1). The chip flashed, and this is the summon
             // that followed it - by the chip, the chord or the tray, because all three are the
@@ -346,6 +347,7 @@ public sealed class EmiDeskService : IDisposable
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] knock hand-off failed"); }
 
             ScheduleSummonMoment();
+            MaybeOfferBookOnSummon(summons);
 
             // She was sent away and called straight back (MOMENTS 1.x). Fired here rather than
             // folded into the greeting: it is a different beat and the engine's floor decides which
@@ -360,6 +362,18 @@ public sealed class EmiDeskService : IDisposable
                 }
             }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] backSoon probe failed"); }
+
+            // It is the weekend (MOMENTS `weekend`). Fired on EVERY weekend summon and left to the
+            // moment's own limit: day/1 already means "the first one of the day", so a latch here
+            // would be a second, worse copy of the bucket the engine prunes for us. Same shape as
+            // backSoon above - a separate beat, and the floor picks between it and the greeting.
+            try
+            {
+                var today = DateTime.Now.DayOfWeek;
+                if (today == DayOfWeek.Saturday || today == DayOfWeek.Sunday)
+                    Fire("weekend", null);
+            }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] weekend probe failed"); }
 
             // A bedtime is a promise she made about tonight, and being summoned through it is the
             // user breaking it, not her. {n} is how many times, so the line can escalate honestly.
@@ -413,6 +427,7 @@ public sealed class EmiDeskService : IDisposable
             }
 
             CancelSummonMoment();
+            CancelEmptyLibraryBeat();
             // `dismissed` is a LOCKED silent moment: the wink chain and the CRT power-off are the
             // whole goodbye. It still fires so the hooks and the counters see it, and Fire() drops
             // it before it can reach a pool (see NeverSpeaks).
@@ -751,6 +766,12 @@ public sealed class EmiDeskService : IDisposable
     private System.Windows.Threading.DispatcherTimer? _summonTimer;
     private string? _summonMoment;
     private string _summonVia = "rail";
+
+    // True when this summon came from the tour narrator. It rides into the greeting's ctx as the
+    // `touring` flag, and the three `ask.firstContact.*` offers are all gated `!touring`: she still
+    // introduces herself mid-tour, she just must not offer a tour she is already giving.
+    private bool _summonTouring;
+
     private DateTime _outSinceUtc = DateTime.MinValue;
 
     /// <summary>When she was last sent away, for the "back already?" beat. MinValue = never.</summary>
@@ -771,6 +792,59 @@ public sealed class EmiDeskService : IDisposable
     {
         if (_outSinceUtc == DateTime.MinValue) return 0;
         return Math.Max(0, (int)(DateTime.UtcNow - _outSinceUtc).TotalMinutes);
+    }
+
+    /// <summary>
+    /// Which greeting this summon opens with (wave 3 - the first-contact fix).
+    ///
+    /// <para>Before this, only the knock path ever played <c>firstContact</c>: a user who took the
+    /// tour, clicked the cold chip or hit the hotkey got <c>desktopFirstBoot</c> and was never
+    /// actually introduced to her. Now the FIRST-EVER summon on ANY path is the introduction, the
+    /// NEXT one is <c>desktopFirstBoot</c>, and everything after that is the ordinary
+    /// <c>summoned</c>.</para>
+    ///
+    /// <para>The knock path still overrides this in <see cref="Summon"/> - it has its own three
+    /// scripted openers (<c>firstContact</c> / <c>firstContactUpgrade</c> / <c>firstContactLater</c>)
+    /// and they are chosen by population, not by order.</para>
+    ///
+    /// <para>"Spent" is read from the engine's own once-ever bucket, so the limits in the lines file
+    /// stay the single authority: this only orders the choice. A greeting the engine swallows (she
+    /// was silenced, the window went away) never spends its limit, so the next summon retries it -
+    /// which is the behaviour we want for an introduction.</para>
+    /// </summary>
+    private static string ChooseGreetMoment()
+    {
+        try
+        {
+            var engine = EmiLineEngine.Instance;
+            if (!engine.EverSpent("firstContact")) return "firstContact";
+            if (!engine.EverSpent("desktopFirstBoot")) return "desktopFirstBoot";
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] greeting choice fell back to summoned"); }
+        return "summoned";
+    }
+
+    /// <summary>
+    /// THE BOOK ROUTE (wave 3). <see cref="EmiCodex.MaybeOfferSoon"/> used to be called from exactly
+    /// one place - <c>EmiTourNarrator.OnFinished</c> - so a user who declined the tour never learned
+    /// the book existed at all. From the second summon on, if they have never opened it and the
+    /// once-ever offer is still unspent, the offer rides in behind the greeting.
+    ///
+    /// <para>The first summon is deliberately skipped: that one is the introduction, and stacking an
+    /// offer on top of it is exactly the noise the greeting order was just fixed to avoid. Everything
+    /// else - the book being in the build, already open, already read - is re-checked by
+    /// <c>MaybeOffer</c> at the tick, and its own delay and re-arm brakes are reused as-is.</para>
+    /// </summary>
+    private static void MaybeOfferBookOnSummon(int summons)
+    {
+        try
+        {
+            if (summons < 2) return;
+            if (EmiState.Current.CodexOpens > 0) return;
+            if (EmiLineEngine.Instance.EverSpent("bookOffer")) return;
+            EmiCodex.MaybeOfferSoon("newuser");
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book route failed"); }
     }
 
     private void ScheduleSummonMoment()
@@ -806,6 +880,8 @@ public sealed class EmiDeskService : IDisposable
             if (!IsOut) return;
             var moment = _summonMoment;
             _summonMoment = null;
+            bool touring = _summonTouring;
+            _summonTouring = false;
 
             // The mute verdict rides here, behind the greeting: the answer to "should the avatar sit
             // out?" is only interesting once she has actually said hello. The engine's floor decides
@@ -814,13 +890,80 @@ public sealed class EmiDeskService : IDisposable
             _pendingMuteMoment = null;
             if (!string.IsNullOrEmpty(mute)) Fire(mute!, null);
 
+            // THE EMPTY LIBRARY, a few seconds behind the hello and never inside it (MOMENTS
+            // `noMediaYet`). Deliberately not folded into the greeting ctx: "hi" and "your folders
+            // are empty, want the pack channel?" are two beats, and the 45s floor would otherwise
+            // silently eat whichever of them lost. The moment's own launch/1 limit means a user who
+            // summons her six times in a sitting still hears it once.
+            ScheduleEmptyLibraryBeat();
+
             if (string.IsNullOrEmpty(moment)) return;
-            Fire(moment!, new { via = _summonVia, minutes = MinutesOut() });
+            Fire(moment!, new { via = _summonVia, minutes = MinutesOut(), touring });
         }
         catch (Exception ex)
         {
             Log.Debug(ex, "[EmiDesk] summon greeting failed");
         }
+    }
+
+    /// <summary>How long after the greeting the empty-library beat lands. Clear of the 45s floor's
+    /// reach is not possible without making it feel detached from the summon, so it sits just past
+    /// the greeting's own bubble instead and takes its chances with the engine, like every other
+    /// second beat in this file.</summary>
+    private const int EmptyLibraryDelayMs = 7000;
+
+    private System.Windows.Threading.DispatcherTimer? _emptyLibraryTimer;
+
+    /// <summary>
+    /// Arm the <c>noMediaYet</c> beat if the library is actually empty. The probe is cheap but not
+    /// free (two directory enumerations), so it is asked once here rather than on every tick, and
+    /// asked again at the tick only through <see cref="EmiOffers.AnnounceEmptyLibrary"/> - a pack
+    /// can finish installing inside those seven seconds and she must not then say the shelf is bare.
+    /// </summary>
+    private void ScheduleEmptyLibraryBeat()
+    {
+        try
+        {
+            CancelEmptyLibraryBeat();
+            if (!EmiOffers.LibraryIsEmpty()) return;
+
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+
+            var timer = new System.Windows.Threading.DispatcherTimer(
+                System.Windows.Threading.DispatcherPriority.Background, disp)
+            {
+                Interval = TimeSpan.FromMilliseconds(EmptyLibraryDelayMs)
+            };
+            timer.Tick += OnEmptyLibraryTick;
+            _emptyLibraryTimer = timer;
+            timer.Start();
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] empty-library beat schedule failed"); }
+    }
+
+    private void OnEmptyLibraryTick(object? sender, EventArgs e)
+    {
+        try
+        {
+            CancelEmptyLibraryBeat();
+            if (!IsOut) return;
+            EmiOffers.AnnounceEmptyLibrary();
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] empty-library beat failed"); }
+    }
+
+    private void CancelEmptyLibraryBeat()
+    {
+        try
+        {
+            var timer = _emptyLibraryTimer;
+            _emptyLibraryTimer = null;
+            if (timer == null) return;
+            timer.Stop();
+            timer.Tick -= OnEmptyLibraryTick;
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] empty-library beat cancel failed"); }
     }
 
     private void CancelSummonMoment()
@@ -1623,6 +1766,11 @@ public sealed class EmiDeskService : IDisposable
     private string? _lateNightNight;
     private string? _smallHoursNight;
     private string? _morningDay;
+
+    /// <summary>The calendar date the clock tick last saw her out on, for <c>dayTurned</c>. Null
+    /// until the first tick of a sitting, which only records what it found.</summary>
+    private string? _clockDay;
+
     private bool _saidLongSitting;
     private bool _saidIdleLong;
 
@@ -1666,9 +1814,16 @@ public sealed class EmiDeskService : IDisposable
             {
                 try
                 {
-                    // The start is the bark's BambiTakeoverStarted; only the END needs a duration,
-                    // and nothing else in the app is counting it.
-                    if (enabled) { _takeoverSinceUtc = DateTime.UtcNow; return; }
+                    // Only the END needs a duration, and nothing else in the app is counting it.
+                    // The START is announced here too as of wave 3: `BambiTakeoverStarted` is a
+                    // bark trigger, not a mirrored one, so before this she watched the takeover
+                    // finish without ever having noticed it begin.
+                    if (enabled)
+                    {
+                        _takeoverSinceUtc = DateTime.UtcNow;
+                        Fire("takeoverStarted", null);
+                        return;
+                    }
 
                     int minutes = _takeoverSinceUtc == DateTime.MinValue
                         ? 0
@@ -1780,6 +1935,17 @@ public sealed class EmiDeskService : IDisposable
             string nightKey = now.AddHours(-6).ToString("yyyy-MM-dd");
             string dayKey = now.ToString("yyyy-MM-dd");
 
+            // MIDNIGHT ROLLED OVER WHILE SHE WAS OUT (MOMENTS `dayTurned`). The calendar date, not
+            // the 06:00 "night" - the beat is about the number on the clock changing. The first
+            // tick of a sitting only records the date it found; a turn she was not present for is
+            // not a turn she noticed. The moment's own night/1 limit stops it repeating.
+            if (_clockDay == null) _clockDay = dayKey;
+            else if (_clockDay != dayKey)
+            {
+                _clockDay = dayKey;
+                Fire("dayTurned", null);
+            }
+
             if (now.Hour < 3 && _lateNightNight != nightKey)
             {
                 _lateNightNight = nightKey;
@@ -1881,6 +2047,8 @@ public sealed class EmiDeskService : IDisposable
         UnwireAppEvents();
         StopNudges();
         CancelFarewell();
+        CancelSummonMoment();
+        CancelEmptyLibraryBeat();
         try
         {
             GlobalHotkeyService.Unregister(GlobalHotkeyService.EmiDeskHotkeyId);

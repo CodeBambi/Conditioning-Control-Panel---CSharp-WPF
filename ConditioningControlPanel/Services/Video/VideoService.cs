@@ -2730,6 +2730,19 @@ namespace ConditioningControlPanel.Services
         /// already failed on this file, so the routing branch below must not send it back.</param>
         private void StartVideoPlayback(string path, bool strict, bool forceLibVlc = false)
         {
+            // EMI Desk (MOMENTS `firstVideoEver`). At the very top so BOTH engines carry it: the
+            // browser route immediately below returns without ever reaching the rest of this
+            // method. The gate is "no video has ever finished", which is the only lifetime video
+            // counter the app keeps (TotalVideoMinutes - there is no watched-count). It reads
+            // slightly wide, since an abandoned first video leaves it true, but the moment's own
+            // limit ever/1 means the second chance can still only produce the same one line.
+            try
+            {
+                if (App.Achievements?.Progress?.TotalVideoMinutes <= 0)
+                    App.EmiDesk?.Fire("firstVideoEver", null);
+            }
+            catch { }
+
             // ---- hybrid routing (docs/BROWSER_VIDEO_ENGINE_PLAN.md §4) ----
             // The ONLY change to this path. When the browser engine takes the clip it satisfies the
             // whole parity checklist itself (see VideoService.Browser.cs) and returns; otherwise
