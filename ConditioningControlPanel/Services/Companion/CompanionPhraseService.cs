@@ -56,10 +56,11 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private static (string Absolute, string? Relative) ResolveVoiceLineFolder()
         {
+            string? modVoiceDir = null;
             var modPath = App.Mods?.ActiveMod?.InstalledPath;
             if (modPath != null)
             {
-                var modVoiceDir = Path.Combine(modPath, "resources", "sounds", "flashes_audio");
+                modVoiceDir = Path.Combine(modPath, "resources", "sounds", "flashes_audio");
                 if (Directory.Exists(modVoiceDir))
                     return (modVoiceDir, null);
             }
@@ -67,13 +68,23 @@ namespace ConditioningControlPanel.Services
             // mirroring how bark_rules.json / avatar_manifest.json resolve. Lets Sissy play its own
             // idle "giggle" lines (in the bark voice) instead of the shared old ones.
             var modId = App.Mods?.ActiveModId;
+            string? perModRel = null;
             if (!string.IsNullOrEmpty(modId))
             {
-                var rel = Path.Combine(CompanionAudioRelativeDir, "mods", modId, "flashes_audio");
-                if (ContentLocator.DirectoryExists(rel))
-                    return (ContentLocator.ResolveDirectory(rel), rel);
+                perModRel = Path.Combine(CompanionAudioRelativeDir, "mods", modId, "flashes_audio");
+                if (ContentLocator.DirectoryExists(perModRel))
+                    return (ContentLocator.ResolveDirectory(perModRel), perModRel);
             }
-            return (ContentLocator.ResolveDirectory(VoiceLineRelativeDir), VoiceLineRelativeDir);
+
+            // The shared folder is not a neutral fallback — it is BambiSleep's own recorded VO, and
+            // FlashService prints each clip's file name in the companion's speech bubble as it plays.
+            // Only the mods it belongs to may speak with it (see
+            // CompanionContentResolver.OwnsBaselineVoiceLines); anyone else points at their OWN
+            // (possibly empty) folder and simply has no voice lines, instead of borrowing Bambi's.
+            if (Companion.CompanionContentResolver.OwnsBaselineVoiceLines(modId))
+                return (ContentLocator.ResolveDirectory(VoiceLineRelativeDir), VoiceLineRelativeDir);
+            if (modVoiceDir != null) return (modVoiceDir, null);
+            return (ContentLocator.ResolveDirectory(perModRel!), perModRel);
         }
 
         /// <summary>

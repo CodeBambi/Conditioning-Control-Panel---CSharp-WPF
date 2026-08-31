@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services.Companion
 {
@@ -125,6 +126,31 @@ namespace ConditioningControlPanel.Services.Companion
             Path.Combine(CompanionAudioRelativeDir, "mods", modId);
 
         /// <summary>
+        /// Whether the shared baseline voice-line library (<c>Resources\sounds\flashes_audio</c>) is
+        /// THIS mod's own voice.
+        ///
+        /// That folder is not a neutral fallback: it is BambiSleep's recorded VO, named line by line
+        /// ("be a good girl accept your conditioning.mp3"), and <c>FlashService</c> both plays it and
+        /// fires <c>FlashAudioPlaying</c> so the avatar prints that file name in HER speech bubble.
+        /// Handing it to another character therefore makes that character speak Bambi's lines in
+        /// Bambi's voice - which is exactly what a mod that ships bark audio but no
+        /// <c>flashes_audio</c> folder (the Infection Control creator mod) did.
+        ///
+        /// Only the two mods the library belongs to get it: BambiSleep, and CCP Default (the neutral
+        /// baseline persona, which has always spoken with these clips). Every other mod either ships
+        /// its own folder - Sissy per-mod, Drone/Locked inside their .ccpmod - or stays silent on
+        /// this channel, the same way <see cref="CompanionChannel.EventAudio"/> already leaves a mod
+        /// that ships none text-only.
+        ///
+        /// An unknown/absent mod id (ModService not up yet) keeps the baseline, so startup order can
+        /// never take the default companion silent.
+        /// </summary>
+        public static bool OwnsBaselineVoiceLines(string? modId) =>
+            string.IsNullOrWhiteSpace(modId)
+            || string.Equals(modId, BuiltInMods.BambiSleepId, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(modId, BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
         /// The ordered candidate list for one channel. Roots that are empty (no content root on a
         /// full install, no InstalledPath on a built-in mod) simply contribute no candidates, so the
         /// ladder shortens instead of producing bogus paths.
@@ -197,7 +223,10 @@ namespace ConditioningControlPanel.Services.Companion
             //    a mod that simply has no overlay of its own.
             switch (channel)
             {
-                case CompanionChannel.VoiceLines:
+                // Voice lines only fall through to the baseline for the mods whose voice that library
+                // actually is — see OwnsBaselineVoiceLines. Anyone else stays silent rather than
+                // borrowing another character's recordings (and her speech bubble).
+                case CompanionChannel.VoiceLines when OwnsBaselineVoiceLines(modId):
                     if (!string.IsNullOrWhiteSpace(installRoot))
                         list.Add(new CompanionContentCandidate(CompanionContentSource.Baseline,
                             Path.Combine(installRoot, VoiceLinesRelativeDir), true));
