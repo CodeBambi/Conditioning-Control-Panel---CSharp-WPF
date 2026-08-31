@@ -1674,15 +1674,26 @@
                             </StackPanel>
                         </Button>
                     </StackPanel>
-                    <TextBlock Grid.Column="1" x:Name="TxtPlayerTitle" Text="{loc:Str label_basic_subject}" Foreground="{DynamicResource PinkBrush}"
-                               poss:Possession.Role="Title" poss:Possession.Name="the title"
-                               FontSize="18" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0"
-                               MaxWidth="200" TextTrimming="CharacterEllipsis"
-                               ToolTip="{Binding ElementName=TxtPlayerTitle, Path=Text}">
-                        <TextBlock.Effect>
-                            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="8" ShadowDepth="0" Opacity="0.6"/>
-                        </TextBlock.Effect>
-                    </TextBlock>
+                    <!-- The rank title used to ellipsise here: "PERFECT FUCKPUPPET" (level 100+,
+                         MainWindow.UiUpdates.cs) measures past 200px at 18px bold and rendered as
+                         "Perfect Fuckpupp...". The 200px cap has to stay - it is what stops the
+                         identity cluster shouldering the header chrome out (#860) - so scale the
+                         title down inside the cap instead of trimming it. StretchDirection
+                         DownOnly means every shorter rank still renders at the full 18px and the
+                         level pill sits exactly where it did; only an over-long title shrinks,
+                         and only as far as it has to. -->
+                    <Viewbox Grid.Column="1" MaxWidth="200" Margin="0,0,12,0"
+                             HorizontalAlignment="Left" VerticalAlignment="Center"
+                             Stretch="Uniform" StretchDirection="DownOnly">
+                        <TextBlock x:Name="TxtPlayerTitle" Text="{loc:Str label_basic_subject}" Foreground="{DynamicResource PinkBrush}"
+                                   poss:Possession.Role="Title" poss:Possession.Name="the title"
+                                   FontSize="18" FontWeight="Bold"
+                                   ToolTip="{Binding ElementName=TxtPlayerTitle, Path=Text}">
+                            <TextBlock.Effect>
+                                <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="8" ShadowDepth="0" Opacity="0.6"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+                    </Viewbox>
                     <Border Grid.Column="2" Background="{DynamicResource PinkBrush}" CornerRadius="12" Padding="10,4" Margin="0,0,20,0">
                         <TextBlock x:Name="TxtLevel" Text="{loc:Str label_lvl_1}" Foreground="White" FontWeight="Bold" FontSize="12"/>
                     </Border>

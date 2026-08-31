@@ -199,7 +199,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
-                    <Grid>
+                    <Grid x:Name="toggleRoot">
                         <Border x:Name="track" Width="44" Height="22" CornerRadius="11" Cursor="Hand"
                                 Background="{DynamicResource PanelAccentBrush}"
                                 BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"/>
@@ -288,6 +288,17 @@
                                     </Storyboard>
                                 </BeginStoryboard>
                             </Trigger.ExitActions>
+                        </Trigger>
+                        <!-- A locked toggle used to be pixel-identical to a live one (users read
+                             the two as "a bit lost graphically"), because nothing here reacted to
+                             IsEnabled. Dim the whole template root rather than the individual
+                             parts: trackOn's Opacity is held by the IsChecked storyboards, and an
+                             animation outranks a trigger setter, so a per-part setter would be
+                             ignored on exactly the ON state that most needs the cue. -->
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="toggleRoot" Property="Opacity" Value="0.4"/>
+                            <Setter TargetName="track" Property="Cursor" Value="Arrow"/>
+                            <Setter TargetName="trackOn" Property="Cursor" Value="Arrow"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
