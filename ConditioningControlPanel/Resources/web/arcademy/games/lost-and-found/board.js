@@ -80,8 +80,22 @@ const GIF_RE = /\.gif(\?|#|$)/i;
 
 /** Is this url a <video> tile rather than an <img>? */
 export function isVideoUrl(url) { return VIDEO_EXT_RE.test(String(url || '')); }
-/** Is this url an animated <img>? (webp is classed 'still' by the provider's
- *  own kindOf(), so an animated webp is a known blind spot, not an oversight.) */
+/** Is this url an animated <img>?
+ *
+ *  ANIMATED WEBP (ccp-bugs#1086). This used to be a documented blind spot: a webp is classed
+ *  'still' by extension, so an animated one paid a decoder and a clock that NO budget on this
+ *  page could see - the live window did not count it, the frame governor could not shed it, and
+ *  a library of them dealt one main-thread decoder per seat. A dense wall of those is the
+ *  reported symptom: the page drops to ~1.3fps, the row has drifted by the time the click lands,
+ *  and the right tile registers as a miss.
+ *
+ *  Animation lives in the webp's VP8X container flag, so a URL genuinely cannot answer it and
+ *  the page never gets the bytes. The DESKTOP host does: ArcademyHostService header-probes a
+ *  local webp and stamps `#.gif` on its ccp.assets url (AnimatedImageHint - the same fragment-hint
+ *  convention provider/index.js hintedPileUrl() uses for blob: rows, and dropped before the fetch
+ *  by the URL Standard, so the same bytes load). GIF_RE's `#` alternative already reads it, which
+ *  is why every budget below this line needed no change. An unhinted webp stays a still - which
+ *  is still the honest answer on the web port, where no host has the file. */
 export function isGifUrl(url) { return GIF_RE.test(String(url || '')); }
 /** Does this url cost a decoder + a clock? THE budget question. */
 export function isAnimatedUrl(url) { return isVideoUrl(url) || isGifUrl(url); }
