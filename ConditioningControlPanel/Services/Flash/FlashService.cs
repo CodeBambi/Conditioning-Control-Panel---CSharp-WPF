@@ -2222,8 +2222,9 @@ namespace ConditioningControlPanel.Services
 
         #region Heartbeat & Animation
 
-        // Old 33ms-tick fade step was 0.08/tick — same speed, expressed per second.
-        private const double FADE_PER_SEC = 2.4;
+        // The Fade slider (Visuals tab) is a percentage where 100% = a one second ramp, so the
+        // default 40% lands on 0.4 s — the same envelope the old fixed FADE_PER_SEC = 2.4 gave.
+        private const double FADE_SECONDS_PER_PERCENT = 0.01;
 
         /// <summary>Subscribe the heartbeat to the composition clock (idempotent, any thread).</summary>
         private void StartHeartbeat()
@@ -2278,7 +2279,10 @@ namespace ConditioningControlPanel.Services
 
             var settings = App.Settings.Current;
             var maxAlpha = Math.Min(1.0, Math.Max(0.0, settings.FlashOpacity / 100.0));
-            var fadeStep = FADE_PER_SEC * dt;
+            // Read the Fade slider live so a mid-session change lands on the next frame.
+            // 0% = instant: a full-alpha step arrives (and leaves) in a single frame.
+            var fadeSeconds = settings.FadeDuration * FADE_SECONDS_PER_PERCENT;
+            var fadeStep = fadeSeconds > 0 ? dt / fadeSeconds : 1.0;
 
             FlashWindow[] windowsCopy;
             lock (_lockObj)
