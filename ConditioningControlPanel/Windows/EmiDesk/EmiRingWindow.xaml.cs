@@ -275,11 +275,30 @@ public partial class EmiRingWindow : Window
     }
 
     private const int GWL_EXSTYLE = -20;
+    private const int GWL_STYLE = -16;
+    private const int WS_VISIBLE = 0x10000000;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_NOACTIVATE = 0x08000000;
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern int GetWindowLong(IntPtr hwnd, int index);
+
+    /// <summary>
+    /// The NATIVE visibility word for the "ring open" log line. WPF's own properties lied for the
+    /// whole of the invisible-first-open bug (see the note at the top of the XAML); only the HWND
+    /// told the truth, so this is what a repeat would be caught by.
+    /// </summary>
+    private string NativeStyle()
+    {
+        try
+        {
+            var h = new WindowInteropHelper(this).Handle;
+            if (h == IntPtr.Zero) return "wsvisible=nohwnd";
+            int st = GetWindowLong(h, GWL_STYLE);
+            return "wsvisible=" + ((st & WS_VISIBLE) != 0);
+        }
+        catch { return "wsvisible=?"; }
+    }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
@@ -374,7 +393,7 @@ public partial class EmiRingWindow : Window
             _closeAnnounced = false;
 
             EmiSfx.RingOpen();
-            Log.Information("[EmiDesk] ring open with {Count} cards", _slots.Count);
+            Log.Information("[EmiDesk] ring open with {Count} cards, {Native}", _slots.Count, NativeStyle());
         }
         catch (Exception ex)
         {
