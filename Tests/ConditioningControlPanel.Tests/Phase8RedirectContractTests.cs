@@ -45,18 +45,29 @@ public class Phase8RedirectContractTests
 
     private static string TabNavigation() => ReadSource("MainWindow", "MainWindow.TabNavigation.cs");
 
-    /// <summary>Every .cs/.xaml under the product project, obj/bin and sibling worktrees excluded.</summary>
+    /// <summary>Every .cs/.xaml under the product project, obj/bin and nested worktrees excluded.
+    ///
+    /// <para>The exclusion is matched on each file's path RELATIVE to <see cref="ProductDir"/>,
+    /// because it is about directories INSIDE the tree under test. Matching the absolute path — as
+    /// this did — silently emptied the whole walk inside an agent worktree, where the checkout
+    /// itself lives at <c>&lt;repo&gt;/.claude/worktrees/&lt;name&gt;/</c> and therefore gives every
+    /// file in the product a <c>.claude</c> segment. The demolition tests below then asserted
+    /// "nothing references this type" against zero files.</para></summary>
     private static IEnumerable<string> ProductSources()
     {
-        var skip = new[] { Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar,
-                           Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar,
-                           Path.DirectorySeparatorChar + ".claude" + Path.DirectorySeparatorChar,
-                           Path.DirectorySeparatorChar + "node_modules" + Path.DirectorySeparatorChar };
+        var skip = new[] { "obj", "bin", ".claude", "node_modules" };
 
-        return Directory.EnumerateFiles(ProductDir, "*.*", SearchOption.AllDirectories)
-                        .Where(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
-                                 || f.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase))
-                        .Where(f => !skip.Any(s => f.Contains(s, StringComparison.OrdinalIgnoreCase)));
+        var files = Directory.EnumerateFiles(ProductDir, "*.*", SearchOption.AllDirectories)
+                             .Where(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+                                      || f.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase))
+                             .Where(f => !Path.GetRelativePath(ProductDir, f)
+                                              .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                                              .Any(segment => skip.Contains(segment, StringComparer.OrdinalIgnoreCase)))
+                             .ToList();
+
+        // A walk that finds nothing would make every assertion below vacuously true.
+        Assert.True(files.Count > 0, "the product source walk found no .cs/.xaml files under " + ProductDir);
+        return files;
     }
 
     /// <summary>Source with // and /* */ comments and XML comments stripped, so a tombstone note

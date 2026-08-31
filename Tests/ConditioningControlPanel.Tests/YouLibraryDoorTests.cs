@@ -49,8 +49,27 @@ public class YouLibraryDoorTests
         return dir!.FullName;
     }
 
+    private static string ProductDir => Path.Combine(RepoRoot(), "ConditioningControlPanel");
+
     private static string ReadSource(params string[] parts) =>
-        File.ReadAllText(Path.Combine(new[] { RepoRoot(), "ConditioningControlPanel" }.Concat(parts).ToArray()));
+        File.ReadAllText(Path.Combine(new[] { ProductDir }.Concat(parts).ToArray()));
+
+    /// <summary>Build output and nested agent worktrees, matched on the path RELATIVE to the
+    /// product directory.</summary>
+    ///
+    /// <para>Matching the ABSOLUTE path is the bug this replaces: an agent worktree checks the whole
+    /// repo out under <c>&lt;repo&gt;/.claude/worktrees/&lt;name&gt;/</c>, so every file's absolute
+    /// path carries a <c>.claude</c> segment and the walk excluded all of them — the source scan
+    /// below then "passed" against an empty set in a worktree and only really ran on a normal
+    /// checkout. The exclusion is about directories INSIDE the tree under test, so only the
+    /// relative path may decide it.</para>
+    private static bool IsExcludedSource(string file)
+    {
+        var skip = new[] { "obj", "bin", ".claude" };
+        return Path.GetRelativePath(ProductDir, file)
+                   .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                   .Any(segment => skip.Contains(segment, StringComparer.OrdinalIgnoreCase));
+    }
 
     private static string MainWindowXaml() => ReadSource("MainWindow", "MainWindow.xaml");
 
@@ -119,12 +138,13 @@ public class YouLibraryDoorTests
         // The handler has to exist somewhere in the product. XAML Click= is compile-checked, so
         // this is belt-and-braces — but it is also the assertion that fails loudly if someone
         // "simplifies" a row by pointing it at a new duplicate launcher instead of the real one.
-        var found = Directory
-            .EnumerateFiles(Path.Combine(RepoRoot(), "ConditioningControlPanel"), "*.cs", SearchOption.AllDirectories)
-            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                        && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
-                        && !f.Contains($"{Path.DirectorySeparatorChar}.claude{Path.DirectorySeparatorChar}"))
-            .Any(f => Regex.IsMatch(File.ReadAllText(f), @"\bvoid\s+" + handler + @"\s*\("));
+        var sources = Directory
+            .EnumerateFiles(ProductDir, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !IsExcludedSource(f))
+            .ToList();
+        Assert.True(sources.Count > 0, "the product source walk found no .cs files under " + ProductDir);
+
+        var found = sources.Any(f => Regex.IsMatch(File.ReadAllText(f), @"\bvoid\s+" + handler + @"\s*\("));
         Assert.True(found, handler + " is bound in MainWindow.xaml but defined nowhere");
     }
 
