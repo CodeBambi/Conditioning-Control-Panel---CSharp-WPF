@@ -5443,9 +5443,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * built class rather than over the screen it replaced, and the freeze rides
      * the same hook in both directions - the card going up stops the clock, the
      * card coming down starts it again. */
+    /* `onLeave` is the card's second button (orientgate Law 2's coda), and it is
+     * THE PILL'S OWN ROUTINE - the same ask, the same jeopardy note, the same
+     * door - because a phone that can never produce a landscape viewport (an iOS
+     * system portrait lock has no in-page override; the Discord Activity iframe
+     * hands us whatever shape it likes) would otherwise be held against a card
+     * with no way off it. The gate reveals it only after a grace period, so a
+     * phone that was merely slow to turn never sees it. */
     requireOrientation(entry.orientation, {
       reason: 'class',
       onChange: (blocking) => orientFreeze(blocking),
+      onLeave: () => askLeaveClass(),
     });
     // The host only flips _classActive off this frame and ignores fields it does
     // not know, so `endless` is free to carry: a free swim opens the same

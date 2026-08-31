@@ -5232,8 +5232,12 @@ html.arc-mobile .arc-rs-close { top:8px; right:10px; }
    Campus signage, not a browser error: the school's own sky, the school's own
    faces, and no scolding. It covers EVERYTHING (z 90 clears the fx layer at 40,
    the ceremony at 45 and EMI), because a card you can play around is a card that
-   does not work. It carries no dismiss button on purpose, since the way out is to
-   turn the phone and it lifts itself the instant you do. */
+   does not work. The CAMPUS card carries no dismiss button on purpose, since the
+   way out is to turn the phone and it lifts itself the instant you do. A CLASS
+   card carries two, revealed by the delayed keyframe below (2026-08-31): a phone
+   that can never produce a landscape viewport - an iOS system portrait lock has
+   no in-page override, and the Discord Activity iframe hands us whatever shape
+   it likes - would otherwise be held against a locked door. */
 .arc-orientgate {
   position:fixed; inset:0; z-index:90;
   display:flex; align-items:center; justify-content:center;
@@ -5253,6 +5257,40 @@ html.arc-mobile .arc-rs-close { top:8px; right:10px; }
 }
 .arc-orientgate-title { margin:6px 0 10px; }
 .arc-orientgate-body { margin:0; line-height:1.55; }
+/* ---- the way in and the way out (class cards only) ----------------------
+   THE GRACE PERIOD IS A KEYFRAME, NOT A TIMER (orientgate Law 4). The block is
+   in the DOM from the first paint and hidden by this rule; seven seconds in, the
+   animation runs once and `forwards` holds the end state. `visibility` rides it
+   too, so the buttons are out of the tab order while they are off screen - and
+   during the delay the base rule stands, because there is no backwards fill. */
+.arc-orientgate-actions {
+  margin-top:18px; padding-top:14px;
+  border-top:1px solid color-mix(in srgb, var(--line), transparent 30%);
+  opacity:0; visibility:hidden; pointer-events:none;
+  animation:arc-orientgate-wayout .35s ease 7s forwards;
+}
+.arc-orientgate-stuck { margin:0 0 10px; line-height:1.5; }
+.arc-orientgate-actionrow {
+  display:flex; flex-wrap:wrap; gap:8px; justify-content:center;
+}
+.arc-orientgate-actionrow .btn { min-height:44px; }
+@keyframes arc-orientgate-wayout {
+  0%   { opacity:0; visibility:hidden; pointer-events:none; }
+  100% { opacity:1; visibility:visible; pointer-events:auto; }
+}
+/* REDUCED MOTION SHOWS THEM AT ONCE. The freeze at the bottom of this file runs
+   every animation at .001s with no delay, which would technically land the same
+   end state - but relying on a blanket freeze to deliver the only way out of a
+   locked card is not a plan. Both selectors out-specify their `*` counterpart,
+   so these win even against the freeze's `!important` longhands. */
+html.arc-reduced .arc-orientgate-actions {
+  animation:none !important; opacity:1; visibility:visible; pointer-events:auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .arc-orientgate-actions {
+    animation:none !important; opacity:1; visibility:visible; pointer-events:auto;
+  }
+}
 /* The glyph. Two nested boxes and a quarter-turn keyframe, no SVG, so it takes
    the sheet's colours for free and costs the compositor one transform. */
 .arc-orientgate-art {

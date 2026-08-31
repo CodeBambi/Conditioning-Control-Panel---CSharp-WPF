@@ -345,4 +345,34 @@ public class ProgramLibraryTests
             Assert.False(string.IsNullOrWhiteSpace(badge.ImageName));
         }
     }
+
+    /// <summary>
+    /// The badge's <c>IsPremiumFeature</c> flag must track its PROGRAM'S tier exactly, because
+    /// that flag is what keeps a still-locked paid-program badge out of a free user's denominator
+    /// (AchievementService.GetTotalCount). Set it on a free program's badge and every free user
+    /// loses a point off their own ceiling; forget it on a paid one and they are pinned under
+    /// 100% forever by a badge they cannot reach - which is the bug this test was written for.
+    ///
+    /// Derived from <see cref="ProgramTier"/> rather than from a hardcoded list of four ids, so a
+    /// sixth program added tomorrow is covered the day it lands.
+    /// </summary>
+    [Fact]
+    public void PaidProgramBadgesAreFlaggedPremiumAndFreeOnesAreNot()
+    {
+        foreach (var program in Library)
+        {
+            var badge = Achievement.All[program.GraduationBadgeId!];
+            var paid = program.Tier == ProgramTier.Premium;
+            Assert.True(badge.IsPremiumFeature == paid,
+                $"{program.Id} is tier {program.Tier} but its badge '{badge.Id}' has " +
+                $"IsPremiumFeature = {badge.IsPremiumFeature}.");
+            // A premium-program badge stays in the FREE, VISIBLE gallery - the flag moves the
+            // denominator, never the card. IsExclusive would take the receipt away on a lapse.
+            if (paid)
+            {
+                Assert.False(badge.IsExclusive);
+                Assert.False(badge.IsHidden);
+            }
+        }
+    }
 }

@@ -312,9 +312,11 @@ namespace ConditioningControlPanel
 
                 if (App.Achievements != null && ProfileMenuBadges != null)
                 {
+                    // The reachable pair, not the raw catalogue: a free user's bubble must
+                    // agree with the tab that 100% is a place they can actually get to.
+                    var (gotBadges, reachable) = App.Achievements.GetReachableCounts();
                     ProfileMenuBadges.Text = string.Format(
-                        Loc.Get("profile_bubble_achievements"),
-                        App.Achievements.GetUnlockedCount(), App.Achievements.GetTotalCount());
+                        Loc.Get("profile_bubble_achievements"), gotBadges, reachable);
                 }
 
                 if (ProfileMenuAccountBtn != null)

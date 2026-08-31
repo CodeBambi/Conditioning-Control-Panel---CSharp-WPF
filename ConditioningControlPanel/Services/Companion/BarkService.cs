@@ -1338,8 +1338,15 @@ namespace ConditioningControlPanel.Services
                 // --- lifetime-completion egg conditions ---
                 case "achievements_all_unlocked":
                 {
-                    var total = App.Achievements?.GetTotalCount() ?? 0;
-                    return total > 0 && (App.Achievements?.GetUnlockedCount() ?? 0) >= total;
+                    // THE SAME 100% THE TAB SHOWS. The unfiltered pair counted the thirteen
+                    // patron-exclusives (and, until the premium rule landed, the four paid
+                    // program badges) into a denominator a free user can never reach, so
+                    // egg_100pct and ms_all_achievements were unfireable by construction.
+                    // exclusive:false is the free collection, and GetTotalCount(false) already
+                    // drops a locked premium-program badge for a user without premium - so this
+                    // trips at the ceiling the player is actually shown.
+                    var total = App.Achievements?.GetTotalCount(exclusive: false) ?? 0;
+                    return total > 0 && (App.Achievements?.GetUnlockedCount(exclusive: false) ?? 0) >= total;
                 }
                 case "all_skills_unlocked":
                 {

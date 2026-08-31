@@ -22,12 +22,29 @@
  *      module subscribes to `onDeviceChange` and the card comes off the frame
  *      the phone comes round, in both directions, for as long as the requirement
  *      stands.
+ *      CODA (2026-08-31, support): a CLASS card also offers a way in and a way
+ *      out, but only after a grace period long enough that a phone which CAN
+ *      turn has already turned. Some phones can never satisfy the requirement -
+ *      an iOS system portrait lock has no in-page override, and the Discord
+ *      Activity iframe hands the page whatever shape it likes - and a card that
+ *      cannot be satisfied and cannot be dismissed is a locked door. So the
+ *      class card grows two buttons: play it upright anyway (the requirement is
+ *      waived and the caller is told the block lifted, exactly as if the phone
+ *      had turned), or leave the class (the caller's own door, via `onLeave`).
+ *      The campus card is untouched - the campus is not a room you can be stuck
+ *      inside, and its way out is the phone.
  *   3. ONE CARD, EVER. `requireOrientation` is idempotent and the node is
  *      REMOVED rather than hidden (trap 27), so a screen that repaints while the
  *      card is up cannot stack two of them.
  *   4. IT IS DOM AND CSS AND NOTHING ELSE. No canvas, no timer, no rAF loop.
- *      The one animation is a CSS keyframe that the reduced-motion rules at the
- *      bottom of styles.css already freeze along with everything else.
+ *      That holds for the grace period on Law 2's coda as well: the actions are
+ *      in the DOM from the first paint and a delayed CSS keyframe reveals them,
+ *      so there is no setTimeout to leak when the card is removed under it.
+ *      Both keyframes are frozen by the reduced-motion rules at the bottom of
+ *      styles.css - which is why the actions carry their OWN reduced-motion
+ *      rule showing them at once, since a frozen reveal that left them at
+ *      opacity 0 would hide the only way out from the people most likely to
+ *      need it.
  *
  * THE CLOCK IS THE CALLER'S PROBLEM. This module blocks the screen and says so;
  * it does not know what a class is. shell.js pauses the class around the card,
@@ -87,6 +104,22 @@ let wantedReason = '';    // 'campus' | 'class' | ''
 let node = null;          // the mounted card, or null
 let unsub = null;         // onDeviceChange unsubscriber
 let onChange = null;      // caller hook: (blocking:boolean) => void
+let onLeave = null;       // caller hook: () => void, the caller's own door
+
+/**
+ * Stand the requirement down from INSIDE the module (Law 2's coda). Same shape
+ * as `requireOrientation(null)` - the want is dropped and the listener with it -
+ * except that it deliberately leaves `onChange` and `onLeave` alone: the caller
+ * has not gone anywhere, and `onChange(false)` is the signal it is waiting on to
+ * start the class again. Re-entering the room later re-arms the gate, which is
+ * correct: the waiver was for this sitting.
+ */
+function standDown() {
+  wanted = null;
+  wantedReason = '';
+  if (unsub) { try { unsub(); } catch (e) { /* noop */ } unsub = null; }
+  return reconcileAndNotify();
+}
 
 /** Build the card. Called only when one is actually going up. */
 function build(want, reason) {
@@ -114,6 +147,44 @@ function build(want, reason) {
   card.appendChild(el('p', 'arc-kicker', t('arcademy', 'The Arcademy')));
   card.appendChild(el('h2', 'arc-h2 arc-orientgate-title', words.title));
   card.appendChild(el('p', 'arc-note arc-orientgate-body', words.body));
+
+  /* THE WAY IN AND THE WAY OUT (Law 2's coda). A class only, and landscape
+   * only: portrait is the shape a phone already holds, and the campus is not a
+   * room you can be trapped inside. Mounted from the first paint and revealed
+   * by a delayed CSS keyframe (Law 4), so a phone that simply had not turned
+   * yet never sees them - and `visibility` rides the same keyframe so they are
+   * out of the tab order until they are on screen. */
+  if (want === 'landscape' && reason === 'class') {
+    const acts = el('div', 'arc-orientgate-actions');
+    acts.appendChild(el('p', 'arc-note arc-orientgate-stuck',
+      t('rotate_stuck_note',
+        'Phone not turning? Some are told to hold still. Pick a way in below.')));
+
+    const row = el('div', 'arc-orientgate-actionrow');
+
+    const waive = el('button', 'btn primary arc-orientgate-waive',
+      t('rotate_play_anyway', 'Play it upright anyway'));
+    waive.type = 'button';
+    waive.addEventListener('click', () => { standDown(); });
+    row.appendChild(waive);
+
+    const leave = el('button', 'btn ghost arc-orientgate-leave',
+      t('rotate_leave_class', 'Leave the class'));
+    leave.type = 'button';
+    leave.addEventListener('click', () => {
+      /* The caller's door first, the card second. The shell's leave routine
+       * freezes the class around its own question, and `orientFreeze` refuses
+       * to resume a class that is already frozen for a reason of its own - so
+       * standing the gate down after it cannot start a game up underneath the
+       * card that asks whether to bin it. */
+      try { if (onLeave) onLeave(); } catch (e) { /* noop */ }
+      standDown();
+    });
+    row.appendChild(leave);
+
+    acts.appendChild(row);
+    card.appendChild(acts);
+  }
 
   root.appendChild(card);
   return root;
@@ -167,6 +238,10 @@ function reconcileAndNotify() {
  * @param {Object=} o
  * @param {string=} o.reason  'campus' | 'class' - picks which copy the card wears
  * @param {Function=} o.onChange  (blocking:boolean) => void, fired only on a flip
+ * @param {Function=} o.onLeave  () => void, the caller's OWN door. Optional, and
+ *   only a `reason: 'class'` card ever offers it: after the grace period the
+ *   card grows a "leave" button that calls this and then stands the gate down.
+ *   The module still knows nothing about what a class is - it just knocks.
  * @returns {boolean} whether a card is up right now
  */
 export function requireOrientation(want, o) {
@@ -175,6 +250,8 @@ export function requireOrientation(want, o) {
   wantedReason = String(opts.reason || '');
   if (typeof opts.onChange === 'function') onChange = opts.onChange;
   else if (opts.onChange === null) onChange = null;
+  if (typeof opts.onLeave === 'function') onLeave = opts.onLeave;
+  else if (opts.onLeave === null) onLeave = null;
 
   if (wanted && !unsub) unsub = onDeviceChange(() => reconcileAndNotify());
   if (!wanted && unsub) { try { unsub(); } catch (e) { /* noop */ } unsub = null; }
@@ -185,9 +262,10 @@ export function requireOrientation(want, o) {
 /** Is a card up right now? Cheap; the shell asks before it resumes a class. */
 export function isBlocking() { return !!node; }
 
-/** Drop everything: no requirement, no card, no listener, no hook. */
+/** Drop everything: no requirement, no card, no listener, no hooks. */
 export function clearOrientation() {
   onChange = null;
+  onLeave = null;
   return requireOrientation(null);
 }
 
