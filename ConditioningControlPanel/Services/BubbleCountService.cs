@@ -471,7 +471,7 @@ public class BubbleCountService : IDisposable
                         Foreground = Brushes.Magenta,
                         FontSize = 64,
                         FontWeight = FontWeights.Bold,
-                        FontFamily = new FontFamily("Impact"),
+                        FontFamily = new FontFamily("Impact, Arial Black, Segoe UI"),
                         TextAlignment = TextAlignment.Center,
                         HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
                         VerticalAlignment = VerticalAlignment.Center

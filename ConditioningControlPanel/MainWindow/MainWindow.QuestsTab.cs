@@ -680,7 +680,7 @@ namespace ConditioningControlPanel
                     var shieldLabel = new TextBlock
                     {
                         Text = "🛡️",
-                        FontFamily = new FontFamily("Segoe UI Emoji"),
+                        FontFamily = new FontFamily("Segoe UI Emoji, Segoe UI Symbol, Segoe UI"),
                         FontSize = 10,
                         TextAlignment = TextAlignment.Center
                     };

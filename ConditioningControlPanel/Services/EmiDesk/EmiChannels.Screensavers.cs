@@ -123,7 +123,7 @@ public static partial class EmiChannels
         /// exotic kaomoji). The katakana come back full width, a touch wider than their column,
         /// which is what they do on the campus too.
         /// </summary>
-        private static readonly FontFamily RainFont = new(
+        private static readonly FontFamily RainFont = Services.UI.FontGuard.Family(
             "Cascadia Mono, Consolas, Noto Sans Mono, MS Gothic, Yu Gothic UI, Meiryo, " +
             "Courier New, Global Monospace");
 

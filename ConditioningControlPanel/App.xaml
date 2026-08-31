@@ -24,6 +24,13 @@
         <!-- Keep any existing app-level dictionaries below -->
       </ResourceDictionary.MergedDictionaries>
 
+      <!-- The app's monospace face, in ONE place so a broken font install can be corrected in one
+           place. Bind it with DynamicResource, never StaticResource: Services/UI/FontGuard probes
+           these families at startup and REPLACES this value when one of them is present but
+           unreadable, which is the only thing that helps a corrupt face (a comma chain does not -
+           see the FontGuard docs). Keep this in sync with FontGuard.MonoChain. -->
+      <FontFamily x:Key="Font.Mono">Cascadia Mono, Consolas, Courier New</FontFamily>
+
       <!-- Tooltips must NOT be layered (per-pixel transparent) windows. A WPF ToolTip with
            HasDropShadow=True is hosted in an AllowsTransparency popup; when that popup shows/hides
            it does a synchronous HwndTarget.OnResize → MediaContext.CompleteRender() that blocks on

@@ -1059,7 +1059,7 @@ public partial class ChaosHubWindow : Window
         col.Children.Add(new TextBlock
         {
             Text = label, Foreground = new SolidColorBrush(Color.FromRgb(0x8A, 0x86, 0xB8)),
-            FontFamily = new FontFamily("Consolas"), FontWeight = FontWeights.Bold, FontSize = 11,
+            FontFamily = new FontFamily("Consolas, Courier New"), FontWeight = FontWeights.Bold, FontSize = 11,
             Margin = new Thickness(0, 0, 0, 6)
         });
         var row = new StackPanel { Orientation = Orientation.Horizontal };
@@ -1410,7 +1410,7 @@ public partial class ChaosHubWindow : Window
         {
             Text = "DIARY · what you've met down there",
             Foreground = new SolidColorBrush(Color.FromRgb(0xE8, 0x43, 0x93)),
-            FontFamily = new FontFamily("Consolas"), FontWeight = FontWeights.Bold, FontSize = 13,
+            FontFamily = new FontFamily("Consolas, Courier New"), FontWeight = FontWeights.Bold, FontSize = 13,
             Margin = new Thickness(0, 0, 0, 12)
         });
         FillDiaryRows(host, 440);
@@ -1457,7 +1457,7 @@ public partial class ChaosHubWindow : Window
     private TextBlock SubHeader(string text) => new()
     {
         Text = text, Foreground = new SolidColorBrush(Color.FromRgb(0xE8, 0x43, 0x93)),
-        FontFamily = new FontFamily("Consolas"), FontWeight = FontWeights.Bold, FontSize = 11,
+        FontFamily = new FontFamily("Consolas, Courier New"), FontWeight = FontWeights.Bold, FontSize = 11,
         Margin = new Thickness(0, 12, 0, 6)
     };
 

@@ -124,7 +124,7 @@ public partial class ChaosHubWindow
     {
         Text = text,
         Foreground = new SolidColorBrush(Color.FromRgb(0xE8, 0xB4, 0x43)),
-        FontFamily = new FontFamily("Consolas"), FontWeight = FontWeights.Bold, FontSize = 10,
+        FontFamily = new FontFamily("Consolas, Courier New"), FontWeight = FontWeights.Bold, FontSize = 10,
         VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0),
     };
 

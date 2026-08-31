@@ -33,7 +33,7 @@
             <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="8"/>
-            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="AcceptsReturn" Value="True"/>
             <Setter Property="TextWrapping" Value="Wrap"/>

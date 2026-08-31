@@ -576,7 +576,7 @@
                                                                FontSize="12" FontWeight="Medium"/>
                                                     <TextBlock x:Name="TxtWebcamStatusChipBlinkTrainer" x:FieldModifier="internal"
                                                                Text="{loc:Str rf_webcam_stopped}" Foreground="{DynamicResource TextMutedBrush}"
-                                                               FontFamily="Consolas" FontSize="11"/>
+                                                               FontFamily="Consolas, Courier New" FontSize="11"/>
                                                 </StackPanel>
                                                 <Button Grid.Column="2" Content="{loc:Str set2_configure_in_settings}"
                                                         Padding="10,4" FontSize="10" VerticalAlignment="Center"

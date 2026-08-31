@@ -34,7 +34,7 @@
             <TextBlock Text="Look around the screen. The cyan dot should follow your gaze."
                        Foreground="{DynamicResource TextMutedBrush}" FontSize="13" Margin="0,8,0,0" HorizontalAlignment="Center"/>
             <TextBlock x:Name="TxtCoords" Text="" Foreground="#00B0FF" FontSize="12"
-                       Margin="0,4,0,0" HorizontalAlignment="Center" FontFamily="Consolas"/>
+                       Margin="0,4,0,0" HorizontalAlignment="Center" FontFamily="Consolas, Courier New"/>
             <!-- Always-visible, mouse-clickable close. Lockdown's global keyboard hook swallows
                  Escape/Alt+F4 (#528), so a key-based exit can strand the user inside this test
                  window; a button click bypasses the keyboard hook entirely. -->

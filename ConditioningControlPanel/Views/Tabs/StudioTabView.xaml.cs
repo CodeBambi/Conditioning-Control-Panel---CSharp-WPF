@@ -792,7 +792,7 @@ namespace ConditioningControlPanel.Views.Tabs
                     Child = new TextBlock
                     {
                         Text = "NEW",
-                        FontFamily = new FontFamily("Consolas"),
+                        FontFamily = new FontFamily("Consolas, Courier New"),
                         FontSize = 9,
                         FontWeight = FontWeights.Bold,
                         Foreground = pillText,

@@ -242,7 +242,7 @@ namespace ConditioningControlPanel
             card.NewFieldsPanel.Children.Add(CreateFieldLabel("Conditions (advanced, raw JSON object - leave empty for none)"));
             card.ConditionsBox = CreateDarkTextBox("{ \"level_gte\": 10 }", multiline: true, height: 56);
             card.ConditionsBox.Width = 400;
-            card.ConditionsBox.FontFamily = new FontFamily("Consolas");
+            card.ConditionsBox.FontFamily = new FontFamily("Consolas, Courier New");
             card.NewFieldsPanel.Children.Add(card.ConditionsBox);
 
             // ── Override fields ──

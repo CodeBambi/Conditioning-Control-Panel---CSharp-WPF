@@ -708,7 +708,7 @@
                                                 </StackPanel>
                                                 <TextBlock x:Name="TxtWebcamStatusChipDeeper" x:FieldModifier="internal"
                                                            Text="{loc:Str rf_webcam_stopped}" Foreground="{DynamicResource TextMutedBrush}"
-                                                           FontFamily="Consolas" FontSize="11" Margin="16,2,0,0"/>
+                                                           FontFamily="Consolas, Courier New" FontSize="11" Margin="16,2,0,0"/>
                                                 <Button Content="{loc:Str set2_configure_in_settings}"
                                                         HorizontalAlignment="Left" Margin="16,6,0,0"
                                                         Padding="8,3" FontSize="10"

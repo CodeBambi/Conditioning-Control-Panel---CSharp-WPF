@@ -13,7 +13,7 @@
         <SolidColorBrush x:Key="TextDim" Color="#AAB8B8D0"/>
         <Style x:Key="Hdr" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource Pink}"/>
-            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Margin" Value="0,12,0,6"/>
@@ -150,7 +150,7 @@
                 MouseLeftButtonDown="Strip_Click">
             <StackPanel VerticalAlignment="Top" Margin="0,20,0,0" HorizontalAlignment="Center">
                 <TextBlock Text="🐇" Foreground="{StaticResource Pink}" FontSize="30" HorizontalAlignment="Center"/>
-                <TextBlock x:Name="TxtStripClock" Text="{Binding ClockText}" Foreground="White" FontFamily="Consolas" FontSize="17"
+                <TextBlock x:Name="TxtStripClock" Text="{Binding ClockText}" Foreground="White" FontFamily="Consolas, Courier New" FontSize="17"
                            HorizontalAlignment="Center" Margin="0,12,0,0"/>
 
                 <!-- left/right side switch — parks the whole sidebar on the other screen edge so it's
@@ -186,11 +186,11 @@
                     <TextBlock x:Name="TxtStreakLbl" Text="STREAK" Foreground="{StaticResource TextDim}"
                                FontSize="12" FontWeight="Bold" HorizontalAlignment="Center"/>
                     <TextBlock x:Name="TxtStreakNum" Text="x0" Foreground="White" FontWeight="Bold"
-                               FontFamily="Consolas" FontSize="29" HorizontalAlignment="Center"/>
+                               FontFamily="Consolas, Courier New" FontSize="29" HorizontalAlignment="Center"/>
                 </StackPanel>
 
                 <TextBlock x:Name="TxtStripMult" Text="{Binding TotalMultText}" Foreground="#FFD24DFF" FontWeight="Bold" FontSize="15"
-                           FontFamily="/Fonts/#Fredoka" RenderTransformOrigin="0.5,0.5"
+                           FontFamily="/Fonts/#Fredoka, Segoe UI" RenderTransformOrigin="0.5,0.5"
                            HorizontalAlignment="Center" Margin="0,12,0,0"/>
 
                 <!-- FOCUS: the defuse fuel — a core resource like streak, so it lives on the
@@ -218,7 +218,7 @@
                      READY breathes a soft cyan glow (code-behind, same pulse as the toy hero button). -->
                 <StackPanel x:Name="RippleStripBlock" Margin="0,12,0,0" HorizontalAlignment="Center">
                     <TextBlock Text="RIPPLE" Foreground="#FF7AE0FF" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center"/>
-                    <TextBlock x:Name="RippleStripText" Text="{Binding RippleText}" FontWeight="Bold" FontFamily="Consolas" FontSize="13"
+                    <TextBlock x:Name="RippleStripText" Text="{Binding RippleText}" FontWeight="Bold" FontFamily="Consolas, Courier New" FontSize="13"
                                HorizontalAlignment="Center" Margin="0,2,0,0">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
@@ -315,7 +315,7 @@
                     <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                         <TextBlock x:Name="TxtPanelScore" Text="{Binding ScoreText}" Foreground="White" FontWeight="Bold" FontSize="22" Margin="0,0,16,0"/>
                         <TextBlock x:Name="TxtPanelMult" Text="{Binding TotalMultText}" Foreground="#FFD24DFF" FontWeight="Bold" FontSize="18"
-                                   FontFamily="/Fonts/#Fredoka" RenderTransformOrigin="0.5,0.5" VerticalAlignment="Center"/>
+                                   FontFamily="/Fonts/#Fredoka, Segoe UI" RenderTransformOrigin="0.5,0.5" VerticalAlignment="Center"/>
                     </StackPanel>
                 </StackPanel>
 
