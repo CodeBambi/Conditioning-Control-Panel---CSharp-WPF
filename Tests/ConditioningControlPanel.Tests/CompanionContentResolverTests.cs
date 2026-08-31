@@ -101,6 +101,77 @@ public class CompanionContentResolverTests
         Assert.Equal(Path.Combine(ContentRoot, "Resources", "sounds", "flashes_audio"), candidates[^1].Path);
     }
 
+    // ------------------------------------------------ the baseline VO library belongs to Bambi
+
+    [Theory]
+    [InlineData(BuiltInMods.BambiSleepId)]
+    [InlineData(BuiltInMods.CCPDefaultId)]
+    [InlineData(null)]
+    public void TheBaselineVoiceLibraryIsOfferedToTheModsItActuallyBelongsTo(string? modId)
+    {
+        Assert.True(CompanionContentResolver.OwnsBaselineVoiceLines(modId));
+    }
+
+    [Theory]
+    [InlineData(BuiltInMods.SissyHypnoId)]
+    [InlineData(BuiltInMods.LockedId)]
+    [InlineData(BuiltInMods.DronificationId)]
+    [InlineData(BuiltInMods.InfectionControlId)]
+    [InlineData("some-creator-mod")]
+    public void EveryOtherModIsDeniedTheBaselineVoiceLibrary(string modId)
+    {
+        Assert.False(CompanionContentResolver.OwnsBaselineVoiceLines(modId));
+    }
+
+    /// <summary>
+    /// The reported bug: Infection Control ships its bark clips under
+    /// resources\sounds\companion_audio but no flashes_audio folder, so the voice-line ladder used
+    /// to end on the shared baseline — BambiSleep's recorded VO, which FlashService plays AND whose
+    /// file name the avatar prints in the companion's own speech bubble. A mod that ships none must
+    /// stay silent instead.
+    /// </summary>
+    [Fact]
+    public void AModThatShipsNoVoiceLinesGetsSilenceNotBambisRecordings()
+    {
+        var candidates = CompanionContentResolver.Candidates(
+            CompanionChannel.VoiceLines, BuiltInMods.InfectionControlId,
+            installedPath: PackagedPath, InstallRoot, ContentRoot);
+
+        Assert.DoesNotContain(candidates, c => c.Source == CompanionContentSource.Baseline);
+        Assert.Equal(
+            new[]
+            {
+                CompanionContentSource.PackagedMod,
+                CompanionContentSource.ModInstallDir,
+                CompanionContentSource.ModContentPack
+            },
+            candidates.Select(c => c.Source).ToArray());
+
+        // With nothing on disk anywhere, the pick is None — i.e. no voice lines at all.
+        Assert.False(CompanionContentResolver.Pick(candidates, _ => false).Found);
+    }
+
+    [Fact]
+    public void AModShippingItsOwnVoiceLinesStillWinsAheadOfEverything()
+    {
+        var own = Path.Combine(PackagedPath, "resources", "sounds", "flashes_audio");
+        var pick = CompanionContentResolver.Resolve(
+            CompanionChannel.VoiceLines, BuiltInMods.DronificationId, PackagedPath,
+            InstallRoot, ContentRoot, ProbeFor(own));
+
+        Assert.Equal(CompanionContentSource.PackagedMod, pick.Source);
+        Assert.Equal(own, pick.Path);
+    }
+
+    [Fact]
+    public void EventAudioNeverHadABaselineAndStillDoesNot()
+    {
+        var candidates = CompanionContentResolver.Candidates(
+            CompanionChannel.EventAudio, BambiId, null, InstallRoot, ContentRoot);
+
+        Assert.DoesNotContain(candidates, c => c.Source == CompanionContentSource.Baseline);
+    }
+
     [Fact]
     public void BarkAudioFallsBackToTheSharedCompanionAudioRoot()
     {
