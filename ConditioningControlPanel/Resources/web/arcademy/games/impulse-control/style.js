@@ -215,11 +215,28 @@ html.arc-reduced .g-ic-dusk{transition:none}
   @keyframes g-ic-holdfade{from{opacity:1}to{opacity:.15}}}
 
 /* ------------------------------------------------------------ the flourish */
-.g-ic-flourish{position:absolute;left:var(--ic-basin-x,50%);top:var(--ic-basin-y,50%);width:0;height:0;pointer-events:none;z-index:4;display:grid;place-items:center;overflow:visible}
-.g-ic-flourish-img{width:34vmin;height:34vmin;object-fit:contain;opacity:0;
-  animation:g-ic-spiralout 1s ease-out forwards}
-@keyframes g-ic-spiralout{0%{opacity:.9;transform:scale(.3) rotate(0)}
-  100%{opacity:0;transform:scale(2.4) rotate(300deg)}}
+/* THE ONE POP - and it is ONE. The flourish wears the bubble's own spiral.png,
+   so anything that makes it read as a SEPARATE object reads as the bubble
+   popping twice (owner 2026-08-31: "an echo of the bubble pop").
+   Two things did:
+     1. THE OFFSET. place-items:center does NOT centre an over-sized item on a
+        0x0 box - Chromium start-aligns it, so a 34vmin flourish bloomed with
+        its TOP-LEFT on the basin, i.e. 17vmin down-and-right of the bubble it
+        was supposed to be replacing. Measured: bubble centre (632,353),
+        flourish centre (752,472). Centre it the way .g-ic-basin centres the
+        bubble - left/top 0 inside the 0x0 anchor plus translate(-50%,-50%) -
+        and drop the grid.
+     2. THE RESTART. It began at scale .3 of 34vmin = ~10vmin, SMALLER than the
+        17.5vmin bubble that had just gone, so the art shrank and then grew
+        again: a second expand-and-pop. It now starts at exactly the bubble's
+        size and full opacity and only ever grows, so it CONTINUES the pop the
+        bubble started (render.js snaps the bubble out on the same tick).
+   End reach is unchanged: 17.5vmin * 4.6 ~= the old 34vmin * 2.4. */
+.g-ic-flourish{position:absolute;left:var(--ic-basin-x,50%);top:var(--ic-basin-y,50%);width:0;height:0;pointer-events:none;z-index:4;overflow:visible}
+.g-ic-flourish-img{position:absolute;left:0;top:0;width:var(--ic-basin-d);height:var(--ic-basin-d);
+  object-fit:contain;opacity:0;animation:g-ic-spiralout 1s ease-out both}
+@keyframes g-ic-spiralout{0%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(0)}
+  100%{opacity:0;transform:translate(-50%,-50%) scale(4.6) rotate(300deg)}}
 
 /* --------------------------------------------------------------- the stamp */
 /* tracks the bubble: just clear of its crown, still inside the crater's mouth */
@@ -734,47 +751,31 @@ html.arc-reduced.ae-touch .g-ic-hw-go,html.arc-reduced.ae-touch .g-ic-bubble.hit
   font-size:11px;letter-spacing:.18em;text-transform:uppercase}
 .g-ic-file-note-line{display:block;font-size:14px;line-height:1.4}
 
-/* ---- THE MELT (Anomaly's wax, on phase only - nothing reforms here) ---- */
-.g-ic-cameo-wax{position:absolute;left:-2px;right:-2px;top:0;bottom:-2px;border-radius:4px;
-  opacity:0;overflow:visible;transform-origin:50% 0;
-  background:linear-gradient(180deg, rgba(90,20,60,0) 0%, rgba(120,26,74,.55) 30%,
-    rgba(150,32,92,.8) 100%)}
-.g-ic-cameo-wax.on{animation:g-ic-cam-wax 1.4s cubic-bezier(.5,.05,.7,1) forwards}
-@keyframes g-ic-cam-wax{0%{opacity:0;transform:scaleY(.2)}
-  25%{opacity:.85;transform:scaleY(.6)}100%{opacity:.95;transform:scaleY(1.08)}}
-.g-ic-cameo-wax::before,.g-ic-cameo-wax::after{content:"";position:absolute;top:100%;
-  width:14%;height:0;border-radius:0 0 50% 50%;background:rgba(150,32,92,.85);
-  box-shadow:0 2px 8px rgba(120,26,74,.6)}
-.g-ic-cameo-wax::before{left:22%}
-.g-ic-cameo-wax::after{left:61%;width:10%}
-.g-ic-cameo-wax.on::before{animation:g-ic-cam-drip 1.4s .3s ease-in forwards}
-.g-ic-cameo-wax.on::after{animation:g-ic-cam-drip 1.4s .55s ease-in forwards}
-@keyframes g-ic-cam-drip{from{height:0}to{height:46%}}
+/* ---- THE EXIT ----
+   There used to be a MELT here: a magenta wax sheet (.g-ic-cameo-wax) that ran
+   down over the card for 1.4s and grew two drips out of its bottom edge, while
+   the card underneath never moved and then hard-cut away. Owner 2026-08-31:
+   "it shows, it's bad - remove it." The card leaves the way everything else in
+   this room leaves: it fades. No wax, no drips, no overlay node. */
+.g-ic-file.leaving{animation:g-ic-file-out .24s ease-in forwards}
+@keyframes g-ic-file-out{from{opacity:1}to{opacity:0}}
 
 /* ---- REDUCED MOTION (trap 92: the exit is an animation on the ROOT) ---- */
 .g-ic-file.is-reduced{animation:g-ic-file-in-r .2s ease-out both}
-.g-ic-file.is-reduced.melting{animation:g-ic-file-out-r .3s ease-out forwards}
+.g-ic-file.is-reduced.leaving{animation:g-ic-file-out-r .2s ease-out forwards}
 .g-ic-file.is-reduced *{animation:none !important}
 @keyframes g-ic-file-in-r{from{opacity:0}to{opacity:1}}
 @keyframes g-ic-file-out-r{from{opacity:1}to{opacity:0}}
-.g-ic-file.is-reduced .g-ic-cameo-wax{opacity:.7;transform:none}
-.g-ic-file.is-reduced .g-ic-cameo-wax::before,
-.g-ic-file.is-reduced .g-ic-cameo-wax::after{display:none}
 @media (prefers-reduced-motion: reduce){
   .g-ic-cameo-ring::after,.g-ic-cameo-halo::after,.g-ic-polaroid-well.conic::before{animation:none}
   .g-ic-cameo-ring.on{animation:none;transform:translate(-50%,-50%) scale(1)}
   .g-ic-cameo-halo.on{animation:none;transform:translate(-50%,-50%) scale(1)}
-  .g-ic-cameo-wax.on{animation:none;opacity:.7;transform:none}
-  .g-ic-cameo-wax::before,.g-ic-cameo-wax::after{display:none}
 }
 html.arc-reduced .g-ic-cameo-ring::after,
 html.arc-reduced .g-ic-cameo-halo::after,
 html.arc-reduced .g-ic-polaroid-well.conic::before{animation:none}
 html.arc-reduced .g-ic-cameo-ring.on{animation:none;transform:translate(-50%,-50%) scale(1)}
 html.arc-reduced .g-ic-cameo-halo.on{animation:none;transform:translate(-50%,-50%) scale(1)}
-html.arc-reduced .g-ic-cameo-wax.on{animation:none;opacity:.7;transform:none}
-html.arc-reduced .g-ic-cameo-wax::before,
-html.arc-reduced .g-ic-cameo-wax::after{display:none}
 
 /* ---- THE PHONE CEILING (html.ae-touch / html.arc-mobile, trap 42) ----
    The well shrinks to the narrow rule the plan sets (min(280px,70vw)) and the
