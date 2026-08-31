@@ -26,25 +26,103 @@ public class CornerGifAdmissionTests
 
     // ---- the session side ----
 
+    /// <summary>
+    /// The admission rule with the spiral clauses parked in their "nothing to see here" state:
+    /// the corner art is the spiral (the stock program-day case), the user allows spirals, and no
+    /// fullscreen spiral is on screen. Keeps the older cases about the switch they are actually
+    /// testing instead of restating six arguments each time.
+    /// </summary>
+    private static bool Allow(
+        bool templateEnabled,
+        bool userAllowed,
+        bool standaloneOverlayActive,
+        bool artIsSpiral = true,
+        bool userSpiralAllowed = true,
+        bool spiralOverlayActive = false)
+        => CornerGifMedia.AllowSessionCornerGif(
+            templateEnabled, userAllowed, standaloneOverlayActive,
+            artIsSpiral, userSpiralAllowed, spiralOverlayActive);
+
     [Fact]
     public void SessionCornerGif_ShowsWhenTemplateAndUserBothAgree()
-        => Assert.True(CornerGifMedia.AllowSessionCornerGif(
-            templateEnabled: true, userAllowed: true, standaloneOverlayActive: false));
+        => Assert.True(Allow(templateEnabled: true, userAllowed: true, standaloneOverlayActive: false));
 
     [Fact]
     public void SessionCornerGif_UserMasterOffBeatsTheTemplate()
-        => Assert.False(CornerGifMedia.AllowSessionCornerGif(
-            templateEnabled: true, userAllowed: false, standaloneOverlayActive: false));
+        => Assert.False(Allow(templateEnabled: true, userAllowed: false, standaloneOverlayActive: false));
 
     [Fact]
     public void SessionCornerGif_TemplateOffStaysOffEvenWhenAllowed()
-        => Assert.False(CornerGifMedia.AllowSessionCornerGif(
-            templateEnabled: false, userAllowed: true, standaloneOverlayActive: false));
+        => Assert.False(Allow(templateEnabled: false, userAllowed: true, standaloneOverlayActive: false));
 
     [Fact]
     public void SessionCornerGif_YieldsToAStandaloneOverlayAlreadyOnScreen()
-        => Assert.False(CornerGifMedia.AllowSessionCornerGif(
-            templateEnabled: true, userAllowed: true, standaloneOverlayActive: true));
+        => Assert.False(Allow(templateEnabled: true, userAllowed: true, standaloneOverlayActive: true));
+
+    // ---- the follow-up report: the SPIRAL clauses ----
+
+    /// <summary>
+    /// The reported bug: spiral overlay switched off on the Spiral card, start a session, and a
+    /// spiral appears in the corner anyway with nothing to turn it off. A user-level spiral OFF is
+    /// a veto on session corner art that IS a spiral.
+    /// </summary>
+    [Fact]
+    public void SessionCornerSpiral_IsVetoedByTheUsersOwnSpiralMaster()
+        => Assert.False(Allow(templateEnabled: true, userAllowed: true, standaloneOverlayActive: false,
+            artIsSpiral: true, userSpiralAllowed: false));
+
+    /// <summary>
+    /// ...but only over the SPIRAL. A template carrying its own corner art is not the thing the
+    /// Spiral card's master switches off, so "no spirals please" must not silently delete a
+    /// session's own artwork.
+    /// </summary>
+    [Fact]
+    public void SpiralOff_DoesNotVetoATemplatesOwnCornerArt()
+        => Assert.True(Allow(templateEnabled: true, userAllowed: true, standaloneOverlayActive: false,
+            artIsSpiral: false, userSpiralAllowed: false));
+
+    /// <summary>
+    /// The second half of the report: the corner spiral rendered WHILE the fullscreen spiral
+    /// overlay ran, so the user watched two spirals at once. The one already on screen wins and
+    /// the session does not spawn a second window.
+    /// </summary>
+    [Fact]
+    public void SessionCornerSpiral_YieldsToTheFullscreenSpiralAlreadyOnScreen()
+        => Assert.False(Allow(templateEnabled: true, userAllowed: true, standaloneOverlayActive: false,
+            artIsSpiral: true, spiralOverlayActive: true));
+
+    /// <summary>Non-spiral corner art alongside a fullscreen spiral is not a double spiral.</summary>
+    [Fact]
+    public void ATemplatesOwnCornerArt_StillShowsUnderAFullscreenSpiral()
+        => Assert.True(Allow(templateEnabled: true, userAllowed: true, standaloneOverlayActive: false,
+            artIsSpiral: false, spiralOverlayActive: true));
+
+    /// <summary>
+    /// What decides "this is a spiral": the template naming no usable art of its own, which is the
+    /// same test ShowCornerGif runs before it falls back to the built-in corner spiral. No program
+    /// template sets CornerGifPath, so every stock program day is a spiral by this rule - and a
+    /// path pointing at a file that is no longer there falls back to the spiral too.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void NoTemplateArt_MeansTheCornerDrawsTheSpiral(string? path)
+        => Assert.True(CornerGifMedia.SessionCornerArtIsSpiral(path));
+
+    [Fact]
+    public void AMissingFile_FallsBackToTheSpiralAndIsJudgedAsOne()
+        => Assert.True(CornerGifMedia.SessionCornerArtIsSpiral(
+            Path.Combine(Path.GetTempPath(), "ccp-no-such-corner-" + Guid.NewGuid().ToString("N") + ".gif")));
+
+    [Fact]
+    public void ARealTemplateFile_IsTheTemplatesOwnArt()
+    {
+        var file = Path.Combine(Path.GetTempPath(), "ccp-corner-" + Guid.NewGuid().ToString("N") + ".gif");
+        File.WriteAllBytes(file, new byte[] { 0x47, 0x49, 0x46 });
+        try { Assert.False(CornerGifMedia.SessionCornerArtIsSpiral(file)); }
+        finally { try { File.Delete(file); } catch { } }
+    }
 
     // ---- the standalone side ----
 
@@ -74,12 +152,39 @@ public class CornerGifAdmissionTests
     {
         // Whichever one is already up, the other is refused - so the reported "two spirals" state
         // cannot be reached from either direction.
-        var sessionUp = CornerGifMedia.AllowSessionCornerGif(templateEnabled, userAllowed, standaloneOverlayActive: false);
+        var sessionUp = Allow(templateEnabled, userAllowed, standaloneOverlayActive: false);
         Assert.False(sessionUp && CornerGifMedia.AllowStandaloneCornerGif(slotEnabled: true, sessionCornerGifActive: sessionUp));
 
         var standaloneUp = CornerGifMedia.AllowStandaloneCornerGif(slotEnabled: true, sessionCornerGifActive: false);
-        Assert.False(standaloneUp && CornerGifMedia.AllowSessionCornerGif(templateEnabled, userAllowed, standaloneOverlayActive: standaloneUp));
+        Assert.False(standaloneUp && Allow(templateEnabled, userAllowed, standaloneOverlayActive: standaloneUp));
     }
+
+    /// <summary>
+    /// The wider invariant the follow-up report adds: whenever the corner would draw a spiral, the
+    /// session overlay is admitted only when NO other spiral is claiming the screen and the user
+    /// has not switched spirals off. Exhaustive over the six inputs, so no combination can slip
+    /// back into the two-spiral state the ticket describes.
+    /// </summary>
+    [Fact]
+    public void ACornerSpiral_IsNeverAdmittedAlongsideAnotherSpiralOrAgainstTheUsersWishes()
+    {
+        foreach (var template in Bools)
+        foreach (var user in Bools)
+        foreach (var standalone in Bools)
+        foreach (var spiralAllowed in Bools)
+        foreach (var spiralUp in Bools)
+        {
+            var admitted = Allow(template, user, standalone,
+                artIsSpiral: true, userSpiralAllowed: spiralAllowed, spiralOverlayActive: spiralUp);
+            if (!admitted) continue;
+            Assert.True(spiralAllowed, "a corner spiral was admitted with the user's spiral master off");
+            Assert.False(spiralUp, "a corner spiral was admitted while a fullscreen spiral was on screen");
+            Assert.False(standalone, "a corner spiral was admitted behind a standalone corner overlay");
+            Assert.True(template && user);
+        }
+    }
+
+    private static readonly bool[] Bools = { true, false };
 
     // ---- the setting itself ----
 
@@ -357,4 +462,48 @@ public class CornerGifAdmissionTests
         var body = end > start ? source[start..end] : source[start..];
         Assert.Contains("CornerGifMedia.AllowStandaloneCornerGif", body);
     }
+
+    /// <summary>
+    /// The spiral side has to resolve in both directions too. A minute-0 corner GIF refused because
+    /// the fullscreen spiral was up would otherwise stay refused for the rest of the run once that
+    /// spiral stops: the per-second tick only re-raises corner GIFs with CornerGifStartMinute above
+    /// zero, and every stock program day is a minute-0 one. StopSpiral nudges the policy, exactly
+    /// as CornerGifService does from the standalone side.
+    /// </summary>
+    [Fact]
+    public void TheFullscreenSpiralGoingDown_ReAsksTheSessionAdmission()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "ConditioningControlPanel", "Services", "Notifications", "OverlayService.cs"));
+        var start = source.IndexOf("internal void StopSpiral()", StringComparison.Ordinal);
+        Assert.True(start >= 0, "StopSpiral was renamed - update this test with it");
+        var body = source[start..source.IndexOf("\n    private void UpdateSpiralOpacity()", start, StringComparison.Ordinal)];
+        Assert.Contains("RefreshCornerGifPolicy()", body);
+    }
+
+    /// <summary>
+    /// Every gate on the session overlay asks the SAME question. The mid-session re-check used to
+    /// call CornerGifMedia.AllowSessionCornerGif with its own argument list, so the two spiral
+    /// clauses would have had to be remembered in two places - which is how the standalone dedupe
+    /// drifted the first time.
+    /// </summary>
+    [Fact]
+    public void EverySessionSideGate_GoesThroughCanRaiseCornerGif()
+    {
+        var source = SessionEngineSource();
+        // Exactly one call site for the shared rule: the one inside CanRaiseCornerGif itself.
+        Assert.Equal(1, Regex.Matches(source, @"CornerGifMedia\.AllowSessionCornerGif").Count);
+        Assert.Contains("CornerGifMedia.AllowSessionCornerGif",
+            MemberBody(source, "private bool CanRaiseCornerGif(SessionSettings settings)"));
+    }
+
+    /// <summary>
+    /// The user's spiral master must be read from the PRE-SESSION snapshot. ApplySessionSettings
+    /// writes App.Settings.Current.SpiralEnabled for the session's own fullscreen spiral, so a veto
+    /// read from the live value would evaporate the moment the session it is meant to veto starts.
+    /// </summary>
+    [Fact]
+    public void TheSpiralVetoReadsTheUsersPreSessionChoice()
+        => Assert.Contains("_savedSettings?.SpiralEnabled",
+            MemberBody(SessionEngineSource(), "private bool UserSpiralAllowed"));
 }

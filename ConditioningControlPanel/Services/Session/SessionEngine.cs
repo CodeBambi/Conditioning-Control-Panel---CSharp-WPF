@@ -876,15 +876,16 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            // Corner GIF: the user master is honoured LIVE, so unticking "Allow session corner
+            // Corner GIF: the admission rule is honoured LIVE, so unticking "Allow session corner
             // GIFs" mid-session takes the overlay off the screen instead of waiting for the next
-            // session. Same for a standalone corner overlay the user switches on mid-session: the
-            // session yields rather than stacking a second spiral behind it.
-            if (_cornerGifWindow != null && !CornerGifMedia.AllowSessionCornerGif(
-                    settings.CornerGifEnabled, SessionCornerGifAllowedByUser, StandaloneCornerGifActive))
+            // session. Same for a standalone corner overlay the user switches on mid-session, and
+            // for the FULLSCREEN spiral this same tick may have just raised a few lines above: the
+            // session yields rather than stacking a second spiral behind either of them. Asked
+            // through CanRaiseCornerGif so this cannot drift from the show paths' gate.
+            if (_cornerGifWindow != null && !CanRaiseCornerGif(settings))
             {
                 CloseCornerGif();
-                App.Logger?.Information("Corner GIF hidden mid-session (user master or a standalone corner overlay now owns the corner)");
+                App.Logger?.Information("Corner GIF hidden mid-session (user master, a standalone corner overlay, or the fullscreen spiral now owns the corner)");
             }
 
             // Corner GIF delayed start
@@ -1731,15 +1732,45 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// The user's own spiral-overlay master (<c>AppSettings.SpiralEnabled</c>) as it stood
+        /// BEFORE this session overrode it. ApplySessionSettings writes that same flag for the
+        /// session's fullscreen spiral, so the live value stops being the user's answer the moment
+        /// a session starts - the pre-session snapshot is the only place their choice survives.
+        /// TRUE off-session and when the snapshot is missing, so nothing silently disappears.
+        /// </summary>
+        private bool UserSpiralAllowed
+            => _savedSettings?.SpiralEnabled ?? App.Settings?.Current?.SpiralEnabled != false;
+
+        /// <summary>A fullscreen spiral overlay is on screen RIGHT NOW, whoever raised it - this
+        /// session, the user's own switch, or a voice command (OverlayService.IsSpiralVisible reads
+        /// the windows, not the setting).</summary>
+        private static bool SpiralOverlayActive
+        {
+            get
+            {
+                try { return App.Overlay?.IsSpiralVisible == true; }
+                catch { return false; }
+            }
+        }
+
+        /// <summary>
         /// Full admission check for the session-scoped corner GIF: the template asked for it, the
         /// USER still allows it, and the corner is not already occupied by a standalone overlay.
         /// The template flag alone used to be the whole gate - ticket 1539282547484139682, where
         /// the documented "turn the Corner GIF off" workaround did nothing for program days and
         /// two spirals could end up on screen at once.
+        ///
+        /// <para>The follow-up report on that ticket: a program day whose corner art is the SPIRAL
+        /// (i.e. every stock one - no program template sets CornerGifPath) still ignored the Spiral
+        /// card's own master, and still stacked on top of the FULLSCREEN spiral, which the
+        /// standalone dedupe knows nothing about. Both of those live in the shared rule, so the
+        /// standalone side reads the same answer.</para>
         /// </summary>
-        private static bool CanRaiseCornerGif(SessionSettings settings)
+        private bool CanRaiseCornerGif(SessionSettings settings)
             => settings != null && CornerGifMedia.AllowSessionCornerGif(
-                   settings.CornerGifEnabled, SessionCornerGifAllowedByUser, StandaloneCornerGifActive);
+                   settings.CornerGifEnabled, SessionCornerGifAllowedByUser, StandaloneCornerGifActive,
+                   CornerGifMedia.SessionCornerArtIsSpiral(settings.CornerGifPath),
+                   UserSpiralAllowed, SpiralOverlayActive);
 
         /// <summary>
         /// TRUE while a session-scoped corner GIF is on screen. Read by CornerGifService so a
