@@ -881,6 +881,14 @@ namespace ConditioningControlPanel
             foreach (var b in _navRailButtons)
                 b.HorizontalContentAlignment = expand ? HorizontalAlignment.Left : HorizontalAlignment.Center;
 
+            // The scrollbar is only allowed out while the rail is. Shut, it is ~17px of chrome
+            // laid over the right third of a 44px medallion (MainWindow.xaml authors Hidden and
+            // carries the arithmetic); open, 236px has room for it and an overflowing rail should
+            // say so. Flipped on both paths, animated or not - it is a Visibility, not a tween.
+            if (NavRailScroll != null)
+                NavRailScroll.VerticalScrollBarVisibility =
+                    expand ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden;
+
             ApplyNavDoorRows(expand, animate);
             ApplyNavRailDoorState(animate);
             ApplyNavRailAirspace(expand);

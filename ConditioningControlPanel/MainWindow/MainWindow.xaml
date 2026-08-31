@@ -598,7 +598,19 @@
                     </Grid>
                 </Button>
 
-                <ScrollViewer x:Name="NavRailScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                <!-- VerticalScrollBarVisibility authors the COLLAPSED state, like every other
+                     rail part: Hidden, because a WPF vertical scrollbar is ~17px and the shut
+                     rail is 56px of which the medallion tile is 44 - the bar does not sit BESIDE
+                     the icons, it lands on top of the right third of every one of them, and once
+                     the extent clears the viewport by even a rounding pixel (the content grid's
+                     MinHeight is bound to the viewport, under a Viewbox at a fractional scale) it
+                     never goes away again. Reported on Discord against v6.8.6 as a permanent
+                     scrollbar drawn over the collapsed rail.
+
+                     Hidden, not Disabled: the wheel still scrolls, so a rail that really does
+                     overflow while shut is still reachable. MainWindow.NavRail.cs hands it back
+                     to Auto while the flyout is out, where 236px has room to show a bar. -->
+                <ScrollViewer x:Name="NavRailScroll" Grid.Row="1" VerticalScrollBarVisibility="Hidden"
                               HorizontalScrollBarVisibility="Disabled">
                     <!-- ============ TOP-PACKED DOORS (Velvet Kit, UI polish 2) ============
                          Six Auto door rows with fixed SPACER rows between them, all pooled at
