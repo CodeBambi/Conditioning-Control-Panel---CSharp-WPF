@@ -481,7 +481,7 @@
   "tooltip_ducking_percentage_80_reduce_other_audio_to_2": "Porcentaje de atenuación (80% = reducir audio de otras apps al 20%)",
   "setting_don_t_duck_browser": "No atenuar navegador",
   "setting_output": "Salida",
-  "tooltip_audio_output_device": "Elige a qué dispositivo de reproducción se envía el audio del CCP. Útil para hacer streaming - enrutalo a auriculares privados para que el público en el dispositivo predeterminado no lo escuche.",
+  "tooltip_audio_output_device": "Elige a qué dispositivo de reproducción se envía el audio del CCP. Útil para hacer streaming - enrutalo a auriculares privados para que el público en el dispositivo predeterminado no lo escuche. La pestaña del navegador integrado es la única excepción - siempre sigue el dispositivo predeterminado de Windows (enrútala desde Configuración de sonido de Windows > Mezclador de volumen).",
   "btn_audio_layers": "🎧 Capas de audio",
   "tooltip_audio_layers": "Superpone pistas de audio de fondo en bucle que suenan juntas durante las sesiones. También habilita sesiones solo de audio.",
   "tooltip_when_enabled_audio_from_the_integrated_bambic": "Cuando está activado, el audio del navegador BambiCloud integrado no se reducirá durante la atenuación",

@@ -482,7 +482,7 @@
   "tooltip_ducking_percentage_80_reduce_other_audio_to_2": "Absenkungs-Prozentsatz (80% = anderes Audio auf 20% reduzieren)",
   "setting_don_t_duck_browser": "Browser nicht absenken",
   "setting_output": "Ausgabe",
-  "tooltip_audio_output_device": "Wähle das Wiedergabegerät, an das CCP-Audio gesendet wird. Nützlich beim Streamen - leite es an ein privates Headset, damit Zuschauer am Standardgerät nichts hören.",
+  "tooltip_audio_output_device": "Wähle das Wiedergabegerät, an das CCP-Audio gesendet wird. Nützlich beim Streamen - leite es an ein privates Headset, damit Zuschauer am Standardgerät nichts hören. Der eingebettete Browser-Tab ist die einzige Ausnahme - er folgt immer dem Windows-Standardgerät (leite ihn in den Windows-Soundeinstellungen > Lautstärkemixer um).",
   "btn_audio_layers": "🎧 Audio-Ebenen",
   "tooltip_audio_layers": "Schichte loopende Hintergrund-Audiospuren, die während der Sitzungen zusammen abgespielt werden. Aktiviert auch reine Audio-Sitzungen.",
   "tooltip_when_enabled_audio_from_the_integrated_bambic": "Wenn aktiviert, wird Audio vom integrierten BambiCloud-Browser während des Absenkens nicht reduziert",
