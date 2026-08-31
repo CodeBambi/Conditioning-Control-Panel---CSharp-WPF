@@ -897,6 +897,153 @@ internal sealed class ChaosWebViewHost : IDisposable
         "},true);}catch(_){}})();";
 
     /// <summary>
+    /// Audio-output routing (#938, tester reports 0831): only pages served from the LOCAL virtual
+    /// origin follow the user's chosen output device. Bureau / Just Drop navigate to REMOTE
+    /// first-party sites, and granting mic permission to remote content is the exact trade the
+    /// player-page fix (BrowserVideoSurface) refused for third-party origins - so they stay on the
+    /// Windows default, same as before.
+    /// </summary>
+    private const string SinkRoutingHost = "ccp.game";
+
+    internal static bool IsSinkRoutingHost(string? primaryHost) =>
+        string.Equals(primaryHost, SinkRoutingHost, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Injected before any page script on every navigation. Two patches, one shared resolver:
+    /// media elements get <c>setSinkId</c> the first time each one plays, and every
+    /// <c>AudioContext</c> the page constructs is routed at creation (the Arcademy shell mixes
+    /// EVERYTHING through a WebAudio graph, so the context - not the elements - is where its audio
+    /// actually leaves the page). The device-id resolution is LAZY: silent pages never run the
+    /// mic-permission probe at all.
+    ///
+    /// <para>Fail-safe contract, same as the player page: every failure path (unsupported API, no
+    /// label match, setSinkId rejection, permission denied) changes nothing - audio stays on the
+    /// Windows default and playback is never paused, muted, or delayed. Reporting rides the
+    /// existing page-log bridge (info on the first successful route, warn on resolver failure).</para>
+    /// </summary>
+    private const string SinkRoutingScriptTemplate = """
+        (function () {
+          'use strict';
+          var WANTED = __CCP_SINK_LABEL__;
+          if (typeof WANTED !== 'string' || !WANTED.trim()) return;
+          WANTED = WANTED.trim();
+          var md = navigator.mediaDevices;
+          function report(ok, detail) {
+            try {
+              window.chrome.webview.postMessage({ type: 'log', level: ok ? 'info' : 'warn',
+                msg: ok ? ('audio routed to output device "' + WANTED + '" via setSinkId (' + detail + ')')
+                        : ('could not route audio to "' + WANTED + '" (' + detail + ') - staying on the Windows default output') });
+            } catch (e) { /* bridge absent - stay silent, stay default */ }
+          }
+          if (!md || typeof md.enumerateDevices !== 'function') return;
+          function norm(s) { return (s || '').trim().toLowerCase(); }
+          function pick(devices) {
+            var w = norm(WANTED);
+            var outs = devices.filter(function (d) {
+              return d.kind === 'audiooutput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications';
+            });
+            var hit = outs.find(function (d) { return norm(d.label) === w; });
+            if (hit) return hit;
+            var open = w.indexOf('(');
+            var close = w.lastIndexOf(')');
+            var driver = open >= 0 && close > open ? w.substring(open + 1, close).trim() : w;
+            hit = outs.find(function (d) {
+              var l = norm(d.label);
+              return !!l && (l.indexOf(driver) === 0 || driver.indexOf(l) === 0 || l.indexOf(driver) >= 0 || w.indexOf(l) >= 0);
+            });
+            return hit || null;
+          }
+          var idPromise = null;
+          function resolveId() {
+            if (idPromise) return idPromise;
+            idPromise = md.enumerateDevices()
+              .then(function (ds) {
+                if (ds.some(function (d) { return d.kind === 'audiooutput' && d.label; })) return ds;
+                // Labels are blank until the origin holds mic permission; the host auto-grants it
+                // for this origin alone (OnPermissionRequested). Stop the probe stream at once -
+                // nothing records anything.
+                return md.getUserMedia({ audio: true }).then(function (stream) {
+                  stream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) { } });
+                  return md.enumerateDevices();
+                });
+              })
+              .then(function (ds) {
+                var hit = pick(ds);
+                if (!hit) { report(false, 'no audiooutput label matched'); return null; }
+                return hit.deviceId;
+              })
+              .catch(function (err) {
+                report(false, (err && (err.name || err.message)) || 'error');
+                return null;
+              });
+            return idPromise;
+          }
+          var reported = false;
+          function route(target, kind) {
+            try {
+              if (!target || typeof target.setSinkId !== 'function') return;
+              resolveId().then(function (id) {
+                if (!id) return;
+                return Promise.resolve(target.setSinkId(id)).then(function () {
+                  if (!reported) { reported = true; report(true, kind); }
+                });
+              }).catch(function (e) { /* stay on default */ });
+            } catch (e) { /* stay on default */ }
+          }
+          try {
+            var origPlay = HTMLMediaElement.prototype.play;
+            HTMLMediaElement.prototype.play = function () {
+              try {
+                if (!this.__ccpSinkDone) { this.__ccpSinkDone = true; route(this, 'media element'); }
+              } catch (e) { }
+              return origPlay.apply(this, arguments);
+            };
+          } catch (e) { }
+          try {
+            if (window.AudioContext && AudioContext.prototype && typeof AudioContext.prototype.setSinkId === 'function') {
+              var OrigCtx = window.AudioContext;
+              var Patched = class extends OrigCtx {
+                constructor() { super(...arguments); route(this, 'AudioContext'); }
+              };
+              if (window.webkitAudioContext === OrigCtx) window.webkitAudioContext = Patched;
+              window.AudioContext = Patched;
+            }
+          } catch (e) { }
+        })();
+        """;
+
+    /// <summary>Label is embedded as a JSON string literal, so a device name full of quotes or
+    /// backslashes can never break out of the script.</summary>
+    internal static string BuildSinkRoutingScript(string label) =>
+        SinkRoutingScriptTemplate.Replace("__CCP_SINK_LABEL__",
+            Newtonsoft.Json.JsonConvert.SerializeObject(label));
+
+    /// <summary>
+    /// Chromium blanks audiooutput labels until the origin holds microphone permission, so the
+    /// injected resolver's one-shot probe surfaces here. Grant is scoped to exactly our own local
+    /// pages: https scheme AND <see cref="SinkRoutingHost"/> (which is also what navigation is
+    /// locked to). Any OTHER origin asking for the mic is denied outright. Every other permission
+    /// kind is left untouched (<c>Handled</c> stays false), so this handler cannot change how any
+    /// existing page behaves.
+    /// </summary>
+    private void OnPermissionRequested(object? sender, CoreWebView2PermissionRequestedEventArgs e)
+    {
+        try
+        {
+            if (e.PermissionKind != CoreWebView2PermissionKind.Microphone) return;
+            bool ourPage = Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri)
+                && uri.Scheme == Uri.UriSchemeHttps
+                && string.Equals(uri.Host, SinkRoutingHost, StringComparison.OrdinalIgnoreCase);
+            e.State = ourPage ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Deny;
+            e.Handled = true;
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("{Tag}: PermissionRequested handler failed: {E}", _opts.LogTag, ex.Message);
+        }
+    }
+
+    /// <summary>
     /// WHO ANSWERS <c>prefers-reduced-motion</c> FOR A PAGE THIS APP HOSTS (ccp-bugs #980).
     ///
     /// <para><b>What broke.</b> Just Drop played as a set of still images: the spiral did not turn,
@@ -1096,6 +1243,27 @@ internal sealed class ChaosWebViewHost : IDisposable
                 }
             }
 
+            // Audio-output routing (#938): tester reports 0831 - the Arcademy (and every other
+            // hosted page) always played on the Windows default. Local first-party pages only;
+            // resolved once at host creation, same as every other option on this window.
+            var sinkLabel = IsSinkRoutingHost(_opts.PrimaryHost)
+                ? Services.Video.Browser.BrowserSinkLabel.Resolve() : null;
+            if (sinkLabel != null)
+            {
+                try
+                {
+                    core.PermissionRequested += OnPermissionRequested;
+                    await core.AddScriptToExecuteOnDocumentCreatedAsync(
+                        BuildSinkRoutingScript(sinkLabel)).ConfigureAwait(true);
+                    if (_disposed) return;
+                }
+                catch (Exception ex)
+                {
+                    // Not fatal: audio simply stays on the Windows default, as it always has.
+                    App.Logger?.Debug("{Tag}: sink routing inject failed: {E}", _opts.LogTag, ex.Message);
+                }
+            }
+
             core.NavigationStarting += OnNavigationStarting;
             core.WebMessageReceived += OnWebMessageReceived;
             core.ProcessFailed += OnProcessFailed;
@@ -1256,6 +1424,7 @@ internal sealed class ChaosWebViewHost : IDisposable
                 _web.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
                 _web.CoreWebView2.ProcessFailed -= OnProcessFailed;
                 _web.CoreWebView2.ContainsFullScreenElementChanged -= OnContainsFullScreenElementChanged;
+                _web.CoreWebView2.PermissionRequested -= OnPermissionRequested;
             }
         }
         catch { }
