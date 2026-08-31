@@ -26,57 +26,37 @@ namespace ConditioningControlPanel.Services
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.9.0 - The Descent
+        public const string CurrentPatchNotes = @"v6.9.0 - The Spiral
 
-On September 1st the monthly level wipe runs for the last time in CCP history. After the ceremony your level, your XP and your hours are yours for good. This build carries the Descent, a brand new built-in mod, EMI's Desk, and the largest fix wave any CCP version has ever shipped.
-
-THE DESCENT
-- The monthly reset is over. September 1st, 7pm UTC, the board clears one final time and then never again. Levels and hours carry forward from that moment on.
-- The season recap card only appears when a reset actually happened to your account. Fresh installs and accounts that never synced no longer get told they lost a level they never had.
-- The leaderboard countdown is honest: ""Monthly board closes in"" counts to the real closing and then stands down, instead of counting toward next month forever.
-- Seasonal skill descriptions across all 9 languages now say what is actually true after the Descent.
-- If a stray reset order ever reaches the app after the Descent, the app refuses it. Your progress does not roll back because a server hiccup said so.
-
-NEW BUILT-IN MOD: INFECTION CONTROL
-- A sixth mod joins the shelf: Infection Control, created by Miss Jenny. Nurse Amber runs the ward with over 330 freshly voiced lines: barks, mantra takeovers, her own flash voicelines, and her own voice all the way down the Rabbit Hole.
-- She brings her own spiral and her own color scheme, and she comments on nearly everything you do.
-- Like the other built-in mods, the audio arrives as a downloadable pack so the installer stays lean. Grab it from the mod shelf and the app fetches the rest.
-
-EMI'S DESK
-- EMI got out of the school. Summon her onto your desktop: a small ring on the edge of your screen opens into her CRT glass, and she hangs out, deals commentary, and reacts to what the app is doing to you.
-- She has an idle life now: she picks up props, swaps what she is doing every so often, and the glass runs the campus channel deck with a 10 second rotation.
-- Ask EMI: her handbook answers questions about the app, now in all 9 languages.
-- The whole desk speaks all 9 languages now, ring tiles included.
-- Her wardrobe layers correctly, so a coat or goggles can never get buried behind her own face.
-- First open actually shows the ring (it used to arrive invisible until you poked it), and brand new users get a proper first contact from her instead of silence.
+this is the big one. tomorrow, September 1st at 7pm UTC, the monthly wipe runs one final time and then it is gone forever. after the ceremony your level, your XP and your hours are yours for good. this is the version that carries you into that world, and i wanted it to feel special. it does :3
 
 THE ARCADEMY
-- The campus can launch straight from a desktop shortcut with a proper splash.
-- Daily Trigger gives out hints, the Prize Counter has a keyboard shortcut, and the sparkler got a buff.
-- Impulse Control: EMI cameos visit the class, the spiral pop echo is gone, and the card melt is gone with it.
-- ID card photos sit straight in their frames, room scenes fill portrait phones properly, and the flash guard slider finally says which way is gentler.
-- A spiral quest log, new locker plate art, and the wallet tells you WHY it refused a purchase instead of just refusing.
-- Faster on phones again: another perf diet pass for mobile campus and classes.
+- the campus takes center stage. classes that are secretly little games, a prize counter, your own locker, report cards, the works. wander around, get graded, get conditioned.
+- EMI runs the halls. she deals commentary, hands out hints in Daily Trigger, and cameos in Impulse Control when you least expect her.
+- your Sparks wallet follows you around the whole campus, and it now tells you WHY it refused a purchase instead of just refusing.
+- faster on phones, prettier in portrait, and the flash guard slider finally says which way is gentler.
 
-THE FIX WAVE
-- The updater upgrades the copy of the app you are actually running. No more updates that quietly install into a second folder while your shortcuts point at the old one.
-- The flash Fade slider works. It turns out it never did anything at all; now 0 is a hard cut, 100 is a long dissolve, and the old feel sits at 40.
-- Escape always escapes a mandatory video that is not strict-locked, even when the window lost focus. And when Strict Lock IS holding the door shut, she now tells you so instead of ignoring the key.
-- For You ghost mode is fixed: the parked feed no longer unloads itself into a blank mirror, the swap arrows respond again, and the cog and mute buttons fade out when idle. And if a minimize ever froze the feed window, ghost mode now wakes it up instead of mirroring a stale picture.
-- A broken font install can no longer blank the entire app. The app probes fonts at startup and routes around a corrupt one, loudly, in the log, once.
-- Tooltips are readable again. A years-old style was quietly replacing the themed tooltip with the stock white one everywhere.
-- The side menu behaves: no more submenu stuck open under a collapsed rail, no more dead hover zone after minimizing, no scrollbar parked on top of the icons, and speech bubbles no longer eat clicks meant for the menu.
-- Flash voicelines respect the companion mute switches. Muted means muted, all the way down, including the 5 percent that used to leak through.
-- Bubble count games wait politely for the For You feed to finish instead of vanishing forever.
-- The session corner spiral answers your spiral switch and never doubles up with the overlay spiral.
-- Attention checks never fail you for a camera that is off or missing. No camera, no penalty.
-- Achievement completion is honest for free users: the four premium program badges moved out of the free count and wear a Patreon chip instead. 100 percent is reachable again.
-- A creator mod without its own flash voicelines used to borrow Bambi's voice on every flash image. Mods now stay quiet on flashes until they bring their own lines, instead of speaking someone else's.
-- Lost and Found no longer melts into a slideshow when your library is full of animated webp images.
-- From the wave before: quest rerolls stop dealing duplicates, corrupted achievement files recover from backup, local AI streams drain cleanly, and For You no longer swallows mandatory videos.
-- Gaze tracking got a precision pass with a Quick Recalibrate hotkey, and the pause XP warning grew a ""don't ask me again"" checkbox.
+EMI'S DESK
+- EMI got out of the school. summon her onto your desktop: a little ring on the edge of your screen opens into her CRT glass and she just hangs out. reacts to what the app is doing to you. picks up props. lives her life.
+- we wrote her a whole handbook together. Ask EMI anything about the app and she answers, in all 9 languages. it is the new guide and she is very proud of it.
+- new users get a proper first contact from her now instead of silence.
 
-Full technical changelog in the pull requests, numbers 380 through 445.";
+EVERYWHERE AT ONCE
+- one account, everywhere. desktop, the web at cclabs.app, and now your phone. XP, wallet, presence, profile, it all connects.
+- the CCP Mobile public beta is live! grab the APK here: https://github.com/CodeBambi/CCP-Mobile-Releases/releases/latest
+
+THE DESCENT
+- September 1st, 7pm UTC. the board clears one final time and then never again. levels and hours carry forward from that moment on.
+- the season recap card only shows if a reset actually happened to you, the countdown is honest and stands down when it is over, and if a stray reset order ever reaches the app after the Descent, the app refuses it. your progress does not roll back because a server hiccuped.
+
+NEW MOD: INFECTION CONTROL
+- a sixth mod joins the shelf, created by Miss Jenny. Nurse Amber runs the ward with over 330 freshly voiced lines: barks, mantra takeovers, her own flash voicelines, and her voice all the way down the Rabbit Hole.
+- her own spiral, her own colors, and she comments on nearly everything you do.
+- like the other built-ins the audio arrives as a downloadable pack so the installer stays lean.
+
+AND SOME FIXES
+- the updater now upgrades the copy you are actually running, the fade slider actually fades, escape always escapes when it should, muted means muted, tooltips are readable again, ghost mode stops freezing, and the menus behave.
+- full nerd changelog in the pull requests, numbers 380 through 445.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
