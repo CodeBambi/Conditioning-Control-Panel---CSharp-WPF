@@ -162,7 +162,7 @@ public static class ChaosUnlockCards
         {
             Text = d.Ribbon,
             Foreground = accent,
-            FontFamily = new FontFamily("Consolas"),
+            FontFamily = new FontFamily("Consolas, Courier New"),
             FontWeight = FontWeights.Bold,
             FontSize = 11.5,
             Margin = new Thickness(0, 0, 0, 10),

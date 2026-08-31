@@ -287,7 +287,7 @@
                                                                    Foreground="#FFB347" FontSize="10"
                                                                    FontWeight="Bold" Margin="4,0,0,0"
                                                                    VerticalAlignment="Center"
-                                                                   FontFamily="Segoe UI Emoji"
+                                                                   FontFamily="Segoe UI Emoji, Segoe UI Symbol, Segoe UI"
                                                                    Visibility="Collapsed"/>
                                                         <TextBlock x:Name="TxtWeeklyRerollBonus" x:FieldModifier="internal" Text=""
                                                                    Foreground="#7BC8F6" FontSize="10"

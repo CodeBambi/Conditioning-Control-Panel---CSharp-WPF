@@ -256,7 +256,18 @@ namespace ConditioningControlPanel
                 // last one we showed a recap for — never on an equal or backward (desynced) key. Ordinal
                 // compare is chronological for zero-padded yyyy-MM; an empty lastSeasonSeen (first run) is
                 // "before" any real key, so first-timers still fire.
-                var monthRolled = string.CompareOrdinal(currentSeason, lastSeasonSeen) > 0;
+                //
+                // AND ONLY WHEN THE SERVER SAID SO. CurrentSeasonKey falls back to the wall-clock month
+                // when the server's key is unknown, and that fallback rolls itself over on the 1st for
+                // every never-synced install — which is how someone whose account was never touched gets
+                // a card, or the plain MessageBox below, announcing that their level and XP were reset.
+                // The Descent makes that permanently wrong rather than occasionally wrong: after
+                // 2026-09-01 no reset is ever coming, so a wall-clock rollover can only ever be a lie.
+                // A reset is the server's to declare; the SeasonResetPending path below is already
+                // server-driven (ProfileSyncService sets it off an explicit level_reset), so this is the
+                // only path that could invent one.
+                var monthRolled = Services.SeasonRecapService.IsSeasonKeyServerConfirmed
+                                  && string.CompareOrdinal(currentSeason, lastSeasonSeen) > 0;
 
                 // A replayed server level_reset can leave SeasonResetPending set on an upgrade launch even
                 // when the season didn't actually change. Only treat it as a real pending reset if the current

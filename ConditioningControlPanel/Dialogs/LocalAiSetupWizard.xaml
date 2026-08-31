@@ -226,7 +226,7 @@
                 <TextBox x:Name="TxtErrorDetail" Margin="0,12,0,0" MaxHeight="180"
                          Background="{DynamicResource PanelBgBrush}" Foreground="#E0E0E0"
                          BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
-                         Padding="8" FontFamily="Consolas" FontSize="11"
+                         Padding="8" FontFamily="Consolas, Courier New" FontSize="11"
                          IsReadOnly="True" TextWrapping="Wrap"
                          VerticalScrollBarVisibility="Auto"/>
                 <TextBlock Margin="0,12,0,0">

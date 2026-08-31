@@ -148,7 +148,7 @@ namespace ConditioningControlPanel.Views.Deeper
                         Text = FormatRulerTime(t, majorSec),
                         Foreground = labelBrush,
                         FontSize = 9,
-                        FontFamily = new FontFamily("Consolas"),
+                        FontFamily = new FontFamily("Consolas, Courier New"),
                         IsHitTestVisible = false
                     };
                     label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));

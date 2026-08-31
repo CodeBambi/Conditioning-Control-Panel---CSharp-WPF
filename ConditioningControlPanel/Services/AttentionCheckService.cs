@@ -35,6 +35,12 @@ namespace ConditioningControlPanel.Services
         private const int DwellTargetMs = 1000; // time on target to pass
         private const double BoundsSlackDips = 30; // extra hit area around the ring
 
+        // A gaze sample older than this is treated as "the camera is not telling us
+        // anything right now" rather than "the user is still where we last saw them".
+        // OnGazeMove arrives per processed frame (tens of ms), so 400ms is many frames
+        // of silence — a stopped camera, a lost face, or a wedged capture thread.
+        private const int GazeStaleMs = 400;
+
         // Reward / penalty amounts are fixed by design — these are intentionally
         // not user-tunable. A reachable XP knob would invite gaming; a fixed
         // value preserves the mechanic's role as a check, not a grind lever.
@@ -67,6 +73,7 @@ namespace ConditioningControlPanel.Services
         private DateTime _fireStartedAt;
         private double _dwellMs;
         private System.Windows.Point? _lastGazePoint;
+        private DateTime _lastGazeAt;
         private bool _gazeSubscribed;
 
         // Belt-and-braces shutdown cleanup. Setting Owner on the popup window
@@ -295,6 +302,7 @@ namespace ConditioningControlPanel.Services
                 _fireStartedAt = DateTime.UtcNow;
                 _dwellMs = 0;
                 _lastGazePoint = null;
+                _lastGazeAt = default; // stale until this check's first live sample
 
                 if (App.Webcam != null && !_gazeSubscribed)
                 {
@@ -365,6 +373,7 @@ namespace ConditioningControlPanel.Services
         private void HandleGazeMove(System.Windows.Point p)
         {
             _lastGazePoint = p;
+            _lastGazeAt = DateTime.UtcNow;
         }
 
         private void OnTick(object? sender, EventArgs e)
@@ -374,10 +383,30 @@ namespace ConditioningControlPanel.Services
                 var settings = App.Settings?.Current;
                 if (settings == null || !_checkActive) { ResolveActive(passed: false); return; }
 
-                var elapsed = (DateTime.UtcNow - _fireStartedAt).TotalMilliseconds;
+                // The camera can go away mid-check (stopped from the Lab pill, panic key,
+                // unplugged, grabbed by another app). Fire() checks IsRunning once up front,
+                // but nothing re-checked it after that, so a check that outlived its camera
+                // drained to a FAIL the user had no way to answer. Dismiss it as neutral
+                // instead — no pass, no fail, no bark — and let the scheduler try later.
+                if (App.Webcam?.IsRunning != true)
+                {
+                    App.Logger?.Debug("AttentionCheck: dismissed — webcam tracking stopped mid-check");
+                    ResolveActive(passed: false, fireEvent: false);
+                    return;
+                }
+
+                var now = DateTime.UtcNow;
+                var elapsed = (now - _fireStartedAt).TotalMilliseconds;
                 var graceMs = settings.AttentionCheckGraceMs;
 
-                if (_lastGazePoint.HasValue && _activeBounds.Contains(_lastGazePoint.Value))
+                // A gaze point only counts while it is FRESH. Without this the last point
+                // the camera ever emitted stayed authoritative forever: parked inside the
+                // ring it passed the check for a user who had walked away, and parked
+                // outside it failed one whose tracker had simply stopped feeding.
+                var gazeFresh = _lastGazePoint.HasValue
+                    && (now - _lastGazeAt).TotalMilliseconds <= GazeStaleMs;
+
+                if (gazeFresh && _activeBounds.Contains(_lastGazePoint!.Value))
                 {
                     _dwellMs += TickMs;
                     _control?.SetProgress(_dwellMs / DwellTargetMs);
@@ -398,6 +427,18 @@ namespace ConditioningControlPanel.Services
 
                 if (elapsed >= graceMs)
                 {
+                    // Grace is up. Only call it a FAIL when the tracker was demonstrably
+                    // feeding us at the deadline — that is the one reading that means
+                    // "they were looking somewhere else". Silence means we never had an
+                    // answer to grade, so it resolves neutral rather than penalising an
+                    // absence the user may not even know about.
+                    if (!gazeFresh)
+                    {
+                        App.Logger?.Debug("AttentionCheck: dismissed — no live gaze at grace expiry");
+                        ResolveActive(passed: false, fireEvent: false);
+                        return;
+                    }
+
                     ResolveActive(passed: false);
                 }
             }

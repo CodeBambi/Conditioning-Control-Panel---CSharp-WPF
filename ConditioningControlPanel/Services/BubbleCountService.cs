@@ -77,6 +77,11 @@ public class BubbleCountService : IDisposable
         _retryCount = 0;
         _schedulerTimer?.Stop();
         _schedulerTimer = null;
+
+        // A defer that outlived the service must not coalesce (and so swallow) every future
+        // trigger - same latch reset VideoService.Stop does for its #1073 defer.
+        _feedDeferPending = false;
+        _feedDeferDeadlineUtc = DateTime.MinValue;
         CloseMessageWindows();
         CleanupTempPackFiles();
 
@@ -118,6 +123,146 @@ public class BubbleCountService : IDisposable
         App.Logger?.Debug("Next bubble count game in {Interval:F1} seconds", interval);
     }
 
+    /// <summary>True while the For You feed is actually on the user's screen. A GHOSTED feed is
+    /// deliberately NOT included (sister of #1073): ghost mode parks the real window off-screen and
+    /// leaves a see-through, click-through DWM mirror, so nothing is competing for the screen and
+    /// there is no reason to stand a bubble-count game down.</summary>
+    private static bool FeedOwnsTheScreen =>
+        Fyp.FypHostService.IsActive && !Fyp.FypHostService.IsGhosted;
+
+    /// <summary>True while a game is parked waiting for the For You feed to leave the screen.
+    /// One pending replay at a time — a feed session that swallows several triggers replays one
+    /// game, not a backlog. Cleared by <see cref="Stop"/> so a defer that outlived the service
+    /// cannot coalesce (and so swallow) every future trigger.</summary>
+    private bool _feedDeferPending;
+
+    /// <summary>Longest a trigger will wait out an on-screen feed. Deliberately short, and the same
+    /// ceiling VideoService uses: the feed can stay open for hours (which is why the original guard
+    /// refused to queue behind it at all), and a counting game that fires many minutes after the
+    /// trigger that earned it is a surprise, not a reward. Past this, the trigger is given up on —
+    /// never accumulated.</summary>
+    private static readonly TimeSpan FeedDeferMaxWait = TimeSpan.FromSeconds(90);
+
+    /// <summary>Absolute expiry of the CURRENT feed-defer chain, set on its first defer.
+    /// <see cref="DateTime.MinValue"/> = no chain in flight.</summary>
+    private DateTime _feedDeferDeadlineUtc = DateTime.MinValue;
+
+    /// <summary>Hold a trigger the For You guard refused and replay it once the feed leaves the
+    /// screen (closed, or ghosted away).</summary>
+    private void DeferGamePastFeed(bool forceTest)
+    {
+        if (_feedDeferPending)
+        {
+            App.Logger?.Information("BubbleCountService: For You replay already pending - trigger coalesced");
+            return;
+        }
+
+        // Ceiling measured from the FIRST defer of the chain, not per-hop: a replay that lands back
+        // in front of the feed must not restart the clock.
+        var now = DateTime.UtcNow;
+        if (_feedDeferDeadlineUtc == DateTime.MinValue)
+            _feedDeferDeadlineUtc = now + FeedDeferMaxWait;
+
+        var remaining = _feedDeferDeadlineUtc - now;
+        if (remaining <= TimeSpan.Zero)
+        {
+            App.Logger?.Information("BubbleCountService: For You replay dropped - past the {Sec:F0}s defer ceiling",
+                FeedDeferMaxWait.TotalSeconds);
+            _feedDeferDeadlineUtc = DateTime.MinValue;
+            return;
+        }
+
+        _feedDeferPending = true;
+        RunWhenFeedClear(
+            () =>
+            {
+                _feedDeferPending = false;
+
+                // Re-assert the preconditions at FIRE time. The defer can easily outlive the thing
+                // that justified it - the engine stopped, the user turned bubble count off (#872) -
+                // and replaying then opens a fullscreen game out of a feature that is switched off.
+                // forceTest is the dashboard's own "play it now" and stays exempt, as it is above.
+                if (!forceTest && (!_isRunning || App.Settings?.Current?.BubbleCountEnabled != true))
+                {
+                    App.Logger?.Information("BubbleCountService: For You replay abandoned - bubble count no longer running");
+                    _feedDeferDeadlineUtc = DateTime.MinValue;
+                    return;
+                }
+
+                TriggerGame(forceTest);
+
+                // TriggerGame may have parked itself again (the feed came back). Only release the
+                // ceiling when the chain really ended, so a re-defer inherits it instead of buying
+                // itself another full window.
+                if (!_feedDeferPending) _feedDeferDeadlineUtc = DateTime.MinValue;
+            },
+            remaining,
+            onExpired: () =>
+            {
+                _feedDeferPending = false;
+                _feedDeferDeadlineUtc = DateTime.MinValue;
+            });
+    }
+
+    /// <summary>
+    /// Run <paramref name="action"/> as soon as the For You feed is off the screen, and give up
+    /// after <paramref name="maxWait"/> so nothing can be held forever. Same shape as
+    /// VideoService.RunWhenFeedClear and for the same reason: there is no "feed closed" event to
+    /// hang off, and ghost mode enters and leaves without one either, so the UI dispatcher is
+    /// polled twice a second. Callers only reach here while the feed IS on screen, so there is no
+    /// fire-immediately branch - the first tick handles the case where it has already gone.
+    ///
+    /// <para><paramref name="onExpired"/> is the UNCONDITIONAL give-up callback: it runs on every
+    /// path where <paramref name="action"/> will not, including the "there is no dispatcher to poll
+    /// on" early return. The caller latches a "defer pending" flag before calling in, and a silent
+    /// early return here would latch it forever.</para>
+    /// </summary>
+    private static void RunWhenFeedClear(Action action, TimeSpan maxWait, Action? onExpired = null)
+    {
+        if (action == null) return;
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher == null || dispatcher.HasShutdownStarted)
+        {
+            // No dispatcher to poll on, so the action can never run - release the caller's latch.
+            try { onExpired?.Invoke(); } catch { }
+            return;
+        }
+
+        var deadline = DateTime.UtcNow + maxWait;
+        // Normal, not Background: this project has a documented starvation issue where Background /
+        // Loaded priority work is starved out under load, which would stall the poll that releases
+        // the parked trigger.
+        var timer = new DispatcherTimer(DispatcherPriority.Normal, dispatcher)
+        {
+            Interval = TimeSpan.FromMilliseconds(500)
+        };
+        timer.Tick += (_, _) =>
+        {
+            try
+            {
+                if (FeedOwnsTheScreen && DateTime.UtcNow < deadline) return;   // still on screen, still within the window
+                timer.Stop();
+                if (FeedOwnsTheScreen)
+                {
+                    App.Logger?.Information("BubbleCountService: deferred game expired - For You feed still on screen after {Sec:F0}s",
+                        maxWait.TotalSeconds);
+                    onExpired?.Invoke();
+                    return;
+                }
+                App.Logger?.Information("BubbleCountService: For You feed left the screen - firing deferred game");
+                action();
+            }
+            catch (Exception ex)
+            {
+                try { timer.Stop(); } catch { }
+                try { onExpired?.Invoke(); } catch { }
+                App.Logger?.Debug("BubbleCountService.RunWhenFeedClear: {E}", ex.Message);
+            }
+        };
+        timer.Start();
+        App.Logger?.Information("BubbleCountService: deferring bubble count game until the For You feed leaves the screen");
+    }
+
     public void TriggerGame(bool forceTest = false)
     {
         // Allow forced test even when engine not running
@@ -151,14 +296,29 @@ public class BubbleCountService : IDisposable
         // on, whether this game touches the shared LibVLC instance at all depends on the FILE, and
         // no file has been chosen yet.
 
-        // For You feed open: bubble count is a video-class interaction and stands down like
-        // the mandatory video does. Drop, never queue (the feed outlives the stuck window),
-        // handing a dequeued slot straight back.
-        if (Fyp.FypHostService.IsActive)
+        // For You feed ON SCREEN: bubble count is a video-class interaction and stands down like
+        // the mandatory video does. This guard was copied from the video one and inherited both of
+        // its bugs, fixed there as #1073:
+        //
+        //  1. It gated on IsActive alone, which is just `_host != null`, and a GHOSTED feed is still
+        //     "active". Ghost mode parks the real window off-screen and leaves a see-through,
+        //     click-through DWM mirror - nothing is competing for the screen, so a game is exactly
+        //     as appropriate as it would be with the feed closed. A user browsing ghosted had every
+        //     bubble-count game silently eaten while seeing no feed at all. Hence FeedOwnsTheScreen.
+        //  2. It DROPPED, so a game the scheduler (or a bubble payload) earned simply evaporated.
+        //     The trigger is now held and replayed once the feed leaves the screen - closed, or
+        //     ghosted away.
+        //
+        // The old comment's concern ("never queue: the feed outlives the stuck window") is still
+        // honoured, twice over: the queue slot is RELEASED here rather than held across the wait,
+        // and the wait itself is capped at FeedDeferMaxWait, so nothing parks behind an all-evening
+        // feed session.
+        if (FeedOwnsTheScreen)
         {
-            App.Logger?.Information("BubbleCountService: game dropped - For You feed active");
+            App.Logger?.Information("BubbleCountService: game deferred - For You feed on screen");
             if (App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.BubbleCount)
                 App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
+            DeferGamePastFeed(forceTest);
             return;
         }
 
@@ -471,7 +631,7 @@ public class BubbleCountService : IDisposable
                         Foreground = Brushes.Magenta,
                         FontSize = 64,
                         FontWeight = FontWeights.Bold,
-                        FontFamily = new FontFamily("Impact"),
+                        FontFamily = new FontFamily("Impact, Arial Black, Segoe UI"),
                         TextAlignment = TextAlignment.Center,
                         HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
                         VerticalAlignment = VerticalAlignment.Center

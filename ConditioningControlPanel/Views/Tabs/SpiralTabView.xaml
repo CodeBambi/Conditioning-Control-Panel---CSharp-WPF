@@ -89,7 +89,7 @@
                 <TextBlock x:Name="FogDigitsGlow" HorizontalAlignment="Center"
                            Text="{Binding Text, ElementName=FogDigits}"
                            FontSize="{Binding FontSize, ElementName=FogDigits}"
-                           FontFamily="Cascadia Mono, Consolas, Courier New"
+                           FontFamily="{DynamicResource Font.Mono}"
                            FontWeight="Bold" Foreground="#E0B052" Opacity="0.42"
                            Typography.NumeralAlignment="Tabular"
                            IsHitTestVisible="False">
@@ -100,7 +100,7 @@
 
                 <TextBlock x:Name="FogDigits" HorizontalAlignment="Center"
                            FontSize="56" FontWeight="Bold"
-                           FontFamily="Cascadia Mono, Consolas, Courier New"
+                           FontFamily="{DynamicResource Font.Mono}"
                            Foreground="#E0B052"
                            Typography.NumeralAlignment="Tabular"/>
             </Grid>

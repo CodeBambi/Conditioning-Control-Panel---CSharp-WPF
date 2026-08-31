@@ -24,13 +24,21 @@
         <!-- Keep any existing app-level dictionaries below -->
       </ResourceDictionary.MergedDictionaries>
 
+      <!-- The app's monospace face, in ONE place so a broken font install can be corrected in one
+           place. Bind it with DynamicResource, never StaticResource: Services/UI/FontGuard probes
+           these families at startup and REPLACES this value when one of them is present but
+           unreadable, which is the only thing that helps a corrupt face (a comma chain does not -
+           see the FontGuard docs). Keep this in sync with FontGuard.MonoChain. -->
+      <FontFamily x:Key="Font.Mono">Cascadia Mono, Consolas, Courier New</FontFamily>
+
       <!-- NOTE: there is deliberately no implicit "Style TargetType=ToolTip" here. One used to
-           live at this level (carrying only HasDropShadow=False) and it silently blanked the
-           app's tooltip theme: entries declared directly on a ResourceDictionary beat everything
-           in its MergedDictionaries, and an implicit Style *replaces* the one it shadows rather
-           than merging setters. So the themed tooltip in Resources/Theme/MainWindow.xaml never
-           applied and every tooltip fell back to the stock light Win32 info-tip. The drop-shadow
-           setter it existed for now lives on that themed style instead. -->
+           live at this level (carrying only HasDropShadow=False, the 2026-06-10 layered-popup
+           deadlock fix) and it silently blanked the app's tooltip theme: entries declared
+           directly on a ResourceDictionary beat everything in its MergedDictionaries, and an
+           implicit Style *replaces* the one it shadows rather than merging setters. So the themed
+           tooltip in Resources/Theme/MainWindow.xaml never applied and every tooltip fell back to
+           the stock light Win32 info-tip. The HasDropShadow=False setter (still required - see
+           the deadlock note on that style) now lives on that themed style instead. -->
 
     </ResourceDictionary>
   </Application.Resources>

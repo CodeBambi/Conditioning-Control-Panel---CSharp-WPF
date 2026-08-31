@@ -484,7 +484,7 @@ namespace ConditioningControlPanel
                     FontSize = size >= QuestStampWeeklySize ? 12 : 10.5,
                     FontWeight = done ? FontWeights.Bold : FontWeights.Normal,
                     Foreground = done ? QuestStampGoldInk : stroke,
-                    FontFamily = new FontFamily("Segoe UI Emoji"),
+                    FontFamily = new FontFamily("Segoe UI Emoji, Segoe UI Symbol, Segoe UI"),
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center,
                     TextAlignment = TextAlignment.Center,
@@ -664,7 +664,7 @@ namespace ConditioningControlPanel
                 Foreground = QuestStampPinkStroke,
                 FontSize = 10.5,
                 FontWeight = FontWeights.Bold,
-                FontFamily = new FontFamily("Segoe UI Emoji"),
+                FontFamily = new FontFamily("Segoe UI Emoji, Segoe UI Symbol, Segoe UI"),
             };
 
             _stampPopDone = new Border
@@ -706,7 +706,7 @@ namespace ConditioningControlPanel
             {
                 FontSize = 15,
                 Foreground = QuestStampWhiteInk,
-                FontFamily = new FontFamily("Segoe UI Emoji"),
+                FontFamily = new FontFamily("Segoe UI Emoji, Segoe UI Symbol, Segoe UI"),
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(0, 0, 6, 0),
             };

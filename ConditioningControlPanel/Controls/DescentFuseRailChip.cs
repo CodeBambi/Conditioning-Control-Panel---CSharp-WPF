@@ -222,7 +222,7 @@ namespace ConditioningControlPanel.Controls
             {
                 // Cascadia first, Consolas behind it: the digits must not reflow as they count down,
                 // and a proportional fallback would jitter the readout every second.
-                FontFamily = new FontFamily("Cascadia Mono, Consolas, Courier New"),
+                FontFamily = Services.UI.FontGuard.Mono,
                 FontSize = 12,
                 Foreground = GoldBrush,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -424,7 +424,7 @@ namespace ConditioningControlPanel.Controls
 
             _tipDigits = new TextBlock
             {
-                FontFamily = new FontFamily("Cascadia Mono, Consolas, Courier New"),
+                FontFamily = Services.UI.FontGuard.Mono,
                 FontSize = 15,
                 Foreground = NeutralDigits,
                 HorizontalAlignment = HorizontalAlignment.Center,

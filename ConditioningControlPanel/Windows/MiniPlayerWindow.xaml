@@ -107,7 +107,7 @@
                 <TextBlock x:Name="TxtTime" Grid.Column="2"
                            Text="00:00 / 00:00" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                            VerticalAlignment="Center" Margin="0,0,12,0"
-                           FontFamily="Consolas"/>
+                           FontFamily="Consolas, Courier New"/>
             </Grid>
         </Grid>
     </Border>

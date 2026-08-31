@@ -235,6 +235,28 @@ Something new is coming on September 1. Stay tuned... :3";
         }
 
         /// <summary>
+        /// The folder the running exe actually lives in, but only when that folder is a real
+        /// Inno install (its uninstaller sits next to the exe). This is the ground truth for an
+        /// in-place upgrade: unlike the HKCU InstallPath echo it cannot go stale, and it moves
+        /// with the folder when a user relocates the install by hand. Returns null for a
+        /// portable/dev run, or when the exe path can't be resolved.
+        /// </summary>
+        private static string? GetRunningInstallDir()
+        {
+            try
+            {
+                var exeDir = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName);
+                if (string.IsNullOrEmpty(exeDir)) return null;
+
+                return File.Exists(Path.Combine(exeDir, "unins000.exe")) ? exeDir : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
         /// Gets the installed version from registry (set by the installer).
         /// Returns null if not installed via installer or registry key not found.
         /// </summary>
@@ -787,12 +809,35 @@ Something new is coming on September 1. Stay tuned... :3";
                 throw new FileNotFoundException("Installer not found", installerPath);
             }
 
-            // Get the current install path from registry (set by Inno Setup)
-            var installPath = GetInstalledPath();
+            // Where to upgrade. The folder the running exe lives in wins over the registry:
+            // HKCU InstallPath is only an echo written at install time, so it goes stale the
+            // moment the user moves the folder by hand or an earlier update relocated the app.
+            // Feeding a stale value to /DIR is what pins the relocation in place - every future
+            // update installs into a folder the user never launches from (ccp-bugs#1090,
+            // ccp-bugs#1004), so they keep starting the old exe and keep being told an update is
+            // available (ccp-bugs#973, #849, #567, #554). Upgrading whatever copy is running
+            // also self-heals an install that already drifted.
+            var registryPath = GetInstalledPath();
+            var installPath = GetRunningInstallDir();
+
             if (string.IsNullOrEmpty(installPath))
             {
-                // Fallback: use the directory where the exe is running from
-                installPath = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName);
+                // The running copy is not a recognisable Inno install (portable or dev run, or
+                // the uninstaller was deleted). Use the registry echo, then the exe's own
+                // folder. If neither resolves we pass no /DIR at all and let Inno's
+                // UsePreviousAppDir pick the previous location - no /DIR beats a wrong one.
+                installPath = !string.IsNullOrEmpty(registryPath)
+                    ? registryPath
+                    : Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName);
+            }
+            else if (!string.IsNullOrEmpty(registryPath) &&
+                     !string.Equals(Path.TrimEndingDirectorySeparator(installPath),
+                                    Path.TrimEndingDirectorySeparator(registryPath),
+                                    StringComparison.OrdinalIgnoreCase))
+            {
+                App.Logger?.Warning(
+                    "Install path mismatch - running from {Running} but registry says {Registry}. " +
+                    "Upgrading the running copy; the registry value is stale.", installPath, registryPath);
             }
 
             App.Logger?.Information("Launching installer for silent update: {Path}, InstallDir: {Dir}", installerPath, installPath);

@@ -369,7 +369,7 @@
 
                             <!-- name + mod chip + mood token -->
                             <WrapPanel Orientation="Horizontal">
-                                <TextBlock Text="{Binding Name}" FontFamily="/Fonts/#Fredoka" FontWeight="SemiBold"
+                                <TextBlock Text="{Binding Name}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontWeight="SemiBold"
                                            FontSize="31" Foreground="White" VerticalAlignment="Center"
                                            Margin="0,0,11,0" Effect="{StaticResource CmpNameGlow}"/>
 

@@ -109,9 +109,16 @@ namespace ConditioningControlPanel.Services.GoonGame
                 int attentionPct;
                 lock (sampleLock)
                 {
+                    // No samples means the attention feed never reported — no camera, no
+                    // consent, or the null feed. That is an ABSENT reading, not a bad one,
+                    // and scoring it 0 handed the both-survived tiebreak
+                    // (GoonSuddenDeath.Higher on Progress) to whoever happened to have a
+                    // camera. Fail open at 100, matching GoonScoring, whose AttentionPct
+                    // starts at 100.0 and whose RollingAttention holds its last value
+                    // rather than collapsing when the sample window empties.
                     attentionPct = attentionSamples > 0
                         ? (int)Math.Round(attentionSum / attentionSamples * 100.0)
-                        : 0;
+                        : 100;
                 }
 
                 var elapsed = survived

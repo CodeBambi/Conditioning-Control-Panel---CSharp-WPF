@@ -69,7 +69,7 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="{loc:Str profile_tab_heading}"
-                                   FontFamily="/Fonts/#Fredoka" FontWeight="SemiBold"
+                                   FontFamily="/Fonts/#Fredoka, Segoe UI" FontWeight="SemiBold"
                                    FontSize="25" Foreground="White" VerticalAlignment="Center">
                             <TextBlock.Effect>
                                 <DropShadowEffect Color="#FF69B4" BlurRadius="18" ShadowDepth="0" Opacity="0.8"/>
@@ -474,7 +474,7 @@
                                         <TextBlock x:Name="ProfileVatReadout" x:FieldModifier="internal" Grid.Row="1"
                                                    Visibility="Collapsed" HorizontalAlignment="Center"
                                                    TextAlignment="Center"
-                                                   Margin="0,3,0,0" FontFamily="Consolas" FontSize="10"
+                                                   Margin="0,3,0,0" FontFamily="Consolas, Courier New" FontSize="10"
                                                    FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
                                                    ToolTipService.InitialShowDelay="200"
                                                    ToolTipService.ShowDuration="20000"/>
@@ -484,7 +484,7 @@
                                     <StackPanel Grid.Column="1" Margin="16,0,14,0" VerticalAlignment="Top">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock x:Name="TxtProfileViewerName" x:FieldModifier="internal" Text="{loc:Str login_display_name}"
-                                                       FontFamily="/Fonts/#Fredoka" FontWeight="SemiBold"
+                                                       FontFamily="/Fonts/#Fredoka, Segoe UI" FontWeight="SemiBold"
                                                        Foreground="White" FontSize="23" TextTrimming="CharacterEllipsis"
                                                        VerticalAlignment="Center"/>
                                             <Button x:Name="BtnChangeDisplayName" x:FieldModifier="internal" Visibility="Collapsed"
@@ -785,7 +785,7 @@
                                 <!-- Column headers carry the equipped accent (Phase 2). -->
                                 <TextBlock x:Name="TxtProfileRecordHeader" x:FieldModifier="internal"
                                            Text="{loc:Str profile_record_title}"
-                                           FontFamily="/Fonts/#Fredoka" FontWeight="Medium"
+                                           FontFamily="/Fonts/#Fredoka, Segoe UI" FontWeight="Medium"
                                            FontSize="15" Foreground="White" Margin="0,0,0,10"/>
 
                                 <!-- XP -->
@@ -802,7 +802,7 @@
                                     <TextBlock Grid.Column="1" Text="{loc:Str label_xp}" Foreground="#B8B1CC" FontSize="11"
                                                VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Grid.Column="2" x:Name="TxtProfileViewerXp" x:FieldModifier="internal" Text="0"
-                                               Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas"
+                                               Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas, Courier New"
                                                VerticalAlignment="Center" TextAlignment="Right"/>
                                 </Grid>
 
@@ -820,7 +820,7 @@
                                     <TextBlock Grid.Column="1" Text="{loc:Str label_bubbles_2}" Foreground="#B8B1CC" FontSize="11"
                                                VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Grid.Column="2" x:Name="TxtProfileViewerBubbles" x:FieldModifier="internal" Text="0"
-                                               Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas"
+                                               Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas, Courier New"
                                                VerticalAlignment="Center" TextAlignment="Right"/>
                                 </Grid>
 
@@ -838,7 +838,7 @@
                                     <TextBlock Grid.Column="1" Text="{loc:Str label_videos}" Foreground="#B8B1CC" FontSize="11"
                                                VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Grid.Column="2" x:Name="TxtProfileViewerVideos" x:FieldModifier="internal" Text="{loc:Str label_0h}"
-                                               Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas"
+                                               Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas, Courier New"
                                                VerticalAlignment="Center" TextAlignment="Right"/>
                                 </Grid>
 
@@ -856,7 +856,7 @@
                                     <TextBlock Grid.Column="1" Text="{loc:Str label_flashes}" Foreground="#B8B1CC" FontSize="11"
                                                VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Grid.Column="2" x:Name="TxtProfileViewerGifs" x:FieldModifier="internal" Text="0"
-                                               Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas"
+                                               Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas, Courier New"
                                                VerticalAlignment="Center" TextAlignment="Right"/>
                                 </Grid>
 
@@ -874,7 +874,7 @@
                                     <TextBlock Grid.Column="1" Text="{loc:Str label_lock_cards_2}" Foreground="#B8B1CC" FontSize="11"
                                                VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Grid.Column="2" x:Name="TxtProfileViewerLockCards" x:FieldModifier="internal" Text="0"
-                                               Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas"
+                                               Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas, Courier New"
                                                VerticalAlignment="Center" TextAlignment="Right"/>
                                 </Grid>
 
@@ -892,7 +892,7 @@
                                     <TextBlock Grid.Column="1" Text="{loc:Str label_achievements}" Foreground="#B8B1CC" FontSize="11"
                                                VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Grid.Column="2" x:Name="TxtProfileViewerAchievements" x:FieldModifier="internal" Text="0"
-                                               Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas"
+                                               Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas, Courier New"
                                                VerticalAlignment="Center" TextAlignment="Right"/>
                                 </Grid>
                             </StackPanel>
@@ -907,7 +907,7 @@
                                 <Grid Margin="0,0,0,10">
                                     <TextBlock x:Name="TxtProfileShowcaseHeader" x:FieldModifier="internal"
                                                Text="{loc:Str profile_showcase_title}"
-                                               FontFamily="/Fonts/#Fredoka" FontWeight="Medium"
+                                               FontFamily="/Fonts/#Fredoka, Segoe UI" FontWeight="Medium"
                                                FontSize="15" Foreground="White"/>
                                     <TextBlock Text="{loc:Str profile_showcase_hint}" Foreground="#8079A3" FontSize="11"
                                                HorizontalAlignment="Right" VerticalAlignment="Center"/>
@@ -1040,7 +1040,7 @@
                             <StackPanel>
                                 <TextBlock x:Name="TxtProfileCommunityHeader" x:FieldModifier="internal"
                                            Text="{loc:Str profile_community_title}"
-                                           FontFamily="/Fonts/#Fredoka" FontWeight="Medium"
+                                           FontFamily="/Fonts/#Fredoka, Segoe UI" FontWeight="Medium"
                                            FontSize="15" Foreground="White" Margin="0,0,0,10"/>
 
                                 <!-- Search. The 1px border is transparent at rest and brightens on

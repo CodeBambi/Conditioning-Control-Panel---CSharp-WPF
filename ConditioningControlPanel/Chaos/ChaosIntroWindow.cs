@@ -113,7 +113,7 @@ public sealed class ChaosIntroWindow : Window
                         Foreground = new SolidColorBrush(color),
                         FontWeight = FontWeights.Bold,
                         FontSize = 11,
-                        FontFamily = new FontFamily("Consolas"),
+                        FontFamily = new FontFamily("Consolas, Courier New"),
                     },
                 });
             }

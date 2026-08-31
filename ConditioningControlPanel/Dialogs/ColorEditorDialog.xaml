@@ -99,7 +99,7 @@
         <Border Grid.Row="2" x:Name="PreviewBorder" Background="Black" CornerRadius="8" 
                 Height="80" Margin="0,0,0,20">
             <TextBlock x:Name="PreviewText" Text="{loc:Str label_good_girl}"
-                       FontSize="28" FontWeight="Bold" FontFamily="Arial"
+                       FontSize="28" FontWeight="Bold" FontFamily="Arial, Segoe UI"
                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
         </Border>
 

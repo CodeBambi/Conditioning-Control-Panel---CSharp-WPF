@@ -1121,7 +1121,7 @@
                                                            TextTrimming="CharacterEllipsis"/>
                                                 <TextBlock Grid.Column="3" Text="{Binding TimeText}"
                                                            Foreground="{DynamicResource TextDimBrush}"
-                                                           FontFamily="Consolas" FontSize="10"
+                                                           FontFamily="Consolas, Courier New" FontSize="10"
                                                            VerticalAlignment="Center"
                                                            Margin="8,0,6,0"/>
                                                 <Button Grid.Column="4"
@@ -1184,7 +1184,7 @@
                         <StackPanel x:Name="RegionEditor" Visibility="Collapsed">
                             <TextBlock Text="{loc:Str deeper_editor_region_id}" Style="{StaticResource EditorLabel}"/>
                             <TextBlock x:Name="TxtRegionId" Foreground="{DynamicResource TextDimBrush}"
-                                       FontSize="11" FontFamily="Consolas" Margin="0,0,0,8"/>
+                                       FontSize="11" FontFamily="Consolas, Courier New" Margin="0,0,0,8"/>
 
                             <TextBlock Text="{loc:Str deeper_editor_region_label}" Style="{StaticResource EditorLabel}"/>
                             <TextBox x:Name="TxtRegionLabel" Style="{StaticResource EditorTextBox}"
@@ -1266,7 +1266,7 @@
                         <StackPanel x:Name="HapticEventEditor" Visibility="Collapsed">
                             <TextBlock Text="{loc:Str deeper_editor_haptic_event}" Style="{StaticResource EditorLabel}"/>
                             <TextBlock x:Name="TxtHapticTrackId" Foreground="{DynamicResource TextDimBrush}"
-                                       FontSize="11" FontFamily="Consolas" Margin="0,0,0,8"/>
+                                       FontSize="11" FontFamily="Consolas, Courier New" Margin="0,0,0,8"/>
 
                             <Grid Margin="0,0,0,4">
                                 <Grid.ColumnDefinitions>
@@ -1303,7 +1303,7 @@
                                 <TextBlock x:Name="TxtHapticIntensityValue" Grid.Column="1"
                                            Text="100%" Foreground="{DynamicResource TextLightBrush}"
                                            HorizontalAlignment="Right" VerticalAlignment="Center"
-                                           FontFamily="Consolas" FontSize="11"/>
+                                           FontFamily="Consolas, Courier New" FontSize="11"/>
                             </Grid>
 
                             <TextBlock Text="{loc:Str deeper_editor_haptic_pattern}" Style="{StaticResource EditorLabel}"/>
@@ -1363,7 +1363,7 @@
                             <DockPanel Margin="0,0,0,10" LastChildFill="True">
                                 <TextBlock x:Name="TxtRuleHeader" DockPanel.Dock="Left"
                                            Foreground="{DynamicResource TextDimBrush}"
-                                           FontSize="11" FontFamily="Consolas" VerticalAlignment="Center"/>
+                                           FontSize="11" FontFamily="Consolas, Courier New" VerticalAlignment="Center"/>
                                 <Button DockPanel.Dock="Right" Content="{loc:Str deeper_editor_rule_delete}"
                                         Click="BtnDeleteRule_Click"
                                         ToolTip="{loc:Str deeper_editor_tip_rule_delete}"

@@ -163,7 +163,7 @@
                         </Border>
 
                         <StackPanel Margin="0,0,58,0">
-                            <TextBlock Text="{Binding InterviewTitle}" FontFamily="/Fonts/#Fredoka"
+                            <TextBlock Text="{Binding InterviewTitle}" FontFamily="/Fonts/#Fredoka, Segoe UI"
                                        FontWeight="SemiBold" FontSize="16" Foreground="White"
                                        TextWrapping="Wrap" Effect="{StaticResource CmpSectionGlow}"/>
 

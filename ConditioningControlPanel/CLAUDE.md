@@ -123,23 +123,35 @@ of truth.)
 3. **Duplicate windows**: Only one StartupUri OR manual window creation in App.xaml.cs, not both
 4. **Resource not found in DataTemplate**: Move converters/resources to Window.Resources, not local Grid.Resources
 5. **Screen enumeration crash**: Always check `Screen.AllScreens.Length > 0` before accessing - can return empty during certain system states
+6. **Never hardcode a risky font family; a comma fallback is NOT a guard.** A user's corrupt
+   Cascadia install made every panel render blank in v6.8.6: WPF threw
+   `UnauthorizedAccessException` from `FontFamily.GetFirstMatchingFont` inside
+   `TextBlock.MeasureOverride`, i.e. from the LAYOUT pass, so it re-threw on every measure and
+   crash.log reached ~0.5GB in one session. Every Cascadia site already named
+   `"Cascadia Mono, Consolas, Courier New"` at the time - a chain only rescues an ABSENT family,
+   because deciding whether the first link matches means opening the font file, and that open is
+   what throws. The monospace face now lives in ONE place, App.xaml's `Font.Mono`, bound with
+   **DynamicResource** (never StaticResource - that snapshots at parse time);
+   `Services/UI/FontGuard` probes the risky families at startup and strikes any unreadable one out
+   of every chain. `FontFallbackTests` fails the build if markup names Cascadia directly or names
+   Consolas/Impact/Segoe MDL2/Segoe UI Emoji with nothing behind it.
 
 ### Async/Threading Issues
-6. **Fire-and-forget Task crashes**: Always wrap `Task.Delay().ContinueWith()` callbacks with `if (Application.Current?.Dispatcher == null) return;` and try-catch
-7. **MainWindow null during session**: SessionEngine holds reference to MainWindow - use `IsMainWindowValid` check before calling window methods
-8. **Event handlers on closed windows**: Check `Application.Current.Dispatcher.HasShutdownStarted` before triggering UI operations in event handlers
+7. **Fire-and-forget Task crashes**: Always wrap `Task.Delay().ContinueWith()` callbacks with `if (Application.Current?.Dispatcher == null) return;` and try-catch
+8. **MainWindow null during session**: SessionEngine holds reference to MainWindow - use `IsMainWindowValid` check before calling window methods
+9. **Event handlers on closed windows**: Check `Application.Current.Dispatcher.HasShutdownStarted` before triggering UI operations in event handlers
 
 ### Build Issues
-9. **Velopack "Access denied"**: Delete `%LOCALAPPDATA%\Temp\Velopack` folder and retry
-10. **Build warnings about Screen**: These are CA1416 platform warnings - safe to ignore for Windows-only app
+10. **Velopack "Access denied"**: Delete `%LOCALAPPDATA%\Temp\Velopack` folder and retry
+11. **Build warnings about Screen**: These are CA1416 platform warnings - safe to ignore for Windows-only app
 
 ### Localization
-11. **Never put a literal line break inside a language-file string.** Until 2026-07-29, 8 of the 9 `Localization/Languages/*.json` files carried raw newlines inside 38 tooltip values, so only Newtonsoft's leniency parsed them - `System.Text.Json`, `jq`, Python and most format-on-save tools rejected all 8. They are now escaped as `\n`/`\r\n` and every file parses strictly. Keep it that way: write `\n`, not an actual newline.
-12. **A dead language file no longer empties the UI.** `LocalizationManager.LoadLanguageFile` returns an empty dictionary on failure; `SetLanguage` treats that as "fall back to English", and `EnsureFallbackLoaded` logs **Fatal** if `en.json` itself fails (the one case with nothing to fall back to - the UI then renders raw keys like `btn_start_flashes`). If you see that Fatal line, the language file is broken, not the UI.
-13. **Don't hand-flip language-file line endings.** All 9 `Localization/Languages/*.json` are LF in git; the worktree shows CRLF only because `core.autocrlf=true` converts on checkout. Let autocrlf do its job and never commit a whole-file line-ending diff.
+12. **Never put a literal line break inside a language-file string.** Until 2026-07-29, 8 of the 9 `Localization/Languages/*.json` files carried raw newlines inside 38 tooltip values, so only Newtonsoft's leniency parsed them - `System.Text.Json`, `jq`, Python and most format-on-save tools rejected all 8. They are now escaped as `\n`/`\r\n` and every file parses strictly. Keep it that way: write `\n`, not an actual newline.
+13. **A dead language file no longer empties the UI.** `LocalizationManager.LoadLanguageFile` returns an empty dictionary on failure; `SetLanguage` treats that as "fall back to English", and `EnsureFallbackLoaded` logs **Fatal** if `en.json` itself fails (the one case with nothing to fall back to - the UI then renders raw keys like `btn_start_flashes`). If you see that Fatal line, the language file is broken, not the UI.
+14. **Don't hand-flip language-file line endings.** All 9 `Localization/Languages/*.json` are LF in git; the worktree shows CRLF only because `core.autocrlf=true` converts on checkout. Let autocrlf do its job and never commit a whole-file line-ending diff.
 
 ### EMI Desk
-14. **The outfit / skin layer is the TOPMOST thing in EMI's composition.** It is drawn above the
+15. **The outfit / skin layer is the TOPMOST thing in EMI's composition.** It is drawn above the
     face and above the takeover glass; face art may never paint over a garment. Her face is not
     part of the body PNG - it is a canvas laid over the glass rect, with the glass a second canvas
     on the same rect - so anything a coat, a collar or a pair of goggles draws across that rect is

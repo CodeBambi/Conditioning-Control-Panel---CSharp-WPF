@@ -717,7 +717,15 @@ public class SpiralRoomTests
     /// <para>The tab's ONE legal accent read is in code, not markup: the spiral canvas takes the
     /// mod's colour because it colours the SPIRAL. So the rule this pins is that the fog era's
     /// MARKUP — every element the countdown is made of — carries literal gold and reaches for no
-    /// resource at all.</para>
+    /// COLOUR resource at all.</para>
+    ///
+    /// <para>This used to ban the string "DynamicResource" outright, which was a cheap stand-in
+    /// for "no colour lookups". It cannot stay that broad: the countdown digits are monospace, and
+    /// the app's monospace face now has to come from the swappable <c>Font.Mono</c> resource so
+    /// FontGuard can strike out a corrupt Cascadia install (v6.8.6 rendered every panel blank
+    /// because a hardcoded face threw from the layout pass). A font lookup is not an accent, so
+    /// the rule is now stated the way it was always meant: every resource this markup reaches for
+    /// must be a FONT, never a brush or a colour.</para>
     /// </summary>
     [Fact]
     public void TheFogEraWearsTheFusesOwnGoldAndNeverTheModAccent()
@@ -725,9 +733,18 @@ public class SpiralRoomTests
         var xaml = AppFile("Views", "Tabs", "SpiralTabView.xaml");
 
         Assert.Contains("#E0B052", xaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("DynamicResource", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("PinkBrush", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("AccentBrush", xaml, StringComparison.Ordinal);
+
+        var colourLookups = System.Text.RegularExpressions.Regex
+            .Matches(xaml, @"\{(?:Dynamic|Static)Resource\s+([^}]+)\}")
+            .Select(m => m.Groups[1].Value.Trim())
+            .Where(key => !key.StartsWith("Font.", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.True(colourLookups.Count == 0,
+            "the fog era must carry literal gold and look up nothing but fonts, but this markup " +
+            "reaches for: " + string.Join(", ", colourLookups));
     }
 
     /// <summary>

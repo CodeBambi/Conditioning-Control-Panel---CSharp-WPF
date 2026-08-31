@@ -1981,49 +1981,77 @@ namespace ConditioningControlPanel.Services
                         // falling through into the clamp chain below.
                         if (v2Result?.LevelReset == true && v2Result.User != null)
                         {
-                            // A reset is a licensed fall: the previously agreed total no longer
-                            // describes this account. Clear before adopting so the send-guard does
-                            // not block the very push that carries the reset upward.
-                            ClearXpWatermark(settings, "admin level_reset");
-
-                            var serverLevel = v2Result.User.Level;
-                            var serverXp = v2Result.User.Xp;
-                            var serverLevelXp = App.Progression?.GetCurrentLevelXP(serverLevel, serverXp) ?? 0;
-
-                            App.Logger?.Information("V2 Sync: Level reset by admin — forcing Level {Level}, XP {Xp}", serverLevel, serverXp);
-                            settings.PlayerLevel = serverLevel;
-                            settings.PlayerXP = serverLevelXp;
-                            // Use server's highest_level_ever (preserved across resets for permanent unlocks)
-                            settings.HighestLevelEver = v2Result.User.HighestLevelEver ?? 0;
-
-                            // Seasonal skill reset: the POINT BALANCE is never reset (policy — points
-                            // persist across seasons; the max-merge above keeps the higher value).
-                            // Only the tree resets: rebuild it as server list ∪ locally-owned
-                            // PERMANENT nodes. The union half protects stat/analytics purchases
-                            // against an older server that still wipes unlocked_skills to [] at
-                            // rollover; mechanical nodes are dropped and must be re-bought
-                            // (the Prestige loop).
-                            var permanentOwned = (settings.UnlockedSkills ?? new List<string>())
-                                .Where(id => Models.SkillDefinition.PermanentIds.Contains(id));
-                            settings.UnlockedSkills = (v2Result.UnlockedSkills ?? new List<string>())
-                                .Union(permanentOwned).ToList();
-
-                            // Clear seasonal flags and tear down effects of dropped mechanical skills
-                            App.SkillTree?.OnSeasonReset();
-
-                            // Season Recap: a level_reset IS the reset — flag the recap so it
-                            // surfaces even mid-month (monthly rollover otherwise also triggers it
-                            // via the month check). Then nudge the UI to present it now if MainWindow
-                            // is already up (e.g. reset arrived during a running session). level_reset
-                            // is one-shot from the server (subsequent syncs return false once the
-                            // server advances the user's season), so this won't loop.
-                            settings.SeasonResetPending = true;
-                            App.Settings?.Save();
-
-                            System.Windows.Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                            // THE DESCENT REFUSAL (2026-09-01) LIVES IN HERE, NOT UP THERE.
+                            //
+                            // Note where this guard is: inside the branch body, as an explicit
+                            // if/else, exactly as the essay above demands. Folding it into the
+                            // condition would look tidier and would reintroduce the #865 bug in a
+                            // new costume — a refused reset would fall out of the `if` and into the
+                            // `else if` clamp chain below, where a zeroed server row reads as
+                            // "uninitialized", local is kept, and the next push writes the whole
+                            // pre-reset profile back over the server. In here a refusal is only ever
+                            // a refusal: nothing else in this response gets to act on the reset.
+                            if (RefuseDescentEraLevelReset(
+                                    v2Result.User.CurrentSeason,
+                                    settings.CurrentSeason,
+                                    settings.DescentMigrationCompleted,
+                                    DateTime.UtcNow))
                             {
-                                (System.Windows.Application.Current?.MainWindow as ConditioningControlPanel.MainWindow)?.TryPresentSeasonRecap();
-                            }));
+                                App.Logger?.Warning(
+                                    "[Descent] REFUSED a server level_reset. The Descent ended monthly seasons on {Epoch:yyyy-MM-dd}, so no season reset can be legitimate after it. KEEPING Level {Level} / XP {Xp}; the server offered Level {ServerLevel} / XP {ServerXp} (season server={ServerSeason}, local={LocalSeason}, migrated={Migrated}). The XP watermark is NOT cleared, no skills are dropped, and no recap is raised. If this was a deliberate admin reset it has to be redone by hand.",
+                                    DescentEpochs.SeasonsEndUtc,
+                                    settings.PlayerLevel, settings.PlayerXP,
+                                    v2Result.User.Level, v2Result.User.Xp,
+                                    string.IsNullOrEmpty(v2Result.User.CurrentSeason) ? "(none)" : v2Result.User.CurrentSeason,
+                                    string.IsNullOrEmpty(settings.CurrentSeason) ? "(none)" : settings.CurrentSeason,
+                                    settings.DescentMigrationCompleted);
+                            }
+                            else
+                            {
+                                // A reset is a licensed fall: the previously agreed total no longer
+                                // describes this account. Clear before adopting so the send-guard does
+                                // not block the very push that carries the reset upward.
+                                ClearXpWatermark(settings, "admin level_reset");
+
+                                var serverLevel = v2Result.User.Level;
+                                var serverXp = v2Result.User.Xp;
+                                var serverLevelXp = App.Progression?.GetCurrentLevelXP(serverLevel, serverXp) ?? 0;
+
+                                App.Logger?.Information("V2 Sync: Level reset by admin — forcing Level {Level}, XP {Xp}", serverLevel, serverXp);
+                                settings.PlayerLevel = serverLevel;
+                                settings.PlayerXP = serverLevelXp;
+                                // Use server's highest_level_ever (preserved across resets for permanent unlocks)
+                                settings.HighestLevelEver = v2Result.User.HighestLevelEver ?? 0;
+
+                                // Seasonal skill reset: the POINT BALANCE is never reset (policy — points
+                                // persist across seasons; the max-merge above keeps the higher value).
+                                // Only the tree resets: rebuild it as server list ∪ locally-owned
+                                // PERMANENT nodes. The union half protects stat/analytics purchases
+                                // against an older server that still wipes unlocked_skills to [] at
+                                // rollover; mechanical nodes are dropped and must be re-bought
+                                // (the Prestige loop).
+                                var permanentOwned = (settings.UnlockedSkills ?? new List<string>())
+                                    .Where(id => Models.SkillDefinition.PermanentIds.Contains(id));
+                                settings.UnlockedSkills = (v2Result.UnlockedSkills ?? new List<string>())
+                                    .Union(permanentOwned).ToList();
+
+                                // Clear seasonal flags and tear down effects of dropped mechanical skills
+                                App.SkillTree?.OnSeasonReset();
+
+                                // Season Recap: a level_reset IS the reset — flag the recap so it
+                                // surfaces even mid-month (monthly rollover otherwise also triggers it
+                                // via the month check). Then nudge the UI to present it now if MainWindow
+                                // is already up (e.g. reset arrived during a running session). level_reset
+                                // is one-shot from the server (subsequent syncs return false once the
+                                // server advances the user's season), so this won't loop.
+                                settings.SeasonResetPending = true;
+                                App.Settings?.Save();
+
+                                System.Windows.Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                                {
+                                    (System.Windows.Application.Current?.MainWindow as ConditioningControlPanel.MainWindow)?.TryPresentSeasonRecap();
+                                }));
+                            }
                         }
                         // THE CEREMONY'S LEDGER IS NOT UP FOR NEGOTIATION until the server acks it.
                         //
@@ -4402,6 +4430,44 @@ namespace ConditioningControlPanel.Services
         #endregion
 
         #region The Descent — migration handshake (CONTRACTS-0812 §2)
+
+        /// <summary>
+        /// Whether a server <c>level_reset</c> must be REFUSED because it is dated at or after the
+        /// Descent (<see cref="DescentEpochs.SeasonsEndUtc"/>, 2026-09-01).
+        ///
+        /// <para>A level_reset is the server saying "a season ended, take these zeroes". After the
+        /// Descent no season ends, so nothing can legitimately say that again. What CAN still say
+        /// it is a server whose DESCENT_MIGRATION suppression failed open, an older deploy rolled
+        /// back underneath it, or a stale response replayed at a client. Obeying any of those costs
+        /// the user their level and XP permanently, because the branch that obeys does not merely
+        /// accept the zeroes — it clears the XP watermark and then PUSHES them back up as this
+        /// client's own agreed truth, so there is nothing left anywhere to restore from. Refusing
+        /// costs, at worst, an admin redoing a reset by hand after reading the log line.</para>
+        ///
+        /// <para>Dated four ways, any one of which is enough:</para>
+        /// <list type="number">
+        /// <item>the account is already through the ceremony — it is on curve v2 and seasons are
+        /// over FOR IT whatever the calendar or the server says;</item>
+        /// <item>the wall clock is past the epoch — no season reset exists to be sent;</item>
+        /// <item>the season key the server is rolling this account INTO is "2026-09" or later, so
+        /// the reset dates itself post-Descent even if our clock disagrees;</item>
+        /// <item>the key we already hold locally is post-Descent, same reasoning from the other
+        /// side. This and (3) are what cover a client whose clock is slow or skewed, which is a
+        /// real case with a ceremony at 19:00Z and users in every timezone.</item>
+        /// </list>
+        ///
+        /// <para>Pure and static on purpose: no App, no settings write, nothing to mock, so the
+        /// refusal is exercisable directly in the suite.</para>
+        /// </summary>
+        internal static bool RefuseDescentEraLevelReset(
+            string? serverSeason, string? localSeason, bool migrationCompleted, DateTime nowUtc)
+        {
+            if (migrationCompleted) return true;
+            if (nowUtc >= DescentEpochs.SeasonsEndUtc) return true;
+            if (DescentEpochs.IsPostDescentSeasonKey(serverSeason)) return true;
+            if (DescentEpochs.IsPostDescentSeasonKey(localSeason)) return true;
+            return false;
+        }
 
         /// <summary>
         /// Settle a submit. THE ACK IS THE ONLY THING THAT MAY WRITE

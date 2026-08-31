@@ -34,7 +34,7 @@
 
         <StackPanel Grid.Row="0" Margin="0,0,0,14">
             <TextBlock Text="{loc:Str profile_customize_title}"
-                       FontFamily="/Fonts/#Fredoka" FontWeight="SemiBold"
+                       FontFamily="/Fonts/#Fredoka, Segoe UI" FontWeight="SemiBold"
                        FontSize="22" Foreground="White">
                 <TextBlock.Effect>
                     <DropShadowEffect Color="#FF69B4" BlurRadius="16" ShadowDepth="0" Opacity="0.6"/>

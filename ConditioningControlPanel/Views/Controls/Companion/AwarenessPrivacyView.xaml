@@ -271,7 +271,7 @@
                         <ScrollViewer MaxHeight="180" HorizontalScrollBarVisibility="Auto"
                                       VerticalScrollBarVisibility="Auto"
                                       Visibility="{Binding HasWireJson, Converter={StaticResource CmpBoolToVis}}">
-                            <TextBlock Text="{Binding WireJson}" FontFamily="Consolas" FontSize="10.5"
+                            <TextBlock Text="{Binding WireJson}" FontFamily="Consolas, Courier New" FontSize="10.5"
                                        Foreground="{StaticResource CmpDimBrush}"/>
                         </ScrollViewer>
                         <TextBlock Text="{Binding WireJsonEmptyCopy}" Style="{StaticResource CmpFaintTextStyle}"

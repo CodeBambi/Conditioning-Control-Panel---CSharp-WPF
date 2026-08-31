@@ -279,7 +279,7 @@ namespace ConditioningControlPanel
             else
             {
                 meta.Foreground = Application.Current.Resources["TextDimBrush"] as Brush;
-                meta.FontFamily = new FontFamily("Consolas");
+                meta.FontFamily = new FontFamily("Consolas, Courier New");
                 meta.FontSize = 9.5;
                 meta.VerticalAlignment = VerticalAlignment.Center;
                 meta.Margin = new Thickness(8, 0, 0, 0);
@@ -428,7 +428,7 @@ namespace ConditioningControlPanel
             else
             {
                 block.Foreground = Application.Current.Resources["TextSecondaryBrush"] as Brush;
-                block.FontFamily = new FontFamily("Consolas");
+                block.FontFamily = new FontFamily("Consolas, Courier New");
                 block.FontSize = 10.5;
                 block.VerticalAlignment = VerticalAlignment.Center;
                 block.TextAlignment = TextAlignment.Right;

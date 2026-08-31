@@ -49,7 +49,7 @@
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                             <TextBlock Text="{Binding Token, Mode=OneTime}"
-                                                       Foreground="White" FontFamily="Consolas"
+                                                       Foreground="White" FontFamily="Consolas, Courier New"
                                                        FontSize="14" FontWeight="Bold"
                                                        TextTrimming="CharacterEllipsis"/>
                                             <TextBlock Text="{Binding SubtitleText, Mode=OneTime}"

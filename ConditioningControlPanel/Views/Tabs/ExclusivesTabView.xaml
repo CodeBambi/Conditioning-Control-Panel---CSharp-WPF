@@ -102,7 +102,7 @@
                             </Border>
                             <StackPanel VerticalAlignment="Center" Margin="18,0,0,0">
                                 <TextBlock Text="{loc:Str exclusives_vault_title}"
-                                           FontFamily="/Fonts/#Fredoka" FontWeight="Bold"
+                                           FontFamily="/Fonts/#Fredoka, Segoe UI" FontWeight="Bold"
                                            FontSize="17" Foreground="{StaticResource TextLightBrush}"/>
                                 <TextBlock Text="{loc:Str exclusives_vault_sub}"
                                            FontSize="11.5" Foreground="{StaticResource TextMutedBrush}"
@@ -226,7 +226,7 @@
                                     </Border>
                                 </StackPanel>
                                 <TextBlock x:Name="TxtSpotTitle" x:FieldModifier="internal"
-                                           FontFamily="/Fonts/#Fredoka" FontWeight="SemiBold"
+                                           FontFamily="/Fonts/#Fredoka, Segoe UI" FontWeight="SemiBold"
                                            FontSize="30" Foreground="White">
                                     <TextBlock.Effect>
                                         <DropShadowEffect Color="#FF69B4" BlurRadius="20"
@@ -283,7 +283,7 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="{loc:Str exclusives_collection}"
-                                   FontFamily="/Fonts/#Fredoka" FontWeight="Medium"
+                                   FontFamily="/Fonts/#Fredoka, Segoe UI" FontWeight="Medium"
                                    FontSize="16" Foreground="{StaticResource TextLightBrush}"/>
                         <Rectangle Grid.Column="1" Height="1" Margin="14,0"
                                    VerticalAlignment="Center">

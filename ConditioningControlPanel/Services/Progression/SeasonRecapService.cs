@@ -43,8 +43,33 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// True when <see cref="CurrentSeasonKey"/> is the SERVER's key rather than the wall-clock
+        /// fallback underneath it.
+        ///
+        /// <para>The fallback exists so the local stats bucket always has somewhere to accrue, and
+        /// for that it is harmless. What is not harmless is letting it DECIDE that a season ended.
+        /// A client that has never synced — not logged in, invite-only, sync quietly failing —
+        /// manufactures a brand-new key out of the calendar on the 1st of every month, and the
+        /// recap's only test was "is this key after the last one I recapped". So it fired, on a key
+        /// the server had never seen, and told the user their level and XP had been reset when
+        /// nothing anywhere had touched them.</para>
+        ///
+        /// <para>On 2026-09-01 that would have gone out to every never-synced install at once, and
+        /// been a lie for all of them: the Descent means no reset is coming at all. A reset is a
+        /// thing the SERVER does, so only the server can confirm one happened.</para>
+        /// </summary>
+        public static bool IsSeasonKeyServerConfirmed
+        {
+            get
+            {
+                var server = App.Settings?.Current?.CurrentSeason;
+                return !string.IsNullOrWhiteSpace(server) && LooksLikeMonthKey(server!);
+            }
+        }
+
         /// <summary>True if the string is a "yyyy-MM" month key (so it's safe to compare/order with our keys).</summary>
-        private static bool LooksLikeMonthKey(string k) =>
+        internal static bool LooksLikeMonthKey(string k) =>
             k.Length == 7 && k[4] == '-'
             && int.TryParse(k.Substring(0, 4), out _)
             && int.TryParse(k.Substring(5, 2), out _);

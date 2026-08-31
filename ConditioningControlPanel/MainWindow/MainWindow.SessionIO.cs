@@ -565,7 +565,7 @@ namespace ConditioningControlPanel
             else
             {
                 block.Foreground = Application.Current.Resources["TextSecondaryBrush"] as Brush;
-                block.FontFamily = new FontFamily("Consolas");
+                block.FontFamily = new FontFamily("Consolas, Courier New");
                 block.FontSize = 11;
                 block.VerticalAlignment = VerticalAlignment.Center;
                 block.TextAlignment = TextAlignment.Right;
