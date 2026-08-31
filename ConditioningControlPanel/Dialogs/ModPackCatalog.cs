@@ -116,6 +116,16 @@ namespace ConditioningControlPanel
                 PremiumProgramNote = true, // "firmware_install" is Premium
                 NoVoiceNote = true         // drone-mode.ccpmod carries no companion_audio at all
             },
+            new ModPackEntry
+            {
+                ModId = BuiltInMods.InfectionControlId,
+                PackId = ReleaseContentService.PackModInfection,
+                NameLocKey = "modpicker_name_infection",
+                DescriptionLocKey = "modpicker_desc_infection",
+                ArtUri = "pack://application:,,,/Resources/intake/pass_card_infection.png",
+                AccentHex = "#2855F0",
+                ApproxBytes = 209 * Mb
+            },
         };
 
         /// <summary>The four optional mods (everything with a downloadable pack).</summary>

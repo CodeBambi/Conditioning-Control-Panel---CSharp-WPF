@@ -71,14 +71,15 @@ namespace ConditioningControlPanel.Services
         public const string PackModSissy = "mod-sissy";
         public const string PackModLocked = "mod-locked";
         public const string PackModDrone = "mod-drone";
+        public const string PackModInfection = "mod-infection";
 
         /// <summary>Audio group: baseline voice (auto) + web-engine audio (lazy).</summary>
         public static readonly IReadOnlyList<string> AudioPackIds = new[] { PackAudioBase, PackAudioWeb };
 
         /// <summary>Mod group: one pack per built-in mod, each carrying its own DTRH persona barks.</summary>
-        public static readonly IReadOnlyList<string> ModPackIds = new[] { PackModBambi, PackModSissy, PackModLocked, PackModDrone };
+        public static readonly IReadOnlyList<string> ModPackIds = new[] { PackModBambi, PackModSissy, PackModLocked, PackModDrone, PackModInfection };
 
-        /// <summary>All six known pack ids, audio group first.</summary>
+        /// <summary>All known pack ids, audio group first.</summary>
         public static readonly IReadOnlyList<string> AllPackIds =
             AudioPackIds.Concat(ModPackIds).ToArray();
 

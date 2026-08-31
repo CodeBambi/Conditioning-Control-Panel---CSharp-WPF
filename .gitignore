@@ -147,6 +147,10 @@ ConditioningControlPanel/DroneMod/*
 # built-in mod (see ConditioningControlPanel.csproj + ModService.ExtractBundledResourceMods).
 !ConditioningControlPanel/LockedMod/locked-resources.ccpmod
 
+# ...and the Infection Control package (Miss Jenny), likewise a bundled built-in
+# delivered via the mod-infection content pack (ModService.ExtractBundledBuiltInMods).
+!ConditioningControlPanel/InfectionMod/infection-control.ccpmod
+
 # MSBuild temp files
 *_wpftmp.csproj
 

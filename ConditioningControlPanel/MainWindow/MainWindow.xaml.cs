@@ -2393,6 +2393,7 @@ namespace ConditioningControlPanel
                         BuiltInMods.SissyHypnoId,
                         BuiltInMods.DronificationId,
                         BuiltInMods.LockedId,
+                        BuiltInMods.InfectionControlId,
                     };
                     foreach (var id in stockOrder)
                     {

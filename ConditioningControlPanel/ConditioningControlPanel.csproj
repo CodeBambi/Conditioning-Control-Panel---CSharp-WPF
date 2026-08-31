@@ -254,6 +254,7 @@
     <Resource Include="Resources\intake\pass_card_sissy.png" />
     <Resource Include="Resources\intake\pass_card_drone.png" />
     <Resource Include="Resources\intake\pass_card_circe.png" />
+    <Resource Include="Resources\intake\pass_card_infection.png" />
     <!-- THE VAT's faucet (planning/one-descent/mockups/faucet.png, chroma-cut to
          alpha, spout tip at 90.6% / 98.9%). Same rule as the intake cards above:
          no glob, so a missing entry fails the pack:// URI at RUNTIME only. -->

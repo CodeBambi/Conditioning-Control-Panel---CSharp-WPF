@@ -16,12 +16,16 @@ namespace ConditioningControlPanel.Models
         // overrides this built-in if present, otherwise this built-in supplies the mod.
         public const string DronificationId = "drone-mode";
         public const string LockedId = "builtin-locked";
+        // Bare community id for the same reason as drone-mode: the creator (Miss Jenny) shared
+        // infection-control.ccpmod copies before it became a built-in.
+        public const string InfectionControlId = "infection-control";
 
         public static ModManifest CCPDefault { get; } = CreateCCPDefault();
         public static ModManifest BambiSleep { get; } = CreateBambiSleep();
         public static ModManifest SissyHypno { get; } = CreateSissyHypno();
         public static ModManifest Dronification { get; } = CreateDronification();
         public static ModManifest Locked { get; } = CreateLocked();
+        public static ModManifest InfectionControl { get; } = CreateInfectionControl();
 
         private static ModManifest CreateBambiSleep()
         {
@@ -1878,6 +1882,106 @@ namespace ConditioningControlPanel.Models
                     { "pink", "green" },
                     { "Pink", "Green" },
                     { "PINK", "GREEN" }
+                }
+            };
+        }
+
+        /// <summary>
+        /// Infection Control ("Nurse Amber", by Miss Jenny). Unlike the other Create* methods this is
+        /// a deliberately COMPACT stub, not a full transcription: infection-control has always shipped
+        /// as a full .ccpmod (see _bundledBuiltInMods in ModService), whose own mod.json overwrites
+        /// this registration the moment the mod-infection pack is extracted. The stub only covers the
+        /// pack-not-downloaded-yet gap — theme/identity/subliminals/triggers so the card and a
+        /// premature activation look right; barks/mantras/personalities/phrases arrive with the pack.
+        /// </summary>
+        private static ModManifest CreateInfectionControl()
+        {
+            return new ModManifest
+            {
+                Id = InfectionControlId,
+                Name = "Infection Control",
+                Version = "1.0.0",
+                Author = "Miss Jenny",
+                Description = "The goon virus has infected you but don't worry! Nurse Amber is here to treat you for it...",
+                MinAppVersion = "6.8.3",
+                Tags = new List<string> { "Resistance", "Relapse", "Goon", "Gooning", "Edging", "Denial" },
+                PreviewImage = "preview.png",
+
+                Theme = new ModTheme
+                {
+                    AccentColor = "#2855F0",
+                    AccentLightColor = "#005900",
+                    AccentDarkColor = "#002D00",
+                    BackgroundColor = "#232323",
+                    PanelColor = "#666666",
+                    SurfaceColor = "#002D00",
+                    FilterColor = "#DC4343"
+                },
+
+                FxPalette = new ModFxPalette
+                {
+                    MistColor = "#DC4343",
+                    ParticleColor = "#002D00",
+                    GlowColor = "#2855F0",
+                    FlashTint = "#005300"
+                },
+
+                Identity = new ModIdentity
+                {
+                    CompanionName = "Nurse Amber",
+                    UserTerm = "Patient",
+                    ModeDisplayName = "Goon Virus",
+                    TalkToLabel = "Page the nurse",
+                    TakeoverLabel = "Intervention",
+                    Affirmation = "The Virus Progresses",
+                    RankSubject = "Infection Level",
+                    PetName = "patient",
+                    Collective = "patients"
+                },
+
+                SubliminalPool = new Dictionary<string, bool>
+                {
+                    { "Resistance is futile", true },
+                    { "Good gooner", true },
+                    { "You can't resist", true },
+                    { "Edging is better", true },
+                    { "Never stop", true },
+                    { "Never quit", true },
+                    { "Pleasure owns you", true },
+                    { "Submit", true },
+                    { "Get weaker", true },
+                    { "Get worse", true },
+                    { "Edge", true },
+                    { "Masturbate", true },
+                    { "Stare", true },
+                    { "Need", true },
+                    { "Want", true },
+                    { "Desire", true },
+                    { "Surrender", true },
+                    { "Relapse", true },
+                    { "Porn always wins", true },
+                    { "Too hot", true },
+                    { "Obey your urges", true }
+                },
+
+                CustomTriggers = new List<string>
+                {
+                    "SYMPTOMS SPREADING",
+                    "TAKE YOUR DOSE",
+                    "NURSE'S ORDERS",
+                    "TREATMENT TIME",
+                    "FEVER RISING",
+                    "QUARANTINE PROTOCOL",
+                    "RELAPSE IS RECOVERY",
+                    "GOOD CARRIER",
+                    "REPORT FOR INTAKE",
+                    "THE STRAIN BELONGS IN YOU",
+                    "RESISTANCE IS A SYMPTOM",
+                    "VITALS LOW AND LAZY",
+                    "BOOSTER READY",
+                    "CHART UPDATED",
+                    "PAGING PATIENT ZERO",
+                    "INFECTION DEEPENS"
                 }
             };
         }
