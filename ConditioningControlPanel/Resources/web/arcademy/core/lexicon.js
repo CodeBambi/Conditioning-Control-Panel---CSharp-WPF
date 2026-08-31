@@ -196,6 +196,14 @@ export const DEFAULT_LEXICON = Object.freeze({
   rotate_landscape_body: 'This room was built wide, so give your phone a quarter turn and the board gets the width it was drawn for. Nothing is running while you sort it out.',
   rotate_portrait_title: 'Stand it back up',
   rotate_portrait_body: 'This one plays tall, so turn your phone upright and the board gets its full height back. Nothing is running while you sort it out.',
+  /* THE WAY IN AND THE WAY OUT. A CLASS card only, and only once the gate's
+     grace period has run: some phones can never produce the shape (an iOS
+     system portrait lock has no in-page override, and the Discord Activity
+     iframe hands the page whatever it likes), and a requirement nobody can
+     satisfy has to carry a door. */
+  rotate_stuck_note: 'Phone not turning? Some are told to hold still. Pick a way in below.',
+  rotate_play_anyway: 'Play it upright anyway',
+  rotate_leave_class: 'Leave the class',
   /* The splash's knock line (boot.js). boot runs before this module loads, so
      it reads init.lexicon directly with the same English as its own fallback -
      keep the two strings identical when either moves. */
