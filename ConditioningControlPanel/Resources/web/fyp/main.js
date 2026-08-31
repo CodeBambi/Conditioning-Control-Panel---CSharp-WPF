@@ -633,7 +633,7 @@ function renderCustomSubChips() {
     const chip = document.createElement('span');
     chip.className = 'niche-chip custom pending';
     chip.textContent = `r/${name}…`;
-    chip.title = 'Checking Scrolller…';
+    chip.title = 'Checking that subreddit…';
     customBox.appendChild(chip);
   }
   for (const entry of customSubs) {
@@ -649,11 +649,11 @@ function renderCustomSubChips() {
       // "stills only" rather than a bare 0, and say nothing at all when the host
       // could not read a count.
       chip.title = (entry.videoCount === 0 ? 'verified · stills only'
-        : entry.videoCount == null ? 'verified on Scrolller'
-        : `verified · ${entry.videoCount} clips on Scrolller`)
+        : entry.videoCount == null ? 'verified on Reddit'
+        : `verified · ${entry.videoCount} clips on Reddit`)
         + (on ? ' · click to drop it from this feed' : ' · click to add it to this feed');
     } else if (missing) {
-      chip.title = "Scrolller didn't have this sub - ✕ to forget it";
+      chip.title = "That sub didn't have media - ✕ to forget it";
     } else {
       chip.title = on ? 'In this feed - click to drop it' : 'Kept - click to add it to this feed';
     }
@@ -814,10 +814,10 @@ function onSubProbe(data) {
     pruneRemoteToChannels(); // the new channel joins the batch loop immediately
     return;
   }
-  if (data.error === 'offline') showSubError("Couldn't reach Scrolller - try again");
+  if (data.error === 'offline') showSubError("Couldn't reach the feed - try again");
   else if (data.error === 'invalid') showSubError(`r/${name} isn't a usable subreddit name`);
   else if (data.error) showSubError(`Couldn't check r/${name} - try again`);
-  else showSubError(`r/${name} isn't on Scrolller`);
+  else showSubError(`r/${name} doesn't exist or has no media`);
   updateOnlineUi(); // drops the pending pill
 }
 

@@ -376,7 +376,7 @@ namespace ConditioningControlPanel
         {
             try
             {
-                Process.Start(new ProcessStartInfo("https://discord.gg/YxVAMt4qaZ") { UseShellExecute = true });
+                Process.Start(new ProcessStartInfo(DiscordLinks.Invite) { UseShellExecute = true });
             }
             catch (Exception ex)
             {
@@ -384,9 +384,22 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// "Get Packs" goes straight to the #asset-packs channel rather than the plain server
+        /// invite: the packs are the thing the button promises, and the invite is still one click
+        /// away on the Account/Discord button. A non-member who lands on the deep link gets
+        /// Discord's no-access view - accepted for now.
+        /// </summary>
         internal void BtnGetPacks_Click(object sender, RoutedEventArgs e)
         {
-            BtnCreatorDiscord_Click(sender, e);
+            try
+            {
+                Process.Start(new ProcessStartInfo(DiscordLinks.PackCatalogue) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to open the pack catalogue link");
+            }
         }
 
         internal void PacksScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
@@ -2247,7 +2260,7 @@ namespace ConditioningControlPanel
 
             Add(MediaSrcLocal, "label_media_source_own", "My own assets",
                 "tooltip_media_source_own", "Only the images and videos in your assets folder.");
-            Add(MediaSrcOnline, "label_media_source_online", "Reddit (via Scrolller)",
+            Add(MediaSrcOnline, "label_media_source_online", "Reddit",
                 "tooltip_media_source_online", "Stream everything from the subreddits you pick. Nothing is saved to your disk.");
             Add(MediaSrcMixed, "label_media_source_both", "Both",
                 "tooltip_media_source_both", "Blend your own media with Reddit, in whatever proportion you like.");
@@ -2549,7 +2562,7 @@ namespace ConditioningControlPanel
                 {
                     // Nothing persisted: we learned nothing about the sub, only about the wire.
                     ShowRemoteSubError(LocOr("msg_remote_sub_offline",
-                        "Couldn't reach Scrolller - try again"));
+                        "Couldn't reach the feed - try again"));
                 }
                 else if (string.Equals(probe.Error, "invalid", StringComparison.Ordinal))
                 {
@@ -2568,7 +2581,7 @@ namespace ConditioningControlPanel
                     };
                     App.Settings?.Save();
                     ShowRemoteSubError(string.Format(LocOr("msg_remote_sub_not_found",
-                        "r/{0} isn't on Scrolller"), clean));
+                        "r/{0} doesn't exist or has no media"), clean));
                 }
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "Committing a probed subreddit failed"); }
@@ -2697,7 +2710,7 @@ namespace ConditioningControlPanel
                     chipTip = row.StillOnly
                         ? LocOr("label_remote_sub_verified_stills", "Verified · stills only")
                         : string.Format(LocOr("label_remote_sub_verified",
-                            "Verified · {0} clips on Scrolller"), row.VideoCount.GetValueOrDefault());
+                            "Verified · {0} clips on Reddit"), row.VideoCount.GetValueOrDefault());
                 }
                 else if (row.Ok == false)
                 {
@@ -2706,7 +2719,7 @@ namespace ConditioningControlPanel
                     accent = muted;
                     label = $"r/{name} ?";
                     chipTip = string.Format(LocOr("msg_remote_sub_not_found",
-                        "r/{0} isn't on Scrolller"), name);
+                        "r/{0} doesn't exist or has no media"), name);
                 }
                 else
                 {

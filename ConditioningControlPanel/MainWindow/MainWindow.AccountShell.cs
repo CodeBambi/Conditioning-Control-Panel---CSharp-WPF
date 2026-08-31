@@ -264,7 +264,7 @@ namespace ConditioningControlPanel
             {
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
-                    FileName = "https://discord.gg/YxVAMt4qaZ",
+                    FileName = DiscordLinks.Invite,
                     UseShellExecute = true
                 });
                 App.Logger?.Information("Opened Discord invite link");

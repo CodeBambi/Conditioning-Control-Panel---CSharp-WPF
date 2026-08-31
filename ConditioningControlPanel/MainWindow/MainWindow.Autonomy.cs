@@ -428,6 +428,10 @@ namespace ConditioningControlPanel
 
             if (!s.WallpaperEnabled && App.Wallpaper?.IsActive == true)
                 App.Wallpaper?.Deactivate();
+
+            // Arming it with nothing to show used to be silent - the wallpaper simply never
+            // changed and no one said why. See WarnIfWallpaperLibraryEmpty in MainWindow.StartStop.cs.
+            if (s.WallpaperEnabled) WarnIfWallpaperLibraryEmpty();
         }
 
         /// <summary>How long a wallpaper change sticks before the original comes back.</summary>

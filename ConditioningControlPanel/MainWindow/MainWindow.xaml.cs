@@ -3773,6 +3773,9 @@ namespace ConditioningControlPanel
                     "Choosing a custom folder is recommended if you want to:\n" +
                     "  • Keep content on a different drive\n" +
                     "  • Preserve content across reinstalls\n\n" +
+                    "Starting from nothing? People share content packs daily on our Discord\n" +
+                    "(the Get Packs button in the Assets tab takes you there), or the app can\n" +
+                    "stream media from Reddit instead - see \"Where your media comes from\".\n\n" +
                     "You can always change this later in Settings > Assets.",
                     "Choose Content Folder",
                     MessageBoxButton.YesNo,
