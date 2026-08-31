@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services.Descent;
 
 namespace ConditioningControlPanel.Views.Tabs
 {
@@ -148,6 +149,10 @@ namespace ConditioningControlPanel.Views.Tabs
             {
                 if (TxtLeaderboardSeason == null || TxtLeaderboardSubtitle == null) return;
 
+                // The Descent branch below collapses the subtitle outright; restore it up front so
+                // a mode switch can never leave it collapsed against a line that does have text.
+                TxtLeaderboardSubtitle.Visibility = Visibility.Visible;
+
                 if (IsAllTimeMode)
                 {
                     TxtLeaderboardSeason.Text = Loc.Get("lb_all_time_title");
@@ -159,6 +164,19 @@ namespace ConditioningControlPanel.Views.Tabs
                 TxtLeaderboardSeason.Text = string.IsNullOrWhiteSpace(seasonTitle)
                     ? Loc.Get("section_seasons")
                     : seasonTitle;
+
+                // THE DESCENT (2026-09-01) ENDED MONTHLY SEASONS, so there is no next season end to
+                // count down to. The arithmetic below is pure wall-clock — first instant of the next
+                // UTC month, no server involved — so left alone it would go right on promising a
+                // season end on the 1st of every month, forever, for a season system that no longer
+                // exists. There is no honest number to put in its place either, so the line goes away
+                // and the season title above stands on its own.
+                if (DescentEpochs.SeasonsHaveEnded)
+                {
+                    TxtLeaderboardSubtitle.Text = string.Empty;
+                    TxtLeaderboardSubtitle.Visibility = Visibility.Collapsed;
+                    return;
+                }
 
                 var now = DateTime.UtcNow;
                 var seasonEnd = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(1);
