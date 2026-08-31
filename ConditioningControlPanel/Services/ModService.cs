@@ -89,11 +89,13 @@ namespace ConditioningControlPanel.Services
             var sissyMod = new ModPackage(BuiltInMods.SissyHypno, null, isBuiltIn: true);
             var droneMod = new ModPackage(BuiltInMods.Dronification, null, isBuiltIn: true);
             var lockedMod = new ModPackage(BuiltInMods.Locked, null, isBuiltIn: true);
+            var infectionMod = new ModPackage(BuiltInMods.InfectionControl, null, isBuiltIn: true);
             _installedMods[_baseMod.Id] = _baseMod;
             _installedMods[bambiMod.Id] = bambiMod;
             _installedMods[sissyMod.Id] = sissyMod;
             _installedMods[droneMod.Id] = droneMod;
             _installedMods[lockedMod.Id] = lockedMod;
+            _installedMods[infectionMod.Id] = infectionMod;
 
             // Replace hardcoded built-ins with extracted .ccpmod packages where
             // available so their full asset set (avatars, sounds, resources)
@@ -1559,6 +1561,7 @@ namespace ConditioningControlPanel.Services
             BuiltInMods.SissyHypnoId,
             BuiltInMods.DronificationId,
             BuiltInMods.LockedId,
+            BuiltInMods.InfectionControlId,
         };
 
         /// <summary>
@@ -1575,6 +1578,7 @@ namespace ConditioningControlPanel.Services
         private static readonly (string RelativePath, string BuiltInId, string PackId)[] _bundledBuiltInMods =
         {
             ("DroneMod/drone-mode.ccpmod", BuiltInMods.DronificationId, ReleaseContentService.PackModDrone),
+            ("InfectionMod/infection-control.ccpmod", BuiltInMods.InfectionControlId, ReleaseContentService.PackModInfection),
         };
 
         /// <summary>
@@ -2259,13 +2263,14 @@ namespace ConditioningControlPanel.Services
 
         private ReleaseContentService? _releaseContent;
 
-        /// <summary>Pack id ↔ built-in mod id for the four per-mod content packs.</summary>
+        /// <summary>Pack id ↔ built-in mod id for the per-mod content packs.</summary>
         private static readonly (string PackId, string ModId)[] _packToMod =
         {
             (ReleaseContentService.PackModBambi, BuiltInMods.BambiSleepId),
             (ReleaseContentService.PackModSissy, BuiltInMods.SissyHypnoId),
             (ReleaseContentService.PackModLocked, BuiltInMods.LockedId),
             (ReleaseContentService.PackModDrone, BuiltInMods.DronificationId),
+            (ReleaseContentService.PackModInfection, BuiltInMods.InfectionControlId),
         };
 
         /// <summary>Built-in mod id a content pack delivers, or null (audio packs map to no mod).</summary>

@@ -213,6 +213,15 @@ $PackSpecs = @(
         Files   = @(
             @{ Path = 'DroneMod\drone-mode.ccpmod'; Entry = 'packs/drone-mode.ccpmod' }
         )
+    },
+    @{
+        Id      = 'mod-infection'
+        File    = 'mod-infection.zip'
+        Label   = 'Infection Control mod'
+        Folders = @()
+        Files   = @(
+            @{ Path = 'InfectionMod\infection-control.ccpmod'; Entry = 'packs/infection-control.ccpmod' }
+        )
     }
 )
 
