@@ -1,0 +1,73 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/KnowledgeLinkEditorDialog.xaml.
+     Deviations, all forced:
+       ResizeMode="NoResize"            -> CanResize="False"
+       {loc:Str key}                    -> a binding
+       Content="{loc:Str …}" on Button  -> a TextBlock child (Avalonia parses "_" as an access key)
+       SizeToContent="{loc:Str btn_height}" -> SizeToContent="Height"
+           The original is a latent WPF bug: a loc auto-pass swallowed the literal enum value, so it
+           only parses while the active language is English ("Height"); de.json gives "Höhe".
+       MessageBox.Show(validation)      -> the inline TxtError TextBlock below, which occupies the
+           row 3 spacer the original left empty. Avalonia has no MessageBox, and this is the same
+           shape UrlPromptDialog already uses. The hardcoded "Validation Error" caption has no
+           equivalent and drops out. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.KnowledgeLinkEditorDialog"
+        x:DataType="d:KnowledgeLinkEditorViewModel"
+        xmlns:d="clr-namespace:ConditioningControlPanel.Avalonia.Views.Dialogs"
+        Title="{Binding LocTitle}"
+        Width="450" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource DarkerBgBrush}"
+        CanResize="False">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- URL -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,15">
+            <TextBlock Text="{Binding LocLabelUrl}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" Margin="0,0,0,5"/>
+            <TextBox x:Name="TxtUrl" Background="{DynamicResource PanelBgBrush}" Foreground="White"
+                     BorderBrush="{DynamicResource PanelAccentBrush}" Padding="8" FontSize="12"/>
+        </StackPanel>
+
+        <!-- Title -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,15">
+            <TextBlock Text="{Binding LocLabelTitle}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" Margin="0,0,0,5"/>
+            <TextBox x:Name="TxtTitle" Background="{DynamicResource PanelBgBrush}" Foreground="White"
+                     BorderBrush="{DynamicResource PanelAccentBrush}" Padding="8" FontSize="12"/>
+        </StackPanel>
+
+        <!-- Description -->
+        <StackPanel Grid.Row="2" Margin="0,0,0,15">
+            <TextBlock Text="{Binding LocLabelDescription}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" Margin="0,0,0,5"/>
+            <TextBox x:Name="TxtDescription" Background="{DynamicResource PanelBgBrush}" Foreground="White"
+                     BorderBrush="{DynamicResource PanelAccentBrush}" Padding="8" FontSize="12"
+                     Height="60" TextWrapping="Wrap" AcceptsReturn="True"/>
+        </StackPanel>
+
+        <!-- Validation (stands in for the WPF MessageBox) -->
+        <TextBlock x:Name="TxtError" Grid.Row="3" Foreground="#FFFF6B6B" FontSize="11"
+                   Margin="0,0,0,10" TextWrapping="Wrap" IsVisible="False"/>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="BtnCancel" Width="80" Margin="0,0,10,0"
+                    Background="{DynamicResource PanelAccentBrush}" Foreground="White" BorderThickness="0"
+                    Padding="8" Cursor="Hand">
+                <TextBlock Text="{Binding LocCancel}"/>
+            </Button>
+            <Button x:Name="BtnAdd" Width="80"
+                    Background="{DynamicResource PinkBrush}" Foreground="White" BorderThickness="0"
+                    Padding="8" Cursor="Hand">
+                <TextBlock Text="{Binding LocAdd}"/>
+            </Button>
+        </StackPanel>
+    </Grid>
+</Window>
