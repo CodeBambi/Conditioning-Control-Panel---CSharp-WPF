@@ -1,5 +1,4 @@
 using System;
-using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Localization
 {
@@ -45,7 +44,9 @@ namespace ConditioningControlPanel.Localization
         /// </summary>
         private sealed class Resolved
         {
-            public ModManifest? Source;
+            // Identity token only - compared with ReferenceEquals, never dereferenced. Typed as
+            // object so Core needs no mod model; see CoreMods for why.
+            public object? Source;
             public string PetName = VanillaPetName;
             public string Collective = VanillaCollective;
         }
@@ -88,32 +89,18 @@ namespace ConditioningControlPanel.Localization
 
         private static Resolved Current()
         {
-            ModManifest? manifest = null;
-            try
-            {
-                manifest = App.Mods?.ActiveMod?.Manifest;
-            }
-            catch
-            {
-                // Startup ordering: localization initializes BEFORE the mod system, so the very
-                // first reads land here with no ModService at all. Vanilla defaults are the right
-                // answer then, and a throwing mod layer must never take a UI string with it.
-            }
+            // Startup ordering: localization initializes BEFORE the mod system, so the very
+            // first reads land here with no provider seeded at all. Vanilla defaults are the
+            // right answer then, and a throwing mod layer must never take a UI string with it -
+            // CoreMods swallows provider faults for exactly that reason.
+            object? manifest = CoreMods.ActiveModToken;
 
             var cached = _cache;
             if (ReferenceEquals(cached.Source, manifest)) return cached;
 
             var fresh = new Resolved { Source = manifest };
-            try
-            {
-                fresh.PetName = App.Mods?.GetPetNameOverride() ?? VanillaPetName;
-                fresh.Collective = App.Mods?.GetCollectiveOverride() ?? VanillaCollective;
-            }
-            catch
-            {
-                fresh.PetName = VanillaPetName;
-                fresh.Collective = VanillaCollective;
-            }
+            fresh.PetName = CoreMods.PetNameOverride ?? VanillaPetName;
+            fresh.Collective = CoreMods.CollectiveOverride ?? VanillaCollective;
 
             _cache = fresh;
             return fresh;
