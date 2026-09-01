@@ -307,14 +307,10 @@ public class AwarenessConsentTests
     /// <summary>Files that ASSIGN <paramref name="property"/> (i.e. "Property =", not "Property ==").</summary>
     private static IEnumerable<string> SourceWriters(string property)
     {
-        foreach (var file in Directory.EnumerateFiles(SourceRoot(), "*.cs", SearchOption.AllDirectories))
+        // Every product root, not just the WPF head: a consent gate that moves to CCP.Core has to
+        // stay under this guard. Build output and nested worktrees are excluded by the helper.
+        foreach (var file in SourceRoots.EnumerateProductSources("*.cs"))
         {
-            if (file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar) ||
-                file.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar) ||
-                // Nested git worktrees (e.g. .claude/worktrees/*) are other branches' sources —
-                // scanning them reports their files as second doors that do not exist on this tree.
-                file.Contains(Path.DirectorySeparatorChar + ".claude" + Path.DirectorySeparatorChar)) continue;
-
             foreach (var line in File.ReadLines(file))
             {
                 var i = line.IndexOf(property + " =", StringComparison.Ordinal);

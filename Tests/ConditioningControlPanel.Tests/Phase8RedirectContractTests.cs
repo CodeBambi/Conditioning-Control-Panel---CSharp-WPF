@@ -45,30 +45,12 @@ public class Phase8RedirectContractTests
 
     private static string TabNavigation() => ReadSource("MainWindow", "MainWindow.TabNavigation.cs");
 
-    /// <summary>Every .cs/.xaml under the product project, obj/bin and nested worktrees excluded.
-    ///
-    /// <para>The exclusion is matched on each file's path RELATIVE to <see cref="ProductDir"/>,
-    /// because it is about directories INSIDE the tree under test. Matching the absolute path — as
-    /// this did — silently emptied the whole walk inside an agent worktree, where the checkout
-    /// itself lives at <c>&lt;repo&gt;/.claude/worktrees/&lt;name&gt;/</c> and therefore gives every
-    /// file in the product a <c>.claude</c> segment. The demolition tests below then asserted
-    /// "nothing references this type" against zero files.</para></summary>
-    private static IEnumerable<string> ProductSources()
-    {
-        var skip = new[] { "obj", "bin", ".claude", "node_modules" };
-
-        var files = Directory.EnumerateFiles(ProductDir, "*.*", SearchOption.AllDirectories)
-                             .Where(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
-                                      || f.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase))
-                             .Where(f => !Path.GetRelativePath(ProductDir, f)
-                                              .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                                              .Any(segment => skip.Contains(segment, StringComparer.OrdinalIgnoreCase)))
-                             .ToList();
-
-        // A walk that finds nothing would make every assertion below vacuously true.
-        Assert.True(files.Count > 0, "the product source walk found no .cs/.xaml files under " + ProductDir);
-        return files;
-    }
+    /// <summary>Every .cs/.xaml across every product root, obj/bin and nested worktrees excluded —
+    /// see <see cref="SourceRoots"/>. A demolished type still referenced from a file that has moved
+    /// to CCP.Core is exactly the reference this must not stop seeing.</summary>
+    private static IEnumerable<string> ProductSources() =>
+        SourceRoots.EnumerateProductSources("*.cs")
+                   .Concat(SourceRoots.EnumerateProductSources("*.xaml"));
 
     /// <summary>Source with // and /* */ comments and XML comments stripped, so a tombstone note
     /// naming a demolished control can never masquerade as a live reference.</summary>
