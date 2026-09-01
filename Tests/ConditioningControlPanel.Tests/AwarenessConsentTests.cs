@@ -123,7 +123,7 @@ public class AwarenessConsentTests
     {
         // The shutoff shares the allow list above with the consent gate, so its one privilege has
         // to be pinned: it may write the enable false, and it may never write it true.
-        var source = File.ReadAllText(Path.Combine(SourceRoot(), "MainWindow", "MainWindow.Patreon.cs"));
+        var source = SourceRoots.ReadProductFile("MainWindow", "MainWindow.Patreon.cs");
 
         // (char)10 is the line feed, spelled without an escape so the split survives however this
         // file's own line endings land.
@@ -148,7 +148,7 @@ public class AwarenessConsentTests
         // observed, behind a padlock that covered the only toggle on that page. A source scan rather
         // than a call, because App.Patreon cannot be stood up headlessly and the regression this
         // guards is a term going MISSING from an expression.
-        var source = File.ReadAllText(Path.Combine(SourceRoot(), "Services", "Awareness", "AwarenessObserver.cs"));
+        var source = SourceRoots.ReadProductFile("Services", "Awareness", "AwarenessObserver.cs");
 
         Assert.Contains("HasEntitlement && s.UseAwarenessV2", source, StringComparison.Ordinal);
         Assert.Contains("App.Patreon?.HasPremiumAccess == true", source, StringComparison.Ordinal);
@@ -170,8 +170,8 @@ public class AwarenessConsentTests
     {
         // Start()-time checks are not enough: entitlement lapses mid-run (midnight rotation, an
         // expiring subscription, a logout) and both of these timers outlive the check that armed them.
-        var observer = File.ReadAllText(Path.Combine(SourceRoot(), "Services", "Awareness", "AwarenessObserver.cs"));
-        var legacy = File.ReadAllText(Path.Combine(SourceRoot(), "Services", "UI", "WindowAwarenessService.cs"));
+        var observer = SourceRoots.ReadProductFile("Services", "Awareness", "AwarenessObserver.cs");
+        var legacy = SourceRoots.ReadProductFile("Services", "UI", "WindowAwarenessService.cs");
 
         var observerTick = observer[observer.IndexOf("private void OnPollTick", StringComparison.Ordinal)..];
         Assert.Contains("if (!IsEnabled) return;", observerTick[..1400], StringComparison.Ordinal);
@@ -191,7 +191,7 @@ public class AwarenessConsentTests
         // Flipping the setting without stopping the service would leave the poll running until the
         // next relaunch — the half-fix that would make #1047 look repaired while the eyes stayed open.
         // Stop() on the legacy service is what chains through to the observer's Stop() and the ledger.
-        var source = File.ReadAllText(Path.Combine(SourceRoot(), "MainWindow", "MainWindow.Patreon.cs"));
+        var source = SourceRoots.ReadProductFile("MainWindow", "MainWindow.Patreon.cs");
 
         var write = source.IndexOf("settings.AwarenessModeEnabled = false;", StringComparison.Ordinal);
         Assert.True(write > 0, "the lapse shutoff no longer switches Awareness Mode off");
@@ -204,7 +204,7 @@ public class AwarenessConsentTests
     [Fact]
     public void TheGatedPathActuallyCallsTheGate()
     {
-        var source = File.ReadAllText(Path.Combine(SourceRoot(), "MainWindow", "MainWindow.CompanionRoom.cs"));
+        var source = SourceRoots.ReadProductFile("MainWindow", "MainWindow.CompanionRoom.cs");
 
         Assert.Contains("AwarenessConsentDialog.EnsureConsent", source, StringComparison.Ordinal);
         // …and a decline has to be able to stop it, which a void method could not express.
@@ -214,7 +214,7 @@ public class AwarenessConsentTests
     [Fact]
     public void TheOldSilentAutoConsentIsGone()
     {
-        var source = File.ReadAllText(Path.Combine(SourceRoot(), "MainWindow", "MainWindow.Patreon.cs"));
+        var source = SourceRoots.ReadProductFile("MainWindow", "MainWindow.Patreon.cs");
 
         // The comment that documented the auto-consent must not outlive the behaviour: a stale comment
         // describing data handling the code no longer does was the single most repeated finding of the
@@ -329,20 +329,5 @@ public class AwarenessConsentTests
                 break;
             }
         }
-    }
-
-    /// <summary>The app project directory, found by walking up from the test binary.</summary>
-    private static string SourceRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null)
-        {
-            var candidate = Path.Combine(dir.FullName, "ConditioningControlPanel", "ConditioningControlPanel.csproj");
-            if (File.Exists(candidate)) return Path.GetDirectoryName(candidate)!;
-            dir = dir.Parent;
-        }
-
-        throw new DirectoryNotFoundException(
-            "ConditioningControlPanel project not found above " + AppContext.BaseDirectory);
     }
 }

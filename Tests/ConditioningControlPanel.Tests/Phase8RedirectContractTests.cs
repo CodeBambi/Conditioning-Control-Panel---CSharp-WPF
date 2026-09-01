@@ -29,19 +29,9 @@ namespace ConditioningControlPanel.Tests;
 /// </summary>
 public class Phase8RedirectContractTests
 {
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
-            dir = dir.Parent;
-        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
-        return dir!.FullName;
-    }
-
-    private static string ProductDir => Path.Combine(RepoRoot(), "ConditioningControlPanel");
-
-    private static string ReadSource(params string[] parts) =>
-        File.ReadAllText(Path.Combine(new[] { ProductDir }.Concat(parts).ToArray()));
+    /// <summary>Product source by path relative to a product root, so a file that has moved to
+    /// CCP.Core still resolves — see <see cref="SourceRoots.FindProductFile"/>.</summary>
+    private static string ReadSource(params string[] parts) => SourceRoots.ReadProductFile(parts);
 
     private static string TabNavigation() => ReadSource("MainWindow", "MainWindow.TabNavigation.cs");
 

@@ -120,6 +120,46 @@ internal static class SourceRoots
         return files;
     }
 
+    /// <summary>The absolute path to ONE product file, given its path relative to a product root
+    /// (e.g. <c>FindProductFile("Services", "ChromeFxNav.cs")</c>), probed across every root in
+    /// <see cref="ProductDirectories"/>.
+    ///
+    /// <para><b>Why this exists.</b> <see cref="EnumerateProductSources"/> fixed the guards that
+    /// SCAN a directory. The ones that read ONE KNOWN FILE were left alone because they fail loudly
+    /// rather than passing vacuously — true, but the cost landed on the wrong people: ~20 test
+    /// classes pinned a file to <c>ConditioningControlPanel/</c> by name, so every unit of the Core
+    /// migration tripped a fresh red test that had nothing to do with it, one at a time. One unit
+    /// had to abandon a file it could otherwise have moved. Probing every root means a file's home
+    /// stops being a test's business.</para></summary>
+    internal static string FindProductFile(params string[] relativeParts)
+    {
+        var relative = Path.Combine(relativeParts);
+        var hits = ProductDirectories.Select(root => Path.Combine(root, relative))
+                                     .Where(File.Exists)
+                                     .ToList();
+
+        // Naming the roots is the point: "in none of CCP.Core, ConditioningControlPanel" says the
+        // file was renamed or deleted. A bare absolute path says only that some path was wrong.
+        Assert.True(hits.Count > 0,
+            $"'{relative}' is in none of the product roots searched: " +
+            string.Join(", ", ProductDirectories.Select(Path.GetFileName)));
+
+        // Two roots holding one relative path means either a half-finished move (delete the stale
+        // copy) or one real file per head (then the test has to say which head it means — e.g.
+        // GlobalUsings.cs and Properties/AssemblyInfo.cs are already legitimately in both roots).
+        // Taking the first silently would assert against the wrong copy and pass, so make the
+        // author choose rather than guess for them.
+        Assert.True(hits.Count == 1,
+            $"'{relative}' exists in more than one product root, so nothing can say which copy this "
+            + "test means — finish the move, or pin the test to one head: " + string.Join(", ", hits));
+
+        return hits[0];
+    }
+
+    /// <summary>The text of ONE product file, located by <see cref="FindProductFile"/>.</summary>
+    internal static string ReadProductFile(params string[] relativeParts) =>
+        File.ReadAllText(FindProductFile(relativeParts));
+
     /// <summary>A product file's path relative to the repo root, forward-slashed, e.g.
     /// <c>ConditioningControlPanel/Models/AppSettings.cs</c>.
     ///

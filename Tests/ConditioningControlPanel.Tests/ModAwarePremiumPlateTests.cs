@@ -57,8 +57,7 @@ public class ModAwarePremiumPlateTests
         return dir!.FullName;
     }
 
-    private static string TabPath(string file)
-        => Path.Combine(RepoRoot(), "ConditioningControlPanel", "Views", "Tabs", file);
+    private static string TabPath(string file) => SourceRoots.FindProductFile("Views", "Tabs", file);
 
     private static string TabText(string file) => File.ReadAllText(TabPath(file));
 
@@ -201,7 +200,7 @@ public class ModAwarePremiumPlateTests
         Assert.Contains("\"features/bambi takeover.png\"", cs, StringComparison.Ordinal);
         Assert.Contains("\"features/takeover.png\"", cs, StringComparison.Ordinal);
 
-        var main = File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+        var main = SourceRoots.ReadProductFile("MainWindow", "MainWindow.xaml.cs");
         Assert.Contains("\"features/bambi takeover.png\"", main, StringComparison.Ordinal);
         Assert.Contains("BuiltInMods.BambiSleepId", main, StringComparison.Ordinal);
     }
