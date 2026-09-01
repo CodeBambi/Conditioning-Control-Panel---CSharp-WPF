@@ -1,0 +1,32 @@
+using System;
+using Avalonia;
+
+namespace ConditioningControlPanel.Avalonia
+{
+    internal static class Program
+    {
+        [STAThread]
+        public static int Main(string[] args)
+        {
+            // --smoke runs a headless self-check and exits, so CI can prove the head boots
+            // without a display server. Without it the app starts normally.
+            if (Array.IndexOf(args, "--smoke") >= 0)
+                return HeadlessSmoke.Run();
+
+            // --render <path> draws the real window offscreen and saves a PNG. Visual proof that
+            // survives on a CI runner with no display server.
+            var r = Array.IndexOf(args, "--render");
+            if (r >= 0 && r + 1 < args.Length)
+                return RenderProof.Run(args[r + 1]);
+
+            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+            return 0;
+        }
+
+        public static AppBuilder BuildAvaloniaApp() =>
+            AppBuilder.Configure<App>()
+                .UsePlatformDetect()      // X11 or Wayland on Linux, Win32 on Windows - one binary
+                .WithInterFont()
+                .LogToTrace();
+    }
+}

@@ -1,0 +1,81 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.MainWindow"
+        Title="Conditioning Control Panel — Core on Linux"
+        Width="880" Height="620"
+        Background="#1A1A2E">
+
+  <!-- Palette is the app's own, from ConditioningControlPanel/CLAUDE.md:
+       "Dark theme with pink/purple accent colors (#FF69B4, #252542, #1A1A2E)".
+       Same values as WPF so a side-by-side fidelity comparison is meaningful. -->
+  <Window.Styles>
+    <Style Selector="TextBlock.h1">
+      <Setter Property="Foreground" Value="#FF69B4"/>
+      <Setter Property="FontSize" Value="21"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="TextBlock.h2">
+      <Setter Property="Foreground" Value="#FF69B4"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Margin" Value="0,0,0,6"/>
+    </Style>
+    <Style Selector="TextBlock.body">
+      <Setter Property="Foreground" Value="#D8D8E8"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+    <Style Selector="TextBlock.dim">
+      <Setter Property="Foreground" Value="#8888A0"/>
+      <Setter Property="FontSize" Value="11"/>
+    </Style>
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="#252542"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="14"/>
+      <Setter Property="Margin" Value="0,0,0,10"/>
+    </Style>
+  </Window.Styles>
+
+  <ScrollViewer Padding="20">
+    <StackPanel>
+
+      <TextBlock Classes="h1" Text="Conditioning Control Panel"/>
+      <TextBlock Classes="dim" Margin="0,2,0,16"
+                 Text="CCP.Avalonia head — the same CCP.Core engine the Windows app runs, rendering on Linux."/>
+
+      <Border Classes="card">
+        <StackPanel>
+          <TextBlock Classes="h2" Text="RUNTIME"/>
+          <TextBlock Classes="body" x:Name="TxtRuntime"/>
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card">
+        <StackPanel>
+          <TextBlock Classes="h2" Text="CorePaths — resolved by the engine, not the head"/>
+          <TextBlock Classes="body" x:Name="TxtPaths"/>
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card">
+        <StackPanel>
+          <TextBlock Classes="h2" Text="ModerationGuard — live"/>
+          <TextBlock Classes="dim" Margin="0,0,0,8"
+                     Text="Typed text runs through the real guard from CCP.Core on every keystroke."/>
+          <TextBox x:Name="TxtInput" Watermark="type something to moderate…"
+                   Background="#1A1A2E" Foreground="#EAEAF5" BorderBrush="#3A3A5C"
+                   CaretBrush="#FF69B4" Margin="0,0,0,8"/>
+          <TextBlock Classes="body" x:Name="TxtVerdict"/>
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card">
+        <StackPanel>
+          <TextBlock Classes="h2" Text="Engine determinism"/>
+          <TextBlock Classes="body" x:Name="TxtEngine"/>
+        </StackPanel>
+      </Border>
+
+    </StackPanel>
+  </ScrollViewer>
+</Window>

@@ -42,6 +42,17 @@ jobs:
       # Non-zero exit fails the job.
       - run: dotnet run --project CCP.LinuxSmoke/CCP.LinuxSmoke.csproj -c Release
 
+      # The Linux head. --smoke proves it links against Core and can produce every value the
+      # window renders; --render draws the REAL MainWindow offscreen through headless Skia and
+      # writes a PNG, which is the only form of visual proof that survives on a runner with no
+      # display server. Both exit non-zero on failure.
+      - run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --smoke
+      - run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --render $RUNNER_TEMP/ccp-avalonia-linux.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-head-render
+          path: ${{ runner.temp }}/ccp-avalonia-linux.png
+
   # The "behaves identically on Windows" gate.
   windows:
     runs-on: windows-latest

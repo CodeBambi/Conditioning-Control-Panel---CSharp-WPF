@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The cross-platform head. This replaces WPF, it does not sit beside it: the owner's decision is
+    one UI codebase for Windows and Linux, so a feature is written once and both platforms get it.
+
+    net8.0 with no -windows suffix and no RuntimeIdentifier, same as CCP.Core, so the target
+    framework itself forbids a WPF reference from creeping back in.
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>            <!-- 'WinExe' just suppresses the console window; it is not Windows-specific -->
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>ConditioningControlPanel.Avalonia</RootNamespace>
+    <AssemblyName>CCP.Avalonia</AssemblyName>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <WarningsAsErrors>$(WarningsAsErrors);CA1416</WarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.3" />
+    <!-- Renders the real window offscreen so CI can prove the Linux head DRAWS, not just boots.
+         A desktop screenshot cannot run on a headless runner; this can. -->
+    <PackageReference Include="Avalonia.Headless" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Skia" Version="11.2.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CCP.Core\CCP.Core.csproj" />
+  </ItemGroup>
+
+</Project>
