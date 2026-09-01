@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using ConditioningControlPanel.Services.Transfer;
 using Newtonsoft.Json;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.GoonGame
 {
@@ -189,11 +190,11 @@ namespace ConditioningControlPanel.Services.GoonGame
                 catch (Exception ex)
                 {
                     // A dead index costs the user a re-transfer, nothing more.
-                    App.Logger?.Warning("TransferInboxStore: index load failed ({E}) - starting fresh", ex.Message);
+                    Log.Warning("TransferInboxStore: index load failed ({E}) - starting fresh", ex.Message);
                     _index = new InboxIndex();
                 }
                 SweepLocked();
-                App.Logger?.Information("TransferInboxStore: {N} received artifacts, {MB:F1} MB",
+                Log.Information("TransferInboxStore: {N} received artifacts, {MB:F1} MB",
                     _index.Entries.Count, _usedBytes / 1048576.0);
             }
         }
@@ -222,7 +223,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                     foreach (var f in Directory.EnumerateFiles(TmpDir, PartPrefix + "*.part"))
                         TryDelete(f, "stale partial");
             }
-            catch (Exception ex) { App.Logger?.Debug("TransferInboxStore.Sweep(tmp): {E}", ex.Message); }
+            catch (Exception ex) { Log.Debug("TransferInboxStore.Sweep(tmp): {E}", ex.Message); }
 
             SaveLocked();
         }
@@ -239,11 +240,11 @@ namespace ConditioningControlPanel.Services.GoonGame
                 Directory.CreateDirectory(RecvDir);
                 foreach (var f in Directory.EnumerateFiles(RecvDir)) { TryDelete(f, why); n++; }
             }
-            catch (Exception ex) { App.Logger?.Debug("TransferInboxStore.Purge(recv): {E}", ex.Message); }
+            catch (Exception ex) { Log.Debug("TransferInboxStore.Purge(recv): {E}", ex.Message); }
             _index.Entries.Clear();
             RecountLocked();
             if (n > 0)
-                App.Logger?.Information("TransferInboxStore: purged {N} received artifact(s) ({Why})", n, why);
+                Log.Information("TransferInboxStore: purged {N} received artifact(s) ({Why})", n, why);
         }
 
         /// <summary>
@@ -262,7 +263,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                     SaveLocked();
                 }
             }
-            catch (Exception ex) { App.Logger?.Warning("TransferInboxStore.PurgeCommittedSafe: {E}", ex.Message); }
+            catch (Exception ex) { Log.Warning("TransferInboxStore.PurgeCommittedSafe: {E}", ex.Message); }
         }
 
         private static void TryDelete(string path, string why)
@@ -271,9 +272,9 @@ namespace ConditioningControlPanel.Services.GoonGame
             try
             {
                 File.Delete(path);
-                App.Logger?.Information("TransferInboxStore: deleted {File} ({Why})", Path.GetFileName(path), why);
+                Log.Information("TransferInboxStore: deleted {File} ({Why})", Path.GetFileName(path), why);
             }
-            catch (Exception ex) { App.Logger?.Debug("TransferInboxStore.TryDelete({P}): {E}", path, ex.Message); }
+            catch (Exception ex) { Log.Debug("TransferInboxStore.TryDelete({P}): {E}", path, ex.Message); }
         }
 
         private void RecountLocked()
@@ -292,7 +293,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 File.WriteAllText(tmp, JsonConvert.SerializeObject(_index, Formatting.None));
                 File.Move(tmp, IndexPath, overwrite: true);
             }
-            catch (Exception ex) { App.Logger?.Warning("TransferInboxStore: index save failed: {E}", ex.Message); }
+            catch (Exception ex) { Log.Warning("TransferInboxStore: index save failed: {E}", ex.Message); }
         }
 
         // ---- reads ----------------------------------------------------------------
@@ -422,7 +423,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning("TransferInboxStore.Begin({Sha}): {E}", sha, ex.Message);
+                    Log.Warning("TransferInboxStore.Begin({Sha}): {E}", sha, ex.Message);
                     return "io-failed";
                 }
             }
@@ -467,7 +468,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning("TransferInboxStore.AppendChunk({Id}): {E}", id, ex.Message);
+                    Log.Warning("TransferInboxStore.AppendChunk({Id}): {E}", id, ex.Message);
                     return "io-failed";
                 }
             }
@@ -547,20 +548,20 @@ namespace ConditioningControlPanel.Services.GoonGame
                         RecountLocked();
                         SaveLocked();
                     }
-                    App.Logger?.Information("TransferInboxStore: received {Sha}.{Ext} ({KB} KB)",
+                    Log.Information("TransferInboxStore: received {Sha}.{Ext} ({KB} KB)",
                         s.Sha[..12], ext, len / 1024);
                     return (true, s.Sha, ext, RecvUrl(s.Sha, ext), null);
                 }
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning("TransferInboxStore.Commit({Id}): {E}", id, ex.Message);
+                Log.Warning("TransferInboxStore.Commit({Id}): {E}", id, ex.Message);
                 error = "io-failed";
             }
 
             lock (_lock) _sessions.Remove(id!);
             TryDelete(s.PartPath, "commit failed: " + error);
-            App.Logger?.Information("TransferInboxStore: commit rejected ({Error}) for {Sha}", error, s.Sha[..12]);
+            Log.Information("TransferInboxStore: commit rejected ({Error}) for {Sha}", error, s.Sha[..12]);
             return (false, s.Sha, "", null, error ?? "io-failed");
         }
 
@@ -593,7 +594,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 var p = Path.Combine(RecvDir, sha + "." + (e?.Ext ?? ""));
                 if (File.Exists(p)) File.Delete(p);
             }
-            catch (Exception ex) { App.Logger?.Debug("TransferInboxStore.Drop({Sha}): {E}", sha, ex.Message); }
+            catch (Exception ex) { Log.Debug("TransferInboxStore.Drop({Sha}): {E}", sha, ex.Message); }
             return true;
         }
 

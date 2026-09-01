@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ConditioningControlPanel.Models.CommandData;
+using Serilog;
 
 namespace ConditioningControlPanel.Models
 {
@@ -42,13 +43,13 @@ namespace ConditioningControlPanel.Models
                 }
                 catch (Exception inner)
                 {
-                    App.Logger?.Warning(inner, "AiCommandData: brace-recovery parse failed for: {Json}", json);
+                    Log.Warning(inner, "AiCommandData: brace-recovery parse failed for: {Json}", json);
                     return null;
                 }
             }
             catch (Exception e)
             {
-                App.Logger?.Warning(e, "AiCommandData: parse failed for: {Json}", json);
+                Log.Warning(e, "AiCommandData: parse failed for: {Json}", json);
                 return null;
             }
         }

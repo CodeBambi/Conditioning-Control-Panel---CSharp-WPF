@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Serilog;
 
 // ============================================================================
 // GOON GAME — Phase B. Score ticks, attention/interaction multiplier, charge
@@ -223,7 +224,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             if (Charges >= GoonConsts.ChargeCap) return;
             Charges++;
             ChargesEarned++;
-            App.Logger?.Debug("[GG] charge +1 ({Reason}) -> {Charges}", reason, Charges);
+            Log.Debug("[GG] charge +1 ({Reason}) -> {Charges}", reason, Charges);
             ChargesChanged?.Invoke(this, Charges);
         }
 

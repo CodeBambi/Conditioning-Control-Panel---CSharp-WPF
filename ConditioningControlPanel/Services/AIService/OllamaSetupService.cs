@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.AIService
 {
@@ -327,7 +328,7 @@ namespace ConditioningControlPanel.Services.AIService
 
             if (proc.ExitCode != 0)
             {
-                App.Logger?.Warning("OllamaSetup.exe exited with code {Code}", proc.ExitCode);
+                Log.Warning("OllamaSetup.exe exited with code {Code}", proc.ExitCode);
                 return false;
             }
 
@@ -411,7 +412,7 @@ namespace ConditioningControlPanel.Services.AIService
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Failed to spawn `ollama serve`");
+                Log.Warning(ex, "Failed to spawn `ollama serve`");
                 // Start() (or a Begin*ReadLine) can throw after the Process object exists.
                 // If it never became the tracked server, tear it down here so we neither
                 // leak the handle nor orphan a process that did in fact start.
@@ -434,7 +435,7 @@ namespace ConditioningControlPanel.Services.AIService
                 {
                     if (started.HasExited)
                     {
-                        App.Logger?.Warning(
+                        Log.Warning(
                             "`ollama serve` exited with code {Code} before binding {Host}. Server output:{Nl}{Tail}",
                             started.ExitCode, host, Environment.NewLine, GetServerLogTail());
                         return false;
@@ -445,7 +446,7 @@ namespace ConditioningControlPanel.Services.AIService
                 await Task.Delay(1000, ct);
             }
 
-            App.Logger?.Warning(
+            Log.Warning(
                 "`ollama serve` did not answer {Host} within 30s. Server output:{Nl}{Tail}",
                 host, Environment.NewLine, GetServerLogTail());
             return false;
@@ -473,7 +474,7 @@ namespace ConditioningControlPanel.Services.AIService
                 }
 
                 if (Interlocked.Increment(ref _serverLogLinesLogged) <= ServerLogLinesToLog)
-                    App.Logger?.Debug("[ollama serve] {Line}", line);
+                    Log.Debug("[ollama serve] {Line}", line);
             }
             catch
             {
@@ -519,7 +520,7 @@ namespace ConditioningControlPanel.Services.AIService
             {
                 // Already gone, never started, or the handle is disposed — all expected.
                 // Logged rather than silent so a genuinely stuck process leaves a trace.
-                App.Logger?.Debug("Could not stop {Context}: {Error}", context, ex.Message);
+                Log.Debug("Could not stop {Context}: {Error}", context, ex.Message);
             }
             finally
             {
@@ -586,18 +587,18 @@ namespace ConditioningControlPanel.Services.AIService
 
             if (!IsLoopbackHost(host))
             {
-                App.Logger?.Information(
+                Log.Information(
                     "Ollama host {Host} is not reachable and is not local — not spawning a server for it", host);
                 return false;
             }
 
             if (FindOllamaCli() == null)
             {
-                App.Logger?.Information("Ollama is not reachable at {Host} and no CLI is installed to start", host);
+                Log.Information("Ollama is not reachable at {Host} and no CLI is installed to start", host);
                 return false;
             }
 
-            App.Logger?.Information("Ollama not reachable at {Host} — starting the headless server", host);
+            Log.Information("Ollama not reachable at {Host} — starting the headless server", host);
             return await TryStartHeadlessServerAsync(host, ct);
         }
 
@@ -731,7 +732,7 @@ namespace ConditioningControlPanel.Services.AIService
             catch (Exception ex)
             {
                 sw.Stop();
-                App.Logger?.Warning(ex, "Smoke test failed (model={Model})", model);
+                Log.Warning(ex, "Smoke test failed (model={Model})", model);
                 return (false, sw.Elapsed, "");
             }
         }
