@@ -30,7 +30,11 @@ namespace ConditioningControlPanel.Avalonia
         private static void EnsureSetUp()
         {
             if (_setUp) return;
-            AppBuilder.Configure<App>()
+            // Start from the app's own builder so the render uses the same Inter font the user
+            // sees; a bare Configure<App>() drew every PNG in the platform fallback face, which
+            // hides exactly the text-metric overruns these renders exist to show. UseHeadless
+            // replaces the windowing subsystem UsePlatformDetect chose, so no display is needed.
+            Program.BuildAvaloniaApp()
                 .UseSkia()
                 .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
                 .SetupWithoutStarting();
