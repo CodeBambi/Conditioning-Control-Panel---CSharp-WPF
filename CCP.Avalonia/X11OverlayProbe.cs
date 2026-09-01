@@ -57,6 +57,15 @@ namespace ConditioningControlPanel.Avalonia
         [DllImport(LibX11)] private static extern IntPtr XDefaultRootWindow(IntPtr display);
         [DllImport(LibX11)] private static extern int XQueryTree(IntPtr display, IntPtr window,
             out IntPtr root, out IntPtr parent, out IntPtr children, out uint count);
+        [StructLayout(LayoutKind.Sequential)]
+        private struct XWindowChanges
+        {
+            public int X, Y, Width, Height, BorderWidth;
+            public IntPtr Sibling;
+            public int StackMode;
+        }
+
+        [DllImport(LibX11)] private static extern int XConfigureWindow(IntPtr display, IntPtr window, uint mask, ref XWindowChanges changes);
         [DllImport(LibXext)] private static extern IntPtr XShapeGetRectangles(IntPtr display, IntPtr window,
             int kind, out int count, out int ordering);
 
@@ -78,6 +87,17 @@ namespace ConditioningControlPanel.Avalonia
                 ShowInTaskbar = false
             };
 
+            // A second window, so restacking has something to be ordered against.
+            var other = new Window
+            {
+                Title = "probe-other",
+                Width = 300,
+                Height = 300,
+                Background = Brushes.DarkGreen,
+                Topmost = true,
+                ShowInTaskbar = false
+            };
+
             var exit = 1;
             overlay.Opened += (_, _) =>
             {
@@ -85,18 +105,19 @@ namespace ConditioningControlPanel.Avalonia
                 // unmapped window has no meaningful input shape to read back.
                 DispatcherTimer.RunOnce(() =>
                 {
-                    try { exit = Score(overlay); }
+                    try { exit = Score(overlay, other); }
                     catch (Exception e) { Console.Error.WriteLine("probe threw: " + e); exit = 1; }
                     finally { lifetime.Shutdown(); }
                 }, TimeSpan.FromMilliseconds(1200));
             };
 
+            other.Show();
             overlay.Show();
             lifetime.Start(Array.Empty<string>());
             return exit;
         }
 
-        private static int Score(Window overlay)
+        private static int Score(Window overlay, Window other)
         {
             if (!X11Overlay.IsAvailable)
             {
@@ -160,9 +181,63 @@ namespace ConditioningControlPanel.Avalonia
                 var stillDrawn = bounding.Length == 1 && bounding[0].Width == w && bounding[0].Height == h;
                 Console.WriteLine($"[4] bounding shape unchanged  -> {Describe(bounding)}   {(stillDrawn ? "<-- still drawn" : "<-- FAILED, the visible shape moved too")}");
 
-                var pass = controlOk && clickThrough && restored && stillDrawn;
+                // [5] RestackAbove. Deliberately structured as TWO FLIPS with no seeding step:
+                // whatever order the windows happen to start in, the call has to reverse it and
+                // then reverse it back. A no-op cannot pass that, which a "put A above B and
+                // check A is above B" test would if they already started that way.
+                //
+                // The settle sleeps are load-bearing. The message goes to KWin, a separate
+                // process; XSync waits for the SERVER only, so reading the order immediately
+                // after the call reads the OLD order and the check fails on working code.
+                var otherXid = Xid(other);
+                var restackOk = false;
+                if (otherXid == IntPtr.Zero)
+                {
+                    Console.WriteLine("[5] RestackAbove              -> skipped, second window has no XID");
+                }
+                else
+                {
+                    var (a0, b0) = (IndexOf(display, root, xid), IndexOf(display, root, otherXid));
+                    Console.WriteLine($"[5a] initial order            -> ours={a0} other={b0}   {(a0 > b0 ? "ours above" : "other above")}");
+
+                    // Flip 1: whichever is underneath goes on top.
+                    var (lower, upper) = a0 > b0 ? (other, overlay) : (overlay, other);
+                    X11Overlay.RestackAbove(lower, upper);
+                    System.Threading.Thread.Sleep(800);
+                    var (a1, b1) = (IndexOf(display, root, xid), IndexOf(display, root, otherXid));
+                    var flipped = (a1 > b1) != (a0 > b0);
+                    Console.WriteLine($"[5b] restacked the lower one  -> ours={a1} other={b1}   {(flipped ? "<-- order REVERSED" : "<-- FAILED, nothing moved")}");
+
+                    // Flip 2: and back, because the overlays reorder repeatedly at runtime.
+                    X11Overlay.RestackAbove(upper, lower);
+                    System.Threading.Thread.Sleep(800);
+                    var (a2, b2) = (IndexOf(display, root, xid), IndexOf(display, root, otherXid));
+                    var flippedBack = (a2 > b2) == (a0 > b0);
+                    Console.WriteLine($"[5c] restacked the other one  -> ours={a2} other={b2}   {(flippedBack ? "<-- order RESTORED" : "<-- FAILED, one-way")}");
+
+                    restackOk = a0 >= 0 && b0 >= 0 && flipped && flippedBack;
+                }
+
+                // [6] Informational, not a gate: does the DIRECT call work on these windows too?
+                // The shim uses the EWMH message because that is the WM-sanctioned route, but the
+                // comment justifying that choice should rest on a measurement rather than on
+                // repeating what the research assumed.
+                if (otherXid != IntPtr.Zero)
+                {
+                    var (c0, d0) = (IndexOf(display, root, xid), IndexOf(display, root, otherXid));
+                    var (lo, hi) = c0 > d0 ? (otherXid, xid) : (xid, otherXid);
+                    var changes = new XWindowChanges { Sibling = hi, StackMode = 0 /* Above */ };
+                    XConfigureWindow(display, lo, (1u << 5) | (1u << 6) /* CWSibling|CWStackMode */, ref changes);
+                    XSync(display, false);
+                    System.Threading.Thread.Sleep(800);
+                    var (c1, d1) = (IndexOf(display, root, xid), IndexOf(display, root, otherXid));
+                    var direct = (c1 > d1) != (c0 > d0);
+                    Console.WriteLine($"[6] XConfigureWindow direct   -> {c0},{d0} then {c1},{d1}   {(direct ? "(also works here)" : "(no effect - EWMH is required)")}");
+                }
+
+                var pass = controlOk && clickThrough && restored && stillDrawn && restackOk;
                 Console.WriteLine(pass
-                    ? "\nPASS - the input region empties and refills on a real Avalonia window"
+                    ? "\nPASS - click-through toggles and the overlay order flips, on real Avalonia windows"
                     : "\nFAIL - the round trip did not complete");
                 return pass ? 0 : 1;
             }
@@ -190,9 +265,9 @@ namespace ConditioningControlPanel.Avalonia
 
         /// <summary>Position of a window in the root's stacking order, bottom first, or -1.
         ///
-        /// <para>KWin reparents managed windows into a frame, so the id we hold is NOT a child of
-        /// root - its frame is. Walking up to the child-of-root first is what makes this compare
-        /// the right two things.</para></summary>
+        /// <para>Walks up to the child-of-root first. KWin does not reparent an undecorated
+        /// XWayland window - measured, the frame and the window are the same id - but it does
+        /// reparent a decorated one, and this has to compare the right two things either way.</para></summary>
         private static int IndexOf(IntPtr display, IntPtr root, IntPtr window)
         {
             var frame = window;
