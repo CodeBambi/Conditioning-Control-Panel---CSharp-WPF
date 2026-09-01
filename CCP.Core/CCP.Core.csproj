@@ -7,8 +7,8 @@
     than a code-review question. Do not add -windows, UseWPF, UseWindowsForms, or a
     RuntimeIdentifier here.
 
-    CA1416 is deliberately NOT suppressed (the app suppresses it). Core is precisely where a
-    Windows-only API call should warn.
+    CA1416 is deliberately NOT suppressed (the app suppresses it) and is escalated to an ERROR
+    below. Core is precisely where a Windows-only API call must not compile.
   -->
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -27,6 +27,10 @@
     <AssemblyName>CCP.Core</AssemblyName>
     <!-- Match the app: assembly info lives in Properties/AssemblyInfo.cs. -->
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <!-- CA1416 (platform compatibility) is an ERROR here. The app <NoWarn>s it because it is
+         deliberately Windows-only; Core is the opposite case, and a warning would be lost
+         among the app's ~342 pre-existing ones. Registry/DPAPI/Console.Beep must not compile. -->
+    <WarningsAsErrors>$(WarningsAsErrors);CA1416</WarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>

@@ -64,12 +64,16 @@ On Linux, building the Windows head works and is the normal way to verify a chan
 ```bash
 dotnet build CCP.Core/CCP.Core.csproj -c Release            # portability proof
 dotnet build ConditioningControlPanel.sln -c Release \
-    -p:EnableWindowsTargeting=true -p:SelfContained=true    # both flags required
+    -p:EnableWindowsTargeting=true \
+    -p:ValidateExecutableReferencesMatchSelfContained=false  # both flags required
 ```
 
-`EnableWindowsTargeting` is needed for the `-windows` TFM off-Windows. `SelfContained` is needed
-because the test project references the self-contained app; without it the solution build fails with
-`NETSDK1151`. Do not "fix" that by editing a `.csproj` — it changes what ships.
+`EnableWindowsTargeting` is needed for the `-windows` TFM off-Windows. The second flag is needed
+because `ConditioningControlPanel.Tests` references the self-contained app without being
+self-contained itself, which the .NET 10 SDK rejects with `NETSDK1151`. Do not "fix" that by editing
+a `.csproj` — it changes what ships. Do not use `-p:SelfContained=true` either: `-p:` sets a *global*
+property, so it also hits `Tests/CCP.Core.Tests`, which has no `RuntimeIdentifier` by design, and
+that combination fails with `NETSDK1191`.
 
 The Windows test suite cannot execute on Linux (`win-x64` testhost). Compile-verify locally; CI runs
 it on `windows-latest`.
