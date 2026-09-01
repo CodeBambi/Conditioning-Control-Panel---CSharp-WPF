@@ -47,6 +47,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Platform-agnostic engine (net8.0). Types moved there keep their original namespaces,
+         so consuming files here need no changes. -->
+    <ProjectReference Include="..\CCP.Core\CCP.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- UI Framework -->
     <!-- Buttplug 5.x is one package: Core + Client + WebSocket connector (the separate
          Buttplug.Client.Connectors.WebsocketConnector package is 3.x-only and is gone).
