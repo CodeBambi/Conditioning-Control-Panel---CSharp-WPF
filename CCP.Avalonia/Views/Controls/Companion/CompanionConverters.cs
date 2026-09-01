@@ -1,21 +1,12 @@
-using System;
-using System.Globalization;
-using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Data;
 using Avalonia.Data.Converters;
+using Avalonia.Data;
+using Avalonia;
+using System.Globalization;
+using System;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 {
-    // =====================================================================================
-    //  PORTED (PARTIAL) from ConditioningControlPanel/Views/Controls/Companion/CompanionConverters.cs.
-    //
-    //  Only the converters the ported zone controls still need cross. The WPF file also carries
-    //  CompanionBoolToVisibilityConverter, CompanionEmptyToVisibilityConverter and friends -
-    //  those exist to produce a System.Windows.Visibility and have no Avalonia counterpart,
-    //  because Avalonia binds IsVisible to a bool directly.
-    // =====================================================================================
-
     /// <summary>
     /// 0..1 fraction to a star <see cref="GridLength"/>. This is the Trainer Card bar recipe:
     /// the filled part of a gauge is a star-width column, so it needs no ActualWidth maths,
@@ -55,11 +46,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             return f;
         }
     }
-    /// <summary>
-    /// The port of the WPF theme's <c>CmpFractionToStar</c> / <c>CmpFractionToRemainderStar</c>
-    /// pair: split a Grid into <c>fraction*</c> and <c>(1-fraction)*</c> columns so a thumb sits
-    /// at a 0..1 position along a track.
-    ///
+
     /// <para>It is an attached property rather than the original's two value converters because
     /// neither half of that design survives the move. Avalonia's <see cref="ColumnDefinition"/>
     /// derives from <c>AvaloniaObject</c>, not <c>StyledElement</c>, so it has no DataContext and
@@ -104,6 +91,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             if (f < 0.0) return 0.0;
             if (f > 1.0) return 1.0;
             return f;
+        }
+    }
+
+    /// <para>The WPF file's visibility converters do NOT cross: Avalonia binds IsVisible to a bool,
+    /// so <c>CmpBoolToVis</c> is a plain binding, <c>CmpBoolToVisInverse</c> is <c>{Binding !X}</c>,
+    /// <c>CmpHasContentToVis</c> is <c>ObjectConverters.IsNotNull</c>, and <c>CmpEnumToVis</c> is
+    /// this class again.</para>
+    /// </summary>
+    public sealed class CompanionEnumEqualsConverter : IValueConverter
+    {
+        public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+            => value != null && parameter != null &&
+               string.Equals(value.ToString(), parameter.ToString(), StringComparison.OrdinalIgnoreCase);
+
+        public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        {
+            if (value is bool b && b && parameter != null)
+            {
+                try
+                {
+                    var t = Nullable.GetUnderlyingType(targetType) ?? targetType;
+                    if (t.IsEnum) return Enum.Parse(t, parameter.ToString()!, ignoreCase: true);
+                }
+                catch (ArgumentException) { /* unparseable parameter — leave the source alone */ }
+                return parameter;
+            }
+            return BindingOperations.DoNothing;
         }
     }
 }
