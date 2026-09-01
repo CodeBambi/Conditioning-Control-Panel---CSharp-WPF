@@ -131,3 +131,17 @@ Bucket A is where to work first: a third of the UI, and the procedure is already
 Pure `git mv`, zero content edits, namespace unchanged. Verify with `git diff -M --stat` showing a
 rename at 100% similarity, then build both projects. If Core rejects the file, leave it in the head
 and record why — a partial move is a correct outcome, not a failure.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on the upstream repo `CodeBambi/Conditioning-Control-Panel---CSharp-WPF`, via `gh` with an explicit `--repo`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical labels, unchanged (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` at the repo root and ADRs in `docs/adr/`. See `docs/agents/domain.md`.
