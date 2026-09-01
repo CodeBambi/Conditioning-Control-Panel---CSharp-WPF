@@ -69,13 +69,13 @@ namespace ConditioningControlPanel.Services.Transfer
 
         // ---- paths ----------------------------------------------------------------
 
-        public string Root => Path.Combine(App.UserDataPath, "transfer-cache");
+        public string Root => Path.Combine(CorePaths.UserData, "transfer-cache");
         public string ArtDir => Path.Combine(Root, "art");
         public string PrvDir => Path.Combine(Root, "prv");
         /// <summary>Reserved for the Phase-5 received-media inbox (TransferInboxStore).</summary>
         public string RecvDir => Path.Combine(Root, "recv");
         /// <summary>SIBLING of the mapped root on purpose — partials must not be page-reachable.</summary>
-        public string TmpDir => Path.Combine(App.UserDataPath, "transfer-cache.tmp");
+        public string TmpDir => Path.Combine(CorePaths.UserData, "transfer-cache.tmp");
         public string IndexPath => Path.Combine(Root, "index.json");
 
         /// <summary>
@@ -112,7 +112,7 @@ namespace ConditioningControlPanel.Services.Transfer
             {
                 var p = e.State == TransferStates.Ready
                     ? ArtifactPathForSha(e.Sha, e.Ext)
-                    : Path.Combine(App.EffectiveAssetsPath, e.Rel.Replace('/', Path.DirectorySeparatorChar));
+                    : Path.Combine(CorePaths.EffectiveAssets, e.Rel.Replace('/', Path.DirectorySeparatorChar));
                 return File.Exists(p) ? p : null;
             }
             catch { return null; }

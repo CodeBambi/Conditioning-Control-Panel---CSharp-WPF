@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Awareness
 {
@@ -220,7 +221,7 @@ namespace ConditioningControlPanel.Services.Awareness
             // logs/app-.log, which "forget everything" does not erase and which the bug-report flow
             // asks users to attach. The legacy service kept its equivalent readout at Debug for
             // exactly this reason; matching it is the fix, not inventing a second discipline.
-            App.Logger?.Debug(result.LogLine);
+            Log.Debug(result.LogLine);
             return result;
         }
 

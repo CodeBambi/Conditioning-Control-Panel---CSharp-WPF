@@ -5,6 +5,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using Newtonsoft.Json;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Transfer
 {
@@ -184,7 +185,7 @@ namespace ConditioningControlPanel.Services.Transfer
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("TransferCacheHash.Sha256File({Path}): {E}", path, ex.Message);
+                Log.Debug("TransferCacheHash.Sha256File({Path}): {E}", path, ex.Message);
                 return null;
             }
         }

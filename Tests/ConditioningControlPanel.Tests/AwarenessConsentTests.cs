@@ -91,7 +91,7 @@ public class AwarenessConsentTests
     {
         var writers = SourceWriters("AwarenessModeEnabled")
             .Concat(SourceWriters("AwarenessConsentGiven"))
-            .Select(Path.GetFileName)
+            .Select(SourceRoots.Relative)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -100,12 +100,20 @@ public class AwarenessConsentTests
         // (#267's EnforceEntitlementLapse, extended for awareness in #1047) and is only allowed here
         // because it can only ever write FALSE — asserted below, so it cannot quietly become a second
         // door. Anything else on this list IS a second door.
+        //
+        // Keyed on the path relative to the REPO, not on the bare filename. The walk spans every
+        // product root now, so a filename is no longer a unique key: a CCP.Core/Models/AppSettings.cs
+        // added during the Core split would inherit this exemption and open a second door in
+        // silence. Whole-path keys also mean that moving a door to Core fails here loudly, which is
+        // the right moment to re-review whether it is still the only way in.
         var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "AppSettings.cs", "MainWindow.CompanionRoom.cs", "MainWindow.Patreon.cs"
+            "ConditioningControlPanel/Models/AppSettings.cs",
+            "ConditioningControlPanel/MainWindow/MainWindow.CompanionRoom.cs",
+            "ConditioningControlPanel/MainWindow/MainWindow.Patreon.cs"
         };
 
-        var strays = writers.Where(f => !allowed.Contains(f!)).ToList();
+        var strays = writers.Where(f => !allowed.Contains(f)).ToList();
         Assert.True(strays.Count == 0,
             "awareness is switched on outside the consent gate in: " + string.Join(", ", strays));
     }
@@ -317,8 +325,6 @@ public class AwarenessConsentTests
                 if (i < 0) continue;
                 if (line.Contains(property + " ==", StringComparison.Ordinal)) continue;
                 if (line.TrimStart().StartsWith("//", StringComparison.Ordinal)) continue;
-                if (line.Contains("_" + char.ToLowerInvariant(property[0]) + property.Substring(1),
-                        StringComparison.Ordinal)) { /* the backing-field assignment inside the setter */ }
                 yield return file;
                 break;
             }

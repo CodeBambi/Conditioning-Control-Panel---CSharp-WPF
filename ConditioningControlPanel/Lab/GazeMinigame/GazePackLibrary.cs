@@ -36,7 +36,7 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
                 if (pack != null) found[full] = pack;
             }
 
-            var assets = App.EffectiveAssetsPath;
+            var assets = CorePaths.EffectiveAssets;
             if (!string.IsNullOrWhiteSpace(assets))
             {
                 // Per-category packs inside the conventional roots.

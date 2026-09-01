@@ -1098,7 +1098,7 @@ namespace ConditioningControlPanel
         // Catalogue eligibility check — wraps the URL helper with the media-type
         // gate (audio enhancements aren't catalogued in W2).
         //
-        // URL eligibility itself lives in Helpers/HtUrlHelper.cs because it's
+        // URL eligibility itself lives in CCP.Core/Helpers/HtUrlHelper.cs because it's
         // now shared by three callers:
         //   1. This W2 row-level submit gate
         //   2. The catalogue server (kept in sync via cclabs-web's enhancements.ts)

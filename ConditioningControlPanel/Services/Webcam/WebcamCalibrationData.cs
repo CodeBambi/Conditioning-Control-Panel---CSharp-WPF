@@ -165,7 +165,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         [JsonProperty] public GazeTrimData? GazeTrim { get; set; }
 
-        public static string FilePath => Path.Combine(App.UserDataPath, FileName);
+        public static string FilePath => Path.Combine(CorePaths.UserData, FileName);
 
         public static WebcamCalibrationData? Load()
         {
@@ -186,7 +186,7 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                Directory.CreateDirectory(App.UserDataPath);
+                Directory.CreateDirectory(CorePaths.UserData);
                 var json = JsonConvert.SerializeObject(this, Formatting.Indented);
                 File.WriteAllText(FilePath, json);
             }

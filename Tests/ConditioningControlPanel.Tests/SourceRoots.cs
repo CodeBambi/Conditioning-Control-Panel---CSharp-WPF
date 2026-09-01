@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -34,6 +35,11 @@ internal static class SourceRoots
     private static readonly string[] SkipSegments = { "bin", "obj", ".claude", "node_modules" };
 
     private static string? _repoRoot;
+    private static IReadOnlyList<string>? _productDirectories;
+
+    // The tree cannot change while the suite runs, so each walk is done once. Without this
+    // the suite re-walks ~1500 files per call, and some guards call in a Theory loop.
+    private static readonly ConcurrentDictionary<string, IReadOnlyList<string>> SourcesByPattern = new(StringComparer.Ordinal);
 
     /// <summary>The repository root, found by walking up from the test binary to the solution file.
     ///
@@ -65,10 +71,12 @@ internal static class SourceRoots
     /// <c>Tools/&lt;name&gt;/</c>, both a level deeper, so neither <c>Tests/</c> nor <c>Tools/</c>
     /// has a <c>.csproj</c> of its own. A new head dropped at the repo root joins automatically; a
     /// new head nested under a folder would not, so put heads at the root.</para></summary>
-    internal static IEnumerable<string> ProductDirectories
+    internal static IReadOnlyList<string> ProductDirectories
     {
         get
         {
+            if (_productDirectories != null) return _productDirectories;
+
             var roots = Directory.EnumerateDirectories(RepoRoot)
                                  .Where(d => Directory.EnumerateFiles(d, "*.csproj").Any())
                                  .OrderBy(d => d, StringComparer.Ordinal)
@@ -81,7 +89,7 @@ internal static class SourceRoots
                 $"expected at least the WPF head and CCP.Core under {RepoRoot}, found: " +
                 (roots.Count == 0 ? "(none)" : string.Join(", ", roots.Select(Path.GetFileName))));
 
-            return roots;
+            return _productDirectories = roots;
         }
     }
 
@@ -92,7 +100,10 @@ internal static class SourceRoots
     /// they are about directories INSIDE the tree under test. Matching the absolute path — as
     /// several of these guards used to — silently empties the entire walk inside an agent worktree,
     /// where the checkout itself sits under a <c>.claude</c> segment.</para></summary>
-    internal static IReadOnlyList<string> EnumerateProductSources(string searchPattern)
+    internal static IReadOnlyList<string> EnumerateProductSources(string searchPattern) =>
+        SourcesByPattern.GetOrAdd(searchPattern, Walk);
+
+    private static IReadOnlyList<string> Walk(string searchPattern)
     {
         var files = ProductDirectories
             .SelectMany(root => Directory
@@ -108,4 +119,14 @@ internal static class SourceRoots
 
         return files;
     }
+
+    /// <summary>A product file's path relative to the repo root, forward-slashed, e.g.
+    /// <c>ConditioningControlPanel/Models/AppSettings.cs</c>.
+    ///
+    /// <para>Use this — never <see cref="Path.GetFileName(string)"/> — to key an allow list or to
+    /// print an offender. Now that the walk spans several roots a bare filename is no longer
+    /// unique: a same-named file in another head would silently inherit the first one's
+    /// exemption.</para></summary>
+    internal static string Relative(string file) =>
+        Path.GetRelativePath(RepoRoot, file).Replace(Path.DirectorySeparatorChar, '/');
 }

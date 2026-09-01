@@ -31,7 +31,7 @@ internal static class DtrhLoomStore
     /// UI thread, but subscribers should still marshal defensively.</summary>
     public static event Action? Changed;
 
-    public static string SpiralsFolder => Path.Combine(App.UserDataPath, "Spirals");
+    public static string SpiralsFolder => Path.Combine(CorePaths.UserData, "Spirals");
 
     /// <summary>Sanitize a display name into the slug the files use. Null when nothing survives.</summary>
     public static string? Slugify(string? name)
