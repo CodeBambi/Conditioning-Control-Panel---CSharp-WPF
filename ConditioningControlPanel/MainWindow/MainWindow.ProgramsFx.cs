@@ -21,7 +21,7 @@ namespace ConditioningControlPanel
     // looks exactly as it did before any of this existed, and holds not one clock. Every day
     // survived earns the interface heat, and a boss day is fully lit whatever the arithmetic says.
     //
-    // ONE SCALAR drives all of it (Helpers/ProgramHeat.cs), so there is no way for two surfaces to
+    // ONE SCALAR drives all of it (CCP.Core/Helpers/ProgramHeat.cs), so there is no way for two surfaces to
     // disagree about how far along a run is, and the tier boundaries are unit-tested rather than
     // eyeballed.
     //
