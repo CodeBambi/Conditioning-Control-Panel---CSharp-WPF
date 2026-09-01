@@ -1,0 +1,146 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/TextEditorDialog.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       Style="{StaticResource X}"     -> Theme="{StaticResource X}"   (keyed styles are ControlThemes)
+       {loc:Str key}                  -> {Binding LocX}               (LocExtension is a WPF
+                                         MarkupExtension and stays in the head)
+       Visibility="Collapsed"         -> IsVisible="False"
+       ResizeMode="CanResizeWithGrip" -> CanResize="True"             (Avalonia has no resize grip;
+                                         the window still resizes)
+       MouseLeftButtonDown            -> PointerPressed, wired in the constructor as one handler
+                                         on the ItemsControl (a DataTemplate has no name scope)
+       DataTemplate.Triggers          -> Classes.selected + the Border.selected style below
+                                         (Avalonia has no DataTriggers)
+       Checked/Unchecked              -> ToggleButton.IsCheckedChangedEvent, wired in the ctor
+       ToolTip="..."                  -> ToolTip.Tip="..."
+       <Window.Resources></Window.Resources>  dropped - it was empty in the original too.
+
+     Buttons carry a TextBlock child rather than Content: Avalonia parses "_" in Content as an
+     access key and every loc key here is snake_case. See the porting notes in CLAUDE.md.
+     The buttons also gained x:Names, because the handlers are wired in the constructor. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.TextEditorDialog"
+        x:DataType="vm:TextEditorViewModel"
+        xmlns:vm="clr-namespace:ConditioningControlPanel.Avalonia.Views.Dialogs"
+        Title="{Binding LocDialogTextManager}"
+        Height="500" Width="550"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource DarkerBgBrush}"
+        CanResize="True">
+
+    <Window.Styles>
+        <!-- The WPF DataTemplate.Triggers block, setters verbatim. Driven by
+             Classes.selected="{Binding IsSelected}" on the row Border. -->
+        <Style Selector="Border.selected">
+            <Setter Property="Background" Value="#3A2A5A"/>
+            <Setter Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Grid Grid.Row="0" Margin="0,0,0,15">
+            <TextBlock x:Name="TxtTitle" Text="{Binding LocDialogTextManager}" Foreground="{StaticResource PinkBrush}"
+                       FontSize="18" FontWeight="Bold" VerticalAlignment="Center"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="BtnSort" Theme="{StaticResource SecondaryButton}"
+                        Margin="0,0,8,0">
+                    <TextBlock Text="{Binding LocBtnSortAZ}"/>
+                </Button>
+                <Button x:Name="BtnToggleAll" Theme="{StaticResource SecondaryButton}">
+                    <TextBlock Text="{Binding LocBtnToggleAll}"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- Add New Item -->
+        <Grid Grid.Row="1" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="TxtNewItem" Grid.Column="0"
+                     Background="{DynamicResource SurfaceBgBrush}" Foreground="White"
+                     BorderBrush="{StaticResource PinkBrush}" BorderThickness="1"
+                     Padding="10,8" FontSize="13" VerticalContentAlignment="Center"/>
+            <Button x:Name="BtnAdd" Grid.Column="1" Theme="{StaticResource ActionButton}"
+                    Margin="8,0,0,0">
+                <TextBlock Text="{Binding LocBtnAdd}"/>
+            </Button>
+        </Grid>
+
+        <!-- Item List -->
+        <Border Grid.Row="2" Background="{StaticResource PanelBgBrush}" CornerRadius="8">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="5">
+                <ItemsControl x:Name="ItemList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:TextItem">
+                            <Border x:Name="ItemBorder" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="5"
+                                    Margin="3" Padding="10,8" Cursor="Hand"
+                                    Classes.selected="{Binding IsSelected}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox Grid.Column="0" Theme="{StaticResource ItemCheckBox}"
+                                              IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                                              Margin="0,0,10,0"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Text}"
+                                               Foreground="White" FontSize="13"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="BtnRemove" Grid.Column="2" Text="✕" Foreground="{DynamicResource TextMutedBrush}"
+                                               FontSize="14" VerticalAlignment="Center"
+                                               Cursor="Hand"
+                                               ToolTip.Tip="{Binding $parent[Window].((vm:TextEditorViewModel)DataContext).LocTooltipRemoveItem}">
+                                        <TextBlock.Styles>
+                                            <!-- Shape-for-shape copy of the WPF Style.Triggers block. It was
+                                                 already dead there - a local Foreground outranks a style
+                                                 trigger - and it is dead here for the same reason. Kept so
+                                                 the two files still diff, not "fixed". -->
+                                            <Style Selector="TextBlock:pointerover">
+                                                <Setter Property="Foreground" Value="#FF4757"/>
+                                            </Style>
+                                        </TextBlock.Styles>
+                                    </TextBlock>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Footer Buttons -->
+        <Grid Grid.Row="3" Margin="0,15,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button x:Name="BtnRemoveSelected" Grid.Column="0" Theme="{StaticResource DangerButton}">
+                <TextBlock Text="{Binding LocBtnRemoveSelected}"/>
+            </Button>
+            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <Button x:Name="BtnCancel" Theme="{StaticResource SecondaryButton}"
+                        Margin="0,0,8,0">
+                    <TextBlock Text="{Binding LocBtnCancel}"/>
+                </Button>
+                <Button x:Name="BtnSave" Theme="{StaticResource ActionButton}">
+                    <TextBlock Text="{Binding LocBtnSave}"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>
