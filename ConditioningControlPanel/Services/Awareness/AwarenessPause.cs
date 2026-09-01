@@ -1,4 +1,5 @@
 using System;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Awareness
 {
@@ -68,7 +69,7 @@ namespace ConditioningControlPanel.Services.Awareness
                 if (_until == null || end > _until.Value) _until = end;
             }
 
-            App.Logger?.Information("Awareness: paused for {Minutes} minute(s)", (int)duration.TotalMinutes);
+            Log.Information("Awareness: paused for {Minutes} minute(s)", (int)duration.TotalMinutes);
         }
 
         /// <summary>Lifts the pause immediately.</summary>
@@ -80,7 +81,7 @@ namespace ConditioningControlPanel.Services.Awareness
                 was = _until != null;
                 _until = null;
             }
-            if (was) App.Logger?.Information("Awareness: pause lifted");
+            if (was) Log.Information("Awareness: pause lifted");
         }
     }
 }

@@ -94,7 +94,7 @@ namespace ConditioningControlPanel.Services
 
         private static IEnumerable<string> EnumerateVideoSubfolders()
         {
-            var root = Path.Combine(App.EffectiveAssetsPath, "videos");
+            var root = Path.Combine(CorePaths.EffectiveAssets, "videos");
             if (!Directory.Exists(root)) yield break;
 
             foreach (var dir in Directory.EnumerateDirectories(root))

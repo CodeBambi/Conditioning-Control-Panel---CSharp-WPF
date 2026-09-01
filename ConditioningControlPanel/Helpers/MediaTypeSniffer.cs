@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using Serilog;
 
 namespace ConditioningControlPanel.Helpers;
 
@@ -259,7 +260,7 @@ public static class MediaTypeSniffer
         var fallback = Normalize(fallbackExtension) ?? DefaultVideoExtension;
         try
         {
-            App.Logger?.Warning(
+            Log.Warning(
                 "MediaTypeSniffer[{Context}]: could not identify media from content-type '{Ct}', magic bytes or url path — defaulting to {Ext} for {Url}",
                 context, contentType ?? "(none)", fallback, Redact(url));
         }
@@ -280,7 +281,7 @@ public static class MediaTypeSniffer
         var fallback = Normalize(fallbackExtension) ?? DefaultVideoExtension;
         try
         {
-            App.Logger?.Warning(
+            Log.Warning(
                 "MediaTypeSniffer[{Context}]: could not identify {File} from content-type '{Ct}', magic bytes or url path — defaulting to {Ext}",
                 context, filePath ?? "(none)", contentType ?? "(none)", fallback);
         }

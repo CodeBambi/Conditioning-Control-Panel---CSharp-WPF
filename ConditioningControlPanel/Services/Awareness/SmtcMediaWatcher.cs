@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Windows.Media.Control;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Awareness
 {
@@ -82,18 +83,18 @@ namespace ConditioningControlPanel.Services.Awareness
 
                     if (!_available)
                     {
-                        App.Logger?.Debug("AwarenessObserver: SMTC returned no session manager - media signal off");
+                        Log.Debug("AwarenessObserver: SMTC returned no session manager - media signal off");
                         return;
                     }
 
                     _timer = new Timer(_ => Poll(), null, TimeSpan.Zero, PollInterval);
-                    App.Logger?.Debug("AwarenessObserver: SMTC media watcher armed");
+                    Log.Debug("AwarenessObserver: SMTC media watcher armed");
                 }
                 catch (Exception ex)
                 {
                     // Denied, unsupported, or the WinRT activation failed. Feature-off, not a crash.
                     _available = false;
-                    App.Logger?.Debug("AwarenessObserver: SMTC unavailable - {Error}", ex.Message);
+                    Log.Debug("AwarenessObserver: SMTC unavailable - {Error}", ex.Message);
                 }
             });
         }
@@ -140,7 +141,7 @@ namespace ConditioningControlPanel.Services.Awareness
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Debug("AwarenessObserver: SMTC read failed - {Error}", ex.Message);
+                    Log.Debug("AwarenessObserver: SMTC read failed - {Error}", ex.Message);
                 }
                 finally
                 {

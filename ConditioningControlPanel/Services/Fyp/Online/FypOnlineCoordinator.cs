@@ -148,7 +148,7 @@ internal sealed class FypOnlineCoordinator
         _kind = kind;
         // The FYP tenant keeps the file it has always written; anyone else gets their own,
         // so nobody inherits (or clobbers) a stranger's learned taste.
-        _storePath = Path.Combine(App.UserDataPath,
+        _storePath = Path.Combine(CorePaths.UserData,
             string.Equals(consumerId, FypConsumerId, StringComparison.OrdinalIgnoreCase)
                 ? "fyp_online.json"
                 : $"remote_online_{FileKey(consumerId)}.json");
@@ -251,7 +251,7 @@ internal sealed class FypOnlineCoordinator
                 var o = new JObject();
                 foreach (var (k, v) in _dwell)
                     o[k] = new JObject { ["ewmaMs"] = Math.Round(v.EwmaMs), ["views"] = v.Views };
-                Directory.CreateDirectory(App.UserDataPath);
+                Directory.CreateDirectory(CorePaths.UserData);
                 File.WriteAllText(_storePath, new JObject { ["channels"] = o }.ToString(Newtonsoft.Json.Formatting.None));
             }
             catch (Exception ex)

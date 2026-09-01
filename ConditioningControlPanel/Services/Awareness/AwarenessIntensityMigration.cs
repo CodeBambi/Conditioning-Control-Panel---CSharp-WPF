@@ -1,4 +1,5 @@
 using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Awareness
 {
@@ -61,7 +62,7 @@ namespace ConditioningControlPanel.Services.Awareness
             if (cooldown <= ShippedDefaultCooldownSeconds)
             {
                 settings.AwarenessIntensityMigrated = true;
-                App.Logger?.Information(
+                Log.Information(
                     "Awareness: reaction cooldown was still the shipped {Seconds}s default — keeping intensity {Intensity}",
                     cooldown, settings.AwarenessIntensity);
                 return true;
@@ -71,7 +72,7 @@ namespace ConditioningControlPanel.Services.Awareness
             settings.AwarenessIntensity = mapped;
             settings.AwarenessIntensityMigrated = true;
 
-            App.Logger?.Information(
+            Log.Information(
                 "Awareness: migrated the {Seconds}s reaction cooldown to intensity {Intensity}",
                 cooldown, mapped);
             return true;

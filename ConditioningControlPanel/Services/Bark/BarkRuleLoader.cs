@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Bark
 {
@@ -81,15 +82,15 @@ namespace ConditioningControlPanel.Services.Bark
                     if (rule != null && rule.IsValid())
                         rules.Add(rule);
                     else
-                        App.Logger?.Warning("BarkRuleLoader: merged rule invalid after merge (id='{Id}')", rule?.Id);
+                        Log.Warning("BarkRuleLoader: merged rule invalid after merge (id='{Id}')", rule?.Id);
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning(ex, "BarkRuleLoader: failed to materialize a merged rule");
+                    Log.Warning(ex, "BarkRuleLoader: failed to materialize a merged rule");
                 }
             }
 
-            App.Logger?.Information(
+            Log.Information(
                 "BarkRuleLoader: loaded {Total} rules ({Base} base, {Mod} mod-overlay from {Source}; field-level merge)",
                 rules.Count, baseCount, modCount,
                 Services.Companion.CompanionContentResolver.Describe(modPick.Source));
@@ -118,7 +119,7 @@ namespace ConditioningControlPanel.Services.Bark
                     var id = obj.Value<string>("id");
                     if (string.IsNullOrWhiteSpace(id))
                     {
-                        App.Logger?.Warning("BarkRuleLoader: skipped a rule with no id in {Source} manifest", source);
+                        Log.Warning("BarkRuleLoader: skipped a rule with no id in {Source} manifest", source);
                         continue;
                     }
 
@@ -133,7 +134,7 @@ namespace ConditioningControlPanel.Services.Bark
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "BarkRuleLoader: failed to read {Source} manifest at {Path}", source, path);
+                Log.Warning(ex, "BarkRuleLoader: failed to read {Source} manifest at {Path}", source, path);
                 return 0;
             }
         }

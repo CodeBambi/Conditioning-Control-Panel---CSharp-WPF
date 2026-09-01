@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.GoonGame
 {
@@ -72,7 +73,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             var dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
             File.WriteAllText(path, root.ToString(Formatting.Indented));
-            App.Logger?.Information("GoonVectorDumper: wrote parity vectors -> {Path}", path);
+            Log.Information("GoonVectorDumper: wrote parity vectors -> {Path}", path);
             return path;
         }
 

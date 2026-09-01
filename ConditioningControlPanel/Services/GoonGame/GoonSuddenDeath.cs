@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Serilog;
 
 // ============================================================================
 // GOON GAME — Phase D. The synchronized sudden-death harness.
@@ -115,7 +116,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             var token = _cts.Token;
 
-            App.Logger?.Information("[GG] sudden death: starting ladder (host={Host}, modes {Local}/{Remote}, net loss {Net})",
+            Log.Information("[GG] sudden death: starting ladder (host={Host}, modes {Local}/{Remote}, net loss {Net})",
                 ctx.IsHost, ctx.LocalMode, ctx.RemoteMode, netLossThreshold);
 
             try
@@ -149,7 +150,7 @@ namespace ConditioningControlPanel.Services.GoonGame
 
                     var lateBy = clock.NowMatchMs - agreed.FireAtMatchMs;
                     if (lateBy > 0)
-                        App.Logger?.Warning("[GG] sudden death: round {Round} schedule was already {Late}ms in the past — firing now", roundNo, lateBy);
+                        Log.Warning("[GG] sudden death: round {Round} schedule was already {Late}ms in the past — firing now", roundNo, lateBy);
                     else
                         await GoonSchedule.WaitUntilMatchMsAsync(clock, agreed.FireAtMatchMs, token).ConfigureAwait(false);
 
@@ -161,7 +162,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                     var raw = await _results.WaitAsync(roundNo, GoonRoundConsts.PeerResultTimeoutMs, token).ConfigureAwait(false);
                     if (raw == null)
                     {
-                        App.Logger?.Warning("[GG] sudden death: no peer result for round {Round} within {Ms}ms", roundNo, GoonRoundConsts.PeerResultTimeoutMs);
+                        Log.Warning("[GG] sudden death: no peer result for round {Round} within {Ms}ms", roundNo, GoonRoundConsts.PeerResultTimeoutMs);
                         RaiseAborted("peer_result_timeout");
                         return;
                     }
@@ -188,7 +189,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                         Peer = peer,
                     };
 
-                    App.Logger?.Information(
+                    Log.Information(
                         "[GG] sudden death: round {Round} ({Kind}, difficulty {Diff}) -> {Verdict}, net {Net}",
                         roundNo, kind, difficulty, verdict, NetScore);
 
@@ -198,7 +199,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                     if (NetScore <= -netLossThreshold || NetScore >= netLossThreshold)
                     {
                         var localLost = NetScore <= -netLossThreshold;
-                        App.Logger?.Information("[GG] sudden death: net loss reached after {Rounds} rounds (local lost = {Lost})", roundNo, localLost);
+                        Log.Information("[GG] sudden death: net loss reached after {Rounds} rounds (local lost = {Lost})", roundNo, localLost);
                         GoonUi.Invoke(() => NetLossReached?.Invoke(this, localLost), "NetLossReached");
                         return;
                     }
@@ -213,7 +214,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "[GG] sudden death: ladder failed");
+                Log.Error(ex, "[GG] sudden death: ladder failed");
                 RaiseAborted("error: " + ex.Message);
             }
             finally
@@ -246,7 +247,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning("[GG] sudden death: StopAsync wait threw: {Error}", ex.Message);
+                Log.Warning("[GG] sudden death: StopAsync wait threw: {Error}", ex.Message);
             }
         }
 
@@ -265,7 +266,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                     break;
                 case MercyMsg:
                     // The match engine also handles this; aborting here just stops the ladder sooner.
-                    App.Logger?.Information("[GG] sudden death: peer mercied mid-ladder — stopping rounds");
+                    Log.Information("[GG] sudden death: peer mercied mid-ladder — stopping rounds");
                     _abortReason = "peer_mercy";
                     try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
                     break;
@@ -369,7 +370,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                         };
                     }
 
-                    App.Logger?.Warning("[GG] sudden death: guest did not return a seed half for round {Round} (attempt {Attempt})", roundNo, attempt + 1);
+                    Log.Warning("[GG] sudden death: guest did not return a seed half for round {Round} (attempt {Attempt})", roundNo, attempt + 1);
                 }
                 return null;
             }
@@ -379,7 +380,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             var proposal = await _schedules.WaitAsync(roundNo, GoonRoundConsts.ScheduleWaitTimeoutMs, ct).ConfigureAwait(false);
             if (proposal == null)
             {
-                App.Logger?.Warning("[GG] sudden death: no round {Round} proposal from host within {Ms}ms", roundNo, GoonRoundConsts.ScheduleWaitTimeoutMs);
+                Log.Warning("[GG] sudden death: no round {Round} proposal from host within {Ms}ms", roundNo, GoonRoundConsts.ScheduleWaitTimeoutMs);
                 return null;
             }
 
@@ -391,7 +392,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // mismatch means the two sides disagree about the modes or about the intersection.
                 // A kind outside the intersection lands here too — same warn-but-follow treatment.
                 var outsideCaps = !IsAllowed(proposal.Kind, ctx.AllowedRoundKinds);
-                App.Logger?.Warning("[GG] sudden death: host proposed {Actual} for round {Round}, expected {Expected}{Caps} — following the host",
+                Log.Warning("[GG] sudden death: host proposed {Actual} for round {Round}, expected {Expected}{Caps} — following the host",
                     proposal.Kind, roundNo, expected, outsideCaps ? " (outside the caps intersection)" : "");
             }
 
@@ -519,7 +520,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             catch (Exception ex)
             {
                 // A broken round is a round we did not complete, not a crashed match.
-                App.Logger?.Error(ex, "[GG] sudden death: round {Round} ({Kind}) threw", roundNo, kind);
+                Log.Error(ex, "[GG] sudden death: round {Round} ({Kind}) threw", roundNo, kind);
                 return new RoundResultMsg { RoundNo = roundNo, Completed = false, ElapsedMs = 0 };
             }
         }
@@ -546,7 +547,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             catch (Exception ex)
             {
                 // Losing a send is survivable: the schedule retry / result timeout paths cover it.
-                App.Logger?.Warning("[GG] sudden death: send of {Type} failed: {Error}", msg.Type, ex.Message);
+                Log.Warning("[GG] sudden death: send of {Type} failed: {Error}", msg.Type, ex.Message);
             }
         }
 
@@ -565,7 +566,7 @@ namespace ConditioningControlPanel.Services.GoonGame
 
         private void RaiseAborted(string reason)
         {
-            App.Logger?.Information("[GG] sudden death: ladder aborted ({Reason})", reason);
+            Log.Information("[GG] sudden death: ladder aborted ({Reason})", reason);
             GoonUi.Invoke(() => Aborted?.Invoke(this, reason), "Aborted");
         }
 
