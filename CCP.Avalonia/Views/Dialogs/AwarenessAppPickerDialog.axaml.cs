@@ -70,6 +70,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// <param name="kind">Which list is being edited. Drives every string on the dialog.</param>
         /// <param name="listed">Entries currently in the list, raw (group tokens included).</param>
         /// <param name="candidates">Apps to offer as rows, already sanitised, newest-interesting first.</param>
+        /// <summary>Render/design constructor: sample rows so --render-view can draw the dialog.</summary>
+        public AwarenessAppPickerDialog()
+            : this(AwarenessListKind.Deny, new[] { "firefox" }, new[] { "firefox", "steam", "discord" }) { }
+
         public AwarenessAppPickerDialog(AwarenessListKind kind,
                                         IEnumerable<string> listed,
                                         IEnumerable<string> candidates)

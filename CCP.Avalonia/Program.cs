@@ -19,11 +19,20 @@ namespace ConditioningControlPanel.Avalonia
             if (r >= 0 && r + 1 < args.Length)
                 return RenderProof.Run(args[r + 1]);
 
-            // --render-view <path> renders a single ported view for side-by-side comparison
-            // against its WPF original.
+            // --render-view <TypeName> <path> renders ONE ported view by name, e.g.
+            //   --render-view AchievementsTabView out.png
+            // The name is matched against every Control under the Views namespace (simple name
+            // or full name). Until this existed the flag ignored its argument and always drew
+            // AppShell, so 20 of the first 21 ported views had never been rendered by anything.
             var rv = Array.IndexOf(args, "--render-view");
-            if (rv >= 0 && rv + 1 < args.Length)
-                return RenderProof.Run(args[rv + 1], () => new Views.AppShell());
+            if (rv >= 0 && rv + 2 < args.Length)
+                return RenderProof.RunView(args[rv + 1], args[rv + 2]);
+
+            // --render-all <dir> renders every view under Views/ to <dir>/<TypeName>.png and
+            // fails if any one throws. This is the per-view proof CI uploads.
+            var ra = Array.IndexOf(args, "--render-all");
+            if (ra >= 0 && ra + 1 < args.Length)
+                return RenderProof.RunAll(args[ra + 1]);
 
             // --x11-probe drives the X11 overlay shim against a real window and asks the X
             // server which window owns the pointer. Every way that shim can fail returns

@@ -53,11 +53,15 @@ jobs:
       # targets Steam Frame (SteamOS/ARM64) and Quest standalone. Rendering needs a device;
       # asserting it can produce every value it renders does not.
       - run: dotnet run --project CCP.VR/CCP.VR.csproj -c Release -- --smoke
-      - run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --render $RUNNER_TEMP/ccp-avalonia-linux.png
+      - run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --render $RUNNER_TEMP/render/MainWindow.png
+      # One PNG per ported view. This is the per-view proof: a view that throws on construction,
+      # binds a key that does not exist, or nulls its own template shows up here and nowhere else.
+      # Non-zero exit fails the job.
+      - run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --render-all $RUNNER_TEMP/render
       - uses: actions/upload-artifact@v4
         with:
           name: linux-head-render
-          path: ${{ runner.temp }}/ccp-avalonia-linux.png
+          path: ${{ runner.temp }}/render/
 
   # The "behaves identically on Windows" gate.
   windows:

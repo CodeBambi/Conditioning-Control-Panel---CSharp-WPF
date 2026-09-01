@@ -33,6 +33,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private readonly TextBox _txtRepetitionPenalty;
         private readonly TextBlock _txtError;
 
+        /// <summary>Render/design constructor: default settings so --render-view can draw the dialog.</summary>
+        public OpenAiCompatibleSamplerSettingsDialog() : this(new CompanionPromptSettings()) { }
+
         public OpenAiCompatibleSamplerSettingsDialog(CompanionPromptSettings settings)
         {
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
