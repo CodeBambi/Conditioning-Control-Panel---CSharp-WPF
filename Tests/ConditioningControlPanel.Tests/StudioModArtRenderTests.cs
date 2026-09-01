@@ -272,7 +272,7 @@ public class StudioModArtRenderTests
     }
 
     private static string StudioTabViewCodeBehind() =>
-        Path.Combine(RepoRoot(), "ConditioningControlPanel", "Views", "Tabs", "StudioTabView.xaml.cs");
+        SourceRoots.FindProductFile("Views", "Tabs", "StudioTabView.xaml.cs");
 
     /// <summary>
     /// Every feature-page XAML that paints itself from a <c>Resources/features/</c> tile, wherever

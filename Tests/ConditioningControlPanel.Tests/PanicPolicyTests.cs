@@ -402,19 +402,9 @@ public class PanicPolicyTests
     // CAN be pinned is that the surfaces the brief lists are all named in it, and that the two
     // things it must NOT do stay out. Both regressions below were shipped once and caught in review.
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
-            dir = dir.Parent;
-        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
-        return dir!.FullName;
-    }
-
     private static string PanicStopEverySurfaceBody()
     {
-        var source = File.ReadAllText(Path.Combine(
-            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+        var source = SourceRoots.ReadProductFile("MainWindow", "MainWindow.xaml.cs");
         var start = source.IndexOf("private void PanicStopEverySurface()", StringComparison.Ordinal);
         Assert.True(start >= 0, "PanicStopEverySurface was renamed - update this test with it");
         var end = source.IndexOf("        /// <summary>", start, StringComparison.Ordinal);
@@ -487,8 +477,7 @@ public class PanicPolicyTests
     [Fact]
     public void TheGameProbe_IsSampledBeforeTheStopPass()
     {
-        var source = File.ReadAllText(Path.Combine(
-            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+        var source = SourceRoots.ReadProductFile("MainWindow", "MainWindow.xaml.cs");
         var probe = source.IndexOf("bool gameOwnedTheScreen = AnyGameSurfaceOwnsTheScreen();", StringComparison.Ordinal);
         Assert.True(probe >= 0, "the pre-stop game probe is gone - the exit-tap guard cannot work without it");
         var stop = source.IndexOf("PanicStopEverySurface();", probe, StringComparison.Ordinal);
@@ -507,8 +496,7 @@ public class PanicPolicyTests
     [InlineData("JustDropHostService.IsActive")]
     public void TheGameProbe_CoversEveryHandOffSurface(string call)
     {
-        var source = File.ReadAllText(Path.Combine(
-            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+        var source = SourceRoots.ReadProductFile("MainWindow", "MainWindow.xaml.cs");
         var start = source.IndexOf("private static bool AnyGameSurfaceOwnsTheScreen()", StringComparison.Ordinal);
         Assert.True(start >= 0, "AnyGameSurfaceOwnsTheScreen was renamed - update this test with it");
         var end = source.IndexOf("        /// <summary>", start, StringComparison.Ordinal);

@@ -28,17 +28,7 @@ namespace ConditioningControlPanel.Tests;
 /// </summary>
 public class PageAdornerScopeTests
 {
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
-            dir = dir.Parent;
-        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
-        return dir!.FullName;
-    }
-
-    private static string MainWindowXaml()
-        => File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml"));
+    private static string MainWindowXaml() => SourceRoots.ReadProductFile("MainWindow", "MainWindow.xaml");
 
     [Fact]
     public void EveryTabViewSitsInsideThePageAdornerDecorator()

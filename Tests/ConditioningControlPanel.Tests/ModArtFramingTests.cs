@@ -329,17 +329,7 @@ public class ModArtFramingTests
     // one — a visible flicker no other test would catch. This repo already answers that hazard with
     // source-scraping tests (PlayDoorRenderTests.PlayHeroMapFeedsEveryHeroBrush), so this does too.
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
-            dir = dir.Parent;
-        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
-        return dir!.FullName;
-    }
-
-    private static string ReadSource(params string[] parts) =>
-        File.ReadAllText(Path.Combine(new[] { RepoRoot(), "ConditioningControlPanel" }.Concat(parts).ToArray()));
+    private static string ReadSource(params string[] parts) => SourceRoots.ReadProductFile(parts);
 
     /// <summary>The x:Key of each rail brush, the file it paints and the surface it is bound to.</summary>
     public static TheoryData<string, string, string> RailBrushKeys() => new()

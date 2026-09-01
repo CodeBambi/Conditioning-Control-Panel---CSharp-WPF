@@ -503,8 +503,7 @@ public class SpiralRoomTests
 
     private static string ProductDir => Path.Combine(RepoRoot(), "ConditioningControlPanel");
 
-    private static string AppFile(params string[] parts)
-        => File.ReadAllText(Path.Combine(new[] { ProductDir }.Concat(parts).ToArray()));
+    private static string AppFile(params string[] parts) => SourceRoots.ReadProductFile(parts);
 
     /// <summary>
     /// THE WINDOW IS GONE. <c>SpiralMapWindow</c> was deleted, not merely bypassed: a second door

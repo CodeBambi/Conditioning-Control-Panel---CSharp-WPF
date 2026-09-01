@@ -49,10 +49,7 @@ public class YouLibraryDoorTests
         return dir!.FullName;
     }
 
-    private static string ProductDir => Path.Combine(RepoRoot(), "ConditioningControlPanel");
-
-    private static string ReadSource(params string[] parts) =>
-        File.ReadAllText(Path.Combine(new[] { ProductDir }.Concat(parts).ToArray()));
+    private static string ReadSource(params string[] parts) => SourceRoots.ReadProductFile(parts);
 
     // The product source walk (and the exclusions that used to live here — build output, and the
     // nested agent worktrees under .claude/ that are other branches' copies of this same tree)

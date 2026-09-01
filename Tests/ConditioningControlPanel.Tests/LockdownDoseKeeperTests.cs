@@ -206,17 +206,7 @@ public class LockdownDoseKeeperTests
     //  Source pins - the runtime half is WPF-bound, so these hold the shape the play-test verified
     // =============================================================================================
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel")))
-            dir = dir.Parent;
-        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
-        return dir!.FullName;
-    }
-
-    private static string Source(params string[] parts)
-        => File.ReadAllText(Path.Combine(new[] { RepoRoot(), "ConditioningControlPanel" }.Concat(parts).ToArray()));
+    private static string Source(params string[] parts) => SourceRoots.ReadProductFile(parts);
 
     [Fact]
     public void Restore_MarshalsBeforeReadingTheWindow_AndOwnsTheRecoveryFile()

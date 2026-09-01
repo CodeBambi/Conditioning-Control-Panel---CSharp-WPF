@@ -202,15 +202,6 @@ public class CornerGifAdmissionTests
 
     // ---- both standalone entry points ask the same question ----
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
-            dir = dir.Parent;
-        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
-        return dir!.FullName;
-    }
-
     /// <summary>
     /// CornerGifService admits a standalone slot from TWO places: RefreshOverlays (every slot, after
     /// a config change) and RefreshSlot (ONE slot, the live size/opacity slider edit). The rule was
@@ -225,8 +216,7 @@ public class CornerGifAdmissionTests
     [InlineData("RefreshSlot")]
     public void BothStandaloneEntryPoints_ShareTheAdmissionRule(string method)
     {
-        var source = File.ReadAllText(Path.Combine(
-            RepoRoot(), "ConditioningControlPanel", "Services", "CornerGifService.cs"));
+        var source = SourceRoots.ReadProductFile("Services", "CornerGifService.cs");
 
         var start = source.IndexOf("public void " + method + "(", StringComparison.Ordinal);
         Assert.True(start >= 0, method + " was renamed - update this test with it");
@@ -243,8 +233,7 @@ public class CornerGifAdmissionTests
 
     // ---- handing the corner back ----
 
-    private static string SessionEngineSource() => File.ReadAllText(Path.Combine(
-        RepoRoot(), "ConditioningControlPanel", "Services", "Session", "SessionEngine.cs"));
+    private static string SessionEngineSource() => SourceRoots.ReadProductFile("Services", "Session", "SessionEngine.cs");
 
     private static string MemberBody(string source, string signature)
     {
@@ -376,8 +365,7 @@ public class CornerGifAdmissionTests
     [Fact]
     public void ThePanicPass_SweepsTheStandaloneSlotsAfterTheSessionOverlay()
     {
-        var source = File.ReadAllText(Path.Combine(
-            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+        var source = SourceRoots.ReadProductFile("MainWindow", "MainWindow.xaml.cs");
         var start = source.IndexOf("private void PanicStopEverySurface()", StringComparison.Ordinal);
         Assert.True(start >= 0, "PanicStopEverySurface was renamed - update this test with it");
         var end = source.IndexOf("        /// <summary>", start, StringComparison.Ordinal);
@@ -403,8 +391,7 @@ public class CornerGifAdmissionTests
     [InlineData("RefreshSlot")]
     public void TheStandaloneSideAlsoReAsksTheSessionAdmission(string method)
     {
-        var source = File.ReadAllText(Path.Combine(
-            RepoRoot(), "ConditioningControlPanel", "Services", "CornerGifService.cs"));
+        var source = SourceRoots.ReadProductFile("Services", "CornerGifService.cs");
         var start = source.IndexOf("public void " + method + "(", StringComparison.Ordinal);
         Assert.True(start >= 0, method + " was renamed - update this test with it");
         var end = source.IndexOf("        /// <summary>", start, StringComparison.Ordinal);
@@ -454,8 +441,7 @@ public class CornerGifAdmissionTests
     [Fact]
     public void DeferredRealization_ReAsksTheAdmissionRule()
     {
-        var source = File.ReadAllText(Path.Combine(
-            RepoRoot(), "ConditioningControlPanel", "Services", "CornerGifService.cs"));
+        var source = SourceRoots.ReadProductFile("Services", "CornerGifService.cs");
         var start = source.IndexOf("private void ScheduleRealize(", StringComparison.Ordinal);
         Assert.True(start >= 0, "ScheduleRealize was renamed - update this test with it");
         var end = source.IndexOf("        /// <summary>", start, StringComparison.Ordinal);
@@ -473,8 +459,7 @@ public class CornerGifAdmissionTests
     [Fact]
     public void TheFullscreenSpiralGoingDown_ReAsksTheSessionAdmission()
     {
-        var source = File.ReadAllText(Path.Combine(
-            RepoRoot(), "ConditioningControlPanel", "Services", "Notifications", "OverlayService.cs"));
+        var source = SourceRoots.ReadProductFile("Services", "Notifications", "OverlayService.cs");
         var start = source.IndexOf("internal void StopSpiral()", StringComparison.Ordinal);
         Assert.True(start >= 0, "StopSpiral was renamed - update this test with it");
         var body = source[start..source.IndexOf("\n    private void UpdateSpiralOpacity()", start, StringComparison.Ordinal)];
