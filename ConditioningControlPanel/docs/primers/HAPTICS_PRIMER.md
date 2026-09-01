@@ -42,7 +42,7 @@ gate, not sprinkled through the UI.
 
 ---
 
-## 1. The v2 contracts (`Services/Haptics/Core/HapticContracts.cs`, 198 lines)
+## 1. The v2 contracts (`CCP.Core/Services/Haptics/Core/HapticContracts.cs`, 198 lines)
 
 Written first, everything else implemented against them. **Do not redesign; extend by adding
 members only.**
@@ -212,7 +212,7 @@ The six `VibrationMode`s (`Constant, Pulse, Wave, Heartbeat, Escalate, Earthquak
 draw, so the picture is the ENGINE's own curve rather than a look-alike. **This is the single
 plug-in point** for any future keyframe designer.
 
-### 5b. `HapticTemperament` (`Core/HapticTemperament.cs`, 132 lines)
+### 5b. `HapticTemperament` (`CCP.Core/Services/Haptics/Core/HapticTemperament.cs`, 132 lines)
 Five presets keyed by a stable lowercase string in `V2.Temperament` (default `"balanced"`;
 unrecognised values fall back to Balanced).
 
@@ -451,20 +451,20 @@ All paths under `.../ConditioningControlPanel/`. Line counts verified 2026-08-03
 
 | File | Lines | Role |
 |---|---|---|
-| `Services/Haptics/Core/HapticContracts.cs` | 198 | **The v2 contract set** (§1). Extend, never redesign. |
+| `CCP.Core/Services/Haptics/Core/HapticContracts.cs` | 198 | **The v2 contract set** (§1). Extend, never redesign. |
 | `Services/Haptics/Core/HapticMixer.cs` | 933 | **The heart**: layers, pulses, temperament, safety, the 10 Hz loop. |
 | `Services/Haptics/Core/HapticDeviceManager.cs` | 302 | N concurrent providers, device registry, per-toy config, dedupe. |
 | `Services/Haptics/Core/HapticPatterns.cs` | 137 | The six `VibrationMode`s as envelopes + `SampleAt`. |
-| `Services/Haptics/Core/HapticTemperament.cs` | 132 | Five presets and their multiplier sets. |
+| `CCP.Core/Services/Haptics/Core/HapticTemperament.cs` | 132 | Five presets and their multiplier sets. |
 | `Services/Haptics/Core/MockProviderV2.cs` | 191 | Three virtual toys with real capability shapes. |
 | `Services/Haptics/Core/MockToast.cs` | 101 | The **single** shared toast window (HWND-leak history). |
 | `Services/Haptics/HapticService.cs` | 872 | `App.Haptics` — the facade; legacy signatures preserved. |
 | `Services/Haptics/LovenseProviderV2.cs` | 1235 | LAN Game Mode: per-toy registry, keep-alive, patterns, presets. |
-| `Services/Haptics/LovensePatterns.cs` | 350 | Verb/step tables, `X-platform` header, quantizer, action fragments. |
+| `CCP.Core/Services/Haptics/LovensePatterns.cs` | 350 | Verb/step tables, `X-platform` header, quantizer, action fragments. |
 | `Services/Haptics/LovenseToyEventsClient.cs` | 525 | Toy Events WebSocket (`/v1`): buttons, strength, battery, shake. |
 | `Services/Haptics/ButtplugProviderV2.cs` | 707 | Buttplug 5.0.1 (**spec v4**) over Intiface. |
 | `Services/Haptics/ToyInputService.cs` | 227 | Debounced button input + user-override back-off. |
-| `Services/Haptics/FunScript.cs` | 188 | Pure parser/sampler (unit-tested). |
+| `CCP.Core/Services/Haptics/FunScript.cs` | 188 | Pure parser/sampler (unit-tested). |
 | `Services/Haptics/FunScriptService.cs` | 300 | Discovery beside the video, 20 Hz sync, position lead. |
 | `Services/Haptics/DtrhHapticDirector.cs` | 423 | DtRH ambient layer + tiered accent pulses. |
 | `Services/AudioSyncService.cs` | 409 | Web-video audio → `HapticLayer.AudioSync` (+ the band split). |
@@ -474,7 +474,7 @@ All paths under `.../ConditioningControlPanel/`. Line counts verified 2026-08-03
 | `Views/Controls/HapticUiModels.cs` | 514 | Row/toy/provider VMs, expansion scope, converters. |
 | `MainWindow/MainWindow.Haptics.cs` | 1062 | Tab handlers + the small `Load*ToUi` helpers. |
 | `Windows/HapticsSetupWindow.xaml(.cs)` | 248+249 | Setup wizard v2 (writes settings, really connects). |
-| `Services/Haptics/IHapticProvider.cs` + `LovenseProvider.cs` + `ButtplugProvider.cs` + `MockHapticProvider.cs` | 37+355+361+68 | **DEAD** v1 path — compiles, nothing constructs it (§13.11). |
+| `CCP.Core/Services/Haptics/IHapticProvider.cs` + `LovenseProvider.cs` + `ButtplugProvider.cs` + `MockHapticProvider.cs` | 37+355+361+68 | **DEAD** v1 path — compiles, nothing constructs it (§13.11). |
 | `Services/Haptics/LockdownService.cs` | 226 | **NOT haptics** — mis-filed lockdown mode (§13.12). |
 
 **C# wiring:** `App.Haptics` declared `App.xaml.cs:354`, constructed `:1563`, `AudioSync` `:1564`,
