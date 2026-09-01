@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -26,15 +26,6 @@ namespace ConditioningControlPanel.Tests;
 /// </summary>
 public class ModManagerWordmarkTests
 {
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
-            dir = dir.Parent;
-        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
-        return dir!.FullName;
-    }
-
     private static string MainWindowXaml() => SourceRoots.ReadProductFile("MainWindow", "MainWindow.xaml");
 
     /// <summary>The whole &lt;Button x:Name="BtnManageMods"&gt; element, template included.</summary>
@@ -107,7 +98,7 @@ public class ModManagerWordmarkTests
         // string is untranslated. The key is not orphaned: it is the button's automation name.
         Assert.Contains("AutomationProperties.Name=\"{loc:Str label_mod_manager}\"", ButtonBlock());
 
-        var langDir = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages");
+        var langDir = SourceRoots.LanguagesDirectory;
         var files = Directory.GetFiles(langDir, "*.json");
         Assert.Equal(9, files.Length);
 
@@ -120,4 +111,4 @@ public class ModManagerWordmarkTests
                 "\" - the hardcoded M / D MANAGER split in MainWindow.xaml no longer spells it");
         }
     }
-}
+}

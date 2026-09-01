@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -40,15 +40,6 @@ public class YouLibraryDoorTests
     //  fixtures
     // =====================================================================================
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
-            dir = dir.Parent;
-        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
-        return dir!.FullName;
-    }
-
     private static string ReadSource(params string[] parts) => SourceRoots.ReadProductFile(parts);
 
     // The product source walk (and the exclusions that used to live here — build output, and the
@@ -59,7 +50,7 @@ public class YouLibraryDoorTests
 
     private static Dictionary<string, string> Language(string file)
     {
-        var path = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages", file);
+        var path = Path.Combine(SourceRoots.LanguagesDirectory, file);
         using var doc = JsonDocument.Parse(File.ReadAllText(path));
 
         // Indexer, not ToDictionary: several language files carry duplicate keys (en.json has 14,

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -39,7 +39,7 @@ public class EmiCodexTests
 
     private static Dictionary<string, string> English()
     {
-        var path = Path.Combine(AppDir(), "Localization", "Languages", "en.json");
+        var path = Path.Combine(SourceRoots.LanguagesDirectory, "en.json");
         Assert.True(File.Exists(path), path);
         using var doc = JsonDocument.Parse(File.ReadAllText(path));
         var d = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -94,7 +94,7 @@ public class EmiCodexTests
     [Fact]
     public void The_label_is_in_all_nine_language_files_and_fits_a_card()
     {
-        var dir = Path.Combine(AppDir(), "Localization", "Languages");
+        var dir = SourceRoots.LanguagesDirectory;
         var files = Directory.GetFiles(dir, "*.json");
         Assert.Equal(9, files.Length);
         foreach (var f in files)

@@ -34,7 +34,7 @@ public class EmiRingCatalogueTests
     }
 
     private static string LangDir() =>
-        Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages");
+        SourceRoots.LanguagesDirectory;
 
     private static Dictionary<string, string> English()
     {

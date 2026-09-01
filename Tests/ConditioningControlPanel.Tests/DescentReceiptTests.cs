@@ -248,7 +248,9 @@ public class DescentReceiptTests
     {
         foreach (var lang in Languages)
         {
-            var path = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages", lang + ".json");
+            // SourceRoots, not a hardcoded head path: the catalogue moved to CCP.Core in this
+            // commit, and a literal "ConditioningControlPanel/Localization" stops resolving.
+            var path = Path.Combine(SourceRoots.LanguagesDirectory, lang + ".json");
             using var doc = JsonDocument.Parse(File.ReadAllText(path));
 
             foreach (var key in ReceiptKeys)
@@ -271,7 +273,9 @@ public class DescentReceiptTests
     {
         foreach (var lang in Languages)
         {
-            var path = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages", lang + ".json");
+            // SourceRoots, not a hardcoded head path: the catalogue moved to CCP.Core in this
+            // commit, and a literal "ConditioningControlPanel/Localization" stops resolving.
+            var path = Path.Combine(SourceRoots.LanguagesDirectory, lang + ".json");
             using var doc = JsonDocument.Parse(File.ReadAllText(path));
 
             Assert.Contains("{0}", doc.RootElement.GetProperty("profile_cycle_receipt_cycle").GetString()!, StringComparison.Ordinal);

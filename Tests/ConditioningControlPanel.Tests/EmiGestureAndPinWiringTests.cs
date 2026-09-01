@@ -121,8 +121,7 @@ public class EmiGestureAndPinWiringTests
         // The hover glyph is her CARDS everywhere a user can read it.
         foreach (var lang in new[] { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" })
         {
-            var json = File.ReadAllText(Path.Combine(
-                SourceRoots.RepoRoot, "ConditioningControlPanel", "Localization", "Languages", lang + ".json"));
+            var json = File.ReadAllText(Path.Combine(SourceRoots.LanguagesDirectory, lang + ".json"));
             foreach (var line in json.Split('\n'))
             {
                 if (!line.Contains("emi_desk", StringComparison.Ordinal)) continue;

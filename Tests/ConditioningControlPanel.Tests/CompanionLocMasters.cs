@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -80,20 +80,9 @@ internal static class CompanionLocMasters
             English.Where(kv => kv.Key.StartsWith("companion_", StringComparison.Ordinal))
                    .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal));
 
-    private static string FindLanguagesDirectory()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null)
-        {
-            var candidate = Path.Combine(dir.FullName, "ConditioningControlPanel",
-                                         "Localization", "Languages");
-            if (File.Exists(Path.Combine(candidate, "en.json"))) return candidate;
-            dir = dir.Parent;
-        }
-        throw new DirectoryNotFoundException(
-            "Could not locate ConditioningControlPanel/Localization/Languages walking up from " +
-            AppContext.BaseDirectory);
-    }
+    // Was a hand-rolled walk-up pinned to ConditioningControlPanel/. SourceRoots probes every
+    // product root, so the catalogue's move to CCP.Core needs no edit here.
+    private static string FindLanguagesDirectory() => SourceRoots.LanguagesDirectory;
 }
 
 /// <summary>

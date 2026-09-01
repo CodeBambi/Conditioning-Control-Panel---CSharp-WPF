@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -68,7 +68,7 @@ public class EmiRingCardFitTests
 
     private static IEnumerable<(string Lang, string Key, string Label)> AllLabels()
     {
-        var dir = App("Localization", "Languages");
+        var dir = SourceRoots.LanguagesDirectory;
         foreach (var path in Directory.EnumerateFiles(dir, "*.json").OrderBy(p => p, StringComparer.Ordinal))
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(path));

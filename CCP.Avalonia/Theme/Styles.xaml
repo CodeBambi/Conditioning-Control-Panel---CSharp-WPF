@@ -62,4 +62,29 @@
     </Setter>
   </ControlTheme>
 
+  <!-- Controls.xaml:16. Lives here rather than Brushes.xaml because SettingCardStyle references
+       it as a same-dictionary StaticResource, which the WPF original comments on explicitly. -->
+  <LinearGradientBrush x:Key="VelvetCardBorderBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+    <GradientStop Color="#66FF7E6B" Offset="0"/>
+    <GradientStop Color="#22FF7E6B" Offset="0.45"/>
+    <GradientStop Color="#55FF69B4" Offset="1"/>
+  </LinearGradientBrush>
+
+  <!-- Controls.xaml:25. Used by 38 view sites. -->
+  <ControlTheme x:Key="SettingCardStyle" TargetType="Border">
+    <Setter Property="CornerRadius" Value="12"/>
+    <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource VelvetCardBorderBrush}"/>
+    <Setter Property="BorderThickness" Value="2"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Margin" Value="0,0,0,10"/>
+  </ControlTheme>
+
+  <!-- MainWindow.xaml:550. Used by 36 view sites. -->
+  <ControlTheme x:Key="SettingLabel" TargetType="TextBlock">
+    <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </ControlTheme>
+
 </ResourceDictionary>

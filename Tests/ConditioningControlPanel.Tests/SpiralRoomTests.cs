@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using ConditioningControlPanel.Models;
@@ -633,7 +633,7 @@ public class SpiralRoomTests
     [Fact]
     public void TheRoomIsNamedInEveryLanguage()
     {
-        var dir = Path.Combine(ProductDir, "Localization", "Languages");
+        var dir = SourceRoots.LanguagesDirectory;
         var files = Directory.GetFiles(dir, "*.json");
         Assert.Equal(9, files.Length);
 
