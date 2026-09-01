@@ -1,0 +1,86 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/Companion/Runtime/WorkshopCellTheme.xaml.
+     Keys, setters, values, order and comments are preserved so the two diff cleanly. Deviations,
+     all forced by real WPF/Avalonia differences:
+
+       <Style x:Key TargetType>     ->  <ControlTheme x:Key TargetType>   (a keyed, reusable style)
+       ControlTemplate.Triggers     ->  nested <Style Selector="^:pointerover|^:disabled">
+                                        (Avalonia has no triggers; pseudo-classes replace them)
+       <ContentPresenter/>          ->  <ContentPresenter Name="PART_ContentPresenter" .../>
+                                        (Avalonia's ContentControl only feeds a presenter carrying
+                                        that name; the WPF original gets its content implicitly)
+
+     Consumers write  Theme="{StaticResource CmpCellLabelStyle}"  where WPF writes Style=, and merge
+     this file with
+       <ResourceInclude Source="avares://CCP.Avalonia/Views/Controls/Companion/Runtime/WorkshopCellTheme.axaml"/>
+     in place of the WPF pack:// URI. -->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ================================================================
+         Interior styling for the Z8 Workshop's re-parented legacy cells.
+
+         The controls inside a Workshop cell are the ones the old accordions
+         shipped (design §6: "a container move, not a rebuild"), so they keep
+         their own app-level styles — ToggleStyle, PinkSlider, the combo box,
+         the help buttons. What they did NOT keep is the old accordion's
+         typography: at 340px wide a cell has room for a 10.5px label and a
+         value, not a 16px settings row.
+
+         These three styles are that reconciliation, and nothing else. They
+         are deliberately here rather than in CompanionTheme.xaml: that
+         dictionary is the ZONE theme, shared with the design-time gallery,
+         and the gallery never renders one of these cells.
+         ================================================================ -->
+
+    <ControlTheme x:Key="CmpCellLabelStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Foreground" Value="#FFD8D2EA"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </ControlTheme>
+
+    <ControlTheme x:Key="CmpCellHintStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="Foreground" Value="#FF8F88AD"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="Margin" Value="0,1,0,0"/>
+    </ControlTheme>
+
+    <ControlTheme x:Key="CmpCellValueStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="#FFFF8FD0"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="HorizontalAlignment" Value="Right"/>
+    </ControlTheme>
+
+    <!-- A quiet, full-width action button — the Workshop's own idiom for "this opens a dialog". -->
+    <ControlTheme x:Key="CmpCellButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="#FF1C1A2E"/>
+        <Setter Property="Foreground" Value="#FFD8D2EA"/>
+        <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="8,4"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <ControlTemplate TargetType="Button">
+                <Border x:Name="Chrome" Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="6" Padding="{TemplateBinding Padding}">
+                    <ContentPresenter Name="PART_ContentPresenter"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#Chrome">
+            <Setter Property="Background" Value="#FF2A2440"/>
+        </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.45"/>
+        </Style>
+    </ControlTheme>
+</ResourceDictionary>
