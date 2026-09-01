@@ -144,11 +144,14 @@ internal static class SourceRoots
             $"'{relative}' is in none of the product roots searched: " +
             string.Join(", ", ProductDirectories.Select(Path.GetFileName)));
 
-        // A half-finished move genuinely leaves the same relative path in two roots. Silently
-        // taking the first would assert against the stale copy and pass — so refuse to guess.
+        // Two roots holding one relative path means either a half-finished move (delete the stale
+        // copy) or one real file per head (then the test has to say which head it means — e.g.
+        // GlobalUsings.cs and Properties/AssemblyInfo.cs are already legitimately in both roots).
+        // Taking the first silently would assert against the wrong copy and pass, so make the
+        // author choose rather than guess for them.
         Assert.True(hits.Count == 1,
-            $"'{relative}' exists in more than one product root, so nothing can say which copy a "
-            + "test means — finish the move and delete the other: " + string.Join(", ", hits));
+            $"'{relative}' exists in more than one product root, so nothing can say which copy this "
+            + "test means — finish the move, or pin the test to one head: " + string.Join(", ", hits));
 
         return hits[0];
     }
