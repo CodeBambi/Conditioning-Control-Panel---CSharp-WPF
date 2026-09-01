@@ -491,50 +491,99 @@
        theme of ours to alias, so BasedOn the Fluent default - the key exists for its call site. -->
   <ControlTheme x:Key="FocusGlowTextBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}"/>
 
-  <!-- MainWindow.xaml:280. WPF's Track/RepeatButton machinery is Avalonia's Track too, but the
-       stock Fluent slider template is a 60-line part contract (PART_Track, PART_DecreaseButton,
-       PART_IncreaseButton, thumb). Restyling those parts through selectors keeps the interaction
-       code and only repaints, which is what the WPF template does visually: 3px groove, pink
-       fill, 14px white thumb. -->
-  <ControlTheme x:Key="PinkSlider" TargetType="Slider" BasedOn="{StaticResource {x:Type Slider}}">
+  <!-- MainWindow.xaml:280. The WPF template replaced wholesale, and so does this one: a
+       ControlTheme's Resources are NOT in the DynamicResource lookup path of the templated parts,
+       and a `/template/ Thumb` setter loses to Fluent's own thumb theme (both measured: the thumb
+       stayed Fluent blue either way). So the template is our own - Track + two RepeatButtons +
+       Thumb, the same parts WPF's has. 3px groove, pink fill, 14px white thumb. -->
+  <!-- The two RepeatButtons are themed, not inline-templated: an inline template nested inside
+       the Slider's template painted nothing under headless Skia (measured), the theme form does. -->
+  <ControlTheme x:Key="SliderFillButton" TargetType="RepeatButton">
+    <Setter Property="Focusable" Value="False"/>
+    <Setter Property="Template">
+      <ControlTemplate TargetType="RepeatButton">
+        <Border Background="{TemplateBinding Background}" Height="{TemplateBinding Height}"
+                CornerRadius="{TemplateBinding CornerRadius}" VerticalAlignment="Center"/>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+
+  <ControlTheme x:Key="PinkSlider" TargetType="Slider">
     <Setter Property="Minimum" Value="0"/>
     <Setter Property="Maximum" Value="100"/>
     <Setter Property="Height" Value="18"/>
     <Setter Property="Margin" Value="0"/>
-    <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
     <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}"/>
-    <Style Selector="^ /template/ Thumb">
-      <Setter Property="Width" Value="14"/>
-      <Setter Property="Height" Value="14"/>
-      <Setter Property="Background" Value="White"/>
-      <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
-      <Setter Property="BorderThickness" Value="1"/>
-      <Setter Property="CornerRadius" Value="7"/>
-    </Style>
-    <Style Selector="^:disabled">
-      <Setter Property="Opacity" Value="0.35"/>
-    </Style>
+    <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+    <Setter Property="Template">
+      <ControlTemplate TargetType="Slider">
+        <Grid>
+          <Border x:Name="TrackGroove" Height="3" Background="{TemplateBinding Background}" CornerRadius="1.5" VerticalAlignment="Center"/>
+          <Track x:Name="PART_Track" Orientation="Horizontal" VerticalAlignment="Center"
+                 Minimum="{TemplateBinding Minimum}" Maximum="{TemplateBinding Maximum}"
+                 Value="{TemplateBinding Value, Mode=TwoWay}" IsDirectionReversed="{TemplateBinding IsDirectionReversed}">
+            <Track.DecreaseButton>
+              <RepeatButton x:Name="PART_DecreaseButton" Theme="{StaticResource SliderFillButton}"
+                            Background="{TemplateBinding Foreground}" Height="3" CornerRadius="1.5"/>
+            </Track.DecreaseButton>
+            <Track.IncreaseButton>
+              <RepeatButton x:Name="PART_IncreaseButton" Theme="{StaticResource SliderFillButton}"
+                            Background="Transparent" Height="3"/>
+            </Track.IncreaseButton>
+            <Thumb x:Name="SliderThumb" Width="14" Height="14" Cursor="Hand">
+              <Thumb.Template>
+                <ControlTemplate TargetType="Thumb">
+                  <Border x:Name="ThumbBody" Width="14" Height="14" CornerRadius="7" Background="White"
+                          BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"/>
+                </ControlTemplate>
+              </Thumb.Template>
+            </Thumb>
+          </Track>
+        </Grid>
+      </ControlTemplate>
+    </Setter>
+    <!-- A disabled slider must LOOK disabled (WPF comment kept): dim groove, fill and thumb. -->
+    <Style Selector="^:disabled /template/ Border#TrackGroove"><Setter Property="Opacity" Value="0.35"/></Style>
+    <Style Selector="^:disabled /template/ RepeatButton#PART_DecreaseButton"><Setter Property="Opacity" Value="0.28"/></Style>
+    <Style Selector="^:disabled /template/ Thumb#SliderThumb"><Setter Property="Opacity" Value="0.35"/></Style>
   </ControlTheme>
 
-  <!-- MainWindow.xaml:350. Same restyle approach as PinkSlider: 6px track, pink->purple fill,
-       16px pink thumb. The thumb's DropShadowEffect glow is dropped (no Effect on Avalonia). -->
-  <ControlTheme x:Key="BlinkTrainerGradientSlider" TargetType="Slider" BasedOn="{StaticResource {x:Type Slider}}">
+  <!-- MainWindow.xaml:350. Same parts, heavier: 6px track, pink->purple gradient fill, 16px pink
+       thumb with a white ring. The thumb's DropShadowEffect glow is dropped. -->
+  <ControlTheme x:Key="BlinkTrainerGradientSlider" TargetType="Slider">
     <Setter Property="MinHeight" Value="22"/>
-    <Setter Property="Background" Value="#22FFFFFF"/>
-    <Setter Property="Foreground">
-      <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
-        <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
-        <GradientStop Color="{DynamicResource NeonPurpleColor}" Offset="1"/>
-      </LinearGradientBrush>
+    <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+    <Setter Property="Template">
+      <ControlTemplate TargetType="Slider">
+        <Grid Height="22">
+          <Border Height="6" CornerRadius="3" Background="#22FFFFFF" VerticalAlignment="Center"/>
+          <Track x:Name="PART_Track" Orientation="Horizontal" VerticalAlignment="Center"
+                 Minimum="{TemplateBinding Minimum}" Maximum="{TemplateBinding Maximum}"
+                 Value="{TemplateBinding Value, Mode=TwoWay}" IsDirectionReversed="{TemplateBinding IsDirectionReversed}">
+            <Track.DecreaseButton>
+              <RepeatButton x:Name="PART_DecreaseButton" Theme="{StaticResource SliderFillButton}" Height="6" CornerRadius="3">
+                <RepeatButton.Background>
+                  <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                    <GradientStop Color="{DynamicResource NeonPurpleColor}" Offset="1"/>
+                  </LinearGradientBrush>
+                </RepeatButton.Background>
+              </RepeatButton>
+            </Track.DecreaseButton>
+            <Track.IncreaseButton>
+              <RepeatButton x:Name="PART_IncreaseButton" Theme="{StaticResource SliderFillButton}" Background="Transparent" Height="6"/>
+            </Track.IncreaseButton>
+            <Thumb Width="16" Height="16" Cursor="Hand">
+              <Thumb.Template>
+                <ControlTemplate TargetType="Thumb">
+                  <Ellipse Fill="{DynamicResource PinkBrush}" Stroke="White" StrokeThickness="1.5"/>
+                </ControlTemplate>
+              </Thumb.Template>
+            </Thumb>
+          </Track>
+        </Grid>
+      </ControlTemplate>
     </Setter>
-    <Style Selector="^ /template/ Thumb">
-      <Setter Property="Width" Value="16"/>
-      <Setter Property="Height" Value="16"/>
-      <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
-      <Setter Property="BorderBrush" Value="White"/>
-      <Setter Property="BorderThickness" Value="1.5"/>
-      <Setter Property="CornerRadius" Value="8"/>
-    </Style>
   </ControlTheme>
 
   <!-- MainWindow.xaml:1234. Restyles the Fluent ComboBox parts rather than replacing the
@@ -549,11 +598,13 @@
     <Setter Property="Padding" Value="8,5"/>
     <Setter Property="CornerRadius" Value="6"/>
     <Setter Property="Cursor" Value="Hand"/>
-    <Style Selector="^:pointerover">
+    <!-- Fluent's item theme sets Background/Foreground on the presenter for these states, so a
+         control-level setter is overridden; target the presenter as Fluent does. -->
+    <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
       <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
     </Style>
-    <Style Selector="^:selected">
+    <Style Selector="^:selected /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource TransparentPink40Brush}"/>
       <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
     </Style>
@@ -609,10 +660,18 @@
             </LinearGradientBrush>
           </Border.BorderBrush>
           <Grid RowDefinitions="Auto,Auto">
-            <ToggleButton Grid.Row="0" x:Name="PART_toggle" Cursor="Hand" Background="Transparent"
+            <ToggleButton Grid.Row="0" x:Name="PART_toggle" Cursor="Hand"
                           IsChecked="{TemplateBinding IsExpanded, Mode=TwoWay}"
-                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                          Padding="12,10" BorderThickness="0">
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+              <!-- Own template: Fluent's ToggleButton paints its :checked state accent-blue,
+                   and an expanded card is always :checked. WPF's header is a bare Border. -->
+              <ToggleButton.Template>
+                <ControlTemplate TargetType="ToggleButton">
+                  <Border Background="Transparent" Padding="12,10">
+                    <ContentPresenter Content="{TemplateBinding Content}"/>
+                  </Border>
+                </ControlTemplate>
+              </ToggleButton.Template>
               <Grid ColumnDefinitions="3,8,*,Auto">
                 <Rectangle Grid.Column="0" RadiusX="1.5" RadiusY="1.5">
                   <Rectangle.Fill>

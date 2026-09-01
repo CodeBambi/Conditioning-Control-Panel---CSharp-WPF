@@ -58,7 +58,9 @@ jobs:
       # binds a key that does not exist, or nulls its own template shows up here and nowhere else.
       # Non-zero exit fails the job.
       - run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --render-all $RUNNER_TEMP/render
+      # always(): the PNGs matter MOST when a view failed - a reviewer needs the 23 that drew.
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: linux-head-render
           path: ${{ runner.temp }}/render/

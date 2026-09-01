@@ -25,14 +25,28 @@ namespace ConditioningControlPanel.Avalonia
             // or full name). Until this existed the flag ignored its argument and always drew
             // AppShell, so 20 of the first 21 ported views had never been rendered by anything.
             var rv = Array.IndexOf(args, "--render-view");
-            if (rv >= 0 && rv + 2 < args.Length)
+            if (rv >= 0)
+            {
+                if (rv + 2 >= args.Length)
+                {
+                    Console.Error.WriteLine("usage: --render-view <TypeName> <out.png>");
+                    return 2;
+                }
                 return RenderProof.RunView(args[rv + 1], args[rv + 2]);
+            }
 
             // --render-all <dir> renders every view under Views/ to <dir>/<TypeName>.png and
             // fails if any one throws. This is the per-view proof CI uploads.
             var ra = Array.IndexOf(args, "--render-all");
-            if (ra >= 0 && ra + 1 < args.Length)
+            if (ra >= 0)
+            {
+                if (ra + 1 >= args.Length)
+                {
+                    Console.Error.WriteLine("usage: --render-all <dir>");
+                    return 2;
+                }
                 return RenderProof.RunAll(args[ra + 1]);
+            }
 
             // --x11-probe drives the X11 overlay shim against a real window and asks the X
             // server which window owns the pointer. Every way that shim can fail returns

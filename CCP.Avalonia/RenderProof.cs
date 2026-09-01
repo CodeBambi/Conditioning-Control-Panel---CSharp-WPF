@@ -50,20 +50,33 @@ namespace ConditioningControlPanel.Avalonia
         /// while the same lookup succeeded in --smoke. Construct after setup, not before.</param>
         public static int Run(string outPath, Func<Control>? viewFactory)
         {
+            Window? window = null;
             try
             {
                 EnsureSetUp();
 
-                var window = new MainWindow { Width = 880, Height = 620 };
                 if (viewFactory is not null)
                 {
                     var view = viewFactory();
-                    // A ported Window cannot be nested; host its content instead. The chrome is
-                    // Avalonia's, the content is the port - which is the part under test.
-                    window.Content = view is Window w ? DetachContent(w) : view;
-                    // Wide enough that the shell's 196px rail plus content is not clipped.
-                    window.Width = 1100;
-                    window.Height = 780;
+                    if (view is Window w)
+                    {
+                        // A ported dialog is a Window: show IT, not its content re-parented into a
+                        // host. Re-parenting breaks every `$parent[Window]` binding in the dialog
+                        // (they resolve to the host, whose DataContext is null) and rendered blank
+                        // labels with exit code 0 - the exact class of bug this flag exists to catch.
+                        window = w;
+                        if (double.IsNaN(w.Width) || w.Width < 200) w.Width = 1100;
+                        if (double.IsNaN(w.Height) || w.Height < 200) w.Height = 780;
+                    }
+                    else
+                    {
+                        // Wide enough that the shell's 196px rail plus content is not clipped.
+                        window = new MainWindow { Width = 1100, Height = 780, Content = view };
+                    }
+                }
+                else
+                {
+                    window = new MainWindow { Width = 880, Height = 620 };
                 }
                 window.Show();
 
@@ -81,7 +94,6 @@ namespace ConditioningControlPanel.Avalonia
                 var dir = Path.GetDirectoryName(Path.GetFullPath(outPath));
                 if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
                 frame.Save(outPath);
-                window.Close();
 
                 var len = new FileInfo(outPath).Length;
                 Console.WriteLine($"rendered -> {outPath} ({frame.PixelSize.Width}x{frame.PixelSize.Height}, {len} bytes)");
@@ -92,20 +104,12 @@ namespace ConditioningControlPanel.Avalonia
                 Console.Error.WriteLine("render failed: " + ex);
                 return 1;
             }
-        }
-
-        /// <summary>
-        /// Lift a ported Window's content out so it can be hosted. The DataContext lives on the
-        /// Window and is inherited by the content, so it must travel too - without this every
-        /// bound string in a dialog rendered blank (found by the first --render-all).
-        /// </summary>
-        private static object? DetachContent(Window w)
-        {
-            var c = w.Content;
-            w.Content = null;
-            if (c is StyledElement se && se.DataContext is null)
-                se.DataContext = w.DataContext;
-            return c;
+            finally
+            {
+                // --render-all runs many views in one process; a window left open by a failed
+                // view would otherwise stay in the headless platform's window list.
+                try { window?.Close(); } catch { /* already closed or never shown */ }
+            }
         }
 
         /// <summary>Render one view, found by simple or full type name.</summary>
