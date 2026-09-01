@@ -29,6 +29,19 @@ namespace ConditioningControlPanel.Services
             @"(?i)([A-Z]:[\\/])Users[\\/]([^\\/\r\n""']+)",
             RegexOptions.Compiled);
 
+        // /home/<name>/... and /Users/<name>/... — the POSIX and macOS home shapes.
+        //
+        // This class only knew the Windows shape while Core ran exclusively inside the WPF
+        // process, so on a Linux head the username went into crash.log verbatim. Found by
+        // actually executing Core on Linux (CCP.LinuxSmoke), not by any compile-time gate:
+        // a Windows path redacted correctly while "/home/alice/..." passed straight through.
+        //
+        // "root" is deliberately kept: it identifies no one and dropping it would obscure that
+        // the app ran elevated, which matters when reading a crash report.
+        private static readonly Regex PosixHomePathRegex = new(
+            @"(?i)(^|[\s""'(\[=:])(/home/|/Users/)(?!root(?:[/\s""')\]]|$))([^/\r\n""'\s]+)",
+            RegexOptions.Compiled);
+
         // Email addresses (RFC-ish — good enough for log scrubbing).
         private static readonly Regex EmailRegex = new(
             @"\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b",
@@ -78,11 +91,18 @@ namespace ConditioningControlPanel.Services
 
             int paths = 0, emails = 0, tokens = 0, appdata = 0;
 
-            // 1. User paths (home folder → redacted).
+            // 1. User paths (home folder → redacted). Windows shape first, then POSIX/macOS,
+            //    so a report from any head redacts the username the same way.
             var step1 = UserPathRegex.Replace(input, m =>
             {
                 paths++;
                 return $"{m.Groups[1].Value}Users\\<redacted>";
+            });
+
+            step1 = PosixHomePathRegex.Replace(step1, m =>
+            {
+                paths++;
+                return $"{m.Groups[1].Value}{m.Groups[2].Value}<redacted>";
             });
 
             // 2. Email addresses.
