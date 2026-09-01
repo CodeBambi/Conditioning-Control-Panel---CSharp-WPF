@@ -1,7 +1,7 @@
 # Goon Game Wire Protocol — v1 (2026-08-03)
 
 Language-neutral spec for Goon Game clients (Windows/WPF today; Expo/React Native and web
-planned). The C# binding is `Services/GoonGame/GoonContracts.cs` + `GoonWire.cs`; the
+planned). The C# binding is `../../CCP.Core/Services/GoonGame/GoonContracts.cs` + `Services/GoonGame/GoonWire.cs`; the
 executable server contract is `GoonFakeSignalingServer` in `GoonSignalingClient.cs`. If an
 implementation and this document disagree, one of them is a bug — fix and mirror.
 
