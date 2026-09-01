@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using ConditioningControlPanel.Models.Deeper;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Deeper
 {
@@ -156,7 +157,7 @@ namespace ConditioningControlPanel.Services.Deeper
             catch (Exception ex)
             {
                 TryDelete(tmpPath);
-                App.Logger?.Warning(ex, "EnhancementMediaBundler.Export injection failed: {Path}", destPath);
+                Log.Warning(ex, "EnhancementMediaBundler.Export injection failed: {Path}", destPath);
                 return BundleResult.Fail($"Failed to inject metadata: {ex.Message}");
             }
         }
@@ -225,13 +226,13 @@ namespace ConditioningControlPanel.Services.Deeper
             catch (EnhancementLoadException ex)
             {
                 error = ex.Message;
-                App.Logger?.Debug("EnhancementMediaBundler.TryExtract: schema/parse error: {Error}", ex.Message);
+                Log.Debug("EnhancementMediaBundler.TryExtract: schema/parse error: {Error}", ex.Message);
                 return false;
             }
             catch (Exception ex)
             {
                 error = ex.Message;
-                App.Logger?.Debug("EnhancementMediaBundler.TryExtract failed: {Error}", ex.Message);
+                Log.Debug("EnhancementMediaBundler.TryExtract failed: {Error}", ex.Message);
                 return false;
             }
         }
@@ -569,7 +570,7 @@ namespace ConditioningControlPanel.Services.Deeper
             // encounter it we just log and bail; the file gets a fresh tag.
             if (unsync)
             {
-                App.Logger?.Debug("ID3v2 tag uses unsynchronisation — frames not parsed.");
+                Log.Debug("ID3v2 tag uses unsynchronisation — frames not parsed.");
                 return result;
             }
             int tagSize = ReadSynchsafe(tag, 6);

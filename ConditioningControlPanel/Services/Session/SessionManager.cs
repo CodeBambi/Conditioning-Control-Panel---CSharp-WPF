@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Services
 {
@@ -81,7 +82,7 @@ namespace ConditioningControlPanel.Services
             foreach (var def in customSessions)
             {
                 var session = def.ToSession();
-                App.Logger?.Debug("Loaded custom session: {Name}, BonusXP={XP}, Source={Source}",
+                Log.Debug("Loaded custom session: {Name}, BonusXP={XP}, Source={Source}",
                     session.Name, session.BonusXP, session.Source);
                 _sessions.Add(session);
             }

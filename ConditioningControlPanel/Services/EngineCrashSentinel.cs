@@ -21,7 +21,7 @@ namespace ConditioningControlPanel.Services
             get
             {
                 // Mirror the app log location (%LOCALAPPDATA%/ConditioningControlPanel/logs).
-                string dir = Path.Combine(App.UserDataPath, "logs");
+                string dir = Path.Combine(CorePaths.UserData, "logs");
                 return Path.Combine(dir, "engine_session.active");
             }
         }

@@ -13,7 +13,7 @@ namespace ConditioningControlPanel.Services.Fyp;
 /// </summary>
 internal sealed class FypMetaStore
 {
-    private static string FilePath => Path.Combine(App.UserDataPath, "fyp_meta.json");
+    private static string FilePath => Path.Combine(CorePaths.UserData, "fyp_meta.json");
     private const int MaxEntries = 10000;
 
     public sealed class Meta
@@ -95,7 +95,7 @@ internal sealed class FypMetaStore
             if (!_dirty) return;
             try
             {
-                Directory.CreateDirectory(App.UserDataPath);
+                Directory.CreateDirectory(CorePaths.UserData);
                 File.WriteAllText(FilePath, JsonConvert.SerializeObject(_byId));
                 _dirty = false;
             }

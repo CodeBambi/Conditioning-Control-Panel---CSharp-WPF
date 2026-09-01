@@ -48,7 +48,7 @@ namespace ConditioningControlPanel.Services
 
         public MediaHistoryService()
         {
-            _filePath = Path.Combine(App.UserDataPath, "media_history.json");
+            _filePath = Path.Combine(CorePaths.UserData, "media_history.json");
             _saveTimer = new Timer(_ => Flush(), null, Timeout.Infinite, Timeout.Infinite);
 
             Load();

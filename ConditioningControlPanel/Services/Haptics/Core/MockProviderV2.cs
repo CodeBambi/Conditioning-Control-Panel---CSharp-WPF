@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Threading;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Haptics.Core
 {
@@ -57,7 +58,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 foreach (var d in _devices) _levels[d.Id] = new double[d.Actuators.Count];
                 IsConnected = true;
             }
-            App.Logger?.Information("MockProviderV2: 3 virtual toys online");
+            Log.Information("MockProviderV2: 3 virtual toys online");
             Raise();
             MockToast.Post("Mock haptics connected\nLush / Edge / Solace");
             return Task.FromResult(true);

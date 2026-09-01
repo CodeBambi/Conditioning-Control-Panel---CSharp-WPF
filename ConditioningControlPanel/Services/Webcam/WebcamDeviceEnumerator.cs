@@ -57,14 +57,14 @@ namespace ConditioningControlPanel.Services
                 var devEnumType = Type.GetTypeFromCLSID(CLSID_SystemDeviceEnum);
                 if (devEnumType == null)
                 {
-                    App.Logger?.Warning("WebcamDeviceEnumerator: SystemDeviceEnum CLSID could not be resolved");
+                    Log.Warning("WebcamDeviceEnumerator: SystemDeviceEnum CLSID could not be resolved");
                     return devices;
                 }
 
                 devEnum = Activator.CreateInstance(devEnumType) as ICreateDevEnum;
                 if (devEnum == null)
                 {
-                    App.Logger?.Warning("WebcamDeviceEnumerator: ICreateDevEnum activation returned null");
+                    Log.Warning("WebcamDeviceEnumerator: ICreateDevEnum activation returned null");
                     return devices;
                 }
 
@@ -101,7 +101,7 @@ namespace ConditioningControlPanel.Services
                     }
                     catch (Exception ex)
                     {
-                        App.Logger?.Debug(ex, "WebcamDeviceEnumerator: failed to read FriendlyName for device {Index}", idx);
+                        Log.Debug(ex, "WebcamDeviceEnumerator: failed to read FriendlyName for device {Index}", idx);
                     }
                     finally
                     {
@@ -118,7 +118,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "WebcamDeviceEnumerator: enumeration threw");
+                Log.Warning(ex, "WebcamDeviceEnumerator: enumeration threw");
             }
             finally
             {

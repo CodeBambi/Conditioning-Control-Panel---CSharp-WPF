@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Fyp.Online;
 
@@ -102,7 +103,7 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
             // The subreddit doesn't exist on scrolller (or was removed): not an error,
             // a dead channel. Caller retires it for the session.
             channel.Dead = true;
-            App.Logger?.Information("[FYP online] r/{Sub} does not resolve on scrolller — channel retired", channel.Name);
+            Log.Information("[FYP online] r/{Sub} does not resolve on scrolller — channel retired", channel.Name);
             return new FeedPage();
         }
 
@@ -157,12 +158,12 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
         var node = data["getSubreddit"];
         if (node == null || node.Type == JTokenType.Null)
         {
-            App.Logger?.Debug("[FYP online] probe r/{Sub}: not on scrolller", sub);
+            Log.Debug("[FYP online] probe r/{Sub}: not on scrolller", sub);
             return new SubProbe { Ok = false };
         }
 
         int? videos = (int?)node["videoCount"];
-        App.Logger?.Debug("[FYP online] probe r/{Sub}: ok, {N} videos", sub, videos);
+        Log.Debug("[FYP online] probe r/{Sub}: ok, {N} videos", sub, videos);
         // videoCount 0 is still Ok — the sub exists and has stills; the picker says so rather
         // than pretending the sub is missing.
         return new SubProbe { Ok = true, VideoCount = videos };
@@ -280,7 +281,7 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
         // don't, the entry is dropped here rather than dying downstream as a black tile.
         if (!RemoteMediaFormats.Validate(entry, out var reason))
         {
-            App.Logger?.Debug("[FYP online] dropped r/{Sub} post {Post}: {Reason}", sub, postId, reason);
+            Log.Debug("[FYP online] dropped r/{Sub} post {Post}: {Reason}", sub, postId, reason);
             return null;
         }
         return entry;
@@ -337,14 +338,14 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
             var text = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
             {
-                App.Logger?.Warning("[FYP online] scrolller API HTTP {Code}: {Body}",
+                Log.Warning("[FYP online] scrolller API HTTP {Code}: {Body}",
                     (int)resp.StatusCode, text.Length > 200 ? text[..200] : text);
                 return null;
             }
             var parsed = JObject.Parse(text);
             if (parsed["errors"] is JArray { Count: > 0 } errors)
             {
-                App.Logger?.Warning("[FYP online] scrolller GraphQL error: {E}",
+                Log.Warning("[FYP online] scrolller GraphQL error: {E}",
                     (string?)errors[0]?["message"] ?? "unknown");
                 return null;
             }
@@ -353,7 +354,7 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
         catch (OperationCanceledException) { return null; }
         catch (Exception ex)
         {
-            App.Logger?.Warning("[FYP online] scrolller request failed: {E}", ex.Message);
+            Log.Warning("[FYP online] scrolller request failed: {E}", ex.Message);
             return null;
         }
         finally { RequestGate.Release(); }

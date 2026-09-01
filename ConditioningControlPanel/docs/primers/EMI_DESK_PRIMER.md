@@ -107,8 +107,8 @@ clicks must be resolved the same way.
 | `Services/EmiDesk/EmiBarkBridge.cs` | 206 | One hook inside `BarkService.Raise` that mirrors ~25 app events into moments. |
 | `Services/EmiDesk/EmiNames.cs` | 227 | Machine key → a name she is allowed to say out loud. Returns **null**, never the raw key. |
 | `Services/EmiDesk/EmiGifRain.cs` | 91 | Calls the Chaos gif cascade for her. Not a fork of it. |
-| `Services/EmiDesk/EmiDebug.cs` | 73 | The two documented QA env overrides (§10.6). |
-| `Services/EmiDesk/EmiChrome.cs` | 196 | **When her chrome is lit.** Pure, clock-injected hover region + grace timer (§15.1). |
+| `CCP.Core/Services/EmiDesk/EmiDebug.cs` | 73 | The two documented QA env overrides (§10.6). |
+| `CCP.Core/Services/EmiDesk/EmiChrome.cs` | 196 | **When her chrome is lit.** Pure, clock-injected hover region + grace timer (§15.1). |
 | `Windows/EmiDesk/EmiDeskWindow.xaml(.cs)` | 120 + 1230 | The surface, drag, resize, placement, DPI, the pet gesture, the seams. |
 | `Windows/EmiDesk/EmiDeskWindow.Ring.cs` | 268 | Ring toggle + the sibling window's lifetime. |
 | `Windows/EmiDesk/EmiDeskWindow.Glass.cs` | 486 | The idle clock, the glitch flip, the channel painters' driver. |
@@ -504,7 +504,7 @@ the same keystroke. `ApplyHotkey` refuses that case explicitly via `PanicPolicy.
 the settings capture refuses a bare key. Every refusal is a **logged no-op** — the chip keeps working,
 so a taken chord costs a line in the log and nothing else.
 
-### 10.6 The QA env overrides (`Services/EmiDesk/EmiDebug.cs`)
+### 10.6 The QA env overrides (`CCP.Core/Services/EmiDesk/EmiDebug.cs`)
 
 Two documented environment variables, absent in every normal launch:
 
@@ -967,7 +967,7 @@ and both chips sit inside it. The three real causes:
 
 Every one of those is "left for a moment", and 140 ms is not enough time to come back.
 
-`Services/EmiDesk/EmiChrome.cs` now owns the decision and none of the drawing:
+`CCP.Core/Services/EmiDesk/EmiChrome.cs` now owns the decision and none of the drawing:
 
 - `EmiChromePart` (Body / Close / Gear / Grip) is a **flag set**, not a single value: WPF can hand
   out a child's enter before its parent's leave, so "which one is it?" is unanswerable and "how many

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.GoonGame
 {
@@ -103,7 +104,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                     ? (int)Math.Min(spec.TimeoutMs, sw.ElapsedMilliseconds)
                     : spec.TimeoutMs;
 
-                App.Logger?.Information(
+                Log.Information(
                     "GoonSuddenDeath: bubble race round {Round} -> {Popped}/{Total} in {Ms}ms",
                     ctx.RoundNo, count, spec.Count, elapsed);
 

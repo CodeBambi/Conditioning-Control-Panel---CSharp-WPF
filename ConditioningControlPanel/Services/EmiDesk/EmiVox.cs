@@ -477,7 +477,7 @@ public sealed class EmiVox : IEmiVox
 
     // ---------------------------------------------------------------- the instance
 
-    private static string ClipDir => Path.Combine(App.UserDataPath, "emi", "vox");
+    private static string ClipDir => Path.Combine(CorePaths.UserData, "emi", "vox");
 
     /// <summary>How many cached line clips to keep before the oldest are swept.</summary>
     private const int CacheCap = 96;

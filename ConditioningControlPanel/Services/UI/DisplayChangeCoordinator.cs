@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.UI
 {
@@ -34,7 +35,7 @@ namespace ConditioningControlPanel.Services.UI
         public static void NotifyDisplayChange(string reason)
         {
             Interlocked.Exchange(ref _quietUntilTick, Environment.TickCount64 + QuietMs);
-            App.Logger?.Debug("[DISPLAY] change ({Reason}) — pausing layered-window spawns for {Ms}ms", reason, QuietMs);
+            Log.Debug("[DISPLAY] change ({Reason}) — pausing layered-window spawns for {Ms}ms", reason, QuietMs);
         }
 
         /// <summary>True while spawns should be skipped (a display change happened within the last <see cref="QuietMs"/> ms).</summary>
@@ -49,14 +50,14 @@ namespace ConditioningControlPanel.Services.UI
         public static void BeginInteractiveMove()
         {
             Interlocked.Exchange(ref _interactiveMove, 1);
-            App.Logger?.Debug("[DISPLAY] interactive move started — quiescing z-order/layered reconcilers");
+            Log.Debug("[DISPLAY] interactive move started — quiescing z-order/layered reconcilers");
         }
 
         /// <summary>Main window left its modal move/size loop (WM_EXITSIZEMOVE).</summary>
         public static void EndInteractiveMove()
         {
             Interlocked.Exchange(ref _interactiveMove, 0);
-            App.Logger?.Debug("[DISPLAY] interactive move ended");
+            Log.Debug("[DISPLAY] interactive move ended");
         }
 
         /// <summary>True while the user is dragging/resizing the main window. During that loop a
