@@ -15,8 +15,14 @@
     <Nullable>enable</Nullable>
     <!-- Match the app: it does not use implicit usings. -->
     <ImplicitUsings>disable</ImplicitUsings>
-    <!-- Must stay ConditioningControlPanel so embedded-resource name strings keep resolving
-         as files move over from the app. -->
+    <!-- Must stay ConditioningControlPanel: it is the prefix of every generated resource
+         logical name, so hardcoded strings like "ConditioningControlPanel.assets.knowledge.json"
+         keep naming the same thing once a resource moves here.
+         It does NOT make a moved resource *reachable*. Lookups go through
+         Assembly.GetExecutingAssembly() (e.g. Services/AIService/Enrichment/KnowledgeService.cs),
+         which returns whichever assembly the calling code was compiled into. Move such a caller
+         here without also moving its <EmbeddedResource> and the stream comes back null at
+         runtime, with no compile error. Move both, or neither. -->
     <RootNamespace>ConditioningControlPanel</RootNamespace>
     <AssemblyName>CCP.Core</AssemblyName>
     <!-- Match the app: assembly info lives in Properties/AssemblyInfo.cs. -->
