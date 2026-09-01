@@ -35,8 +35,16 @@ namespace ConditioningControlPanel.Avalonia
             var s1 = ConditioningControlPanel.Localization.Loc.Get("section_achievements");
             Check("localization resolves a real string", s1 != "section_achievements", s1);
 
-            // The window is not constructed here: building a Window needs a platform backend, and
-            // asserting on the values it renders is what actually matters.
+            // Ported dialogs: assert their view models resolve real strings. Constructing the
+            // Windows themselves needs a platform backend, so --render-view covers visuals and
+            // this covers the content they bind to.
+            var upd = new Views.Dialogs.UpdateProgressViewModel();
+            Check("UpdateProgressDialog strings resolve",
+                  upd.LocTitle != "dialog_downloading_update", upd.LocTitle);
+
+            var url = new Views.Dialogs.UrlPromptViewModel();
+            Check("UrlPromptDialog strings resolve",
+                  url.LocCancel != "btn_cancel", url.LocCancel);
             Console.WriteLine();
             Console.WriteLine(failures == 0
                 ? "Linux head can produce every value it renders."
