@@ -59,7 +59,7 @@ internal static class FypAssetManifest
         var entries = new List<Entry>();
         try
         {
-            var root = App.EffectiveAssetsPath;
+            var root = CorePaths.EffectiveAssets;
             var disabled = new HashSet<string>(
                 (App.Settings?.Current?.DisabledAssetPaths ?? new()).Select(p => p.Replace('\\', '/')),
                 StringComparer.OrdinalIgnoreCase);

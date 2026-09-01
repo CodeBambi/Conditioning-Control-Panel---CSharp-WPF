@@ -37,8 +37,8 @@ namespace ConditioningControlPanel.Services
             App.EnsureCustomAssetsDirectories();
 
             // Ensure destination folders exist
-            var imagesFolder = Path.Combine(App.EffectiveAssetsPath, "images");
-            var videosFolder = Path.Combine(App.EffectiveAssetsPath, "videos");
+            var imagesFolder = Path.Combine(CorePaths.EffectiveAssets, "images");
+            var videosFolder = Path.Combine(CorePaths.EffectiveAssets, "videos");
             Directory.CreateDirectory(imagesFolder);
             Directory.CreateDirectory(videosFolder);
 
@@ -402,9 +402,9 @@ namespace ConditioningControlPanel.Services
         private static string? GetDestinationFolder(string extension)
         {
             if (IsVideo(extension))
-                return Path.Combine(App.EffectiveAssetsPath, "videos");
+                return Path.Combine(CorePaths.EffectiveAssets, "videos");
             if (IsImage(extension))
-                return Path.Combine(App.EffectiveAssetsPath, "images");
+                return Path.Combine(CorePaths.EffectiveAssets, "images");
             return null;
         }
 

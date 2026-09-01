@@ -224,7 +224,7 @@ namespace ConditioningControlPanel.Services.Awareness
         }
 
         /// <summary><c>%LOCALAPPDATA%\ConditioningControlPanel\awareness_ledger.json</c>.</summary>
-        public static string DefaultLedgerPath => Path.Combine(App.UserDataPath, "awareness_ledger.json");
+        public static string DefaultLedgerPath => Path.Combine(CorePaths.UserData, "awareness_ledger.json");
 
         /// <summary>Full path of the ledger file — surfaced for the privacy panel and diagnostics.</summary>
         public string LedgerPath => _path;

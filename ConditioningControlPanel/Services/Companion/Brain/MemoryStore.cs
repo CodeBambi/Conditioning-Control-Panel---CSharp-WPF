@@ -212,7 +212,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         public static string DefaultMemoryPath => Path.Combine(CompanionDirectory, "memory.json");
 
         /// <summary>The companion's private data folder. Not the assets path, not a mod folder.</summary>
-        public static string CompanionDirectory => Path.Combine(App.UserDataPath, "companion");
+        public static string CompanionDirectory => Path.Combine(CorePaths.UserData, "companion");
 
         /// <summary>Full path of memory.json — surfaced for the privacy panel and diagnostics.</summary>
         public string MemoryPath => _path;

@@ -516,7 +516,7 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var path = Path.Combine(App.UserDataPath, "logs", "crash.log");
+                var path = Path.Combine(CorePaths.UserData, "logs", "crash.log");
                 if (!File.Exists(path)) return string.Empty;
                 // Crash log is usually small but can accumulate across sessions.
                 // Read the last MaxCrashLogChars bytes via a streaming approach.
@@ -676,7 +676,7 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var logDir = Path.Combine(App.UserDataPath, "logs");
+                var logDir = Path.Combine(CorePaths.UserData, "logs");
                 if (!Directory.Exists(logDir)) return string.Empty;
                 var files = Directory.GetFiles(logDir, "app-*.log");
                 if (files.Length == 0) return string.Empty;
