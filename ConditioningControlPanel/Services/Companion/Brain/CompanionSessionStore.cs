@@ -74,8 +74,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
         public CompanionSessionStore(string? sessionPath = null, string? legacyPath = null)
         {
-            _sessionPath = sessionPath ?? Path.Combine(App.UserDataPath, "companion", "session.json");
-            _legacyPath = legacyPath ?? Path.Combine(App.UserDataPath, "local_chat_history.json");
+            _sessionPath = sessionPath ?? Path.Combine(CorePaths.UserData, "companion", "session.json");
+            _legacyPath = legacyPath ?? Path.Combine(CorePaths.UserData, "local_chat_history.json");
         }
 
         /// <summary>Full path of session.json — surfaced for the privacy panel and diagnostics.</summary>

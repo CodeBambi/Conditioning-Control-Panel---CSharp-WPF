@@ -34,7 +34,7 @@ namespace ConditioningControlPanel.Services
 
         public SessionLogService()
         {
-            LogsFolder = Path.Combine(App.UserDataPath, "session_logs");
+            LogsFolder = Path.Combine(CorePaths.UserData, "session_logs");
             try { Directory.CreateDirectory(LogsFolder); }
             catch (Exception ex) { App.Logger?.Warning(ex, "SessionLogService: failed to create logs folder"); }
         }

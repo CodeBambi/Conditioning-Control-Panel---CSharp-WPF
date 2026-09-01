@@ -38,7 +38,7 @@ namespace ConditioningControlPanel.Services
 
         private static string SafeContentRoot()
         {
-            try { return Path.Combine(App.UserDataPath, "content"); }
+            try { return Path.Combine(CorePaths.UserData, "content"); }
             catch { return string.Empty; }
         }
 

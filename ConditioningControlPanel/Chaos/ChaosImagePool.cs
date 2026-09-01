@@ -31,7 +31,7 @@ internal static class ChaosImagePool
     {
         try
         {
-            var dir = Path.Combine(App.EffectiveAssetsPath ?? "", "images");
+            var dir = Path.Combine(CorePaths.EffectiveAssets ?? "", "images");
             var now = DateTime.UtcNow;
             if (dir == _dir && now - _stamp < TTL) return _files;
             // Stamp BEFORE the walk so a missing/throwing folder isn't re-walked every call.

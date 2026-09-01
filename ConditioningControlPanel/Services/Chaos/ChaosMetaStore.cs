@@ -6,7 +6,7 @@ namespace ConditioningControlPanel.Services.Chaos;
 
 /// <summary>
 /// Disk persistence for <see cref="ChaosMetaState"/>. Mirrors SettingsService's
-/// approach: Newtonsoft.Json, stored in <see cref="App.UserDataPath"/>, atomic write
+/// approach: Newtonsoft.Json, stored in <see cref="CorePaths.UserData"/>, atomic write
 /// via a <c>.tmp</c> file + replace. <see cref="Load(int)"/> never throws — a missing or
 /// corrupt file yields a fresh default state (logged), so bad meta data can't brick
 /// the app.
@@ -23,15 +23,15 @@ public static class ChaosMetaStore
 {
     public const int SlotCount = 3;
 
-    private static string LegacyPath => Path.Combine(App.UserDataPath, "chaos_meta.json");
+    private static string LegacyPath => Path.Combine(CorePaths.UserData, "chaos_meta.json");
 
     /// <summary>Absolute path to a slot's save file (1-based). Public so the slot picker can
     /// show it and reveal the folder.</summary>
     public static string SlotFilePath(int slot) =>
-        Path.Combine(App.UserDataPath, $"chaos_meta.slot{Clamp(slot)}.json");
+        Path.Combine(CorePaths.UserData, $"chaos_meta.slot{Clamp(slot)}.json");
 
     /// <summary>The folder every save lives in — shown in the picker ("all saves are local").</summary>
-    public static string SaveFolder => App.UserDataPath;
+    public static string SaveFolder => CorePaths.UserData;
 
     /// <summary>The currently-selected slot (1-3), read from settings. Falls back to slot 1
     /// before settings have loaded.</summary>

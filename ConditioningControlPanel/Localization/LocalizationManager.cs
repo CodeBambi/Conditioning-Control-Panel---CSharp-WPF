@@ -176,7 +176,7 @@ namespace ConditioningControlPanel.Localization
             // Fallback: try user data directory (for user-added translations)
             if (!File.Exists(filePath))
             {
-                var userDir = Path.Combine(App.UserDataPath, "Languages", $"{languageCode}.json");
+                var userDir = Path.Combine(CorePaths.UserData, "Languages", $"{languageCode}.json");
                 if (File.Exists(userDir))
                     filePath = userDir;
             }

@@ -24,7 +24,7 @@ namespace ConditioningControlPanel.Services.Chaos
             get
             {
                 // Mirror the app log location (%LOCALAPPDATA%/ConditioningControlPanel/logs).
-                string dir = Path.Combine(App.UserDataPath, "logs");
+                string dir = Path.Combine(CorePaths.UserData, "logs");
                 return Path.Combine(dir, "chaos_session.active");
             }
         }
