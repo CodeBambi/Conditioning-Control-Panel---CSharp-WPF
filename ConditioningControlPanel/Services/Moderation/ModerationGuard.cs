@@ -453,11 +453,36 @@ namespace ConditioningControlPanel.Services.Moderation
             // P2-C5: normalise BEFORE matching. Closes the trivial l33t / zero-width /
             // homoglyph / NFKC bypasses called out in the hostile review (b0mb, n!gger,
             // f4ggot, "b​o​mb", Cyrillic 'с' homoglyphs, etc.).
-            var normalised = Normalize(text);
+            //
+            // P3-AGE: the l33t fold is one-way and LOSSY for isolated single digits
+            // (5->s, 7->t, 1->i, 3->e, 4->a, 0->o), so it erased the very tokens the
+            // age patterns exist to catch: "she is 5 years old" folded to "she is s
+            // years old" and `\b(1[0-7]|[1-9])\s*years?\s*old\b` could then only ever
+            // see the four digits with no leet mapping (2, 6, 8, 9) — ages 1/3/4/5/7
+            // were unmatchable in EVERY minor-protection pattern, English and foreign
+            // alike. Same hole killed Illegal's `c-?4` ("make c4" -> "make ca").
+            //
+            // Fix: keep LeetFold exactly as-is (it defeats real leetspeak evasion) and
+            // ALSO match the un-folded normalisation. Blocking if EITHER string hits can
+            // only ever add blocks: the folded string is still matched first for every
+            // category in the same priority order, so every input that blocked before
+            // this change still blocks — its category can only move UP to a
+            // higher-priority hard category, never to ALLOW.
+            //
+            // The un-folded pass is skipped for ProfessionalAdvice on purpose. PA is the
+            // one advisory category: it returns SoftHit (Allow=true) and RETURNS, which
+            // would skip the foreign scan below. An un-folded-only PA hit could therefore
+            // turn a previously hard-blocked foreign input into an allow. Excluding it
+            // removes that soft-return path entirely, so the un-folded pass can only
+            // produce hard blocks. PA keeps its exact pre-fix behaviour (folded only).
+            var (normalised, unfolded) = NormalizePair(text);
+            bool foldChanged = !string.Equals(normalised, unfolded, StringComparison.Ordinal);
 
             foreach (var (cat, regexes, keywords) in rules)
             {
-                if (MatchesAny(normalised, regexes, keywords, out var note))
+                if (MatchesAny(normalised, regexes, keywords, out var note) ||
+                    (foldChanged && cat != ProhibitedCategory.ProfessionalAdvice &&
+                     MatchesAny(unfolded, regexes, keywords, out note)))
                 {
                     if (cat == ProhibitedCategory.ProfessionalAdvice)
                         return ModerationResult.SoftHit(cat, note);
@@ -472,10 +497,21 @@ namespace ConditioningControlPanel.Services.Moderation
             // English pass above. Passing raw `text` here let l33t/zero-width/homoglyph
             // bypasses ("B0mbe", "B​o​m​b​e") sail past every non-EN locale even though
             // C5 closed them for English.
-            var foreignResult = ForeignLanguageKeywords.Scan(normalised);
-            if (!foreignResult.Allow) return foreignResult;
-            if (foreignResult.Category == ProhibitedCategory.ProfessionalAdvice)
-                return foreignResult;
+            // P3-AGE: and BOTH strings, for the same reason the English pass sees both —
+            // every locale's age pattern is `(1[0-7]|[1-9])` too ("5 jahre alt", "5 лет",
+            // "5 años"). Both hard blocks are resolved before either soft hit, so a
+            // ProfessionalAdvice hit on one string can never mask a Minor block on the
+            // other.
+            var foreignFolded = ForeignLanguageKeywords.Scan(normalised);
+            if (!foreignFolded.Allow) return foreignFolded;
+
+            var foreignUnfolded = foldChanged ? ForeignLanguageKeywords.Scan(unfolded) : ModerationResult.Pass();
+            if (!foreignUnfolded.Allow) return foreignUnfolded;
+
+            if (foreignFolded.Category == ProhibitedCategory.ProfessionalAdvice)
+                return foreignFolded;
+            if (foreignUnfolded.Category == ProhibitedCategory.ProfessionalAdvice)
+                return foreignUnfolded;
 
             return ModerationResult.Pass();
         }
@@ -503,9 +539,25 @@ namespace ConditioningControlPanel.Services.Moderation
         /// arrays; callers in unit tests or in foreign-language follow-up workstreams
         /// can fold a string through the same pipeline.
         /// </summary>
-        public static string Normalize(string text)
+        public static string Normalize(string text) => NormalizePair(text).Folded;
+
+        /// <summary>
+        /// Runs the <see cref="Normalize"/> pipeline once and hands back BOTH end states:
+        /// <c>Folded</c> is what <see cref="Normalize"/> returns (steps 1-5, l33t fold
+        /// included), <c>Unfolded</c> is the same string with step 4 skipped (steps 1-3
+        /// + 5 only).
+        ///
+        /// Step 4 is lossy: it rewrites isolated single digits as letters, which destroys
+        /// single-digit ages ("5 years old" -&gt; "s years old") before any age pattern
+        /// can see them. <see cref="Scan"/> matches every rule against both strings and
+        /// blocks on either, so each covers the class the other cannot: Folded catches
+        /// leetspeak substitution (b0mb, n!gger), Unfolded catches literal digits the
+        /// fold would eat (single-digit ages, "c4"). Neither catches the two mixed in
+        /// one sentence ("5 y3ars old") — see the P3-AGE note in <see cref="Scan"/>.
+        /// </summary>
+        private static (string Folded, string Unfolded) NormalizePair(string text)
         {
-            if (string.IsNullOrEmpty(text)) return string.Empty;
+            if (string.IsNullOrEmpty(text)) return (string.Empty, string.Empty);
 
             // Step 1: NFKC.
             string nfkc;
@@ -527,7 +579,7 @@ namespace ConditioningControlPanel.Services.Moderation
             var folded = LeetFold(stripped);
 
             // Step 5: lowercase.
-            return folded.ToLowerInvariant();
+            return (folded.ToLowerInvariant(), stripped.ToLowerInvariant());
         }
 
         private static bool IsStrippableControl(int v)
