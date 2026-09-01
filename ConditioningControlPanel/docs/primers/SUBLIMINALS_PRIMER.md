@@ -64,7 +64,7 @@ Everything below §1 is about **`App.Subliminal`** unless the header says Bounci
 | `Services/Commands/BounceCommand.cs` | AI/remote command for Bouncing Text (`Start(true, words)` / `Stop`). |
 | `App.xaml.cs` | Declares `public static SubliminalService Subliminal` (`:290`) + `BouncingTextService BouncingText` (`:317`); constructs `Subliminal` at `:1397` and `BouncingText` at `:1424` in `OnStartup`. Also owns `App.CompositorEnabled` (the predicate behind render path A) and `GetActiveTextScreenRects` consumption at `:683` (§6). |
 | `Models/AppSettings.cs` | `#region Subliminals` (`:1026`+) and `#region Bouncing Text` (`:2779`+). See §8. |
-| `Services/Compositor/CompositorLayers.cs` | Z-order constants: `Subliminal = 40` (`:14`), between `Flash = 30` and `Bubbles = 45`. |
+| `CCP.Core/Services/Compositor/CompositorLayers.cs` | Z-order constants: `Subliminal = 40` (`:14`), between `Flash = 30` and `Bubbles = 45`. |
 
 **No `BouncingTextLayer.cs` exists.** `CompositorLayers.BouncingText = 50` (`:16`) is a *reserved*
 z-slot; Bouncing Text is still window-only and has **no** compositor render path (§7, §10.9).
