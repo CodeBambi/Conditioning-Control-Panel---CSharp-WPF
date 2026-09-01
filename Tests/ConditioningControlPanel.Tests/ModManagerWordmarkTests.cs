@@ -120,4 +120,4 @@ public class ModManagerWordmarkTests
                 "\" - the hardcoded M / D MANAGER split in MainWindow.xaml no longer spells it");
         }
     }
-}
+}
