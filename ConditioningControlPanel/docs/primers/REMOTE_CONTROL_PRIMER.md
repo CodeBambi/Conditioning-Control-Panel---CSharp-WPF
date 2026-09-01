@@ -354,7 +354,7 @@ A public opt-in matchmaking directory bolted onto Remote Control ("SP5 layer 3")
 | `Services/Progression/QuestService.cs` | `:728` | `TrackRemoteCommand` → `QuestCategory.Remote`. |
 | `Models/Quest.cs` | `:32`, `:216-247` | `QuestCategory.Remote` + the premium remote quests. |
 | `Services/GamificationBridge.cs` | `:105` | Subscribes to `SessionStarted`. |
-| `Helpers/HtUrlHelper.cs` | — | `IsEligibleHtUrl` / `TryExtractHtVideoId` — the `play_hypnotube` domain gate. |
+| `CCP.Core/Helpers/HtUrlHelper.cs` | — | `IsEligibleHtUrl` / `TryExtractHtVideoId` — the `play_hypnotube` domain gate. |
 
 ---
 
