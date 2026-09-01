@@ -127,6 +127,7 @@ namespace ConditioningControlPanel.Services.Video.Browser
                 core.NavigationStarting += OnNavigationStarting;
                 core.WebMessageReceived += OnWebMessageReceived;
                 core.ProcessFailed += OnCoreProcessFailed;
+                core.PermissionRequested += OnPermissionRequested;
                 _navHost = primaryHost;
 
                 core.Navigate(startUrl);
@@ -204,6 +205,34 @@ namespace ConditioningControlPanel.Services.Video.Browser
             }
         }
 
+        /// <summary>
+        /// The player page's audio-output routing (#938 plumbing) needs device LABELS from
+        /// <c>enumerateDevices()</c>, and Chromium blanks audiooutput labels until the origin holds
+        /// microphone permission - so the page's probe (a getUserMedia stream it stops on the next
+        /// line) surfaces here. Grant is scoped to exactly our own page: https scheme AND the host
+        /// this surface navigated to (the ccp.game virtual host; OnNavigationStarting already
+        /// cancels every navigation elsewhere). Everything else - other origins, other permission
+        /// kinds - is denied outright rather than left to a prompt, because these are chromeless
+        /// fullscreen windows where a permission bubble would be unanswerable.
+        /// </summary>
+        private void OnPermissionRequested(object? sender, CoreWebView2PermissionRequestedEventArgs e)
+        {
+            try
+            {
+                bool ourPage = Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri)
+                    && uri.Scheme == Uri.UriSchemeHttps
+                    && string.Equals(uri.Host, _navHost, StringComparison.OrdinalIgnoreCase);
+                e.State = ourPage && e.PermissionKind == CoreWebView2PermissionKind.Microphone
+                    ? CoreWebView2PermissionState.Allow
+                    : CoreWebView2PermissionState.Deny;
+                e.Handled = true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BrowserVideo[{Tag}]: PermissionRequested handler failed: {E}", _tag, ex.Message);
+            }
+        }
+
         private void OnCoreProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
         {
             App.Logger?.Warning("BrowserVideo[{Tag}]: WebView2 process failed ({Kind})", _tag, e.ProcessFailedKind);
@@ -264,6 +293,7 @@ namespace ConditioningControlPanel.Services.Video.Browser
                     _web.CoreWebView2.NavigationStarting -= OnNavigationStarting;
                     _web.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
                     _web.CoreWebView2.ProcessFailed -= OnCoreProcessFailed;
+                    _web.CoreWebView2.PermissionRequested -= OnPermissionRequested;
                 }
             }
             catch { }
