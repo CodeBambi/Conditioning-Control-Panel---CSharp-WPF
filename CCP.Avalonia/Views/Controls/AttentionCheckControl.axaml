@@ -1,0 +1,60 @@
+<!-- PORTED from ConditioningControlPanel/Controls/AttentionCheckControl.xaml.
+     Structure, order and spacing are preserved so the two can be compared directly. This view has
+     no loc strings, no keyed styles, no emoji and no buttons, so it needs no view-model and no new
+     theme key. Documented deviations, all forced by real WPF/Avalonia differences:
+
+       StrokeDashCap="Round"           ->  StrokeLineCap="Round"    (Avalonia has one cap for line
+                                           ends and dash ends; there is no separate StrokeDashCap)
+       StrokeDashArray="0 10000"       ->  "0,10000"                (Avalonia's list parser needs
+                                           commas; a space-separated list is AVLN1000 at build)
+       x:Name on the ScaleTransform    ->  dropped                  (AVLN2000: Avalonia can only
+                                           name a StyledElement, so the code-behind takes the
+                                           transform out of the TransformGroup instead)
+       RenderTransformOrigin="0.5,0.5" ->  "50%,50%"                (Avalonia parses bare numbers as
+                                           ABSOLUTE pixels; only a % is relative. Same origin, and
+                                           it is also Avalonia's default)
+       ShadowDepth="0"                 ->  OffsetX="0" OffsetY="0"  (Avalonia's DropShadowEffect
+                                           takes offsets, not depth+direction; same as the
+                                           AchievementsTabView port)
+       Storyboard (StartPulse)         ->  an Avalonia Animation in the code-behind -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.AttentionCheckControl"
+             Width="84" Height="84"
+             Background="Transparent"
+             IsHitTestVisible="False">
+    <!-- Lifted from WebcamCalibrationWindow.xaml ring visuals so the
+         attention-check pop-in is visually identical to a calibration dot.
+         Click-through (IsHitTestVisible=False) — focus is captured by the
+         host window for gaze tracking; we don't want stray clicks. -->
+    <Grid>
+        <Ellipse x:Name="DotRingBg" Width="84" Height="84"
+                 Stroke="#33FFFFFF" StrokeThickness="3"/>
+        <Ellipse x:Name="DotRingFg" Width="84" Height="84"
+                 Stroke="#FFFF69B4" StrokeThickness="4"
+                 StrokeDashArray="0,10000" StrokeLineCap="Round"
+                 RenderTransformOrigin="50%,50%">
+            <Ellipse.RenderTransform>
+                <TransformGroup>
+                    <RotateTransform Angle="-90"/>
+                    <ScaleTransform ScaleX="1" ScaleY="1"/>
+                </TransformGroup>
+            </Ellipse.RenderTransform>
+            <Ellipse.Effect>
+                <DropShadowEffect Color="#FF69B4" BlurRadius="14" OffsetX="0" OffsetY="0" Opacity="0.7"/>
+            </Ellipse.Effect>
+        </Ellipse>
+        <Ellipse Width="44" Height="44">
+            <Ellipse.Fill>
+                <RadialGradientBrush>
+                    <GradientStop Color="#FFFFB6E1" Offset="0"/>
+                    <GradientStop Color="#FFFF69B4" Offset="0.6"/>
+                    <GradientStop Color="#FFC71585" Offset="1"/>
+                </RadialGradientBrush>
+            </Ellipse.Fill>
+            <Ellipse.Effect>
+                <DropShadowEffect Color="#FF69B4" BlurRadius="30" OffsetX="0" OffsetY="0" Opacity="0.9"/>
+            </Ellipse.Effect>
+        </Ellipse>
+    </Grid>
+</UserControl>
