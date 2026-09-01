@@ -54,9 +54,9 @@ jobs:
       # asserting it can produce every value it renders does not.
       - run: dotnet run --project CCP.VR/CCP.VR.csproj -c Release -- --smoke
       - run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --render $RUNNER_TEMP/render/MainWindow.png
-      # One PNG per ported view. This is the per-view proof: a view that throws on construction,
-      # binds a key that does not exist, or nulls its own template shows up here and nowhere else.
-      # Non-zero exit fails the job.
+      # One PNG per ported view. A view that throws on construction fails the job; one that nulls
+      # its own template or binds a missing property does NOT - Avalonia keeps bindings silent -
+      # so the run prints every binding error per view and the PNGs are the proof. Read them.
       - run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --render-all $RUNNER_TEMP/render
       # always(): the PNGs matter MOST when a view failed - a reviewer needs the 23 that drew.
       - uses: actions/upload-artifact@v4

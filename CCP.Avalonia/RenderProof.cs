@@ -7,6 +7,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Avalonia.Headless;
+using Avalonia.Logging;
 using Avalonia.Media.Imaging;
 
 namespace ConditioningControlPanel.Avalonia
@@ -22,6 +23,28 @@ namespace ConditioningControlPanel.Avalonia
     internal static class RenderProof
     {
         private static bool _setUp;
+        private static readonly BindingErrorSink _bindingErrors = new();
+
+        /// <summary>
+        /// A failed binding is SILENT in Avalonia: the control keeps its default and the render
+        /// exits 0. That is how a view with every binding broken (EngineRoomDrawer's provider
+        /// bindings, on main) draws a header over 700px of nothing and passes. This sink counts
+        /// Binding-area warnings and errors per view and prints them, so the log names the
+        /// property and the path rather than leaving it to someone squinting at a PNG.
+        /// </summary>
+        private sealed class BindingErrorSink : ILogSink
+        {
+            public readonly List<string> Messages = new();
+            public bool IsEnabled(LogEventLevel level, string area) =>
+                area == LogArea.Binding && level >= LogEventLevel.Warning;
+            public void Log(LogEventLevel level, string area, object? source, string messageTemplate)
+                => Messages.Add($"{source?.GetType().Name}: {messageTemplate}");
+            public void Log(LogEventLevel level, string area, object? source, string messageTemplate, params object?[] propertyValues)
+            {
+                try { Messages.Add($"{source?.GetType().Name}: {string.Format(messageTemplate.Replace("{Property}", "{0}").Replace("{Path}", "{1}").Replace("{Error}", "{2}"), propertyValues)}"); }
+                catch { Messages.Add($"{source?.GetType().Name}: {messageTemplate}"); }
+            }
+        }
 
         /// <summary>
         /// One headless platform per process. SetupWithoutStarting() throws if called twice,
@@ -38,6 +61,7 @@ namespace ConditioningControlPanel.Avalonia
                 .UseSkia()
                 .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
                 .SetupWithoutStarting();
+            Logger.Sink = _bindingErrors;
             _setUp = true;
         }
 
@@ -58,6 +82,7 @@ namespace ConditioningControlPanel.Avalonia
             try
             {
                 EnsureSetUp();
+                _bindingErrors.Messages.Clear();
 
                 if (viewFactory is not null)
                 {
@@ -100,7 +125,10 @@ namespace ConditioningControlPanel.Avalonia
                 frame.Save(outPath);
 
                 var len = new FileInfo(outPath).Length;
-                Console.WriteLine($"rendered -> {outPath} ({frame.PixelSize.Width}x{frame.PixelSize.Height}, {len} bytes)");
+                var errs = _bindingErrors.Messages.Count;
+                Console.WriteLine($"rendered -> {outPath} ({frame.PixelSize.Width}x{frame.PixelSize.Height}, {len} bytes){(errs > 0 ? $"  [{errs} binding error(s)]" : "")}");
+                foreach (var m in _bindingErrors.Messages.Distinct().Take(20))
+                    Console.WriteLine("    binding: " + m);
                 return len > 0 ? 0 : 1;
             }
             catch (Exception ex)
@@ -128,7 +156,7 @@ namespace ConditioningControlPanel.Avalonia
                 foreach (var t in Views()) Console.Error.WriteLine("  " + t.Name);
                 return 2;
             }
-            return Run(outPath, () => (Control)Activator.CreateInstance(type)!);
+            return Run(outPath, () => Construct(type));
         }
 
         /// <summary>Render every view to &lt;dir&gt;/&lt;TypeName&gt;.png. Non-zero if any fails.</summary>
@@ -139,7 +167,7 @@ namespace ConditioningControlPanel.Avalonia
             var views = Views().ToList();
             foreach (var t in views)
             {
-                var rc = Run(Path.Combine(dir, t.Name + ".png"), () => (Control)Activator.CreateInstance(t)!);
+                var rc = Run(Path.Combine(dir, t.Name + ".png"), () => Construct(t));
                 if (rc != 0) failed.Add(t.Name);
             }
             Console.WriteLine($"{views.Count - failed.Count}/{views.Count} views rendered to {dir}");
@@ -148,15 +176,24 @@ namespace ConditioningControlPanel.Avalonia
         }
 
         /// <summary>
-        /// Every concrete Control with a parameterless constructor under the Views namespace.
+        /// Every concrete Control under the Views namespace - including ones with NO parameterless
+        /// constructor, which then fail in RunAll rather than silently shrinking the proof. A dialog
+        /// that needs arguments gets an `internal` render constructor with sample data (see
+        /// TextEditorDialog); internal, so no production caller can ship the sample.
         /// Sorted so the --render-all output and the "known views" listing are stable.
         /// </summary>
         private static IEnumerable<Type> Views() =>
             typeof(RenderProof).Assembly.GetTypes()
-                .Where(t => t.IsClass && !t.IsAbstract
+                .Where(t => t.IsClass && !t.IsAbstract && !t.IsNested
                             && typeof(Control).IsAssignableFrom(t)
-                            && (t.Namespace ?? "").StartsWith("ConditioningControlPanel.Avalonia.Views", StringComparison.Ordinal)
-                            && t.GetConstructor(Type.EmptyTypes) is not null)
+                            && (t.Namespace ?? "").StartsWith("ConditioningControlPanel.Avalonia.Views", StringComparison.Ordinal))
                 .OrderBy(t => t.Name, StringComparer.Ordinal);
+
+        private static Control Construct(Type t)
+        {
+            var ctor = t.GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null)
+                ?? throw new InvalidOperationException($"{t.Name} has no parameterless constructor; add an internal render constructor with sample data.");
+            return (Control)ctor.Invoke(null);
+        }
     }
 }

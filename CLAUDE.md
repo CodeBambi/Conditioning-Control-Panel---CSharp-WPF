@@ -88,7 +88,7 @@ Measured on the first ported view (`Views/Tabs/AchievementsTabView`). The mappin
 | `<Style x:Key TargetType>` | `<ControlTheme x:Key TargetType>` |
 | `Visibility="Collapsed"` | `IsVisible="False"` |
 | `Panel.ZIndex` | `ZIndex` |
-| `{loc:Str key}` | a binding - `LocExtension` is a WPF `MarkupExtension` and stays in the head |
+| `{loc:Str key}` | `{loc:Str key}` unchanged, with `xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"` (the Avalonia twin lives in the head; the strings come from Core) |
 
 Three things that will bite, all found by rendering rather than by reading:
 
