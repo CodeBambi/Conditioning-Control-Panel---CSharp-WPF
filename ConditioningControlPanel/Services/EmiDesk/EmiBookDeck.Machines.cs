@@ -83,7 +83,7 @@ internal static class EmiBookDeckMachines
         //
         // "toy buzz" rather than "haptics" for the same reason the owner's own example says
         // "gifs and images" rather than "media assets". The palette is six entries - Haptic,
-        // Flash, Bubble, Subliminal, Overlay, Speak (Models/Deeper/TimelineItem.cs EffectTypes,
+        // Flash, Bubble, Subliminal, Overlay, Speak (CCP.Core/Models/Deeper/TimelineItem.cs EffectTypes,
         // and the editor's + Effect dropdown lists all six) - and four of them fit the line.
         // The two dropped are the two a newcomer has no picture for.
         //
