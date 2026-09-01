@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CCP.Core", "CCP.Core\CCP.Co
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CCP.Core.Tests", "Tests\CCP.Core.Tests\CCP.Core.Tests.csproj", "{6650EA51-CE84-4C3B-B22C-C9842553CC6A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CCP.LinuxSmoke", "CCP.LinuxSmoke\CCP.LinuxSmoke.csproj", "{89FAE4B2-D607-4AFD-8D44-3C2C6E22B83A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -35,6 +37,10 @@ Global
 		{6650EA51-CE84-4C3B-B22C-C9842553CC6A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6650EA51-CE84-4C3B-B22C-C9842553CC6A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6650EA51-CE84-4C3B-B22C-C9842553CC6A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{89FAE4B2-D607-4AFD-8D44-3C2C6E22B83A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{89FAE4B2-D607-4AFD-8D44-3C2C6E22B83A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{89FAE4B2-D607-4AFD-8D44-3C2C6E22B83A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{89FAE4B2-D607-4AFD-8D44-3C2C6E22B83A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

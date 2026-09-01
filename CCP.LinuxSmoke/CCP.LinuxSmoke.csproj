@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A head that actually RUNS CCP.Core on Linux.
+
+    Until this existed, Core was only ever *compiled* for net8.0 and then executed exclusively
+    inside the Windows WPF process. Compiling proves the type system is satisfied; it does not
+    prove the code behaves. That gap is not theoretical - a code review found
+    EnhancementValidator.IsUnsafeAssetPath leaning on Path.IsPathRooted, whose result differs by
+    platform, so an anti-exfiltration check silently changed meaning on the very heads this
+    migration exists to enable. Nothing caught it: the TFM guard passed, the grep gate passed, and
+    git recorded a 100% rename.
+
+    This project is the tripwire. It is deliberately NOT a UI - it is the smallest thing that can
+    execute engine code on a non-Windows runtime and assert on the answers. The Avalonia and VR
+    heads replace its UI role later; they do not replace its role in CI.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>ConditioningControlPanel.LinuxSmoke</RootNamespace>
+    <AssemblyName>CCP.LinuxSmoke</AssemblyName>
+    <!-- Core escalates CA1416; a head that runs off-Windows must hold the same line. -->
+    <WarningsAsErrors>$(WarningsAsErrors);CA1416</WarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CCP.Core\CCP.Core.csproj" />
+  </ItemGroup>
+
+</Project>

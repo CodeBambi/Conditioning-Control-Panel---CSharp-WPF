@@ -31,6 +31,17 @@ jobs:
       # the first test lands.
       - run: dotnet build Tests/CCP.Core.Tests/CCP.Core.Tests.csproj -c Release
 
+      # Compiling for net8.0 proves the type system is satisfied. It does not prove the engine
+      # BEHAVES off Windows. This step actually executes Core on Linux and asserts on the answers.
+      #
+      # It is not redundant with the build above, and it earned its place immediately: on its
+      # first run it caught LogScrubber leaking the username out of crash.log on Linux, because
+      # the scrubber only knew the C:\Users\ shape. Nothing else could have found that - the TFM
+      # guard passed, the grep gate passed, and git recorded a 100% rename.
+      #
+      # Non-zero exit fails the job.
+      - run: dotnet run --project CCP.LinuxSmoke/CCP.LinuxSmoke.csproj -c Release
+
   # The "behaves identically on Windows" gate.
   windows:
     runs-on: windows-latest
