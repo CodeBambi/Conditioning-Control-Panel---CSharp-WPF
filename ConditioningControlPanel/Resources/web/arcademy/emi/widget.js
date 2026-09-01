@@ -437,7 +437,7 @@ export function toyLineIndex(day) {
  *  widget.css `.emi-prop` holds the anchor and the reason it can be one fixed
  *  corner rather than a per-pose table.
  *
- *  Every number below is also in `Services/EmiDesk/EmiProps.cs`, the desk's
+ *  Every number below is also in `CCP.Core/Services/EmiDesk/EmiProps.cs`, the desk's
  *  copy of this layer. Change one, change the other. */
 export const PROP_DIR = './art/emi/props/';
 /** `./art/emi/props/phone.png` ... PURE. */
