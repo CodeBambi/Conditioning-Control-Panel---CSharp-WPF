@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Deeper
 {
@@ -82,7 +83,7 @@ namespace ConditioningControlPanel.Services.Deeper
                 {
                     if (!await UrlSafety.IsSafePublicHttpsAsync(current, linked.Token).ConfigureAwait(false))
                     {
-                        App.Logger?.Debug("HtMetadataFetcher: rejecting unsafe host {Host}", current.Host);
+                        Log.Debug("HtMetadataFetcher: rejecting unsafe host {Host}", current.Host);
                         return null;
                     }
 
@@ -136,7 +137,7 @@ namespace ConditioningControlPanel.Services.Deeper
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("HtMetadataFetcher: {Error}", ex.Message);
+                Log.Debug("HtMetadataFetcher: {Error}", ex.Message);
                 return null;
             }
         }

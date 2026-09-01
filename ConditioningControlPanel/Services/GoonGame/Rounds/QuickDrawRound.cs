@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.GoonGame
 {
@@ -96,7 +97,7 @@ namespace ConditioningControlPanel.Services.GoonGame
 
                 if (!signalled)
                 {
-                    App.Logger?.Information("GoonSuddenDeath: quick-draw round {Round} timed out at {Ms}ms", ctx.RoundNo, spec.TimeLimitMs);
+                    Log.Information("GoonSuddenDeath: quick-draw round {Round} timed out at {Ms}ms", ctx.RoundNo, spec.TimeLimitMs);
                     return new RoundResultMsg { RoundNo = ctx.RoundNo, Completed = false, ElapsedMs = spec.TimeLimitMs };
                 }
 

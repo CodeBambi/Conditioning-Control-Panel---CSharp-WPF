@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ConditioningControlPanel.Services.AIService;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Companion.Brain
 {
@@ -215,7 +216,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             var handler = TurnsChanged;
             if (handler == null) return;
             try { handler(this, EventArgs.Empty); }
-            catch (Exception ex) { App.Logger?.Debug("ChatSession: TurnsChanged handler threw: {Error}", ex.Message); }
+            catch (Exception ex) { Log.Debug("ChatSession: TurnsChanged handler threw: {Error}", ex.Message); }
         }
 
         /// <summary>The dialogue subset, in order — exactly what is allowed to reach disk.</summary>

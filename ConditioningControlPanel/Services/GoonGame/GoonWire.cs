@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.GoonGame
 {
@@ -110,7 +111,7 @@ namespace ConditioningControlPanel.Services.GoonGame
 
             if (Encoding.UTF8.GetByteCount(json) > MaxWireBytes)
             {
-                App.Logger?.Warning("[{Tag}] Dropping oversize frame ({Chars} chars, cap {Cap} bytes)",
+                Log.Warning("[{Tag}] Dropping oversize frame ({Chars} chars, cap {Cap} bytes)",
                     logTag, json.Length, MaxWireBytes);
                 return null;
             }
@@ -121,7 +122,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 var t = obj["t"]?.Value<string>();
                 if (string.IsNullOrEmpty(t))
                 {
-                    App.Logger?.Warning("[{Tag}] Frame has no \"t\" discriminator", logTag);
+                    Log.Warning("[{Tag}] Frame has no \"t\" discriminator", logTag);
                     return null;
                 }
 
@@ -129,14 +130,14 @@ namespace ConditioningControlPanel.Services.GoonGame
                 {
                     // A newer peer sending a message kind we don't know about. Forward-compatible
                     // by design: ignore it and keep the channel alive.
-                    App.Logger?.Information("[{Tag}] Ignoring unknown message type '{T}'", logTag, t);
+                    Log.Information("[{Tag}] Ignoring unknown message type '{T}'", logTag, t);
                     return null;
                 }
 
                 var v = obj["v"]?.Value<int?>() ?? GoonConsts.ProtocolVersion;
                 if (v > GoonConsts.ProtocolVersion)
                 {
-                    App.Logger?.Information("[{Tag}] Peer speaks protocol v{Peer} (we are v{Ours}) — parsing anyway",
+                    Log.Information("[{Tag}] Peer speaks protocol v{Peer} (we are v{Ours}) — parsing anyway",
                         logTag, v, GoonConsts.ProtocolVersion);
                 }
 
@@ -146,7 +147,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "[{Tag}] Unparseable frame ({Chars} chars)", logTag, json.Length);
+                Log.Warning(ex, "[{Tag}] Unparseable frame ({Chars} chars)", logTag, json.Length);
                 return null;
             }
         }

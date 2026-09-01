@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services
 {
@@ -70,7 +71,7 @@ namespace ConditioningControlPanel.Services
                 var size = new FileInfo(path).Length;
                 if (size > MaxFileBytes)
                 {
-                    App.Logger?.Warning("AppClusterMap: override is {Bytes} bytes (cap {Cap}) — using embedded defaults",
+                    Log.Warning("AppClusterMap: override is {Bytes} bytes (cap {Cap}) — using embedded defaults",
                         size, MaxFileBytes);
                     return;
                 }
@@ -89,17 +90,17 @@ namespace ConditioningControlPanel.Services
                     if (_clusters.ContainsKey(required)) continue;
                     if (!DefaultClusters.TryGetValue(required, out var embedded)) continue;
                     _clusters[required] = embedded;
-                    App.Logger?.Warning(
+                    Log.Warning(
                         "AppClusterMap: override omitted the '{Cluster}' cluster — re-injected the embedded terms",
                         required);
                 }
 
-                App.Logger?.Information("AppClusterMap: loaded {Clusters} clusters, {Apps} bespoke apps from {Path}",
+                Log.Information("AppClusterMap: loaded {Clusters} clusters, {Apps} bespoke apps from {Path}",
                     _clusters.Count, _apps.Count, path);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "AppClusterMap: failed to load override — using embedded defaults");
+                Log.Warning(ex, "AppClusterMap: failed to load override — using embedded defaults");
                 _clusters = DefaultClusters;
                 _apps = DefaultApps;
             }

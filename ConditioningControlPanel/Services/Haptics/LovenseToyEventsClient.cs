@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using ConditioningControlPanel.Services.Haptics.Core;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Haptics
 {
@@ -206,7 +207,7 @@ namespace ConditioningControlPanel.Services.Haptics
                         opened = true;
                         var openedAt = DateTime.UtcNow;
                         ActiveEndpoint = candidate;
-                        App.Logger?.Information("Lovense Toy Events: connected to {Endpoint}", candidate);
+                        Log.Information("Lovense Toy Events: connected to {Endpoint}", candidate);
                         SetConnected(true);
 
                         await SessionAsync(ws, ct).ConfigureAwait(false);
@@ -230,21 +231,21 @@ namespace ConditioningControlPanel.Services.Haptics
                             MarkUnsupported(candidate);
                             if (AllCandidatesUnsupported())
                             {
-                                App.Logger?.Information(
+                                Log.Information(
                                     "Lovense Toy Events API not available at any endpoint (last: {Endpoint}, {Reason}) - " +
                                     "toy-button input is disabled for this Lovense Remote version. " +
                                     "Command output is unaffected.", candidate, ex.Message);
                             }
                             else
                             {
-                                App.Logger?.Debug(
+                                Log.Debug(
                                     "Lovense Toy Events: {Endpoint} has no /v1 listener ({Reason}) - trying the others.",
                                     candidate, ex.Message);
                             }
                         }
                         else
                         {
-                            App.Logger?.Debug("Lovense Toy Events: {Endpoint} unreachable ({Reason})",
+                            Log.Debug("Lovense Toy Events: {Endpoint} unreachable ({Reason})",
                                               candidate, ex.Message);
                         }
                     }
@@ -375,7 +376,7 @@ namespace ConditioningControlPanel.Services.Haptics
                 }
             }
             catch (OperationCanceledException) { }
-            catch (Exception ex) { App.Logger?.Debug("Lovense Toy Events ping stopped: {Reason}", ex.Message); }
+            catch (Exception ex) { Log.Debug("Lovense Toy Events ping stopped: {Reason}", ex.Message); }
         }
 
         private async Task SendTextAsync(ClientWebSocket ws, string json, CancellationToken ct)
@@ -410,7 +411,7 @@ namespace ConditioningControlPanel.Services.Haptics
                 catch (OperationCanceledException) { break; }
                 catch (Exception ex)
                 {
-                    App.Logger?.Debug("Lovense Toy Events receive ended: {Reason}", ex.Message);
+                    Log.Debug("Lovense Toy Events receive ended: {Reason}", ex.Message);
                     break;
                 }
 
@@ -425,7 +426,7 @@ namespace ConditioningControlPanel.Services.Haptics
 
                 if (frame.Length + result.Count > MaxFrameBytes)
                 {
-                    App.Logger?.Debug("Lovense Toy Events: message exceeded {Cap} bytes - dropped and resyncing.",
+                    Log.Debug("Lovense Toy Events: message exceeded {Cap} bytes - dropped and resyncing.",
                                       MaxFrameBytes);
                     frame.SetLength(0);
                     dropping = !result.EndOfMessage;
@@ -442,11 +443,11 @@ namespace ConditioningControlPanel.Services.Haptics
                 if (_loggedFrames < MaxLoggedFrames)
                 {
                     _loggedFrames++;
-                    App.Logger?.Debug("Lovense Toy Events frame: {Frame}", text);
+                    Log.Debug("Lovense Toy Events frame: {Frame}", text);
                 }
 
                 try { HandleFrame(text); }
-                catch (Exception ex) { App.Logger?.Debug("Lovense Toy Events parse failed: {Reason}", ex.Message); }
+                catch (Exception ex) { Log.Debug("Lovense Toy Events parse failed: {Reason}", ex.Message); }
             }
         }
 
@@ -579,7 +580,7 @@ namespace ConditioningControlPanel.Services.Haptics
         private void Raise(HapticToyEvent e)
         {
             try { ToyEvent?.Invoke(this, e); }
-            catch (Exception ex) { App.Logger?.Debug("Lovense ToyEvent handler threw: {Reason}", ex.Message); }
+            catch (Exception ex) { Log.Debug("Lovense ToyEvent handler threw: {Reason}", ex.Message); }
         }
 
         private void SetConnected(bool value)
@@ -587,7 +588,7 @@ namespace ConditioningControlPanel.Services.Haptics
             if (_connected == value) return;
             _connected = value;
             try { ConnectionChanged?.Invoke(this, value); }
-            catch (Exception ex) { App.Logger?.Debug("Lovense ToyEvents ConnectionChanged handler threw: {Reason}", ex.Message); }
+            catch (Exception ex) { Log.Debug("Lovense ToyEvents ConnectionChanged handler threw: {Reason}", ex.Message); }
         }
     }
 }

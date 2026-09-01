@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using Serilog;
 
 namespace ConditioningControlPanel.Services
 {
@@ -279,12 +280,12 @@ namespace ConditioningControlPanel.Services
             try
             {
                 var line = FormatSurfaceLine(engine, monitor, primary, firstFrameMs, failureReason);
-                App.Logger?.Information("VideoSurface: {Surface}", line);
+                Log.Information("VideoSurface: {Surface}", line);
                 VideoDiag.Log("SURFACE", line);
             }
             catch (Exception ex)
             {
-                try { App.Logger?.Debug("VideoSurfaceHealth.Report failed: {E}", ex.Message); } catch { }
+                try { Log.Debug("VideoSurfaceHealth.Report failed: {E}", ex.Message); } catch { }
             }
         }
     }

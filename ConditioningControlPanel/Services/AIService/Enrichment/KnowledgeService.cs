@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using ConditioningControlPanel.Models.AiEnrichment;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.AIService.Enrichment
 {
@@ -33,12 +34,12 @@ namespace ConditioningControlPanel.Services.AIService.Enrichment
                 {
                     var json = File.ReadAllText(filePath);
                     _context = JsonSerializer.Deserialize<List<Knowledge>>(json, options) ?? new();
-                    App.Logger?.Information("KnowledgeService: Loaded {Count} entries from {FilePath}", _context.Count, filePath);
+                    Log.Information("KnowledgeService: Loaded {Count} entries from {FilePath}", _context.Count, filePath);
                     return;
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning(ex, "KnowledgeService: Error loading {FilePath}, falling back", filePath);
+                    Log.Warning(ex, "KnowledgeService: Error loading {FilePath}, falling back", filePath);
                 }
             }
 
@@ -49,12 +50,12 @@ namespace ConditioningControlPanel.Services.AIService.Enrichment
                 {
                     var json = File.ReadAllText(projectAssetsPath);
                     _context = JsonSerializer.Deserialize<List<Knowledge>>(json, options) ?? new();
-                    App.Logger?.Information("KnowledgeService: Loaded {Count} entries from project assets {FilePath}", _context.Count, projectAssetsPath);
+                    Log.Information("KnowledgeService: Loaded {Count} entries from project assets {FilePath}", _context.Count, projectAssetsPath);
                     return;
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning(ex, "KnowledgeService: Error loading project assets {FilePath}", projectAssetsPath);
+                    Log.Warning(ex, "KnowledgeService: Error loading project assets {FilePath}", projectAssetsPath);
                 }
             }
 
@@ -69,16 +70,16 @@ namespace ConditioningControlPanel.Services.AIService.Enrichment
                     using var reader = new StreamReader(stream);
                     var json = reader.ReadToEnd();
                     _context = JsonSerializer.Deserialize<List<Knowledge>>(json, options) ?? new();
-                    App.Logger?.Information("KnowledgeService: Loaded {Count} entries from embedded resource", _context.Count);
+                    Log.Information("KnowledgeService: Loaded {Count} entries from embedded resource", _context.Count);
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Error(ex, "KnowledgeService: Error loading embedded resource");
+                    Log.Error(ex, "KnowledgeService: Error loading embedded resource");
                 }
             }
             else
             {
-                App.Logger?.Debug("KnowledgeService: No knowledge.json found — using empty knowledge base");
+                Log.Debug("KnowledgeService: No knowledge.json found — using empty knowledge base");
             }
         }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using Serilog;
 
 namespace ConditioningControlPanel.Helpers
 {
@@ -58,7 +59,7 @@ namespace ConditioningControlPanel.Helpers
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "ExplorerLauncher: reveal failed for {Path}", path);
+                Log.Warning(ex, "ExplorerLauncher: reveal failed for {Path}", path);
                 return false;
             }
         }
@@ -75,7 +76,7 @@ namespace ConditioningControlPanel.Helpers
             {
                 if (!Directory.Exists(directory))
                 {
-                    App.Logger?.Debug("ExplorerLauncher: folder no longer exists: {Dir}", directory);
+                    Log.Debug("ExplorerLauncher: folder no longer exists: {Dir}", directory);
                     return false;
                 }
 
@@ -84,7 +85,7 @@ namespace ConditioningControlPanel.Helpers
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "ExplorerLauncher: open folder failed for {Dir}", directory);
+                Log.Warning(ex, "ExplorerLauncher: open folder failed for {Dir}", directory);
                 return false;
             }
         }
@@ -145,7 +146,7 @@ namespace ConditioningControlPanel.Helpers
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "ExplorerLauncher: explorer.exe failed to start for {Args}", arguments);
+                Log.Warning(ex, "ExplorerLauncher: explorer.exe failed to start for {Args}", arguments);
                 return false;
             }
         }

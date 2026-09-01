@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ConditioningControlPanel.Controls;
+using Serilog;
 
 namespace ConditioningControlPanel
 {
@@ -29,7 +30,7 @@ namespace ConditioningControlPanel
                     _tabFxCanvases[tab] = list = new List<AmbientFxCanvas>();
                 if (!list.Contains(canvas)) list.Add(canvas);
             }
-            catch (Exception ex) { App.Logger?.Debug("RegisterTabFx: {E}", ex.Message); }
+            catch (Exception ex) { Log.Debug("RegisterTabFx: {E}", ex.Message); }
         }
 
         /// <summary>Pauses every registered canvas that does not belong to the incoming tab, and
@@ -49,7 +50,7 @@ namespace ConditioningControlPanel
                     }
                 }
             }
-            catch (Exception ex) { App.Logger?.Debug("SwitchTabFx: {E}", ex.Message); }
+            catch (Exception ex) { Log.Debug("SwitchTabFx: {E}", ex.Message); }
         }
     }
 }

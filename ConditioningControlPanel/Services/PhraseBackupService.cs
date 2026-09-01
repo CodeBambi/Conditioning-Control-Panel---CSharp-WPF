@@ -5,6 +5,7 @@ using System.Linq;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services
 {
@@ -140,14 +141,14 @@ namespace ConditioningControlPanel.Services
                 ObjectCreationHandling = ObjectCreationHandling.Replace,
                 Error = (sender, args) =>
                 {
-                    App.Logger?.Warning("Skipping unimportable phrase member '{Path}': {Error}",
+                    Log.Warning("Skipping unimportable phrase member '{Path}': {Error}",
                         args.ErrorContext.Path, args.ErrorContext.Error.Message);
                     args.ErrorContext.Handled = true;
                 }
             };
 
             JsonConvert.PopulateObject(filtered.ToString(), settings, populateSettings);
-            App.Logger?.Information("Imported phrases from {Path}", filePath);
+            Log.Information("Imported phrases from {Path}", filePath);
             return CountEntries(filtered);
         }
 

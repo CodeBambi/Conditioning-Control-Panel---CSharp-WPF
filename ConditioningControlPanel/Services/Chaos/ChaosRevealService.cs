@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Chaos;
 
@@ -105,12 +106,12 @@ public static class RevealService
                 if (ChaosMeta.State.SeenReveals.Contains(id)) continue;
                 if (!ChaosMeta.State.PendingReveals.Add(id)) continue;
                 changed = true;
-                App.Logger?.Information("Chaos reveal pending: {Id} ({Reason})", id, reason);
+                Log.Information("Chaos reveal pending: {Id} ({Reason})", id, reason);
                 try { Pending?.Invoke(id); } catch { }
             }
             if (changed) ChaosMeta.Save();
         }
-        catch (Exception ex) { App.Logger?.Warning("RevealService.Sync failed ({E})", ex.Message); }
+        catch (Exception ex) { Log.Warning("RevealService.Sync failed ({E})", ex.Message); }
     }
 
     /// <summary>Snapshot of ids awaiting their flash (dollhouse open). Does not mutate state.</summary>
