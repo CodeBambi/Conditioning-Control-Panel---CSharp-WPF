@@ -122,7 +122,7 @@ try {
     $commit = Require-Success (Invoke-Owned $git @('-C', $repo, 'cat-file', '-p', 'HEAD') $repo 'commit-object') # Real parents even with shallow checkout.
     Save-Json "$root/identity.json" @{ checkout = $identity; commitObject = $commit; githubSha = $env:GITHUB_SHA; os = [Environment]::OSVersion.VersionString; powershell = "$($PSVersionTable.PSVersion)" }
     # Freeze the reviewed safe Program/App/null-lifetime route and every product dependency.
-    foreach ($entry in @(@('CCP.Avalonia', 'ccb86d7a980aa92ae71a385011d6f94ecb352645'), @('CCP.Core', 'ec2d4c2a60bf3683ce7ec97c4d9e1c5c6d84b0c3'))) {
+    foreach ($entry in @(@('CCP.Avalonia', '1ddda086316a65d6f04f216730888e47afefbef2'), @('CCP.Core', 'ec2d4c2a60bf3683ce7ec97c4d9e1c5c6d84b0c3'))) {
         $tree = Require-Success (Invoke-Owned $git @('-C', $repo, 'rev-parse', "HEAD:$($entry[0])") $repo "tree-$($entry[0])")
         if ($tree -ne $entry[1]) { throw "Unreviewed source tree: $($entry[0])" }
     }

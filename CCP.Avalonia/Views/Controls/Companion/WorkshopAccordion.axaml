@@ -1,0 +1,226 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/Companion/WorkshopAccordion.xaml.
+     Structure, ordering, spacing, comments and every resource key are preserved so the two can be
+     diffed. Documented deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource X}"      ->  Theme="{StaticResource X}"   (keyed styles are ControlThemes)
+       <Style x:Key TargetType>        ->  <ControlTheme x:Key TargetType>
+       pack:// merged dictionary       ->  avares:// ResourceInclude
+       {loc:Str key}                   ->  {Binding …Strings.LocX}      (LocExtension is a WPF
+                                           MarkupExtension and stays in the head; the strings
+                                           still come from CCP.Core's Loc, via the VM)
+       ToolTip="…"                     ->  ToolTip.Tip="…"
+       Visibility="Collapsed"          ->  IsVisible="False"
+       Style.Triggers / DataTemplate.Triggers
+                                       ->  Avalonia has neither. Each one becomes the equivalent
+                                           direct binding or class selector:
+                                             ActivateCommand == null  -> Classes.inert + a nested
+                                                                         "^.inert" style
+                                             IsCaption                -> Classes.caption + a
+                                                                         UserControl-level style
+                                             Button.IsMouseOver       -> "Button:pointerover TextBlock…"
+                                             IsSlider                 -> IsVisible="{Binding IsSlider}"
+                                             Content == null          -> IsVisible + ObjectConverters
+                                                                         (the same null test the
+                                                                         original documents, now
+                                                                         expressed as a converter)
+       Value -> CmpHasContentToVis     ->  StringConverters.IsNotNullOrEmpty (built in; the ported
+                                           theme no longer carries the converter)
+       CmpFractionToStar / …RemainderStar
+                                       ->  the CompanionGrid.StarFraction attached property.
+                                           Avalonia's ColumnDefinition has no DataContext and
+                                           Grid.ColumnDefinitions is not a styled property, so
+                                           neither can be bound. Same two star columns, set from
+                                           a change handler. See CompanionConverters.cs.
+       CmpEmojiToImage on an <Image>   ->  a plain <TextBlock>; Avalonia draws colour emoji natively
+       x:FieldModifier="internal"      ->  dropped; x:Name alone. The seam button exists for
+                                           MainWindow partials, which this head does not have yet.
+       d:DataContext / MockWorkshopAccordionVm
+                                       ->  not ported (the mock, CompanionObservable and
+                                           CompanionRelayCommand are a separate chunk of the head).
+                                           x:DataType gives the compiled bindings their types. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.Companion.WorkshopAccordion"
+             x:DataType="local:IWorkshopAccordionVm"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Companion"
+             mc:Ignorable="d"
+             d:DesignWidth="1160" d:DesignHeight="400">
+
+    <!-- ================================================================
+         Z8 — THE WORKSHOP (legacy + expert shelf).
+         "nothing was deleted. it just stopped being the front door."
+
+         Six pigeonholes in a wrapping grid: roster, behavior, triggers &
+         phrases, her library, community, awareness fine-tuning. The
+         interior is today's accordions almost verbatim — a container
+         move, not a rebuild — so this scaffold renders generic cells and
+         the wiring pass swaps each row for the real control while
+         preserving every x:Name the MainWindow partials write to.
+
+         A row with an ActivateCommand behaves like the mockup's <li>:
+         hand cursor, label goes white on hover, click opens the real
+         dialog. A row without one is inert and says so by not lighting
+         up — no dead-looking disabled chrome either way.
+
+         Cell titles are the deep-link anchors: the hero's Switch chip
+         asks for ROSTER, Z5's "fine-tuning ↓" asks for the awareness
+         cell, and ExpandAndReveal(title) scrolls it in.
+
+         Cells wrap rather than sitting in a fixed 3-column grid so the
+         drawer collapses to one column on a narrow window without a
+         width trigger.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://CCP.Avalonia/Views/Controls/Companion/Themes/CompanionTheme.axaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- a row is a chrome-free button so ActivateCommand is reachable by keyboard too -->
+            <ControlTheme x:Key="CmpZ8RowButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent">
+                            <ContentPresenter x:Name="PART_ContentPresenter"
+                                              Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter>
+                <!-- no command = nothing to click; do not pretend otherwise -->
+                <Style Selector="^.inert">
+                    <Setter Property="Cursor" Value="Arrow"/>
+                    <Setter Property="Focusable" Value="False"/>
+                </Style>
+            </ControlTheme>
+
+            <!-- the row label: white on hover, but only when the row actually does something.
+                 The hover half cannot live in the ControlTheme (a nested selector has to start
+                 at "^", and this one starts at the ancestor Button) — it is in UserControl.Styles
+                 below, together with the caption rule that has to lose to it. -->
+            <ControlTheme x:Key="CmpZ8RowLabelStyle" TargetType="TextBlock"
+                          BasedOn="{StaticResource CmpWorkshopRowStyle}">
+                <Setter Property="Margin" Value="0"/>
+            </ControlTheme>
+
+            <!-- one row: plain label/value, a mock slider, or a muted caption -->
+            <DataTemplate x:Key="CmpWorkshopRowTemplate" x:DataType="local:IWorkshopRowVm">
+                <Button Theme="{StaticResource CmpZ8RowButtonStyle}" Command="{Binding ActivateCommand}"
+                        Classes.inert="{Binding ActivateCommand, Converter={x:Static ObjectConverters.IsNull}}"
+                        ToolTip.Tip="{Binding Label}">
+                    <Grid Margin="0,2.5,0,2.5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Text="{Binding Label}"
+                                   Classes="z8row" Classes.caption="{Binding IsCaption}"
+                                   Theme="{StaticResource CmpZ8RowLabelStyle}"/>
+
+                        <!-- slider mock: a hairline track with a pink thumb at SliderFraction -->
+                        <Grid x:Name="Track" Grid.Column="1" Height="12" Margin="8,0,8,0"
+                              VerticalAlignment="Center" IsVisible="{Binding IsSlider}">
+                            <Border Height="4" CornerRadius="2" VerticalAlignment="Center"
+                                    Background="{StaticResource CmpTrackSoftBrush}"/>
+                            <Grid local:CompanionGrid.StarFraction="{Binding SliderFraction}">
+                                <Ellipse Grid.Column="1" Width="12" Height="12" HorizontalAlignment="Left"
+                                         Margin="-6,0,0,0" Fill="{StaticResource CmpPinkBrush}"/>
+                            </Grid>
+                        </Grid>
+
+                        <TextBlock Grid.Column="2" Text="{Binding Value}"
+                                   Theme="{StaticResource CmpWorkshopRowStyle}" Margin="8,0,0,0"
+                                   Foreground="{StaticResource CmpDimBrush}"
+                                   IsVisible="{Binding Value, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    </Grid>
+                </Button>
+            </DataTemplate>
+
+            <!-- one pigeonhole. The heading is a button that deep-links to this cell; the
+                 CommandParameter is the KEY, never the title — the title is localizable and an
+                 anchor that moves with the language is an anchor that misses. -->
+            <DataTemplate x:Key="CmpWorkshopCellTemplate" x:DataType="local:IWorkshopCellVm">
+                <Border Theme="{StaticResource CmpWorkshopCellStyle}" Width="340"
+                        Tag="{Binding Key}">
+                    <StackPanel>
+                        <Button Theme="{StaticResource CmpZ8RowButtonStyle}"
+                                ToolTip.Tip="{Binding $parent[local:WorkshopAccordion].Strings.LocFocusTip}"
+                                Command="{Binding $parent[ItemsControl].((local:IWorkshopAccordionVm)DataContext).FocusCellCommand}"
+                                CommandParameter="{Binding Key}">
+                            <TextBlock Text="{Binding Title}" Theme="{StaticResource CmpWorkshopCellTitleStyle}"/>
+                        </Button>
+
+                        <!-- Scaffold rows: the design-time shape. A wired-up cell carries the real
+                             re-parented control instead and these collapse, so the two can never
+                             render on top of each other.
+
+                             Null-tested rather than converted to a Visibility, exactly as the WPF
+                             DataTrigger was: the cell is one or the other, never both. -->
+                        <ItemsControl x:Name="ScaffoldRows" ItemsSource="{Binding Rows}"
+                                      ItemTemplate="{StaticResource CmpWorkshopRowTemplate}"
+                                      IsVisible="{Binding Content, Converter={x:Static ObjectConverters.IsNull}}"/>
+
+                        <!-- The container move (design §3 Z8): the legacy accordion's own controls,
+                             re-parented, not rebuilt. -->
+                        <ContentPresenter x:Name="CellContent" Content="{Binding Content}"
+                                          IsVisible="{Binding Content, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+                    </StackPanel>
+                </Border>
+            </DataTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <!-- CmpZ8RowLabelStyle's two WPF triggers. A caption is muted and italic; every other row
+             goes white while its Button is hovered. ":not(.caption)" is the MultiDataTrigger's
+             second condition — a caption must not light up. -->
+        <Style Selector="TextBlock.z8row.caption">
+            <Setter Property="Foreground" Value="{DynamicResource CmpFaintBrush}"/>
+            <Setter Property="FontStyle" Value="Italic"/>
+        </Style>
+        <Style Selector="Button:pointerover TextBlock.z8row:not(.caption)">
+            <Setter Property="Foreground" Value="{DynamicResource CmpTextBrush}"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Expander x:Name="Drawer" Theme="{StaticResource CmpDrawerStyle}"
+              IsExpanded="{Binding IsExpanded, Mode=TwoWay}">
+        <Expander.Header>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="🔧" FontSize="14" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding $parent[local:WorkshopAccordion].Strings.LocHeader}"
+                           Theme="{StaticResource CmpDrawerHeaderTextStyle}"/>
+            </StackPanel>
+        </Expander.Header>
+
+        <StackPanel>
+            <TextBlock Text="{Binding DrawerNote}" Theme="{StaticResource CmpDrawerNoteStyle}"/>
+            <ItemsControl x:Name="CellHost" ItemsSource="{Binding Cells}"
+                          ItemTemplate="{StaticResource CmpWorkshopCellTemplate}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+
+            <!-- COMPAT SEAM (design §6 disposition table, last row; §7.10). MainWindow's partials
+                 look this button up by name to hang the settings help popup on it. The Workshop
+                 absorbed the settings shelf, so the Workshop carries it — hidden, exactly as
+                 CompanionTabView keeps it. See the fuller seam note in CompanionHeroCard.xaml. -->
+            <Button x:Name="HelpBtnCompanionSettings"
+                    Tag="CompanionSettings" IsVisible="False" IsHitTestVisible="False"/>
+        </StackPanel>
+    </Expander>
+</UserControl>

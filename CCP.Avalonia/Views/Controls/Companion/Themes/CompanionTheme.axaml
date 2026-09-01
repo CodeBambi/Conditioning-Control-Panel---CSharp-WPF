@@ -209,4 +209,119 @@
         <Setter Property="Background" Value="{StaticResource CmpAttentionBrush}"/>
         <Setter Property="BorderBrush" Value="#66FFD0E6"/>
     </ControlTheme>
+
+    <!-- WorkshopAccordion additions retained with the accepted gauge resources. -->
+    <CornerRadius x:Key="CmpRadiusInner">10</CornerRadius>
+
+    <!-- ============================ 3. palette ============================ -->
+    <SolidColorBrush x:Key="CmpPinkBrush" Color="{StaticResource CmpPinkColor}"/>
+
+    <!-- text -->
+    <SolidColorBrush x:Key="CmpHairlineSoftBrush" Color="#0DFFFFFF"/>
+    <SolidColorBrush x:Key="CmpWorkshopBorderBrush" Color="#33808080"/>
+
+    <!-- ============================ 14. drawers (Z7 / Z8) ============================
+         Deliberately unglamorous: flat, thin gray border, no glow, no gradient. The contrast
+         with everything above IS the design — that is her, this is wiring. -->
+
+    <!-- The drawer's clickable head. Its own ControlTheme rather than an inline template,
+         because the WPF ControlTemplate.Triggers that swap the arrow become nested selectors
+         and those have to hang off "^" — the theme's own target. -->
+    <ControlTheme x:Key="CmpDrawerHeaderToggleStyle" TargetType="ToggleButton">
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Focusable" Value="True"/>
+        <Setter Property="Template">
+            <ControlTemplate TargetType="ToggleButton">
+                <Border x:Name="HeadBd" Background="Transparent" Padding="18,13,18,13">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <ContentPresenter x:Name="PART_ContentPresenter" Grid.Column="0"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          VerticalAlignment="Center"/>
+                        <!-- ▼ / ▲ swap rather than a rotate: a named transform
+                             inside a property value is not a trigger target. -->
+                        <TextBlock x:Name="Arrow" Grid.Column="1" Text="&#x25BC;" FontSize="11"
+                                   VerticalAlignment="Center" Foreground="#FFA9A3C4"/>
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:checked /template/ TextBlock#Arrow">
+            <Setter Property="Text" Value="&#x25B2;"/>
+        </Style>
+        <Style Selector="^:pointerover /template/ TextBlock#Arrow">
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpDrawerStyle" TargetType="Expander">
+        <Setter Property="Foreground" Value="#FFA9A3C4"/>
+        <Setter Property="Margin" Value="0,16,0,0"/>
+        <!-- The chrome is a TemplateBinding, not a hardcode, precisely so the Engine Room can be
+             a shade grayer than the Workshop (the mockup's .drawer vs .drawer.engine). -->
+        <Setter Property="BorderBrush" Value="{StaticResource CmpWorkshopBorderBrush}"/>
+        <Setter Property="Template">
+            <ControlTemplate TargetType="Expander">
+                <Border Background="#D916162B" BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="1" CornerRadius="12">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <ToggleButton x:Name="PART_toggle" Grid.Row="0"
+                                      Theme="{StaticResource CmpDrawerHeaderToggleStyle}"
+                                      Content="{TemplateBinding Header}"
+                                      IsChecked="{TemplateBinding IsExpanded, Mode=TwoWay}"/>
+                        <Border x:Name="BodyHost" Grid.Row="1"
+                                IsVisible="{TemplateBinding IsExpanded}"
+                                BorderBrush="{StaticResource CmpHairlineSoftBrush}" BorderThickness="0,1,0,0"
+                                Padding="20,4,20,18">
+                            <ContentPresenter x:Name="PART_ContentPresenter"
+                                              Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"/>
+                        </Border>
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpDrawerHeaderTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="#FFA9A3C4"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpDrawerNoteStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10.5"/>
+        <Setter Property="FontStyle" Value="Italic"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpFaintBrush}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="Margin" Value="0,8,0,12"/>
+    </ControlTheme>
+
+    <!-- .ws-cell — a Workshop pigeonhole -->
+    <ControlTheme x:Key="CmpWorkshopCellStyle" TargetType="Border">
+        <Setter Property="Background" Value="#8012101F"/>
+        <Setter Property="BorderBrush" Value="#10FFFFFF"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusInner}"/>
+        <Setter Property="Padding" Value="13,11,13,11"/>
+        <Setter Property="Margin" Value="0,0,10,10"/>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpWorkshopCellTitleStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="#FFC4B0F0"/>
+        <Setter Property="Margin" Value="0,0,0,7"/>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpWorkshopRowStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10.5"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpMutedBrush}"/>
+        <Setter Property="Margin" Value="0,2.5,0,2.5"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </ControlTheme>
 </ResourceDictionary>
