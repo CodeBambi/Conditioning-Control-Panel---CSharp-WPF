@@ -228,7 +228,7 @@ Rules shared by all three tracks (the build lane owns the counters; they persist
 > **Prestige**: searched (`grep -rn "Prestige" Services/ Models/`) and there is **no prestige system in the
 > desktop app** - the closest is `Services/Descent/DescentMigrationService.cs` (the curve recurve ceremony,
 > `:40 StageCeremonyDue`). No `prestige` moment is defined. The Arcademy ticket/token wallet
-> (`Services/Arcademy/ArcademyEconomy.cs`) is **pure static functions with no events** and lives inside the
+> (`../../CCP.Core/Services/Arcademy/ArcademyEconomy.cs`) is **pure static functions with no events** and lives inside the
 > web host, so no desktop economy moment exists either. Both would need new seams. (UNVERIFIED that the
 > owner wants them at all.)
 
@@ -507,7 +507,7 @@ anywhere in the app; the only precedent is BarkService's `local_hour` condition 
 Listed so nobody hunts for them:
 
 - **Prestige** - no prestige system exists in the desktop app. No moment defined.
-- **Wallet / economy** - `Services/Arcademy/ArcademyEconomy.cs` is pure static functions on a `JObject`
+- **Wallet / economy** - `../../CCP.Core/Services/Arcademy/ArcademyEconomy.cs` is pure static functions on a `JObject`
   wallet with no events, and the wallet itself lives in the web host. Sparkle points are a skill-tree
   multiplier (`SkillTreeService.GetSparkleBoostTier()` :192), not a currency with a balance event. No
   economy moment defined.
