@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Services.Possession.Effects;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Possession.Scenes;
 
@@ -67,13 +68,13 @@ public sealed class PossessionSceneEffect : IPossessionEffect
         _live = true;
         try { await _scene.RunAsync(ctx, ctx.Host, _pick, ct).ConfigureAwait(true); }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { App.Logger?.Warning("Possession scene {Id} threw: {Error}", Id, ex.Message); }
+        catch (Exception ex) { Log.Warning("Possession scene {Id} threw: {Error}", Id, ex.Message); }
     }
 
     public async Task UndoAsync(TimeSpan duration)
     {
         try { await _scene.UndoAsync(duration).ConfigureAwait(true); }
-        catch (Exception ex) { App.Logger?.Warning("Possession scene {Id} undo failed: {Error}", Id, ex.Message); }
+        catch (Exception ex) { Log.Warning("Possession scene {Id} undo failed: {Error}", Id, ex.Message); }
         finally { _live = false; }
     }
 }

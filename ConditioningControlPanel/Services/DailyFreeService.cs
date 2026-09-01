@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services
 {
@@ -101,7 +102,7 @@ namespace ConditioningControlPanel.Services
                 if (due < TimeSpan.FromSeconds(1)) due = TimeSpan.FromSeconds(1);
                 _dayRollTimer.Change(due, Timeout.InfiniteTimeSpan);
             }
-            catch (Exception ex) { App.Logger?.Debug("DailyFree: day-roll re-arm failed: {E}", ex.Message); }
+            catch (Exception ex) { Log.Debug("DailyFree: day-roll re-arm failed: {E}", ex.Message); }
         }
 
         /// <summary>
@@ -116,13 +117,13 @@ namespace ConditioningControlPanel.Services
                 var stamp = LocalDateStamp();
                 if (stamp == _dayRollLastStamp) return;
                 _dayRollLastStamp = stamp;
-                App.Logger?.Information("DailyFree: local day rolled over to {Date}", stamp);
+                Log.Information("DailyFree: local day rolled over to {Date}", stamp);
                 // Yesterday's override must not survive the rollover, and the seeded pick has
                 // already moved on by itself - so this is a repaint signal, not an invalidation.
                 _ = RefreshAsync();
                 TodayChanged?.Invoke();
             }
-            catch (Exception ex) { App.Logger?.Debug("DailyFree: day-roll tick failed: {E}", ex.Message); }
+            catch (Exception ex) { Log.Debug("DailyFree: day-roll tick failed: {E}", ex.Message); }
             finally { ArmDayRollTimer(); }
         }
 
@@ -289,7 +290,7 @@ namespace ConditioningControlPanel.Services
                 // benched pool members (haptics, voice) are already wired.
                 if (!OverridableKeys.Contains(key))
                 {
-                    App.Logger?.Warning("DailyFree: server override '{Key}' not in pool, ignoring", key);
+                    Log.Warning("DailyFree: server override '{Key}' not in pool, ignoring", key);
                     return;
                 }
 
@@ -297,12 +298,12 @@ namespace ConditioningControlPanel.Services
                 _serverKey = key;
                 _serverKeyForDate = LocalDateStamp();
                 _lastFetchUtc = DateTime.UtcNow;
-                App.Logger?.Information("DailyFree: server override for {Date}: {Key}", _serverKeyForDate, key);
+                Log.Information("DailyFree: server override for {Date}: {Key}", _serverKeyForDate, key);
                 if (changed) TodayChanged?.Invoke();
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("DailyFree: override fetch failed (seeded pick stands): {E}", ex.Message);
+                Log.Debug("DailyFree: override fetch failed (seeded pick stands): {E}", ex.Message);
             }
         }
     }

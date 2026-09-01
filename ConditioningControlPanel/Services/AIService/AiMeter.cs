@@ -1,3 +1,5 @@
+using Serilog;
+
 namespace ConditioningControlPanel.Services.AIService
 {
     /// <summary>
@@ -61,13 +63,13 @@ namespace ConditioningControlPanel.Services.AIService
         {
             if (cachedInputTokens == null && tokensRemainingToday == null)
             {
-                App.Logger?.Information(
+                Log.Information(
                     "[AI-METER] provider={Provider} purpose={Purpose} in_tok~{InTokens} out_tok~{OutTokens} ms={ElapsedMs} outcome={Outcome}",
                     provider, purpose, ApproxTokens(inputChars), ApproxTokens(outputChars), elapsedMs, outcome);
                 return;
             }
 
-            App.Logger?.Information(
+            Log.Information(
                 "[AI-METER] provider={Provider} purpose={Purpose} in_tok~{InTokens} out_tok~{OutTokens} ms={ElapsedMs} outcome={Outcome} cached_in={CachedIn} tok_left={TokensLeft}",
                 provider, purpose, ApproxTokens(inputChars), ApproxTokens(outputChars), elapsedMs, outcome,
                 cachedInputTokens ?? -1, tokensRemainingToday ?? -1);

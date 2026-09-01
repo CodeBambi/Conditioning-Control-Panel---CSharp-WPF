@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.GoonGame
 {
@@ -125,7 +126,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                     ? spec.DurationMs
                     : (int)Math.Min(spec.DurationMs, sw.ElapsedMilliseconds);
 
-                App.Logger?.Information(
+                Log.Information(
                     "GoonSuddenDeath: staring contest round {Round} -> {Outcome} at {Ms}ms (attention {Pct}%)",
                     ctx.RoundNo, survived ? "survived" : "blinked", elapsed, attentionPct);
 

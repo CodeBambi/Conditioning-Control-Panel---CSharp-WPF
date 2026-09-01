@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Text;
+using Serilog;
 
 namespace ConditioningControlPanel.Services
 {
@@ -30,7 +31,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning("Could not check startup registration: {Error}", ex.Message);
+                Log.Warning("Could not check startup registration: {Error}", ex.Message);
                 return false;
             }
         }
@@ -46,7 +47,7 @@ namespace ConditioningControlPanel.Services
                 var exePath = GetExecutablePath();
                 if (string.IsNullOrEmpty(exePath) || !File.Exists(exePath))
                 {
-                    App.Logger?.Warning("Could not find executable path for startup registration");
+                    Log.Warning("Could not find executable path for startup registration");
                     return false;
                 }
 
@@ -54,12 +55,12 @@ namespace ConditioningControlPanel.Services
                 CreateShortcut(ShortcutPath, exePath, Path.GetDirectoryName(exePath) ?? "",
                     "Conditioning Control Panel", "--startup");
 
-                App.Logger?.Information("Registered for Windows startup: {Path}", ShortcutPath);
+                Log.Information("Registered for Windows startup: {Path}", ShortcutPath);
                 return true;
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Failed to register for Windows startup");
+                Log.Error(ex, "Failed to register for Windows startup");
                 return false;
             }
         }
@@ -74,13 +75,13 @@ namespace ConditioningControlPanel.Services
                 if (File.Exists(ShortcutPath))
                 {
                     File.Delete(ShortcutPath);
-                    App.Logger?.Information("Unregistered from Windows startup");
+                    Log.Information("Unregistered from Windows startup");
                 }
                 return true;
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Failed to unregister from Windows startup");
+                Log.Error(ex, "Failed to unregister from Windows startup");
                 return false;
             }
         }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Lab.GazeMinigame
 {
@@ -52,7 +53,7 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "AssetPack.FromFolder: enumeration failed for {Path}", folderPath);
+                Log.Warning(ex, "AssetPack.FromFolder: enumeration failed for {Path}", folderPath);
                 return null;
             }
 
