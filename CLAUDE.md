@@ -108,6 +108,24 @@ Three things that will bite, all found by rendering rather than by reading:
    dependency and those `pack://` URIs to a plain `<TextBlock Text="🔒"/>` on that head.
    `BoolToVisibility` (~27 usages) likewise disappears: Avalonia binds `IsVisible` to a bool directly.
 
+## What actually remains in the UI
+
+Measured across all 183 `.xaml` files and their code-behind (131,562 LOC), bucketed by what blocks
+each one. "192 views to port" is the wrong mental model - they are not uniformly hard:
+
+| Bucket | Files | % | LOC | What it needs |
+|---|---:|---:|---:|---|
+| **A. straight port** | 62 | 33% | 23,604 | Nothing. The mapping above applies. |
+| **B. custom control first** | 44 | 24% | 31,977 | Its `fx:`/`cmp:`/`helpers:` control ported first. |
+| **D. WebView2-hosted** | 12 | 6% | 29,435 | `Avalonia.Controls.WebView` (12.x only - the reason the head targets 12). |
+| **E. Win32 / layered window** | 65 | 35% | 46,546 | Per-platform reimplementation, or dropping where the platform forbids it. |
+
+Bucket E is the Chaos overlays, the compositor and the click-through transparent windows. Those are
+not ports - Wayland and Quest do not permit desktop-wide always-on-top click-through surfaces at all.
+Plan to reimplement per platform or to lose the feature there, and decide which before starting.
+
+Bucket A is where to work first: a third of the UI, and the procedure is already written down.
+
 ## Moving a file into Core
 
 Pure `git mv`, zero content edits, namespace unchanged. Verify with `git diff -M --stat` showing a
