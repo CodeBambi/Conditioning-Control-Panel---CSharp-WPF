@@ -239,8 +239,9 @@ public class EmiDeskLayerOrderTests
             "the overlay must be authored after FaceLayer in the XAML source too, so a reader sees "
             + "the order without running anything");
 
-        // Pinned to the WPF head on purpose: CCP.Core keeps its own CLAUDE.md, and a shared
-        // reader would have to guess between them.
+        // Pinned to the WPF head on purpose. This is the head's own working doc, not product
+        // source, and any other root that grows a CLAUDE.md would make a multi-root probe
+        // ambiguous — a red test on someone else's unit, for a file that never moves.
         var claude = File.ReadAllText(
             Path.Combine(SourceRoots.RepoRoot, "ConditioningControlPanel", "CLAUDE.md"));
         Assert.Contains("outfit / skin layer is the TOPMOST thing", claude);
