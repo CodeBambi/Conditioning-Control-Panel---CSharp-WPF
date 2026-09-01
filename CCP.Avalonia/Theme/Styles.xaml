@@ -1,0 +1,65 @@
+<!-- PORTED from ConditioningControlPanel/Resources/Theme/MainWindow.xaml - keep the values in step.
+
+     Unlike Colors.xaml and Brushes.xaml, this one is NOT a straight copy. WPF's keyed
+     `<Style x:Key TargetType>` has no direct Avalonia equivalent: Avalonia's `Style` is
+     selector-based and implicit, so a *keyed, reusable* style is a `ControlTheme`. The setters
+     inside are otherwise identical.
+
+     Consequence at the call site: WPF's  Style="{StaticResource SectionPanel}"
+     becomes Avalonia's        Theme="{StaticResource SectionPanel}"
+
+     That one substitution is the bulk of the work in porting a view, which is why it is worth
+     writing down here rather than rediscovering it 193 times.
+
+     Only the styles needed by the first ported view live here. The remaining ~12 keys in
+     Controls.xaml and the rest of MainWindow.xaml follow the same mapping. -->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- MainWindow.xaml:525 -->
+  <ControlTheme x:Key="SectionPanel" TargetType="Border">
+    <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}"/>
+    <Setter Property="CornerRadius" Value="12"/>
+    <Setter Property="Padding" Value="12,8"/>
+    <Setter Property="Margin" Value="0,0,0,8"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
+  </ControlTheme>
+
+  <!-- MainWindow.xaml:542 -->
+  <ControlTheme x:Key="SectionHeader" TargetType="TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource PinkSoftBrush}"/>
+    <Setter Property="FontSize" Value="14"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Margin" Value="0,0,0,8"/>
+  </ControlTheme>
+
+  <!-- MainWindow.xaml:677. The WPF original carries a ControlTemplate drawing a "?" in an
+       18x18 rounded border, plus ToolTipService timings. Avalonia has no ToolTipService - the
+       equivalents are ToolTip.ShowDelay and friends - so those are dropped here rather than
+       guessed at; the visual template is reproduced faithfully. -->
+  <ControlTheme x:Key="HelpButtonStyle" TargetType="Button">
+    <Setter Property="Width" Value="18"/>
+    <Setter Property="Height" Value="18"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="Margin" Value="8,0,0,0"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Template">
+      <ControlTemplate TargetType="Button">
+        <Border Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="9" Width="18" Height="18">
+          <TextBlock Text="?" FontSize="11"
+                     Foreground="{TemplateBinding Foreground}"
+                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+
+</ResourceDictionary>

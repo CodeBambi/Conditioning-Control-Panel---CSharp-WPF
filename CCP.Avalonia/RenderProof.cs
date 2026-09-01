@@ -17,7 +17,12 @@ namespace ConditioningControlPanel.Avalonia
     /// </summary>
     internal static class RenderProof
     {
-        public static int Run(string outPath)
+        public static int Run(string outPath) => Run(outPath, null);
+
+        /// <param name="view">Optional view to host instead of the default window content, so a
+        /// ported view can be rendered on its own for a side-by-side fidelity comparison against
+        /// its WPF original.</param>
+        public static int Run(string outPath, global::Avalonia.Controls.Control? view)
         {
             try
             {
@@ -27,6 +32,12 @@ namespace ConditioningControlPanel.Avalonia
                     .SetupWithoutStarting();
 
                 var window = new MainWindow { Width = 880, Height = 620 };
+                if (view is not null)
+                {
+                    window.Content = view;
+                    window.Width = 720;
+                    window.Height = 760;
+                }
                 window.Show();
 
                 // Two passes: layout settles on the first, content is painted on the second.

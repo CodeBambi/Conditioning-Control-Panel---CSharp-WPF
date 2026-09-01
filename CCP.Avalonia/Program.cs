@@ -19,6 +19,12 @@ namespace ConditioningControlPanel.Avalonia
             if (r >= 0 && r + 1 < args.Length)
                 return RenderProof.Run(args[r + 1]);
 
+            // --render-view <path> renders a single ported view for side-by-side comparison
+            // against its WPF original.
+            var rv = Array.IndexOf(args, "--render-view");
+            if (rv >= 0 && rv + 1 < args.Length)
+                return RenderProof.Run(args[rv + 1], new Views.Tabs.AchievementsTabView());
+
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
             return 0;
         }

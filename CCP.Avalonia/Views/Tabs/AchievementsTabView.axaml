@@ -1,0 +1,95 @@
+<!-- PORTED from ConditioningControlPanel/Views/Tabs/AchievementsTabView.xaml.
+     Structure, order, spacing and every resource key are preserved so the two can be compared
+     directly. Documented deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource X}"  ->  Theme="{StaticResource X}"   (keyed styles are ControlThemes)
+       {loc:Str key}               ->  {Binding LocX}               (LocExtension is a WPF
+                                       MarkupExtension and stays in the head; the strings still
+                                       come from CCP.Core's LocalizationManager, via the VM)
+       helpers:EmojiTextBlock      ->  TextBlock                    (custom control not ported yet)
+       Visibility="Collapsed"      ->  IsVisible="False"
+       Panel.ZIndex                ->  ZIndex
+       DropShadowEffect            ->  DropShadowEffect (Avalonia.Media, same concept)
+       WrapPanel                   ->  WrapPanel (identical) -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.AchievementsTabView"
+             x:DataType="vm:AchievementsTabViewModel"
+             xmlns:vm="clr-namespace:ConditioningControlPanel.Avalonia.Views.Tabs">
+  <Border Theme="{StaticResource SectionPanel}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+      <StackPanel>
+        <Grid Margin="0,0,0,10">
+          <TextBlock Theme="{StaticResource SectionHeader}" Text="{Binding LocSectionAchievements}" Margin="0"/>
+          <Button x:Name="HelpBtnAchievements" Theme="{StaticResource HelpButtonStyle}"
+                  HorizontalAlignment="Right" Tag="Achievements"/>
+        </Grid>
+        <TextBlock Text="{Binding LocSubtitleRewards}"
+                   Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,10"/>
+
+        <!-- Filter chips (populated in code-behind: All / Unlocked / Locked / Rewards) -->
+        <WrapPanel x:Name="AchievementFilters" Margin="0,0,0,8"/>
+
+        <!-- Achievement Grid (populated in code-behind). WrapPanel, not UniformGrid:
+             cards are fixed-size, so the panel must not stretch the gutters with them. -->
+        <WrapPanel x:Name="AchievementGrid" Margin="0,5"/>
+
+        <TextBlock x:Name="TxtAchievementCount" Text="{Binding LocUnlockedCount}"
+                   Foreground="{DynamicResource TextMutedBrush}" FontSize="14"
+                   HorizontalAlignment="Center" Margin="0,15,0,0"/>
+
+        <!-- Third, independent counter: wardrobe items earned through achievements.
+             Never folded into the free or patron achievement counts. -->
+        <TextBlock x:Name="TxtRewardCount" Text="{Binding LocRewardCount}"
+                   Foreground="#8079A3" FontSize="12"
+                   HorizontalAlignment="Center" Margin="0,4,0,0"/>
+
+        <!-- Patron-exclusive achievements: separate section with its OWN counter.
+             Free and patron counts are never summed. -->
+        <Border Height="1" Background="#33FFFFFF" Margin="0,24,0,0"/>
+        <TextBlock Theme="{StaticResource SectionHeader}"
+                   Text="{Binding LocSectionPatronAchievements}" Margin="0,18,0,0"/>
+        <TextBlock Text="{Binding LocPatronSubtitle}"
+                   Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,12"/>
+
+        <Grid Margin="0,5,0,0">
+          <StackPanel>
+            <WrapPanel x:Name="PatronAchievementGrid" Margin="0,5"/>
+            <TextBlock x:Name="TxtPatronAchievementCount" Text="{Binding LocPatronCount}"
+                       Foreground="{DynamicResource TextMutedBrush}" FontSize="14"
+                       HorizontalAlignment="Center" Margin="0,15,0,0"/>
+          </StackPanel>
+
+          <!-- Lock overlay for free users (mirrors PatreonFeaturesOverlay) -->
+          <Border x:Name="PatronAchievementsOverlay" Background="#CC1A1A2E" CornerRadius="12"
+                  ZIndex="100" IsVisible="{Binding PatronLocked}">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="20">
+              <TextBlock Text="🔒" FontSize="40" HorizontalAlignment="Center" Margin="0,0,0,15"/>
+              <TextBlock Text="{Binding LocSectionPatronAchievements}"
+                         Foreground="{DynamicResource PinkBrush}"
+                         FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,10">
+                <TextBlock.Effect>
+                  <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.5"/>
+                </TextBlock.Effect>
+              </TextBlock>
+              <TextBlock Text="{Binding LocPatronLocked}" Foreground="{DynamicResource TextMutedBrush}"
+                         FontSize="14" HorizontalAlignment="Center" TextAlignment="Center"
+                         TextWrapping="Wrap" MaxWidth="380"/>
+              <!-- FIDELITY BUG, found by rendering this view: Avalonia's Button treats "_" in
+                   its Content as an access-key marker, so the loc key btn_visit_patreon rendered
+                   as "btnvisit_patreon" with a stray underline. WPF only does this when
+                   RecognizesAccessKey is set, so it never bit the original. Any localized string
+                   containing an underscore hits this - including every fallback that shows the
+                   raw key. A TextBlock child opts out of access-key parsing entirely. -->
+              <Button Background="#FF424D" Foreground="White"
+                      BorderThickness="0" Padding="18,8" Margin="0,15,0,0"
+                      HorizontalAlignment="Center">
+                <TextBlock Text="{Binding LocVisitPatreon}"/>
+              </Button>
+            </StackPanel>
+          </Border>
+        </Grid>
+      </StackPanel>
+    </ScrollViewer>
+  </Border>
+</UserControl>
