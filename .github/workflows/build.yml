@@ -47,6 +47,12 @@ jobs:
       # writes a PNG, which is the only form of visual proof that survives on a runner with no
       # display server. Both exit non-zero on failure.
       - run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --smoke
+
+      # The VR head. Builds and self-checks on ubuntu with no OpenXR runtime and no headset -
+      # StereoKit ships natives for linux-x64/arm64 and android-arm64, so the same assembly
+      # targets Steam Frame (SteamOS/ARM64) and Quest standalone. Rendering needs a device;
+      # asserting it can produce every value it renders does not.
+      - run: dotnet run --project CCP.VR/CCP.VR.csproj -c Release -- --smoke
       - run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --render $RUNNER_TEMP/ccp-avalonia-linux.png
       - uses: actions/upload-artifact@v4
         with:
