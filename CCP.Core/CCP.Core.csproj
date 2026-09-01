@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Platform-agnostic engine library. Targets plain net8.0 ON PURPOSE: the target framework
+    itself is the architecture test. A net8.0 assembly physically cannot reference
+    System.Windows.*, so any WPF/WinForms/Win32 leak into Core becomes a compile error rather
+    than a code-review question. Do not add -windows, UseWPF, UseWindowsForms, or a
+    RuntimeIdentifier here.
+
+    CA1416 is deliberately NOT suppressed (the app suppresses it). Core is precisely where a
+    Windows-only API call should warn.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <!-- Match the app: it does not use implicit usings. -->
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- Must stay ConditioningControlPanel so embedded-resource name strings keep resolving
+         as files move over from the app. -->
+    <RootNamespace>ConditioningControlPanel</RootNamespace>
+    <AssemblyName>CCP.Core</AssemblyName>
+    <!-- Match the app: assembly info lives in Properties/AssemblyInfo.cs. -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="Serilog" Version="3.1.1" />
+  </ItemGroup>
+
+</Project>
