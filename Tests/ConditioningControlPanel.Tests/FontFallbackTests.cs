@@ -39,27 +39,10 @@ public class FontFallbackTests
 
     private static string AppDir => Path.Combine(RepoRoot(), "ConditioningControlPanel");
 
-    /// <summary>
-    /// Every shipped source file of the given extension.
-    ///
-    /// <para>The exclusions are matched on the path RELATIVE to the app folder, not the absolute
-    /// path. That distinction matters: agent worktrees live at
-    /// <c>ConditioningControlPanel/.claude/worktrees/&lt;id&gt;/</c>, so a suite running inside one
-    /// has ".claude" in every absolute path it sees. Filtering absolute paths would therefore
-    /// exclude the entire tree and pass vacuously in a worktree, while still needing to skip other
-    /// branches' worktrees in a normal checkout. Relative matching gets both right.</para>
-    /// </summary>
-    private static IEnumerable<string> SourceFiles(string extension)
-    {
-        var skip = new[] { "bin", "obj", ".claude" };
-        return Directory.EnumerateFiles(AppDir, "*" + extension, SearchOption.AllDirectories)
-            .Where(p =>
-            {
-                var segments = Path.GetRelativePath(AppDir, p)
-                    .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                return !segments.Any(s => skip.Contains(s, StringComparer.OrdinalIgnoreCase));
-            });
-    }
+    /// <summary>Every shipped source file of the given extension, across every product root — see
+    /// <see cref="SourceRoots"/> for the roots and the excluded directories.</summary>
+    private static IEnumerable<string> SourceFiles(string extension) =>
+        SourceRoots.EnumerateProductSources("*" + extension);
 
     // ------------------------------------------------------------------ the chain filter
 
@@ -117,8 +100,9 @@ public class FontFallbackTests
 
     /// <summary>
     /// The scans below are all "find me the offenders, expect none", which is exactly the shape
-    /// that passes for free when the file walk returns nothing. YouLibraryDoorTests silently does
-    /// this today inside an agent worktree. So: prove the walk actually sees the app first.
+    /// that passes for free when the file walk returns nothing. <see cref="SourceRoots"/> guards
+    /// the empty-walk and lost-root cases for every guard in the suite; this keeps the sharper
+    /// "and it found the actual markup" pin on top of it.
     /// </summary>
     [Fact]
     public void The_markup_scan_actually_finds_the_app()
@@ -126,7 +110,8 @@ public class FontFallbackTests
         var xaml = SourceFiles(".xaml").ToList();
 
         Assert.True(xaml.Count > 50,
-            "the XAML walk found only " + xaml.Count + " files under " + AppDir +
+            "the XAML walk found only " + xaml.Count + " files across " +
+            string.Join(", ", SourceRoots.ProductDirectories.Select(Path.GetFileName)) +
             " - the scans in this suite would be passing vacuously");
         Assert.Contains(xaml, p => Path.GetFileName(p) == "MainWindow.xaml");
     }

@@ -40,17 +40,10 @@ public class EmiMomentIdWiringTests
 
     private static string AppDir() => Path.Combine(RepoRoot(), "ConditioningControlPanel");
 
-    /// <summary>Every C# file that ships, ignoring build output.</summary>
-    private static IEnumerable<string> SourceFiles()
-    {
-        foreach (var path in Directory.EnumerateFiles(AppDir(), "*.cs", SearchOption.AllDirectories))
-        {
-            var rel = path.Substring(AppDir().Length).Replace('\\', '/');
-            if (rel.Contains("/bin/", StringComparison.OrdinalIgnoreCase)) continue;
-            if (rel.Contains("/obj/", StringComparison.OrdinalIgnoreCase)) continue;
-            yield return path;
-        }
-    }
+    /// <summary>Every C# file that ships, across every product root, ignoring build output. A
+    /// moment id raised from code that has moved to CCP.Core still has to be in the vocabulary,
+    /// so this walks the roots rather than the WPF head alone.</summary>
+    private static IEnumerable<string> SourceFiles() => SourceRoots.EnumerateProductSources("*.cs");
 
     // =====================================================================================
     //  the shipped vocabulary

@@ -91,11 +91,10 @@ public class ShortWalkTourTests : IDisposable
         svc.Start(TutorialType.ShortWalk);
 
         var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var path in Directory.EnumerateFiles(AppDir(), "*.xaml", SearchOption.AllDirectories))
+        // Every product root, so a view that moves out of the WPF head keeps feeding this set
+        // rather than quietly turning its own tour targets into "dead" names.
+        foreach (var path in SourceRoots.EnumerateProductSources("*.xaml"))
         {
-            var rel = path.Substring(AppDir().Length).Replace('\\', '/');
-            if (rel.Contains("/bin/", StringComparison.OrdinalIgnoreCase)) continue;
-            if (rel.Contains("/obj/", StringComparison.OrdinalIgnoreCase)) continue;
             foreach (Match m in Regex.Matches(File.ReadAllText(path), @"x:Name=""([A-Za-z_][A-Za-z0-9_]*)"""))
                 names.Add(m.Groups[1].Value);
         }
