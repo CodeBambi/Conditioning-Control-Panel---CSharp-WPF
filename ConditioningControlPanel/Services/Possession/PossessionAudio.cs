@@ -259,7 +259,7 @@ public static class PossessionAudio
     /// app deletes things out of its own temp tree (the .NET extraction-cache incident), and a cue that
     /// vanished mid-lockdown would be re-rendered on the audio path.
     /// </summary>
-    private static string ClipDir => Path.Combine(App.UserDataPath, "possession");
+    private static string ClipDir => Path.Combine(CorePaths.UserData, "possession");
 
     // The file names carry the synth version. Change the maths, change the name - never leave a user
     // listening to a stale render of a cue we have since retuned.

@@ -17,7 +17,7 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public static class SeasonRecapService
     {
-        private static string SnapshotDir => Path.Combine(App.UserDataPath, "season-recaps");
+        private static string SnapshotDir => Path.Combine(CorePaths.UserData, "season-recaps");
 
         private static string PathFor(string seasonKey) =>
             Path.Combine(SnapshotDir, $"{seasonKey}.json");

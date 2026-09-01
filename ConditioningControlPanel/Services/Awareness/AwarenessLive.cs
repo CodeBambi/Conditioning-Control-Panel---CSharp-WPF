@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Awareness
 {
@@ -90,7 +91,7 @@ namespace ConditioningControlPanel.Services.Awareness
             }
 
             try { FramePublished?.Invoke(null, EventArgs.Empty); }
-            catch (Exception ex) { App.Logger?.Debug("AwarenessLive: a FramePublished subscriber threw: {E}", ex.Message); }
+            catch (Exception ex) { Log.Debug("AwarenessLive: a FramePublished subscriber threw: {E}", ex.Message); }
         }
 
         /// <summary>Forgets the last frame. Part of <see cref="WipeEverything"/>; separate so tests can be blunt.</summary>
@@ -138,7 +139,7 @@ namespace ConditioningControlPanel.Services.Awareness
             if (ledger != null)
             {
                 try { ledger.Wipe(); }
-                catch (Exception ex) { App.Logger?.Warning(ex, "AwarenessLive: ledger wipe failed"); }
+                catch (Exception ex) { Log.Warning(ex, "AwarenessLive: ledger wipe failed"); }
             }
             else
             {
@@ -149,22 +150,22 @@ namespace ConditioningControlPanel.Services.Awareness
             if (memory != null)
             {
                 try { _ = memory.ForgetAsync(null); }
-                catch (Exception ex) { App.Logger?.Warning(ex, "AwarenessLive: memory forget failed"); }
+                catch (Exception ex) { Log.Warning(ex, "AwarenessLive: memory forget failed"); }
             }
 
             // The in-RAM half of the erasure. Without this the observer still holds the app it had
             // committed to and the candidate it was about to cut, and could speak about what was just
             // wiped on its very next tick.
             try { ResetObserverState?.Invoke(); }
-            catch (Exception ex) { App.Logger?.Warning(ex, "AwarenessLive: observer state reset failed"); }
+            catch (Exception ex) { Log.Warning(ex, "AwarenessLive: observer state reset failed"); }
 
             // The other in-RAM half: the cooldown ledger's per-app last-spoke times and the scorer's
             // repetition counters, both keyed by the app ids that were just erased.
             try { ResetPacingState?.Invoke(); }
-            catch (Exception ex) { App.Logger?.Warning(ex, "AwarenessLive: pacing state reset failed"); }
+            catch (Exception ex) { Log.Warning(ex, "AwarenessLive: pacing state reset failed"); }
 
             Clear();
-            App.Logger?.Information("Awareness: everything she noticed has been erased");
+            Log.Information("Awareness: everything she noticed has been erased");
         }
 
         /// <summary>
@@ -178,13 +179,13 @@ namespace ConditioningControlPanel.Services.Awareness
             var id = AwarenessText.SanitizeId(appId);
 
             try { Ledger?.Forget(id); }
-            catch (Exception ex) { App.Logger?.Warning(ex, "AwarenessLive: ledger forget failed"); }
+            catch (Exception ex) { Log.Warning(ex, "AwarenessLive: ledger forget failed"); }
 
             try { _ = Memory?.ForgetAsync(id); }
-            catch (Exception ex) { App.Logger?.Warning(ex, "AwarenessLive: memory forget failed"); }
+            catch (Exception ex) { Log.Warning(ex, "AwarenessLive: memory forget failed"); }
 
             try { ForgetPacingState?.Invoke(id); }
-            catch (Exception ex) { App.Logger?.Warning(ex, "AwarenessLive: pacing forget failed"); }
+            catch (Exception ex) { Log.Warning(ex, "AwarenessLive: pacing forget failed"); }
 
             lock (Lock)
             {
@@ -207,7 +208,7 @@ namespace ConditioningControlPanel.Services.Awareness
             try { path = ActivityLedger.DefaultLedgerPath; }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "AwarenessLive: could not resolve the ledger path");
+                Log.Warning(ex, "AwarenessLive: could not resolve the ledger path");
                 return;
             }
 
@@ -219,7 +220,7 @@ namespace ConditioningControlPanel.Services.Awareness
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning(ex, "AwarenessLive: failed to delete {File}", file);
+                    Log.Warning(ex, "AwarenessLive: failed to delete {File}", file);
                 }
             }
         }

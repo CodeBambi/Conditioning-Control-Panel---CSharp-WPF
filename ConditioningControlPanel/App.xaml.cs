@@ -162,25 +162,11 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// User data folder path in LocalAppData - persists across updates.
-        /// CCP_USERDATA_DIR redirects the whole tree (settings, logs, content, mods) so test
-        /// harnesses can run against a sandbox instead of the real profile; same env-hook
-        /// pattern as the CCP_STRESS_* knobs.
+        /// Resolution (including the CCP_USERDATA_DIR override) lives in
+        /// <see cref="CorePaths.UserData"/>; this stays as the name ~580 files and the XAML already
+        /// use. Document the behaviour there, not here.
         /// </summary>
-        public static string UserDataPath { get; } = ResolveUserDataPath();
-
-        private static string ResolveUserDataPath()
-        {
-            try
-            {
-                var overrideDir = Environment.GetEnvironmentVariable("CCP_USERDATA_DIR");
-                if (!string.IsNullOrWhiteSpace(overrideDir) && Path.IsPathRooted(overrideDir))
-                    return overrideDir;
-            }
-            catch { }
-            return Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "ConditioningControlPanel");
-        }
+        public static string UserDataPath => CorePaths.UserData;
 
         /// <summary>
         /// User assets folder path - for user-added content that persists across updates
@@ -228,6 +214,29 @@ namespace ConditioningControlPanel
             }
         }
         private static bool _warnedMissingCustomAssetsPath;
+
+        /// <summary>
+        /// Hands Core the live assets-path getter. Seeded from a static ctor because
+        /// <see cref="Main"/> is itself a static member of App: the cctor therefore runs before
+        /// Main's body, i.e. before this exe executes anything. The lambda defers the actual read,
+        /// so App's own static-init order is irrelevant here.
+        ///
+        /// <para>A host that never touches App (test host, XAML designer, a future Avalonia head)
+        /// leaves the hook null - and that is still correct, not merely safe: the only thing that
+        /// can make the answer differ from the default is <c>Settings.Current.CustomAssetsPath</c>,
+        /// which cannot be populated without touching <c>App.Settings</c>, which triggers this
+        /// cctor. Unseeded therefore implies no settings, and Core's fallback
+        /// (<c>UserData/assets</c>) is exactly what <see cref="EffectiveAssetsPath"/> returns in
+        /// that state.</para>
+        ///
+        /// <para>Note this ctor removes <c>beforefieldinit</c> from App. Keep the body to hook
+        /// wiring only - never a logger, a directory create, or a service touch (Tests'
+        /// WpfRenderHarness constructs App on a test thread and relies on that).</para>
+        /// </summary>
+        static App()
+        {
+            CorePaths.EffectiveAssetsProvider = () => EffectiveAssetsPath;
+        }
 
         #region Remote media handoff (Phase 1.5)
 

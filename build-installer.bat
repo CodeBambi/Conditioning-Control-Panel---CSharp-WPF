@@ -9,6 +9,7 @@ echo.
 :: Configuration
 set VERSION=6.9.0
 set PROJECT_DIR=ConditioningControlPanel
+set CORE_DIR=CCP.Core
 set PUBLISH_DIR=%PROJECT_DIR%\bin\Release\net8.0-windows10.0.19041.0\win-x64\publish
 set INSTALLER_OUTPUT=installer-output
 :: Short staging path for the Inno Setup compile. The publish tree sits ~131 chars
@@ -37,8 +38,13 @@ echo [1/4] Cleaning previous builds...
 :: prior run is "up to date" even when source code has changed, and the new
 :: single-file bundle gets wrapped around the old DLL — burning v6.0.1's
 :: bump into a v6.0.0 binary inside a v6.0.1-named installer.
+:: CCP.Core gets the same treatment: it is a project reference that ships inside the
+:: single-file bundle and now holds shipping logic (Chaos tuning constants, the
+:: chaos_meta save schema), so a stale Core DLL is the same hazard one layer down.
 if exist "%PROJECT_DIR%\bin\Release" rmdir /s /q "%PROJECT_DIR%\bin\Release"
 if exist "%PROJECT_DIR%\obj\Release" rmdir /s /q "%PROJECT_DIR%\obj\Release"
+if exist "%CORE_DIR%\bin\Release" rmdir /s /q "%CORE_DIR%\bin\Release"
+if exist "%CORE_DIR%\obj\Release" rmdir /s /q "%CORE_DIR%\obj\Release"
 if exist "%PUBLISH_DIR%" rmdir /s /q "%PUBLISH_DIR%"
 if exist "%INSTALLER_OUTPUT%" rmdir /s /q "%INSTALLER_OUTPUT%"
 mkdir "%INSTALLER_OUTPUT%" 2>nul

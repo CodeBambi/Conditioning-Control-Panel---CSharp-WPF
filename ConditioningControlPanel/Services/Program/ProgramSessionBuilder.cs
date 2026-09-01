@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text.Json;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Models.Program;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Program;
 
@@ -199,7 +200,7 @@ public static class ProgramSessionBuilder
         {
             if (!SettingsByName.TryGetValue(key, out var prop) || !prop.CanWrite)
             {
-                App.Logger?.Warning("Program day override targets unknown SessionSettings field '{Field}'", key);
+                Log.Warning("Program day override targets unknown SessionSettings field '{Field}'", key);
                 continue;
             }
 
@@ -212,7 +213,7 @@ public static class ProgramSessionBuilder
                 // into a string property would hand the rest of the app a null it assumes is "".
                 if (converted == null && Nullable.GetUnderlyingType(prop.PropertyType) == null)
                 {
-                    App.Logger?.Warning("Program day override for '{Field}' resolved to null and was skipped", key);
+                    Log.Warning("Program day override for '{Field}' resolved to null and was skipped", key);
                     continue;
                 }
 
@@ -220,7 +221,7 @@ public static class ProgramSessionBuilder
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Program day override for '{Field}' could not be applied", key);
+                Log.Warning(ex, "Program day override for '{Field}' could not be applied", key);
             }
         }
     }

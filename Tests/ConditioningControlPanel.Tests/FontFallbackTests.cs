@@ -110,8 +110,7 @@ public class FontFallbackTests
         var xaml = SourceFiles(".xaml").ToList();
 
         Assert.True(xaml.Count > 50,
-            "the XAML walk found only " + xaml.Count + " files across " +
-            string.Join(", ", SourceRoots.ProductDirectories.Select(Path.GetFileName)) +
+            "the XAML walk found only " + xaml.Count + " files across the product roots" +
             " - the scans in this suite would be passing vacuously");
         Assert.Contains(xaml, p => Path.GetFileName(p) == "MainWindow.xaml");
     }
@@ -125,9 +124,12 @@ public class FontFallbackTests
     public void No_markup_names_Cascadia_directly()
     {
         var offenders = SourceFiles(".xaml")
-            .Where(p => !p.EndsWith(Path.Combine("ConditioningControlPanel", "App.xaml"), StringComparison.OrdinalIgnoreCase))
+            // Each head's own App.xaml is the one allowed place: it holds the Font.Mono resource
+            // that FontGuard swaps. Matched on the filename, so a new head is exempt on arrival
+            // rather than failing this test the day it lands.
+            .Where(p => !string.Equals(Path.GetFileName(p), "App.xaml", StringComparison.OrdinalIgnoreCase))
             .Where(p => File.ReadAllText(p).Contains("Cascadia", StringComparison.OrdinalIgnoreCase))
-            .Select(p => Path.GetRelativePath(AppDir, p))
+            .Select(SourceRoots.Relative)
             .ToList();
 
         Assert.True(offenders.Count == 0,
@@ -154,7 +156,7 @@ public class FontFallbackTests
     {
         var staticUses = SourceFiles(".xaml")
             .Where(p => File.ReadAllText(p).Contains("StaticResource " + FontGuard.MonoResourceKey))
-            .Select(p => Path.GetRelativePath(AppDir, p))
+            .Select(SourceRoots.Relative)
             .ToList();
 
         Assert.True(staticUses.Count == 0,
@@ -183,7 +185,7 @@ public class FontFallbackTests
                 if (Regex.IsMatch(text, "FontFamily=\"" + Regex.Escape(face) + "\"") ||
                     Regex.IsMatch(text, "Property=\"FontFamily\"\\s+Value=\"" + Regex.Escape(face) + "\""))
                 {
-                    offenders.Add(Path.GetRelativePath(AppDir, path) + " -> " + face);
+                    offenders.Add(SourceRoots.Relative(path) + " -> " + face);
                 }
             }
         }

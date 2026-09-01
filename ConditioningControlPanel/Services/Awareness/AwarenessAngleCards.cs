@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Awareness
 {
@@ -253,7 +254,7 @@ namespace ConditioningControlPanel.Services.Awareness
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "AwarenessAngleCards: embedded deck could not be read");
+                Log.Error(ex, "AwarenessAngleCards: embedded deck could not be read");
             }
 
             _embedded = (json == null ? null : Parse(json, isEmbedded: true)) ?? MinimalDeck();
@@ -272,7 +273,7 @@ namespace ConditioningControlPanel.Services.Awareness
                 var info = new FileInfo(path);
                 if (info.Length > MaxFileBytes)
                 {
-                    App.Logger?.Warning(
+                    Log.Warning(
                         "AwarenessAngleCards: override is {Bytes} bytes (cap {Cap}) — using the built-in deck",
                         info.Length, MaxFileBytes);
                     return embedded;
@@ -281,20 +282,20 @@ namespace ConditioningControlPanel.Services.Awareness
                 var parsed = Parse(File.ReadAllText(path), isEmbedded: false);
                 if (parsed == null)
                 {
-                    App.Logger?.Warning(
+                    Log.Warning(
                         "AwarenessAngleCards: override at {Path} did not survive validation — using the built-in deck",
                         path);
                     return embedded;
                 }
 
-                App.Logger?.Information(
+                Log.Information(
                     "AwarenessAngleCards: loaded {Keys} card key(s), {Personas} persona(s) from {Path}",
                     parsed.Clusters.Count, parsed.Personas.Count, path);
                 return parsed;
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "AwarenessAngleCards: override load failed — using the built-in deck");
+                Log.Warning(ex, "AwarenessAngleCards: override load failed — using the built-in deck");
                 return embedded;
             }
         }
@@ -312,7 +313,7 @@ namespace ConditioningControlPanel.Services.Awareness
             try { root = JObject.Parse(json); }
             catch (Exception ex)
             {
-                App.Logger?.Warning("AwarenessAngleCards: deck did not parse ({Error})", ex.Message);
+                Log.Warning("AwarenessAngleCards: deck did not parse ({Error})", ex.Message);
                 return null;
             }
 
@@ -463,7 +464,7 @@ namespace ConditioningControlPanel.Services.Awareness
         /// </summary>
         private static AwarenessAngleDeck MinimalDeck()
         {
-            App.Logger?.Error(
+            Log.Error(
                 "AwarenessAngleCards: embedded deck '{Resource}' is missing from the assembly — " +
                 "awareness reactions will be generic until it is restored", EmbeddedResourceName);
 

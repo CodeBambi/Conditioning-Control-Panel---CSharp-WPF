@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Windows.Devices.Enumeration;
+using Serilog;
 
 namespace ConditioningControlPanel.Services
 {
@@ -37,7 +38,7 @@ namespace ConditioningControlPanel.Services
 
                 if (!task.Wait(TimeSpan.FromSeconds(5)))
                 {
-                    App.Logger?.Warning("WebcamWinRtEnumerator: FindAllAsync timed out");
+                    Log.Warning("WebcamWinRtEnumerator: FindAllAsync timed out");
                     return devices;
                 }
 
@@ -49,11 +50,11 @@ namespace ConditioningControlPanel.Services
                     devices.Add(new WebcamDeviceEnumerator.WebcamDevice(idx, name));
                     idx++;
                 }
-                App.Logger?.Information("WebcamWinRtEnumerator: {Count} video-capture device(s) via WinRT", devices.Count);
+                Log.Information("WebcamWinRtEnumerator: {Count} video-capture device(s) via WinRT", devices.Count);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "WebcamWinRtEnumerator: enumeration threw");
+                Log.Warning(ex, "WebcamWinRtEnumerator: enumeration threw");
             }
             return devices;
         }

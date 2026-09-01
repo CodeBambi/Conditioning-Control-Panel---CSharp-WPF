@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using SherpaOnnx;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Speech
 {
@@ -77,7 +78,7 @@ namespace ConditioningControlPanel.Services.Speech
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "SileroVadGate: init failed — falling back to the energy gate");
+                Log.Warning(ex, "SileroVadGate: init failed — falling back to the energy gate");
                 return null;
             }
         }
@@ -98,7 +99,7 @@ namespace ConditioningControlPanel.Services.Speech
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "SileroVadGate: update failed — passing audio through");
+                Log.Warning(ex, "SileroVadGate: update failed — passing audio through");
                 return true; // fail-open: worse to drop the user's speech than to skip gating
             }
         }

@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.GoonGame
 {
@@ -151,7 +152,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             catch (OperationCanceledException) { /* channel going away */ }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "[{Tag}] Failed to answer clock ping {Seq}", _tag, ping.Seq);
+                Log.Warning(ex, "[{Tag}] Failed to answer clock ping {Seq}", _tag, ping.Seq);
             }
         }
 
@@ -186,7 +187,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             if (_disposed) return false;
             if (_send == null)
             {
-                App.Logger?.Warning("[{Tag}] SyncAsync with no transport attached", _tag);
+                Log.Warning("[{Tag}] SyncAsync with no transport attached", _tag);
                 return false;
             }
 
@@ -223,7 +224,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 catch (OperationCanceledException) { return false; }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning(ex, "[{Tag}] Clock ping {Seq} failed to send", _tag, seq);
+                    Log.Warning(ex, "[{Tag}] Clock ping {Seq} failed to send", _tag, seq);
                     lock (_gate) _pending.Remove(seq);
                     continue;
                 }
@@ -258,7 +259,7 @@ namespace ConditioningControlPanel.Services.GoonGame
 
                 if (_samples.Count < MinUsableSamples)
                 {
-                    App.Logger?.Warning("[{Tag}] Clock sync got only {N} usable samples ({Stale} unanswered) — not adopting",
+                    Log.Warning("[{Tag}] Clock sync got only {N} usable samples ({Stale} unanswered) — not adopting",
                         _tag, _samples.Count, stale);
                     return false;
                 }
@@ -277,7 +278,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // dragging a good offset around.
                 if (_synced && byRtt[0].Rtt > _bestRttMs * ResyncRttRejectFactor && _bestRttMs < double.MaxValue)
                 {
-                    App.Logger?.Information("[{Tag}] Rejecting resync — best RTT {Rtt:F0}ms vs baseline {Base:F0}ms",
+                    Log.Information("[{Tag}] Rejecting resync — best RTT {Rtt:F0}ms vs baseline {Base:F0}ms",
                         _tag, byRtt[0].Rtt, _bestRttMs);
                     _samples.Clear();
                     return false;
@@ -301,14 +302,14 @@ namespace ConditioningControlPanel.Services.GoonGame
                     // Not an error: already-scheduled fires re-read the clock as they wait, so a
                     // correction lands on them too. Logged because a big jump is worth seeing when
                     // someone reports a desynced round.
-                    App.Logger?.Information("[{Tag}] Clock corrected by {Delta}ms (offset {Offset}ms, rtt {Rtt:F0}ms)",
+                    Log.Information("[{Tag}] Clock corrected by {Delta}ms (offset {Offset}ms, rtt {Rtt:F0}ms)",
                         _tag, delta, newOffset, medianRtt);
                 }
             }
 
             if (firstSync)
             {
-                App.Logger?.Information("[{Tag}] Clock synced: offset={Offset}ms rtt={Rtt:F0}ms master={Master}",
+                Log.Information("[{Tag}] Clock synced: offset={Offset}ms rtt={Rtt:F0}ms master={Master}",
                     _tag, newOffset, medianRtt, _isClockMaster);
                 GoonDispatch.Post(() => Synced?.Invoke(this, EventArgs.Empty));
             }
@@ -331,7 +332,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 catch (OperationCanceledException) { }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning(ex, "[{Tag}] Clock resync failed", _tag);
+                    Log.Warning(ex, "[{Tag}] Clock resync failed", _tag);
                 }
             }, null, GoonConsts.ClockResyncIntervalMs, GoonConsts.ClockResyncIntervalMs);
         }
@@ -372,14 +373,14 @@ namespace ConditioningControlPanel.Services.GoonGame
 
             if (!IsSynced)
             {
-                App.Logger?.Warning("[{Tag}] Refusing to schedule '{Label}' — clock not synced", _tag, label);
+                Log.Warning("[{Tag}] Refusing to schedule '{Label}' — clock not synced", _tag, label);
                 return null;
             }
 
             var lead = fireAtMatchMs - NowMatchMs;
             if (lead < GoonConsts.MinScheduleBufferMs)
             {
-                App.Logger?.Warning("[{Tag}] Refusing to schedule '{Label}' — only {Lead}ms lead (need {Min}ms)",
+                Log.Warning("[{Tag}] Refusing to schedule '{Label}' — only {Lead}ms lead (need {Min}ms)",
                     _tag, label, lead, GoonConsts.MinScheduleBufferMs);
                 return null;
             }
@@ -434,7 +435,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                         var slip = _clock.NowMatchMs - _fireAtMatchMs;
                         if (slip > 250)
                         {
-                            App.Logger?.Information("[{Tag}] Scheduled '{Label}' fired {Slip}ms late",
+                            Log.Information("[{Tag}] Scheduled '{Label}' fired {Slip}ms late",
                                 _clock._tag, _label, slip);
                         }
                         _action();
@@ -443,7 +444,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 catch (OperationCanceledException) { /* disposed */ }
                 catch (Exception ex)
                 {
-                    App.Logger?.Error(ex, "[{Tag}] Scheduled fire '{Label}' failed", _clock._tag, _label);
+                    Log.Error(ex, "[{Tag}] Scheduled fire '{Label}' failed", _clock._tag, _label);
                 }
             }
 

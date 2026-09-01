@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Windows.Media.MediaProperties;
 using Windows.Media.Transcoding;
 using Windows.Storage;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Transfer
 {
@@ -73,7 +74,7 @@ namespace ConditioningControlPanel.Services.Transfer
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
-                App.Logger?.Debug("VideoTranscodeLane.ProbeAsync({Path}): {E}", path, ex.Message);
+                Log.Debug("VideoTranscodeLane.ProbeAsync({Path}): {E}", path, ex.Message);
                 return null;
             }
         }
@@ -193,7 +194,7 @@ namespace ConditioningControlPanel.Services.Transfer
             if (!prep.CanTranscode)
             {
                 TryDelete(tmpOut);
-                App.Logger?.Information("VideoTranscodeLane: cannot transcode {Path} ({Reason})",
+                Log.Information("VideoTranscodeLane: cannot transcode {Path} ({Reason})",
                     srcPath, prep.FailureReason);
                 throw new TranscodeUnsupportedException(TransferFailReasons.NoDecoder);
             }
@@ -220,7 +221,7 @@ namespace ConditioningControlPanel.Services.Transfer
             catch (Exception ex)
             {
                 TryDelete(tmpOut);
-                App.Logger?.Warning("VideoTranscodeLane: transcode of {Path} failed: {E}", srcPath, ex.Message);
+                Log.Warning("VideoTranscodeLane: transcode of {Path} failed: {E}", srcPath, ex.Message);
                 throw;
             }
         }

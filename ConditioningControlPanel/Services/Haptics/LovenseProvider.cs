@@ -73,7 +73,7 @@ namespace ConditioningControlPanel.Services.Haptics
         {
             try
             {
-                App.Logger?.Information("Connecting to Lovense in {Mode} mode at {Url}", _mode, _baseUrl);
+                Log.Information("Connecting to Lovense in {Mode} mode at {Url}", _mode, _baseUrl);
                 
                 string content;
                 if (_mode == LovenseConnectionMode.Lan)
@@ -90,7 +90,7 @@ namespace ConditioningControlPanel.Services.Haptics
                     content = await response.Content.ReadAsStringAsync();
                 }
 
-                App.Logger?.Information("Lovense response: {Content}", content);
+                Log.Information("Lovense response: {Content}", content);
                 using var doc = JsonDocument.Parse(content);
                 var root = doc.RootElement;
 
@@ -119,7 +119,7 @@ namespace ConditioningControlPanel.Services.Haptics
             catch (Exception ex)
             {
                 Error?.Invoke(this, $"Connection failed: {ex.Message}");
-                App.Logger?.Error(ex, "Lovense connection failed");
+                Log.Error(ex, "Lovense connection failed");
                 return false;
             }
         }
@@ -140,7 +140,7 @@ namespace ConditioningControlPanel.Services.Haptics
                     
                 ConnectedDevices.Add(displayName);
                 DeviceDiscovered?.Invoke(this, displayName);
-                App.Logger?.Information("Found toy: {Id} - {Name}", _toyId, displayName);
+                Log.Information("Found toy: {Id} - {Name}", _toyId, displayName);
             }
             if (ConnectedDevices.Count > 0) 
             { 
@@ -189,7 +189,7 @@ namespace ConditioningControlPanel.Services.Haptics
         {
             if (!IsConnected || string.IsNullOrEmpty(_toyId))
             {
-                App.Logger?.Debug("Lovense.Vibrate: Not connected or no toyId");
+                Log.Debug("Lovense.Vibrate: Not connected or no toyId");
                 return;
             }
             try
@@ -218,12 +218,12 @@ namespace ConditioningControlPanel.Services.Haptics
                         return; // Skip - too soon
                     }
 
-                    App.Logger?.Information("Lovense SEND: level {Level}/20", i);
+                    Log.Information("Lovense SEND: level {Level}/20", i);
                     _lastSentLevel = i;
                     _lastSentTime = now;
                 }
 
-                App.Logger?.Debug("Lovense.Vibrate: intensity={Raw:F2} -> level={Level}/20, continuous={Continuous}",
+                Log.Debug("Lovense.Vibrate: intensity={Raw:F2} -> level={Level}/20, continuous={Continuous}",
                     intensity, i, continuous);
 
                 if (_mode == LovenseConnectionMode.Lan)
@@ -231,24 +231,24 @@ namespace ConditioningControlPanel.Services.Haptics
                     // Lovense Remote API requires timeSec parameter
                     var sec = Math.Max(1, durationMs / 1000);
                     var cmdJson = $"{{\"command\":\"Function\",\"action\":\"Vibrate:{i}\",\"timeSec\":{sec},\"apiVer\":1}}";
-                    App.Logger?.Information("Lovense sending: {Json}", cmdJson);
+                    Log.Information("Lovense sending: {Json}", cmdJson);
                     var json = new StringContent(cmdJson, Encoding.UTF8, "application/json");
                     var response = await _client.PostAsync($"{_baseUrl}/command", json);
                     var responseContent = await response.Content.ReadAsStringAsync();
-                    App.Logger?.Information("Lovense response: {Status} - {Content}", response.StatusCode, responseContent);
+                    Log.Information("Lovense response: {Status} - {Content}", response.StatusCode, responseContent);
                 }
                 else
                 {
                     // For Lovense Connect (Local mode), use simpler command without timeSec
                     // The device maintains vibration until next command
                     var url = $"{_baseUrl}/command?command=Vibrate&action=Vibrate&intensity={i}&toy={_toyId}";
-                    App.Logger?.Debug("Lovense sending GET: {Url} (level {Level})", url, i);
+                    Log.Debug("Lovense sending GET: {Url} (level {Level})", url, i);
                     var response = await _client.GetAsync(url);
                     var responseContent = await response.Content.ReadAsStringAsync();
-                    App.Logger?.Debug("Lovense response: {Status} - {Content}", response.StatusCode, responseContent);
+                    Log.Debug("Lovense response: {Status} - {Content}", response.StatusCode, responseContent);
                 }
             }
-            catch (Exception ex) { App.Logger?.Warning(ex, "Vibrate failed"); }
+            catch (Exception ex) { Log.Warning(ex, "Vibrate failed"); }
         }
 
         public async Task StopAsync()
@@ -267,7 +267,7 @@ namespace ConditioningControlPanel.Services.Haptics
                 }
                 _lastSentLevel = 0;
             }
-            catch (Exception ex) { App.Logger?.Warning(ex, "Stop failed"); }
+            catch (Exception ex) { Log.Warning(ex, "Stop failed"); }
         }
 
         /// <summary>
@@ -303,14 +303,14 @@ namespace ConditioningControlPanel.Services.Haptics
 
                 var durationSec = Math.Max(1, totalDurationMs / 1000);
 
-                App.Logger?.Information("Lovense.Pattern: {Count} levels, avg={Avg}, max={Max}, sending={Send} for {Duration}s",
+                Log.Information("Lovense.Pattern: {Count} levels, avg={Avg}, max={Max}, sending={Send} for {Duration}s",
                     levels.Length, avgLevel, maxLevel, levelToSend, durationSec);
 
                 // Skip if same level as before (unless it's been a while)
                 var timeSinceLastCmd = DateTime.UtcNow - _lastSentTime;
                 if (levelToSend == _lastSentLevel && timeSinceLastCmd.TotalMilliseconds < 1000)
                 {
-                    App.Logger?.Debug("Lovense.Pattern: Skipping same level {Level}", levelToSend);
+                    Log.Debug("Lovense.Pattern: Skipping same level {Level}", levelToSend);
                     return;
                 }
 
@@ -321,11 +321,11 @@ namespace ConditioningControlPanel.Services.Haptics
                 {
                     // Use standard Vibrate command with longer duration
                     var cmdJson = $"{{\"command\":\"Function\",\"action\":\"Vibrate:{levelToSend}\",\"timeSec\":{durationSec},\"apiVer\":1}}";
-                    App.Logger?.Information("Lovense sending: {Json}", cmdJson);
+                    Log.Information("Lovense sending: {Json}", cmdJson);
                     var json = new StringContent(cmdJson, Encoding.UTF8, "application/json");
                     var response = await _client.PostAsync($"{_baseUrl}/command", json);
                     var responseContent = await response.Content.ReadAsStringAsync();
-                    App.Logger?.Information("Lovense response: {Status} - {Content}", response.StatusCode, responseContent);
+                    Log.Information("Lovense response: {Status} - {Content}", response.StatusCode, responseContent);
                 }
                 else
                 {
@@ -335,7 +335,7 @@ namespace ConditioningControlPanel.Services.Haptics
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Pattern vibrate failed");
+                Log.Warning(ex, "Pattern vibrate failed");
             }
         }
 

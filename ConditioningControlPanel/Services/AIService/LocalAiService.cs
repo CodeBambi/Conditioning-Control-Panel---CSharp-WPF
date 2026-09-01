@@ -109,7 +109,7 @@ namespace ConditioningControlPanel.Services.AIService
         private const int LocalMaxTokensHardCap = 512;
 
         private static string HistoryFilePath =>
-            Path.Combine(App.UserDataPath, "local_chat_history.json");
+            Path.Combine(CorePaths.UserData, "local_chat_history.json");
 
         private sealed class PersistedTurn
         {

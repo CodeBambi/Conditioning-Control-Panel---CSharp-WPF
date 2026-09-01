@@ -91,7 +91,7 @@ public class Phase8RedirectContractTests
         Assert.Contains("ShowAppInfoPopup", m.Groups["body"].Value, StringComparison.Ordinal);
 
         // And the destination is a real method somewhere in the product.
-        Assert.Contains(ProductSources().Where(f => f.EndsWith(".cs")),
+        Assert.Contains(SourceRoots.EnumerateProductSources("*.cs"),
                         f => Regex.IsMatch(File.ReadAllText(f), @"void ShowAppInfoPopup\("));
     }
 
@@ -188,7 +188,7 @@ public class Phase8RedirectContractTests
         {
             var text = StripComments(File.ReadAllText(f));
             if (Regex.IsMatch(text, @"\b" + Regex.Escape(typeName) + @"\b"))
-                live.Add(Path.GetRelativePath(ProductDir, f));
+                live.Add(SourceRoots.Relative(f));
         }
 
         Assert.True(live.Count == 0,
@@ -213,7 +213,7 @@ public class Phase8RedirectContractTests
         {
             foreach (var (line, i) in StripComments(File.ReadAllText(f)).Split('\n').Select((l, i) => (l, i + 1)))
                 if (pattern.IsMatch(line))
-                    live.Add($"{Path.GetRelativePath(ProductDir, f)}:{i}");
+                    live.Add($"{SourceRoots.Relative(f)}:{i}");
         }
 
         Assert.True(live.Count == 0, $"{memberName} is demolished but still dereferenced: "

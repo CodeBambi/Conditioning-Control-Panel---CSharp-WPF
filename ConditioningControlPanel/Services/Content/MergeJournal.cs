@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Serilog;
 
 namespace ConditioningControlPanel.Services
 {
@@ -77,7 +78,7 @@ namespace ConditioningControlPanel.Services
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Debug("MergeJournal: could not remove tree {Path}: {Error}", tree, ex.Message);
+                    Log.Debug("MergeJournal: could not remove tree {Path}: {Error}", tree, ex.Message);
                 }
             }
 
@@ -91,7 +92,7 @@ namespace ConditioningControlPanel.Services
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Debug("MergeJournal: could not remove {Path}: {Error}", file, ex.Message);
+                    Log.Debug("MergeJournal: could not remove {Path}: {Error}", file, ex.Message);
                 }
             }
 
@@ -111,7 +112,7 @@ namespace ConditioningControlPanel.Services
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Debug("MergeJournal: left {Path} in place: {Error}", dir, ex.Message);
+                    Log.Debug("MergeJournal: left {Path} in place: {Error}", dir, ex.Message);
                 }
             }
 
