@@ -164,8 +164,7 @@ public class ModAwareDecodedArtTests
         return dir!.FullName;
     }
 
-    private static string AppFile(params string[] parts)
-        => File.ReadAllText(Path.Combine(RepoRoot(), Path.Combine("ConditioningControlPanel", Path.Combine(parts))));
+    private static string AppFile(params string[] parts) => SourceRoots.ReadProductFile(parts);
 
     [Fact]
     public void EveryDoorMedallionIsNamedAndItsArtIsOnDisk()

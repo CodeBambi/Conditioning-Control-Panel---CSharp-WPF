@@ -193,8 +193,7 @@ public class CompanionAvatarArtTests
         return dir!.FullName;
     }
 
-    private static string AppFile(params string[] parts)
-        => File.ReadAllText(Path.Combine(RepoRoot(), Path.Combine("ConditioningControlPanel", Path.Combine(parts))));
+    private static string AppFile(params string[] parts) => SourceRoots.ReadProductFile(parts);
 
     private static string HeroCardXaml() => AppFile("Views", "Controls", "Companion", "CompanionHeroCard.xaml");
     private static string HeroCardCode() => AppFile("Views", "Controls", "Companion", "CompanionHeroCard.xaml.cs");

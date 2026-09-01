@@ -120,6 +120,43 @@ internal static class SourceRoots
         return files;
     }
 
+    /// <summary>The absolute path to ONE product file, given its path relative to a product root
+    /// (e.g. <c>FindProductFile("Services", "ChromeFxNav.cs")</c>), probed across every root in
+    /// <see cref="ProductDirectories"/>.
+    ///
+    /// <para><b>Why this exists.</b> <see cref="EnumerateProductSources"/> fixed the guards that
+    /// SCAN a directory. The ones that read ONE KNOWN FILE were left alone because they fail loudly
+    /// rather than passing vacuously — true, but the cost landed on the wrong people: ~20 test
+    /// classes pinned a file to <c>ConditioningControlPanel/</c> by name, so every unit of the Core
+    /// migration tripped a fresh red test that had nothing to do with it, one at a time. One unit
+    /// had to abandon a file it could otherwise have moved. Probing every root means a file's home
+    /// stops being a test's business.</para></summary>
+    internal static string FindProductFile(params string[] relativeParts)
+    {
+        var relative = Path.Combine(relativeParts);
+        var hits = ProductDirectories.Select(root => Path.Combine(root, relative))
+                                     .Where(File.Exists)
+                                     .ToList();
+
+        // Naming the roots is the point: "in none of CCP.Core, ConditioningControlPanel" says the
+        // file was renamed or deleted. A bare absolute path says only that some path was wrong.
+        Assert.True(hits.Count > 0,
+            $"'{relative}' is in none of the product roots searched: " +
+            string.Join(", ", ProductDirectories.Select(Path.GetFileName)));
+
+        // A half-finished move genuinely leaves the same relative path in two roots. Silently
+        // taking the first would assert against the stale copy and pass — so refuse to guess.
+        Assert.True(hits.Count == 1,
+            $"'{relative}' exists in more than one product root, so nothing can say which copy a "
+            + "test means — finish the move and delete the other: " + string.Join(", ", hits));
+
+        return hits[0];
+    }
+
+    /// <summary>The text of ONE product file, located by <see cref="FindProductFile"/>.</summary>
+    internal static string ReadProductFile(params string[] relativeParts) =>
+        File.ReadAllText(FindProductFile(relativeParts));
+
     /// <summary>A product file's path relative to the repo root, forward-slashed, e.g.
     /// <c>ConditioningControlPanel/Models/AppSettings.cs</c>.
     ///

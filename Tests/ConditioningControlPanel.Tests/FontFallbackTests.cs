@@ -28,17 +28,6 @@ namespace ConditioningControlPanel.Tests;
 /// </summary>
 public class FontFallbackTests
 {
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
-            dir = dir.Parent;
-        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
-        return dir!.FullName;
-    }
-
-    private static string AppDir => Path.Combine(RepoRoot(), "ConditioningControlPanel");
-
     /// <summary>Every shipped source file of the given extension, across every product root — see
     /// <see cref="SourceRoots"/> for the roots and the excluded directories.</summary>
     private static IEnumerable<string> SourceFiles(string extension) =>
@@ -145,7 +134,7 @@ public class FontFallbackTests
     [Fact]
     public void App_xaml_declares_the_mono_resource_and_agrees_with_the_guard()
     {
-        var appXaml = File.ReadAllText(Path.Combine(AppDir, "App.xaml"));
+        var appXaml = SourceRoots.ReadProductFile("App.xaml");
 
         Assert.Contains("x:Key=\"" + FontGuard.MonoResourceKey + "\"", appXaml);
         Assert.Contains(FontGuard.MonoChain, appXaml);

@@ -16,17 +16,7 @@ namespace ConditioningControlPanel.Tests;
 /// </summary>
 public class EmiDeskLiveRunRegressionTests
 {
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
-            dir = dir.Parent;
-        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
-        return dir!.FullName;
-    }
-
-    private static string Read(params string[] parts) =>
-        File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", Path.Combine(parts)));
+    private static string Read(params string[] parts) => SourceRoots.ReadProductFile(parts);
 
     [Fact]
     public void A_summon_interrupted_by_the_mute_prompt_cannot_finish()

@@ -107,8 +107,8 @@ public class LockdownEmergencyExitTests
         return File.ReadAllText(path);
     }
 
-    private static string LockdownSource() => Source("Services", "Haptics", "LockdownService.cs");
-    private static string HostSource() => Source("Services", "EmergencyExit", "EmergencyExitHostService.cs");
+    private static string LockdownSource() => SourceRoots.ReadProductFile("Services", "Haptics", "LockdownService.cs");
+    private static string HostSource() => SourceRoots.ReadProductFile("Services", "EmergencyExit", "EmergencyExitHostService.cs");
     private static string GameSource(string id) => Source("Resources", "web", "emergency-exit", "games", id + ".js");
 
     /// <summary>The body of a method, from its signature to the next method at the same indent.</summary>
@@ -251,7 +251,7 @@ public class LockdownEmergencyExitTests
     [InlineData("MainWindow.PremiumRail.cs")]
     public void BothConsentDialogs_SayTheEmergencyExitCanRestartTheTimer(string file)
     {
-        var src = Source("MainWindow", file);
+        var src = SourceRoots.ReadProductFile("MainWindow", file);
         Assert.Contains("The Emergency Exit button is a gamble", src);
         Assert.Contains("the timer restarts at its FULL length", src);
     }

@@ -173,16 +173,15 @@ public class EmiRingCatalogueTests
     {
         // Source tripwire: these launchers are the only way in for their features, so the counter
         // line inside each of them is the whole of "an open is an open, wherever it came from".
-        var root = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Services");
         var expected = new (string File, string Id)[]
         {
-            (Path.Combine(root, "Arcademy", "ArcademyHostService.cs"), "arcademy"),
-            (Path.Combine(root, "Chaos", "DtrhHostService.cs"), "dtrh"),
-            (Path.Combine(root, "Chaos", "LoomHostService.cs"), "loom"),
-            (Path.Combine(root, "Fyp", "FypHostService.cs"), "fyp"),
-            (Path.Combine(root, "Quiz", "IntakeHostService.cs"), "intake"),
-            (Path.Combine(root, "GoonGame", "GoonHostService.cs"), "goon"),
-            (Path.Combine(root, "JustDrop", "JustDropHostService.cs"), "justdrop"),
+            (SourceRoots.FindProductFile("Services", "Arcademy", "ArcademyHostService.cs"), "arcademy"),
+            (SourceRoots.FindProductFile("Services", "Chaos", "DtrhHostService.cs"), "dtrh"),
+            (SourceRoots.FindProductFile("Services", "Chaos", "LoomHostService.cs"), "loom"),
+            (SourceRoots.FindProductFile("Services", "Fyp", "FypHostService.cs"), "fyp"),
+            (SourceRoots.FindProductFile("Services", "Quiz", "IntakeHostService.cs"), "intake"),
+            (SourceRoots.FindProductFile("Services", "GoonGame", "GoonHostService.cs"), "goon"),
+            (SourceRoots.FindProductFile("Services", "JustDrop", "JustDropHostService.cs"), "justdrop"),
         };
 
         foreach (var (file, id) in expected)
@@ -195,8 +194,9 @@ public class EmiRingCatalogueTests
     [Fact]
     public void The_two_navigation_chokepoints_still_call_the_counter()
     {
-        var mw = Path.Combine(RepoRoot(), "ConditioningControlPanel", "MainWindow");
-        Assert.Contains("EmiTargets.NoteTabOpened(", File.ReadAllText(Path.Combine(mw, "MainWindow.TabNavigation.cs")));
-        Assert.Contains("EmiTargets.NoteRackOpened(", File.ReadAllText(Path.Combine(mw, "MainWindow.Presets.cs")));
+        Assert.Contains("EmiTargets.NoteTabOpened(",
+                        SourceRoots.ReadProductFile("MainWindow", "MainWindow.TabNavigation.cs"));
+        Assert.Contains("EmiTargets.NoteRackOpened(",
+                        SourceRoots.ReadProductFile("MainWindow", "MainWindow.Presets.cs"));
     }
 }

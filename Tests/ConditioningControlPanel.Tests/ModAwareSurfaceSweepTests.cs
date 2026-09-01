@@ -19,17 +19,7 @@ namespace ConditioningControlPanel.Tests;
 /// </summary>
 public class ModAwareSurfaceSweepTests
 {
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
-            dir = dir.Parent;
-        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
-        return dir!.FullName;
-    }
-
-    private static string AppFile(params string[] parts)
-        => File.ReadAllText(Path.Combine(RepoRoot(), Path.Combine("ConditioningControlPanel", Path.Combine(parts))));
+    private static string AppFile(params string[] parts) => SourceRoots.ReadProductFile(parts);
 
     /// <summary>The text between two anchors, so an assertion cannot pass on a match somewhere else in the file.</summary>
     private static string Body(string source, string startAnchor, string endAnchor)
