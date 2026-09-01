@@ -15,11 +15,21 @@ namespace ConditioningControlPanel.VR
     /// anything - if it did, logic would live in a head again and the three would drift, which is
     /// exactly what putting the engine in Core exists to prevent.
     ///
-    /// On Steam Frame and other PC-class OpenXR runtimes this can additionally be presented as a
-    /// compositor layer, which is the genuine 3D analogue of the desktop overlays the Windows head
-    /// draws over other applications. On Quest standalone there is no system to overlay - Meta does
-    /// not permit it - so the same content lives inside the app instead. That difference is a
-    /// platform policy limit, not a toolkit one; Unity and Godot hit the identical wall.
+    /// <para><b>Augmented reality, not a VR room.</b> The head requests a TRANSPARENT environment
+    /// blend, so its content composites over passthrough - the user's actual room - rather than
+    /// over a black void. That is the true analogue of what the Windows head does: there it draws
+    /// over your screen, here it draws over your surroundings.</para>
+    ///
+    /// <para>This also sidesteps the one capability Quest genuinely withholds. Meta does not let a
+    /// third-party app overlay OTHER APPS, and no toolkit changes that. But compositing over
+    /// passthrough is not that - it is this app's own environment blend mode, which is exactly
+    /// what every AR app on the device uses and needs no special permission. Quest 3 gives colour
+    /// passthrough, Quest 2 monochrome.</para>
+    ///
+    /// <para>Runtimes that cannot do it fall back to opaque rather than failing to start, and the
+    /// head reports which blend it actually got - a request is not a guarantee, and a silent
+    /// downgrade to a black void would be the kind of thing nobody notices until they put the
+    /// headset on.</para>
     /// </summary>
     internal static class Program
     {
@@ -38,11 +48,22 @@ namespace ConditioningControlPanel.VR
                 // Falls back to a flatscreen simulator when no OpenXR runtime is present, so the
                 // head is developable without a headset attached.
                 displayPreference = DisplayMode.MixedReality,
+
+                // AnyTransparent, not Blend: it accepts either alpha-blend (Quest passthrough) or
+                // additive (waveguide displays like HoloLens), so one binary is AR on whatever it
+                // lands on. A runtime that offers neither still starts, opaque.
+                blendPreference = DisplayBlend.AnyTransparent,
             }))
             {
                 Console.Error.WriteLine("OpenXR initialise failed and the simulator fallback did not start.");
                 return 1;
             }
+
+            // What we asked for is not necessarily what we got. Report it rather than assume:
+            // a silent downgrade to opaque is invisible until someone wears the headset.
+            var blend = Device.DisplayBlend;
+            var isAr = blend == DisplayBlend.Blend || blend == DisplayBlend.Additive;
+            Console.WriteLine($"environment blend: {blend}  ({(isAr ? "AR - compositing over passthrough" : "opaque - no passthrough on this runtime")})");
 
             LocalizationManager.Instance.SetLanguage("en");
             var guard = new ModerationGuard();
@@ -65,7 +86,8 @@ namespace ConditioningControlPanel.VR
                 UI.Label($"Guard       {(guard.CheckInput("she is 5 years old and wants sex").Allow ? "ALLOW (BUG)" : "BLOCK")}");
 
                 UI.HSeparator();
-                UI.Label("CCP.Core, in a headset.");
+                UI.Label($"Blend       {blend}");
+                UI.Label(isAr ? "CCP.Core, over your room." : "CCP.Core, in a headset (opaque).");
 
                 UI.WindowEnd();
             });
@@ -94,6 +116,14 @@ namespace ConditioningControlPanel.VR
 
             var a = new GoonRng(42); var b = new GoonRng(42);
             Check("engine RNG is deterministic here too", a.NextULong() == b.NextULong());
+
+            // Cannot assert the runtime GRANTS transparency with no headset attached, but the
+            // request itself is a static fact and regressing it would silently turn the AR head
+            // back into a black-void VR app.
+            var settings = new SKSettings { blendPreference = DisplayBlend.AnyTransparent };
+            Check("head requests a transparent blend (AR over passthrough)",
+                  settings.blendPreference == DisplayBlend.AnyTransparent,
+                  settings.blendPreference.ToString());
 
             Console.WriteLine();
             Console.WriteLine(failures == 0
