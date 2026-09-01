@@ -78,6 +78,36 @@ that combination fails with `NETSDK1191`.
 The Windows test suite cannot execute on Linux (`win-x64` testhost). Compile-verify locally; CI runs
 it on `windows-latest`.
 
+## Porting a WPF view to Avalonia
+
+Measured on the first ported view (`Views/Tabs/AchievementsTabView`). The mapping:
+
+| WPF | Avalonia |
+|---|---|
+| `Style="{StaticResource X}"` | `Theme="{StaticResource X}"` |
+| `<Style x:Key TargetType>` | `<ControlTheme x:Key TargetType>` |
+| `Visibility="Collapsed"` | `IsVisible="False"` |
+| `Panel.ZIndex` | `ZIndex` |
+| `{loc:Str key}` | a binding - `LocExtension` is a WPF `MarkupExtension` and stays in the head |
+
+Three things that will bite, all found by rendering rather than by reading:
+
+1. **Avalonia's `Button` parses `_` in `Content` as an access key.** `btn_visit_patreon` renders as
+   "btnvisit_patreon" with a stray underline. WPF only does this with `RecognizesAccessKey`, so it
+   never bit the original - but every loc key here is snake_case. Put a `TextBlock` inside the
+   button, which opts out.
+
+2. **Read the code-behind before writing a binding.** `{loc:Str …}` covers only static strings;
+   anything with a number in it is set from code with `Loc.GetF` and format arguments. Inventing a
+   key name produces a plausible-looking string that is also structurally wrong.
+
+3. **`EmojiToImageSource` is not needed on Avalonia.** It exists because "WPF's TextBlock can't
+   render COLR/CPAL color fonts" (see `Helpers/EmojiImage.cs`), so the app ships Twemoji SVGs and
+   renders them through SharpVectors from `pack://` URIs. Avalonia renders colour emoji natively -
+   verified on Linux with Noto Color Emoji. That collapses ~103 converter usages, the SharpVectors
+   dependency and those `pack://` URIs to a plain `<TextBlock Text="🔒"/>` on that head.
+   `BoolToVisibility` (~27 usages) likewise disappears: Avalonia binds `IsVisible` to a bool directly.
+
 ## Moving a file into Core
 
 Pure `git mv`, zero content edits, namespace unchanged. Verify with `git diff -M --stat` showing a
