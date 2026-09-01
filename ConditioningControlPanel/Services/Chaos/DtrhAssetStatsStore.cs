@@ -37,7 +37,7 @@ internal static class DtrhAssetStatsStore
     private static readonly object _writeLock = new();   // serializes the background disk write so overlapping flushes never interleave
     private static Dictionary<string, AssetStat>? _stats;
 
-    private static string FilePath => Path.Combine(App.UserDataPath, "dtrh_asset_stats.json");
+    private static string FilePath => Path.Combine(CorePaths.UserData, "dtrh_asset_stats.json");
 
     private static void EnsureLoaded()
     {

@@ -45,7 +45,7 @@ namespace ConditioningControlPanel.Services.Video.Browser
         private static readonly Dictionary<string, string> _stableKeys = new(StringComparer.OrdinalIgnoreCase);
         private static readonly List<string> _stableOrder = new();
 
-        private static string FilePath => Path.Combine(App.UserDataPath, "browser_unsafe_videos.json");
+        private static string FilePath => Path.Combine(CorePaths.UserData, "browser_unsafe_videos.json");
 
         /// <summary>
         /// Give a path a content identity that survives the path itself. Called where a content-pack
@@ -176,7 +176,7 @@ namespace ConditioningControlPanel.Services.Video.Browser
             {
                 string json;
                 lock (_lock) { json = JsonConvert.SerializeObject(_order); }
-                Directory.CreateDirectory(App.UserDataPath);
+                Directory.CreateDirectory(CorePaths.UserData);
                 File.WriteAllText(FilePath, json);
             }
             catch (Exception ex)

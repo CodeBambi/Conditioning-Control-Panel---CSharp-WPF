@@ -61,7 +61,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             return c;
         }
 
-        public static string Dir => Path.Combine(App.UserDataPath, "goon_avatars");
+        public static string Dir => Path.Combine(CorePaths.UserData, "goon_avatars");
 
         private static bool IsKnownFile(string? bare) =>
             bare == OwnFile || bare == PeerFile || bare == LastOpponentFile;

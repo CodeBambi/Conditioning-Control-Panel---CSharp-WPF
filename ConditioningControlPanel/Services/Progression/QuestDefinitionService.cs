@@ -86,7 +86,7 @@ public class QuestDefinitionService : IDisposable
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}");
 
         // Set up cache directories
-        var appDataPath = App.UserDataPath;
+        var appDataPath = CorePaths.UserData;
         _cacheDir = appDataPath;
         _imageCacheDir = Path.Combine(appDataPath, "quest-images");
         _cacheFilePath = Path.Combine(_cacheDir, CacheFileName);

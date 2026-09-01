@@ -37,7 +37,7 @@ namespace ConditioningControlPanel.Services.JustDrop
 
         private static List<string>? _codes;
 
-        private static string FilePath => Path.Combine(App.UserDataPath, "justdrop_credited.json");
+        private static string FilePath => Path.Combine(CorePaths.UserData, "justdrop_credited.json");
 
         /// <summary>
         /// Records <paramref name="orderCode"/> as paid and returns whether it was NEW - i.e.
@@ -100,7 +100,7 @@ namespace ConditioningControlPanel.Services.JustDrop
             _codes = codes;
             try
             {
-                Directory.CreateDirectory(App.UserDataPath);
+                Directory.CreateDirectory(CorePaths.UserData);
                 File.WriteAllText(FilePath, JsonConvert.SerializeObject(codes));
             }
             catch (Exception ex)

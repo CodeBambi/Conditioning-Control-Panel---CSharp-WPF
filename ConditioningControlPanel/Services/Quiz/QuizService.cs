@@ -1044,7 +1044,7 @@ Do NOT include any other text before or after the question format. Just the ques
         // ============ QUIZ HISTORY STORAGE ============
 
         private const int MaxHistoryEntries = 50;
-        private static string HistoryFilePath => Path.Combine(App.UserDataPath, "quiz_history.json");
+        private static string HistoryFilePath => Path.Combine(CorePaths.UserData, "quiz_history.json");
 
         public static List<QuizHistoryEntry> LoadHistory()
         {
@@ -1247,7 +1247,7 @@ Make all phrases thematically consistent with the quiz category and the user's s
 
         // ============ CATEGORY DEFINITIONS ============
 
-        private static string CustomCategoriesFilePath => Path.Combine(App.UserDataPath, "custom_quiz_categories.json");
+        private static string CustomCategoriesFilePath => Path.Combine(CorePaths.UserData, "custom_quiz_categories.json");
 
         public static List<QuizCategoryDefinition> GetBuiltInCategories()
         {
