@@ -694,17 +694,9 @@ public class PlayDoorRenderTests
         });
     }
 
-    /// <summary>
-    /// The product's own C# sources. Build output is skipped for the obvious reason, and
-    /// <c>.claude/</c> because a developer's git worktrees live under it — those are other
-    /// branches' copies of this repo and asserting against them would fail on whatever anyone
-    /// happens to have checked out.
-    /// </summary>
-    private static IEnumerable<string> SourceFiles() =>
-        Directory.EnumerateFiles(Path.Combine(RepoRoot(), "ConditioningControlPanel"), "*.cs", SearchOption.AllDirectories)
-                 .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                             && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
-                             && !f.Contains($"{Path.DirectorySeparatorChar}.claude{Path.DirectorySeparatorChar}"));
+    /// <summary>The product's own C# sources, across every product root — see
+    /// <see cref="SourceRoots"/> for which roots and which directories it skips.</summary>
+    private static IEnumerable<string> SourceFiles() => SourceRoots.EnumerateProductSources("*.cs");
 
     private static IEnumerable<string> BuiltInModRuleFiles()
     {
