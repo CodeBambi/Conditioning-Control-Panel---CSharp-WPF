@@ -60,7 +60,7 @@ IHapticProviderV2:  LovenseProviderV2 (LAN JSON + Toy Events WS)
                     ButtplugProviderV2 (Buttplug 5.0.1)
                     MockProviderV2 (N virtual toys, capability presets, visualizer)
 ```
-Contracts live in `Services/Haptics/Core/HapticContracts.cs` (written by Fable — DO NOT redesign; extend via new members only if genuinely required, and note it here).
+Contracts live in `CCP.Core/Services/Haptics/Core/HapticContracts.cs` (written by Fable — DO NOT redesign; extend via new members only if genuinely required, and note it here).
 
 Routing: config maps each `HapticEventKind` row → enabled + intensity + mode/pattern, targeted at a `ToyRole` column. Continuous layers route to roles too (Ambient default). A toy with Role=All hears everything.
 
@@ -108,7 +108,7 @@ Files: `Services/Haptics/Core/HapticMixer.cs`, `HapticDeviceManager.cs`, `MockPr
 
 ### Phase B — LovenseProviderV2 (Agent B)
 Files: `Services/Haptics/LovenseProviderV2.cs`, `Services/Haptics/LovenseToyEventsClient.cs`,
-`Services/Haptics/LovensePatterns.cs`. Legacy `LovenseProvider.cs` untouched (dies at integration).
+`CCP.Core/Services/Haptics/LovensePatterns.cs`. Legacy `LovenseProvider.cs` untouched (dies at integration).
 - [x] Per-toy registry from `GetToys` (both parse shapes), capabilities from `shortFunctionNames`, battery, nickname.
 - [x] `SetOutputsAsync` per device+actuator; heterogeneous = parallel requests; `timeSec:0` + refresh keep-alive OR short-timeSec repeats (pick one, document); StopAll bypass.
 - [x] HTTPS `.lovense.club:30010` → HTTP `:20010` auto-fallback, one persisted working base URL, `X-platform` header.
@@ -260,7 +260,7 @@ Phase F UI decisions at the end of this section).
         the attention-check opt-in, the 5-120 s back-off slider, and a live
         "Backing off - you took control" badge in the expander HEADER (visible while collapsed).
   - [ ] Remaining consumers (lock-card alternative confirm, quest interaction) — still engine-only.
-- [x] **FunScript** (engine): `Services/Haptics/FunScript.cs` (pure parser/sampler, unit-tested) +
+- [x] **FunScript** (engine): `CCP.Core/Services/Haptics/FunScript.cs` (pure parser/sampler, unit-tested) +
       `Services/Haptics/FunScriptService.cs` (wiring). Auto-loads `<video>.funscript` then
       `<video-dir>\funscripts\<name>.funscript`; Position actuators get a 300 ms lead, everything
       else gets the speed→intensity envelope on `HapticLayer.Pattern`. Default ON, zero-config.
@@ -290,7 +290,7 @@ Phase F UI decisions at the end of this section).
   - [x] UI: enable toggle in the Extras strip, 0-100% strength slider (`LuminanceSyncIntensity`)
         in Advanced. (The per-control 0.4-opacity workaround this used to carry is GONE —
         `PinkSlider` itself now has a real `IsEnabled=False` visual; see the design pass below.)
-- [x] **Temperament dial**: `Services/Haptics/Core/HapticTemperament.cs` — five presets, each a
+- [x] **Temperament dial**: `CCP.Core/Services/Haptics/Core/HapticTemperament.cs` — five presets, each a
       multiplier set applied inside `HapticMixer`. Settings key `HapticSettingsV2.Temperament`
       (`[JsonProperty("temperament")]`, default `"balanced"`; an unrecognised value falls back to
       Balanced). UI: a 5-chip segmented `RadioButton` row in the Power card with a one-line
