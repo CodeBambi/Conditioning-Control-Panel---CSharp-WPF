@@ -2,6 +2,17 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="ConditioningControlPanel.Avalonia.App"
              RequestedThemeVariant="Dark">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <!-- The app's real palette, ported key-for-key from the WPF head so the two can be
+             compared side by side. Colors first, then the brushes derived from them - the
+             same merge order App.xaml uses. -->
+        <ResourceInclude Source="avares://CCP.Avalonia/Theme/Colors.xaml"/>
+        <ResourceInclude Source="avares://CCP.Avalonia/Theme/Brushes.xaml"/>
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
   <Application.Styles>
     <FluentTheme />
   </Application.Styles>

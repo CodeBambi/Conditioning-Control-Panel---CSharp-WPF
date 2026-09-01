@@ -1,0 +1,286 @@
+<!-- PORTED FROM ConditioningControlPanel/Resources/Theme/Brushes.xaml - DO NOT diverge.
+     Same keys, same hex values, so a Windows/Linux fidelity comparison is meaningful.
+     WPF and Avalonia share this dictionary syntax almost exactly; only the xmlns and
+     DynamicResource->StaticResource for intra-dictionary refs differ.
+     When the WPF head is retired this becomes the single source of truth. -->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Brushes (derived from Colors — use DynamicResource so runtime color changes propagate) -->
+    <SolidColorBrush x:Key="PinkBrush"   Color="{StaticResource PinkColor}"/>
+    <SolidColorBrush x:Key="DarkPinkBrush" Color="{StaticResource DarkPink}"/>
+    <SolidColorBrush x:Key="PanelBgBrush" Color="{StaticResource PanelBg}"/>
+    <SolidColorBrush x:Key="PanelBgTransparentBrush" Color="{StaticResource PanelBgTransparent}"/>
+    <SolidColorBrush x:Key="DarkerBgBrush" Color="{StaticResource DarkerBg}"/>
+    <SolidColorBrush x:Key="SurfaceBgBrush" Color="{StaticResource SurfaceBg}"/>
+    <SolidColorBrush x:Key="TextLightBrush" Color="{StaticResource TextLight}"/>
+    <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMuted}"/>
+    <SolidColorBrush x:Key="PanelAccentBrush" Color="{StaticResource PanelAccent}"/>
+    <SolidColorBrush x:Key="PanelAccentHoverBrush" Color="{StaticResource PanelAccentHover}"/>
+    <SolidColorBrush x:Key="PreviewBgBrush" Color="{StaticResource PreviewBg}"/>
+
+    <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource Danger}"/>
+
+    <!-- Ambient FX brushes. DESIGN-TIME SEEDS ONLY, exactly like their Color keys in Colors.xaml:
+         Services/FxTheme.ApplyForActiveMod overwrites all four (Color + Brush) at startup and on
+         every mod switch. They exist here so a chrome FX layer still has a brush to draw with if
+         that call ever fails, and so the XAML designer isn't left with null backgrounds. -->
+    <SolidColorBrush x:Key="FxMistBrush" Color="{StaticResource FxMistColor}"/>
+    <SolidColorBrush x:Key="FxParticleBrush" Color="{StaticResource FxParticleColor}"/>
+    <SolidColorBrush x:Key="FxGlowBrush" Color="{StaticResource FxGlowColor}"/>
+    <SolidColorBrush x:Key="FxFlashTintBrush" Color="{StaticResource FxFlashTintColor}"/>
+
+    <!-- Semantic success green (see Colors.xaml). Static across mods. -->
+    <SolidColorBrush x:Key="SuccessGreenBrush" Color="{StaticResource SuccessGreen}"/>
+    <SolidColorBrush x:Key="SuccessGreenDeepBrush" Color="{StaticResource SuccessGreenDeep}"/>
+    <SolidColorBrush x:Key="SuccessGreenSoftBrush" Color="{StaticResource SuccessGreenSoft}"/>
+
+    <SolidColorBrush x:Key="TransparentPinkBrush" Color="{StaticResource TransparentPink}"/>
+    <SolidColorBrush x:Key="PinkButtonHoveredBrush" Color="{StaticResource PinkButtonHovered}"/>
+
+    <!-- Accent pressed (darkened accent for press states) -->
+    <SolidColorBrush x:Key="AccentPressedBrush" Color="{StaticResource AccentPressed}"/>
+
+    <!-- 20% alpha transparent accent -->
+    <SolidColorBrush x:Key="TransparentPink20Brush" Color="{StaticResource TransparentPink20}"/>
+
+    <!-- Patreon brushes (secondary color — auto-computed for custom mods) -->
+    <SolidColorBrush x:Key="PatreonPurpleBrush" Color="{StaticResource PatreonPurple}"/>
+    <SolidColorBrush x:Key="PatreonLightPurpleBrush" Color="{StaticResource PatreonLightPurple}"/>
+    <SolidColorBrush x:Key="PatreonDarkPurpleBrush" Color="{StaticResource PatreonDarkPurple}"/>
+
+    <!-- Secondary brush (alias for PatreonPurpleBrush, used in UI elements) -->
+    <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource PatreonPurple}"/>
+
+    <!-- Semi-transparent white -->
+    <SolidColorBrush x:Key="TransparentWhiteBrush" Color="{StaticResource TransparentWhite}"/>
+
+    <!-- Added: brush for Controls.xaml hover color -->
+    <SolidColorBrush x:Key="DangerHoverBrush" Color="{StaticResource DangerHover}"/>
+
+    <!-- Accent-tinted dark backgrounds (for headers, panels that need subtle accent tint) -->
+    <SolidColorBrush x:Key="AccentTintedBgBrush" Color="{StaticResource AccentTintedBg}"/>
+    <SolidColorBrush x:Key="AccentTintedBgHoverBrush" Color="{StaticResource AccentTintedBgHover}"/>
+    <SolidColorBrush x:Key="AccentMidGradientBrush" Color="{StaticResource AccentMidGradient}"/>
+
+    <!-- 40% and 50% alpha accent brushes (for hover/selected overlays) -->
+    <SolidColorBrush x:Key="TransparentPink40Brush" Color="{StaticResource TransparentPink40}"/>
+    <SolidColorBrush x:Key="TransparentPink50Brush" Color="{StaticResource TransparentPink50}"/>
+
+    <!-- New: de-saturated accent for headers/labels -->
+    <SolidColorBrush x:Key="PinkSoftBrush" Color="{StaticResource PinkSoft}"/>
+    <!-- New: vibrant accent for CTAs and interactive elements -->
+    <SolidColorBrush x:Key="PinkVibrantBrush" Color="{StaticResource PinkVibrant}"/>
+    <!-- New: glass-style card borders -->
+    <SolidColorBrush x:Key="GlassBorderBrush" Color="{StaticResource GlassBorder}"/>
+    <SolidColorBrush x:Key="GlassBorderHoverBrush" Color="{StaticResource GlassBorderHover}"/>
+    <!-- New: elevated card surface -->
+    <SolidColorBrush x:Key="ElevatedSurfaceBrush" Color="{StaticResource ElevatedSurface}"/>
+    <!-- New: quaternary text -->
+    <SolidColorBrush x:Key="TextDimBrush" Color="{StaticResource TextDim}"/>
+    <!-- Velvet Kit: secondary text tier (see Colors.xaml). -->
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondary}"/>
+
+    <!-- ============================================================
+         Velvet Kit: section-hue brushes. Per section:
+           SectionHueXBrush       — edge bar / icon tint / panel title text
+           SectionHueXWashBrush   — diagonal wash for the card face; PAINT ON
+                                    TOP of ElevatedSurfaceBrush (the wash ends
+                                    transparent, it is not a full background)
+           SectionHueXBorderBrush — card BorderBrush (replaces GlassBorder on
+                                    hue-coded cards)
+         Static tokens (not mod-mutable) so StaticResource is safe here.
+         ============================================================ -->
+    <SolidColorBrush x:Key="SectionHueGeneralBrush" Color="{StaticResource SectionHueGeneral}"/>
+    <SolidColorBrush x:Key="SectionHueGeneralBorderBrush" Color="{StaticResource SectionHueGeneralBorder}"/>
+    <LinearGradientBrush x:Key="SectionHueGeneralWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="{StaticResource SectionHueGeneralWash}" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="SectionHueStartupBrush" Color="{StaticResource SectionHueStartup}"/>
+    <SolidColorBrush x:Key="SectionHueStartupBorderBrush" Color="{StaticResource SectionHueStartupBorder}"/>
+    <LinearGradientBrush x:Key="SectionHueStartupWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="{StaticResource SectionHueStartupWash}" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="SectionHueAudioBrush" Color="{StaticResource SectionHueAudio}"/>
+    <SolidColorBrush x:Key="SectionHueAudioBorderBrush" Color="{StaticResource SectionHueAudioBorder}"/>
+    <LinearGradientBrush x:Key="SectionHueAudioWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="{StaticResource SectionHueAudioWash}" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+    <!-- Studio triad carries LITERAL colors (same values as the SectionHueStudio* keys in
+         Colors.xaml) instead of StaticResource: inserting cross-dictionary StaticResource
+         refs mid-file trips WPF's deferred-BAML offset bug and the whole dictionary dies
+         at load with EndOfStreamException ("Unable to read beyond the end of the stream").
+         Static tokens by design, so literals lose nothing. Keep it this way. -->
+    <SolidColorBrush x:Key="SectionHueStudioBrush" Color="#FFFF7E6B"/>
+    <SolidColorBrush x:Key="SectionHueStudioBorderBrush" Color="#40FF7E6B"/>
+    <LinearGradientBrush x:Key="SectionHueStudioWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="#14FF7E6B" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="SectionHueDevicesBrush" Color="{StaticResource SectionHueDevices}"/>
+    <SolidColorBrush x:Key="SectionHueDevicesBorderBrush" Color="{StaticResource SectionHueDevicesBorder}"/>
+    <LinearGradientBrush x:Key="SectionHueDevicesWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="{StaticResource SectionHueDevicesWash}" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="SectionHuePerformanceBrush" Color="{StaticResource SectionHuePerformance}"/>
+    <SolidColorBrush x:Key="SectionHuePerformanceBorderBrush" Color="{StaticResource SectionHuePerformanceBorder}"/>
+    <LinearGradientBrush x:Key="SectionHuePerformanceWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="{StaticResource SectionHuePerformanceWash}" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="SectionHueNotificationsBrush" Color="{StaticResource SectionHueNotifications}"/>
+    <SolidColorBrush x:Key="SectionHueNotificationsBorderBrush" Color="{StaticResource SectionHueNotificationsBorder}"/>
+    <LinearGradientBrush x:Key="SectionHueNotificationsWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="{StaticResource SectionHueNotificationsWash}" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="SectionHueAccountBrush" Color="{StaticResource SectionHueAccount}"/>
+    <SolidColorBrush x:Key="SectionHueAccountBorderBrush" Color="{StaticResource SectionHueAccountBorder}"/>
+    <LinearGradientBrush x:Key="SectionHueAccountWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="{StaticResource SectionHueAccountWash}" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="SectionHueDataBrush" Color="{StaticResource SectionHueData}"/>
+    <SolidColorBrush x:Key="SectionHueDataBorderBrush" Color="{StaticResource SectionHueDataBorder}"/>
+    <LinearGradientBrush x:Key="SectionHueDataWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="{StaticResource SectionHueDataWash}" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="SectionHueUpdatesBrush" Color="{StaticResource SectionHueUpdates}"/>
+    <SolidColorBrush x:Key="SectionHueUpdatesBorderBrush" Color="{StaticResource SectionHueUpdatesBorder}"/>
+    <LinearGradientBrush x:Key="SectionHueUpdatesWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="{StaticResource SectionHueUpdatesWash}" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+
+    <!-- EMI Desk triad. LITERAL colors, for the same reason the Studio triad above is literal:
+         inserting cross-dictionary StaticResource refs mid-file trips WPF's deferred-BAML offset
+         bug and the whole dictionary dies at load with EndOfStreamException. The hue is EMI's own
+         #FF69B4 rather than the active mod's accent, because she is the app's mascot and her
+         section should not restyle itself with whatever skin is loaded. -->
+    <SolidColorBrush x:Key="SectionHueEmiDeskBrush" Color="#FFFF69B4"/>
+    <SolidColorBrush x:Key="SectionHueEmiDeskBorderBrush" Color="#40FF69B4"/>
+    <LinearGradientBrush x:Key="SectionHueEmiDeskWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="#14FF69B4" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+
+    <!-- Deeper tab accent brushes -->
+    <SolidColorBrush x:Key="DeeperAccentBrush" Color="{StaticResource DeeperAccent}"/>
+    <SolidColorBrush x:Key="DeeperAccentSoftBrush" Color="{StaticResource DeeperAccentSoft}"/>
+    <SolidColorBrush x:Key="DeeperAccentTransparent20Brush" Color="{StaticResource DeeperAccentTransparent20}"/>
+    <SolidColorBrush x:Key="DeeperAccentTransparent40Brush" Color="{StaticResource DeeperAccentTransparent40}"/>
+
+    <!-- Mission 2 (Hub redesign) — semantic aliases for the row badges /
+         tag chips. Aliasing existing brushes (rather than minting new hex)
+         lets future theming reskin each surface independently of its
+         underlying palette entry. -->
+    <SolidColorBrush x:Key="DeeperHubVideoBadgeBgBrush"   Color="{StaticResource DeeperAccentTransparent40}"/>
+    <SolidColorBrush x:Key="DeeperHubAudioBadgeBgBrush"   Color="{StaticResource TransparentPink40}"/>
+    <SolidColorBrush x:Key="DeeperHubHapticsChipBgBrush"  Color="{StaticResource DeeperAccentTransparent20}"/>
+    <SolidColorBrush x:Key="DeeperHubWebcamChipBgBrush"   Color="{StaticResource DeeperHubWebcamChipBg}"/>
+
+    <!-- Deeper editor chrome brushes — see Colors.xaml for the role of each. -->
+    <SolidColorBrush x:Key="DeeperLaneCanvasBrush" Color="{StaticResource DeeperLaneCanvas}"/>
+    <SolidColorBrush x:Key="DeeperLaneBgBrush" Color="{StaticResource DeeperLaneBg}"/>
+    <SolidColorBrush x:Key="DeeperLaneHeaderBrush" Color="{StaticResource DeeperLaneHeader}"/>
+    <SolidColorBrush x:Key="DeeperLaneHeaderHoverBrush" Color="{StaticResource DeeperLaneHeaderHover}"/>
+    <SolidColorBrush x:Key="DeeperLaneSeparatorBrush" Color="{StaticResource DeeperLaneSeparator}"/>
+    <SolidColorBrush x:Key="DeeperDrawerStripBrush" Color="{StaticResource DeeperDrawerStrip}"/>
+    <SolidColorBrush x:Key="DeeperDrawerStripHoverBrush" Color="{StaticResource DeeperDrawerStripHover}"/>
+    <SolidColorBrush x:Key="DeeperSelectionStripBrush" Color="{StaticResource DeeperSelectionStrip}"/>
+
+    <!-- Mission 3 (Player redesign + theming cleanup) — see Colors.xaml. -->
+    <SolidColorBrush x:Key="DeeperPreviewSurfaceBgBrush" Color="{StaticResource DeeperPreviewSurfaceBg}"/>
+    <SolidColorBrush x:Key="DeeperWaveformBgBrush" Color="{StaticResource DeeperWaveformBg}"/>
+    <SolidColorBrush x:Key="DeeperMenuItemHoverBgBrush" Color="{StaticResource DeeperMenuItemHoverBg}"/>
+    <SolidColorBrush x:Key="DeeperPlayerOverlayBgBrush" Color="{StaticResource DeeperPlayerOverlayBg}"/>
+    <SolidColorBrush x:Key="DeeperGazePickerBackdropBrush" Color="{StaticResource DeeperGazePickerBackdrop}"/>
+    <SolidColorBrush x:Key="DeeperGazePickerToolbarBgBrush" Color="{StaticResource DeeperGazePickerToolbarBg}"/>
+    <SolidColorBrush x:Key="DeeperGazePickerHandleFillBrush" Color="{StaticResource DeeperGazePickerHandleFill}"/>
+    <SolidColorBrush x:Key="DeeperGazePickerCancelBorderBrush" Color="{StaticResource DeeperGazePickerCancelBorder}"/>
+
+    <!-- SP5 layer 3: NeonPurple brushes for the Available Subjects tab. -->
+    <SolidColorBrush x:Key="NeonPurpleBrush" Color="{StaticResource NeonPurple}"/>
+    <SolidColorBrush x:Key="NeonPurpleSoftBrush" Color="{StaticResource NeonPurpleSoft}"/>
+    <SolidColorBrush x:Key="NeonPurpleTransparent20Brush" Color="{StaticResource NeonPurpleTransparent20}"/>
+
+    <!-- ============================ Session Rack ============================
+         Difficulty + provenance colour code for the compact session list. See the
+         matching block in Colors.xaml for why these do NOT follow the mod accent.
+         The rows are code-built (MainWindow.SessionIO.RepaintSessionRack) and reach
+         these keys through SetResourceReference, i.e. as DynamicResource, so an
+         override still lands without a rebuild.
+         ====================================================================== -->
+    <SolidColorBrush x:Key="SessionDiffEasyBrush" Color="{StaticResource SessionDiffEasy}"/>
+    <SolidColorBrush x:Key="SessionDiffEasyWashBrush" Color="{StaticResource SessionDiffEasyWash}"/>
+    <SolidColorBrush x:Key="SessionDiffMediumBrush" Color="{StaticResource SessionDiffMedium}"/>
+    <SolidColorBrush x:Key="SessionDiffMediumWashBrush" Color="{StaticResource SessionDiffMediumWash}"/>
+    <SolidColorBrush x:Key="SessionDiffHardBrush" Color="{StaticResource SessionDiffHard}"/>
+    <SolidColorBrush x:Key="SessionDiffHardWashBrush" Color="{StaticResource SessionDiffHardWash}"/>
+    <SolidColorBrush x:Key="SessionDiffExtremeBrush" Color="{StaticResource SessionDiffExtreme}"/>
+    <SolidColorBrush x:Key="SessionDiffExtremeWashBrush" Color="{StaticResource SessionDiffExtremeWash}"/>
+
+    <SolidColorBrush x:Key="SessionSrcBuiltInBrush" Color="{StaticResource SessionSrcBuiltIn}"/>
+    <SolidColorBrush x:Key="SessionSrcBuiltInWashBrush" Color="{StaticResource SessionSrcBuiltInWash}"/>
+    <SolidColorBrush x:Key="SessionSrcCustomBrush" Color="{StaticResource SessionSrcCustom}"/>
+    <SolidColorBrush x:Key="SessionSrcCustomWashBrush" Color="{StaticResource SessionSrcCustomWash}"/>
+    <SolidColorBrush x:Key="SessionSrcImportedBrush" Color="{StaticResource SessionSrcImported}"/>
+    <SolidColorBrush x:Key="SessionSrcImportedWashBrush" Color="{StaticResource SessionSrcImportedWash}"/>
+
+    <!-- v6 CCP brand gradient (135°, pink → violet). Static, NOT mod-overridable.
+         Applied at the four brand anchors (logo, START button, XP bar, primary nav active)
+         on CCP Default only; ApplyModTheme swaps AccentGradientBrush to point at this for
+         CCP Default and to a solid SolidColorBrush(accent) for every other mod. -->
+    <LinearGradientBrush x:Key="BrandGradient" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#E84393" Offset="0"/>
+        <GradientStop Color="#8B5CF6" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- Anchor swap point. ApplyModTheme rewrites this at runtime:
+           CCP Default → BrandGradient (above)
+           any other mod → SolidColorBrush of the active mod's accent color
+         XAML anchors read {StaticResource AccentGradientBrush}; everything else stays on PinkBrush. -->
+    <SolidColorBrush x:Key="AccentGradientBrush" Color="{StaticResource PinkColor}"/>
+
+    <!-- ==================================================================
+         TIER LIVERY - the persistent "this is paid content" trim, worn by a
+         tiered feature's chrome (Studio rack row, Play cards, rail chips)
+         whether or not the account has the tier. Distinct from the lockband
+         vocabulary (RailLock*/PlayLock*, local to their views), which is the
+         PRICE TAG a locked account sees on top of this; the livery never
+         hides, so a patron still sees which features are the premium ones.
+
+         Deliberately CONSTANT across mods, like the lockbands: a tier mark is
+         commerce, not decor, so it does not take colour from the mod chain.
+         Literal gradient stops on purpose - a Theme dictionary referencing a
+         fresh cross-dictionary StaticResource is the BAML EndOfStream trap
+         (see Velvet-Kit round 2). Base tones match the established tier
+         colours: gold #F0C24B = Tier 1, and Tier 2 wears DIAMOND (ice-white
+         cyan) - the violet flask stays on the lockband glyphs only. -->
+    <LinearGradientBrush x:Key="Tier1GoldBorderBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#F2D98C" Offset="0"/>
+        <GradientStop Color="#C9963B" Offset="0.5"/>
+        <GradientStop Color="#8C6218" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="Tier1GoldHoverBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#FFE9A9" Offset="0"/>
+        <GradientStop Color="#F0C24B" Offset="0.5"/>
+        <GradientStop Color="#C9963B" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="Tier2DiamondBorderBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#EAFBFF" Offset="0"/>
+        <GradientStop Color="#8FD4EF" Offset="0.5"/>
+        <GradientStop Color="#4C93C4" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="Tier2DiamondHoverBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#FFFFFF" Offset="0"/>
+        <GradientStop Color="#BFEFFF" Offset="0.5"/>
+        <GradientStop Color="#7FC4E8" Offset="1"/>
+    </LinearGradientBrush>
+
+</ResourceDictionary>

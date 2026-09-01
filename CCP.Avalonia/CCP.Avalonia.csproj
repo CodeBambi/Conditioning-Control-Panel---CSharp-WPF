@@ -31,6 +31,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The ported palette keeps the .xaml extension it has in the WPF head, so a diff against
+         ConditioningControlPanel/Resources/Theme/ stays readable. The SDK only globs *.axaml,
+         hence the explicit include. -->
+    <AvaloniaResource Include="Theme\**\*.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\CCP.Core\CCP.Core.csproj" />
   </ItemGroup>
 

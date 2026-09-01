@@ -1,0 +1,221 @@
+<!-- PORTED FROM ConditioningControlPanel/Resources/Theme/Colors.xaml - DO NOT diverge.
+     Same keys, same hex values, so a Windows/Linux fidelity comparison is meaningful.
+     WPF and Avalonia share this dictionary syntax almost exactly; only the xmlns and
+     DynamicResource->StaticResource for intra-dictionary refs differ.
+     When the WPF head is retired this becomes the single source of truth. -->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Colors (central source) -->
+    <Color x:Key="PinkColor">#FFFF69B4</Color>
+    <Color x:Key="DarkPink">#FFFF1493</Color>
+    <Color x:Key="PanelBg">#FF1C1C35</Color>
+    <Color x:Key="PanelBgTransparent">#C01C1C35</Color>
+    <Color x:Key="DarkerBg">#FF121220</Color>
+    <Color x:Key="SurfaceBg">#FF181830</Color>
+    <Color x:Key="TextLight">#FFF0F0F5</Color>
+    <!-- Velvet Kit (UI polish 2, 2026-08-12): TextMuted lifted #6E6E88 → #A0A0BC.
+         The old value measured ~3.0:1 on ElevatedSurface — below WCAG AA — and was
+         the description line of every settings row. 5.6:1 now. Do not darken again. -->
+    <Color x:Key="TextMuted">#FFA0A0BC</Color>
+    <!-- Velvet Kit: secondary text tier between TextLight and TextMuted (8.7:1).
+         For values, body copy and list text that used to grab ad-hoc greys. -->
+    <Color x:Key="TextSecondary">#FFC9C9DE</Color>
+    <Color x:Key="PanelAccent">#FF2E2E4A</Color>
+    <Color x:Key="PanelAccentHover">#FF3A3A5C</Color>
+    <Color x:Key="PreviewBg">#FF0D0D18</Color>
+
+    <Color x:Key="Danger">#FFE53935</Color>
+
+    <!-- Semantic success / "go / live / correct" green. Static across mods on purpose
+         (like Danger red): green=go reads universally, and it harmonises with the
+         drone-mode green accent. Used by the Lab engine-bar LIVE pill + Start button. -->
+    <Color x:Key="SuccessGreen">#FF3EE87A</Color>
+    <Color x:Key="SuccessGreenDeep">#FF1FB85A</Color>
+    <Color x:Key="SuccessGreenSoft">#223EE87A</Color>
+
+    <Color x:Key="TransparentPink">#30FF69B4</Color>
+
+    <Color x:Key="PinkButtonHovered">#FFFF8FAF</Color>
+
+    <!-- Accent pressed (darkened accent for press states) -->
+    <Color x:Key="AccentPressed">#FFE0507A</Color>
+
+    <!-- 20% alpha transparent accent -->
+    <Color x:Key="TransparentPink20">#20FF69B4</Color>
+
+    <!-- Patreon palette -->
+    <Color x:Key="PatreonPurple">#FF9B59B6</Color>
+    <Color x:Key="PatreonLightPurple">#FFE0B0FF</Color>
+    <Color x:Key="PatreonDarkPurple">#FF8E44AD</Color>
+
+    <!-- Semi-transparent white (alpha 0x40) -->
+    <Color x:Key="TransparentWhite">#40FFFFFF</Color>
+
+    <!-- Added: alternate danger (used by Controls.xaml hover) -->
+    <Color x:Key="DangerHover">#FFE84050</Color>
+
+    <!-- Accent-tinted dark backgrounds -->
+    <Color x:Key="AccentTintedBg">#FF251A38</Color>
+    <Color x:Key="AccentTintedBgHover">#FF352548</Color>
+    <Color x:Key="AccentMidGradient">#FF1E1530</Color>
+
+    <!-- 40% alpha accent for hover overlays -->
+    <Color x:Key="TransparentPink40">#40FF69B4</Color>
+    <!-- 50% alpha accent for selected overlays -->
+    <Color x:Key="TransparentPink50">#50FF69B4</Color>
+
+    <!-- New: de-saturated accent for headers/labels -->
+    <Color x:Key="PinkSoft">#FFDF6BA0</Color>
+    <!-- New: vibrant accent for CTAs and interactive elements -->
+    <Color x:Key="PinkVibrant">#FFFF5CA8</Color>
+    <!-- New: glass-style card borders -->
+    <Color x:Key="GlassBorder">#20FFFFFF</Color>
+    <Color x:Key="GlassBorderHover">#30FFFFFF</Color>
+    <!-- New: elevated card surface -->
+    <Color x:Key="ElevatedSurface">#FF222240</Color>
+    <!-- New: quaternary text. Velvet Kit: lifted #505068 → #7A7A94 (was 1.8:1 —
+         invisible). Still decorative-only: never carry information in TextDim. -->
+    <Color x:Key="TextDim">#FF7A7A94</Color>
+
+    <!-- Deeper tab accent (universal media enhancement system) — distinct violet
+         that contrasts the pink primary while staying inside the dark/violet palette. -->
+    <Color x:Key="DeeperAccent">#FF7B5CFF</Color>
+    <Color x:Key="DeeperAccentSoft">#FFB7A5FF</Color>
+    <Color x:Key="DeeperAccentTransparent20">#207B5CFF</Color>
+    <Color x:Key="DeeperAccentTransparent40">#407B5CFF</Color>
+
+    <!-- Mission 2 (Hub redesign) — webcam chip needs a teal accent that
+         contrasts both DeeperAccent (violet) and PinkColor (the catch-all
+         pink). Picked to evoke "lens" / "camera". Same alpha (0x20) as the
+         haptics chip so the two read as one family. -->
+    <Color x:Key="DeeperHubWebcamChipBg">#205CFFB7</Color>
+
+    <!-- Deeper editor chrome — surfaces introduced by Mission 1 (Editor restructure):
+         lane headers, lane content backgrounds, the metadata drawer strip,
+         selection-summary strip. Picked to sit between DarkerBg (#121220) and
+         PanelBg (#1C1C35) so the editor reads as nested layers rather than one
+         flat wall. Selection halo reuses DeeperAccentSoft. -->
+    <Color x:Key="DeeperLaneCanvas">#FF15151F</Color>
+    <Color x:Key="DeeperLaneBg">#FF1A1A28</Color>
+    <Color x:Key="DeeperLaneHeader">#FF1F1F30</Color>
+    <Color x:Key="DeeperLaneHeaderHover">#FF2A2A42</Color>
+    <Color x:Key="DeeperLaneSeparator">#FF2E2E48</Color>
+    <Color x:Key="DeeperDrawerStrip">#FF1F1F30</Color>
+    <Color x:Key="DeeperDrawerStripHover">#FF2A2A42</Color>
+    <Color x:Key="DeeperSelectionStrip">#287B5CFF</Color>
+
+    <!-- Mission 3 (Player redesign + theming cleanup) — chrome surfaces and
+         picker overlays that were previously hardcoded across XAML/code.
+
+         PreviewSurfaceBg / WaveformBg / MenuItemHoverBg: editor + player
+         hardcoded hex promoted to theme tokens.
+
+         PlayerOverlayBg: semi-opaque black for in-pane overlays (zoom pills,
+         "Now: region" label) that need to sit over a video frame.
+
+         GazePicker* family: the topmost transparent picker (separate Window)
+         couldn't pick up any DynamicResource until these existed. -->
+    <Color x:Key="DeeperPreviewSurfaceBg">#FF0A0A14</Color>
+    <Color x:Key="DeeperWaveformBg">#10000020</Color>
+    <Color x:Key="DeeperMenuItemHoverBg">#FF3D3D60</Color>
+    <Color x:Key="DeeperPlayerOverlayBg">#A0000000</Color>
+    <Color x:Key="DeeperGazePickerBackdrop">#40000000</Color>
+    <Color x:Key="DeeperGazePickerToolbarBg">#E61C1C35</Color>
+    <Color x:Key="DeeperGazePickerHandleFill">#FFFFFFFF</Color>
+    <Color x:Key="DeeperGazePickerCancelBorder">#80FFFFFF</Color>
+
+    <!-- SP5 layer 3: NeonPurple — Available Subjects directory tab + page accent.
+         Distinct from DeeperAccent #7B5CFF (violet, calmer); #B47BFF reads as
+         bright/neon and marks the section as visually different. ~12:1 against
+         the dark background tokens (AAA). Mirrors the cclabs-web neon-purple
+         token shipped in SP5L2 so the desktop and web "Available Subjects"
+         surfaces share a single visual identity. -->
+    <Color x:Key="NeonPurple">#FFB47BFF</Color>
+    <Color x:Key="NeonPurpleSoft">#FFD4BCFF</Color>
+    <Color x:Key="NeonPurpleTransparent20">#33B47BFF</Color>
+    <!-- Naming-parity alias with PinkColor — gradient stops that take a Color
+         (not a Brush) want a "*Color" key. Same value as NeonPurple. -->
+    <Color x:Key="NeonPurpleColor">#FFB47BFF</Color>
+
+    <!-- ============================================================
+         Velvet Kit (UI polish 2): per-section hue identities for the Settings
+         door and any surface that wants section color coding. STATIC across
+         mods on purpose (like Danger/SuccessGreen): these are wayfinding, not
+         brand — the mod accent stays the star. Three colors per section:
+           SectionHueX        — full hue: 3px edge bar, icon tint, panel title
+           SectionHueXWash    — 8% alpha: gradient wash start (→ transparent)
+           SectionHueXBorder  — 25% alpha: card BorderBrush over dark
+         Chosen to stay distinguishable at 8% alpha next to ANY mod accent;
+         no pure red (Danger owns red). Nav rail doors reuse the same family.
+         ============================================================ -->
+    <Color x:Key="SectionHueGeneral">#FFFF69B4</Color>
+    <Color x:Key="SectionHueGeneralWash">#14FF69B4</Color>
+    <Color x:Key="SectionHueGeneralBorder">#40FF69B4</Color>
+    <Color x:Key="SectionHueStartup">#FFFFB84E</Color>
+    <Color x:Key="SectionHueStartupWash">#14FFB84E</Color>
+    <Color x:Key="SectionHueStartupBorder">#40FFB84E</Color>
+    <Color x:Key="SectionHueAudio">#FFFF7E6B</Color>
+    <Color x:Key="SectionHueAudioWash">#14FF7E6B</Color>
+    <Color x:Key="SectionHueAudioBorder">#40FF7E6B</Color>
+    <!-- Studio door hue (same coral as Audio by design - Studio rack pages key off this alias) -->
+    <Color x:Key="SectionHueStudio">#FFFF7E6B</Color>
+    <Color x:Key="SectionHueStudioWash">#14FF7E6B</Color>
+    <Color x:Key="SectionHueStudioBorder">#40FF7E6B</Color>
+    <Color x:Key="SectionHueDevices">#FF5CE0A5</Color>
+    <Color x:Key="SectionHueDevicesWash">#145CE0A5</Color>
+    <Color x:Key="SectionHueDevicesBorder">#405CE0A5</Color>
+    <Color x:Key="SectionHuePerformance">#FFB8E85C</Color>
+    <Color x:Key="SectionHuePerformanceWash">#14B8E85C</Color>
+    <Color x:Key="SectionHuePerformanceBorder">#40B8E85C</Color>
+    <Color x:Key="SectionHueNotifications">#FF5EA8FF</Color>
+    <Color x:Key="SectionHueNotificationsWash">#145EA8FF</Color>
+    <Color x:Key="SectionHueNotificationsBorder">#405EA8FF</Color>
+    <Color x:Key="SectionHueAccount">#FFE85CE0</Color>
+    <Color x:Key="SectionHueAccountWash">#14E85CE0</Color>
+    <Color x:Key="SectionHueAccountBorder">#40E85CE0</Color>
+    <Color x:Key="SectionHueData">#FF5ED4E8</Color>
+    <Color x:Key="SectionHueDataWash">#145ED4E8</Color>
+    <Color x:Key="SectionHueDataBorder">#405ED4E8</Color>
+    <Color x:Key="SectionHueUpdates">#FF3EE87A</Color>
+    <Color x:Key="SectionHueUpdatesWash">#143EE87A</Color>
+    <Color x:Key="SectionHueUpdatesBorder">#403EE87A</Color>
+
+    <!-- ============================ Session Rack ============================
+         The colour code for the compact session list (Session Rack, 2026-08-16).
+         Two families, both STATIC across mods on purpose - exactly like Danger and
+         SuccessGreen above. Difficulty and provenance are semantics, not brand: if
+         these followed the mod accent, a drone-green build would paint EASY and
+         EXTREME the same green and the stripe would stop meaning anything.
+
+         Each entry ships a solid (the 4px stripe, the pill text) and a *Wash sibling
+         at 0x22 alpha (~13%) for the pill/chip background - the same solid+wash shape
+         the SectionHue* family above uses. A mod that genuinely wants its own
+         difficulty palette can still override these fourteen keys wholesale.
+         ====================================================================== -->
+    <Color x:Key="SessionDiffEasy">#FF57D9A3</Color>
+    <Color x:Key="SessionDiffEasyWash">#2257D9A3</Color>
+    <Color x:Key="SessionDiffMedium">#FFF5C242</Color>
+    <Color x:Key="SessionDiffMediumWash">#22F5C242</Color>
+    <Color x:Key="SessionDiffHard">#FFFF8A4C</Color>
+    <Color x:Key="SessionDiffHardWash">#22FF8A4C</Color>
+    <Color x:Key="SessionDiffExtreme">#FFF23557</Color>
+    <Color x:Key="SessionDiffExtremeWash">#22F23557</Color>
+
+    <Color x:Key="SessionSrcBuiltIn">#FF5CC8FF</Color>
+    <Color x:Key="SessionSrcBuiltInWash">#225CC8FF</Color>
+    <Color x:Key="SessionSrcCustom">#FFFF69B4</Color>
+    <Color x:Key="SessionSrcCustomWash">#22FF69B4</Color>
+    <Color x:Key="SessionSrcImported">#FFB07CFF</Color>
+    <Color x:Key="SessionSrcImportedWash">#22B07CFF</Color>
+
+    <!-- Ambient FX palette. DESIGN-TIME SEEDS ONLY (the Bambi pink family):
+         Services/FxTheme.ApplyForActiveMod overwrites all four at startup and on every mod
+         switch from the active mod's fxPalette → filterColor → accentColor chain. Never
+         hardcode an FX colour anywhere else — read FxTheme or these keys. -->
+    <Color x:Key="FxMistColor">#FFE84393</Color>
+    <Color x:Key="FxParticleColor">#FFFF69B4</Color>
+    <Color x:Key="FxGlowColor">#FFFF69B4</Color>
+    <Color x:Key="FxFlashTintColor">#FFFF8FAF</Color>
+
+</ResourceDictionary>

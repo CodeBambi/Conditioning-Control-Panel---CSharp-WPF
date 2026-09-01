@@ -59,12 +59,19 @@ namespace ConditioningControlPanel.Avalonia
             Moderate(string.Empty, verdict);
         }
 
+        /// <summary>Palette lookup with a literal fallback, so a missing key degrades to the
+        /// right colour rather than to Avalonia's default and hides the gap.</summary>
+        private global::Avalonia.Media.IBrush Brush(string key, string fallback) =>
+            global::Avalonia.Application.Current!.TryFindResource(key, out var v) && v is global::Avalonia.Media.IBrush b
+                ? b
+                : global::Avalonia.Media.Brush.Parse(fallback);
+
         private void Moderate(string text, TextBlock target)
         {
             if (string.IsNullOrWhiteSpace(text))
             {
                 target.Text = "awaiting input…";
-                target.Foreground = global::Avalonia.Media.Brush.Parse("#8888A0");
+                target.Foreground = Brush("TextMutedBrush", "#A0A0BC");
                 return;
             }
 
@@ -72,12 +79,12 @@ namespace ConditioningControlPanel.Avalonia
             if (result.Allow)
             {
                 target.Text = "ALLOW";
-                target.Foreground = global::Avalonia.Media.Brush.Parse("#6FCF97");
+                target.Foreground = Brush("SuccessGreenBrush", "#3EE87A");
             }
             else
             {
                 target.Text = $"BLOCK   category={result.Category}   {result.Note}";
-                target.Foreground = global::Avalonia.Media.Brush.Parse("#FF6B81");
+                target.Foreground = Brush("DangerBrush", "#E53935");
             }
         }
     }
