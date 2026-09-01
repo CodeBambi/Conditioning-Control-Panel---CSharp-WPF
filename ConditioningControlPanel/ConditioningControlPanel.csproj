@@ -168,14 +168,10 @@
     <PackageReference Include="SharpVectors" Version="1.8.4.2" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- Localization language files - must be on disk for File.ReadAllText() -->
-    <Content Include="Localization\Languages\*.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
-    </Content>
-  </ItemGroup>
+  <!-- Localization language files moved to CCP.Core alongside LocalizationManager. Content
+       flows transitively through the ProjectReference, so they still land in this project's
+       output at Localization/Languages/ - the exact path LocalizationManager reads and the
+       exact layout installer.iss ships. Verified in bin and publish output. -->
 
   <ItemGroup>
     <Content Include="appsettings.json">

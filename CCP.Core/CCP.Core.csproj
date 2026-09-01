@@ -61,5 +61,20 @@
     That rewrite is per-namespace and repo-wide, so it has to be its own reviewed change.
     Until then: move types no XAML references. Grep the .xaml before moving anything.
   -->
+  <ItemGroup>
+    <!-- The language data, moved here with LocalizationManager. It reads them from
+         AppDomain.CurrentDomain.BaseDirectory/Localization/Languages/, so every head needs them
+         in ITS output - and Content with CopyToOutputDirectory flows transitively through a
+         ProjectReference, so declaring it once here serves the WPF head, the Avalonia head and
+         any future VR head without each repeating the include.
+
+         ExcludeFromSingleFile mirrors the WPF head's original setting: the files must be real
+         files on disk for File.ReadAllText, not bundled into a single-file exe. -->
+    <Content Include="Localization\Languages\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+  </ItemGroup>
 
 </Project>
