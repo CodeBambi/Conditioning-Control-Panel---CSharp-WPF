@@ -390,6 +390,12 @@ Trained habits layer on top via `ChaosMeta.ApplyTo`; equipped lifetime boons via
 
 ## 12. File map
 
+> Some of these files no longer sit next to this document: `ChaosTuning.cs`, `ChaosMetaState.cs`,
+> `ChaosCraftingIds.cs` and `ChaosNarrativeModels.cs` moved to `CCP.Core/Services/Chaos/` (the
+> platform-agnostic `net8.0` library shared with the future Linux/VR heads). Namespace and
+> behaviour are unchanged - `ConditioningControlPanel.Services.Chaos` either way - so nothing
+> below changes for a caller; only the folder you edit them in does.
+
 | File | Role |
 |------|------|
 | `ChaosModeService.cs` | Run lifecycle: timers, scoring, waves, drafts, payout, power-ups, pendulum, gold |
