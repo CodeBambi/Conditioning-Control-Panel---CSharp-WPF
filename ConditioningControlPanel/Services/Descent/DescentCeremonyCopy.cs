@@ -109,10 +109,32 @@ namespace ConditioningControlPanel.Services.Descent
             choice == DescentMigrationChoices.Cycle
                 ? $"Cycle I. Level {level}.\n\n" +
                   "The mark is on your card and it stays there. Everything you banked is still " +
-                  "banked. The spiral starts tonight, at Day 1 — the same Day 1 as everyone else."
+                  "banked. The spiral starts tonight, at Day 1 — the same Day 1 as everyone else.\n\n" +
+                  DoneReceiptLine(choice)
                 : $"Level {level}, measured on the ladder you're actually standing on.\n\n" +
                   "The stages you climbed will come back to you one a day. The spiral starts " +
-                  "tonight, at Day 1 — the same Day 1 as everyone else.";
+                  "tonight, at Day 1 — the same Day 1 as everyone else.\n\n" +
+                  DoneReceiptLine(choice);
+
+        /// <summary>
+        /// THE RECEIPT, SAID OUT LOUD AND THEN POINTED AT (v6.9.1).
+        ///
+        /// <para>Five subjects on launch night chose a door and then could not find any trace of
+        /// what it did. The Cycle bonus was live in the ledger the whole time, which is worse than
+        /// it sounds: an irreversible choice with nothing to show for it reads, from the outside,
+        /// exactly like a choice that did nothing. So the close now states the bonus AND names the
+        /// surface that keeps it, and the profile card grew the chip this line is promising
+        /// (MainWindow.ProfileCard.RefreshProfileDescentReceipt).</para>
+        ///
+        /// <para>The percent comes off <see cref="DescentMigration.CycleXpBonus"/> and never a
+        /// literal: the constant is explicitly tunable, and copy that has to be remembered
+        /// alongside it is copy that will one day be wrong.</para>
+        /// </summary>
+        public static string DoneReceiptLine(string choice) =>
+            choice == DescentMigrationChoices.Cycle
+                ? $"+{(DescentMigration.CycleXpBonus - 1.0) * 100:0.#}% XP on everything you earn, " +
+                  "permanently. You can see it on your Profile card, under the XP bar."
+                : "Your Profile card keeps the record of tonight, under the XP bar.";
 
         public const string DoneClose = "Begin";
 
