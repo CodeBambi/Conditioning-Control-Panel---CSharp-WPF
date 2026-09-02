@@ -1,0 +1,90 @@
+<!-- PORTED from ConditioningControlPanel/Windows/AchievementPopup.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None"              -> SystemDecorations="None"
+       AllowsTransparency="True"       -> TransparencyLevelHint="Transparent"
+       ResizeMode="NoResize"           -> CanResize="False"
+       MouseLeftButtonDown="..."       -> PointerPressed, wired in the constructor
+       ShadowDepth="0"                 -> OffsetX="0" OffsetY="0"  (Avalonia's DropShadowEffect
+                                          takes a vector, not depth+direction)
+       Image + EmojiToImageSource      -> TextBlock "🏆"           (Avalonia draws COLR/CPAL colour
+                                          fonts natively; see CLAUDE.md trap 3)
+       Button.Style + IsMouseOver      -> Style Selector="Button.closeGlyph:pointerover" below.
+                                          Shape-for-shape: the local Foreground on the button
+                                          outranks it, so it was already dead in WPF and is dead
+                                          here for the same reason. Kept so the two still diff.
+
+     The close button carries a TextBlock child rather than Content: Avalonia parses "_" in
+     Content as an access key. See the porting notes in CLAUDE.md. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.AchievementPopup"
+        Title="Achievement Unlocked!"
+        Width="400" Height="200"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Focusable="False"
+        CanResize="False"
+        WindowStartupLocation="Manual">
+
+    <Window.Styles>
+        <Style Selector="Button.closeGlyph:pointerover">
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+    </Window.Styles>
+
+    <Border Background="#E0151530" CornerRadius="12" BorderBrush="{StaticResource PinkBrush}" BorderThickness="2"
+            Margin="10">
+        <Border.Effect>
+            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.5"/>
+        </Border.Effect>
+
+        <Grid Margin="15">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Achievement Image -->
+            <Border Grid.Column="0" Width="120" Height="120" Background="{DynamicResource DarkerBgBrush}" CornerRadius="8" Margin="0,0,15,0">
+                <Image x:Name="AchievementImage" Stretch="Uniform" Margin="5"/>
+            </Border>
+
+            <!-- Text Content -->
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <!-- Trophy Icon + "Achievement Unlocked" -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <TextBlock x:Name="TxtHeaderIcon" Text="🏆" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock x:Name="TxtHeaderText" Text="ACHIEVEMENT UNLOCKED!" Foreground="#FFD700"
+                               FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Achievement Name -->
+                <TextBlock x:Name="TxtName" Text="Achievement Name"
+                           Foreground="{StaticResource PinkBrush}"
+                           FontWeight="Bold" FontSize="18"
+                           TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+                <!-- Flavor Text -->
+                <TextBlock x:Name="TxtFlavor" Text="Flavor text goes here..."
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                           TextWrapping="Wrap" FontStyle="Italic"/>
+            </StackPanel>
+
+            <!-- Close Button -->
+            <Button x:Name="BtnClose" Grid.Column="1" Classes="closeGlyph"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Width="24" Height="24" Margin="0,-5,-5,0" Padding="0"
+                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                    Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
+                    BorderThickness="0" Cursor="Hand">
+                <TextBlock Text="✕"/>
+            </Button>
+        </Grid>
+    </Border>
+</Window>

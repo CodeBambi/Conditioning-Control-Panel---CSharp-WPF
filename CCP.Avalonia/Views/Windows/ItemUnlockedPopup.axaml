@@ -1,0 +1,82 @@
+<!-- PORTED from ConditioningControlPanel/Windows/ItemUnlockedPopup.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None"              -> SystemDecorations="None"
+       AllowsTransparency="True"       -> TransparencyLevelHint="Transparent"
+       ResizeMode="NoResize"           -> CanResize="False"
+       MouseLeftButtonDown="..."       -> PointerPressed, wired in the constructor
+       Visibility="Collapsed"          -> IsVisible="False"
+       HeaderIcon (Image + Twemoji)    -> TextBlock "🎀"   (Avalonia draws COLR/CPAL colour fonts
+       FallbackGlyphImage (Image)      -> deleted          natively, so the SVG fallback pair
+                                                            collapses to one TextBlock each;
+                                                            CLAUDE.md trap 3)
+       TxtHeader / TxtSub set in code  -> {loc:Str}, same keys. They were only set from code in
+                                          WPF because the Twemoji fallback prefixed the glyph;
+                                          with the glyph in its own TextBlock they are static, and
+                                          a binding survives a language change where an assigned
+                                          .Text would not.
+       CardBorder VerticalAlignment    -> "Top" with the card's natural height. The WPF window is
+                                          exactly card-sized (340x104) and never resizes, so
+                                          pinning the card to its content is identical on the
+                                          desktop - and it keeps the render harness' minimum window
+                                          height from stretching the card down the whole PNG.
+
+     BorderBrush + Effect on CardBorder are still set in code-behind from the item's mod accent. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.ItemUnlockedPopup"
+        Title="New Item Unlocked!"
+        Width="340" Height="104"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Focusable="False"
+        CanResize="False"
+        WindowStartupLocation="Manual">
+
+    <!-- 10px transparent margin so the accent glow has room to bleed: 340x104 window = 320x84 card -->
+    <Border x:Name="CardBorder" Background="#E0151530" CornerRadius="12" BorderThickness="2"
+            Margin="10" VerticalAlignment="Top" Height="84">
+
+        <Grid Margin="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Item art (or a gift glyph when the PNG never landed) -->
+            <Border Grid.Column="0" Width="64" Height="64" CornerRadius="10"
+                    Background="{DynamicResource DarkerBgBrush}" Margin="0,0,10,0">
+                <Grid>
+                    <Image x:Name="ItemImage" Stretch="Uniform" Margin="4"/>
+                    <TextBlock x:Name="FallbackGlyphText" Text="&#x1F381;" FontSize="26" IsVisible="False"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+
+            <!-- Header / item name / call to action -->
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                    <TextBlock x:Name="HeaderIcon" Text="&#x1F380;" FontSize="11" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <TextBlock x:Name="TxtHeader" Text="{loc:Str toast_item_unlocked_header}" Foreground="#FFD700"
+                               FontWeight="Bold" FontSize="11" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+
+                <!-- Registry proper noun - deliberately NOT localized -->
+                <TextBlock x:Name="TxtItemName" Text="Item Name"
+                           FontWeight="Bold" FontSize="16"
+                           TextTrimming="CharacterEllipsis"/>
+
+                <TextBlock x:Name="TxtSub" Text="{loc:Str toast_item_unlocked_sub}"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"
+                           TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
