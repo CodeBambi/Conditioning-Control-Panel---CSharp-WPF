@@ -3705,6 +3705,11 @@ namespace ConditioningControlPanel
             // Check if any authenticated user needs to complete registration (choose display name)
             // This handles users who had cached tokens but cancelled the registration dialog previously
             _ = CheckPendingRegistrationAsync();
+
+            // A provider sign-in that resolves to a DIFFERENT record than this session (the
+            // split-identity shape) is reported by the validate guards; once the window is up
+            // the player is offered the merge, instead of the report dying in the log.
+            Services.SplitIdentityService.AttachOwner(this);
         }
 
         /// <summary>

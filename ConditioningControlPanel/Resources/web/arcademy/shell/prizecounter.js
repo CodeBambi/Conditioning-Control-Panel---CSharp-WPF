@@ -188,6 +188,9 @@ export const REFUSALS = Object.freeze({
    * DID answer, and the answer was that this account cannot bank here yet.
    * Without this row the tier refusal wore the offline line. */
   tier: ['prize_tier', 'The bank does not serve this account yet. Nothing was charged.'],
+  /* The same gate when THIS install's Patreon says paid (2026-09-02): the subscription
+   * is on a record the bank is not looking at. The host offers the merge at launch. */
+  tier_split: ['prize_tier_split', 'Your subscription sits on another profile. Restart and accept the merge the app offers.'],
 });
 
 /** The glyph each sku wears on its little drawn box. Text, not art: a sku the

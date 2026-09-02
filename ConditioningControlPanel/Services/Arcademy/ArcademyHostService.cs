@@ -1681,6 +1681,12 @@ internal static class ArcademyHostService
         // they never sound like a scolding and never mention a network.
         ["prize_offline"] = "The counter cannot reach the bank right now. Nothing was charged.",
         ["prize_busy"] = "Somebody is already at the drawer. Give it a second and ask again.",
+        // The tier gate (2026-08-29) told apart from the wire being down, and (2026-09-02) told
+        // apart from the SPLIT-IDENTITY shape: the bank answered "locked" while this install's own
+        // Patreon says paid, which means the subscription sits on a record the bank is not looking
+        // at. SplitIdentityService offers the merge at launch; this line says where to find it.
+        ["prize_tier"] = "The bank does not serve this account yet. Nothing was charged.",
+        ["prize_tier_split"] = "Your subscription sits on another profile. Restart and accept the merge the app offers.",
         ["prize_quiet"] = "The counter went quiet on that one. Try again in a moment.",
         ["prize_empty"] = "Shelf is bare tonight. Come back when the truck has been.",
         // THE ALMOST and THE CHARGE-HOLD (shell/prizecounter.js, wave 0828). `prize_short` is a

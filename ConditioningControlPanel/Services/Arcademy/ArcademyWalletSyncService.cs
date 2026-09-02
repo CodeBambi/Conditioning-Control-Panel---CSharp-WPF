@@ -668,7 +668,13 @@ internal static class ArcademyWalletSyncService
                 if (response.StatusCode == HttpStatusCode.Forbidden && IsTierRefusal(reply))
                 {
                     App.Logger?.Information("[ArcademyWallet] buy refused by the tier gate: {Body}", Truncate(text));
-                    return new BuyOutcome(true, false, "tier", null);
+                    // The bank said "locked" while this install's own Patreon says Lab tier (or a
+                    // validate guard has already caught the provider resolving elsewhere): the
+                    // subscription is on a record the bank is not looking at. That is the
+                    // split-identity shape SplitIdentityService offers to merge at launch, and the
+                    // counter's line should point there rather than read as "not subscribed".
+                    var split = SplitIdentityService.HasPending || App.Patreon?.HasLabAccess == true;
+                    return new BuyOutcome(true, false, split ? "tier_split" : "tier", null);
                 }
                 if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
                 {
