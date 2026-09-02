@@ -284,8 +284,10 @@ namespace ConditioningControlPanel
             pointsBorder.Child = pointsStack;
             mainStack.Children.Add(pointsBorder);
 
-            // Prestige row — lifetime sparkle points SPENT (monotonic, survives seasons).
-            // Re-buying seasonal nodes raises it: number always goes up.
+            // Prestige row — lifetime sparkle points SPENT. Monotonic, and now purely a record
+            // of lifetime spend: the monthly re-buy loop that used to feed it died with the
+            // seasons. Whether Prestige gets a new sink is an open design question and is
+            // deliberately left unanswered here.
             var lifetimeSpent = App.Achievements?.Progress?.LifetimeSkillPointsSpent ?? 0;
             var prestigeRank = 1 + (int)(lifetimeSpent / 100);
             var prestigeBorder = new Border
@@ -987,16 +989,16 @@ namespace ConditioningControlPanel
             Grid.SetRow(nameLabel, 1);
             contentGrid.Children.Add(nameLabel);
 
-            // Row 3: Cost/Status Button. Owned permanent nodes get a gold "FOREVER" badge —
-            // they survive the season reset; owned mechanical nodes keep the green OWNED look
-            // (and reset monthly).
-            var buttonBg = isUnlocked && skill.IsPermanent ? Color.FromRgb(255, 200, 80) :
-                          isUnlocked ? Color.FromRgb(100, 255, 150) :
+            // Row 3: Cost/Status Button. EVERY owned node gets the gold "FOREVER" badge now.
+            // The green OWNED look used to mark the mechanical nodes that reset monthly, and
+            // since the Descent nothing resets, so the two-tone split was drawing a distinction
+            // that no longer exists. (label_skill_owned is left in the language files rather than
+            // ripped out of nine of them for the sake of a string nothing renders.)
+            var buttonBg = isUnlocked ? Color.FromRgb(255, 200, 80) :
                           canPurchase ? (Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4") :
                           Color.FromRgb(40, 35, 50);
 
-            var buttonText = isUnlocked && skill.IsPermanent ? $"💎{skill.Cost} {Loc.Get("label_skill_permanent")}" :
-                            isUnlocked ? $"💎{skill.Cost} {Loc.Get("label_skill_owned")}" :
+            var buttonText = isUnlocked ? $"💎{skill.Cost} {Loc.Get("label_skill_permanent")}" :
                             canPurchase ? $"💎 {skill.Cost}" :
                             $"🔒 {skill.Cost}";
 
@@ -2014,8 +2016,9 @@ namespace ConditioningControlPanel
                 var flavorText = App.Mods?.MakeModAware(skill.FlavorText) ?? skill.LocalizedFlavorText;
                 var descText = App.Mods?.MakeModAware(skill.Description) ?? skill.LocalizedDescription;
                 var confirmMessage = Loc.GetF("msg_purchase_skill", skillName, skill.Cost, pointsLabel, flavorText, descText);
-                // Permanent nodes survive the season; mechanical nodes reset monthly — say so up front
-                confirmMessage += "\n\n" + Loc.Get(skill.IsPermanent ? "msg_skill_permanent_note" : "msg_skill_seasonal_note");
+                // Every skill is permanent since the Descent, so there is one note left and it is
+                // the true one. msg_skill_seasonal_note has been retired from the language files.
+                confirmMessage += "\n\n" + Loc.Get("msg_skill_permanent_note");
                 var result = MessageBox.Show(
                     confirmMessage,
                     Loc.Get("dialog_purchase_enhancement"),

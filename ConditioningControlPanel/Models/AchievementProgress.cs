@@ -112,7 +112,12 @@ public class AchievementProgress
     /// <summary>
     /// All-time sparkle points SPENT on enhancements — the Prestige metric. Monotonic:
     /// never reset by seasons, logout-safe via achievements.json, server-reconciled
-    /// upward from lifetime_points_spent. Re-buying seasonal nodes raises it.
+    /// upward from lifetime_points_spent.
+    ///
+    /// <para>It used to be fed by the monthly re-buy of the mechanical nodes. The Descent ended
+    /// seasons and every skill is permanent now, so this counts a tree that is bought once and
+    /// then stops: an honest record of lifetime spend with no recurring sink behind it. Whether
+    /// Prestige gets a new one is an open design question, deliberately unanswered here.</para>
     /// </summary>
     public long LifetimeSkillPointsSpent { get; set; }
     

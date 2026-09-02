@@ -1053,8 +1053,10 @@ namespace ConditioningControlPanel.Services
         /// - server season is NEWER than the restored one while local still sits above it: the
         ///   restore reverted across a rollover, and <c>level_reset</c> is one-shot server-side
         ///   (the pre-corruption client already consumed it), so nothing else will ever apply it —
-        ///   adopt the server's post-rollover level/XP and drop the mechanical skills the backup
-        ///   resurrected, exactly like the <c>level_reset</c> branch in <see cref="SyncProfileAsync"/>;
+        ///   adopt the server's post-rollover level/XP, which is the thing the backup actually
+        ///   reverted. THE SKILLS ARE LEFT ALONE: this used to prune the tree the backup brought
+        ///   back, and since the Descent folded every skill into permanent there is nothing here
+        ///   that may take a purchase away;
         /// - server is simply ahead: adopt it via the take-higher apply;
         /// - otherwise keep local (the server is genuinely behind) and let the push proceed.
         ///
@@ -1096,13 +1098,15 @@ namespace ConditioningControlPanel.Services
                     settings.HighestLevelEver = user.HighestLevelEver;
                     settings.CurrentSeason = user.CurrentSeason;
 
-                    // Same policy as the level_reset branch: the POINT BALANCE is never reset,
-                    // only the tree — keep permanent nodes, drop the mechanical ones the backup
-                    // brought back. (The profile projection carries no unlocked_skills list, so
-                    // there is nothing to union in here; the next sync response re-adds anything
-                    // the server still holds.)
-                    settings.UnlockedSkills = (settings.UnlockedSkills ?? new List<string>())
-                        .Where(id => Models.SkillDefinition.PermanentIds.Contains(id)).ToList();
+                    // Same policy as the level_reset branch, and the policy has widened: the
+                    // POINT BALANCE was never reset, and since the Descent neither is the tree.
+                    // This used to prune the restored tree down to the permanent nodes, which
+                    // meant a rolling-backup restore could still cost a user skills long after
+                    // seasons stopped existing — the one remaining path that dropped a purchase
+                    // without any server ever asking it to. Level and XP are still adopted from
+                    // the server below, because those are the thing the backup actually reverted;
+                    // the skills are left alone. (The profile projection carries no
+                    // unlocked_skills list, so there is nothing to union in here either way.)
                     App.SkillTree?.OnSeasonReset();
 
                     settings.SeasonResetPending = true;
@@ -1634,8 +1638,9 @@ namespace ConditioningControlPanel.Services
                         else if (v2Result?.SkillPoints.HasValue == true)
                         {
                             // Take max of server/local — skill points only increase (level-ups, bubble
-                            // pops) and are NEVER reset by seasons (policy: the balance is permanent;
-                            // only mechanical skills reset), so the higher value is always correct.
+                            // pops) and are NEVER reset by seasons (policy: the balance is permanent,
+                            // and since the Descent so is the tree it buys), so the higher value is
+                            // always correct.
                             // This also shields the balance from an older server that still zeroes
                             // skill_points at rollover.
                             var maxPoints = Math.Max(v2Result.SkillPoints.Value, settings.SkillPoints);
@@ -2023,19 +2028,19 @@ namespace ConditioningControlPanel.Services
                                 // Use server's highest_level_ever (preserved across resets for permanent unlocks)
                                 settings.HighestLevelEver = v2Result.User.HighestLevelEver ?? 0;
 
-                                // Seasonal skill reset: the POINT BALANCE is never reset (policy — points
-                                // persist across seasons; the max-merge above keeps the higher value).
-                                // Only the tree resets: rebuild it as server list ∪ locally-owned
-                                // PERMANENT nodes. The union half protects stat/analytics purchases
-                                // against an older server that still wipes unlocked_skills to [] at
-                                // rollover; mechanical nodes are dropped and must be re-bought
-                                // (the Prestige loop).
-                                var permanentOwned = (settings.UnlockedSkills ?? new List<string>())
-                                    .Where(id => Models.SkillDefinition.PermanentIds.Contains(id));
+                                // The POINT BALANCE is never reset (policy — points persist, and
+                                // the max-merge above keeps the higher value), and since the
+                                // Descent the TREE is never reset either. This is still a union of
+                                // the server's list with what we already own, but the local half is
+                                // no longer filtered down to the permanent nodes, so the union can
+                                // only ever add: a reset that reaches this far cannot subtract a
+                                // purchase, and an older server that wipes unlocked_skills to [] at
+                                // rollover is fully absorbed rather than half-absorbed.
                                 settings.UnlockedSkills = (v2Result.UnlockedSkills ?? new List<string>())
-                                    .Union(permanentOwned).ToList();
+                                    .Union(settings.UnlockedSkills ?? new List<string>()).ToList();
 
-                                // Clear seasonal flags and tear down effects of dropped mechanical skills
+                                // Clear the seasonal streak and quest latches. Nothing is dropped from
+                                // the tree any more, so there are no effects left to tear down.
                                 App.SkillTree?.OnSeasonReset();
 
                                 // Season Recap: a level_reset IS the reset — flag the recap so it
