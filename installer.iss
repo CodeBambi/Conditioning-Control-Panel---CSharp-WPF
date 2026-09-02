@@ -3,7 +3,7 @@
 ;
 ; Requirements:
 ; 1. Install Inno Setup from https://jrsoftware.org/isinfo.php
-; 2. Build the app first: dotnet publish -c Release
+; 2. Build the app first: dotnet publish -c Release -r win-x64 --self-contained true
 ; 3. Compile this script with Inno Setup Compiler
 ;
 ; The installer will:
