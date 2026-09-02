@@ -1,0 +1,279 @@
+<!-- PORTED from ConditioningControlPanel/Windows/MediaHistoryWindow.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None" + AllowsTransparency="True"
+                                      -> SystemDecorations="None" + TransparencyLevelHint="Transparent"
+       <Style x:Key TargetType>       -> <ControlTheme x:Key TargetType>, applied with Theme=
+       ControlTemplate.Triggers       -> ^:pointerover / ^:selected nested selectors
+       <ContentPresenter/>            -> Content="{TemplateBinding Content}" (trap 6: a bare
+                                         presenter draws nothing in Avalonia)
+       Visibility="Collapsed"         -> IsVisible="False"
+       ToolTip="..."                  -> ToolTip.Tip="..."
+       ItemContainerStyle             -> ItemContainerTheme
+       VirtualizingStackPanel.* /
+       ScrollViewer.CanContentScroll  -> dropped; Avalonia's ListBox virtualizes by default and
+                                         has no attached equivalents for these.
+       ListBox HorizontalContentAlignment
+                                      -> moved onto the ListBoxItem theme (Avalonia's ListBox is
+                                         not a ContentControl); the row still stretches.
+       <MediaElement PreviewVideo/>   -> dropped. Avalonia has no MediaElement and no package may
+                                         be added, so the video branch of ShowPreview is a stub.
+       Image + ThumbConverter         -> dropped. MediaThumbnailConverter lives in the WPF head;
+                                         the placeholder glyph the WPF markup draws underneath it
+                                         is what shows.
+       Click= / MouseLeftButtonDown=  -> wired in the constructor
+     Buttons carry a TextBlock child rather than Content (trap 1: "_" is an access key). -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        xmlns:vm="clr-namespace:ConditioningControlPanel.Avalonia.Views.Windows"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.MediaHistoryWindow"
+        Title="{loc:Str dialog_media_log}"
+        Width="920" Height="640" MinWidth="720" MinHeight="440"
+        WindowStartupLocation="CenterOwner"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        ShowInTaskbar="False">
+
+    <Window.Styles>
+        <!-- Fluent's TextBox paints PART_BorderElement opaque on hover and focus, and that setter
+             sits on the template child, so it outranks the TextBox's own Background="Transparent".
+             The WPF original stayed transparent over its host Border in every state.
+             ponytail: local copy, hoist to Theme/Styles.xaml when a second view needs it. -->
+        <Style Selector="TextBox.transparent /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+    </Window.Styles>
+
+    <Window.Resources>
+        <!-- Small secondary/icon button (Open-in-folder, filters, close).
+             ponytail: local copy of ConditioningControlPanel/Windows/MediaHistoryWindow.xaml:MlChip,
+             hoist when a second view needs it. -->
+        <ControlTheme x:Key="MlChip" TargetType="Button">
+            <Setter Property="Background" Value="#252540"/>
+            <Setter Property="BorderBrush" Value="#3A3A58"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="#D8D8E8"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#border">
+                <Setter Property="Background" Value="#2F2F52"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- The WPF ListBox.ItemContainerStyle, setters verbatim. -->
+        <ControlTheme x:Key="MlRow" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="4,2"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="RowBorder" Background="Transparent"
+                            CornerRadius="8" Padding="8,6">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Stretch"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#RowBorder">
+                <Setter Property="Background" Value="#20202F"/>
+            </Style>
+            <Style Selector="^:selected /template/ Border#RowBorder">
+                <Setter Property="Background" Value="#2C2340"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource DarkerBgBrush}" BorderBrush="{DynamicResource PinkBrush}"
+            BorderThickness="3" CornerRadius="18" Padding="20">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header (drag handle) -->
+            <DockPanel Grid.Row="0" x:Name="HeaderBar" Margin="0,0,0,12" Background="Transparent">
+                <TextBlock DockPanel.Dock="Left" Text="{loc:Str dialog_media_log}"
+                           Foreground="{DynamicResource PinkBrush}" FontSize="22" FontWeight="Bold"
+                           VerticalAlignment="Center"/>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <TextBlock x:Name="TxtCount" Foreground="#808090" FontSize="12"
+                               VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <Button x:Name="BtnClear" Theme="{StaticResource MlChip}"
+                            Margin="0,0,8,0"
+                            ToolTip.Tip="{loc:Str tooltip_clear_media_log}">
+                        <TextBlock Text="{loc:Str btn_clear_log}"/>
+                    </Button>
+                    <Button x:Name="BtnClose" Content="✕" Theme="{StaticResource MlChip}" Padding="10,5"/>
+                </StackPanel>
+            </DockPanel>
+
+            <!-- Filter / search bar -->
+            <Grid Grid.Row="1" Margin="0,0,0,10">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                    <Button x:Name="BtnFilterAll" Theme="{StaticResource MlChip}"
+                            Tag="all" Margin="0,0,6,0">
+                        <TextBlock Text="{loc:Str filter_all}"/>
+                    </Button>
+                    <Button x:Name="BtnFilterImages" Theme="{StaticResource MlChip}"
+                            Tag="image" Margin="0,0,6,0">
+                        <TextBlock Text="{loc:Str filter_images}"/>
+                    </Button>
+                    <Button x:Name="BtnFilterVideos" Theme="{StaticResource MlChip}"
+                            Tag="video">
+                        <TextBlock Text="{loc:Str filter_videos}"/>
+                    </Button>
+                </StackPanel>
+                <Border HorizontalAlignment="Right" Width="240" Background="#1C1C30"
+                        BorderBrush="#3A3A58" BorderThickness="1" CornerRadius="6" Padding="8,4">
+                    <Grid>
+                        <TextBlock x:Name="SearchPlaceholder" Text="{loc:Str placeholder_search_media}"
+                                   Foreground="#606078" FontSize="12" VerticalAlignment="Center"
+                                   IsHitTestVisible="False"/>
+                        <TextBox x:Name="TxtSearch" Classes="transparent" Background="Transparent" BorderThickness="0"
+                                 Foreground="White" CaretBrush="White" FontSize="12" VerticalAlignment="Center"/>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Body: list | preview -->
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MinWidth="360"/>
+                    <ColumnDefinition Width="6"/>
+                    <ColumnDefinition Width="340" MinWidth="280"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- LEFT: virtualized list -->
+                <Border Grid.Column="0" Background="#161626" BorderBrush="#2A2A44" BorderThickness="1" CornerRadius="10">
+                    <Grid>
+                        <TextBlock x:Name="TxtEmpty" Text="{loc:Str label_no_media_yet}"
+                                   Foreground="#707080" FontSize="14" FontStyle="Italic"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   TextWrapping="Wrap" TextAlignment="Center" Margin="24"
+                                   IsVisible="False"/>
+                        <ListBox x:Name="MediaList" Background="Transparent" BorderThickness="0"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 ItemContainerTheme="{StaticResource MlRow}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:MediaHistoryRow">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Thumb (glyph shows through when no bitmap) -->
+                                        <Border Grid.Column="0" Width="40" Height="40" CornerRadius="6"
+                                                Background="#0E0E1C" ClipToBounds="True" Margin="0,0,10,0">
+                                            <Grid>
+                                                <TextBlock Text="{Binding PlaceholderGlyph, Mode=OneTime}"
+                                                           FontSize="18" HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center" Opacity="0.65"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding DisplayName, Mode=OneTime}"
+                                                       Foreground="White" FontSize="13"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding TimeText, Mode=OneTime}"
+                                                       Foreground="#7A7A90" FontSize="11" Margin="0,2,0,0"/>
+                                        </StackPanel>
+
+                                        <Border Grid.Column="2" VerticalAlignment="Center" Margin="8,0"
+                                                CornerRadius="4" Padding="6,2"
+                                                Background="{Binding BadgeBrush, Mode=OneTime}">
+                                            <TextBlock Text="{Binding TypeBadge, Mode=OneTime}"
+                                                       Foreground="White" FontSize="10" FontWeight="Bold"/>
+                                        </Border>
+
+                                        <Button Grid.Column="3" Content="📂" Theme="{StaticResource MlChip}"
+                                                Padding="7,4" VerticalAlignment="Center"
+                                                Tag="{Binding}"
+                                                ToolTip.Tip="{loc:Str tooltip_reveal_in_explorer}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Border>
+
+                <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"
+                              Background="Transparent"/>
+
+                <!-- RIGHT: single live preview -->
+                <Border Grid.Column="2" Background="#161626" BorderBrush="#2A2A44" BorderThickness="1" CornerRadius="10" Padding="14">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Preview surface -->
+                        <Border Grid.Row="0" Background="#0B0B16" CornerRadius="8" ClipToBounds="True">
+                            <Grid>
+                                <TextBlock x:Name="PreviewHint" Text="{loc:Str label_select_to_preview}"
+                                           Foreground="#606078" FontSize="13" FontStyle="Italic"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           TextWrapping="Wrap" TextAlignment="Center" Margin="16"/>
+                                <Image x:Name="PreviewImage" Stretch="Uniform" IsVisible="False"/>
+                                <TextBlock x:Name="PreviewMissing" Text="{loc:Str label_file_not_found}"
+                                           Foreground="#E08080" FontSize="13"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           TextWrapping="Wrap" TextAlignment="Center" Margin="16"
+                                           IsVisible="False"/>
+                            </Grid>
+                        </Border>
+
+                        <StackPanel Grid.Row="1" Margin="0,12,0,0">
+                            <TextBlock x:Name="PreviewName" Foreground="White" FontSize="14" FontWeight="Bold"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Name="PreviewPath" Foreground="#7A7A90" FontSize="11" Margin="0,4,0,0"
+                                       TextWrapping="Wrap" MaxHeight="54"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,12,0,0">
+                            <Button x:Name="BtnPreviewOpenFolder"
+                                    Theme="{StaticResource MlChip}"
+                                    Margin="0,0,8,0" IsEnabled="False">
+                                <TextBlock Text="{loc:Str btn_open_in_folder}"/>
+                            </Button>
+                            <Button x:Name="BtnPreviewOpenFile"
+                                    Theme="{StaticResource MlChip}"
+                                    IsEnabled="False">
+                                <TextBlock Text="{loc:Str btn_open_file}"/>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
