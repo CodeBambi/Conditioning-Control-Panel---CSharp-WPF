@@ -1,0 +1,148 @@
+<!-- PORTED from ConditioningControlPanel/Windows/SessionLogHistoryWindow.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       AllowsTransparency="True" / WindowStyle="None"
+                                      -> TransparencyLevelHint="Transparent" + SystemDecorations="None"
+       <Style x:Key TargetType>       -> <ControlTheme x:Key TargetType>, applied with Theme=
+                                         rather than Style= (keyed styles are ControlThemes)
+       ControlTemplate.Triggers       -> ^:pointerover nested selectors inside the ControlTheme
+       <ContentPresenter/>            -> Content="{TemplateBinding Content}" (trap 6: a bare
+                                         presenter draws nothing in Avalonia)
+       Visibility="Collapsed"         -> IsVisible="False"
+       <Run Text="{Binding X}"/> runs -> one bound Text per line. Avalonia's Run does not take a
+                                         binding under compiled bindings, and the runs here only
+                                         concatenated; HistoryRow exposes Headline and Meta.
+       Click="..."                    -> wired in the constructor
+     The close button carries a TextBlock child rather than Content (trap 1). -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        xmlns:vm="clr-namespace:ConditioningControlPanel.Avalonia.Views.Windows"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.SessionLogHistoryWindow"
+        Title="{loc:Str dialog_session_history}"
+        Width="560" Height="640"
+        WindowStartupLocation="CenterOwner"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        ShowInTaskbar="False">
+
+    <Window.Resources>
+        <!-- ponytail: local copy of
+             ConditioningControlPanel/Windows/SessionLogHistoryWindow.xaml:HistoryRowButtonStyle,
+             hoist when a second view needs it. -->
+        <ControlTheme x:Key="HistoryRowButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#252540"/>
+            <Setter Property="BorderBrush" Value="#3A3A58"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="14,10"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="8" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#border">
+                <Setter Property="Background" Value="#2F2F52"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- The WPF footer button's inline Style was template-only; the theme keys the same shape
+             so the ContentPresenter can carry its Content binding (trap 6). -->
+        <ControlTheme x:Key="HistoryCloseButtonStyle" TargetType="Button">
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}"
+                            CornerRadius="8" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource DarkerBgBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="3" CornerRadius="20" Padding="24">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <DockPanel Grid.Row="0" Margin="0,0,0,14">
+                <TextBlock DockPanel.Dock="Left" Text="{loc:Str dialog_session_history}"
+                           Foreground="{DynamicResource PinkBrush}" FontSize="22" FontWeight="Bold"
+                           VerticalAlignment="Center"/>
+                <TextBlock DockPanel.Dock="Right" x:Name="TxtCount"
+                           Foreground="#808090" FontSize="12"
+                           VerticalAlignment="Center" HorizontalAlignment="Right"/>
+            </DockPanel>
+
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <Grid>
+                    <TextBlock x:Name="TxtEmpty"
+                               Text="{loc:Str label_no_session_logs}"
+                               Foreground="#707080" FontSize="14" FontStyle="Italic"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Margin="0,40" IsVisible="False"/>
+                    <ItemsControl x:Name="LogList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:HistoryRow">
+                                <Button Theme="{StaticResource HistoryRowButtonStyle}"
+                                        Tag="{Binding}"
+                                        Margin="0,0,0,8">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Row="0" Grid.Column="0"
+                                                   Text="{Binding Headline}"
+                                                   Foreground="White" FontSize="15" FontWeight="Bold"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Grid.Row="0" Grid.Column="1"
+                                                   Text="{Binding StatusText}"
+                                                   Foreground="{Binding StatusBrush}"
+                                                   FontSize="11" FontWeight="Bold"
+                                                   VerticalAlignment="Center"/>
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                                   Text="{Binding Meta}"
+                                                   Foreground="#808090" FontSize="12"
+                                                   Margin="0,4,0,0"/>
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Grid>
+            </ScrollViewer>
+
+            <Button Grid.Row="2" x:Name="BtnClose" Theme="{StaticResource HistoryCloseButtonStyle}"
+                    Background="{DynamicResource PinkBrush}" Foreground="White"
+                    BorderThickness="0" Padding="28,10" FontSize="14" FontWeight="Bold"
+                    Cursor="Hand" HorizontalAlignment="Center" Margin="0,14,0,0">
+                <TextBlock Text="{loc:Str btn_close}"/>
+            </Button>
+        </Grid>
+    </Border>
+</Window>
