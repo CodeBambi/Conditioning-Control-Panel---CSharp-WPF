@@ -4909,5 +4909,9 @@
   "emi_book_vault_nudge2": "*Stufe 2* ist die zweite Latte, dahinter liegt die *Arcademy*",
   "emi_book_vault_nudge3": "das *Tagesgeschenk* öffnet jeden Tag ein bezahltes Feature für alle",
   "emi_book_vault_nudge4": "*Flashes*, *Videos*, *Subliminals*, Overlays und Sitzungen sind gratis",
-  "emi_book_vault_catch": "es prüft dein Abo online. offline bleibt alles 14 Tage offen, dann ist zu."
+  "emi_book_vault_catch": "es prüft dein Abo online. offline bleibt alles 14 Tage offen, dann ist zu.",
+  "label_gaze_interaction": "Blick-Interaktion",
+  "label_stare_to_pop": "Ansehen zum Platzen",
+  "tooltip_bubble_gaze_pop": "Sieh eine Blase etwa 1 Sekunde lang an, um sie ohne Klicken platzen zu lassen. Gilt nur für Blasen; Flashes haben ihren eigenen Schalter auf der Flash-Seite.",
+  "label_gaze_needs_calibration": "Benötigt eine laufende Webcam und eine kalibrierte Blickverfolgung. Einrichtung unter Play, Blick-Fokus."
 }

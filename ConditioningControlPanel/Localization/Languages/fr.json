@@ -4909,5 +4909,9 @@
   "emi_book_vault_nudge2": "le *palier 2* est une seconde barre, et l'*Arcademy* est derrière",
   "emi_book_vault_nudge3": "le *Cadeau du jour* ouvre une fonction payante à tout le monde chaque jour",
   "emi_book_vault_nudge4": "*flashs*, *vidéos*, *subliminaux*, superpositions et sessions sont gratuits",
-  "emi_book_vault_catch": "il vérifie ton abonnement en ligne. hors ligne, tout reste ouvert 14 jours, puis se ferme."
+  "emi_book_vault_catch": "il vérifie ton abonnement en ligne. hors ligne, tout reste ouvert 14 jours, puis se ferme.",
+  "label_gaze_interaction": "Interaction par le regard",
+  "label_stare_to_pop": "Fixer pour éclater",
+  "tooltip_bubble_gaze_pop": "Regardez une bulle pendant environ 1 seconde pour la faire éclater, sans cliquer. Ne concerne que les bulles ; les flashs ont leur propre interrupteur sur la page Flashes.",
+  "label_gaze_needs_calibration": "Nécessite la webcam active et le suivi oculaire calibré. Configurez-le dans Play, Regard Focalisé."
 }

@@ -4900,5 +4900,9 @@
   "emi_book_vault_nudge2": "el *nivel 2* es un segundo escalón, y ahí está *The Arcademy*",
   "emi_book_vault_nudge3": "el *Regalo del día* abre una función de pago para todas cada día",
   "emi_book_vault_nudge4": "*flashes*, *videos*, *subliminales*, capas y sesiones son gratis",
-  "emi_book_vault_catch": "comprueba tu suscripción en línea. sin conexión sigue abierto 14 días, luego se cierra."
+  "emi_book_vault_catch": "comprueba tu suscripción en línea. sin conexión sigue abierto 14 días, luego se cierra.",
+  "label_gaze_interaction": "Interacción con la mirada",
+  "label_stare_to_pop": "Mirar para reventar",
+  "tooltip_bubble_gaze_pop": "Mira una burbuja durante 1 segundo para reventarla sin hacer clic. Solo afecta a las burbujas; los flashes tienen su propio interruptor en la página de Flashes.",
+  "label_gaze_needs_calibration": "Necesita la cámara encendida y el seguimiento ocular calibrado. Configúralo en Play, Mirada Fija."
 }

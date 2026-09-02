@@ -187,6 +187,43 @@
                     </Grid>
                 </Border>
 
+                <!-- Gaze interaction. Its own card, mirroring the Flashes page: a distinct
+                     capability with its own hardware prerequisite, not another bubble dial.
+                     Before v6.9.1 bubbles were the only gaze target with no switch of their
+                     own - they rode the Play tab's "Focus Gaze" master - and users reported
+                     "Stare to pop" as removed because this page never showed one. -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                        <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                Background="{StaticResource SectionHueStudioBrush}"/>
+                        <StackPanel Margin="16,8,16,8">
+                            <TextBlock Text="{loc:Str label_gaze_interaction}" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextLightBrush}" Margin="0,2,0,4"/>
+
+                            <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_bubble_gaze_pop}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str label_stare_to_pop}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkBubbleGazePop"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkBubbleGazePop_Changed" Unchecked="ChkBubbleGazePop_Changed"/>
+                            </Grid>
+
+                            <!-- Shown only while the camera cannot actually feed the dwell engine.
+                                 The row above stays live either way: the toggle is a stored
+                                 preference, not a "start the webcam" button. -->
+                            <TextBlock x:Name="TxtBubbleGazeHint" Visibility="Collapsed"
+                                       Text="{loc:Str label_gaze_needs_calibration}"
+                                       Foreground="{DynamicResource PinkBrush}" FontSize="11" FontStyle="Italic"
+                                       TextWrapping="Wrap" Margin="0,2,0,4"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
                 <!-- Trigger options: own card, revealed by the switch above. -->
                 <StackPanel x:Name="TriggerOptionsPanel" Visibility="Collapsed">
                     <Border Style="{StaticResource SettingCardStyle}">

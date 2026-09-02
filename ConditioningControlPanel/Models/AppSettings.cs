@@ -2219,6 +2219,23 @@ namespace ConditioningControlPanel.Models
             set { _flashGazeLingerExtensionMs = Math.Clamp(value, 250, 10000); OnPropertyChanged(); }
         }
 
+        // ---- Gaze-reactive bubble behavior --------------------------------
+        // BubbleGazePopEnabled is the bubble twin of FlashGazePopEnabled: it
+        // gates the dwell/blink pop of a floating bubble. Before it existed,
+        // bubbles were the only gaze target with no per-feature flag of their
+        // own — they rode entirely on GazeFocusService.MasterEnabled (the Play
+        // tab's "Focus Gaze" switch), so users hunting for "Stare to pop" on
+        // the Bubble Pop page found nothing and reported the feature as
+        // removed (v6.9.0 launch reports). Defaults ON to match the flash
+        // toggle; GazeFocusService still requires a running, calibrated,
+        // consented camera before any of this does anything.
+        private bool _bubbleGazePopEnabled = true;
+        public bool BubbleGazePopEnabled
+        {
+            get => _bubbleGazePopEnabled;
+            set { _bubbleGazePopEnabled = value; OnPropertyChanged(); }
+        }
+
         // VideoGazeClickEnabled gates the gaze-dwell shortcut for the video
         // attention minigame (look at a FloatingText target long enough to
         // fire its onHit callback, same as a mouse click).
