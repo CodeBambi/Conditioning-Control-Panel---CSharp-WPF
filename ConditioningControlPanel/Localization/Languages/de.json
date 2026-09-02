@@ -2136,7 +2136,7 @@
   "msg_skill_permanent_note": "★ Permanent: Jedes Talent, das du kaufst, gehört dir und bleibt dir, und es kommt nichts mehr, was es dir wieder wegnimmt~",
   "label_prestige": "Prestige",
   "label_prestige_rank": "Rang {0}",
-  "tooltip_prestige": "Alle Sparkle-Punkte, die du je für Talente ausgegeben hast, für immer zusammengezählt, damit die Zahl nur in eine Richtung geht~",
+  "tooltip_prestige": "Jeder Funkelpunkt, den du je für Skills ausgegeben hast, für immer zusammengezählt, damit die Zahl nur in eine Richtung wächst, und wenn du einen Skill zurückgibst und neu kaufst, zählt auch dieser zweite Kauf mit~",
   "dialog_purchase_enhancement": "Talent kaufen",
   "msg_purchase_skill": "'{0}' für {1} {2} kaufen?\n\n{3}\n\n{4}",
   "dialog_purchase_failed": "Kauf fehlgeschlagen",
@@ -4944,5 +4944,16 @@
   "label_gaze_interaction": "Blick-Interaktion",
   "label_stare_to_pop": "Ansehen zum Platzen",
   "tooltip_bubble_gaze_pop": "Sieh eine Blase etwa 1 Sekunde lang an, um sie ohne Klicken platzen zu lassen. Gilt nur für Blasen; Flashes haben ihren eigenen Schalter auf der Flash-Seite.",
-  "label_gaze_needs_calibration": "Benötigt eine laufende Webcam und eine kalibrierte Blickverfolgung. Einrichtung unter Play, Blick-Fokus."
+  "label_gaze_needs_calibration": "Benötigt eine laufende Webcam und eine kalibrierte Blickverfolgung. Einrichtung unter Play, Blick-Fokus.",
+  "dialog_refund_enhancement": "Skill zurückgeben",
+  "msg_refund_skill": "'{0}' zurückgeben? Du hast {1} dafür bezahlt, {2} {3} bekommst du wieder, und der Skill liegt danach wieder im Baum, bereit zum erneuten Kauf, wann immer du magst~",
+  "msg_refund_skill_note": "✦ Ein erneuter Kauf zählt wieder voll für dein Prestige, und genau deshalb kommt nur die Hälfte der Funkel zurück, denn wer einen Kauf gratis rückgängig machen könnte, müsste sich nie wieder etwas verdienen~",
+  "dialog_refund_failed": "Rückgabe fehlgeschlagen",
+  "label_skill_refund_hint": "✦ Kannst du jederzeit für {0} {1} zurückgeben, wenn dir nach einem anderen Aufbau ist~",
+  "label_skill_refund_locked_branch": "🔒 Weiter oben im Zweig baut etwas darauf auf, gib das zuerst zurück, dann wird dieser hier frei~",
+  "label_skill_refund_never": "💗 Der hier hat dir am Kauftag noch etwas extra zugesteckt, also bleibt er für immer bei dir~",
+  "skill_err_cannot_refund": "Der lässt sich gerade nicht zurückgeben, Süße~",
+  "skill_err_refund_login_required": "Zum Zurückgeben eines Skills musst du angemeldet sein.",
+  "skill_err_refund_not_ready": "Das Zurückgeben von Skills ist noch nicht freigeschaltet, behalte ihn also vorerst, und nach dem nächsten Update wartet er auf dich~",
+  "skill_err_refund_signed_out": "Deine Sitzung ist abgelaufen. Öffne ⚙️ {0} → Konto und melde dich erneut an, um einen Skill zurückzugeben."
 }

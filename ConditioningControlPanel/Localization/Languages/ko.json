@@ -2135,7 +2135,7 @@
   "msg_skill_permanent_note": "★ 영구: 한 번 산 스킬은 계속 당신 것이고, 이제 그걸 다시 가져갈 일은 아무것도 없어요~",
   "label_prestige": "프레스티지",
   "label_prestige_rank": "랭크 {0}",
-  "tooltip_prestige": "지금까지 스킬에 쓴 스파클 포인트를 전부 영원히 더한 값이라서, 이 숫자는 올라가기만 해요~",
+  "tooltip_prestige": "스킬에 써 온 반짝임 포인트를 전부 영영 더해 둔 숫자라서 한 방향으로만 움직이고, 스킬을 돌려주고 다시 사면 그 두 번째 구매도 함께 쌓여~",
   "dialog_purchase_enhancement": "스킬 구매",
   "msg_purchase_skill": "'{0}'을(를) {1} {2}에 구매할까요?\n\n{3}\n\n{4}",
   "dialog_purchase_failed": "구매 실패",
@@ -4942,5 +4942,16 @@
   "label_gaze_interaction": "시선 조작",
   "label_stare_to_pop": "응시해서 터뜨리기",
   "tooltip_bubble_gaze_pop": "버블을 약 1초간 바라보면 클릭하지 않아도 터집니다. 버블에만 적용되며, 플래시는 플래시 페이지에 별도 스위치가 있습니다.",
-  "label_gaze_needs_calibration": "웹캠 실행과 시선 추적 보정이 필요합니다. Play의 포커스 게이즈에서 설정하세요."
+  "label_gaze_needs_calibration": "웹캠 실행과 시선 추적 보정이 필요합니다. Play의 포커스 게이즈에서 설정하세요.",
+  "dialog_refund_enhancement": "스킬 돌려주기",
+  "msg_refund_skill": "'{0}'을(를) 돌려줄까? {1}을 주고 산 스킬이지만 {2} {3}이(가) 돌아오고, 스킬은 다시 트리에 놓여서 언제든 다시 살 수 있게 돼~",
+  "msg_refund_skill_note": "✦ 다시 사면 프레스티지에 또 쌓이고, 그래서 반짝임은 절반만 돌아오는 거야. 구매를 공짜로 되돌릴 수 있는 아이는 아무것도 벌 필요가 없어지니까~",
+  "dialog_refund_failed": "돌려주지 못했어",
+  "label_skill_refund_hint": "✦ 다른 조합이 끌리면 언제든 {0} {1}에 돌려줄 수 있어~",
+  "label_skill_refund_locked_branch": "🔒 이 가지 위쪽의 무언가가 이걸 딛고 있으니, 그걸 먼저 돌려주면 이것도 풀려~",
+  "label_skill_refund_never": "💗 이건 사던 날 작은 선물을 하나 얹어 줬으니, 계속 네 곁에 남아 있어~",
+  "skill_err_cannot_refund": "그건 지금은 돌려줄 수 없어, 자기야~",
+  "skill_err_refund_login_required": "스킬을 돌려주려면 로그인이 필요해.",
+  "skill_err_refund_not_ready": "스킬 돌려주기는 아직 켜지지 않았으니 지금은 그대로 두면, 다음 업데이트 뒤에 기다리고 있을 거야~",
+  "skill_err_refund_signed_out": "세션이 만료됐어. ⚙️ {0} → 계정을 열고 다시 로그인한 다음 스킬을 돌려줘."
 }

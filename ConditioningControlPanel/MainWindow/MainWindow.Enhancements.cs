@@ -284,10 +284,11 @@ namespace ConditioningControlPanel
             pointsBorder.Child = pointsStack;
             mainStack.Children.Add(pointsBorder);
 
-            // Prestige row — lifetime sparkle points SPENT. Monotonic, and now purely a record
-            // of lifetime spend: the monthly re-buy loop that used to feed it died with the
-            // seasons. Whether Prestige gets a new sink is an open design question and is
-            // deliberately left unanswered here.
+            // Prestige row — lifetime sparkle points SPENT. Monotonic. The monthly re-buy loop
+            // that used to feed it died with the seasons and the voluntary respec replaces it:
+            // owned leaves can be handed back for half their price and bought again, and only the
+            // buying counts here. The tooltip says so, because a number nobody can move is a
+            // number nobody looks at twice.
             var lifetimeSpent = App.Achievements?.Progress?.LifetimeSkillPointsSpent ?? 0;
             var prestigeRank = 1 + (int)(lifetimeSpent / 100);
             var prestigeBorder = new Border
@@ -818,6 +819,10 @@ namespace ConditioningControlPanel
                            App.SkillTree?.HasSkill(skill.PrerequisiteId) == true;
             var settings = App.Settings?.Current;
             var isLocked = !isUnlocked && !canPurchase;
+            // Voluntary respec: an owned node can be handed back for half its price, which is what
+            // gives Prestige a loop again. Only leaves qualify, so the far end of a branch offers
+            // it and the nodes holding that branch up do not.
+            var canRefund = isUnlocked && App.SkillTree?.CanRefundSkill(skill.Id) == true;
 
             // Border color based on state
             Color borderColor;
@@ -833,7 +838,7 @@ namespace ConditioningControlPanel
                 CornerRadius = new CornerRadius(10),
                 Width = NodeWidth,
                 Height = NodeHeight,
-                Cursor = canPurchase ? System.Windows.Input.Cursors.Hand : System.Windows.Input.Cursors.Arrow,
+                Cursor = (canPurchase || canRefund) ? System.Windows.Input.Cursors.Hand : System.Windows.Input.Cursors.Arrow,
                 Tag = skill.Id,
                 ClipToBounds = true,
                 RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
@@ -872,10 +877,15 @@ namespace ConditioningControlPanel
             border.MouseEnter += (s, e) => ApplySkillNodeHover(border, true);
             border.MouseLeave += (s, e) => ApplySkillNodeHover(border, false);
 
-            // Click handler
+            // Click handler. The two are mutually exclusive by construction (a skill is either
+            // owned or purchasable, never both), so one node never carries both gestures.
             if (canPurchase)
             {
                 border.MouseLeftButtonUp += SkillCard_Click;
+            }
+            else if (canRefund)
+            {
+                border.MouseLeftButtonUp += SkillRefund_Click;
             }
 
             // Tooltip
@@ -903,6 +913,26 @@ namespace ConditioningControlPanel
                     Foreground = new SolidColorBrush(Color.FromRgb(255, 100, 100)),
                     Margin = new Thickness(0, 6, 0, 0)
                 });
+            }
+
+            // The respec line. Only owned nodes get one, and it says which of the three things is
+            // true of this node, because a click that does nothing with no explanation is worse
+            // than no click at all.
+            if (isUnlocked)
+            {
+                var respecLine = DescribeSkillRespec(skill, canRefund);
+                if (respecLine != null)
+                {
+                    tooltipStack.Children.Add(new TextBlock
+                    {
+                        Text = respecLine,
+                        Foreground = new SolidColorBrush(canRefund
+                            ? Color.FromRgb(255, 200, 80)
+                            : Color.FromRgb(170, 160, 180)),
+                        TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(0, 6, 0, 0)
+                    });
+                }
             }
 
             border.ToolTip = new ToolTip
@@ -1850,6 +1880,9 @@ namespace ConditioningControlPanel
             var settings = App.Settings?.Current;
             var isUnlocked = App.SkillTree?.HasSkill(skill.Id) == true;
             var canPurchase = App.SkillTree?.CanPurchaseSkill(skill.Id) == true;
+            // The three secrets sit at the tip of nothing, so an owned one is always a leaf and
+            // the respec offer reaches them on the same terms as any node on the tree proper.
+            var canRefund = isUnlocked && App.SkillTree?.CanRefundSkill(skill.Id) == true;
 
             Color bgColor, borderColor;
             if (isUnlocked)
@@ -1878,7 +1911,7 @@ namespace ConditioningControlPanel
                 Height = SecretCardHeight,
                 Margin = new Thickness(0, 3, 10, 3),
                 Padding = new Thickness(8, 6, 8, 6),
-                Cursor = canPurchase ? System.Windows.Input.Cursors.Hand : System.Windows.Input.Cursors.Arrow,
+                Cursor = (canPurchase || canRefund) ? System.Windows.Input.Cursors.Hand : System.Windows.Input.Cursors.Arrow,
                 Tag = skill.Id
             };
 
@@ -1907,6 +1940,10 @@ namespace ConditioningControlPanel
             {
                 border.MouseLeftButtonUp += SkillCard_Click;
             }
+            else if (canRefund)
+            {
+                border.MouseLeftButtonUp += SkillRefund_Click;
+            }
 
             // Tooltip
             var tooltipStack = new StackPanel { MaxWidth = 280 };
@@ -1924,6 +1961,23 @@ namespace ConditioningControlPanel
                 Foreground = Brushes.White,
                 TextWrapping = TextWrapping.Wrap
             });
+
+            if (isUnlocked)
+            {
+                var respecLine = DescribeSkillRespec(skill, canRefund);
+                if (respecLine != null)
+                {
+                    tooltipStack.Children.Add(new TextBlock
+                    {
+                        Text = respecLine,
+                        Foreground = new SolidColorBrush(canRefund
+                            ? Color.FromRgb(255, 200, 80)
+                            : Color.FromRgb(170, 160, 180)),
+                        TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(0, 6, 0, 0)
+                    });
+                }
+            }
 
             border.ToolTip = new ToolTip
             {
@@ -2069,6 +2123,91 @@ namespace ConditioningControlPanel
                         RefreshEnhancementsUI();
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// The line an owned node adds to its tooltip about the voluntary respec, or null when
+        /// there is nothing worth saying.
+        ///
+        /// <para>Three cases and three different sentences, because "you can hand this back" and
+        /// "you cannot hand this back" are both useful and being told neither is not. A node
+        /// holding up something else the player owns says so and names the way out; a node that
+        /// handed over a consumable when it was bought says it keeps its place. The offer is also
+        /// dropped silently while the server has told us it cannot do refunds this session, which
+        /// is why <paramref name="canRefund"/> is passed in rather than recomputed here.</para>
+        /// </summary>
+        private static string? DescribeSkillRespec(Models.SkillDefinition skill, bool canRefund)
+        {
+            var pointsLabel = (App.Mods?.GetPointsLabel() ?? Loc.Get("label_sparkle_points")).ToLower();
+
+            if (canRefund)
+                return Loc.GetF("label_skill_refund_hint", Models.SkillRespec.RefundFor(skill), pointsLabel);
+
+            return App.SkillTree?.GetRefundBlock(skill.Id) switch
+            {
+                Models.SkillRefundBlock.HasOwnedDependents => Loc.Get("label_skill_refund_locked_branch"),
+                Models.SkillRefundBlock.MintsAConsumable => Loc.Get("label_skill_refund_never"),
+                _ => null
+            };
+        }
+
+        /// <summary>
+        /// Handles a click on an owned, refundable skill: the voluntary respec.
+        ///
+        /// <para>Mirrors <see cref="SkillCard_Click"/> deliberately, right down to using the same
+        /// confirmation dialog shape, because this screen has exactly one way of asking "are you
+        /// sure" and a second one would be a second thing to learn. The dialog quotes the price
+        /// paid and the points coming back so the difference between them is on screen before
+        /// anyone agrees to it, and defaults to No: nothing is ever taken from a player who did
+        /// not read the question and answer it.</para>
+        ///
+        /// <para>There is no celebration on the way out. A refund is not an achievement, and the
+        /// prestige burst belongs to the purchase that follows it.</para>
+        /// </summary>
+        private async void SkillRefund_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (sender is not Border border || border.Tag is not string skillId) return;
+
+            var skill = Models.SkillDefinition.All.FirstOrDefault(s => s.Id == skillId);
+            if (skill == null) return;
+            if (App.SkillTree?.CanRefundSkill(skillId) != true) return;
+
+            var skillName = App.Mods?.MakeModAware(skill.Name) ?? skill.LocalizedName;
+            var pointsLabel = (App.Mods?.GetPointsLabel() ?? Loc.Get("label_sparkle_points")).ToLower();
+            var refund = Models.SkillRespec.RefundFor(skill);
+
+            var confirmMessage = Loc.GetF("msg_refund_skill", skillName, skill.Cost, refund, pointsLabel);
+            confirmMessage += "\n\n" + Loc.Get("msg_refund_skill_note");
+
+            var result = MessageBox.Show(
+                confirmMessage,
+                Loc.Get("dialog_refund_enhancement"),
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question,
+                MessageBoxResult.No);
+
+            if (result != MessageBoxResult.Yes) return;
+
+            border.IsEnabled = false;
+            try
+            {
+                var (success, error) = await (App.SkillTree?.RefundSkillAsync(skillId)
+                    ?? Task.FromResult((false, (string?)"Skill tree unavailable")));
+
+                if (success)
+                {
+                    App.Logger?.Information("Skill handed back via UI: {SkillId}", skillId);
+                }
+                else if (!string.IsNullOrEmpty(error))
+                {
+                    MessageBox.Show(error, Loc.Get("dialog_refund_failed"), MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            finally
+            {
+                border.IsEnabled = true;
+                RefreshEnhancementsUI();
             }
         }
 

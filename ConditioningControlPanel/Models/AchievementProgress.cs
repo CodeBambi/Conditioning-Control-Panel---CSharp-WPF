@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using ConditioningControlPanel.Services;
 
@@ -115,9 +115,13 @@ public class AchievementProgress
     /// upward from lifetime_points_spent.
     ///
     /// <para>It used to be fed by the monthly re-buy of the mechanical nodes. The Descent ended
-    /// seasons and every skill is permanent now, so this counts a tree that is bought once and
-    /// then stops: an honest record of lifetime spend with no recurring sink behind it. Whether
-    /// Prestige gets a new one is an open design question, deliberately unanswered here.</para>
+    /// seasons and every skill is permanent now, so nothing takes a purchase away any more and a
+    /// tree bought once would leave this number parked at a fixed final rank forever. The
+    /// voluntary respec is the answer to that: a player may hand a skill back for half its price
+    /// and buy it again, and the second purchase adds here exactly as the monthly one used to. The
+    /// refund never subtracts from this total, which is the point of calling it lifetime spend.
+    /// See <see cref="Models.SkillRespec"/> for the arithmetic that keeps the loop from being
+    /// farmable.</para>
     /// </summary>
     public long LifetimeSkillPointsSpent { get; set; }
     

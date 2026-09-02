@@ -2135,7 +2135,7 @@
   "msg_skill_permanent_note": "★ 永久：買ったスキルはずっとあなたのものだし、もうそれを取り上げにくるものは何もないよ～",
   "label_prestige": "プレステージ",
   "label_prestige_rank": "ランク{0}",
-  "tooltip_prestige": "これまでスキルに使ったスパークルポイントを全部ずっと積み上げているから、この数字は増えるいっぽうだよ～",
+  "tooltip_prestige": "これまでスキルに使ったきらめきポイントの総額を、ずっと数え続けているの。だから数字は一方向にしか動かないし、スキルを返してもう一度買えば、その二度目の購入もちゃんと加算されるよ~",
   "dialog_purchase_enhancement": "スキルを購入",
   "msg_purchase_skill": "「{0}」を{1} {2}で購入しますか？\n\n{3}\n\n{4}",
   "dialog_purchase_failed": "購入失敗",
@@ -4935,5 +4935,16 @@
   "label_gaze_interaction": "視線操作",
   "label_stare_to_pop": "見つめて割る",
   "tooltip_bubble_gaze_pop": "バブルを約1秒見つめると、クリックせずに割れます。対象はバブルのみです。フラッシュにはフラッシュページに専用のスイッチがあります。",
-  "label_gaze_needs_calibration": "ウェブカメラの起動と視線追跡のキャリブレーションが必要です。Play のフォーカスゲイズで設定してください。"
+  "label_gaze_needs_calibration": "ウェブカメラの起動と視線追跡のキャリブレーションが必要です。Play のフォーカスゲイズで設定してください。",
+  "dialog_refund_enhancement": "スキルを返す",
+  "msg_refund_skill": "「{0}」を返す？ {1} で買ったスキルだけど、{2} {3}が戻ってきて、スキルはまたツリーに並んで、いつでも買い直せるようになるよ~",
+  "msg_refund_skill_note": "✦ もう一度買えばプレステージにまた加算されるの。だからきらめきは半分しか戻らないんだよ、だって購入をタダで取り消せる子は、なにひとつ稼がなくてよくなっちゃうでしょ~",
+  "dialog_refund_failed": "返せませんでした",
+  "label_skill_refund_hint": "✦ 別の組み合わせを試したくなったら、いつでも {0} {1}で返せるよ~",
+  "label_skill_refund_locked_branch": "🔒 この先の枝がこれの上に乗っているから、そっちを先に返せばこれも自由になるよ~",
+  "label_skill_refund_never": "💗 これは買った日にちょっとしたおまけをくれたから、ずっと手元に残るんだよ~",
+  "skill_err_cannot_refund": "それは今は返せないの、かわいこちゃん~",
+  "skill_err_refund_login_required": "スキルを返すにはログインが必要だよ。",
+  "skill_err_refund_not_ready": "スキルを返す機能はまだオンになっていないから、今はそのまま持っていてね。次のアップデートのあとに待っているよ~",
+  "skill_err_refund_signed_out": "セッションの有効期限が切れたよ。⚙️ {0} → アカウントを開いて、もう一度サインインしてからスキルを返してね。"
 }

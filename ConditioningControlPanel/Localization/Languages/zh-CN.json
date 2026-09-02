@@ -2875,7 +2875,7 @@
   "msg_skill_permanent_note": "★ 永久：你买下的每个技能都会一直是你的，也不会再有什么东西来把它收走~",
   "label_prestige": "声望",
   "label_prestige_rank": "段位 {0}",
-  "tooltip_prestige": "你在技能上花过的所有闪耀点数会一直累加起来，所以这个数字只会往上走~",
+  "tooltip_prestige": "你在技能上花过的每一点闪光都被永远累加起来，所以这个数字只会朝一个方向走，而且如果你归还技能之后再买一次，那第二次购买也照样会算进去~",
   "dialog_purchase_enhancement": "购买技能",
   "msg_purchase_skill": "花费 {1} {2} 购买 '{0}'？\n\n{3}\n\n{4}",
   "dialog_purchase_failed": "购买失败",
@@ -5400,5 +5400,16 @@
   "label_gaze_interaction": "视线交互",
   "label_stare_to_pop": "注视即可戳破",
   "tooltip_bubble_gaze_pop": "注视泡泡约 1 秒即可戳破，无需点击。仅对泡泡有效；闪图在闪图页面有独立开关。",
-  "label_gaze_needs_calibration": "需要打开摄像头并完成视线追踪校准。请在 Play 的聚焦注视中设置。"
+  "label_gaze_needs_calibration": "需要打开摄像头并完成视线追踪校准。请在 Play 的聚焦注视中设置。",
+  "dialog_refund_enhancement": "归还技能",
+  "msg_refund_skill": "要把「{0}」还回去吗？它花了你 {1}，会退回 {2} {3}，技能也会重新回到树上，随时都能再买一次~",
+  "msg_refund_skill_note": "✦ 再买一次会重新计入你的声望，所以只退一半闪光哦，毕竟能免费反悔的女孩，就再也不用去争取什么了~",
+  "dialog_refund_failed": "归还失败",
+  "label_skill_refund_hint": "✦ 想换个搭配的话，随时可以用 {0} {1}把它还回去~",
+  "label_skill_refund_locked_branch": "🔒 这条分支更上面的东西正靠着它，先把那个还回去，这个就空出来了~",
+  "label_skill_refund_never": "💗 这个在你买下的那天多塞给了你一点东西，所以它会一直留在你身边~",
+  "skill_err_cannot_refund": "这个现在还不能归还哦，小甜心~",
+  "skill_err_refund_login_required": "需要先登录才能归还技能。",
+  "skill_err_refund_not_ready": "归还技能还没开放呢，先留着吧，下次更新之后它就会在这里等你~",
+  "skill_err_refund_signed_out": "登录已过期。打开 ⚙️ {0} → 账户重新登录，就能归还技能了。"
 }

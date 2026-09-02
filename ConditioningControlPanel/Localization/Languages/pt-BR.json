@@ -2135,7 +2135,7 @@
   "msg_skill_permanent_note": "★ Permanente: cada habilidade que você compra é sua e continua sendo, e não vem mais nada tirar ela de você~",
   "label_prestige": "Prestígio",
   "label_prestige_rank": "Rank {0}",
-  "tooltip_prestige": "Todos os pontos de brilho que você já gastou em habilidades, somados para sempre, então o número só vai para um lado~",
+  "tooltip_prestige": "Cada ponto de brilho que você já gastou em habilidades, somado para sempre, então o número só anda para um lado, e se você devolver uma habilidade e comprar de novo essa segunda compra também conta~",
   "dialog_purchase_enhancement": "Comprar Habilidade",
   "msg_purchase_skill": "Comprar '{0}' por {1} {2}?\n\n{3}\n\n{4}",
   "dialog_purchase_failed": "Compra Falhou",
@@ -4943,5 +4943,16 @@
   "label_gaze_interaction": "Interação por olhar",
   "label_stare_to_pop": "Olhar para estourar",
   "tooltip_bubble_gaze_pop": "Olhe para uma bolha por cerca de 1 segundo para estourá-la, sem clicar. Vale só para bolhas; os flashes têm o próprio interruptor na página de Flashes.",
-  "label_gaze_needs_calibration": "Precisa da webcam ligada e do rastreamento ocular calibrado. Configure em Play, Olhar Focado."
+  "label_gaze_needs_calibration": "Precisa da webcam ligada e do rastreamento ocular calibrado. Configure em Play, Olhar Focado.",
+  "dialog_refund_enhancement": "Devolver uma habilidade",
+  "msg_refund_skill": "Devolver '{0}'? Ela te custou {1}, você recebe {2} {3} de volta, e ela volta para a árvore pronta para ser comprada de novo quando quiser~",
+  "msg_refund_skill_note": "✦ Comprar de novo conta outra vez para o seu Prestígio, e é justamente por isso que só metade dos brilhos volta, porque uma garota que pudesse desfazer uma compra de graça nunca precisaria conquistar nada~",
+  "dialog_refund_failed": "Não deu para devolver",
+  "label_skill_refund_hint": "✦ Dá para devolver por {0} {1} sempre que bater vontade de outra combinação~",
+  "label_skill_refund_locked_branch": "🔒 Algo mais adiante no ramo se apoia nela, então devolva aquilo primeiro e esta aqui fica livre~",
+  "label_skill_refund_never": "💗 Esta te deu um mimo no dia da compra, então fica com você para sempre~",
+  "skill_err_cannot_refund": "Essa não dá para devolver agora, linda~",
+  "skill_err_refund_login_required": "Você precisa estar conectada para devolver uma habilidade.",
+  "skill_err_refund_not_ready": "Devolver habilidades ainda não está ligado, então segure essa por enquanto que ela vai estar te esperando depois da próxima atualização~",
+  "skill_err_refund_signed_out": "Sua sessão expirou. Abra ⚙️ {0} → Conta e entre de novo para devolver uma habilidade."
 }
