@@ -1,0 +1,690 @@
+<!-- PORTED from ConditioningControlPanel/Views/Tabs/QuestsTabView.xaml.
+     Structure, order, spacing and every resource key preserved so the two diff cleanly. The
+     original's long design essays (why the board is 3+1 side by side, why the daily grid is
+     capped at 800, why the weekly stands up vertically, why the punch card is painted from
+     code) are NOT transcribed - they still explain the WPF file and the shape they argue for is
+     preserved here unchanged.
+
+     Deviations, all forced:
+
+       Style="{StaticResource X}"        -> Theme="{StaticResource X}"
+       Visibility="Collapsed"            -> IsVisible="False"
+       helpers:EmojiTextBlock            -> TextBlock  (Avalonia draws colour emoji natively)
+       Image + EmojiToImageSource        -> TextBlock  (same reason; the converter exists only
+                                            because WPF cannot draw COLR/CPAL faces)
+       hover:HoverPop.IsEnabled          -> dropped; the behaviour lives in the WPF head
+       ToolTip="..."                     -> ToolTip.Tip="..."
+       ToolTipService.ShowOnDisabled     -> ToolTip.ShowOnDisabled
+       DropShadowEffect ShadowDepth="2"  -> OffsetX/OffsetY (Avalonia has no ShadowDepth)
+       LinearGradientBrush "0,0"->"1,1"  -> "0%,0%"->"100%,100%"  (a bare pair is ABSOLUTE px in
+                                            Avalonia, so the season title and the weekly scrim
+                                            would each be a 1px ramp over a flat fill)
+       FontFamily="Segoe UI Emoji, ..."  -> dropped (Windows-only face list)
+       x:FieldModifier="internal"        -> dropped (Avalonia has no such directive; nothing in
+                                            this head reaches into the tab by field yet)
+       x:Name on brushes/gradient stops  -> dropped; the season shimmer they fed is stubbed
+       Click="..."                       -> wired in the constructor
+
+     Buttons hold a TextBlock rather than a Content string: Avalonia parses "_" in Content as an
+     access key. See the porting notes in CLAUDE.md. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             xmlns:ctrl="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.QuestsTabView">
+
+  <UserControl.Resources>
+    <!-- ponytail: local copy of Resources/Theme/MainWindow.xaml:TabButton and :TabButtonActive,
+         hoist when a second view needs it. ContentPresenter carries Content/ContentTemplate
+         explicitly (a bare presenter draws nothing on Avalonia) and the hover trigger is a
+         :pointerover selector; both copied from Theme/Styles.xaml:OutlineButton. -->
+    <ControlTheme x:Key="TabButton" TargetType="Button">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Padding" Value="6,6"/>
+      <Setter Property="MinWidth" Value="65"/>
+      <Setter Property="Height" Value="32"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <ControlTemplate TargetType="Button">
+          <Border x:Name="border" Background="Transparent"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="6" Padding="{TemplateBinding Padding}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover /template/ Border#border">
+        <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+      </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="TabButtonActive" TargetType="Button">
+      <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Padding" Value="6,6"/>
+      <Setter Property="MinWidth" Value="65"/>
+      <Setter Property="Height" Value="32"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <ControlTemplate TargetType="Button">
+          <Border x:Name="bg" Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="6" Padding="{TemplateBinding Padding}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover /template/ Border#bg">
+        <Setter Property="Background" Value="{DynamicResource PinkButtonHoveredBrush}"/>
+      </Style>
+    </ControlTheme>
+
+    <!-- ponytail: local copy of Resources/Theme/MainWindow.xaml:AnimatedGradientPanel and
+         :AnimatedGradientPanelWide, hoist when a second view needs it. The six floating
+         particles and the Forever storyboard that drifts them are DROPPED - they are a
+         Storyboard on an IsVisible trigger, which has no Avalonia equivalent that is worth
+         hand-rolling for a decoration; the gradient and the two corner glows carry the look.
+         ponytail: no particle drift, restore with Avalonia animations if the panel reads flat. -->
+    <ControlTheme x:Key="AnimatedGradientPanel" TargetType="ContentControl">
+      <Setter Property="Template">
+        <ControlTemplate TargetType="ContentControl">
+          <Border CornerRadius="15"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  ClipToBounds="True">
+            <Grid>
+              <Rectangle RadiusX="15" RadiusY="15">
+                <Rectangle.Fill>
+                  <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                    <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>
+                    <GradientStop Color="{DynamicResource AccentMidGradient}" Offset="0.5"/>
+                    <GradientStop Color="{DynamicResource DarkerBg}" Offset="1"/>
+                  </LinearGradientBrush>
+                </Rectangle.Fill>
+              </Rectangle>
+              <Ellipse Width="200" Height="200" Opacity="0.15"
+                       HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-50,-50,0,0">
+                <Ellipse.Fill>
+                  <RadialGradientBrush>
+                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                    <GradientStop Color="Transparent" Offset="1"/>
+                  </RadialGradientBrush>
+                </Ellipse.Fill>
+              </Ellipse>
+              <Ellipse Width="180" Height="180" Opacity="0.12"
+                       HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-40,-40">
+                <Ellipse.Fill>
+                  <RadialGradientBrush>
+                    <GradientStop Color="{DynamicResource PatreonPurple}" Offset="0"/>
+                    <GradientStop Color="Transparent" Offset="1"/>
+                  </RadialGradientBrush>
+                </Ellipse.Fill>
+              </Ellipse>
+              <Border Padding="20">
+                <ContentPresenter Content="{TemplateBinding Content}"
+                                  ContentTemplate="{TemplateBinding ContentTemplate}"/>
+              </Border>
+            </Grid>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </ControlTheme>
+
+    <ControlTheme x:Key="AnimatedGradientPanelWide" TargetType="ContentControl">
+      <Setter Property="Template">
+        <ControlTemplate TargetType="ContentControl">
+          <Border CornerRadius="10"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  ClipToBounds="True">
+            <Grid>
+              <Rectangle RadiusX="10" RadiusY="10">
+                <Rectangle.Fill>
+                  <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                    <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>
+                    <GradientStop Color="{DynamicResource AccentMidGradient}" Offset="0.5"/>
+                    <GradientStop Color="{DynamicResource DarkerBg}" Offset="1"/>
+                  </LinearGradientBrush>
+                </Rectangle.Fill>
+              </Rectangle>
+              <Ellipse Width="250" Height="150" Opacity="0.12"
+                       HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-80,-40,0,0">
+                <Ellipse.Fill>
+                  <RadialGradientBrush>
+                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                    <GradientStop Color="Transparent" Offset="1"/>
+                  </RadialGradientBrush>
+                </Ellipse.Fill>
+              </Ellipse>
+              <Border Padding="10">
+                <ContentPresenter Content="{TemplateBinding Content}"
+                                  ContentTemplate="{TemplateBinding ContentTemplate}"/>
+              </Border>
+            </Grid>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </ControlTheme>
+  </UserControl.Resources>
+
+  <Grid>
+    <Border Theme="{StaticResource SectionPanel}">
+      <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="15">
+          <!-- Sub-tab Navigation -->
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+            <Button x:Name="BtnQuestSubDaily" Theme="{StaticResource TabButtonActive}" Width="120">
+              <TextBlock Text="{loc:Str btn_daily_weekly}"/>
+            </Button>
+            <Button x:Name="BtnQuestSubRoadmap" Theme="{StaticResource TabButton}"
+                    Margin="10,0,0,0" Width="150">
+              <TextBlock Text="{loc:Str btn_bimbo_journal}"/>
+            </Button>
+          </StackPanel>
+
+          <!-- Daily/Weekly Quests Panel -->
+          <StackPanel x:Name="DailyWeeklyPanel">
+            <!-- Season Title Banner. The Text is only ever the pre-first-paint placeholder;
+                 the real title is season-NEUTRAL by design - never hardcode a season name. -->
+            <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" Padding="20,14"
+                    Margin="0,0,0,18" BorderThickness="1" BorderBrush="#3D3D60">
+              <TextBlock x:Name="TxtSeasonTitle" Text="{loc:Str section_seasons}"
+                         FontSize="28" FontWeight="ExtraBold" FontStyle="Italic"
+                         HorizontalAlignment="Center" TextAlignment="Center">
+                <TextBlock.Foreground>
+                  <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0.0"/>
+                    <GradientStop Color="#DA70D6" Offset="0.25"/>
+                    <GradientStop Color="{DynamicResource DarkPink}" Offset="0.5"/>
+                    <GradientStop Color="#DA70D6" Offset="0.75"/>
+                    <GradientStop Color="{DynamicResource PinkColor}" Offset="1.0"/>
+                  </LinearGradientBrush>
+                </TextBlock.Foreground>
+                <TextBlock.Effect>
+                  <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="15"
+                                    OffsetX="0" OffsetY="0" Opacity="0.6"/>
+                </TextBlock.Effect>
+              </TextBlock>
+            </Border>
+
+            <!-- Header -->
+            <Grid Margin="0,0,0,20">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{loc:Str label_quests}" Foreground="{DynamicResource PinkBrush}"
+                           FontSize="18" FontWeight="Bold"/>
+                <Button x:Name="HelpBtnQuests" Theme="{StaticResource HelpButtonStyle}" Tag="Quests"/>
+              </StackPanel>
+              <TextBlock x:Name="TxtQuestStats" Text="{loc:Str label_0_completed_this_week}"
+                         Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                         HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            </Grid>
+
+            <!-- THE BOARD ROW: three dailies and the weekly, side by side, so the whole 3 + 1
+                 board is on screen at once with no scrolling. -->
+            <Grid Margin="0,0,0,20" ColumnDefinitions="*,16,Auto">
+              <ContentControl Grid.Column="0" Theme="{StaticResource AnimatedGradientPanel}"
+                              BorderThickness="2" BorderBrush="#FFD700">
+                <StackPanel>
+                  <!-- Card Header -->
+                  <Grid Margin="0,0,0,12">
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Text="&#x2600;&#xFE0F;" FontSize="18" VerticalAlignment="Center"/>
+                      <TextBlock Text="{loc:Str label_daily_quest}" Foreground="#FFD700"
+                                 FontSize="16" FontWeight="Bold" Margin="8,0,0,0"
+                                 VerticalAlignment="Center"/>
+                      <Border x:Name="DailyQuestCounterBadge" Background="#3D3D60" CornerRadius="8"
+                              Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtDailyQuestCounter" Text="0/3"
+                                   Foreground="#FFD700" FontSize="11" FontWeight="Bold"/>
+                      </Border>
+                    </StackPanel>
+                    <TextBlock Text="{loc:Str label_resets_at_midnight}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                  </Grid>
+
+                  <!-- Daily Progress Segments. The one place that says "the DAY is 2 of 3 done"
+                       rather than "this card is done". The 14px gutters and the 800 cap are the
+                       ones DailyCardsGrid uses, so each segment caps the seat it counts.
+
+                       HorizontalAlignment is Stretch, not the WPF original's Center: an Avalonia
+                       Grid whose star columns hold only zero-width children reports a desired
+                       width of just the gutters, so Center arranged all three bars into 28px and
+                       the scoreboard vanished. Stretch + MaxWidth still centres (Avalonia offsets
+                       a stretched child the same way it offsets a centred one) and gives the
+                       columns a width to share. Found by rendering. -->
+                  <Grid Margin="0,0,0,4" MaxWidth="800" HorizontalAlignment="Stretch"
+                        ColumnDefinitions="*,14,*,14,*">
+                    <Border x:Name="DailySegment1" Grid.Column="0" Background="#3D3D60"
+                            CornerRadius="3" Height="6"/>
+                    <Border x:Name="DailySegment2" Grid.Column="2" Background="#3D3D60"
+                            CornerRadius="3" Height="6"/>
+                    <Border x:Name="DailySegment3" Grid.Column="4" Background="#3D3D60"
+                            CornerRadius="3" Height="6"/>
+                  </Grid>
+                  <TextBlock Text="{loc:Str label_complete_3_daily_quests_1_weekly_quest}"
+                             Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                             HorizontalAlignment="Center" Margin="0,0,0,12"/>
+
+                  <!-- The three seats. CAPPED AT 800 (3 x ~257 + 2 gutters): stretching them
+                       letterboxes each quest's square 256x256 art. -->
+                  <Grid x:Name="DailyCardsGrid" MaxWidth="800" HorizontalAlignment="Stretch"
+                        ColumnDefinitions="*,14,*,14,*">
+                    <ctrl:DailyQuestCard x:Name="DailyCard0" Grid.Column="0"/>
+                    <ctrl:DailyQuestCard x:Name="DailyCard1" Grid.Column="2"/>
+                    <ctrl:DailyQuestCard x:Name="DailyCard2" Grid.Column="4"/>
+                  </Grid>
+
+                  <!-- All Daily Quests Completed: a ribbon UNDER the finished board, not a card
+                       that replaces it - three stamped cards are worth looking at. -->
+                  <Border x:Name="DailyAllCompletedMessage" Background="#2D4A2D" CornerRadius="10"
+                          Padding="15,12" Margin="0,14,0,0" IsVisible="False">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                      <TextBlock Text="&#x2705;" FontSize="28" HorizontalAlignment="Center"
+                                 Margin="0,0,0,6"/>
+                      <TextBlock Text="{loc:Str label_all_daily_quests_completed}" Foreground="#00E676"
+                                 FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"
+                                 Margin="0,0,0,5"/>
+                      <TextBlock Text="{loc:Str label_check_back_tomorrow_for_new_quests}"
+                                 Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                                 HorizontalAlignment="Center"/>
+                    </StackPanel>
+                  </Border>
+
+                  <!-- One shared reroll pool across all three seats, said once here. -->
+                  <TextBlock x:Name="TxtDailyRerollPool" Text=""
+                             Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                             HorizontalAlignment="Center" Margin="0,12,0,0"/>
+                </StackPanel>
+              </ContentControl>
+
+              <!-- THE WEEKLY, STOOD UP: art on top with the name and the ask printed on it, then
+                   the bar, then the reroll - deliberately the same shape as a DailyQuestCard, so
+                   the row reads as four quests rather than three quests and a widget. Fixed 300
+                   wide; stretching it takes width back off the dailies. -->
+              <ContentControl Grid.Column="2" Width="300"
+                              Theme="{StaticResource AnimatedGradientPanel}"
+                              BorderThickness="2" BorderBrush="#9370DB"
+                              VerticalAlignment="Top">
+                <StackPanel>
+                  <!-- Stacked header, not a two-column Grid: at 300 wide the title and the reset
+                       note will not share a line. -->
+                  <StackPanel Margin="0,0,0,10">
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Text="&#x1F319;" FontSize="16" VerticalAlignment="Center"/>
+                      <TextBlock Text="{loc:Str label_weekly_quest}" Foreground="#9370DB"
+                                 FontSize="15" FontWeight="Bold" Margin="8,0,0,0"
+                                 VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="{loc:Str label_resets_sunday}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               Margin="0,3,0,0"/>
+                  </StackPanel>
+
+                  <Border x:Name="WeeklyQuestCard" Background="{DynamicResource PanelBgBrush}"
+                          CornerRadius="10" ClipToBounds="True">
+                    <Grid RowDefinitions="Auto,Auto">
+                      <!-- ART. Square, like the daily frames: every file in Resources/quests is
+                           256x256. -->
+                      <Border Grid.Row="0" Height="256" Background="{DynamicResource DarkerBgBrush}"
+                              CornerRadius="9,9,0,0" ClipToBounds="True">
+                        <Grid>
+                          <Image x:Name="ImgWeeklyQuest" Stretch="UniformToFill"/>
+
+                          <!-- Scrim, ramped to near-opaque at the bottom: the shipped art has the
+                               quest's name set into that band and it would print under the
+                               caption. -->
+                          <Border Height="112" VerticalAlignment="Bottom" IsHitTestVisible="False">
+                            <Border.Background>
+                              <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                <GradientStop Color="#00000000" Offset="0"/>
+                                <GradientStop Color="#8A000000" Offset="0.28"/>
+                                <GradientStop Color="#FC000000" Offset="0.52"/>
+                                <GradientStop Color="#FF000000" Offset="1"/>
+                              </LinearGradientBrush>
+                            </Border.Background>
+                          </Border>
+
+                          <!-- Completed. Under the caption, so a finished weekly still says which
+                               weekly it was. -->
+                          <Border x:Name="WeeklyCompletedOverlay" Background="#992D4A2D" IsVisible="False">
+                            <TextBlock Text="&#x2713;" Foreground="#00E676" FontSize="72"
+                                       FontWeight="Bold" HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" Margin="0,0,0,38">
+                              <TextBlock.Effect>
+                                <DropShadowEffect Color="Black" BlurRadius="8" OffsetX="0" OffsetY="2"/>
+                              </TextBlock.Effect>
+                            </TextBlock>
+                          </Border>
+
+                          <!-- XP, on the art, same corner the daily cards use. -->
+                          <Border Background="#B01A1A2E" CornerRadius="9" Padding="7,2" Margin="8"
+                                  HorizontalAlignment="Right" VerticalAlignment="Top"
+                                  IsHitTestVisible="False">
+                            <StackPanel Orientation="Horizontal">
+                              <TextBlock x:Name="TxtWeeklyXP" Text="{loc:Str label_0_xp}"
+                                         Foreground="{DynamicResource PinkBrush}" FontSize="11"
+                                         FontWeight="Bold" VerticalAlignment="Center"/>
+                              <TextBlock x:Name="TxtWeeklyStreakBonus" Text=""
+                                         Foreground="#FFB347" FontSize="10" FontWeight="Bold"
+                                         Margin="4,0,0,0" VerticalAlignment="Center" IsVisible="False"/>
+                              <TextBlock x:Name="TxtWeeklyRerollBonus" Text=""
+                                         Foreground="#7BC8F6" FontSize="10" FontWeight="Bold"
+                                         Margin="4,0,0,0" VerticalAlignment="Center" IsVisible="False"/>
+                            </StackPanel>
+                          </Border>
+
+                          <!-- CAPTION -->
+                          <StackPanel VerticalAlignment="Bottom" Margin="11,0,11,9" IsHitTestVisible="False">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                              <TextBlock x:Name="TxtWeeklyQuestIcon" Text="" FontSize="15"
+                                         VerticalAlignment="Center" Margin="0,0,6,0" IsVisible="False"/>
+                              <TextBlock x:Name="TxtWeeklyQuestName" Text="{loc:Str label_loading_2}"
+                                         Foreground="White" FontSize="14" FontWeight="Bold"
+                                         TextWrapping="Wrap" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock x:Name="TxtWeeklyQuestDesc" Text=""
+                                       Foreground="#D6D6E8" FontSize="11" TextWrapping="Wrap"
+                                       TextTrimming="CharacterEllipsis" MaxHeight="31"/>
+                          </StackPanel>
+                        </Grid>
+                      </Border>
+
+                      <!-- BODY: the bar and its count on one line, same as a daily card. -->
+                      <Grid Grid.Row="1" Margin="11,9,11,11" ColumnDefinitions="*,Auto">
+                        <Border x:Name="WeeklyProgressTrack" Grid.Column="0"
+                                Background="{DynamicResource DarkerBgBrush}" CornerRadius="4"
+                                Height="10" VerticalAlignment="Center" Margin="0,0,10,0">
+                          <Border x:Name="WeeklyProgressFill" Background="#9370DB"
+                                  CornerRadius="4" HorizontalAlignment="Left" Width="0"/>
+                        </Border>
+                        <TextBlock x:Name="TxtWeeklyProgress" Grid.Column="1" Text="0 / 0"
+                                   Foreground="#9370DB" FontSize="12" FontWeight="Bold"
+                                   VerticalAlignment="Center"/>
+                      </Grid>
+                    </Grid>
+                  </Border>
+
+                  <!-- Reroll. Stretched: at 300 wide a left-aligned button leaves a lopsided gap
+                       the dailies do not have. -->
+                  <Button x:Name="BtnRerollWeekly" Theme="{StaticResource OutlineButton}"
+                          FontSize="11" Padding="8,4" Margin="0,10,0,0"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                          ToolTip.ShowOnDisabled="True"
+                          ToolTip.Tip="{loc:Str tooltip_reroll_for_a_different_quest_once_per_week}">
+                    <TextBlock Text="{loc:Str btn_reroll}"/>
+                  </Button>
+                </StackPanel>
+              </ContentControl>
+            </Grid>
+
+            <!-- Quest Complete Banner (shown briefly when a quest completes) -->
+            <Border x:Name="QuestCompleteBanner" Background="#2D4A2D" CornerRadius="10"
+                    Padding="15" Margin="0,20,0,0" IsVisible="False">
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <TextBlock Text="&#x2728;" FontSize="22" VerticalAlignment="Center"/>
+                <TextBlock x:Name="TxtQuestComplete" Text="{loc:Str label_quest_complete}"
+                           Foreground="#00E676" FontSize="18" FontWeight="Bold"
+                           Margin="10,0" VerticalAlignment="Center"/>
+                <TextBlock Text="&#x2728;" FontSize="22" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Border>
+
+            <!-- Intake Punch Card. Eight holes, two rows of four, earned by the Graded Intake.
+                 Wears the same DarkerBg/10/15,12 shell as the streak calendar below it on
+                 purpose: both are "here is your long-running progress" strips. The holes
+                 themselves are drawn from code, matching the calendar. -->
+            <Border x:Name="PunchCardPanel" IsVisible="False"
+                    Background="{DynamicResource DarkerBgBrush}" CornerRadius="10"
+                    Padding="15,12" Margin="0,20,0,0">
+              <StackPanel>
+                <Grid Margin="0,0,0,10">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#x1F39F;" FontSize="15" VerticalAlignment="Center"/>
+                    <TextBlock Text="{loc:Str label_intake_punch_card}" Foreground="White"
+                               FontSize="14" FontWeight="Bold" VerticalAlignment="Center"
+                               Margin="8,0,0,0"/>
+                  </StackPanel>
+                  <TextBlock x:Name="TxtPunchCardProgress" Text=""
+                             Foreground="{DynamicResource PinkBrush}" FontSize="13"
+                             FontWeight="SemiBold" HorizontalAlignment="Right"
+                             VerticalAlignment="Center"/>
+                </Grid>
+
+                <!-- Rows/Columns pinned rather than left to wrap, so the card keeps the same
+                     footprint at one hole and at eight. -->
+                <UniformGrid x:Name="PunchCardHoles" Rows="2" Columns="4"
+                             HorizontalAlignment="Center" Margin="0,2,0,0"/>
+
+                <TextBlock x:Name="TxtPunchCardStatus" Text="" IsVisible="False"
+                           Foreground="#FFD700" FontSize="12" FontWeight="SemiBold"
+                           TextAlignment="Center" TextWrapping="Wrap" Margin="0,10,0,0"/>
+                <!-- The rules, one sentence. Never names the prize. -->
+                <TextBlock x:Name="TxtPunchCardRules" Text=""
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                           TextAlignment="Center" TextWrapping="Wrap" Margin="0,8,0,0"/>
+              </StackPanel>
+            </Border>
+
+            <!-- Quest Streak Calendar -->
+            <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="10"
+                    Padding="15,12" Margin="0,20,0,0">
+              <StackPanel>
+                <Grid Margin="0,0,0,10" ColumnDefinitions="Auto,*,Auto">
+                  <TextBlock Grid.Column="0" Text="{loc:Str label_quest_streak}" Foreground="White"
+                             FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
+                  <TextBlock x:Name="TxtQuestStreakCount" Grid.Column="1" Text="" Foreground="#FFD700"
+                             FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Right"
+                             VerticalAlignment="Center" Margin="0,0,10,0"/>
+                  <Button x:Name="BtnFixStreak" Grid.Column="2" Theme="{StaticResource OutlineButton}"
+                          Padding="8,3" FontSize="11" IsVisible="False" VerticalAlignment="Center"
+                          ToolTip.ShowOnDisabled="True">
+                    <TextBlock Text="{loc:Str btn_fix_day}"/>
+                  </Button>
+                </Grid>
+                <Canvas x:Name="StreakCalendarCanvas" Height="50" ClipToBounds="True"/>
+                <TextBlock x:Name="TxtFixStreakStatus" Text="" Foreground="{DynamicResource PinkBrush}"
+                           FontSize="11" TextAlignment="Center" Margin="0,5,0,0" IsVisible="False"/>
+              </StackPanel>
+            </Border>
+
+            <!-- Quest Statistics -->
+            <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="10"
+                    Padding="15" Margin="0,20,0,0">
+              <StackPanel>
+                <Grid Margin="0,0,0,15">
+                  <TextBlock Text="{loc:Str label_quest_statistics}" Foreground="White"
+                             FontSize="14" FontWeight="Bold"/>
+                  <Button x:Name="HelpBtnQuestStats" Theme="{StaticResource HelpButtonStyle}"
+                          HorizontalAlignment="Right" Tag="QuestStats"/>
+                </Grid>
+                <Grid ColumnDefinitions="*,*,*,*">
+                  <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                    <TextBlock x:Name="TxtTotalDailyCompleted" Text="0" Foreground="#FFD700"
+                               FontSize="24" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{loc:Str label_daily_completed}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"/>
+                  </StackPanel>
+                  <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                    <TextBlock x:Name="TxtTotalWeeklyCompleted" Text="0" Foreground="#9370DB"
+                               FontSize="24" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{loc:Str label_weekly_completed}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"/>
+                  </StackPanel>
+                  <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                    <TextBlock x:Name="TxtTotalQuestXP" Text="0" Foreground="{DynamicResource PinkBrush}"
+                               FontSize="24" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{loc:Str label_total_xp_earned}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"/>
+                  </StackPanel>
+                  <StackPanel Grid.Column="3" HorizontalAlignment="Center">
+                    <TextBlock x:Name="TxtStreakFixCharges" Text="0" Foreground="#4FC3F7"
+                               FontSize="24" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{loc:Str label_streak_fixes}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"/>
+                  </StackPanel>
+                </Grid>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+          <!-- End Daily/Weekly Panel -->
+
+          <!-- Bimbo Journal Panel -->
+          <StackPanel x:Name="RoadmapPanel" IsVisible="False">
+            <TextBlock Text="{loc:Str label_look_how_far_you_ve_come_sweetie}"
+                       FontSize="26" FontStyle="Italic" FontWeight="Light"
+                       Foreground="#CC88AACC" HorizontalAlignment="Center"
+                       Margin="0,0,0,8" TextAlignment="Center"/>
+
+            <Border Background="#30FFD700" BorderBrush="#AAFFD700" BorderThickness="1.5"
+                    CornerRadius="6" Padding="14,10" Margin="20,0,20,14" MaxWidth="700"
+                    HorizontalAlignment="Center">
+              <StackPanel>
+                <TextBlock Text="{loc:Str label_what_is_the_bimbo_journal}" Foreground="#FFD700"
+                           FontSize="14" FontWeight="Bold" Margin="0,0,0,6"/>
+                <TextBlock TextWrapping="Wrap" Foreground="#DDFFFFFF" FontSize="12" LineHeight="18">
+                  <Run Text="{loc:Str label_each_track_has_steps_that_ask_you_to_take_a_p}"/>
+                  <LineBreak/>
+                  <Run Text="{loc:Str label_click_a_step_take_the_pic_and_upload_it_to_ma}"/>
+                  <LineBreak/>
+                  <Run Text="{loc:Str label_complete_all_steps_in_a_track_to_unlock_the_n}"/>
+                </TextBlock>
+                <TextBlock Foreground="#AAFFD700" FontSize="11" FontStyle="Italic" Margin="0,8,0,0"
+                           TextWrapping="Wrap"
+                           Text="{loc:Str label_all_photos_are_stored_locally_on_your_pc_only}"/>
+              </StackPanel>
+            </Border>
+
+            <!-- Track Selector Tabs -->
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+              <Button x:Name="BtnTrack1" Theme="{StaticResource TabButtonActive}"
+                      Tag="EmptyDoll" Width="130">
+                <TextBlock Text="{loc:Str btn_the_empty_doll}"/>
+              </Button>
+              <Button x:Name="BtnTrack2" Theme="{StaticResource TabButton}"
+                      Tag="ObedientPuppet" Margin="10,0,0,0" Width="150">
+                <TextBlock Text="{loc:Str btn_the_obedient_puppet}"/>
+              </Button>
+              <Button x:Name="BtnTrack3" Theme="{StaticResource TabButton}"
+                      Tag="SluttyBlowdoll" Margin="10,0,0,0" Width="150">
+                <TextBlock Text="{loc:Str btn_the_slutty_blowdoll}"/>
+              </Button>
+            </StackPanel>
+
+            <!-- Track Info Header -->
+            <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="10"
+                    Padding="15" Margin="0,0,0,15">
+              <Grid>
+                <Button x:Name="HelpBtnRoadmap" Theme="{StaticResource HelpButtonStyle}"
+                        HorizontalAlignment="Right" VerticalAlignment="Top" Tag="Roadmap"/>
+                <StackPanel>
+                  <TextBlock x:Name="TxtRoadmapTrackName" Text="{loc:Str btn_the_empty_doll}"
+                             Foreground="{DynamicResource PinkBrush}" FontSize="20" FontWeight="Bold"/>
+                  <TextBlock x:Name="TxtRoadmapTrackSubtitle" Text="{loc:Str label_gateway_phase}"
+                             Foreground="{DynamicResource TextMutedBrush}" FontSize="14"/>
+                  <TextBlock x:Name="TxtRoadmapTrackProgress" Text="{loc:Str label_0_7_steps_completed}"
+                             Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,5,0,0"/>
+                </StackPanel>
+                <StackPanel x:Name="BadgeIndicator" Orientation="Horizontal"
+                            HorizontalAlignment="Right" VerticalAlignment="Center" IsVisible="False">
+                  <TextBlock Text="&#x1F3C6;" FontSize="22" VerticalAlignment="Center"/>
+                  <TextBlock Text="{loc:Str label_badge_earned}" Foreground="#FFD700" FontSize="14"
+                             FontWeight="Bold" VerticalAlignment="Center" Margin="5,0,0,0"/>
+                </StackPanel>
+              </Grid>
+            </Border>
+
+            <!-- Locked Track Overlay -->
+            <Border x:Name="TrackLockedOverlay" Background="#CC1A1A2E" CornerRadius="10"
+                    Padding="40" IsVisible="False">
+              <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock Text="&#x1F512;" FontSize="44" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="TxtLockReason"
+                           Text="{loc:Str label_complete_the_previous_track_to_unlock}"
+                           Foreground="White" FontSize="16" Margin="0,15,0,0"
+                           HorizontalAlignment="Center"/>
+              </StackPanel>
+            </Border>
+
+            <!-- Horizontal Scrolling Roadmap -->
+            <ContentControl x:Name="RoadmapScrollContainer"
+                            Theme="{StaticResource AnimatedGradientPanelWide}" MinHeight="220">
+              <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                <StackPanel x:Name="RoadmapNodesPanel" Orientation="Horizontal" Margin="10,15"/>
+              </ScrollViewer>
+            </ContentControl>
+
+            <!-- Roadmap Statistics -->
+            <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="10"
+                    Padding="15" Margin="0,15,0,0">
+              <StackPanel>
+                <Grid Margin="0,0,0,15">
+                  <TextBlock Text="{loc:Str label_transformation_progress}" Foreground="White"
+                             FontSize="14" FontWeight="Bold"/>
+                  <Button x:Name="HelpBtnRoadmapStats" Theme="{StaticResource HelpButtonStyle}"
+                          HorizontalAlignment="Right" Tag="RoadmapStats"/>
+                </Grid>
+                <Grid ColumnDefinitions="*,*,*">
+                  <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                    <TextBlock x:Name="TxtRoadmapTotalSteps" Text="0 / 21"
+                               Foreground="{DynamicResource PinkBrush}" FontSize="24"
+                               FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{loc:Str label_steps_completed}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               HorizontalAlignment="Center"/>
+                  </StackPanel>
+                  <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                    <TextBlock x:Name="TxtRoadmapPhotos" Text="0" Foreground="#9370DB"
+                               FontSize="24" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{loc:Str label_photos_submitted}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               HorizontalAlignment="Center"/>
+                  </StackPanel>
+                  <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                    <TextBlock x:Name="TxtRoadmapJourneyDays" Text="--" Foreground="#FFD700"
+                               FontSize="24" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{loc:Str label_days_on_journey}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               HorizontalAlignment="Center"/>
+                  </StackPanel>
+                </Grid>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+          <!-- End Roadmap Panel -->
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+
+    <!-- Login Required Overlay -->
+    <Border x:Name="QuestsLoginOverlay" Background="#E6151528" CornerRadius="12" IsVisible="False">
+      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40">
+        <TextBlock Text="&#x1F512;" FontSize="44" HorizontalAlignment="Center" Margin="0,0,0,15"/>
+        <TextBlock Text="{loc:Str label_login_required}" Foreground="{DynamicResource PinkBrush}"
+                   FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+        <TextBlock Text="{loc:Str label_log_in_with_discord_or_patreon_to_access_ques}"
+                   Foreground="#AA99AA" FontSize="14" HorizontalAlignment="Center"
+                   TextAlignment="Center" TextWrapping="Wrap" MaxWidth="350"/>
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>
