@@ -1,0 +1,134 @@
+<!-- PORTED from ConditioningControlPanel/Windows/PopQuizWindow.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None" + AllowsTransparency="True"
+                                      -> SystemDecorations="None" + TransparencyLevelHint="Transparent"
+       LinearGradientBrush 0,0 -> 1,1 -> "0%,0%" -> "100%,100%". A bare pair is ABSOLUTE pixels in
+                                         Avalonia, which collapses the border ramp to one pixel.
+       <Border.BorderThickness><Thickness>
+                                      -> the attribute form; element-form Thickness is not what
+                                         Avalonia's XAML compiler expects here.
+       DropShadowEffect ShadowDepth   -> OffsetX="0" OffsetY="0"
+       {DynamicResource PinkColor}
+         inside an Effect             -> {StaticResource PinkColor}. An Effect is not in the
+                                         logical tree, so DynamicResource has no scope to resolve.
+       Visibility="Collapsed"         -> IsVisible="False"
+       KeyDown= / MouseLeftButtonDown= / MouseEnter= / MouseLeave=
+                                      -> KeyDown / PointerPressed / PointerEntered / PointerExited,
+                                         wired in the constructor.
+
+     Tag="0..3" and Cursor="Hand" stay on the answer Borders: both exist on Avalonia's Control,
+     and the constructor overwrites Tag with the shuffled index exactly as WPF did.
+     Focusable="True" is new: the window has no focusable child and Avalonia only delivers KeyDown
+     to a focused element, so without it ESC would silently do nothing. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.PopQuizWindow"
+        Title="{loc:Str label_pop_quiz}"
+        Width="500" Height="420"
+        WindowStartupLocation="CenterScreen"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Focusable="True"
+        Topmost="True">
+
+    <Border CornerRadius="16" Margin="10" BorderThickness="1.5">
+        <Border.Background>
+            <SolidColorBrush Color="#F0151530"/>
+        </Border.Background>
+        <Border.BorderBrush>
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Color="#60FF69B4" Offset="0"/>
+                <GradientStop Color="#609B59B6" Offset="1"/>
+            </LinearGradientBrush>
+        </Border.BorderBrush>
+        <Border.Effect>
+            <DropShadowEffect Color="Black" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.6"/>
+        </Border.Effect>
+
+        <Grid Margin="24,20">
+            <!-- Question Panel -->
+            <StackPanel x:Name="QuestionPanel" VerticalAlignment="Center">
+                <!-- Question text -->
+                <TextBlock x:Name="TxtQuestion" FontSize="24" FontWeight="Bold"
+                           Foreground="White" TextWrapping="Wrap" TextAlignment="Center"
+                           Margin="0,0,0,24">
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="{StaticResource PinkColor}" BlurRadius="15" OffsetX="0" OffsetY="0" Opacity="0.3"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+
+                <!-- Answer buttons -->
+                <StackPanel x:Name="AnswersPanel">
+                    <Border x:Name="AnswerA" Cursor="Hand" CornerRadius="8" Margin="0,0,0,8" Padding="14,10"
+                            Tag="0" BorderThickness="1">
+                        <Border.Background>
+                            <SolidColorBrush Color="#15FFFFFF"/>
+                        </Border.Background>
+                        <Border.BorderBrush>
+                            <SolidColorBrush Color="#20FFFFFF"/>
+                        </Border.BorderBrush>
+                        <TextBlock x:Name="TxtAnswerA" FontSize="15" Foreground="#D0D0E0"
+                                   TextWrapping="Wrap" TextAlignment="Center"/>
+                    </Border>
+
+                    <Border x:Name="AnswerB" Cursor="Hand" CornerRadius="8" Margin="0,0,0,8" Padding="14,10"
+                            Tag="1" BorderThickness="1">
+                        <Border.Background>
+                            <SolidColorBrush Color="#15FFFFFF"/>
+                        </Border.Background>
+                        <Border.BorderBrush>
+                            <SolidColorBrush Color="#20FFFFFF"/>
+                        </Border.BorderBrush>
+                        <TextBlock x:Name="TxtAnswerB" FontSize="15" Foreground="#D0D0E0"
+                                   TextWrapping="Wrap" TextAlignment="Center"/>
+                    </Border>
+
+                    <Border x:Name="AnswerC" Cursor="Hand" CornerRadius="8" Margin="0,0,0,8" Padding="14,10"
+                            Tag="2" BorderThickness="1">
+                        <Border.Background>
+                            <SolidColorBrush Color="#15FFFFFF"/>
+                        </Border.Background>
+                        <Border.BorderBrush>
+                            <SolidColorBrush Color="#20FFFFFF"/>
+                        </Border.BorderBrush>
+                        <TextBlock x:Name="TxtAnswerC" FontSize="15" Foreground="#D0D0E0"
+                                   TextWrapping="Wrap" TextAlignment="Center"/>
+                    </Border>
+
+                    <Border x:Name="AnswerD" Cursor="Hand" CornerRadius="8" Margin="0,0,0,8" Padding="14,10"
+                            Tag="3" BorderThickness="1">
+                        <Border.Background>
+                            <SolidColorBrush Color="#15FFFFFF"/>
+                        </Border.Background>
+                        <Border.BorderBrush>
+                            <SolidColorBrush Color="#20FFFFFF"/>
+                        </Border.BorderBrush>
+                        <TextBlock x:Name="TxtAnswerD" FontSize="15" Foreground="#D0D0E0"
+                                   TextWrapping="Wrap" TextAlignment="Center"/>
+                    </Border>
+                </StackPanel>
+
+                <!-- ESC hint -->
+                <TextBlock Text="{loc:Str label_esc_to_skip}" Foreground="#303050" FontSize="11"
+                           HorizontalAlignment="Center" Margin="0,8,0,0"/>
+            </StackPanel>
+
+            <!-- Affirmation Panel (shown after answering) -->
+            <StackPanel x:Name="AffirmationPanel" IsVisible="False"
+                        VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock x:Name="TxtAffirmation" FontSize="22" FontWeight="SemiBold"
+                           Foreground="{DynamicResource PinkBrush}" TextWrapping="Wrap" TextAlignment="Center">
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="{StaticResource PinkColor}" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.5"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+                <TextBlock Text="{loc:Str label_25_xp}" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold"
+                           HorizontalAlignment="Center" Margin="0,10,0,0"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
