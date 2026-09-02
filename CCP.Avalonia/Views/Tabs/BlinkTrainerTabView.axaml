@@ -1,0 +1,647 @@
+<!-- PORTED from ConditioningControlPanel/Views/Tabs/BlinkTrainerTabView.xaml.
+     Structure, order, spacing and every resource key are preserved so the two can be compared
+     directly. Documented deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource X}"    ->  Theme="{StaticResource X}"
+       Visibility="Collapsed"        ->  IsVisible="False"
+       ToolTip="..."                 ->  ToolTip.Tip="..."
+       Content="{loc:Str key}"       ->  a <TextBlock> child (Avalonia parses "_" in Content as an
+                                         access key; every loc key here is snake_case)
+       StartPoint="0,0" EndPoint=".9,.7" -> "0%,0%" / "90%,70%" (RelativePoint parses a bare pair
+                                         as ABSOLUTE pixels, which collapses the gradient to 1px)
+       StrokeStartLineCap/EndLineCap ->  StrokeLineCap; StrokeLineJoin -> StrokeJoin
+       RenderTransformOrigin="0.5,0.5" -> "50%,50%"
+       Grid.Triggers + Storyboard    ->  Style.Animations on the two eye canvases (same 4s loop,
+                                         open 0-3.6s / closed 3.6-4.0s, Opacity instead of
+                                         Visibility so the layout does not thrash)
+       DropShadowEffect (gate glow)  ->  BoxShadow on the same Border
+       MouseLeftButtonUp             ->  PointerReleased
+       Checked + Unchecked           ->  IsCheckedChanged
+       Converter={StaticResource EmojiToImageSource} -> plain <TextBlock Text="🔒"/>; Avalonia
+                                         draws colour emoji natively
+       x:FieldModifier="internal"    ->  dropped; x:Names kept (nothing on this head pokes them yet)
+       SnapsToDevicePixels           ->  dropped (no equivalent, no visual effect here)
+       Button.Resources Style-for-Border -> CornerRadius straight on the Button
+       feat:AdaptiveSideArt.CollapseBelow -> dropped; the attached behaviour is not ported
+       MediaElement                  ->  dropped; no media element on this head (see comment)
+       Image / ImageBrush art        ->  dropped; Resources/features/blink_trainer.png is not an
+                                         asset of this project yet (see comments) -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.BlinkTrainerTabView">
+
+  <!-- Mint (#5CE0A5) is this tab's hue. LOCAL resources with LITERAL colors only - same rule as
+       the WPF original, where promoting them tripped a deferred-BAML EndOfStreamException. -->
+  <UserControl.Resources>
+    <SolidColorBrush x:Key="TabHueBrush" Color="#5CE0A5"/>
+    <SolidColorBrush x:Key="TabHueBorderBrush" Color="#405CE0A5"/>
+    <LinearGradientBrush x:Key="TabHueWashBrush" StartPoint="0%,0%" EndPoint="90%,70%">
+      <GradientStop Color="#145CE0A5" Offset="0"/>
+      <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+    <!-- Same shape as VelvetCardBorderBrush, in mint: the stage is the marquee surface. -->
+    <LinearGradientBrush x:Key="TabHueFrameBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+      <GradientStop Color="#7A5CE0A5" Offset="0"/>
+      <GradientStop Color="#225CE0A5" Offset="0.45"/>
+      <GradientStop Color="#55FF69B4" Offset="1"/>
+    </LinearGradientBrush>
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <!-- The eye-logo blink, ported from the WPF Storyboard: 4s loop, open 0-3.6s (90%),
+         closed 3.6-4.0s. WPF animated Visibility with DiscreteObjectKeyFrames; Avalonia
+         keyframes animate properties, so this drives Opacity on a hard cut (the paired 0/1
+         frames leave no visible tween) - same look, and both canvases stay measured. -->
+    <Style Selector="Canvas#EyeLogoOpen">
+      <Style.Animations>
+        <Animation Duration="0:0:4" IterationCount="INFINITE">
+          <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+          <KeyFrame Cue="89%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+          <KeyFrame Cue="90%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+          <KeyFrame Cue="99%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+          <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+    <Style Selector="Canvas#EyeLogoClosed">
+      <Style.Animations>
+        <Animation Duration="0:0:4" IterationCount="INFINITE">
+          <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+          <KeyFrame Cue="89%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+          <KeyFrame Cue="90%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+          <KeyFrame Cue="99%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+          <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+  </UserControl.Styles>
+
+  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <Grid Margin="36,28,36,28">
+      <!-- WPF authors this HorizontalAlignment="Center". WPF's Grid reports the FULL proportional
+           width of its star columns as its desired size, so a Center-aligned StackPanel around one
+           still fills its slot up to MaxWidth; Avalonia's Grid reports only its content's width, so
+           the verbatim copy collapsed the whole page to the 448px stage and squeezed the 2* art
+           column to a 7px sliver. Stretch + MaxWidth is the Avalonia spelling of the same intent -
+           fill, then centre at the cap. -->
+      <StackPanel MaxWidth="1180" HorizontalAlignment="Stretch">
+
+        <!-- ═══ HERO (72px) ═══ -->
+        <Border Height="72" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{StaticResource TabHueBorderBrush}" BorderThickness="2"
+                Margin="0,0,0,14">
+          <Grid>
+            <!-- ponytail: the WPF hero carries a hidden <Image x:Name="ImgBlinkTrainerFeature">
+                 as the mod-art carrier, plus a right-hand plate whose ImageBrush binds to it.
+                 This head has no Resources/features/blink_trainer.png asset yet, so both are
+                 dropped rather than left as a blank rectangle. Restore them as an avares://
+                 ImageBrush when the art moves. -->
+
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
+
+              <!-- Animated eye logo (48x48). Fill pulls from PinkBrush at render time. -->
+              <Grid Width="48" Height="48" VerticalAlignment="Center" Margin="0,0,14,0">
+                <!-- Open eye: outer almond outline + pupil -->
+                <Canvas x:Name="EyeLogoOpen" Width="48" Height="48">
+                  <Path Stroke="{DynamicResource PinkBrush}" StrokeThickness="2.6"
+                        Fill="Transparent" StrokeJoin="Round" StrokeLineCap="Round"
+                        Data="M 4,24 Q 24,6 44,24 Q 24,42 4,24 Z"/>
+                  <Ellipse Canvas.Left="17" Canvas.Top="17" Width="14" Height="14"
+                           Fill="{DynamicResource PinkBrush}"/>
+                  <Ellipse Canvas.Left="21" Canvas.Top="19" Width="4" Height="4"
+                           Fill="White" Opacity="0.85"/>
+                </Canvas>
+                <!-- Closed eye: shallow arc (lashes implicit) -->
+                <Canvas x:Name="EyeLogoClosed" Width="48" Height="48" Opacity="0">
+                  <Path Stroke="{DynamicResource PinkBrush}" StrokeThickness="2.6"
+                        Fill="Transparent" StrokeLineCap="Round"
+                        Data="M 5,26 Q 24,18 43,26"/>
+                  <Path Stroke="{DynamicResource PinkBrush}" StrokeThickness="1.6"
+                        Fill="Transparent" StrokeLineCap="Round"
+                        Opacity="0.55"
+                        Data="M 10,22 L 8,18 M 24,20 L 24,15 M 38,22 L 40,18"/>
+                </Canvas>
+              </Grid>
+
+              <StackPanel VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="{loc:Str tab_blink_trainer}" FontSize="17" FontWeight="Bold"
+                             Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                  <Border Background="#1A5CE0A5" BorderBrush="{StaticResource TabHueBorderBrush}" BorderThickness="1"
+                          CornerRadius="4" Padding="5,1" Margin="8,1,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="{loc:Str blink_trainer_beta}" Foreground="{StaticResource TabHueBrush}"
+                               FontSize="9.5" FontWeight="Bold"/>
+                  </Border>
+                </StackPanel>
+                <TextBlock Text="{loc:Str blink_trainer_tagline}" FontSize="11.5"
+                           Foreground="{StaticResource TextMutedBrush}" Margin="0,1,0,0"/>
+              </StackPanel>
+            </StackPanel>
+
+            <!-- Help button. ponytail: needs HelpContentService (WPF wires it in
+                 MainWindow.Presets.cs via SetHelpContent(..., "BlinkTrainer")). -->
+            <Button x:Name="HelpBtnBlinkTrainer" Theme="{StaticResource HelpButtonStyle}"
+                    HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0"
+                    Tag="BlinkTrainer"/>
+          </Grid>
+        </Border>
+
+        <!-- ═══ WIDE LAYOUT ═══
+             Row 0 is the "look" band: the live stage on the left, the feature plate on the
+             right (both 288 tall). Row 1 is the settings, spanning both columns and capped at
+             940. ponytail: the WPF root carries feat:AdaptiveSideArt.CollapseBelow="860" to
+             collapse the art column on a narrow host; that attached behaviour is not ported. -->
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="3*" MaxWidth="780"/>
+            <ColumnDefinition Width="2*"/>
+          </Grid.ColumnDefinitions>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+
+          <!-- Stage column: preview frame on top, ONE action bar (status left, buttons right)
+               directly underneath. BlinkTrainerStageActions is the SINGLE container the gate
+               disables for non-premium users - the stage itself stays lit as the shop window. -->
+          <StackPanel Grid.Row="0" Grid.Column="0" VerticalAlignment="Top" HorizontalAlignment="Center">
+            <Border x:Name="BlinkTrainerStageFrame"
+                    Width="448" Height="288"
+                    VerticalAlignment="Top"
+                    CornerRadius="16"
+                    BorderThickness="2"
+                    BorderBrush="{StaticResource TabHueFrameBrush}"
+                    Background="{DynamicResource SurfaceBgBrush}">
+              <!-- Inner clip border - a parent's CornerRadius clips its own background, not its
+                   child's content, so the swapping images need their own clipped Border. -->
+              <Border CornerRadius="14" ClipToBounds="True" Background="{StaticResource TabHueWashBrush}">
+                <Grid x:Name="BlinkTrainerStageContent">
+                  <!-- Two overlapping images for the demo cross-fade; live mode hard-cuts.
+                       Sources are set by the host, so both are empty here. -->
+                  <Image x:Name="BlinkTrainerStageImageA" Stretch="UniformToFill" Opacity="1"/>
+                  <Image x:Name="BlinkTrainerStageImageB" Stretch="UniformToFill" Opacity="0"/>
+                  <!-- ponytail: the WPF stage also hosts a muted MediaElement for video assets.
+                       Avalonia has no built-in media element; wire a video surface here when the
+                       head gets one (LibVLCSharp / Avalonia.MediaPlayer). -->
+                </Grid>
+              </Border>
+            </Border>
+
+            <!-- ═══ STAGE ACTION BAR (one row, under preview) ═══
+                 Width pinned to the stage's own 448 so the row reads as the stage's footer.
+                 The status side owns the star column because its text is state-driven and can
+                 run long; it ellipsises instead of squeezing the Auto button columns. -->
+            <Grid x:Name="BlinkTrainerStageActions" Width="448" Margin="0,10,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+
+              <!-- ═══ STATUS CLUSTER (dot + text + optional fix-it button) ═══ -->
+              <Grid Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto"/>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Ellipse Grid.Column="0" x:Name="BlinkTrainerStatusDot"
+                         Width="10" Height="10"
+                         Fill="{DynamicResource PinkBrush}" Margin="0,0,9,0"
+                         VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" x:Name="BlinkTrainerStatusText"
+                           Text="{loc:Str blink_trainer_status_ready}"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           FontSize="12.5"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip.Tip="{Binding $self.Text}"
+                           VerticalAlignment="Center"/>
+                <!-- Contextual fix-it button (grant consent / add folder / calibrate).
+                     Hidden until the host fills it in. -->
+                <Button Grid.Column="2" x:Name="BlinkTrainerStatusAction"
+                        IsVisible="False"
+                        Margin="10,0,0,0"
+                        VerticalAlignment="Center"
+                        Theme="{StaticResource OutlineButton}"
+                        Padding="10,4"
+                        FontSize="11.5"/>
+              </Grid>
+
+              <!-- Tracker toggle. Label/colour are refreshed by the host
+                   (RefreshBlinkTrainerTrackerButton flips it to "Stop tracker"); the WPF XAML
+                   authors this literal untranslated, so it stays verbatim. -->
+              <Button Grid.Column="1" x:Name="BtnBlinkTrainerStartStopTracker"
+                      VerticalAlignment="Center"
+                      Margin="0,0,8,0"
+                      Padding="16,7"
+                      Theme="{StaticResource OutlineButton}"
+                      Click="BtnBlinkTrainerStartStopTracker_Click">
+                <TextBlock Text="Start tracker" FontSize="12"/>
+              </Button>
+
+              <!-- ═══ START BUTTON — still the loudest thing on the row ═══ -->
+              <Button Grid.Column="2" x:Name="BtnBlinkTrainerStartSession"
+                      VerticalAlignment="Center"
+                      Padding="22,9"
+                      Theme="{StaticResource SmallPinkButton}"
+                      Click="BtnBlinkTrainerStartSession_Click">
+                <TextBlock Text="{loc:Str blink_trainer_start_session}" FontSize="13.5" FontWeight="Bold"/>
+              </Button>
+            </Grid>
+          </StackPanel>
+
+          <!-- SIDE ART. ponytail: on WPF this Border's Background is the blink_trainer.png
+               ImageBrush; that asset is not in this project yet, so the plate carries the tab's
+               own wash and keeps the layout honest. Swap in an avares:// ImageBrush when the
+               art moves. -->
+          <Border Grid.Row="0" Grid.Column="1" Margin="14,0,0,0" CornerRadius="14"
+                  BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                  Background="{StaticResource TabHueWashBrush}"
+                  VerticalAlignment="Top" Height="288" MinHeight="200">
+            <!-- Scrim so the plate sits under the page instead of fighting it. -->
+            <Border CornerRadius="12">
+              <Border.Background>
+                <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
+                  <GradientStop Color="#66000000" Offset="0"/>
+                  <GradientStop Color="#00000000" Offset="0.45"/>
+                </LinearGradientBrush>
+              </Border.Background>
+            </Border>
+          </Border>
+
+          <!-- ═══ GATED ZONE ═══
+               Three dense cards. Covered by BlinkTrainerGate for non-premium users; the stage
+               above stays visible AND animating to show the feature in action - that partial
+               cover is deliberate, so the gate is the last sibling of THIS grid. -->
+          <!-- HorizontalAlignment: WPF authors "Left", which still fills to MaxWidth there because
+               its Grid desires the whole star slot. Avalonia's does not (see the root StackPanel),
+               so Left would leave the three cards at their content width, ~330px. Stretch keeps the
+               940 measure; the cost is that Avalonia centres a Stretch child under a MaxWidth, so
+               the block sits ~44px in rather than flush with the hero. -->
+          <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                x:Name="BlinkTrainerGatedZone"
+                Margin="0,12,0,0" MaxWidth="940" HorizontalAlignment="Stretch">
+            <StackPanel x:Name="BlinkTrainerGatedContent">
+
+              <!-- ── ASSET PACKS ── -->
+              <Border Theme="{StaticResource SettingCardStyle}">
+                <Grid>
+                  <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                  <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                          Background="{StaticResource TabHueBrush}"/>
+                  <StackPanel Margin="16,10,16,12">
+                    <TextBlock Text="{loc:Str blink_trainer_section_asset_packs}"
+                               Foreground="{StaticResource TabHueBrush}"
+                               FontSize="10" FontWeight="Bold"
+                               Margin="0,0,0,10"/>
+
+                    <!-- Folder cards. Populated by the host's RebuildBlinkTrainerFolderCards(). -->
+                    <StackPanel x:Name="BlinkTrainerFolderCardsHost"/>
+
+                    <!-- Add-folder button with a dashed pink border: a Rectangle draws the dashes
+                         behind the Button, IsHitTestVisible=False so clicks pass through. -->
+                    <Grid>
+                      <Rectangle Stroke="{DynamicResource PinkBrush}"
+                                 StrokeThickness="1"
+                                 StrokeDashArray="4,3"
+                                 RadiusX="8" RadiusY="8"
+                                 IsHitTestVisible="False"/>
+                      <Button x:Name="BtnBlinkTrainerAddFolderCard"
+                              HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Center"
+                              Padding="12,8"
+                              Background="Transparent"
+                              Foreground="{DynamicResource PinkBrush}"
+                              BorderThickness="0"
+                              CornerRadius="8"
+                              Cursor="Hand"
+                              Click="BtnBlinkTrainerAddFolderCard_Click">
+                        <TextBlock Text="{loc:Str blink_trainer_add_folder}" FontWeight="SemiBold" FontSize="12"/>
+                      </Button>
+                    </Grid>
+
+                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,10,0,4"/>
+
+                    <!-- Include videos toggle. ToggleStyle targets CheckBox, so this is a styled
+                         CheckBox; the old two-line description is now the row's tooltip. -->
+                    <Grid Height="34" Background="Transparent"
+                          ToolTip.Tip="{loc:Str blink_trainer_include_videos_sub}">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                      </Grid.ColumnDefinitions>
+                      <TextBlock Grid.Column="0" Text="{loc:Str blink_trainer_include_videos}"
+                                 FontSize="13" FontWeight="SemiBold"
+                                 Foreground="{StaticResource TextLightBrush}"
+                                 VerticalAlignment="Center"/>
+                      <CheckBox Grid.Column="1"
+                                x:Name="ToggleBlinkTrainerIncludeVideos"
+                                Theme="{StaticResource ToggleStyle}"
+                                VerticalAlignment="Center"
+                                IsCheckedChanged="ToggleBlinkTrainerIncludeVideos_Changed"/>
+                    </Grid>
+                  </StackPanel>
+                </Grid>
+              </Border>
+
+              <!-- ── SESSION ── -->
+              <Border Theme="{StaticResource SettingCardStyle}">
+                <Grid>
+                  <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                  <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                          Background="{StaticResource TabHueBrush}"/>
+                  <StackPanel Margin="16,10,16,12">
+                    <TextBlock Text="{loc:Str blink_trainer_section_session}"
+                               Foreground="{StaticResource TabHueBrush}"
+                               FontSize="10" FontWeight="Bold"
+                               Margin="0,0,0,4"/>
+
+                    <!-- Duration — 36px row. The value label keeps its ScaleTransform: the host's
+                         AnimateBlinkTrainerSliderLabel scales it on drag and bails if it is not a
+                         ScaleTransform. "10 min" is the authored state; the host writes "{n} min"
+                         from settings with plain interpolation, no loc key. -->
+                    <Grid Height="36" Background="Transparent">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto" MinWidth="56"/>
+                      </Grid.ColumnDefinitions>
+                      <TextBlock Grid.Column="0" Text="{loc:Str blink_trainer_duration_label}"
+                                 FontSize="13" FontWeight="SemiBold"
+                                 Foreground="{StaticResource TextLightBrush}"
+                                 VerticalAlignment="Center"/>
+                      <Slider Grid.Column="1" x:Name="SliderBlinkTrainerDurationNew"
+                              Minimum="1" Maximum="180" Value="10"
+                              VerticalAlignment="Center" Margin="14,0"
+                              Theme="{StaticResource BlinkTrainerGradientSlider}"
+                              ValueChanged="SliderBlinkTrainerDurationNew_Changed"
+                              PointerPressed="BlinkTrainerSlider_DragStart"
+                              PointerReleased="BlinkTrainerSlider_DragEnd"
+                              PointerCaptureLost="BlinkTrainerSlider_LostCapture"/>
+                      <TextBlock Grid.Column="2" x:Name="TxtBlinkTrainerDurationValue"
+                                 Text="10 min"
+                                 Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="Bold"
+                                 HorizontalAlignment="Right" VerticalAlignment="Center"
+                                 RenderTransformOrigin="50%,50%">
+                        <TextBlock.RenderTransform>
+                          <ScaleTransform/>
+                        </TextBlock.RenderTransform>
+                      </TextBlock>
+                    </Grid>
+
+                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                    <!-- Overlay opacity — 36px row -->
+                    <Grid Height="36" Background="Transparent">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto" MinWidth="56"/>
+                      </Grid.ColumnDefinitions>
+                      <TextBlock Grid.Column="0" Text="{loc:Str blink_trainer_opacity_label}"
+                                 FontSize="13" FontWeight="SemiBold"
+                                 Foreground="{StaticResource TextLightBrush}"
+                                 VerticalAlignment="Center"/>
+                      <Slider Grid.Column="1" x:Name="SliderBlinkTrainerOpacityNew"
+                              Minimum="1" Maximum="100" Value="80"
+                              VerticalAlignment="Center" Margin="14,0"
+                              Theme="{StaticResource BlinkTrainerGradientSlider}"
+                              ValueChanged="SliderBlinkTrainerOpacityNew_Changed"
+                              PointerPressed="BlinkTrainerSlider_DragStart"
+                              PointerReleased="BlinkTrainerSlider_DragEnd"
+                              PointerCaptureLost="BlinkTrainerSlider_LostCapture"
+                              Loaded="SliderBlinkTrainerOpacityNew_Loaded"/>
+                      <TextBlock Grid.Column="2" x:Name="TxtBlinkTrainerOpacityValue"
+                                 Text="80%"
+                                 Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="Bold"
+                                 HorizontalAlignment="Right" VerticalAlignment="Center"
+                                 RenderTransformOrigin="50%,50%">
+                        <TextBlock.RenderTransform>
+                          <ScaleTransform/>
+                        </TextBlock.RenderTransform>
+                      </TextBlock>
+                    </Grid>
+
+                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                    <!-- Mix-mode visual toggle. A picker, not a dial: the host's
+                         SetMixModeSelection paints the selected Border's BorderBrush pink and
+                         clears the other. -->
+                    <TextBlock Text="{loc:Str blink_trainer_tiling_label}"
+                               Foreground="{StaticResource TextLightBrush}"
+                               FontSize="13" FontWeight="SemiBold" Margin="0,4,0,8"/>
+                    <Grid Width="292" HorizontalAlignment="Left">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="*"/>
+                      </Grid.ColumnDefinitions>
+
+                      <Border x:Name="BlinkTrainerMixOptionSame" Grid.Column="0"
+                              CornerRadius="8" Padding="10" Cursor="Hand"
+                              Background="#11000000"
+                              BorderThickness="2"
+                              BorderBrush="Transparent"
+                              PointerReleased="BlinkTrainerMixOptionSame_Click">
+                        <StackPanel>
+                          <UniformGrid Rows="2" Columns="2" Width="60" Height="60" HorizontalAlignment="Center">
+                            <Border Background="{DynamicResource PinkBrush}" Margin="2"/>
+                            <Border Background="{DynamicResource PinkBrush}" Margin="2"/>
+                            <Border Background="{DynamicResource PinkBrush}" Margin="2"/>
+                            <Border Background="{DynamicResource PinkBrush}" Margin="2"/>
+                          </UniformGrid>
+                          <TextBlock Text="{loc:Str blink_trainer_tiling_same}"
+                                     Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
+                                     HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                        </StackPanel>
+                      </Border>
+
+                      <Border x:Name="BlinkTrainerMixOptionMix" Grid.Column="2"
+                              CornerRadius="8" Padding="10" Cursor="Hand"
+                              Background="#11000000"
+                              BorderThickness="2"
+                              BorderBrush="Transparent"
+                              PointerReleased="BlinkTrainerMixOptionMix_Click">
+                        <StackPanel>
+                          <UniformGrid Rows="2" Columns="2" Width="60" Height="60" HorizontalAlignment="Center">
+                            <Border Background="#FF69B4" Margin="2"/>
+                            <Border Background="#B47BFF" Margin="2"/>
+                            <Border Background="#FFB1E0" Margin="2"/>
+                            <Border Background="#E07BFF" Margin="2"/>
+                          </UniformGrid>
+                          <TextBlock Text="{loc:Str blink_trainer_tiling_mix}"
+                                     Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
+                                     HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                        </StackPanel>
+                      </Border>
+                    </Grid>
+                  </StackPanel>
+                </Grid>
+              </Border>
+
+              <!-- ── WEBCAM ── -->
+              <Border Theme="{StaticResource SettingCardStyle}">
+                <Grid>
+                  <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                  <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                          Background="{StaticResource TabHueBrush}"/>
+                  <StackPanel Margin="16,10,16,12">
+                    <TextBlock Text="{loc:Str blink_trainer_section_webcam}"
+                               Foreground="{StaticResource TabHueBrush}"
+                               FontSize="10" FontWeight="Bold"
+                               Margin="0,0,0,10"/>
+
+                    <!-- The camera/monitor pickers live in Settings → Devices; what remains is a
+                         read-only chip plus the way to the page that owns the camera. Consent and
+                         calibration below are ACTIONS, not settings, so they stay here. -->
+                    <Border x:Name="WebcamStatusChipBlinkTrainer"
+                            CornerRadius="8" Padding="12,10" Margin="0,0,0,12"
+                            Background="{DynamicResource PanelBgBrush}"
+                            BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                      <Grid>
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="Auto"/>
+                          <ColumnDefinition Width="*"/>
+                          <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Ellipse Grid.Column="0" x:Name="WebcamStatusChipBlinkTrainerDot"
+                                 Width="8" Height="8" Fill="{DynamicResource TextMutedBrush}"
+                                 Margin="0,0,9,0" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                          <TextBlock Text="{loc:Str set2_webcam_chip_label}"
+                                     Foreground="{StaticResource TextLightBrush}"
+                                     FontSize="12" FontWeight="Medium"/>
+                          <TextBlock x:Name="TxtWebcamStatusChipBlinkTrainer"
+                                     Text="{loc:Str rf_webcam_stopped}" Foreground="{DynamicResource TextMutedBrush}"
+                                     FontFamily="Consolas, Courier New" FontSize="11"/>
+                        </StackPanel>
+                        <Button Grid.Column="2"
+                                Padding="10,4" VerticalAlignment="Center"
+                                Theme="{StaticResource OutlineButton}"
+                                Click="BtnOpenDeviceSettings_Click">
+                          <TextBlock Text="{loc:Str set2_configure_in_settings}" FontSize="10"/>
+                        </Button>
+                      </Grid>
+                    </Border>
+
+                    <!-- Consent status. The host recolours this card green/amber and swaps both
+                         texts between granted / required; the green literals and the "granted"
+                         keys below are the authored starting state, exactly as on WPF. -->
+                    <Border x:Name="BlinkTrainerConsentCard"
+                            CornerRadius="8" Padding="12" Margin="0,0,0,12"
+                            Background="#1A4ADE80"
+                            BorderBrush="#4ADE80" BorderThickness="1">
+                      <StackPanel>
+                        <TextBlock x:Name="BlinkTrainerConsentStatus"
+                                   Text="{loc:Str blink_trainer_consent_granted}"
+                                   Foreground="{StaticResource TextLightBrush}" FontSize="12" FontWeight="Medium"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                          <Button x:Name="BtnBlinkTrainerManageConsent"
+                                  Padding="10,4"
+                                  Theme="{StaticResource OutlineButton}"
+                                  Click="BtnBlinkTrainerManageConsent_Click">
+                            <TextBlock Text="{loc:Str blink_trainer_consent_manage}" FontSize="11"/>
+                          </Button>
+                          <Button x:Name="BtnBlinkTrainerRevokeConsent"
+                                  Margin="8,0,0,0"
+                                  Padding="10,4"
+                                  IsVisible="False"
+                                  Background="Transparent" Foreground="#FF6060"
+                                  BorderBrush="#FF6060" BorderThickness="1"
+                                  Cursor="Hand"
+                                  ToolTip.Tip="{loc:Str blink_trainer_consent_revoke_tooltip}"
+                                  Click="BtnBlinkTrainerRevokeConsent_Click">
+                            <TextBlock Text="{loc:Str blink_trainer_consent_revoke_short}" FontSize="10"/>
+                          </Button>
+                        </StackPanel>
+                      </StackPanel>
+                    </Border>
+
+                    <!-- Calibration -->
+                    <Grid>
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                      </Grid.ColumnDefinitions>
+                      <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <TextBlock Text="{loc:Str blink_trainer_calibration_label}"
+                                   Foreground="{StaticResource TextLightBrush}"
+                                   FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="BlinkTrainerCalibrationStatus"
+                                   Text="{loc:Str blink_trainer_calibration_none}"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,2,0,0"/>
+                      </StackPanel>
+                      <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Padding="12,5" Margin="0,0,8,0"
+                                Theme="{StaticResource OutlineButton}"
+                                Click="BtnBlinkTrainerCalibrate_Click">
+                          <TextBlock Text="{loc:Str blink_trainer_calibration_btn}" FontSize="11"/>
+                        </Button>
+                        <Button Padding="12,5"
+                                Theme="{StaticResource OutlineButton}"
+                                Click="BtnBlinkTrainerQuickRecal_Click">
+                          <TextBlock Text="{loc:Str blink_trainer_calibration_quick}" FontSize="11"/>
+                        </Button>
+                      </StackPanel>
+                    </Grid>
+                  </StackPanel>
+                </Grid>
+              </Border>
+
+            </StackPanel>
+
+            <!-- Premium gate overlay. Sits on top of the gated StackPanel; the stage, its actions
+                 and the hero remain visible so the user sees the feature working before the ask. -->
+            <Border x:Name="BlinkTrainerGate"
+                    IsVisible="False"
+                    Background="#CC0A0A14">
+              <Border CornerRadius="16"
+                      Background="{DynamicResource ElevatedSurfaceBrush}"
+                      BorderThickness="2"
+                      MaxWidth="480"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      Padding="36,32"
+                      BoxShadow="0 0 40 0 #66FF69B4">
+                <Border.BorderBrush>
+                  <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                    <GradientStop Color="{DynamicResource NeonPurpleColor}" Offset="1"/>
+                  </LinearGradientBrush>
+                </Border.BorderBrush>
+
+                <StackPanel HorizontalAlignment="Center">
+                  <TextBlock Text="🔒" FontSize="34"
+                             HorizontalAlignment="Center"
+                             Margin="0,0,0,12"/>
+                  <TextBlock Text="{loc:Str blink_trainer_gate_headline}"
+                             Foreground="{StaticResource TextLightBrush}"
+                             FontSize="22" FontWeight="Bold"
+                             HorizontalAlignment="Center"
+                             Margin="0,0,0,8"/>
+                  <TextBlock Text="{loc:Str blink_trainer_gate_body}"
+                             Foreground="{DynamicResource TextMutedBrush}"
+                             FontSize="13"
+                             TextAlignment="Center"
+                             TextWrapping="Wrap"
+                             MaxWidth="340"
+                             Margin="0,0,0,24"/>
+                  <Button x:Name="BtnBlinkTrainerGateUnlock"
+                          Padding="32,12"
+                          Theme="{StaticResource SmallPinkButton}"
+                          HorizontalAlignment="Center"
+                          Click="BtnBlinkTrainerGateUnlock_Click">
+                    <TextBlock Text="{loc:Str blink_trainer_gate_cta}" FontSize="14" FontWeight="Bold"/>
+                  </Button>
+                </StackPanel>
+              </Border>
+            </Border>
+          </Grid>
+        </Grid>
+
+      </StackPanel>
+    </Grid>
+  </ScrollViewer>
+</UserControl>
