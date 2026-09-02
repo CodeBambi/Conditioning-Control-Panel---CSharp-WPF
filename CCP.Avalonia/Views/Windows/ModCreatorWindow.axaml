@@ -1,0 +1,133 @@
+<!-- PORTED from ConditioningControlPanel/Windows/ModCreatorWindow.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       Style="{StaticResource X}"      -> Theme="{StaticResource X}"   (keyed styles are ControlThemes)
+       WindowStyle="None"              -> SystemDecorations="None"
+       AllowsTransparency="True"       -> TransparencyLevelHint="Transparent"
+       MouseLeftButtonDown             -> PointerPressed, wired in the constructor
+       ToolTip="..."                   -> ToolTip.Tip="..."
+       Click="X_Click"                 -> x:Name + a handler wired in the constructor, per the
+                                          convention the other ported windows follow
+       <WindowChrome.WindowChrome>     -> dropped; Avalonia has no twin. ponytail: the 6px
+                                          resize border is lost, CanResize="True" leaves the
+                                          platform's own edge grab in its place.
+
+     ActionButton / SecondaryButton / DangerButton were three local <Style x:Key> blocks in the
+     WPF file. They already exist as ControlThemes in Theme/Styles.xaml with the same setters and
+     the same hover/disabled states, so the local copies are gone and the call sites point at the
+     shared keys.
+
+     Buttons carry a TextBlock child rather than Content: Avalonia parses "_" in Content as an
+     access key. See the porting notes in CLAUDE.md.
+
+     Everything between the title bar and the bottom bar is built in code-behind, exactly as in
+     the WPF original - SidebarPanel and ContentPanel start empty in both files. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.ModCreatorWindow"
+        Title="{loc:Str dialog_mod_creator}"
+        Height="750" Width="1100"
+        MinHeight="600" MinWidth="900"
+        WindowStartupLocation="CenterOwner"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        CanResize="True"
+        Background="Transparent">
+
+    <Window.Resources>
+        <!-- ponytail: local copy of Windows/ModCreatorWindow.xaml:DarkTextBox, hoist when a second
+             view needs it. Setters only, BasedOn the Fluent default: the WPF template hangs a
+             ScrollViewer named PART_ContentHost inside a Border and Avalonia's TextBox has no such
+             part, so copying the template would leave a box that never draws its text (CLAUDE.md
+             trap 4). FocusGlowTextBox in Theme/Styles.xaml is shaped the same way for the same
+             reason. -->
+        <ControlTheme x:Key="DarkTextBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="Background" Value="#252542"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="#505070"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="CaretBrush" Value="White"/>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Border Background="#1A1A2E" CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title Bar -->
+            <Border x:Name="TitleBar" Grid.Row="0" Background="#252542" CornerRadius="12,12,0,0" Padding="20,10">
+                <Grid>
+                    <TextBlock Text="{loc:Str dialog_mod_creator}" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"
+                               VerticalAlignment="Center"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <Button x:Name="BtnHelp"
+                                Background="Transparent" Foreground="{DynamicResource PinkBrush}" FontSize="16" FontWeight="Bold"
+                                BorderThickness="0" Cursor="Hand" Padding="8,2" Width="30" Height="30"
+                                ToolTip.Tip="{loc:Str tooltip_mod_creator_tutorial}">
+                            <TextBlock Text="?"/>
+                        </Button>
+                        <Button x:Name="BtnMinimize"
+                                Background="Transparent" Foreground="{DynamicResource TextMutedBrush}" FontSize="14"
+                                BorderThickness="0" Cursor="Hand" Padding="8,2" Width="30" Height="30">
+                            <TextBlock Text="{loc:Str btn_text}"/>
+                        </Button>
+                        <Button x:Name="BtnClose"
+                                Background="Transparent" Foreground="{DynamicResource TextMutedBrush}" FontSize="16" FontWeight="Bold"
+                                BorderThickness="0" Cursor="Hand" Padding="8,2" Width="30" Height="30">
+                            <TextBlock Text="X"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Main Content -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Sidebar -->
+                <Border Grid.Column="0" Background="#1E1E36" CornerRadius="0,0,0,12" Padding="0,8">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="SidebarPanel"/>
+                    </ScrollViewer>
+                </Border>
+
+                <!-- Content Area -->
+                <ScrollViewer Grid.Column="1" x:Name="ContentScroll"
+                              VerticalScrollBarVisibility="Auto" Padding="20,10,20,10">
+                    <StackPanel x:Name="ContentPanel"/>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- Bottom Bar -->
+            <Border Grid.Row="2" Background="#252542" CornerRadius="0,0,12,12" Padding="15,10">
+                <Grid>
+                    <TextBlock x:Name="TxtStatus" Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                               VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button x:Name="BtnLoad" Theme="{StaticResource SecondaryButton}" Margin="0,0,8,0">
+                            <TextBlock Text="{loc:Str btn_load_ccpmod}"/>
+                        </Button>
+                        <Button x:Name="BtnReset" Theme="{StaticResource DangerButton}" Margin="0,0,8,0">
+                            <TextBlock Text="{loc:Str btn_reset_all}"/>
+                        </Button>
+                        <Button x:Name="BtnExport" Theme="{StaticResource ActionButton}">
+                            <TextBlock Text="{loc:Str btn_export_as_ccpmod}"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
