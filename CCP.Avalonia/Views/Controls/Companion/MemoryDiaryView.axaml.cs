@@ -28,7 +28,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     /// <para>Deviations: <c>CompanionWheelRelay.Attach(FactWall)</c> is gone — Avalonia's
     /// ScrollViewer chains a wheel notch it cannot use to its parent by itself. The WPF
     /// <c>IMemoryDiaryVm</c>, <c>MockMemoryDiaryVm</c>, <c>MemoryFactCard</c>, <c>FactOrdering</c>
-    /// and <c>MemoryForgetConfirm</c> live in the head; their shape is carried below as concrete
+    /// and <c>DiaryForgetConfirm</c> live in the head; their shape is carried below as concrete
     /// classes seeded with the mock's artboard, the same way MakeHerYoursView does it.</para>
     /// </summary>
     public partial class MemoryDiaryView : UserControl
@@ -56,7 +56,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         /// The "Forget everything…" two-step. Bound from the footer by name through the
         /// UserControl, so the destructive command has exactly one path to being executed.
         /// </summary>
-        public MemoryForgetConfirm ForgetConfirm { get; } = new();
+        public DiaryForgetConfirm ForgetConfirm { get; } = new();
 
         // =====================================================================================
         //  inline edit
@@ -137,17 +137,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 
     /// <summary>
     /// The two-step "Forget everything…" flow for Z3, in her voice. Port of the head's
-    /// MemoryForgetConfirm.cs. Invariants: the destructive command runs only from
+    /// DiaryForgetConfirm.cs. Invariants: the destructive command runs only from
     /// <see cref="ConfirmCommand"/> and only while armed; confirming disarms first so a double-click
     /// cannot fire the wipe twice; re-binding always disarms.
     /// </summary>
-    public sealed class MemoryForgetConfirm : CompanionObservable
+    public sealed class DiaryForgetConfirm : CompanionObservable
     {
         private ICommand? _target;
         private bool _isArmed;
         private readonly CompanionRelayCommand _arm, _confirm;
 
-        public MemoryForgetConfirm()
+        public DiaryForgetConfirm()
         {
             ArmCommand = _arm = new CompanionRelayCommand(Arm, () => CanArm);
             ConfirmCommand = _confirm = new CompanionRelayCommand(Confirm, () => IsArmed);

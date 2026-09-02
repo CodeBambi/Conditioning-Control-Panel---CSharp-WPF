@@ -284,7 +284,7 @@
                  Two faces in one row: the usual storage note, and — once armed — the wipe's
                  confirm strip, asked in her voice. Inline rather than a modal, so the card never
                  blocks the tab (the Vault rule). ForgetConfirm is the little state machine that
-                 owns which one shows; see MemoryForgetConfirm. -->
+                 owns which one shows; see DiaryForgetConfirm. -->
             <Grid Grid.Row="4" Margin="0,13,0,0">
 
                 <Grid IsVisible="{Binding !#Root.ForgetConfirm.IsArmed}"
