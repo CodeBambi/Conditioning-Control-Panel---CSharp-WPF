@@ -1,0 +1,205 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/ModPickerDialog.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       AllowsTransparency="True" / WindowStyle="None"
+                                     -> TransparencyLevelHint="Transparent" + SystemDecorations="None"
+       Background="Transparent"      -> Background="Transparent" (unchanged, but now the real ground)
+       ResizeMode="NoResize"         -> CanResize="False"
+       Style="{StaticResource X}"    -> Theme="{StaticResource X}"   (keyed styles are ControlThemes)
+       <Style x:Key="CardShell" TargetType="Border">
+                                     -> <ControlTheme ...>. Border is not templated, so a
+                                        property-only theme is safe here (CLAUDE.md trap 4).
+       Visibility="{Binding XVisibility}"
+                                     -> IsVisible="{Binding XVisible}". The card's Visibility
+                                        properties became bools; Avalonia binds IsVisible to a
+                                        bool directly (CLAUDE.md trap 3).
+       MouseLeftButtonDown           -> PointerPressed, wired in the constructor
+       hover:HoverPop.IsEnabled      -> the Image.hoverPop style below (scale only, no wobble)
+       RenderOptions.BitmapScalingMode -> RenderOptions.BitmapInterpolationMode
+
+     The footer buttons carry a TextBlock child rather than Content: Avalonia parses "_" in Content
+     as an access key and every loc key here is snake_case (CLAUDE.md trap 1). BtnDownload's label
+     is swapped between two keys from code, so its TextBlock is re-BOUND rather than assigned. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        xmlns:vm="clr-namespace:ConditioningControlPanel.Avalonia.Views.Dialogs"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.ModPickerDialog"
+        Title="{loc:Str dialog_mod_picker}"
+        Height="720" Width="840"
+        WindowStartupLocation="CenterScreen"
+        CanResize="False"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent">
+
+    <!-- Card visuals are driven by plain INPC properties on ModPickerCard (including the
+         IsVisible ones) rather than value converters, so nothing here depends on a converter
+         living in the right resource scope inside a DataTemplate. -->
+    <Window.Resources>
+        <ControlTheme x:Key="CardShell" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource PanelBgBrush}"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="14"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Window.Styles>
+        <!-- ponytail: local copy of ConditioningControlPanel/Behaviors/HoverPopBehavior.cs:HoverPop
+             - the 1.06 scale only, not the back-ease wobble - hoist when a second view needs it. -->
+        <Style Selector="Image.hoverPop">
+            <Setter Property="RenderTransform" Value="scale(1)"/>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.22"/>
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Image.hoverPop:pointerover">
+            <Setter Property="RenderTransform" Value="scale(1.06)"/>
+        </Style>
+    </Window.Styles>
+
+    <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12"
+            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title bar -->
+            <Border x:Name="TitleBar" Grid.Row="0" Background="{DynamicResource PanelBgBrush}"
+                    CornerRadius="12,12,0,0" Padding="20,12">
+                <Grid>
+                    <TextBlock Text="{loc:Str modpicker_title}" Foreground="{DynamicResource PinkBrush}"
+                               FontSize="18" FontWeight="Bold" VerticalAlignment="Center"/>
+                    <Button x:Name="BtnCloseX" Content="X"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Background="Transparent" Foreground="{DynamicResource TextMutedBrush}" FontSize="16" FontWeight="Bold"
+                            BorderThickness="0" Cursor="Hand" Padding="8,2"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                            Width="30" Height="30"/>
+                </Grid>
+            </Border>
+
+            <!-- Subtitle -->
+            <TextBlock Grid.Row="1" Text="{loc:Str modpicker_subtitle}"
+                       Foreground="#C0C0C0" FontSize="13" TextWrapping="Wrap"
+                       Margin="20,14,20,10"/>
+
+            <!-- Cards -->
+            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="20,0,20,0" Padding="0,0,8,0">
+                <ItemsControl x:Name="CardsList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ModPickerCard">
+                            <Border Theme="{StaticResource CardShell}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Art -->
+                                    <!-- ClipToBounds added with the hover pop: without it the 1.06
+                                         zoom paints the mod art straight over the accent border. -->
+                                    <Border Grid.Column="0" Width="86" Height="86" CornerRadius="8"
+                                            BorderBrush="{Binding AccentBrush}" BorderThickness="2"
+                                            ClipToBounds="True"
+                                            Background="#1A1A2E" Margin="0,0,14,0">
+                                        <Image Classes="hoverPop" Source="{Binding Art}" Stretch="UniformToFill"
+                                               RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                                    </Border>
+
+                                    <!-- Text block -->
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" Foreground="White"
+                                                   FontSize="16" FontWeight="Bold"/>
+                                        <TextBlock Text="{Binding Description}" Foreground="#C0C0C0"
+                                                   FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"/>
+
+                                        <!-- Honesty notes -->
+                                        <TextBlock Text="{Binding PremiumNote}" IsVisible="{Binding PremiumNoteVisible}"
+                                                   Foreground="#FFB347" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                        <TextBlock Text="{Binding VoiceNote}" IsVisible="{Binding VoiceNoteVisible}"
+                                                   Foreground="#FFB347" FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0"/>
+
+                                        <!-- Progress -->
+                                        <Grid IsVisible="{Binding ProgressVisible}" Margin="0,8,0,0">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            <ProgressBar Grid.Row="0" Height="6" MinHeight="6" Minimum="0" Maximum="100"
+                                                         Value="{Binding Percent, Mode=OneWay}"
+                                                         Background="#252542" Foreground="{Binding AccentBrush}"
+                                                         BorderThickness="0"/>
+                                            <TextBlock Grid.Row="1" Text="{Binding StatusText}" Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" Margin="0,4,0,0"/>
+                                        </Grid>
+
+                                        <!-- Status-only line (queued / done / failed, no bar) -->
+                                        <TextBlock Text="{Binding StatusText}" IsVisible="{Binding StatusOnlyVisible}"
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,8,0,0"/>
+                                    </StackPanel>
+
+                                    <!-- Size badge + selection -->
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right"
+                                                Margin="14,0,0,0">
+                                        <Border Background="{DynamicResource PanelAccentBrush}" CornerRadius="10"
+                                                Padding="10,4" HorizontalAlignment="Right"
+                                                IsVisible="{Binding SizeVisible}">
+                                            <TextBlock Text="{Binding SizeText}" Foreground="#E0E0E0"
+                                                       FontSize="12" FontWeight="SemiBold"/>
+                                        </Border>
+                                        <TextBlock Text="{loc:Str modpicker_installed_badge}"
+                                                   IsVisible="{Binding InstalledVisible}"
+                                                   Foreground="#4CAF50" FontSize="12" FontWeight="SemiBold"
+                                                   HorizontalAlignment="Right" Margin="0,6,0,0"/>
+                                        <CheckBox Theme="{StaticResource ItemCheckBox}"
+                                                  IsVisible="{Binding SelectVisible}"
+                                                  IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                  IsEnabled="{Binding CanSelect}"
+                                                  HorizontalAlignment="Right" Margin="0,10,2,0"
+                                                  Cursor="Hand"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Hint line: background-continue normally, offline copy when the manifest is missing -->
+            <TextBlock x:Name="TxtHint" Grid.Row="3" Text="{loc:Str modpicker_hint_background}"
+                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"
+                       Margin="20,6,20,10"/>
+
+            <!-- Buttons -->
+            <Border Grid.Row="4" Background="{DynamicResource PanelBgBrush}" CornerRadius="0,0,12,12" Padding="20,14">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button x:Name="BtnSkip" Grid.Column="0" Theme="{StaticResource OutlineButton}"
+                            HorizontalAlignment="Left" FontSize="12" Padding="18,10">
+                        <TextBlock Text="{loc:Str modpicker_btn_skip}"/>
+                    </Button>
+
+                    <Button x:Name="BtnDownload" Grid.Column="1" Theme="{StaticResource PinkButton}"
+                            HorizontalAlignment="Right" Margin="14,0,0,0">
+                        <TextBlock x:Name="TxtDownload" Text="{loc:Str modpicker_btn_download}"/>
+                    </Button>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
