@@ -1,0 +1,208 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/AppSettings/PerformanceSettingsSection.xaml.
+     Structure, order, spacing, every x:Name and every resource key are preserved so the two diff
+     directly. Deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource X}"    ->  Theme="{StaticResource X}"    (keyed styles are ControlThemes)
+       <Style x:Key="SettingChip">   ->  a local ControlTheme with a ^:pointerover setter
+       Image + EmojiToImageSource    ->  <TextBlock Text="⚡"/>  (Avalonia draws colour emoji natively)
+       ToolTip="..."                 ->  ToolTip.Tip="..."
+       VerticalScrollBarVisibility   ->  ScrollViewer.VerticalScrollBarVisibility (attached here)
+       Content="{loc:Str ...}"       ->  a <TextBlock> child (Avalonia's Button reads "_" in Content
+                                         as an access key and every loc key here is snake_case)
+       x:FieldModifier="internal"    ->  dropped; no host re-publishes these fields yet. x:Names kept.
+       SelectedIndex on CmbMotionLevel is seeded to 0 here: WPF leaves it unset until
+       SyncFromSettings paints it from App.Settings, which does not exist on this head. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.AppSettings.PerformanceSettingsSection"
+             mc:Ignorable="d" d:DesignWidth="620">
+
+    <!-- ================================================================
+         SETTINGS ▸ PERFORMANCE  (UX restructure, Phase 2)
+
+         CmbMotionLevel is the motion kill-switch. Item order IS the
+         MotionLevel enum ordinal (Full=0, Reduced=1, Off=2) - the WPF
+         host casts SelectedIndex straight to the enum. Never reorder
+         these three items.
+
+         Quiet surface: no animation, no ambient canvas, no hover
+         choreography beyond what the shared styles do.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <!-- ponytail: local copy of PerformanceSettingsSection.xaml:SettingChip, hoist when a second view needs it -->
+        <ControlTheme x:Key="SettingChip" TargetType="Border">
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+            <Style Selector="^:pointerover">
+                <Setter Property="BorderBrush" Value="{StaticResource SectionHuePerformanceBorderBrush}"/>
+            </Style>
+        </ControlTheme>
+    </UserControl.Resources>
+
+    <Border x:Name="PerformanceSectionCard" CornerRadius="12" Padding="0" Margin="0,0,0,10"
+            Background="{DynamicResource ElevatedSurfaceBrush}"
+            BorderBrush="{StaticResource SectionHuePerformanceBorderBrush}" BorderThickness="1">
+        <Grid>
+            <Border CornerRadius="11" Background="{StaticResource SectionHuePerformanceWashBrush}"/>
+            <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                    Background="{StaticResource SectionHuePerformanceBrush}"/>
+            <StackPanel Margin="15,12,15,12">
+
+                <!-- header -->
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="⚡" FontSize="13" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                    <TextBlock Theme="{StaticResource SectionHeader}" Text="{loc:Str set2_section_performance}"
+                               Foreground="{StaticResource SectionHuePerformanceBrush}"
+                               FontSize="13" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Text="{loc:Str set2_section_performance_hint}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,8"/>
+
+                <!-- Four related switches = one 2-column chip grid (contract). Every
+                     description became its chip's ToolTip; not one loc key changed. -->
+                <Grid ColumnDefinitions="*,6,*" RowDefinitions="Auto,Auto">
+
+                    <Border Grid.Row="0" Grid.Column="0" Theme="{StaticResource SettingChip}"
+                            ToolTip.Tip="{loc:Str set2_tooltip_performance_mode}">
+                        <Grid MinHeight="22" ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="{loc:Str set2_setting_performance_mode}"
+                                       Foreground="{DynamicResource TextLightBrush}"
+                                       FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <CheckBox Grid.Column="1" x:Name="ChkPerformanceMode"
+                                      Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                      IsCheckedChanged="ChkPerformanceMode_Changed"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Row="0" Grid.Column="2" Theme="{StaticResource SettingChip}"
+                            ToolTip.Tip="{loc:Str set2_tooltip_auto_performance}">
+                        <Grid MinHeight="22" ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="{loc:Str set2_setting_auto_performance}"
+                                       Foreground="{DynamicResource TextLightBrush}"
+                                       FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <CheckBox Grid.Column="1" x:Name="ChkAutoPerformance"
+                                      Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center" IsChecked="True"
+                                      IsCheckedChanged="ChkAutoPerformance_Changed"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Row="1" Grid.Column="0" Theme="{StaticResource SettingChip}"
+                            ToolTip.Tip="{loc:Str set2_tooltip_unified_overlay}">
+                        <Grid MinHeight="22" ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="{loc:Str set2_setting_unified_overlay}"
+                                       Foreground="{DynamicResource TextLightBrush}"
+                                       FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <CheckBox Grid.Column="1" x:Name="ChkUnifiedOverlay"
+                                      Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center" IsChecked="True"
+                                      IsCheckedChanged="ChkUnifiedOverlay_Changed"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Force video GPU decode. -->
+                    <Border Grid.Row="1" Grid.Column="2" Theme="{StaticResource SettingChip}"
+                            ToolTip.Tip="{loc:Str set2_tooltip_video_hw_decode}">
+                        <Grid MinHeight="22" ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="{loc:Str set2_setting_video_hw_decode}"
+                                       Foreground="{DynamicResource TextLightBrush}"
+                                       FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <CheckBox Grid.Column="1" x:Name="ChkVideoHwDecode"
+                                      Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                      IsCheckedChanged="ChkVideoHwDecode_Changed"/>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- Motion (accessibility). The three items ARE the enum ordinals — never reorder. -->
+                <Grid MinHeight="34" Margin="0,2,0,0" ColumnDefinitions="*,Auto"
+                      ToolTip.Tip="{loc:Str tooltip_motion_level}">
+                    <TextBlock Grid.Column="0" Theme="{StaticResource SettingLabel}"
+                               Text="{loc:Str setting_motion_level}"
+                               Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                    <ComboBox Grid.Column="1" x:Name="CmbMotionLevel"
+                              Theme="{StaticResource DarkComboBoxStyle}" FontSize="11"
+                              Width="110" MinHeight="28" VerticalAlignment="Center" SelectedIndex="0"
+                              SelectionChanged="CmbMotionLevel_SelectionChanged">
+                        <ComboBoxItem Content="{loc:Str label_motion_full}"/>
+                        <ComboBoxItem Content="{loc:Str label_motion_reduced}"/>
+                        <ComboBoxItem Content="{loc:Str label_motion_off}"/>
+                    </ComboBox>
+                </Grid>
+
+                <!-- ============================================================
+                     DO NOT DISTURB. The user lists the apps they watch things in;
+                     while one of those owns the FOREGROUND window the app stops
+                     scheduling its own media over the top of it. The list is
+                     stored NORMALISED (lower-case, no ".exe"); TxtDndProcesses
+                     is only ever a view of it. It starts EMPTY and is never
+                     auto-populated. Suppression is spawn-only.
+                     ============================================================ -->
+                <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Opacity="0.5"
+                        Margin="0,10,0,8"/>
+
+                <TextBlock Text="{loc:Str set2_dnd_header}" FontSize="12.5" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextLightBrush}"/>
+                <TextBlock Text="{loc:Str set2_dnd_hint}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,2,0,6"/>
+
+                <TextBox x:Name="TxtDndProcesses"
+                         AcceptsReturn="True" TextWrapping="NoWrap" MinHeight="52" MaxHeight="110"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto" FontSize="11"
+                         Foreground="{DynamicResource TextLightBrush}" Background="{DynamicResource SurfaceBgBrush}"
+                         BorderBrush="{DynamicResource PanelAccentHoverBrush}" BorderThickness="1" Padding="6,4"
+                         LostFocus="TxtDndProcesses_LostFocus"
+                         ToolTip.Tip="{loc:Str set2_dnd_list_tooltip}"/>
+
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,2">
+                    <Button x:Name="BtnDndPickApp"
+                            Theme="{StaticResource OutlineButton}" Padding="12,5"
+                            Click="BtnDndPickApp_Click"
+                            ToolTip.Tip="{loc:Str set2_dnd_btn_pick_tooltip}">
+                        <TextBlock Text="{loc:Str set2_dnd_btn_pick}"/>
+                    </Button>
+                </StackPanel>
+
+                <Grid Margin="0,6,0,0" ColumnDefinitions="*,6,*">
+
+                    <Border Grid.Column="0" Theme="{StaticResource SettingChip}"
+                            ToolTip.Tip="{loc:Str set2_tooltip_dnd_videos}">
+                        <Grid MinHeight="22" ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="{loc:Str set2_setting_dnd_videos}"
+                                       Foreground="{DynamicResource TextLightBrush}"
+                                       FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <CheckBox Grid.Column="1" x:Name="ChkDndSuppressVideos"
+                                      Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center" IsChecked="True"
+                                      IsCheckedChanged="ChkDndSuppressVideos_Changed"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Column="2" Theme="{StaticResource SettingChip}"
+                            ToolTip.Tip="{loc:Str set2_tooltip_dnd_flashes}">
+                        <Grid MinHeight="22" ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="{loc:Str set2_setting_dnd_flashes}"
+                                       Foreground="{DynamicResource TextLightBrush}"
+                                       FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <CheckBox Grid.Column="1" x:Name="ChkDndSuppressFlashes"
+                                      Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                      IsCheckedChanged="ChkDndSuppressFlashes_Changed"/>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>
