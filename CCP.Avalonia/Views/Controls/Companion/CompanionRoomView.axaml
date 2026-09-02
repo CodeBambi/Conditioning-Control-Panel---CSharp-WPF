@@ -1,0 +1,160 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/Companion/CompanionRoomView.xaml.
+     Arrangement is preserved zone for zone. Deviations, all forced by what exists on this head:
+
+       Style="{StaticResource X}"    ->  Theme="{StaticResource X}"
+       pack:// merged dictionary     ->  avares:// ResourceInclude
+       DataContext="{Binding Zone}"  ->  dropped. ICompanionRoomVm and its eight zone interfaces
+                                         live in the WPF head; every ported zone seeds its own
+                                         viewmodel, exactly as it does when rendered alone.
+       x:Name on ColumnDefinition    ->  dropped (not a StyledElement); the code-behind indexes
+                                         Shelf.ColumnDefinitions instead.
+       CompanionHeroCard, ChatThresholdView, AwarenessPrivacyView, AiPermissionsGrid
+                                     ->  NOT PORTED YET. Each sits as a labelled placeholder card
+                                         carrying the zone's x:Name, so the shelf, the navigator
+                                         and the deep links keep their real targets and the swap
+                                         is one element each. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.Companion.CompanionRoomView"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Companion"
+             mc:Ignorable="d"
+             d:DesignWidth="1240" d:DesignHeight="1400">
+
+    <!-- ================================================================
+         "HER ROOM" — the composed Companion tab.
+
+         Nine controls, one page. Arrangement only: every zone owns its own
+         card, its own states and its own copy, and nothing here reaches
+         inside one. What the page adds is the three things a zone cannot
+         have on its own — the room it sits in, the shelf that puts the
+         columns beside each other, and the navigator that lets a link in
+         one zone land in another.
+
+         Strata, outside in:
+           1. THE ROOM   — CmpRoomShellStyle: the linear backdrop, clipped
+                           and cornered, with the mockup's three radial
+                           washes riding above it as sibling Borders.
+           2. THE SCROLL — one column, the whole page, MaxWidth 1460.
+           3. THE SHELF  — Z2/Z3 at 60% beside Z4/Z5/Z6 at 40%, stacking
+                           to one column on a narrow window.
+
+         ZONE ORDER (design §2's zone map, top to bottom):
+           Z0+Z1  CompanionHeroCard      header band + Companion Card
+           Z2     ChatThresholdView      talk to her          (left column)
+           Z3     MemoryDiaryView        what she knows       (left column)
+           Z4     MakeHerYoursView       make her yours       (right column)
+           Z5     AwarenessPrivacyView   what she can see     (right column)
+           Z6     AttentionGaugeView     her attention        (right column)
+           Z7     EngineRoomDrawer       the Engine Room      (full width)
+           Z7b    AiPermissionsGrid      what she's allowed   (full width)
+           Z8     WorkshopAccordion      the Workshop         (full width)
+
+         MOTION BUDGET (ONE ambient loop per tab). The page adds none.
+         RoomAmbientHost is the seam the mockup's dust motes would go in.
+
+         Nothing here binds to Bounds. The shelf's one-column collapse is a
+         threshold flip with hysteresis in code-behind.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://CCP.Avalonia/Views/Controls/Companion/Themes/CompanionTheme.axaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Border Theme="{StaticResource CmpRoomShellStyle}">
+        <Grid>
+            <!-- ========== 1. the room's washes ==========
+                 .room's four stacked CSS backgrounds: the linear base is the shell's own
+                 Background, these three are the radials. Order matters — purple top-left,
+                 pink top-right, then the cool pool the floor sits in. -->
+            <Border Theme="{StaticResource CmpRoomWashStyle}"
+                    Background="{StaticResource CmpRoomGlowPurpleBrush}"/>
+            <Border Theme="{StaticResource CmpRoomWashStyle}"
+                    Background="{StaticResource CmpRoomGlowPinkBrush}"/>
+            <Border Theme="{StaticResource CmpRoomWashStyle}"
+                    Background="{StaticResource CmpRoomFloorGlowBrush}"/>
+
+            <!-- The seam for the room's ambient layer. Empty on purpose — see the motion
+                 budget note above. -->
+            <Grid x:Name="RoomAmbientHost" IsHitTestVisible="False"/>
+
+            <!-- ========== 2. the scroll ========== -->
+            <ScrollViewer x:Name="PageScroll" Focusable="False"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Padding="{StaticResource CmpRoomPadding}"
+                          AutomationProperties.AutomationId="CompanionRoomScroll">
+
+                <!-- The body is centred and capped, like the other redesigned tabs, so the
+                     cards do not stretch to absurd widths on an ultrawide. -->
+                <StackPanel MaxWidth="1460" HorizontalAlignment="Stretch">
+
+                    <!-- ========== Z0 + Z1 ==========
+                         ponytail: CompanionHeroCard placeholder, swap for the port when it lands -->
+                    <Border x:Name="HeroZone" Theme="{StaticResource CmpCardStyle}" Margin="0,0,0,16"
+                            AutomationProperties.AutomationId="CompanionRoomHero">
+                        <TextBlock Text="Z0+Z1 · CompanionHeroCard (not ported yet)" Theme="{StaticResource CmpFaintTextStyle}"/>
+                    </Border>
+
+                    <!-- ========== 3. the shelf ==========
+                         Three columns: left 3*, a 16px gutter, right 2*. The gutter is a column
+                         rather than a margin, so the collapse can close it to zero without
+                         touching either card's own spacing. Stacked, the right panel moves to
+                         row 1 and both panels span all three columns. The flip lives in
+                         ApplyShelfLayout(); the widths and spans below are the WIDE state. -->
+                    <Grid x:Name="Shelf" ColumnDefinitions="3*,16,2*" RowDefinitions="Auto,Auto">
+
+                        <StackPanel x:Name="ShelfLeft" Grid.Row="0" Grid.Column="0">
+                            <!-- ponytail: ChatThresholdView placeholder, swap for the port when it lands -->
+                            <Border x:Name="ChatZone" Theme="{StaticResource CmpCardStyle}" Margin="{StaticResource CmpCardMargin}"
+                                    AutomationProperties.AutomationId="CompanionRoomChat">
+                                <TextBlock Text="Z2 · ChatThresholdView (not ported yet)" Theme="{StaticResource CmpFaintTextStyle}"/>
+                            </Border>
+                            <local:MemoryDiaryView x:Name="MemoryZone"
+                                                   AutomationProperties.AutomationId="CompanionRoomMemory"/>
+                        </StackPanel>
+
+                        <StackPanel x:Name="ShelfRight" Grid.Row="0" Grid.Column="2">
+                            <local:MakeHerYoursView x:Name="PersonalityZone"
+                                                    AutomationProperties.AutomationId="CompanionRoomPersonality"/>
+                            <!-- Focusable so the hero's awareness pill has somewhere to put the
+                                 keyboard when it deep-links here; the card itself takes no input.
+                                 ponytail: AwarenessPrivacyView placeholder, swap for the port when it lands -->
+                            <Border x:Name="AwarenessZone" Focusable="True" Theme="{StaticResource CmpCardStyle}"
+                                    Margin="{StaticResource CmpCardMargin}"
+                                    AutomationProperties.AutomationId="CompanionRoomAwareness">
+                                <TextBlock Text="Z5 · AwarenessPrivacyView (not ported yet)" Theme="{StaticResource CmpFaintTextStyle}"/>
+                            </Border>
+                            <local:AttentionGaugeView x:Name="AttentionZone"
+                                                      AutomationProperties.AutomationId="CompanionRoomAttention"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- ========== Z7 / Z8 ==========
+                         Both drawers carry their own top margin from CmpDrawerStyle, so the
+                         shelf needs no trailing gap of its own. -->
+                    <local:EngineRoomDrawer x:Name="EngineZone"
+                                            AutomationProperties.AutomationId="CompanionRoomEngine"/>
+
+                    <!-- ========== Z7b · WHAT SHE'S ALLOWED TO DO ==========
+                         The AI-effects permissions grid. It sits HERE, between the provider
+                         plumbing it depends on and the Workshop, because "may she fire a flash"
+                         is meaningless until "which brain is she running on" is answered.
+                         ponytail: AiPermissionsGrid placeholder, swap for the port when it lands -->
+                    <Border x:Name="PermissionsZone" Theme="{StaticResource CmpCardStyle}" Margin="0,16,0,0"
+                            AutomationProperties.AutomationId="CompanionRoomPermissions">
+                        <TextBlock Text="Z7b · AiPermissionsGrid (not ported yet)" Theme="{StaticResource CmpFaintTextStyle}"/>
+                    </Border>
+
+                    <local:WorkshopAccordion x:Name="WorkshopZone"
+                                             AutomationProperties.AutomationId="CompanionRoomWorkshop"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</UserControl>

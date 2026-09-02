@@ -1,0 +1,74 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/Companion/CompanionRoomPreviewWindow.xaml.
+     Deviations: Style -> Theme, pack:// -> avares://, ToolTip -> ToolTip.Tip, and the strip's
+     buttons are built from a static key list rather than MockCompanionRoomVm.Variants (the mock
+     lives in the WPF head — see the code-behind). -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Controls.Companion.CompanionRoomPreviewWindow"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:local="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Companion"
+        mc:Ignorable="d"
+        Title="Her Room — preview harness"
+        Width="1240" Height="1400"
+        MinWidth="820" MinHeight="600"
+        Background="#FF080711"
+        UseLayoutRounding="True"
+        WindowStartupLocation="CenterScreen"
+        AutomationProperties.AutomationId="CtabPreviewWindow">
+
+    <!-- ================================================================
+         DEBUG PREVIEW HARNESS for the composed Companion tab.
+
+         Nothing in the app opens this window. It exists so the redesign can
+         be looked at, screenshotted and driven before the wiring pass
+         connects the real services — the whole page, every state, no login,
+         no provider, no train.
+
+         Opened by CompanionRoomPreviewWindow.Launch() (optionally with a
+         variant key) from a driver, or constructed directly by a test and
+         driven with ShowVariant(key). The state strip is built in code and
+         every button carries an AutomationId of the form CtabPreview_<key>.
+         ================================================================ -->
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://CCP.Avalonia/Views/Controls/Companion/Themes/CompanionTheme.axaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- ========== the state strip ========== -->
+        <Border Grid.Row="0" Background="#FF12101F" BorderBrush="#33B478FF"
+                BorderThickness="0,0,0,1" Padding="14,10,14,10">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+
+                <TextBlock Grid.Column="0" Text="page state" VerticalAlignment="Center"
+                           Margin="0,0,12,0" Theme="{StaticResource CmpFaintTextStyle}"/>
+
+                <!-- Filled by BuildStateStrip(). -->
+                <WrapPanel x:Name="StateStrip" Grid.Column="1" Orientation="Horizontal"
+                           AutomationProperties.AutomationId="CtabPreview_Strip"/>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock x:Name="CurrentLabel" VerticalAlignment="Center" Margin="0,0,12,0"
+                               Theme="{StaticResource CmpDimTextStyle}"
+                               AutomationProperties.AutomationId="CtabPreview_Current"/>
+                    <Button x:Name="WidthToggle" Click="WidthToggle_Click"
+                            Theme="{StaticResource CmpChipButtonStyle}"
+                            ToolTip.Tip="flips the window across the shelf's 1100px collapse threshold"
+                            AutomationProperties.AutomationId="CtabPreview_ToggleWidth">
+                        <TextBlock Text="narrow ⇄ wide"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ========== the page under test ========== -->
+        <local:CompanionRoomView x:Name="Room" Grid.Row="1" Margin="10"
+                                 AutomationProperties.AutomationId="CtabPreview_Room"/>
+    </Grid>
+</Window>
