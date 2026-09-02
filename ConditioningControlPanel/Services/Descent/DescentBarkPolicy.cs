@@ -113,11 +113,22 @@ namespace ConditioningControlPanel.Services.Descent
         public const double NearBankFloorPct = 12.0;
 
         /// <summary>
-        /// Days away before a return is worth remarking on. One day away is an
-        /// ordinary evening off and saying anything about it would read as being
-        /// counted, which is the one thing this copy must never do.
+        /// The smallest payout worth welcoming. A surge that pays exactly 1.0x is a
+        /// surge that pays nothing, which is what every stamp written before the
+        /// server froze the multiplier reads as, and welcoming someone for a bonus
+        /// they will never feel is worse than saying nothing at all.
+        ///
+        /// THIS REPLACED A DAYS-AWAY FLOOR OF 2, and that floor was unreachable in
+        /// practice. The server stamps the surge inside the same bank that moves
+        /// `devotion_last_day` forward to today (descent.js applyRelapseSurge, one
+        /// line before applyDevotionDay), and `days_away` is measured off that same
+        /// stamp, so a return reads 0 days away the instant it becomes a surge. A
+        /// block carrying `surge_active` alongside a days_away of 2 can only be
+        /// composed two further days later, by which point the welcome would land
+        /// on somebody who came back and then went away again. The payout is the
+        /// honest witness that a return happened, so the payout is what we read.
         /// </summary>
-        public const int LapseMinDaysAway = 2;
+        public const double LapseMinSurgeMultiplier = 1.0;
 
         /// <summary>YYYY-MM-DD in UTC, the same shape the server stamps days with.</summary>
         public static string TodayUtc(DateTime utcNow) =>
@@ -170,7 +181,7 @@ namespace ConditioningControlPanel.Services.Descent
             string? lapseKey = LapseKeyOf(relapse, todayUtc);
             bool lapseReturn = relapse is not null
                                && relapse.SurgeActive
-                               && relapse.DaysAway >= LapseMinDaysAway
+                               && relapse.SurgeMultiplier > LapseMinSurgeMultiplier
                                && lapseKey is not null
                                && !string.Equals(lapseKey, memory.LastLapseKey, StringComparison.Ordinal);
 

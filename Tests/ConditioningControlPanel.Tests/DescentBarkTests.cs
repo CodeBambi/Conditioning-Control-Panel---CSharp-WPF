@@ -130,54 +130,95 @@ public class DescentBarkTests
             DescentBarkPolicy.Decide(Block(101, Day2, 3, fillPct: 50), memory, Day2).Moment);
     }
 
+    /// <summary>
+    /// THESE BLOCKS ARE THE SHAPE THE SERVER ACTUALLY EMITS, and until 2026-09-02 they were not.
+    /// The old fixtures paired `surge_active` with a days_away of 10 and 20, which the wire cannot
+    /// produce: `applyRelapseSurge` stamps the surge one line before `applyDevotionDay` moves
+    /// `devotion_last_day` to today, and `relapseDaysAway` measures the gap off that same field, so
+    /// a return reads ZERO days away at the exact moment it becomes a surge. Testing against a
+    /// payload nobody ships is how the policy's own days-away floor of 2 survived review while
+    /// making the welcome unreachable, so the fixtures moved to the real thing.
+    /// </summary>
     [Fact]
     public void A_return_is_welcomed_once_per_surge_not_once_per_surge_day()
     {
         var memory = Seeded(stage: 2, lastBankedDay: "2026-08-20");
-        var relapse = new DescentRelapse
+
+        // THE RETURN DAY. Ten days away, the bank that brought them back has already moved the
+        // last-banked day to today, and the payout carries the gap the stamp froze.
+        var returnDay = new DescentRelapse
         {
-            Multiplier = 1.4,
-            DaysAway = 10,
+            Multiplier = 1.0,
+            DaysAway = 0,
             SurgeActive = true,
             SurgeEndsAt = "2026-09-05T00:00:00Z",
             SurgeMultiplier = 1.4,
         };
 
-        var first = DescentBarkPolicy.Decide(Block(30, "2026-08-20", 2, fillPct: 3, relapse: relapse), memory, Day2);
+        var first = DescentBarkPolicy.Decide(Block(30, Day2, 2, fillPct: 25, relapse: returnDay), memory, Day2);
         Assert.Equal(DescentBarkMoment.LapseReturn, first.Moment);
-        Assert.Equal(10, first.DaysAway);
+        Assert.Equal(1.4, first.SurgeMultiplier);
 
-        // Day two and day three of the same surge are the same welcome, and it has been given.
+        // The same day also banked, and the welcome outranks it rather than firing beside it.
+        Assert.Equal(Day2, memory.LastBankedDay);
+
+        // Day two and day three of the same surge are the same welcome, and it has been given. The
+        // gap now reads 1 because the return day banked and nothing has banked since.
         const string day3 = "2026-09-03";
+        var laterInWindow = new DescentRelapse
+        {
+            Multiplier = 1.04,
+            DaysAway = 1,
+            SurgeActive = true,
+            SurgeEndsAt = "2026-09-05T00:00:00Z",
+            SurgeMultiplier = 1.4,
+        };
         Assert.NotEqual(DescentBarkMoment.LapseReturn,
-            DescentBarkPolicy.Decide(Block(31, Day2, 2, fillPct: 3, relapse: relapse), memory, day3).Moment);
+            DescentBarkPolicy.Decide(Block(31, Day2, 2, fillPct: 3, relapse: laterInWindow), memory, day3).Moment);
 
         // A LATER return is a different surge, and is welcomed again.
         var laterSurge = new DescentRelapse
         {
-            Multiplier = 1.8,
-            DaysAway = 20,
+            Multiplier = 1.0,
+            DaysAway = 0,
             SurgeActive = true,
             SurgeEndsAt = "2026-10-01T00:00:00Z",
             SurgeMultiplier = 1.8,
         };
         Assert.Equal(DescentBarkMoment.LapseReturn,
-            DescentBarkPolicy.Decide(Block(31, "2026-09-28", 2, fillPct: 1, relapse: laterSurge), memory, "2026-09-29").Moment);
+            DescentBarkPolicy.Decide(Block(31, "2026-09-29", 2, fillPct: 22, relapse: laterSurge), memory, "2026-09-29").Moment);
     }
 
     [Fact]
     public void An_evening_off_is_not_a_return()
     {
-        // One day away is an ordinary evening off. Remarking on it would read as being counted,
-        // which is the one thing this copy must never do.
+        // One day away is an ordinary evening off, and the server never stamps a surge for one:
+        // `isMakeupEligible` wants a pre-bank gap of at least two days, so the block that comes
+        // back from a single missed evening simply carries no surge at all.
         var memory = Seeded(stage: 2, lastBankedDay: Day1);
-        var relapse = new DescentRelapse
+        var eveningOff = new DescentRelapse
         {
-            Multiplier = 1.04, DaysAway = 1, SurgeActive = true,
-            SurgeEndsAt = "2026-09-05T00:00:00Z", SurgeMultiplier = 1.04,
+            Multiplier = 1.04, DaysAway = 1, SurgeActive = false,
+            SurgeEndsAt = null, SurgeMultiplier = 1.0,
         };
         Assert.NotEqual(DescentBarkMoment.LapseReturn,
-            DescentBarkPolicy.Decide(Block(20, Day1, 2, fillPct: 2, relapse: relapse), memory, Day2).Moment);
+            DescentBarkPolicy.Decide(Block(20, Day1, 2, fillPct: 2, relapse: eveningOff), memory, Day2).Moment);
+    }
+
+    [Fact]
+    public void A_surge_that_pays_nothing_is_not_welcomed()
+    {
+        // Every surge stamped before the server froze the multiplier reads back as exactly 1.0x,
+        // and the gap those stamps measured is unrecoverable. Welcoming somebody for a faster fill
+        // they will never actually feel is worse than staying quiet, so the payout is the gate.
+        var memory = Seeded(stage: 2, lastBankedDay: Day1);
+        var preFreeze = new DescentRelapse
+        {
+            Multiplier = 1.0, DaysAway = 0, SurgeActive = true,
+            SurgeEndsAt = "2026-09-05T00:00:00Z", SurgeMultiplier = 1.0,
+        };
+        Assert.NotEqual(DescentBarkMoment.LapseReturn,
+            DescentBarkPolicy.Decide(Block(20, Day2, 2, fillPct: 4, relapse: preFreeze), memory, Day2).Moment);
     }
 
     [Fact]

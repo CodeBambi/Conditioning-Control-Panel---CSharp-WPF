@@ -682,7 +682,7 @@ namespace ConditioningControlPanel
                     "The jar on your Trainer Card is today. A fifth of the jar banks the day, and banked days are the only thing that moves you down the Spiral.",
                     "Seven stages are waiting at 1, 7, 21, 50, 100, 180 and 300 days, and the map lights up as you pass each one.",
                     "A short day that banks counts the same as a long one, so showing up beats grinding.",
-                    "Nothing resets. September's wipe was the last one, and everything you've earned stays where it is."
+                    "Nothing here resets, and nothing is going to. Your level, your XP and every stage you've reached stay yours however long you leave them."
                 },
                 Footer = "Open the Spiral from the rail any time, or from the plate on your Trainer Card."
             },
