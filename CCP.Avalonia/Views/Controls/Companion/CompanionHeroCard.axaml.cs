@@ -271,12 +271,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     }
 
     /// <summary>The one command shape these placeholders need: run a delegate, always enabled.</summary>
-    internal sealed class RelayCommand : ICommand
-    {
-        private readonly Action _run;
-        public RelayCommand(Action run) => _run = run;
-        public bool CanExecute(object? parameter) => true;
-        public void Execute(object? parameter) => _run();
-        public event EventHandler? CanExecuteChanged { add { } remove { } }
-    }
+    // RelayCommand: the one AwarenessPrivacyView declares in this namespace (a lower layer of the
+    // stack) is a superset of the one this file carried, so this file uses it.
 }
